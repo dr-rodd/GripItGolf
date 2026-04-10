@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-gold: #C9A84C;
+  --font-playfair: var(--font-playfair);
+  --font-caveat: var(--font-caveat);
+  --font-crimson: var(--font-crimson);
+}
+
+body {
+  font-family: var(--font-playfair), Georgia, serif;
+  background-color: #0a1a0e;
+}
+
+@keyframes slide-from-right {
+  from { transform: translateX(48px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes slide-from-left {
+  from { transform: translateX(-48px); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+
+.animate-slide-from-right { animation: slide-from-right 0.22s ease-out; }
+.animate-slide-from-left  { animation: slide-from-left  0.22s ease-out; }
