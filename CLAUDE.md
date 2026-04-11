@@ -1,63 +1,96 @@
 # GripItGolf
 
-A multi-trip golf platform. Each trip is a self-contained competition with its own players, courses, rounds, and scoring. Built on the Donegal Masters codebase, generalised to support any number of trips created and managed by an organiser.
+A multi-trip golf platform. Any group leader creates a trip, gets a shareable code, and their group gets a full live scoring experience — courses, scorecards, leaderboards, teams.
 
-## Platform Concept
+Forked from Donegal Masters — a single-trip family golf app. This project converts it into a platform where anyone can run their own trip. The Donegal Masters UX is the gold standard for look and feel.
 
-- An **organiser** creates a trip, defines the players, courses, and rounds
-- **Players** are scoped to a trip — the same person can appear across multiple trips as separate records
-- All scoring, leaderboards, and game logic is trip-scoped
-- The home page lists available trips; each trip has its own isolated app experience
+## Who is building this
 
-## Design Philosophy
+Big Dog — not a coder. Uses Claude.ai for all design decisions and Claude Code (CC) for all execution. Never ask for confirmation before making changes. Always push to remote at the end of every task.
 
-Mobile-first. All UI code must be designed and optimised for mobile by default.
+## Working approach
 
-- Write styles for mobile first; use `sm:` / `md:` / `lg:` breakpoints only to enhance for larger screens
-- Touch targets minimum 44px
-- Layouts, spacing, and typography should feel native on a phone screen
-- Mobile-only interactions (e.g. swipe) must have a desktop fallback
+- Claude.ai leads design and clarifies requirements before any CC prompt is written
+- CC prompts must be: succinct, robust, copiable, targeted to specific files or components
+- Chunked sequential prompts preferred — test and deploy between dependent steps
+- CLI and automated approaches preferred over manual dashboard steps
+- No jargon without explanation
+- Do not over-specify logic the codebase already handles
+- User refers to Claude Code as "CC"
 
-## Tech Stack
+## Tech stack
 
 - **Framework:** Next.js 16 (App Router, TypeScript)
-- **Styling:** Tailwind CSS (mobile-first utility classes)
-- **Database:** Supabase (PostgreSQL)
-- **Supabase client:** `lib/supabase.ts` — import as `import { supabase } from '@/lib/supabase'`
+- **Styling:** Tailwind CSS (mobile-first)
+- **Database:** Supabase (PostgreSQL + RLS)
+- **Hosting:** Vercel (Hobby)
+- **Repo:** github.com/dr-rodd/GripItGolf (branch: master)
+- **Supabase project ref:** bnnnnuxoczzuipefhvms
 - **Package manager:** npm
 
-## URL Structure
+## Environment variables
+NEXT_PUBLIC_SUPABASE_URL=https://bnnnnuxoczzuipefhvms.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+CRON_SECRET=...
+
+Stored in `.env.local` (gitignored). Service role key must never be exposed client-side.
+
+## Design philosophy
+
+Mobile-first. Used on the course, on phones, by non-technical users.
+
+- All styles mobile-first; use `sm:` / `md:` / `lg:` only to enhance for larger screens
+- Touch targets minimum 44px
+- Large, legible text — key numbers must be readable at a glance
+- Paper scorecard style for review screens: parchment cream background, ink-style symbols
+- Avoid red as a score indicator — use gold instead
+- Score symbols: thick gold ring (eagle), thin gold ring (birdie), blank (par), thin brown rounded square (bogey), thick brown rounded square (double bogey+)
+
+## Platform concept
+
+- A **lead player** creates a trip — no account required, open access for now
+- A **6-character alphanumeric trip code** is generated on creation (e.g. `GX7K2P`)
+- Other players join by entering the trip code at `/join`
+- All trip data is scoped by `trip_id` — no data leaks between trips
+- No auth gate yet — trip code is the only access control
+- Auth (Supabase email/password) will be added later for trip management
+
+## Routing
 
 | Route | Purpose |
 |---|---|
-| `/` | Home — lists all active trips |
-| `/trips/[tripSlug]` | Trip landing page |
-| `/trips/[tripSlug]/courses` | Course portal for the trip |
-| `/trips/[tripSlug]/courses/[courseSlug]` | Live dashboard for a course/round |
-| `/trips/[tripSlug]/leaderboard` | Trip leaderboard |
+| `/` | Landing page — create or join a trip |
+| `/join` | Enter trip code to join |
+| `/trip/[tripCode]` | Trip home — course portal |
+| `/trip/[tripCode]/course/[roundNumber]` | Course dashboard — live scoring |
+| `/trip/[tripCode]/scorecard/[sessionId]` | Score entry |
+| `/trip/[tripCode]/leaderboard` | Leaderboard |
+| `/trip/[tripCode]/summary/[sessionId]` | Post-round summary |
+| `/dashboard` | Lead player's trip list (future — post auth) |
+| `/dashboard/create` | Trip creation wizard (future — post auth) |
 
-## Database Schema
+## Database schema
 
-### Core Tables
-
-| Table | Description |
-|---|---|
-| `trips` | Top-level. Each trip has a `name`, `slug`, `status` (upcoming/active/completed), `start_date`, `end_date` |
-| `teams` | Scoped to a `trip_id`. Has `name` and `color` (hex) |
-| `players` | Scoped to a `trip_id`. Has `team_id`, `name`, `role` (dad/mum/child/player), `handicap` |
-| `courses` | Scoped to a `trip_id`. Has `name`, `slug`, `location` |
-| `holes` | 18 holes per course — `hole_number`, `par`, `stroke_index` |
-| `rounds` | Links `round_number` to a `course_id` and `trip_id`. Has `status` (upcoming/active/completed) |
-| `round_handicaps` | Snapshot of each player's `playing_handicap` per round — use this for scoring, not `players.handicap` |
-| `scores` | One row per player/hole/round — `gross_score` and auto-calculated `stableford_points` |
-
-### Live Scoring Tables
+### Core tables
 
 | Table | Description |
 |---|---|
-| `live_rounds` | Active scoring sessions per player/round. Includes `session_finalised_at` |
+| `trips` | Top-level. `name`, `slug`, `trip_code` (6-char unique), `status`, `competition_type`, `start_date`, `end_date`, `created_at` |
+| `teams` | Scoped to `trip_id`. `name`, `color` (hex) |
+| `players` | Scoped to `trip_id`. `team_id` (nullable), `name`, `role` (player), `handicap`, `is_lead` (boolean) |
+| `courses` | Scoped to `trip_id`. `name`, `slug`, `location` |
+| `holes` | 18 per course. `hole_number`, `par`, `stroke_index` |
+| `rounds` | Scoped to `trip_id`. Links `round_number` to `course_id`. `status` (upcoming/active/completed) |
+| `round_handicaps` | Snapshot of `playing_handicap` per player per round — use this for scoring, never `players.handicap` |
+| `scores` | One row per player/hole/round. `gross_score`, auto-calculated `stableford_points` |
+
+### Live scoring tables
+
+| Table | Description |
+|---|---|
+| `live_rounds` | Active scoring sessions per player/round. `session_finalised_at` marks completion |
 | `live_scores` | Hole-by-hole scores during active play, before finalisation |
-| `live_player_locks` | Prevents multiple concurrent scoring sessions for same player/round |
+| `live_player_locks` | Prevents concurrent scoring sessions for same player/round |
 
 ### Views
 
@@ -66,25 +99,26 @@ Mobile-first. All UI code must be designed and optimised for mobile by default.
 | `leaderboard_by_round` | Best stableford per hole per team per round, with `running_team_total` |
 | `leaderboard_summary` | Total team points per round per trip, ordered by score |
 
-### Key Constraints
+### Key constraints
 
-- One score per player per hole per round (unique constraint)
+- One score per player per hole per round
 - Each course played only once per trip
-- `players.trip_id` must match `teams.trip_id` (enforced via FK chain)
-- Composite players have `team_id = NULL` — always fetch in flat queries, not via nested PostgREST
+- `players.trip_id` must match `teams.trip_id`
+- Composite players have `team_id = NULL` — always fetch flat, never via nested PostgREST
 
-## Stableford Scoring
+## Stableford scoring (canonical — do not deviate)
 
-Points calculated by PostgreSQL trigger `trg_scores_stableford` on every insert/update to `scores`.shots_received = FLOOR(playing_handicap / 18) + (1 if stroke_index <= playing_handicap % 18 else 0)
+Calculated by PostgreSQL trigger `trg_scores_stableford` on every insert/update to `scores`.
+shots_received = FLOOR(handicap / 18) + (1 if stroke_index <= handicap % 18 else 0)
 net_score      = gross_score - shots_received
 points         = GREATEST(0, par + 2 - net_score)
-NR = 0 Stableford points. Max nett per hole capped at score giving 0 points.
 
-## Team Scoring
+- NR = 0 points
+- Max nett capped at score giving 0 points (net double bogey)
+- Leaderboard display: relative to 2pts/hole baseline. 36 points = "E", 38 = "+2"
+- Team leaderboard: best individual stableford score per hole per team, summed across 18 holes
 
-Team score per hole = best (highest) stableford points by any team member on that hole. Team leaderboard sums best-ball scores across all 18 holes.
-
-## Player States (Live Scoring)
+## Player states (live scoring)
 
 | State | Description |
 |---|---|
@@ -92,60 +126,28 @@ Team score per hole = best (highest) stableford points by any team member on tha
 | Active | Assigned to an in-progress scorecard |
 | Finalised | Scorecard completed and committed |
 
-A player cannot be in more than one state. Finalised players cannot be reselected unless manually unfinalised via settings.
+One state at a time. Finalised players cannot be reselected unless manually unfinalised via settings.
 
-## App Architecture
+## Competition formats
 
-### Key Features per Trip
+**Now:** Stableford Teams, Stableford Individual
 
-- Course portal with green glow for active rounds, completed badges
-- Live dashboard with active scorecard cards per player
-- Score entry with left/right hole navigation
-- Post-round summary with provisional edit mode
-- Settings tab: void active rounds, unfinalise finalised rounds, finalise session
+**Future:** Match Play, Skins, Nassau, Best Ball, Scramble
 
-### Background Jobs
+The `competition_type` field on `trips` and a `settings` JSONB column support adding formats without schema changes.
 
-- Abandoned scorecard cleanup: Vercel cron route. Requires `CRON_SECRET`. Implemented as Supabase SQL migration + Next.js API route.
-
-## Scoring Display Conventions
-
-- Stableford: running total vs 2pts per hole baseline — show as +/- relative to baseline, higher is better
-- Gross: score vs par at holes played — lower is better
-- Nett: `course par + 36 - stableford points` for finalised rounds; scale baseline to holes completed for in-progress
-- Colour: gold for better than baseline, green for better than par nett
-- Avoid red as a score indicator — most amateur scores will be over par; use gold instead
-
-## Design Principles
-
-- Mobile-first, used by older users — large legible text, generous touch targets
-- Key numbers (scores, points, positions) must be immediately readable at a glance
-- Paper scorecard style for review screens: parchment cream background, ink-style symbols
-- Score symbols: thick gold ring (eagle), thin gold ring (birdie), blank (par), thin brown rounded square (bogey), thick brown rounded square (double bogey+)
-- Contributor cells in composite scorecard: filled rounded square background
-
-## Site Config
-
-Each trip's name and branding can be configured. Do not hardcode trip names in components — pull from the `trips` table or `config/site.ts` for global branding.
-
-## Environment Variables
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-CRON_SECRET=...
-
-Stored in `.env.local` (gitignored). Service role key must remain server-side only — never expose client-side.
-
-## Key Files
+## Key files
 
 | File | Purpose |
 |---|---|
-| `app/page.tsx` | Home — trip listing |
+| `app/page.tsx` | Landing page |
 | `app/layout.tsx` | Root layout |
 | `lib/supabase.ts` | Supabase client |
 | `supabase/migrations/` | All schema migrations in order |
+| `supabase/seed.sql` | Empty — trip data entered through the app |
 | `config/site.ts` | Global platform branding |
 
-## Data Insertion Order
+## Data insertion order
 
 1. `trips`
 2. `teams`
@@ -156,16 +158,13 @@ Stored in `.env.local` (gitignored). Service role key must remain server-side on
 7. `round_handicaps`
 8. `scores`
 
-## Prompting Guidelines for Claude Code
+## Background jobs
 
-- Prompts must be succinct — avoid over-specifying logic the codebase already handles
-- Target specific files or components
-- Avoid unnecessary token usage — no broad sitewide audits when a targeted fix will do
-- Build in chunks with testing between dependent steps
-- Prefer CLI/automated approaches over manual dashboard steps
-- User is not a coder — prompts must be clear and copiable without modification
+Abandoned scorecard cleanup: Vercel cron route. Requires `CRON_SECRET`. Implemented as Supabase SQL migration + Next.js API route.
 
-## Claude Code Behaviour
+## CC behaviour
 
-- Never ask for permission or confirmation before making changes — just do it
-- Always push to remote at the end of every task without being asked
+- Never ask for permission or confirmation — just do it
+- Always push to remote at the end of every task
+- Never expose service role key client-side
+- All queries must filter by `trip_id`
