@@ -14,6 +14,7 @@ import { createAdminClient } from "@/lib/supabase-admin"
 //   - In-progress rounds (any scores submitted) are never touched,
 //     even if the last submission was hours ago.
 
+// GET /api/cleanup — called by Vercel cron, see vercel.json
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET
   if (!secret) {
