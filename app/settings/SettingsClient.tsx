@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { supabaseAdmin } from "@/lib/supabase-admin"
+import { createAdminClient } from "@/lib/supabase-admin"
 import { revalidateLeaderboards } from "@/app/actions/revalidate"
 
 type Action = "reset-scores" | "reset-teams"
@@ -39,6 +39,7 @@ const ACTIONS: ActionConfig[] = [
 const PASSWORD = "donegal2026"
 
 async function executeAction(action: Action): Promise<void> {
+  const supabaseAdmin = createAdminClient()
   if (action === "reset-scores") {
     const [scoresRes, hcpsRes, compositeRes, liveScoresRes, liveLocksRes, liveRoundsRes] = await Promise.all([
       supabaseAdmin.from("scores").delete().not("round_id", "is", null),
