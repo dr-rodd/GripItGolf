@@ -19,8 +19,8 @@ const crimson = Crimson_Pro({
 });
 
 export const metadata: Metadata = {
-  title: "The Donegal Masters",
-  description: "Rosapenna Golf Resort — April 2026",
+  title: "GripItGolf",
+  description: "Your golf trip. Live scores, leaderboards, and bragging rights.",
 };
 
 export default function RootLayout({
