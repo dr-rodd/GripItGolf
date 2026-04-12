@@ -34,6 +34,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 CRON_SECRET=...
 
 Stored in `.env.local` (gitignored). Service role key must never be exposed client-side.
+Vercel project: grip-it-golf (auto-deploys from master branch on GitHub)
 
 ## Design philosophy
 
@@ -162,9 +163,10 @@ The `competition_type` field on `trips` and a `settings` JSONB column support ad
 
 Abandoned scorecard cleanup: Vercel cron route. Requires `CRON_SECRET`. Implemented as Supabase SQL migration + Next.js API route.
 
-## CC behaviour
+## CC Behaviour
 
 - Never ask for permission or confirmation — just do it
-- Always push to remote at the end of every task
+- Always commit and push directly to master — never create a new branch
+- Vercel auto-deploys from master via GitHub integration — no manual deploy steps needed
 - Never expose service role key client-side
 - All queries must filter by `trip_id`
