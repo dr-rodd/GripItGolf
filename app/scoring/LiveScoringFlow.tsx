@@ -90,6 +90,16 @@ function effectivePar(hole: Hole, gender: string) {
 function effectiveSI(hole: Hole, gender: string) {
   return gender === "F" && hole.stroke_index_ladies ? hole.stroke_index_ladies : hole.stroke_index
 }
+function resolvePlayingHandicap(
+  existingHcp: RoundHandicap | undefined,
+  player: Player,
+  tee: Tee,
+  context: string,
+): number {
+  if (existingHcp?.playing_handicap !== undefined) return existingHcp.playing_handicap
+  console.warn(`[handicap-fallback] no round_handicap for player ${player.id} — recomputing. context=${context}`)
+  return calcPlayingHandicap(player.handicap, tee.slope, tee.course_rating, tee.par)
+}
 function yardageForTee(hole: Hole, teeName: string): number | null {
   const key = `yardage_${teeName.toLowerCase()}` as keyof Hole
   return (hole[key] as number | undefined) ?? null
@@ -236,6 +246,9 @@ export default function LiveScoringFlow({
   // Player locking
   const [lockedPlayerIds, setLockedPlayerIds] = useState<string[]>([])
 
+  // Round handicaps — starts from page-load prop, replaced by doResume() fresh fetch
+  const [effectiveRoundHandicaps, setEffectiveRoundHandicaps] = useState<RoundHandicap[]>(roundHandicaps)
+
   // Swipe gesture tracking
   const touchStartX = useRef<number | null>(null)
 
@@ -261,15 +274,16 @@ export default function LiveScoringFlow({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, holeIdx, courseHoles.length])
 
-  // Player setups — only for players that have a tee selected
+  // TODO(arch): roundHandicaps is a page-load prop — stale if organiser edits mid-session.
+  // Current fix: doResume() re-fetches. Bigger fix would be to always fetch fresh in this computation.
+  // Revisit during multi-tenant rework.
   const playerSetups: PlayerSetup[] = selectedPlayerIds
     .filter(id => playerTeeIds[id])
     .map(id => {
       const player = players.find(p => p.id === id)!
       const tee = tees.find(t => t.id === playerTeeIds[id])!
-      const existingHcp = roundHandicaps.find(rh => rh.round_id === roundId && rh.player_id === id)
-      const playingHcp = existingHcp?.playing_handicap
-        ?? calcPlayingHandicap(player.handicap, tee.slope, tee.course_rating, tee.par)
+      const existingHcp = effectiveRoundHandicaps.find(rh => rh.round_id === roundId && rh.player_id === id)
+      const playingHcp = resolvePlayingHandicap(existingHcp, player, tee, `round=${roundId}`)
       return { player, tee, playingHcp }
     })
 
@@ -322,6 +336,14 @@ export default function LiveScoringFlow({
         return
       }
 
+      // Fresh-fetch round_handicaps so we don't use a stale prop value if the
+      // organiser corrected a handicap after this page loaded.
+      const { data: freshHcps } = await supabase
+        .from("round_handicaps")
+        .select("round_id, player_id, playing_handicap")
+        .eq("round_id", rId)
+        .in("player_id", lockedIds)
+
       const { data: existingScores } = await supabase
         .from("live_scores")
         .select("player_id, hole_number, gross_score, stableford_points, no_return")
@@ -362,6 +384,7 @@ export default function LiveScoringFlow({
         resumeIdx = i + 1
       }
 
+      setEffectiveRoundHandicaps(freshHcps ?? [])
       setLockedPlayerIds(lockedIds)
       setSelectedPlayerIds(lockedIds)
       setPlayerTeeIds(teeMap)
