@@ -749,6 +749,10 @@ export default function LiveScoringFlow({
                   <span className="text-sm opacity-50">HCP {player.handicap}</span>
                 </button>
 
+                {/* TODO(ux): Auto-select Blue/Slate for men and Red/Claret for women on fresh start.
+                  Currently only applied on session resume for yardage display. Donegal Masters 2026
+                  shipped without this and users manually selected tees every round. Not a correctness
+                  issue but a real friction point — revisit when building the multi-tenant setup flow. */}
                 {/* Tee selector — only for selected players */}
                 {isSelected && (
                   <div className="bg-[#0d1f14] border-x border-b border-[#C9A84C]/20 px-4 py-3">

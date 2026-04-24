@@ -396,6 +396,10 @@ function EntryFlow({ players, rounds, holes, tees, roundHandicaps }: {
 
         {selectedRound && (
           <>
+            {/* TODO(ux): Auto-select Blue/Slate for men and Red/Claret for women on fresh start.
+              Currently only applied on session resume for yardage display. Donegal Masters 2026
+              shipped without this and users manually selected tees every round. Not a correctness
+              issue but a real friction point — revisit when building the multi-tenant setup flow. */}
             {/* Tee selection */}
             <div>
               <label className="block text-white/50 text-sm tracking-[0.15em] uppercase mb-2">Tee</label>
