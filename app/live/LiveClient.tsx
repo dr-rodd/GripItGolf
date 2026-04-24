@@ -67,8 +67,6 @@ interface Props {
 
 // ─── Helpers ──────────────────────────────────────────────
 
-const ST_PATRICKS_COURSE_ID = "11111111-0000-0000-0000-000000000003"
-
 function calcPlayingHandicap(hcpIndex: number, slope: number, courseRating: number, par: number) {
   return Math.round(hcpIndex * (slope / 113) + (courseRating - par))
 }
@@ -84,18 +82,12 @@ function nrGross(par: number, si: number, playingHcp: number) {
   return par + 2 + shotsReceived(si, playingHcp)
 }
 
-function effectivePar(hole: Hole, gender: string, courseId: string) {
-  if (gender === "F" && courseId === ST_PATRICKS_COURSE_ID && hole.par_ladies) {
-    return hole.par_ladies
-  }
-  return hole.par
+function effectivePar(hole: Hole, gender: string) {
+  return gender === "F" && hole.par_ladies ? hole.par_ladies : hole.par
 }
 
-function effectiveSI(hole: Hole, gender: string, courseId: string) {
-  if (gender === "F" && courseId === ST_PATRICKS_COURSE_ID && hole.stroke_index_ladies) {
-    return hole.stroke_index_ladies
-  }
-  return hole.stroke_index
+function effectiveSI(hole: Hole, gender: string) {
+  return gender === "F" && hole.stroke_index_ladies ? hole.stroke_index_ladies : hole.stroke_index
 }
 
 function yardageForTee(hole: Hole, teeName: string): number | null {
@@ -299,8 +291,8 @@ function EntryFlow({ players, rounds, holes, tees, roundHandicaps }: {
         for (const { player, playingHcp } of playerSetups) {
           const hs = scores[hIdx]?.[player.id]
           const noReturn = hs?.gross == null
-          const p = effectivePar(hole, player.gender, courseId)
-          const si = effectiveSI(hole, player.gender, courseId)
+          const p = effectivePar(hole, player.gender)
+          const si = effectiveSI(hole, player.gender)
           scoreRows.push({
             player_id: player.id,
             hole_id: hole.id,
@@ -519,8 +511,8 @@ function EntryFlow({ players, rounds, holes, tees, roundHandicaps }: {
         if (hs?.gross !== null && hs?.gross !== undefined) {
           pts += calcStableford(
             hs.gross,
-            effectivePar(hole, player.gender, selectedRound?.courses?.id ?? ""),
-            effectiveSI(hole, player.gender, selectedRound?.courses?.id ?? ""),
+            effectivePar(hole, player.gender),
+            effectiveSI(hole, player.gender),
             playingHcp
           )
         }
@@ -654,7 +646,7 @@ function HoleCard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [holeIdx])
 
-  const par = effectivePar(hole, playerSetups[0]?.player.gender ?? "M", courseId)
+  const par = effectivePar(hole, playerSetups[0]?.player.gender ?? "M")
   const yardage = yardageForTee(hole, teeName)
   const allHaveGross = playerSetups.every(({ player }) => holeScores[player.id]?.gross !== null)
 
@@ -673,8 +665,8 @@ function HoleCard({
         .map(({ player, playingHcp }) => {
           const hs = holeScores[player.id]
           if (hs.gross === null) return null
-          const p = effectivePar(hole, player.gender, courseId)
-          const si = effectiveSI(hole, player.gender, courseId)
+          const p = effectivePar(hole, player.gender)
+          const si = effectiveSI(hole, player.gender)
           const stableford = calcStableford(hs.gross, p, si, playingHcp)
           return {
             player_id: player.id,
@@ -703,8 +695,8 @@ function HoleCard({
     const updated: Record<string, HoleScore> = {}
     for (const { player, playingHcp } of playerSetups) {
       const hs = holeScores[player.id]
-      const p = effectivePar(hole, player.gender, courseId)
-      const si = effectiveSI(hole, player.gender, courseId)
+      const p = effectivePar(hole, player.gender)
+      const si = effectiveSI(hole, player.gender)
       const stableford = hs.gross !== null ? calcStableford(hs.gross, p, si, playingHcp) : null
       updated[player.id] = { ...hs, stableford }
     }
@@ -745,7 +737,7 @@ function HoleCard({
         </div>
         <div className="text-center">
           <div className="text-white/40 text-xs tracking-[0.2em] uppercase">SI</div>
-          <div className="text-2xl font-bold text-white/70">{effectiveSI(hole, playerSetups[0]?.player.gender ?? "M", courseId)}</div>
+          <div className="text-2xl font-bold text-white/70">{effectiveSI(hole, playerSetups[0]?.player.gender ?? "M")}</div>
         </div>
         {yardage !== null && (
           <div className="text-center">
@@ -759,8 +751,8 @@ function HoleCard({
       <div className="flex flex-col gap-4">
         {playerSetups.map(({ player, playingHcp }) => {
           const hs = holeScores[player.id]
-          const p = effectivePar(hole, player.gender, courseId)
-          const si = effectiveSI(hole, player.gender, courseId)
+          const p = effectivePar(hole, player.gender)
+          const si = effectiveSI(hole, player.gender)
           const shots = shotsReceived(si, playingHcp)
           const stableford = hs.gross !== null ? calcStableford(hs.gross, p, si, playingHcp) : null
           const showFairway = (p === 4 || p === 5)

@@ -58,8 +58,6 @@ type LiveStep = "activate" | "setup" | "holes" | "summary" | "committed" | "resu
 
 // ─── Constants ────────────────────────────────────────────
 
-const ST_PATRICKS_COURSE_ID = "11111111-0000-0000-0000-000000000003"
-
 const TEE_STYLES: Record<string, { dot: string; active: string }> = {
   Black:     { dot: "bg-zinc-300",   active: "border-zinc-300 text-zinc-200" },
   Blue:      { dot: "bg-blue-400",   active: "border-blue-400 text-blue-300" },
@@ -86,13 +84,11 @@ function calcStableford(gross: number, par: number, si: number, hcp: number) {
 function nrGross(par: number, si: number, hcp: number) {
   return par + 2 + shotsReceived(si, hcp)
 }
-function effectivePar(hole: Hole, gender: string, courseId: string) {
-  return gender === "F" && courseId === ST_PATRICKS_COURSE_ID && hole.par_ladies
-    ? hole.par_ladies : hole.par
+function effectivePar(hole: Hole, gender: string) {
+  return gender === "F" && hole.par_ladies ? hole.par_ladies : hole.par
 }
-function effectiveSI(hole: Hole, gender: string, courseId: string) {
-  return gender === "F" && courseId === ST_PATRICKS_COURSE_ID && hole.stroke_index_ladies
-    ? hole.stroke_index_ladies : hole.stroke_index
+function effectiveSI(hole: Hole, gender: string) {
+  return gender === "F" && hole.stroke_index_ladies ? hole.stroke_index_ladies : hole.stroke_index
 }
 function yardageForTee(hole: Hole, teeName: string): number | null {
   const key = `yardage_${teeName.toLowerCase()}` as keyof Hole
@@ -492,8 +488,8 @@ export default function LiveScoringFlow({
     for (let i = 0; i < courseHoles.length; i++) {
       const hole = courseHoles[i]
       const hs = editDraft[i] ?? { gross: null, isNR: false, stableford: null }
-      const p  = effectivePar(hole, setup.player.gender, courseId)
-      const si = effectiveSI(hole, setup.player.gender, courseId)
+      const p  = effectivePar(hole, setup.player.gender)
+      const si = effectiveSI(hole, setup.player.gender)
       const stableford = hs.isNR ? 0 : hs.gross !== null ? calcStableford(hs.gross, p, si, setup.playingHcp) : null
       newPlayerScores[i] = { ...hs, stableford }
 
@@ -561,8 +557,8 @@ export default function LiveScoringFlow({
         for (const setup of playerSetups) {
           const hs = scores[hIdx]?.[setup.player.id]
           const noReturn = hs?.isNR === true || hs?.gross == null
-          const p = effectivePar(hole, setup.player.gender, courseId)
-          const si = effectiveSI(hole, setup.player.gender, courseId)
+          const p = effectivePar(hole, setup.player.gender)
+          const si = effectiveSI(hole, setup.player.gender)
           scoreRows.push({
             player_id: setup.player.id, hole_id: hole.id, round_id: roundId,
             gross_score: noReturn ? nrGross(p, si, setup.playingHcp) : hs!.gross!,
@@ -844,8 +840,8 @@ export default function LiveScoringFlow({
         .map(({ player, playingHcp }) => {
           const hs = holeScores[player.id]
           if (!hs?.gross && !hs?.isNR) return null
-          const p = effectivePar(hole, player.gender, courseId)
-          const si = effectiveSI(hole, player.gender, courseId)
+          const p = effectivePar(hole, player.gender)
+          const si = effectiveSI(hole, player.gender)
           const gross = hs.isNR ? nrGross(p, si, playingHcp) : hs.gross!
           return {
             player_id: player.id, round_id: roundId, hole_number: hole.hole_number,
@@ -862,8 +858,8 @@ export default function LiveScoringFlow({
       const updated: Record<string, HoleScore> = {}
       for (const { player, playingHcp } of playerSetups) {
         const hs = holeScores[player.id]
-        const p = effectivePar(hole, player.gender, courseId)
-        const si = effectiveSI(hole, player.gender, courseId)
+        const p = effectivePar(hole, player.gender)
+        const si = effectiveSI(hole, player.gender)
         updated[player.id] = {
           ...hs,
           stableford: hs?.isNR ? 0 : hs?.gross != null ? calcStableford(hs.gross, p, si, playingHcp) : null,
@@ -958,8 +954,8 @@ export default function LiveScoringFlow({
           <div className="max-w-lg mx-auto w-full px-4 pt-4 pb-28 space-y-2">
             {courseHoles.map((hole, idx) => {
               const hs = editDraft[idx] ?? { gross: null, isNR: false, stableford: null }
-              const ePar = effectivePar(hole, player.gender, courseId)
-              const eSI  = effectiveSI(hole, player.gender, courseId)
+              const ePar = effectivePar(hole, player.gender)
+              const eSI  = effectiveSI(hole, player.gender)
               const netParGross = ePar + shotsReceived(eSI, playingHcp)
               const pts = hs.isNR ? 0 : hs.gross !== null
                 ? calcStableford(hs.gross, ePar, eSI, playingHcp)
@@ -1115,8 +1111,8 @@ export default function LiveScoringFlow({
 
           const rows = courseHoles.map((hole, idx) => {
             const hs      = scores[idx]?.[player.id]
-            const ePar    = effectivePar(hole, player.gender, courseId)
-            const eSI     = effectiveSI(hole, player.gender, courseId)
+            const ePar    = effectivePar(hole, player.gender)
+            const eSI     = effectiveSI(hole, player.gender)
             const isNR      = hs?.isNR === true
             const gross     = isNR ? null : (hs?.gross ?? null)  // null for NR display
             const grossFull = hs?.gross ?? null                   // NR max gross for subtotals
@@ -1360,8 +1356,8 @@ function HoleCard({
       <div className="flex flex-col gap-3">
         {playerSetups.map(({ player, playingHcp, tee }) => {
           const hs   = holeScores[player.id] ?? { gross: null, isNR: false, stableford: null }
-          const ePar = effectivePar(hole, player.gender, courseId)
-          const eSI  = effectiveSI(hole, player.gender, courseId)
+          const ePar = effectivePar(hole, player.gender)
+          const eSI  = effectiveSI(hole, player.gender)
           return (
             <LivePlayerTile
               key={player.id}
