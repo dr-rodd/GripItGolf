@@ -169,3 +169,14 @@ Stored in `.env.local` (gitignored). Service role key must remain server-side on
 
 - Never ask for permission or confirmation before making changes — just do it
 - Always push to remote at the end of every task without being asked
+
+## Refactoring Discipline
+
+### Signature changes (arity or argument order)
+
+Never use `sed` with variable-name patterns to update call sites. On 2026-04-23 a call site in `LiveLeaderboardPanel` was missed when removing the third argument from `effectivePar` because the sed pattern matched `h` (a reduce callback parameter) but the missed line used `hole` (a find result). The function compiled; the wrong par was silently used for nett scoring.
+
+Required procedure when changing a function signature:
+1. `grep -rn 'functionName(' app/` — list every call site.
+2. Read the list. Acknowledge it explicitly.
+3. Edit each call site by hand or with a pattern that matches the function name only, not the argument variable names.
