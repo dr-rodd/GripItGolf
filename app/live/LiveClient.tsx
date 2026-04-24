@@ -275,6 +275,7 @@ function EntryFlow({ players, rounds, holes, tees, roundHandicaps }: {
 
     try {
       // 1. Upsert round_handicaps for each player
+      // TODO(error-handling): check error, revert optimistic UI, toast on failure
       await Promise.all(
         playerSetups.map(({ player, playingHcp }) =>
           supabase.from("round_handicaps").upsert(
@@ -686,6 +687,7 @@ function HoleCard({
         .filter(Boolean)
 
       if (rows.length > 0) {
+        // TODO(error-handling): check error, revert optimistic UI, toast on failure
         await supabase.from("live_scores").upsert(rows as any, {
           onConflict: "player_id,round_id,hole_number",
         })

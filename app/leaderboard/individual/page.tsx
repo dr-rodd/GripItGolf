@@ -4,7 +4,7 @@ import IndividualClient from "./IndividualClient"
 import Poller from "@/app/components/Poller"
 import BackButton from "@/app/components/BackButton"
 
-export const revalidate = 30
+export const dynamic = 'force-dynamic'
 
 export default async function IndividualPage() {
   const [roundsRes, playersRes, teamsRes, holesRes, scoresRes, hcpsRes] = await Promise.all([

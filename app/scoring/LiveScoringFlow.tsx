@@ -199,6 +199,7 @@ async function generateCompositeScores(
       }
     })
 
+    // TODO(error-handling): check error, revert optimistic UI, toast on failure
     await supabase.from("composite_holes").upsert(compositeHoleRows, {
       onConflict: "composite_player_id,round_id,hole_id",
     })
@@ -529,6 +530,7 @@ export default function LiveScoringFlow({
       }
     }
 
+    // TODO(error-handling): check error, revert optimistic UI, toast on failure
     await Promise.all([
       upsertRows.length > 0
         ? supabase.from("live_scores").upsert(upsertRows, { onConflict: "player_id,round_id,hole_number" })
@@ -557,6 +559,7 @@ export default function LiveScoringFlow({
     setError(null)
     try {
       // 1. Upsert round_handicaps
+      // TODO(error-handling): check error, revert optimistic UI, toast on failure
       await Promise.all(
         playerSetups.map(({ player, playingHcp }) =>
           supabase.from("round_handicaps").upsert(
@@ -567,6 +570,7 @@ export default function LiveScoringFlow({
       )
 
       // 2. Delete existing scores for these players then insert fresh
+      // TODO(error-handling): check error, revert optimistic UI, toast on failure
       await Promise.all(
         playerSetups.map(({ player }) =>
           supabase.from("scores").delete()
@@ -602,6 +606,7 @@ export default function LiveScoringFlow({
       })
 
       // 5. Mark live_scores committed
+      // TODO(error-handling): check error, revert optimistic UI, toast on failure
       await supabase.from("live_scores")
         .update({ committed: true })
         .in("player_id", playerSetups.map(p => p.player.id))
@@ -610,6 +615,7 @@ export default function LiveScoringFlow({
       // 6. Finalise the live round and return to the course portal
       // Note: player locks are intentionally kept so the live leaderboard
       // continues to display finalised players. Locks are only removed on discard.
+      // TODO(error-handling): check error, revert optimistic UI, toast on failure
       await supabase
         .from("live_rounds")
         .update({ status: "finalised", closed_at: new Date().toISOString() })
@@ -878,6 +884,7 @@ export default function LiveScoringFlow({
           }
         }).filter(Boolean)
       if (rows.length > 0) {
+        // TODO(error-handling): check error, revert optimistic UI, toast on failure
         supabase.from("live_scores").upsert(rows as any, { onConflict: "player_id,round_id,hole_number" })
           .then(() => {}) // fire and forget
       }
