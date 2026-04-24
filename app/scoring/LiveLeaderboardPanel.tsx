@@ -45,18 +45,12 @@ interface LiveScoreRow {
 
 // ─── Helpers ──────────────────────────────────────────────
 
-const ST_PATRICKS_COURSE_ID = "11111111-0000-0000-0000-000000000003"
-
-function effectivePar(hole: Hole, gender: string, courseId: string) {
-  return gender === "F" && courseId === ST_PATRICKS_COURSE_ID && hole.par_ladies
-    ? hole.par_ladies
-    : hole.par
+function effectivePar(hole: Hole, gender: string) {
+  return gender === "F" && hole.par_ladies ? hole.par_ladies : hole.par
 }
 
-function effectiveSI(hole: Hole, gender: string, courseId: string) {
-  return gender === "F" && courseId === ST_PATRICKS_COURSE_ID && hole.stroke_index_ladies
-    ? hole.stroke_index_ladies
-    : hole.stroke_index
+function effectiveSI(hole: Hole, gender: string) {
+  return gender === "F" && hole.stroke_index_ladies ? hole.stroke_index_ladies : hole.stroke_index
 }
 
 function fmtRelative(rel: number): string {
@@ -160,8 +154,8 @@ export function InlineScorecard({
   // Build rows
   const rows = courseHoles.map((hole, idx) => {
     const ls     = scoreByHole.get(hole.hole_number)
-    const ePar   = effectivePar(hole, player.gender, courseId)
-    const eSI    = effectiveSI(hole, player.gender, courseId)
+    const ePar   = effectivePar(hole, player.gender)
+    const eSI    = effectiveSI(hole, player.gender)
     const gross  = ls?.gross_score ?? null
     const pts    = ls?.stableford_points ?? null
     return { hole, idx, ePar, eSI, gross, pts }
@@ -360,10 +354,10 @@ export default function LiveLeaderboardPanel({
       for (const ls of playerScores) {
         const hole = courseHoles.find(h => h.hole_number === ls.hole_number)
         if (!hole || ls.gross_score === null) continue
-        totalParPlayed += effectivePar(hole, player.gender, liveRound.course_id)
+        totalParPlayed += effectivePar(hole, player.gender)
       }
 
-      const playerCoursePar = courseHoles.reduce((s, h) => s + effectivePar(h, player.gender, liveRound.course_id), 0)
+      const playerCoursePar = courseHoles.reduce((s, h) => s + effectivePar(h, player.gender), 0)
       const totalNett = playerCoursePar + 36 - totalStableford
       const holesCompleted = playerScores.length
 

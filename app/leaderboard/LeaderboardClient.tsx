@@ -42,11 +42,14 @@ const displayName = (p: Player) =>
 
 function teamRoundPts(team: Team, holes: Hole[], scores: Score[], roundId: string): number {
   return holes.reduce((total, hole) => {
-    const best = team.players
+    const holePts = team.players
       .map(p => scores.find(s => s.player_id === p.id && s.hole_id === hole.id && s.round_id === roundId))
       .filter(Boolean)
-      .reduce((max, s) => Math.max(max, s!.stableford_points), 0)
-    return total + best
+      .map(s => s!.stableford_points)
+      .sort((a, b) => b - a)
+      .slice(0, 2)
+      .reduce((sum, p) => sum + p, 0)
+    return total + holePts
   }, 0)
 }
 
@@ -130,15 +133,17 @@ function CompositeScorecard({ team, round, holes, scores, roundHandicaps, compos
       const s = playerScoreMaps[pi].get(hole.hole_number)
       return s ? s.stableford_points : null
     })
-    const bestPts = players.reduce((max, _, pi) => {
-      const s = playerScoreMaps[pi].get(hole.hole_number)
-      return s ? Math.max(max, s.stableford_points) : max
-    }, 0)
+    const holeScores = players
+      .flatMap((_, pi) => {
+        const s = playerScoreMaps[pi].get(hole.hole_number)
+        return s != null ? [{ pi, pts: s.stableford_points }] : []
+      })
+      .sort((a, b) => b.pts - a.pts)
+    const top2 = holeScores.slice(0, 2)
+    const bestPts = top2.reduce((sum, x) => sum + x.pts, 0)
     const hasScores = players.some((_, pi) => playerScoreMaps[pi].has(hole.hole_number))
-    const contributors = players.map((_, pi) => {
-      const s = playerScoreMaps[pi].get(hole.hole_number)
-      return bestPts > 0 && s != null && s.stableford_points === bestPts
-    })
+    const top2Pis = new Set(top2.map(x => x.pi))
+    const contributors = players.map((_, pi) => top2Pis.has(pi))
     const sourceColors = players.map(p => {
       if (!p.is_composite) return null
       const sourceId = compositeHoleMap.get(`${p.id}:${round.id}:${hole.id}`)

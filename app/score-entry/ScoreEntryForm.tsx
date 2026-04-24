@@ -17,7 +17,6 @@ interface Hole    {
   yardage_sandstone?: number; yardage_slate?: number; yardage_granite?: number; yardage_claret?: number
 }
 
-const ST_PATRICKS_COURSE_ID = '11111111-0000-0000-0000-000000000003'
 
 interface SubmittedSnapshot {
   playerName: string
@@ -617,8 +616,7 @@ export default function ScoreEntryForm({ players, courses }: { players: Player[]
       if (y) yardageMap[h.id] = y
     }
 
-    // Use ladies par/stroke_index for female players on St Patrick's course
-    const isLadies = player?.gender === 'F' && courseId === ST_PATRICKS_COURSE_ID
+    const isLadies = player?.gender === 'F'
     const resolvedHoles = isLadies
       ? holeData.map(h => ({
           ...h,

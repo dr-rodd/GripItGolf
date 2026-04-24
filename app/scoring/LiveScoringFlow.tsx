@@ -58,8 +58,6 @@ type LiveStep = "activate" | "setup" | "holes" | "summary" | "committed" | "resu
 
 // ─── Constants ────────────────────────────────────────────
 
-const ST_PATRICKS_COURSE_ID = "11111111-0000-0000-0000-000000000003"
-
 const TEE_STYLES: Record<string, { dot: string; active: string }> = {
   Black:     { dot: "bg-zinc-300",   active: "border-zinc-300 text-zinc-200" },
   Blue:      { dot: "bg-blue-400",   active: "border-blue-400 text-blue-300" },
@@ -86,13 +84,21 @@ function calcStableford(gross: number, par: number, si: number, hcp: number) {
 function nrGross(par: number, si: number, hcp: number) {
   return par + 2 + shotsReceived(si, hcp)
 }
-function effectivePar(hole: Hole, gender: string, courseId: string) {
-  return gender === "F" && courseId === ST_PATRICKS_COURSE_ID && hole.par_ladies
-    ? hole.par_ladies : hole.par
+function effectivePar(hole: Hole, gender: string) {
+  return gender === "F" && hole.par_ladies ? hole.par_ladies : hole.par
 }
-function effectiveSI(hole: Hole, gender: string, courseId: string) {
-  return gender === "F" && courseId === ST_PATRICKS_COURSE_ID && hole.stroke_index_ladies
-    ? hole.stroke_index_ladies : hole.stroke_index
+function effectiveSI(hole: Hole, gender: string) {
+  return gender === "F" && hole.stroke_index_ladies ? hole.stroke_index_ladies : hole.stroke_index
+}
+function resolvePlayingHandicap(
+  existingHcp: RoundHandicap | undefined,
+  player: Player,
+  tee: Tee,
+  context: string,
+): number {
+  if (existingHcp?.playing_handicap !== undefined) return existingHcp.playing_handicap
+  console.warn(`[handicap-fallback] no round_handicap for player ${player.id} — recomputing. context=${context}`)
+  return calcPlayingHandicap(player.handicap, tee.slope, tee.course_rating, tee.par)
 }
 function yardageForTee(hole: Hole, teeName: string): number | null {
   const key = `yardage_${teeName.toLowerCase()}` as keyof Hole
@@ -193,6 +199,7 @@ async function generateCompositeScores(
       }
     })
 
+    // TODO(error-handling): check error, revert optimistic UI, toast on failure
     await supabase.from("composite_holes").upsert(compositeHoleRows, {
       onConflict: "composite_player_id,round_id,hole_id",
     })
@@ -240,6 +247,9 @@ export default function LiveScoringFlow({
   // Player locking
   const [lockedPlayerIds, setLockedPlayerIds] = useState<string[]>([])
 
+  // Round handicaps — starts from page-load prop, replaced by doResume() fresh fetch
+  const [effectiveRoundHandicaps, setEffectiveRoundHandicaps] = useState<RoundHandicap[]>(roundHandicaps)
+
   // Swipe gesture tracking
   const touchStartX = useRef<number | null>(null)
 
@@ -265,15 +275,16 @@ export default function LiveScoringFlow({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, holeIdx, courseHoles.length])
 
-  // Player setups — only for players that have a tee selected
+  // TODO(arch): roundHandicaps is a page-load prop — stale if organiser edits mid-session.
+  // Current fix: doResume() re-fetches. Bigger fix would be to always fetch fresh in this computation.
+  // Revisit during multi-tenant rework.
   const playerSetups: PlayerSetup[] = selectedPlayerIds
     .filter(id => playerTeeIds[id])
     .map(id => {
       const player = players.find(p => p.id === id)!
       const tee = tees.find(t => t.id === playerTeeIds[id])!
-      const existingHcp = roundHandicaps.find(rh => rh.round_id === roundId && rh.player_id === id)
-      const playingHcp = existingHcp?.playing_handicap
-        ?? calcPlayingHandicap(player.handicap, tee.slope, tee.course_rating, tee.par)
+      const existingHcp = effectiveRoundHandicaps.find(rh => rh.round_id === roundId && rh.player_id === id)
+      const playingHcp = resolvePlayingHandicap(existingHcp, player, tee, `round=${roundId}`)
       return { player, tee, playingHcp }
     })
 
@@ -326,6 +337,14 @@ export default function LiveScoringFlow({
         return
       }
 
+      // Fresh-fetch round_handicaps so we don't use a stale prop value if the
+      // organiser corrected a handicap after this page loaded.
+      const { data: freshHcps } = await supabase
+        .from("round_handicaps")
+        .select("round_id, player_id, playing_handicap")
+        .eq("round_id", rId)
+        .in("player_id", lockedIds)
+
       const { data: existingScores } = await supabase
         .from("live_scores")
         .select("player_id, hole_number, gross_score, stableford_points, no_return")
@@ -366,6 +385,7 @@ export default function LiveScoringFlow({
         resumeIdx = i + 1
       }
 
+      setEffectiveRoundHandicaps(freshHcps ?? [])
       setLockedPlayerIds(lockedIds)
       setSelectedPlayerIds(lockedIds)
       setPlayerTeeIds(teeMap)
@@ -492,8 +512,8 @@ export default function LiveScoringFlow({
     for (let i = 0; i < courseHoles.length; i++) {
       const hole = courseHoles[i]
       const hs = editDraft[i] ?? { gross: null, isNR: false, stableford: null }
-      const p  = effectivePar(hole, setup.player.gender, courseId)
-      const si = effectiveSI(hole, setup.player.gender, courseId)
+      const p  = effectivePar(hole, setup.player.gender)
+      const si = effectiveSI(hole, setup.player.gender)
       const stableford = hs.isNR ? 0 : hs.gross !== null ? calcStableford(hs.gross, p, si, setup.playingHcp) : null
       newPlayerScores[i] = { ...hs, stableford }
 
@@ -510,6 +530,7 @@ export default function LiveScoringFlow({
       }
     }
 
+    // TODO(error-handling): check error, revert optimistic UI, toast on failure
     await Promise.all([
       upsertRows.length > 0
         ? supabase.from("live_scores").upsert(upsertRows, { onConflict: "player_id,round_id,hole_number" })
@@ -538,6 +559,7 @@ export default function LiveScoringFlow({
     setError(null)
     try {
       // 1. Upsert round_handicaps
+      // TODO(error-handling): check error, revert optimistic UI, toast on failure
       await Promise.all(
         playerSetups.map(({ player, playingHcp }) =>
           supabase.from("round_handicaps").upsert(
@@ -548,6 +570,7 @@ export default function LiveScoringFlow({
       )
 
       // 2. Delete existing scores for these players then insert fresh
+      // TODO(error-handling): check error, revert optimistic UI, toast on failure
       await Promise.all(
         playerSetups.map(({ player }) =>
           supabase.from("scores").delete()
@@ -561,8 +584,8 @@ export default function LiveScoringFlow({
         for (const setup of playerSetups) {
           const hs = scores[hIdx]?.[setup.player.id]
           const noReturn = hs?.isNR === true || hs?.gross == null
-          const p = effectivePar(hole, setup.player.gender, courseId)
-          const si = effectiveSI(hole, setup.player.gender, courseId)
+          const p = effectivePar(hole, setup.player.gender)
+          const si = effectiveSI(hole, setup.player.gender)
           scoreRows.push({
             player_id: setup.player.id, hole_id: hole.id, round_id: roundId,
             gross_score: noReturn ? nrGross(p, si, setup.playingHcp) : hs!.gross!,
@@ -583,6 +606,7 @@ export default function LiveScoringFlow({
       })
 
       // 5. Mark live_scores committed
+      // TODO(error-handling): check error, revert optimistic UI, toast on failure
       await supabase.from("live_scores")
         .update({ committed: true })
         .in("player_id", playerSetups.map(p => p.player.id))
@@ -591,6 +615,7 @@ export default function LiveScoringFlow({
       // 6. Finalise the live round and return to the course portal
       // Note: player locks are intentionally kept so the live leaderboard
       // continues to display finalised players. Locks are only removed on discard.
+      // TODO(error-handling): check error, revert optimistic UI, toast on failure
       await supabase
         .from("live_rounds")
         .update({ status: "finalised", closed_at: new Date().toISOString() })
@@ -753,6 +778,10 @@ export default function LiveScoringFlow({
                   <span className="text-sm opacity-50">HCP {player.handicap}</span>
                 </button>
 
+                {/* TODO(ux): Auto-select Blue/Slate for men and Red/Claret for women on fresh start.
+                  Currently only applied on session resume for yardage display. Donegal Masters 2026
+                  shipped without this and users manually selected tees every round. Not a correctness
+                  issue but a real friction point — revisit when building the multi-tenant setup flow. */}
                 {/* Tee selector — only for selected players */}
                 {isSelected && (
                   <div className="bg-[#0d1f14] border-x border-b border-[#C9A84C]/20 px-4 py-3">
@@ -844,8 +873,8 @@ export default function LiveScoringFlow({
         .map(({ player, playingHcp }) => {
           const hs = holeScores[player.id]
           if (!hs?.gross && !hs?.isNR) return null
-          const p = effectivePar(hole, player.gender, courseId)
-          const si = effectiveSI(hole, player.gender, courseId)
+          const p = effectivePar(hole, player.gender)
+          const si = effectiveSI(hole, player.gender)
           const gross = hs.isNR ? nrGross(p, si, playingHcp) : hs.gross!
           return {
             player_id: player.id, round_id: roundId, hole_number: hole.hole_number,
@@ -855,6 +884,7 @@ export default function LiveScoringFlow({
           }
         }).filter(Boolean)
       if (rows.length > 0) {
+        // TODO(error-handling): check error, revert optimistic UI, toast on failure
         supabase.from("live_scores").upsert(rows as any, { onConflict: "player_id,round_id,hole_number" })
           .then(() => {}) // fire and forget
       }
@@ -862,8 +892,8 @@ export default function LiveScoringFlow({
       const updated: Record<string, HoleScore> = {}
       for (const { player, playingHcp } of playerSetups) {
         const hs = holeScores[player.id]
-        const p = effectivePar(hole, player.gender, courseId)
-        const si = effectiveSI(hole, player.gender, courseId)
+        const p = effectivePar(hole, player.gender)
+        const si = effectiveSI(hole, player.gender)
         updated[player.id] = {
           ...hs,
           stableford: hs?.isNR ? 0 : hs?.gross != null ? calcStableford(hs.gross, p, si, playingHcp) : null,
@@ -958,8 +988,8 @@ export default function LiveScoringFlow({
           <div className="max-w-lg mx-auto w-full px-4 pt-4 pb-28 space-y-2">
             {courseHoles.map((hole, idx) => {
               const hs = editDraft[idx] ?? { gross: null, isNR: false, stableford: null }
-              const ePar = effectivePar(hole, player.gender, courseId)
-              const eSI  = effectiveSI(hole, player.gender, courseId)
+              const ePar = effectivePar(hole, player.gender)
+              const eSI  = effectiveSI(hole, player.gender)
               const netParGross = ePar + shotsReceived(eSI, playingHcp)
               const pts = hs.isNR ? 0 : hs.gross !== null
                 ? calcStableford(hs.gross, ePar, eSI, playingHcp)
@@ -1115,8 +1145,8 @@ export default function LiveScoringFlow({
 
           const rows = courseHoles.map((hole, idx) => {
             const hs      = scores[idx]?.[player.id]
-            const ePar    = effectivePar(hole, player.gender, courseId)
-            const eSI     = effectiveSI(hole, player.gender, courseId)
+            const ePar    = effectivePar(hole, player.gender)
+            const eSI     = effectiveSI(hole, player.gender)
             const isNR      = hs?.isNR === true
             const gross     = isNR ? null : (hs?.gross ?? null)  // null for NR display
             const grossFull = hs?.gross ?? null                   // NR max gross for subtotals
@@ -1360,8 +1390,8 @@ function HoleCard({
       <div className="flex flex-col gap-3">
         {playerSetups.map(({ player, playingHcp, tee }) => {
           const hs   = holeScores[player.id] ?? { gross: null, isNR: false, stableford: null }
-          const ePar = effectivePar(hole, player.gender, courseId)
-          const eSI  = effectiveSI(hole, player.gender, courseId)
+          const ePar = effectivePar(hole, player.gender)
+          const eSI  = effectiveSI(hole, player.gender)
           return (
             <LivePlayerTile
               key={player.id}
