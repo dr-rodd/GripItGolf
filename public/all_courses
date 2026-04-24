@@ -1,0 +1,1431 @@
+TOP 100 GOLF COURSES — ISLAND OF IRELAND
+Combined scorecard database (25 courses)
+Generated: 2026-04-24
+
+=====================================
+COURSE 1 of 25 — adare-manor
+=====================================
+COURSE: Adare Manor Golf Course (Hotel & Resort)
+LOCATION: Adare, Limerick, Ireland
+WEBSITE: https://www.adaremanor.com/golf/
+SCORECARD_SOURCE: https://golfify.io (official-match data for Adare Manor — Blue 7453y, Par 72)
+STATUS: complete
+
+NOTES:
+- Course redesigned by Tom Fazio (2018). Host of 2027 Ryder Cup.
+- Blue/Championship tees: 7453 yds, Par 72; White 6590, Yellow 6063, Red 5419.
+- Par 72 across all tees. Front 9 / Back 9 par = 36 / 36.
+
+MENS (Blue / Championship tees — 7453 yds, Par 72):
+hole,par,stroke_index
+1,4,5
+2,4,9
+3,4,13
+4,3,17
+5,4,1
+6,3,15
+7,5,7
+8,4,3
+9,5,11
+10,4,10
+11,3,14
+12,5,8
+13,4,6
+14,4,4
+15,4,16
+16,3,12
+17,4,18
+18,5,2
+
+LADIES (Red tees — 5419 yds, Par 72):
+hole,par,stroke_index
+1,4,3
+2,4,9
+3,4,13
+4,3,17
+5,4,7
+6,3,15
+7,5,5
+8,4,11
+9,5,1
+10,4,10
+11,3,16
+12,5,8
+13,4,4
+14,4,6
+15,4,14
+16,3,18
+17,4,12
+18,5,2
+
+DATA_QUALITY: complete — all pars and stroke indices verified.
+
+=====================================
+COURSE 2 of 25 — ballybunion-old
+=====================================
+COURSE: Ballybunion Golf Club — Old Course
+LOCATION: Ballybunion, Kerry, Ireland
+WEBSITE: https://www.ballybuniongolfclub.com/
+SCORECARD_SOURCE: https://www.ballybuniongolfclub.com/wp-content/uploads/2019/01/2019-scorecard-old.pdf (official PDF)
+STATUS: complete
+
+NOTES:
+- Ballybunion Old — Par 71 for men, Par 74 for ladies.
+- Mens tees: Championship 6739y, White 6383y, forward (yellow) 6039y.
+- Ladies Red tees 5410y (note: ladies hole 9 plays as par 5 and several back-9 holes flip par vs mens).
+- Front-9 stroke indices follow classic convention: mens SI 1-17 odd on front, 2-18 even on back.
+
+MENS (Championship tees — 6739 yds, Par 71):
+hole,par,stroke_index
+1,4,11
+2,4,1
+3,3,9
+4,5,17
+5,5,13
+6,4,7
+7,4,5
+8,3,15
+9,4,3
+10,4,12
+11,4,2
+12,3,8
+13,5,18
+14,3,14
+15,3,4
+16,5,16
+17,4,6
+18,4,10
+
+LADIES (Red tees — 5410 yds, Par 74):
+hole,par,stroke_index
+1,4,9
+2,5,3
+3,3,13
+4,5,5
+5,5,11
+6,4,7
+7,4,1
+8,3,15
+9,5,17
+10,4,14
+11,4,2
+12,3,12
+13,5,6
+14,3,10
+15,4,18
+16,5,16
+17,4,4
+18,4,8
+
+DATA_QUALITY: complete — values transcribed from the official 2019 scorecard PDF.
+
+=====================================
+COURSE 3 of 25 — ballyliffin-glashedy-links
+=====================================
+COURSE: Ballyliffin Golf Club — Glashedy Links
+LOCATION: Ballyliffin, Donegal, Ireland
+WEBSITE: https://www.ballyliffingolfclub.com/
+SCORECARD_SOURCE: Official Ballyliffin Golf Club Glashedy Links scorecard (club-issued card)
+STATUS: complete
+
+NOTES:
+- Designed by Pat Ruddy & Tom Craddock, opened 1995. Host of 2018 Dubai Duty Free Irish Open.
+- Blue 7542y / Gold 6796y / White 6395y for men; Red 5588y for ladies. Par 72 throughout.
+
+MENS (Blue / Championship tees — 7542 yds, Par 72):
+hole,par,stroke_index
+1,4,10
+2,4,2
+3,4,8
+4,5,18
+5,3,16
+6,4,14
+7,3,12
+8,4,6
+9,4,4
+10,4,17
+11,4,7
+12,4,3
+13,5,11
+14,3,15
+15,4,1
+16,4,5
+17,5,9
+18,4,13
+
+LADIES (Red tees — 5588 yds, Par 72):
+hole,par,stroke_index
+1,4,10
+2,4,2
+3,4,8
+4,5,18
+5,3,16
+6,4,14
+7,3,12
+8,4,6
+9,4,4
+10,4,11
+11,4,7
+12,4,1
+13,5,13
+14,3,17
+15,4,3
+16,4,9
+17,5,5
+18,4,15
+
+DATA_QUALITY: complete — values transcribed from the official scorecard image.
+
+=====================================
+COURSE 4 of 25 — ballyliffin-old
+=====================================
+COURSE: Ballyliffin Golf Club — Old Links
+LOCATION: Ballyliffin, Donegal, Ireland
+WEBSITE: https://www.ballyliffingolfclub.com/
+SCORECARD_SOURCE: Official Ballyliffin Golf Club Old Course scorecard (club-issued card)
+STATUS: complete
+
+NOTES:
+- Oldest course at Ballyliffin. Renovated by Nick Faldo in 2006.
+- Blue 6937y / Gold 6450y / White 6257y for men; Red 5443y for ladies. Par 71 throughout.
+
+MENS (Blue / Championship tees — 6937 yds, Par 71):
+hole,par,stroke_index
+1,4,10
+2,4,2
+3,4,6
+4,5,14
+5,3,16
+6,4,8
+7,3,18
+8,4,12
+9,4,4
+10,4,17
+11,4,9
+12,3,13
+13,4,15
+14,5,3
+15,4,1
+16,4,7
+17,3,11
+18,5,5
+
+LADIES (Red tees — 5443 yds, Par 71):
+hole,par,stroke_index
+1,4,12
+2,4,2
+3,4,6
+4,5,10
+5,3,16
+6,4,4
+7,3,18
+8,4,14
+9,4,8
+10,4,13
+11,4,5
+12,3,17
+13,4,3
+14,5,1
+15,4,9
+16,4,7
+17,3,15
+18,5,11
+
+DATA_QUALITY: complete — values transcribed from the official scorecard image.
+
+=====================================
+COURSE 5 of 25 — carne-wild-atlantic-dunes
+=====================================
+COURSE: Carne Golf Links — Wild Atlantic Dunes
+LOCATION: Belmullet, Mayo, Ireland
+WEBSITE: https://carnegolflinks.com/ (also: https://belmulletgolfclub.ie/)
+SCORECARD_SOURCE: course.bluegolf.com (Carne Golf Links / Wild Atlantic Dunes detailed scorecard)
+STATUS: complete
+
+NOTES:
+- Design: Eddie Hackett (original), with Kilmore nine by Ally McIntosh / Jim Engh (opened 2013).
+- Wild Atlantic Dunes routing uses Kilmore 1–9 + original Hackett back-nine (or vice versa).
+- Par 72 for men (6685y from back), Par 73 for ladies (5067y from red tees).
+
+MENS (Championship tees — 6685 yds, Par 72):
+hole,par,stroke_index
+1,5,15
+2,4,7
+3,4,11
+4,5,9
+5,3,13
+6,4,3
+7,3,17
+8,5,4
+9,4,12
+10,3,10
+11,4,8
+12,4,2
+13,5,6
+14,3,14
+15,4,18
+16,3,16
+17,4,1
+18,5,5
+
+LADIES (Red tees — 5067 yds, Par 73):
+hole,par,stroke_index
+1,5,15
+2,4,1
+3,4,17
+4,5,3
+5,3,7
+6,4,5
+7,3,18
+8,5,10
+9,4,11
+10,3,14
+11,4,6
+12,4,4
+13,5,12
+14,3,8
+15,4,13
+16,3,16
+17,5,9
+18,5,2
+
+DATA_QUALITY: complete — values from the BlueGolf detailed scorecard for Carne Golf Links.
+
+=====================================
+COURSE 6 of 25 — county-louth
+=====================================
+COURSE: County Louth Golf Club (Baltray)
+LOCATION: Baltray, Drogheda, Louth, Ireland
+WEBSITE: https://www.countylouthgolfclub.com/
+SCORECARD_SOURCE: https://www.countylouthgolfclub.com/course-scorecard (embedded scorecard data)
+STATUS: complete
+
+NOTES:
+- Classic Tom Simpson links (1938). Par 72 from all men's tees.
+- Championship (Blue) 7031y, White 6716y, Green 6338y for men; Red 5873y, Gold 5479y for ladies (ladies par 75).
+
+MENS (Championship / Blue tees — 7031 yds, Par 72):
+hole,par,stroke_index
+1,4,4
+2,5,16
+3,5,8
+4,4,18
+5,3,12
+6,5,14
+7,3,10
+8,4,6
+9,4,2
+10,4,9
+11,4,1
+12,4,3
+13,4,5
+14,4,13
+15,3,17
+16,4,7
+17,3,15
+18,5,11
+
+LADIES (Red tees — 5873 yds, Par 75):
+hole,par,stroke_index
+1,4,5
+2,5,15
+3,5,3
+4,4,11
+5,3,13
+6,5,9
+7,3,7
+8,4,1
+9,5,17
+10,4,6
+11,5,12
+12,4,4
+13,5,18
+14,4,16
+15,3,14
+16,4,2
+17,3,8
+18,5,10
+
+DATA_QUALITY: complete — values transcribed from the official club scorecard data.
+
+=====================================
+COURSE 7 of 25 — county-sligo-colt-championship
+=====================================
+COURSE: County Sligo Golf Club — Colt Championship (Rosses Point)
+LOCATION: Rosses Point, Sligo, Ireland
+WEBSITE: https://countysligogolfclub.ie/
+SCORECARD_SOURCE: Official County Sligo Golf Club scorecard (club-issued PDF)
+STATUS: complete
+
+NOTES:
+- Designed by H.S. (Harry) Colt (1927). Named Irish Golf Course of the Year 2024.
+- Black 7157y / White 6574y / Gold 6375y for men, Par 71. Gold 6375y / Green 5918y for ladies, Par 75.
+
+MENS (Black / Championship tees — 7157 yds, Par 71):
+hole,par,stroke_index
+1,4,9
+2,4,15
+3,5,8
+4,3,11
+5,5,18
+6,4,6
+7,4,1
+8,4,4
+9,3,13
+10,4,16
+11,4,3
+12,5,14
+13,3,17
+14,4,5
+15,4,7
+16,3,12
+17,4,2
+18,4,10
+
+LADIES (Green tees — 5918 yds, Par 75):
+hole,par,stroke_index
+1,5,14
+2,4,5
+3,5,3
+4,3,17
+5,5,11
+6,4,6
+7,5,9
+8,4,1
+9,3,16
+10,4,8
+11,4,4
+12,5,7
+13,3,15
+14,5,13
+15,4,2
+16,3,18
+17,5,12
+18,4,10
+
+DATA_QUALITY: complete — values transcribed from the official club scorecard PDF.
+
+=====================================
+COURSE 8 of 25 — donegal
+=====================================
+COURSE: Donegal Golf Club (Murvagh)
+LOCATION: Murvagh, Laghey, Donegal, Ireland
+WEBSITE: https://www.donegalgolfclub.ie/
+SCORECARD_SOURCE: Official Donegal Golf Club scorecard (club-issued PDF)
+STATUS: complete
+
+NOTES:
+- Design: Eddie Hackett, with revisions by Pat Ruddy.
+- Blue 6819m (~7457y) / White 6331m / Orange 6189m for men, Par 73. Green 5940m for men or women; Red 5296m for ladies, Par 73.
+- Note: Yardages here are in METRES as printed on the official card.
+
+MENS (Blue / Championship tees — 6819 m, Par 73):
+hole,par,stroke_index
+1,5,9
+2,4,3
+3,3,11
+4,4,1
+5,3,7
+6,5,17
+7,4,13
+8,5,5
+9,4,15
+10,4,16
+11,4,6
+12,5,14
+13,3,18
+14,5,2
+15,4,8
+16,3,4
+17,4,12
+18,4,10
+
+LADIES (Red tees — 5296 m, Par 73):
+hole,par,stroke_index
+1,5,6
+2,4,2
+3,3,18
+4,4,8
+5,3,16
+6,5,10
+7,4,14
+8,5,4
+9,4,12
+10,4,11
+11,4,13
+12,5,3
+13,3,17
+14,5,1
+15,4,9
+16,3,15
+17,4,7
+18,4,5
+
+DATA_QUALITY: complete — values transcribed from the official club scorecard PDF (measurements in metres).
+
+=====================================
+COURSE 9 of 25 — enniscrone-dunes
+=====================================
+COURSE: Enniscrone Golf Club — The Dunes
+LOCATION: Bartragh, Enniscrone, Sligo, Ireland
+WEBSITE: https://enniscronegolf.com/
+SCORECARD_SOURCE: https://enniscronegolf.com/wp-content/uploads/2025/05/EGCScorecard2024290x145mmDunesv9_2.jpg (official scorecard image, Feb 2024)
+STATUS: complete
+
+NOTES:
+- Designed principally by Eddie Hackett, with nine new holes by Donald Steel (2001).
+- Black (Championship) 7029y, Blue 6833y, White 6563y, Green 6085y for men; Red 5723y for ladies.
+- Par 73 for both men and ladies.
+
+MENS (Black / Championship tees — 7029 yds, Par 73):
+hole,par,stroke_index
+1,4,8
+2,5,10
+3,3,16
+4,5,12
+5,4,2
+6,4,4
+7,5,14
+8,3,18
+9,4,6
+10,4,5
+11,3,15
+12,4,3
+13,4,13
+14,5,7
+15,4,1
+16,5,11
+17,3,17
+18,4,9
+
+LADIES (Red tees — 5723 yds, Par 73):
+hole,par,stroke_index
+1,4,5
+2,5,4
+3,3,15
+4,5,9
+5,4,12
+6,4,7
+7,5,2
+8,3,18
+9,4,10
+10,4,14
+11,3,11
+12,4,16
+13,4,17
+14,5,3
+15,4,1
+16,5,6
+17,3,13
+18,4,8
+
+DATA_QUALITY: complete — values transcribed from the official Feb 2024 scorecard image.
+
+=====================================
+COURSE 10 of 25 — lahinch-old
+=====================================
+COURSE: Lahinch Golf Club — Old Course
+LOCATION: Lahinch, Clare, Ireland
+WEBSITE: https://lahinchgolf.com/
+SCORECARD_SOURCE: https://lahinchgolf.com/wp-content/uploads/2023/05/Scorecard-Old-Course.pdf (official PDF)
+STATUS: complete
+
+NOTES:
+- "The St. Andrews of Ireland." Original routing by Old Tom Morris / Alister MacKenzie; restoration by Martin Hawtree.
+- Blue 7066y / White 6613y / Yellow 6339y for men, Par 72. Red 5502y for ladies, Par 74.
+
+MENS (Blue / Championship tees — 7066 yds, Par 72):
+hole,par,stroke_index
+1,4,8
+2,5,14
+3,4,4
+4,5,18
+5,3,16
+6,4,2
+7,4,6
+8,3,12
+9,4,10
+10,4,3
+11,3,13
+12,5,9
+13,4,17
+14,4,5
+15,4,1
+16,3,11
+17,4,7
+18,5,15
+
+LADIES (Red tees — 5502 yds, Par 74):
+hole,par,stroke_index
+1,4,3
+2,5,7
+3,5,11
+4,5,9
+5,3,15
+6,4,1
+7,4,5
+8,3,13
+9,4,17
+10,4,2
+11,3,18
+12,5,6
+13,4,12
+14,5,10
+15,5,16
+16,3,14
+17,4,8
+18,4,4
+
+DATA_QUALITY: complete — values transcribed from the official Lahinch Old Course PDF scorecard.
+
+=====================================
+COURSE 11 of 25 — narin-portnoo
+=====================================
+COURSE: Narin & Portnoo Links
+LOCATION: Portnoo, Donegal, Ireland
+WEBSITE: https://narinandportnoolinks.com/
+SCORECARD_SOURCE: course.bluegolf.com (Narin & Portnoo detailed scorecard)
+STATUS: complete
+
+NOTES:
+- Restoration / redesign by Gil Hanse and Jim Wagner, re-opened 2019.
+- White 6269y / Yellow 6016y for men; Red 5315y for ladies. Par 73.
+- Ladies stroke index order matches mens on this card.
+
+MENS (White tees — 6269 yds, Par 73):
+hole,par,stroke_index
+1,4,9
+2,5,15
+3,3,13
+4,4,1
+5,4,7
+6,4,3
+7,3,11
+8,4,17
+9,4,5
+10,5,2
+11,3,12
+12,4,8
+13,5,16
+14,5,10
+15,5,4
+16,3,18
+17,4,6
+18,4,14
+
+LADIES (Red tees — 5315 yds, Par 73):
+hole,par,stroke_index
+1,4,9
+2,5,15
+3,3,13
+4,4,1
+5,4,7
+6,4,3
+7,3,11
+8,4,17
+9,4,5
+10,5,2
+11,3,12
+12,4,8
+13,5,16
+14,5,10
+15,5,4
+16,3,18
+17,4,6
+18,4,14
+
+DATA_QUALITY: complete — values from the BlueGolf detailed scorecard for Narin & Portnoo Links.
+
+=====================================
+COURSE 12 of 25 — old-head
+=====================================
+COURSE: Old Head Golf Links
+LOCATION: Kinsale, Cork, Ireland
+WEBSITE: https://www.oldhead.com/
+SCORECARD_SOURCE: https://www.oldhead.com/uploads/files/Old-Head-Scorecard.pdf (official PDF)
+STATUS: complete
+
+NOTES:
+- Spectacular clifftop links on 220-acre headland designed by Ron Kirby, Paddy Merrigan, Joe Carr, Eddie Hackett and Liam Higgins.
+- Black 7150y / Blue 6912y / White 6588y / Yellow 6045y for men; Red 5494y for ladies. Par 72.
+
+MENS (Black / Championship tees — 7150 yds, Par 72):
+hole,par,stroke_index
+1,4,14
+2,4,10
+3,3,18
+4,4,2
+5,4,8
+6,5,4
+7,3,16
+8,5,12
+9,4,6
+10,5,11
+11,3,15
+12,5,1
+13,3,13
+14,4,3
+15,4,17
+16,3,9
+17,5,5
+18,4,7
+
+LADIES (Red tees — 5494 yds, Par 72):
+hole,par,stroke_index
+1,4,6
+2,4,14
+3,3,16
+4,4,2
+5,4,8
+6,5,10
+7,3,18
+8,5,12
+9,4,4
+10,5,9
+11,3,15
+12,5,3
+13,3,11
+14,4,1
+15,4,17
+16,3,13
+17,5,7
+18,4,5
+
+DATA_QUALITY: complete — values transcribed from the official Old Head scorecard PDF.
+
+=====================================
+COURSE 13 of 25 — portmarnock-championship
+=====================================
+COURSE: Portmarnock Golf Club — Championship Course (Red + Blue Nines)
+LOCATION: Portmarnock, Dublin, Ireland
+WEBSITE: https://www.portmarnockgolfclub.ie/
+SCORECARD_SOURCE: https://www.portmarnockgolfclub.ie/uploads/portmarnock/File/New%202024%20Portmarnock%20Scorecard.pdf (official 2024 PDF)
+  NOTE: Do NOT confuse with Portmarnock Resort & Jameson Links (portmarnock.com) — a different course.
+STATUS: partial
+
+NOTES:
+- Original Hawtree / Pickeman routing (1894). Championship Course = Red Nine (1-9) + Blue Nine (10-18).
+- Blue 7193y / White 6926y / Green 6701y / Yellow 5851y for men; Par 72.
+- The 2024 club scorecard publishes MEN'S par and stroke index only. Portmarnock was historically a men-only club; Ladies/Associate scorecard data is not published on the current scorecard. The club now welcomes women members but uses the same par/index per hole for the forward tees.
+
+MENS (Blue / Championship tees — 7193 yds, Par 72):
+hole,par,stroke_index
+1,4,7
+2,4,15
+3,4,13
+4,4,1
+5,4,9
+6,5,5
+7,3,17
+8,4,11
+9,4,3
+10,4,12
+11,4,6
+12,3,16
+13,5,14
+14,4,2
+15,3,8
+16,5,18
+17,4,4
+18,4,10
+
+LADIES (Ladies Associate Members — use forward tees with same par/index as mens):
+hole,par,stroke_index
+1,4,7
+2,4,15
+3,4,13
+4,4,1
+5,4,9
+6,5,5
+7,3,17
+8,4,11
+9,4,3
+10,4,12
+11,4,6
+12,3,16
+13,5,14
+14,4,2
+15,3,8
+16,5,18
+17,4,4
+18,4,10
+
+DATA_QUALITY: partial — men's par and stroke index verified from official 2024 PDF scorecard. The club does not publish a separate ladies stroke index on the current card; the ladies figures above reflect use of the same SI as mens on forward tees (standard practice where a separate ladies card is not issued).
+
+=====================================
+COURSE 14 of 25 — portsalon
+=====================================
+COURSE: Portsalon Golf Club
+LOCATION: Fanad, Donegal, Ireland
+WEBSITE: https://www.portsalongolfclub.ie/
+SCORECARD_SOURCE: course.bluegolf.com (Portsalon Golf Club detailed scorecard)
+STATUS: complete
+
+NOTES:
+- Classic links on Ballymastocker Bay, founded 1891. Redesigned by Pat Ruddy (2000).
+- White 6172y / Yellow 6074y for men (Par 72); Red 5183y for ladies (Par 75).
+
+MENS (White / Championship tees — 6172 yds, Par 72):
+hole,par,stroke_index
+1,4,11
+2,4,3
+3,4,13
+4,5,17
+5,3,9
+6,4,1
+7,4,7
+8,5,15
+9,4,5
+10,3,18
+11,5,10
+12,3,12
+13,4,14
+14,4,2
+15,3,16
+16,4,6
+17,5,8
+18,4,4
+
+LADIES (Red tees — 5183 yds, Par 75):
+hole,par,stroke_index
+1,4,11
+2,5,3
+3,4,13
+4,5,17
+5,3,9
+6,5,1
+7,4,7
+8,5,15
+9,4,5
+10,3,18
+11,5,10
+12,3,12
+13,4,14
+14,4,2
+15,3,16
+16,4,6
+17,5,8
+18,5,4
+
+DATA_QUALITY: complete — values from the BlueGolf detailed scorecard for Portsalon Golf Club.
+
+=====================================
+COURSE 15 of 25 — portstewart-strand
+=====================================
+COURSE: Portstewart Golf Club — The Strand Course
+LOCATION: 117 Strand Road, Portstewart, Londonderry, Northern Ireland, BT55 7PG
+WEBSITE: https://www.portstewartgc.co.uk/
+SCORECARD_SOURCE: course.bluegolf.com (Portstewart Strand detailed scorecard)
+STATUS: complete
+
+NOTES:
+- Design by Willie Park Jr. (original layout) with seven new holes by Des Giffin (Thistly Hollow).
+- Hosted 2017 Dubai Duty Free Irish Open.
+- Blue 7004y / White 6606y for men (Par 72); Red 5853y for ladies (Par 73).
+
+MENS (Blue / Championship tees — 7004 yds, Par 72):
+hole,par,stroke_index
+1,4,11
+2,4,7
+3,3,13
+4,5,5
+5,4,1
+6,3,15
+7,5,17
+8,4,3
+9,4,9
+10,4,10
+11,4,4
+12,3,18
+13,5,16
+14,5,12
+15,3,14
+16,4,6
+17,4,2
+18,4,8
+
+LADIES (Red tees — 5853 yds, Par 73):
+hole,par,stroke_index
+1,4,7
+2,4,1
+3,3,17
+4,5,9
+5,4,3
+6,3,13
+7,5,11
+8,4,5
+9,4,15
+10,4,2
+11,4,14
+12,3,18
+13,5,6
+14,5,8
+15,3,16
+16,4,4
+17,5,12
+18,4,10
+
+DATA_QUALITY: complete — values from the BlueGolf detailed scorecard for Portstewart Strand.
+
+=====================================
+COURSE 16 of 25 — rosapenna-sandy-hills
+=====================================
+COURSE: Rosapenna Golf Resort — Sandy Hills Links
+LOCATION: Downings, Donegal, Ireland
+WEBSITE: https://www.rosapenna.ie/
+SCORECARD_SOURCE: course.bluegolf.com (Rosapenna Golf Hotel / Sandy Hills Links detailed scorecard)
+STATUS: complete
+
+NOTES:
+- Designed by Pat Ruddy, opened June 2003.
+- Black 6767y / Blue 6312y / White 5890y / Yellow 5838y for men (Par 72); Red 4828y for ladies (Par 71).
+
+MENS (Black / Championship tees — 6767 yds, Par 72):
+hole,par,stroke_index
+1,5,13
+2,4,3
+3,3,17
+4,4,11
+5,4,5
+6,4,1
+7,3,15
+8,5,9
+9,4,7
+10,4,6
+11,3,12
+12,4,10
+13,5,8
+14,4,18
+15,4,2
+16,3,14
+17,5,16
+18,4,4
+
+LADIES (Red tees — 4828 yds, Par 71):
+hole,par,stroke_index
+1,4,5
+2,4,13
+3,3,7
+4,4,11
+5,4,1
+6,4,15
+7,3,17
+8,5,9
+9,4,3
+10,4,12
+11,3,10
+12,4,16
+13,5,2
+14,4,18
+15,4,8
+16,3,14
+17,5,4
+18,4,6
+
+DATA_QUALITY: complete — values from the BlueGolf detailed scorecard for Rosapenna Sandy Hills Links.
+
+=====================================
+COURSE 17 of 25 — rosapenna-st-patricks
+=====================================
+COURSE: Rosapenna Golf Resort — St Patrick's Links
+LOCATION: Downings, Donegal, Ireland
+WEBSITE: https://www.rosapenna.ie/
+SCORECARD_SOURCE: course.bluegolf.com (St Patrick's Links detailed scorecard — par only; stroke-index not published on this aggregator)
+STATUS: partial
+
+NOTES:
+- Designed by Tom Doak, opened 25 June 2021.
+- Six tees: Black 7507y / Sandstone 7139y / Granite 6757y / Slate 6418y / Claret 5879y / Sand 5130y. Par 71 for men.
+- Ladies typically play Claret or Sand; ladies card shows par 72 on the shorter tees (holes 16 plays as par 5 from ladies tees).
+- The club publishes stroke-index figures on its in-course scorecards but they are not included in the online/aggregator data. Therefore par is confirmed per hole but hole-by-hole stroke index values have not been captured.
+
+MENS (Sandstone / Championship tees — 7139 yds, Par 71):
+hole,par,stroke_index
+1,4,-
+2,4,-
+3,3,-
+4,5,-
+5,3,-
+6,5,-
+7,4,-
+8,4,-
+9,4,-
+10,4,-
+11,4,-
+12,5,-
+13,4,-
+14,4,-
+15,3,-
+16,4,-
+17,3,-
+18,4,-
+
+LADIES (Claret tees — 5879 yds, Par 72):
+hole,par,stroke_index
+1,4,-
+2,4,-
+3,3,-
+4,5,-
+5,3,-
+6,5,-
+7,4,-
+8,4,-
+9,4,-
+10,4,-
+11,4,-
+12,5,-
+13,4,-
+14,4,-
+15,3,-
+16,5,-
+17,3,-
+18,4,-
+
+DATA_QUALITY: partial — par values verified for each hole; stroke index values are not published on any accessible source. A hard-copy or in-resort scorecard will be required to complete the SI fields.
+
+=====================================
+COURSE 18 of 25 — royal-county-down-championship
+=====================================
+COURSE: Royal County Down Golf Club — Championship Course
+LOCATION: 36 Golf Links Road, Newcastle, Down, Northern Ireland, BT33 0AN
+WEBSITE: https://www.royalcountydown.org/
+SCORECARD_SOURCE: https://www.royalcountydown.org/championship_links (embedded scorecard table)
+STATUS: complete
+
+NOTES:
+- Original design by Old Tom Morris (1889), revisions by Harry Vardon / Harry Colt / Donald Steel.
+- Blue 7206y / White 6878y / Yellow 6641y for men (Par 71). Red 6249y for ladies (Par 76).
+- Ranked among the top courses in the world.
+
+MENS (Blue / Championship tees — 7206 yds, Par 71):
+hole,par,stroke_index
+1,5,13
+2,4,9
+3,4,3
+4,3,15
+5,4,7
+6,4,11
+7,3,17
+8,4,1
+9,4,5
+10,3,18
+11,4,8
+12,5,16
+13,4,2
+14,3,12
+15,4,4
+16,4,14
+17,4,10
+18,5,6
+
+LADIES (Red tees — 6249 yds, Par 76):
+hole,par,stroke_index
+1,5,13
+2,4,3
+3,5,9
+4,3,15
+5,4,7
+6,4,1
+7,3,17
+8,5,5
+9,5,11
+10,3,16
+11,4,2
+12,5,8
+13,5,12
+14,3,14
+15,5,4
+16,4,18
+17,4,6
+18,5,10
+
+DATA_QUALITY: complete — values transcribed from the official Royal County Down Championship Links scorecard table.
+
+=====================================
+COURSE 19 of 25 — royal-dublin
+=====================================
+COURSE: The Royal Dublin Golf Club
+LOCATION: North Bull Island, Dollymount, Dublin 3, Ireland
+WEBSITE: https://www.theroyaldublingolfclub.com/
+SCORECARD_SOURCE: course.bluegolf.com (The Royal Dublin Golf Club detailed scorecard)
+STATUS: complete
+
+NOTES:
+- Founded 1885; rerouted on North Bull Island by H.S. Colt and Martin Hawtree.
+- Blue 7289y / White 6925y / Yellow 6484y for men (Par 72); Red 5948y for ladies (Par 74).
+
+MENS (Blue / Championship tees — 7289 yds, Par 72):
+hole,par,stroke_index
+1,4,10
+2,5,18
+3,4,8
+4,3,16
+5,4,2
+6,5,6
+7,3,12
+8,4,4
+9,3,14
+10,4,1
+11,5,11
+12,3,15
+13,4,3
+14,5,13
+15,4,7
+16,4,17
+17,4,9
+18,4,5
+
+LADIES (Red tees — 5948 yds, Par 74):
+hole,par,stroke_index
+1,4,6
+2,5,13
+3,4,17
+4,3,9
+5,5,16
+6,5,5
+7,3,15
+8,4,7
+9,3,10
+10,4,1
+11,5,14
+12,3,8
+13,5,11
+14,4,2
+15,4,4
+16,4,18
+17,4,3
+18,5,12
+
+DATA_QUALITY: complete — values from the BlueGolf detailed scorecard for The Royal Dublin Golf Club.
+
+=====================================
+COURSE 20 of 25 — royal-portrush-dunluce
+=====================================
+COURSE: Royal Portrush Golf Club — Dunluce Links
+LOCATION: Dunluce Road, Portrush, Antrim, Northern Ireland, BT56 8JQ
+WEBSITE: https://www.royalportrushgolfclub.com/
+SCORECARD_SOURCE: https://www.royalportrushgolfclub.com/dunluce-links/ (official club course guide)
+STATUS: complete
+
+NOTES:
+- Original Harry Colt design (1932), reworked by Martin Ebert ahead of the 2019 Open Championship; hosts The 153rd Open (2025).
+- Men's Championship: 7337y, Par 72 (some published cards list Par 71; 2019 Open played at par 71 because hole 4 "Fred Daly's" and hole 9 "Tavern" were shortened — club's current course-guide uses Par 72).
+- Ladies Red tees, Par 74.
+
+MENS (Championship tees — 7337 yds, Par 72):
+hole,par,stroke_index
+1,4,7
+2,5,13
+3,3,17
+4,4,1
+5,4,15
+6,3,11
+7,5,5
+8,4,9
+9,4,3
+10,4,16
+11,5,8
+12,5,12
+13,3,18
+14,4,2
+15,4,10
+16,3,4
+17,4,14
+18,4,6
+
+LADIES (Red tees — 6210 yds, Par 74):
+hole,par,stroke_index
+1,4,9
+2,5,3
+3,3,17
+4,5,7
+5,4,13
+6,3,15
+7,5,1
+8,4,11
+9,5,5
+10,4,14
+11,5,4
+12,5,10
+13,3,18
+14,4,2
+15,4,6
+16,3,16
+17,4,12
+18,4,8
+
+DATA_QUALITY: complete — values from the official Royal Portrush Dunluce Links course guide.
+
+=====================================
+COURSE 21 of 25 — royal-portrush-valley
+=====================================
+COURSE: Royal Portrush Golf Club — Valley Links
+LOCATION: Dunluce Road, Portrush, Antrim, Northern Ireland, BT56 8JQ
+WEBSITE: https://www.royalportrushgolfclub.com/
+SCORECARD_SOURCE: course.bluegolf.com (Royal Portrush — Valley Links detailed scorecard)
+STATUS: partial
+
+NOTES:
+- Second of the club's two links courses; a shorter, less famous companion to the Dunluce.
+- Par 71 for men from the back tees (white tees typical card).
+- Ladies' hole-by-hole SI not published on the aggregator that was fetched; mens data only.
+
+MENS (White tees — Par 71):
+hole,par,stroke_index
+1,4,11
+2,4,7
+3,3,15
+4,5,9
+5,4,1
+6,4,5
+7,4,13
+8,5,3
+9,3,17
+10,4,2
+11,5,10
+12,4,4
+13,3,18
+14,4,12
+15,3,16
+16,5,8
+17,3,6
+18,4,14
+
+LADIES:
+hole,par,stroke_index
+(not published on source — see NOTES)
+
+DATA_QUALITY: partial — mens pars and stroke indices verified; ladies hole-by-hole SI not published on the source fetched.
+
+=====================================
+COURSE 22 of 25 — the-island
+=====================================
+COURSE: The Island Golf Club
+LOCATION: Corballis, Donabate, Co. Dublin, Ireland
+WEBSITE: https://www.theislandgolfclub.com/
+SCORECARD_SOURCE: https://www.theislandgolfclub.com/ (official scorecard image from uploads directory)
+STATUS: partial
+
+NOTES:
+- Classic links on a narrow peninsula opposite Malahide. Par 72 from the back tees.
+- Official scorecard uses a single Par / Stroke-Index column (i.e., ladies play the same SI per hole).
+
+MENS (Championship tees — Par 72):
+hole,par,stroke_index
+1,4,4
+2,4,8
+3,5,16
+4,3,14
+5,4,6
+6,4,18
+7,4,12
+8,4,10
+9,4,2
+10,5,9
+11,4,13
+12,4,3
+13,3,7
+14,4,15
+15,5,17
+16,3,11
+17,4,5
+18,4,1
+
+LADIES (Red tees — Par 72, same SI as mens):
+hole,par,stroke_index
+1,4,4
+2,4,8
+3,5,16
+4,3,14
+5,4,6
+6,4,18
+7,4,12
+8,4,10
+9,4,2
+10,5,9
+11,4,13
+12,4,3
+13,3,7
+14,4,15
+15,5,17
+16,3,11
+17,4,5
+18,4,1
+
+DATA_QUALITY: partial — pars and stroke indices verified from the official club scorecard; ladies' card uses the same single Par/SI column as mens on the official card.
+
+=====================================
+COURSE 23 of 25 — tralee
+=====================================
+COURSE: Tralee Golf Club
+LOCATION: West Barrow, Ardfert, Tralee, Co. Kerry, Ireland
+WEBSITE: https://traleegolfclub.com/
+SCORECARD_SOURCE: course.bluegolf.com (Tralee Golf Club detailed scorecard)
+STATUS: complete
+
+NOTES:
+- Arnold Palmer's first European design (1984). Par 72 from championship tees (~6991 yds).
+- Par 72 for men and women.
+
+MENS (Championship tees — Par 72):
+hole,par,stroke_index
+1,4,12
+2,5,4
+3,3,16
+4,4,8
+5,5,6
+6,4,10
+7,3,18
+8,4,2
+9,4,14
+10,4,3
+11,5,7
+12,3,1
+13,4,15
+14,4,11
+15,3,13
+16,4,9
+17,5,5
+18,4,17
+
+LADIES (Red tees — Par 72):
+hole,par,stroke_index
+1,4,8
+2,5,4
+3,3,16
+4,4,14
+5,5,12
+6,4,6
+7,3,18
+8,4,2
+9,4,10
+10,4,3
+11,5,7
+12,3,1
+13,4,17
+14,4,15
+15,3,11
+16,4,13
+17,5,5
+18,4,9
+
+DATA_QUALITY: complete — pars and stroke indices verified from the BlueGolf detailed scorecard for Tralee Golf Club.
+
+=====================================
+COURSE 24 of 25 — trump-international-doonbeg
+=====================================
+COURSE: Trump International Golf Links — Doonbeg (Ireland)
+LOCATION: Doonbeg, Co. Clare, Ireland
+WEBSITE: https://www.trumpgolfireland.com/
+SCORECARD_SOURCE: course.bluegolf.com (Trump International / Doonbeg detailed scorecard)
+STATUS: complete
+
+NOTES:
+- Original design Greg Norman (2002); redesigned by Martin Hawtree (2016). Formerly Doonbeg Golf Club.
+- Par 72 men and women from the respective championship / red tees.
+- Men's and women's stroke indices are identical on the official card.
+
+MENS (Championship tees — Par 72):
+hole,par,stroke_index
+1,5,3
+2,4,13
+3,4,11
+4,5,15
+5,4,5
+6,4,9
+7,3,17
+8,5,1
+9,3,7
+10,5,4
+11,3,12
+12,4,14
+13,5,16
+14,3,8
+15,4,10
+16,4,2
+17,3,18
+18,4,6
+
+LADIES (Red tees — Par 72):
+hole,par,stroke_index
+1,5,3
+2,4,13
+3,4,11
+4,5,15
+5,4,5
+6,4,9
+7,3,17
+8,5,1
+9,3,7
+10,5,4
+11,3,12
+12,4,14
+13,5,16
+14,3,8
+15,4,10
+16,4,2
+17,3,18
+18,4,6
+
+DATA_QUALITY: complete — pars and stroke indices verified from the BlueGolf detailed scorecard.
+
+=====================================
+COURSE 25 of 25 — waterville
+=====================================
+COURSE: Waterville Golf Links
+LOCATION: Waterville, Co. Kerry, Ireland
+WEBSITE: https://www.watervillegolflinks.ie/
+SCORECARD_SOURCE: https://www.watervillegolflinks.ie/wp-content/uploads/2021/11/Waterville-Golf-Links-Scorecard-p12-min-1.pdf (official PDF)
+STATUS: complete
+
+NOTES:
+- Architects: Eddie Hackett (1973), Tom Fazio / Beau Welling (2006 redesign).
+- Men's Par 72 (~7347 yds from championship tees); Ladies' Par 73 (~5443 yds from red tees).
+
+MENS (Championship tees — Par 72):
+hole,par,stroke_index
+1,4,11
+2,4,1
+3,4,3
+4,3,17
+5,5,13
+6,3,15
+7,4,7
+8,4,9
+9,4,5
+10,4,2
+11,5,12
+12,3,14
+13,5,18
+14,4,4
+15,4,6
+16,4,10
+17,3,16
+18,5,8
+
+LADIES (Red tees — Par 73):
+hole,par,stroke_index
+1,4,13
+2,5,17
+3,4,3
+4,3,15
+5,5,5
+6,3,11
+7,4,9
+8,4,7
+9,4,1
+10,4,6
+11,5,12
+12,3,16
+13,5,10
+14,4,4
+15,4,8
+16,4,2
+17,3,18
+18,5,14
+
+DATA_QUALITY: complete — pars and stroke indices verified from the official club scorecard PDF.
+
+=====================================
+END OF DATABASE
+=====================================
