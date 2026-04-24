@@ -354,7 +354,7 @@ export default function LiveLeaderboardPanel({
       for (const ls of playerScores) {
         const hole = courseHoles.find(h => h.hole_number === ls.hole_number)
         if (!hole || ls.gross_score === null) continue
-        totalParPlayed += effectivePar(hole, player.gender, liveRound.course_id)
+        totalParPlayed += effectivePar(hole, player.gender)
       }
 
       const playerCoursePar = courseHoles.reduce((s, h) => s + effectivePar(h, player.gender), 0)
