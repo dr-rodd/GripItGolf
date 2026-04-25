@@ -1,10 +1,19 @@
 -- ============================================================
 -- Platform courses batch A: courses 1–12 of 25
 -- (Adare Manor through Old Head Golf Links)
--- Runs after 20260101000004_platform_courses.sql which already
--- makes trip_id nullable and creates uq_courses_platform_slug.
 -- ============================================================
 
+-- Allow platform courses (trip_id = NULL) alongside trip-scoped courses.
+ALTER TABLE courses ALTER COLUMN trip_id DROP NOT NULL;
+
+-- Unique slug per platform course (partial index — trip-scoped slugs unconstrained).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_courses_platform_slug
+  ON courses(slug) WHERE trip_id IS NULL;
+
+-- Per-round scheduled date set during trip creation.
+ALTER TABLE rounds ADD COLUMN IF NOT EXISTS scheduled_date DATE;
+
+-- Ladies data quality flags.
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS ladies_data_verified BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS ladies_data_note TEXT;
 
