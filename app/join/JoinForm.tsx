@@ -22,14 +22,14 @@ export default function JoinForm({ initialCode }: { initialCode: string }) {
       .eq('trip_code', code.toUpperCase().trim())
       .single()
 
-    setLoading(false)
-
     if (!trip) {
+      setLoading(false)
       setError('Trip not found — check your code and try again')
       return
     }
 
     router.push(`/trip/${trip.trip_code}`)
+    router.refresh()
   }
 
   return (
