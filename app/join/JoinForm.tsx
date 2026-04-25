@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 
@@ -8,25 +9,26 @@ export default function JoinForm({ initialCode }: { initialCode: string }) {
   const [code, setCode] = useState(initialCode.toUpperCase())
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setLoading(true)
 
-    const { data: trip } = await supabase
+    const { data } = await supabase
       .from('trips')
       .select('trip_code')
       .eq('trip_code', code.toUpperCase().trim())
       .single()
 
-    if (!trip) {
+    if (!data) {
       setLoading(false)
       setError('Trip not found — check your code and try again')
       return
     }
 
-    window.location.href = `/trip/${trip.trip_code}`
+    router.push(`/trip/${data.trip_code}`)
   }
 
   return (
