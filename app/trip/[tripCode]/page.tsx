@@ -65,18 +65,18 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
           </p>
         )}
 
-        {/* Join button */}
+        {/* Enter trip */}
         <Link
-          href={`/join?code=${trip.trip_code}`}
+          href={`/trip/${tripCode}/players`}
           className="block w-full text-center py-4 mb-10 bg-[#C9A84C] text-[#0a1a0e] text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-[#d4b35a] transition-colors"
         >
-          Join This Trip
+          Enter Trip
         </Link>
 
         {/* Rounds */}
         {rounds && rounds.length > 0 && (
           <div>
-            <p className="text-white/30 text-xs tracking-[0.2em] uppercase mb-4">Rounds</p>
+            <p className="text-white/30 text-xs tracking-[0.2em] uppercase mb-4">Courses</p>
             <div className="flex flex-col gap-3">
               {rounds.map((round) => (
                 <Link
