@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 
@@ -9,7 +8,6 @@ export default function JoinForm({ initialCode }: { initialCode: string }) {
   const [code, setCode] = useState(initialCode.toUpperCase())
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -28,8 +26,7 @@ export default function JoinForm({ initialCode }: { initialCode: string }) {
       return
     }
 
-    router.push(`/trip/${trip.trip_code}`)
-    router.refresh()
+    window.location.href = `/trip/${trip.trip_code}`
   }
 
   return (
