@@ -171,6 +171,17 @@ Abandoned scorecard cleanup: Vercel cron route. Requires `CRON_SECRET`. Implemen
 - Never expose service role key client-side
 - All queries must filter by `trip_id`
 
+## Terminal use — last resort only
+
+The user has no coding background. Treat the terminal as a last resort, not a default tool.
+
+**Prefer instead:**
+- File edits, commits, and pushes via built-in tools
+- The GitHub website for branch management, deletions, and file history
+- Direct Supabase actions (migrations, schema changes) via SQL files committed and pushed
+
+**When the terminal is genuinely required** (no alternative exists), explain in plain language what the command does and why there is no other way, before running it. Never run a terminal command silently.
+
 ## Multi-year architecture (inherited from Donegal Masters 2026 archive work)
 
 Every table holding tournament-instance data has an `edition_year` INTEGER NOT NULL column. A `tournament_config` table holds one row with `current_year`. All live-app queries filter by `current_year` via a `lib/getCurrentYear.ts` helper (5-minute cache, server-side only — never call from client). Client components receive currentYear as a prop threaded from the server component chain.
