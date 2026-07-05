@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
+import TripCountdown from './TripCountdown'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,11 +12,13 @@ function formatDate(d: string | null) {
 export default async function TripPage({ params }: { params: Promise<{ tripCode: string }> }) {
   const { tripCode } = await params
 
-  const { data: trip } = await supabase
+  const { data: trip, error: tripError } = await supabase
     .from('trips')
-    .select('id, name, start_date, end_date, trip_code')
+    .select('id, name, start_date, end_date, trip_code, created_at')
     .eq('trip_code', tripCode)
     .single()
+
+  if (tripError) console.error('TripPage trip query failed:', tripError)
 
   if (!trip) {
     return (
@@ -29,84 +32,129 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
     )
   }
 
-  const { data: rounds } = await supabase
-    .from('rounds')
-    .select('round_number, status, scheduled_date, course_id')
-    .eq('trip_id', trip.id)
-    .order('round_number')
+  const [roundsResult, playersResult] = await Promise.all([
+    supabase
+      .from('rounds')
+      .select('round_number, course_id')
+      .eq('trip_id', trip.id)
+      .order('round_number'),
+    supabase
+      .from('players')
+      .select('id, name, handicap')
+      .eq('trip_id', trip.id)
+      .order('name'),
+  ])
 
-  const courseIds = (rounds ?? []).map(r => r.course_id).filter(Boolean)
-  const { data: courses } = courseIds.length > 0
+  if (roundsResult.error) console.error('TripPage rounds query failed:', roundsResult.error)
+  if (playersResult.error) console.error('TripPage players query failed:', playersResult.error)
+
+  const rounds  = roundsResult.data ?? []
+  const players = playersResult.data ?? []
+
+  const courseIds = rounds.map(r => r.course_id).filter(Boolean)
+  const { data: courses, error: coursesError } = courseIds.length > 0
     ? await supabase.from('courses').select('id, name').in('id', courseIds)
-    : { data: [] }
+    : { data: [], error: null }
 
-  const courseMap = Object.fromEntries((courses ?? []).map(c => [c.id, c.name]))
+  if (coursesError) console.error('TripPage courses query failed:', coursesError)
+
+  const courseMap   = Object.fromEntries((courses ?? []).map(c => [c.id, c.name]))
+  const courseNames = rounds.map(r => courseMap[r.course_id]).filter(Boolean).join(' · ')
+
+  const estYear    = trip.created_at ? new Date(trip.created_at).getFullYear() : null
+  const dateRange  = [formatDate(trip.start_date), formatDate(trip.end_date)].filter(Boolean).join(' – ')
 
   return (
-    <main className="min-h-dvh bg-[#0a1a0e] px-6 py-12">
-      <div className="max-w-md mx-auto">
+    <main className="min-h-dvh bg-[#0a1a0e]">
 
-        {/* Logo mark */}
-        <div className="mb-8 flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full border-2 border-[#C9A84C]" />
-          <div className="w-3 h-3 rounded-full bg-[#C9A84C]" />
-          <div className="w-3 h-3 rounded-full border-2 border-[#C9A84C]" />
-        </div>
+      {/* ── Hero ── */}
+      <section className="min-h-dvh flex flex-col items-center justify-center px-6 py-16">
+        <div className="w-full max-w-xs flex flex-col items-center text-center">
 
-        {/* Trip name */}
-        <h1 className="font-[family-name:var(--font-playfair)] text-4xl sm:text-5xl text-white leading-tight mb-2">
-          {trip.name}
-        </h1>
+          {/* Est. ornament */}
+          {estYear && (
+            <div className="flex items-center gap-4 mb-6">
+              <div className="h-px w-14 bg-[#C9A84C]/40" />
+              <span className="text-[#C9A84C]/60 text-[10px] tracking-[0.3em] uppercase">Est. {estYear}</span>
+              <div className="h-px w-14 bg-[#C9A84C]/40" />
+            </div>
+          )}
 
-        {/* Dates */}
-        {(trip.start_date || trip.end_date) && (
-          <p className="text-white/40 text-sm tracking-wide mb-8">
-            {[formatDate(trip.start_date), formatDate(trip.end_date)].filter(Boolean).join(' – ')}
-          </p>
-        )}
+          {/* Trip name */}
+          <h1 className="font-[family-name:var(--font-playfair)] text-4xl sm:text-5xl text-white leading-tight mb-3">
+            {trip.name}
+          </h1>
 
-        {/* Enter trip */}
-        <Link
-          href={`/trip/${tripCode}/players`}
-          className="block w-full text-center py-4 mb-10 bg-[#C9A84C] text-[#0a1a0e] text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-[#d4b35a] transition-colors"
-        >
-          Enter Trip
-        </Link>
+          {/* Dates */}
+          {dateRange && (
+            <p className="text-white/70 text-sm tracking-[0.15em] mb-1">{dateRange}</p>
+          )}
 
-        {/* Rounds */}
-        {rounds && rounds.length > 0 && (
-          <div>
-            <p className="text-white/30 text-xs tracking-[0.2em] uppercase mb-4">Courses</p>
-            <div className="flex flex-col gap-3">
-              {rounds.map((round) => (
-                <Link
-                  key={round.round_number}
-                  href={`/trip/${tripCode}/course/${round.round_number}`}
-                  className="flex items-center justify-between px-5 py-4 border border-white/10 rounded-xl hover:border-[#C9A84C]/40 transition-colors group"
+          {/* Course names — venue line */}
+          {courseNames && (
+            <p className="text-white/30 text-xs tracking-[0.15em] uppercase mb-8">{courseNames}</p>
+          )}
+
+          {/* Countdown wrapping nav */}
+          <TripCountdown target={trip.start_date ?? null}>
+            <nav className="flex flex-col gap-3 w-full">
+
+              {/* Enter Trip — functional primary action */}
+              <Link
+                href={`/trip/${tripCode}/players`}
+                className="w-full py-[18px] border-2 border-[#C9A84C] text-[#C9A84C] rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:bg-[#C9A84C]/10 transition-colors"
+              >
+                Enter Trip
+              </Link>
+
+              {/* Coming-soon sections */}
+              {(['Teams', 'Leaderboard', 'Live Scoring'] as const).map(label => (
+                <div
+                  key={label}
+                  className="w-full py-[18px] border-2 border-white/10 rounded-xl flex items-center justify-center gap-3"
                 >
-                  <div>
-                    <p className="text-white text-sm font-medium">Round {round.round_number}</p>
-                    {courseMap[round.course_id] && (
-                      <p className="text-white/40 text-xs mt-0.5">{courseMap[round.course_id]}</p>
-                    )}
-                    {round.scheduled_date && (
-                      <p className="text-white/25 text-xs mt-0.5">{formatDate(round.scheduled_date)}</p>
-                    )}
-                  </div>
-                  <span className="text-[#C9A84C] text-lg group-hover:translate-x-1 transition-transform">→</span>
-                </Link>
+                  <span className="text-white/25 text-sm tracking-[0.25em] uppercase">{label}</span>
+                  <span className="text-white/15 text-[10px] tracking-[0.2em] uppercase">Soon</span>
+                </div>
+              ))}
+
+            </nav>
+          </TripCountdown>
+
+        </div>
+      </section>
+
+      {/* ── Registered players ── */}
+      {players.length > 0 && (
+        <section className="px-6 pb-16">
+          <div className="max-w-xs mx-auto">
+            <p className="text-white/30 text-xs tracking-[0.2em] uppercase mb-4">Players</p>
+            <div className="flex flex-col gap-2">
+              {players.map(p => (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between px-4 py-3 border border-white/10 rounded-xl"
+                >
+                  <span className="text-white text-sm">{p.name}</span>
+                  {p.handicap != null && (
+                    <span className="font-[family-name:var(--font-playfair)] text-[#C9A84C] text-base leading-none">
+                      {p.handicap}
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
           </div>
-        )}
+        </section>
+      )}
 
-        <div className="mt-12">
-          <Link href="/" className="text-white/25 text-xs tracking-wide hover:text-white/50 transition-colors">
-            ← GripItGolf
-          </Link>
-        </div>
-
+      {/* ── Footer ── */}
+      <div className="px-6 pb-10 text-center">
+        <Link href="/" className="text-white/20 text-xs tracking-wide hover:text-white/40 transition-colors">
+          ← GripItGolf
+        </Link>
       </div>
+
     </main>
   )
 }

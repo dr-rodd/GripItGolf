@@ -39,7 +39,7 @@ export default function PlayersClient({
       setError('Could not claim player — try again')
       return
     }
-    router.push(`/trip/${tripCode}/course/1`)
+    router.push(`/trip/${tripCode}`)
   }
 
   async function handleAdd(e: React.FormEvent) {
@@ -65,7 +65,7 @@ export default function PlayersClient({
       setAdding(false)
       return
     }
-    router.push(`/trip/${tripCode}/course/1`)
+    router.push(`/trip/${tripCode}`)
   }
 
   return (
