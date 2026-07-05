@@ -7,11 +7,13 @@ export const dynamic = 'force-dynamic'
 export default async function PlayersPage({ params }: { params: Promise<{ tripCode: string }> }) {
   const { tripCode } = await params
 
-  const { data: trip } = await supabase
+  const { data: trip, error: tripError } = await supabase
     .from('trips')
     .select('id, name')
     .eq('trip_code', tripCode)
     .single()
+
+  if (tripError) console.error('players/page trip query failed:', tripError)
 
   if (!trip) {
     return (
@@ -24,13 +26,15 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
     )
   }
 
-  const { data: players } = await supabase
+  const { data: players, error: playersError } = await supabase
     .from('players')
     .select('id, name, handicap, gender')
     .eq('trip_id', trip.id)
     .eq('is_lead', false)
     .or('claimed.is.null,claimed.eq.false')
     .order('name')
+
+  if (playersError) console.error('players/page players query failed:', playersError)
 
   return (
     <main className="min-h-dvh bg-[#0a1a0e] px-6 py-12">
@@ -46,6 +50,12 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
           {trip.name}
         </h1>
         <p className="text-white/40 text-sm tracking-wide mb-10">Who are you?</p>
+
+        {playersError && (
+          <p className="text-[#C9A84C] text-sm mb-6">
+            Could not load players — please refresh the page.
+          </p>
+        )}
 
         <PlayersClient
           tripCode={tripCode}
