@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import TripCountdown from './TripCountdown'
+import FormatPicker from './FormatPicker'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +15,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
   const { data: trip, error: tripError } = await supabase
     .from('trips')
-    .select('id, name, start_date, end_date, trip_code, created_at')
+    .select('id, name, start_date, end_date, trip_code, created_at, group_style, competition_style')
     .eq('trip_code', tripCode)
     .single()
 
@@ -107,8 +108,18 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                 Enter Trip
               </Link>
 
+              {/* Competition format picker */}
+              <div className="w-full border-2 border-white/10 rounded-xl px-5 py-4">
+                <p className="text-white/30 text-[10px] tracking-[0.2em] uppercase mb-3">Competition format</p>
+                <FormatPicker
+                  tripId={trip.id}
+                  initialGroup={(trip.group_style ?? 'individual') as any}
+                  initialCompetition={(trip.competition_style ?? 'league') as any}
+                />
+              </div>
+
               {/* Coming-soon sections */}
-              {(['Teams', 'Leaderboard', 'Live Scoring'] as const).map(label => (
+              {(['Leaderboard', 'Live Scoring'] as const).map(label => (
                 <div
                   key={label}
                   className="w-full py-[18px] border-2 border-white/10 rounded-xl flex items-center justify-center gap-3"
