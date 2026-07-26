@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
+import { enabledFormats, parseFormats } from '@/lib/formats'
 import TripCountdown from './TripCountdown'
 
 export const dynamic = 'force-dynamic'
@@ -7,13 +8,6 @@ export const dynamic = 'force-dynamic'
 function formatDate(d: string | null) {
   if (!d) return null
   return new Date(d).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-const FORMAT_LABELS: Record<string, string> = {
-  individual: 'Individual',
-  teams: 'Teams',
-  league: 'League',
-  matchplay: 'Matchplay',
 }
 
 export default async function TripPage({ params }: { params: Promise<{ tripCode: string }> }) {
@@ -73,10 +67,9 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
   // Trips created before the lifecycle migration have no setup_status — treat as live
   const isDraft = (trip.setup_status ?? 'live') === 'draft'
-  const formatLine = [
-    FORMAT_LABELS[trip.group_style ?? 'individual'],
-    FORMAT_LABELS[trip.competition_style ?? 'league'],
-  ].filter(Boolean).join(' · ')
+  const formatLine = enabledFormats(parseFormats(trip.formats))
+    .map(f => f.tabLabel)
+    .join(' · ')
 
   const lockedButton = (label: string) => (
     <div className="w-full py-[18px] border-2 border-white/10 rounded-xl flex items-center justify-center gap-3">

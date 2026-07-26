@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { FORMATS, type FormatKey, type TripFormats } from '@/lib/formats'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -12,8 +13,7 @@ type Trip = {
   name: string
   start_date: string | null
   end_date: string | null
-  group_style: string
-  competition_style: string
+  formats: TripFormats
   setup_status: string
   edit_permission: string
 }
@@ -32,11 +32,6 @@ type Player = {
 type RoundInfo = { id: string; round_number: number; courseName: string }
 
 // ── Constants ─────────────────────────────────────────────────────────────
-
-const PRESET_COLORS = [
-  '#DC2626', '#2563EB', '#16A34A', '#9333EA',
-  '#EA580C', '#DB2777', '#0D9488', '#C9A84C',
-]
 
 const INPUT = [
   'w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5',
@@ -66,8 +61,7 @@ export default function TripSetupClient({
   const [name, setName] = useState(trip.name)
   const [startDate, setStartDate] = useState(trip.start_date ?? '')
   const [endDate, setEndDate] = useState(trip.end_date ?? '')
-  const [groupStyle, setGroupStyle] = useState(trip.group_style)
-  const [competitionStyle, setCompetitionStyle] = useState(trip.competition_style)
+  const [formats, setFormats] = useState<TripFormats>(trip.formats)
   const [editPermission, setEditPermission] = useState(trip.edit_permission)
   const [setupStatus, setSetupStatus] = useState(trip.setup_status)
 
@@ -95,6 +89,7 @@ export default function TripSetupClient({
   const isDraft = setupStatus === 'draft'
   const canEdit = isDraft && (editPermission === 'everyone' || isOwner)
   const locked = !canEdit || busy
+  const unassignedCount = players.filter(p => !p.team_id).length
 
   function flashError(msg: string) {
     setError(msg)
@@ -125,67 +120,25 @@ export default function TripSetupClient({
     }
   }
 
-  async function saveFormat(nextGroup: string, nextCompetition: string) {
-    const prev = { g: groupStyle, c: competitionStyle }
-    setGroupStyle(nextGroup)
-    setCompetitionStyle(nextCompetition)
-    if (!(await saveTrip({ group_style: nextGroup, competition_style: nextCompetition }))) {
-      setGroupStyle(prev.g)
-      setCompetitionStyle(prev.c)
+  async function toggleFormat(key: FormatKey) {
+    const next: TripFormats = { ...formats }
+    if (next[key]) delete next[key]
+    else next[key] = true
+
+    if (Object.keys(next).length === 0) {
+      flashError('Keep at least one format switched on')
+      return
     }
+
+    const prev = formats
+    setFormats(next)
+    if (!(await saveTrip({ formats: next }))) setFormats(prev)
   }
 
   async function savePermission(next: string) {
     const prev = editPermission
     setEditPermission(next)
     if (!(await saveTrip({ edit_permission: next }))) setEditPermission(prev)
-  }
-
-  // ── Teams ────────────────────────────────────────────────────────────────
-
-  async function addTeam() {
-    setBusy(true)
-    const letter = String.fromCharCode(65 + teams.length)
-    const { data, error: err } = await supabase
-      .from('teams')
-      .insert({
-        trip_id: trip.id,
-        name: `Team ${letter}`,
-        color: PRESET_COLORS[teams.length % PRESET_COLORS.length],
-      })
-      .select('id, name, color')
-      .single()
-    if (err || !data) flashError('Could not add team')
-    else setTeams(prev => [...prev, data])
-    setBusy(false)
-  }
-
-  async function updateTeam(id: string, patch: Partial<Team>) {
-    const prev = teams
-    setTeams(ts => ts.map(t => (t.id === id ? { ...t, ...patch } : t)))
-    const { error: err } = await supabase.from('teams').update(patch).eq('id', id)
-    if (err) {
-      setTeams(prev)
-      flashError('Could not save team')
-    }
-  }
-
-  async function deleteTeam(id: string) {
-    const team = teams.find(t => t.id === id)
-    const memberCount = players.filter(p => p.team_id === id).length
-    const msg = memberCount > 0
-      ? `Delete ${team?.name}? Its ${memberCount} player${memberCount === 1 ? '' : 's'} will become unassigned.`
-      : `Delete ${team?.name}?`
-    if (!window.confirm(msg)) return
-    setBusy(true)
-    const { error: err } = await supabase.from('teams').delete().eq('id', id)
-    if (err) {
-      flashError('Could not delete team')
-    } else {
-      setTeams(prev => prev.filter(t => t.id !== id))
-      setPlayers(prev => prev.map(p => (p.team_id === id ? { ...p, team_id: null } : p)))
-    }
-    setBusy(false)
   }
 
   // ── Players ──────────────────────────────────────────────────────────────
@@ -393,117 +346,91 @@ export default function TripSetupClient({
               </div>
             </section>
 
-            {/* ── Format ── */}
+            {/* ── Formats ── */}
             <section className={SECTION}>
-              <p className="text-[#C9A84C] text-xs tracking-widest uppercase mb-4">Competition format</p>
-              <div className="space-y-4">
-                <div>
-                  <label className={LABEL}>Group style</label>
-                  <div className="flex gap-2">
-                    {[
-                      { value: 'individual', label: 'Individual' },
-                      { value: 'teams', label: 'Teams' },
-                    ].map(o => (
-                      <button
-                        key={o.value}
-                        onClick={() => saveFormat(o.value, competitionStyle)}
-                        disabled={locked}
-                        className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
-                          groupStyle === o.value
-                            ? 'bg-[#C9A84C] text-[#0a1a0e]'
-                            : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
-                        }`}
-                      >
-                        {o.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className={LABEL}>Competition style</label>
-                  <div className="flex gap-2">
-                    {[
-                      { value: 'league', label: 'League' },
-                      { value: 'matchplay', label: 'Matchplay' },
-                    ].map(o => (
-                      <button
-                        key={o.value}
-                        onClick={() => saveFormat(groupStyle, o.value)}
-                        disabled={locked}
-                        className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
-                          competitionStyle === o.value
-                            ? 'bg-[#C9A84C] text-[#0a1a0e]'
-                            : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
-                        }`}
-                      >
-                        {o.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              <p className="text-[#C9A84C] text-xs tracking-widest uppercase mb-1">Competitions</p>
+              <p className="text-white/40 text-xs mb-4">
+                Switch on as many as you like — each one gets its own leaderboard
+              </p>
+              <div className="space-y-2.5">
+                {FORMATS.map(f => {
+                  const on = !!formats[f.key]
+                  return (
+                    <button
+                      key={f.key}
+                      onClick={() => toggleFormat(f.key)}
+                      disabled={locked}
+                      className={`w-full text-left px-4 py-4 rounded-xl border transition-colors disabled:opacity-40 ${
+                        on
+                          ? 'border-[#C9A84C]/60 bg-[#C9A84C]/10'
+                          : 'border-white/10 bg-white/5 hover:border-white/25'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span
+                          className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 transition-colors ${
+                            on ? 'bg-[#C9A84C] border-[#C9A84C]' : 'border-white/25'
+                          }`}
+                        >
+                          {on && (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a1a0e" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                          )}
+                        </span>
+                        <div className="min-w-0">
+                          <p className={`text-sm font-medium ${on ? 'text-white' : 'text-white/70'}`}>
+                            {f.label}
+                          </p>
+                          <p className="text-white/40 text-xs mt-0.5 leading-snug">{f.description}</p>
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             </section>
 
             {/* ── Teams ── */}
-            {groupStyle === 'teams' && (
+            {formats.teams && (
               <section className={SECTION}>
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-1">
                   <p className="text-[#C9A84C] text-xs tracking-widest uppercase">Teams</p>
-                  <span className="text-white/30 text-xs">{teams.length} team{teams.length === 1 ? '' : 's'}</span>
+                  <span className="text-white/30 text-xs">
+                    {teams.length} team{teams.length === 1 ? '' : 's'}
+                  </span>
                 </div>
-                <div className="space-y-3">
-                  {teams.map(team => (
-                    <div key={team.id} className="bg-white/5 border border-white/10 rounded-xl p-4">
-                      <div className="flex items-center gap-3 mb-3">
-                        <span className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} />
-                        <input
-                          type="text"
-                          defaultValue={team.name}
-                          onBlur={e => {
-                            const v = e.target.value.trim()
-                            if (v && v !== team.name) updateTeam(team.id, { name: v })
-                          }}
-                          disabled={locked}
-                          className="flex-1 bg-transparent text-white text-sm font-medium focus:outline-none disabled:opacity-40"
-                        />
-                        {!locked && (
-                          <button
-                            onClick={() => deleteTeam(team.id)}
-                            className="w-9 h-9 flex items-center justify-center text-white/30 hover:text-white/70 transition-colors"
-                            aria-label={`Delete ${team.name}`}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M18 6L6 18M6 6l12 12" />
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-                      {!locked && (
-                        <div className="flex gap-2.5 flex-wrap">
-                          {PRESET_COLORS.map(color => (
-                            <button
-                              key={color}
-                              onClick={() => updateTeam(team.id, { color })}
-                              style={{ backgroundColor: color }}
-                              className={`w-7 h-7 rounded-full transition-transform hover:scale-110 ${
-                                team.color === color ? 'ring-2 ring-white ring-offset-2 ring-offset-[#0a1a0e] scale-110' : ''
-                              }`}
-                              aria-label={`Select colour ${color}`}
-                            />
-                          ))}
+                <p className="text-white/40 text-xs mb-4">
+                  {unassignedCount > 0
+                    ? `${unassignedCount} player${unassignedCount === 1 ? '' : 's'} still to be assigned`
+                    : 'Everyone has a team'}
+                </p>
+
+                {teams.length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    {teams.map(team => {
+                      const members = players.filter(p => p.team_id === team.id)
+                      return (
+                        <div key={team.id} className="flex items-center gap-3 px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl">
+                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} />
+                          <span className="text-white text-sm flex-1 min-w-0 truncate">{team.name}</span>
+                          <span className="text-white/30 text-xs flex-shrink-0">
+                            {members.length} player{members.length === 1 ? '' : 's'}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                  ))}
-                  {!locked && (
-                    <button
-                      onClick={addTeam}
-                      className="w-full py-3.5 border border-dashed border-white/20 rounded-xl text-white/50 text-sm hover:border-white/40 hover:text-white/70 transition-colors"
-                    >
-                      + Add team
-                    </button>
-                  )}
-                </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {!locked && (
+                  <Link
+                    href={`/trip/${trip.trip_code}/teams`}
+                    className="block w-full py-3.5 border border-[#C9A84C]/40 text-[#C9A84C] rounded-xl text-sm tracking-wider uppercase text-center hover:bg-[#C9A84C]/10 transition-colors"
+                  >
+                    Pick teams
+                  </Link>
+                )}
               </section>
             )}
 
@@ -576,7 +503,7 @@ export default function TripSetupClient({
                           </button>
                         ))}
                       </div>
-                      {groupStyle === 'teams' && (
+                      {formats.teams &&(
                         <div className="relative flex-1 min-w-0">
                           <select
                             value={player.team_id ?? ''}
@@ -643,7 +570,7 @@ export default function TripSetupClient({
                         ))}
                       </div>
                     </div>
-                    {groupStyle === 'teams' && teams.length > 0 && (
+                    {formats.teams &&teams.length > 0 && (
                       <div className="relative">
                         <select
                           value={newTeamId}

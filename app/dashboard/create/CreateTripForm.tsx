@@ -161,6 +161,10 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
         status: 'upcoming',
         start_date: startDate || null,
         end_date: endDate || null,
+        formats: useTeams
+          ? { individual_stableford: true, teams: true }
+          : { individual_stableford: true },
+        num_teams: useTeams ? teams.length : 2,
       })
       .select('id')
       .single()
