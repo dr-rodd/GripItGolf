@@ -52,6 +52,7 @@ interface Props {
   holes: Hole[]
   tees: Tee[]
   roundHandicaps: RoundHandicap[]
+  backHref?: string
 }
 
 type View = "dashboard" | "scoring" | "live-board" | "settings"
@@ -60,6 +61,7 @@ type View = "dashboard" | "scoring" | "live-board" | "settings"
 
 export default function CourseDashboardClient({
   courseName, courseId, players, rounds, holes, tees, roundHandicaps,
+  backHref = "/scoring",
 }: Props) {
   const [view, setView]                       = useState<View>("dashboard")
   const [scoringLiveRound, setScoringLiveRound] = useState<ActiveLiveRound | null>(null)
@@ -362,7 +364,7 @@ export default function CourseDashboardClient({
   // ─── Header ───────────────────────────────────────────────
 
   const headerLeft = view === "dashboard"
-    ? <BackButton href="/scoring" />
+    ? <BackButton href={backHref} />
     : <BackButton onClick={goBack} />
 
   const headerRight = view === "scoring"

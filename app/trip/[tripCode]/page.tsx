@@ -165,7 +165,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                   {/* Live Scoring — links to round 1 */}
                   {rounds.length > 0 ? (
                     <Link
-                      href={`/trip/${tripCode}/course/1`}
+                      href={`/trip/${tripCode}/course`}
                       className="w-full py-[18px] border-2 border-white/20 text-white/60 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-white/40 hover:text-white/80 transition-colors"
                     >
                       Live Scoring
