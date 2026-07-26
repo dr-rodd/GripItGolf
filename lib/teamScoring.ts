@@ -6,12 +6,14 @@ export type TeamScoringMode = 'hero' | 'better_ball' | 'aggregate'
 export type TeamScoring = {
   mode: TeamScoringMode
   countingScores: number   // better_ball: how many scores count on each hole
+  aggregateFinish: number  // better_ball: closing holes where EVERYONE counts (0 = off)
   aggregateHoles: number   // aggregate: how many of the closing holes count
 }
 
 export const DEFAULT_TEAM_SCORING: TeamScoring = {
   mode: 'better_ball',
   countingScores: 2,
+  aggregateFinish: 0,
   aggregateHoles: 18,
 }
 
@@ -28,12 +30,12 @@ export const TEAM_SCORING_MODES: {
   {
     key: 'better_ball',
     label: 'Better Ball',
-    description: 'A composite card built hole by hole from the team\'s best scores. Forgiving of one bad hole.',
+    description: 'A composite card built hole by hole from the team\'s best scores. Can open up to everyone for a grandstand finish.',
   },
   {
     key: 'aggregate',
     label: 'Aggregate',
-    description: 'Everyone\'s score counts. Optionally only over the closing holes, so nobody is out of it early.',
+    description: 'Everyone\'s score counts on every hole that matters. The purest team format.',
   },
 ]
 
@@ -44,11 +46,13 @@ export function parseTeamScoring(raw: unknown): TeamScoring {
     ? (r.mode as TeamScoringMode)
     : DEFAULT_TEAM_SCORING.mode
   const counting = Number(r.countingScores)
+  const finish   = Number(r.aggregateFinish)
   const holes    = Number(r.aggregateHoles)
   return {
     mode,
-    countingScores: Number.isFinite(counting) ? Math.min(4, Math.max(1, Math.round(counting))) : DEFAULT_TEAM_SCORING.countingScores,
-    aggregateHoles: Number.isFinite(holes)    ? Math.min(18, Math.max(1, Math.round(holes)))   : DEFAULT_TEAM_SCORING.aggregateHoles,
+    countingScores:  Number.isFinite(counting) ? Math.min(4,  Math.max(1, Math.round(counting))) : DEFAULT_TEAM_SCORING.countingScores,
+    aggregateFinish: Number.isFinite(finish)   ? Math.min(18, Math.max(0, Math.round(finish)))   : DEFAULT_TEAM_SCORING.aggregateFinish,
+    aggregateHoles:  Number.isFinite(holes)    ? Math.min(18, Math.max(1, Math.round(holes)))    : DEFAULT_TEAM_SCORING.aggregateHoles,
   }
 }
 
@@ -56,9 +60,12 @@ export function parseTeamScoring(raw: unknown): TeamScoring {
 export function describeTeamScoring(ts: TeamScoring): string {
   if (ts.mode === 'hero') return 'Best single card in the team counts each round'
   if (ts.mode === 'better_ball') {
-    return ts.countingScores === 1
+    const base = ts.countingScores === 1
       ? 'Best score on each hole counts'
       : `Best ${ts.countingScores} scores on each hole count`
+    return ts.aggregateFinish > 0
+      ? `${base}, and everyone counts on the last ${ts.aggregateFinish}`
+      : base
   }
   return ts.aggregateHoles >= 18
     ? 'Every score counts on all 18 holes'
@@ -116,14 +123,20 @@ export function teamRoundPoints(
   }
 
   if (scoring.mode === 'better_ball') {
+    // Holes inside the closing stretch open up to the whole team, so a
+    // trailing side can still catch up over the last few.
+    const finishFrom = scoring.aggregateFinish > 0
+      ? 18 - scoring.aggregateFinish + 1
+      : Infinity
+
     let total = 0
     for (let hole = 1; hole <= 18; hole++) {
-      total += mine
+      const holeScores = mine
         .filter(s => s.holeNumber === hole)
         .map(s => s.points)
         .sort((a, b) => b - a)
-        .slice(0, scoring.countingScores)
-        .reduce((sum, p) => sum + p, 0)
+      const counting = hole >= finishFrom ? holeScores.length : scoring.countingScores
+      total += holeScores.slice(0, counting).reduce((sum, p) => sum + p, 0)
     }
     return { roundId, points: total, heroPlayerId: null, played: true }
   }

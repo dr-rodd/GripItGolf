@@ -519,6 +519,28 @@ export default function TripSetupClient({
                         {smallestTeamSize} score{smallestTeamSize === 1 ? '' : 's'} a hole.
                       </p>
                     )}
+
+                    <label className={`${LABEL} mt-4`}>Everyone counts on the last…</label>
+                    <div className="flex gap-2">
+                      {[0, 3, 6, 9].map(n => (
+                        <button
+                          key={n}
+                          onClick={() => saveTeamScoring({ aggregateFinish: n })}
+                          disabled={locked}
+                          className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
+                            teamScoring.aggregateFinish === n
+                              ? 'bg-[#C9A84C] text-[#0a1a0e]'
+                              : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
+                          }`}
+                        >
+                          {n === 0 ? 'Off' : n}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-white/30 text-xs mt-2 leading-snug">
+                      Turn this on for a grandstand finish — the closing holes open up so
+                      every player&apos;s score counts, not just the best {teamScoring.countingScores}.
+                    </p>
                   </div>
                 )}
 
