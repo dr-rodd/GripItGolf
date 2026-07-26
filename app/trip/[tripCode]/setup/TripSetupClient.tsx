@@ -4,6 +4,10 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { FORMATS, type FormatKey, type TripFormats } from '@/lib/formats'
+import {
+  TEAM_SCORING_MODES, describeTeamScoring,
+  type TeamScoring, type TeamScoringMode,
+} from '@/lib/teamScoring'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -14,6 +18,7 @@ type Trip = {
   start_date: string | null
   end_date: string | null
   formats: TripFormats
+  team_scoring: TeamScoring
   setup_status: string
   edit_permission: string
 }
@@ -62,6 +67,7 @@ export default function TripSetupClient({
   const [startDate, setStartDate] = useState(trip.start_date ?? '')
   const [endDate, setEndDate] = useState(trip.end_date ?? '')
   const [formats, setFormats] = useState<TripFormats>(trip.formats)
+  const [teamScoring, setTeamScoring] = useState<TeamScoring>(trip.team_scoring)
   const [editPermission, setEditPermission] = useState(trip.edit_permission)
   const [setupStatus, setSetupStatus] = useState(trip.setup_status)
 
@@ -90,6 +96,9 @@ export default function TripSetupClient({
   const canEdit = isDraft && (editPermission === 'everyone' || isOwner)
   const locked = !canEdit || busy
   const unassignedCount = players.filter(p => !p.team_id).length
+  const smallestTeamSize = teams.length > 0
+    ? Math.min(...teams.map(t => players.filter(p => p.team_id === t.id).length))
+    : 0
 
   function flashError(msg: string) {
     setError(msg)
@@ -133,6 +142,13 @@ export default function TripSetupClient({
     const prev = formats
     setFormats(next)
     if (!(await saveTrip({ formats: next }))) setFormats(prev)
+  }
+
+  async function saveTeamScoring(patch: Partial<TeamScoring>) {
+    const prev = teamScoring
+    const next = { ...teamScoring, ...patch }
+    setTeamScoring(next)
+    if (!(await saveTrip({ team_scoring: next }))) setTeamScoring(prev)
   }
 
   async function savePermission(next: string) {
@@ -431,6 +447,110 @@ export default function TripSetupClient({
                     Pick teams
                   </Link>
                 )}
+              </section>
+            )}
+
+            {/* ── Team scoring ── */}
+            {formats.teams && (
+              <section className={SECTION}>
+                <p className="text-[#C9A84C] text-xs tracking-widest uppercase mb-1">Team scoring</p>
+                <p className="text-white/40 text-xs mb-4">
+                  How each team&apos;s points are worked out on every course played
+                </p>
+
+                <div className="space-y-2.5">
+                  {TEAM_SCORING_MODES.map(m => {
+                    const on = teamScoring.mode === m.key
+                    return (
+                      <button
+                        key={m.key}
+                        onClick={() => saveTeamScoring({ mode: m.key as TeamScoringMode })}
+                        disabled={locked}
+                        className={`w-full text-left px-4 py-4 rounded-xl border transition-colors disabled:opacity-40 ${
+                          on
+                            ? 'border-[#C9A84C]/60 bg-[#C9A84C]/10'
+                            : 'border-white/10 bg-white/5 hover:border-white/25'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span
+                            className={`mt-0.5 w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 transition-colors ${
+                              on ? 'border-[#C9A84C]' : 'border-white/25'
+                            }`}
+                          >
+                            {on && <span className="w-2.5 h-2.5 rounded-full bg-[#C9A84C]" />}
+                          </span>
+                          <div className="min-w-0">
+                            <p className={`text-sm font-medium ${on ? 'text-white' : 'text-white/70'}`}>
+                              {m.label}
+                            </p>
+                            <p className="text-white/40 text-xs mt-0.5 leading-snug">{m.description}</p>
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Better Ball — how many scores count per hole */}
+                {teamScoring.mode === 'better_ball' && (
+                  <div className="mt-4">
+                    <label className={LABEL}>Scores counting on each hole</label>
+                    <div className="flex gap-2">
+                      {[1, 2, 3, 4].map(n => (
+                        <button
+                          key={n}
+                          onClick={() => saveTeamScoring({ countingScores: n })}
+                          disabled={locked}
+                          className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
+                            teamScoring.countingScores === n
+                              ? 'bg-[#C9A84C] text-[#0a1a0e]'
+                              : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                    {teamScoring.countingScores > smallestTeamSize && smallestTeamSize > 0 && (
+                      <p className="text-amber-400/80 text-xs mt-2 leading-snug">
+                        Your smallest team has {smallestTeamSize} player
+                        {smallestTeamSize === 1 ? '' : 's'} — it can only ever contribute{' '}
+                        {smallestTeamSize} score{smallestTeamSize === 1 ? '' : 's'} a hole.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Aggregate — how many closing holes count */}
+                {teamScoring.mode === 'aggregate' && (
+                  <div className="mt-4">
+                    <label className={LABEL}>Holes that count</label>
+                    <div className="flex gap-2">
+                      {[18, 9, 6, 3].map(n => (
+                        <button
+                          key={n}
+                          onClick={() => saveTeamScoring({ aggregateHoles: n })}
+                          disabled={locked}
+                          className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
+                            teamScoring.aggregateHoles === n
+                              ? 'bg-[#C9A84C] text-[#0a1a0e]'
+                              : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
+                          }`}
+                        >
+                          {n === 18 ? 'All 18' : `Last ${n}`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-4 px-4 py-3 bg-white/5 border border-white/10 rounded-xl">
+                  <p className="text-white/50 text-xs">
+                    <span className="text-[#C9A84C]">In play:</span>{' '}
+                    {describeTeamScoring(teamScoring)}
+                  </p>
+                </div>
               </section>
             )}
 

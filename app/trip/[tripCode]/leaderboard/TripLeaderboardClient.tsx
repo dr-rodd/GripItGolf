@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { enabledFormats, type FormatKey, type TripFormats } from '@/lib/formats'
+import { describeTeamScoring, teamRoundPoints, type TeamScoring } from '@/lib/teamScoring'
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -19,6 +20,7 @@ type RoundHcp   = { round_id: string; player_id: string; playing_handicap: numbe
 
 interface Props {
   formats: TripFormats
+  teamScoring: TeamScoring
   rounds: Round[]
   teams: Team[]
   players: Player[]
@@ -95,7 +97,7 @@ function LiveDot() {
 // ─── Component ─────────────────────────────────────────────────
 
 export default function TripLeaderboardClient({
-  formats, rounds, teams, players, holes, scores, liveScores, roundHandicaps,
+  formats, teamScoring, rounds, teams, players, holes, scores, liveScores, roundHandicaps,
 }: Props) {
   const tabs = enabledFormats(formats)
   const [active, setActive] = useState<FormatKey>(tabs[0]?.key ?? 'individual_stableford')
@@ -282,34 +284,26 @@ export default function TripLeaderboardClient({
       .sort((a, b) => b.pts - a.pts || b.won - a.won || a.player.name.localeCompare(b.player.name))
   }, [players, visibleRounds, inScope, holes, hcpFor, playerById])
 
-  // ── Teams (best 2 per hole) ─────────────────────────────────
+  // ── Teams ───────────────────────────────────────────────────
+  // Points per round come from the trip's chosen mode: hero,
+  // better ball, or aggregate.
 
   const teamRows = useMemo(() => {
     return teams
       .map(team => {
-        const members = players.filter(p => p.team_id === team.id)
-        const memberIds = new Set(members.map(m => m.id))
+        const members   = players.filter(p => p.team_id === team.id)
+        const memberIds = members.map(m => m.id)
 
-        let points = 0
-        let holesCounted = 0
-        for (const round of visibleRounds) {
-          for (let hole = 1; hole <= 18; hole++) {
-            const holePts = inScope
-              .filter(s => s.roundId === round.id && s.holeNumber === hole && memberIds.has(s.playerId))
-              .map(s => s.points)
-              .sort((a, b) => b - a)
-              .slice(0, 2)
-            if (holePts.length === 0) continue
-            holesCounted++
-            points += holePts.reduce((sum, p) => sum + p, 0)
-          }
-        }
+        const perRound = visibleRounds.map(round => ({
+          round,
+          ...teamRoundPoints(memberIds, round.id, inScope, teamScoring),
+        }))
 
         return {
           team,
           members,
-          points,
-          holesCounted,
+          perRound: perRound.filter(r => r.played),
+          points: perRound.reduce((sum, r) => sum + r.points, 0),
           isLive: members.some(m =>
             inScope.some(s => s.playerId === m.id && liveRoundIds.has(s.roundId))
           ),
@@ -317,7 +311,7 @@ export default function TripLeaderboardClient({
       })
       .filter(r => r.members.length > 0)
       .sort((a, b) => b.points - a.points || a.team.name.localeCompare(b.team.name))
-  }, [teams, players, visibleRounds, inScope, liveRoundIds])
+  }, [teams, players, visibleRounds, inScope, liveRoundIds, teamScoring])
 
   // ── Render ──────────────────────────────────────────────────
 
@@ -512,7 +506,7 @@ export default function TripLeaderboardClient({
           : (
             <>
               <p className="text-white/30 text-xs mb-3">
-                The best two scores in each team count on every hole.
+                {describeTeamScoring(teamScoring)}.
               </p>
               <div className="space-y-3">
                 {teamRows.map((row, i) => (
@@ -537,7 +531,39 @@ export default function TripLeaderboardClient({
                         {row.points}
                       </span>
                     </div>
-                    <div className="px-4 pb-3 pt-1 flex flex-wrap gap-x-3 gap-y-1 border-t border-white/[0.06]">
+
+                    {/* Per-course contribution */}
+                    {row.perRound.length > 0 && (
+                      <div className="border-t border-white/[0.06]">
+                        {row.perRound.map(r => {
+                          const hero = r.heroPlayerId
+                            ? playerById.get(r.heroPlayerId)?.name.split(' ')[0]
+                            : null
+                          return (
+                            <div
+                              key={r.roundId}
+                              className="flex items-center gap-3 px-4 py-2 text-xs"
+                            >
+                              <span className="text-white/25 w-6 flex-shrink-0 tabular-nums">
+                                R{r.round.round_number}
+                              </span>
+                              <span className="flex-1 min-w-0 text-white/40 truncate">
+                                {r.round.courses?.name ?? '—'}
+                                {hero && (
+                                  <span className="text-[#C9A84C]/70"> · {hero}</span>
+                                )}
+                              </span>
+                              <span className="text-white/60 tabular-nums flex-shrink-0">
+                                {r.points}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Squad */}
+                    <div className="px-4 py-2.5 flex flex-wrap gap-x-3 gap-y-1 border-t border-white/[0.06]">
                       {row.members.map(m => {
                         const pts = inScope
                           .filter(s => s.playerId === m.id)

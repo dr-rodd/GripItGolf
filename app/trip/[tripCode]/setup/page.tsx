@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { parseFormats } from '@/lib/formats'
+import { parseTeamScoring } from '@/lib/teamScoring'
 import TripSetupClient from './TripSetupClient'
 
 export const dynamic = 'force-dynamic'
@@ -69,6 +70,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         start_date: trip.start_date ?? null,
         end_date: trip.end_date ?? null,
         formats: parseFormats(trip.formats),
+        team_scoring: parseTeamScoring(trip.team_scoring),
         setup_status: trip.setup_status ?? 'live',
         edit_permission: trip.edit_permission ?? 'everyone',
       }}

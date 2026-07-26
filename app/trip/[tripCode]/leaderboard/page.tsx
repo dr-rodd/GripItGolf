@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { parseFormats } from '@/lib/formats'
+import { parseTeamScoring } from '@/lib/teamScoring'
 import Poller from '@/app/components/Poller'
 import BackButton from '@/app/components/BackButton'
 import TripLeaderboardClient from './TripLeaderboardClient'
@@ -16,7 +17,7 @@ export default async function TripLeaderboardPage({
 
   const { data: trip } = await supabase
     .from('trips')
-    .select('id, name, formats')
+    .select('id, name, formats, team_scoring')
     .eq('trip_code', tripCode)
     .single()
   if (!trip) notFound()
@@ -72,6 +73,7 @@ export default async function TripLeaderboardPage({
 
       <TripLeaderboardClient
         formats={parseFormats(trip.formats)}
+        teamScoring={parseTeamScoring(trip.team_scoring)}
         rounds={(rounds ?? []) as any}
         teams={teamsRes.data ?? []}
         players={playersRes.data ?? []}
