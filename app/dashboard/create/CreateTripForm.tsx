@@ -191,8 +191,9 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
     // 3. Players (skip blanks)
     const validPlayers = players.filter(p => p.name.trim())
+    let playerRows: { id: string; handicap: number }[] = []
     if (validPlayers.length > 0) {
-      const { error: playersErr } = await supabase
+      const { data: insertedPlayers, error: playersErr } = await supabase
         .from('players')
         .insert(
           validPlayers.map((p, i) => ({
@@ -205,16 +206,18 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
             team_id: useTeams && p.teamIndex >= 0 ? teamIds[p.teamIndex] ?? null : null,
           }))
         )
+        .select('id, handicap')
 
-      if (playersErr) {
+      if (playersErr || !insertedPlayers) {
         setError('Failed to add players. Please try again.')
         setSubmitting(false)
         return
       }
+      playerRows = insertedPlayers
     }
 
     // 4. Rounds
-    const { error: roundsErr } = await supabase
+    const { data: insertedRounds, error: roundsErr } = await supabase
       .from('rounds')
       .insert(
         rounds.map((r, i) => ({
@@ -225,11 +228,31 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
           ...(r.scheduledDate ? { scheduled_date: r.scheduledDate } : {}),
         }))
       )
+      .select('id')
 
-    if (roundsErr) {
+    if (roundsErr || !insertedRounds) {
       setError('Failed to create rounds. Each course can only be used once per trip.')
       setSubmitting(false)
       return
+    }
+
+    // 5. Round handicaps — one row per player per round
+    // WHS formula: PH = HI × Slope/113 + (CR − Par). With no tee data yet,
+    // slope=113 and CR=Par cancel out, leaving PH = HI rounded to nearest integer.
+    if (playerRows.length > 0) {
+      const hcpRows = insertedRounds.flatMap(round =>
+        playerRows.map(player => ({
+          round_id: round.id,
+          player_id: player.id,
+          playing_handicap: Math.round(player.handicap ?? 0),
+        }))
+      )
+      const { error: hcpErr } = await supabase.from('round_handicaps').insert(hcpRows)
+      if (hcpErr) {
+        setError('Failed to set player handicaps. Please try again.')
+        setSubmitting(false)
+        return
+      }
     }
 
     setResultCode(code)
