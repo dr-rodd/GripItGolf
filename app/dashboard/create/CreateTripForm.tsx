@@ -378,6 +378,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                   value={startDate}
                   onChange={e => setStartDate(e.target.value)}
                   className={INPUT}
+                  style={{ colorScheme: 'dark' }}
                 />
               </div>
               <div>
@@ -387,6 +388,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                   value={endDate}
                   onChange={e => setEndDate(e.target.value)}
                   className={INPUT}
+                  style={{ colorScheme: 'dark' }}
                 />
               </div>
             </div>
@@ -463,6 +465,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                         value={round.scheduledDate}
                         onChange={e => updateRound(i, { scheduledDate: e.target.value })}
                         className={INPUT}
+                        style={{ colorScheme: 'dark' }}
                       />
                     </div>
                   </div>
