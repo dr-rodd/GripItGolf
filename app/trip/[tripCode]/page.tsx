@@ -118,16 +118,28 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                 />
               </div>
 
-              {/* Coming-soon sections */}
-              {(['Leaderboard', 'Live Scoring'] as const).map(label => (
-                <div
-                  key={label}
-                  className="w-full py-[18px] border-2 border-white/10 rounded-xl flex items-center justify-center gap-3"
+              {/* Live Scoring — links to round 1 */}
+              {rounds.length > 0 ? (
+                <Link
+                  href={`/trip/${tripCode}/course/1`}
+                  className="w-full py-[18px] border-2 border-white/20 text-white/60 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-white/40 hover:text-white/80 transition-colors"
                 >
-                  <span className="text-white/25 text-sm tracking-[0.25em] uppercase">{label}</span>
+                  Live Scoring
+                </Link>
+              ) : (
+                <div className="w-full py-[18px] border-2 border-white/10 rounded-xl flex items-center justify-center gap-3">
+                  <span className="text-white/25 text-sm tracking-[0.25em] uppercase">Live Scoring</span>
                   <span className="text-white/15 text-[10px] tracking-[0.2em] uppercase">Soon</span>
                 </div>
-              ))}
+              )}
+
+              {/* Leaderboard */}
+              <Link
+                href={`/trip/${tripCode}/leaderboard`}
+                className="w-full py-[18px] border-2 border-white/20 text-white/60 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-white/40 hover:text-white/80 transition-colors"
+              >
+                Leaderboard
+              </Link>
 
             </nav>
           </TripCountdown>
