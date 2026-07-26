@@ -255,6 +255,12 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
       }
     }
 
+    // Remember this device created the trip — used by the setup page
+    // when edit permission is set to "owner only" (no auth yet).
+    try {
+      localStorage.setItem(`gig-owner-${code}`, '1')
+    } catch { /* localStorage unavailable */ }
+
     setResultCode(code)
     setStep('done')
     setSubmitting(false)
@@ -286,7 +292,8 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
             Trip Created!
           </h1>
           <p className="text-white/50 text-sm mb-10">
-            Share this code with your group to join
+            Share this code with your group to join. Your trip starts in setup
+            mode — finalise it from the trip page when everyone&apos;s ready to play.
           </p>
 
           <div className="bg-white/5 border border-[#C9A84C]/20 rounded-2xl p-8 mb-4">

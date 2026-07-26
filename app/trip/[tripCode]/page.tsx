@@ -1,7 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import TripCountdown from './TripCountdown'
-import FormatPicker from './FormatPicker'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,12 +9,19 @@ function formatDate(d: string | null) {
   return new Date(d).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+const FORMAT_LABELS: Record<string, string> = {
+  individual: 'Individual',
+  teams: 'Teams',
+  league: 'League',
+  matchplay: 'Matchplay',
+}
+
 export default async function TripPage({ params }: { params: Promise<{ tripCode: string }> }) {
   const { tripCode } = await params
 
   const { data: trip, error: tripError } = await supabase
     .from('trips')
-    .select('id, name, start_date, end_date, trip_code, created_at, group_style, competition_style')
+    .select('*')
     .eq('trip_code', tripCode)
     .single()
 
@@ -65,6 +71,23 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   const estYear    = trip.created_at ? new Date(trip.created_at).getFullYear() : null
   const dateRange  = [formatDate(trip.start_date), formatDate(trip.end_date)].filter(Boolean).join(' – ')
 
+  // Trips created before the lifecycle migration have no setup_status — treat as live
+  const isDraft = (trip.setup_status ?? 'live') === 'draft'
+  const formatLine = [
+    FORMAT_LABELS[trip.group_style ?? 'individual'],
+    FORMAT_LABELS[trip.competition_style ?? 'league'],
+  ].filter(Boolean).join(' · ')
+
+  const lockedButton = (label: string) => (
+    <div className="w-full py-[18px] border-2 border-white/10 rounded-xl flex items-center justify-center gap-3">
+      <span className="text-white/25 text-sm tracking-[0.25em] uppercase">{label}</span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/20" aria-hidden="true">
+        <rect x="3" y="11" width="18" height="11" rx="2" />
+        <path d="M7 11V7a5 5 0 0110 0v4" />
+      </svg>
+    </div>
+  )
+
   return (
     <main className="min-h-dvh bg-[#0a1a0e]">
 
@@ -93,14 +116,27 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
           {/* Course names — venue line */}
           {courseNames && (
-            <p className="text-white/30 text-xs tracking-[0.15em] uppercase mb-8">{courseNames}</p>
+            <p className="text-white/30 text-xs tracking-[0.15em] uppercase mb-2">{courseNames}</p>
+          )}
+
+          {/* Format line */}
+          {formatLine && (
+            <p className="text-[#C9A84C]/50 text-[10px] tracking-[0.25em] uppercase mb-8">{formatLine}</p>
+          )}
+
+          {/* Setup badge */}
+          {isDraft && (
+            <div className="flex items-center gap-2 px-4 py-2 bg-[#C9A84C]/10 border border-[#C9A84C]/30 rounded-full mb-6">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C]" />
+              <span className="text-[#C9A84C] text-[10px] tracking-[0.25em] uppercase">In Setup</span>
+            </div>
           )}
 
           {/* Countdown wrapping nav */}
           <TripCountdown target={trip.start_date ?? null}>
             <nav className="flex flex-col gap-3 w-full">
 
-              {/* Enter Trip — functional primary action */}
+              {/* Enter Trip — join / claim a player */}
               <Link
                 href={`/trip/${tripCode}/players`}
                 className="w-full py-[18px] border-2 border-[#C9A84C] text-[#C9A84C] rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:bg-[#C9A84C]/10 transition-colors"
@@ -108,38 +144,53 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                 Enter Trip
               </Link>
 
-              {/* Competition format picker */}
-              <div className="w-full border-2 border-white/10 rounded-xl px-5 py-4">
-                <p className="text-white/30 text-[10px] tracking-[0.2em] uppercase mb-3">Competition format</p>
-                <FormatPicker
-                  tripId={trip.id}
-                  initialGroup={(trip.group_style ?? 'individual') as any}
-                  initialCompetition={(trip.competition_style ?? 'league') as any}
-                />
-              </div>
+              {isDraft ? (
+                <>
+                  {/* Trip Setup — the organiser's home while drafting */}
+                  <Link
+                    href={`/trip/${tripCode}/setup`}
+                    className="w-full py-[18px] bg-[#C9A84C] text-[#0a1a0e] rounded-xl text-sm font-bold tracking-[0.25em] uppercase text-center hover:bg-[#d4b35a] transition-colors"
+                  >
+                    Trip Setup
+                  </Link>
 
-              {/* Live Scoring — links to round 1 */}
-              {rounds.length > 0 ? (
-                <Link
-                  href={`/trip/${tripCode}/course/1`}
-                  className="w-full py-[18px] border-2 border-white/20 text-white/60 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-white/40 hover:text-white/80 transition-colors"
-                >
-                  Live Scoring
-                </Link>
+                  {lockedButton('Live Scoring')}
+                  {lockedButton('Leaderboard')}
+                  <p className="text-white/25 text-xs mt-1">
+                    Scoring opens when the trip is finalised
+                  </p>
+                </>
               ) : (
-                <div className="w-full py-[18px] border-2 border-white/10 rounded-xl flex items-center justify-center gap-3">
-                  <span className="text-white/25 text-sm tracking-[0.25em] uppercase">Live Scoring</span>
-                  <span className="text-white/15 text-[10px] tracking-[0.2em] uppercase">Soon</span>
-                </div>
-              )}
+                <>
+                  {/* Live Scoring — links to round 1 */}
+                  {rounds.length > 0 ? (
+                    <Link
+                      href={`/trip/${tripCode}/course/1`}
+                      className="w-full py-[18px] border-2 border-white/20 text-white/60 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-white/40 hover:text-white/80 transition-colors"
+                    >
+                      Live Scoring
+                    </Link>
+                  ) : (
+                    lockedButton('Live Scoring')
+                  )}
 
-              {/* Leaderboard */}
-              <Link
-                href={`/trip/${tripCode}/leaderboard`}
-                className="w-full py-[18px] border-2 border-white/20 text-white/60 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-white/40 hover:text-white/80 transition-colors"
-              >
-                Leaderboard
-              </Link>
+                  {/* Leaderboard */}
+                  <Link
+                    href={`/trip/${tripCode}/leaderboard`}
+                    className="w-full py-[18px] border-2 border-white/20 text-white/60 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-white/40 hover:text-white/80 transition-colors"
+                  >
+                    Leaderboard
+                  </Link>
+
+                  {/* Settings — leads to setup page with unlock option */}
+                  <Link
+                    href={`/trip/${tripCode}/setup`}
+                    className="text-white/25 text-xs tracking-wide hover:text-white/50 transition-colors mt-1"
+                  >
+                    Trip settings
+                  </Link>
+                </>
+              )}
 
             </nav>
           </TripCountdown>
