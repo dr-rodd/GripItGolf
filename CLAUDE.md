@@ -147,6 +147,20 @@ Stored in the `formats` JSONB column on `trips` as boolean flags. Defined in `li
 
 At least one format must stay enabled — the setup UI refuses to switch the last one off.
 
+### Team scoring modes
+
+When Team Play is on, `trips.team_scoring` (JSONB) decides how a team's points for each round are calculated. Logic lives in `lib/teamScoring.ts` — a pure function, unit-verifiable, takes any team size.
+
+| Mode | Calculation | Option |
+|---|---|---|
+| `hero` | Best single individual card in the team counts for that round | — |
+| `better_ball` | Composite card: best N Stableford scores on each hole | `countingScores` 1–4 |
+| `aggregate` | Every member's score counts, over the closing X holes | `aggregateHoles` 18/9/6/3 |
+
+Team sizes are deliberately **not** fixed — a team can have any number of players. `countingScores` above the smallest team's size is allowed (it just caps out); setup warns rather than blocks.
+
+This supersedes Donegal Masters rule 6 ("best-2-of-3") for trip pages — best-2 is now just the `better_ball` default, not a hard rule. The legacy DM leaderboard still hard-codes best-2.
+
 **Future:** Skins, Nassau, Best Ball, Scramble, bracketed (rather than round-robin) matchplay.
 
 ## Trip lifecycle
