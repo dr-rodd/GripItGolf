@@ -62,7 +62,7 @@ export default async function TripLeaderboardPage({
       <div className="sticky top-0 z-50 bg-[#0a1a0e] border-b border-[#1e3d28]">
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
           <BackButton href={`/trip/${tripCode}`} />
-          <h1 className="font-[family-name:var(--font-playfair)] text-xl text-white tracking-wide truncate px-2">
+          <h1 className="font-[family-name:var(--font-playfair)] text-xl sm:text-2xl text-white tracking-wide truncate px-2">
             {trip.name}
           </h1>
           <div className="w-11" />
