@@ -62,11 +62,13 @@ Mobile-first. Used on the course, on phones, by non-technical users.
 |---|---|
 | `/` | Landing page — create or join a trip |
 | `/join` | Enter trip code to join |
-| `/trip/[tripCode]` | Trip home — course portal |
+| `/trip/[tripCode]` | Trip hub — hero, nav, player list |
+| `/trip/[tripCode]/setup` | Trip setup — formats, players, finalise/unlock |
+| `/trip/[tripCode]/teams` | Drag-and-drop team assignment |
+| `/trip/[tripCode]/players` | Join trip / claim a player slot |
+| `/trip/[tripCode]/course` | Round picker for live scoring |
 | `/trip/[tripCode]/course/[roundNumber]` | Course dashboard — live scoring |
-| `/trip/[tripCode]/scorecard/[sessionId]` | Score entry |
-| `/trip/[tripCode]/leaderboard` | Leaderboard |
-| `/trip/[tripCode]/summary/[sessionId]` | Post-round summary |
+| `/trip/[tripCode]/leaderboard` | Leaderboard — one tab per enabled format |
 | `/dashboard` | Lead player's trip list (future — post auth) |
 | `/dashboard/create` | Trip creation wizard (future — post auth) |
 
@@ -76,7 +78,8 @@ Mobile-first. Used on the course, on phones, by non-technical users.
 
 | Table | Description |
 |---|---|
-| `trips` | Top-level. `name`, `slug`, `trip_code` (6-char unique), `status`, `competition_type`, `start_date`, `end_date`, `created_at` |
+| `trips` | Top-level. `name`, `slug`, `trip_code` (6-char unique), `status`, `formats` (JSONB), `num_teams`, `setup_status`, `edit_permission`, `finalised_at`, `start_date`, `end_date`, `created_at` |
+| `tees` | Scoped to `course_id`. `name` (colour), `gender`, `par`, `course_rating`, `slope`. Unique on `(course_id, name, gender)` |
 | `teams` | Scoped to `trip_id`. `name`, `color` (hex) |
 | `players` | Scoped to `trip_id`. `team_id` (nullable), `name`, `role` (player), `handicap`, `is_lead` (boolean) |
 | `courses` | Scoped to `trip_id`. `name`, `slug`, `location` |
@@ -131,11 +134,32 @@ One state at a time. Finalised players cannot be reselected unless manually unfi
 
 ## Competition formats
 
-**Now:** Stableford Teams, Stableford Individual
+Formats are **independently toggleable** — a trip can run several at once, and each enabled format gets its own tab on the leaderboard. This is a deliberate departure from Donegal Masters, which had one fixed format.
 
-**Future:** Match Play, Skins, Nassau, Best Ball, Scramble
+Stored in the `formats` JSONB column on `trips` as boolean flags. Defined in `lib/formats.ts` — add a format there plus a leaderboard branch; no schema change needed.
 
-The `competition_type` field on `trips` and a `settings` JSONB column support adding formats without schema changes.
+| Key | Format | Scoring |
+|---|---|---|
+| `individual_stableford` | Individual Stableford | Total points. Default on. |
+| `individual_strokes` | Individual Strokeplay | Gross and nett totals, lowest wins |
+| `individual_matchplay` | Individual Matchplay | Round robin — every player meets every other each round, holes decided on nett score, 1pt a win / ½ a half |
+| `teams` | Team Play | Best 2 scores per team count on every hole |
+
+At least one format must stay enabled — the setup UI refuses to switch the last one off.
+
+**Future:** Skins, Nassau, Best Ball, Scramble, bracketed (rather than round-robin) matchplay.
+
+## Trip lifecycle
+
+Trips have a `setup_status` of `draft` or `live`.
+
+- **Draft** — everything editable: name, dates, formats, teams, players, handicaps. Scoring and the leaderboard are locked on the trip hub. Players can still join with the trip code.
+- **Finalise** — writes a `round_handicaps` row for every player on every round (this is what catches players who joined after creation), then flips to `live` and opens scoring.
+- **Unlock** — returns a live trip to `draft`. **Scores are never touched by the switch.** Re-finalising only fills gaps; it never overwrites existing handicap rows.
+
+`edit_permission` is `everyone` or `owner`. Owner is a device flag in localStorage (`gig-owner-<TRIP_CODE>`) set at creation — placeholder until auth lands.
+
+Trips predating this feature were marked `live` by migration 010, so nothing changed for them.
 
 ## Key files
 
@@ -147,6 +171,17 @@ The `competition_type` field on `trips` and a `settings` JSONB column support ad
 | `supabase/migrations/` | All schema migrations in order |
 | `supabase/seed.sql` | Empty — trip data entered through the app |
 | `config/site.ts` | Global platform branding |
+
+## Tee data
+
+The `tees` table drives tee selection in live scoring and the WHS playing-handicap calculation. It was empty in production until July 2026 — tee selection was permanently blocked on every platform course.
+
+- **Migration 008** — all 22 platform courses. Real tee colours, par, CR and slope researched from club sites and golf databases. Confidence is noted per course in the file comments.
+- **Migration 009** — the three Rosapenna courses, using certified figures from the Donegal Masters 2026 scorecards.
+
+**Still estimated, needs a real scorecard:** Ballyliffin Old (no WHS data published anywhere), Portsalon, Royal Portrush Valley (redesigned post-2019 Open, databases stale), Narin & Portnoo (Gil Hanse redesign changed par 73 → 70, databases stale). Ladies par is estimated on The Island and Doonbeg.
+
+When adding a course, insert its tees in the same migration. A course with no tee rows cannot be scored.
 
 ## Data insertion order
 
@@ -228,7 +263,7 @@ In GripItGolf's multi-tenant model, this pattern needs scoping per-trip: `editio
 | # | Rule | Status | Reference |
 |---|------|--------|-----------|
 | 1 | iOS: `translateX` inside `overflow-hidden` breaks tap hit-testing | ⚠️ TODO | `app/scoring/LiveScoringFlow.tsx:921` — `translateX` inside `overflow-x-hidden` div. Not `overflow-hidden` exactly but adjacent enough to revisit before iOS testing. |
-| 2 | Leaderboard merges uncommitted `live_scores` + committed `scores` | ⚠️ TODO | `app/leaderboard/LeaderboardClient.tsx` queries `scores` table only. `live_scores` not merged. In-progress rounds show stale data until finalised. |
+| 2 | Leaderboard merges uncommitted `live_scores` + committed `scores` | ✅ Fixed (trip pages) | `app/trip/[tripCode]/leaderboard/` fetches both and merges — committed always wins per hole. In-progress rounds show a pulsing dot. The legacy DM `app/leaderboard/` still queries `scores` only. |
 | 3 | Offline queue stamps `trip_id` at enqueue, not flush | N/A | Feature not built. No offline queue exists in this codebase. |
 | 4 | WHS formula: `PH = HI × Slope/113 + (CR − Par)`, no 95%, no truncation | ✅ Compliant | Verified 2026-04-24. `calcPlayingHandicap` in `LiveScoringFlow.tsx`, `LiveClient.tsx`, `LeaderboardClient.tsx`. |
 | 5 | Ladies tees applied on all courses, not just one | ✅ Fixed | commit `a320b53` + `be82e21` (2026-04-24). `ST_PATRICKS_COURSE_ID` gate removed from all 4 files; missed call site fixed. |
@@ -237,7 +272,7 @@ In GripItGolf's multi-tenant model, this pattern needs scoping per-trip: `editio
 | 8 | Team re-assignment: 3-step null/place/restore to satisfy role-per-team constraint | N/A | Feature not built. No team re-assignment UI exists yet. |
 | 9 | Silent mutation failures surfaced to user | ⚠️ TODO | `// TODO(error-handling)` comments added 2026-04-24 to 7 unchecked mutation sites across `LiveScoringFlow.tsx` and `LiveClient.tsx`. Full fix requires error destructuring + UI feedback. |
 | 10 | `force-dynamic` on leaderboard pages (not `revalidate = 30`) | ✅ Fixed | Fixed 2026-04-24 — was missed in initial port from Donegal Masters. Both `app/leaderboard/page.tsx` and `app/leaderboard/individual/page.tsx`. |
-| 11 | Tee auto-selection on fresh start (Blue/Slate men, Red/Claret women) | ⚠️ TODO | TODO comment placed 2026-04-24 at tee selector blocks in `LiveClient.tsx` (~line 399) and `LiveScoringFlow.tsx` (~line 752). |
+| 11 | Tee auto-selection on fresh start | ✅ Fixed | `togglePlayer` in `LiveScoringFlow.tsx` auto-selects when a player's gender has exactly one tee on that course. Men usually see 2–3 options and choose, since the choice changes their playing handicap. |
 | 12 | Session resume fetches fresh `round_handicaps` (not stale page-load prop) | ✅ Fixed | commit `0d7296c` (2026-04-24). `doResume()` fetches fresh; `effectiveRoundHandicaps` state unifies sources; `resolvePlayingHandicap()` logs fallback. |
 | — | Next.js 16: dynamic route `params` must be awaited as a Promise | ✅ Compliant | Both dynamic routes use `const { x } = await params`: `app/scoring/[slug]/page.tsx:19`, `app/scorecard/[playerId]/page.tsx:16`. |
 
