@@ -57,6 +57,11 @@ export function parseTeamScoring(raw: unknown): TeamScoring {
 }
 
 /** One-line summary of the current setting, for the setup and leaderboard screens. */
+/** "the last hole" / "the last 3 holes" — reads properly at either end. */
+function lastHoles(n: number) {
+  return n === 1 ? 'the last hole' : `the last ${n} holes`
+}
+
 export function describeTeamScoring(ts: TeamScoring): string {
   if (ts.mode === 'hero') return 'Best single card in the team counts each round'
   if (ts.mode === 'better_ball') {
@@ -64,12 +69,12 @@ export function describeTeamScoring(ts: TeamScoring): string {
       ? 'Best score on each hole counts'
       : `Best ${ts.countingScores} scores on each hole count`
     return ts.aggregateFinish > 0
-      ? `${base}, and everyone counts on the last ${ts.aggregateFinish}`
+      ? `${base}, and everyone counts on ${lastHoles(ts.aggregateFinish)}`
       : base
   }
   return ts.aggregateHoles >= 18
     ? 'Every score counts on all 18 holes'
-    : `Every score counts on the last ${ts.aggregateHoles} holes`
+    : `Every score counts on ${lastHoles(ts.aggregateHoles)}`
 }
 
 // ─── Calculation ───────────────────────────────────────────────

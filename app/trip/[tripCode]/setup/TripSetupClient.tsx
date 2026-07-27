@@ -521,19 +521,19 @@ export default function TripSetupClient({
                     )}
 
                     <label className={`${LABEL} mt-4`}>Everyone counts on the last…</label>
-                    <div className="flex gap-2">
-                      {[0, 3, 6, 9].map(n => (
+                    <div className="grid grid-cols-3 gap-2">
+                      {[0, 1, 2, 3, 6, 9].map(n => (
                         <button
                           key={n}
                           onClick={() => saveTeamScoring({ aggregateFinish: n })}
                           disabled={locked}
-                          className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
+                          className={`py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
                             teamScoring.aggregateFinish === n
                               ? 'bg-[#C9A84C] text-[#0a1a0e]'
                               : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
                           }`}
                         >
-                          {n === 0 ? 'Off' : n}
+                          {n === 0 ? 'Off' : n === 1 ? '1 hole' : `${n} holes`}
                         </button>
                       ))}
                     </div>
@@ -548,22 +548,26 @@ export default function TripSetupClient({
                 {teamScoring.mode === 'aggregate' && (
                   <div className="mt-4">
                     <label className={LABEL}>Holes that count</label>
-                    <div className="flex gap-2">
-                      {[18, 9, 6, 3].map(n => (
+                    <div className="grid grid-cols-3 gap-2">
+                      {[18, 9, 6, 3, 2, 1].map(n => (
                         <button
                           key={n}
                           onClick={() => saveTeamScoring({ aggregateHoles: n })}
                           disabled={locked}
-                          className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
+                          className={`py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
                             teamScoring.aggregateHoles === n
                               ? 'bg-[#C9A84C] text-[#0a1a0e]'
                               : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
                           }`}
                         >
-                          {n === 18 ? 'All 18' : `Last ${n}`}
+                          {n === 18 ? 'All 18' : n === 1 ? 'Last hole' : `Last ${n}`}
                         </button>
                       ))}
                     </div>
+                    <p className="text-white/30 text-xs mt-2 leading-snug">
+                      A short closing stretch keeps every team in it to the end — one bad
+                      round no longer settles the trip.
+                    </p>
                   </div>
                 )}
 

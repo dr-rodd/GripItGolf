@@ -154,8 +154,8 @@ When Team Play is on, `trips.team_scoring` (JSONB) decides how a team's points f
 | Mode | Calculation | Options |
 |---|---|---|
 | `hero` | Best single individual card in the team counts for that round | — |
-| `better_ball` | Composite card: best N Stableford scores on each hole, optionally opening up to the whole team over the closing holes | `countingScores` 1–4, `aggregateFinish` 0/3/6/9 |
-| `aggregate` | Every member's score counts, over the closing X holes | `aggregateHoles` 18/9/6/3 |
+| `better_ball` | Composite card: best N Stableford scores on each hole, optionally opening up to the whole team over the closing holes | `countingScores` 1–4, `aggregateFinish` 0/1/2/3/6/9 |
+| `aggregate` | Every member's score counts, over the closing X holes | `aggregateHoles` 18/9/6/3/2/1 |
 
 `aggregateFinish` is the grandstand-finish rule: holes inside the closing stretch count **every** player rather than the best N, so a trailing team can still catch up. It can only raise a team's total, never lower it. Setting it to 18 is equivalent to the standalone `aggregate` mode.
 
