@@ -207,6 +207,9 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
             gender: p.gender,
             role: 'player',
             is_lead: i === 0,
+            // The organiser entered themselves, so they're in. Everyone else
+            // named here is a placeholder until they claim their own slot.
+            claimed: i === 0,
             team_id: useTeams && p.teamIndex >= 0 ? teamIds[p.teamIndex] ?? null : null,
           }))
         )

@@ -41,7 +41,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       .order('round_number'),
     supabase
       .from('players')
-      .select('id, name, handicap')
+      .select('id, name, handicap, claimed')
       .eq('trip_id', trip.id)
       .order('name'),
   ])
@@ -66,6 +66,11 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   const dateRange  = [formatDate(trip.start_date), formatDate(trip.end_date)].filter(Boolean).join(' – ')
 
   // Trips created before the lifecycle migration have no setup_status — treat as live
+  // A player is confirmed once a real person has claimed that slot;
+  // organiser-created placeholders stay pending until someone does.
+  const confirmedCount = players.filter(p => p.claimed === true).length
+  const pendingCount   = players.length - confirmedCount
+
   const isDraft = (trip.setup_status ?? 'live') === 'draft'
   const formatLine = enabledFormats(parseFormats(trip.formats))
     .map(f => f.tabLabel)
@@ -129,12 +134,12 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
           <TripCountdown target={trip.start_date ?? null}>
             <nav className="flex flex-col gap-3 w-full">
 
-              {/* Enter Trip — join / claim a player */}
+              {/* Join Trip — claim a slot or add yourself */}
               <Link
                 href={`/trip/${tripCode}/players`}
                 className="w-full py-[18px] border-2 border-[#C9A84C] text-[#C9A84C] rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:bg-[#C9A84C]/10 transition-colors"
               >
-                Enter Trip
+                Join Trip
               </Link>
 
               {isDraft ? (
@@ -191,26 +196,77 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
         </div>
       </section>
 
-      {/* ── Registered players ── */}
+      {/* ── Players ── */}
       {players.length > 0 && (
         <section className="px-6 pb-16">
           <div className="max-w-xs mx-auto">
-            <p className="text-white/30 text-xs tracking-[0.2em] uppercase mb-4">Players</p>
-            <div className="flex flex-col gap-2">
-              {players.map(p => (
-                <div
-                  key={p.id}
-                  className="flex items-center justify-between px-4 py-3 border border-white/10 rounded-xl"
-                >
-                  <span className="text-white text-sm">{p.name}</span>
-                  {p.handicap != null && (
-                    <span className="font-[family-name:var(--font-playfair)] text-[#C9A84C] text-base leading-none">
-                      {p.handicap}
-                    </span>
-                  )}
-                </div>
-              ))}
+
+            <div className="flex items-baseline justify-between mb-3">
+              <p className="text-white/30 text-xs tracking-[0.2em] uppercase">Players</p>
+              <p className="text-white/25 text-xs tabular-nums">
+                {confirmedCount} of {players.length} in
+              </p>
             </div>
+
+            {/* Legend — makes the colours mean something at a glance */}
+            <div className="flex items-center gap-4 mb-4">
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]" />
+                <span className="text-white/30 text-[10px] tracking-wider uppercase">Confirmed</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C]" />
+                <span className="text-white/30 text-[10px] tracking-wider uppercase">Pending</span>
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              {players.map(p => {
+                const confirmed = p.claimed === true
+                return (
+                  <div
+                    key={p.id}
+                    className={`flex items-center gap-3 px-4 py-3 border rounded-xl transition-colors ${
+                      confirmed
+                        ? 'border-emerald-500/50 bg-emerald-500/[0.06] shadow-[0_0_14px_rgba(16,185,129,0.14)]'
+                        : 'border-[#C9A84C]/45 bg-[#C9A84C]/[0.04]'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                        confirmed
+                          ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]'
+                          : 'bg-[#C9A84C]'
+                      }`}
+                      aria-hidden="true"
+                    />
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-white text-sm truncate">{p.name}</span>
+                      <span
+                        className={`block text-[10px] tracking-wider uppercase mt-0.5 ${
+                          confirmed ? 'text-emerald-400/70' : 'text-[#C9A84C]/70'
+                        }`}
+                      >
+                        {confirmed ? 'Confirmed' : 'Pending'}
+                      </span>
+                    </span>
+                    {p.handicap != null && (
+                      <span className="font-[family-name:var(--font-playfair)] text-[#C9A84C] text-base leading-none flex-shrink-0">
+                        {p.handicap}
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {pendingCount > 0 && (
+              <p className="text-white/25 text-xs mt-4 leading-relaxed">
+                {pendingCount === 1 ? 'One player has' : `${pendingCount} players have`} still
+                to join. Share the code <span className="text-[#C9A84C]">{tripCode}</span> and
+                they can claim their spot.
+              </p>
+            )}
           </div>
         </section>
       )}
