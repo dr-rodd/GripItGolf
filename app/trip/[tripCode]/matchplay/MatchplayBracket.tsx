@@ -268,28 +268,6 @@ export default function MatchplayBracket({
           ))
         })}
 
-        {/* Past the Final there is no next round. A plain gold box, level with
-            the Final itself — it is a destination, not another match, so it
-            does not take the half-pitch offset a real column would. */}
-        {(() => {
-          const slot = rounds.length - position
-          if (slot > 2.2) return null
-          const finalTop = tileTop(0, slot - 1, PITCH)
-          return (
-            <div
-              className="absolute flex flex-col items-center justify-center rounded-sm border border-[#C9A84C] bg-[#C9A84C]/15"
-              style={{
-                left: columnX(slot, stride),
-                top: finalTop,
-                width: TILE_W,
-                height: TILE_H,
-                opacity: slot > 1.05 ? 0.25 : 1,
-              }}
-            >
-              <span className="text-[#C9A84C] text-[10px] tracking-[0.25em] uppercase">Winner</span>
-            </div>
-          )
-        })()}
       </div>
 
       {/* Round position */}
@@ -359,27 +337,45 @@ function MatchTile({
   // A bye has a winner but was never played, so it is not a "won" match
   const isBye   = match.player_a_is_bye || match.player_b_is_bye
   const decided = !!match.winner_player_id && !isBye
+  // Winning the Final is winning the whole thing — gold rather than the green
+  // an ordinary win gets, and a glow so it reads as the end of the bracket.
+  const isChampion = decided && !match.next_match_id
   // Byes are genuinely inert: there is no decision to make, so no handler is
   // attached at all rather than a handler that declines to act.
   const interactive = isDecidable(match)
 
   const press = useRef<{ x: number; y: number; at: number; moved: boolean; fired: boolean } | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const popTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 'holding' shrinks the tile so a press is visibly registering; 'popped'
+  // springs it back out when the hold completes, so the gesture confirms itself
+  // without needing a message.
+  const [feedback, setFeedback] = useState<'idle' | 'holding' | 'popped'>('idle')
 
   const clearTimer = () => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null }
   }
-  useEffect(() => clearTimer, [])
+  const pop = () => {
+    setFeedback('popped')
+    if (popTimer.current) clearTimeout(popTimer.current)
+    popTimer.current = setTimeout(() => setFeedback('idle'), 220)
+  }
+  useEffect(() => () => {
+    clearTimer()
+    if (popTimer.current) clearTimeout(popTimer.current)
+  }, [])
 
   const handlers = interactive ? {
     onPointerDown: (e: React.PointerEvent) => {
       press.current = { x: e.clientX, y: e.clientY, at: Date.now(), moved: false, fired: false }
       clearTimer()
+      setFeedback('holding')
       // Holding reopens a finished match. Only a decided one can be corrected.
       if (decided) {
         timer.current = setTimeout(() => {
           if (press.current && !press.current.moved) {
             press.current.fired = true
+            pop()
             onOpen(true)
           }
         }, LONG_PRESS_MS)
@@ -392,6 +388,7 @@ function MatchTile({
           Math.abs(e.clientY - p.y) > MOVE_TOLERANCE) {
         p.moved = true          // this is a swipe or a scroll, not a tap
         clearTimer()
+        setFeedback('idle')
       }
     },
     onPointerUp: () => {
@@ -399,6 +396,8 @@ function MatchTile({
       press.current = null
       clearTimer()
       if (!p || p.fired) return          // the hold already opened it
+      if (p.moved) { setFeedback('idle'); return }
+      pop()
       const outcome = pressOutcome({
         decidable: interactive,
         decided,
@@ -409,21 +408,20 @@ function MatchTile({
       if (outcome === 'decide') onOpen(false)
       else if (outcome === 'correct') onOpen(true)
     },
-    onPointerCancel: () => { press.current = null; clearTimer() },
+    onPointerCancel: () => { press.current = null; clearTimer(); setFeedback('idle') },
     onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
   } : {}
+
+  const scale = feedback === 'holding' ? 0.94 : feedback === 'popped' ? 1.06 : 1
 
   return (
     <div
       {...handlers}
-      // Positioned with left/top rather than a transform: a translated child
-      // inside an overflow-hidden parent breaks tap hit-testing on iOS Safari
-      // until the first scroll, and these tiles are tappable.
-      className={`absolute rounded-sm border overflow-hidden ${
-        decided
-          ? 'border-emerald-500/50 bg-[#0f2418]'
-          : 'border-[#1e3d28] bg-[#0f2418]'
-      } ${interactive ? 'cursor-pointer active:brightness-125' : ''}`}
+      // The outer element is positioned with left/top and never transformed:
+      // a transformed child inside an overflow-hidden parent breaks tap
+      // hit-testing on iOS Safari until the first scroll. The scale lives on
+      // the inner wrapper, so the hit area stays exactly where it is.
+      className={interactive ? 'absolute cursor-pointer' : 'absolute'}
       style={{
         left: x,
         top: y,
@@ -433,34 +431,79 @@ function MatchTile({
         touchAction: 'none',
       }}
     >
-      <Side
-        playerId={match.player_a_id}
-        isBye={match.player_a_is_bye}
-        seed={match.seed_a}
-        isWinner={decided && match.winner_player_id === match.player_a_id}
-        result={match.result}
-        playerById={playerById}
-      />
-      <div className="h-px bg-[#1e3d28]" />
-      <Side
-        playerId={match.player_b_id}
-        isBye={match.player_b_is_bye}
-        seed={match.seed_b}
-        isWinner={decided && match.winner_player_id === match.player_b_id}
-        result={match.result}
-        playerById={playerById}
-      />
+      <div
+        className={`relative w-full h-full rounded-sm border overflow-hidden ${
+          isChampion
+            ? 'border-[#C9A84C] bg-[#C9A84C]/[0.10]'
+            : decided
+              ? 'border-emerald-500/50 bg-[#0f2418]'
+              : 'border-[#1e3d28] bg-[#0f2418]'
+        }`}
+        style={{
+          transform: `scale(${scale})`,
+          transition: feedback === 'holding'
+            ? 'transform 160ms ease-out'
+            : 'transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+          // A won Final is the end of the bracket — make it unmistakable
+          boxShadow: isChampion
+            ? '0 0 0 1px rgba(201,168,76,0.5), 0 0 24px rgba(201,168,76,0.45)'
+            : undefined,
+        }}
+      >
+        <Side
+          playerId={match.player_a_id}
+          isBye={match.player_a_is_bye}
+          seed={match.seed_a}
+          isWinner={decided && match.winner_player_id === match.player_a_id}
+          isChampion={isChampion && match.winner_player_id === match.player_a_id}
+          result={match.result}
+          playerById={playerById}
+        />
+        <div className={`h-px ${isChampion ? 'bg-[#C9A84C]/30' : 'bg-[#1e3d28]'}`} />
+        <Side
+          playerId={match.player_b_id}
+          isBye={match.player_b_is_bye}
+          seed={match.seed_b}
+          isWinner={decided && match.winner_player_id === match.player_b_id}
+          isChampion={isChampion && match.winner_player_id === match.player_b_id}
+          result={match.result}
+          playerById={playerById}
+        />
+
+        {/* Fills over the hold so it is clear the press is doing something
+            and roughly how much longer to keep holding. Only on a decided
+            tile, since that is the only place holding does anything. */}
+        {decided && feedback === 'holding' && (
+          <span
+            data-hold-progress
+            className="absolute left-0 bottom-0 h-[2px] bg-[#C9A84C]"
+            style={{
+              width: '100%',
+              transformOrigin: 'left',
+              animation: `holdFill ${LONG_PRESS_MS}ms linear forwards`,
+            }}
+          />
+        )}
+      </div>
+
+      <style>{`
+        @keyframes holdFill {
+          from { transform: scaleX(0); }
+          to   { transform: scaleX(1); }
+        }
+      `}</style>
     </div>
   )
 }
 
 function Side({
-  playerId, isBye, seed, isWinner, result, playerById,
+  playerId, isBye, seed, isWinner, isChampion, result, playerById,
 }: {
   playerId: string | null
   isBye: boolean
   seed: number | null
   isWinner: boolean
+  isChampion: boolean
   result: string | null
   playerById: Map<string, BracketPlayerRow>
 }) {
@@ -472,13 +515,13 @@ function Side({
   return (
     <div
       className={`h-[37px] flex items-center gap-1.5 pl-1.5 pr-2 ${
-        isWinner ? 'bg-emerald-500/[0.12]' : ''
+        isChampion ? 'bg-[#C9A84C]/15' : isWinner ? 'bg-emerald-500/[0.12]' : ''
       }`}
     >
       {/* Green edge marks the winner at a glance, before you read anything */}
       <span
         className={`w-[3px] h-6 rounded-full flex-shrink-0 ${
-          isWinner ? 'bg-emerald-400' : 'bg-transparent'
+          isChampion ? 'bg-[#C9A84C]' : isWinner ? 'bg-emerald-400' : 'bg-transparent'
         }`}
       />
 
@@ -494,7 +537,9 @@ function Side({
         <>
           <span
             className={`flex-1 min-w-0 truncate text-sm leading-none ${
-              isWinner ? 'text-emerald-300 font-semibold' : 'text-white/80'
+              isChampion ? 'text-[#C9A84C] font-bold'
+                : isWinner ? 'text-emerald-300 font-semibold'
+                : 'text-white/80'
             }`}
           >
             {shortName}
@@ -503,7 +548,9 @@ function Side({
           {/* The margin replaces the handicap once a match is won — by then
               the score is the thing worth knowing */}
           {isWinner && result ? (
-            <span className="flex-shrink-0 text-[11px] font-semibold tabular-nums text-emerald-300">
+            <span className={`flex-shrink-0 text-[11px] font-semibold tabular-nums ${
+              isChampion ? 'text-[#C9A84C]' : 'text-emerald-300'
+            }`}>
               {result}
             </span>
           ) : (
@@ -577,12 +624,27 @@ function DecideSheet({
           </button>
         </div>
 
-        {/* Generic by design — no count, no list of what might change */}
+        {/* Deliberately blunt. No count and no list of which matches — the
+            point is to make someone stop, not to invite them to weigh it up. */}
         {correcting && (
-          <div className="mt-3 mb-4 px-4 py-3 bg-amber-500/10 border border-amber-500/40 rounded-xl">
-            <p className="text-amber-400 text-sm leading-snug">
-              This may affect later rounds that depended on this result.
-            </p>
+          <div className="mt-3 mb-4 px-4 py-4 bg-amber-500/15 border-2 border-amber-500/60 rounded-xl">
+            <div className="flex items-start gap-2.5">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   strokeWidth="2.5" strokeLinecap="round"
+                   className="text-amber-400 flex-shrink-0 mt-0.5" aria-hidden="true">
+                <path d="M12 9v4M12 17h.01" />
+                <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+              </svg>
+              <div className="min-w-0">
+                <p className="text-amber-400 text-base font-bold leading-snug">
+                  This will void all subsequent results.
+                </p>
+                <p className="text-amber-400/70 text-xs leading-snug mt-1.5">
+                  Every result recorded after this one in the same line of the draw is
+                  cleared and must be entered again. It cannot be undone.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 

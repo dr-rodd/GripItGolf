@@ -169,6 +169,62 @@ section('Won matches show green and the margin')
     'but a bye is not painted green — it was awarded, not won')
 }
 
+// ─── The champion ──────────────────────────────────────────────
+
+section('A won Final is gold and glowing, not green')
+{
+  const { players, matches } = build(4)
+  const finalMatch = matches.find(m => m.next_match_id === null)!
+
+  // Play both semis, then the Final
+  let played = matches
+  for (const sf of matches.filter(m => m.round_number === 1)) {
+    played = played.map(m => m.id === sf.id
+      ? { ...m, winner_player_id: sf.player_a_id, result: '3&2' } : m)
+    played = played.map(m => m.id === finalMatch.id
+      ? { ...m, [sf.next_slot === 'A' ? 'player_a_id' : 'player_b_id']: sf.player_a_id }
+      : m)
+  }
+  const champion = played.find(m => m.id === finalMatch.id)!.player_a_id
+  played = played.map(m => m.id === finalMatch.id
+    ? { ...m, winner_player_id: champion, result: '2 up' } : m)
+
+  const html = renderToStaticMarkup(
+    React.createElement(MatchplayBracket, { matches: played, players })
+  )
+
+  ok(html.includes('rgba(201,168,76'), 'the Final carries a gold glow')
+  ok(html.includes('border-[#C9A84C] bg-[#C9A84C]'), 'and a gold tile')
+  ok(html.includes('text-[#C9A84C] font-bold'), 'the champion name is gold and bold')
+
+  // Ordinary wins stay green — gold means winning the whole thing
+  ok(html.includes('border-emerald-500/50'), 'the semi-finals stay green')
+  ok(html.includes('text-emerald-300'), 'their winners stay green too')
+
+  // An undecided Final gets none of it
+  const unfinished = played.map(m => m.id === finalMatch.id
+    ? { ...m, winner_player_id: null, result: null } : m)
+  const plainHtml = renderToStaticMarkup(
+    React.createElement(MatchplayBracket, { matches: unfinished, players })
+  )
+  ok(!plainHtml.includes('rgba(201,168,76'), 'an unwon Final does not glow')
+
+  // A won semi-final is not treated as the champion — it advances somewhere
+  ok(plainHtml.includes('border-emerald-500/50'),
+    'a won semi is still green even when the Final is open')
+  ok(!plainHtml.includes('text-[#C9A84C] font-bold'),
+    'and never gets the champion styling')
+}
+
+section('Press feedback is wired up')
+{
+  const html = render(8)
+  ok(html.includes('@keyframes holdFill'), 'the hold animation is defined')
+  ok(html.includes('transform:scale('), 'tiles carry a scale transform for the press')
+  ok(html.includes('cubic-bezier(0.34, 1.56, 0.64, 1)'),
+    'the release uses an overshoot curve, so it pops rather than eases flat')
+}
+
 // ─── Interaction ───────────────────────────────────────────────
 
 section('Which tiles are interactive')
@@ -212,7 +268,7 @@ section('Structure')
   // At first paint the visible pair is rounds 1 and 2, plus one lookahead
   // column that is rendered faded and clipped.
   const html = render(16)
-  const tiles = (html.match(/class="absolute rounded-sm border/g) ?? []).length
+  const tiles = (html.match(/relative w-full h-full rounded-sm border/g) ?? []).length
   ok(tiles >= 8 + 4, '16 players: at least the first two rounds are laid out')
 
   // Connectors are drawn as SVG paths
@@ -221,11 +277,9 @@ section('Structure')
   const paths = (html.match(/<path d="M /g) ?? []).length
   ok(paths > 0, 'at least one connector joins a pair to its target')
 
-  // The Final gets a placeholder rather than a blank column — only when
-  // there is no next round, so not at first paint on a multi-round bracket
-  ok(!render(16).includes('Winner'), '16 players: no winner box at the first round pair')
-  ok(render(2).includes('Winner'), '2 players: the lone Final shows the winner box')
-  ok(render(2).includes('border-[#C9A84C]'), 'the winner box is gold')
+  // The empty winner box is gone — a won Final marks itself instead
+  ok(!render(16).includes('>Winner<'), '16 players: no winner box')
+  ok(!render(2).includes('>Winner<'), '2 players: no winner box either')
 }
 
 // ─── Navigation affordances ────────────────────────────────────
