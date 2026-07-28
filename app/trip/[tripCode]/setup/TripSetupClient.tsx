@@ -612,6 +612,7 @@ export default function TripSetupClient({
                       <div className="w-24 flex-shrink-0">
                         <input
                           type="number"
+                          inputMode="decimal"
                           defaultValue={player.handicap ?? ''}
                           onBlur={e => {
                             const v = parseFloat(e.target.value)
@@ -684,6 +685,7 @@ export default function TripSetupClient({
                     <div className="flex gap-2">
                       <input
                         type="number"
+                        inputMode="decimal"
                         value={newHandicap}
                         onChange={e => setNewHandicap(e.target.value)}
                         placeholder="Handicap"

@@ -6,6 +6,10 @@ import { supabase } from '@/lib/supabase'
 import BackButton from '@/app/components/BackButton'
 import DateField from '@/app/components/DateField'
 import { MAX_ROUNDS, roundCountError } from '@/lib/tripLimits'
+import Toggle from '@/app/components/Toggle'
+import {
+  MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError,
+} from '@/lib/passcode'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -68,6 +72,11 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
     { name: '', handicap: '', gender: 'M', teamIndex: -1 },
   ])
 
+  // Settings lock — can only ever be set here, at creation
+  const [lockSettings, setLockSettings] = useState(false)
+  const [passcode, setPasscode] = useState('')
+  const [passcodeConfirm, setPasscodeConfirm] = useState('')
+
   // Submit state
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -86,6 +95,12 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
   )
   const step2Valid = rounds.every(r => r.courseId)
   const step3Valid = !useTeams || teams.every(t => t.name.trim())
+
+  const passcodeIssue = !lockSettings
+    ? null
+    : passcodeError(passcode) ??
+      (passcode !== passcodeConfirm ? 'The two passcodes do not match.' : null)
+  const step4Valid = !passcodeIssue
 
   // ── Navigation ───────────────────────────────────────────────────────────
 
@@ -161,6 +176,18 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
     const code = generateCode()
 
+    // Hashed here so the passcode itself never leaves the device
+    let passcodeHash: string | null = null
+    if (lockSettings) {
+      try {
+        passcodeHash = await hashPasscode(passcode)
+      } catch {
+        setError('Could not set the passcode on this device. Try again, or create the trip without one.')
+        setSubmitting(false)
+        return
+      }
+    }
+
     // 1. Trip
     const { data: trip, error: tripErr } = await supabase
       .from('trips')
@@ -175,6 +202,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
           ? { individual_stableford: true, teams: true }
           : { individual_stableford: true },
         num_teams: useTeams ? teams.length : 2,
+        settings_passcode_hash: passcodeHash,
       })
       .select('id')
       .single()
@@ -313,12 +341,31 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
             mode — finalise it from the trip page when everyone&apos;s ready to play.
           </p>
 
-          <div className="bg-white/5 border border-[#C9A84C]/20 rounded-2xl p-8 mb-4">
+          <div className="bg-white/5 border border-[#C9A84C]/20 rounded-2xl px-4 py-8 mb-4">
             <p className="text-white/40 text-xs tracking-widest uppercase mb-4">Your Trip Code</p>
-            <p className="font-[family-name:var(--font-playfair)] text-6xl text-[#C9A84C] tracking-[0.2em] font-bold">
-              {resultCode}
-            </p>
+            {/* Laid out as characters with a gap rather than letter-spacing:
+                tracking adds space after the final character too, which pushed
+                the code off the right edge of the box. */}
+            <div className="flex items-center justify-center gap-1 sm:gap-1.5">
+              {resultCode.split('').map((ch, i) => (
+                <span
+                  key={i}
+                  className="font-[family-name:var(--font-playfair)] text-[clamp(2rem,11vw,3rem)] leading-none text-[#C9A84C] font-bold tabular-nums"
+                >
+                  {ch}
+                </span>
+              ))}
+            </div>
           </div>
+
+          {lockSettings && (
+            <div className="mb-4 px-4 py-3 bg-white/5 border border-white/10 rounded-xl">
+              <p className="text-white/60 text-xs leading-snug">
+                Settings are locked. Keep your passcode safe — it cannot be recovered
+                or changed.
+              </p>
+            </div>
+          )}
 
           <button
             onClick={copyCode}
@@ -346,7 +393,8 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
     !submitting &&
     !(step === 1 && !step1Valid) &&
     !(step === 2 && !step2Valid) &&
-    !(step === 3 && !step3Valid)
+    !(step === 3 && !step3Valid) &&
+    !(step === 4 && !step4Valid)
 
   return (
     <div className="min-h-dvh bg-[#0a1a0e] text-white">
@@ -515,14 +563,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                 <p className="text-white text-sm font-medium">Use teams?</p>
                 <p className="text-white/40 text-xs mt-0.5">Enables the team leaderboard</p>
               </div>
-              <button
-                onClick={() => setUseTeams(v => !v)}
-                className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${useTeams ? 'bg-[#C9A84C]' : 'bg-white/15'}`}
-              >
-                <span
-                  className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${useTeams ? 'translate-x-7' : 'translate-x-1'}`}
-                />
-              </button>
+              <Toggle checked={useTeams} onChange={setUseTeams} label="Use teams" />
             </div>
 
             {useTeams && (
@@ -619,6 +660,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                   <div className="flex gap-3">
                     <input
                       type="number"
+                      inputMode="decimal"
                       value={player.handicap}
                       onChange={e => updatePlayer(i, { handicap: e.target.value })}
                       placeholder="Handicap"
@@ -675,6 +717,60 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
             >
               + Add another player
             </button>
+
+            {/* ── Settings lock ──
+                Only settable here. Once the trip exists, anyone holding the
+                trip code could otherwise lock a trip they do not run. */}
+            <div className="mt-8 pt-6 border-t border-white/10">
+              <div className="flex items-start justify-between gap-4 bg-white/5 border border-white/10 rounded-xl px-4 py-4">
+                <div className="min-w-0">
+                  <p className="text-white text-sm font-medium">Lock trip settings</p>
+                  <p className="text-white/40 text-xs mt-0.5 leading-snug">
+                    Ask for a passcode before anyone can change formats, players or teams
+                  </p>
+                </div>
+                <Toggle checked={lockSettings} onChange={setLockSettings} label="Lock trip settings" />
+              </div>
+
+              {lockSettings && (
+                <div className="mt-3 space-y-3">
+                  <div className="px-4 py-3.5 bg-amber-500/10 border border-amber-500/40 rounded-xl">
+                    <p className="text-amber-400 text-sm font-semibold leading-snug">
+                      This can only be set now.
+                    </p>
+                    <p className="text-amber-400/70 text-xs leading-snug mt-1.5">
+                      There is no way to add, change or remove it later — otherwise anyone
+                      with your trip code could lock you out of your own trip. Write it down.
+                    </p>
+                  </div>
+
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="new-password"
+                    value={passcode}
+                    onChange={e => setPasscode(e.target.value.replace(/\D/g, ''))}
+                    placeholder={`Passcode (${MIN_PASSCODE}–${MAX_PASSCODE} digits)`}
+                    maxLength={MAX_PASSCODE}
+                    className={INPUT}
+                  />
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="new-password"
+                    value={passcodeConfirm}
+                    onChange={e => setPasscodeConfirm(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Enter it again"
+                    maxLength={MAX_PASSCODE}
+                    className={INPUT}
+                  />
+
+                  {passcodeIssue && (passcode || passcodeConfirm) && (
+                    <p className="text-amber-400 text-xs leading-snug">{passcodeIssue}</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

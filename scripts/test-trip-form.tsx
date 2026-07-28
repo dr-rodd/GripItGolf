@@ -13,6 +13,11 @@ import DateField from '../app/components/DateField'
 import CreateTripForm from '../app/dashboard/create/CreateTripForm'
 import TripSetupClient from '../app/trip/[tripCode]/setup/TripSetupClient'
 import { MIN_ROUNDS, MAX_ROUNDS, roundCountError, isRoundCountValid } from '../lib/tripLimits'
+import Toggle from '../app/components/Toggle'
+import {
+  MIN_PASSCODE, MAX_PASSCODE, passcodeError, isPasscodeValid,
+  hashPasscode, verifyPasscode, isLocked,
+} from '../lib/passcode'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -148,10 +153,147 @@ section('The trip setup page uses the same field')
   ok(html.includes('repeat(2, minmax(0, 1fr))'), 'and the same two-column row')
 }
 
-console.log(`\n${'─'.repeat(56)}`)
-if (failed === 0) console.log(`✓ all ${passed} checks passed`)
-else {
-  console.log(`✗ ${failed} of ${passed + failed} checks failed:`)
-  for (const f of failures) console.log(`   · ${f}`)
-  process.exitCode = 1
+// ─── Toggle ────────────────────────────────────────────────────
+
+section('Toggle knob is positioned, not translated')
+{
+  const off = renderToStaticMarkup(
+    React.createElement(Toggle, { checked: false, onChange: () => {}, label: 'Use teams' })
+  )
+  const on = renderToStaticMarkup(
+    React.createElement(Toggle, { checked: true, onChange: () => {}, label: 'Use teams' })
+  )
+
+  // The old version relied on an absolute element's static position plus a
+  // transform, which left the knob outside the track and stopping halfway
+  ok(!off.includes('translate-x'), 'the knob is not moved with a transform')
+  ok(off.includes('left:4px'), 'at rest it sits inside the left edge of the track')
+  ok(on.includes('left:24px'), 'switched on it sits inside the right edge')
+
+  // 48 wide, 20 knob, 4 inset → travel is 48-20-4 = 24, and it stays inside
+  ok(off.includes('width:48px') && off.includes('height:28px'), 'the track has a fixed size')
+  ok(off.includes('width:20px') && off.includes('height:20px'), 'so does the knob')
+  ok(off.includes('top:4px'), 'and it is centred vertically')
+
+  ok(on.includes('aria-checked="true"'), 'it reports its state to assistive tech')
+  ok(off.includes('aria-checked="false"'), 'in both directions')
+  ok(off.includes('role="switch"'), 'and identifies as a switch')
+  ok(off.includes('type="button"'), 'without submitting any form it sits in')
 }
+
+// ─── Handicap keypad ───────────────────────────────────────────
+
+section('Handicap inputs bring up a keypad')
+{
+  // Handicap fields live on step 4 and in trip setup, neither of which appears
+  // in step 1's markup, so the source is what to check.
+  const files = [
+    'app/dashboard/create/CreateTripForm.tsx',
+    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
+    'app/trip/[tripCode]/players/PlayersClient.tsx',
+  ]
+  for (const f of files) {
+    const src = require('fs').readFileSync(f, 'utf-8')
+    const fields  = (src.match(/placeholder="(Handicap|HCP)/g) ?? []).length
+    const keypads = (src.match(/inputMode="decimal"/g) ?? []).length
+    const name = f.split('/').pop()
+    ok(fields > 0, `${name} has a handicap field`)
+    ok(keypads >= fields, `${name}: every handicap field asks for the decimal keypad`)
+  }
+  // A handicap carries a decimal, so the whole-number keypad would be wrong
+  const create = require('fs').readFileSync(files[0], 'utf-8')
+  ok(!/inputMode="numeric"[\s\S]{0,80}placeholder="Handicap"/.test(create),
+    'not the whole-number keypad, since handicaps have a decimal')
+}
+
+// ─── Passcode ──────────────────────────────────────────────────
+
+section('Passcode rules')
+{
+  eq(passcodeError('1234'), null, 'four digits is fine')
+  eq(passcodeError('12345678'), null, 'eight digits is fine')
+  ok(isPasscodeValid('4821'), 'a typical code passes')
+
+  ok(passcodeError('') !== null, 'empty is refused')
+  ok(passcodeError('123') !== null, 'three digits is too short')
+  ok(passcodeError('123456789') !== null, 'nine digits is too long')
+  ok(passcodeError('12a4') !== null, 'letters are refused')
+  ok(passcodeError('12 4') !== null, 'spaces are refused')
+  ok(passcodeError('-123') !== null, 'a sign is refused')
+
+  ok(passcodeError('123')!.includes(String(MIN_PASSCODE)), 'the message names the minimum')
+  ok(passcodeError('123456789')!.includes(String(MAX_PASSCODE)), 'and the maximum')
+  ok(/numbers only/i.test(passcodeError('abcd')!), 'and explains why letters fail')
+}
+
+// Hashing is async, and CJS output has no top-level await
+async function main() {
+  section('Hashing')
+  {
+    const hash = await hashPasscode('4821')
+    eq(hash.length, 64, 'a SHA-256 digest is 64 hex characters')
+    ok(/^[0-9a-f]{64}$/.test(hash), 'and is lower-case hex, matching the column constraint')
+    ok(!hash.includes('4821'), 'the passcode itself does not appear in the hash')
+
+    eq(await hashPasscode('4821'), hash, 'the same code always hashes the same')
+    ok(await hashPasscode('4822') !== hash, 'a different code hashes differently')
+
+    ok(await verifyPasscode('4821', hash), 'the right code verifies')
+    ok(!(await verifyPasscode('4822', hash)), 'a wrong code does not')
+    ok(!(await verifyPasscode('', hash)), 'nor does an empty one')
+
+    // No passcode set means settings are simply open
+    ok(await verifyPasscode('', null), 'with no passcode set, anything passes')
+    ok(await verifyPasscode('9999', null), 'because there is nothing to check')
+
+    ok(isLocked(hash), 'a trip with a hash is locked')
+    ok(!isLocked(null), 'a trip without one is not')
+    ok(!isLocked(''), 'and neither is an empty string')
+    ok(!isLocked(undefined), 'nor a missing value')
+  }
+
+  section('The lock is offered at creation, with its warning')
+  {
+    // The lock sits on step 4, so it is not in step 1's markup
+    const source = require('fs').readFileSync(
+      'app/dashboard/create/CreateTripForm.tsx', 'utf-8')
+    ok(source.includes('Lock trip settings'), 'the option is on the form')
+    ok(source.includes('label="Lock trip settings"'), 'as a labelled switch')
+    ok(source.includes('settings_passcode_hash: passcodeHash'),
+      'and the hash is stored on the trip')
+    ok(source.includes('hashPasscode(passcode)'),
+      'hashed on the device, so the code itself is never sent')
+    ok(source.includes('This can only be set now'),
+      'the warning states it is a one-time choice')
+    ok(/anyone\s+with your trip code could lock you out/.test(source),
+      'and explains why it cannot be changed later')
+    ok(source.includes('Write it down'), 'and tells you to keep it')
+  }
+
+  // ─── Trip code display ─────────────────────────────────────────
+
+  section('The generated trip code fits its box')
+  {
+    const source = require('fs').readFileSync(
+      'app/dashboard/create/CreateTripForm.tsx', 'utf-8')
+
+    // Letter-spacing adds a gap after the final character too, which pushed the
+    // code past the right edge. Characters are laid out with a gap instead.
+    ok(!source.includes("text-6xl text-[#C9A84C] tracking-[0.2em]"),
+      'the code no longer uses trailing letter-spacing at a fixed huge size')
+    ok(source.includes("resultCode.split('')"),
+      'it is laid out character by character')
+    ok(source.includes('clamp('),
+      'and scales with the viewport rather than a fixed size')
+  }
+
+  console.log(`\n${'─'.repeat(56)}`)
+  if (failed === 0) console.log(`✓ all ${passed} checks passed`)
+  else {
+    console.log(`✗ ${failed} of ${passed + failed} checks failed:`)
+    for (const f of failures) console.log(`   · ${f}`)
+    process.exitCode = 1
+  }
+}
+
+main()

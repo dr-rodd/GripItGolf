@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { parseFormats } from '@/lib/formats'
 import { parseTeamScoring } from '@/lib/teamScoring'
 import TripSetupClient from './TripSetupClient'
+import PasscodeGate from './PasscodeGate'
+import { isLocked } from '@/lib/passcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,7 +63,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
 
   const courseMap = Object.fromEntries((courses ?? []).map(c => [c.id, c.name]))
 
-  return (
+  const settings = (
     <TripSetupClient
       trip={{
         id: trip.id,
@@ -83,4 +85,20 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       }))}
     />
   )
+
+  // Locked at creation and never afterwards, so a trip cannot be locked out
+  // from under whoever runs it
+  if (isLocked(trip.settings_passcode_hash)) {
+    return (
+      <PasscodeGate
+        tripCode={tripCode}
+        tripName={trip.name}
+        passcodeHash={trip.settings_passcode_hash as string}
+      >
+        {settings}
+      </PasscodeGate>
+    )
+  }
+
+  return settings
 }

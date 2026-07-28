@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { enabledFormats, parseFormats } from '@/lib/formats'
+import { isLocked } from '@/lib/passcode'
 import TripCountdown from './TripCountdown'
 
 export const dynamic = 'force-dynamic'
@@ -8,6 +9,17 @@ export const dynamic = 'force-dynamic'
 function formatDate(d: string | null) {
   if (!d) return null
   return new Date(d).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+/** Marks a trip whose settings need a passcode. */
+function LockIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="2.5" className="flex-shrink-0 opacity-70" aria-label="Passcode required">
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0110 0v4" />
+    </svg>
+  )
 }
 
 export default async function TripPage({ params }: { params: Promise<{ tripCode: string }> }) {
@@ -71,6 +83,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   const confirmedCount = players.filter(p => p.claimed === true).length
   const pendingCount   = players.length - confirmedCount
 
+  const settingsLocked = isLocked(trip.settings_passcode_hash)
   const isDraft = (trip.setup_status ?? 'live') === 'draft'
   const formatLine = enabledFormats(parseFormats(trip.formats))
     .map(f => f.tabLabel)
@@ -147,9 +160,10 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                   {/* Trip Setup — the organiser's home while drafting */}
                   <Link
                     href={`/trip/${tripCode}/setup`}
-                    className="w-full py-[18px] bg-[#C9A84C] text-[#0a1a0e] rounded-xl text-sm font-bold tracking-[0.25em] uppercase text-center hover:bg-[#d4b35a] transition-colors"
+                    className="w-full py-[18px] bg-[#C9A84C] text-[#0a1a0e] rounded-xl text-sm font-bold tracking-[0.25em] uppercase text-center hover:bg-[#d4b35a] transition-colors inline-flex items-center justify-center gap-2"
                   >
                     Trip Setup
+                    {settingsLocked && <LockIcon />}
                   </Link>
 
                   {lockedButton('Live Scoring')}
@@ -183,9 +197,10 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                   {/* Settings — leads to setup page with unlock option */}
                   <Link
                     href={`/trip/${tripCode}/setup`}
-                    className="text-white/25 text-xs tracking-wide hover:text-white/50 transition-colors mt-1"
+                    className="text-white/25 text-xs tracking-wide hover:text-white/50 transition-colors mt-1 inline-flex items-center justify-center gap-1.5"
                   >
                     Trip settings
+                    {settingsLocked && <LockIcon />}
                   </Link>
                 </>
               )}

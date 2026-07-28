@@ -109,6 +109,7 @@ export default function PlayersClient({
           />
           <input
             type="number"
+            inputMode="decimal"
             value={addHandicap}
             onChange={(e) => setAddHandicap(e.target.value)}
             placeholder="Handicap (e.g. 14.2)"
