@@ -11,9 +11,11 @@ import {
   bracketBlockedReason, MatchplayError,
   type BracketPlayer,
 } from './matchplay'
+import { recordWinner } from './matchplayProgress'
 
 export type StoredMatch = {
   id: string
+  trip_id: string
   round_number: number
   round_name: string
   slot: number
@@ -64,7 +66,7 @@ export async function loadBracket(tripId: string): Promise<StoredMatch[]> {
   const { data, error } = await supabase
     .from('matchplay_matches')
     .select(
-      'id, round_number, round_name, slot, player_a_id, player_b_id, ' +
+      'id, trip_id, round_number, round_name, slot, player_a_id, player_b_id, ' +
       'player_a_is_bye, player_b_is_bye, seed_a, seed_b, ' +
       'winner_player_id, result, next_match_id, next_slot'
     )
@@ -137,4 +139,37 @@ export async function createBracket(tripId: string): Promise<BracketStatus> {
   }
 
   return getBracketStatus(tripId)
+}
+
+/**
+ * Record or correct a winner, writing the whole cascade in one statement.
+ *
+ * The cascade may touch several rows — a correction early in a large bracket
+ * clears every decided match above it. Those rows have to move together: a
+ * half-applied cascade leaves a bracket claiming someone won a match against
+ * an opponent who is no longer in it. A single upsert is one INSERT ... ON
+ * CONFLICT, so the database applies all of it or none, which matters on the
+ * patchy connections this app is used on.
+ *
+ * The decision of what to change is made by the pure function in
+ * matchplayProgress.ts — the code that is unit-tested is the code that runs.
+ */
+export async function persistWinner(
+  allMatches: StoredMatch[],
+  matchId: string,
+  winnerPlayerId: string,
+  result: string | null,
+): Promise<StoredMatch[]> {
+  const { matches, changed } = recordWinner(allMatches, matchId, winnerPlayerId, { result })
+
+  if (changed.length === 0) return matches
+
+  const { error } = await supabase
+    .from('matchplay_matches')
+    .upsert(changed, { onConflict: 'id' })
+
+  if (error) {
+    throw new MatchplayError('Could not save that result. Please try again.')
+  }
+  return matches
 }

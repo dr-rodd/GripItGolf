@@ -14,6 +14,7 @@ import MatchplayBracket, {
   type BracketMatchRow, type BracketPlayerRow,
 } from '../app/trip/[tripCode]/matchplay/MatchplayBracket'
 import { generateBracket, bracketToRows, bracketShape } from '../lib/matchplay'
+import { isDecidable } from '../lib/matchplayProgress'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -166,6 +167,42 @@ section('Won matches show green and the margin')
   ok(byeMatch.winner_player_id !== null, 'the bye does carry a winner in the data')
   ok(!byeHtml.includes('border-emerald-500/50'),
     'but a bye is not painted green — it was awarded, not won')
+}
+
+// ─── Interaction ───────────────────────────────────────────────
+
+section('Which tiles are interactive')
+{
+  const { matches } = build(6)
+  const r1 = matches.filter(m => m.round_number === 1)
+
+  const byes = r1.filter(m => m.player_a_is_bye || m.player_b_is_bye)
+  const real = r1.filter(m => !m.player_a_is_bye && !m.player_b_is_bye)
+  eq(byes.length, 2, '6 players: two bye tiles')
+  eq(real.length, 2, '6 players: two playable tiles')
+
+  ok(byes.every(m => !isDecidable(m)), 'bye tiles are not decidable')
+  ok(real.every(m => isDecidable(m)), 'playable tiles are')
+
+  // A later round with nobody in it yet cannot be tapped either
+  const later = matches.filter(m => m.round_number > 1)
+  ok(later.every(m => !isDecidable(m)), 'empty later-round tiles are not decidable')
+
+  // Interactive tiles carry the pointer affordance, byes do not.
+  // Counting the class is how we tell handlers were attached at all.
+  const html = render(6)
+  const interactive = (html.match(/cursor-pointer/g) ?? []).length
+  eq(interactive, 2, 'exactly the two playable tiles are interactive')
+
+  // With no byes every first-round tile is interactive
+  eq((render(8).match(/cursor-pointer/g) ?? []).length, 4,
+    '8 players: all four quarter-finals are interactive')
+}
+
+section('The hold hint is present')
+{
+  ok(render(8).includes('hold a finished match to change it'),
+    'the correction gesture is explained rather than left to be discovered')
 }
 
 // ─── Structure ─────────────────────────────────────────────────

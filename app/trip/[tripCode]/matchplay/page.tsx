@@ -39,7 +39,7 @@ export default async function MatchplayPage({
     supabase
       .from('matchplay_matches')
       .select(
-        'id, round_number, round_name, slot, player_a_id, player_b_id, ' +
+        'id, trip_id, round_number, round_name, slot, player_a_id, player_b_id, ' +
         'player_a_is_bye, player_b_is_bye, seed_a, seed_b, ' +
         'winner_player_id, result, next_match_id, next_slot'
       )

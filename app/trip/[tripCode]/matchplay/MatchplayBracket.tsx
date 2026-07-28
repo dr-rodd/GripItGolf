@@ -5,11 +5,14 @@ import {
   tileTop, tileCenter, columnX, columnHeight,
   connectorPath, roundHeaderLabel, clampPosition, easeOut,
 } from '@/lib/bracketLayout'
+import { isDecidable, pressOutcome } from '@/lib/matchplayProgress'
 
 // ─── Types ─────────────────────────────────────────────────────
 
 export type BracketMatchRow = {
   id: string
+  /** Carried so a recorded result can be written straight back. */
+  trip_id: string
   round_number: number
   round_name: string
   slot: number
@@ -23,6 +26,7 @@ export type BracketMatchRow = {
   /** Margin the match finished by, e.g. "3&2". Never set on a bye. */
   result: string | null
   next_match_id: string | null
+  next_slot: 'A' | 'B' | null
 }
 
 export type BracketPlayerRow = { id: string; name: string; handicap: number | null }
@@ -40,11 +44,18 @@ const SWIPE_MS = 340
 // ─── Component ─────────────────────────────────────────────────
 
 export default function MatchplayBracket({
-  matches, players,
+  matches: initialMatches, players,
 }: {
   matches: BracketMatchRow[]
   players: BracketPlayerRow[]
 }) {
+  // Held locally so a recorded result shows immediately, then reverted if the
+  // write fails — the bracket must never show something the database rejected.
+  const [matches, setMatches] = useState(initialMatches)
+  useEffect(() => { setMatches(initialMatches) }, [initialMatches])
+
+  const [sheet, setSheet] = useState<{ match: BracketMatchRow; correcting: boolean } | null>(null)
+
   const playerById = useMemo(
     () => new Map(players.map(p => [p.id, p])),
     [players]
@@ -252,6 +263,7 @@ export default function MatchplayBracket({
               x={x}
               y={tileTop(j, slot, PITCH)}
               faded={slot < -0.05 || slot > 1.05}
+              onOpen={correcting => setSheet({ match, correcting })}
             />
           ))
         })}
@@ -295,43 +307,130 @@ export default function MatchplayBracket({
       </div>
 
       <p className="text-white/20 text-xs text-center mt-4">
-        Swipe to move between rounds
+        Swipe to move between rounds · hold a finished match to change it
       </p>
+
+      {sheet && (
+        <DecideSheet
+          match={sheet.match}
+          correcting={sheet.correcting}
+          playerById={playerById}
+          onClose={() => setSheet(null)}
+          onApply={async (winnerId, margin) => {
+            const before = matches
+            // Imported here rather than at the top so the Supabase client is
+            // only constructed when someone actually records a result — it
+            // keeps this module renderable without an environment, which is
+            // what lets the bracket be tested headlessly.
+            const { persistWinner } = await import('@/lib/matchplayStore')
+            try {
+              // Show it straight away, undo it if the write is refused
+              const saved = await persistWinner(
+                matches as never, sheet.match.id, winnerId, margin
+              )
+              setMatches(saved as never)
+              setSheet(null)
+            } catch (err) {
+              setMatches(before)
+              throw err
+            }
+          }}
+        />
+      )}
     </div>
   )
 }
 
 // ─── Tile ──────────────────────────────────────────────────────
 
+const LONG_PRESS_MS = 500
+const MOVE_TOLERANCE = 10   // px of travel before a press counts as a swipe
+
 function MatchTile({
-  match, playerById, x, y, faded,
+  match, playerById, x, y, faded, onOpen,
 }: {
   match: BracketMatchRow
   playerById: Map<string, BracketPlayerRow>
   x: number
   y: number
   faded: boolean
+  onOpen: (correcting: boolean) => void
 }) {
   // A bye has a winner but was never played, so it is not a "won" match
   const isBye   = match.player_a_is_bye || match.player_b_is_bye
   const decided = !!match.winner_player_id && !isBye
+  // Byes are genuinely inert: there is no decision to make, so no handler is
+  // attached at all rather than a handler that declines to act.
+  const interactive = isDecidable(match)
+
+  const press = useRef<{ x: number; y: number; at: number; moved: boolean; fired: boolean } | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearTimer = () => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null }
+  }
+  useEffect(() => clearTimer, [])
+
+  const handlers = interactive ? {
+    onPointerDown: (e: React.PointerEvent) => {
+      press.current = { x: e.clientX, y: e.clientY, at: Date.now(), moved: false, fired: false }
+      clearTimer()
+      // Holding reopens a finished match. Only a decided one can be corrected.
+      if (decided) {
+        timer.current = setTimeout(() => {
+          if (press.current && !press.current.moved) {
+            press.current.fired = true
+            onOpen(true)
+          }
+        }, LONG_PRESS_MS)
+      }
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const p = press.current
+      if (!p) return
+      if (Math.abs(e.clientX - p.x) > MOVE_TOLERANCE ||
+          Math.abs(e.clientY - p.y) > MOVE_TOLERANCE) {
+        p.moved = true          // this is a swipe or a scroll, not a tap
+        clearTimer()
+      }
+    },
+    onPointerUp: () => {
+      const p = press.current
+      press.current = null
+      clearTimer()
+      if (!p || p.fired) return          // the hold already opened it
+      const outcome = pressOutcome({
+        decidable: interactive,
+        decided,
+        moved: p.moved,
+        heldMs: Date.now() - p.at,
+        longPressMs: LONG_PRESS_MS,
+      })
+      if (outcome === 'decide') onOpen(false)
+      else if (outcome === 'correct') onOpen(true)
+    },
+    onPointerCancel: () => { press.current = null; clearTimer() },
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+  } : {}
 
   return (
     <div
+      {...handlers}
       // Positioned with left/top rather than a transform: a translated child
       // inside an overflow-hidden parent breaks tap hit-testing on iOS Safari
-      // until the first scroll, and Phase 4 makes these tiles tappable.
+      // until the first scroll, and these tiles are tappable.
       className={`absolute rounded-sm border overflow-hidden ${
         decided
           ? 'border-emerald-500/50 bg-[#0f2418]'
           : 'border-[#1e3d28] bg-[#0f2418]'
-      }`}
+      } ${interactive ? 'cursor-pointer active:brightness-125' : ''}`}
       style={{
         left: x,
         top: y,
         width: TILE_W,
         height: TILE_H,
         opacity: faded ? 0.25 : 1,
+        touchAction: 'none',
       }}
     >
       <Side
@@ -416,6 +515,142 @@ function Side({
       ) : (
         <span className="flex-1 text-[11px] text-white/20 italic">To be decided</span>
       )}
+    </div>
+  )
+}
+
+// ─── Decide / correct sheet ────────────────────────────────────
+
+function DecideSheet({
+  match, correcting, playerById, onClose, onApply,
+}: {
+  match: BracketMatchRow
+  correcting: boolean
+  playerById: Map<string, BracketPlayerRow>
+  onClose: () => void
+  onApply: (winnerId: string, margin: string | null) => Promise<void>
+}) {
+  const [margin, setMargin]   = useState(match.result ?? '')
+  const [picked, setPicked]   = useState<string | null>(null)
+  const [saving, setSaving]   = useState(false)
+  const [error, setError]     = useState('')
+
+  const sides = [
+    { id: match.player_a_id, seed: match.seed_a },
+    { id: match.player_b_id, seed: match.seed_b },
+  ].filter(s => !!s.id) as { id: string; seed: number | null }[]
+
+  async function apply(winnerId: string) {
+    setSaving(true)
+    setError('')
+    try {
+      await onApply(winnerId, margin.trim() || null)
+    } catch (e) {
+      setError((e as Error).message)
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/70" />
+      <div
+        className="relative bg-[#0a1a0e] border-t border-[#1e3d28] rounded-t-2xl px-5 pt-5"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 20px)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <div className="min-w-0">
+            <p className="text-[#C9A84C]/70 text-[10px] tracking-[0.25em] uppercase">
+              {match.round_name}
+            </p>
+            <p className="font-[family-name:var(--font-playfair)] text-white text-xl leading-tight mt-0.5">
+              {correcting ? 'Change the winner' : 'Who won?'}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="w-11 h-11 flex-shrink-0 flex items-center justify-center text-white/40 hover:text-white transition-colors text-xl"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Generic by design — no count, no list of what might change */}
+        {correcting && (
+          <div className="mt-3 mb-4 px-4 py-3 bg-amber-500/10 border border-amber-500/40 rounded-xl">
+            <p className="text-amber-400 text-sm leading-snug">
+              This may affect later rounds that depended on this result.
+            </p>
+          </div>
+        )}
+
+        <label className="block text-white/40 text-[10px] tracking-[0.2em] uppercase mt-4 mb-2">
+          Margin — optional
+        </label>
+        <input
+          value={margin}
+          onChange={e => setMargin(e.target.value)}
+          placeholder="e.g. 3&2"
+          maxLength={12}
+          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-[#C9A84C]/50 transition-colors mb-4"
+        />
+
+        <div className="flex flex-col gap-2.5">
+          {sides.map(side => {
+            const player = playerById.get(side.id)
+            const isCurrent = match.winner_player_id === side.id
+            const isPicked  = picked === side.id
+            return (
+              <button
+                key={side.id}
+                disabled={saving}
+                onClick={() => correcting ? setPicked(side.id) : apply(side.id)}
+                className={`w-full flex items-center gap-3 px-4 py-4 rounded-xl border transition-colors disabled:opacity-40 ${
+                  isPicked
+                    ? 'border-emerald-400 bg-emerald-500/15'
+                    : isCurrent
+                      ? 'border-emerald-500/40 bg-emerald-500/[0.07]'
+                      : 'border-white/15 bg-white/5 hover:border-white/35'
+                }`}
+              >
+                <span className="w-5 text-white/25 text-xs tabular-nums text-right flex-shrink-0">
+                  {side.seed ?? ''}
+                </span>
+                <span className="flex-1 min-w-0 text-left">
+                  <span className="block text-white text-base truncate">
+                    {player?.name ?? 'Unknown player'}
+                  </span>
+                  {isCurrent && (
+                    <span className="block text-emerald-400/70 text-[10px] tracking-wider uppercase mt-0.5">
+                      Currently the winner
+                    </span>
+                  )}
+                </span>
+                <span className="text-white/35 text-sm tabular-nums flex-shrink-0">
+                  {player?.handicap ?? '—'}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* A correction is applied only after an explicit confirmation */}
+        {correcting && (
+          <button
+            onClick={() => picked && apply(picked)}
+            disabled={!picked || saving || picked === match.winner_player_id}
+            className="w-full mt-4 py-4 bg-amber-500 text-[#1a0f0a] rounded-xl text-sm font-bold tracking-[0.15em] uppercase hover:bg-amber-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Saving…'
+              : picked && picked !== match.winner_player_id ? 'Confirm change'
+              : 'Pick the other player'}
+          </button>
+        )}
+
+        {error && <p className="text-amber-400 text-sm mt-3 leading-snug">{error}</p>}
+      </div>
     </div>
   )
 }
