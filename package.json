@@ -10,7 +10,10 @@
     "migrate": "tsx scripts/migrate.ts",
     "test:matchplay": "tsx scripts/test-matchplay.ts",
     "test:matchplay:db": "tsx scripts/test-matchplay-db.ts",
-    "test:formats": "tsx scripts/test-formats.ts"
+    "test:formats": "tsx scripts/test-formats.ts",
+    "test:bracket-layout": "tsx scripts/test-bracket-layout.ts",
+    "test:bracket-render": "tsx scripts/test-bracket-render.tsx",
+    "test": "npm run test:matchplay && npm run test:formats && npm run test:bracket-layout && npm run test:bracket-render"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

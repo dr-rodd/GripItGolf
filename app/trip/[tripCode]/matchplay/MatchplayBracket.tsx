@@ -1,13 +1,14 @@
-/**
- * Bracket display — placeholder.
- *
- * Phase 3 replaces this with the real draw view. For now it lists the draw
- * round by round so an organiser can confirm the bracket came out right.
- * Deliberately a server component: no interactivity, so none of it ships as
- * client JavaScript.
- */
+'use client'
 
-type Match = {
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  tileTop, tileCenter, columnX, columnHeight,
+  connectorPath, roundHeaderLabel, clampPosition, easeOut,
+} from '@/lib/bracketLayout'
+
+// ─── Types ─────────────────────────────────────────────────────
+
+export type BracketMatchRow = {
   id: string
   round_number: number
   round_name: string
@@ -19,114 +20,370 @@ type Match = {
   seed_a: number | null
   seed_b: number | null
   winner_player_id: string | null
+  next_match_id: string | null
 }
 
-type Player = { id: string; name: string }
+export type BracketPlayerRow = { id: string; name: string; handicap: number | null }
+
+// ─── Fixed dimensions ──────────────────────────────────────────
+// Tiles never resize. Only the gap between columns flexes, so the pair still
+// fits a narrow phone without shrinking the text.
+
+const TILE_W = 140
+const TILE_H = 54
+const PITCH  = 74          // standard vertical spacing, left column
+const MIN_GAP = 34         // smallest gap between the two columns
+const SWIPE_MS = 340
+
+// ─── Component ─────────────────────────────────────────────────
 
 export default function MatchplayBracket({
   matches, players,
 }: {
-  matches: Match[]
-  players: Player[]
+  matches: BracketMatchRow[]
+  players: BracketPlayerRow[]
 }) {
-  const nameOf = new Map(players.map(p => [p.id, p.name]))
-  const rounds = [...new Set(matches.map(m => m.round_number))].sort((a, b) => a - b)
+  const playerById = useMemo(
+    () => new Map(players.map(p => [p.id, p])),
+    [players]
+  )
 
-  const played = matches.filter(
-    m => m.winner_player_id && !m.player_a_is_bye && !m.player_b_is_bye
-  ).length
-  const byes = matches.filter(m => m.player_a_is_bye || m.player_b_is_bye).length
-
-  /** One side of a match: a player, a bye, or nobody yet. */
-  function Side({
-    playerId, isBye, seed, isWinner,
-  }: {
-    playerId: string | null
-    isBye: boolean
-    seed: number | null
-    isWinner: boolean
-  }) {
-    if (isBye) {
-      return (
-        <div className="flex items-center gap-2 py-1.5">
-          <span className="w-6 text-white/20 text-xs tabular-nums flex-shrink-0">—</span>
-          <span className="text-white/25 text-sm italic">Bye</span>
-        </div>
-      )
-    }
-    if (!playerId) {
-      return (
-        <div className="flex items-center gap-2 py-1.5">
-          <span className="w-6 text-white/20 text-xs tabular-nums flex-shrink-0">—</span>
-          <span className="text-white/25 text-sm">To be decided</span>
-        </div>
-      )
-    }
-    return (
-      <div className="flex items-center gap-2 py-1.5">
-        <span className="w-6 text-white/30 text-xs tabular-nums flex-shrink-0">
-          {seed ?? ''}
-        </span>
-        <span className={`text-sm truncate ${isWinner ? 'text-[#C9A84C] font-semibold' : 'text-white/80'}`}>
-          {nameOf.get(playerId) ?? 'Unknown player'}
-        </span>
-        {isWinner && (
-          <span className="text-[#C9A84C] text-xs flex-shrink-0" aria-label="Winner">✓</span>
-        )}
-      </div>
+  /** Matches grouped by round, in playing order. */
+  const rounds = useMemo(() => {
+    const numbers = [...new Set(matches.map(m => m.round_number))].sort((a, b) => a - b)
+    return numbers.map(n =>
+      matches.filter(m => m.round_number === n).sort((a, b) => a.slot - b.slot)
     )
+  }, [matches])
+
+  const roundNames = useMemo(
+    () => rounds.map(r => r[0]?.round_name ?? ''),
+    [rounds]
+  )
+
+  // `position` is continuous: 2.0 means round 3 is the left column, 2.5 is
+  // halfway through a swipe. Every coordinate on screen derives from it, which
+  // is what keeps the connectors welded to the tiles while it moves.
+  const [position, setPosition] = useState(0)
+  const [width, setWidth] = useState(360)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const animRef = useRef<number | null>(null)
+  const dragRef = useRef<{ x: number; from: number; active: boolean } | null>(null)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const measure = () => setWidth(el.clientWidth)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  useEffect(() => () => { if (animRef.current) cancelAnimationFrame(animRef.current) }, [])
+
+  const stride = Math.max(TILE_W + MIN_GAP, width - TILE_W)
+
+  const animateTo = useCallback((target: number) => {
+    if (animRef.current) cancelAnimationFrame(animRef.current)
+    const from = position
+    const to = clampPosition(target, rounds.length)
+    if (Math.abs(to - from) < 0.001) { setPosition(to); return }
+    const started = performance.now()
+    const step = (now: number) => {
+      const t = Math.min(1, (now - started) / SWIPE_MS)
+      setPosition(from + (to - from) * easeOut(t))
+      if (t < 1) animRef.current = requestAnimationFrame(step)
+      else animRef.current = null
+    }
+    animRef.current = requestAnimationFrame(step)
+  }, [position, rounds.length])
+
+  // ── Dragging ────────────────────────────────────────────────
+
+  const onDragStart = (x: number) => {
+    if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null }
+    dragRef.current = { x, from: position, active: true }
+  }
+  const onDragMove = (x: number) => {
+    const d = dragRef.current
+    if (!d?.active) return
+    // Dragging left (negative delta) advances to later rounds
+    setPosition(clampPosition(d.from - (x - d.x) / stride, rounds.length))
+  }
+  const onDragEnd = (x: number) => {
+    const d = dragRef.current
+    dragRef.current = null
+    if (!d?.active) return
+    const moved = (d.x - x) / stride
+    // A decisive flick counts even if it did not travel far
+    const target = Math.abs(moved) > 0.22
+      ? d.from + Math.sign(moved)
+      : Math.round(position)
+    animateTo(target)
+  }
+
+  if (rounds.length === 0) return null
+
+  const leftIndex = Math.round(position)
+  const header = roundHeaderLabel(roundNames, leftIndex)
+
+  // Columns worth rendering: the visible pair plus one either side, so a
+  // swipe has something to bring in. Anything further out is clipped away.
+  const first = Math.max(0, Math.floor(position) - 1)
+  const last  = Math.min(rounds.length - 1, Math.ceil(position) + 2)
+  const visible: number[] = []
+  for (let i = first; i <= last; i++) visible.push(i)
+
+  // Height follows the tallest thing on screen so the page does not jump
+  const viewHeight = Math.max(
+    ...visible.map(i => columnHeight(rounds[i].length, i - position, PITCH, TILE_H)),
+    TILE_H
+  )
+
+  const atStart = position <= 0.001
+  const atEnd   = position >= rounds.length - 1.001
+
+  // ── Connectors ──────────────────────────────────────────────
+  // Recomputed from `position` every frame, exactly like the tiles.
+
+  const connectors: { key: string; d: string; dim: boolean }[] = []
+  for (const roundIndex of visible) {
+    const nextRound = rounds[roundIndex + 1]
+    if (!nextRound) continue
+    const slot = roundIndex - position
+    const feederX = columnX(slot, stride) + TILE_W
+    const targetX = columnX(slot + 1, stride)
+    // Only draw for the pair on screen; further out it is clipped anyway
+    if (slot < -1.2 || slot > 1.2) continue
+
+    nextRound.forEach((target, j) => {
+      const a = rounds[roundIndex][2 * j]
+      const b = rounds[roundIndex][2 * j + 1]
+      if (!a || !b) return
+      connectors.push({
+        key: `${target.id}-conn`,
+        d: connectorPath({
+          feederRightX: feederX,
+          feederTopY:    tileCenter(2 * j,     slot, PITCH, TILE_H),
+          feederBottomY: tileCenter(2 * j + 1, slot, PITCH, TILE_H),
+          targetLeftX: targetX,
+          targetY: tileCenter(j, slot + 1, PITCH, TILE_H),
+        }),
+        dim: slot < -0.05,
+      })
+    })
   }
 
   return (
-    <div className="space-y-6">
+    <div className="select-none">
 
-      {/* Summary */}
-      <div className="border border-[#1e3d28] rounded-sm px-4 py-3">
-        <p className="text-white/60 text-sm">
-          {matches.length} match{matches.length === 1 ? '' : 'es'} · {rounds.length} round
-          {rounds.length === 1 ? '' : 's'}
+      {/* Round header — updates as you swipe */}
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <button
+          onClick={() => animateTo(leftIndex - 1)}
+          disabled={atStart}
+          aria-label="Previous round"
+          className="w-11 h-11 flex-shrink-0 flex items-center justify-center rounded-sm border border-[#1e3d28] text-white/50 disabled:opacity-25 enabled:hover:text-white enabled:hover:border-[#C9A84C]/40 transition-colors"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+
+        <p className="font-[family-name:var(--font-playfair)] text-white text-base sm:text-lg text-center leading-tight min-w-0 truncate">
+          {header}
         </p>
-        <p className="text-white/30 text-xs mt-1">
-          {byes > 0 && `${byes} bye${byes === 1 ? '' : 's'} · `}
-          {played > 0 ? `${played} result${played === 1 ? '' : 's'} in` : 'No results yet'}
-        </p>
+
+        <button
+          onClick={() => animateTo(leftIndex + 1)}
+          disabled={atEnd}
+          aria-label="Next round"
+          className="w-11 h-11 flex-shrink-0 flex items-center justify-center rounded-sm border border-[#1e3d28] text-white/50 disabled:opacity-25 enabled:hover:text-white enabled:hover:border-[#C9A84C]/40 transition-colors"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </button>
       </div>
 
-      {rounds.map(roundNumber => {
-        const inRound = matches
-          .filter(m => m.round_number === roundNumber)
-          .sort((a, b) => a.slot - b.slot)
+      {/* The bracket itself */}
+      <div
+        ref={containerRef}
+        className="relative overflow-hidden touch-pan-y"
+        style={{ height: viewHeight }}
+        onTouchStart={e => onDragStart(e.touches[0].clientX)}
+        onTouchMove={e => onDragMove(e.touches[0].clientX)}
+        onTouchEnd={e => onDragEnd(e.changedTouches[0].clientX)}
+        onMouseDown={e => onDragStart(e.clientX)}
+        onMouseMove={e => dragRef.current?.active && onDragMove(e.clientX)}
+        onMouseUp={e => onDragEnd(e.clientX)}
+        onMouseLeave={e => dragRef.current?.active && onDragEnd(e.clientX)}
+      >
+        {/* Connectors sit behind the tiles, drawn from the same numbers */}
+        <svg
+          className="absolute inset-0 pointer-events-none"
+          width="100%"
+          height={viewHeight}
+          aria-hidden="true"
+        >
+          {connectors.map(c => (
+            <path
+              key={c.key}
+              d={c.d}
+              fill="none"
+              stroke="#1e3d28"
+              strokeWidth={1.5}
+              opacity={c.dim ? 0.3 : 1}
+            />
+          ))}
+        </svg>
 
-        return (
-          <section key={roundNumber}>
-            <p className="text-white/35 text-xs tracking-[0.2em] uppercase mb-2 px-1">
-              {inRound[0]?.round_name ?? `Round ${roundNumber}`}
-            </p>
-            <div className="border border-[#1e3d28] rounded-sm divide-y divide-[#1e3d28]">
-              {inRound.map(m => (
-                <div key={m.id} className="px-4 py-2">
-                  <Side
-                    playerId={m.player_a_id}
-                    isBye={m.player_a_is_bye}
-                    seed={m.seed_a}
-                    isWinner={!!m.winner_player_id && m.winner_player_id === m.player_a_id}
-                  />
-                  <Side
-                    playerId={m.player_b_id}
-                    isBye={m.player_b_is_bye}
-                    seed={m.seed_b}
-                    isWinner={!!m.winner_player_id && m.winner_player_id === m.player_b_id}
-                  />
-                </div>
-              ))}
+        {visible.map(roundIndex => {
+          const slot = roundIndex - position
+          const x = columnX(slot, stride)
+          return rounds[roundIndex].map((match, j) => (
+            <MatchTile
+              key={match.id}
+              match={match}
+              playerById={playerById}
+              x={x}
+              y={tileTop(j, slot, PITCH)}
+              faded={slot < -0.05 || slot > 1.05}
+            />
+          ))
+        })}
+
+        {/* Past the Final there is no next round — show where the winner lands
+            rather than an empty half-screen. Placed on the same continuous
+            slot as every other column, so it slides in with them rather than
+            appearing once the swipe has already finished. */}
+        {(() => {
+          const slot = rounds.length - position
+          if (slot > 2.2) return null
+          return (
+            <div
+              className="absolute flex items-center justify-center rounded-sm border border-dashed border-[#1e3d28]"
+              style={{
+                left: columnX(slot, stride),
+                top: tileTop(0, slot, PITCH),
+                width: TILE_W,
+                height: TILE_H,
+                opacity: slot > 1.05 ? 0.25 : 1,
+              }}
+            >
+              <span className="text-white/20 text-[10px] tracking-[0.2em] uppercase">Winner</span>
             </div>
-          </section>
-        )
-      })}
+          )
+        })()}
+      </div>
 
-      <p className="text-white/20 text-xs text-center leading-relaxed px-4">
-        Recording results comes next. For now this confirms the draw.
+      {/* Round position */}
+      <div className="flex items-center justify-center gap-1.5 mt-5">
+        {rounds.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => animateTo(i)}
+            aria-label={`Go to ${roundNames[i]}`}
+            className={`h-1 rounded-full transition-all ${
+              i === leftIndex ? 'w-6 bg-[#C9A84C]' : 'w-1.5 bg-white/15 hover:bg-white/30'
+            }`}
+          />
+        ))}
+      </div>
+
+      <p className="text-white/20 text-xs text-center mt-4">
+        Swipe to move between rounds
       </p>
+    </div>
+  )
+}
+
+// ─── Tile ──────────────────────────────────────────────────────
+
+function MatchTile({
+  match, playerById, x, y, faded,
+}: {
+  match: BracketMatchRow
+  playerById: Map<string, BracketPlayerRow>
+  x: number
+  y: number
+  faded: boolean
+}) {
+  const decided = !!match.winner_player_id
+
+  return (
+    <div
+      // Positioned with left/top rather than a transform: a translated child
+      // inside an overflow-hidden parent breaks tap hit-testing on iOS Safari
+      // until the first scroll, and Phase 4 makes these tiles tappable.
+      className={`absolute rounded-sm border bg-[#0f2418] overflow-hidden ${
+        decided ? 'border-[#C9A84C]/40' : 'border-[#1e3d28]'
+      }`}
+      style={{
+        left: x,
+        top: y,
+        width: TILE_W,
+        height: TILE_H,
+        opacity: faded ? 0.25 : 1,
+      }}
+    >
+      <Side
+        playerId={match.player_a_id}
+        isBye={match.player_a_is_bye}
+        seed={match.seed_a}
+        isWinner={decided && match.winner_player_id === match.player_a_id}
+        playerById={playerById}
+      />
+      <div className="h-px bg-[#1e3d28]" />
+      <Side
+        playerId={match.player_b_id}
+        isBye={match.player_b_is_bye}
+        seed={match.seed_b}
+        isWinner={decided && match.winner_player_id === match.player_b_id}
+        playerById={playerById}
+      />
+    </div>
+  )
+}
+
+function Side({
+  playerId, isBye, seed, isWinner, playerById,
+}: {
+  playerId: string | null
+  isBye: boolean
+  seed: number | null
+  isWinner: boolean
+  playerById: Map<string, BracketPlayerRow>
+}) {
+  const player = playerId ? playerById.get(playerId) : null
+
+  return (
+    <div className="h-[26px] flex items-center gap-1.5 px-2">
+      <span className="w-3 flex-shrink-0 text-[9px] tabular-nums text-white/25 text-right">
+        {isBye ? '' : seed ?? ''}
+      </span>
+
+      {isBye ? (
+        <span className="flex-1 text-[10px] tracking-[0.15em] uppercase text-white/25">
+          Bye
+        </span>
+      ) : player ? (
+        <>
+          <span
+            className={`flex-1 min-w-0 truncate text-xs leading-none ${
+              isWinner ? 'text-[#C9A84C] font-semibold' : 'text-white/85'
+            }`}
+          >
+            {player.name}
+          </span>
+          <span className="flex-shrink-0 text-[10px] tabular-nums text-white/35">
+            {player.handicap ?? '—'}
+          </span>
+        </>
+      ) : (
+        <span className="flex-1 text-[10px] text-white/20 italic">To be decided</span>
+      )}
     </div>
   )
 }

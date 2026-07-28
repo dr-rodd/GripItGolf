@@ -3,7 +3,9 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { parseFormats, isEnabled } from '@/lib/formats'
 import BackButton from '@/app/components/BackButton'
-import MatchplayBracket from './MatchplayBracket'
+import MatchplayBracket, {
+  type BracketMatchRow, type BracketPlayerRow,
+} from './MatchplayBracket'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +48,7 @@ export default async function MatchplayPage({
       .order('slot'),
     supabase
       .from('players')
-      .select('id, name')
+      .select('id, name, handicap')
       .eq('trip_id', trip.id),
   ])
 
@@ -82,8 +84,8 @@ export default async function MatchplayPage({
           />
         ) : (
           <MatchplayBracket
-            matches={matches as never}
-            players={playersRes.data ?? []}
+            matches={matches as unknown as BracketMatchRow[]}
+            players={(playersRes.data ?? []) as BracketPlayerRow[]}
           />
         )}
       </div>
