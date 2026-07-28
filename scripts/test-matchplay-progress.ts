@@ -9,7 +9,8 @@
  */
 
 import {
-  recordWinner, isDecidable, pressOutcome, ProgressError, type ProgressMatch,
+  recordWinner, clearWinner, isDecidable, pressOutcome, ProgressError,
+  type ProgressMatch,
 } from '../lib/matchplayProgress'
 import { generateBracket, bracketToRows } from '../lib/matchplay'
 
@@ -389,6 +390,155 @@ section('Every match in a played-out bracket, corrected in turn')
     }
     ok(allSound, `${size} players: correcting any match clears exactly its decided chain and no more`)
   }
+}
+
+// ─── Voiding a match back to unplayed ──────────────────────────
+
+section('Voiding a match with nothing decided above it')
+{
+  let ms = bracket(8)
+  const qfId = inRound(ms, 1)[0].id
+  ms = decideA(ms, qfId, '4&3')
+
+  const qf = find(ms, qfId)
+  const { matches, clearedIds, changed } = clearWinner(ms, qfId)
+
+  eq(find(matches, qfId).winner_player_id, null, 'the match is unplayed again')
+  eq(find(matches, qfId).result, null, 'and its margin is gone')
+  eq(clearedIds, [], 'nothing above it needed clearing')
+
+  // Whoever had advanced is taken back out of the semi
+  const sf = find(matches, qf.next_match_id!)
+  const seat = qf.next_slot === 'A' ? sf.player_a_id : sf.player_b_id
+  eq(seat, null, 'they are removed from the round above')
+  eq(changed.length, 2, 'the match and the slot above it')
+
+  // Both players are still in the match, so it can be replayed
+  eq(find(matches, qfId).player_a_id, qf.player_a_id, 'player A is still there')
+  eq(find(matches, qfId).player_b_id, qf.player_b_id, 'player B is still there')
+  ok(isDecidable(find(matches, qfId)), 'and it can be decided again')
+}
+
+section('Voiding ripples exactly like a correction')
+{
+  const before = playedOut()
+  const qf = inRound(before, 1)[0]
+  const sfId = qf.next_match_id!
+  const finalId = find(before, sfId).next_match_id!
+
+  const { matches, clearedIds } = clearWinner(before, qf.id)
+
+  eq(clearedIds, [sfId, finalId], 'the whole decided chain above clears')
+  eq(find(matches, qf.id).winner_player_id, null, 'the match itself is unplayed')
+  eq(find(matches, sfId).winner_player_id, null, 'the semi-final is unplayed')
+  eq(find(matches, finalId).winner_player_id, null, 'the Final is unplayed')
+
+  // The slot the voided match fed is empty, not holding a stale player
+  const sf = find(matches, sfId)
+  const seat = qf.next_slot === 'A' ? sf.player_a_id : sf.player_b_id
+  eq(seat, null, 'no stale player left in the semi')
+
+  // The other half of the draw is untouched
+  const otherSF = inRound(before, 2).find(m => m.id !== sfId)!
+  eq(find(matches, otherSF.id).winner_player_id, otherSF.winner_player_id,
+    'the other semi-final keeps its winner')
+  eq(find(matches, otherSF.id).result, otherSF.result, 'and its margin')
+}
+
+section('Voiding the Final')
+{
+  const ms = playedOut()
+  const fin = inRound(ms, 3)[0]
+  const { matches, clearedIds, changed } = clearWinner(ms, fin.id)
+
+  eq(clearedIds, [], 'nothing downstream exists')
+  eq(changed.length, 1, 'one row changes')
+  eq(find(matches, fin.id).winner_player_id, null, 'the Final is unplayed')
+  eq(find(matches, fin.id).result, null, 'with no margin')
+  eq(find(matches, fin.id).player_a_id, fin.player_a_id, 'both finalists remain')
+  eq(find(matches, fin.id).player_b_id, fin.player_b_id, 'in place')
+}
+
+section('Voiding what is already unplayed does nothing')
+{
+  const ms = bracket(8)
+  const qf = inRound(ms, 1)[0]
+  const { changed, clearedIds, matches } = clearWinner(ms, qf.id)
+  eq(changed, [], 'no rows change')
+  eq(clearedIds, [], 'nothing cleared')
+  eq(JSON.stringify(matches), JSON.stringify(ms), 'the bracket is identical')
+}
+
+section('A bye cannot be voided either')
+{
+  const ms = bracket(6)
+  const bye = inRound(ms, 1).find(m => m.player_a_is_bye || m.player_b_is_bye)!
+  throws(() => clearWinner(ms, bye.id), 'voiding a bye is refused')
+  throws(() => clearWinner(ms, 'nope'), 'voiding an unknown match is refused')
+}
+
+section('Void then re-decide restores a working bracket')
+{
+  const ms = playedOut()
+  const qf = inRound(ms, 1)[0]
+
+  const voided = clearWinner(ms, qf.id).matches
+  // Give it to the other player this time
+  const redecided = recordWinner(voided, qf.id, qf.player_b_id!, { result: '2&1' }).matches
+
+  const after = find(redecided, qf.id)
+  eq(after.winner_player_id, qf.player_b_id, 'the other player now wins it')
+  eq(after.result, '2&1', 'with the new margin')
+
+  const sf = find(redecided, qf.next_match_id!)
+  const seat = qf.next_slot === 'A' ? sf.player_a_id : sf.player_b_id
+  eq(seat, qf.player_b_id, 'and they are seated in the semi')
+  eq(sf.winner_player_id, null, 'which is waiting to be played again')
+
+  // Every remaining winner is still one of its own players
+  ok(redecided.every(m => !m.winner_player_id ||
+    m.winner_player_id === m.player_a_id || m.winner_player_id === m.player_b_id),
+    'no match is left claiming a winner who is not in it')
+}
+
+// ─── Amending a score after the fact ───────────────────────────
+
+section('A margin can be added or changed without touching the winner')
+{
+  const ms = bracket(8)
+  const qf = inRound(ms, 1)[0]
+
+  // Recorded with no margin at the time
+  const noMargin = recordWinner(ms, qf.id, qf.player_a_id!).matches
+  eq(find(noMargin, qf.id).result, null, 'recorded without a margin')
+
+  // Added afterwards
+  const added = recordWinner(noMargin, qf.id, qf.player_a_id!, { result: '3&2' })
+  eq(find(added.matches, qf.id).result, '3&2', 'the margin can be added later')
+  eq(find(added.matches, qf.id).winner_player_id, qf.player_a_id, 'the winner is unchanged')
+  eq(added.clearedIds, [], 'and nothing cascades')
+  eq(added.changed.length, 1, 'only that row is written')
+
+  // Amended again
+  const amended = recordWinner(added.matches, qf.id, qf.player_a_id!, { result: '5&4' })
+  eq(find(amended.matches, qf.id).result, '5&4', 'and amended again')
+  eq(amended.clearedIds, [], 'still without cascading')
+
+  // Even in a fully played bracket, a margin edit disturbs nothing
+  const full = playedOut()
+  const early = inRound(full, 1)[0]
+  const edited = recordWinner(full, early.id, early.winner_player_id!, { result: '6&5' })
+  eq(edited.clearedIds, [], 'amending a margin in a played-out bracket clears nothing')
+  eq(edited.changed.length, 1, 'and writes a single row')
+  ok(full.every(m => {
+    const a = find(edited.matches, m.id)
+    return a.winner_player_id === m.winner_player_id
+  }), 'every winner in the bracket survives a margin edit')
+
+  // Clearing a margin back to nothing
+  const cleared = recordWinner(added.matches, qf.id, qf.player_a_id!, { result: null })
+  eq(find(cleared.matches, qf.id).result, null, 'a margin can be removed again')
+  eq(find(cleared.matches, qf.id).winner_player_id, qf.player_a_id, 'leaving the winner')
 }
 
 // ─── Gesture rules ─────────────────────────────────────────────

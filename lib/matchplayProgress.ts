@@ -65,79 +65,132 @@ export function isDecidable(match: ProgressMatch): boolean {
  * `result` is the margin, e.g. "3&2". It is cleared whenever the winner
  * changes, since a margin describes an outcome that no longer stands.
  */
+/**
+ * The forward walk shared by recording, correcting and voiding.
+ *
+ * Seats `incoming` in the slot this match feeds — a player when someone has
+ * won it, null when nobody has — then clears results above it for as long as
+ * they were genuinely decided, stopping at the first that was not.
+ */
+function cascade<T extends ProgressMatch>(
+  working: Map<string, T>,
+  from: T,
+  incoming: string | null,
+): string[] {
+  const clearedIds: string[] = []
+  let current = from
+  let seat = incoming
+  const guard = new Set<string>()
+
+  while (current.next_match_id) {
+    if (guard.has(current.id)) break     // a cycle would mean a corrupt bracket
+    guard.add(current.id)
+
+    const next = working.get(current.next_match_id)
+    if (!next || !current.next_slot) break
+
+    if (current.next_slot === 'A') next.player_a_id = seat
+    else                           next.player_b_id = seat
+
+    // Undecided: the slot change is the whole story, nothing to invalidate
+    if (!next.winner_player_id) break
+
+    // Decided against a player who should not have been there
+    next.winner_player_id = null
+    next.result = null
+    clearedIds.push(next.id)
+
+    current = next
+    seat = null      // nobody advances out of a match that is now undecided
+  }
+  return clearedIds
+}
+
+function diff<T extends ProgressMatch>(before: Map<string, T>, after: T[]): T[] {
+  return after.filter(m => {
+    const was = before.get(m.id)!
+    return (
+      was.player_a_id      !== m.player_a_id ||
+      was.player_b_id      !== m.player_b_id ||
+      was.winner_player_id !== m.winner_player_id ||
+      was.result           !== m.result
+    )
+  })
+}
+
+function open<T extends ProgressMatch>(matches: T[], matchId: string) {
+  const original = new Map(matches.map(m => [m.id, m]))
+  const working  = new Map(matches.map(m => [m.id, { ...m } as T]))
+  const target = working.get(matchId)
+  if (!target) throw new ProgressError('That match is not part of this bracket.')
+  if (target.player_a_is_bye || target.player_b_is_bye) {
+    throw new ProgressError('A bye has no match to decide — the player advances automatically.')
+  }
+  return { original, working, target }
+}
+
+/**
+ * Record a winner, cascading only as far as genuinely invalidated results.
+ *
+ * `result` is the margin, e.g. "3&2". It is cleared when the winner changes,
+ * since a margin describes an outcome that no longer stands — but it can be
+ * set or amended freely while the winner stays the same, which is how a score
+ * gets added to a match that was recorded without one.
+ */
 export function recordWinner<T extends ProgressMatch>(
   matches: T[],
   matchId: string,
   winnerPlayerId: string,
   opts: { result?: string | null } = {},
 ): WinnerChange<T> {
-  const original = new Map(matches.map(m => [m.id, m]))
-  const working  = new Map(matches.map(m => [m.id, { ...m } as T]))
+  const { original, working, target } = open(matches, matchId)
 
-  const target = working.get(matchId)
-  if (!target) throw new ProgressError('That match is not part of this bracket.')
-  if (target.player_a_is_bye || target.player_b_is_bye) {
-    throw new ProgressError('A bye has no match to decide — the player advances automatically.')
-  }
   if (winnerPlayerId !== target.player_a_id && winnerPlayerId !== target.player_b_id) {
     throw new ProgressError('That player is not in this match.')
   }
 
-  const previousWinner = target.winner_player_id
-  const winnerChanged  = previousWinner !== winnerPlayerId
+  const winnerChanged = target.winner_player_id !== winnerPlayerId
 
   target.winner_player_id = winnerPlayerId
-  // A margin belongs to a specific outcome. Keep it only if the winner stands.
   target.result = opts.result !== undefined
     ? opts.result
     : winnerChanged ? null : target.result
 
-  const clearedIds: string[] = []
-
   // Nothing downstream moves unless the winner actually changed — the slot
   // above already holds this player.
-  if (winnerChanged) {
-    let current: T = target
-    // Who should now occupy the slot this match feeds. Null once we are
-    // walking past a match we have just un-decided: nobody advances from it.
-    let incoming: string | null = winnerPlayerId
-    const guard = new Set<string>()
-
-    while (current.next_match_id) {
-      if (guard.has(current.id)) break     // a cycle would mean a corrupt bracket
-      guard.add(current.id)
-
-      const next = working.get(current.next_match_id)
-      if (!next || !current.next_slot) break
-
-      if (current.next_slot === 'A') next.player_a_id = incoming
-      else                           next.player_b_id = incoming
-
-      // Undecided: the slot swap is the whole story, nothing to invalidate
-      if (!next.winner_player_id) break
-
-      // Decided against a player who should not have been there
-      next.winner_player_id = null
-      next.result = null
-      clearedIds.push(next.id)
-
-      current  = next
-      incoming = null
-    }
-  }
+  const clearedIds = winnerChanged ? cascade(working, target, winnerPlayerId) : []
 
   const all = matches.map(m => working.get(m.id)!)
-  const changed = all.filter(m => {
-    const before = original.get(m.id)!
-    return (
-      before.player_a_id      !== m.player_a_id ||
-      before.player_b_id      !== m.player_b_id ||
-      before.winner_player_id !== m.winner_player_id ||
-      before.result           !== m.result
-    )
-  })
+  return { matches: all, changed: diff(original, all), clearedIds }
+}
 
-  return { matches: all, changed, clearedIds }
+/**
+ * Put a match back to unplayed.
+ *
+ * Used when a result was recorded against the wrong match, or entered by
+ * mistake and the players have not finished. Whoever had advanced out of it is
+ * taken back out of the round above, and the same forward walk clears anything
+ * that had been decided using them.
+ */
+export function clearWinner<T extends ProgressMatch>(
+  matches: T[],
+  matchId: string,
+): WinnerChange<T> {
+  const { original, working, target } = open(matches, matchId)
+
+  // Already unplayed — nothing to undo
+  if (!target.winner_player_id) {
+    const untouched = matches.map(m => working.get(m.id)!)
+    return { matches: untouched, changed: [], clearedIds: [] }
+  }
+
+  target.winner_player_id = null
+  target.result = null
+
+  const clearedIds = cascade(working, target, null)
+
+  const all = matches.map(m => working.get(m.id)!)
+  return { matches: all, changed: diff(original, all), clearedIds }
 }
 
 // ─── Gesture rules ─────────────────────────────────────────────

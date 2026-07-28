@@ -294,7 +294,7 @@ export default function MatchplayBracket({
           correcting={sheet.correcting}
           playerById={playerById}
           onClose={() => setSheet(null)}
-          onApply={async (winnerId, margin) => {
+          onApply={async (winnerId: string | null, margin) => {
             const before = matches
             // Imported here rather than at the top so the Supabase client is
             // only constructed when someone actually records a result — it
@@ -575,10 +575,13 @@ function DecideSheet({
   correcting: boolean
   playerById: Map<string, BracketPlayerRow>
   onClose: () => void
-  onApply: (winnerId: string, margin: string | null) => Promise<void>
+  onApply: (winnerId: string | null, margin: string | null) => Promise<void>
 }) {
   const [margin, setMargin]   = useState(match.result ?? '')
-  const [picked, setPicked]   = useState<string | null>(null)
+  // Starts on whoever currently holds it, so opening the sheet and changing
+  // only the margin works. Tapping that player again clears the selection,
+  // which is how a match goes back to unplayed.
+  const [picked, setPicked]   = useState<string | null>(match.winner_player_id)
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState('')
 
@@ -587,16 +590,20 @@ function DecideSheet({
     { id: match.player_b_id, seed: match.seed_b },
   ].filter(s => !!s.id) as { id: string; seed: number | null }[]
 
-  async function apply(winnerId: string) {
+  async function apply(winnerId: string | null) {
     setSaving(true)
     setError('')
     try {
-      await onApply(winnerId, margin.trim() || null)
+      // A voided match keeps no margin — it describes a result that no
+      // longer exists.
+      await onApply(winnerId, winnerId ? margin.trim() || null : null)
     } catch (e) {
       setError((e as Error).message)
       setSaving(false)
     }
   }
+
+  const voiding = correcting && picked === null
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
@@ -648,16 +655,20 @@ function DecideSheet({
           </div>
         )}
 
-        <label className="block text-white/40 text-[10px] tracking-[0.2em] uppercase mt-4 mb-2">
-          Margin — optional
-        </label>
-        <input
-          value={margin}
-          onChange={e => setMargin(e.target.value)}
-          placeholder="e.g. 3&2"
-          maxLength={12}
-          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-[#C9A84C]/50 transition-colors mb-4"
-        />
+        {!voiding && (
+          <>
+            <label className="block text-white/40 text-[10px] tracking-[0.2em] uppercase mt-4 mb-2">
+              Margin — optional
+            </label>
+            <input
+              value={margin}
+              onChange={e => setMargin(e.target.value)}
+              placeholder="e.g. 3&2"
+              maxLength={12}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-[#C9A84C]/50 transition-colors mb-4"
+            />
+          </>
+        )}
 
         <div className="flex flex-col gap-2.5">
           {sides.map(side => {
@@ -668,13 +679,15 @@ function DecideSheet({
               <button
                 key={side.id}
                 disabled={saving}
-                onClick={() => correcting ? setPicked(side.id) : apply(side.id)}
+                onClick={() => correcting
+                  // Tapping the selected player again lets go of them, which
+                  // is how you say "this match was not played after all"
+                  ? setPicked(prev => prev === side.id ? null : side.id)
+                  : apply(side.id)}
                 className={`w-full flex items-center gap-3 px-4 py-4 rounded-xl border transition-colors disabled:opacity-40 ${
                   isPicked
                     ? 'border-emerald-400 bg-emerald-500/15'
-                    : isCurrent
-                      ? 'border-emerald-500/40 bg-emerald-500/[0.07]'
-                      : 'border-white/15 bg-white/5 hover:border-white/35'
+                    : 'border-white/15 bg-white/5 hover:border-white/35'
                 }`}
               >
                 <span className="w-5 text-white/25 text-xs tabular-nums text-right flex-shrink-0">
@@ -685,8 +698,8 @@ function DecideSheet({
                     {player?.name ?? 'Unknown player'}
                   </span>
                   {isCurrent && (
-                    <span className="block text-emerald-400/70 text-[10px] tracking-wider uppercase mt-0.5">
-                      Currently the winner
+                    <span className="block text-white/30 text-[10px] tracking-wider uppercase mt-0.5">
+                      {isPicked ? 'Winner — tap to unplay' : 'Was the winner'}
                     </span>
                   )}
                 </span>
@@ -700,15 +713,20 @@ function DecideSheet({
 
         {/* A correction is applied only after an explicit confirmation */}
         {correcting && (
-          <button
-            onClick={() => picked && apply(picked)}
-            disabled={!picked || saving || picked === match.winner_player_id}
-            className="w-full mt-4 py-4 bg-amber-500 text-[#1a0f0a] rounded-xl text-sm font-bold tracking-[0.15em] uppercase hover:bg-amber-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            {saving ? 'Saving…'
-              : picked && picked !== match.winner_player_id ? 'Confirm change'
-              : 'Pick the other player'}
-          </button>
+          <>
+            {voiding && (
+              <p className="text-white/40 text-xs leading-snug mt-4 text-center">
+                Nobody selected — this match goes back to unplayed.
+              </p>
+            )}
+            <button
+              onClick={() => apply(picked)}
+              disabled={saving}
+              className="w-full mt-4 py-4 bg-amber-500 text-[#1a0f0a] rounded-xl text-sm font-bold tracking-[0.15em] uppercase hover:bg-amber-400 transition-colors disabled:opacity-40"
+            >
+              {saving ? 'Saving…' : 'Confirm'}
+            </button>
+          </>
         )}
 
         {error && <p className="text-amber-400 text-sm mt-3 leading-snug">{error}</p>}

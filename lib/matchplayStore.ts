@@ -11,7 +11,7 @@ import {
   bracketBlockedReason, MatchplayError,
   type BracketPlayer,
 } from './matchplay'
-import { recordWinner } from './matchplayProgress'
+import { recordWinner, clearWinner } from './matchplayProgress'
 
 export type StoredMatch = {
   id: string
@@ -157,10 +157,13 @@ export async function createBracket(tripId: string): Promise<BracketStatus> {
 export async function persistWinner(
   allMatches: StoredMatch[],
   matchId: string,
-  winnerPlayerId: string,
+  /** Null puts the match back to unplayed. */
+  winnerPlayerId: string | null,
   result: string | null,
 ): Promise<StoredMatch[]> {
-  const { matches, changed } = recordWinner(allMatches, matchId, winnerPlayerId, { result })
+  const { matches, changed } = winnerPlayerId === null
+    ? clearWinner(allMatches, matchId)
+    : recordWinner(allMatches, matchId, winnerPlayerId, { result })
 
   if (changed.length === 0) return matches
 
