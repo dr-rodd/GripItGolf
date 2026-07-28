@@ -104,6 +104,29 @@ export function bracketShape(playerCount: number): BracketShape {
   }
 }
 
+/**
+ * Why a bracket cannot be drawn for this many players, or null if it can.
+ * Pure, so the settings panel and the tests share one source of truth.
+ */
+export function bracketBlockedReason(playerCount: number): string | null {
+  if (playerCount < MIN_PLAYERS) {
+    return `Matchplay needs at least ${MIN_PLAYERS} players. This trip has ${playerCount}.`
+  }
+  if (playerCount > MAX_BRACKET) {
+    return `Matchplay currently supports up to ${MAX_BRACKET} players. This trip has ${playerCount}.`
+  }
+  return null
+}
+
+/** What a bracket would look like if built now, or null if it cannot be. */
+export function previewBracket(playerCount: number): BracketShape | null {
+  try {
+    return bracketShape(playerCount)
+  } catch {
+    return null
+  }
+}
+
 function assertPlayerCount(playerCount: number) {
   if (!Number.isInteger(playerCount)) {
     throw new MatchplayError(`Player count must be a whole number, got ${playerCount}.`)

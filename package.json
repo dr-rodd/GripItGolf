@@ -9,7 +9,8 @@
     "lint": "eslint",
     "migrate": "tsx scripts/migrate.ts",
     "test:matchplay": "tsx scripts/test-matchplay.ts",
-    "test:matchplay:db": "tsx scripts/test-matchplay-db.ts"
+    "test:matchplay:db": "tsx scripts/test-matchplay-db.ts",
+    "test:formats": "tsx scripts/test-formats.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

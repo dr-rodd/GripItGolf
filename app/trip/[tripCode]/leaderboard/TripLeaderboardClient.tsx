@@ -1,7 +1,8 @@
 'use client'
 
 import { Fragment, useMemo, useState } from 'react'
-import { enabledFormats, type FormatKey, type TripFormats } from '@/lib/formats'
+import Link from 'next/link'
+import { isEnabled, leaderboardTabs, type FormatKey, type TripFormats } from '@/lib/formats'
 import { describeTeamScoring, teamRoundPoints, type TeamScoring } from '@/lib/teamScoring'
 
 // ─── Types ─────────────────────────────────────────────────────
@@ -19,6 +20,7 @@ type LiveScore  = { player_id: string; round_id: string; hole_number: number; gr
 type RoundHcp   = { round_id: string; player_id: string; playing_handicap: number }
 
 interface Props {
+  tripCode: string
   formats: TripFormats
   teamScoring: TeamScoring
   rounds: Round[]
@@ -511,12 +513,64 @@ function Board({
   )
 }
 
+
+/**
+ * Entry point to the matchplay draw.
+ *
+ * Deliberately a link to a separate route, not an inline component: none of
+ * the matchplay display code should load with the leaderboard. Nothing from
+ * the matchplay module is imported into this file.
+ */
+function MatchplayButton({ tripCode, enabled }: { tripCode: string; enabled: boolean }) {
+  const base =
+    'w-full flex items-center justify-between px-5 py-4 rounded-sm border transition-colors mb-4'
+
+  if (!enabled) {
+    return (
+      <div
+        className={`${base} border-[#1e3d28] bg-[#0f2418] opacity-50 cursor-not-allowed`}
+        aria-disabled="true"
+      >
+        <span className="min-w-0">
+          <span className="block font-[family-name:var(--font-playfair)] text-white/40 text-base leading-tight">
+            Matchplay
+          </span>
+          <span className="block text-white/25 text-xs mt-0.5">
+            Switch it on in Trip Setup to use it
+          </span>
+        </span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             strokeWidth="2" className="text-white/20 flex-shrink-0 ml-4" aria-hidden="true">
+          <rect x="3" y="11" width="18" height="11" rx="2" />
+          <path d="M7 11V7a5 5 0 0110 0v4" />
+        </svg>
+      </div>
+    )
+  }
+
+  return (
+    <Link
+      href={`/trip/${tripCode}/matchplay`}
+      className={`${base} border-[#C9A84C]/50 bg-[#0f2418] shadow-[0_0_16px_rgba(201,168,76,0.10)] hover:border-[#C9A84C] active:opacity-75`}
+    >
+      <span className="min-w-0">
+        <span className="block font-[family-name:var(--font-playfair)] text-white text-base leading-tight">
+          Matchplay
+        </span>
+        <span className="block text-[#C9A84C] text-xs mt-0.5">View the knockout draw</span>
+      </span>
+      <span className="text-white/30 text-sm flex-shrink-0 ml-4">View →</span>
+    </Link>
+  )
+}
+
 // ─── Main ──────────────────────────────────────────────────────
 
 export default function TripLeaderboardClient({
-  formats, teamScoring, rounds, teams, players, holes, scores, liveScores, roundHandicaps,
+  tripCode, formats, teamScoring, rounds, teams, players, holes, scores, liveScores, roundHandicaps,
 }: Props) {
-  const tabs = enabledFormats(formats)
+  // Matchplay has its own route, so it is a button rather than a tab
+  const tabs = leaderboardTabs(formats)
   const [active, setActive] = useState<FormatKey>(tabs[0]?.key ?? 'individual_stableford')
   const [card, setCard] = useState<{ row: BoardRow; round: Round } | null>(null)
 
@@ -666,87 +720,6 @@ export default function TripLeaderboardClient({
       .sort((a, b) => a.total - b.total)
   }, [players, sortedRounds, resolved, holes, hcpFor]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Individual Matchplay ────────────────────────────────────
-
-  const matchplayRows: BoardRow[] = useMemo(() => {
-    const holeById = new Map(holes.map(h => [h.id, h]))
-    const nettBy = new Map<string, number>()
-    for (const s of resolved) {
-      if (s.gross == null) continue
-      const hole = holeById.get(s.holeId)
-      const player = playerById.get(s.playerId)
-      if (!hole || !player) continue
-      const ph = hcpFor.get(`${s.roundId}:${s.playerId}`) ?? player.handicap ?? 0
-      nettBy.set(
-        `${s.playerId}:${s.roundId}:${s.holeNumber}`,
-        s.gross - shotsReceived(ph, effectiveSI(hole, player.gender))
-      )
-    }
-
-    const perRoundPts = new Map<string, Record<string, number>>()
-    const playedBy    = new Map<string, string[]>()
-    const record = new Map<string, { w: number; h: number; l: number }>()
-    for (const p of players) {
-      perRoundPts.set(p.id, {})
-      playedBy.set(p.id, [])
-      record.set(p.id, { w: 0, h: 0, l: 0 })
-    }
-
-    for (const round of sortedRounds) {
-      for (const p of players) perRoundPts.get(p.id)![round.id] = 0
-      for (let i = 0; i < players.length; i++) {
-        for (let j = i + 1; j < players.length; j++) {
-          const a = players[i], b = players[j]
-          let aUp = 0, bUp = 0, contested = 0
-          for (let hole = 1; hole <= 18; hole++) {
-            const an = nettBy.get(`${a.id}:${round.id}:${hole}`)
-            const bn = nettBy.get(`${b.id}:${round.id}:${hole}`)
-            if (an == null || bn == null) continue
-            contested++
-            if (an < bn) aUp++
-            else if (bn < an) bUp++
-          }
-          if (contested === 0) continue
-          // Both players had a match this round, however it finished
-          for (const id of [a.id, b.id]) {
-            const list = playedBy.get(id)!
-            if (!list.includes(round.id)) list.push(round.id)
-          }
-          const ra = record.get(a.id)!, rb = record.get(b.id)!
-          if (aUp > bUp) {
-            perRoundPts.get(a.id)![round.id] += 1; ra.w++; rb.l++
-          } else if (bUp > aUp) {
-            perRoundPts.get(b.id)![round.id] += 1; rb.w++; ra.l++
-          } else {
-            perRoundPts.get(a.id)![round.id] += 0.5
-            perRoundPts.get(b.id)![round.id] += 0.5
-            ra.h++; rb.h++
-          }
-        }
-      }
-    }
-
-    return players
-      .map(p => {
-        const perRound = perRoundPts.get(p.id)!
-        const rec = record.get(p.id)!
-        const row: BoardRow = {
-          id: p.id,
-          name: p.name,
-          subLabel: `${rec.w}W · ${rec.h}H · ${rec.l}L`,
-          perRound,
-          playedRounds: playedBy.get(p.id)!,
-          total: Object.values(perRound).reduce((s, v) => s + v, 0),
-          isLive: isLiveFor([p.id]),
-          playerIds: [p.id],
-        }
-        return { row, played: rec.w + rec.h + rec.l }
-      })
-      .filter(r => r.played > 0)
-      .map(r => r.row)
-      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
-  }, [players, sortedRounds, resolved, holes, hcpFor, playerById]) // eslint-disable-line react-hooks/exhaustive-deps
-
   // ── Teams ───────────────────────────────────────────────────
 
   const teamRows: BoardRow[] = useMemo(() => {
@@ -788,10 +761,15 @@ export default function TripLeaderboardClient({
 
   // ── Render ──────────────────────────────────────────────────
 
+  const matchplayOn = isEnabled(formats, 'individual_matchplay')
+
+  // Matchplay lives on its own page, so a matchplay-only trip legitimately
+  // has no tabs here — show the button rather than an empty board.
   if (tabs.length === 0) {
     return (
-      <div className="max-w-lg mx-auto px-4 py-8">
-        <EmptyState message="No competitions switched on for this trip." />
+      <div className="max-w-lg mx-auto px-4 py-6">
+        <MatchplayButton tripCode={tripCode} enabled={matchplayOn} />
+        {!matchplayOn && <EmptyState message="No competitions switched on for this trip." />}
       </div>
     )
   }
@@ -799,20 +777,16 @@ export default function TripLeaderboardClient({
   const currentRows =
     active === 'individual_stableford' ? stablefordRows :
     active === 'individual_strokes'    ? strokeRows :
-    active === 'individual_matchplay'  ? matchplayRows :
                                          teamRows
 
   const emptyMessage =
     active === 'teams'
       ? 'No teams with players yet. Set them up in Trip Setup.'
-      : active === 'individual_matchplay'
-        ? 'Matches settle once two players have scored the same holes.'
         : 'No scores yet. The board fills in as play starts.'
 
   const caption =
     active === 'teams'            ? `${describeTeamScoring(teamScoring)}.` :
     active === 'individual_strokes'   ? 'Nett totals, lowest wins. Gross shown under each name.' :
-    active === 'individual_matchplay' ? 'Every player meets every other each round. Holes are decided on nett score — a win is 1 point, a half is ½.' :
                                         ''
 
   // Team cards show every member side by side; individual tabs show one column
@@ -822,6 +796,8 @@ export default function TripLeaderboardClient({
 
   return (
     <div className="max-w-lg mx-auto px-4 py-6">
+
+      <MatchplayButton tripCode={tripCode} enabled={matchplayOn} />
 
       {/* Format tabs */}
       {tabs.length > 1 && (

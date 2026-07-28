@@ -8,6 +8,7 @@ import {
   TEAM_SCORING_MODES, describeTeamScoring,
   type TeamScoring, type TeamScoringMode,
 } from '@/lib/teamScoring'
+import MatchplayPanel from './MatchplayPanel'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -798,6 +799,18 @@ export default function TripSetupClient({
               </button>
             )}
           </>
+        )}
+
+        {/* ── Per-format settings ──
+            These sit outside the draft-only block on purpose. A bracket is
+            normally drawn once the roster has settled, which is at or after
+            finalising, so the panel has to survive the switch to live. */}
+        {formats.individual_matchplay && (
+          <MatchplayPanel
+            tripId={trip.id}
+            tripCode={trip.trip_code}
+            canEdit={editPermission === 'everyone' || isOwner}
+          />
         )}
 
         {/* Live-mode summary */}

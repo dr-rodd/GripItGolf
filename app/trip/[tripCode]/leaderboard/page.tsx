@@ -72,6 +72,7 @@ export default async function TripLeaderboardPage({
       <Poller isActive={hasActiveRound} />
 
       <TripLeaderboardClient
+        tripCode={tripCode}
         formats={parseFormats(trip.formats)}
         teamScoring={parseTeamScoring(trip.team_scoring)}
         rounds={(rounds ?? []) as any}

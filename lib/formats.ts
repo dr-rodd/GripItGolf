@@ -15,6 +15,11 @@ export const FORMATS: {
   tabLabel: string
   description: string
   needsTeams?: boolean
+  /**
+   * Formats with their own route are reached by a button on the leaderboard
+   * rather than a tab, so their display code never loads with the board.
+   */
+  dedicatedPage?: boolean
 }[] = [
   {
     key: 'individual_stableford',
@@ -32,7 +37,8 @@ export const FORMATS: {
     key: 'individual_matchplay',
     label: 'Individual Matchplay',
     tabLabel: 'Matchplay',
-    description: 'Every player against every other, hole by hole. Win 1pt, half 0.5.',
+    description: 'A knockout draw. Seeds are kept apart, byes handed out when the player count isn\'t a power of two.',
+    dedicatedPage: true,
   },
   {
     key: 'teams',
@@ -57,4 +63,13 @@ export function parseFormats(raw: unknown): TripFormats {
 
 export function enabledFormats(formats: TripFormats) {
   return FORMATS.filter(f => formats[f.key])
+}
+
+/** Enabled formats that render as a tab on the leaderboard itself. */
+export function leaderboardTabs(formats: TripFormats) {
+  return enabledFormats(formats).filter(f => !f.dedicatedPage)
+}
+
+export function isEnabled(formats: TripFormats, key: FormatKey) {
+  return formats[key] === true
 }
