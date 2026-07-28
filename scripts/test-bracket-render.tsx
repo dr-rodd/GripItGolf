@@ -75,17 +75,19 @@ for (const count of [2, 3, 4, 6, 8, 9, 11, 16, 20, 32]) {
 
 section('Round header')
 {
-  eq(render(32).includes('Round of 32 → Round of 16'), true,
-    '32 players opens on "Round of 32 → Round of 16"')
-  eq(render(6).includes('Quarter-Final → Semi-Final'), true,
-    '6 players opens on "Quarter-Final → Semi-Final"')
-  eq(render(4).includes('Semi-Final → Final'), true,
-    '4 players opens on "Semi-Final → Final"')
+  // The header names the left column only
+  eq(render(32).includes('Round of 32'), true, '32 players opens titled "Round of 32"')
+  eq(render(6).includes('Quarter-Final'), true, '6 players opens titled "Quarter-Final"')
+  eq(render(4).includes('Semi-Final'), true, '4 players opens titled "Semi-Final"')
 
-  // A two-player bracket is a lone Final: one round, so no arrow anywhere
+  // The next round is not named, and no arrow is drawn
+  ok(!render(6).includes('→'), '6 players: no arrow in the header')
+  ok(!render(32).includes('→'), '32 players: no arrow in the header')
+  ok(!render(4).includes('Semi-Final → Final'), '4 players: the next round is not named')
+
   const two = render(2)
   ok(two.includes('Final'), '2 players shows "Final"')
-  ok(!two.includes('→'), '2 players shows no arrow, having nothing to point at')
+  ok(!two.includes('→'), '2 players shows no arrow')
 }
 
 // ─── Byes ──────────────────────────────────────────────────────
@@ -127,6 +129,45 @@ section('Tile content')
   ok(render(8).includes('To be decided'), 'undecided slots read "To be decided"')
 }
 
+// ─── Decided matches ───────────────────────────────────────────
+
+section('Won matches show green and the margin')
+{
+  const { players, matches } = build(8)
+  // Settle the first quarter-final 3&2
+  const first = matches.find(m => m.round_number === 1)!
+  const decided = matches.map(m =>
+    m.id === first.id
+      ? { ...m, winner_player_id: first.player_a_id, result: '3&2' }
+      : m
+  )
+  const html = renderToStaticMarkup(
+    React.createElement(MatchplayBracket, { matches: decided, players })
+  )
+
+  ok(html.includes('3&amp;2') || html.includes('3&2'), 'the margin is shown on the tile')
+  ok(html.includes('emerald'), 'the winner is marked in green')
+  ok(html.includes('border-emerald-500/50'), 'the tile itself is outlined green once won')
+  ok(html.includes('text-emerald-300'), 'the winning name is green')
+
+  // Undecided matches stay neutral
+  const plain = renderToStaticMarkup(
+    React.createElement(MatchplayBracket, { matches, players })
+  )
+  ok(!plain.includes('border-emerald-500/50'), 'an unplayed tile is not outlined green')
+  ok(!plain.includes('3&amp;2'), 'and carries no margin')
+
+  // A bye has a winner but was never played, so it must not read as won
+  const { players: sixP, matches: sixM } = build(6)
+  const byeHtml = renderToStaticMarkup(
+    React.createElement(MatchplayBracket, { matches: sixM, players: sixP })
+  )
+  const byeMatch = sixM.find(m => m.player_b_is_bye)!
+  ok(byeMatch.winner_player_id !== null, 'the bye does carry a winner in the data')
+  ok(!byeHtml.includes('border-emerald-500/50'),
+    'but a bye is not painted green — it was awarded, not won')
+}
+
 // ─── Structure ─────────────────────────────────────────────────
 
 section('Structure')
@@ -145,8 +186,9 @@ section('Structure')
 
   // The Final gets a placeholder rather than a blank column — only when
   // there is no next round, so not at first paint on a multi-round bracket
-  ok(!render(16).includes('Winner'), '16 players: no winner placeholder at the first round pair')
-  ok(render(2).includes('Winner'), '2 players: the lone Final shows the winner placeholder')
+  ok(!render(16).includes('Winner'), '16 players: no winner box at the first round pair')
+  ok(render(2).includes('Winner'), '2 players: the lone Final shows the winner box')
+  ok(render(2).includes('border-[#C9A84C]'), 'the winner box is gold')
 }
 
 // ─── Navigation affordances ────────────────────────────────────

@@ -30,6 +30,8 @@ export type BracketMatch = {
   playerAIsBye: boolean
   playerBIsBye: boolean
   winnerPlayerId: string | null
+  /** Margin the match finished by, e.g. "3&2". Never set on a bye. */
+  result: string | null
   nextMatchId: string | null // the match this winner feeds into (null for the final)
   nextSlot: 'A' | 'B' | null // which side of that match they occupy
 }
@@ -198,6 +200,7 @@ export function generateBracket(
         playerAIsBye: false,
         playerBIsBye: false,
         winnerPlayerId: null,
+        result: null,
         nextMatchId: null,
         nextSlot: null,
       } as BracketMatch))
@@ -294,6 +297,7 @@ export type MatchplayRow = {
   seed_a: number | null
   seed_b: number | null
   winner_player_id: string | null
+  result: string | null
   next_match_id: string | null
   next_slot: 'A' | 'B' | null
 }
@@ -312,6 +316,7 @@ export function bracketToRows(tripId: string, matches: BracketMatch[]): Matchpla
     seed_a: m.seedA,
     seed_b: m.seedB,
     winner_player_id: m.winnerPlayerId,
+    result: m.result,
     next_match_id: m.nextMatchId,
     next_slot: m.nextSlot,
   }))

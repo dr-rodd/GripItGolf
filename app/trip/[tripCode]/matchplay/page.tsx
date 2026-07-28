@@ -41,7 +41,7 @@ export default async function MatchplayPage({
       .select(
         'id, round_number, round_name, slot, player_a_id, player_b_id, ' +
         'player_a_is_bye, player_b_is_bye, seed_a, seed_b, ' +
-        'winner_player_id, next_match_id, next_slot'
+        'winner_player_id, result, next_match_id, next_slot'
       )
       .eq('trip_id', trip.id)
       .order('round_number')

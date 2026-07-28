@@ -211,22 +211,40 @@ section('Horizontal placement')
 section('Round header')
 {
   const five = ['Round of 32', 'Round of 16', 'Quarter-Final', 'Semi-Final', 'Final']
-  eq(roundHeaderLabel(five, 0), 'Round of 32 → Round of 16', 'first pair reads both names')
-  eq(roundHeaderLabel(five, 2), 'Quarter-Final → Semi-Final', 'middle pair reads both names')
-  eq(roundHeaderLabel(five, 3), 'Semi-Final → Final', 'second-to-last reads both names')
-  eq(roundHeaderLabel(five, 4), 'Final', 'at the Final there is nothing after, so no arrow')
+  // The header names the left column only. The right column is self-evidently
+  // the round after it, and naming both truncated on a phone.
+  eq(roundHeaderLabel(five, 0), 'Round of 32', 'first pair is titled by its left column')
+  eq(roundHeaderLabel(five, 2), 'Quarter-Final',
+    'with a quarter-final and semi-final in view it reads "Quarter-Final"')
+  eq(roundHeaderLabel(five, 3), 'Semi-Final', 'and so on down the bracket')
+  eq(roundHeaderLabel(five, 4), 'Final', 'the Final is titled "Final"')
   eq(roundHeaderLabel(five, 5), '', 'past the end there is nothing to show')
 
   const two = ['Semi-Final', 'Final']
-  eq(roundHeaderLabel(two, 0), 'Semi-Final → Final', 'a four-player bracket reads both names')
-  eq(roundHeaderLabel(two, 1), 'Final', 'and drops the arrow at its Final')
+  eq(roundHeaderLabel(two, 0), 'Semi-Final', 'a four-player bracket opens on its semi-final')
+  eq(roundHeaderLabel(two, 1), 'Final', 'and ends on its Final')
 
-  const one = ['Final']
-  eq(roundHeaderLabel(one, 0), 'Final', 'a two-player bracket is a Final alone, no arrow')
-
+  eq(roundHeaderLabel(['Final'], 0), 'Final', 'a two-player bracket is a Final alone')
   eq(roundHeaderLabel([], 0), '', 'no rounds gives an empty header')
-  ok(!roundHeaderLabel(five, 4).includes('→'), 'the arrow never dangles at the end')
-  ok(!roundHeaderLabel(one, 0).includes('→'), 'nor on a lone Final')
+
+  // With a single name there is nothing to dangle at either end
+  let noArrows = true
+  for (const names of [five, two, ['Final'], []]) {
+    for (let i = -1; i <= names.length + 1; i++) {
+      if (roundHeaderLabel(names, i).includes('→')) noArrows = false
+    }
+  }
+  ok(noArrows, 'no arrow appears at any position in any bracket size')
+
+  // Every index inside a real bracket produces a usable title
+  for (const count of [2, 4, 6, 9, 20, 32]) {
+    const shape = bracketShape(count)
+    let allNamed = true
+    for (let i = 0; i < shape.totalRounds; i++) {
+      if (roundHeaderLabel(shape.roundNames, i) !== shape.roundNames[i]) allNamed = false
+    }
+    ok(allNamed, `${count} players: every round is titled by its own name`)
+  }
 }
 
 // ─── Navigation bounds ─────────────────────────────────────────

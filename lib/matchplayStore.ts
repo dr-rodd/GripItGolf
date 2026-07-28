@@ -24,6 +24,7 @@ export type StoredMatch = {
   seed_a: number | null
   seed_b: number | null
   winner_player_id: string | null
+  result: string | null
   next_match_id: string | null
   next_slot: 'A' | 'B' | null
 }
@@ -65,7 +66,7 @@ export async function loadBracket(tripId: string): Promise<StoredMatch[]> {
     .select(
       'id, round_number, round_name, slot, player_a_id, player_b_id, ' +
       'player_a_is_bye, player_b_is_bye, seed_a, seed_b, ' +
-      'winner_player_id, next_match_id, next_slot'
+      'winner_player_id, result, next_match_id, next_slot'
     )
     .eq('trip_id', tripId)
     .order('round_number')

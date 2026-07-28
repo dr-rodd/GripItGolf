@@ -20,6 +20,8 @@ export type BracketMatchRow = {
   seed_a: number | null
   seed_b: number | null
   winner_player_id: string | null
+  /** Margin the match finished by, e.g. "3&2". Never set on a bye. */
+  result: string | null
   next_match_id: string | null
 }
 
@@ -29,10 +31,10 @@ export type BracketPlayerRow = { id: string; name: string; handicap: number | nu
 // Tiles never resize. Only the gap between columns flexes, so the pair still
 // fits a narrow phone without shrinking the text.
 
-const TILE_W = 140
-const TILE_H = 54
-const PITCH  = 74          // standard vertical spacing, left column
-const MIN_GAP = 34         // smallest gap between the two columns
+const TILE_W = 158
+const TILE_H = 76          // two 38px rows — comfortably readable on the course
+const PITCH  = 98          // standard vertical spacing, left column
+const MIN_GAP = 30         // smallest gap between the two columns
 const SWIPE_MS = 340
 
 // ─── Component ─────────────────────────────────────────────────
@@ -254,25 +256,25 @@ export default function MatchplayBracket({
           ))
         })}
 
-        {/* Past the Final there is no next round — show where the winner lands
-            rather than an empty half-screen. Placed on the same continuous
-            slot as every other column, so it slides in with them rather than
-            appearing once the swipe has already finished. */}
+        {/* Past the Final there is no next round. A plain gold box, level with
+            the Final itself — it is a destination, not another match, so it
+            does not take the half-pitch offset a real column would. */}
         {(() => {
           const slot = rounds.length - position
           if (slot > 2.2) return null
+          const finalTop = tileTop(0, slot - 1, PITCH)
           return (
             <div
-              className="absolute flex items-center justify-center rounded-sm border border-dashed border-[#1e3d28]"
+              className="absolute flex flex-col items-center justify-center rounded-sm border border-[#C9A84C] bg-[#C9A84C]/15"
               style={{
                 left: columnX(slot, stride),
-                top: tileTop(0, slot, PITCH),
+                top: finalTop,
                 width: TILE_W,
                 height: TILE_H,
                 opacity: slot > 1.05 ? 0.25 : 1,
               }}
             >
-              <span className="text-white/20 text-[10px] tracking-[0.2em] uppercase">Winner</span>
+              <span className="text-[#C9A84C] text-[10px] tracking-[0.25em] uppercase">Winner</span>
             </div>
           )
         })()}
@@ -310,15 +312,19 @@ function MatchTile({
   y: number
   faded: boolean
 }) {
-  const decided = !!match.winner_player_id
+  // A bye has a winner but was never played, so it is not a "won" match
+  const isBye   = match.player_a_is_bye || match.player_b_is_bye
+  const decided = !!match.winner_player_id && !isBye
 
   return (
     <div
       // Positioned with left/top rather than a transform: a translated child
       // inside an overflow-hidden parent breaks tap hit-testing on iOS Safari
       // until the first scroll, and Phase 4 makes these tiles tappable.
-      className={`absolute rounded-sm border bg-[#0f2418] overflow-hidden ${
-        decided ? 'border-[#C9A84C]/40' : 'border-[#1e3d28]'
+      className={`absolute rounded-sm border overflow-hidden ${
+        decided
+          ? 'border-emerald-500/50 bg-[#0f2418]'
+          : 'border-[#1e3d28] bg-[#0f2418]'
       }`}
       style={{
         left: x,
@@ -333,6 +339,7 @@ function MatchTile({
         isBye={match.player_a_is_bye}
         seed={match.seed_a}
         isWinner={decided && match.winner_player_id === match.player_a_id}
+        result={match.result}
         playerById={playerById}
       />
       <div className="h-px bg-[#1e3d28]" />
@@ -341,6 +348,7 @@ function MatchTile({
         isBye={match.player_b_is_bye}
         seed={match.seed_b}
         isWinner={decided && match.winner_player_id === match.player_b_id}
+        result={match.result}
         playerById={playerById}
       />
     </div>
@@ -348,41 +356,65 @@ function MatchTile({
 }
 
 function Side({
-  playerId, isBye, seed, isWinner, playerById,
+  playerId, isBye, seed, isWinner, result, playerById,
 }: {
   playerId: string | null
   isBye: boolean
   seed: number | null
   isWinner: boolean
+  result: string | null
   playerById: Map<string, BracketPlayerRow>
 }) {
   const player = playerId ? playerById.get(playerId) : null
+  // Only a first name fits at this width, and it is what everyone calls
+  // each other on a trip anyway
+  const shortName = player ? player.name.split(' ')[0] : ''
 
   return (
-    <div className="h-[26px] flex items-center gap-1.5 px-2">
-      <span className="w-3 flex-shrink-0 text-[9px] tabular-nums text-white/25 text-right">
+    <div
+      className={`h-[37px] flex items-center gap-1.5 pl-1.5 pr-2 ${
+        isWinner ? 'bg-emerald-500/[0.12]' : ''
+      }`}
+    >
+      {/* Green edge marks the winner at a glance, before you read anything */}
+      <span
+        className={`w-[3px] h-6 rounded-full flex-shrink-0 ${
+          isWinner ? 'bg-emerald-400' : 'bg-transparent'
+        }`}
+      />
+
+      <span className="w-3 flex-shrink-0 text-[10px] tabular-nums text-white/25 text-right">
         {isBye ? '' : seed ?? ''}
       </span>
 
       {isBye ? (
-        <span className="flex-1 text-[10px] tracking-[0.15em] uppercase text-white/25">
+        <span className="flex-1 text-[11px] tracking-[0.15em] uppercase text-white/25">
           Bye
         </span>
       ) : player ? (
         <>
           <span
-            className={`flex-1 min-w-0 truncate text-xs leading-none ${
-              isWinner ? 'text-[#C9A84C] font-semibold' : 'text-white/85'
+            className={`flex-1 min-w-0 truncate text-sm leading-none ${
+              isWinner ? 'text-emerald-300 font-semibold' : 'text-white/80'
             }`}
           >
-            {player.name}
+            {shortName}
           </span>
-          <span className="flex-shrink-0 text-[10px] tabular-nums text-white/35">
-            {player.handicap ?? '—'}
-          </span>
+
+          {/* The margin replaces the handicap once a match is won — by then
+              the score is the thing worth knowing */}
+          {isWinner && result ? (
+            <span className="flex-shrink-0 text-[11px] font-semibold tabular-nums text-emerald-300">
+              {result}
+            </span>
+          ) : (
+            <span className="flex-shrink-0 text-[11px] tabular-nums text-white/35">
+              {player.handicap ?? '—'}
+            </span>
+          )}
         </>
       ) : (
-        <span className="flex-1 text-[10px] text-white/20 italic">To be decided</span>
+        <span className="flex-1 text-[11px] text-white/20 italic">To be decided</span>
       )}
     </div>
   )

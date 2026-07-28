@@ -93,17 +93,14 @@ export function connectorPath(o: {
 }
 
 /**
- * Heading for the visible pair, e.g. "Quarter-Final → Semi-Final".
+ * Heading for the view — the left column's round only.
  *
- * There is no round beyond the Final, and nothing before the first, so the
- * arrow only appears when there is genuinely something on both sides.
+ * The right column is the next round and is self-evidently so, so naming both
+ * just made the header long enough to truncate on a phone. With one name there
+ * is nothing to handle at either end of the bracket: the Final reads "Final".
  */
 export function roundHeaderLabel(roundNames: string[], leftIndex: number): string {
-  const left  = roundNames[leftIndex]
-  const right = roundNames[leftIndex + 1]
-  if (!left)  return right ?? ''
-  if (!right) return left
-  return `${left} → ${right}`
+  return roundNames[leftIndex] ?? ''
 }
 
 /** Clamp a position to the rounds that exist. */
