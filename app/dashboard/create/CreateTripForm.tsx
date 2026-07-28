@@ -4,6 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import BackButton from '@/app/components/BackButton'
+import DateField from '@/app/components/DateField'
+import { MAX_ROUNDS, roundCountError } from '@/lib/tripLimits'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -28,6 +30,9 @@ const INPUT = [
 const LABEL = 'block text-white/60 text-xs uppercase tracking-wider mb-2'
 
 const STEP_LABELS = ['Trip details', 'Rounds', 'Teams', 'Players']
+
+// Presets cover the common cases; the + button goes beyond them.
+const ROUND_PRESETS = Array.from({ length: MAX_ROUNDS }, (_, i) => i + 1)
 
 function generateCode(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -71,7 +76,8 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
   // ── Validation ───────────────────────────────────────────────────────────
 
-  const step1Valid = tripName.trim().length > 0
+  const roundsError = roundCountError(numRounds)
+  const step1Valid = tripName.trim().length > 0 && !roundsError
   const selectedCourseIds = rounds.map(r => r.courseId).filter(Boolean)
   const hasDupeCourses = new Set(selectedCourseIds).size < selectedCourseIds.length
   const step2Valid = rounds.every(r => r.courseId) && !hasDupeCourses
@@ -384,37 +390,22 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className={LABEL}>Start date</label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={e => setStartDate(e.target.value)}
-                  className={INPUT}
-                  style={{ colorScheme: 'dark' }}
-                />
-              </div>
-              <div>
-                <label className={LABEL}>End date</label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={e => setEndDate(e.target.value)}
-                  className={INPUT}
-                  style={{ colorScheme: 'dark' }}
-                />
-              </div>
+            {/* Two equal columns that cannot outgrow the row. The explicit
+                minmax(0,1fr) is what stops a date input's intrinsic width
+                pushing the second column off the right of the page. */}
+            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+              <DateField label="Start date" value={startDate} onChange={setStartDate} />
+              <DateField label="End date"   value={endDate}   onChange={setEndDate} />
             </div>
 
             <div>
               <label className={LABEL}>Number of rounds</label>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5, 6, 7].map(n => (
+              <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
+                {ROUND_PRESETS.map(n => (
                   <button
                     key={n}
                     onClick={() => setNumRounds(n)}
-                    className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors ${
+                    className={`py-3 rounded-xl text-sm font-medium transition-colors ${
                       numRounds === n
                         ? 'bg-[#C9A84C] text-[#0a1a0e]'
                         : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
@@ -423,7 +414,35 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                     {n}
                   </button>
                 ))}
+                {/* Adds a round beyond the presets. It will go past the limit
+                    quite happily — the error below is what stops you, so the
+                    cap is visible rather than silently unreachable. */}
+                <button
+                  onClick={() => setNumRounds(n => n + 1)}
+                  aria-label="Add a round"
+                  className={`py-3 rounded-xl text-lg leading-none font-medium transition-colors ${
+                    numRounds > MAX_ROUNDS
+                      ? 'bg-amber-500/20 border border-amber-500/60 text-amber-400'
+                      : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
+                  }`}
+                >
+                  +
+                </button>
               </div>
+
+              {roundsError && (
+                <div className="mt-3 flex items-center justify-between gap-3 px-4 py-3 bg-amber-500/10 border border-amber-500/40 rounded-xl">
+                  <p className="text-amber-400 text-sm leading-snug min-w-0">
+                    {numRounds} rounds selected. {roundsError}
+                  </p>
+                  <button
+                    onClick={() => setNumRounds(MAX_ROUNDS)}
+                    className="flex-shrink-0 px-3 py-2 border border-amber-500/50 rounded-lg text-amber-400 text-xs tracking-wider uppercase hover:bg-amber-500/10 transition-colors"
+                  >
+                    Set {MAX_ROUNDS}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -472,16 +491,11 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                         </p>
                       )}
                     </div>
-                    <div>
-                      <label className={LABEL}>Date</label>
-                      <input
-                        type="date"
-                        value={round.scheduledDate}
-                        onChange={e => updateRound(i, { scheduledDate: e.target.value })}
-                        className={INPUT}
-                        style={{ colorScheme: 'dark' }}
-                      />
-                    </div>
+                    <DateField
+                      label="Date"
+                      value={round.scheduledDate}
+                      onChange={v => updateRound(i, { scheduledDate: v })}
+                    />
                   </div>
                 </div>
               )

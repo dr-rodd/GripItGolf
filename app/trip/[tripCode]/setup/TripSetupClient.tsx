@@ -9,6 +9,7 @@ import {
   type TeamScoring, type TeamScoringMode,
 } from '@/lib/teamScoring'
 import MatchplayPanel from './MatchplayPanel'
+import DateField from '@/app/components/DateField'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -336,29 +337,19 @@ export default function TripSetupClient({
                     className={INPUT}
                   />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className={LABEL}>Start date</label>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={e => saveDates(e.target.value, endDate)}
-                      disabled={locked}
-                      className={INPUT}
-                      style={{ colorScheme: 'dark' }}
-                    />
-                  </div>
-                  <div>
-                    <label className={LABEL}>End date</label>
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={e => saveDates(startDate, e.target.value)}
-                      disabled={locked}
-                      className={INPUT}
-                      style={{ colorScheme: 'dark' }}
-                    />
-                  </div>
+                <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                  <DateField
+                    label="Start date"
+                    value={startDate}
+                    onChange={v => saveDates(v, endDate)}
+                    disabled={locked}
+                  />
+                  <DateField
+                    label="End date"
+                    value={endDate}
+                    onChange={v => saveDates(startDate, v)}
+                    disabled={locked}
+                  />
                 </div>
               </div>
             </section>
