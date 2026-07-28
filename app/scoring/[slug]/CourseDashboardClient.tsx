@@ -53,6 +53,12 @@ interface Props {
   tees: Tee[]
   roundHandicaps: RoundHandicap[]
   backHref?: string
+  /**
+   * Score this round specifically. A course can be played more than once in a
+   * trip, so filtering by course alone would offer both and let someone score
+   * against the wrong one. The trip route already knows which was asked for.
+   */
+  roundId?: string
 }
 
 type View = "dashboard" | "scoring" | "live-board" | "settings"
@@ -61,7 +67,7 @@ type View = "dashboard" | "scoring" | "live-board" | "settings"
 
 export default function CourseDashboardClient({
   courseName, courseId, players, rounds, holes, tees, roundHandicaps,
-  backHref = "/scoring",
+  backHref = "/scoring", roundId,
 }: Props) {
   const [view, setView]                       = useState<View>("dashboard")
   const [scoringLiveRound, setScoringLiveRound] = useState<ActiveLiveRound | null>(null)
@@ -82,16 +88,22 @@ export default function CourseDashboardClient({
 
   const nonComposite = players.filter(p => !p.is_composite)
 
-  // Only pass this course's round to LiveScoringFlow so the "activate" step
-  // only shows the one relevant round.
-  const courseRoundsForFlow = rounds.filter(r => r.courses?.id === courseId)
+  // Only pass the relevant round to LiveScoringFlow so the "activate" step
+  // offers exactly one choice. When the caller names a round we use it; the
+  // legacy per-course route falls back to matching on the course.
+  const courseRoundsForFlow = roundId
+    ? rounds.filter(r => r.id === roundId)
+    : rounds.filter(r => r.courses?.id === courseId)
 
   const fetchScorecards = useCallback(async () => {
-    const { data: liveRoundsData } = await supabase
+    // Scoped to the round when one is named: a course played twice in a trip
+    // has two sets of scorecards, and they must not appear together.
+    let query = supabase
       .from("live_rounds")
       .select("id, course_id, round_id, status, session_finalised_at, activated_at, activated_by, rounds(round_number), courses(name)")
-      .eq("course_id", courseId)
       .in("status", ["active", "finalised"])
+    query = roundId ? query.eq("round_id", roundId) : query.eq("course_id", courseId)
+    const { data: liveRoundsData } = await query
 
     if (!liveRoundsData || liveRoundsData.length === 0) {
       setScorecards([])
@@ -138,7 +150,7 @@ export default function CourseDashboardClient({
 
     setScorecards(cards)
     setLoading(false)
-  }, [courseId, players])
+  }, [courseId, roundId, players])
 
   useEffect(() => {
     fetchScorecards()
@@ -172,7 +184,9 @@ export default function CourseDashboardClient({
   }
 
   async function startNewScorecard() {
-    const courseRound = rounds.find(r => r.courses?.id === courseId)
+    const courseRound = roundId
+      ? rounds.find(r => r.id === roundId)
+      : rounds.find(r => r.courses?.id === courseId)
     if (!courseRound || isSessionFinalised) return
     setStarting(true)
     setStartError(null)

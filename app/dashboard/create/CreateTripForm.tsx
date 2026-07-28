@@ -79,8 +79,12 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
   const roundsError = roundCountError(numRounds)
   const step1Valid = tripName.trim().length > 0 && !roundsError
   const selectedCourseIds = rounds.map(r => r.courseId).filter(Boolean)
-  const hasDupeCourses = new Set(selectedCourseIds).size < selectedCourseIds.length
-  const step2Valid = rounds.every(r => r.courseId) && !hasDupeCourses
+  // A course may be played more than once — opening and closing on the same
+  // links is ordinary. Repeats are flagged for reassurance, never blocked.
+  const repeatedCourseIds = new Set(
+    selectedCourseIds.filter((id, i) => selectedCourseIds.indexOf(id) !== i)
+  )
+  const step2Valid = rounds.every(r => r.courseId)
   const step3Valid = !useTeams || teams.every(t => t.name.trim())
 
   // ── Navigation ───────────────────────────────────────────────────────────
@@ -244,7 +248,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
       .select('id')
 
     if (roundsErr || !insertedRounds) {
-      setError('Failed to create rounds. Each course can only be used once per trip.')
+      setError('Failed to create rounds. Please try again.')
       setSubmitting(false)
       return
     }
@@ -456,8 +460,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
               </div>
             )}
             {rounds.map((round, i) => {
-              const isDupe = hasDupeCourses && round.courseId &&
-                selectedCourseIds.filter(id => id === round.courseId).length > 1
+              const isRepeat = !!round.courseId && repeatedCourseIds.has(round.courseId)
               return (
                 <div key={i} className="bg-white/5 border border-white/10 rounded-2xl p-5">
                   <p className="text-[#C9A84C] text-xs tracking-widest uppercase mb-4">
@@ -470,7 +473,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                         <select
                           value={round.courseId}
                           onChange={e => updateRound(i, { courseId: e.target.value })}
-                          className={`${INPUT} appearance-none pr-10 ${isDupe ? 'border-amber-500/60' : ''}`}
+                          className={`${INPUT} appearance-none pr-10`}
                         >
                           <option value="" className="bg-[#0a1a0e]">Select a course…</option>
                           {courses.map(c => (
@@ -485,9 +488,9 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                           </svg>
                         </div>
                       </div>
-                      {isDupe && (
-                        <p className="text-amber-400 text-xs mt-1.5">
-                          Each course can only be played once per trip
+                      {isRepeat && (
+                        <p className="text-white/35 text-xs mt-1.5">
+                          Played more than once this trip — that&apos;s fine
                         </p>
                       )}
                     </div>

@@ -106,7 +106,7 @@ Mobile-first. Used on the course, on phones, by non-technical users.
 ### Key constraints
 
 - One score per player per hole per round
-- Each course played only once per trip
+- A course may be played more than once per trip (the original `(trip_id, course_id)` unique constraint was dropped in migration 017). Round numbers are still unique within a trip.
 - `players.trip_id` must match `teams.trip_id`
 - Composite players have `team_id = NULL` — always fetch flat, never via nested PostgREST
 
