@@ -46,6 +46,13 @@ type ResolvedScore = {
   gross: number | null
   points: number
   noReturn: boolean
+  /**
+   * Still in the in-progress table — the card has not been finalised.
+   *
+   * This is what decides whether a round shows green or gold, and whether it
+   * shows how far ahead of level someone is or their finished total.
+   */
+  live: boolean
 }
 
 /** One line on the board — a player or a team, depending on the tab. */
@@ -63,6 +70,18 @@ type BoardRow = {
   playedRounds: string[]
   /** Rounds set aside by the discard rule — shown struck through. */
   droppedRounds?: string[]
+  /**
+   * Rounds with a card still open. Those show green and read as how far
+   * ahead of level the player is; a finalised round shows gold and reads as
+   * the total, which is the number that matters once the card is in.
+   */
+  liveRounds?: string[]
+  /**
+   * How far ahead of level a round stands while it is in play. Against two
+   * points a hole on Stableford, against par on Strokes. Null where the
+   * question does not apply — a prize table has no "level".
+   */
+  relativeByRound?: Record<string, number>
   total: number
   isLive: boolean
   /** Whose card the scorecard sheet shows when this row is opened. */
@@ -96,11 +115,16 @@ const firstName = (n: string) => n.split(' ')[0]
 
 // ─── Shared bits ───────────────────────────────────────────────
 
+/**
+ * Marks a row with a card still open. Green, because gold now means the card
+ * is in — the two must not both be gold or the distinction says nothing.
+ */
 function LiveDot() {
   return (
     <span
-      className="w-1.5 h-1.5 rounded-full bg-[#C9A84C] flex-shrink-0 animate-pulse"
-      title="Round in progress"
+      className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0 animate-pulse"
+      style={{ boxShadow: '0 0 6px rgba(52,211,153,0.9)' }}
+      title="Card still open"
     />
   )
 }
@@ -108,6 +132,16 @@ function LiveDot() {
 /** Whole numbers stay plain; a shared position shows its half. */
 function formatScore(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1)
+}
+
+/**
+ * Level is "E", and everything else carries its sign — the way a scoreboard
+ * has always read. Used while a round is still being played, when how far
+ * ahead of level you are says more than a running total does.
+ */
+function formatRelative(n: number): string {
+  if (n === 0) return 'E'
+  return n > 0 ? `+${formatScore(n)}` : formatScore(n)
 }
 
 /** Shown while a scorecard is open somewhere on the trip. */
@@ -397,6 +431,8 @@ function CourseTiles({
       {rounds.map(round => {
         const pts = row.perRound[round.id] ?? 0
         const hasScores = row.playedRounds.includes(round.id)
+        const live = row.liveRounds?.includes(round.id) ?? false
+        const rel  = row.relativeByRound?.[round.id]
         const hero = row.heroByRound?.[round.id]
         const heroName = hero ? playerById.get(hero)?.name : null
         return (
@@ -404,9 +440,11 @@ function CourseTiles({
             key={round.id}
             onClick={() => onTileClick(round)}
             className={`w-full text-left rounded-sm border transition-all duration-200 overflow-hidden active:opacity-75 ${
-              hasScores
-                ? 'border-[#C9A84C]/50 shadow-[0_0_16px_rgba(201,168,76,0.10)] bg-[#0f2418]'
-                : 'border-[#1e3d28] bg-[#0f2418]'
+              live
+                ? 'border-emerald-500/50 shadow-[0_0_16px_rgba(16,185,129,0.12)] bg-[#0f2418]'
+                : hasScores
+                  ? 'border-[#C9A84C]/50 shadow-[0_0_16px_rgba(201,168,76,0.10)] bg-[#0f2418]'
+                  : 'border-[#1e3d28] bg-[#0f2418]'
             }`}
           >
             <div className="px-5 py-4 flex items-center justify-between gap-4">
@@ -414,16 +452,22 @@ function CourseTiles({
                 <p className="font-[family-name:var(--font-playfair)] text-white text-base leading-tight truncate">
                   {round.courses?.name ?? `Round ${round.round_number}`}
                 </p>
-                <p className={`text-sm mt-1 truncate ${hasScores ? 'text-[#C9A84C]' : 'text-white/25'}`}>
-                  {hasScores
-                    ? heroName ? `Carried by ${firstName(heroName)}` : 'Scores submitted'
-                    : 'No scores yet'}
+                <p className={`text-sm mt-1 truncate ${
+                  live ? 'text-emerald-300' : hasScores ? 'text-[#C9A84C]' : 'text-white/25'
+                }`}>
+                  {live
+                    ? heroName ? `In play — carried by ${firstName(heroName)}` : 'Card still open'
+                    : hasScores
+                      ? heroName ? `Carried by ${firstName(heroName)}` : 'Scores submitted'
+                      : 'No scores yet'}
                 </p>
               </div>
               <div className="flex-shrink-0 flex items-center gap-3">
                 {hasScores && (
-                  <span className="font-[family-name:var(--font-playfair)] text-[#C9A84C] text-xl font-bold tabular-nums">
-                    {pts}
+                  <span className={`font-[family-name:var(--font-playfair)] text-xl font-bold tabular-nums ${
+                    live ? 'text-emerald-400' : 'text-[#C9A84C]'
+                  }`}>
+                    {live && rel !== undefined ? formatRelative(rel) : formatScore(pts)}
                   </span>
                 )}
                 <span className="text-white/30 text-sm">View →</span>
@@ -509,18 +553,31 @@ function Board({
               {showRoundColumns && rounds.map(r => {
                 const played  = row.playedRounds.includes(r.id)
                 const dropped = row.droppedRounds?.includes(r.id) ?? false
-                const pts = row.perRound[r.id] ?? 0
+                const live    = row.liveRounds?.includes(r.id) ?? false
+                const pts     = row.perRound[r.id] ?? 0
+                const rel     = row.relativeByRound?.[r.id]
+
+                // In play: how far ahead of level, in green. Finalised: the
+                // total, in gold. A dropped round is neither — it is set aside.
+                const showRelative = live && !dropped && rel !== undefined
                 return (
                   <span
                     key={r.id}
-                    title={dropped ? 'Set aside — worst round dropped' : undefined}
-                    className={`text-center tabular-nums text-2xl font-semibold ${
+                    title={
+                      dropped ? 'Set aside — worst round dropped'
+                        : live ? 'Card still open — against level so far'
+                        : undefined
+                    }
+                    className={`text-center tabular-nums font-semibold ${
+                      showRelative ? 'text-xl' : 'text-2xl'
+                    } ${
                       !played ? 'text-white/20'
                         : dropped ? 'text-white/25 line-through decoration-white/30'
-                        : 'text-white/70'
+                        : live ? 'text-emerald-400'
+                        : 'text-[#C9A84C]/80'
                     }`}
                   >
-                    {played ? formatScore(pts) : '—'}
+                    {!played ? '—' : showRelative ? formatRelative(rel) : formatScore(pts)}
                   </span>
                 )
               })}
@@ -640,6 +697,7 @@ export default function TripLeaderboardClient({
         gross: s.no_return ? null : s.gross_score,
         points: s.stableford_points ?? 0,
         noReturn: s.no_return,
+        live: false,
       })
     }
 
@@ -660,6 +718,7 @@ export default function TripLeaderboardClient({
         gross: ls.gross_score,
         points: ls.stableford_points ?? 0,
         noReturn: false,
+        live: true,
       })
     }
 
@@ -696,13 +755,19 @@ export default function TripLeaderboardClient({
     return players
       .map(p => {
         const perRound: Record<string, number> = {}
+        const relativeByRound: Record<string, number> = {}
         const playedRounds: string[] = []
+        const liveRounds: string[] = []
         let holesPlayed = 0
         for (const r of sortedRounds) {
           const mine = resolved.filter(s => s.playerId === p.id && s.roundId === r.id)
           perRound[r.id] = mine.reduce((sum, s) => sum + s.points, 0)
+          // Two points a hole is level, so this is how far ahead they stand
+          // on the holes they have actually played
+          relativeByRound[r.id] = perRound[r.id] - mine.length * 2
           holesPlayed += mine.length
           if (mine.length > 0) playedRounds.push(r.id)
+          if (mine.some(s => s.live)) liveRounds.push(r.id)
         }
         // Worst rounds are set aside before totalling, if the trip says so
         const played = playedRounds.map(id => perRound[id])
@@ -721,6 +786,8 @@ export default function TripLeaderboardClient({
           perRound,
           playedRounds,
           droppedRounds: [...dropped],
+          liveRounds,
+          relativeByRound,
           total,
           isLive: isLiveFor([p.id]),
           playerIds: [p.id],
@@ -741,7 +808,9 @@ export default function TripLeaderboardClient({
     return players
       .map(p => {
         const perRound: Record<string, number> = {}
+        const relativeByRound: Record<string, number> = {}
         const playedRounds: string[] = []
+        const liveRounds: string[] = []
         let gross = 0, nett = 0, holesPlayed = 0
         for (const r of sortedRounds) {
           const mine = resolved.filter(s => s.playerId === p.id && s.roundId === r.id && s.gross != null)
@@ -753,9 +822,17 @@ export default function TripLeaderboardClient({
             return sum + shotsReceived(ph, effectiveSI(hole, p.gender))
           }, 0)
           perRound[r.id] = g - shots
+          // Par of the holes actually played, so a card nine holes in reads
+          // against nine holes of par rather than eighteen
+          const parPlayed = mine.reduce((sum, sc) => {
+            const hole = holeById.get(sc.holeId)
+            return hole ? sum + effectivePar(hole, p.gender) : sum
+          }, 0)
+          relativeByRound[r.id] = perRound[r.id] - parPlayed
           gross += g
           holesPlayed += mine.length
           if (mine.length > 0) playedRounds.push(r.id)
+          if (mine.some(sc => sc.live)) liveRounds.push(r.id)
         }
         // Low scores win here, so the worst round is the highest one
         const playedNett = playedRounds.map(id => perRound[id])
@@ -770,6 +847,8 @@ export default function TripLeaderboardClient({
           perRound,
           playedRounds,
           droppedRounds: [...dropped],
+          liveRounds,
+          relativeByRound,
           total: nett,
           isLive: isLiveFor([p.id]),
           playerIds: [p.id],
@@ -803,11 +882,18 @@ export default function TripLeaderboardClient({
       .map(p => {
         const byRound: Record<string, number> = {}
         const playedRounds: string[] = []
+        const liveRounds: string[] = []
         for (const r of sortedRounds) {
           const awarded = perRound.get(r.id)?.get(p.id)
           if (awarded === undefined) continue
           byRound[r.id] = awarded
           playedRounds.push(r.id)
+          // No relative figure here on purpose: a prize table pays finishing
+          // position, and there is no "level" to be ahead of. The green still
+          // says the position can move before the card is in.
+          if (resolved.some(sc => sc.playerId === p.id && sc.roundId === r.id && sc.live)) {
+            liveRounds.push(r.id)
+          }
         }
         const played = playedRounds.map(id => byRound[id])
         const total = totalAfterDiscard(played, discard)
@@ -822,6 +908,7 @@ export default function TripLeaderboardClient({
           perRound: byRound,
           playedRounds,
           droppedRounds: [...dropped],
+          liveRounds,
           total,
           isLive: isLiveFor([p.id]),
           playerIds: [p.id],
@@ -843,6 +930,7 @@ export default function TripLeaderboardClient({
         const perRound: Record<string, number> = {}
         const heroByRound: Record<string, string | null> = {}
         const playedRounds: string[] = []
+        const liveRounds: string[] = []
         let total = 0
 
         for (const r of sortedRounds) {
@@ -851,6 +939,12 @@ export default function TripLeaderboardClient({
           heroByRound[r.id] = res.heroPlayerId
           total += res.points
           if (res.played) playedRounds.push(r.id)
+          // No relative figure: what counts as level depends on the mode and
+          // the team's size, so a signed number here would mislead. Green
+          // still says the total can move.
+          if (resolved.some(sc => memberIds.includes(sc.playerId) && sc.roundId === r.id && sc.live)) {
+            liveRounds.push(r.id)
+          }
         }
 
         const row: BoardRow = {
@@ -860,6 +954,7 @@ export default function TripLeaderboardClient({
           subLabel: members.map(m => firstName(m.name)).join(', '),
           perRound,
           playedRounds,
+          liveRounds,
           total,
           isLive: isLiveFor(memberIds),
           playerIds: memberIds,
@@ -905,6 +1000,10 @@ export default function TripLeaderboardClient({
     active === 'strokes'    ? 'Strokeplay' :
     active === 'custom'     ? 'Custom points' :
                               'Team Play'
+
+  // Stableford and Strokes have a level to be ahead of; a prize table and a
+  // team total do not, so those only change colour while a card is open.
+  const relativeBoard = active === 'stableford' || active === 'strokes'
 
   const boardRules: string[] = (() => {
     const out: string[] = []
@@ -968,6 +1067,27 @@ export default function TripLeaderboardClient({
             {boardRules.join(' · ')}
           </p>
           {inPlay && <InPlayBadge />}
+        </div>
+      )}
+
+      {/* What the two colours mean. Only worth saying while something is
+          actually in play — otherwise every round is gold and there is no
+          distinction to explain. */}
+      {inPlay && currentRows.length > 0 && (
+        <div className="flex items-center gap-4 mb-2 px-1">
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"
+                  style={{ boxShadow: '0 0 6px rgba(52,211,153,0.9)' }} />
+            <span className="text-white/35 text-[10px] tracking-wider uppercase">
+              {relativeBoard ? 'In play — against level' : 'In play'}
+            </span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C]" />
+            <span className="text-white/35 text-[10px] tracking-wider uppercase">
+              Card in — {active === 'strokes' ? 'nett total' : 'total'}
+            </span>
+          </span>
         </div>
       )}
 

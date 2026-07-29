@@ -58,17 +58,39 @@ const roundHandicaps = players.flatMap(p =>
   rounds.map(r => ({ round_id: r.id, player_id: p.id, playing_handicap: p.handicap }))
 )
 
-function render(formats: TripFormats, opts: { activeRoundIds?: string[] } = {}) {
+type RenderOpts = {
+  activeRoundIds?: string[]
+  liveScores?: unknown[]
+  scores?: unknown[]
+  teams?: unknown[]
+  players?: unknown[]
+  teamScoring?: unknown
+}
+
+function render(formats: TripFormats, opts: RenderOpts = {}) {
   return renderToStaticMarkup(
     React.createElement(TripLeaderboardClient, {
       tripCode: 'ABC123',
       formats,
       activeRoundIds: opts.activeRoundIds ?? [],
-      teamScoring: DEFAULT_TEAM_SCORING,
-      rounds, teams: [], players, holes, scores,
-      liveScores: [], roundHandicaps,
+      teamScoring: opts.teamScoring ?? DEFAULT_TEAM_SCORING,
+      rounds,
+      teams: opts.teams ?? [],
+      players: opts.players ?? players,
+      holes,
+      scores: opts.scores ?? scores,
+      liveScores: opts.liveScores ?? [],
+      roundHandicaps,
     } as never)
   )
+}
+
+/** Holes 1..n of a round, still sitting in the in-progress table. */
+function liveHoles(playerId: string, roundId: string, upTo: number, pointsPerHole: number) {
+  return holes.slice(0, upTo).map(h => ({
+    player_id: playerId, round_id: roundId, hole_number: h.hole_number,
+    gross_score: 6 - pointsPerHole, stableford_points: pointsPerHole,
+  }))
 }
 
 /** A trip running an individual league with the given boards ticked. */
@@ -230,6 +252,151 @@ section('Matchplay')
   ok(on.includes('/trip/ABC123/matchplay'), 'and links out when it is on')
   ok(!on.includes('>Matchplay<') || !on.includes('role="tab"'),
     'it never becomes a tab')
+}
+
+// ─── Live vs finalised ─────────────────────────────────────────
+
+section('A card still open reads against level, in green')
+{
+  // Alice nine holes into round 1 at 3 points a hole: 27 points, which is
+  // nine ahead of the eighteen that nine holes of level would give.
+  const html = render(F({ stableford: true }), {
+    scores: [],
+    liveScores: liveHoles('p1', 'r1', 9, 3),
+    activeRoundIds: ['r1'],
+  })
+
+  ok(html.includes('+9'), 'the round shows how far ahead of level it stands')
+  ok(html.includes('text-emerald-400'), 'and it is green')
+
+  // The round column and the Total column say different things: the round
+  // reads against level, the total stays a total. Round columns come first,
+  // so the relative figure precedes the total in the markup.
+  ok(html.includes('>27<'), 'the total column still carries the running total')
+  ok(html.indexOf('+9') < html.lastIndexOf('>27<'),
+    'with the round reading against level before it')
+  ok(html.includes('In play'), 'with the board marked as in play')
+
+  // Exactly level reads as E, the way a scoreboard has always shown it
+  const level = render(F({ stableford: true }), {
+    scores: [], liveScores: liveHoles('p2', 'r1', 9, 2), activeRoundIds: ['r1'],
+  })
+  ok(level.includes('>E<'), 'two points a hole is level, shown as E')
+  ok(!level.includes('+0'), 'not as +0')
+
+  // Behind level carries its sign
+  const behind = render(F({ stableford: true }), {
+    scores: [], liveScores: liveHoles('p3', 'r1', 9, 1), activeRoundIds: ['r1'],
+  })
+  ok(behind.includes('-9'), 'behind level shows a minus')
+}
+
+section('A finalised card reads as its total, in gold')
+{
+  // The default fixture is entirely committed scores
+  const html = render(F({ stableford: true }))
+
+  ok(html.includes('>54<'), 'a finished round shows the total it scored')
+  ok(html.includes('#C9A84C'), 'in gold')
+  ok(!html.includes('text-emerald-400'), 'with nothing green, since nothing is in play')
+  ok(!html.includes('In play'), 'and no in-play badge')
+
+  // The relative figure is gone once the card is in — the total is the number
+  // that matters, and "+18" would be a different claim from "54"
+  ok(!html.includes('+18'), 'and not how far ahead of level it finished')
+}
+
+section('Committed always wins over in-progress for the same hole')
+{
+  // The same hole in both tables: the committed one is the truth, and the
+  // round is no longer live because nothing uncommitted is left.
+  const html = render(F({ stableford: true }), {
+    scores: scoresFor('p1', 'r1', 3),
+    liveScores: liveHoles('p1', 'r1', 18, 1),
+    activeRoundIds: ['r1'],
+  })
+  ok(html.includes('>54<'), 'the committed score is the one counted')
+  ok(!html.includes('>18<'), 'not the stale in-progress one')
+}
+
+section('Strokes measures against par, not against two points a hole')
+{
+  // Nine holes of par 4 is 36. Alice plays them in 3 gross each — but off 10
+  // she also receives shots, so the nett is what the board compares to par.
+  const html = render(F({ strokes: true }), {
+    scores: [], liveScores: liveHoles('p1', 'r1', 9, 3), activeRoundIds: ['r1'],
+  })
+  ok(html.includes('text-emerald-400'), 'an open card is green here too')
+  // 9 holes at 3 gross = 27, less 9 shots received (SI 1-9 all inside a
+  // handicap of 10) = 18 nett, against 36 of par
+  ok(html.includes('-18'), 'and reads as nett against the par of the holes played')
+  ok(html.includes('>18<'), 'while the total column keeps the nett total')
+  ok(html.indexOf('-18') < html.lastIndexOf('>18<'),
+    'the round reading against par, the total reading as a total')
+}
+
+// ─── Players own their scores, not teams ───────────────────────
+
+section('A player carries their scores to whichever team they end up in')
+{
+  const teams = [
+    { id: 't1', name: 'Reds',  color: '#DC2626' },
+    { id: 't2', name: 'Blues', color: '#2563EB' },
+  ]
+  const inReds = players.map(p => p.id === 'p1' ? { ...p, team_id: 't1' } : { ...p, team_id: 't2' })
+  const inBlues = players.map(p => ({ ...p, team_id: 't2' }))
+
+  const teamFormats = parseFormats({
+    individual: false, teams: true,
+    league: { on: true, stableford: true },
+  })
+
+  const before = render(teamFormats, { teams, players: inReds })
+  const after  = render(teamFormats, { teams, players: inBlues })
+
+  // Alice's 54 and 18 move with her. Under hero scoring the Reds had her
+  // card and nothing else; once she moves they have nobody left.
+  ok(before.includes('Reds'), 'the Reds are on the board while she is in them')
+  // A team with no players is not a row — it has no scores to show
+  ok(!after.includes('Reds'), 'and drop off it once nobody is left in them')
+  ok(after.includes('Blues'), 'with the Blues carrying everyone')
+
+  // The scores themselves were never re-entered — they belong to the player,
+  // and the team row is built from whoever is in the team right now. The team
+  // leads the row; its members are listed underneath it.
+  ok(before.indexOf('Reds') < before.indexOf('Alice'),
+    'the team name leads the row, with its members listed under it')
+  ok(after.includes('Alice'), 'and she is listed under the Blues once she moves')
+}
+
+section('A player with no team is on the individual board but no team board')
+{
+  const teams = [{ id: 't1', name: 'Reds', color: '#DC2626' }]
+  // Alice is in a team; Bob and Cara joined later and have not been placed
+  const partly = players.map(p => p.id === 'p1' ? { ...p, team_id: 't1' } : p)
+
+  const both = parseFormats({
+    individual: true, teams: true,
+    league: { on: true, stableford: true },
+  })
+
+  const html = render(both, { teams, players: partly })
+
+  // Teams lead, so the team tab is the one showing
+  ok(html.includes('Reds'), 'the team with a player in it is on the board')
+  ok(html.includes('>Teams<'), 'the team tab is present')
+  ok(html.includes('>Stableford<'), 'and so is the individual one')
+
+  // Every player is on the individual board whether or not they have a team.
+  // Rendering only shows the active tab, so this is asserted on the tab list
+  // plus the fact that an unplaced player is not silently dropped from the
+  // roster the board is built from.
+  const individualOnly = parseFormats({
+    individual: true, league: { on: true, stableford: true },
+  })
+  const solo = render(individualOnly, { players: partly })
+  ok(solo.includes('Alice') && solo.includes('Bob') && solo.includes('Cara'),
+    'all three are on the individual board, placed or not')
 }
 
 console.log(`\n${'─'.repeat(56)}`)
