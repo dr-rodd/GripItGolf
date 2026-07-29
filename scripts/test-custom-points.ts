@@ -5,13 +5,14 @@
  * round, and when the table is shorter than the field. Dropping worst rounds
  * has to behave in both directions — worst is the lowest Stableford but the
  * highest nett strokes.
+ *
+ * The format model itself is tested in scripts/test-formats.ts.
  */
 
 import {
   defaultCustomPoints, resolveCustomPoints, clampPoints, customPointsError,
   awardRound, totalAfterDiscard, discardedIndices, MAX_CUSTOM_POINTS,
 } from '../lib/customPoints'
-import { parseFormats, leaderboardTabs, individualOn, isEmpty, DEFAULT_FORMATS } from '../lib/formats'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -185,64 +186,6 @@ section('Which rounds were set aside')
   const kept = scores.filter((_, i) => !discardedIndices(scores, 2).includes(i))
   eq(kept.reduce((a, b) => a + b, 0), totalAfterDiscard(scores, 2),
     'the rounds not flagged are exactly the rounds counted')
-}
-
-// ─── The format model ──────────────────────────────────────────
-
-section('Individual boards are settings, not separate formats')
-{
-  const f = parseFormats({
-    individual: { stableford: true, strokes: true, custom: true, customPoints: [10, 5], discardWorst: 1 },
-    teams: true,
-  })
-  eq(leaderboardTabs(f).map(b => b.key), ['stableford', 'strokes', 'custom', 'teams'],
-    'each active board becomes a tab, teams last')
-  eq(f.individual.customPoints, [10, 5], 'a stored table is read back')
-  eq(f.individual.discardWorst, 1, 'so is the discard setting')
-  ok(individualOn(f), 'individual is on when any of its boards is')
-
-  const stablefordOnly = parseFormats({ individual: { stableford: true } })
-  eq(leaderboardTabs(stablefordOnly).map(b => b.key), ['stableford'], 'one board, one tab')
-  ok(individualOn(stablefordOnly), 'and individual counts as on')
-
-  const noBoards = parseFormats({ individual: { stableford: false }, teams: true })
-  ok(!individualOn(noBoards), 'individual is off when none of its boards is ticked')
-  eq(leaderboardTabs(noBoards).map(b => b.key), ['teams'], 'leaving only the teams tab')
-
-  // Matchplay has its own route, so it is never a tab
-  const mp = parseFormats({ individual: { stableford: true }, matchplay: true })
-  ok(mp.matchplay, 'matchplay is on')
-  ok(!leaderboardTabs(mp).some(b => (b.key as string) === 'matchplay'),
-    'but it does not appear as a tab')
-}
-
-section('Older trips are read without migrating')
-{
-  const legacy = parseFormats({
-    individual_stableford: true, individual_strokes: true,
-    individual_matchplay: true, teams: true,
-  })
-  ok(legacy.individual.stableford, 'the old stableford flag maps to the board')
-  ok(legacy.individual.strokes, 'so does the old strokes flag')
-  ok(legacy.matchplay, 'the old matchplay flag maps across')
-  ok(legacy.teams, 'and teams')
-  ok(!legacy.individual.custom, 'custom is off, since it did not exist')
-  eq(legacy.individual.discardWorst, 0, 'and nothing is discarded')
-
-  const legacyStableford = parseFormats({ individual_stableford: true })
-  eq(leaderboardTabs(legacyStableford).map(b => b.key), ['stableford'],
-    'a plain old trip still shows its one board')
-}
-
-section('Something is always on')
-{
-  eq(parseFormats({}), DEFAULT_FORMATS, 'an empty object falls back to the default')
-  eq(parseFormats(null), DEFAULT_FORMATS, 'so does null')
-  eq(parseFormats({ individual: { stableford: false }, matchplay: false, teams: false }),
-    DEFAULT_FORMATS, 'and so does a trip with everything switched off')
-  ok(!isEmpty(parseFormats({})), 'the fallback is never empty')
-  ok(isEmpty({ individual: { stableford: false, strokes: false, custom: false, customPoints: [], discardWorst: 0 }, matchplay: false, teams: false }),
-    'but an all-off object is recognised as empty')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

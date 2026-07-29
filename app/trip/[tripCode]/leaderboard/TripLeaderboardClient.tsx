@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { leaderboardTabs, type BoardKey, type TripFormats } from '@/lib/formats'
+import { leaderboardTabs, matchplayOn, type BoardKey, type TripFormats } from '@/lib/formats'
 import {
   resolveCustomPoints, awardRound, totalAfterDiscard, discardedIndices,
 } from '@/lib/customPoints'
@@ -675,10 +675,10 @@ export default function TripLeaderboardClient({
   )
   const inPlay = openRoundIds.size > 0
 
-  const discard = formats.individual.discardWorst
+  const discard = formats.league.discardWorst
   const customTable = useMemo(
-    () => resolveCustomPoints(formats.individual.customPoints, players.length),
-    [formats.individual.customPoints, players.length]
+    () => resolveCustomPoints(formats.league.customPoints, players.length),
+    [formats.league.customPoints, players.length]
   )
 
   const hcpFor = useMemo(() => {
@@ -874,15 +874,15 @@ export default function TripLeaderboardClient({
 
   // ── Render ──────────────────────────────────────────────────
 
-  const matchplayOn = formats.matchplay
+  const showMatchplay = matchplayOn(formats)
 
   // Matchplay lives on its own page, so a matchplay-only trip legitimately
   // has no tabs here — show the button rather than an empty board.
   if (tabs.length === 0) {
     return (
       <div className="max-w-lg mx-auto px-4 py-6">
-        <MatchplayButton tripCode={tripCode} enabled={matchplayOn} />
-        {!matchplayOn && <EmptyState message="No competitions switched on for this trip." />}
+        <MatchplayButton tripCode={tripCode} enabled={showMatchplay} />
+        {!showMatchplay && <EmptyState message="No competitions switched on for this trip." />}
       </div>
     )
   }
@@ -926,7 +926,7 @@ export default function TripLeaderboardClient({
   return (
     <div className="max-w-lg mx-auto px-4 py-6">
 
-      <MatchplayButton tripCode={tripCode} enabled={matchplayOn} />
+      <MatchplayButton tripCode={tripCode} enabled={showMatchplay} />
 
       {/* Format tabs */}
       {tabs.length > 1 && (

@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import BackButton from '@/app/components/BackButton'
 import DateField from '@/app/components/DateField'
 import { MAX_ROUNDS, roundCountError } from '@/lib/tripLimits'
-import { DEFAULT_INDIVIDUAL } from '@/lib/formats'
+import { DEFAULT_FORMATS } from '@/lib/formats'
 import Toggle from '@/app/components/Toggle'
 import {
   MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError,
@@ -215,10 +215,14 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
       status: 'upcoming',
       start_date: startDate || null,
       end_date: endDate || null,
+      // A starting point, not the final answer — the decision tree in trip
+      // settings is where the competition is actually chosen.
       formats: {
-        individual: { ...DEFAULT_INDIVIDUAL },
-        matchplay: false,
+        ...DEFAULT_FORMATS,
+        individual: !useTeams,
         teams: useTeams,
+        league: { ...DEFAULT_FORMATS.league },
+        matchplay: { ...DEFAULT_FORMATS.matchplay },
       },
       num_teams: useTeams ? teams.length : 2,
     }

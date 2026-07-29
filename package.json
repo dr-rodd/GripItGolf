@@ -12,12 +12,14 @@
     "test:matchplay:db": "tsx scripts/test-matchplay-db.ts",
     "test:bracket-layout": "tsx scripts/test-bracket-layout.ts",
     "test:bracket-render": "tsx scripts/test-bracket-render.tsx",
-    "test": "npm run test:matchplay && npm run test:custom-points && npm run test:bracket-layout && npm run test:bracket-render && npm run test:progress && npm run test:trip-form && npm run test:leaderboard && npm run test:branding",
+    "test": "npm run test:formats && npm run test:matchplay && npm run test:custom-points && npm run test:bracket-layout && npm run test:bracket-render && npm run test:progress && npm run test:setup-flow && npm run test:trip-form && npm run test:leaderboard && npm run test:branding",
     "test:progress": "tsx scripts/test-matchplay-progress.ts",
     "test:trip-form": "NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder tsx scripts/test-trip-form.tsx",
     "test:custom-points": "tsx scripts/test-custom-points.ts",
     "test:leaderboard": "NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder tsx scripts/test-leaderboard.tsx",
-    "test:branding": "tsx scripts/test-branding.tsx"
+    "test:branding": "tsx scripts/test-branding.tsx",
+    "test:formats": "tsx scripts/test-formats.ts",
+    "test:setup-flow": "tsx scripts/test-setup-flow.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

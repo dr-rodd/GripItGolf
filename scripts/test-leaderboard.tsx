@@ -71,8 +71,9 @@ function render(formats: TripFormats, opts: { activeRoundIds?: string[] } = {}) 
   )
 }
 
-const F = (individual: Partial<TripFormats['individual']>, rest: Partial<TripFormats> = {}) =>
-  parseFormats({ individual, ...rest })
+/** A trip running an individual league with the given boards ticked. */
+const F = (league: Partial<TripFormats['league']>, rest: Record<string, unknown> = {}) =>
+  parseFormats({ individual: true, league: { on: true, ...league }, ...rest })
 
 // ─── Tabs follow the boards that are on ────────────────────────
 

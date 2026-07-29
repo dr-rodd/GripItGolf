@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import {
-  type TripFormats, type IndividualSettings, individualOn, isEmpty,
-  MAX_DISCARD,
+  type TripFormats, type LeagueSettings, type MatchplayFormat,
+  isEmpty, LEAGUE_BOARDS, MAX_DISCARD,
 } from '@/lib/formats'
 import {
   defaultCustomPoints, resolveCustomPoints, clampPoints, MAX_CUSTOM_POINTS,
@@ -14,6 +14,12 @@ import {
   TEAM_SCORING_MODES, describeTeamScoring,
   type TeamScoring, type TeamScoringMode,
 } from '@/lib/teamScoring'
+import {
+  setupSteps, finaliseBlockedReason, nextUnanswered, type Step,
+} from '@/lib/tripSetupFlow'
+import {
+  teamNoun, teamSizeBanner, teamSizeLimit, oversizedTeams, canJoinTeam,
+} from '@/lib/teamLimits'
 import MatchplayPanel from './MatchplayPanel'
 import DateField from '@/app/components/DateField'
 import BackButton from '@/app/components/BackButton'
@@ -63,6 +69,144 @@ function ordinal(n: number): string {
   const rem100 = n % 100
   if (rem100 >= 11 && rem100 <= 13) return `${n}th`
   return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
+}
+
+// ── Decision-tree pieces ──────────────────────────────────────────────────
+//
+// Settings read as a form: one question at a time, in order, each answer
+// opening whatever it opens. The order lives in lib/tripSetupFlow.ts — this
+// file renders it rather than deciding it.
+
+function Tick({ on }: { on: boolean }) {
+  return (
+    <span className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 transition-colors ${
+      on ? 'bg-[#C9A84C] border-[#C9A84C]' : 'border-white/25'
+    }`}>
+      {on && (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a1a0e"
+             strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6L9 17l-5-5" />
+        </svg>
+      )}
+    </span>
+  )
+}
+
+function Dot({ on }: { on: boolean }) {
+  return (
+    <span className={`mt-0.5 w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 transition-colors ${
+      on ? 'border-[#C9A84C]' : 'border-white/25'
+    }`}>
+      {on && <span className="w-2.5 h-2.5 rounded-full bg-[#C9A84C]" />}
+    </span>
+  )
+}
+
+/** One selectable answer. `pick` draws a radio, otherwise a tickbox. */
+function Option({
+  on, label, hint, onClick, disabled, pick = false,
+}: {
+  on: boolean
+  label: string
+  hint?: string
+  onClick: () => void
+  disabled?: boolean
+  pick?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`w-full text-left px-4 py-3.5 rounded-xl border transition-colors disabled:opacity-40 ${
+        on ? 'border-[#C9A84C]/60 bg-[#C9A84C]/10' : 'border-white/10 bg-white/5 hover:border-white/25'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        {pick ? <Dot on={on} /> : <Tick on={on} />}
+        <div className="min-w-0">
+          <p className={`text-sm font-medium ${on ? 'text-white' : 'text-white/70'}`}>{label}</p>
+          {hint && <p className="text-white/40 text-xs mt-0.5 leading-snug">{hint}</p>}
+        </div>
+      </div>
+    </button>
+  )
+}
+
+/** A row of segmented buttons — a small answer that doesn't need its own tiles. */
+function Chips<T extends string | number>({
+  value, options, onChange, disabled, columns,
+}: {
+  value: T
+  options: { value: T; label: string }[]
+  onChange: (v: T) => void
+  disabled?: boolean
+  columns?: number
+}) {
+  return (
+    <div
+      className={columns ? 'grid gap-2' : 'flex gap-2'}
+      style={columns ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined}
+    >
+      {options.map(o => (
+        <button
+          key={String(o.value)}
+          onClick={() => onChange(o.value)}
+          disabled={disabled}
+          className={`${columns ? '' : 'flex-1'} py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
+            value === o.value
+              ? 'bg-[#C9A84C] text-[#0a1a0e]'
+              : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * One question in the tree.
+ *
+ * Numbered so the page reads as a form being filled in, and marked once
+ * answered so a glance down the page shows what is left.
+ */
+function Question({
+  step, children,
+}: {
+  step: Step
+  children: React.ReactNode
+}) {
+  return (
+    <section className={SECTION}>
+      <div className="flex items-start gap-3 mb-4">
+        <span className={`flex-shrink-0 w-7 h-7 rounded-full border flex items-center justify-center text-xs font-bold tabular-nums transition-colors ${
+          step.answered
+            ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300'
+            : 'border-[#C9A84C]/50 bg-[#C9A84C]/10 text-[#C9A84C]'
+        }`}>
+          {step.answered ? (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-label="Answered">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+          ) : step.number}
+        </span>
+        <div className="min-w-0">
+          <p className="text-[#C9A84C] text-xs tracking-widest uppercase">{step.title}</p>
+          <p className="text-white text-sm mt-1 leading-snug">{step.question}</p>
+        </div>
+      </div>
+
+      {children}
+
+      {step.warning ? (
+        <p className="text-amber-400/90 text-xs mt-3 leading-snug">{step.warning}</p>
+      ) : step.summary ? (
+        <p className="text-white/40 text-xs mt-3 leading-snug">{step.summary}</p>
+      ) : null}
+    </section>
+  )
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
@@ -155,24 +299,50 @@ export default function TripSetupClient({
     if (!(await saveTrip({ formats: next }))) setFormats(prev)
   }
 
-  /** Individual is on when at least one of its boards is ticked. */
-  function toggleBoard(key: 'stableford' | 'strokes' | 'custom') {
-    const individual: IndividualSettings = { ...formats.individual, [key]: !formats.individual[key] }
-    // Turning Custom on for the first time seeds a table from the field
-    if (key === 'custom' && individual.custom && individual.customPoints.length === 0) {
-      individual.customPoints = defaultCustomPoints(players.length)
-    }
-    saveFormats({ ...formats, individual })
+  /** Answer question 1 — who is being ranked. Both is allowed. */
+  function toggleCompetitor(key: 'individual' | 'teams') {
+    const next: TripFormats = { ...formats, [key]: !formats[key] }
+    // A pairs draw is between teams. Without them it can only be singles.
+    if (!next.teams) next.matchplay = { ...next.matchplay, format: 'singles' }
+    saveFormats(next)
   }
 
-  function setIndividual(patch: Partial<IndividualSettings>) {
-    saveFormats({ ...formats, individual: { ...formats.individual, ...patch } })
+  /** Answer question 2 — league, matchplay, or both. */
+  function toggleCompetition(key: 'league' | 'matchplay') {
+    const next: TripFormats =
+      key === 'league'
+        ? { ...formats, league: { ...formats.league, on: !formats.league.on } }
+        : { ...formats, matchplay: { ...formats.matchplay, on: !formats.matchplay.on } }
+    // Turning matchplay on with teams already picked means pairs by default —
+    // it is the only thing a team can play a knockout as.
+    if (key === 'matchplay' && next.matchplay.on && next.teams && !next.individual) {
+      next.matchplay = { ...next.matchplay, format: 'pairs' }
+    }
+    saveFormats(next)
+  }
+
+  function setMatchplayFormat(format: MatchplayFormat) {
+    saveFormats({ ...formats, matchplay: { ...formats.matchplay, format } })
+  }
+
+  /** The league is off once no board is ticked — an empty league is no league. */
+  function toggleBoard(key: 'stableford' | 'strokes' | 'custom') {
+    const league: LeagueSettings = { ...formats.league, [key]: !formats.league[key] }
+    // Turning Custom on for the first time seeds a table from the field
+    if (key === 'custom' && league.custom && league.customPoints.length === 0) {
+      league.customPoints = defaultCustomPoints(players.length)
+    }
+    saveFormats({ ...formats, league })
+  }
+
+  function setLeague(patch: Partial<LeagueSettings>) {
+    saveFormats({ ...formats, league: { ...formats.league, ...patch } })
   }
 
   function setCustomPoint(index: number, raw: string) {
-    const table = resolveCustomPoints(formats.individual.customPoints, players.length)
+    const table = resolveCustomPoints(formats.league.customPoints, players.length)
     table[index] = clampPoints(raw === '' ? 0 : raw)
-    setIndividual({ customPoints: table })
+    setLeague({ customPoints: table })
   }
 
   async function saveTeamScoring(patch: Partial<TeamScoring>) {
@@ -244,6 +414,22 @@ export default function TripSetupClient({
     }
   }
 
+  /**
+   * Move a player between teams, refusing rather than overfilling.
+   *
+   * A pairs draw is played between teams of two, so a third player in a
+   * pairing is not a thing the bracket can represent. Better to say so than
+   * to let it save and break the draw later.
+   */
+  async function movePlayerToTeam(id: string, teamId: string | null) {
+    if (teamId && !canJoinTeam(formats, teamId, players)) {
+      const team = teams.find(t => t.id === teamId)
+      flashError(`${team?.name ?? 'That ' + teamNoun(formats).one} is already full`)
+      return
+    }
+    await updatePlayer(id, { team_id: teamId })
+  }
+
   async function removePlayer(id: string) {
     const player = players.find(p => p.id === id)
     if (!window.confirm(`Remove ${player?.name}? Any scores they have will be deleted.`)) return
@@ -294,6 +480,301 @@ export default function TripSetupClient({
   // ── Render ───────────────────────────────────────────────────────────────
 
   const viewOnly = isDraft && !canEdit
+
+  // The decision tree. Which questions show, and whether each has an answer,
+  // is decided in lib/tripSetupFlow.ts — this file only draws them.
+  const customTable = resolveCustomPoints(formats.league.customPoints, players.length)
+  const flowCtx = {
+    players,
+    teams,
+    teamScoring,
+    customTableLength: customTable.length,
+  }
+  const steps    = setupSteps(formats, flowCtx)
+  const pending  = nextUnanswered(steps)
+  const blocked  = finaliseBlockedReason(formats, flowCtx)
+  const noun     = teamNoun(formats)
+  const sizeBanner = teamSizeBanner(formats)
+  const sizeLimit  = teamSizeLimit(formats)
+  const oversize   = oversizedTeams(formats, teams, players)
+
+  /** The answer controls for one question. */
+  function questionBody(step: Step) {
+    switch (step.key) {
+      case 'competitors':
+        return (
+          <div className="space-y-2.5">
+            <Option
+              on={formats.teams}
+              onClick={() => toggleCompetitor('teams')}
+              disabled={locked}
+              label="Teams"
+              hint="Players are grouped, and the teams are ranked against each other."
+            />
+            <Option
+              on={formats.individual}
+              onClick={() => toggleCompetitor('individual')}
+              disabled={locked}
+              label="Individuals"
+              hint="Every player is ranked on their own card."
+            />
+            {formats.teams && formats.individual && (
+              <p className="text-white/30 text-xs leading-snug px-1">
+                Both run off the same cards. The team board is the main
+                competition and opens first; the individual boards sit behind it.
+              </p>
+            )}
+          </div>
+        )
+
+      case 'competition':
+        return (
+          <div className="space-y-2.5">
+            <Option
+              on={formats.league.on}
+              onClick={() => toggleCompetition('league')}
+              disabled={locked}
+              label="League"
+              hint="Every round counts towards a running table."
+            />
+            <Option
+              on={formats.matchplay.on}
+              onClick={() => toggleCompetition('matchplay')}
+              disabled={locked}
+              label="Matchplay"
+              hint="A knockout draw on its own page, played head to head."
+            />
+          </div>
+        )
+
+      case 'boards':
+        return (
+          <div className="space-y-2">
+            {LEAGUE_BOARDS.map(b => (
+              <Option
+                key={b.key}
+                on={formats.league[b.key]}
+                onClick={() => toggleBoard(b.key)}
+                disabled={locked}
+                label={b.label}
+                hint={b.hint}
+              />
+            ))}
+          </div>
+        )
+
+      case 'discard':
+        return (
+          <>
+            <Chips
+              value={formats.league.discardWorst}
+              onChange={n => setLeague({ discardWorst: n })}
+              disabled={locked}
+              options={Array.from({ length: MAX_DISCARD + 1 }, (_, n) => ({
+                value: n,
+                label: n === 0 ? 'Keep all' : `Drop ${n}`,
+              }))}
+            />
+            <p className="text-white/30 text-xs mt-2 leading-snug">
+              A bad day stops defining the week. Applies to Stableford and
+              Strokes alike, and nobody is ever dropped below one counting round.
+            </p>
+          </>
+        )
+
+      case 'customPoints':
+        return players.length === 0 ? null : (
+          <>
+            <div className="flex items-center justify-between mb-2">
+              <label className={`${LABEL} mb-0`}>Points by position</label>
+              <button
+                onClick={() => setLeague({ customPoints: defaultCustomPoints(players.length) })}
+                disabled={locked}
+                className="text-[#C9A84C]/70 text-[10px] tracking-wider uppercase hover:text-[#C9A84C] transition-colors disabled:opacity-40"
+              >
+                Reset
+              </button>
+            </div>
+            <div className="space-y-2">
+              {customTable.map((pts, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="w-14 flex-shrink-0 text-white/50 text-xs tabular-nums">
+                    {ordinal(i + 1)}
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={pts}
+                    onChange={e => setCustomPoint(i, e.target.value)}
+                    disabled={locked}
+                    min={0}
+                    max={MAX_CUSTOM_POINTS}
+                    className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm tabular-nums focus:outline-none focus:border-[#C9A84C]/50 disabled:opacity-40"
+                  />
+                  <span className="w-10 flex-shrink-0 text-white/25 text-xs">
+                    {pts === 1 ? 'pt' : 'pts'}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="text-white/30 text-xs mt-2 leading-snug">
+              Up to {MAX_CUSTOM_POINTS} a position, and zero is allowed. Players
+              level on the day share the places they occupy.
+            </p>
+          </>
+        )
+
+      case 'matchplayFormat':
+        return (
+          <div className="space-y-2.5">
+            <Option
+              pick
+              on={formats.matchplay.format === 'singles'}
+              onClick={() => setMatchplayFormat('singles')}
+              disabled={locked}
+              label="Singles"
+              hint="Player against player."
+            />
+            <Option
+              pick
+              on={formats.matchplay.format === 'pairs'}
+              onClick={() => setMatchplayFormat('pairs')}
+              disabled={locked || !formats.teams}
+              label="Pairs"
+              hint={formats.teams
+                ? 'Pairing against pairing. Teams are locked at two.'
+                : 'Needs teams — switch them on above.'}
+            />
+          </div>
+        )
+
+      case 'teamScoring':
+        return (
+          <>
+            <div className="space-y-2.5">
+              {TEAM_SCORING_MODES.map(m => (
+                <Option
+                  key={m.key}
+                  pick
+                  on={teamScoring.mode === m.key}
+                  onClick={() => saveTeamScoring({ mode: m.key as TeamScoringMode })}
+                  disabled={locked}
+                  label={m.label}
+                  hint={m.description}
+                />
+              ))}
+            </div>
+
+            {/* Better Ball — how many scores count per hole */}
+            {teamScoring.mode === 'better_ball' && (
+              <div className="mt-4">
+                <label className={LABEL}>Scores counting on each hole</label>
+                <Chips
+                  value={teamScoring.countingScores}
+                  onChange={n => saveTeamScoring({ countingScores: n })}
+                  disabled={locked}
+                  options={[1, 2, 3, 4].map(n => ({ value: n, label: String(n) }))}
+                />
+                {teamScoring.countingScores > smallestTeamSize && smallestTeamSize > 0 && (
+                  <p className="text-amber-400/80 text-xs mt-2 leading-snug">
+                    Your smallest {noun.one} has {smallestTeamSize} player
+                    {smallestTeamSize === 1 ? '' : 's'} — it can only ever contribute{' '}
+                    {smallestTeamSize} score{smallestTeamSize === 1 ? '' : 's'} a hole.
+                  </p>
+                )}
+
+                <label className={`${LABEL} mt-4`}>Everyone counts on the last…</label>
+                <Chips
+                  columns={3}
+                  value={teamScoring.aggregateFinish}
+                  onChange={n => saveTeamScoring({ aggregateFinish: n })}
+                  disabled={locked}
+                  options={[0, 1, 2, 3, 6, 9].map(n => ({
+                    value: n,
+                    label: n === 0 ? 'Off' : n === 1 ? '1 hole' : `${n} holes`,
+                  }))}
+                />
+                <p className="text-white/30 text-xs mt-2 leading-snug">
+                  Turn this on for a grandstand finish — the closing holes open up so
+                  every player&apos;s score counts, not just the best {teamScoring.countingScores}.
+                </p>
+              </div>
+            )}
+
+            {/* Aggregate — how many closing holes count */}
+            {teamScoring.mode === 'aggregate' && (
+              <div className="mt-4">
+                <label className={LABEL}>Holes that count</label>
+                <Chips
+                  columns={3}
+                  value={teamScoring.aggregateHoles}
+                  onChange={n => saveTeamScoring({ aggregateHoles: n })}
+                  disabled={locked}
+                  options={[18, 9, 6, 3, 2, 1].map(n => ({
+                    value: n,
+                    label: n === 18 ? 'All 18' : n === 1 ? 'Last hole' : `Last ${n}`,
+                  }))}
+                />
+                <p className="text-white/30 text-xs mt-2 leading-snug">
+                  A short closing stretch keeps every {noun.one} in it to the end — one
+                  bad round no longer settles the trip.
+                </p>
+              </div>
+            )}
+          </>
+        )
+
+      case 'teams':
+        return (
+          <>
+            {/* A pairs draw fixes the size, so say so before anyone picks */}
+            {sizeBanner && (
+              <div className="flex items-start gap-3 px-4 py-3 mb-3 bg-[#C9A84C]/10 border border-[#C9A84C]/40 rounded-xl">
+                <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#C9A84C] flex-shrink-0" />
+                <p className="text-[#C9A84C] text-xs leading-snug">{sizeBanner}</p>
+              </div>
+            )}
+
+            {teams.length > 0 && (
+              <div className="space-y-2 mb-4">
+                {teams.map(team => {
+                  const members = players.filter(p => p.team_id === team.id)
+                  const over = oversize.some(o => o.teamId === team.id)
+                  return (
+                    <div
+                      key={team.id}
+                      className={`flex items-center gap-3 px-3 py-2.5 border rounded-xl ${
+                        over ? 'border-amber-500/50 bg-amber-500/10' : 'border-white/10 bg-white/5'
+                      }`}
+                    >
+                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} />
+                      <span className="text-white text-sm flex-1 min-w-0 truncate">{team.name}</span>
+                      <span className={`text-xs flex-shrink-0 ${over ? 'text-amber-400' : 'text-white/30'}`}>
+                        {members.length} player{members.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {!locked && (
+              <Link
+                href={`/trip/${trip.trip_code}/teams`}
+                className="block w-full py-3.5 border border-[#C9A84C]/40 text-[#C9A84C] rounded-xl text-sm tracking-wider uppercase text-center hover:bg-[#C9A84C]/10 transition-colors"
+              >
+                Pick {noun.many}
+              </Link>
+            )}
+
+            <p className="text-white/30 text-xs mt-3 leading-snug">
+              {noun.Many} can be changed at any point. Players own their scores and
+              carry them to whichever {noun.one} they end up in.
+            </p>
+          </>
+        )
+    }
+  }
 
   return (
     <main className="min-h-dvh bg-[#0a1a0e] text-white pb-16">
@@ -375,364 +856,24 @@ export default function TripSetupClient({
               </div>
             </section>
 
-            {/* ── Competitions ── */}
-            <section className={SECTION}>
-              <p className="text-[#C9A84C] text-xs tracking-widest uppercase mb-1">Competitions</p>
-              <p className="text-white/40 text-xs mb-4">
-                Switch on as many as you like — each board gets its own tab on the leaderboard
-              </p>
+            {/* ── The decision tree ──
+                One question at a time, in the order set by lib/tripSetupFlow.ts.
+                A question only appears once the answer above has opened it. */}
+            {steps.map(step => (
+              <Question key={step.key} step={step}>
+                {questionBody(step)}
+              </Question>
+            ))}
 
-              <div className="space-y-2.5">
-                {/* Individual — a single competition with up to three boards */}
-                <div className={`rounded-xl border transition-colors ${
-                  individualOn(formats)
-                    ? 'border-[#C9A84C]/60 bg-[#C9A84C]/10'
-                    : 'border-white/10 bg-white/5'
-                }`}>
-                  <div className="px-4 pt-4 pb-3">
-                    <p className={`text-sm font-medium ${individualOn(formats) ? 'text-white' : 'text-white/70'}`}>
-                      Individual
-                    </p>
-                    <p className="text-white/40 text-xs mt-0.5 leading-snug">
-                      Tick the boards you want. Ticking none switches Individual off.
-                    </p>
-                  </div>
-
-                  <div className="px-4 pb-4 space-y-2">
-                    {([
-                      { key: 'stableford' as const, label: 'Stableford leaderboard',
-                        hint: 'Points per hole against your handicap' },
-                      { key: 'strokes' as const, label: 'Strokes leaderboard',
-                        hint: 'Gross and nett totals, lowest wins' },
-                      { key: 'custom' as const, label: 'Custom points',
-                        hint: 'Your own prize table by finishing position each round' },
-                    ]).map(b => {
-                      const on = formats.individual[b.key]
-                      return (
-                        <button
-                          key={b.key}
-                          onClick={() => toggleBoard(b.key)}
-                          disabled={locked}
-                          className={`w-full text-left flex items-start gap-3 px-3 py-3 rounded-lg border transition-colors disabled:opacity-40 ${
-                            on ? 'border-[#C9A84C]/40 bg-[#C9A84C]/[0.07]' : 'border-white/10 hover:border-white/25'
-                          }`}
-                        >
-                          <span className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 ${
-                            on ? 'bg-[#C9A84C] border-[#C9A84C]' : 'border-white/25'
-                          }`}>
-                            {on && (
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a1a0e"
-                                   strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M20 6L9 17l-5-5" />
-                              </svg>
-                            )}
-                          </span>
-                          <span className="min-w-0">
-                            <span className={`block text-sm ${on ? 'text-white' : 'text-white/70'}`}>{b.label}</span>
-                            <span className="block text-white/35 text-xs mt-0.5 leading-snug">{b.hint}</span>
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-
-                  {/* ── Individual sub-settings, only once a board is on ── */}
-                  {individualOn(formats) && (
-                    <div className="px-4 pb-4 pt-1 border-t border-white/10 space-y-4">
-
-                      {/* Drop worst rounds — applies to Stableford and Strokes */}
-                      {(formats.individual.stableford || formats.individual.strokes) && (
-                        <div>
-                          <label className={LABEL}>Discard worst round</label>
-                          <div className="flex gap-2">
-                            {Array.from({ length: MAX_DISCARD + 1 }, (_, n) => (
-                              <button
-                                key={n}
-                                onClick={() => setIndividual({ discardWorst: n })}
-                                disabled={locked}
-                                className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
-                                  formats.individual.discardWorst === n
-                                    ? 'bg-[#C9A84C] text-[#0a1a0e]'
-                                    : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
-                                }`}
-                              >
-                                {n === 0 ? 'Keep all' : `Drop ${n}`}
-                              </button>
-                            ))}
-                          </div>
-                          <p className="text-white/30 text-xs mt-2 leading-snug">
-                            A bad day stops defining the week. Nobody is ever dropped below
-                            one counting round.
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Custom points table */}
-                      {formats.individual.custom && (
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <label className={`${LABEL} mb-0`}>Points by position</label>
-                            <button
-                              onClick={() => setIndividual({ customPoints: defaultCustomPoints(players.length) })}
-                              disabled={locked}
-                              className="text-[#C9A84C]/70 text-[10px] tracking-wider uppercase hover:text-[#C9A84C] transition-colors disabled:opacity-40"
-                            >
-                              Reset
-                            </button>
-                          </div>
-
-                          {players.length === 0 ? (
-                            <p className="text-white/35 text-xs leading-snug">
-                              Add players first — the table is built from the field.
-                            </p>
-                          ) : (
-                            <>
-                              <div className="space-y-2">
-                                {resolveCustomPoints(formats.individual.customPoints, players.length)
-                                  .map((pts, i) => (
-                                    <div key={i} className="flex items-center gap-3">
-                                      <span className="w-14 flex-shrink-0 text-white/50 text-xs tabular-nums">
-                                        {ordinal(i + 1)}
-                                      </span>
-                                      <input
-                                        type="number"
-                                        inputMode="numeric"
-                                        value={pts}
-                                        onChange={e => setCustomPoint(i, e.target.value)}
-                                        disabled={locked}
-                                        min={0}
-                                        max={MAX_CUSTOM_POINTS}
-                                        className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm tabular-nums focus:outline-none focus:border-[#C9A84C]/50 disabled:opacity-40"
-                                      />
-                                      <span className="w-10 flex-shrink-0 text-white/25 text-xs">
-                                        {pts === 1 ? 'pt' : 'pts'}
-                                      </span>
-                                    </div>
-                                  ))}
-                              </div>
-                              <p className="text-white/30 text-xs mt-2 leading-snug">
-                                Up to {MAX_CUSTOM_POINTS} a position, and zero is allowed. Players
-                                level on the day share the places they occupy.
-                              </p>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Matchplay and Teams — plain on/off, settings of their own below */}
-                {([
-                  { key: 'matchplay' as const, label: 'Individual Matchplay',
-                    hint: 'A knockout draw on its own page. Seeds kept apart, byes handed out.' },
-                  { key: 'teams' as const, label: 'Team Play',
-                    hint: 'Teams scored together — pick how below.' },
-                ]).map(f => {
-                  const on = formats[f.key]
-                  return (
-                    <button
-                      key={f.key}
-                      onClick={() => saveFormats({ ...formats, [f.key]: !on })}
-                      disabled={locked}
-                      className={`w-full text-left px-4 py-4 rounded-xl border transition-colors disabled:opacity-40 ${
-                        on ? 'border-[#C9A84C]/60 bg-[#C9A84C]/10' : 'border-white/10 bg-white/5 hover:border-white/25'
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <span className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 ${
-                          on ? 'bg-[#C9A84C] border-[#C9A84C]' : 'border-white/25'
-                        }`}>
-                          {on && (
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a1a0e"
-                                 strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M20 6L9 17l-5-5" />
-                            </svg>
-                          )}
-                        </span>
-                        <div className="min-w-0">
-                          <p className={`text-sm font-medium ${on ? 'text-white' : 'text-white/70'}`}>{f.label}</p>
-                          <p className="text-white/40 text-xs mt-0.5 leading-snug">{f.hint}</p>
-                        </div>
-                      </div>
-                    </button>
-                  )
-                })}
+            {/* What is still outstanding, so the page has an end */}
+            {pending && (
+              <div className="px-4 py-3.5 bg-white/5 border border-white/10 rounded-xl">
+                <p className="text-white/50 text-xs leading-snug">
+                  Next up — <span className="text-white/80">{pending.title}</span>: {pending.question}
+                </p>
               </div>
-            </section>
-
-            {/* ── Teams ── */}
-            {formats.teams && (
-              <section className={SECTION}>
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-[#C9A84C] text-xs tracking-widest uppercase">Teams</p>
-                  <span className="text-white/30 text-xs">
-                    {teams.length} team{teams.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-                <p className="text-white/40 text-xs mb-4">
-                  {unassignedCount > 0
-                    ? `${unassignedCount} player${unassignedCount === 1 ? '' : 's'} still to be assigned`
-                    : 'Everyone has a team'}
-                </p>
-
-                {teams.length > 0 && (
-                  <div className="space-y-2 mb-4">
-                    {teams.map(team => {
-                      const members = players.filter(p => p.team_id === team.id)
-                      return (
-                        <div key={team.id} className="flex items-center gap-3 px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl">
-                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} />
-                          <span className="text-white text-sm flex-1 min-w-0 truncate">{team.name}</span>
-                          <span className="text-white/30 text-xs flex-shrink-0">
-                            {members.length} player{members.length === 1 ? '' : 's'}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {!locked && (
-                  <Link
-                    href={`/trip/${trip.trip_code}/teams`}
-                    className="block w-full py-3.5 border border-[#C9A84C]/40 text-[#C9A84C] rounded-xl text-sm tracking-wider uppercase text-center hover:bg-[#C9A84C]/10 transition-colors"
-                  >
-                    Pick teams
-                  </Link>
-                )}
-              </section>
             )}
 
-            {/* ── Team scoring ── */}
-            {formats.teams && (
-              <section className={SECTION}>
-                <p className="text-[#C9A84C] text-xs tracking-widest uppercase mb-1">Team scoring</p>
-                <p className="text-white/40 text-xs mb-4">
-                  How each team&apos;s points are worked out on every course played
-                </p>
-
-                <div className="space-y-2.5">
-                  {TEAM_SCORING_MODES.map(m => {
-                    const on = teamScoring.mode === m.key
-                    return (
-                      <button
-                        key={m.key}
-                        onClick={() => saveTeamScoring({ mode: m.key as TeamScoringMode })}
-                        disabled={locked}
-                        className={`w-full text-left px-4 py-4 rounded-xl border transition-colors disabled:opacity-40 ${
-                          on
-                            ? 'border-[#C9A84C]/60 bg-[#C9A84C]/10'
-                            : 'border-white/10 bg-white/5 hover:border-white/25'
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <span
-                            className={`mt-0.5 w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 transition-colors ${
-                              on ? 'border-[#C9A84C]' : 'border-white/25'
-                            }`}
-                          >
-                            {on && <span className="w-2.5 h-2.5 rounded-full bg-[#C9A84C]" />}
-                          </span>
-                          <div className="min-w-0">
-                            <p className={`text-sm font-medium ${on ? 'text-white' : 'text-white/70'}`}>
-                              {m.label}
-                            </p>
-                            <p className="text-white/40 text-xs mt-0.5 leading-snug">{m.description}</p>
-                          </div>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {/* Better Ball — how many scores count per hole */}
-                {teamScoring.mode === 'better_ball' && (
-                  <div className="mt-4">
-                    <label className={LABEL}>Scores counting on each hole</label>
-                    <div className="flex gap-2">
-                      {[1, 2, 3, 4].map(n => (
-                        <button
-                          key={n}
-                          onClick={() => saveTeamScoring({ countingScores: n })}
-                          disabled={locked}
-                          className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
-                            teamScoring.countingScores === n
-                              ? 'bg-[#C9A84C] text-[#0a1a0e]'
-                              : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
-                          }`}
-                        >
-                          {n}
-                        </button>
-                      ))}
-                    </div>
-                    {teamScoring.countingScores > smallestTeamSize && smallestTeamSize > 0 && (
-                      <p className="text-amber-400/80 text-xs mt-2 leading-snug">
-                        Your smallest team has {smallestTeamSize} player
-                        {smallestTeamSize === 1 ? '' : 's'} — it can only ever contribute{' '}
-                        {smallestTeamSize} score{smallestTeamSize === 1 ? '' : 's'} a hole.
-                      </p>
-                    )}
-
-                    <label className={`${LABEL} mt-4`}>Everyone counts on the last…</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[0, 1, 2, 3, 6, 9].map(n => (
-                        <button
-                          key={n}
-                          onClick={() => saveTeamScoring({ aggregateFinish: n })}
-                          disabled={locked}
-                          className={`py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
-                            teamScoring.aggregateFinish === n
-                              ? 'bg-[#C9A84C] text-[#0a1a0e]'
-                              : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
-                          }`}
-                        >
-                          {n === 0 ? 'Off' : n === 1 ? '1 hole' : `${n} holes`}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-white/30 text-xs mt-2 leading-snug">
-                      Turn this on for a grandstand finish — the closing holes open up so
-                      every player&apos;s score counts, not just the best {teamScoring.countingScores}.
-                    </p>
-                  </div>
-                )}
-
-                {/* Aggregate — how many closing holes count */}
-                {teamScoring.mode === 'aggregate' && (
-                  <div className="mt-4">
-                    <label className={LABEL}>Holes that count</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[18, 9, 6, 3, 2, 1].map(n => (
-                        <button
-                          key={n}
-                          onClick={() => saveTeamScoring({ aggregateHoles: n })}
-                          disabled={locked}
-                          className={`py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
-                            teamScoring.aggregateHoles === n
-                              ? 'bg-[#C9A84C] text-[#0a1a0e]'
-                              : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
-                          }`}
-                        >
-                          {n === 18 ? 'All 18' : n === 1 ? 'Last hole' : `Last ${n}`}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-white/30 text-xs mt-2 leading-snug">
-                      A short closing stretch keeps every team in it to the end — one bad
-                      round no longer settles the trip.
-                    </p>
-                  </div>
-                )}
-
-                <div className="mt-4 px-4 py-3 bg-white/5 border border-white/10 rounded-xl">
-                  <p className="text-white/50 text-xs">
-                    <span className="text-[#C9A84C]">In play:</span>{' '}
-                    {describeTeamScoring(teamScoring)}
-                  </p>
-                </div>
-              </section>
-            )}
 
             {/* ── Players ── */}
             <section className={SECTION}>
@@ -804,18 +945,23 @@ export default function TripSetupClient({
                           </button>
                         ))}
                       </div>
-                      {formats.teams &&(
+                      {formats.teams && (
                         <div className="relative flex-1 min-w-0">
                           <select
                             value={player.team_id ?? ''}
-                            onChange={e => updatePlayer(player.id, { team_id: e.target.value || null })}
+                            onChange={e => movePlayerToTeam(player.id, e.target.value || null)}
                             disabled={locked}
                             className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm appearance-none focus:outline-none focus:border-[#C9A84C]/50 disabled:opacity-40"
                           >
-                            <option value="" className="bg-[#0a1a0e]">No team</option>
-                            {teams.map(t => (
-                              <option key={t.id} value={t.id} className="bg-[#0a1a0e]">{t.name}</option>
-                            ))}
+                            <option value="" className="bg-[#0a1a0e]">No {noun.one}</option>
+                            {teams.map(t => {
+                              const size = players.filter(p => p.team_id === t.id).length
+                              return (
+                                <option key={t.id} value={t.id} className="bg-[#0a1a0e]">
+                                  {t.name}{sizeLimit !== null ? ` (${size}/${sizeLimit})` : ''}
+                                </option>
+                              )
+                            })}
                           </select>
                           <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/40">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -872,17 +1018,23 @@ export default function TripSetupClient({
                         ))}
                       </div>
                     </div>
-                    {formats.teams &&teams.length > 0 && (
+                    {formats.teams && teams.length > 0 && (
                       <div className="relative">
                         <select
                           value={newTeamId}
                           onChange={e => setNewTeamId(e.target.value)}
                           className={`${INPUT} appearance-none pr-10`}
                         >
-                          <option value="" className="bg-[#0a1a0e]">No team assigned</option>
-                          {teams.map(t => (
-                            <option key={t.id} value={t.id} className="bg-[#0a1a0e]">{t.name}</option>
-                          ))}
+                          <option value="" className="bg-[#0a1a0e]">No {noun.one} assigned</option>
+                          {teams.map(t => {
+                            const size = players.filter(p => p.team_id === t.id).length
+                            const full = sizeLimit !== null && size >= sizeLimit
+                            return (
+                              <option key={t.id} value={t.id} disabled={full} className="bg-[#0a1a0e]">
+                                {t.name}{sizeLimit !== null ? ` (${size}/${sizeLimit})` : ''}{full ? ' — full' : ''}
+                              </option>
+                            )
+                          })}
                         </select>
                         <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-white/40">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -943,15 +1095,24 @@ export default function TripSetupClient({
               </div>
             </section>
 
-            {/* ── Finalise ── */}
+            {/* ── Finalise ──
+                Blocked only by answers that would make the trip unplayable —
+                a half-filled team sheet is the organiser's business. */}
             {canEdit && (
-              <button
-                onClick={finalise}
-                disabled={busy}
-                className="w-full py-5 bg-[#C9A84C] text-[#0a1a0e] text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-[#d4b35a] transition-colors disabled:opacity-40"
-              >
-                {busy ? 'Working…' : 'Finalise & Go Live'}
-              </button>
+              <>
+                {blocked && (
+                  <div className="px-4 py-3.5 bg-amber-500/10 border border-amber-500/40 rounded-xl">
+                    <p className="text-amber-400 text-sm leading-snug">{blocked}</p>
+                  </div>
+                )}
+                <button
+                  onClick={finalise}
+                  disabled={busy || blocked !== null}
+                  className="w-full py-5 bg-[#C9A84C] text-[#0a1a0e] text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-[#d4b35a] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {busy ? 'Working…' : 'Finalise & Go Live'}
+                </button>
+              </>
             )}
           </>
         )}
