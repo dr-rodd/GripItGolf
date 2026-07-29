@@ -1,10 +1,11 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { parseFormats } from '@/lib/formats'
+import { parseFormats, isPairsMatchplay, matchplayOn } from '@/lib/formats'
+import { playerEntrant, pairEntrant, type Entrant } from '@/lib/matchplayEntrants'
 import BackButton from '@/app/components/BackButton'
 import MatchplayBracket, {
-  type BracketMatchRow, type BracketPlayerRow,
+  type BracketMatchRow, type BracketEntrantRow,
 } from './MatchplayBracket'
 
 export const dynamic = 'force-dynamic'
@@ -33,29 +34,65 @@ export default async function MatchplayPage({
   if (!trip) notFound()
 
   const formats = parseFormats(trip.formats)
-  const enabled = formats.matchplay
+  const enabled = matchplayOn(formats)
+  const pairs   = isPairsMatchplay(formats)
 
-  const [matchesRes, playersRes] = await Promise.all([
+  const [matchesRes, playersRes, teamsRes] = await Promise.all([
     supabase
       .from('matchplay_matches')
       .select(
         'id, trip_id, round_number, round_name, slot, player_a_id, player_b_id, ' +
         'player_a_is_bye, player_b_is_bye, seed_a, seed_b, ' +
-        'winner_player_id, result, next_match_id, next_slot'
+        'winner_player_id, result, next_match_id, next_slot, ' +
+        'entrant_type, team_a_id, team_b_id, winner_team_id'
       )
       .eq('trip_id', trip.id)
       .order('round_number')
       .order('slot'),
     supabase
       .from('players')
-      .select('id, name, handicap')
+      .select('id, name, handicap, team_id')
+      .eq('trip_id', trip.id),
+    // Only needed for a pairs draw, but asking for it unconditionally keeps
+    // this a single round trip rather than a conditional second one.
+    supabase
+      .from('teams')
+      .select('id, name')
       .eq('trip_id', trip.id),
   ])
 
   if (matchesRes.error) console.error('MatchplayPage matches query failed:', matchesRes.error)
   if (playersRes.error) console.error('MatchplayPage players query failed:', playersRes.error)
+  if (teamsRes.error)   console.error('MatchplayPage teams query failed:', teamsRes.error)
 
-  const matches = matchesRes.data ?? []
+  const roster = playersRes.data ?? []
+
+  type RawMatch = Record<string, unknown> & {
+    entrant_type?: string | null
+    team_a_id?: string | null
+    team_b_id?: string | null
+    winner_team_id?: string | null
+  }
+  const rawMatches = (matchesRes.data ?? []) as unknown as RawMatch[]
+
+  // The bracket itself says what it is between, not the settings. A draw made
+  // before the format was switched is still a real draw, and reading it
+  // against the wrong kind of entrant renders a column of blanks.
+  const storedAsPairs = rawMatches.some(m => m.entrant_type === 'pair')
+
+  const entrants: Entrant[] = storedAsPairs
+    ? (teamsRes.data ?? []).map(t => pairEntrant(t, roster.filter(p => p.team_id === t.id)))
+    : roster.map(playerEntrant)
+
+  // A pairs row keeps its sides in the team columns; everything downstream
+  // works in one shape, so they are moved across on the way in.
+  const matches = rawMatches.map(m =>
+    m.entrant_type === 'pair'
+      ? { ...m,
+          player_a_id: m.team_a_id ?? null,
+          player_b_id: m.team_b_id ?? null,
+          winner_player_id: m.winner_team_id ?? null }
+      : m)
 
   return (
     <div className="min-h-dvh bg-[#0a1a0e] text-white">
@@ -85,7 +122,7 @@ export default async function MatchplayPage({
         ) : (
           <MatchplayBracket
             matches={matches as unknown as BracketMatchRow[]}
-            players={(playersRes.data ?? []) as BracketPlayerRow[]}
+            entrants={entrants as BracketEntrantRow[]}
           />
         )}
       </div>

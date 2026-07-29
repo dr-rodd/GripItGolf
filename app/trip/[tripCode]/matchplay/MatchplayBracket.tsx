@@ -29,7 +29,21 @@ export type BracketMatchRow = {
   next_slot: 'A' | 'B' | null
 }
 
-export type BracketPlayerRow = { id: string; name: string; handicap: number | null }
+/**
+ * One side of a match: a player in a singles draw, a pairing in a pairs one.
+ *
+ * The names are worked out before they get here — see lib/matchplayEntrants.ts
+ * — so this file draws whoever it is handed without caring which. A pairing
+ * arrives already carrying its two players' names rather than a team name,
+ * because a pairing IS its players and "Team B" tells nobody anything.
+ */
+export type BracketEntrantRow = {
+  id: string
+  name: string
+  /** What fits on a tile. "Ross" for a player, "Ross & Dave" for a pairing. */
+  shortName: string
+  handicap: number | null
+}
 
 // ─── Fixed dimensions ──────────────────────────────────────────
 // Tiles never resize. Only the gap between columns flexes, so the pair still
@@ -44,10 +58,10 @@ const SWIPE_MS = 340
 // ─── Component ─────────────────────────────────────────────────
 
 export default function MatchplayBracket({
-  matches: initialMatches, players,
+  matches: initialMatches, entrants,
 }: {
   matches: BracketMatchRow[]
-  players: BracketPlayerRow[]
+  entrants: BracketEntrantRow[]
 }) {
   // Held locally so a recorded result shows immediately, then reverted if the
   // write fails — the bracket must never show something the database rejected.
@@ -57,8 +71,8 @@ export default function MatchplayBracket({
   const [sheet, setSheet] = useState<{ match: BracketMatchRow; correcting: boolean } | null>(null)
 
   const playerById = useMemo(
-    () => new Map(players.map(p => [p.id, p])),
-    [players]
+    () => new Map(entrants.map(e => [e.id, e])),
+    [entrants]
   )
 
   /** Matches grouped by round, in playing order. */
@@ -328,7 +342,7 @@ function MatchTile({
   match, playerById, x, y, faded, onOpen,
 }: {
   match: BracketMatchRow
-  playerById: Map<string, BracketPlayerRow>
+  playerById: Map<string, BracketEntrantRow>
   x: number
   y: number
   faded: boolean
@@ -505,12 +519,12 @@ function Side({
   isWinner: boolean
   isChampion: boolean
   result: string | null
-  playerById: Map<string, BracketPlayerRow>
+  playerById: Map<string, BracketEntrantRow>
 }) {
   const player = playerId ? playerById.get(playerId) : null
-  // Only a first name fits at this width, and it is what everyone calls
-  // each other on a trip anyway
-  const shortName = player ? player.name.split(' ')[0] : ''
+  // Worked out upstream: a first name for a player, both first names for a
+  // pairing. Splitting it here would turn "Ross & Dave" back into "Ross".
+  const shortName = player ? player.shortName : ''
 
   return (
     <div
@@ -573,7 +587,7 @@ function DecideSheet({
 }: {
   match: BracketMatchRow
   correcting: boolean
-  playerById: Map<string, BracketPlayerRow>
+  playerById: Map<string, BracketEntrantRow>
   onClose: () => void
   onApply: (winnerId: string | null, margin: string | null) => Promise<void>
 }) {

@@ -1121,11 +1121,14 @@ export default function TripSetupClient({
             These sit outside the draft-only block on purpose. A bracket is
             normally drawn once the roster has settled, which is at or after
             finalising, so the panel has to survive the switch to live. */}
-        {formats.matchplay && (
+        {formats.matchplay.on && (
           <MatchplayPanel
             tripId={trip.id}
             tripCode={trip.trip_code}
             canEdit={editPermission === 'everyone' || isOwner}
+            formats={formats}
+            teams={teams}
+            players={players}
           />
         )}
 

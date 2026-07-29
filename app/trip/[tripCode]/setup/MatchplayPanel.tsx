@@ -6,6 +6,9 @@ import {
   getBracketStatus, createBracket, previewBracket, bracketBlockedReason,
   type BracketStatus,
 } from '@/lib/matchplayStore'
+import { isPairsMatchplay, type TripFormats } from '@/lib/formats'
+import { pairsBlockedReason, teamNoun } from '@/lib/teamLimits'
+import type { MemberLike, TeamLike } from '@/lib/teamLimits'
 
 /**
  * Settings for the matchplay format. Appears when matchplay is switched on
@@ -17,12 +20,20 @@ import {
  * finalising the trip.
  */
 export default function MatchplayPanel({
-  tripId, tripCode, canEdit,
+  tripId, tripCode, canEdit, formats, teams, players,
 }: {
   tripId: string
   tripCode: string
   canEdit: boolean
+  formats: TripFormats
+  teams: TeamLike[]
+  players: MemberLike[]
 }) {
+  // A pairs draw is between pairings, so it is drawn from the team sheet
+  // rather than the roster — and cannot be drawn from a broken one.
+  const pairs = isPairsMatchplay(formats)
+  const kind  = pairs ? 'pair' as const : 'player' as const
+  const noun  = teamNoun(formats)
   const [status, setStatus]   = useState<BracketStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy]       = useState(false)
@@ -31,14 +42,14 @@ export default function MatchplayPanel({
 
   const refresh = useCallback(async () => {
     try {
-      setStatus(await getBracketStatus(tripId))
+      setStatus(await getBracketStatus(tripId, kind))
       setError('')
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setLoading(false)
     }
-  }, [tripId])
+  }, [tripId, kind])
 
   useEffect(() => { refresh() }, [refresh])
 
@@ -46,7 +57,7 @@ export default function MatchplayPanel({
     setBusy(true)
     setError('')
     try {
-      setStatus(await createBracket(tripId))
+      setStatus(await createBracket(tripId, kind))
       setConfirming(false)
     } catch (e) {
       setError((e as Error).message)
@@ -66,16 +77,24 @@ export default function MatchplayPanel({
     )
   }
 
-  const playerCount = status?.playerCount ?? 0
-  const blocked     = bracketBlockedReason(playerCount)
-  const preview     = previewBracket(playerCount)
-  const exists      = status?.exists ?? false
-  const played      = status?.playedCount ?? 0
+  const entrantCount = status?.entrantCount ?? 0
+  // A broken pairing sheet is the more useful thing to say, so it wins over
+  // the generic "not enough entrants" message.
+  const blocked = pairs
+    ? pairsBlockedReason(formats, teams, players) ?? bracketBlockedReason(entrantCount)
+    : bracketBlockedReason(entrantCount)
+  const preview = previewBracket(entrantCount)
+  const exists  = status?.exists ?? false
+  const played  = status?.playedCount ?? 0
+  const entrantWord = (n: number) =>
+    pairs ? (n === 1 ? noun.one : noun.many) : (n === 1 ? 'player' : 'players')
 
   return (
     <section className={SECTION}>
       <div className="flex items-center justify-between mb-1">
-        <p className="text-[#C9A84C] text-xs tracking-widest uppercase">Matchplay</p>
+        <p className="text-[#C9A84C] text-xs tracking-widest uppercase">
+          {pairs ? 'Pairs Matchplay' : 'Matchplay'}
+        </p>
         {exists && (
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]" />
@@ -84,8 +103,8 @@ export default function MatchplayPanel({
         )}
       </div>
       <p className="text-white/40 text-xs mb-4">
-        A knockout draw. Top seeds are kept apart, and byes are handed out when
-        the player count isn&apos;t a power of two.
+        A knockout draw between {pairs ? noun.many : 'players'}. Top seeds are kept
+        apart, and byes are handed out when the count isn&apos;t a power of two.
       </p>
 
       {/* Current state */}
@@ -110,7 +129,7 @@ export default function MatchplayPanel({
           <p className="text-amber-400/90 text-sm leading-snug">{blocked}</p>
         ) : (
           <p className="text-white/60 text-sm leading-snug">
-            {playerCount} player{playerCount === 1 ? '' : 's'} registered — this would draw a
+            {entrantCount} {entrantWord(entrantCount)} — this would draw a
             bracket of {preview!.bracketSize}
             {preview!.byeCount > 0 && ` with ${preview!.byeCount} bye${preview!.byeCount === 1 ? '' : 's'}`}
             , {preview!.roundNames.join(' → ')}.
@@ -140,8 +159,9 @@ export default function MatchplayPanel({
             </>
           ) : (
             <p className="text-white/70 text-sm leading-snug mb-4">
-              This will regenerate the bracket from the {playerCount} players registered
-              now. Nothing has been played yet, so nothing is lost.
+              This will regenerate the bracket from the {entrantCount}{' '}
+              {entrantWord(entrantCount)} registered now. Nothing has been played
+              yet, so nothing is lost.
             </p>
           )}
           <div className="flex gap-2">
@@ -199,8 +219,9 @@ export default function MatchplayPanel({
 
       {exists && canEdit && (
         <p className="text-white/25 text-xs mt-3 leading-snug">
-          Players joining or leaving after the draw don&apos;t change it. Reshuffle when
-          you want the bracket to match the current roster.
+          {pairs ? 'Pairings changing' : 'Players joining or leaving'} after the draw
+          doesn&apos;t change it. Reshuffle when you want the bracket to match the
+          current {pairs ? 'team sheet' : 'roster'}.
         </p>
       )}
 

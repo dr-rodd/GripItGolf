@@ -12,7 +12,20 @@ import {
   type BracketPlayer,
 } from './matchplay'
 import { recordWinner, clearWinner } from './matchplayProgress'
+import {
+  playerEntrant, pairEntrant, type Entrant, type EntrantKind,
+} from './matchplayEntrants'
 
+/**
+ * A match as the rest of the app sees it: two sides, whoever they are.
+ *
+ * The `player_*` names are kept even for a pairs draw, where the sides are
+ * pairings. That is deliberate. lib/matchplay.ts and lib/matchplayProgress.ts
+ * are pure, heavily tested, and care only that a side has an id — renaming
+ * their fields to suit a second entrant kind would churn 485 passing checks
+ * to say the same thing. The mapping to and from the team columns happens at
+ * the edge of this module, in toStored/toRow, and nowhere else.
+ */
 export type StoredMatch = {
   id: string
   trip_id: string
@@ -29,6 +42,83 @@ export type StoredMatch = {
   result: string | null
   next_match_id: string | null
   next_slot: 'A' | 'B' | null
+  /** Which columns this row actually lives in. */
+  entrant_type: EntrantKind
+}
+
+/** The columns read back from the database, both sets. */
+export type MatchRow = Omit<StoredMatch, 'entrant_type'> & {
+  entrant_type: EntrantKind | null
+  team_a_id: string | null
+  team_b_id: string | null
+  winner_team_id: string | null
+}
+
+const MATCH_COLUMNS =
+  'id, trip_id, round_number, round_name, slot, player_a_id, player_b_id, ' +
+  'player_a_is_bye, player_b_is_bye, seed_a, seed_b, ' +
+  'winner_player_id, result, next_match_id, next_slot, ' +
+  'entrant_type, team_a_id, team_b_id, winner_team_id'
+
+/**
+ * Database row → the shape everything else works in.
+ *
+ * Rows written before pairs existed have no `entrant_type`, so a missing one
+ * reads as a singles draw rather than as an error.
+ *
+ * Exported only so scripts/test-entrants.ts can exercise the real mapping
+ * rather than a restatement of it. Getting the direction wrong would record a
+ * result against the wrong entrant, so it is worth testing the code that runs.
+ */
+export function toStored(row: MatchRow): StoredMatch {
+  const kind: EntrantKind = row.entrant_type === 'pair' ? 'pair' : 'player'
+  if (kind === 'player') {
+    const { team_a_id, team_b_id, winner_team_id, ...rest } = row
+    void team_a_id; void team_b_id; void winner_team_id
+    return { ...rest, entrant_type: 'player' }
+  }
+  const { team_a_id, team_b_id, winner_team_id, ...rest } = row
+  return {
+    ...rest,
+    entrant_type: 'pair',
+    player_a_id: team_a_id,
+    player_b_id: team_b_id,
+    winner_player_id: winner_team_id,
+  }
+}
+
+/** The reverse, for every write. Exported for the same reason as toStored. */
+export function toRow(m: StoredMatch): Record<string, unknown> {
+  const base = {
+    id: m.id,
+    trip_id: m.trip_id,
+    round_number: m.round_number,
+    round_name: m.round_name,
+    slot: m.slot,
+    player_a_is_bye: m.player_a_is_bye,
+    player_b_is_bye: m.player_b_is_bye,
+    seed_a: m.seed_a,
+    seed_b: m.seed_b,
+    result: m.result,
+    next_match_id: m.next_match_id,
+    next_slot: m.next_slot,
+    entrant_type: m.entrant_type,
+  }
+  // The database refuses a row that fills both sets, so the unused set is
+  // written as NULL rather than left off — an update has to clear it.
+  return m.entrant_type === 'pair'
+    ? {
+        ...base,
+        player_a_id: null, player_b_id: null, winner_player_id: null,
+        team_a_id: m.player_a_id, team_b_id: m.player_b_id,
+        winner_team_id: m.winner_player_id,
+      }
+    : {
+        ...base,
+        player_a_id: m.player_a_id, player_b_id: m.player_b_id,
+        winner_player_id: m.winner_player_id,
+        team_a_id: null, team_b_id: null, winner_team_id: null,
+      }
 }
 
 export type BracketStatus = {
@@ -38,50 +128,73 @@ export type BracketStatus = {
   playedCount: number
   byeCount: number
   roundNames: string[]
-  /** Players on the roster right now — not necessarily what the bracket used. */
-  playerCount: number
+  /**
+   * Entrants available right now — players in a singles draw, pairings in a
+   * pairs one. Not necessarily what the bracket was drawn from.
+   */
+  entrantCount: number
+  /** What this draw is between. */
+  kind: EntrantKind
 }
 
 /**
- * Players eligible for a bracket, in registration order.
+ * Everyone in the draw, whichever kind of draw it is.
  *
  * Everyone on the trip roster counts, whether or not they have claimed their
  * own slot — an organiser-entered player is still expected to play. Composite
  * players are synthetic scorecards, not people, so they are excluded.
+ *
+ * A pairs draw seats teams, so an empty team would take a place in the
+ * bracket and then have nobody to play it. They are dropped here rather than
+ * seeded and dealt with later.
  */
-export async function fetchBracketPlayers(tripId: string): Promise<BracketPlayer[]> {
-  const { data, error } = await supabase
+export async function fetchEntrants(tripId: string, kind: EntrantKind): Promise<Entrant[]> {
+  const { data: players, error: playersError } = await supabase
     .from('players')
-    .select('id, name, created_at')
+    .select('id, name, handicap, team_id, created_at')
     .eq('trip_id', tripId)
     .eq('is_composite', false)
     .order('created_at')
 
-  if (error) throw new MatchplayError('Could not read the player list. Please try again.')
-  // Seeding rule lives in lib/matchplay.ts — swap it there, not here.
-  return sortPlayersBySeed(data ?? []).map(p => ({ id: p.id, name: p.name }))
+  if (playersError) throw new MatchplayError('Could not read the player list. Please try again.')
+  const roster = players ?? []
+
+  if (kind === 'player') {
+    return sortPlayersBySeed(roster).map(playerEntrant)
+  }
+
+  const { data: teams, error: teamsError } = await supabase
+    .from('teams')
+    .select('id, name, created_at')
+    .eq('trip_id', tripId)
+    .order('created_at')
+
+  if (teamsError) throw new MatchplayError('Could not read the pairings. Please try again.')
+
+  return sortPlayersBySeed(teams ?? [])
+    .map(t => pairEntrant(t, roster.filter(p => p.team_id === t.id)))
+    .filter(e => e.memberNames.length > 0)
 }
 
 export async function loadBracket(tripId: string): Promise<StoredMatch[]> {
   const { data, error } = await supabase
     .from('matchplay_matches')
-    .select(
-      'id, trip_id, round_number, round_name, slot, player_a_id, player_b_id, ' +
-      'player_a_is_bye, player_b_is_bye, seed_a, seed_b, ' +
-      'winner_player_id, result, next_match_id, next_slot'
-    )
+    .select(MATCH_COLUMNS)
     .eq('trip_id', tripId)
     .order('round_number')
     .order('slot')
 
   if (error) throw new MatchplayError('Could not load the bracket. Please try again.')
-  return (data ?? []) as unknown as StoredMatch[]
+  return ((data ?? []) as unknown as MatchRow[]).map(toStored)
 }
 
-export async function getBracketStatus(tripId: string): Promise<BracketStatus> {
-  const [matches, players] = await Promise.all([
+export async function getBracketStatus(
+  tripId: string,
+  kind: EntrantKind = 'player',
+): Promise<BracketStatus> {
+  const [matches, entrants] = await Promise.all([
     loadBracket(tripId),
-    fetchBracketPlayers(tripId),
+    fetchEntrants(tripId, kind),
   ])
 
   const byes = matches.filter(m => m.player_a_is_bye || m.player_b_is_bye)
@@ -96,7 +209,8 @@ export async function getBracketStatus(tripId: string): Promise<BracketStatus> {
     playedCount: played.length,
     byeCount: byes.length,
     roundNames: [...new Set(matches.map(m => m.round_name))],
-    playerCount: players.length,
+    entrantCount: entrants.length,
+    kind,
   }
 }
 
@@ -119,14 +233,18 @@ export async function deleteBracket(tripId: string): Promise<void> {
  * always reflects who is registered at the moment the organiser clicks — not
  * whenever the page happened to load.
  */
-export async function createBracket(tripId: string): Promise<BracketStatus> {
-  const players = await fetchBracketPlayers(tripId)
+export async function createBracket(
+  tripId: string,
+  kind: EntrantKind = 'player',
+): Promise<BracketStatus> {
+  const entrants = await fetchEntrants(tripId, kind)
 
-  const blocked = bracketBlockedReason(players.length)
+  const blocked = bracketBlockedReason(entrants.length)
   if (blocked) throw new MatchplayError(blocked)
 
-  const matches = generateBracket(players)
+  const matches = generateBracket(entrants.map(e => ({ id: e.id, name: e.name })))
   const rows = rowsInInsertOrder(bracketToRows(tripId, matches))
+    .map(r => toRow({ ...r, entrant_type: kind } as StoredMatch))
 
   await deleteBracket(tripId)
 
@@ -138,7 +256,7 @@ export async function createBracket(tripId: string): Promise<BracketStatus> {
     throw new MatchplayError('Could not save the bracket. Please try again.')
   }
 
-  return getBracketStatus(tripId)
+  return getBracketStatus(tripId, kind)
 }
 
 /**
@@ -169,7 +287,7 @@ export async function persistWinner(
 
   const { error } = await supabase
     .from('matchplay_matches')
-    .upsert(changed, { onConflict: 'id' })
+    .upsert(changed.map(toRow), { onConflict: 'id' })
 
   if (error) {
     throw new MatchplayError('Could not save that result. Please try again.')

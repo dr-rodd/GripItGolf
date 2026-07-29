@@ -11,8 +11,9 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import MatchplayBracket, {
-  type BracketMatchRow, type BracketPlayerRow,
+  type BracketMatchRow, type BracketEntrantRow,
 } from '../app/trip/[tripCode]/matchplay/MatchplayBracket'
+import { playerEntrant, pairEntrant } from '../lib/matchplayEntrants'
 import { generateBracket, bracketToRows, bracketShape } from '../lib/matchplay'
 import { isDecidable } from '../lib/matchplayProgress'
 
@@ -31,25 +32,73 @@ function eq(got: unknown, want: unknown, label: string) {
 const section = (n: string) => console.log(`\n${n}`)
 
 function build(count: number) {
-  const players: BracketPlayerRow[] = Array.from({ length: count }, (_, i) => ({
-    id: `p${i + 1}`,
-    name: `Player${i + 1}`,
-    handicap: i + 1,
-  }))
+  const entrants: BracketEntrantRow[] = Array.from({ length: count }, (_, i) =>
+    playerEntrant({ id: `p${i + 1}`, name: `Player${i + 1}`, handicap: i + 1 }))
   let id = 0
   const generated = generateBracket(
-    players.map(p => ({ id: p.id, name: p.name })),
+    entrants.map(e => ({ id: e.id, name: e.name })),
     { makeId: () => `m${++id}` }
   )
   const matches = bracketToRows('trip', generated) as unknown as BracketMatchRow[]
-  return { players, matches }
+  return { players: entrants, matches }
 }
 
 function render(count: number) {
   const { players, matches } = build(count)
   return renderToStaticMarkup(
-    React.createElement(MatchplayBracket, { matches, players })
+    React.createElement(MatchplayBracket, { matches, entrants: players })
   )
+}
+
+/** The same, but between pairings of two. */
+function buildPairs(pairCount: number) {
+  const entrants: BracketEntrantRow[] = Array.from({ length: pairCount }, (_, i) =>
+    pairEntrant(
+      { id: `t${i + 1}`, name: `Team ${String.fromCharCode(65 + i)}` },
+      [
+        { id: `p${i}a`, name: `Alpha${i + 1} Surname`, handicap: i + 1 },
+        { id: `p${i}b`, name: `Beta${i + 1} Surname`, handicap: 20 - i },
+      ],
+    ))
+  let id = 0
+  const generated = generateBracket(
+    entrants.map(e => ({ id: e.id, name: e.name })),
+    { makeId: () => `mp${++id}` }
+  )
+  const matches = bracketToRows('trip', generated) as unknown as BracketMatchRow[]
+  return { entrants, matches }
+}
+
+function renderPairs(pairCount: number) {
+  const { entrants, matches } = buildPairs(pairCount)
+  return renderToStaticMarkup(
+    React.createElement(MatchplayBracket, { matches, entrants })
+  )
+}
+
+// ─── A pairs draw shows the players, not the pairing ───────────
+
+section('Pairings are shown as their players')
+{
+  const html = renderPairs(4)
+
+  // "In the matchplay leaderboard no need to name the pairings. Just put the
+  // players names beside each other."
+  ok(html.includes('Alpha1 &amp; Beta1'), 'both first names appear, side by side')
+  ok(html.includes('Alpha2 &amp; Beta2'), 'for every pairing in the draw')
+  ok(!html.includes('Team A'), 'and the team name is not used')
+  ok(!html.includes('Team B'), 'for any of them')
+
+  // Surnames do not fit a tile, and never did for singles either
+  ok(!html.includes('Surname'), 'surnames are dropped, as they are for players')
+
+  // The combined handicap is what a pairing plays off
+  ok(html.includes('>21<'), 'the pairing shows its combined handicap')
+
+  // A singles draw is unaffected
+  const singles = render(4)
+  ok(singles.includes('>Player1<'), 'a singles draw still shows one name')
+  ok(!singles.includes('&amp;'), 'with nothing joined to it')
 }
 
 // ─── Renders at every bracket size ─────────────────────────────
@@ -143,7 +192,7 @@ section('Won matches show green and the margin')
       : m
   )
   const html = renderToStaticMarkup(
-    React.createElement(MatchplayBracket, { matches: decided, players })
+    React.createElement(MatchplayBracket, { matches: decided, entrants: players })
   )
 
   ok(html.includes('3&amp;2') || html.includes('3&2'), 'the margin is shown on the tile')
@@ -153,7 +202,7 @@ section('Won matches show green and the margin')
 
   // Undecided matches stay neutral
   const plain = renderToStaticMarkup(
-    React.createElement(MatchplayBracket, { matches, players })
+    React.createElement(MatchplayBracket, { matches, entrants: players })
   )
   ok(!plain.includes('border-emerald-500/50'), 'an unplayed tile is not outlined green')
   ok(!plain.includes('3&amp;2'), 'and carries no margin')
@@ -161,7 +210,7 @@ section('Won matches show green and the margin')
   // A bye has a winner but was never played, so it must not read as won
   const { players: sixP, matches: sixM } = build(6)
   const byeHtml = renderToStaticMarkup(
-    React.createElement(MatchplayBracket, { matches: sixM, players: sixP })
+    React.createElement(MatchplayBracket, { matches: sixM, entrants: sixP })
   )
   const byeMatch = sixM.find(m => m.player_b_is_bye)!
   ok(byeMatch.winner_player_id !== null, 'the bye does carry a winner in the data')
@@ -190,7 +239,7 @@ section('A won Final is gold and glowing, not green')
     ? { ...m, winner_player_id: champion, result: '2 up' } : m)
 
   const html = renderToStaticMarkup(
-    React.createElement(MatchplayBracket, { matches: played, players })
+    React.createElement(MatchplayBracket, { matches: played, entrants: players })
   )
 
   ok(html.includes('rgba(201,168,76'), 'the Final carries a gold glow')
@@ -205,7 +254,7 @@ section('A won Final is gold and glowing, not green')
   const unfinished = played.map(m => m.id === finalMatch.id
     ? { ...m, winner_player_id: null, result: null } : m)
   const plainHtml = renderToStaticMarkup(
-    React.createElement(MatchplayBracket, { matches: unfinished, players })
+    React.createElement(MatchplayBracket, { matches: unfinished, entrants: players })
   )
   ok(!plainHtml.includes('rgba(201,168,76'), 'an unwon Final does not glow')
 
