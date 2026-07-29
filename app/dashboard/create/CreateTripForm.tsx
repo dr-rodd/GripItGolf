@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import BackButton from '@/app/components/BackButton'
 import DateField from '@/app/components/DateField'
 import { MAX_ROUNDS, roundCountError } from '@/lib/tripLimits'
+import { DEFAULT_INDIVIDUAL } from '@/lib/formats'
 import Toggle from '@/app/components/Toggle'
 import {
   MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError,
@@ -37,6 +38,24 @@ const STEP_LABELS = ['Trip details', 'Rounds', 'Teams', 'Players']
 
 // Presets cover the common cases; the + button goes beyond them.
 const ROUND_PRESETS = Array.from({ length: MAX_ROUNDS }, (_, i) => i + 1)
+
+/**
+ * What actually went wrong, in words.
+ *
+ * "Failed to create trip. Please try again." is useless when the real cause is
+ * a column that has not been added yet — trying again will fail identically.
+ * Supabase's message names the column, so it is worth showing.
+ */
+function describeError(err: unknown): string {
+  const e = err as { message?: string; hint?: string; details?: string } | null
+  const msg = e?.message?.trim()
+  if (!msg) return 'Please try again.'
+  // A missing column means a migration has not been run
+  if (/column|schema cache/i.test(msg)) {
+    return `${msg} — a database update may not have been applied yet.`
+  }
+  return msg
+}
 
 function generateCode(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -189,26 +208,32 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
     }
 
     // 1. Trip
+    const tripRow: Record<string, unknown> = {
+      name: tripName.trim(),
+      slug: code.toLowerCase(),
+      trip_code: code,
+      status: 'upcoming',
+      start_date: startDate || null,
+      end_date: endDate || null,
+      formats: {
+        individual: { ...DEFAULT_INDIVIDUAL },
+        matchplay: false,
+        teams: useTeams,
+      },
+      num_teams: useTeams ? teams.length : 2,
+    }
+    // Only sent when a passcode was actually set, so a database that has not
+    // had that column added yet can still create ordinary trips.
+    if (passcodeHash) tripRow.settings_passcode_hash = passcodeHash
+
     const { data: trip, error: tripErr } = await supabase
       .from('trips')
-      .insert({
-        name: tripName.trim(),
-        slug: code.toLowerCase(),
-        trip_code: code,
-        status: 'upcoming',
-        start_date: startDate || null,
-        end_date: endDate || null,
-        formats: useTeams
-          ? { individual_stableford: true, teams: true }
-          : { individual_stableford: true },
-        num_teams: useTeams ? teams.length : 2,
-        settings_passcode_hash: passcodeHash,
-      })
+      .insert(tripRow)
       .select('id')
       .single()
 
     if (tripErr || !trip) {
-      setError('Failed to create trip. Please try again.')
+      setError(`Could not create the trip. ${describeError(tripErr)}`)
       setSubmitting(false)
       return
     }
@@ -224,7 +249,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
         .select('id')
 
       if (teamsErr || !inserted) {
-        setError('Failed to create teams. Please try again.')
+        setError(`Trip created, but the teams failed. ${describeError(teamsErr)}`)
         setSubmitting(false)
         return
       }
@@ -254,7 +279,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
         .select('id, handicap')
 
       if (playersErr || !insertedPlayers) {
-        setError('Failed to add players. Please try again.')
+        setError(`Trip created, but the players failed. ${describeError(playersErr)}`)
         setSubmitting(false)
         return
       }
@@ -276,7 +301,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
       .select('id')
 
     if (roundsErr || !insertedRounds) {
-      setError('Failed to create rounds. Please try again.')
+      setError(`Trip created, but the rounds failed. ${describeError(roundsErr)}`)
       setSubmitting(false)
       return
     }
@@ -294,7 +319,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
       )
       const { error: hcpErr } = await supabase.from('round_handicaps').insert(hcpRows)
       if (hcpErr) {
-        setError('Failed to set player handicaps. Please try again.')
+        setError(`Trip created, but the handicaps failed. ${describeError(hcpErr)}`)
         setSubmitting(false)
         return
       }

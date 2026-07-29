@@ -260,8 +260,14 @@ async function main() {
       'app/dashboard/create/CreateTripForm.tsx', 'utf-8')
     ok(source.includes('Lock trip settings'), 'the option is on the form')
     ok(source.includes('label="Lock trip settings"'), 'as a labelled switch')
-    ok(source.includes('settings_passcode_hash: passcodeHash'),
+    ok(source.includes('tripRow.settings_passcode_hash = passcodeHash'),
       'and the hash is stored on the trip')
+    // Sent only when a passcode exists: a database that has not had that
+    // column added yet must still be able to create ordinary trips.
+    ok(source.includes('if (passcodeHash) tripRow.settings_passcode_hash'),
+      'but only when one was actually set')
+    ok(source.includes('describeError'),
+      'and a failed insert reports what the database actually said')
     ok(source.includes('hashPasscode(passcode)'),
       'hashed on the device, so the code itself is never sent')
     ok(source.includes('This can only be set now'),
