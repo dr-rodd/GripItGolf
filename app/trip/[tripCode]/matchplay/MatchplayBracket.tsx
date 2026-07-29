@@ -197,7 +197,7 @@ export default function MatchplayBracket({
           onClick={() => animateTo(leftIndex - 1)}
           disabled={atStart}
           aria-label="Previous round"
-          className="w-11 h-11 flex-shrink-0 flex items-center justify-center rounded-sm border border-[#1e3d28] text-white/50 disabled:opacity-25 enabled:hover:text-white enabled:hover:border-[#C9A84C]/40 transition-colors"
+          className="w-11 h-11 flex-shrink-0 flex items-center justify-center rounded-xl border border-white/15 bg-white/[0.04] text-white/60 disabled:opacity-25 enabled:hover:text-white enabled:hover:border-white/30 enabled:hover:bg-white/[0.08] transition-colors"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M15 18l-6-6 6-6" />
@@ -212,7 +212,7 @@ export default function MatchplayBracket({
           onClick={() => animateTo(leftIndex + 1)}
           disabled={atEnd}
           aria-label="Next round"
-          className="w-11 h-11 flex-shrink-0 flex items-center justify-center rounded-sm border border-[#1e3d28] text-white/50 disabled:opacity-25 enabled:hover:text-white enabled:hover:border-[#C9A84C]/40 transition-colors"
+          className="w-11 h-11 flex-shrink-0 flex items-center justify-center rounded-xl border border-white/15 bg-white/[0.04] text-white/60 disabled:opacity-25 enabled:hover:text-white enabled:hover:border-white/30 enabled:hover:bg-white/[0.08] transition-colors"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M9 18l6-6-6-6" />
@@ -432,7 +432,7 @@ function MatchTile({
       }}
     >
       <div
-        className={`relative w-full h-full rounded-sm border overflow-hidden ${
+        className={`relative w-full h-full rounded-lg border overflow-hidden ${
           isChampion
             ? 'border-[#C9A84C] bg-[#C9A84C]/[0.10]'
             : decided

@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
-import Link from 'next/link'
 import PlayersClient from './PlayersClient'
+import BackButton from '@/app/components/BackButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,9 +19,7 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
     return (
       <main className="min-h-dvh flex flex-col items-center justify-center bg-[#0a1a0e] px-6">
         <p className="font-[family-name:var(--font-playfair)] text-2xl text-white mb-3">Trip not found</p>
-        <Link href="/" className="text-[#C9A84C] text-sm tracking-wide hover:text-[#d4b35a] transition-colors">
-          ← Back to home
-        </Link>
+        <BackButton href="/" label="Home" />
       </main>
     )
   }
@@ -64,9 +62,7 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
         />
 
         <div className="mt-12">
-          <Link href={`/trip/${tripCode}`} className="text-white/25 text-xs tracking-wide hover:text-white/50 transition-colors">
-            ← Back to trip
-          </Link>
+          <BackButton href={`/trip/${tripCode}`} label="Trip" />
         </div>
 
       </div>

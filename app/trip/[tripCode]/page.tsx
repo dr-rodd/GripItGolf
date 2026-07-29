@@ -4,8 +4,21 @@ import { enabledSummary, parseFormats } from '@/lib/formats'
 import { isLocked } from '@/lib/passcode'
 import TripCountdown from './TripCountdown'
 import GreenDot from '@/app/components/GreenDot'
+import BackButton from '@/app/components/BackButton'
 
 export const dynamic = 'force-dynamic'
+
+/** "Friday 17 April" — the day matters as much as the date on a golf trip. */
+function formatDay(d: string | null | undefined) {
+  if (!d) return null
+  // Parsed as a plain date, not a moment in time: a round on the 17th is on
+  // the 17th wherever you happen to be reading this.
+  const [y, m, day] = d.split('-').map(Number)
+  if (!y || !m || !day) return null
+  return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString('en-IE', {
+    weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC',
+  })
+}
 
 function formatDate(d: string | null) {
   if (!d) return null
@@ -39,9 +52,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       <main className="min-h-dvh flex flex-col items-center justify-center bg-[#0a1a0e] px-6">
         <p className="font-[family-name:var(--font-playfair)] text-2xl text-white mb-3">Trip not found</p>
         <p className="text-white/40 text-sm mb-8">Check the code and try again.</p>
-        <Link href="/" className="text-[#C9A84C] text-sm tracking-wide hover:text-[#d4b35a] transition-colors">
-          ← Back to home
-        </Link>
+        <BackButton href="/" label="Home" />
       </main>
     )
   }
@@ -49,7 +60,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   const [roundsResult, playersResult] = await Promise.all([
     supabase
       .from('rounds')
-      .select('round_number, course_id')
+      .select('round_number, course_id, scheduled_date')
       .eq('trip_id', trip.id)
       .order('round_number'),
     supabase
@@ -73,9 +84,18 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   if (coursesError) console.error('TripPage courses query failed:', coursesError)
 
   const courseMap = Object.fromEntries((courses ?? []).map(c => [c.id, c.name]))
-  const courseList = rounds
-    .map(r => ({ round: r.round_number, name: courseMap[r.course_id] }))
-    .filter(c => Boolean(c.name)) as { round: number; name: string }[]
+
+  // Grouped by the day they are played, so a two-round day reads as one day
+  // with two courses rather than as two unrelated entries.
+  const days: { key: string; label: string | null; courses: string[] }[] = []
+  for (const r of rounds) {
+    const name = courseMap[r.course_id]
+    if (!name) continue
+    const key = r.scheduled_date ?? `round-${r.round_number}`
+    const existing = days.find(d => d.key === key)
+    if (existing) existing.courses.push(name)
+    else days.push({ key, label: formatDay(r.scheduled_date), courses: [name] })
+  }
 
   const dateRange  = [formatDate(trip.start_date), formatDate(trip.end_date)].filter(Boolean).join(' – ')
 
@@ -85,6 +105,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   const confirmedCount = players.filter(p => p.claimed === true).length
   const pendingCount   = players.length - confirmedCount
 
+  const everyoneIn = players.length > 0 && pendingCount === 0
   const settingsLocked = isLocked(trip.settings_passcode_hash)
   const isDraft = (trip.setup_status ?? 'live') === 'draft'
   const formatLine = enabledSummary(parseFormats(trip.formats)).join(' · ')
@@ -103,43 +124,47 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
     <main className="min-h-dvh bg-[#0a1a0e]">
 
       {/* ── Hero ── */}
-      <section className="min-h-dvh flex flex-col items-center justify-center px-6 py-16">
+      <section className="flex flex-col items-center px-6 pt-8 pb-12">
         <div className="w-full max-w-sm flex flex-col items-center text-center">
 
-          {/* The mark, at the top of every trip */}
-          <GreenDot size={16} className="mb-5" />
+          {/* The mark, at the top of every trip. Its glow is drawn outside the
+              dot, so the negative margin pulls the visible edge up to where
+              the spacing looks right rather than where the box ends. */}
+          <GreenDot size={16} className="-mt-1 mb-2" />
 
           {/* Trip name — the reason you opened the page, so it leads.
               Scales with the viewport and wraps rather than shrinking to fit. */}
-          <h1 className="font-[family-name:var(--font-playfair)] text-white font-bold leading-[1.05] tracking-tight text-[clamp(2.25rem,11vw,3.5rem)] mb-4 text-balance">
+          <h1 className="font-[family-name:var(--font-playfair)] text-white font-bold leading-[1.05] tracking-tight text-[clamp(2.25rem,11vw,3.5rem)] text-balance">
             {trip.name}
           </h1>
 
           {/* Dates */}
           {dateRange && (
-            <p className="text-white/60 text-sm tracking-[0.15em] mb-6">{dateRange}</p>
+            <p className="text-white/50 text-xs tracking-[0.2em] uppercase mt-3">{dateRange}</p>
           )}
 
-          {/* Courses — a trip is its venues, so they are listed rather than
-              crammed into one muted line */}
-          {courseList.length > 0 && (
-            <div className="w-full mb-6">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="h-px flex-1 bg-white/10" />
-                <span className="text-white/25 text-[10px] tracking-[0.3em] uppercase">
-                  {courseList.length === 1 ? 'The Course' : 'The Courses'}
-                </span>
-                <div className="h-px flex-1 bg-white/10" />
-              </div>
-              <ul className="flex flex-col gap-1.5">
-                {courseList.map((c, i) => (
-                  <li key={i} className="flex items-baseline justify-center gap-2.5">
-                    <span className="text-white/20 text-[10px] tabular-nums flex-shrink-0">
-                      {c.round}
-                    </span>
-                    <span className="font-[family-name:var(--font-playfair)] text-white/90 text-lg leading-snug">
-                      {c.name}
-                    </span>
+          {/* The schedule — each day, and what is played on it */}
+          {days.length > 0 && (
+            <div className="w-full mt-7">
+              <ul className="flex flex-col gap-2">
+                {days.map((d, i) => (
+                  <li
+                    key={d.key}
+                    className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"
+                  >
+                    <p className="text-[#C9A84C]/60 text-[10px] tracking-[0.25em] uppercase">
+                      {d.label ?? `Round ${i + 1}`}
+                    </p>
+                    <div className="mt-1.5 flex flex-col gap-0.5">
+                      {d.courses.map((name, j) => (
+                        <p
+                          key={j}
+                          className="font-[family-name:var(--font-playfair)] text-white text-lg leading-tight"
+                        >
+                          {name}
+                        </p>
+                      ))}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -148,12 +173,12 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
           {/* Format line */}
           {formatLine && (
-            <p className="text-[#C9A84C]/50 text-[10px] tracking-[0.25em] uppercase mb-8">{formatLine}</p>
+            <p className="text-[#C9A84C]/40 text-[10px] tracking-[0.25em] uppercase mt-6">{formatLine}</p>
           )}
 
           {/* Setup badge */}
           {isDraft && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-[#C9A84C]/10 border border-[#C9A84C]/30 rounded-full mb-6">
+            <div className="flex items-center gap-2 px-4 py-2 bg-[#C9A84C]/10 border border-[#C9A84C]/30 rounded-full mt-6">
               <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C]" />
               <span className="text-[#C9A84C] text-[10px] tracking-[0.25em] uppercase">In Setup</span>
             </div>
@@ -163,12 +188,18 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
           <TripCountdown target={trip.start_date ?? null}>
             <nav className="flex flex-col gap-3 w-full max-w-xs mx-auto">
 
-              {/* Join Trip — claim a slot or add yourself */}
+              {/* Join Trip. Gold while someone is still expected; once the
+                  whole field is in there is nothing left to prompt, so it
+                  settles back to a plain button. */}
               <Link
                 href={`/trip/${tripCode}/players`}
-                className="w-full py-[18px] border-2 border-[#C9A84C] text-[#C9A84C] rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:bg-[#C9A84C]/10 transition-colors"
+                className={`w-full py-[18px] border-2 rounded-xl text-sm tracking-[0.25em] uppercase text-center transition-colors ${
+                  everyoneIn
+                    ? 'border-white/15 text-white/50 hover:border-white/30 hover:text-white/70'
+                    : 'border-[#C9A84C] text-[#C9A84C] hover:bg-[#C9A84C]/10'
+                }`}
               >
-                Join Trip
+                {everyoneIn ? 'Players' : 'Join Trip'}
               </Link>
 
               {isDraft ? (
@@ -303,10 +334,8 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       )}
 
       {/* ── Footer ── */}
-      <div className="px-6 pb-10 text-center">
-        <Link href="/" className="text-white/20 text-xs tracking-wide hover:text-white/40 transition-colors">
-          ← Green Dot Golf
-        </Link>
+      <div className="px-6 pb-10 flex justify-center">
+        <BackButton href="/" label="Green Dot Golf" />
       </div>
 
     </main>

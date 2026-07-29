@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import Link from 'next/link'
+import BackButton from '@/app/components/BackButton'
 import { parseFormats } from '@/lib/formats'
 import { parseTeamScoring } from '@/lib/teamScoring'
 import TripSetupClient from './TripSetupClient'
@@ -24,9 +24,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       <main className="min-h-dvh flex flex-col items-center justify-center bg-[#0a1a0e] px-6">
         <p className="font-[family-name:var(--font-playfair)] text-2xl text-white mb-3">Trip not found</p>
         <p className="text-white/40 text-sm mb-8">Check the code and try again.</p>
-        <Link href="/" className="text-[#C9A84C] text-sm tracking-wide hover:text-[#d4b35a] transition-colors">
-          ← Back to home
-        </Link>
+        <BackButton href="/" label="Home" />
       </main>
     )
   }

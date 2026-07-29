@@ -10,6 +10,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import fs from 'fs'
 import GreenDot from '../app/components/GreenDot'
+import BackButton from '../app/components/BackButton'
 import Home from '../app/page'
 import { SITE } from '../config/site'
 
@@ -121,14 +122,94 @@ section('Trip hub')
   ok(src.includes('clamp(2.25rem,11vw,3.5rem)'), 'the trip name scales up large')
   ok(src.includes('text-balance'), 'and wraps evenly rather than orphaning a word')
 
-  // Courses are listed, not squeezed into one muted line
-  ok(src.includes('courseList'), 'courses are held as a list')
-  ok(!src.includes("join(' · ')\n") || !src.includes('courseNames'),
-    'not flattened into a single string')
-  ok(src.includes('The Course'), 'the list is captioned')
-  ok(src.includes('text-lg'), 'and set large enough to read at a glance')
+  // The schedule reads as days, not as a flat list of rounds: two rounds on
+  // the same date are one card with two courses under it.
+  ok(src.includes('function formatDay'), 'there is a day formatter')
+  ok(src.includes("weekday: 'long'"), 'which names the weekday, not just the date')
+  ok(src.includes("timeZone: 'UTC'"),
+    'and reads the date as a plain date, so the 17th is the 17th anywhere')
+  ok(/existing\.courses\.push/.test(src),
+    'rounds sharing a date are gathered under one day')
+  ok(src.includes('d.courses.map'), 'and every course on that day is listed')
+  ok(src.includes('text-lg'), 'set large enough to read at a glance')
 
-  ok(src.includes('← Green Dot Golf'), 'the footer carries the new name')
+  // Not squeezed into one muted line the way it was
+  ok(!src.includes('courseList'), 'the old flat course list is gone')
+  ok(!src.includes('The Course'), 'and its caption with it')
+
+  // The hero no longer fills the screen before anything useful appears
+  ok(src.includes('pt-8'), 'the hero starts near the top')
+  ok(!/section className="min-h-dvh/.test(src), 'rather than centring in a full screen')
+
+  ok(src.includes('label="Green Dot Golf"'), 'the footer carries the new name')
+}
+
+section('The players button stops asking once everyone is in')
+{
+  const src = read('app/trip/[tripCode]/page.tsx')
+
+  ok(src.includes('everyoneIn'), 'the page knows when the field is complete')
+  ok(/const everyoneIn = players\.length > 0 && pendingCount === 0/.test(src),
+    'which means at least one player and none pending — an empty trip is not complete')
+
+  // Gold is a prompt. With nobody left to join there is nothing to prompt.
+  const btn = src.slice(src.indexOf('everyoneIn'), src.indexOf('{isDraft ?'))
+  ok(/everyoneIn[\s\S]*?'border-white\/15/.test(btn), 'complete: the button goes quiet')
+  ok(/'border-\[#C9A84C\] text-\[#C9A84C\]/.test(btn), 'incomplete: it is still gold')
+  ok(btn.includes("everyoneIn ? 'Players' : 'Join Trip'"),
+    'and it stops saying Join Trip once there is nobody left to join')
+}
+
+// ─── Back controls ─────────────────────────────────────────────
+
+section('There is one way back')
+{
+  const bare  = renderToStaticMarkup(React.createElement(BackButton, { href: '/' }))
+  const named = renderToStaticMarkup(React.createElement(BackButton, { href: '/trip/ABC123', label: 'Trip' }))
+
+  // The box, not a bare chevron or a tiny text link
+  ok(bare.includes('rounded-xl'), 'it is a rounded box')
+  // Named exactly: a bare `includes('border')` once passed on a borderless
+  // pill, because the hover class still had the word in it.
+  ok(bare.includes('border border-white/15'), 'with a border at rest, so it reads as a control')
+  ok(bare.includes('bg-white/[0.04]'), 'and a fill faint enough not to compete with the page')
+  ok(bare.includes('h-11'), 'and it is 44px tall — a real touch target')
+  ok(bare.includes('w-11'), 'square when it is only an arrow')
+  ok(bare.includes('<svg'), 'carrying a back arrow')
+
+  // A labelled one widens rather than shrinking the text into the square
+  ok(named.includes('px-4'), 'a labelled one is padded out instead')
+  ok(!named.includes('w-11'), 'and is no longer square')
+  ok(named.includes('>Trip<'), 'showing the word')
+  ok(named.includes('/trip/ABC123'), 'and linking where it says')
+
+  // The arrow alone has no text, so it needs a name read out; the labelled
+  // one already has one and would otherwise be announced twice.
+  ok(bare.includes('aria-label="Back"'), 'the bare arrow is named for screen readers')
+  ok(!named.includes('aria-label'), 'the labelled one is not, since its text already names it')
+
+  // Both forms exist because some places navigate and some just close
+  const button = renderToStaticMarkup(React.createElement(BackButton, { onClick: () => {} }))
+  ok(button.includes('<button'), 'it can be a button when there is nowhere to link to')
+  ok(button.includes('type="button"'), 'and never submits a form it happens to sit in')
+  ok(bare.includes('<a'), 'and a link when there is')
+
+  // Nothing anywhere still rolls its own
+  const pages = [
+    'app/page.tsx', 'app/join/JoinForm.tsx',
+    'app/trip/[tripCode]/page.tsx', 'app/trip/[tripCode]/players/page.tsx',
+    'app/trip/[tripCode]/setup/page.tsx', 'app/trip/[tripCode]/setup/PasscodeGate.tsx',
+    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
+  ]
+  for (const f of pages) {
+    const s = read(f)
+    ok(!/←\s*(Back|Green Dot)/.test(s), `${f.split('/').pop()} has no bare ← text link`)
+  }
+
+  // The bracket's round nav is the same box language
+  const bracket = read('app/trip/[tripCode]/matchplay/MatchplayBracket.tsx')
+  ok(!bracket.includes('rounded-sm'), 'the bracket round nav is no longer a sharp box')
+  ok(bracket.includes('rounded-xl border border-white/15'), 'it matches the rest')
 }
 
 // ─── Everywhere else ───────────────────────────────────────────

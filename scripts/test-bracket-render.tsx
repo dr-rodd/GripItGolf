@@ -268,7 +268,7 @@ section('Structure')
   // At first paint the visible pair is rounds 1 and 2, plus one lookahead
   // column that is rendered faded and clipped.
   const html = render(16)
-  const tiles = (html.match(/relative w-full h-full rounded-sm border/g) ?? []).length
+  const tiles = (html.match(/relative w-full h-full rounded-lg border/g) ?? []).length
   ok(tiles >= 8 + 4, '16 players: at least the first two rounds are laid out')
 
   // Connectors are drawn as SVG paths

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import GreenDot from '@/app/components/GreenDot'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import Link from 'next/link'
+import BackButton from '@/app/components/BackButton'
 
 export default function JoinForm({ initialCode }: { initialCode: string }) {
   const [code, setCode] = useState(initialCode.toUpperCase())
@@ -76,9 +76,7 @@ export default function JoinForm({ initialCode }: { initialCode: string }) {
         </form>
 
         <div className="mt-10">
-          <Link href="/" className="text-white/25 text-xs tracking-wide hover:text-white/50 transition-colors">
-            ← Back to home
-          </Link>
+          <BackButton href="/" label="Home" />
         </div>
 
       </div>

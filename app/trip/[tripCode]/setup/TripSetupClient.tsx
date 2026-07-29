@@ -16,6 +16,7 @@ import {
 } from '@/lib/teamScoring'
 import MatchplayPanel from './MatchplayPanel'
 import DateField from '@/app/components/DateField'
+import BackButton from '@/app/components/BackButton'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -300,15 +301,7 @@ export default function TripSetupClient({
       {/* Header */}
       <div className="border-b border-[#1e3d28]">
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
-          <Link
-            href={`/trip/${trip.trip_code}`}
-            className="w-11 h-11 flex items-center justify-center text-white/60 hover:text-white transition-colors"
-            aria-label="Back to trip"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
-          </Link>
+          <BackButton href={`/trip/${trip.trip_code}`} />
           <h1 className="font-[family-name:var(--font-playfair)] text-xl tracking-wide">Trip Setup</h1>
           <div className="w-11" />
         </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useState, useSyncExternalStore } from 'react'
-import Link from 'next/link'
+import BackButton from '@/app/components/BackButton'
 import { verifyPasscode, rememberUnlock, hasUnlocked, MAX_PASSCODE } from '@/lib/passcode'
 
 /**
@@ -93,12 +93,9 @@ export default function PasscodeGate({
           </button>
         </form>
 
-        <Link
-          href={`/trip/${tripCode}`}
-          className="inline-block text-white/25 text-xs tracking-wide hover:text-white/50 transition-colors mt-8"
-        >
-          ← Back to trip
-        </Link>
+        <div className="mt-8">
+          <BackButton href={`/trip/${tripCode}`} label="Trip" />
+        </div>
       </div>
     </main>
   )
