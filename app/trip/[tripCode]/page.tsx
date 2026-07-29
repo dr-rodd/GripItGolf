@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-import { enabledFormats, parseFormats } from '@/lib/formats'
+import { enabledSummary, parseFormats } from '@/lib/formats'
 import { isLocked } from '@/lib/passcode'
 import TripCountdown from './TripCountdown'
 
@@ -85,9 +85,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
   const settingsLocked = isLocked(trip.settings_passcode_hash)
   const isDraft = (trip.setup_status ?? 'live') === 'draft'
-  const formatLine = enabledFormats(parseFormats(trip.formats))
-    .map(f => f.tabLabel)
-    .join(' · ')
+  const formatLine = enabledSummary(parseFormats(trip.formats)).join(' · ')
 
   const lockedButton = (label: string) => (
     <div className="w-full py-[18px] border-2 border-white/10 rounded-xl flex items-center justify-center gap-3">

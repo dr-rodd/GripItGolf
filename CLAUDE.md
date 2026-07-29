@@ -134,18 +134,33 @@ One state at a time. Finalised players cannot be reselected unless manually unfi
 
 ## Competition formats
 
-Formats are **independently toggleable** — a trip can run several at once, and each enabled format gets its own tab on the leaderboard. This is a deliberate departure from Donegal Masters, which had one fixed format.
+Three top-level competitions, each revealing its own settings once switched on. Stored in the `formats` JSONB column on `trips`; defined in `lib/formats.ts`.
 
-Stored in the `formats` JSONB column on `trips` as boolean flags. Defined in `lib/formats.ts` — add a format there plus a leaderboard branch; no schema change needed.
+| Competition | Settings |
+|---|---|
+| **Individual** | Up to three boards, ticked independently: Stableford, Strokes, Custom points. Ticking none switches Individual off. Plus `discardWorst` (0–2), which drops a player's weakest rounds from Stableford, Strokes and Custom alike. |
+| **Individual Matchplay** | A knockout draw on its own route (`/trip/[tripCode]/matchplay`), reached by a button rather than a tab. |
+| **Team Play** | Scoring mode — see below. |
 
-| Key | Format | Scoring |
-|---|---|---|
-| `individual_stableford` | Individual Stableford | Total points. Default on. |
-| `individual_strokes` | Individual Strokeplay | Gross and nett totals, lowest wins |
-| `individual_matchplay` | Individual Matchplay | Round robin — every player meets every other each round, holes decided on nett score, 1pt a win / ½ a half |
-| `teams` | Team Play | Best 2 scores per team count on every hole |
+Stableford and Strokes used to be separate top-level formats. They are two views of the same individual competition, so they are boards within it, which is also what made room for Custom.
 
-At least one format must stay enabled — the setup UI refuses to switch the last one off.
+`parseFormats` reads the older flat shape (`{individual_stableford: true}`) as well as the current nested one, so no migration was needed.
+
+### Custom points
+
+A prize table paid by finishing position each round — 10 for the winner, 5 for second, and so on. Logic in `lib/customPoints.ts`, all pure.
+
+- Default table is the inverse of the field: eight players gives 8, 7, 6 … 1
+- Any position may be edited, 0 to 100. Zero is allowed
+- A stored table is padded rather than regenerated when players join, so edits survive
+- Positions are decided on that round's Stableford result
+- **Players level on the day share the places they occupy** — two tied for first with a 10/6 table take eight each. The total awarded is the same however a round finishes
+
+### Leaderboard
+
+Each active board is a tab. With more than one running, a title card above the board names it and states how it is being scored, so a glance tells you which you are looking at.
+
+A round is **In play** — a glowing green badge — when a `live_rounds` row for it has status `active`. Recorded scores alone do not count; the scorecard has to be open.
 
 ### Team scoring modes
 

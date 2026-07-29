@@ -2,7 +2,10 @@
 
 import { Fragment, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { isEnabled, leaderboardTabs, type FormatKey, type TripFormats } from '@/lib/formats'
+import { leaderboardTabs, type BoardKey, type TripFormats } from '@/lib/formats'
+import {
+  resolveCustomPoints, awardRound, totalAfterDiscard, discardedIndices,
+} from '@/lib/customPoints'
 import { describeTeamScoring, teamRoundPoints, type TeamScoring } from '@/lib/teamScoring'
 
 // ─── Types ─────────────────────────────────────────────────────
@@ -22,6 +25,8 @@ type RoundHcp   = { round_id: string; player_id: string; playing_handicap: numbe
 interface Props {
   tripCode: string
   formats: TripFormats
+  /** Rounds with a scorecard open right now. */
+  activeRoundIds: string[]
   teamScoring: TeamScoring
   rounds: Round[]
   teams: Team[]
@@ -56,6 +61,8 @@ type BoardRow = {
    * is not the same as not turning up.
    */
   playedRounds: string[]
+  /** Rounds set aside by the discard rule — shown struck through. */
+  droppedRounds?: string[]
   total: number
   isLive: boolean
   /** Whose card the scorecard sheet shows when this row is opened. */
@@ -96,6 +103,31 @@ function LiveDot() {
       title="Round in progress"
     />
   )
+}
+
+/** Whole numbers stay plain; a shared position shows its half. */
+function formatScore(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1)
+}
+
+/** Shown while a scorecard is open somewhere on the trip. */
+function InPlayBadge() {
+  return (
+    <span className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-emerald-500/40 bg-emerald-500/10">
+      <span
+        className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"
+        style={{ boxShadow: '0 0 6px rgba(52,211,153,0.9)' }}
+      />
+      <span className="text-emerald-300 text-[10px] tracking-[0.15em] uppercase">In play</span>
+    </span>
+  )
+}
+
+/** "10 / 5 / 3 a round" — the top of the table, enough to recognise it by. */
+function describeCustomTable(table: number[]): string {
+  if (table.length === 0) return 'Points by finishing position'
+  const head = table.slice(0, 3).join(' / ')
+  return table.length > 3 ? `${head} … a round` : `${head} a round`
 }
 
 function EmptyState({ message }: { message: string }) {
@@ -475,16 +507,20 @@ function Board({
               </div>
 
               {showRoundColumns && rounds.map(r => {
-                const played = row.playedRounds.includes(r.id)
+                const played  = row.playedRounds.includes(r.id)
+                const dropped = row.droppedRounds?.includes(r.id) ?? false
                 const pts = row.perRound[r.id] ?? 0
                 return (
                   <span
                     key={r.id}
+                    title={dropped ? 'Set aside — worst round dropped' : undefined}
                     className={`text-center tabular-nums text-2xl font-semibold ${
-                      played ? 'text-white/70' : 'text-white/20'
+                      !played ? 'text-white/20'
+                        : dropped ? 'text-white/25 line-through decoration-white/30'
+                        : 'text-white/70'
                     }`}
                   >
-                    {played ? pts : '—'}
+                    {played ? formatScore(pts) : '—'}
                   </span>
                 )
               })}
@@ -492,7 +528,7 @@ function Board({
               {/* Rows are pre-filtered to those who have played, so the
                   total is always a real number — including a legitimate 0. */}
               <span className="text-right tabular-nums font-bold text-2xl text-[#C9A84C]">
-                {row.total}
+                {formatScore(row.total)}
               </span>
             </button>
 
@@ -567,11 +603,12 @@ function MatchplayButton({ tripCode, enabled }: { tripCode: string; enabled: boo
 // ─── Main ──────────────────────────────────────────────────────
 
 export default function TripLeaderboardClient({
-  tripCode, formats, teamScoring, rounds, teams, players, holes, scores, liveScores, roundHandicaps,
+  tripCode, formats, activeRoundIds, teamScoring, rounds, teams, players,
+  holes, scores, liveScores, roundHandicaps,
 }: Props) {
   // Matchplay has its own route, so it is a button rather than a tab
   const tabs = leaderboardTabs(formats)
-  const [active, setActive] = useState<FormatKey>(tabs[0]?.key ?? 'individual_stableford')
+  const [active, setActive] = useState<BoardKey>(tabs[0]?.key ?? 'stableford')
   const [card, setCard] = useState<{ row: BoardRow; round: Round } | null>(null)
 
   const sortedRounds = useMemo(
@@ -629,7 +666,20 @@ export default function TripLeaderboardClient({
     return out
   }, [scores, liveScores, holes, rounds])
 
-  const liveRoundIds = useMemo(() => new Set(liveScores.map(ls => ls.round_id)), [liveScores])
+  // A round counts as in play when a scorecard is actually open on it, not
+  // merely because someone once entered a score into it.
+  const openRoundIds = useMemo(() => new Set(activeRoundIds), [activeRoundIds])
+  const liveRoundIds = useMemo(
+    () => new Set([...liveScores.map(ls => ls.round_id), ...activeRoundIds]),
+    [liveScores, activeRoundIds]
+  )
+  const inPlay = openRoundIds.size > 0
+
+  const discard = formats.individual.discardWorst
+  const customTable = useMemo(
+    () => resolveCustomPoints(formats.individual.customPoints, players.length),
+    [formats.individual.customPoints, players.length]
+  )
 
   const hcpFor = useMemo(() => {
     const m = new Map<string, number>()
@@ -647,15 +697,19 @@ export default function TripLeaderboardClient({
       .map(p => {
         const perRound: Record<string, number> = {}
         const playedRounds: string[] = []
-        let total = 0, holesPlayed = 0
+        let holesPlayed = 0
         for (const r of sortedRounds) {
           const mine = resolved.filter(s => s.playerId === p.id && s.roundId === r.id)
-          const pts = mine.reduce((sum, s) => sum + s.points, 0)
-          perRound[r.id] = pts
-          total += pts
+          perRound[r.id] = mine.reduce((sum, s) => sum + s.points, 0)
           holesPlayed += mine.length
           if (mine.length > 0) playedRounds.push(r.id)
         }
+        // Worst rounds are set aside before totalling, if the trip says so
+        const played = playedRounds.map(id => perRound[id])
+        const total = totalAfterDiscard(played, discard)
+        const dropped = new Set(
+          discardedIndices(played, discard).map(i => playedRounds[i])
+        )
         // Display against the 2pts-a-hole baseline, as on the DM board
         const diff = total - holesPlayed * 2
         const row: BoardRow = {
@@ -666,6 +720,7 @@ export default function TripLeaderboardClient({
           }`,
           perRound,
           playedRounds,
+          droppedRounds: [...dropped],
           total,
           isLive: isLiveFor([p.id]),
           playerIds: [p.id],
@@ -675,7 +730,7 @@ export default function TripLeaderboardClient({
       .filter(r => r.holesPlayed > 0)
       .map(r => r.row)
       .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
-  }, [players, sortedRounds, resolved]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [players, sortedRounds, resolved, discard]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Individual Strokeplay ───────────────────────────────────
   // Lower is better, so the board shows nett as the headline and the
@@ -699,16 +754,22 @@ export default function TripLeaderboardClient({
           }, 0)
           perRound[r.id] = g - shots
           gross += g
-          nett  += g - shots
           holesPlayed += mine.length
           if (mine.length > 0) playedRounds.push(r.id)
         }
+        // Low scores win here, so the worst round is the highest one
+        const playedNett = playedRounds.map(id => perRound[id])
+        nett = totalAfterDiscard(playedNett, discard, { lowerWins: true })
+        const dropped = new Set(
+          discardedIndices(playedNett, discard, { lowerWins: true }).map(i => playedRounds[i])
+        )
         const row: BoardRow = {
           id: p.id,
           name: p.name,
           subLabel: `${holesPlayed} hole${holesPlayed === 1 ? '' : 's'} · ${gross} gross`,
           perRound,
           playedRounds,
+          droppedRounds: [...dropped],
           total: nett,
           isLive: isLiveFor([p.id]),
           playerIds: [p.id],
@@ -718,7 +779,59 @@ export default function TripLeaderboardClient({
       .filter(r => r.holesPlayed > 0)
       .map(r => r.row)
       .sort((a, b) => a.total - b.total)
-  }, [players, sortedRounds, resolved, holes, hcpFor]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [players, sortedRounds, resolved, holes, hcpFor, discard]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Custom points ───────────────────────────────────────────
+  // Each round is scored on its own Stableford result, positions are paid
+  // from the trip's table, and the board is the sum across rounds.
+
+  const customRows: BoardRow[] = useMemo(() => {
+    const perRound = new Map<string, Map<string, number>>()
+    for (const r of sortedRounds) {
+      const standings = players
+        .map(p => {
+          const mine = resolved.filter(s => s.playerId === p.id && s.roundId === r.id)
+          return mine.length > 0
+            ? { playerId: p.id, score: mine.reduce((sum, s) => sum + s.points, 0) }
+            : null
+        })
+        .filter(Boolean) as { playerId: string; score: number }[]
+      perRound.set(r.id, awardRound(standings, customTable))
+    }
+
+    return players
+      .map(p => {
+        const byRound: Record<string, number> = {}
+        const playedRounds: string[] = []
+        for (const r of sortedRounds) {
+          const awarded = perRound.get(r.id)?.get(p.id)
+          if (awarded === undefined) continue
+          byRound[r.id] = awarded
+          playedRounds.push(r.id)
+        }
+        const played = playedRounds.map(id => byRound[id])
+        const total = totalAfterDiscard(played, discard)
+        const dropped = new Set(discardedIndices(played, discard).map(i => playedRounds[i]))
+
+        const row: BoardRow = {
+          id: p.id,
+          name: p.name,
+          subLabel: playedRounds.length > 0
+            ? `${playedRounds.length} round${playedRounds.length === 1 ? '' : 's'}`
+            : '',
+          perRound: byRound,
+          playedRounds,
+          droppedRounds: [...dropped],
+          total,
+          isLive: isLiveFor([p.id]),
+          playerIds: [p.id],
+        }
+        return { row, played: playedRounds.length }
+      })
+      .filter(r => r.played > 0)
+      .map(r => r.row)
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
+  }, [players, sortedRounds, resolved, customTable, discard]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Teams ───────────────────────────────────────────────────
 
@@ -761,7 +874,7 @@ export default function TripLeaderboardClient({
 
   // ── Render ──────────────────────────────────────────────────
 
-  const matchplayOn = isEnabled(formats, 'individual_matchplay')
+  const matchplayOn = formats.matchplay
 
   // Matchplay lives on its own page, so a matchplay-only trip legitimately
   // has no tabs here — show the button rather than an empty board.
@@ -775,19 +888,35 @@ export default function TripLeaderboardClient({
   }
 
   const currentRows =
-    active === 'individual_stableford' ? stablefordRows :
-    active === 'individual_strokes'    ? strokeRows :
-                                         teamRows
+    active === 'stableford' ? stablefordRows :
+    active === 'strokes'    ? strokeRows :
+    active === 'custom'     ? customRows :
+                              teamRows
 
   const emptyMessage =
     active === 'teams'
       ? 'No teams with players yet. Set them up in Trip Setup.'
-        : 'No scores yet. The board fills in as play starts.'
+      : 'No scores yet. The board fills in as play starts.'
 
-  const caption =
-    active === 'teams'            ? `${describeTeamScoring(teamScoring)}.` :
-    active === 'individual_strokes'   ? 'Nett totals, lowest wins. Gross shown under each name.' :
-                                        ''
+  // What this board is and how it is being scored. Shown whenever more than
+  // one competition is running, so a glance tells you which you are looking at.
+  const boardTitle =
+    active === 'stableford' ? 'Stableford' :
+    active === 'strokes'    ? 'Strokeplay' :
+    active === 'custom'     ? 'Custom points' :
+                              'Team Play'
+
+  const boardRules: string[] = (() => {
+    const out: string[] = []
+    if (active === 'stableford') out.push('Total points, highest wins')
+    if (active === 'strokes')    out.push('Nett totals, lowest wins')
+    if (active === 'custom')     out.push(describeCustomTable(customTable))
+    if (active === 'teams')      out.push(describeTeamScoring(teamScoring))
+    if (active !== 'teams' && discard > 0) {
+      out.push(`worst ${discard === 1 ? 'round' : `${discard} rounds`} dropped`)
+    }
+    return out
+  })()
 
   // Team cards show every member side by side; individual tabs show one column
   const cardPlayers = card
@@ -818,8 +947,28 @@ export default function TripLeaderboardClient({
         </div>
       )}
 
-      {caption && (
-        <p className="text-white/30 text-xs mb-3 leading-relaxed">{caption}</p>
+      {/* Title card — only worth the space once there is more than one board */}
+      {tabs.length > 1 ? (
+        <div className="border border-[#1e3d28] rounded-sm px-4 py-3 mb-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-[family-name:var(--font-playfair)] text-white text-base leading-tight">
+              {boardTitle}
+            </p>
+            {inPlay && <InPlayBadge />}
+          </div>
+          {boardRules.length > 0 && (
+            <p className="text-white/35 text-xs mt-1 leading-snug">
+              {boardRules.join(' · ')}
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <p className="text-white/30 text-xs leading-relaxed min-w-0">
+            {boardRules.join(' · ')}
+          </p>
+          {inPlay && <InPlayBadge />}
+        </div>
       )}
 
       {currentRows.length === 0

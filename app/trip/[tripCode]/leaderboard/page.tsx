@@ -33,7 +33,7 @@ export default async function TripLeaderboardPage({
   const courseIds = (rounds ?? []).map(r => (r.courses as any)?.id).filter(Boolean)
   const nilId     = '00000000-0000-0000-0000-000000000000'
 
-  const [teamsRes, playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes] =
+  const [teamsRes, playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes, openRes] =
     await Promise.all([
       supabase.from('teams').select('id, name, color').eq('trip_id', trip.id).order('created_at'),
       supabase.from('players')
@@ -53,9 +53,17 @@ export default async function TripLeaderboardPage({
       supabase.from('round_handicaps')
         .select('round_id, player_id, playing_handicap')
         .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
+      // A round is "in play" when a scorecard is open on it — not merely
+      // because a score was once entered against it
+      supabase.from('live_rounds')
+        .select('round_id')
+        .eq('status', 'active')
+        .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
     ])
 
-  const hasActiveRound = (rounds ?? []).some((r: any) => r.status === 'active')
+  const activeRoundIds = [...new Set((openRes.data ?? []).map(r => r.round_id as string))]
+  const hasActiveRound =
+    activeRoundIds.length > 0 || (rounds ?? []).some((r: any) => r.status === 'active')
 
   return (
     <div className="min-h-dvh bg-[#0a1a0e] text-white">
@@ -74,6 +82,7 @@ export default async function TripLeaderboardPage({
       <TripLeaderboardClient
         tripCode={tripCode}
         formats={parseFormats(trip.formats)}
+        activeRoundIds={activeRoundIds}
         teamScoring={parseTeamScoring(trip.team_scoring)}
         rounds={(rounds ?? []) as any}
         teams={teamsRes.data ?? []}

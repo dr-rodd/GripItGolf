@@ -3,7 +3,13 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { FORMATS, type FormatKey, type TripFormats } from '@/lib/formats'
+import {
+  type TripFormats, type IndividualSettings, individualOn, isEmpty,
+  MAX_DISCARD,
+} from '@/lib/formats'
+import {
+  defaultCustomPoints, resolveCustomPoints, clampPoints, MAX_CUSTOM_POINTS,
+} from '@/lib/customPoints'
 import {
   TEAM_SCORING_MODES, describeTeamScoring,
   type TeamScoring, type TeamScoringMode,
@@ -50,6 +56,13 @@ const INPUT = [
 const LABEL = 'block text-white/60 text-xs uppercase tracking-wider mb-2'
 
 const SECTION = 'bg-white/5 border border-white/10 rounded-2xl p-5'
+
+/** 1st, 2nd, 3rd, 4th … */
+function ordinal(n: number): string {
+  const rem100 = n % 100
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`
+  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
+}
 
 // ── Component ─────────────────────────────────────────────────────────────
 
@@ -131,19 +144,34 @@ export default function TripSetupClient({
     }
   }
 
-  async function toggleFormat(key: FormatKey) {
-    const next: TripFormats = { ...formats }
-    if (next[key]) delete next[key]
-    else next[key] = true
-
-    if (Object.keys(next).length === 0) {
-      flashError('Keep at least one format switched on')
+  async function saveFormats(next: TripFormats) {
+    if (isEmpty(next)) {
+      flashError('Keep at least one competition switched on')
       return
     }
-
     const prev = formats
     setFormats(next)
     if (!(await saveTrip({ formats: next }))) setFormats(prev)
+  }
+
+  /** Individual is on when at least one of its boards is ticked. */
+  function toggleBoard(key: 'stableford' | 'strokes' | 'custom') {
+    const individual: IndividualSettings = { ...formats.individual, [key]: !formats.individual[key] }
+    // Turning Custom on for the first time seeds a table from the field
+    if (key === 'custom' && individual.custom && individual.customPoints.length === 0) {
+      individual.customPoints = defaultCustomPoints(players.length)
+    }
+    saveFormats({ ...formats, individual })
+  }
+
+  function setIndividual(patch: Partial<IndividualSettings>) {
+    saveFormats({ ...formats, individual: { ...formats.individual, ...patch } })
+  }
+
+  function setCustomPoint(index: number, raw: string) {
+    const table = resolveCustomPoints(formats.individual.customPoints, players.length)
+    table[index] = clampPoints(raw === '' ? 0 : raw)
+    setIndividual({ customPoints: table })
   }
 
   async function saveTeamScoring(patch: Partial<TeamScoring>) {
@@ -354,43 +382,184 @@ export default function TripSetupClient({
               </div>
             </section>
 
-            {/* ── Formats ── */}
+            {/* ── Competitions ── */}
             <section className={SECTION}>
               <p className="text-[#C9A84C] text-xs tracking-widest uppercase mb-1">Competitions</p>
               <p className="text-white/40 text-xs mb-4">
-                Switch on as many as you like — each one gets its own leaderboard
+                Switch on as many as you like — each board gets its own tab on the leaderboard
               </p>
+
               <div className="space-y-2.5">
-                {FORMATS.map(f => {
-                  const on = !!formats[f.key]
+                {/* Individual — a single competition with up to three boards */}
+                <div className={`rounded-xl border transition-colors ${
+                  individualOn(formats)
+                    ? 'border-[#C9A84C]/60 bg-[#C9A84C]/10'
+                    : 'border-white/10 bg-white/5'
+                }`}>
+                  <div className="px-4 pt-4 pb-3">
+                    <p className={`text-sm font-medium ${individualOn(formats) ? 'text-white' : 'text-white/70'}`}>
+                      Individual
+                    </p>
+                    <p className="text-white/40 text-xs mt-0.5 leading-snug">
+                      Tick the boards you want. Ticking none switches Individual off.
+                    </p>
+                  </div>
+
+                  <div className="px-4 pb-4 space-y-2">
+                    {([
+                      { key: 'stableford' as const, label: 'Stableford leaderboard',
+                        hint: 'Points per hole against your handicap' },
+                      { key: 'strokes' as const, label: 'Strokes leaderboard',
+                        hint: 'Gross and nett totals, lowest wins' },
+                      { key: 'custom' as const, label: 'Custom points',
+                        hint: 'Your own prize table by finishing position each round' },
+                    ]).map(b => {
+                      const on = formats.individual[b.key]
+                      return (
+                        <button
+                          key={b.key}
+                          onClick={() => toggleBoard(b.key)}
+                          disabled={locked}
+                          className={`w-full text-left flex items-start gap-3 px-3 py-3 rounded-lg border transition-colors disabled:opacity-40 ${
+                            on ? 'border-[#C9A84C]/40 bg-[#C9A84C]/[0.07]' : 'border-white/10 hover:border-white/25'
+                          }`}
+                        >
+                          <span className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 ${
+                            on ? 'bg-[#C9A84C] border-[#C9A84C]' : 'border-white/25'
+                          }`}>
+                            {on && (
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a1a0e"
+                                   strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M20 6L9 17l-5-5" />
+                              </svg>
+                            )}
+                          </span>
+                          <span className="min-w-0">
+                            <span className={`block text-sm ${on ? 'text-white' : 'text-white/70'}`}>{b.label}</span>
+                            <span className="block text-white/35 text-xs mt-0.5 leading-snug">{b.hint}</span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* ── Individual sub-settings, only once a board is on ── */}
+                  {individualOn(formats) && (
+                    <div className="px-4 pb-4 pt-1 border-t border-white/10 space-y-4">
+
+                      {/* Drop worst rounds — applies to Stableford and Strokes */}
+                      {(formats.individual.stableford || formats.individual.strokes) && (
+                        <div>
+                          <label className={LABEL}>Discard worst round</label>
+                          <div className="flex gap-2">
+                            {Array.from({ length: MAX_DISCARD + 1 }, (_, n) => (
+                              <button
+                                key={n}
+                                onClick={() => setIndividual({ discardWorst: n })}
+                                disabled={locked}
+                                className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
+                                  formats.individual.discardWorst === n
+                                    ? 'bg-[#C9A84C] text-[#0a1a0e]'
+                                    : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
+                                }`}
+                              >
+                                {n === 0 ? 'Keep all' : `Drop ${n}`}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-white/30 text-xs mt-2 leading-snug">
+                            A bad day stops defining the week. Nobody is ever dropped below
+                            one counting round.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Custom points table */}
+                      {formats.individual.custom && (
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className={`${LABEL} mb-0`}>Points by position</label>
+                            <button
+                              onClick={() => setIndividual({ customPoints: defaultCustomPoints(players.length) })}
+                              disabled={locked}
+                              className="text-[#C9A84C]/70 text-[10px] tracking-wider uppercase hover:text-[#C9A84C] transition-colors disabled:opacity-40"
+                            >
+                              Reset
+                            </button>
+                          </div>
+
+                          {players.length === 0 ? (
+                            <p className="text-white/35 text-xs leading-snug">
+                              Add players first — the table is built from the field.
+                            </p>
+                          ) : (
+                            <>
+                              <div className="space-y-2">
+                                {resolveCustomPoints(formats.individual.customPoints, players.length)
+                                  .map((pts, i) => (
+                                    <div key={i} className="flex items-center gap-3">
+                                      <span className="w-14 flex-shrink-0 text-white/50 text-xs tabular-nums">
+                                        {ordinal(i + 1)}
+                                      </span>
+                                      <input
+                                        type="number"
+                                        inputMode="numeric"
+                                        value={pts}
+                                        onChange={e => setCustomPoint(i, e.target.value)}
+                                        disabled={locked}
+                                        min={0}
+                                        max={MAX_CUSTOM_POINTS}
+                                        className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm tabular-nums focus:outline-none focus:border-[#C9A84C]/50 disabled:opacity-40"
+                                      />
+                                      <span className="w-10 flex-shrink-0 text-white/25 text-xs">
+                                        {pts === 1 ? 'pt' : 'pts'}
+                                      </span>
+                                    </div>
+                                  ))}
+                              </div>
+                              <p className="text-white/30 text-xs mt-2 leading-snug">
+                                Up to {MAX_CUSTOM_POINTS} a position, and zero is allowed. Players
+                                level on the day share the places they occupy.
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Matchplay and Teams — plain on/off, settings of their own below */}
+                {([
+                  { key: 'matchplay' as const, label: 'Individual Matchplay',
+                    hint: 'A knockout draw on its own page. Seeds kept apart, byes handed out.' },
+                  { key: 'teams' as const, label: 'Team Play',
+                    hint: 'Teams scored together — pick how below.' },
+                ]).map(f => {
+                  const on = formats[f.key]
                   return (
                     <button
                       key={f.key}
-                      onClick={() => toggleFormat(f.key)}
+                      onClick={() => saveFormats({ ...formats, [f.key]: !on })}
                       disabled={locked}
                       className={`w-full text-left px-4 py-4 rounded-xl border transition-colors disabled:opacity-40 ${
-                        on
-                          ? 'border-[#C9A84C]/60 bg-[#C9A84C]/10'
-                          : 'border-white/10 bg-white/5 hover:border-white/25'
+                        on ? 'border-[#C9A84C]/60 bg-[#C9A84C]/10' : 'border-white/10 bg-white/5 hover:border-white/25'
                       }`}
                     >
                       <div className="flex items-start gap-3">
-                        <span
-                          className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 transition-colors ${
-                            on ? 'bg-[#C9A84C] border-[#C9A84C]' : 'border-white/25'
-                          }`}
-                        >
+                        <span className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 ${
+                          on ? 'bg-[#C9A84C] border-[#C9A84C]' : 'border-white/25'
+                        }`}>
                           {on && (
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a1a0e" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a1a0e"
+                                 strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M20 6L9 17l-5-5" />
                             </svg>
                           )}
                         </span>
                         <div className="min-w-0">
-                          <p className={`text-sm font-medium ${on ? 'text-white' : 'text-white/70'}`}>
-                            {f.label}
-                          </p>
-                          <p className="text-white/40 text-xs mt-0.5 leading-snug">{f.description}</p>
+                          <p className={`text-sm font-medium ${on ? 'text-white' : 'text-white/70'}`}>{f.label}</p>
+                          <p className="text-white/40 text-xs mt-0.5 leading-snug">{f.hint}</p>
                         </div>
                       </div>
                     </button>
@@ -798,7 +967,7 @@ export default function TripSetupClient({
             These sit outside the draft-only block on purpose. A bracket is
             normally drawn once the roster has settled, which is at or after
             finalising, so the panel has to survive the switch to live. */}
-        {formats.individual_matchplay && (
+        {formats.matchplay && (
           <MatchplayPanel
             tripId={trip.id}
             tripCode={trip.trip_code}

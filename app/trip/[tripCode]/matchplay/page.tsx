@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { parseFormats, isEnabled } from '@/lib/formats'
+import { parseFormats } from '@/lib/formats'
 import BackButton from '@/app/components/BackButton'
 import MatchplayBracket, {
   type BracketMatchRow, type BracketPlayerRow,
@@ -33,7 +33,7 @@ export default async function MatchplayPage({
   if (!trip) notFound()
 
   const formats = parseFormats(trip.formats)
-  const enabled = isEnabled(formats, 'individual_matchplay')
+  const enabled = formats.matchplay
 
   const [matchesRes, playersRes] = await Promise.all([
     supabase

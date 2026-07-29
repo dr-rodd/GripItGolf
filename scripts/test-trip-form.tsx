@@ -14,6 +14,7 @@ import CreateTripForm from '../app/dashboard/create/CreateTripForm'
 import TripSetupClient from '../app/trip/[tripCode]/setup/TripSetupClient'
 import { MIN_ROUNDS, MAX_ROUNDS, roundCountError, isRoundCountValid } from '../lib/tripLimits'
 import Toggle from '../app/components/Toggle'
+import { parseFormats } from '../lib/formats'
 import {
   MIN_PASSCODE, MAX_PASSCODE, passcodeError, isPasscodeValid,
   hashPasscode, verifyPasscode, isLocked,
@@ -141,7 +142,7 @@ section('The trip setup page uses the same field')
       trip: {
         id: 't1', trip_code: 'ABC123', name: 'Test Trip',
         start_date: '2026-05-01', end_date: '2026-05-04',
-        formats: { individual_stableford: true },
+        formats: parseFormats({ individual: { stableford: true } }),
         team_scoring: { mode: 'better_ball', countingScores: 2, aggregateFinish: 0, aggregateHoles: 18 },
         setup_status: 'draft', edit_permission: 'everyone',
       },
