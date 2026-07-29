@@ -1,6 +1,14 @@
-# GripItGolf
+# Green Dot Golf
 
 A multi-trip golf platform. Any group leader creates a trip, gets a shareable code, and their group gets a full live scoring experience — courses, scorecards, leaderboards, teams.
+
+## The name
+
+Your handicap is the best 8 of your last 20 rounds. On a handicap graph those eight show as green dots — so a green dot is a round that counted. Every golfer teeing off is chasing one.
+
+The mark is `app/components/GreenDot.tsx`: a glowing green dot that breathes and sends out a slow ripple. It appears beneath the wordmark on the landing page and at the top of every trip hub. Keyframes live in `app/globals.css` and are disabled under `prefers-reduced-motion`.
+
+Gold (`#C9A84C`) remains the accent for scores and actions. Green is reserved for the dot and for live/won states — the two should not be mixed in the mark itself.
 
 Forked from Donegal Masters — a single-trip family golf app. This project converts it into a platform where anyone can run their own trip. The Donegal Masters UX is the gold standard for look and feel.
 
@@ -25,6 +33,7 @@ Big Dog — not a coder. Uses Claude.ai for all design decisions and Claude Code
 - **Database:** Supabase (PostgreSQL + RLS)
 - **Hosting:** Vercel (Hobby)
 - **Repo:** github.com/dr-rodd/GripItGolf (branch: master)
+- **Product name:** Green Dot Golf (repo name unchanged)
 - **Supabase project ref:** bnnnnuxoczzuipefhvms
 - **Package manager:** npm
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import GreenDot from '@/app/components/GreenDot'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
@@ -35,11 +36,9 @@ export default function JoinForm({ initialCode }: { initialCode: string }) {
     <main className="min-h-dvh flex flex-col items-center justify-center bg-[#0a1a0e] px-6">
       <div className="w-full max-w-xs">
 
-        {/* Logo mark */}
-        <div className="mb-8 flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full border-2 border-[#C9A84C]" />
-          <div className="w-3 h-3 rounded-full bg-[#C9A84C]" />
-          <div className="w-3 h-3 rounded-full border-2 border-[#C9A84C]" />
+        {/* The mark */}
+        <div className="mb-6 -ml-2">
+          <GreenDot size={14} />
         </div>
 
         <h1 className="font-[family-name:var(--font-playfair)] text-4xl text-white mb-2">

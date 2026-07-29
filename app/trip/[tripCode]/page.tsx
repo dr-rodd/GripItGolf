@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { enabledSummary, parseFormats } from '@/lib/formats'
 import { isLocked } from '@/lib/passcode'
 import TripCountdown from './TripCountdown'
+import GreenDot from '@/app/components/GreenDot'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,10 +72,11 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
   if (coursesError) console.error('TripPage courses query failed:', coursesError)
 
-  const courseMap   = Object.fromEntries((courses ?? []).map(c => [c.id, c.name]))
-  const courseNames = rounds.map(r => courseMap[r.course_id]).filter(Boolean).join(' · ')
+  const courseMap = Object.fromEntries((courses ?? []).map(c => [c.id, c.name]))
+  const courseList = rounds
+    .map(r => ({ round: r.round_number, name: courseMap[r.course_id] }))
+    .filter(c => Boolean(c.name)) as { round: number; name: string }[]
 
-  const estYear    = trip.created_at ? new Date(trip.created_at).getFullYear() : null
   const dateRange  = [formatDate(trip.start_date), formatDate(trip.end_date)].filter(Boolean).join(' – ')
 
   // Trips created before the lifecycle migration have no setup_status — treat as live
@@ -102,30 +104,46 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
       {/* ── Hero ── */}
       <section className="min-h-dvh flex flex-col items-center justify-center px-6 py-16">
-        <div className="w-full max-w-xs flex flex-col items-center text-center">
+        <div className="w-full max-w-sm flex flex-col items-center text-center">
 
-          {/* Est. ornament */}
-          {estYear && (
-            <div className="flex items-center gap-4 mb-6">
-              <div className="h-px w-14 bg-[#C9A84C]/40" />
-              <span className="text-[#C9A84C]/60 text-[10px] tracking-[0.3em] uppercase">Est. {estYear}</span>
-              <div className="h-px w-14 bg-[#C9A84C]/40" />
-            </div>
-          )}
+          {/* The mark, at the top of every trip */}
+          <GreenDot size={16} className="mb-5" />
 
-          {/* Trip name */}
-          <h1 className="font-[family-name:var(--font-playfair)] text-4xl sm:text-5xl text-white leading-tight mb-3">
+          {/* Trip name — the reason you opened the page, so it leads.
+              Scales with the viewport and wraps rather than shrinking to fit. */}
+          <h1 className="font-[family-name:var(--font-playfair)] text-white font-bold leading-[1.05] tracking-tight text-[clamp(2.25rem,11vw,3.5rem)] mb-4 text-balance">
             {trip.name}
           </h1>
 
           {/* Dates */}
           {dateRange && (
-            <p className="text-white/70 text-sm tracking-[0.15em] mb-1">{dateRange}</p>
+            <p className="text-white/60 text-sm tracking-[0.15em] mb-6">{dateRange}</p>
           )}
 
-          {/* Course names — venue line */}
-          {courseNames && (
-            <p className="text-white/30 text-xs tracking-[0.15em] uppercase mb-2">{courseNames}</p>
+          {/* Courses — a trip is its venues, so they are listed rather than
+              crammed into one muted line */}
+          {courseList.length > 0 && (
+            <div className="w-full mb-6">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="h-px flex-1 bg-white/10" />
+                <span className="text-white/25 text-[10px] tracking-[0.3em] uppercase">
+                  {courseList.length === 1 ? 'The Course' : 'The Courses'}
+                </span>
+                <div className="h-px flex-1 bg-white/10" />
+              </div>
+              <ul className="flex flex-col gap-1.5">
+                {courseList.map((c, i) => (
+                  <li key={i} className="flex items-baseline justify-center gap-2.5">
+                    <span className="text-white/20 text-[10px] tabular-nums flex-shrink-0">
+                      {c.round}
+                    </span>
+                    <span className="font-[family-name:var(--font-playfair)] text-white/90 text-lg leading-snug">
+                      {c.name}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {/* Format line */}
@@ -143,7 +161,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
           {/* Countdown wrapping nav */}
           <TripCountdown target={trip.start_date ?? null}>
-            <nav className="flex flex-col gap-3 w-full">
+            <nav className="flex flex-col gap-3 w-full max-w-xs mx-auto">
 
               {/* Join Trip — claim a slot or add yourself */}
               <Link
@@ -287,7 +305,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       {/* ── Footer ── */}
       <div className="px-6 pb-10 text-center">
         <Link href="/" className="text-white/20 text-xs tracking-wide hover:text-white/40 transition-colors">
-          ← GripItGolf
+          ← Green Dot Golf
         </Link>
       </div>
 

@@ -19,8 +19,8 @@ const crimson = Crimson_Pro({
 });
 
 export const metadata: Metadata = {
-  title: "GripItGolf",
-  description: "Your golf trip. Live scores, leaderboards, and bragging rights.",
+  title: "Green Dot Golf",
+  description: "Your handicap is the best 8 of your last 20. Live scoring, leaderboards and matchplay for your golf trip.",
 };
 
 export default function RootLayout({
