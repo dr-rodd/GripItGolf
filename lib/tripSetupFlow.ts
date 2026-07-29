@@ -205,6 +205,27 @@ export function flowWarnings(steps: readonly Step[]): { step: Step; warning: str
 }
 
 /**
+ * Why an answer cannot be saved, when it would leave nothing to play for.
+ *
+ * A trip with no competition has no storable form — parseFormats replaces one
+ * with the default — so the answer is refused. Which is fine, as long as the
+ * refusal points at the switch that does what the organiser meant: unticking
+ * the last board is not how you switch the league off.
+ */
+export function emptyFormatsReason(f: TripFormats): string {
+  if (!hasCompetitors(f)) {
+    return 'A trip needs someone competing — pick teams or individuals'
+  }
+  if (!f.league.on && !f.matchplay.on) {
+    return 'Switch on a league or a matchplay draw'
+  }
+  if (f.league.on && !anyLeagueBoard(f)) {
+    return 'A league needs a board — pick one, or switch the league off above'
+  }
+  return 'Keep at least one competition switched on'
+}
+
+/**
  * Why the trip cannot go live yet, or null if it can.
  *
  * Deliberately narrower than "every question answered": a trip can be

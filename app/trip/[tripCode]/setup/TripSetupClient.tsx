@@ -15,7 +15,8 @@ import {
   type TeamScoring, type TeamScoringMode,
 } from '@/lib/teamScoring'
 import {
-  setupSteps, finaliseBlockedReason, nextUnanswered, type Step,
+  setupSteps, finaliseBlockedReason, nextUnanswered, emptyFormatsReason,
+  type Step,
 } from '@/lib/tripSetupFlow'
 import {
   teamNoun, teamSizeBanner, teamSizeLimit, oversizedTeams, canJoinTeam,
@@ -289,9 +290,18 @@ export default function TripSetupClient({
     }
   }
 
+  /**
+   * Save an answer, unless it would leave the trip with nothing to play for.
+   *
+   * A trip with no competition cannot be stored: parseFormats refuses to
+   * return one, so reloading the page would quietly replace it with the
+   * default and throw away the rest of the organiser's answers. The refusal
+   * therefore says which switch to reach for instead of just saying no —
+   * turning the league off is a different action from unticking its last board.
+   */
   async function saveFormats(next: TripFormats) {
     if (isEmpty(next)) {
-      flashError('Keep at least one competition switched on')
+      flashError(emptyFormatsReason(next))
       return
     }
     const prev = formats

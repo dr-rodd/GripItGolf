@@ -143,17 +143,38 @@ One state at a time. Finalised players cannot be reselected unless manually unfi
 
 ## Competition formats
 
-Three top-level competitions, each revealing its own settings once switched on. Stored in the `formats` JSONB column on `trips`; defined in `lib/formats.ts`.
+Trip settings are a **decision tree** — questions asked in order as the organiser scrolls, each answer opening what it opens. The tree is `lib/tripSetupFlow.ts` (pure); `TripSetupClient.tsx` renders it rather than deciding it, so the order has one source of truth. Stored in the `formats` JSONB column on `trips`; the model is `lib/formats.ts`.
 
-| Competition | Settings |
-|---|---|
-| **Individual** | Up to three boards, ticked independently: Stableford, Strokes, Custom points. Ticking none switches Individual off. Plus `discardWorst` (0–2), which drops a player's weakest rounds from Stableford, Strokes and Custom alike. |
-| **Individual Matchplay** | A knockout draw on its own route (`/trip/[tripCode]/matchplay`), reached by a button rather than a tab. |
-| **Team Play** | Scoring mode — see below. |
+| # | Question | Opens |
+|---|---|---|
+| 1 | **Who competes** — teams, individuals, or both | Everything below |
+| 2 | **League, matchplay, or both** | The branches for whichever is on |
+| 3 | **League scoring** — Stableford / Strokes / Custom points | Discard (the two stroke-based boards) and the prize table (Custom) |
+| 4 | **Matchplay format** — singles or pairs | Only a real choice with teams on |
+| 5 | **Team scoring** — how team points are worked out | Teams + league only |
+| 6 | **Pick the teams** | Teams only |
 
-Stableford and Strokes used to be separate top-level formats. They are two views of the same individual competition, so they are boards within it, which is also what made room for Custom.
+Both axes allow more than one answer. A trip can rank individuals and teams off the same cards, and can run a league and a knockout side by side.
 
-`parseFormats` reads the older flat shape (`{individual_stableford: true}`) as well as the current nested one, so no migration was needed.
+**Teams lead when both are on.** Teams is the main competition: the team tab is first and opens by default, with the individual boards behind it. `mainCompetition(f)` and the tab order in `leaderboardTabs(f)` both encode this.
+
+`discardWorst` (0–2) drops a player's weakest rounds. It applies to Stableford and Strokes; Custom is a prize table by position, so dropping a round there is a separate idea and the question is not asked for it alone.
+
+### Reading stored settings — three generations, no migrations
+
+`parseFormats` reads every shape this app has written, so nothing was ever migrated:
+
+| Generation | Shape | Reads back as |
+|---|---|---|
+| 1 (flat) | `{individual_stableford: true, teams: true}` | Individual league, singles draw |
+| 2 (nested) | `{individual: {stableford: true}, matchplay: true}` | Same |
+| 3 (current) | `{individual: true, teams: false, league: {…}, matchplay: {on, format}}` | Itself |
+
+The current shape is detected **positively** — by a `league` key, or a `matchplay` that is an object. Detecting the old shapes instead missed a row that only said `{teams: true, matchplay: true}`: no `individual` key to spot it by, and the draw was silently dropped on read.
+
+Neither older shape could express a pairs draw, so both always read back as singles. A teams-only generation-2 trip gets `league.stableford = true`, since teams were always scored as a league and it would otherwise return with nothing to play for.
+
+A trip with nothing switched on has no storable form — `parseFormats` returns the default instead — so settings **refuse** such an answer rather than saving it. `emptyFormatsReason` names the switch that does what the organiser meant: unticking the last board is not how you turn the league off.
 
 ### Custom points
 
@@ -165,11 +186,45 @@ A prize table paid by finishing position each round — 10 for the winner, 5 for
 - Positions are decided on that round's Stableford result
 - **Players level on the day share the places they occupy** — two tied for first with a 10/6 table take eight each. The total awarded is the same however a round finishes
 
+### Matchplay: singles and pairs
+
+A draw is between **players** (singles) or **pairings** (pairs). A pairing IS a team of two, so pairs requires teams — `isPairsMatchplay(f)` returns false without them however the stored value reads.
+
+- **Teams are locked at two** under a pairs draw: banner above team selection, `n/2` on each column, refused drags, disabled dropdown options, and a finalise block if the sheet is broken. `lib/teamLimits.ts` is the single rule (`PAIR_SIZE`, `teamSizeLimit`, `canJoinTeam`, `pairsBlockedReason`).
+- **Teams are called pairings** throughout the pairs UI — `teamNoun(f)` gives the words.
+- **A pairing is never named on the draw.** A tile carries its two players' first names side by side ("Ross & Dave"); "Team B" tells nobody who is playing. Elsewhere — team lists, the team leaderboard — a team keeps its name. `lib/matchplayEntrants.ts` does the naming; members are ordered by handicap so a pairing reads the same every time.
+- Auto-balance already paired high with low at two per team (snake draft, second lap reversed), so it was unchanged.
+
+**Storage.** `matchplay_matches` has a team column beside each player column, with `entrant_type` (`player`/`pair`) saying which set a row uses (migration 019). Every constraint guarding the player columns is mirrored for the team ones. `lib/matchplay.ts` and `lib/matchplayProgress.ts` are untouched — they care only that a side has an id — and the mapping lives in `toStored`/`toRow` in `lib/matchplayStore.ts` and nowhere else. A row with no `entrant_type` is a pre-pairs row and reads as singles.
+
+The bracket page reads `entrant_type` from the **rows**, not from current settings: a draw made before the format was switched is still a real draw, and reading it against the wrong entrant kind renders a column of blanks.
+
 ### Leaderboard
 
-Each active board is a tab. With more than one running, a title card above the board names it and states how it is being scored, so a glance tells you which you are looking at.
+Each active board is a tab, teams first when teams are on. With more than one running, a title card above the board names it and states how it is being scored.
 
 A round is **In play** — a glowing green badge — when a `live_rounds` row for it has status `active`. Recorded scores alone do not count; the scorecard has to be open.
+
+**Green while the card is open, gold once it is in.** A round with uncommitted `live_scores` shows green and reads as *how far ahead of level it stands*. Once finalised it turns gold and reverts to the total.
+
+| Board | While in play | Once finalised |
+|---|---|---|
+| Stableford | against two points a hole — 27 off nine holes reads `+9` | the total |
+| Strokes | nett against the par of the **holes played**, not of eighteen | the nett total |
+| Custom | colour only — a prize table pays position, there is no level | the points awarded |
+| Teams | colour only — level depends on the mode and team size | the total |
+
+Level prints as `E`. The row's live dot is **green**, not gold — gold now means the opposite, and both being gold would say nothing. A legend appears while anything is in play.
+
+Committed scores always win over in-progress ones for the same hole.
+
+### Who appears on which board
+
+- **Players own their scores, not teams.** Scores are keyed by `player_id`; a team row is computed from *current* membership. Move a player between teams mid-trip and their scores go with them — no re-entry, no migration. Team points are a pure function of member scores under the trip's rules (`lib/teamScoring.ts`).
+- A player added **after** teams were picked appears on the individual board immediately, and on a team board only once they are placed in a team.
+- A team with nobody in it is not a row.
+
+Both are pinned by tests in `scripts/test-leaderboard.tsx` rather than left as assumptions.
 
 ### Team scoring modes
 
@@ -183,7 +238,7 @@ When Team Play is on, `trips.team_scoring` (JSONB) decides how a team's points f
 
 `aggregateFinish` is the grandstand-finish rule: holes inside the closing stretch count **every** player rather than the best N, so a trailing team can still catch up. It can only raise a team's total, never lower it. Setting it to 18 is equivalent to the standalone `aggregate` mode.
 
-Team sizes are deliberately **not** fixed — a team can have any number of players. `countingScores` above the smallest team's size is allowed (it just caps out); setup warns rather than blocks.
+Team sizes are deliberately **not** fixed for a team league — a team can have any number of players. `countingScores` above the smallest team's size is allowed (it just caps out); setup warns rather than blocks. A **pairs matchplay draw is the one exception**: it fixes teams at two, since that is what a pairing is.
 
 This supersedes Donegal Masters rule 6 ("best-2-of-3") for trip pages — best-2 is now just the `better_ball` default, not a hard rule. The legacy DM leaderboard still hard-codes best-2.
 
@@ -208,6 +263,10 @@ Trips predating this feature were marked `live` by migration 010, so nothing cha
 | `app/page.tsx` | Landing page |
 | `app/layout.tsx` | Root layout |
 | `lib/supabase.ts` | Supabase client |
+| `lib/formats.ts` | What a trip runs — the decision-tree model |
+| `lib/tripSetupFlow.ts` | The tree itself: which questions, in what order |
+| `lib/teamLimits.ts` | Team size rules and the pairing/team wording |
+| `lib/matchplayEntrants.ts` | Players or pairings as one shape, and how they are named |
 | `supabase/migrations/` | All schema migrations in order |
 | `supabase/seed.sql` | Empty — trip data entered through the app |
 | `config/site.ts` | Global platform branding |
@@ -222,6 +281,26 @@ The `tees` table drives tee selection in live scoring and the WHS playing-handic
 **Still estimated, needs a real scorecard:** Ballyliffin Old (no WHS data published anywhere), Portsalon, Royal Portrush Valley (redesigned post-2019 Open, databases stale), Narin & Portnoo (Gil Hanse redesign changed par 73 → 70, databases stale). Ladies par is estimated on The Island and Doonbeg.
 
 When adding a course, insert its tees in the same migration. A course with no tee rows cannot be scored.
+
+## Test suites
+
+Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No framework: they print named checks and set a non-zero exit code. Logic lives in pure `lib/*.ts` modules so it can be driven without a database, and components are rendered with `renderToStaticMarkup`.
+
+| Suite | Covers |
+|---|---|
+| `test:formats` | The format model and all three generations of stored settings |
+| `test:setup-flow` | The decision tree, team size limits, pairs blocking |
+| `test:matchplay` | Bracket generation and seeding |
+| `test:entrants` | Player/pairing naming, and the real column-mapping functions |
+| `test:custom-points` | The prize table and discard rules |
+| `test:bracket-layout` | Column geometry and connectors |
+| `test:bracket-render` | The bracket component at every size, singles and pairs |
+| `test:progress` | Recording and correcting winners, and the cascade |
+| `test:trip-form` | Trip creation |
+| `test:leaderboard` | Every board, live vs finalised, score ownership |
+| `test:branding` | The green dot, the wordmark, back controls |
+
+**Mutation testing is the standard, not an extra.** Break the code deliberately, confirm a test fails, restore. It has repeatedly found suites that passed while testing nothing — most recently a pair-size assertion written against the constant it was meant to pin, so changing `PAIR_SIZE` to 3 left every check green.
 
 ## Data insertion order
 

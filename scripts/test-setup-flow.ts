@@ -17,7 +17,7 @@ import { type TripFormats } from '../lib/formats'
 import { DEFAULT_TEAM_SCORING, type TeamScoring } from '../lib/teamScoring'
 import {
   setupSteps, nextUnanswered, flowComplete, flowWarnings, finaliseBlockedReason,
-  type StepKey,
+  emptyFormatsReason, type StepKey,
 } from '../lib/tripSetupFlow'
 import {
   PAIR_SIZE, teamNoun, teamSizeLimit, teamSizeBanner, teamCountOptions,
@@ -346,6 +346,33 @@ section('Every visible step is numbered from one, in order')
   eq(steps[0].key, 'competitors', 'and who competes is always first')
   ok(steps.every(s => s.title.length > 0 && s.question.length > 0),
     'every question has a title and a question to ask')
+}
+
+section('A refusal points at the switch that does what was meant')
+{
+  // A trip with nothing to play for has no storable form, so these answers
+  // are refused. The refusal has to say which switch to reach for — being
+  // told "no" while looking at a tickbox that clearly untickable is useless.
+  ok(emptyFormatsReason(fmt()).includes('someone competing'),
+    'nobody competing says to pick who is')
+
+  ok(emptyFormatsReason(fmt({ individual: true })).includes('league or a matchplay'),
+    'no competition says to switch one on')
+
+  // The important one: unticking the last board is not how you turn the
+  // league off, and the message says where the switch actually is
+  const noBoard = emptyFormatsReason(fmt({ individual: true, league: { on: true } }))
+  ok(noBoard.includes('switch the league off'),
+    'a league with no board points at the league switch')
+  ok(noBoard.includes('pick one'), 'and offers the alternative')
+
+  // Each reason is distinct — a single generic message would be no help
+  const reasons = [
+    emptyFormatsReason(fmt()),
+    emptyFormatsReason(fmt({ individual: true })),
+    emptyFormatsReason(fmt({ individual: true, league: { on: true } })),
+  ]
+  eq(new Set(reasons).size, 3, 'the three cases each say something different')
 }
 
 console.log(`\n${'─'.repeat(56)}`)
