@@ -89,9 +89,16 @@ section('Landing page')
   const ctaAt = home.indexOf('Create a Trip')
   ok(dotAt < ctaAt, 'and above the buttons, so it is the centre of the page')
 
-  // The premise is stated, since the name only makes sense if you know it
-  ok(home.includes('best 8 of your last 20'), 'the page explains what a green dot is')
-  ok(/go and get one/i.test(home), 'and why you want one')
+  // The blurb is the Schrödinger line: the dot is undecided until you play
+  ok(home.includes('both green and not green'), 'the quote is on the page')
+  ok(/only your actions decide/i.test(home), 'including the part that puts it on the golfer')
+  ok(home.includes('Schr'), 'and it is attributed')
+  ok(home.includes('Erwin'), 'to Erwin, which is the physicist\'s name')
+  ok(!home.includes('Ernst'), 'not Ernst')
+
+  // Marked up as a quotation rather than styled to look like one
+  ok(home.includes('<blockquote'), 'set as a blockquote')
+  ok(home.includes('<figcaption'), 'with the attribution as a caption')
 
   ok(home.includes('/dashboard/create'), 'Create a Trip still links out')
   ok(home.includes('/join'), 'so does Join a Trip')

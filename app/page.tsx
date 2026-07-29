@@ -19,13 +19,16 @@ export default function Home() {
       {/* The mark itself, centred beneath the lettering */}
       <GreenDot size={22} label="Green dot" />
 
-      {/* What a green dot actually means */}
-      <p className="text-white/45 text-sm sm:text-base leading-relaxed text-center max-w-[19rem] mt-7">
-        Your handicap is the best 8 of your last 20.
-      </p>
-      <p className="text-emerald-300/70 text-sm sm:text-base leading-relaxed text-center max-w-[19rem] mt-1.5 mb-12">
-        Those eight are green dots. Go and get one.
-      </p>
+      {/* The dot is undecided until you play the round */}
+      <figure className="mt-8 mb-12 max-w-[21rem]">
+        <blockquote className="text-white/60 text-base sm:text-lg leading-relaxed text-center italic text-balance">
+          &ldquo;At this moment the dot is both green and not green. Only your
+          actions decide which it becomes.&rdquo;
+        </blockquote>
+        <figcaption className="text-emerald-300/50 text-[11px] tracking-[0.2em] uppercase text-center mt-4">
+          — Erwin Schr&ouml;dinger
+        </figcaption>
+      </figure>
 
       {/* CTA buttons */}
       <div className="flex flex-col gap-4 w-full max-w-xs">
