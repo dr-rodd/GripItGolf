@@ -5,6 +5,7 @@ import { isLocked } from '@/lib/passcode'
 import TripCountdown from './TripCountdown'
 import GreenDot from '@/app/components/GreenDot'
 import BackButton from '@/app/components/BackButton'
+import SupportLink from '@/app/components/SupportLink'
 
 export const dynamic = 'force-dynamic'
 
@@ -334,6 +335,8 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       )}
 
       {/* ── Footer ── */}
+      <SupportLink className="px-6 pb-8" />
+
       <div className="px-6 pb-10 flex justify-center">
         <BackButton href="/" label="Green Dot Golf" />
       </div>

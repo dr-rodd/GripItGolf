@@ -42,6 +42,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://bnnnnuxoczzuipefhvms.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 CRON_SECRET=...
 ADMIN_PASSWORD=...   # /admin/trips. No NEXT_PUBLIC_ prefix — server only.
+NEXT_PUBLIC_DONATION_URL=...   # Revolut payment link. Unset = no support link anywhere.
 
 Stored in `.env.local` (gitignored). Service role key must never be exposed client-side.
 Vercel project: grip-it-golf (auto-deploys from master branch on GitHub)
@@ -269,6 +270,15 @@ Still a shared password: no per-user accounts, no audit trail, no way to revoke 
 
 Never shown to other players. Only surfaced on `/admin/trips`.
 
+## Support link
+
+An optional "support the app" link in the footer of the trip hub and the leaderboard. `app/components/SupportLink.tsx`, reading `NEXT_PUBLIC_DONATION_URL`.
+
+- **Unset means gone.** No link, no wrapper, no gap — `SupportLink` returns `null`, so removing the variable removes the feature completely.
+- The value is sanitised before it becomes an `href` (`lib/donation.ts`). An href is one of the few places a bad string becomes executable, so `javascript:` and `data:` are refused and render nothing.
+- `target="_blank"` with **both** `noopener` and `noreferrer`.
+- Never a modal, banner or popup, and never on the scoring pages — it must not sit anywhere near someone entering a score.
+
 ## Trip lifecycle
 
 Trips have a `setup_status` of `draft` or `live`.
@@ -324,6 +334,7 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:trip-form` | Trip creation |
 | `test:leaderboard` | Every board, live vs finalised, score ownership |
 | `test:admin` | Optional email, derived trip status, admin session signing |
+| `test:support` | The donation link, and that it vanishes when unconfigured |
 | `test:branding` | The green dot, the wordmark, back controls |
 
 **Mutation testing is the standard, not an extra.** Break the code deliberately, confirm a test fails, restore. It has repeatedly found suites that passed while testing nothing — most recently a pair-size assertion written against the constant it was meant to pin, so changing `PAIR_SIZE` to 3 left every check green.

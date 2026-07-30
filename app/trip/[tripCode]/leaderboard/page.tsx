@@ -5,6 +5,7 @@ import { parseTeamScoring } from '@/lib/teamScoring'
 import Poller from '@/app/components/Poller'
 import BackButton from '@/app/components/BackButton'
 import TripLeaderboardClient from './TripLeaderboardClient'
+import SupportLink from '@/app/components/SupportLink'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,6 +93,9 @@ export default async function TripLeaderboardPage({
         liveScores={liveScoresRes.data ?? []}
         roundHandicaps={hcpsRes.data ?? []}
       />
+
+      {/* Below the board, after everything worth reading */}
+      <SupportLink className="px-4 pb-12" />
     </div>
   )
 }
