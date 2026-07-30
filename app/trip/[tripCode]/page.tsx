@@ -1,8 +1,15 @@
+import { cookies } from 'next/headers'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-import { enabledSummary, parseFormats } from '@/lib/formats'
+import { enabledSummary, isPairsMatchplay, matchplayOn, parseFormats } from '@/lib/formats'
 import { isLocked } from '@/lib/passcode'
+import { playerCookieName, readPlayerId } from '@/lib/playerCookie'
+import {
+  standings, standingFor, matchRecord, describePosition, formatRelative,
+  type SummaryScore, type SummaryMatch,
+} from '@/lib/playerSummary'
 import TripCountdown from './TripCountdown'
+import WelcomeBack from './WelcomeBack'
 import GreenDot from '@/app/components/GreenDot'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
@@ -66,7 +73,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       .order('round_number'),
     supabase
       .from('players')
-      .select('id, name, handicap, claimed')
+      .select('id, name, handicap, claimed, team_id')
       .eq('trip_id', trip.id)
       .order('name'),
   ])
@@ -109,7 +116,86 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   const everyoneIn = players.length > 0 && pendingCount === 0
   const settingsLocked = isLocked(trip.settings_passcode_hash)
   const isDraft = (trip.setup_status ?? 'live') === 'draft'
-  const formatLine = enabledSummary(parseFormats(trip.formats)).join(' · ')
+  const formats = parseFormats(trip.formats)
+  const formatLine = enabledSummary(formats).join(' · ')
+
+  // ── Do we know who this is? ──
+  //
+  // A cookie left on this device when they joined. Nothing is fetched for it
+  // until it turns out to name somebody real, so a first-time visitor pays
+  // nothing for a greeting they will not see.
+  const jar = await cookies()
+  const knownId = readPlayerId(jar.get(playerCookieName(tripCode))?.value)
+  // The id has to belong to *this* trip. A cookie is per-trip already, but
+  // checking against the roster means a stale or copied one finds nobody
+  // rather than greeting a stranger from someone else's trip.
+  const me = knownId ? players.find(p => p.id === knownId) ?? null : null
+
+  const summaryLines: { label: string; value: string; strong?: boolean }[] = []
+
+  if (me) {
+    const [scoresResult, matchesResult] = await Promise.all([
+      supabase
+        .from('scores')
+        .select('player_id, round_id, stableford_points')
+        .eq('trip_id', trip.id),
+      matchplayOn(formats)
+        ? supabase
+            .from('matchplay_matches')
+            .select('player_a_id, player_b_id, winner_player_id, ' +
+                    'team_a_id, team_b_id, winner_team_id, ' +
+                    'player_a_is_bye, player_b_is_bye, entrant_type')
+            .eq('trip_id', trip.id)
+        : Promise.resolve({ data: [], error: null }),
+    ])
+
+    if (scoresResult.error) console.error('TripPage scores query failed:', scoresResult.error)
+    if (matchesResult.error) console.error('TripPage matchplay query failed:', matchesResult.error)
+
+    type MatchRow = {
+      player_a_id: string | null; player_b_id: string | null; winner_player_id: string | null
+      team_a_id: string | null;   team_b_id: string | null;   winner_team_id: string | null
+      player_a_is_bye: boolean;   player_b_is_bye: boolean
+    }
+    const matchRows = (matchesResult.data ?? []) as unknown as MatchRow[]
+
+    // The same totals the leaderboard shows, under the same discard rule
+    const scored: SummaryScore[] = (scoresResult.data ?? []).map(s => ({
+      playerId: s.player_id,
+      roundId: s.round_id,
+      points: s.stableford_points ?? 0,
+    }))
+    const board = standings(scored, formats.league.discardWorst)
+    const mine  = standingFor(me.id, board)
+
+    if (mine) {
+      summaryLines.push({ label: 'Points', value: String(mine.total), strong: true })
+      summaryLines.push({ label: 'Level', value: formatRelative(mine.relative) })
+      summaryLines.push({ label: 'Position', value: describePosition(mine, board.length) })
+      summaryLines.push({
+        label: 'Rounds',
+        value: `${mine.rounds} of ${rounds.length || mine.rounds}`,
+      })
+    }
+
+    // In a pairs draw the entrant is their pairing, not them
+    const entrantId = isPairsMatchplay(formats) ? me.team_id ?? null : me.id
+    if (entrantId && matchRows.length > 0) {
+      const pairs = isPairsMatchplay(formats)
+      const asSides: SummaryMatch[] = matchRows.map(m => ({
+        sideA:  pairs ? m.team_a_id : m.player_a_id,
+        sideB:  pairs ? m.team_b_id : m.player_b_id,
+        winner: pairs ? m.winner_team_id : m.winner_player_id,
+        isBye:  m.player_a_is_bye || m.player_b_is_bye,
+      }))
+      const record = matchRecord(entrantId, asSides)
+      if (record.played > 0) {
+        summaryLines.push({ label: 'Matches', value: `${record.won} of ${record.played}` })
+      } else if (record.stillIn) {
+        summaryLines.push({ label: 'Matchplay', value: 'In the draw' })
+      }
+    }
+  }
 
   const lockedButton = (label: string) => (
     <div className="w-full py-[18px] border-2 border-white/10 rounded-xl flex items-center justify-center gap-3">
@@ -132,6 +218,18 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
               dot, so the negative margin pulls the visible edge up to where
               the spacing looks right rather than where the box ends. */}
           <GreenDot size={16} className="-mt-1 mb-2" />
+
+          {/* Only for somebody this device already knows. A stranger sees the
+              page exactly as it was before this feature existed. */}
+          {me && (
+            <div className="w-full mb-5">
+              <WelcomeBack
+                tripCode={tripCode}
+                name={me.name.split(' ')[0]}
+                lines={summaryLines}
+              />
+            </div>
+          )}
 
           {/* Trip name — the reason you opened the page, so it leads.
               Scales with the viewport and wraps rather than shrinking to fit. */}

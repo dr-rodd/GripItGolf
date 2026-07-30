@@ -270,6 +270,29 @@ Still a shared password: no per-user accounts, no audit trail, no way to revoke 
 
 Never shown to other players. Only surfaced on `/admin/trips`.
 
+## Returning players
+
+A player joins without an account, so a cookie is the only way to greet them next time. `lib/playerCookie.ts`, `lib/playerSummary.ts`, `WelcomeBack.tsx`.
+
+**A cookie, not an IP address.** A household shares one IP, a club's wifi shares one across everybody in the bar, and a phone's changes on mobile data. None of that identifies a person.
+
+**A cookie, not localStorage.** The trip hub is server-rendered, so a cookie is readable while the page is being built and the greeting is in the first paint. localStorage would mean rendering as a stranger and then correcting it — a flicker on every visit.
+
+| | |
+|---|---|
+| Name | `gg_player_<TRIP_CODE>` — one per trip, so two trips can never be confused |
+| Value | the player's own `players.id`; no second identifier to keep in step |
+| Life | 180 days, `path=/`, `samesite=lax`, `secure` only over https |
+| Set on | claiming a slot, adding yourself, and creating a trip (the organiser) |
+
+**It is not a credential and must not become one.** It decides whose name is greeted and whose summary is shown, and every one of those facts is already visible to anyone holding the trip code. It is deliberately JavaScript-readable, since the join flow sets it in the browser. If it ever starts gating something — editing scores, seeing an email — it needs real auth behind it.
+
+The id is checked for UUID shape and then against *this trip's* roster, so a stale, junk or copied cookie recognises nobody rather than greeting a stranger. An unrecognised visitor sees the page exactly as it was before the feature existed: no error, no empty block.
+
+**Nothing is fetched for a stranger.** The scores and matchplay queries sit inside `if (me)`, so a first-time visitor pays nothing for a greeting they will not see.
+
+The summary reuses `totalAfterDiscard` — the trip's own discard rule — so the hub and the leaderboard cannot disagree. A **"Not you?"** control clears the cookie: a phone gets handed round on a golf trip, and without it the first person to join on a shared handset owns that device's greeting for six months.
+
 ## Support link
 
 An optional "support the app" link in the footer of the trip hub and the leaderboard. `app/components/SupportLink.tsx`, reading `NEXT_PUBLIC_DONATION_URL`.
@@ -334,6 +357,7 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:trip-form` | Trip creation |
 | `test:leaderboard` | Every board, live vs finalised, score ownership |
 | `test:admin` | Optional email, derived trip status, admin session signing |
+| `test:recognition` | The per-trip cookie, the personal summary, the greeting |
 | `test:support` | The donation link, and that it vanishes when unconfigured |
 | `test:branding` | The green dot, the wordmark, back controls |
 

@@ -8,6 +8,7 @@ import DateField from '@/app/components/DateField'
 import { MAX_ROUNDS, roundCountError } from '@/lib/tripLimits'
 import { DEFAULT_FORMATS } from '@/lib/formats'
 import { normaliseEmail, emailWarning, MAX_EMAIL } from '@/lib/email'
+import { rememberPlayer } from '@/lib/playerCookie'
 import Toggle from '@/app/components/Toggle'
 import {
   MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError,
@@ -270,7 +271,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
     // 3. Players (skip blanks)
     const validPlayers = players.filter(p => p.name.trim())
-    let playerRows: { id: string; handicap: number }[] = []
+    let playerRows: { id: string; handicap: number; is_lead?: boolean }[] = []
     if (validPlayers.length > 0) {
       const { data: insertedPlayers, error: playersErr } = await supabase
         .from('players')
@@ -288,7 +289,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
             team_id: useTeams && p.teamIndex >= 0 ? teamIds[p.teamIndex] ?? null : null,
           }))
         )
-        .select('id, handicap')
+        .select('id, handicap, is_lead')
 
       if (playersErr || !insertedPlayers) {
         setError(`Trip created, but the players failed. ${describeError(playersErr)}`)
@@ -296,6 +297,14 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
         return
       }
       playerRows = insertedPlayers
+
+      // The organiser entered themselves first and is already claimed, so
+      // remember them here rather than making them go through the join flow
+      // to be recognised on their own trip. Found by the flag rather than by
+      // position — relying on insert order returning unchanged is a bet that
+      // costs nothing to avoid.
+      const lead = insertedPlayers.find(p => p.is_lead)
+      if (lead) rememberPlayer(code, lead.id)
     }
 
     // 4. Rounds

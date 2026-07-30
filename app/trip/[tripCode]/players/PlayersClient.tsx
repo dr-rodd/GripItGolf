@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { rememberPlayer } from '@/lib/playerCookie'
 
 type Player = {
   id: string
@@ -39,6 +40,11 @@ export default function PlayersClient({
       setError('Could not claim player — try again')
       return
     }
+    // Remember them on this device, so the trip greets them by name next
+    // time. Only after the write succeeded — a failed claim should leave no
+    // trace. If cookies are blocked this does nothing and the trip is
+    // unaffected; they simply arrive as a stranger each visit.
+    rememberPlayer(tripCode, player.id)
     router.push(`/trip/${tripCode}`)
   }
 
@@ -53,18 +59,25 @@ export default function PlayersClient({
       setAdding(false)
       return
     }
-    const { error } = await supabase.from('players').insert({
-      trip_id: tripId,
-      name,
-      handicap,
-      gender: addGender,
-      claimed: true,
-    })
-    if (error) {
+    // The id comes back from the insert — that is the id the cookie stores,
+    // so there is no second identifier to keep in step with anything.
+    const { data, error } = await supabase
+      .from('players')
+      .insert({
+        trip_id: tripId,
+        name,
+        handicap,
+        gender: addGender,
+        claimed: true,
+      })
+      .select('id')
+      .single()
+    if (error || !data) {
       setError('Could not add player — try again')
       setAdding(false)
       return
     }
+    rememberPlayer(tripCode, data.id)
     router.push(`/trip/${tripCode}`)
   }
 
