@@ -41,6 +41,7 @@ Big Dog — not a coder. Uses Claude.ai for all design decisions and Claude Code
 NEXT_PUBLIC_SUPABASE_URL=https://bnnnnuxoczzuipefhvms.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 CRON_SECRET=...
+ADMIN_PASSWORD=...   # /admin/trips. No NEXT_PUBLIC_ prefix — server only.
 
 Stored in `.env.local` (gitignored). Service role key must never be exposed client-side.
 Vercel project: grip-it-golf (auto-deploys from master branch on GitHub)
@@ -78,6 +79,7 @@ Mobile-first. Used on the course, on phones, by non-technical users.
 | `/trip/[tripCode]/course` | Round picker for live scoring |
 | `/trip/[tripCode]/course/[roundNumber]` | Course dashboard — live scoring |
 | `/trip/[tripCode]/leaderboard` | Leaderboard — one tab per enabled format |
+| `/admin/trips` | Owner-only overview of every trip. Unlinked, noindex, password-gated |
 | `/dashboard` | Lead player's trip list (future — post auth) |
 | `/dashboard/create` | Trip creation wizard (future — post auth) |
 
@@ -244,6 +246,29 @@ This supersedes Donegal Masters rule 6 ("best-2-of-3") for trip pages — best-2
 
 **Future:** Skins, Nassau, Best Ball, Scramble, bracketed (rather than round-robin) matchplay.
 
+## Admin overview
+
+`/admin/trips` lists every trip on the platform, newest first: name, code, created date, lead email, player count and status. View only, linked from nowhere, `noindex`. You reach it by typing the URL.
+
+**The lock is server-side, unlike `lib/passcode.ts`.** That distinction matters and should not be collapsed:
+
+| | Trip settings passcode | Admin password |
+|---|---|---|
+| Guards | one trip's settings | every trip, and organisers' email addresses |
+| Checked | in the browser | on the server |
+| Secret | SHA-256 hash in a public column | `ADMIN_PASSWORD` env var, never `NEXT_PUBLIC_` |
+| Session | `sessionStorage` flag | HMAC-signed httpOnly cookie, 12h |
+
+A client-side check here would ship the password in the JS bundle and fetch the data with the anon key — no protection at all. The trip query sits below the cookie check, so a failed login never touches the data. The cookie is signed with the password itself, so it cannot be forged and changing the password logs everyone out. An unset `ADMIN_PASSWORD` fails **closed** — a misconfigured deploy is locked, not open.
+
+Still a shared password: no per-user accounts, no audit trail, no way to revoke one person. Fine for one operator; not fine for two. `lib/adminAuth.ts`, tested adversarially in `scripts/test-admin.ts`.
+
+## Lead player email
+
+`trips.lead_email` (migration 020) is nullable and optional, asked once on the creation form. **It must never block trip creation** — blank, half-typed and malformed all normalise to `null` and the trip is created regardless. `lib/email.ts` is a reader, not a validator: it either recognises an address or returns null. The column carries a shape check as a guard against hand-written rows, not as validation.
+
+Never shown to other players. Only surfaced on `/admin/trips`.
+
 ## Trip lifecycle
 
 Trips have a `setup_status` of `draft` or `live`.
@@ -298,6 +323,7 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:progress` | Recording and correcting winners, and the cascade |
 | `test:trip-form` | Trip creation |
 | `test:leaderboard` | Every board, live vs finalised, score ownership |
+| `test:admin` | Optional email, derived trip status, admin session signing |
 | `test:branding` | The green dot, the wordmark, back controls |
 
 **Mutation testing is the standard, not an extra.** Break the code deliberately, confirm a test fails, restore. It has repeatedly found suites that passed while testing nothing — most recently a pair-size assertion written against the constant it was meant to pin, so changing `PAIR_SIZE` to 3 left every check green.

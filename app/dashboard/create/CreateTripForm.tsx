@@ -7,6 +7,7 @@ import BackButton from '@/app/components/BackButton'
 import DateField from '@/app/components/DateField'
 import { MAX_ROUNDS, roundCountError } from '@/lib/tripLimits'
 import { DEFAULT_FORMATS } from '@/lib/formats'
+import { normaliseEmail, emailWarning, MAX_EMAIL } from '@/lib/email'
 import Toggle from '@/app/components/Toggle'
 import {
   MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError,
@@ -69,6 +70,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
   // Step 1
   const [tripName, setTripName] = useState('')
+  const [leadEmail, setLeadEmail] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [numRounds, setNumRounds] = useState(3)
@@ -229,6 +231,12 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
     // Only sent when a passcode was actually set, so a database that has not
     // had that column added yet can still create ordinary trips.
     if (passcodeHash) tripRow.settings_passcode_hash = passcodeHash
+
+    // Same reasoning, and the same for anything that is not an address:
+    // blank, half-typed or nonsense all mean "not given", and none of them is
+    // worth failing a trip over.
+    const email = normaliseEmail(leadEmail)
+    if (email) tripRow.lead_email = email
 
     const { data: trip, error: tripErr } = await supabase
       .from('trips')
@@ -477,6 +485,37 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
               <DateField label="Start date" value={startDate} onChange={setStartDate} />
               <DateField label="End date"   value={endDate}   onChange={setEndDate} />
+            </div>
+
+            {/* Optional, and it stays optional: nothing below depends on it,
+                nothing blocks on it, and a malformed address is simply not
+                saved rather than standing between anyone and their trip. */}
+            <div>
+              <label className={LABEL} htmlFor="lead-email">Email (optional)</label>
+              <input
+                id="lead-email"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                maxLength={MAX_EMAIL}
+                value={leadEmail}
+                onChange={e => setLeadEmail(e.target.value)}
+                placeholder="you@example.com"
+                className={INPUT}
+              />
+              <p className="text-white/30 text-xs mt-2 leading-snug">
+                So we can confirm your trip and keep you updated. Leave it blank
+                if you would rather not — the trip works either way, and no other
+                player ever sees it.
+              </p>
+              {emailWarning(leadEmail) && (
+                <p className="text-amber-400/80 text-xs mt-2 leading-snug">
+                  {emailWarning(leadEmail)}
+                </p>
+              )}
             </div>
 
             <div>
