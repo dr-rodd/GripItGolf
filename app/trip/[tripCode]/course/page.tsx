@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import BackButton from '@/app/components/BackButton'
+import TabBar from '@/app/components/TabBar'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,13 +31,13 @@ export default async function TripCoursePortalPage({
   if (roundsError) console.error('TripCoursePortal rounds query failed:', roundsError)
 
   return (
-    <div className="min-h-dvh bg-[#0a1a0e] text-white">
+    <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
 
       {/* Sticky header */}
-      <div className="border-b border-[#1e3d28] sticky top-0 z-20 bg-[#0a1a0e]">
+      <div className="border-b border-bark/12 sticky top-0 z-20 bg-cream">
         <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
           <BackButton href={`/trip/${tripCode}`} />
-          <h1 className="font-[family-name:var(--font-playfair)] text-lg text-white tracking-wide">
+          <h1 className="font-[family-name:var(--font-display)] text-lg text-ink tracking-wide">
             Live Scoring
           </h1>
           <div className="w-[60px]" />
@@ -44,12 +45,12 @@ export default async function TripCoursePortalPage({
       </div>
 
       <div className="max-w-lg mx-auto px-4 py-6">
-        <p className="text-white/35 text-xs tracking-[0.2em] uppercase mb-4">
+        <p className="text-ink/40 text-xs tracking-[0.2em] uppercase mb-4">
           Choose a round
         </p>
 
         {(rounds ?? []).length === 0 && (
-          <p className="text-white/40 text-sm py-8 text-center">
+          <p className="text-ink/40 text-sm py-8 text-center">
             No rounds set up for this trip yet.
           </p>
         )}
@@ -61,27 +62,28 @@ export default async function TripCoursePortalPage({
               <Link
                 key={round.id}
                 href={`/trip/${tripCode}/course/${round.round_number}`}
-                className="flex items-center justify-between w-full px-5 py-5 border border-white/10 rounded-xl hover:border-[#C9A84C]/40 hover:bg-white/[0.02] transition-colors"
+                className="flex items-center justify-between w-full px-5 py-5 border border-bark/12 rounded-xl hover:border-accent/40 hover:bg-surface transition-colors"
               >
                 <div className="min-w-0">
-                  <p className="text-[#C9A84C]/70 text-[10px] tracking-[0.25em] uppercase mb-1">
+                  <p className="text-ink/40 text-[10px] tracking-[0.25em] uppercase mb-1">
                     Round {round.round_number}
                     {round.status === 'completed' && ' · Completed'}
                     {round.status === 'active' && ' · In play'}
                   </p>
-                  <p className="font-[family-name:var(--font-playfair)] text-white text-lg leading-tight truncate">
+                  <p className="font-[family-name:var(--font-display)] text-ink text-lg leading-tight truncate">
                     {course?.name ?? `Round ${round.round_number}`}
                   </p>
                   {course?.location && (
-                    <p className="text-white/25 text-xs mt-1 truncate">{course.location}</p>
+                    <p className="text-ink/25 text-xs mt-1 truncate">{course.location}</p>
                   )}
                 </div>
-                <span className="text-[#C9A84C] text-lg flex-shrink-0 ml-4">→</span>
+                <span className="text-accent text-lg flex-shrink-0 ml-4">→</span>
               </Link>
             )
           })}
         </div>
       </div>
+      <TabBar tripCode={tripCode} />
     </div>
   )
 }

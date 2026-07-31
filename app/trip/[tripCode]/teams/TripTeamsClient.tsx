@@ -22,7 +22,7 @@ const UNASSIGNED = 'unassigned'
 
 const PRESET_COLORS = [
   '#DC2626', '#2563EB', '#16A34A', '#9333EA',
-  '#EA580C', '#DB2777', '#0D9488', '#C9A84C',
+  '#EA580C', '#DB2777', '#0D9488', '#0A9D56',
   '#65A30D', '#7C3AED', '#0891B2', '#B45309',
 ]
 
@@ -31,24 +31,24 @@ const PRESET_COLORS = [
 function PlayerTile({ player, faded = false }: { player: Player; faded?: boolean }) {
   return (
     <div
-      className={`border border-[#1e3d28] rounded-lg px-3 py-2.5 flex items-center justify-between gap-2 bg-[#152a1e] transition-opacity ${
+      className={`border border-bark/12 rounded-lg px-3 py-2.5 flex items-center justify-between gap-2 bg-surface transition-opacity ${
         faded ? 'opacity-25' : 'opacity-100'
       }`}
     >
-      <span className="text-white text-sm font-medium leading-tight flex-1 min-w-0 truncate">
+      <span className="text-ink text-sm font-medium leading-tight flex-1 min-w-0 truncate">
         {player.name}
       </span>
       <span
         className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
           player.gender === 'F'
-            ? 'bg-rose-900/40 text-rose-300'
-            : 'bg-blue-900/40 text-blue-300'
+            ? 'bg-rust/40 text-rose-300'
+            : 'bg-bark/40 text-blue-300'
         }`}
       >
         {player.gender}
       </span>
-      <span className="border border-[#C9A84C]/50 bg-[#C9A84C]/10 px-2 py-0.5 rounded flex-shrink-0">
-        <span className="font-[family-name:var(--font-playfair)] text-[#C9A84C] text-base leading-none">
+      <span className="border border-accent/50 bg-accent/10 px-2 py-0.5 rounded flex-shrink-0">
+        <span className="font-[family-name:var(--font-display)] text-accent text-base leading-none">
           {player.handicap ?? 0}
         </span>
       </span>
@@ -94,18 +94,18 @@ function TeamColumn({
       ref={setNodeRef}
       className={`rounded-xl overflow-hidden flex flex-col min-h-[180px] transition-all duration-150 ${
         isOver && !full
-          ? 'border-2 border-[#C9A84C]/60 bg-[#C9A84C]/5'
+          ? 'border-2 border-accent/60 bg-accent/5'
           : isOver && full
-            ? 'border-2 border-amber-500/60 bg-amber-500/5'
+            ? 'border-2 border-rust/60 bg-rust/5'
             : over
-              ? 'border border-amber-500/50 bg-[#0f2418]'
-              : 'border border-[#1e3d28] bg-[#0f2418]'
+              ? 'border border-rust/50 bg-surface'
+              : 'border border-bark/12 bg-surface'
       }`}
     >
-      <div className="px-3 py-3 border-b border-[#1e3d28] flex items-center gap-2">
+      <div className="px-3 py-3 border-b border-bark/12 flex items-center gap-2">
         <button
           onClick={() => setShowColors(v => !v)}
-          className="w-4 h-4 rounded-full flex-shrink-0 ring-offset-2 ring-offset-[#0f2418] hover:ring-2 hover:ring-white/40 transition-all"
+          className="w-4 h-4 rounded-full flex-shrink-0 ring-offset-2 ring-offset-surface hover:ring-2 hover:ring-bark/25 transition-all"
           style={{ backgroundColor: team.color }}
           aria-label={`Change ${team.name} colour`}
         />
@@ -117,24 +117,24 @@ function TeamColumn({
             else e.target.value = team.name
           }}
           onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-          className="flex-1 min-w-0 bg-transparent text-white text-sm font-semibold outline-none border-b border-transparent focus:border-[#C9A84C]/50 transition-colors"
+          className="flex-1 min-w-0 bg-transparent text-ink text-sm font-semibold outline-none border-b border-transparent focus:border-accent/50 transition-colors"
         />
         <span className={`text-xs flex-shrink-0 tabular-nums ${
-          over ? 'text-amber-400' : 'text-white/25'
+          over ? 'text-rust-deep' : 'text-ink/25'
         }`}>
           {sizeLimit !== null ? `${players.length}/${sizeLimit}` : players.length} · {totalHandicap}
         </span>
       </div>
 
       {showColors && (
-        <div className="px-3 py-2.5 border-b border-[#1e3d28] flex gap-2 flex-wrap">
+        <div className="px-3 py-2.5 border-b border-bark/12 flex gap-2 flex-wrap">
           {PRESET_COLORS.map(color => (
             <button
               key={color}
               onClick={() => { onRecolour(team.id, color); setShowColors(false) }}
               style={{ backgroundColor: color }}
               className={`w-6 h-6 rounded-full transition-transform hover:scale-110 ${
-                team.color === color ? 'ring-2 ring-white ring-offset-2 ring-offset-[#0f2418]' : ''
+                team.color === color ? 'ring-2 ring-bark/40 ring-offset-2 ring-offset-surface' : ''
               }`}
               aria-label={`Colour ${color}`}
             />
@@ -145,10 +145,10 @@ function TeamColumn({
       <div className="p-2 space-y-2 flex-1">
         {players.map(p => <DraggablePlayer key={p.id} player={p} />)}
         {players.length === 0 && (
-          <p className="text-white/15 text-sm text-center py-8 select-none">Drop here</p>
+          <p className="text-ink/25 text-sm text-center py-8 select-none">Drop here</p>
         )}
         {full && !over && (
-          <p className="text-white/20 text-[10px] tracking-wider uppercase text-center pb-2 select-none">
+          <p className="text-ink/25 text-[10px] tracking-wider uppercase text-center pb-2 select-none">
             Full
           </p>
         )}
@@ -164,18 +164,18 @@ function UnassignedZone({ players }: { players: Player[] }) {
       ref={setNodeRef}
       className={`rounded-xl overflow-hidden transition-all duration-150 ${
         isOver
-          ? 'border-2 border-[#C9A84C]/60 bg-[#C9A84C]/5'
-          : 'border border-[#1e3d28] bg-[#0f2418]'
+          ? 'border-2 border-accent/60 bg-accent/5'
+          : 'border border-bark/12 bg-surface'
       }`}
     >
-      <div className="px-4 py-3 border-b border-[#1e3d28] flex items-center justify-between">
-        <span className="text-white/50 text-xs tracking-[0.2em] uppercase">Unassigned</span>
-        <span className="text-white/25 text-xs tabular-nums">{players.length}</span>
+      <div className="px-4 py-3 border-b border-bark/12 flex items-center justify-between">
+        <span className="text-ink/40 text-xs tracking-[0.2em] uppercase">Unassigned</span>
+        <span className="text-ink/25 text-xs tabular-nums">{players.length}</span>
       </div>
       <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 min-h-[72px]">
         {players.map(p => <DraggablePlayer key={p.id} player={p} />)}
         {players.length === 0 && (
-          <p className="text-white/15 text-sm py-4 col-span-full text-center select-none">
+          <p className="text-ink/25 text-sm py-4 col-span-full text-center select-none">
             Everyone has a team
           </p>
         )}
@@ -384,15 +384,15 @@ export default function TripTeamsClient({
 
         {/* A pairs draw fixes the size, so say so before anyone picks */}
         {banner && (
-          <div className="flex items-start gap-3 px-4 py-3.5 bg-[#C9A84C]/10 border border-[#C9A84C]/40 rounded-xl">
-            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#C9A84C] flex-shrink-0" />
-            <p className="text-[#C9A84C] text-sm leading-snug">{banner}</p>
+          <div className="flex items-start gap-3 px-4 py-3.5 bg-accent/10 border border-accent/40 rounded-xl">
+            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0" />
+            <p className="text-accent text-sm leading-snug">{banner}</p>
           </div>
         )}
 
         {/* Team count */}
         <div>
-          <label className="block text-white/60 text-xs uppercase tracking-wider mb-2">
+          <label className="block text-ink/65 text-xs uppercase tracking-wider mb-2">
             Number of {noun.many}
           </label>
           <div className="flex gap-2 flex-wrap">
@@ -403,8 +403,8 @@ export default function TripTeamsClient({
                 disabled={busy}
                 className={`flex-1 min-w-[48px] py-3 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
                   teams.length === n
-                    ? 'bg-[#C9A84C] text-[#0a1a0e]'
-                    : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
+                    ? 'bg-accent text-ink'
+                    : 'bg-surface border border-bark/12 text-ink/65 hover:border-bark/25'
                 }`}
               >
                 {n}
@@ -418,13 +418,13 @@ export default function TripTeamsClient({
           <button
             onClick={autoBalance}
             disabled={busy}
-            className="w-full py-3.5 border border-[#C9A84C]/40 text-[#C9A84C] rounded-xl text-sm tracking-wider uppercase hover:bg-[#C9A84C]/10 transition-colors disabled:opacity-40"
+            className="w-full py-3.5 border border-accent/40 text-accent rounded-xl text-sm tracking-wider uppercase hover:bg-accent/10 transition-colors disabled:opacity-40"
           >
             {pairs ? 'Auto-pair high with low' : 'Auto-balance by handicap'}
           </button>
         )}
 
-        <p className="text-white/30 text-xs text-center">
+        <p className="text-ink/40 text-xs text-center">
           Drag players between {noun.many}. On a phone, press and hold briefly first.
         </p>
 
@@ -445,7 +445,7 @@ export default function TripTeamsClient({
         </div>
 
         {teams.length === 0 && (
-          <p className="text-white/40 text-sm text-center py-8">
+          <p className="text-ink/40 text-sm text-center py-8">
             Pick a number of {noun.many} above to get started.
           </p>
         )}
@@ -453,15 +453,15 @@ export default function TripTeamsClient({
 
       <DragOverlay dropAnimation={null}>
         {activePlayer && (
-          <div className="rotate-1 scale-105 shadow-xl shadow-black/60 w-56">
+          <div className="rotate-1 scale-105 shadow-xl shadow-bark/20 w-56">
             <PlayerTile player={activePlayer} />
           </div>
         )}
       </DragOverlay>
 
       {error && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 bg-[#1a0f0a] border border-amber-500/40 rounded-xl shadow-xl z-50">
-          <p className="text-amber-400 text-sm whitespace-nowrap">{error}</p>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 bg-surface border border-rust/40 rounded-xl shadow-xl z-50">
+          <p className="text-rust-deep text-sm whitespace-nowrap">{error}</p>
         </div>
       )}
     </DndContext>

@@ -92,9 +92,9 @@ type BoardRow = {
 
 // ─── Donegal Masters scorecard styling ─────────────────────────
 
-const SC_SF    = { fontFamily: 'Georgia, serif' }
-const SC_MUTED = 'text-[#7A7060]'
-const SC_DARK  = 'text-[#3A3A2E]'
+const SC_SF    = { fontFamily: 'var(--font-serif)' }
+const SC_MUTED = 'text-[rgba(43,33,24,0.45)]'
+const SC_DARK  = 'text-[#2B2118]'
 
 // ─── Scoring helpers ───────────────────────────────────────────
 
@@ -122,8 +122,7 @@ const firstName = (n: string) => n.split(' ')[0]
 function LiveDot() {
   return (
     <span
-      className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0 animate-pulse"
-      style={{ boxShadow: '0 0 6px rgba(52,211,153,0.9)' }}
+      className="w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0 dot-live"
       title="Card still open"
     />
   )
@@ -147,12 +146,9 @@ function formatRelative(n: number): string {
 /** Shown while a scorecard is open somewhere on the trip. */
 function InPlayBadge() {
   return (
-    <span className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-emerald-500/40 bg-emerald-500/10">
-      <span
-        className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"
-        style={{ boxShadow: '0 0 6px rgba(52,211,153,0.9)' }}
-      />
-      <span className="text-emerald-300 text-[10px] tracking-[0.15em] uppercase">In play</span>
+    <span className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/[0.22]">
+      <span className="w-1.5 h-1.5 rounded-full bg-accent dot-live" aria-hidden="true" />
+      <span className="t-cap uppercase tracking-[0.12em] text-accent-deep">In play</span>
     </span>
   )
 }
@@ -166,8 +162,8 @@ function describeCustomTable(table: number[]): string {
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="border border-[#1e3d28] py-16 text-center">
-      <p className="text-white/30 text-sm px-6">{message}</p>
+    <div className="bg-surface border border-bark/12 rounded-2xl py-14 text-center">
+      <p className="t-body text-ink/65 px-6 max-w-[24rem] mx-auto">{message}</p>
     </div>
   )
 }
@@ -204,7 +200,7 @@ function ScorecardSheet({
   const scoreSymbol = (gross: number | null, par: number, isNR: boolean) => {
     if (isNR) {
       return (
-        <span className="inline-flex items-center justify-center w-9 h-9 border border-orange-500/60 rounded-sm text-orange-500 text-xs font-semibold">
+        <span className="inline-flex items-center justify-center w-9 h-9 border border-rust/60 rounded-sm text-rust text-xs font-semibold">
           NR
         </span>
       )
@@ -212,26 +208,26 @@ function ScorecardSheet({
     if (gross === null) return <span className={`${SC_MUTED} text-lg`} style={SC_SF}>—</span>
     const diff = gross - par
     if (diff <= -2) return (
-      <span className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-[#C9A84C]">
-        <span className="absolute inset-[3px] rounded-full border border-[#C9A84C]" />
-        <span className="relative text-sm font-semibold leading-none text-[#7B5C1E]">{gross}</span>
+      <span className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-accent">
+        <span className="absolute inset-[3px] rounded-full border border-accent" />
+        <span className="relative text-sm font-semibold leading-none text-[#0A6B3C]">{gross}</span>
       </span>
     )
     if (diff === -1) return (
-      <span className="inline-flex w-9 h-9 rounded-full border border-[#C9A84C] items-center justify-center text-[#7B5C1E] text-lg font-semibold leading-none">
+      <span className="inline-flex w-9 h-9 rounded-full border border-accent items-center justify-center text-[#0A6B3C] text-lg font-semibold leading-none">
         {gross}
       </span>
     )
     if (diff === 0) return <span className={`${SC_DARK} text-lg font-semibold`} style={SC_SF}>{gross}</span>
     if (diff === 1) return (
-      <span className="inline-flex w-9 h-9 rounded-md border border-[#9B8860] items-center justify-center text-[#5A4F3A] text-lg font-semibold leading-none">
+      <span className="inline-flex w-9 h-9 rounded-md border border-[rgba(74,55,40,0.55)] items-center justify-center text-[#4A3728] text-lg font-semibold leading-none">
         {gross}
       </span>
     )
     return (
-      <span className="relative inline-flex items-center justify-center w-9 h-9 rounded-md border border-[#9B8860]">
-        <span className="absolute inset-[3px] rounded-sm border border-[#9B8860]" />
-        <span className="relative text-sm font-semibold leading-none text-[#5A4F3A]">{gross}</span>
+      <span className="relative inline-flex items-center justify-center w-9 h-9 rounded-md border border-[rgba(74,55,40,0.55)]">
+        <span className="absolute inset-[3px] rounded-sm border border-[rgba(74,55,40,0.55)]" />
+        <span className="relative text-sm font-semibold leading-none text-[#4A3728]">{gross}</span>
       </span>
     )
   }
@@ -251,19 +247,19 @@ function ScorecardSheet({
 
   const SummaryRow = ({ label, hs }: { label: string; hs: Hole[] }) => (
     <div
-      style={{ ...gridCols, background: 'rgba(201,168,76,0.18)' }}
-      className="px-3 py-2 items-center border-y border-[#D4CBBA]"
+      style={{ ...gridCols, background: 'rgba(10,157,86,0.12)' }}
+      className="px-3 py-2 items-center border-y border-[rgba(74,55,40,0.18)]"
     >
-      <span className="text-xs font-bold tracking-widest uppercase text-[#4A3810]" style={SC_SF}>{label}</span>
-      <span className="text-base font-bold text-[#4A3810]" style={SC_SF}>
+      <span className="text-xs font-bold tracking-widest uppercase text-[#0A6B3C]" style={SC_SF}>{label}</span>
+      <span className="text-base font-bold text-[#0A6B3C]" style={SC_SF}>
         {sumPar(hs, players[0]?.gender ?? 'M')}
       </span>
       {players.map(p => (
-        <span key={p.id} className="text-center text-base font-bold text-[#4A3810]" style={SC_SF}>
+        <span key={p.id} className="text-center text-base font-bold text-[#0A6B3C]" style={SC_SF}>
           {sumGross(hs, p.id) > 0 ? sumGross(hs, p.id) : '—'}
         </span>
       ))}
-      <span className="text-right text-lg font-bold text-[#5C4520] font-[family-name:var(--font-playfair)]">
+      <span className="text-right text-lg font-bold text-[#0A6B3C] font-[family-name:var(--font-display)]">
         {players.reduce((s, p) => s + sumPts(hs, p.id), 0)}
       </span>
     </div>
@@ -271,45 +267,45 @@ function ScorecardSheet({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/70" />
+      <div className="absolute inset-0 bg-ink/50" />
       <div
-        className="relative bg-[#0a1a0e] rounded-t-2xl flex flex-col max-h-[90vh]"
+        className="relative bg-cream rounded-t-2xl flex flex-col max-h-[90vh]"
         style={{ paddingTop: 'max(env(safe-area-inset-top), 16px)' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Title — never scrolls */}
         <div className="flex-shrink-0 flex items-center justify-between px-4 pt-5 pb-3">
           <div className="min-w-0 flex items-baseline gap-3 flex-wrap">
-            <p className="font-[family-name:var(--font-playfair)] text-white text-2xl leading-tight truncate">
+            <p className="font-[family-name:var(--font-display)] text-ink text-2xl leading-tight truncate">
               {title}
             </p>
-            <p className="text-[#C9A84C] text-base truncate">{subtitle}</p>
+            <p className="text-accent text-base truncate">{subtitle}</p>
           </div>
           <button
             onClick={onClose}
-            className="text-white/50 hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-xl flex-shrink-0"
+            className="text-ink/40 hover:text-ink transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-xl flex-shrink-0"
             aria-label="Close scorecard"
           >
             ✕
           </button>
         </div>
 
-        <div className="flex flex-col flex-1 min-h-0 rounded-t-xl overflow-hidden" style={{ background: '#F5F0E8' }}>
+        <div className="flex flex-col flex-1 min-h-0 rounded-t-xl overflow-hidden" style={{ background: '#FFFFFF' }}>
 
           {/* Players + their playing handicaps */}
           <div
-            className="flex-shrink-0 flex items-baseline gap-3 px-3 py-2 border-b border-[#D4CBBA]"
-            style={{ background: '#EAE4D5' }}
+            className="flex-shrink-0 flex items-baseline gap-3 px-3 py-2 border-b border-[rgba(74,55,40,0.18)]"
+            style={{ background: '#F1EEE9' }}
           >
-            <span className="text-[10px] tracking-[0.15em] uppercase flex-shrink-0" style={{ ...SC_SF, color: '#7A7060' }}>
+            <span className="text-[10px] tracking-[0.15em] uppercase flex-shrink-0" style={{ ...SC_SF, color: 'rgba(43,33,24,0.45)' }}>
               {players.length > 1 ? 'Players' : 'Player'}
             </span>
             <div className="flex-1 min-w-0 flex items-baseline justify-between">
               {players.map(p => {
                 const hcp = roundHandicaps.find(rh => rh.player_id === p.id && rh.round_id === round.id)?.playing_handicap
                 return (
-                  <span key={p.id} className="flex-1 text-center text-sm text-[#2C2C1E]" style={SC_SF}>
-                    <span className="font-[family-name:var(--font-playfair)] font-semibold">{firstName(p.name)}</span>
+                  <span key={p.id} className="flex-1 text-center text-sm text-[#2B2118]" style={SC_SF}>
+                    <span className="font-[family-name:var(--font-display)] font-semibold">{firstName(p.name)}</span>
                     {' '}
                     <span className={`text-[10px] ${SC_MUTED}`}>{hcp ?? '—'}</span>
                   </span>
@@ -320,8 +316,8 @@ function ScorecardSheet({
 
           {/* Column headers */}
           <div
-            style={{ ...gridCols, background: '#EAE4D5' }}
-            className="flex-shrink-0 px-3 py-1.5 border-b border-[#D4CBBA]"
+            style={{ ...gridCols, background: '#F1EEE9' }}
+            className="flex-shrink-0 px-3 py-1.5 border-b border-[rgba(74,55,40,0.18)]"
           >
             {(['Hole', 'Par'] as const).map(h => (
               <span key={h} className={`text-[10px] tracking-[0.15em] uppercase font-semibold ${SC_MUTED}`} style={SC_SF}>
@@ -355,7 +351,7 @@ function ScorecardSheet({
                 <Fragment key={hole.id}>
                   <div
                     style={gridCols}
-                    className="px-3 py-1.5 items-center border-b border-[#E3DCCC]"
+                    className="px-3 py-1.5 items-center border-b border-[rgba(74,55,40,0.10)]"
                   >
                     <span className={`text-base font-semibold ${SC_DARK}`} style={SC_SF}>
                       {hole.hole_number}
@@ -376,7 +372,7 @@ function ScorecardSheet({
                       )
                     })}
                     <span
-                      className={`text-right text-base ${rowPts > 0 ? 'text-[#7B6C3E] font-bold' : `${SC_MUTED} opacity-60`}`}
+                      className={`text-right text-base ${rowPts > 0 ? 'text-[#0A6B3C] font-bold' : `${SC_MUTED} opacity-60`}`}
                       style={SC_SF}
                     >
                       {rowPts > 0 ? rowPts : '—'}
@@ -391,19 +387,19 @@ function ScorecardSheet({
               <>
                 {back.length > 0 && <SummaryRow label="In" hs={back} />}
                 <div
-                  style={{ ...gridCols, background: 'rgba(201,168,76,0.35)' }}
+                  style={{ ...gridCols, background: 'rgba(10,157,86,0.12)' }}
                   className="px-3 py-2.5 items-center"
                 >
-                  <span className="text-sm font-bold tracking-widest uppercase text-[#4A3810]" style={SC_SF}>Tot</span>
-                  <span className="text-lg font-bold text-[#4A3810]" style={SC_SF}>
+                  <span className="text-sm font-bold tracking-widest uppercase text-[#0A6B3C]" style={SC_SF}>Tot</span>
+                  <span className="text-lg font-bold text-[#0A6B3C]" style={SC_SF}>
                     {sumPar(courseHoles, players[0]?.gender ?? 'M')}
                   </span>
                   {players.map(p => (
-                    <span key={p.id} className="text-center text-lg font-bold text-[#4A3810]" style={SC_SF}>
+                    <span key={p.id} className="text-center text-lg font-bold text-[#0A6B3C]" style={SC_SF}>
                       {sumGross(courseHoles, p.id) > 0 ? sumGross(courseHoles, p.id) : '—'}
                     </span>
                   ))}
-                  <span className="text-right text-2xl font-extrabold text-[#5C4520] font-[family-name:var(--font-playfair)]">
+                  <span className="text-right text-2xl font-extrabold text-[#0A6B3C] font-[family-name:var(--font-display)]">
                     {players.reduce((s, p) => s + sumPts(courseHoles, p.id), 0)}
                   </span>
                 </div>
@@ -427,7 +423,7 @@ function CourseTiles({
   onTileClick: (round: Round) => void
 }) {
   return (
-    <div className="px-3 pb-4 pt-2 space-y-2 bg-[#070f09]">
+    <div className="px-3 pb-4 pt-2 space-y-2 bg-cream">
       {rounds.map(round => {
         const pts = row.perRound[round.id] ?? 0
         const hasScores = row.playedRounds.includes(round.id)
@@ -439,21 +435,21 @@ function CourseTiles({
           <button
             key={round.id}
             onClick={() => onTileClick(round)}
-            className={`w-full text-left rounded-sm border transition-all duration-200 overflow-hidden active:opacity-75 ${
+            className={`w-full text-left rounded-xl border transition-colors duration-150 overflow-hidden active:opacity-75 ${
               live
-                ? 'border-emerald-500/50 shadow-[0_0_16px_rgba(16,185,129,0.12)] bg-[#0f2418]'
+                ? 'border-accent/50  bg-surface'
                 : hasScores
-                  ? 'border-[#C9A84C]/50 shadow-[0_0_16px_rgba(201,168,76,0.10)] bg-[#0f2418]'
-                  : 'border-[#1e3d28] bg-[#0f2418]'
+                  ? 'border-accent/50  bg-surface'
+                  : 'border-bark/12 bg-surface'
             }`}
           >
             <div className="px-5 py-4 flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <p className="font-[family-name:var(--font-playfair)] text-white text-base leading-tight truncate">
+                <p className="font-[family-name:var(--font-display)] text-ink text-base leading-tight truncate">
                   {round.courses?.name ?? `Round ${round.round_number}`}
                 </p>
                 <p className={`text-sm mt-1 truncate ${
-                  live ? 'text-emerald-300' : hasScores ? 'text-[#C9A84C]' : 'text-white/25'
+                  live ? 'text-accent-deep' : hasScores ? 'text-ink/65' : 'text-ink/40'
                 }`}>
                   {live
                     ? heroName ? `In play — carried by ${firstName(heroName)}` : 'Card still open'
@@ -464,13 +460,13 @@ function CourseTiles({
               </div>
               <div className="flex-shrink-0 flex items-center gap-3">
                 {hasScores && (
-                  <span className={`font-[family-name:var(--font-playfair)] text-xl font-bold tabular-nums ${
-                    live ? 'text-emerald-400' : 'text-[#C9A84C]'
+                  <span className={`font-[family-name:var(--font-display)] text-xl font-bold tabular-nums ${
+                    live ? 'text-accent-deep' : 'text-ink'
                   }`}>
                     {live && rel !== undefined ? formatRelative(rel) : formatScore(pts)}
                   </span>
                 )}
-                <span className="text-white/30 text-sm">View →</span>
+                <span className="text-ink/40 text-sm">View →</span>
               </div>
             </div>
           </button>
@@ -503,20 +499,20 @@ function Board({
   } as const
 
   return (
-    <div className="border border-[#1e3d28]">
+    <div className="bg-surface border border-bark/12 rounded-2xl overflow-hidden">
       {/* Sticky column headers */}
       <div
         style={gridStyle}
-        className="sticky top-[85px] z-10 px-3 py-1 bg-[#0a1a0e] border-b border-[#1e3d28]"
+        className="sticky top-0 z-10 px-3 py-1.5 bg-surface border-b border-bark/12"
       >
-        <span className="text-[10px] tracking-widest uppercase text-white/30">Pos</span>
-        <span className="text-[10px] tracking-widest uppercase text-white/30">Name</span>
+        <span className="text-[10px] tracking-widest uppercase text-ink/40">Pos</span>
+        <span className="text-[10px] tracking-widest uppercase text-ink/40">Name</span>
         {showRoundColumns && rounds.map(r => (
-          <span key={r.id} className="text-xs text-white/30 text-center tabular-nums">
+          <span key={r.id} className="text-xs text-ink/40 text-center tabular-nums">
             {r.round_number}
           </span>
         ))}
-        <span className="text-[10px] tracking-widest uppercase text-white/30 text-right">Tot</span>
+        <span className="text-[10px] tracking-widest uppercase text-ink/40 text-right">Tot</span>
       </div>
 
       {rows.map((row, i) => {
@@ -527,24 +523,22 @@ function Board({
             <button
               onClick={() => setExpandedId(prev => (prev === row.id ? null : row.id))}
               style={gridStyle}
-              className={`w-full px-3 py-1 text-left active:bg-white/5 transition-colors ${
-                !isLast || isExpanded ? 'border-b border-[#1e3d28]' : ''
+              className={`w-full px-3 py-1 text-left active:bg-surface transition-colors ${
+                !isLast || isExpanded ? 'border-b border-bark/12' : ''
               }`}
             >
-              <span className="text-white/40 text-sm font-semibold tabular-nums">{i + 1}</span>
+              <span className="t-cap text-ink/40 tabular-nums pt-0.5">{i + 1}</span>
 
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   {row.color && (
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} />
                   )}
-                  <span className="font-[family-name:var(--font-playfair)] text-base text-white truncate">
-                    {row.name}
-                  </span>
+                  <span className="t-card text-ink truncate">{row.name}</span>
                   {row.isLive && <LiveDot />}
                 </div>
                 {row.subLabel && (
-                  <p className={`text-white/30 text-xs truncate leading-snug ${row.color ? 'pl-3.5' : ''}`}>
+                  <p className={`text-ink/40 text-xs truncate leading-snug ${row.color ? 'pl-3.5' : ''}`}>
                     {row.subLabel}
                   </p>
                 )}
@@ -571,10 +565,10 @@ function Board({
                     className={`text-center tabular-nums font-semibold ${
                       showRelative ? 'text-xl' : 'text-2xl'
                     } ${
-                      !played ? 'text-white/20'
-                        : dropped ? 'text-white/25 line-through decoration-white/30'
-                        : live ? 'text-emerald-400'
-                        : 'text-[#C9A84C]/80'
+                      !played ? 'text-ink/25'
+                        : dropped ? 'text-ink/25 line-through decoration-ink/30'
+                        : live ? 'text-accent'
+                        : 'text-ink'
                     }`}
                   >
                     {!played ? '—' : showRelative ? formatRelative(rel) : formatScore(pts)}
@@ -584,13 +578,15 @@ function Board({
 
               {/* Rows are pre-filtered to those who have played, so the
                   total is always a real number — including a legitimate 0. */}
-              <span className="text-right tabular-nums font-bold text-2xl text-[#C9A84C]">
+              {/* The total is the primary datum, so it is plain ink. Emerald
+                  on this board means one thing only: still being played. */}
+              <span className="text-right t-num font-semibold text-2xl text-ink">
                 {formatScore(row.total)}
               </span>
             </button>
 
             {isExpanded && (
-              <div className={!isLast ? 'border-b border-[#1e3d28]' : ''}>
+              <div className={!isLast ? 'border-b border-bark/12' : ''}>
                 <CourseTiles
                   row={row}
                   rounds={rounds}
@@ -616,24 +612,24 @@ function Board({
  */
 function MatchplayButton({ tripCode, enabled }: { tripCode: string; enabled: boolean }) {
   const base =
-    'w-full flex items-center justify-between px-5 py-4 rounded-sm border transition-colors mb-4'
+    'w-full flex items-center justify-between px-5 py-4 rounded-2xl border transition-colors duration-150 mb-4'
 
   if (!enabled) {
     return (
       <div
-        className={`${base} border-[#1e3d28] bg-[#0f2418] opacity-50 cursor-not-allowed`}
+        className={`${base} border-bark/12 bg-surface opacity-50 cursor-not-allowed`}
         aria-disabled="true"
       >
         <span className="min-w-0">
-          <span className="block font-[family-name:var(--font-playfair)] text-white/40 text-base leading-tight">
+          <span className="block font-[family-name:var(--font-display)] text-ink/40 text-base leading-tight">
             Matchplay
           </span>
-          <span className="block text-white/25 text-xs mt-0.5">
+          <span className="block text-ink/25 text-xs mt-0.5">
             Switch it on in Trip Setup to use it
           </span>
         </span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             strokeWidth="2" className="text-white/20 flex-shrink-0 ml-4" aria-hidden="true">
+             strokeWidth="2" className="text-ink/25 flex-shrink-0 ml-4" aria-hidden="true">
           <rect x="3" y="11" width="18" height="11" rx="2" />
           <path d="M7 11V7a5 5 0 0110 0v4" />
         </svg>
@@ -644,15 +640,15 @@ function MatchplayButton({ tripCode, enabled }: { tripCode: string; enabled: boo
   return (
     <Link
       href={`/trip/${tripCode}/matchplay`}
-      className={`${base} border-[#C9A84C]/50 bg-[#0f2418] shadow-[0_0_16px_rgba(201,168,76,0.10)] hover:border-[#C9A84C] active:opacity-75`}
+      className={`${base} border-accent/50 bg-surface  hover:border-accent active:opacity-75`}
     >
       <span className="min-w-0">
-        <span className="block font-[family-name:var(--font-playfair)] text-white text-base leading-tight">
+        <span className="block font-[family-name:var(--font-display)] text-ink text-base leading-tight">
           Matchplay
         </span>
-        <span className="block text-[#C9A84C] text-xs mt-0.5">View the knockout draw</span>
+        <span className="block text-accent text-xs mt-0.5">View the knockout draw</span>
       </span>
-      <span className="text-white/30 text-sm flex-shrink-0 ml-4">View →</span>
+      <span className="text-ink/40 text-sm flex-shrink-0 ml-4">View →</span>
     </Link>
   )
 }
@@ -1034,10 +1030,10 @@ export default function TripLeaderboardClient({
             <button
               key={t.key}
               onClick={() => setActive(t.key)}
-              className={`flex-shrink-0 px-4 py-2.5 text-xs tracking-[0.15em] uppercase transition-colors rounded-sm border ${
+              className={`flex-shrink-0 px-4 py-2.5 t-label transition-colors duration-150 rounded-xl border ${
                 active === t.key
-                  ? 'bg-[#C9A84C] text-[#0a1a0e] font-bold border-[#C9A84C]'
-                  : 'bg-[#0f2418] border-[#1e3d28] text-white/50 hover:text-white/80'
+                  ? 'bg-accent text-ink font-bold border-accent'
+                  : 'bg-surface border-bark/12 text-ink/40 hover:text-ink/65'
               }`}
             >
               {t.tabLabel}
@@ -1048,22 +1044,22 @@ export default function TripLeaderboardClient({
 
       {/* Title card — only worth the space once there is more than one board */}
       {tabs.length > 1 ? (
-        <div className="border border-[#1e3d28] rounded-sm px-4 py-3 mb-3">
+        <div className="bg-surface border border-bark/12 rounded-2xl px-4 py-3 mb-3">
           <div className="flex items-center justify-between gap-3">
-            <p className="font-[family-name:var(--font-playfair)] text-white text-base leading-tight">
+            <p className="font-[family-name:var(--font-display)] text-ink text-base leading-tight">
               {boardTitle}
             </p>
             {inPlay && <InPlayBadge />}
           </div>
           {boardRules.length > 0 && (
-            <p className="text-white/35 text-xs mt-1 leading-snug">
+            <p className="text-ink/40 text-xs mt-1 leading-snug">
               {boardRules.join(' · ')}
             </p>
           )}
         </div>
       ) : (
         <div className="flex items-center justify-between gap-3 mb-3">
-          <p className="text-white/30 text-xs leading-relaxed min-w-0">
+          <p className="text-ink/40 text-xs leading-relaxed min-w-0">
             {boardRules.join(' · ')}
           </p>
           {inPlay && <InPlayBadge />}
@@ -1076,15 +1072,14 @@ export default function TripLeaderboardClient({
       {inPlay && currentRows.length > 0 && (
         <div className="flex items-center gap-4 mb-2 px-1">
           <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"
-                  style={{ boxShadow: '0 0 6px rgba(52,211,153,0.9)' }} />
-            <span className="text-white/35 text-[10px] tracking-wider uppercase">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent" aria-hidden="true" />
+            <span className="text-ink/40 text-[10px] tracking-wider uppercase">
               {relativeBoard ? 'In play — against level' : 'In play'}
             </span>
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C]" />
-            <span className="text-white/35 text-[10px] tracking-wider uppercase">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+            <span className="text-ink/40 text-[10px] tracking-wider uppercase">
               Card in — {active === 'strokes' ? 'nett total' : 'total'}
             </span>
           </span>
@@ -1105,7 +1100,7 @@ export default function TripLeaderboardClient({
         )}
 
       {!showRoundColumns && sortedRounds.length > 4 && (
-        <p className="text-white/25 text-xs mt-3 text-center">
+        <p className="text-ink/25 text-xs mt-3 text-center">
           Tap a row to see every round.
         </p>
       )}

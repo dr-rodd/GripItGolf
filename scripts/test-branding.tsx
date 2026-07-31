@@ -1,17 +1,26 @@
 /**
- * Branding tests. Run with: npm run test:branding
+ * Style-system tests. Run with: npm run test:branding
  *
- * The green dot is the identity, not decoration, so the pieces that carry it
- * are asserted rather than eyeballed: the wordmark, the dot beneath it, the
- * dot at the top of every trip, and the fact that the old name is gone.
+ * The style guide is the source of truth and app/globals.css is its code.
+ * What is pinned here is the handful of rules that are easy to break by
+ * accident and expensive to notice:
+ *
+ *   · the palette — no pure grey, no gold, no lime, no gradients
+ *   · the wordmark is a file, never retyped in a webfont
+ *   · three fonts with one job each
+ *   · the bottom tab bar, including the label that nearly does not fit
+ *   · no glows, no springs, and motion that can be switched off
+ *
+ * Colour regressions are the ones worth automating: a wrong hex looks fine
+ * in a diff and wrong on a phone in sunlight.
  */
 
 import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import fs from 'fs'
-import GreenDot from '../app/components/GreenDot'
-import BackButton from '../app/components/BackButton'
 import Home from '../app/page'
+import Wordmark from '../app/components/Wordmark'
+import { Badge, LiveDot, EmptyState, buttonClass } from '../app/components/ui'
 import { SITE } from '../config/site'
 
 let passed = 0, failed = 0
@@ -28,48 +37,271 @@ function eq(got: unknown, want: unknown, label: string) {
 const section = (n: string) => console.log(`\n${n}`)
 
 const read = (p: string) => fs.readFileSync(p, 'utf-8')
+const css = read('app/globals.css')
 
-// ─── The dot ───────────────────────────────────────────────────
-
-section('The green dot')
-{
-  const dot = renderToStaticMarkup(React.createElement(GreenDot, { size: 22, label: 'Green dot' }))
-
-  ok(dot.includes('gdBreathe'), 'it breathes')
-  ok(dot.includes('gdRipple'), 'and sends out a ripple')
-  // Strict: the dot itself must be green, not merely sit inside a green halo.
-  // An OR here once let a gold dot through a mutation test.
-  ok(dot.includes('#34D399'), 'the dot is emerald at its core')
-  ok(dot.includes('#6EE7B7'), 'with a lighter highlight')
-  ok(dot.includes('#10B981'), 'and a deeper edge')
-  ok(dot.includes('rgba(52,211,153'), 'the halo and glow are green too')
-  ok(!/C9A84C|201,168,76/.test(dot), 'no gold anywhere in the mark — the dot is the one green thing')
-  ok(dot.includes('box-shadow'), 'and it glows')
-  ok(dot.includes('aria-label="Green dot"'), 'it can be labelled where it means something')
-
-  // Purely decorative uses are hidden from screen readers
-  const plain = renderToStaticMarkup(React.createElement(GreenDot, { size: 14 }))
-  ok(plain.includes('aria-hidden="true"'), 'and hidden when it is only decoration')
-  ok(!plain.includes('aria-label'), 'with no label to read out')
-
-  // Size drives the whole mark, so a bigger dot really is bigger
-  const small = renderToStaticMarkup(React.createElement(GreenDot, { size: 10 }))
-  const large = renderToStaticMarkup(React.createElement(GreenDot, { size: 40 }))
-  ok(small.includes('width:10px'), 'a small dot is 10px')
-  ok(large.includes('width:40px'), 'a large one is 40px')
-  ok(large.length > 0 && small !== large, 'the size prop actually changes the output')
-
-  // The glow is drawn around the dot, so the halo is larger than the dot
-  ok(large.includes('width:104px'), 'the halo scales with the dot')
+/** Every source file that makes up the platform UI. */
+function uiFiles(): string[] {
+  const out: string[] = []
+  const walk = (dir: string) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = `${dir}/${e.name}`
+      if (e.isDirectory()) walk(p)
+      else if (/\.tsx?$/.test(e.name)) out.push(p)
+    }
+  }
+  for (const d of ['app/trip', 'app/components', 'app/join', 'app/dashboard', 'app/admin']) walk(d)
+  out.push('app/page.tsx', 'app/layout.tsx')
+  return out
 }
 
-section('Motion can be turned off')
+// ─── Palette ───────────────────────────────────────────────────
+
+section('The palette is defined once, in one place')
 {
-  const css = read('app/globals.css')
-  ok(css.includes('@keyframes gdBreathe'), 'the breathe keyframes exist')
-  ok(css.includes('@keyframes gdRipple'), 'so do the ripple keyframes')
-  ok(css.includes('prefers-reduced-motion'),
-    'and anyone who asked for less motion gets a still dot')
+  for (const [name, hex] of [
+    ['cream',   '#F6F4F0'],
+    ['surface', '#FFFFFF'],
+    ['ink',     '#2B2118'],
+    ['bark',    '#4A3728'],
+    ['accent',  '#0A9D56'],
+    ['rust',    '#B5533C'],
+  ] as const) {
+    ok(css.includes(`--color-${name}:`), `${name} is a token`)
+    ok(css.toUpperCase().includes(hex.toUpperCase()), `${name} is ${hex}`)
+  }
+}
+
+section('The old identity is gone')
+{
+  const files = uiFiles()
+  const offenders = (re: RegExp) =>
+    files.filter(f => re.test(read(f))).map(f => f.replace('app/', ''))
+
+  // Gold was the accent for the whole of the previous design. One stray
+  // #C9A84C on a cream page is glaring, and easy to leave behind.
+  eq(offenders(/#C9A84C|#d4b35a/i), [], 'no gold anywhere')
+  eq(offenders(/#0a1a0e|#0f2418|#1e3d28/i), [], 'no dark-green surfaces anywhere')
+
+  // "Do not use lime/bright green — emerald is the final brand green."
+  eq(offenders(/#3BBD30/i), [], 'no lime green')
+
+  // "No gradients anywhere."
+  eq(offenders(/bg-gradient|linear-gradient|radial-gradient/), [], 'no gradients')
+
+  // "No pure gray anywhere. Every neutral is derived from #4A3728."
+  eq(offenders(/\b(text|bg|border)-(gray|slate|zinc|neutral|stone)-\d/), [],
+    'no grey utility classes — every neutral comes from bark')
+}
+
+section('Emerald is an accent, not a wash')
+{
+  // It may fill a button or a champion tile; it must never be a page or a
+  // large surface. Those are cream and white.
+  const files = uiFiles()
+  const washes = files.filter(f =>
+    /className="[^"]*min-h-dvh[^"]*bg-accent/.test(read(f)))
+  eq(washes, [], 'no full-height emerald background')
+}
+
+// ─── The wordmark ──────────────────────────────────────────────
+
+section('The wordmark is a file, not type')
+{
+  ok(fs.existsSync('public/logo.svg'), 'logo.svg exists')
+
+  const mark = renderToStaticMarkup(React.createElement(Wordmark, { width: 280 }))
+  ok(mark.includes('/logo.svg'), 'the component renders the file')
+  ok(mark.includes('alt="green dot."'), 'and names it for anyone who cannot see it')
+
+  // "Do not attempt to recreate it in a webfont." Nothing may draw the
+  // wordmark out of live text.
+  const svg = read('public/logo.svg')
+  ok(svg.includes('#4A3728'), 'the wordmark is brown')
+  ok(svg.includes('#0A9D56'), 'and the dot is emerald')
+  ok(!/#F6F5EF|#F6F4F0/.test(svg),
+    'with no baked background, so it sits on cream and on white alike')
+
+  // "Do not recolor it per-page" — no filters, no fill overrides
+  const files = uiFiles().filter(f => read(f).includes('Wordmark'))
+  for (const f of files) {
+    ok(!/Wordmark[^/>]*(?:filter|invert|brightness)/.test(read(f)),
+      `${f.split('/').pop()} does not recolour the mark`)
+  }
+}
+
+// ─── Type ──────────────────────────────────────────────────────
+
+section('Three fonts, one job each')
+{
+  ok(css.includes("'Clash Display'"), 'Clash Display is the headline face')
+  ok(css.includes("'Bespoke Serif'"), 'Bespoke Serif is the body and data face')
+  ok(css.includes('--font-archivo'), 'Archivo is the UI face')
+
+  // Fontshare is a third party; a slow or blocked CDN must not change the
+  // page's texture, so every family names a fallback of the same kind.
+  ok(/--font-display:[^;]*sans-serif/.test(css), 'the headline falls back to a sans')
+  ok(/--font-serif:[^;]*serif/.test(css), 'the body falls back to a serif')
+  ok(read('app/layout.tsx').includes('api.fontshare.com'), 'and Fontshare is actually loaded')
+  ok(read('app/layout.tsx').includes('preconnect'), 'with a preconnect, since it is off-origin')
+
+  // The old faces are gone
+  eq(uiFiles().filter(f => /font-playfair|font-caveat|font-crimson/.test(read(f))), [],
+    'no trace of the previous typefaces')
+
+  for (const level of ['t-h1', 't-h2', 't-card', 't-body', 't-data', 't-label', 't-cap']) {
+    ok(css.includes(`.${level}`), `${level} is in the scale`)
+  }
+
+  // Numbers in a table must not jitter as they change
+  ok(/\.t-data, \.t-num \{[^}]*tabular-nums/.test(css), 'table numerals are tabular')
+}
+
+// ─── The tab bar ───────────────────────────────────────────────
+
+section('The bottom tab bar')
+{
+  const src = read('app/components/TabBar.tsx')
+
+  eq(
+    (src.match(/label: '([^']+)'/g) ?? []).map(s => s.replace(/label: '|'/g, '')),
+    ['Home', 'Leaderboard', 'Scoring', 'Settings'],
+    'four items, in the order the guide sets',
+  )
+
+  ok(src.includes('fixed bottom-0'), 'fixed to the bottom of the viewport')
+  ok(src.includes('env(safe-area-inset-bottom)'),
+    'clearing the iPhone home indicator, or the bottom row of taps lands on nothing')
+  ok(src.includes('bg-surface'), 'on white')
+  ok(src.includes('border-t border-bark/12'), 'with a hairline top border')
+
+  // "Labels must fit on one line — test Leaderboard specifically"
+  ok(src.includes('whitespace-nowrap'), 'labels never wrap')
+  ok(src.includes('fontSize: 10'), 'at 10px, which is what makes Leaderboard fit')
+  ok(src.includes('size={20}'), 'with 20px icons')
+
+  ok(src.includes("'text-accent'"), 'the active tab is emerald')
+  ok(src.includes('text-bark/60'), 'and an inactive one is bark at 60%')
+  ok(src.includes('fontWeight: active ? 600 : 400'), 'with the active label heavier')
+
+  // Every trip screen carries it, so the app is navigable from anywhere
+  const carriers = [
+    'app/trip/[tripCode]/page.tsx',
+    'app/trip/[tripCode]/leaderboard/page.tsx',
+    'app/trip/[tripCode]/course/page.tsx',
+    'app/trip/[tripCode]/teams/page.tsx',
+    'app/trip/[tripCode]/players/page.tsx',
+    'app/trip/[tripCode]/matchplay/page.tsx',
+  ]
+  for (const f of carriers) {
+    ok(read(f).includes('<TabBar'), `${f.split('/').slice(-2).join('/')} carries the tab bar`)
+    ok(read(f).includes('has-tabbar'), '  …and leaves room for it')
+  }
+  ok(css.includes('.has-tabbar'), 'and the room is a token, not a magic number per page')
+}
+
+// ─── Icons ─────────────────────────────────────────────────────
+
+section('One icon set')
+{
+  const icons = read('app/components/icons.tsx')
+  ok(icons.includes('Tabler'), 'the set is named and credited')
+  ok(icons.includes('stroke="currentColor"'), 'icons take their colour from the text')
+  ok(icons.includes('fill="none"'), 'and are outline, not solid')
+  for (const n of ['IconHome', 'IconTrophy', 'IconClipboardList', 'IconSettings']) {
+    ok(icons.includes(`export const ${n}`), `${n} exists for the tab bar`)
+  }
+}
+
+// ─── Components ────────────────────────────────────────────────
+
+section('Status badges follow the spec')
+{
+  const win = renderToStaticMarkup(React.createElement(Badge, { tone: 'win', children: 'Won' }))
+  const loss = renderToStaticMarkup(React.createElement(Badge, { tone: 'loss', children: 'Lost' }))
+  const neutral = renderToStaticMarkup(React.createElement(Badge, { children: 'Thru 11' }))
+
+  ok(win.includes('rounded-full'), 'a badge is a pill')
+  // Background at 22%, text a darker shade of the same hue — never black
+  ok(win.includes('bg-accent/[0.22]') && win.includes('text-accent-deep'), 'win is emerald on emerald')
+  ok(loss.includes('bg-rust/[0.22]') && loss.includes('text-rust-deep'), 'loss is rust on rust')
+  ok(neutral.includes('text-bark'), 'and neutral is bark on bark')
+  ok(!/text-black|text-ink\b/.test(win), 'no black text on a coloured pill')
+
+  const live = renderToStaticMarkup(React.createElement(Badge, { live: true, children: 'In play' }))
+  ok(live.includes('dot-live'), 'a live badge carries the breathing dot')
+}
+
+section('One primary action per screen')
+{
+  ok(buttonClass('primary').includes('bg-accent'), 'the primary action is emerald')
+  ok(buttonClass('primary').includes('text-white'), 'with white on it, for contrast')
+  ok(!buttonClass('secondary').includes('bg-accent'), 'a secondary action is not')
+  ok(buttonClass('secondary').includes('border-bark/25'), 'it is a bordered surface instead')
+  ok(buttonClass('primary').includes('min-h-[48px]'), 'and every button is a real touch target')
+}
+
+section('Empty states say what to do next')
+{
+  const html = renderToStaticMarkup(
+    React.createElement(EmptyState, {
+      message: 'No trips yet.',
+      actionLabel: 'Create a trip',
+      actionHref: '/dashboard/create',
+    })
+  )
+  ok(html.includes('No trips yet.'), 'one short sentence')
+  ok(html.includes('Create a trip'), 'and one clear action')
+  ok(html.includes('/dashboard/create'), 'that goes somewhere')
+  ok(!html.includes('<svg'), 'with no illustration or icon')
+}
+
+// ─── Motion ────────────────────────────────────────────────────
+
+section('Motion is calm, and can be switched off')
+{
+  // "ease-out everywhere. No bounce, no spring, no elastic easing."
+  const files = uiFiles()
+  const springs = files.filter(f => /cubic-bezier\([^)]*1\.\d/.test(read(f)))
+  eq(springs, [], 'no overshoot curves anywhere')
+
+  // "Nothing takes longer than ~400ms"
+  const durations = [...css.matchAll(/(\d+)ms/g)].map(m => Number(m[1]))
+  ok(durations.length > 0, 'the stylesheet defines durations')
+  ok(durations.every(d => d <= 400), `none of them exceeds 400ms (longest ${Math.max(...durations)}ms)`)
+
+  ok(css.includes('.page-enter'), 'pages fade in')
+  ok(/\.page-enter \{ animation: gdFade 200ms ease-out/.test(css), 'over 200ms, ease-out')
+
+  // "Live score updates: flash the cell emerald at ~20%, fade over ~400ms.
+  //  Do not use a jump/bounce."
+  ok(css.includes('.score-flash'), 'a changed score flashes')
+  ok(css.includes('rgba(10, 157, 86, 0.20)'), 'emerald at 20%')
+  ok(!/gdScoreFlash[\s\S]*?transform/.test(css), 'and does not move — the number is being read')
+
+  // Anyone who asked for less motion gets none of it
+  ok(css.includes('prefers-reduced-motion'), 'reduced motion is honoured')
+  const reduced = css.slice(css.indexOf('prefers-reduced-motion'))
+  for (const c of ['page-enter', 'score-flash', 'dot-live', 'skeleton']) {
+    ok(reduced.includes(c), `  …including ${c}`)
+  }
+
+  // "Prefer skeleton loading states over spinners"
+  ok(css.includes('.skeleton'), 'skeletons exist to be preferred')
+}
+
+section('No glows')
+{
+  // The old design glowed; on cream a glow reads as a smudge, and the guide
+  // has none. The dot is solid emerald and that is all.
+  const files = uiFiles()
+  const glows = files.filter(f => /boxShadow: '0 0 |shadow-\[0_0_/.test(read(f)))
+  eq(glows, [], 'nothing glows')
+
+  const dot = renderToStaticMarkup(React.createElement(LiveDot, {}))
+  ok(dot.includes('bg-accent'), 'the live dot is solid emerald')
+  ok(dot.includes('dot-live'), 'and breathes')
+  ok(!dot.includes('shadow'), 'without a glow')
+  ok(dot.includes('w-1.5 h-1.5'), 'kept small, so it stays a punctuation mark')
 }
 
 // ─── Landing page ──────────────────────────────────────────────
@@ -78,162 +310,39 @@ const home = renderToStaticMarkup(React.createElement(Home))
 
 section('Landing page')
 {
-  ok(home.includes('Green Dot'), 'the wordmark reads Green Dot')
-  ok(home.includes('>Golf<'), 'with Golf beneath it')
-  ok(!home.includes('GripItGolf'), 'the old name is gone')
+  ok(home.includes('/logo.svg'), 'the wordmark is the page')
+  ok(!home.includes('<h1'), 'and is not restated as a heading beneath itself')
 
-  // The dot sits under the lettering, which is the whole idea of the mark
-  const titleAt = home.indexOf('Green Dot')
-  const dotAt   = home.indexOf('gdBreathe')
-  ok(dotAt > titleAt, 'the dot comes after the lettering, so it sits beneath it')
+  // "a simple title underneath explaining that the user should tap the nav
+  //  buttons to start their trip"
+  ok(/tap below/i.test(home), 'one line tells you to tap below')
+  ok(home.includes('/dashboard/create'), 'Create a trip is one of the two')
+  ok(home.includes('/join'), 'Join a trip is the other')
+  ok(/Create a trip/i.test(home) && /Join a trip/i.test(home), 'both are named plainly')
 
-  const ctaAt = home.indexOf('Create a Trip')
-  ok(dotAt < ctaAt, 'and above the buttons, so it is the centre of the page')
+  // One primary action: creating. Joining is secondary.
+  // Counted as elements, not substrings: "hover:bg-accent-deep" contains
+  // "bg-accent" and would double every button.
+  const emeraldFills = [...home.matchAll(/class="([^"]*)"/g)]
+    .filter(m => /(?:^| )bg-accent(?![-\w/])/.test(m[1]))
+  eq(emeraldFills.length, 1, 'exactly one emerald button on the screen')
 
-  // The blurb is the Schrödinger line: the dot is undecided until you play
-  ok(home.includes('both green and not green'), 'the quote is on the page')
-  ok(/only your actions decide/i.test(home), 'including the part that puts it on the golfer')
-  ok(home.includes('Schr'), 'and it is attributed')
-  ok(home.includes('Erwin'), 'to Erwin, which is the physicist\'s name')
-  ok(!home.includes('Ernst'), 'not Ernst')
-
-  // Marked up as a quotation rather than styled to look like one
-  ok(home.includes('<blockquote'), 'set as a blockquote')
-  ok(home.includes('<figcaption'), 'with the attribution as a caption')
-
-  ok(home.includes('/dashboard/create'), 'Create a Trip still links out')
-  ok(home.includes('/join'), 'so does Join a Trip')
-
-  // The title scales rather than being pinned to one size
-  ok(home.includes('clamp('), 'the wordmark scales with the viewport')
-}
-
-// ─── Trip hub ──────────────────────────────────────────────────
-
-section('Trip hub')
-{
-  const src = read('app/trip/[tripCode]/page.tsx')
-
-  ok(src.includes('<GreenDot'), 'a green dot sits at the top of a trip')
-  ok(!src.includes('Est. {estYear}'), 'the Est. lettering is gone')
-  ok(!src.includes('estYear'), 'and nothing is left computing it')
-
-  // The trip name leads the page
-  ok(src.includes('clamp(2.25rem,11vw,3.5rem)'), 'the trip name scales up large')
-  ok(src.includes('text-balance'), 'and wraps evenly rather than orphaning a word')
-
-  // The schedule reads as days, not as a flat list of rounds: two rounds on
-  // the same date are one card with two courses under it.
-  ok(src.includes('function formatDay'), 'there is a day formatter')
-  ok(src.includes("weekday: 'long'"), 'which names the weekday, not just the date')
-  ok(src.includes("timeZone: 'UTC'"),
-    'and reads the date as a plain date, so the 17th is the 17th anywhere')
-  ok(/existing\.courses\.push/.test(src),
-    'rounds sharing a date are gathered under one day')
-  ok(src.includes('d.courses.map'), 'and every course on that day is listed')
-  ok(src.includes('text-lg'), 'set large enough to read at a glance')
-
-  // Not squeezed into one muted line the way it was
-  ok(!src.includes('courseList'), 'the old flat course list is gone')
-  ok(!src.includes('The Course'), 'and its caption with it')
-
-  // The hero no longer fills the screen before anything useful appears
-  ok(src.includes('pt-8'), 'the hero starts near the top')
-  ok(!/section className="min-h-dvh/.test(src), 'rather than centring in a full screen')
-
-  ok(src.includes('label="Green Dot Golf"'), 'the footer carries the new name')
-}
-
-section('The players button stops asking once everyone is in')
-{
-  const src = read('app/trip/[tripCode]/page.tsx')
-
-  ok(src.includes('everyoneIn'), 'the page knows when the field is complete')
-  ok(/const everyoneIn = players\.length > 0 && pendingCount === 0/.test(src),
-    'which means at least one player and none pending — an empty trip is not complete')
-
-  // Gold is a prompt. With nobody left to join there is nothing to prompt.
-  const btn = src.slice(src.indexOf('everyoneIn'), src.indexOf('{isDraft ?'))
-  ok(/everyoneIn[\s\S]*?'border-white\/15/.test(btn), 'complete: the button goes quiet')
-  ok(/'border-\[#C9A84C\] text-\[#C9A84C\]/.test(btn), 'incomplete: it is still gold')
-  ok(btn.includes("everyoneIn ? 'Players' : 'Join Trip'"),
-    'and it stops saying Join Trip once there is nobody left to join')
-}
-
-// ─── Back controls ─────────────────────────────────────────────
-
-section('There is one way back')
-{
-  const bare  = renderToStaticMarkup(React.createElement(BackButton, { href: '/' }))
-  const named = renderToStaticMarkup(React.createElement(BackButton, { href: '/trip/ABC123', label: 'Trip' }))
-
-  // The box, not a bare chevron or a tiny text link
-  ok(bare.includes('rounded-xl'), 'it is a rounded box')
-  // Named exactly: a bare `includes('border')` once passed on a borderless
-  // pill, because the hover class still had the word in it.
-  ok(bare.includes('border border-white/15'), 'with a border at rest, so it reads as a control')
-  ok(bare.includes('bg-white/[0.04]'), 'and a fill faint enough not to compete with the page')
-  ok(bare.includes('h-11'), 'and it is 44px tall — a real touch target')
-  ok(bare.includes('w-11'), 'square when it is only an arrow')
-  ok(bare.includes('<svg'), 'carrying a back arrow')
-
-  // A labelled one widens rather than shrinking the text into the square
-  ok(named.includes('px-4'), 'a labelled one is padded out instead')
-  ok(!named.includes('w-11'), 'and is no longer square')
-  ok(named.includes('>Trip<'), 'showing the word')
-  ok(named.includes('/trip/ABC123'), 'and linking where it says')
-
-  // The arrow alone has no text, so it needs a name read out; the labelled
-  // one already has one and would otherwise be announced twice.
-  ok(bare.includes('aria-label="Back"'), 'the bare arrow is named for screen readers')
-  ok(!named.includes('aria-label'), 'the labelled one is not, since its text already names it')
-
-  // Both forms exist because some places navigate and some just close
-  const button = renderToStaticMarkup(React.createElement(BackButton, { onClick: () => {} }))
-  ok(button.includes('<button'), 'it can be a button when there is nowhere to link to')
-  ok(button.includes('type="button"'), 'and never submits a form it happens to sit in')
-  ok(bare.includes('<a'), 'and a link when there is')
-
-  // Nothing anywhere still rolls its own
-  const pages = [
-    'app/page.tsx', 'app/join/JoinForm.tsx',
-    'app/trip/[tripCode]/page.tsx', 'app/trip/[tripCode]/players/page.tsx',
-    'app/trip/[tripCode]/setup/page.tsx', 'app/trip/[tripCode]/setup/PasscodeGate.tsx',
-    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
-  ]
-  for (const f of pages) {
-    const s = read(f)
-    ok(!/←\s*(Back|Green Dot)/.test(s), `${f.split('/').pop()} has no bare ← text link`)
-  }
-
-  // The bracket's round nav is the same box language
-  const bracket = read('app/trip/[tripCode]/matchplay/MatchplayBracket.tsx')
-  ok(!bracket.includes('rounded-sm'), 'the bracket round nav is no longer a sharp box')
-  ok(bracket.includes('rounded-xl border border-white/15'), 'it matches the rest')
+  ok(home.includes('bg-cream'), 'on the cream page')
+  ok(!home.includes('Schr'), 'the old quotation is gone')
+  ok(!home.includes('GripItGolf'), 'and so is the old name')
 }
 
 // ─── Everywhere else ───────────────────────────────────────────
 
 section('The old branding is gone')
 {
-  eq(SITE.name, 'Green Dot Golf', 'the site config names the app')
-  ok(SITE.tagline.includes('best 8 of your last 20'), 'and carries the premise')
+  eq(SITE.name, 'Green Dot Golf', 'the site config still names the app')
 
   const layout = read('app/layout.tsx')
-  ok(layout.includes('Green Dot Golf'), 'the browser tab says Green Dot Golf')
-  ok(!layout.includes('title: "GripItGolf"'), 'and no longer says GripItGolf')
+  ok(layout.includes('green dot.'), 'the browser tab carries the wordmark')
+  ok(layout.includes('#F6F4F0'), 'and the theme colour is cream')
 
-  const join = read('app/join/JoinForm.tsx')
-  ok(join.includes('GreenDot'), 'the join page uses the green dot')
-  ok(!join.includes('rounded-full border-2 border-[#C9A84C]" />\n          <div className="w-3 h-3 rounded-full bg-[#C9A84C]'),
-    'rather than the old three-dot mark')
-
-  // Nothing user-facing still says the old name
-  const files = [
-    'app/page.tsx', 'app/layout.tsx', 'app/join/JoinForm.tsx',
-    'app/trip/[tripCode]/page.tsx', 'config/site.ts',
-  ]
-  for (const f of files) {
+  for (const f of ['app/page.tsx', 'app/layout.tsx', 'app/join/JoinForm.tsx']) {
     ok(!read(f).includes('GripItGolf'), `${f.split('/').pop()} does not mention the old name`)
   }
 }

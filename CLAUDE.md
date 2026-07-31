@@ -47,16 +47,53 @@ NEXT_PUBLIC_DONATION_URL=...   # Revolut payment link. Unset = no support link a
 Stored in `.env.local` (gitignored). Service role key must never be exposed client-side.
 Vercel project: grip-it-golf (auto-deploys from master branch on GitHub)
 
-## Design philosophy
+## Design system — Green Dot Collective
 
-Mobile-first. Used on the course, on phones, by non-technical users.
+`STYLE_GUIDE.md` is the source of truth; `app/globals.css` is its code. **No file outside globals.css should carry a raw brand hex.** `npm run test:branding` enforces that.
 
-- All styles mobile-first; use `sm:` / `md:` / `lg:` only to enhance for larger screens
-- Touch targets minimum 44px
-- Large, legible text — key numbers must be readable at a glance
-- Paper scorecard style for review screens: parchment cream background, ink-style symbols
-- Avoid red as a score indicator — use gold instead
-- Score symbols: thick gold ring (eagle), thin gold ring (birdie), blank (par), thin brown rounded square (bogey), thick brown rounded square (double bogey+)
+Mobile first, always. Nearly all real use is a phone, on a course, in daylight.
+
+### Palette
+
+| Token | Value | Use |
+|---|---|---|
+| `cream` | `#F6F4F0` | The page, everywhere |
+| `surface` | `#FFFFFF` | Cards, the tab bar, anything raised |
+| `ink` | `#2B2118` | Text — 100% primary, 65% secondary, 40% muted |
+| `bark` | `#4A3728` | **Every** neutral, at an opacity. Borders are `bark/12`, strong `bark/25` |
+| `accent` | `#0A9D56` | Emerald. Buttons, active states, win, live |
+| `rust` | `#B5533C` | Loss only |
+
+**No pure grey anywhere** — neutrals are `bark` at an opacity, never a grey hex or a Tailwind `gray-*`. **No gradients. No glows.** Emerald is an accent: one primary action per screen. A page with three emerald buttons has none.
+
+### Type
+
+Three families, one job each, never mixed. Clash Display (headlines), Bespoke Serif (body and all dense data), Archivo (buttons, labels, form fields). Use the scale classes — `t-h1` `t-h2` `t-card` `t-body` `t-data` `t-label` `t-cap` — rather than ad-hoc sizes.
+
+Clash Display and Bespoke Serif are **Fontshare** fonts loaded from their CDN in `layout.tsx`; Archivo is self-hosted via `next/font`. The fallback chain degrades to a sans and a serif respectively, so a blocked CDN changes the faces but not the register.
+
+### The wordmark
+
+`public/logo.svg`, rendered by `app/components/Wordmark.tsx` as an `<img>`. Never recreated in a webfont, never recoloured per page — brown on cream or brown on white, nothing else. Replacing the file needs no code change.
+
+> ⚠️ **The current logo.svg is a placeholder.** The real file was named in the style guide but never supplied. Drop it in at `public/logo.svg`.
+
+### Navigation
+
+Bottom tab bar, `app/components/TabBar.tsx` — Home · Leaderboard · Scoring · Settings, scoped to a trip. Fixed to the bottom with `env(safe-area-inset-bottom)`; without that the bottom row of taps lands on the iPhone home indicator. Pages carrying it add `has-tabbar` for clearance. Labels are 10px so **Leaderboard** fits one line.
+
+Deliberately **absent from the scoring flow**, where the bottom of the screen is score entry and a nav bar under it is a mis-tap waiting to happen.
+
+### Motion
+
+`ease-out` everywhere. Micro 120–180ms, larger 250–350ms, nothing over 400ms. **No bounce, no spring, no elastic easing.** Pages fade in over 200ms (`page-enter`). A changed live score flashes its cell emerald and fades (`score-flash`) — it never moves, because it is being read. Every animation is stilled under `prefers-reduced-motion`.
+
+### Scoring symbols
+
+Thick emerald ring (eagle), thin emerald ring (birdie), bare number (par), thin bark square (bogey), thick bark square (double+). The paper scorecard is now white on cream with bark rules rather than parchment.
+
+- Touch targets minimum 48px
+- Leaderboard, scoring and bracket screens stay tight (4–16px). Generous spacing is for entry screens only
 
 ## Platform concept
 

@@ -22,14 +22,14 @@ export function WelcomeBackCard({
   onNotMe: () => void
 }) {
   return (
-    <div className="w-full rounded-xl border border-emerald-500/35 bg-emerald-500/[0.06] px-4 py-3.5 text-left">
+    <div className="w-full rounded-2xl border border-accent/30 bg-accent/[0.07] px-4 py-3.5 text-left">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-emerald-300 text-sm min-w-0">
-          Welcome back, <span className="font-semibold">{name}</span>
+        <p className="t-body text-ink min-w-0">
+          Welcome back, <span className="t-card">{name}</span>
         </p>
         <button
           onClick={onNotMe}
-          className="flex-shrink-0 text-white/30 text-[10px] tracking-wider uppercase hover:text-white/60 transition-colors"
+          className="flex-shrink-0 t-cap uppercase tracking-[0.12em] text-ink/40 hover:text-ink/65 transition-colors duration-150"
         >
           Not you?
         </button>
@@ -39,14 +39,12 @@ export function WelcomeBackCard({
         <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1.5">
           {lines.map(l => (
             <span key={l.label} className="flex items-baseline gap-1.5">
-              <span className="text-white/30 text-[10px] tracking-wider uppercase">
+              <span className="t-cap uppercase tracking-[0.12em] text-ink/40">
                 {l.label}
               </span>
               <span
-                className={`tabular-nums ${
-                  l.strong
-                    ? 'font-[family-name:var(--font-playfair)] text-[#C9A84C] text-base leading-none'
-                    : 'text-white/70 text-sm'
+                className={`t-num ${
+                  l.strong ? 't-card text-accent-deep' : 't-data text-ink/65'
                 }`}
               >
                 {l.value}

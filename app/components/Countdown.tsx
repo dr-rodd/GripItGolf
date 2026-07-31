@@ -78,7 +78,7 @@ export default function Countdown({ children }: { children: React.ReactNode }) {
             {!mounted ? (
               <div className="h-[84px]" />
             ) : timeLeft ? (
-              <div className="flex gap-5 sm:gap-8 bg-black/40 px-5 py-4 backdrop-blur-sm">
+              <div className="flex gap-5 sm:gap-8 bg-ink/30 px-5 py-4 backdrop-blur-sm">
                 {[
                   { label: "Days",    value: timeLeft.days },
                   { label: "Hours",   value: timeLeft.hours },
@@ -87,12 +87,12 @@ export default function Countdown({ children }: { children: React.ReactNode }) {
                 ].map(({ label, value }) => (
                   <div key={label} className="flex flex-col items-center gap-1.5">
                     <span
-                      className="font-[family-name:var(--font-playfair)] text-4xl sm:text-5xl font-bold tabular-nums"
-                      style={{ color: "#C9A84C", textShadow: "0 0 30px rgba(201,168,76,0.5), 0 2px 4px rgba(0,0,0,1)" }}
+                      className="font-[family-name:var(--font-display)] text-4xl sm:text-5xl font-bold tabular-nums"
+                      style={{ color: "#0A9D56", textShadow: "0 0 30px rgba(10,157,86,0.12), 0 2px 4px rgba(0,0,0,1)" }}
                     >
                       {String(value).padStart(2, "0")}
                     </span>
-                    <span className="text-[10px] tracking-[0.25em] uppercase text-white/70 font-light">
+                    <span className="text-[10px] tracking-[0.25em] uppercase text-ink/65 font-light">
                       {label}
                     </span>
                   </div>

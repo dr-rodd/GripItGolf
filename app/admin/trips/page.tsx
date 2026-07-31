@@ -81,22 +81,22 @@ export default async function AdminTripsPage() {
   const withEmail = trips.filter(t => t.lead_email).length
 
   return (
-    <main className="min-h-dvh bg-[#0a1a0e] text-white">
+    <main className="min-h-dvh bg-cream text-ink">
 
-      <div className="border-b border-[#1e3d28]">
+      <div className="border-b border-bark/12">
         <div className="max-w-4xl mx-auto px-4 py-5 flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="font-[family-name:var(--font-playfair)] text-xl tracking-wide">
+            <h1 className="font-[family-name:var(--font-display)] text-xl tracking-wide">
               Trips
             </h1>
-            <p className="text-white/35 text-xs mt-0.5">
+            <p className="text-ink/40 text-xs mt-0.5">
               {trips.length} total · {withEmail} with an email
             </p>
           </div>
           <form action={logout}>
             <button
               type="submit"
-              className="flex-shrink-0 px-4 h-11 rounded-xl border border-white/15 bg-white/[0.04] text-white/60 text-xs tracking-[0.18em] uppercase hover:text-white hover:border-white/30 transition-colors"
+              className="flex-shrink-0 px-4 h-11 rounded-xl border border-bark/12 bg-surface text-ink/65 text-xs tracking-[0.18em] uppercase hover:text-ink hover:border-bark/25 transition-colors"
             >
               Sign out
             </button>
@@ -106,25 +106,25 @@ export default async function AdminTripsPage() {
 
       <div className="max-w-4xl mx-auto px-4 py-6">
         {error && (
-          <p className="text-amber-400 text-sm mb-4">
+          <p className="text-rust-deep text-sm mb-4">
             Could not load trips — refresh to try again.
           </p>
         )}
 
         {trips.length === 0 ? (
-          <div className="border border-[#1e3d28] rounded-xl py-16 text-center">
-            <p className="text-white/30 text-sm">No trips yet.</p>
+          <div className="border border-bark/12 rounded-xl py-16 text-center">
+            <p className="text-ink/40 text-sm">No trips yet.</p>
           </div>
         ) : (
           <>
             {/* Cards on a phone, a table from sm up. The same data either way —
                 this is read on a phone as often as anywhere else. */}
-            <div className="hidden sm:block border border-[#1e3d28] rounded-xl overflow-x-auto">
+            <div className="hidden sm:block border border-bark/12 rounded-xl overflow-x-auto">
               <table className="w-full text-sm min-w-[46rem]">
                 <thead>
-                  <tr className="border-b border-[#1e3d28] text-left">
+                  <tr className="border-b border-bark/12 text-left">
                     {['Trip', 'Code', 'Created', 'Lead email', 'Players', 'Status'].map(h => (
-                      <th key={h} className="px-4 py-3 text-[10px] tracking-[0.2em] uppercase text-white/30 font-normal">
+                      <th key={h} className="px-4 py-3 text-[10px] tracking-[0.2em] uppercase text-ink/40 font-normal">
                         {h}
                       </th>
                     ))}
@@ -134,20 +134,20 @@ export default async function AdminTripsPage() {
                   {trips.map(t => {
                     const state = tripState(t, today)
                     return (
-                      <tr key={t.id} className="border-b border-[#1e3d28] last:border-0">
-                        <td className="px-4 py-3 font-[family-name:var(--font-playfair)] text-base">
+                      <tr key={t.id} className="border-b border-bark/12 last:border-0">
+                        <td className="px-4 py-3 font-[family-name:var(--font-display)] text-base">
                           {t.name}
                         </td>
-                        <td className="px-4 py-3 tabular-nums text-[#C9A84C]">
+                        <td className="px-4 py-3 tabular-nums text-accent">
                           {t.trip_code ?? '—'}
                         </td>
-                        <td className="px-4 py-3 text-white/50 whitespace-nowrap">
+                        <td className="px-4 py-3 text-ink/40 whitespace-nowrap">
                           {formatDateTime(t.created_at)}
                         </td>
-                        <td className="px-4 py-3 text-white/70 break-all">
-                          {t.lead_email ?? <span className="text-white/20">—</span>}
+                        <td className="px-4 py-3 text-ink/65 break-all">
+                          {t.lead_email ?? <span className="text-ink/25">—</span>}
                         </td>
-                        <td className="px-4 py-3 tabular-nums text-white/70">
+                        <td className="px-4 py-3 tabular-nums text-ink/65">
                           {playerCount.get(t.id) ?? 0}
                         </td>
                         <td className="px-4 py-3">
@@ -164,13 +164,13 @@ export default async function AdminTripsPage() {
               {trips.map(t => {
                 const state = tripState(t, today)
                 return (
-                  <div key={t.id} className="border border-[#1e3d28] rounded-xl px-4 py-3.5">
+                  <div key={t.id} className="border border-bark/12 rounded-xl px-4 py-3.5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="font-[family-name:var(--font-playfair)] text-base leading-tight truncate">
+                        <p className="font-[family-name:var(--font-display)] text-base leading-tight truncate">
                           {t.name}
                         </p>
-                        <p className="text-[#C9A84C] text-xs tabular-nums mt-0.5">
+                        <p className="text-accent text-xs tabular-nums mt-0.5">
                           {t.trip_code ?? 'no code'}
                         </p>
                       </div>
@@ -196,8 +196,8 @@ export default async function AdminTripsPage() {
 function Field({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="flex gap-2">
-      <span className="text-white/30 w-16 flex-shrink-0">{label}</span>
-      <span className={value ? 'text-white/70 break-all' : 'text-white/20'}>
+      <span className="text-ink/40 w-16 flex-shrink-0">{label}</span>
+      <span className={value ? 'text-ink/65 break-all' : 'text-ink/25'}>
         {value ?? '—'}
       </span>
     </div>
@@ -209,11 +209,11 @@ function StatusPill({ label, open }: { label: string; open: boolean }) {
     <span
       className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] tracking-[0.15em] uppercase ${
         open
-          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-          : 'border-white/15 bg-white/[0.04] text-white/40'
+          ? 'border-accent/40 bg-accent/10 text-accent'
+          : 'border-bark/12 bg-surface text-ink/40'
       }`}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${open ? 'bg-emerald-400' : 'bg-white/30'}`} />
+      <span className={`w-1.5 h-1.5 rounded-full ${open ? 'bg-accent' : 'bg-bark/25'}`} />
       {label}
     </span>
   )

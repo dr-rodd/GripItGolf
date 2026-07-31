@@ -25,16 +25,16 @@ type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F'; teamInde
 
 const PRESET_COLORS = [
   '#DC2626', '#2563EB', '#16A34A', '#9333EA',
-  '#EA580C', '#DB2777', '#0D9488', '#C9A84C',
+  '#EA580C', '#DB2777', '#0D9488', '#0A9D56',
 ]
 
 const INPUT = [
-  'w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5',
-  'text-white placeholder-white/30',
-  'focus:outline-none focus:border-[#C9A84C]/50 transition-colors',
+  'w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5',
+  'text-ink placeholder-white/30',
+  'focus:outline-none focus:border-accent/50 transition-colors',
 ].join(' ')
 
-const LABEL = 'block text-white/60 text-xs uppercase tracking-wider mb-2'
+const LABEL = 'block text-ink/65 text-xs uppercase tracking-wider mb-2'
 
 const STEP_LABELS = ['Trip details', 'Rounds', 'Teams', 'Players']
 
@@ -371,24 +371,24 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
   if (step === 'done') {
     return (
-      <div className="min-h-dvh bg-[#0a1a0e] flex flex-col items-center justify-center px-6">
+      <div className="min-h-dvh bg-cream flex flex-col items-center justify-center px-6">
         <div className="w-full max-w-xs text-center">
-          <div className="w-16 h-16 rounded-full bg-[#C9A84C]/20 border border-[#C9A84C]/40 flex items-center justify-center mx-auto mb-8">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <div className="w-16 h-16 rounded-full bg-accent/20 border border-accent/40 flex items-center justify-center mx-auto mb-8">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0A9D56" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M20 6L9 17l-5-5" />
             </svg>
           </div>
 
-          <h1 className="font-[family-name:var(--font-playfair)] text-3xl text-white mb-2">
+          <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-2">
             Trip Created!
           </h1>
-          <p className="text-white/50 text-sm mb-10">
+          <p className="text-ink/40 text-sm mb-10">
             Share this code with your group to join. Your trip starts in setup
             mode — finalise it from the trip page when everyone&apos;s ready to play.
           </p>
 
-          <div className="bg-white/5 border border-[#C9A84C]/20 rounded-2xl px-4 py-8 mb-4">
-            <p className="text-white/40 text-xs tracking-widest uppercase mb-4">Your Trip Code</p>
+          <div className="bg-surface border border-bark/25 rounded-2xl px-4 py-8 mb-4">
+            <p className="text-ink/40 text-xs tracking-widest uppercase mb-4">Your Trip Code</p>
             {/* Laid out as characters with a gap rather than letter-spacing:
                 tracking adds space after the final character too, which pushed
                 the code off the right edge of the box. */}
@@ -396,7 +396,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
               {resultCode.split('').map((ch, i) => (
                 <span
                   key={i}
-                  className="font-[family-name:var(--font-playfair)] text-[clamp(2rem,11vw,3rem)] leading-none text-[#C9A84C] font-bold tabular-nums"
+                  className="font-[family-name:var(--font-display)] text-[clamp(2rem,11vw,3rem)] leading-none text-accent font-bold tabular-nums"
                 >
                   {ch}
                 </span>
@@ -405,8 +405,8 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
           </div>
 
           {lockSettings && (
-            <div className="mb-4 px-4 py-3 bg-white/5 border border-white/10 rounded-xl">
-              <p className="text-white/60 text-xs leading-snug">
+            <div className="mb-4 px-4 py-3 bg-surface border border-bark/12 rounded-xl">
+              <p className="text-ink/65 text-xs leading-snug">
                 Settings are locked. Keep your passcode safe — it cannot be recovered
                 or changed.
               </p>
@@ -415,14 +415,14 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
           <button
             onClick={copyCode}
-            className="w-full py-4 rounded-xl border border-white/20 text-white text-sm tracking-[0.15em] uppercase hover:border-white/40 transition-colors mb-3"
+            className="w-full py-4 rounded-xl border border-bark/25 text-ink text-sm tracking-[0.15em] uppercase hover:border-bark/25 transition-colors mb-3"
           >
             {copied ? '✓ Copied' : 'Copy Code'}
           </button>
 
           <Link
             href={`/trip/${resultCode}`}
-            className="block w-full py-4 bg-[#C9A84C] text-[#0a1a0e] text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-[#d4b35a] transition-colors"
+            className="block w-full py-4 bg-accent text-ink text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent-deep transition-colors"
           >
             Go to Your Trip
           </Link>
@@ -443,13 +443,13 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
     !(step === 4 && !step4Valid)
 
   return (
-    <div className="min-h-dvh bg-[#0a1a0e] text-white">
+    <div className="min-h-dvh bg-cream text-ink">
 
       {/* Header */}
-      <div className="border-b border-[#1e3d28]">
+      <div className="border-b border-bark/12">
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
           {stepNum > 1 ? <BackButton onClick={goBack} /> : <BackButton href="/" />}
-          <h1 className="font-[family-name:var(--font-playfair)] text-xl text-white tracking-wide">
+          <h1 className="font-[family-name:var(--font-display)] text-xl text-ink tracking-wide">
             Create a Trip
           </h1>
           <div className="w-11" />
@@ -457,16 +457,16 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
       </div>
 
       {/* Progress bar + step label */}
-      <div className="border-b border-[#1e3d28]">
+      <div className="border-b border-bark/12">
         <div className="max-w-lg mx-auto px-4 pt-3 pb-1 flex gap-1.5">
           {[1, 2, 3, 4].map(s => (
             <div
               key={s}
-              className={`h-1 flex-1 rounded-full transition-colors ${s <= stepNum ? 'bg-[#C9A84C]' : 'bg-white/10'}`}
+              className={`h-1 flex-1 rounded-full transition-colors ${s <= stepNum ? 'bg-accent' : 'bg-bark/[0.06]'}`}
             />
           ))}
         </div>
-        <p className="text-center text-white/40 text-xs py-2 tracking-wider uppercase">
+        <p className="text-center text-ink/40 text-xs py-2 tracking-wider uppercase">
           Step {stepNum} of 4 — {STEP_LABELS[stepNum - 1]}
         </p>
       </div>
@@ -515,13 +515,13 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                 placeholder="you@example.com"
                 className={INPUT}
               />
-              <p className="text-white/30 text-xs mt-2 leading-snug">
+              <p className="text-ink/40 text-xs mt-2 leading-snug">
                 So we can confirm your trip and keep you updated. Leave it blank
                 if you would rather not — the trip works either way, and no other
                 player ever sees it.
               </p>
               {emailWarning(leadEmail) && (
-                <p className="text-amber-400/80 text-xs mt-2 leading-snug">
+                <p className="text-rust/80 text-xs mt-2 leading-snug">
                   {emailWarning(leadEmail)}
                 </p>
               )}
@@ -536,8 +536,8 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                     onClick={() => setNumRounds(n)}
                     className={`py-3 rounded-xl text-sm font-medium transition-colors ${
                       numRounds === n
-                        ? 'bg-[#C9A84C] text-[#0a1a0e]'
-                        : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
+                        ? 'bg-accent text-ink'
+                        : 'bg-surface border border-bark/12 text-ink/65 hover:border-bark/25'
                     }`}
                   >
                     {n}
@@ -551,8 +551,8 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                   aria-label="Add a round"
                   className={`py-3 rounded-xl text-lg leading-none font-medium transition-colors ${
                     numRounds > MAX_ROUNDS
-                      ? 'bg-amber-500/20 border border-amber-500/60 text-amber-400'
-                      : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
+                      ? 'bg-rust/20 border border-rust/60 text-rust-deep'
+                      : 'bg-surface border border-bark/12 text-ink/65 hover:border-bark/25'
                   }`}
                 >
                   +
@@ -560,13 +560,13 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
               </div>
 
               {roundsError && (
-                <div className="mt-3 flex items-center justify-between gap-3 px-4 py-3 bg-amber-500/10 border border-amber-500/40 rounded-xl">
-                  <p className="text-amber-400 text-sm leading-snug min-w-0">
+                <div className="mt-3 flex items-center justify-between gap-3 px-4 py-3 bg-rust/10 border border-rust/40 rounded-xl">
+                  <p className="text-rust-deep text-sm leading-snug min-w-0">
                     {numRounds} rounds selected. {roundsError}
                   </p>
                   <button
                     onClick={() => setNumRounds(MAX_ROUNDS)}
-                    className="flex-shrink-0 px-3 py-2 border border-amber-500/50 rounded-lg text-amber-400 text-xs tracking-wider uppercase hover:bg-amber-500/10 transition-colors"
+                    className="flex-shrink-0 px-3 py-2 border border-rust/50 rounded-lg text-rust-deep text-xs tracking-wider uppercase hover:bg-rust/10 transition-colors"
                   >
                     Set {MAX_ROUNDS}
                   </button>
@@ -580,15 +580,15 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
         {step === 2 && (
           <div className="space-y-5">
             {courses.length === 0 && (
-              <div className="p-4 bg-white/5 border border-white/10 rounded-xl text-white/50 text-sm text-center">
-                No platform courses available yet. Add courses with <code className="text-[#C9A84C]">trip_id = NULL</code> to get started.
+              <div className="p-4 bg-surface border border-bark/12 rounded-xl text-ink/40 text-sm text-center">
+                No platform courses available yet. Add courses with <code className="text-accent">trip_id = NULL</code> to get started.
               </div>
             )}
             {rounds.map((round, i) => {
               const isRepeat = !!round.courseId && repeatedCourseIds.has(round.courseId)
               return (
-                <div key={i} className="bg-white/5 border border-white/10 rounded-2xl p-5">
-                  <p className="text-[#C9A84C] text-xs tracking-widest uppercase mb-4">
+                <div key={i} className="bg-surface border border-bark/12 rounded-2xl p-5">
+                  <p className="text-ink/40 text-xs tracking-widest uppercase mb-4">
                     Round {i + 1}
                   </p>
                   <div className="space-y-4">
@@ -600,21 +600,21 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                           onChange={e => updateRound(i, { courseId: e.target.value })}
                           className={`${INPUT} appearance-none pr-10`}
                         >
-                          <option value="" className="bg-[#0a1a0e]">Select a course…</option>
+                          <option value="" className="bg-cream">Select a course…</option>
                           {courses.map(c => (
-                            <option key={c.id} value={c.id} className="bg-[#0a1a0e]">
+                            <option key={c.id} value={c.id} className="bg-cream">
                               {c.name}
                             </option>
                           ))}
                         </select>
-                        <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-white/40">
+                        <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ink/40">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <path d="M6 9l6 6 6-6" />
                           </svg>
                         </div>
                       </div>
                       {isRepeat && (
-                        <p className="text-white/35 text-xs mt-1.5">
+                        <p className="text-ink/40 text-xs mt-1.5">
                           Played more than once this trip — that&apos;s fine
                         </p>
                       )}
@@ -635,10 +635,10 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
         {step === 3 && (
           <div className="space-y-6">
             {/* Toggle */}
-            <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl px-4 py-4">
+            <div className="flex items-center justify-between bg-surface border border-bark/12 rounded-xl px-4 py-4">
               <div>
-                <p className="text-white text-sm font-medium">Use teams?</p>
-                <p className="text-white/40 text-xs mt-0.5">Enables the team leaderboard</p>
+                <p className="text-ink text-sm font-medium">Use teams?</p>
+                <p className="text-ink/40 text-xs mt-0.5">Enables the team leaderboard</p>
               </div>
               <Toggle checked={useTeams} onChange={setUseTeams} label="Use teams" />
             </div>
@@ -654,8 +654,8 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                         onClick={() => setTeamCount(n)}
                         className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors ${
                           numTeams === n
-                            ? 'bg-[#C9A84C] text-[#0a1a0e]'
-                            : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/30'
+                            ? 'bg-accent text-ink'
+                            : 'bg-surface border border-bark/12 text-ink/65 hover:border-bark/25'
                         }`}
                       >
                         {n}
@@ -666,7 +666,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
                 <div className="space-y-3">
                   {teams.map((team, i) => (
-                    <div key={i} className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <div key={i} className="bg-surface border border-bark/12 rounded-2xl p-4">
                       <div className="flex items-center gap-3 mb-4">
                         <div className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} />
                         <input
@@ -674,7 +674,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                           value={team.name}
                           onChange={e => updateTeam(i, { name: e.target.value })}
                           placeholder={`Team ${i + 1}`}
-                          className="flex-1 bg-transparent text-white placeholder-white/30 focus:outline-none text-sm font-medium"
+                          className="flex-1 bg-transparent text-ink placeholder-white/30 focus:outline-none text-sm font-medium"
                         />
                       </div>
                       <div className="flex gap-2.5 flex-wrap">
@@ -685,7 +685,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                             style={{ backgroundColor: color }}
                             className={`w-7 h-7 rounded-full transition-transform hover:scale-110 ${
                               team.color === color
-                                ? 'ring-2 ring-white ring-offset-2 ring-offset-[#0a1a0e] scale-110'
+                                ? 'ring-2 ring-bark/40 ring-offset-2 ring-offset-cream scale-110'
                                 : ''
                             }`}
                             aria-label={`Select colour ${color}`}
@@ -703,19 +703,19 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
         {/* ── Step 4: Players ──────────────────────────────────────── */}
         {step === 4 && (
           <div className="space-y-4">
-            <p className="text-white/50 text-sm mb-2">
+            <p className="text-ink/40 text-sm mb-2">
               Optional — players can also join later with the trip code.
             </p>
             {players.map((player, i) => (
-              <div key={i} className="bg-white/5 border border-white/10 rounded-2xl p-4">
+              <div key={i} className="bg-surface border border-bark/12 rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-[#C9A84C] text-xs tracking-widest uppercase">
+                  <span className="text-ink/40 text-xs tracking-widest uppercase">
                     {i === 0 ? 'Lead player' : `Player ${i + 1}`}
                   </span>
                   {i > 0 && (
                     <button
                       onClick={() => removePlayer(i)}
-                      className="text-white/30 hover:text-white/60 transition-colors p-1"
+                      className="text-ink/40 hover:text-ink/65 transition-colors p-1"
                       aria-label="Remove player"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -753,8 +753,8 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                           onClick={() => updatePlayer(i, { gender: g })}
                           className={`w-12 rounded-xl text-sm font-medium transition-colors ${
                             player.gender === g
-                              ? 'bg-[#C9A84C] text-[#0a1a0e]'
-                              : 'bg-white/5 border border-white/10 text-white/60 hover:border-white/30'
+                              ? 'bg-accent text-ink'
+                              : 'bg-surface border border-bark/12 text-ink/65 hover:border-bark/25'
                           }`}
                         >
                           {g}
@@ -770,14 +770,14 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                         onChange={e => updatePlayer(i, { teamIndex: parseInt(e.target.value) })}
                         className={`${INPUT} appearance-none pr-10`}
                       >
-                        <option value={-1} className="bg-[#0a1a0e]">No team assigned</option>
+                        <option value={-1} className="bg-cream">No team assigned</option>
                         {teams.map((t, ti) => (
-                          <option key={ti} value={ti} className="bg-[#0a1a0e]">
+                          <option key={ti} value={ti} className="bg-cream">
                             {t.name}
                           </option>
                         ))}
                       </select>
-                      <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-white/40">
+                      <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ink/40">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                           <path d="M6 9l6 6 6-6" />
                         </svg>
@@ -790,7 +790,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
             <button
               onClick={addPlayer}
-              className="w-full py-4 border border-dashed border-white/20 rounded-xl text-white/50 text-sm hover:border-white/40 hover:text-white/70 transition-colors"
+              className="w-full py-4 border border-dashed border-bark/25 rounded-xl text-ink/40 text-sm hover:border-bark/25 hover:text-ink/65 transition-colors"
             >
               + Add another player
             </button>
@@ -798,11 +798,11 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
             {/* ── Settings lock ──
                 Only settable here. Once the trip exists, anyone holding the
                 trip code could otherwise lock a trip they do not run. */}
-            <div className="mt-8 pt-6 border-t border-white/10">
-              <div className="flex items-start justify-between gap-4 bg-white/5 border border-white/10 rounded-xl px-4 py-4">
+            <div className="mt-8 pt-6 border-t border-bark/12">
+              <div className="flex items-start justify-between gap-4 bg-surface border border-bark/12 rounded-xl px-4 py-4">
                 <div className="min-w-0">
-                  <p className="text-white text-sm font-medium">Lock trip settings</p>
-                  <p className="text-white/40 text-xs mt-0.5 leading-snug">
+                  <p className="text-ink text-sm font-medium">Lock trip settings</p>
+                  <p className="text-ink/40 text-xs mt-0.5 leading-snug">
                     Ask for a passcode before anyone can change formats, players or teams
                   </p>
                 </div>
@@ -811,11 +811,11 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
               {lockSettings && (
                 <div className="mt-3 space-y-3">
-                  <div className="px-4 py-3.5 bg-amber-500/10 border border-amber-500/40 rounded-xl">
-                    <p className="text-amber-400 text-sm font-semibold leading-snug">
+                  <div className="px-4 py-3.5 bg-rust/10 border border-rust/40 rounded-xl">
+                    <p className="text-rust-deep text-sm font-semibold leading-snug">
                       This can only be set now.
                     </p>
-                    <p className="text-amber-400/70 text-xs leading-snug mt-1.5">
+                    <p className="text-rust/70 text-xs leading-snug mt-1.5">
                       There is no way to add, change or remove it later — otherwise anyone
                       with your trip code could lock you out of your own trip. Write it down.
                     </p>
@@ -843,7 +843,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                   />
 
                   {passcodeIssue && (passcode || passcodeConfirm) && (
-                    <p className="text-amber-400 text-xs leading-snug">{passcodeIssue}</p>
+                    <p className="text-rust-deep text-xs leading-snug">{passcodeIssue}</p>
                   )}
                 </div>
               )}
@@ -853,8 +853,8 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
         {/* Error */}
         {error && (
-          <div className="mt-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
-            <p className="text-amber-400 text-sm">{error}</p>
+          <div className="mt-6 p-4 bg-rust/10 border border-rust/30 rounded-xl">
+            <p className="text-rust-deep text-sm">{error}</p>
           </div>
         )}
 
@@ -863,12 +863,12 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
           <button
             onClick={goNext}
             disabled={!canProceed}
-            className="w-full py-5 bg-[#C9A84C] text-[#0a1a0e] text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-[#d4b35a] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full py-5 bg-accent text-ink text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {submitting ? 'Creating…' : isFinalStep ? 'Create Trip' : 'Continue'}
           </button>
           {isFinalStep && (
-            <p className="text-center text-white/30 text-xs mt-3">
+            <p className="text-center text-ink/40 text-xs mt-3">
               Players without a name will be skipped
             </p>
           )}

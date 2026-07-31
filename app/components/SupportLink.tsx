@@ -20,7 +20,7 @@ export default function SupportLink({ className = '' }: { className?: string }) 
 
   return (
     <div className={`text-center ${className}`.trim()}>
-      <p className="text-white/25 text-xs leading-relaxed max-w-[19rem] mx-auto mb-3">
+      <p className="t-body text-ink/40 max-w-[19rem] mx-auto mb-3">
         Enjoy the app? Support like minded golfers grow the game.
       </p>
       <a
@@ -29,7 +29,7 @@ export default function SupportLink({ className = '' }: { className?: string }) 
         // noopener stops the payment page reaching back into this one;
         // noreferrer keeps our URL out of its logs.
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 h-11 px-4 rounded-xl border border-white/15 bg-white/[0.04] text-white/60 text-xs tracking-[0.18em] uppercase hover:text-white hover:border-emerald-500/40 hover:bg-emerald-500/[0.06] transition-colors"
+        className="inline-flex items-center gap-2 h-11 px-4 rounded-xl border border-bark/12 bg-surface text-ink/65 text-xs tracking-[0.18em] uppercase hover:text-ink hover:border-accent/40 hover:bg-accent/[0.06] transition-colors"
       >
         Let&apos;s get those green dots
         <span aria-hidden="true">🟢</span>

@@ -196,15 +196,14 @@ section('Won matches show green and the margin')
   )
 
   ok(html.includes('3&amp;2') || html.includes('3&2'), 'the margin is shown on the tile')
-  ok(html.includes('emerald'), 'the winner is marked in green')
-  ok(html.includes('border-emerald-500/50'), 'the tile itself is outlined green once won')
-  ok(html.includes('text-emerald-300'), 'the winning name is green')
+  ok(html.includes('border-accent/50'), 'the tile itself is outlined once won')
+  ok(html.includes('text-accent-deep'), 'and the winning name carries the accent')
 
   // Undecided matches stay neutral
   const plain = renderToStaticMarkup(
     React.createElement(MatchplayBracket, { matches, entrants: players })
   )
-  ok(!plain.includes('border-emerald-500/50'), 'an unplayed tile is not outlined green')
+  ok(!plain.includes('border-accent/50'), 'an unplayed tile is not outlined')
   ok(!plain.includes('3&amp;2'), 'and carries no margin')
 
   // A bye has a winner but was never played, so it must not read as won
@@ -214,13 +213,13 @@ section('Won matches show green and the margin')
   )
   const byeMatch = sixM.find(m => m.player_b_is_bye)!
   ok(byeMatch.winner_player_id !== null, 'the bye does carry a winner in the data')
-  ok(!byeHtml.includes('border-emerald-500/50'),
-    'but a bye is not painted green — it was awarded, not won')
+  ok(!byeHtml.includes('border-accent/50'),
+    'but a bye is not marked as won — it was awarded, not played')
 }
 
 // ─── The champion ──────────────────────────────────────────────
 
-section('A won Final is gold and glowing, not green')
+section('The champion is solid, an ordinary win is a tint')
 {
   const { players, matches } = build(4)
   const finalMatch = matches.find(m => m.next_match_id === null)!
@@ -242,13 +241,16 @@ section('A won Final is gold and glowing, not green')
     React.createElement(MatchplayBracket, { matches: played, entrants: players })
   )
 
-  ok(html.includes('rgba(201,168,76'), 'the Final carries a gold glow')
-  ok(html.includes('border-[#C9A84C] bg-[#C9A84C]'), 'and a gold tile')
-  ok(html.includes('text-[#C9A84C] font-bold'), 'the champion name is gold and bold')
+  // There is only one accent now, so the hierarchy lives inside it: a won
+  // match is an emerald tint, the champion is filled solid emerald. Two
+  // weights of one hue rather than two competing colours.
+  ok(html.includes('border-accent bg-accent'), 'the champion tile is filled solid')
+  ok(html.includes('text-white font-semibold'), 'with the name reversed out of it')
+  ok(!html.includes('rgba(10,157,86,0.12), 0 0 24px'), 'and no glow — the guide has none')
 
-  // Ordinary wins stay green — gold means winning the whole thing
-  ok(html.includes('border-emerald-500/50'), 'the semi-finals stay green')
-  ok(html.includes('text-emerald-300'), 'their winners stay green too')
+  // Ordinary wins stay a tint — solid means winning the whole thing
+  ok(html.includes('border-accent/50'), 'the semi-finals keep the outline')
+  ok(html.includes('text-accent-deep'), 'and their winners the accent text')
 
   // An undecided Final gets none of it
   const unfinished = played.map(m => m.id === finalMatch.id
@@ -259,9 +261,9 @@ section('A won Final is gold and glowing, not green')
   ok(!plainHtml.includes('rgba(201,168,76'), 'an unwon Final does not glow')
 
   // A won semi-final is not treated as the champion — it advances somewhere
-  ok(plainHtml.includes('border-emerald-500/50'),
-    'a won semi is still green even when the Final is open')
-  ok(!plainHtml.includes('text-[#C9A84C] font-bold'),
+  ok(plainHtml.includes('border-accent/50'),
+    'a won semi is still marked even when the Final is open')
+  ok(!plainHtml.includes('border-accent bg-accent'),
     'and never gets the champion styling')
 }
 
@@ -270,8 +272,11 @@ section('Press feedback is wired up')
   const html = render(8)
   ok(html.includes('@keyframes holdFill'), 'the hold animation is defined')
   ok(html.includes('transform:scale('), 'tiles carry a scale transform for the press')
-  ok(html.includes('cubic-bezier(0.34, 1.56, 0.64, 1)'),
-    'the release uses an overshoot curve, so it pops rather than eases flat')
+  // The style guide is explicit: ease-out everywhere, no bounce, no spring,
+  // no elastic easing. The release used to overshoot; it no longer does.
+  ok(html.includes('ease-out'), 'the release eases out')
+  ok(!html.includes('cubic-bezier(0.34, 1.56, 0.64, 1)'),
+    'and does not overshoot — no spring anywhere in the system')
 }
 
 // ─── Interaction ───────────────────────────────────────────────

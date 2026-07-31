@@ -33,7 +33,7 @@ export default function Toggle({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={`relative flex-shrink-0 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-        checked ? 'bg-[#C9A84C]' : 'bg-white/15'
+        checked ? 'bg-accent' : 'bg-bark/[0.08]'
       }`}
       style={{ width: TRACK_W, height: TRACK_H }}
     >

@@ -27,7 +27,7 @@ export default function DateField({
   return (
     <div className={`min-w-0 ${className}`}>
       {label && (
-        <label className="block text-white/60 text-xs uppercase tracking-wider mb-2">
+        <label className="block text-ink/65 text-xs uppercase tracking-wider mb-2">
           {label}
         </label>
       )}
@@ -38,9 +38,9 @@ export default function DateField({
         disabled={disabled}
         className={[
           'block w-full min-w-0 max-w-full',
-          'bg-white/5 border border-white/10 rounded-xl px-4 py-3.5',
-          'text-white text-sm',
-          'focus:outline-none focus:border-[#C9A84C]/50 transition-colors',
+          'bg-surface border border-bark/12 rounded-xl px-4 py-3.5',
+          'text-ink text-sm',
+          'focus:outline-none focus:border-accent/50 transition-colors',
           'disabled:opacity-40 disabled:cursor-not-allowed',
         ].join(' ')}
         style={{

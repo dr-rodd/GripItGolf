@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { IconChevronLeft } from "./icons"
 
 /**
  * The one way back, everywhere.
@@ -16,27 +17,13 @@ type Props = Common & (
 )
 
 const BASE = [
-  "inline-flex items-center justify-center gap-2 flex-shrink-0",
-  "h-11 rounded-xl border border-white/15 bg-white/[0.04]",
-  "text-white/60 hover:text-white hover:border-white/30 hover:bg-white/[0.08]",
-  "transition-colors",
+  "inline-flex items-center justify-center gap-1 flex-shrink-0",
+  "h-11 rounded-xl border border-bark/12 bg-surface",
+  "text-ink/65 hover:text-ink hover:border-bark/25",
+  "transition-colors duration-150",
 ].join(" ")
 
-const icon = (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M15 18l-6-6 6-6" />
-  </svg>
-)
+const icon = <IconChevronLeft size={18} />
 
 export default function BackButton({ href, onClick, label, className = "" }: Props) {
   // Square when the arrow speaks for itself; padded out when it has a word to say.
@@ -46,7 +33,7 @@ export default function BackButton({ href, onClick, label, className = "" }: Pro
     <>
       {icon}
       {label && (
-        <span className="text-xs tracking-[0.18em] uppercase">{label}</span>
+        <span className="t-label pr-1">{label}</span>
       )}
     </>
   )

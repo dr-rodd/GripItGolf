@@ -72,16 +72,16 @@ export default function TripCountdown({
         >
           <div className="overflow-hidden flex flex-col items-center">
             <div className="flex items-center gap-4 mb-2">
-              <div className="h-px w-16 bg-[#C9A84C]/40" />
-              <div className="w-1.5 h-1.5 rounded-full bg-[#C9A84C]/60" />
-              <div className="h-px w-16 bg-[#C9A84C]/40" />
+              <div className="h-px w-16 bg-accent/40" />
+              <div className="w-1.5 h-1.5 rounded-full bg-accent/60" />
+              <div className="h-px w-16 bg-accent/40" />
             </div>
 
             {/* Placeholder preserves height before hydration to prevent layout shift */}
             {!mounted ? (
               <div className="h-[84px]" />
             ) : timeLeft ? (
-              <div className="flex gap-5 sm:gap-8 bg-white/5 px-5 py-4 rounded-sm">
+              <div className="flex gap-5 sm:gap-8 bg-surface px-5 py-4 rounded-sm">
                 {[
                   { label: 'Days',    value: timeLeft.days },
                   { label: 'Hours',   value: timeLeft.hours },
@@ -90,12 +90,12 @@ export default function TripCountdown({
                 ].map(({ label, value }) => (
                   <div key={label} className="flex flex-col items-center gap-1.5">
                     <span
-                      className="font-[family-name:var(--font-playfair)] text-4xl sm:text-5xl font-bold tabular-nums"
-                      style={{ color: '#C9A84C', textShadow: '0 0 30px rgba(201,168,76,0.4), 0 2px 4px rgba(0,0,0,0.8)' }}
+                      className="font-[family-name:var(--font-display)] text-4xl sm:text-5xl font-bold tabular-nums"
+                      style={{ color: '#0A9D56', textShadow: '0 0 30px rgba(10,157,86,0.12), 0 2px 4px rgba(0,0,0,0.8)' }}
                     >
                       {String(value).padStart(2, '0')}
                     </span>
-                    <span className="text-[10px] tracking-[0.25em] uppercase text-white/50 font-light">
+                    <span className="text-[10px] tracking-[0.25em] uppercase text-ink/40 font-light">
                       {label}
                     </span>
                   </div>
@@ -110,9 +110,9 @@ export default function TripCountdown({
 
       {/* Divider always present — nav slides up naturally as timer collapses */}
       <div className="flex items-center gap-4 mb-4">
-        <div className="h-px w-16 bg-[#C9A84C]/40" />
-        <div className="w-1.5 h-1.5 rounded-full bg-[#C9A84C]/60" />
-        <div className="h-px w-16 bg-[#C9A84C]/40" />
+        <div className="h-px w-16 bg-accent/40" />
+        <div className="w-1.5 h-1.5 rounded-full bg-accent/60" />
+        <div className="h-px w-16 bg-accent/40" />
       </div>
 
       {children}

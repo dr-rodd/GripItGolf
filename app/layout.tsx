@@ -1,26 +1,41 @@
-import type { Metadata } from "next";
-import { Playfair_Display, Caveat, Crimson_Pro } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Archivo } from "next/font/google";
 import "./globals.css";
 
-const playfair = Playfair_Display({
+/**
+ * Archivo comes through next/font, so it is self-hosted, preloaded, and
+ * immune to a third party being slow. It is the workhorse: buttons, labels,
+ * form fields — everything that has to stay legible in bright sunlight.
+ *
+ * Clash Display and Bespoke Serif are Fontshare fonts, not on Google Fonts,
+ * so they load from Fontshare's CDN via the stylesheet below. If that ever
+ * fails the page still reads properly: the fallback chain in globals.css puts
+ * Archivo behind Clash Display and Georgia behind Bespoke Serif, so the
+ * weights and the register survive even when the exact faces do not.
+ */
+const archivo = Archivo({
   subsets: ["latin"],
-  variable: "--font-playfair",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-archivo",
+  display: "swap",
 });
 
-const caveat = Caveat({
-  subsets: ["latin"],
-  variable: "--font-caveat",
-});
-
-const crimson = Crimson_Pro({
-  subsets: ["latin"],
-  variable: "--font-crimson",
-  weight: ["400", "600"],
-});
+const FONTSHARE =
+  "https://api.fontshare.com/v2/css?" +
+  "f[]=clash-display@500,600&" +
+  "f[]=bespoke-serif@400,500,700&" +
+  "display=swap";
 
 export const metadata: Metadata = {
-  title: "Green Dot Golf",
-  description: "Your handicap is the best 8 of your last 20. Live scoring, leaderboards and matchplay for your golf trip.",
+  title: "green dot.",
+  description:
+    "Your handicap is the best 8 of your last 20. Live scoring, leaderboards and matchplay for your golf trip.",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#F6F4F0",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
@@ -30,7 +45,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${playfair.variable} ${caveat.variable} ${crimson.variable} antialiased`}>
+      <head>
+        <link rel="preconnect" href="https://api.fontshare.com" />
+        <link rel="preconnect" href="https://cdn.fontshare.com" crossOrigin="" />
+        <link rel="stylesheet" href={FONTSHARE} />
+      </head>
+      <body className={`${archivo.variable} antialiased`}>
         {children}
       </body>
     </html>

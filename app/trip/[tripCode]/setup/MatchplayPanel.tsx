@@ -66,13 +66,13 @@ export default function MatchplayPanel({
     }
   }
 
-  const SECTION = 'bg-white/5 border border-white/10 rounded-2xl p-5'
+  const SECTION = 'bg-surface border border-bark/12 rounded-2xl p-5'
 
   if (loading) {
     return (
       <section className={SECTION}>
-        <p className="text-[#C9A84C] text-xs tracking-widest uppercase mb-3">Matchplay</p>
-        <p className="text-white/30 text-sm">Checking…</p>
+        <p className="text-ink/40 text-xs tracking-widest uppercase mb-3">Matchplay</p>
+        <p className="text-ink/40 text-sm">Checking…</p>
       </section>
     )
   }
@@ -92,33 +92,33 @@ export default function MatchplayPanel({
   return (
     <section className={SECTION}>
       <div className="flex items-center justify-between mb-1">
-        <p className="text-[#C9A84C] text-xs tracking-widest uppercase">
+        <p className="text-ink/40 text-xs tracking-widest uppercase">
           {pairs ? 'Pairs Matchplay' : 'Matchplay'}
         </p>
         {exists && (
           <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]" />
-            <span className="text-emerald-400/80 text-[10px] tracking-wider uppercase">Bracket drawn</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-accent " />
+            <span className="text-accent/80 text-[10px] tracking-wider uppercase">Bracket drawn</span>
           </span>
         )}
       </div>
-      <p className="text-white/40 text-xs mb-4">
+      <p className="text-ink/40 text-xs mb-4">
         A knockout draw between {pairs ? noun.many : 'players'}. Top seeds are kept
         apart, and byes are handed out when the count isn&apos;t a power of two.
       </p>
 
       {/* Current state */}
-      <div className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl mb-4">
+      <div className="px-4 py-3 bg-surface border border-bark/12 rounded-xl mb-4">
         {exists ? (
           <>
-            <p className="text-white text-sm">
+            <p className="text-ink text-sm">
               {status!.matchCount} match{status!.matchCount === 1 ? '' : 'es'} across{' '}
               {status!.roundNames.length} round{status!.roundNames.length === 1 ? '' : 's'}
             </p>
-            <p className="text-white/40 text-xs mt-1 leading-snug">
+            <p className="text-ink/40 text-xs mt-1 leading-snug">
               {status!.roundNames.join(' → ')}
             </p>
-            <p className="text-white/40 text-xs mt-2">
+            <p className="text-ink/40 text-xs mt-2">
               {status!.byeCount > 0 && `${status!.byeCount} bye${status!.byeCount === 1 ? '' : 's'} · `}
               {played > 0
                 ? `${played} result${played === 1 ? '' : 's'} recorded`
@@ -126,9 +126,9 @@ export default function MatchplayPanel({
             </p>
           </>
         ) : blocked ? (
-          <p className="text-amber-400/90 text-sm leading-snug">{blocked}</p>
+          <p className="text-rust/90 text-sm leading-snug">{blocked}</p>
         ) : (
-          <p className="text-white/60 text-sm leading-snug">
+          <p className="text-ink/65 text-sm leading-snug">
             {entrantCount} {entrantWord(entrantCount)} — this would draw a
             bracket of {preview!.bracketSize}
             {preview!.byeCount > 0 && ` with ${preview!.byeCount} bye${preview!.byeCount === 1 ? '' : 's'}`}
@@ -142,23 +142,23 @@ export default function MatchplayPanel({
         <div
           className={`px-4 py-4 rounded-xl mb-3 border ${
             played > 0
-              ? 'border-amber-500/50 bg-amber-500/10'
-              : 'border-white/15 bg-white/5'
+              ? 'border-rust/50 bg-rust/10'
+              : 'border-bark/12 bg-surface'
           }`}
         >
           {played > 0 ? (
             <>
-              <p className="text-amber-400 text-sm font-medium leading-snug mb-1">
+              <p className="text-rust-deep text-sm font-medium leading-snug mb-1">
                 This will erase {played} result{played === 1 ? '' : 's'} already recorded
                 for this bracket.
               </p>
-              <p className="text-white/50 text-xs leading-snug mb-4">
+              <p className="text-ink/40 text-xs leading-snug mb-4">
                 A new draw is generated from scratch. Those match outcomes cannot be
                 recovered. Hole scores and the other leaderboards are untouched.
               </p>
             </>
           ) : (
-            <p className="text-white/70 text-sm leading-snug mb-4">
+            <p className="text-ink/65 text-sm leading-snug mb-4">
               This will regenerate the bracket from the {entrantCount}{' '}
               {entrantWord(entrantCount)} registered now. Nothing has been played
               yet, so nothing is lost.
@@ -168,7 +168,7 @@ export default function MatchplayPanel({
             <button
               onClick={() => setConfirming(false)}
               disabled={busy}
-              className="flex-1 py-3.5 border border-white/20 text-white/70 rounded-xl text-sm tracking-wider uppercase hover:border-white/40 transition-colors disabled:opacity-40"
+              className="flex-1 py-3.5 border border-bark/25 text-ink/65 rounded-xl text-sm tracking-wider uppercase hover:border-bark/25 transition-colors disabled:opacity-40"
             >
               Cancel
             </button>
@@ -177,8 +177,8 @@ export default function MatchplayPanel({
               disabled={busy}
               className={`flex-1 py-3.5 rounded-xl text-sm font-bold tracking-wider uppercase transition-colors disabled:opacity-40 ${
                 played > 0
-                  ? 'bg-amber-500 text-[#1a0f0a] hover:bg-amber-400'
-                  : 'bg-[#C9A84C] text-[#0a1a0e] hover:bg-[#d4b35a]'
+                  ? 'bg-rust-deep text-[#1a0f0a] hover:bg-rust-deep'
+                  : 'bg-accent text-ink hover:bg-accent-deep'
               }`}
             >
               {busy ? 'Working…' : played > 0 ? 'Erase & Reshuffle' : 'Reshuffle'}
@@ -193,7 +193,7 @@ export default function MatchplayPanel({
           <button
             onClick={() => setConfirming(true)}
             disabled={busy || !!blocked}
-            className="w-full py-3.5 border border-white/20 text-white/70 rounded-xl text-sm tracking-wider uppercase hover:border-white/40 hover:text-white transition-colors disabled:opacity-40"
+            className="w-full py-3.5 border border-bark/25 text-ink/65 rounded-xl text-sm tracking-wider uppercase hover:border-bark/25 hover:text-ink transition-colors disabled:opacity-40"
           >
             Reshuffle
           </button>
@@ -201,7 +201,7 @@ export default function MatchplayPanel({
           <button
             onClick={generate}
             disabled={busy || !!blocked}
-            className="w-full py-3.5 bg-[#C9A84C] text-[#0a1a0e] rounded-xl text-sm font-bold tracking-wider uppercase hover:bg-[#d4b35a] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full py-3.5 bg-accent text-ink rounded-xl text-sm font-bold tracking-wider uppercase hover:bg-accent-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {busy ? 'Drawing…' : 'Create Matchplay'}
           </button>
@@ -211,14 +211,14 @@ export default function MatchplayPanel({
       {exists && (
         <Link
           href={`/trip/${tripCode}/matchplay`}
-          className="block text-center text-[#C9A84C]/70 text-xs tracking-wider uppercase mt-3 hover:text-[#C9A84C] transition-colors"
+          className="block text-center text-accent/70 text-xs tracking-wider uppercase mt-3 hover:text-accent transition-colors"
         >
           View the draw →
         </Link>
       )}
 
       {exists && canEdit && (
-        <p className="text-white/25 text-xs mt-3 leading-snug">
+        <p className="text-ink/25 text-xs mt-3 leading-snug">
           {pairs ? 'Pairings changing' : 'Players joining or leaving'} after the draw
           doesn&apos;t change it. Reshuffle when you want the bracket to match the
           current {pairs ? 'team sheet' : 'roster'}.
@@ -226,7 +226,7 @@ export default function MatchplayPanel({
       )}
 
       {error && (
-        <p className="text-amber-400 text-sm mt-3 leading-snug">{error}</p>
+        <p className="text-rust-deep text-sm mt-3 leading-snug">{error}</p>
       )}
     </section>
   )

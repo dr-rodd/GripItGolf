@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { parseFormats, isPairsMatchplay, matchplayOn } from '@/lib/formats'
 import { playerEntrant, pairEntrant, type Entrant } from '@/lib/matchplayEntrants'
 import BackButton from '@/app/components/BackButton'
+import TabBar from '@/app/components/TabBar'
 import MatchplayBracket, {
   type BracketMatchRow, type BracketEntrantRow,
 } from './MatchplayBracket'
@@ -95,11 +96,11 @@ export default async function MatchplayPage({
       : m)
 
   return (
-    <div className="min-h-dvh bg-[#0a1a0e] text-white">
-      <div className="sticky top-0 z-50 bg-[#0a1a0e] border-b border-[#1e3d28]">
+    <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
+      <div className="sticky top-0 z-50 bg-cream border-b border-bark/12">
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
           <BackButton href={`/trip/${tripCode}/leaderboard`} />
-          <h1 className="font-[family-name:var(--font-playfair)] text-xl sm:text-2xl text-white tracking-wide truncate px-2">
+          <h1 className="font-[family-name:var(--font-display)] text-xl sm:text-2xl text-ink tracking-wide truncate px-2">
             Matchplay
           </h1>
           <div className="w-11" />
@@ -138,17 +139,18 @@ function EmptyState({
   tripCode: string
 }) {
   return (
-    <div className="border border-[#1e3d28] rounded-sm px-6 py-14 text-center">
-      <p className="font-[family-name:var(--font-playfair)] text-white/70 text-lg leading-snug mb-2">
+    <div className="border border-bark/12 rounded-sm px-6 py-14 text-center">
+      <p className="font-[family-name:var(--font-display)] text-ink/65 text-lg leading-snug mb-2">
         {title}
       </p>
-      <p className="text-white/30 text-sm leading-relaxed mb-8 max-w-xs mx-auto">{body}</p>
+      <p className="text-ink/40 text-sm leading-relaxed mb-8 max-w-xs mx-auto">{body}</p>
       <Link
         href={`/trip/${tripCode}/setup`}
-        className="inline-block px-6 py-3.5 border border-[#C9A84C]/40 text-[#C9A84C] rounded-sm text-xs tracking-[0.2em] uppercase hover:bg-[#C9A84C]/10 transition-colors"
+        className="inline-block px-6 py-3.5 border border-accent/40 text-ink/40 rounded-sm text-xs tracking-[0.2em] uppercase hover:bg-accent/10 transition-colors"
       >
         Trip Setup
       </Link>
+      <TabBar tripCode={tripCode} />
     </div>
   )
 }

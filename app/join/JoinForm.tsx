@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import GreenDot from '@/app/components/GreenDot'
+import Wordmark from '@/app/components/Wordmark'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import BackButton from '@/app/components/BackButton'
@@ -33,18 +33,18 @@ export default function JoinForm({ initialCode }: { initialCode: string }) {
   }
 
   return (
-    <main className="min-h-dvh flex flex-col items-center justify-center bg-[#0a1a0e] px-6">
+    <main className="min-h-dvh flex flex-col items-center justify-center bg-cream px-6">
       <div className="w-full max-w-xs">
 
         {/* The mark */}
         <div className="mb-6 -ml-2">
-          <GreenDot size={14} />
+          <Wordmark width={150} />
         </div>
 
-        <h1 className="font-[family-name:var(--font-playfair)] text-4xl text-white mb-2">
+        <h1 className="font-[family-name:var(--font-display)] text-4xl text-ink mb-2">
           Join a Trip
         </h1>
-        <p className="text-white/40 text-sm mb-8">
+        <p className="text-ink/40 text-sm mb-8">
           Enter the 6-character code from your organiser.
         </p>
 
@@ -55,7 +55,7 @@ export default function JoinForm({ initialCode }: { initialCode: string }) {
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             maxLength={6}
             placeholder="GX7K2P"
-            className="w-full py-4 px-5 bg-white/5 border border-white/15 rounded-xl text-white text-xl tracking-[0.4em] uppercase text-center placeholder:text-white/15 placeholder:tracking-[0.4em] focus:outline-none focus:border-[#C9A84C]/60 transition-colors"
+            className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-xl tracking-[0.4em] uppercase text-center placeholder:text-ink/25 placeholder:tracking-[0.4em] focus:outline-none focus:border-accent/60 transition-colors"
             autoFocus
             autoComplete="off"
             autoCorrect="off"
@@ -63,13 +63,13 @@ export default function JoinForm({ initialCode }: { initialCode: string }) {
           />
 
           {error && (
-            <p className="text-[#C9A84C] text-sm text-center leading-snug">{error}</p>
+            <p className="text-accent text-sm text-center leading-snug">{error}</p>
           )}
 
           <button
             type="submit"
             disabled={loading || code.trim().length < 6}
-            className="w-full py-5 bg-[#C9A84C] text-[#0a1a0e] text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-[#d4b35a] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full py-5 bg-accent text-ink text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {loading ? 'Checking…' : 'Join Trip'}
           </button>

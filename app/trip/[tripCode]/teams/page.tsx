@@ -4,6 +4,7 @@ import { parseFormats } from '@/lib/formats'
 import { teamNoun } from '@/lib/teamLimits'
 import BackButton from '@/app/components/BackButton'
 import TripTeamsClient from './TripTeamsClient'
+import TabBar from '@/app/components/TabBar'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,11 +43,11 @@ export default async function TripTeamsPage({
   if (playersRes.error) console.error('TripTeamsPage players query failed:', playersRes.error)
 
   return (
-    <div className="min-h-dvh bg-[#0a1a0e] text-white">
-      <div className="border-b border-[#1e3d28] sticky top-0 z-20 bg-[#0a1a0e]">
+    <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
+      <div className="border-b border-bark/12 sticky top-0 z-20 bg-cream">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <BackButton href={`/trip/${tripCode}/setup`} />
-          <h1 className="font-[family-name:var(--font-playfair)] text-lg text-white tracking-wide">
+          <h1 className="font-[family-name:var(--font-display)] text-lg text-ink tracking-wide">
             {noun.Many}
           </h1>
           <div className="w-[60px]" />
@@ -62,6 +63,7 @@ export default async function TripTeamsPage({
           players={playersRes.data ?? []}
         />
       </div>
+      <TabBar tripCode={tripCode} />
     </div>
   )
 }

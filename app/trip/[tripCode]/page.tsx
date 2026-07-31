@@ -10,9 +10,11 @@ import {
 } from '@/lib/playerSummary'
 import TripCountdown from './TripCountdown'
 import WelcomeBack from './WelcomeBack'
-import GreenDot from '@/app/components/GreenDot'
+import Wordmark from '@/app/components/Wordmark'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
+import TabBar from '@/app/components/TabBar'
+import { Badge } from '@/app/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,9 +59,9 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
   if (!trip) {
     return (
-      <main className="min-h-dvh flex flex-col items-center justify-center bg-[#0a1a0e] px-6">
-        <p className="font-[family-name:var(--font-playfair)] text-2xl text-white mb-3">Trip not found</p>
-        <p className="text-white/40 text-sm mb-8">Check the code and try again.</p>
+      <main className="min-h-dvh flex flex-col items-center justify-center bg-cream px-6">
+        <p className="font-[family-name:var(--font-display)] text-2xl text-ink mb-3">Trip not found</p>
+        <p className="text-ink/40 text-sm mb-8">Check the code and try again.</p>
         <BackButton href="/" label="Home" />
       </main>
     )
@@ -198,9 +200,9 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   }
 
   const lockedButton = (label: string) => (
-    <div className="w-full py-[18px] border-2 border-white/10 rounded-xl flex items-center justify-center gap-3">
-      <span className="text-white/25 text-sm tracking-[0.25em] uppercase">{label}</span>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/20" aria-hidden="true">
+    <div className="w-full py-[18px] border-2 border-bark/12 rounded-xl flex items-center justify-center gap-3">
+      <span className="text-ink/25 text-sm tracking-[0.25em] uppercase">{label}</span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-ink/25" aria-hidden="true">
         <rect x="3" y="11" width="18" height="11" rx="2" />
         <path d="M7 11V7a5 5 0 0110 0v4" />
       </svg>
@@ -208,16 +210,14 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   )
 
   return (
-    <main className="min-h-dvh bg-[#0a1a0e]">
+    <main className="min-h-dvh bg-cream has-tabbar page-enter">
 
       {/* ── Hero ── */}
       <section className="flex flex-col items-center px-6 pt-8 pb-12">
         <div className="w-full max-w-sm flex flex-col items-center text-center">
 
-          {/* The mark, at the top of every trip. Its glow is drawn outside the
-              dot, so the negative margin pulls the visible edge up to where
-              the spacing looks right rather than where the box ends. */}
-          <GreenDot size={16} className="-mt-1 mb-2" />
+          {/* The mark, small, at the top of every trip */}
+          <Wordmark width={120} className="mb-6 opacity-90" />
 
           {/* Only for somebody this device already knows. A stranger sees the
               page exactly as it was before this feature existed. */}
@@ -233,13 +233,13 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
           {/* Trip name — the reason you opened the page, so it leads.
               Scales with the viewport and wraps rather than shrinking to fit. */}
-          <h1 className="font-[family-name:var(--font-playfair)] text-white font-bold leading-[1.05] tracking-tight text-[clamp(2.25rem,11vw,3.5rem)] text-balance">
+          <h1 className="t-h1 text-ink text-balance" style={{ fontSize: 'clamp(26px, 8vw, 34px)' }}>
             {trip.name}
           </h1>
 
           {/* Dates */}
           {dateRange && (
-            <p className="text-white/50 text-xs tracking-[0.2em] uppercase mt-3">{dateRange}</p>
+            <p className="t-cap uppercase tracking-[0.18em] text-ink/40 mt-3">{dateRange}</p>
           )}
 
           {/* The schedule — each day, and what is played on it */}
@@ -249,16 +249,16 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                 {days.map((d, i) => (
                   <li
                     key={d.key}
-                    className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"
+                    className="rounded-xl border border-bark/12 bg-surface px-4 py-3"
                   >
-                    <p className="text-[#C9A84C]/60 text-[10px] tracking-[0.25em] uppercase">
+                    <p className="t-cap uppercase tracking-[0.18em] text-ink/40">
                       {d.label ?? `Round ${i + 1}`}
                     </p>
                     <div className="mt-1.5 flex flex-col gap-0.5">
                       {d.courses.map((name, j) => (
                         <p
                           key={j}
-                          className="font-[family-name:var(--font-playfair)] text-white text-lg leading-tight"
+                          className="t-card text-ink"
                         >
                           {name}
                         </p>
@@ -272,14 +272,13 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
           {/* Format line */}
           {formatLine && (
-            <p className="text-[#C9A84C]/40 text-[10px] tracking-[0.25em] uppercase mt-6">{formatLine}</p>
+            <p className="t-cap uppercase tracking-[0.18em] text-ink/40 mt-6">{formatLine}</p>
           )}
 
           {/* Setup badge */}
           {isDraft && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-[#C9A84C]/10 border border-[#C9A84C]/30 rounded-full mt-6">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C]" />
-              <span className="text-[#C9A84C] text-[10px] tracking-[0.25em] uppercase">In Setup</span>
+            <div className="mt-6">
+              <Badge>In setup</Badge>
             </div>
           )}
 
@@ -294,8 +293,8 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                 href={`/trip/${tripCode}/players`}
                 className={`w-full py-[18px] border-2 rounded-xl text-sm tracking-[0.25em] uppercase text-center transition-colors ${
                   everyoneIn
-                    ? 'border-white/15 text-white/50 hover:border-white/30 hover:text-white/70'
-                    : 'border-[#C9A84C] text-[#C9A84C] hover:bg-[#C9A84C]/10'
+                    ? 'border-bark/12 text-ink/40 hover:border-bark/25 hover:text-ink/65'
+                    : 'border-accent text-accent hover:bg-accent/10'
                 }`}
               >
                 {everyoneIn ? 'Players' : 'Join Trip'}
@@ -306,7 +305,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                   {/* Trip Setup — the organiser's home while drafting */}
                   <Link
                     href={`/trip/${tripCode}/setup`}
-                    className="w-full py-[18px] bg-[#C9A84C] text-[#0a1a0e] rounded-xl text-sm font-bold tracking-[0.25em] uppercase text-center hover:bg-[#d4b35a] transition-colors inline-flex items-center justify-center gap-2"
+                    className="w-full py-[18px] bg-accent text-ink rounded-xl text-sm font-bold tracking-[0.25em] uppercase text-center hover:bg-accent-deep transition-colors inline-flex items-center justify-center gap-2"
                   >
                     Trip Setup
                     {settingsLocked && <LockIcon />}
@@ -314,7 +313,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
                   {lockedButton('Live Scoring')}
                   {lockedButton('Leaderboard')}
-                  <p className="text-white/25 text-xs mt-1">
+                  <p className="text-ink/25 text-xs mt-1">
                     Scoring opens when the trip is finalised
                   </p>
                 </>
@@ -324,7 +323,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                   {rounds.length > 0 ? (
                     <Link
                       href={`/trip/${tripCode}/course`}
-                      className="w-full py-[18px] border-2 border-white/20 text-white/60 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-white/40 hover:text-white/80 transition-colors"
+                      className="w-full py-[18px] border-2 border-bark/25 text-ink/65 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-bark/25 hover:text-ink/65 transition-colors"
                     >
                       Live Scoring
                     </Link>
@@ -335,7 +334,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                   {/* Leaderboard */}
                   <Link
                     href={`/trip/${tripCode}/leaderboard`}
-                    className="w-full py-[18px] border-2 border-white/20 text-white/60 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-white/40 hover:text-white/80 transition-colors"
+                    className="w-full py-[18px] border-2 border-bark/25 text-ink/65 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-bark/25 hover:text-ink/65 transition-colors"
                   >
                     Leaderboard
                   </Link>
@@ -343,7 +342,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                   {/* Settings — leads to setup page with unlock option */}
                   <Link
                     href={`/trip/${tripCode}/setup`}
-                    className="text-white/25 text-xs tracking-wide hover:text-white/50 transition-colors mt-1 inline-flex items-center justify-center gap-1.5"
+                    className="text-ink/25 text-xs tracking-wide hover:text-ink/40 transition-colors mt-1 inline-flex items-center justify-center gap-1.5"
                   >
                     Trip settings
                     {settingsLocked && <LockIcon />}
@@ -363,8 +362,8 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
           <div className="max-w-xs mx-auto">
 
             <div className="flex items-baseline justify-between mb-3">
-              <p className="text-white/30 text-xs tracking-[0.2em] uppercase">Players</p>
-              <p className="text-white/25 text-xs tabular-nums">
+              <p className="text-ink/40 text-xs tracking-[0.2em] uppercase">Players</p>
+              <p className="text-ink/25 text-xs tabular-nums">
                 {confirmedCount} of {players.length} in
               </p>
             </div>
@@ -372,12 +371,12 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
             {/* Legend — makes the colours mean something at a glance */}
             <div className="flex items-center gap-4 mb-4">
               <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]" />
-                <span className="text-white/30 text-[10px] tracking-wider uppercase">Confirmed</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-accent " />
+                <span className="text-ink/40 text-[10px] tracking-wider uppercase">Confirmed</span>
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C]" />
-                <span className="text-white/30 text-[10px] tracking-wider uppercase">Pending</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+                <span className="text-ink/40 text-[10px] tracking-wider uppercase">Pending</span>
               </span>
             </div>
 
@@ -389,30 +388,30 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                     key={p.id}
                     className={`flex items-center gap-3 px-4 py-3 border rounded-xl transition-colors ${
                       confirmed
-                        ? 'border-emerald-500/50 bg-emerald-500/[0.06] shadow-[0_0_14px_rgba(16,185,129,0.14)]'
-                        : 'border-[#C9A84C]/45 bg-[#C9A84C]/[0.04]'
+                        ? 'border-accent/50 bg-accent/[0.06] '
+                        : 'border-accent/45 bg-accent/[0.06]'
                     }`}
                   >
                     <span
                       className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                         confirmed
-                          ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]'
-                          : 'bg-[#C9A84C]'
+                          ? 'bg-accent '
+                          : 'bg-accent'
                       }`}
                       aria-hidden="true"
                     />
                     <span className="flex-1 min-w-0">
-                      <span className="block text-white text-sm truncate">{p.name}</span>
+                      <span className="block text-ink text-sm truncate">{p.name}</span>
                       <span
                         className={`block text-[10px] tracking-wider uppercase mt-0.5 ${
-                          confirmed ? 'text-emerald-400/70' : 'text-[#C9A84C]/70'
+                          confirmed ? 'text-accent/70' : 'text-accent/70'
                         }`}
                       >
                         {confirmed ? 'Confirmed' : 'Pending'}
                       </span>
                     </span>
                     {p.handicap != null && (
-                      <span className="font-[family-name:var(--font-playfair)] text-[#C9A84C] text-base leading-none flex-shrink-0">
+                      <span className="font-[family-name:var(--font-display)] text-accent text-base leading-none flex-shrink-0">
                         {p.handicap}
                       </span>
                     )}
@@ -422,9 +421,9 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
             </div>
 
             {pendingCount > 0 && (
-              <p className="text-white/25 text-xs mt-4 leading-relaxed">
+              <p className="text-ink/25 text-xs mt-4 leading-relaxed">
                 {pendingCount === 1 ? 'One player has' : `${pendingCount} players have`} still
-                to join. Share the code <span className="text-[#C9A84C]">{tripCode}</span> and
+                to join. Share the code <span className="text-accent">{tripCode}</span> and
                 they can claim their spot.
               </p>
             )}
@@ -436,8 +435,10 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       <SupportLink className="px-6 pb-8" />
 
       <div className="px-6 pb-10 flex justify-center">
-        <BackButton href="/" label="Green Dot Golf" />
+        <BackButton href="/" label="All trips" />
       </div>
+
+      <TabBar tripCode={tripCode} />
 
     </main>
   )

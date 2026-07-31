@@ -21,9 +21,9 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
 
   if (!trip) {
     return (
-      <main className="min-h-dvh flex flex-col items-center justify-center bg-[#0a1a0e] px-6">
-        <p className="font-[family-name:var(--font-playfair)] text-2xl text-white mb-3">Trip not found</p>
-        <p className="text-white/40 text-sm mb-8">Check the code and try again.</p>
+      <main className="min-h-dvh flex flex-col items-center justify-center bg-cream px-6">
+        <p className="font-[family-name:var(--font-display)] text-2xl text-ink mb-3">Trip not found</p>
+        <p className="text-ink/40 text-sm mb-8">Check the code and try again.</p>
         <BackButton href="/" label="Home" />
       </main>
     )

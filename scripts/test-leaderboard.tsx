@@ -197,7 +197,7 @@ section('Custom points with the worst round dropped')
 
 section('Title card appears once more than one board is running')
 {
-  const CARD = 'border border-[#1e3d28] rounded-sm px-4 py-3 mb-3'
+  const CARD = 'bg-surface border border-bark/12 rounded-2xl px-4 py-3 mb-3'
 
   const single = render(F({ stableford: true }))
   ok(!single.includes(CARD), 'a lone board gets no title card, just its rule line')
@@ -228,9 +228,9 @@ section('In play badge')
 
   const live = render(F({ stableford: true }), { activeRoundIds: ['r1'] })
   ok(live.includes('In play'), 'shown while a scorecard is open')
-  ok(live.includes('bg-emerald-400'), 'with a green dot')
-  ok(live.includes('animate-pulse'), 'that pulses')
-  ok(live.includes('rgba(52,211,153'), 'and glows')
+  ok(live.includes('bg-accent'), 'with an emerald dot')
+  ok(live.includes('dot-live'), 'that breathes rather than blinks')
+  ok(!live.includes('box-shadow'), 'and does not glow — the guide has none')
 
   // It belongs to the trip, not to one board
   const liveMulti = render(F({ stableford: true, strokes: true }), { activeRoundIds: ['r2'] })
@@ -267,7 +267,7 @@ section('A card still open reads against level, in green')
   })
 
   ok(html.includes('+9'), 'the round shows how far ahead of level it stands')
-  ok(html.includes('text-emerald-400'), 'and it is green')
+  ok(html.includes('text-accent'), 'and it carries the accent')
 
   // The round column and the Total column say different things: the round
   // reads against level, the total stays a total. Round columns come first,
@@ -291,14 +291,19 @@ section('A card still open reads against level, in green')
   ok(behind.includes('-9'), 'behind level shows a minus')
 }
 
-section('A finalised card reads as its total, in gold')
+section('A finalised card reads as its total, in plain ink')
 {
   // The default fixture is entirely committed scores
   const html = render(F({ stableford: true }))
 
   ok(html.includes('>54<'), 'a finished round shows the total it scored')
-  ok(html.includes('#C9A84C'), 'in gold')
-  ok(!html.includes('text-emerald-400'), 'with nothing green, since nothing is in play')
+  // Emerald means live. There is no second accent, so a finished round is
+  // simply the number — which is the right emphasis once the card is in.
+  ok(html.includes('text-ink'), 'in plain ink')
+  // Emerald appears nowhere on a board with nothing in play. That is the
+  // whole distinction: it does not mean "score", it means "still going".
+  ok(!/class="[^"]*text-accent[^"]*"/.test(html),
+    'with no emerald anywhere, since nothing is in play')
   ok(!html.includes('In play'), 'and no in-play badge')
 
   // The relative figure is gone once the card is in — the total is the number
@@ -326,7 +331,7 @@ section('Strokes measures against par, not against two points a hole')
   const html = render(F({ strokes: true }), {
     scores: [], liveScores: liveHoles('p1', 'r1', 9, 3), activeRoundIds: ['r1'],
   })
-  ok(html.includes('text-emerald-400'), 'an open card is green here too')
+  ok(html.includes('text-accent'), 'an open card carries the accent here too')
   // 9 holes at 3 gross = 27, less 9 shots received (SI 1-9 all inside a
   // handicap of 10) = 18 nett, against 36 of par
   ok(html.includes('-18'), 'and reads as nett against the par of the holes played')
