@@ -5,6 +5,7 @@ import { teamNoun } from '@/lib/teamLimits'
 import BackButton from '@/app/components/BackButton'
 import TripTeamsClient from './TripTeamsClient'
 import TabBar from '@/app/components/TabBar'
+import TripHeader from '@/app/components/TripHeader'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,7 +45,8 @@ export default async function TripTeamsPage({
 
   return (
     <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
-      <div className="border-b border-bark/12 sticky top-0 z-20 bg-cream">
+      <TripHeader tripCode={tripCode} />
+      <div className="bg-cream border-b border-bark/12">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <BackButton href={`/trip/${tripCode}/setup`} />
           <h1 className="font-[family-name:var(--font-display)] text-lg text-ink tracking-wide">

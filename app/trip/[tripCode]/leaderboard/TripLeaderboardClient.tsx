@@ -7,6 +7,7 @@ import {
   resolveCustomPoints, awardRound, totalAfterDiscard, discardedIndices,
 } from '@/lib/customPoints'
 import { describeTeamScoring, teamRoundPoints, type TeamScoring } from '@/lib/teamScoring'
+import { HEADER_H } from '@/app/components/TripHeader'
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -502,8 +503,10 @@ function Board({
     <div className="bg-surface border border-bark/12 rounded-2xl overflow-hidden">
       {/* Sticky column headers */}
       <div
-        style={gridStyle}
-        className="sticky top-0 z-10 px-3 py-1.5 bg-surface border-b border-bark/12"
+        // Sits directly under the wordmark header, which is 52px tall. A
+        // hard 0 here would slide the column headings under the mark.
+        style={{ ...gridStyle, top: HEADER_H }}
+        className="sticky z-10 px-3 py-1.5 bg-surface border-b border-bark/12"
       >
         <span className="text-[10px] tracking-widest uppercase text-ink/40">Pos</span>
         <span className="text-[10px] tracking-widest uppercase text-ink/40">Name</span>

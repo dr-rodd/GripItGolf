@@ -3,10 +3,10 @@ import { supabase } from '@/lib/supabase'
 import { parseFormats } from '@/lib/formats'
 import { parseTeamScoring } from '@/lib/teamScoring'
 import Poller from '@/app/components/Poller'
-import BackButton from '@/app/components/BackButton'
 import TripLeaderboardClient from './TripLeaderboardClient'
 import SupportLink from '@/app/components/SupportLink'
 import TabBar from '@/app/components/TabBar'
+import TripHeader from '@/app/components/TripHeader'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,13 +69,13 @@ export default async function TripLeaderboardPage({
 
   return (
     <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
-      <div className="sticky top-0 z-50 bg-cream border-b border-bark/12">
-        <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
-          <BackButton href={`/trip/${tripCode}`} />
-          <h1 className="font-[family-name:var(--font-display)] text-xl sm:text-2xl text-ink tracking-wide truncate px-2">
+      <TripHeader tripCode={tripCode} />
+
+      <div className="bg-cream border-b border-bark/12">
+        <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
+          <h1 className="t-h2 text-ink truncate">
             {trip.name}
           </h1>
-          <div className="w-11" />
         </div>
       </div>
 

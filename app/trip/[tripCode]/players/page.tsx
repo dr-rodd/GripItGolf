@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import PlayersClient from './PlayersClient'
 import BackButton from '@/app/components/BackButton'
 import TabBar from '@/app/components/TabBar'
+import TripHeader from '@/app/components/TripHeader'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,8 +37,10 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
   if (playersError) console.error('players/page players query failed:', playersError)
 
   return (
-    <main className="min-h-dvh bg-cream has-tabbar page-enter px-6 py-12">
-      <div className="max-w-md mx-auto">
+    <main className="min-h-dvh bg-cream has-tabbar page-enter">
+      <TripHeader tripCode={tripCode} />
+
+      <div className="max-w-md mx-auto px-6 py-10">
 
         <div className="mb-8 flex items-center gap-2">
           <div className="w-3 h-3 rounded-full border-2 border-accent" />

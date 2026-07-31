@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 150" width="560" height="150" role="img" aria-label="green dot">
+  <!--
+    ┌──────────────────────────────────────────────────────────────┐
+    │ PLACEHOLDER — the single-line wordmark, for the sticky       │
+    │ header. Replace with the supplied artwork.                   │
+    │                                                              │
+    │ Keep it wide and tightly cropped to the mark — roughly 3.7:1 │
+    │ — so it sits on one line in a 52px header without needing a  │
+    │ code change.                                                 │
+    └──────────────────────────────────────────────────────────────┘
+  -->
+  <text x="0" y="112"
+        font-family="'Clash Display', 'Archivo', ui-sans-serif, system-ui, sans-serif"
+        font-size="128" font-weight="600" letter-spacing="-4"
+        fill="#4A3728">green dot</text>
+  <circle cx="516" cy="100" r="17" fill="#0A9D56"/>
+</svg>

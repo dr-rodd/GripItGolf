@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import CourseDashboardClient from '@/app/scoring/[slug]/CourseDashboardClient'
+import TripHeader from '@/app/components/TripHeader'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,16 +61,22 @@ export default async function TripCoursePage({
   ])
 
   return (
-    <CourseDashboardClient
-      courseName={(thisRound.courses as any).name}
-      courseId={courseId}
-      players={(playersRes.data ?? []) as any}
-      rounds={(allRounds ?? []) as any}
-      holes={(holesRes.data ?? []) as any}
-      tees={(teesRes.data ?? []) as any}
-      roundHandicaps={hcpsRes.data ?? []}
-      backHref={`/trip/${tripCode}/course`}
-      roundId={thisRound.id}
-    />
+    // The mark is the way back from a scorecard, and the only chrome on the
+    // screen. No tab bar here: the bottom of a scoring screen is score entry,
+    // and a nav bar under it is a mis-tap waiting to happen.
+    <div className="min-h-dvh bg-cream">
+      <TripHeader tripCode={tripCode} />
+      <CourseDashboardClient
+        courseName={(thisRound.courses as any).name}
+        courseId={courseId}
+        players={(playersRes.data ?? []) as any}
+        rounds={(allRounds ?? []) as any}
+        holes={(holesRes.data ?? []) as any}
+        tees={(teesRes.data ?? []) as any}
+        roundHandicaps={hcpsRes.data ?? []}
+        backHref={`/trip/${tripCode}/course`}
+        roundId={thisRound.id}
+      />
+    </div>
   )
 }

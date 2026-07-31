@@ -1,8 +1,8 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import BackButton from '@/app/components/BackButton'
 import TabBar from '@/app/components/TabBar'
+import TripHeader from '@/app/components/TripHeader'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,14 +33,11 @@ export default async function TripCoursePortalPage({
   return (
     <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
 
-      {/* Sticky header */}
-      <div className="border-b border-bark/12 sticky top-0 z-20 bg-cream">
-        <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
-          <BackButton href={`/trip/${tripCode}`} />
-          <h1 className="font-[family-name:var(--font-display)] text-lg text-ink tracking-wide">
-            Live Scoring
-          </h1>
-          <div className="w-[60px]" />
+      <TripHeader tripCode={tripCode} />
+
+      <div className="border-b border-bark/12 bg-cream">
+        <div className="max-w-lg mx-auto px-4 py-4">
+          <h1 className="t-h2 text-ink">Live scoring</h1>
         </div>
       </div>
 

@@ -107,19 +107,36 @@ section('Emerald is an accent, not a wash')
 
 section('The wordmark is a file, not type')
 {
-  ok(fs.existsSync('public/logo.svg'), 'logo.svg exists')
+  // Two forms of one mark: stacked for entry screens, a single line for the
+  // sticky header. Both are files, at fixed paths, so replacing either is a
+  // drop-in with no code change.
+  ok(fs.existsSync('public/logo.svg'), 'the stacked mark exists')
+  ok(fs.existsSync('public/logo-line.svg'), 'and so does the single-line one')
 
-  const mark = renderToStaticMarkup(React.createElement(Wordmark, { width: 280 }))
-  ok(mark.includes('/logo.svg'), 'the component renders the file')
-  ok(mark.includes('alt="green dot."'), 'and names it for anyone who cannot see it')
+  const stacked = renderToStaticMarkup(React.createElement(Wordmark, { width: 280 }))
+  ok(stacked.includes('/logo.svg'), 'the component renders the stacked file by default')
+  ok(stacked.includes('alt="green dot golf"'), 'and names it for anyone who cannot see it')
+
+  const line = renderToStaticMarkup(
+    React.createElement(Wordmark, { variant: 'line', width: 118 }))
+  ok(line.includes('/logo-line.svg'), 'and the line file when asked for it')
+  ok(line.includes('alt="green dot."'), 'named too')
+
+  // Where the header names itself, the image must not say it a second time
+  const hidden = renderToStaticMarkup(
+    React.createElement(Wordmark, { ariaHidden: true, width: 100 }))
+  ok(hidden.includes('aria-hidden="true"'), 'it can be hidden when something else names it')
+  ok(hidden.includes('alt=""'), 'with an empty alt, not a missing one')
 
   // "Do not attempt to recreate it in a webfont." Nothing may draw the
   // wordmark out of live text.
-  const svg = read('public/logo.svg')
-  ok(svg.includes('#4A3728'), 'the wordmark is brown')
-  ok(svg.includes('#0A9D56'), 'and the dot is emerald')
-  ok(!/#F6F5EF|#F6F4F0/.test(svg),
-    'with no baked background, so it sits on cream and on white alike')
+  for (const f of ['public/logo.svg', 'public/logo-line.svg']) {
+    const svg = read(f)
+    ok(svg.includes('#4A3728'), `${f.split('/')[1]} is brown`)
+    ok(svg.includes('#0A9D56'), '  …with an emerald dot')
+    ok(!/#F6F5EF|#F6F4F0/.test(svg),
+      '  …and no baked background, so it sits on cream and on white alike')
+  }
 
   // "Do not recolor it per-page" — no filters, no fill overrides
   const files = uiFiles().filter(f => read(f).includes('Wordmark'))
@@ -197,6 +214,85 @@ section('The bottom tab bar')
     ok(read(f).includes('has-tabbar'), '  …and leaves room for it')
   }
   ok(css.includes('.has-tabbar'), 'and the room is a token, not a magic number per page')
+}
+
+// ─── The sticky header ─────────────────────────────────────────
+
+section('The mark is the header, and the way back')
+{
+  const src = read('app/components/TripHeader.tsx')
+
+  ok(src.includes('sticky top-0'), 'it sticks to the top')
+  ok(src.includes('HEADER_H = 52'), 'at a known height')
+  ok(src.includes('href={`/trip/${tripCode}`}'), 'and tapping it goes to the trip hub')
+  ok(src.includes("aria-label=\"Back to the trip\""), 'which is said out loud, since it is only a logo')
+  ok(src.includes("variant=\"line\"") || src.includes("variant='line'"),
+    'the header carries the single-line mark')
+
+  // The board's own sticky row has to clear it, or the column headings
+  // slide underneath the logo as you scroll.
+  const board = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  ok(board.includes('HEADER_H'), 'the leaderboard offsets its own sticky row by that height')
+  ok(!board.includes('sticky top-0 z-10'), 'rather than pinning it to zero')
+
+  // Every trip screen has it, so the way back is in the same place everywhere
+  const carriers = [
+    'app/trip/[tripCode]/page.tsx',
+    'app/trip/[tripCode]/leaderboard/page.tsx',
+    'app/trip/[tripCode]/course/page.tsx',
+    'app/trip/[tripCode]/course/[roundNumber]/page.tsx',
+    'app/trip/[tripCode]/teams/page.tsx',
+    'app/trip/[tripCode]/players/page.tsx',
+    'app/trip/[tripCode]/matchplay/page.tsx',
+  ]
+  for (const f of carriers) {
+    ok(read(f).includes('<TripHeader'), `${f.split('/').slice(-2).join('/')} carries the mark`)
+  }
+}
+
+section('The morph happens on the hub, and nowhere else')
+{
+  const src = read('app/components/TripHeader.tsx')
+  const hub = read('app/trip/[tripCode]/page.tsx')
+
+  ok(hub.includes('variant="morph"'), 'the hub asks for the morph')
+  ok(hub.includes('<HeroWordmark'), 'and carries the stacked mark that performs it')
+
+  // The delicate screens get the settled header and nothing moving
+  for (const f of [
+    'app/trip/[tripCode]/leaderboard/page.tsx',
+    'app/trip/[tripCode]/course/page.tsx',
+    'app/trip/[tripCode]/course/[roundNumber]/page.tsx',
+  ]) {
+    ok(!read(f).includes('variant="morph"'),
+      `${f.split('/').slice(-2).join('/')} does not morph — it is read standing on a tee`)
+    ok(!read(f).includes('HeroWordmark'), '  …and has no hero mark to morph from')
+  }
+
+  // Scroll handlers fire constantly on a phone; this one coalesces
+  ok(src.includes('requestAnimationFrame'), 'the scroll listener is frame-coalesced')
+  ok(src.includes('{ passive: true }'), 'and passive, so it never blocks a scroll')
+  ok(src.includes('removeEventListener'), 'and is torn down')
+  ok(src.includes('cancelAnimationFrame'), 'along with any frame still pending')
+
+  // The two marks overlap rather than swapping, which is what reads as a morph
+  ok(src.includes('progress - 0.45'), 'the line mark arrives over the back of the travel')
+  ok(/leaving = .*progress \/ 0.7/.test(src), 'as the stacked one is leaving over the front')
+  ok(src.includes('scale('), 'the stacked mark contracts towards the header')
+  ok(src.includes('translateY('), 'and rises towards it')
+
+  // Anyone who asked for less motion gets the end state, not a slow version
+  ok(src.includes('prefers-reduced-motion'), 'reduced motion is honoured')
+  ok(src.includes('if (query.matches) { setReduced(true); setProgress(1); return }'),
+    'by settling immediately rather than animating slower')
+
+  // Both marks read the same number, from one hook. Two copies of this drift
+  // apart mid-scroll and the morph comes apart in the middle.
+  ok(src.includes('function useScrollProgress'), 'the scroll position is computed once')
+  eq((src.match(/requestAnimationFrame/g) ?? []).length, 1, 'with one frame loop, not two')
+  eq((src.match(/addEventListener/g) ?? []).length, 1, 'and one listener')
+  eq((src.match(/useScrollProgress\(/g) ?? []).length, 3,
+    'defined once and used by both the header and the hero mark')
 }
 
 // ─── Icons ─────────────────────────────────────────────────────

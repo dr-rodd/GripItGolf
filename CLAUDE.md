@@ -74,9 +74,25 @@ Clash Display and Bespoke Serif are **Fontshare** fonts loaded from their CDN in
 
 ### The wordmark
 
-`public/logo.svg`, rendered by `app/components/Wordmark.tsx` as an `<img>`. Never recreated in a webfont, never recoloured per page — brown on cream or brown on white, nothing else. Replacing the file needs no code change.
+Two forms of one mark, both files, both rendered by `app/components/Wordmark.tsx` as an `<img>`. Never recreated in a webfont, never recoloured per page — brown on cream or brown on white, nothing else. Replacing either file needs no code change.
 
-> ⚠️ **The current logo.svg is a placeholder.** The real file was named in the style guide but never supplied. Drop it in at `public/logo.svg`.
+| File | Form | Where |
+|---|---|---|
+| `public/logo.svg` | stacked — green / dot / golf, square | Landing, and the trip hub hero |
+| `public/logo-line.svg` | single line — green dot, ~3.7:1 | The sticky header |
+
+> ⚠️ **Both are placeholders.** The real artwork was shown but the files never reached the repo. Drop them in at those two paths.
+
+### The sticky header
+
+`app/components/TripHeader.tsx` — the mark at the top of every trip screen, and the way back to the trip hub from anywhere. 52px, exported as `HEADER_H` so the leaderboard's own sticky column row can clear it.
+
+Two behaviours:
+
+- **`morph`** — the trip hub only. The stacked mark stands full size in the hero and, as you scroll, contracts and rises while the single-line mark arrives in the header. The two overlap (the stacked leaves over the front 70% of the travel, the line arrives over the back 55%) — that overlap is what reads as a morph rather than as one thing swapping for another. 132px of scroll.
+- **`fixed`** — everywhere else. Just the line mark, sticky from the first pixel. **The leaderboard and scoring screens never morph**: they are read standing on a tee, and nothing on them should move that is not a score.
+
+`useScrollProgress` is one hook shared by both marks. Two copies would drift apart mid-scroll and the morph would come apart in the middle. The listener is passive and frame-coalesced; reduced motion settles to the end state immediately rather than animating slower.
 
 ### Navigation
 
