@@ -128,15 +128,26 @@ section('The wordmark is a file, not type')
   ok(hidden.includes('aria-hidden="true"'), 'it can be hidden when something else names it')
   ok(hidden.includes('alt=""'), 'with an empty alt, not a missing one')
 
-  // "Do not attempt to recreate it in a webfont." Nothing may draw the
-  // wordmark out of live text.
+  // "Do not attempt to recreate it in a webfont." Both files are vector
+  // outlines of the supplied artwork — no live text, no font dependency.
   for (const f of ['public/logo.svg', 'public/logo-line.svg']) {
     const svg = read(f)
-    ok(svg.includes('#4A3728'), `${f.split('/')[1]} is brown`)
-    ok(svg.includes('#0A9D56'), '  …with an emerald dot')
-    ok(!/#F6F5EF|#F6F4F0/.test(svg),
-      '  …and no baked background, so it sits on cream and on white alike')
+    ok(/#4a3728/i.test(svg), `${f.split('/')[1]} is brown`)
+    ok(/#0a9d56/i.test(svg), '  …with an emerald dot')
+    ok(!/<text|font-family/i.test(svg), '  …drawn as paths, not set in a typeface')
   }
+
+  // The header sits over cream but the mark has to survive a white surface
+  // too, so the line version carries no background of its own. The stacked
+  // one keeps the background it was supplied with; it is only shown on cream.
+  ok(!/<rect[^>]*fill="#f6f5ef"/i.test(read('public/logo-line.svg')),
+    'the line mark has no baked background')
+
+  // Derived from the stacked mark rather than redrawn, so replacing the
+  // artwork and re-running the generator keeps the two in step.
+  const gen = read('scripts/make-line-logo.ts')
+  ok(gen.includes("SRC = 'public/logo.svg'"), 'the line mark is generated from the stacked one')
+  ok(read('package.json').includes('logo:line'), 'and there is a command to regenerate it')
 
   // "Do not recolor it per-page" — no filters, no fill overrides
   const files = uiFiles().filter(f => read(f).includes('Wordmark'))

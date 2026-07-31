@@ -17,8 +17,14 @@
  */
 
 export const WORDMARK = {
-  stacked: { src: '/logo.svg',      ratio: 1,         alt: 'green dot golf' },
-  line:    { src: '/logo-line.svg', ratio: 150 / 560, alt: 'green dot.' },
+  // The supplied artwork: a square canvas with the mark inset, and a cream
+  // background baked in. That background is a shade off our own cream, but
+  // by one or two values — invisible in practice, and the stacked mark is
+  // only ever shown on cream.
+  stacked: { src: '/logo.svg',      ratio: 1,      alt: 'green dot golf' },
+  // Derived from the same paths by scripts/make-line-logo.ts, cropped to the
+  // ink and with no background, so it sits on cream and on white alike.
+  line:    { src: '/logo-line.svg', ratio: 0.2015, alt: 'green dot.' },
 } as const
 
 export type WordmarkVariant = keyof typeof WORDMARK

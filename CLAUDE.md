@@ -78,10 +78,18 @@ Two forms of one mark, both files, both rendered by `app/components/Wordmark.tsx
 
 | File | Form | Where |
 |---|---|---|
-| `public/logo.svg` | stacked — green / dot / golf, square | Landing, and the trip hub hero |
-| `public/logo-line.svg` | single line — green dot, ~3.7:1 | The sticky header |
+| `public/logo.svg` | stacked — green / dot / golf, square. **The supplied artwork.** | Landing, and the trip hub hero |
+| `public/logo-line.svg` | single line — green dot. **Generated**, not drawn. | The sticky header |
 
-> ⚠️ **Both are placeholders.** The real artwork was shown but the files never reached the repo. Drop them in at those two paths.
+**The line version is derived from the stacked one** by `scripts/make-line-logo.ts` (`npm run logo:line`). No separate line file was supplied, and the guide forbids redrawing the mark — so the generator reuses the very same paths. The export places each word in its own `<g transform="translate(x, y)">`, which makes putting "green" and "dot" on a shared baseline arithmetic on those transforms. Every curve is the original; "golf" is dropped and the emerald dot follows.
+
+**Re-run `npm run logo:line` whenever `public/logo.svg` is replaced**, and update `WORDMARK.line.ratio` in `Wordmark.tsx` to the aspect ratio it prints.
+
+Two things the generator learned the hard way, both visible only by rendering it:
+- Spacing off the glyph *transforms* gives "greendot". The word space has to come from where the ink actually ends, so bounds are parsed out of the path data and a word space is a third of the cap height.
+- Cropping to each glyph's original bounds clips the ascenders off the `d` and the `t`, because they are measured on the baseline the glyph came from rather than the one it moves to.
+
+The supplied stacked file has a cream background baked in, a shade off our own. It is only ever shown on cream, so it stays as supplied; the generated line mark has no background, since the header has to survive a white surface.
 
 ### The sticky header
 
