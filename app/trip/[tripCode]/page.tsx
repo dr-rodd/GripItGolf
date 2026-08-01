@@ -11,6 +11,8 @@ import {
 import TripCountdown from './TripCountdown'
 import WelcomeBack from './WelcomeBack'
 import TripHeader, { HeroPin } from '@/app/components/TripHeader'
+import Itinerary from './Itinerary'
+import { type ItineraryItem, dayCount } from '@/lib/itinerary'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import TabBar from '@/app/components/TabBar'
@@ -67,7 +69,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
     )
   }
 
-  const [roundsResult, playersResult] = await Promise.all([
+  const [roundsResult, playersResult, itineraryResult] = await Promise.all([
     supabase
       .from('rounds')
       .select('round_number, course_id, scheduled_date')
@@ -78,15 +80,41 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       .select('id, name, handicap, claimed, team_id')
       .eq('trip_id', trip.id)
       .order('name'),
+    supabase
+      .from('itinerary_items')
+      .select('id, day_index, position, kind, course_id, tee_time, tee_count, ' +
+              'stay_name, travel_mode, from_place, to_place, duration_mins')
+      .eq('trip_id', trip.id)
+      .order('day_index')
+      .order('position'),
   ])
 
   if (roundsResult.error) console.error('TripPage rounds query failed:', roundsResult.error)
+  if (itineraryResult.error) console.error('TripPage itinerary query failed:', itineraryResult.error)
   if (playersResult.error) console.error('TripPage players query failed:', playersResult.error)
 
   const rounds  = roundsResult.data ?? []
   const players = playersResult.data ?? []
 
-  const courseIds = rounds.map(r => r.course_id).filter(Boolean)
+  type ItinRow = {
+    id: string; day_index: number; position: number; kind: 'golf' | 'stay' | 'travel'
+    course_id: string | null; tee_time: string | null; tee_count: number | null
+    stay_name: string | null; travel_mode: 'car' | 'flight' | 'train' | null
+    from_place: string | null; to_place: string | null; duration_mins: number | null
+  }
+  const itinerary: ItineraryItem[] = ((itineraryResult.data ?? []) as unknown as ItinRow[])
+    .map(r => ({
+      id: r.id, dayIndex: r.day_index, position: r.position, kind: r.kind,
+      courseId: r.course_id, teeTime: r.tee_time, teeCount: r.tee_count,
+      stayName: r.stay_name, travelMode: r.travel_mode,
+      fromPlace: r.from_place, toPlace: r.to_place, durationMins: r.duration_mins,
+    }))
+
+  // Courses for both the rounds list and the itinerary's golf tiles
+  const courseIds = [
+    ...rounds.map(r => r.course_id),
+    ...itinerary.map(i => i.courseId),
+  ].filter(Boolean)
   const { data: courses, error: coursesError } = courseIds.length > 0
     ? await supabase.from('courses').select('id, name').in('id', courseIds)
     : { data: [], error: null }
@@ -245,8 +273,18 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
             <p className="t-cap uppercase tracking-[0.18em] text-ink/40 mt-3">{dateRange}</p>
           )}
 
-          {/* The schedule — each day, and what is played on it */}
-          {days.length > 0 && (
+          {/* The running order, dimming as the trip happens. Falls back to
+              the plain list of rounds for trips made before the itinerary. */}
+          {itinerary.length > 0 ? (
+            <div className="w-full mt-7 text-left">
+              <Itinerary
+                items={itinerary}
+                startDate={trip.start_date ?? null}
+                courseNames={courseMap}
+                days={dayCount(trip.start_date ?? null, trip.end_date ?? null)}
+              />
+            </div>
+          ) : days.length > 0 && (
             <div className="w-full mt-7">
               <ul className="flex flex-col gap-2">
                 {days.map((d, i) => (

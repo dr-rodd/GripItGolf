@@ -389,6 +389,30 @@ An optional "support the app" link in the footer of the trip hub and the leaderb
 - `target="_blank"` with **both** `noopener` and `noreferrer`.
 - Never a modal, banner or popup, and never on the scoring pages — it must not sit anywhere near someone entering a score.
 
+## The itinerary
+
+A trip is a drive to the coast, a tee time, another drive, a guesthouse — in that order, on a given day. `itinerary_items` (migration 021) holds that running order; `lib/itinerary.ts` is the model, pure.
+
+**Creation step 2 is the itinerary builder**, replacing the old "pick a course per round" list. One day open at a time, tiles in the order they happen, and three add buttons pinned to the bottom of the screen — on a phone that is where the thumb already is.
+
+| Kind | Carries |
+|---|---|
+| `golf` | course (platform list only), first tee time, number of tee times |
+| `stay` | a name. Free text on purpose — an organiser knows what "the guesthouse in Ballina" means |
+| `travel` | car / flight / train, from, to, duration |
+
+**Golf items are the source of truth for rounds.** A round exists because a golf item does. On save the itinerary is written first so every row has an id, then golf items become rounds in `(day_index, position)` order — which is the order they are numbered in — each carrying `rounds.itinerary_item_id` back to the item that made it. The rounds-count picker is gone; the cap still applies, counted from the golf items.
+
+**Positions are gapless**, renumbered on every add, delete and move. These lists are a handful of items long and a sequence you can read is worth more than avoiding a rewrite of four rows. Drag and drop moves items within a day or between days (`@dnd-kit`, press-and-hold on touch so a drag is never started by a scroll).
+
+The schema uses one wide table with a `kind` column and a check constraint that each kind carries its own detail and none of anyone else's — without it a half-edited row can claim to be a drive with a tee time. Verified against Postgres: 5 valid shapes accepted, 8 malformed ones refused.
+
+### On the trip hub
+
+`Itinerary.tsx` shows the running order and **dims what has already happened**, so the eye lands on what is next. A day whose items are all past fades as a whole; the item happening now carries the emerald tint and the live dot.
+
+`itemState` takes `now` as an argument and is judged by day first, then by tee time — a round is roughly four and a half hours plus ten minutes a group. The component reads the clock through `useSyncExternalStore`, bucketed to the minute: the server has no idea what time it is where the reader is, so rendering against `new Date()` directly is a hydration error, and a snapshot that changed every render would loop.
+
 ## Trip lifecycle
 
 Trips have a `setup_status` of `draft` or `live`.

@@ -9,6 +9,7 @@
 
 import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
+import fs from 'fs'
 import DateField from '../app/components/DateField'
 import CreateTripForm from '../app/dashboard/create/CreateTripForm'
 import TripSetupClient from '../app/trip/[tripCode]/setup/TripSetupClient'
@@ -69,20 +70,30 @@ const formHtml = renderToStaticMarkup(
   React.createElement(CreateTripForm, { courses })
 )
 
-section('Rounds control')
+section('The itinerary replaces the rounds picker')
 {
-  ok(formHtml.includes('Number of rounds'), 'the control is labelled')
-  ok(formHtml.includes('aria-label="Add a round"'), 'there is an add button')
-  ok(formHtml.includes('>+<'), 'and it shows a plus')
+  // Rounds are no longer chosen by number. A round exists because a golf
+  // item was added to a day, so the running order is the thing being built.
+  ok(!formHtml.includes('Number of rounds'), 'there is no rounds counter any more')
+  ok(!formHtml.includes('aria-label="Add a round"'), 'nor an add-a-round control')
 
-  // Presets run 1..MAX_ROUNDS — no hardcoded 7 any more
-  for (let n = MIN_ROUNDS; n <= MAX_ROUNDS; n++) {
-    ok(formHtml.includes(`>${n}<`), `preset ${n} is offered`)
-  }
+  const labels = formHtml.match(/Step \d of 4 — ([^<]+)/)
+  ok(labels !== null, 'the wizard says which step it is on')
 
-  // The row has a fixed number of equal columns that can shrink
-  ok(formHtml.includes('repeat(7, minmax(0, 1fr))'),
-    'the rounds row uses shrinkable equal columns')
+  const src = fs.readFileSync('app/dashboard/create/CreateTripForm.tsx', 'utf-8')
+  ok(src.includes("'Trip details', 'Itinerary', 'Teams', 'Players'"),
+    'and step two is the itinerary')
+  ok(src.includes('<ItineraryBuilder'), 'which renders the builder')
+
+  // A trip with no golf has nothing to score, so it cannot move on
+  ok(src.includes('plannedGolf.length > 0'), 'a trip needs at least one round')
+  ok(src.includes('roundCountError(plannedGolf.length)'),
+    'and the cap on rounds still applies, counted from the golf items')
+
+  // The golf items are what the rounds table is built from
+  ok(src.includes('plannedGolf.map'), 'rounds are written from the golf items')
+  ok(src.includes('itinerary_item_id'), 'and each round remembers the item that made it')
+  ok(src.includes("from('itinerary_items')"), 'with the itinerary saved alongside')
 }
 
 // ─── Date fields stay inside their container ───────────────────

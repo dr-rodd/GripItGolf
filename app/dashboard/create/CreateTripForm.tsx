@@ -5,10 +5,12 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import BackButton from '@/app/components/BackButton'
 import DateField from '@/app/components/DateField'
-import { MAX_ROUNDS, roundCountError } from '@/lib/tripLimits'
+import { roundCountError } from '@/lib/tripLimits'
 import { DEFAULT_FORMATS } from '@/lib/formats'
 import { normaliseEmail, emailWarning, MAX_EMAIL } from '@/lib/email'
 import { rememberPlayer } from '@/lib/playerCookie'
+import ItineraryBuilder from '@/app/components/ItineraryBuilder'
+import { type ItineraryItem, golfItems, dateForDay } from '@/lib/itinerary'
 import Toggle from '@/app/components/Toggle'
 import {
   MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError,
@@ -17,7 +19,6 @@ import {
 // ── Types ─────────────────────────────────────────────────────────────────
 
 type Course = { id: string; name: string }
-type RoundInput = { courseId: string; scheduledDate: string }
 type TeamInput = { name: string; color: string }
 type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F'; teamIndex: number }
 
@@ -36,10 +37,9 @@ const INPUT = [
 
 const LABEL = 'block text-ink/65 text-xs uppercase tracking-wider mb-2'
 
-const STEP_LABELS = ['Trip details', 'Rounds', 'Teams', 'Players']
+const STEP_LABELS = ['Trip details', 'Itinerary', 'Teams', 'Players']
 
 // Presets cover the common cases; the + button goes beyond them.
-const ROUND_PRESETS = Array.from({ length: MAX_ROUNDS }, (_, i) => i + 1)
 
 /**
  * What actually went wrong, in words.
@@ -74,12 +74,10 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
   const [leadEmail, setLeadEmail] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [numRounds, setNumRounds] = useState(3)
 
   // Step 2
-  const [rounds, setRounds] = useState<RoundInput[]>(
-    Array.from({ length: 3 }, () => ({ courseId: '', scheduledDate: '' }))
-  )
+  // The trip's running order. Golf items in it become the rounds.
+  const [itinerary, setItinerary] = useState<ItineraryItem[]>([])
 
   // Step 3
   const [useTeams, setUseTeams] = useState(true)
@@ -107,15 +105,13 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
   // ── Validation ───────────────────────────────────────────────────────────
 
-  const roundsError = roundCountError(numRounds)
-  const step1Valid = tripName.trim().length > 0 && !roundsError
-  const selectedCourseIds = rounds.map(r => r.courseId).filter(Boolean)
-  // A course may be played more than once — opening and closing on the same
-  // links is ordinary. Repeats are flagged for reassurance, never blocked.
-  const repeatedCourseIds = new Set(
-    selectedCourseIds.filter((id, i) => selectedCourseIds.indexOf(id) !== i)
-  )
-  const step2Valid = rounds.every(r => r.courseId)
+  const step1Valid = tripName.trim().length > 0
+
+  // A trip needs somewhere to play. Stays and journeys are optional
+  // decoration; without golf there is nothing to score.
+  const plannedGolf = golfItems(itinerary)
+  const step2Valid = plannedGolf.length > 0 && !roundCountError(plannedGolf.length)
+
   const step3Valid = !useTeams || teams.every(t => t.name.trim())
 
   const passcodeIssue = !lockSettings
@@ -128,9 +124,6 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
   function goNext() {
     if (step === 1) {
-      setRounds(prev =>
-        Array.from({ length: numRounds }, (_, i) => prev[i] ?? { courseId: '', scheduledDate: '' })
-      )
       setStep(2)
     } else if (step === 2) {
       setStep(3)
@@ -146,12 +139,6 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
     if (step === 2) setStep(1)
     else if (step === 3) setStep(2)
     else if (step === 4) setStep(3)
-  }
-
-  // ── Round helpers ────────────────────────────────────────────────────────
-
-  function updateRound(i: number, patch: Partial<RoundInput>) {
-    setRounds(prev => prev.map((r, idx) => idx === i ? { ...r, ...patch } : r))
   }
 
   // ── Team helpers ─────────────────────────────────────────────────────────
@@ -307,17 +294,56 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
       if (lead) rememberPlayer(code, lead.id)
     }
 
-    // 4. Rounds
+    // 4. The itinerary, and the rounds that come out of it.
+    //
+    // Written first so each row has a real id, then the golf ones become
+    // rounds pointing back at the item that created them. Order is day then
+    // position, which is exactly the order rounds are numbered in.
+    const itineraryRows = itinerary.map(item => ({
+      trip_id: tripId,
+      day_index: item.dayIndex,
+      position: item.position,
+      kind: item.kind,
+      course_id: item.kind === 'golf' ? item.courseId ?? null : null,
+      tee_time: item.kind === 'golf' ? item.teeTime || null : null,
+      tee_count: item.kind === 'golf' ? item.teeCount ?? 1 : null,
+      stay_name: item.kind === 'stay' ? item.stayName ?? null : null,
+      travel_mode: item.kind === 'travel' ? item.travelMode ?? null : null,
+      from_place: item.kind === 'travel' ? item.fromPlace || null : null,
+      to_place: item.kind === 'travel' ? item.toPlace || null : null,
+      duration_mins: item.kind === 'travel' ? item.durationMins ?? null : null,
+    }))
+
+    const { data: savedItems, error: itinErr } = itineraryRows.length > 0
+      ? await supabase.from('itinerary_items').insert(itineraryRows)
+          .select('id, day_index, position, kind')
+      : { data: [], error: null }
+
+    if (itinErr) {
+      setError(`Trip created, but the itinerary failed. ${describeError(itinErr)}`)
+      setSubmitting(false)
+      return
+    }
+
+    // Match each saved row back to the item that produced it, by its slot.
+    const savedBySlot = new Map(
+      (savedItems ?? []).map(r => [`${r.day_index}:${r.position}`, r.id])
+    )
+
     const { data: insertedRounds, error: roundsErr } = await supabase
       .from('rounds')
       .insert(
-        rounds.map((r, i) => ({
-          trip_id: tripId,
-          course_id: r.courseId,
-          round_number: i + 1,
-          status: 'upcoming',
-          ...(r.scheduledDate ? { scheduled_date: r.scheduledDate } : {}),
-        }))
+        plannedGolf.map((g, i) => {
+          const date = dateForDay(startDate || null, g.dayIndex)
+          return {
+            trip_id: tripId,
+            course_id: g.courseId,
+            round_number: i + 1,
+            status: 'upcoming',
+            itinerary_item_id: savedBySlot.get(`${g.dayIndex}:${g.position}`) ?? null,
+            ...(date ? { scheduled_date: date } : {}),
+          }
+        })
       )
       .select('id')
 
@@ -527,111 +553,30 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
               )}
             </div>
 
-            <div>
-              <label className={LABEL}>Number of rounds</label>
-              <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
-                {ROUND_PRESETS.map(n => (
-                  <button
-                    key={n}
-                    onClick={() => setNumRounds(n)}
-                    className={`py-3 rounded-xl text-sm font-medium transition-colors ${
-                      numRounds === n
-                        ? 'bg-accent text-ink'
-                        : 'bg-surface border border-bark/12 text-ink/65 hover:border-bark/25'
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-                {/* Adds a round beyond the presets. It will go past the limit
-                    quite happily — the error below is what stops you, so the
-                    cap is visible rather than silently unreachable. */}
-                <button
-                  onClick={() => setNumRounds(n => n + 1)}
-                  aria-label="Add a round"
-                  className={`py-3 rounded-xl text-lg leading-none font-medium transition-colors ${
-                    numRounds > MAX_ROUNDS
-                      ? 'bg-rust/20 border border-rust/60 text-rust-deep'
-                      : 'bg-surface border border-bark/12 text-ink/65 hover:border-bark/25'
-                  }`}
-                >
-                  +
-                </button>
-              </div>
-
-              {roundsError && (
-                <div className="mt-3 flex items-center justify-between gap-3 px-4 py-3 bg-rust/10 border border-rust/40 rounded-xl">
-                  <p className="text-rust-deep text-sm leading-snug min-w-0">
-                    {numRounds} rounds selected. {roundsError}
-                  </p>
-                  <button
-                    onClick={() => setNumRounds(MAX_ROUNDS)}
-                    className="flex-shrink-0 px-3 py-2 border border-rust/50 rounded-lg text-rust-deep text-xs tracking-wider uppercase hover:bg-rust/10 transition-colors"
-                  >
-                    Set {MAX_ROUNDS}
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
         )}
 
-        {/* ── Step 2: Rounds ───────────────────────────────────────── */}
+        {/* ── Step 2: The itinerary ────────────────────────────────
+            Replaces the old "pick a course per round" list. A round now
+            exists because a golf item does, so the running order is the
+            thing being built and the rounds fall out of it. */}
         {step === 2 && (
-          <div className="space-y-5">
+          <div>
             {courses.length === 0 && (
-              <div className="p-4 bg-surface border border-bark/12 rounded-xl text-ink/40 text-sm text-center">
+              <div className="p-4 bg-surface border border-bark/12 rounded-xl text-ink/40 text-sm text-center mb-4">
                 No platform courses available yet. Add courses with <code className="text-accent">trip_id = NULL</code> to get started.
               </div>
             )}
-            {rounds.map((round, i) => {
-              const isRepeat = !!round.courseId && repeatedCourseIds.has(round.courseId)
-              return (
-                <div key={i} className="bg-surface border border-bark/12 rounded-2xl p-5">
-                  <p className="text-ink/40 text-xs tracking-widest uppercase mb-4">
-                    Round {i + 1}
-                  </p>
-                  <div className="space-y-4">
-                    <div>
-                      <label className={LABEL}>Course</label>
-                      <div className="relative">
-                        <select
-                          value={round.courseId}
-                          onChange={e => updateRound(i, { courseId: e.target.value })}
-                          className={`${INPUT} appearance-none pr-10`}
-                        >
-                          <option value="" className="bg-cream">Select a course…</option>
-                          {courses.map(c => (
-                            <option key={c.id} value={c.id} className="bg-cream">
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ink/40">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <path d="M6 9l6 6 6-6" />
-                          </svg>
-                        </div>
-                      </div>
-                      {isRepeat && (
-                        <p className="text-ink/40 text-xs mt-1.5">
-                          Played more than once this trip — that&apos;s fine
-                        </p>
-                      )}
-                    </div>
-                    <DateField
-                      label="Date"
-                      value={round.scheduledDate}
-                      onChange={v => updateRound(i, { scheduledDate: v })}
-                    />
-                  </div>
-                </div>
-              )
-            })}
+            <ItineraryBuilder
+              startDate={startDate || null}
+              endDate={endDate || null}
+              courses={courses}
+              items={itinerary}
+              onChange={setItinerary}
+            />
           </div>
         )}
 
-        {/* ── Step 3: Teams ────────────────────────────────────────── */}
         {step === 3 && (
           <div className="space-y-6">
             {/* Toggle */}
