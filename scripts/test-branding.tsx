@@ -291,10 +291,23 @@ section('The morph happens on the hub, and nowhere else')
   ok(src.includes('cancelAnimationFrame'), 'along with any frame still pending')
 
   // One element the whole way, not two crossfading
-  ok(src.includes('scale('), 'the mark contracts towards the header')
-  ok(src.includes('translate('), 'and travels towards it')
   eq((src.match(/<MorphWordmark/g) ?? []).length, 1,
     'there is one mark on screen, never two fading past each other')
+  ok(src.includes('heroOrigin') && src.includes('lineOrigin'),
+    'the header hands it both ends of the journey in screen pixels')
+  ok(src.includes('HERO_W') && src.includes('LINE_W'),
+    'and the size at each end')
+  // Positioned, not transformed: a scaling frame is what made "dot" appear
+  // to lurch right while the mark as a whole moved left.
+  ok(!/transform: `?(translate|scale)/.test(src),
+    'the mark is positioned rather than transformed as a block')
+
+  // The page holds still while the mark moves: the spacer shrinks by exactly
+  // the distance scrolled, so the first pull of the scroll animates the logo
+  // and nothing else. The two being the same number is what makes that work.
+  ok(src.includes('HERO_SPACE * (1 - t)'), 'the room below the mark closes as it leaves')
+  ok(src.includes('window.scrollY || 0) / HERO_SPACE'),
+    'and the animation runs over exactly that distance, so the page does not shift')
 
   // Anyone who asked for less motion gets the end state, not a slow version
   ok(src.includes('prefers-reduced-motion'), 'reduced motion is honoured')
@@ -324,41 +337,194 @@ section('The words move separately, and never through each other')
 
   // Each word runs on its own window, or it is not a morph but a slide
   ok(src.includes('const TIMING'), 'each word has its own timing')
-  for (const id of ['green', 'dot', 'golf', 'mark']) {
-    ok(new RegExp(`\\b${id}:\\s*\\{ x:`).test(src), `  …including ${id}`)
+
+  const windows: Record<string, { y: [number, number]; x: [number, number] }> = {}
+  for (const m of src.matchAll(
+    /(\w+):\s*\{ y: \[([\d.]+), ([\d.]+)\], x: \[([\d.]+), ([\d.]+)\] \}/g)) {
+    windows[m[1]] = { y: [+m[2], +m[3]], x: [+m[4], +m[5]] }
+  }
+  eq(Object.keys(windows).sort(), ['dot', 'golf', 'green', 'mark'],
+    'all four are timed')
+
+  // ── Up, then left ──
+  // The rule the whole animation rests on. A word moving on both axes at
+  // once cuts a diagonal, and the first version of this dragged "dot"
+  // straight through the middle of "green" for a third of the travel.
+  for (const [id, w] of Object.entries(windows)) {
+    if (w.x[0] === w.x[1]) continue        // golf never moves sideways at all
+    ok(w.x[0] >= w.y[1] - 0.001, `${id} finishes rising before it starts moving left`)
   }
 
-  // The defect this exists to prevent: "dot" sits below "green" and ends up
-  // to its right, so moving it diagonally drags it straight through the
-  // other word. Across first, then up.
-  const dotX = src.match(/dot:\s*\{ x: \[([\d.]+), ([\d.]+)\], y: \[([\d.]+), ([\d.]+)\]/)
-  ok(dotX !== null, 'dot has a window on each axis')
-  if (dotX) {
-    const [, , xEnd, yStart] = dotX.map(Number)
-    ok(yStart >= xEnd - 0.2,
-      'dot clears sideways before it rises, so it never crosses green')
+  eq(windows.golf.y[0], 0, 'golf starts leaving straight away')
+  ok(windows.mark.x[1] >= 0.99, 'and the dot is the last thing to land')
+
+  // ── Nothing moves right ──
+  // Checked against the geometry rather than asserted in prose. The mark
+  // shrinks towards its left edge, so every word's final screen position is
+  // left of where it started — which is the whole reason each word is placed
+  // in screen space instead of nudged about inside a scaling frame.
+  {
+    const box = (name: string) =>
+      JSON.parse(geom.match(new RegExp(`${name} = (\\[[^\\]]+\\])`))![1]) as number[]
+    const stackedBox = box('STACKED_BOX'), lineBox = box('LINE_BOX')
+    const heroW = 210, lineW = 118, rowW = 390
+    const heroUnit = heroW / stackedBox[2], lineUnit = lineW / lineBox[2]
+    const heroX = (rowW - heroW) / 2, lineX = 0
+
+    const words = [...geom.matchAll(
+      /"id": "(\w+)",[\s\S]*?"stacked": \[\s*([-\d.]+),[\s\S]*?"line": \[\s*([-\d.]+),/g)]
+    eq(words.length, 4, 'all four words have positions in both layouts')
+
+    for (const [, id, sx, lx] of words) {
+      const from = heroX + (Number(sx) - stackedBox[0]) * heroUnit
+      const to   = lineX + (Number(lx) - lineBox[0])    * lineUnit
+      ok(to <= from + 0.5, `${id} ends left of where it started`)
+    }
   }
 
-  // Only the word that leaves fades. Anything else dimming mid-move reads as
-  // a crossfade, which is the thing this replaced.
-  const fading = [...geom.matchAll(/"id": "(\w+)",[\s\S]*?"fades": (true|false)/g)]
-    .filter(m => m[2] === 'true').map(m => m[1])
-  eq(fading, ['golf'], 'only golf is marked as leaving')
+  // ── No two words ever overlap ──
+  //
+  // The property itself, sampled across the whole travel, rather than a
+  // rule of thumb about timings that stands in for it. This is the check
+  // that would have caught the first version directly: it dragged "dot"
+  // through the middle of "green" for about a third of the scroll.
+  {
+    const box = (name: string) =>
+      JSON.parse(geom.match(new RegExp(`${name} = (\\[[^\\]]+\\])`))![1]) as number[]
+    const stackedBox = box('STACKED_BOX'), lineBox = box('LINE_BOX')
+    const words = [...geom.matchAll(
+      /"id": "(\w+)",\s*"fades": (true|false),\s*"box": \[\s*([-\d.]+),\s*([-\d.]+),\s*([-\d.]+),\s*([-\d.]+)[\s\S]*?"stacked": \[\s*([-\d.]+),\s*([-\d.]+)[\s\S]*?"line": \[\s*([-\d.]+),\s*([-\d.]+)/g)]
+      .map(m => ({
+        id: m[1], fades: m[2] === 'true',
+        w: +m[5], h: +m[6],
+        sx: +m[7], sy: +m[8], lx: +m[9], ly: +m[10],
+      }))
+    eq(words.length, 4, 'every word has a box in both layouts')
 
-  // Asserted on what it renders, not just on the flag: an earlier version
-  // checked the data and missed the component dimming every word.
-  const mid = renderToStaticMarkup(
-    React.createElement(MorphWordmark, { progress: 0.5, width: 118 }))
-  const opacities = [...mid.matchAll(/\sopacity="([\d.]+)"/g)].map(m => Number(m[1]))
-  eq(opacities.length, 4, 'all four groups render')
-  eq(opacities.filter(o => o < 1).length, 1,
-    'and exactly one of them is fading halfway through — the one that leaves')
+    const heroW = 210, lineW = 118, rowW = 390, heroTop = 96
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3)
+    const rampAt = ([a, b]: [number, number], p: number) =>
+      b <= a ? (p >= b ? 1 : 0) : p <= a ? 0 : p >= b ? 1 : ease((p - a) / (b - a))
+    const mix = (a: number, b: number, t: number) => a + (b - a) * t
 
-  // The end state is the line mark, whole and opaque
-  const done = renderToStaticMarkup(
-    React.createElement(MorphWordmark, { progress: 1, width: 118 }))
-  eq([...done.matchAll(/\sopacity="([\d.]+)"/g)].map(m => Number(m[1])).filter(o => o > 0).length, 3,
-    'and by the end only the three words that stay are visible')
+    const sizeWin = src.match(/const SIZE: Window = \[([\d.]+), ([\d.]+)\]/)!
+    const SIZE: [number, number] = [+sizeWin[1], +sizeWin[2]]
+    // Defensive: if the fade is ever removed this must read as a failure,
+    // not throw on a null match and take the whole run with it.
+    const fadeMatch = src.match(/1 - ty \* ([\d.]+)/)
+    ok(fadeMatch !== null, 'the leaving word fades on its way out')
+    const fadeK = fadeMatch ? Number(fadeMatch[1]) : 0
+
+    const rectsAt = (p: number) => {
+      const unit = mix(heroW / stackedBox[2], lineW / lineBox[2], rampAt(SIZE, p))
+      return words.map(w => {
+        const ty = rampAt(windows[w.id].y as [number, number], p)
+        const tx = rampAt(windows[w.id].x as [number, number], p)
+        return {
+          id: w.id,
+          opacity: w.fades ? Math.max(0, 1 - ty * fadeK) : 1,
+          x: mix((rowW - heroW) / 2 + (w.sx - stackedBox[0]) * unit,
+                 0 + (w.lx - lineBox[0]) * unit, tx),
+          y: mix(heroTop + (w.sy - stackedBox[1]) * unit,
+                 14 + (w.ly - lineBox[1]) * unit, ty),
+          w: w.w * unit, h: w.h * unit,
+        }
+      }).filter(r => r.opacity > 0.15)
+    }
+
+    type R = { id: string; x: number; y: number; w: number; h: number }
+    const overlap = (A: R, B: R) => {
+      const ox = Math.min(A.x + A.w, B.x + B.w) - Math.max(A.x, B.x)
+      const oy = Math.min(A.y + A.h, B.y + B.h) - Math.max(A.y, B.y)
+      return ox > 0 && oy > 0 ? ox * oy : 0
+    }
+    const pairKey = (a: string, b: string) => [a, b].sort().join('/')
+
+    // The two layouts are the designer's, and in the stacked one the lines
+    // are set tightly enough that the ink boxes already touch. That is
+    // kerning, not collision — so what is measured is only the overlap the
+    // animation *introduces* on top of whichever end state overlaps more.
+    const resting = new Map<string, number>()
+    for (const p of [0, 1]) {
+      const rects = rectsAt(p)
+      for (let a = 0; a < rects.length; a++) {
+        for (let b = a + 1; b < rects.length; b++) {
+          const k = pairKey(rects[a].id, rects[b].id)
+          resting.set(k, Math.max(resting.get(k) ?? 0, overlap(rects[a], rects[b])))
+        }
+      }
+    }
+
+    let worst: string | null = null
+    for (let i = 0; i <= 80 && !worst; i++) {
+      const p = i / 80
+      const rects = rectsAt(p)
+      for (let a = 0; a < rects.length; a++) {
+        for (let b = a + 1; b < rects.length; b++) {
+          const A = rects[a], B = rects[b]
+          const area = overlap(A, B)
+          const allowed = (resting.get(pairKey(A.id, B.id)) ?? 0) + 300
+          if (area > allowed) {
+            worst = `${A.id} and ${B.id} collide at progress ${p.toFixed(2)}: ` +
+                    `${area.toFixed(0)}px² against ${allowed.toFixed(0)} allowed`
+            break
+          }
+        }
+      }
+    }
+    eq(worst, null, 'and the animation never puts one word across another')
+  }
+
+  // ── The component actually applies the per-word timing ──
+  //
+  // Everything above reads the timing table out of the source and reasons
+  // about it. That leaves a hole: the component could ignore the table and
+  // move every word together. So this drives the real thing and checks that
+  // at a moment when green has moved, dot has not.
+  {
+    // Representative geometry: a phone-width row, the mark at its two sizes.
+    const MARK = {
+      heroWidth: 210, lineWidth: 118,
+      heroOrigin: [90, 96] as [number, number],
+      lineOrigin: [0, 14] as [number, number],
+    }
+    const tops = (progress: number) => {
+      const html = renderToStaticMarkup(
+        React.createElement(MorphWordmark, { progress, ...MARK }))
+      const found: Record<string, number> = {}
+      const order = ['green', 'dot', 'golf', 'mark']
+      const matches = [...html.matchAll(/top:\s*([-\d.]+)px/g)]
+      matches.forEach((m, i) => { if (order[i]) found[order[i]] = Number(m[1]) })
+      return found
+    }
+
+    const rest = tops(0)
+    const early = tops(0.22)   // green is rising; dot has not started
+    const late  = tops(0.60)   // dot is rising
+
+    // The whole mark is shrinking throughout, so every word drifts a little
+    // even before its own window opens. What matters is that green is doing
+    // far more than that while dot is doing only that.
+    const greenEarly = Math.abs(early.green - rest.green)
+    const dotEarly   = Math.abs(early.dot - rest.dot)
+    ok(greenEarly > 40, 'green has risen properly a fifth of the way through')
+    ok(dotEarly < greenEarly / 3,
+      'while dot has barely stirred — they are not on one clock')
+    ok(Math.abs(late.dot - rest.dot) > 40, 'and dot makes its own move later')
+
+    // golf leaves downwards, away from everything else
+    ok(tops(0.3).golf > rest.golf + 40, 'golf drops away from the others')
+
+    // And it is gone early. What it does after that does not matter — it is
+    // invisible — so the assertion is about the fade, not the drift.
+    const opacityOf = (progress: number, index: number) => {
+      const html = renderToStaticMarkup(
+        React.createElement(MorphWordmark, { progress, ...MARK }))
+      return [...html.matchAll(/opacity:\s*([\d.]+)/g)].map(m => Number(m[1]))[index]
+    }
+    ok(opacityOf(0, 2) === 1, 'golf is fully there to begin with')
+    ok(opacityOf(0.25, 2) === 0, 'and completely gone a quarter of the way through')
+  }
 
   ok(src.includes('easeOut'), 'every word decelerates')
   // Checked against the code, not the prose: the comment above easeOut says

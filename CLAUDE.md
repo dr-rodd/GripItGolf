@@ -99,16 +99,22 @@ Two behaviours:
 
 - **`morph`** — the trip hub only. **One element the whole way**: the mark starts large and centred below the header and travels up into it over 190px of scroll. Nothing crossfades and no letter is drawn twice.
 
-  The words move separately, which is what makes it read as a transformation rather than a slide (`MorphWordmark.tsx`):
+  **The page holds still while it happens.** The spacer below the header shrinks by exactly the distance scrolled, so the first pull of the scroll animates the logo and nothing else; the content catches up once the mark has landed. `HERO_SPACE` is both the spacer height and the scroll distance, and they must stay equal or the page shifts under the animation.
+
+  Every word is positioned in **screen pixels**, not nudged inside a scaling frame. That matters: in a frame, `dot` has to travel right to reach its place after `green`, so it lurched right while the mark as a whole moved left. Positioned in screen space, the mark shrinks towards its left edge and *every* word genuinely moves left.
+
+  **Up, then left — strictly, one word at a time** (`MorphWordmark.tsx`):
 
   | Word | Motion |
   |---|---|
-  | `golf` | leaves first — slides out and fades, freeing the room before anything needs it |
-  | `green` | the anchor; settles early, and the others line up against it |
-  | `dot` | across into clear air first, **then** up onto the line |
+  | `green` | rises first, alone — the whole opening of the scroll is just this |
+  | `dot` | waits for green to clear left, then rises, then follows it left |
+  | `golf` | drops **down** and out, fading. Up would take it through `dot` and `green` |
   | `.` | last, by the same route — punctuation arriving after its sentence |
 
-  **The two axes are timed separately on purpose.** `dot` sits below `green` and ends up to its right, so a straight diagonal drags it through the middle of the other word — letters collide for about a third of the travel. Sideways first, then up, keeps every word in clear air.
+  A word never moves on both axes at once: its vertical window closes before its horizontal one opens. `EXIT_DROP` is in pixels rather than artwork units, because everything in units is multiplied by a scale that shrinks to a third — a generous drop in units came out tiny on screen, and with the rest of the mark rising past it `golf` appeared to drift *upwards*.
+
+  `test:branding` samples the whole travel and asserts no two words ever collide, allowing for the overlap the artwork's own kerning already has at rest.
 
   The offsets come from `app/components/wordmarkMorph.ts`, **generated** by `npm run logo:line` from the artwork's own word groups. Replace the logo, re-run it, and the animation still lands.
 - **`fixed`** — everywhere else. Just the line mark, sticky from the first pixel. **The leaderboard and scoring screens never morph**: they are read standing on a tee, and nothing on them should move that is not a score.
