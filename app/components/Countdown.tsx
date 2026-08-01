@@ -92,7 +92,7 @@ export default function Countdown({ children }: { children: React.ReactNode }) {
                     >
                       {String(value).padStart(2, "0")}
                     </span>
-                    <span className="text-[10px] tracking-[0.25em] uppercase text-ink/65 font-light">
+                    <span className="text-[12px] tracking-[0.25em] uppercase text-ink/80 font-light">
                       {label}
                     </span>
                   </div>

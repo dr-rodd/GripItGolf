@@ -52,8 +52,8 @@ function Choice({
     >
       <span className="flex items-start justify-between gap-3">
         <span className="min-w-0">
-          <span className={`block t-card ${on ? 'text-ink' : 'text-ink/65'}`}>{label}</span>
-          {hint && <span className="block t-cap text-ink/40 mt-1 leading-snug">{hint}</span>}
+          <span className={`block t-card ${on ? 'text-ink' : 'text-ink/80'}`}>{label}</span>
+          {hint && <span className="block t-cap text-ink/65 mt-1 leading-snug">{hint}</span>}
         </span>
         {taken
           ? <Badge tone="win">In use</Badge>
@@ -67,7 +67,7 @@ function Choice({
 function Question({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="t-label text-ink/65 mb-2">
+      <p className="t-label text-ink/80 mb-2">
         <span className="text-accent tabular-nums">{n}.</span> {title}
       </p>
       <div className="flex flex-col gap-2">{children}</div>
@@ -105,7 +105,7 @@ function PointsTable({
       <div className="flex flex-col gap-2">
         {rows.map((pts, i) => (
           <div key={i} className="flex items-center gap-3">
-            <span className="w-12 flex-shrink-0 t-cap text-ink/40 tabular-nums">{ordinal(i + 1)}</span>
+            <span className="w-12 flex-shrink-0 t-cap text-ink/65 tabular-nums">{ordinal(i + 1)}</span>
             <input
               type="number" inputMode="numeric" min={0} max={MAX_CUSTOM_POINTS} value={pts}
               onChange={e => {
@@ -115,7 +115,7 @@ function PointsTable({
               }}
               className={`${FIELD} flex-1 min-w-0 tabular-nums`}
             />
-            <span className="w-8 flex-shrink-0 t-cap text-ink/25">{pts === 1 ? 'pt' : 'pts'}</span>
+            <span className="w-8 flex-shrink-0 t-cap text-ink/50">{pts === 1 ? 'pt' : 'pts'}</span>
           </div>
         ))}
       </div>
@@ -264,19 +264,19 @@ function Builder({
                 className={`min-h-[48px] rounded-xl border t-label transition-colors duration-150 ${
                   (draft.discardWorst ?? 0) === n
                     ? 'border-accent bg-accent/[0.08] text-ink'
-                    : 'border-bark/25 bg-surface text-ink/65'
+                    : 'border-bark/25 bg-surface text-ink/80'
                 }`}
               >
                 {n === 0 ? 'Keep all' : `Drop ${n}`}
               </button>
             ))}
           </div>
-          <p className="t-cap text-ink/40">A bad day stops defining the week.</p>
+          <p className="t-cap text-ink/65">A bad day stops defining the week.</p>
         </Question>
       )}
 
       {draft.competition === 'matchplay' && (
-        <p className="t-body text-ink/65">
+        <p className="t-body text-ink/80">
           The draw is generated at random once the players are in. A manual
           draw can come later.
           {draft.audience === 'team' && ' Pairings are teams of two, named by their players.'}
@@ -285,7 +285,7 @@ function Builder({
 
       {/* What is still outstanding, so the form has an end */}
       {missing.length > 0 && draft.audience && (
-        <p className="t-cap text-ink/40">Still to answer: {missing.join(' · ')}</p>
+        <p className="t-cap text-ink/65">Still to answer: {missing.join(' · ')}</p>
       )}
 
       <div className="flex gap-2">
@@ -335,13 +335,13 @@ export default function LeaderboardSetup({
                 <span className="t-h2 text-ink">{boardTitle(lb)}</span>
                 {i === 0 && <Badge tone="win">Primary</Badge>}
               </div>
-              <p className="t-cap text-ink/40 mt-1 leading-snug">{boardRules(lb)}</p>
+              <p className="t-cap text-ink/65 mt-1 leading-snug">{boardRules(lb)}</p>
             </div>
             <button
               type="button"
               onClick={() => onChange(boards.filter(b => b.id !== lb.id))}
               aria-label={`Remove ${boardTitle(lb)}`}
-              className="flex-shrink-0 w-9 h-9 flex items-center justify-center text-ink/25 hover:text-rust transition-colors duration-150"
+              className="flex-shrink-0 w-9 h-9 flex items-center justify-center text-ink/50 hover:text-rust transition-colors duration-150"
             >
               <IconX size={16} />
             </button>
@@ -373,7 +373,7 @@ export default function LeaderboardSetup({
             Add another leaderboard
             {!done && <IconPlus size={14} />}
           </button>
-          <p className="t-cap text-ink/40 mt-2 text-center">
+          <p className="t-cap text-ink/65 mt-2 text-center">
             {!done
               ? 'Finish your main leaderboard first — you can add more after.'
               : !more

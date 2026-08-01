@@ -19,7 +19,7 @@ type Props = Common & (
 const BASE = [
   "inline-flex items-center justify-center gap-1 flex-shrink-0",
   "h-11 rounded-xl border border-bark/12 bg-surface",
-  "text-ink/65 hover:text-ink hover:border-bark/25",
+  "text-ink/80 hover:text-ink hover:border-bark/25",
   "transition-colors duration-150",
 ].join(" ")
 

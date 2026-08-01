@@ -59,16 +59,22 @@ Mobile first, always. Nearly all real use is a phone, on a course, in daylight.
 |---|---|---|
 | `cream` | `#F6F4F0` | The page, everywhere |
 | `surface` | `#FFFFFF` | Cards, the tab bar, anything raised |
-| `ink` | `#2B2118` | Text — 100% primary, 65% secondary, 40% muted |
+| `ink` | `#2B2118` | Text — 100% primary, 80% secondary, 65% muted, 50% faint |
 | `bark` | `#4A3728` | **Every** neutral, at an opacity. Borders are `bark/12`, strong `bark/25` |
 | `accent` | `#0A9D56` | Emerald. Buttons, active states, win, live |
 | `rust` | `#B5533C` | Loss only |
 
 **No pure grey anywhere** — neutrals are `bark` at an opacity, never a grey hex or a Tailwind `gray-*`. **No gradients. No glows.** Emerald is an accent: one primary action per screen. A page with three emerald buttons has none.
 
+**Every opacity is checked against the page it prints on.** `test:branding` computes the real WCAG ratio rather than trusting the ramp. Solid ink on cream is 14.3:1; the tiers above are 7.8, 4.8 and 3.1. Nothing may print below 3:1, and 65% — which carries most of the writing — clears AA outright at 4.8. The old ramp went down to 40% (2.4:1) and 25% (1.7:1), below anything WCAG calls text; 40% was the single most-used colour in the app.
+
+**A solid emerald button rests on `accent-deep`, not `accent`.** White on the brighter emerald is 3.5:1 and dark ink on it is 4.5:1 — neither reads at button size. The deeper green is 6.6:1, and it was already that button's own hover state, so the button uses the same two colours it always did with the resting one swapped. The brighter emerald is untouched everywhere it is not behind words: the dot, the bars, tints, active states.
+
 ### Type
 
-Three families, one job each, never mixed. Clash Display (headlines), Bespoke Serif (body and all dense data), Archivo (buttons, labels, form fields). Use the scale classes — `t-h1` `t-h2` `t-card` `t-body` `t-data` `t-label` `t-cap` — rather than ad-hoc sizes.
+Three families, one job each, never mixed. Clash Display (headlines), Bespoke Serif (body and all dense data), Archivo (buttons, labels, form fields). Use the scale classes — `t-h1` (30) `t-h2` (21) `t-card` (16) `t-body` (17) `t-data` (15) `t-label` (13) `t-cap` (13) — rather than ad-hoc sizes.
+
+**Nothing is smaller than 13px in the scale, or 12px anywhere.** This is read one-handed, outdoors, in daylight, often by someone whose reading glasses are in the car. The old scale bottomed out at 11px and Tailwind's `text-xs` (12px) was scattered across 92 places; both are gone and `test:branding` enforces the floor, including on hand-written `text-[Npx]`.
 
 Clash Display and Bespoke Serif are **Fontshare** fonts loaded from their CDN in `layout.tsx`; Archivo is self-hosted via `next/font`. The fallback chain degrades to a sans and a serif respectively, so a blocked CDN changes the faces but not the register.
 

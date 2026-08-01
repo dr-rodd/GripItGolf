@@ -59,12 +59,12 @@ type RoundInfo = { id: string; round_number: number; courseName: string }
 
 const INPUT = [
   'w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5',
-  'text-ink placeholder-white/30',
+  'text-ink placeholder:text-ink/60',
   'focus:outline-none focus:border-accent/50 transition-colors',
   'disabled:opacity-40 disabled:cursor-not-allowed',
 ].join(' ')
 
-const LABEL = 'block text-ink/65 text-xs uppercase tracking-wider mb-2'
+const LABEL = 'block text-ink/80 text-[13px] uppercase tracking-wider mb-2'
 
 const SECTION = 'bg-surface border border-bark/12 rounded-2xl p-5'
 
@@ -128,8 +128,8 @@ function Option({
       <div className="flex items-start gap-3">
         {pick ? <Dot on={on} /> : <Tick on={on} />}
         <div className="min-w-0">
-          <p className={`text-sm font-medium ${on ? 'text-ink' : 'text-ink/65'}`}>{label}</p>
-          {hint && <p className="text-ink/40 text-xs mt-0.5 leading-snug">{hint}</p>}
+          <p className={`text-sm font-medium ${on ? 'text-ink' : 'text-ink/80'}`}>{label}</p>
+          {hint && <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">{hint}</p>}
         </div>
       </div>
     </button>
@@ -158,8 +158,8 @@ function Chips<T extends string | number>({
           disabled={disabled}
           className={`${columns ? '' : 'flex-1'} py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
             value === o.value
-              ? 'bg-accent text-ink'
-              : 'bg-surface border border-bark/12 text-ink/65 hover:border-bark/25'
+              ? 'bg-accent-deep text-white'
+              : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
           }`}
         >
           {o.label}
@@ -184,7 +184,7 @@ function Question({
   return (
     <section className={SECTION}>
       <div className="flex items-start gap-3 mb-4">
-        <span className={`flex-shrink-0 w-7 h-7 rounded-full border flex items-center justify-center text-xs font-bold tabular-nums transition-colors ${
+        <span className={`flex-shrink-0 w-7 h-7 rounded-full border flex items-center justify-center text-[13px] font-bold tabular-nums transition-colors ${
           step.answered
             ? 'border-accent/50 bg-accent/15 text-accent'
             : 'border-accent/50 bg-accent/10 text-accent'
@@ -197,7 +197,7 @@ function Question({
           ) : step.number}
         </span>
         <div className="min-w-0">
-          <p className="text-ink/40 text-xs tracking-widest uppercase">{step.title}</p>
+          <p className="text-ink/65 text-[13px] tracking-widest uppercase">{step.title}</p>
           <p className="text-ink text-sm mt-1 leading-snug">{step.question}</p>
         </div>
       </div>
@@ -205,9 +205,9 @@ function Question({
       {children}
 
       {step.warning ? (
-        <p className="text-rust/90 text-xs mt-3 leading-snug">{step.warning}</p>
+        <p className="text-rust/90 text-[13px] mt-3 leading-snug">{step.warning}</p>
       ) : step.summary ? (
-        <p className="text-ink/40 text-xs mt-3 leading-snug">{step.summary}</p>
+        <p className="text-ink/65 text-[13px] mt-3 leading-snug">{step.summary}</p>
       ) : null}
     </section>
   )
@@ -541,7 +541,7 @@ export default function TripSetupClient({
               hint="Every player is ranked on their own card."
             />
             {formats.teams && formats.individual && (
-              <p className="text-ink/40 text-xs leading-snug px-1">
+              <p className="text-ink/65 text-[13px] leading-snug px-1">
                 Both run off the same cards. The team board is the main
                 competition and opens first; the individual boards sit behind it.
               </p>
@@ -597,7 +597,7 @@ export default function TripSetupClient({
                 label: n === 0 ? 'Keep all' : `Drop ${n}`,
               }))}
             />
-            <p className="text-ink/40 text-xs mt-2 leading-snug">
+            <p className="text-ink/65 text-[13px] mt-2 leading-snug">
               A bad day stops defining the week. Applies to Stableford and
               Strokes alike, and nobody is ever dropped below one counting round.
             </p>
@@ -612,7 +612,7 @@ export default function TripSetupClient({
               <button
                 onClick={() => setLeague({ customPoints: defaultCustomPoints(players.length) })}
                 disabled={locked}
-                className="text-accent/70 text-[10px] tracking-wider uppercase hover:text-accent transition-colors disabled:opacity-40"
+                className="text-accent/70 text-[12px] tracking-wider uppercase hover:text-accent transition-colors disabled:opacity-40"
               >
                 Reset
               </button>
@@ -620,7 +620,7 @@ export default function TripSetupClient({
             <div className="space-y-2">
               {customTable.map((pts, i) => (
                 <div key={i} className="flex items-center gap-3">
-                  <span className="w-14 flex-shrink-0 text-ink/40 text-xs tabular-nums">
+                  <span className="w-14 flex-shrink-0 text-ink/65 text-[13px] tabular-nums">
                     {ordinal(i + 1)}
                   </span>
                   <input
@@ -633,13 +633,13 @@ export default function TripSetupClient({
                     max={MAX_CUSTOM_POINTS}
                     className="flex-1 min-w-0 bg-surface border border-bark/12 rounded-lg px-3 py-2.5 text-ink text-sm tabular-nums focus:outline-none focus:border-accent/50 disabled:opacity-40"
                   />
-                  <span className="w-10 flex-shrink-0 text-ink/25 text-xs">
+                  <span className="w-10 flex-shrink-0 text-ink/50 text-[13px]">
                     {pts === 1 ? 'pt' : 'pts'}
                   </span>
                 </div>
               ))}
             </div>
-            <p className="text-ink/40 text-xs mt-2 leading-snug">
+            <p className="text-ink/65 text-[13px] mt-2 leading-snug">
               Up to {MAX_CUSTOM_POINTS} a position, and zero is allowed. Players
               level on the day share the places they occupy.
             </p>
@@ -698,7 +698,7 @@ export default function TripSetupClient({
                   options={[1, 2, 3, 4].map(n => ({ value: n, label: String(n) }))}
                 />
                 {teamScoring.countingScores > smallestTeamSize && smallestTeamSize > 0 && (
-                  <p className="text-rust/80 text-xs mt-2 leading-snug">
+                  <p className="text-rust/80 text-[13px] mt-2 leading-snug">
                     Your smallest {noun.one} has {smallestTeamSize} player
                     {smallestTeamSize === 1 ? '' : 's'} — it can only ever contribute{' '}
                     {smallestTeamSize} score{smallestTeamSize === 1 ? '' : 's'} a hole.
@@ -716,7 +716,7 @@ export default function TripSetupClient({
                     label: n === 0 ? 'Off' : n === 1 ? '1 hole' : `${n} holes`,
                   }))}
                 />
-                <p className="text-ink/40 text-xs mt-2 leading-snug">
+                <p className="text-ink/65 text-[13px] mt-2 leading-snug">
                   Turn this on for a grandstand finish — the closing holes open up so
                   every player&apos;s score counts, not just the best {teamScoring.countingScores}.
                 </p>
@@ -737,7 +737,7 @@ export default function TripSetupClient({
                     label: n === 18 ? 'All 18' : n === 1 ? 'Last hole' : `Last ${n}`,
                   }))}
                 />
-                <p className="text-ink/40 text-xs mt-2 leading-snug">
+                <p className="text-ink/65 text-[13px] mt-2 leading-snug">
                   A short closing stretch keeps every {noun.one} in it to the end — one
                   bad round no longer settles the trip.
                 </p>
@@ -753,7 +753,7 @@ export default function TripSetupClient({
             {sizeBanner && (
               <div className="flex items-start gap-3 px-4 py-3 mb-3 bg-accent/10 border border-accent/40 rounded-xl">
                 <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0" />
-                <p className="text-accent text-xs leading-snug">{sizeBanner}</p>
+                <p className="text-accent text-[13px] leading-snug">{sizeBanner}</p>
               </div>
             )}
 
@@ -771,7 +771,7 @@ export default function TripSetupClient({
                     >
                       <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} />
                       <span className="text-ink text-sm flex-1 min-w-0 truncate">{team.name}</span>
-                      <span className={`text-xs flex-shrink-0 ${over ? 'text-rust-deep' : 'text-ink/40'}`}>
+                      <span className={`text-[13px] flex-shrink-0 ${over ? 'text-rust-deep' : 'text-ink/65'}`}>
                         {members.length} player{members.length === 1 ? '' : 's'}
                       </span>
                     </div>
@@ -789,7 +789,7 @@ export default function TripSetupClient({
               </Link>
             )}
 
-            <p className="text-ink/40 text-xs mt-3 leading-snug">
+            <p className="text-ink/65 text-[13px] mt-3 leading-snug">
               {noun.Many} can be changed at any point. Players own their scores and
               carry them to whichever {noun.one} they end up in.
             </p>
@@ -824,7 +824,7 @@ export default function TripSetupClient({
             <button
               onClick={unlock}
               disabled={busy}
-              className="flex-shrink-0 px-4 py-2 border border-bark/25 rounded-lg text-xs tracking-wider uppercase text-ink/65 hover:border-bark/25 hover:text-ink transition-colors disabled:opacity-40"
+              className="flex-shrink-0 px-4 py-2 border border-bark/25 rounded-lg text-[13px] tracking-wider uppercase text-ink/80 hover:border-bark/25 hover:text-ink transition-colors disabled:opacity-40"
             >
               Unlock
             </button>
@@ -833,7 +833,7 @@ export default function TripSetupClient({
 
         {viewOnly && (
           <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
-            <p className="text-ink/40 text-sm">
+            <p className="text-ink/65 text-sm">
               Only the trip owner can edit this trip. Ask whoever created it to make changes.
             </p>
           </div>
@@ -843,7 +843,7 @@ export default function TripSetupClient({
           <>
             {/* ── Trip details ── */}
             <section className={SECTION}>
-              <p className="text-ink/40 text-xs tracking-widest uppercase mb-4">Trip details</p>
+              <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-4">Trip details</p>
               <div className="space-y-4">
                 <div>
                   <label className={LABEL}>Trip name</label>
@@ -879,7 +879,7 @@ export default function TripSetupClient({
                 until this is settled. */}
             <section className={SECTION}>
               <p className="t-label text-accent-deep uppercase tracking-[0.18em] mb-1">Leaderboards</p>
-              <p className="t-body text-ink/65 mb-4">
+              <p className="t-body text-ink/80 mb-4">
                 What this trip is playing for. Every board here is scored from
                 the same cards.
               </p>
@@ -909,8 +909,8 @@ export default function TripSetupClient({
             {/* What is still outstanding, so the page has an end */}
             {pending && (
               <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
-                <p className="text-ink/40 text-xs leading-snug">
-                  Next up — <span className="text-ink/65">{pending.title}</span>: {pending.question}
+                <p className="text-ink/65 text-[13px] leading-snug">
+                  Next up — <span className="text-ink/80">{pending.title}</span>: {pending.question}
                 </p>
               </div>
             )}
@@ -919,8 +919,8 @@ export default function TripSetupClient({
             {/* ── Players ── */}
             <section className={SECTION}>
               <div className="flex items-center justify-between mb-4">
-                <p className="text-ink/40 text-xs tracking-widest uppercase">Players</p>
-                <span className="text-ink/40 text-xs">{players.length}</span>
+                <p className="text-ink/65 text-[13px] tracking-widest uppercase">Players</p>
+                <span className="text-ink/65 text-[13px]">{players.length}</span>
               </div>
 
               <div className="space-y-3">
@@ -938,12 +938,12 @@ export default function TripSetupClient({
                         className="flex-1 bg-transparent text-ink text-sm font-medium focus:outline-none disabled:opacity-40"
                       />
                       {player.is_lead && (
-                        <span className="text-ink/40 text-[10px] tracking-widest uppercase flex-shrink-0">Lead</span>
+                        <span className="text-ink/65 text-[12px] tracking-widest uppercase flex-shrink-0">Lead</span>
                       )}
                       {!locked && (
                         <button
                           onClick={() => removePlayer(player.id)}
-                          className="w-9 h-9 flex items-center justify-center text-ink/40 hover:text-ink/65 transition-colors flex-shrink-0"
+                          className="w-9 h-9 flex items-center justify-center text-ink/65 hover:text-ink/80 transition-colors flex-shrink-0"
                           aria-label={`Remove ${player.name}`}
                         >
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -978,8 +978,8 @@ export default function TripSetupClient({
                             disabled={locked}
                             className={`w-11 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 ${
                               player.gender === g
-                                ? 'bg-accent text-ink'
-                                : 'bg-surface border border-bark/12 text-ink/40'
+                                ? 'bg-accent-deep text-white'
+                                : 'bg-surface border border-bark/12 text-ink/65'
                             }`}
                           >
                             {g}
@@ -1004,7 +1004,7 @@ export default function TripSetupClient({
                               )
                             })}
                           </select>
-                          <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink/40">
+                          <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink/65">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                               <path d="M6 9l6 6 6-6" />
                             </svg>
@@ -1016,7 +1016,7 @@ export default function TripSetupClient({
                 ))}
 
                 {players.length === 0 && (
-                  <p className="text-ink/40 text-sm text-center py-2">
+                  <p className="text-ink/65 text-sm text-center py-2">
                     No players yet — add them below or share the trip code
                   </p>
                 )}
@@ -1050,8 +1050,8 @@ export default function TripSetupClient({
                             onClick={() => setNewGender(g)}
                             className={`w-12 rounded-xl text-sm font-medium transition-colors ${
                               newGender === g
-                                ? 'bg-accent text-ink'
-                                : 'bg-surface border border-bark/12 text-ink/40'
+                                ? 'bg-accent-deep text-white'
+                                : 'bg-surface border border-bark/12 text-ink/65'
                             }`}
                           >
                             {g}
@@ -1077,7 +1077,7 @@ export default function TripSetupClient({
                             )
                           })}
                         </select>
-                        <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ink/40">
+                        <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ink/65">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <path d="M6 9l6 6 6-6" />
                           </svg>
@@ -1099,12 +1099,12 @@ export default function TripSetupClient({
             {/* ── Rounds (read-only summary) ── */}
             {rounds.length > 0 && (
               <section className={SECTION}>
-                <p className="text-ink/40 text-xs tracking-widest uppercase mb-4">Rounds</p>
+                <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-4">Rounds</p>
                 <div className="space-y-2">
                   {rounds.map(r => (
                     <div key={r.id} className="flex items-center gap-3 text-sm">
-                      <span className="text-ink/40 w-16 flex-shrink-0">Round {r.round_number}</span>
-                      <span className="text-ink/65">{r.courseName}</span>
+                      <span className="text-ink/65 w-16 flex-shrink-0">Round {r.round_number}</span>
+                      <span className="text-ink/80">{r.courseName}</span>
                     </div>
                   ))}
                 </div>
@@ -1113,8 +1113,8 @@ export default function TripSetupClient({
 
             {/* ── Edit permission ── */}
             <section className={SECTION}>
-              <p className="text-ink/40 text-xs tracking-widest uppercase mb-1">Who can edit</p>
-              <p className="text-ink/40 text-xs mb-4">Controls who can change this trip while it&apos;s in setup</p>
+              <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-1">Who can edit</p>
+              <p className="text-ink/65 text-[13px] mb-4">Controls who can change this trip while it&apos;s in setup</p>
               <div className="flex gap-2">
                 {[
                   { value: 'everyone', label: 'Any player' },
@@ -1126,8 +1126,8 @@ export default function TripSetupClient({
                     disabled={locked}
                     className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
                       editPermission === o.value
-                        ? 'bg-accent text-ink'
-                        : 'bg-surface border border-bark/12 text-ink/65 hover:border-bark/25'
+                        ? 'bg-accent-deep text-white'
+                        : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
                     }`}
                   >
                     {o.label}
@@ -1149,7 +1149,7 @@ export default function TripSetupClient({
                 <button
                   onClick={finalise}
                   disabled={busy || blocked !== null}
-                  className="w-full py-5 bg-accent text-ink text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-full py-5 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {busy ? 'Working…' : 'Finalise & Go Live'}
                 </button>
@@ -1176,7 +1176,7 @@ export default function TripSetupClient({
         {/* Live-mode summary */}
         {!isDraft && (
           <div className={SECTION}>
-            <p className="text-ink/40 text-sm leading-relaxed">
+            <p className="text-ink/65 text-sm leading-relaxed">
               The trip is finalised and play is live. To change players, teams, or the format,
               unlock the trip above — all scores entered so far are kept.
             </p>

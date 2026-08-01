@@ -85,7 +85,7 @@ export default function PlayersClient({
     <div className="flex flex-col gap-10">
       {unclaimedPlayers.length > 0 && (
         <section>
-          <p className="text-ink/40 text-xs tracking-[0.2em] uppercase mb-4">Join as existing player</p>
+          <p className="text-ink/65 text-[13px] tracking-[0.2em] uppercase mb-4">Join as existing player</p>
           <div className="flex flex-col gap-3">
             {unclaimedPlayers.map((p) => (
               <button
@@ -97,7 +97,7 @@ export default function PlayersClient({
                 <div>
                   <p className="text-ink text-sm font-medium">{p.name}</p>
                   {p.handicap != null && (
-                    <p className="text-ink/40 text-xs mt-0.5">HCP {p.handicap}</p>
+                    <p className="text-ink/65 text-[13px] mt-0.5">HCP {p.handicap}</p>
                   )}
                 </div>
                 <span className="text-accent text-lg">
@@ -110,7 +110,7 @@ export default function PlayersClient({
       )}
 
       <section>
-        <p className="text-ink/40 text-xs tracking-[0.2em] uppercase mb-4">Add yourself</p>
+        <p className="text-ink/65 text-[13px] tracking-[0.2em] uppercase mb-4">Add yourself</p>
         <form onSubmit={handleAdd} className="flex flex-col gap-4">
           <input
             type="text"
@@ -118,7 +118,7 @@ export default function PlayersClient({
             onChange={(e) => setAddName(e.target.value)}
             placeholder="Your name"
             required
-            className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-sm placeholder:text-ink/25 focus:outline-none focus:border-accent/60 transition-colors"
+            className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/60 transition-colors"
           />
           <input
             type="number"
@@ -130,7 +130,7 @@ export default function PlayersClient({
             min="0"
             max="54"
             required
-            className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-sm placeholder:text-ink/25 focus:outline-none focus:border-accent/60 transition-colors"
+            className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/60 transition-colors"
           />
           <div className="flex gap-3">
             {(['M', 'F'] as const).map((g) => (
@@ -140,8 +140,8 @@ export default function PlayersClient({
                 onClick={() => setAddGender(g)}
                 className={`flex-1 py-4 rounded-xl text-sm font-bold tracking-[0.15em] uppercase transition-colors ${
                   addGender === g
-                    ? 'bg-accent text-ink'
-                    : 'bg-surface border border-bark/12 text-ink/40 hover:border-accent/40'
+                    ? 'bg-accent-deep text-white'
+                    : 'bg-surface border border-bark/12 text-ink/65 hover:border-accent/40'
                 }`}
               >
                 {g === 'M' ? 'Male' : 'Female'}
@@ -156,7 +156,7 @@ export default function PlayersClient({
           <button
             type="submit"
             disabled={adding || !addName.trim() || !addHandicap}
-            className="w-full py-5 bg-accent text-ink text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full py-5 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {adding ? 'Adding…' : 'Join Trip'}
           </button>

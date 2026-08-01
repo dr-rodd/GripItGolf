@@ -126,14 +126,14 @@ function LiveSessionCard({ session, onVoided }: { session: LiveSession; onVoided
           <p className="text-ink text-sm font-semibold leading-tight">
             Round {roundNumber} · {courseName}
           </p>
-          <p className="text-ink/40 text-xs mt-0.5 truncate">{players}</p>
-          <p className="text-ink/25 text-[10px] mt-0.5">Started {startedAt}</p>
+          <p className="text-ink/65 text-[13px] mt-0.5 truncate">{players}</p>
+          <p className="text-ink/50 text-[12px] mt-0.5">Started {startedAt}</p>
         </div>
         <button
           onClick={toggle}
-          className={`flex-shrink-0 px-3 py-1.5 border rounded-sm text-xs tracking-wide transition-colors
+          className={`flex-shrink-0 px-3 py-1.5 border rounded-sm text-[13px] tracking-wide transition-colors
             ${confirming
-              ? "border-bark/25 text-ink/40"
+              ? "border-bark/25 text-ink/65"
               : "border-red-700/50 text-red-400 hover:border-red-500 hover:bg-red-900/20"}`}
         >
           {confirming ? "Back" : "Void"}
@@ -142,7 +142,7 @@ function LiveSessionCard({ session, onVoided }: { session: LiveSession; onVoided
 
       {confirming && (
         <div className="border-t border-bark/12 px-4 py-3 space-y-3 bg-red-900/5">
-          <p className="text-red-300/80 text-xs">
+          <p className="text-red-300/80 text-[13px]">
             Voids this scorecard and removes these players from the live leaderboard.
           </p>
           <input
@@ -155,8 +155,8 @@ function LiveSessionCard({ session, onVoided }: { session: LiveSession; onVoided
             className={`w-full bg-cream border rounded-sm px-3 py-2 text-ink text-sm outline-none transition-colors
               ${wrongPw ? "border-red-500/70" : "border-bark/12 focus:border-accent/50"}`}
           />
-          {wrongPw              && <p className="text-red-400 text-xs">Incorrect password.</p>}
-          {status === "error"   && <p className="text-red-400 text-xs">Failed to void. Try again.</p>}
+          {wrongPw              && <p className="text-red-400 text-[13px]">Incorrect password.</p>}
+          {status === "error"   && <p className="text-red-400 text-[13px]">Failed to void. Try again.</p>}
           <button
             onClick={handleVoid}
             disabled={status === "loading"}
@@ -195,13 +195,13 @@ function LiveSessionsPanel({ onSuccess }: { onSuccess: (msg: string) => void }) 
     <div className="border border-bark/12 rounded-sm overflow-hidden">
       <div className="px-4 py-3 bg-cream border-b border-bark/12">
         <p className="text-ink font-semibold text-sm">Live Scorecards</p>
-        <p className="text-ink/40 text-xs mt-0.5">Active scoring sessions — void to remove from leaderboard</p>
+        <p className="text-ink/65 text-[13px] mt-0.5">Active scoring sessions — void to remove from leaderboard</p>
       </div>
       <div className="bg-surface">
         {loading ? (
-          <p className="px-4 py-4 text-ink/40 text-xs">Loading…</p>
+          <p className="px-4 py-4 text-ink/65 text-[13px]">Loading…</p>
         ) : sessions.length === 0 ? (
-          <p className="px-4 py-4 text-ink/40 text-xs">No active live sessions</p>
+          <p className="px-4 py-4 text-ink/65 text-[13px]">No active live sessions</p>
         ) : (
           sessions.map(session => (
             <LiveSessionCard
@@ -254,13 +254,13 @@ function ActionCard({ config, onSuccess }: { config: ActionConfig; onSuccess: (m
           <p className={`font-semibold text-sm ${config.danger ? "text-red-300" : "text-ink"}`}>
             {config.label}
           </p>
-          <p className="text-ink/40 text-xs mt-0.5">{config.description}</p>
+          <p className="text-ink/65 text-[13px] mt-0.5">{config.description}</p>
         </div>
         <button
           onClick={toggle}
-          className={`flex-shrink-0 px-3 py-1.5 border rounded-sm text-xs tracking-wide transition-colors
+          className={`flex-shrink-0 px-3 py-1.5 border rounded-sm text-[13px] tracking-wide transition-colors
             ${open
-              ? "border-bark/25 text-ink/40 hover:text-ink/65"
+              ? "border-bark/25 text-ink/65 hover:text-ink/80"
               : config.danger
                 ? "border-red-700/50 text-red-400 hover:border-red-500 hover:bg-red-900/20"
                 : "border-accent/40 text-accent hover:border-accent hover:bg-accent/10"}`}
@@ -271,11 +271,11 @@ function ActionCard({ config, onSuccess }: { config: ActionConfig; onSuccess: (m
 
       {open && (
         <div className="border-t border-bark/12 px-4 py-4 space-y-3">
-          <p className={`text-xs ${config.danger ? "text-red-300/80" : "text-accent/80"}`}>
+          <p className={`text-[13px] ${config.danger ? "text-red-300/80" : "text-accent/80"}`}>
             {config.confirmText}
           </p>
           <div>
-            <label className="block text-[10px] tracking-[0.15em] uppercase text-ink/25 mb-1.5">
+            <label className="block text-[12px] tracking-[0.15em] uppercase text-ink/50 mb-1.5">
               Password
             </label>
             <input
@@ -288,8 +288,8 @@ function ActionCard({ config, onSuccess }: { config: ActionConfig; onSuccess: (m
               className={`w-full bg-cream border rounded-sm px-3 py-2 text-ink text-sm outline-none transition-colors
                 ${wrongPw ? "border-red-500/70" : "border-bark/12 focus:border-accent/50"}`}
             />
-            {wrongPw && <p className="text-red-400 text-xs mt-1">Incorrect password.</p>}
-            {status === "error" && <p className="text-red-400 text-xs mt-1">Action failed. Try again.</p>}
+            {wrongPw && <p className="text-red-400 text-[13px] mt-1">Incorrect password.</p>}
+            {status === "error" && <p className="text-red-400 text-[13px] mt-1">Action failed. Try again.</p>}
           </div>
           <button
             onClick={confirm}
@@ -321,7 +321,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
             <h2 className="font-[family-name:var(--font-display)] text-ink text-lg">Settings</h2>
             <button
               onClick={onClose}
-              className="text-ink/40 hover:text-ink/65 transition-colors text-2xl leading-none"
+              className="text-ink/65 hover:text-ink/80 transition-colors text-2xl leading-none"
             >
               ×
             </button>

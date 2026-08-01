@@ -51,7 +51,7 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
         <h1 className="font-[family-name:var(--font-display)] text-4xl sm:text-5xl text-ink leading-tight mb-2">
           {trip.name}
         </h1>
-        <p className="text-ink/40 text-sm tracking-wide mb-10">Who are you?</p>
+        <p className="text-ink/65 text-sm tracking-wide mb-10">Who are you?</p>
 
         {playersError && (
           <p className="text-accent text-sm mb-6">

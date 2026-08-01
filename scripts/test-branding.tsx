@@ -56,7 +56,7 @@ function uiFiles(): string[] {
     }
   }
   for (const d of ['app/trip', 'app/components', 'app/join', 'app/dashboard', 'app/admin']) walk(d)
-  out.push('app/page.tsx', 'app/layout.tsx')
+  out.push('app/page.tsx', 'app/layout.tsx', 'app/Landing.tsx')
   return out
 }
 
@@ -188,6 +188,126 @@ section('Three fonts, one job each')
 
   // Numbers in a table must not jitter as they change
   ok(/\.t-data, \.t-num \{[^}]*tabular-nums/.test(css), 'table numerals are tabular')
+}
+
+// ─── Readability ───────────────────────────────────────────────
+//
+// The two things that actually stop this being legible on a phone in
+// daylight: type that is too small, and type that is too pale. Both are
+// arithmetic, so both are checked rather than eyeballed.
+
+/** WCAG relative luminance. */
+function luminance([r, g, b]: number[]): number {
+  const lin = (c: number) => {
+    const v = c / 255
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+  }
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+}
+
+/** Contrast between two colours, brighter over darker. */
+function contrast(a: number[], b: number[]): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+const INK   = [0x2B, 0x21, 0x18]
+const CREAM = [0xF6, 0xF4, 0xF0]
+/** Ink at an opacity, composited over the page. */
+const inkAt = (a: number) => INK.map((c, i) => c * a + CREAM[i] * (1 - a))
+
+section('Text is dark enough to read')
+{
+  // Sanity: the arithmetic agrees with the known figure for solid ink
+  ok(Math.abs(contrast(INK, CREAM) - 14.34) < 0.1,
+    'solid ink on cream is about 14:1')
+
+  // Every ink opacity the app actually uses, checked against the page it is
+  // printed on. 65% is the floor for anything that is a sentence; 50% is
+  // allowed only for large text, and nothing goes below it.
+  const used = new Set<number>()
+  for (const f of uiFiles()) {
+    for (const m of read(f).matchAll(/text-ink\/(\d+)/g)) used.add(Number(m[1]))
+  }
+  ok(used.size > 0, 'the app prints ink at several opacities')
+
+  for (const pct of [...used].sort((a, b) => a - b)) {
+    const ratio = contrast(inkAt(pct / 100), CREAM)
+    ok(ratio >= 3, `ink/${pct} clears 3:1 for large text (${ratio.toFixed(2)}:1)`)
+  }
+
+  // …and the tier that carries most of the writing clears AA outright
+  const body = contrast(inkAt(0.65), CREAM)
+  ok(body >= 4.5, `the muted tier clears AA for body text (${body.toFixed(2)}:1)`)
+
+  // The tiers that were failing are gone. ink/40 was 2.37:1 and was the most
+  // used colour in the app; ink/25 was 1.66:1, which is barely a mark.
+  for (const gone of [25, 30, 40, 45]) {
+    eq(uiFiles().filter(f => new RegExp(`text-ink/${gone}\\b`).test(read(f))), [],
+      `nothing prints at ink/${gone} any more`)
+  }
+
+  // A placeholder is text too
+  const ph = Number(css.match(/::placeholder[\s\S]{0,80}rgba\(43, 33, 24, ([\d.]+)\)/)?.[1] ?? 0)
+  ok(contrast(inkAt(ph), CREAM) >= 3,
+    `placeholders clear 3:1 (${contrast(inkAt(ph), CREAM).toFixed(2)}:1 at ${ph})`)
+}
+
+section('A label on a coloured fill is dark enough too')
+{
+  const ACCENT = [0x0A, 0x9D, 0x56]
+  const DEEP   = [0x0A, 0x6B, 0x3C]
+  const WHITE  = [255, 255, 255]
+
+  // The emerald a button rests on is the deeper of the two, because white on
+  // the brighter one is 3.5:1 and dark ink on it is 4.5:1 — neither reads at
+  // button size. The button was already using both greens; this only swaps
+  // which one it sits at.
+  ok(contrast(WHITE, DEEP) >= 4.5,
+    `white on the deep emerald clears AA (${contrast(WHITE, DEEP).toFixed(2)}:1)`)
+  ok(contrast(WHITE, ACCENT) < 4.5,
+    'which the brighter emerald does not, and is why it is not the resting fill')
+
+  // Nothing prints text straight onto the brighter emerald any more
+  const offenders = uiFiles().filter(f =>
+    new RegExp('bg-accent(?![-/\\[])\\s+text-').test(read(f)))
+  eq(offenders, [], 'no text sits on the brighter emerald')
+
+  // The accent itself is untouched everywhere it is not behind words
+  ok(uiFiles().some(f => /rounded-full bg-accent\b/.test(read(f))),
+    'the emerald is still the dot, the bar and the active state')
+}
+
+section('Type is big enough to read')
+{
+  // The scale itself
+  const sizes: Record<string, number> = {}
+  for (const m of css.matchAll(/\.(t-h1|t-h2|t-card|t-body|t-data|t-label|t-cap)\s*\{[^}]*font-size:\s*(\d+)px/g)) {
+    sizes[m[1]] = Number(m[2])
+  }
+  eq(Object.keys(sizes).sort(),
+    ['t-body', 't-cap', 't-card', 't-data', 't-h1', 't-h2', 't-label'],
+    'every step of the scale has a size')
+
+  for (const [name, px] of Object.entries(sizes)) {
+    ok(px >= 13, `${name} is at least 13px (${px}px)`)
+  }
+  ok(sizes['t-body'] >= 16, `body copy is at least 16px (${sizes['t-body']}px)`)
+  ok(sizes['t-h1'] > sizes['t-h2'] && sizes['t-h2'] > sizes['t-card'],
+    'and the headings still step down in order')
+
+  // Ad-hoc sizes bypass the scale, so they get the same floor
+  const tooSmall: string[] = []
+  for (const f of uiFiles()) {
+    for (const m of read(f).matchAll(/text-\[(\d+)px\]/g)) {
+      if (Number(m[1]) < 12) tooSmall.push(`${f.split('/').pop()}:${m[1]}px`)
+    }
+  }
+  eq(tooSmall, [], 'nothing is set smaller than 12px by hand')
+
+  // Tailwind's text-xs is 12px and was doing most of the damage
+  eq(uiFiles().filter(f => /\btext-xs\b/.test(read(f))), [],
+    'and text-xs is gone, which was 12px everywhere it appeared')
 }
 
 // ─── The tab bar ───────────────────────────────────────────────
@@ -909,8 +1029,9 @@ section('Landing page')
   // One primary action: creating. Joining is secondary.
   // Counted as elements, not substrings: "hover:bg-accent-deep" contains
   // "bg-accent" and would double every button.
+  // Either green counts: a solid emerald fill is a solid emerald fill
   const emeraldFills = [...home.matchAll(/class="([^"]*)"/g)]
-    .filter(m => /(?:^| )bg-accent(?![-\w/])/.test(m[1]))
+    .filter(m => /(?:^| )bg-accent(-deep)?(?![-\w/])/.test(m[1]))
   eq(emeraldFills.length, 1, 'exactly one emerald button on the screen')
 
   ok(home.includes('bg-cream'), 'on the cream page')

@@ -55,7 +55,7 @@ interface Props {
 // ─── Donegal Masters scorecard styling ─────────────────────────
 
 const SC_SF    = { fontFamily: 'var(--font-serif)' }
-const SC_MUTED = 'text-[rgba(43,33,24,0.45)]'
+const SC_MUTED = 'text-[rgba(43,33,24,0.62)]'
 const SC_DARK  = 'text-[#2B2118]'
 
 const firstName = (n: string) => n.split(' ')[0]
@@ -110,7 +110,7 @@ function describeCustomTable(table: number[]): string {
 function EmptyState({ message }: { message: string }) {
   return (
     <div className="bg-surface border border-bark/12 rounded-2xl py-14 text-center">
-      <p className="t-body text-ink/65 px-6 max-w-[24rem] mx-auto">{message}</p>
+      <p className="t-body text-ink/80 px-6 max-w-[24rem] mx-auto">{message}</p>
     </div>
   )
 }
@@ -147,7 +147,7 @@ function ScorecardSheet({
   const scoreSymbol = (gross: number | null, par: number, isNR: boolean) => {
     if (isNR) {
       return (
-        <span className="inline-flex items-center justify-center w-9 h-9 border border-rust/60 rounded-sm text-rust text-xs font-semibold">
+        <span className="inline-flex items-center justify-center w-9 h-9 border border-rust/60 rounded-sm text-rust text-[13px] font-semibold">
           NR
         </span>
       )
@@ -197,7 +197,7 @@ function ScorecardSheet({
       style={{ ...gridCols, background: 'rgba(10,157,86,0.12)' }}
       className="px-3 py-2 items-center border-y border-[rgba(74,55,40,0.18)]"
     >
-      <span className="text-xs font-bold tracking-widest uppercase text-[#0A6B3C]" style={SC_SF}>{label}</span>
+      <span className="text-[13px] font-bold tracking-widest uppercase text-[#0A6B3C]" style={SC_SF}>{label}</span>
       <span className="text-base font-bold text-[#0A6B3C]" style={SC_SF}>
         {sumPar(hs, players[0]?.gender ?? 'M')}
       </span>
@@ -230,7 +230,7 @@ function ScorecardSheet({
           </div>
           <button
             onClick={onClose}
-            className="text-ink/40 hover:text-ink transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-xl flex-shrink-0"
+            className="text-ink/65 hover:text-ink transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-xl flex-shrink-0"
             aria-label="Close scorecard"
           >
             ✕
@@ -244,7 +244,7 @@ function ScorecardSheet({
             className="flex-shrink-0 flex items-baseline gap-3 px-3 py-2 border-b border-[rgba(74,55,40,0.18)]"
             style={{ background: '#F1EEE9' }}
           >
-            <span className="text-[10px] tracking-[0.15em] uppercase flex-shrink-0" style={{ ...SC_SF, color: 'rgba(43,33,24,0.45)' }}>
+            <span className="text-[12px] tracking-[0.15em] uppercase flex-shrink-0" style={{ ...SC_SF, color: 'rgba(43,33,24,0.62)' }}>
               {players.length > 1 ? 'Players' : 'Player'}
             </span>
             <div className="flex-1 min-w-0 flex items-baseline justify-between">
@@ -254,7 +254,7 @@ function ScorecardSheet({
                   <span key={p.id} className="flex-1 text-center text-sm text-[#2B2118]" style={SC_SF}>
                     <span className="font-[family-name:var(--font-display)] font-semibold">{firstName(p.name)}</span>
                     {' '}
-                    <span className={`text-[10px] ${SC_MUTED}`}>{hcp ?? '—'}</span>
+                    <span className={`text-[12px] ${SC_MUTED}`}>{hcp ?? '—'}</span>
                   </span>
                 )
               })}
@@ -267,16 +267,16 @@ function ScorecardSheet({
             className="flex-shrink-0 px-3 py-1.5 border-b border-[rgba(74,55,40,0.18)]"
           >
             {(['Hole', 'Par'] as const).map(h => (
-              <span key={h} className={`text-[10px] tracking-[0.15em] uppercase font-semibold ${SC_MUTED}`} style={SC_SF}>
+              <span key={h} className={`text-[12px] tracking-[0.15em] uppercase font-semibold ${SC_MUTED}`} style={SC_SF}>
                 {h}
               </span>
             ))}
             {players.map((p, i) => (
-              <span key={p.id} className={`text-[10px] tracking-[0.15em] uppercase font-semibold ${SC_MUTED} text-center`} style={SC_SF}>
+              <span key={p.id} className={`text-[12px] tracking-[0.15em] uppercase font-semibold ${SC_MUTED} text-center`} style={SC_SF}>
                 {players.length > 1 ? i + 1 : 'Score'}
               </span>
             ))}
-            <span className={`text-[10px] tracking-[0.15em] uppercase font-semibold ${SC_MUTED} text-right`} style={SC_SF}>
+            <span className={`text-[12px] tracking-[0.15em] uppercase font-semibold ${SC_MUTED} text-right`} style={SC_SF}>
               Pts
             </span>
           </div>
@@ -396,7 +396,7 @@ function CourseTiles({
                   {round.courses?.name ?? `Round ${round.round_number}`}
                 </p>
                 <p className={`text-sm mt-1 truncate ${
-                  live ? 'text-accent-deep' : hasScores ? 'text-ink/65' : 'text-ink/40'
+                  live ? 'text-accent-deep' : hasScores ? 'text-ink/80' : 'text-ink/65'
                 }`}>
                   {live
                     ? heroName ? `In play — carried by ${firstName(heroName)}` : 'Card still open'
@@ -413,7 +413,7 @@ function CourseTiles({
                     {live && rel !== undefined ? formatRelative(rel) : formatScore(pts)}
                   </span>
                 )}
-                <span className="text-ink/40 text-sm">View →</span>
+                <span className="text-ink/65 text-sm">View →</span>
               </div>
             </div>
           </button>
@@ -454,14 +454,14 @@ function Board({
         style={{ ...gridStyle, top: HEADER_H }}
         className="sticky z-10 px-3 py-1.5 bg-surface border-b border-bark/12"
       >
-        <span className="text-[10px] tracking-widest uppercase text-ink/40">Pos</span>
-        <span className="text-[10px] tracking-widest uppercase text-ink/40">Name</span>
+        <span className="text-[12px] tracking-widest uppercase text-ink/65">Pos</span>
+        <span className="text-[12px] tracking-widest uppercase text-ink/65">Name</span>
         {showRoundColumns && rounds.map(r => (
-          <span key={r.id} className="text-xs text-ink/40 text-center tabular-nums">
+          <span key={r.id} className="text-[13px] text-ink/65 text-center tabular-nums">
             {r.round_number}
           </span>
         ))}
-        <span className="text-[10px] tracking-widest uppercase text-ink/40 text-right">Tot</span>
+        <span className="text-[12px] tracking-widest uppercase text-ink/65 text-right">Tot</span>
       </div>
 
       {rows.map((row, i) => {
@@ -476,7 +476,7 @@ function Board({
                 !isLast || isExpanded ? 'border-b border-bark/12' : ''
               }`}
             >
-              <span className="t-cap text-ink/40 tabular-nums pt-0.5">{i + 1}</span>
+              <span className="t-cap text-ink/65 tabular-nums pt-0.5">{i + 1}</span>
 
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
@@ -487,7 +487,7 @@ function Board({
                   {row.isLive && <LiveDot />}
                 </div>
                 {row.subLabel && (
-                  <p className={`text-ink/40 text-xs truncate leading-snug ${row.color ? 'pl-3.5' : ''}`}>
+                  <p className={`text-ink/65 text-[13px] truncate leading-snug ${row.color ? 'pl-3.5' : ''}`}>
                     {row.subLabel}
                   </p>
                 )}
@@ -514,8 +514,8 @@ function Board({
                     className={`text-center tabular-nums font-semibold ${
                       showRelative ? 'text-xl' : 'text-2xl'
                     } ${
-                      !played ? 'text-ink/25'
-                        : dropped ? 'text-ink/25 line-through decoration-ink/30'
+                      !played ? 'text-ink/50'
+                        : dropped ? 'text-ink/50 line-through decoration-ink/30'
                         : live ? 'text-accent'
                         : 'text-ink'
                     }`}
@@ -570,15 +570,15 @@ function MatchplayButton({ tripCode, enabled }: { tripCode: string; enabled: boo
         aria-disabled="true"
       >
         <span className="min-w-0">
-          <span className="block font-[family-name:var(--font-display)] text-ink/40 text-base leading-tight">
+          <span className="block font-[family-name:var(--font-display)] text-ink/65 text-base leading-tight">
             Matchplay
           </span>
-          <span className="block text-ink/25 text-xs mt-0.5">
+          <span className="block text-ink/50 text-[13px] mt-0.5">
             Switch it on in Trip Setup to use it
           </span>
         </span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             strokeWidth="2" className="text-ink/25 flex-shrink-0 ml-4" aria-hidden="true">
+             strokeWidth="2" className="text-ink/50 flex-shrink-0 ml-4" aria-hidden="true">
           <rect x="3" y="11" width="18" height="11" rx="2" />
           <path d="M7 11V7a5 5 0 0110 0v4" />
         </svg>
@@ -595,9 +595,9 @@ function MatchplayButton({ tripCode, enabled }: { tripCode: string; enabled: boo
         <span className="block font-[family-name:var(--font-display)] text-ink text-base leading-tight">
           Matchplay
         </span>
-        <span className="block text-accent text-xs mt-0.5">View the knockout draw</span>
+        <span className="block text-accent text-[13px] mt-0.5">View the knockout draw</span>
       </span>
-      <span className="text-ink/40 text-sm flex-shrink-0 ml-4">View →</span>
+      <span className="text-ink/65 text-sm flex-shrink-0 ml-4">View →</span>
     </Link>
   )
 }
@@ -769,8 +769,8 @@ export default function TripLeaderboardClient({
               onClick={() => setActiveId(t.id)}
               className={`flex-shrink-0 px-4 py-2.5 t-label transition-colors duration-150 rounded-xl border ${
                 activeBoard.id === t.id
-                  ? 'bg-accent text-ink font-bold border-accent'
-                  : 'bg-surface border-bark/12 text-ink/40 hover:text-ink/65'
+                  ? 'bg-accent-deep text-white font-bold border-accent-deep'
+                  : 'bg-surface border-bark/12 text-ink/65 hover:text-ink/80'
               }`}
             >
               {boardTitle(t)}
@@ -789,14 +789,14 @@ export default function TripLeaderboardClient({
             {inPlay && <InPlayBadge />}
           </div>
           {rules.length > 0 && (
-            <p className="text-ink/40 text-xs mt-1 leading-snug">
+            <p className="text-ink/65 text-[13px] mt-1 leading-snug">
               {rules.join(' · ')}
             </p>
           )}
         </div>
       ) : (
         <div className="flex items-center justify-between gap-3 mb-3">
-          <p className="text-ink/40 text-xs leading-relaxed min-w-0">
+          <p className="text-ink/65 text-[13px] leading-relaxed min-w-0">
             {rules.join(' · ')}
           </p>
           {inPlay && <InPlayBadge />}
@@ -810,13 +810,13 @@ export default function TripLeaderboardClient({
         <div className="flex items-center gap-4 mb-2 px-1">
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-accent" aria-hidden="true" />
-            <span className="text-ink/40 text-[10px] tracking-wider uppercase">
+            <span className="text-ink/65 text-[12px] tracking-wider uppercase">
               {relativeBoard ? 'In play — against level' : 'In play'}
             </span>
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-            <span className="text-ink/40 text-[10px] tracking-wider uppercase">
+            <span className="text-ink/65 text-[12px] tracking-wider uppercase">
               Card in — {activeBoard.scoring === 'strokes' ? 'nett total' : 'total'}
             </span>
           </span>
@@ -837,7 +837,7 @@ export default function TripLeaderboardClient({
         )}
 
       {!showRoundColumns && sortedRounds.length > 4 && (
-        <p className="text-ink/25 text-xs mt-3 text-center">
+        <p className="text-ink/50 text-[13px] mt-3 text-center">
           Tap a row to see every round.
         </p>
       )}

@@ -89,14 +89,14 @@ export default async function AdminTripsPage() {
             <h1 className="font-[family-name:var(--font-display)] text-xl tracking-wide">
               Trips
             </h1>
-            <p className="text-ink/40 text-xs mt-0.5">
+            <p className="text-ink/65 text-[13px] mt-0.5">
               {trips.length} total · {withEmail} with an email
             </p>
           </div>
           <form action={logout}>
             <button
               type="submit"
-              className="flex-shrink-0 px-4 h-11 rounded-xl border border-bark/12 bg-surface text-ink/65 text-xs tracking-[0.18em] uppercase hover:text-ink hover:border-bark/25 transition-colors"
+              className="flex-shrink-0 px-4 h-11 rounded-xl border border-bark/12 bg-surface text-ink/80 text-[13px] tracking-[0.18em] uppercase hover:text-ink hover:border-bark/25 transition-colors"
             >
               Sign out
             </button>
@@ -113,7 +113,7 @@ export default async function AdminTripsPage() {
 
         {trips.length === 0 ? (
           <div className="border border-bark/12 rounded-xl py-16 text-center">
-            <p className="text-ink/40 text-sm">No trips yet.</p>
+            <p className="text-ink/65 text-sm">No trips yet.</p>
           </div>
         ) : (
           <>
@@ -124,7 +124,7 @@ export default async function AdminTripsPage() {
                 <thead>
                   <tr className="border-b border-bark/12 text-left">
                     {['Trip', 'Code', 'Created', 'Lead email', 'Players', 'Status'].map(h => (
-                      <th key={h} className="px-4 py-3 text-[10px] tracking-[0.2em] uppercase text-ink/40 font-normal">
+                      <th key={h} className="px-4 py-3 text-[12px] tracking-[0.2em] uppercase text-ink/65 font-normal">
                         {h}
                       </th>
                     ))}
@@ -141,13 +141,13 @@ export default async function AdminTripsPage() {
                         <td className="px-4 py-3 tabular-nums text-accent">
                           {t.trip_code ?? '—'}
                         </td>
-                        <td className="px-4 py-3 text-ink/40 whitespace-nowrap">
+                        <td className="px-4 py-3 text-ink/65 whitespace-nowrap">
                           {formatDateTime(t.created_at)}
                         </td>
-                        <td className="px-4 py-3 text-ink/65 break-all">
-                          {t.lead_email ?? <span className="text-ink/25">—</span>}
+                        <td className="px-4 py-3 text-ink/80 break-all">
+                          {t.lead_email ?? <span className="text-ink/50">—</span>}
                         </td>
-                        <td className="px-4 py-3 tabular-nums text-ink/65">
+                        <td className="px-4 py-3 tabular-nums text-ink/80">
                           {playerCount.get(t.id) ?? 0}
                         </td>
                         <td className="px-4 py-3">
@@ -170,14 +170,14 @@ export default async function AdminTripsPage() {
                         <p className="font-[family-name:var(--font-display)] text-base leading-tight truncate">
                           {t.name}
                         </p>
-                        <p className="text-accent text-xs tabular-nums mt-0.5">
+                        <p className="text-accent text-[13px] tabular-nums mt-0.5">
                           {t.trip_code ?? 'no code'}
                         </p>
                       </div>
                       <StatusPill label={state.label} open={state.open} />
                     </div>
 
-                    <div className="mt-3 flex flex-col gap-1 text-xs">
+                    <div className="mt-3 flex flex-col gap-1 text-[13px]">
                       <Field label="Created" value={formatDateTime(t.created_at)} />
                       <Field label="Email" value={t.lead_email} />
                       <Field label="Players" value={String(playerCount.get(t.id) ?? 0)} />
@@ -196,8 +196,8 @@ export default async function AdminTripsPage() {
 function Field({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="flex gap-2">
-      <span className="text-ink/40 w-16 flex-shrink-0">{label}</span>
-      <span className={value ? 'text-ink/65 break-all' : 'text-ink/25'}>
+      <span className="text-ink/65 w-16 flex-shrink-0">{label}</span>
+      <span className={value ? 'text-ink/80 break-all' : 'text-ink/50'}>
         {value ?? '—'}
       </span>
     </div>
@@ -207,10 +207,10 @@ function Field({ label, value }: { label: string; value: string | null }) {
 function StatusPill({ label, open }: { label: string; open: boolean }) {
   return (
     <span
-      className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] tracking-[0.15em] uppercase ${
+      className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[12px] tracking-[0.15em] uppercase ${
         open
           ? 'border-accent/40 bg-accent/10 text-accent'
-          : 'border-bark/12 bg-surface text-ink/40'
+          : 'border-bark/12 bg-surface text-ink/65'
       }`}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${open ? 'bg-accent' : 'bg-bark/25'}`} />

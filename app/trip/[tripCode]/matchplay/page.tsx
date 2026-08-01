@@ -142,13 +142,13 @@ function EmptyState({
 }) {
   return (
     <div className="border border-bark/12 rounded-sm px-6 py-14 text-center">
-      <p className="font-[family-name:var(--font-display)] text-ink/65 text-lg leading-snug mb-2">
+      <p className="font-[family-name:var(--font-display)] text-ink/80 text-lg leading-snug mb-2">
         {title}
       </p>
-      <p className="text-ink/40 text-sm leading-relaxed mb-8 max-w-xs mx-auto">{body}</p>
+      <p className="text-ink/65 text-sm leading-relaxed mb-8 max-w-xs mx-auto">{body}</p>
       <Link
         href={`/trip/${tripCode}/setup`}
-        className="inline-block px-6 py-3.5 border border-accent/40 text-ink/40 rounded-sm text-xs tracking-[0.2em] uppercase hover:bg-accent/10 transition-colors"
+        className="inline-block px-6 py-3.5 border border-accent/40 text-ink/65 rounded-sm text-[13px] tracking-[0.2em] uppercase hover:bg-accent/10 transition-colors"
       >
         Trip Setup
       </Link>

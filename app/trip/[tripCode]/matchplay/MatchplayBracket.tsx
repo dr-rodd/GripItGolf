@@ -211,7 +211,7 @@ export default function MatchplayBracket({
           onClick={() => animateTo(leftIndex - 1)}
           disabled={atStart}
           aria-label="Previous round"
-          className="w-11 h-11 flex-shrink-0 flex items-center justify-center rounded-xl border border-bark/12 bg-surface text-ink/65 disabled:opacity-25 enabled:hover:text-ink enabled:hover:border-bark/25 enabled:hover:bg-surface transition-colors"
+          className="w-11 h-11 flex-shrink-0 flex items-center justify-center rounded-xl border border-bark/12 bg-surface text-ink/80 disabled:opacity-25 enabled:hover:text-ink enabled:hover:border-bark/25 enabled:hover:bg-surface transition-colors"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M15 18l-6-6 6-6" />
@@ -226,7 +226,7 @@ export default function MatchplayBracket({
           onClick={() => animateTo(leftIndex + 1)}
           disabled={atEnd}
           aria-label="Next round"
-          className="w-11 h-11 flex-shrink-0 flex items-center justify-center rounded-xl border border-bark/12 bg-surface text-ink/65 disabled:opacity-25 enabled:hover:text-ink enabled:hover:border-bark/25 enabled:hover:bg-surface transition-colors"
+          className="w-11 h-11 flex-shrink-0 flex items-center justify-center rounded-xl border border-bark/12 bg-surface text-ink/80 disabled:opacity-25 enabled:hover:text-ink enabled:hover:border-bark/25 enabled:hover:bg-surface transition-colors"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M9 18l6-6-6-6" />
@@ -298,7 +298,7 @@ export default function MatchplayBracket({
         ))}
       </div>
 
-      <p className="text-ink/25 text-xs text-center mt-4">
+      <p className="text-ink/50 text-[13px] text-center mt-4">
         Swipe to move between rounds · hold a finished match to change it
       </p>
 
@@ -537,12 +537,12 @@ function Side({
         }`}
       />
 
-      <span className="w-3 flex-shrink-0 text-[10px] tabular-nums text-ink/25 text-right">
+      <span className="w-3 flex-shrink-0 text-[12px] tabular-nums text-ink/50 text-right">
         {isBye ? '' : seed ?? ''}
       </span>
 
       {isBye ? (
-        <span className="flex-1 text-[11px] tracking-[0.15em] uppercase text-ink/25">
+        <span className="flex-1 text-[12px] tracking-[0.15em] uppercase text-ink/50">
           Bye
         </span>
       ) : player ? (
@@ -551,7 +551,7 @@ function Side({
             className={`flex-1 min-w-0 truncate text-sm leading-none ${
               isChampion ? 'text-white font-semibold'
                 : isWinner ? 'text-accent-deep font-semibold'
-                : 'text-ink/65'
+                : 'text-ink/80'
             }`}
           >
             {shortName}
@@ -560,19 +560,19 @@ function Side({
           {/* The margin replaces the handicap once a match is won — by then
               the score is the thing worth knowing */}
           {isWinner && result ? (
-            <span className={`flex-shrink-0 text-[11px] font-semibold tabular-nums ${
+            <span className={`flex-shrink-0 text-[12px] font-semibold tabular-nums ${
               isChampion ? 'text-white' : 'text-accent-deep'
             }`}>
               {result}
             </span>
           ) : (
-            <span className="flex-shrink-0 text-[11px] tabular-nums text-ink/40">
+            <span className="flex-shrink-0 text-[12px] tabular-nums text-ink/65">
               {player.handicap ?? '—'}
             </span>
           )}
         </>
       ) : (
-        <span className="flex-1 text-[11px] text-ink/25 italic">To be decided</span>
+        <span className="flex-1 text-[12px] text-ink/50 italic">To be decided</span>
       )}
     </div>
   )
@@ -627,7 +627,7 @@ function DecideSheet({
       >
         <div className="flex items-start justify-between gap-3 mb-1">
           <div className="min-w-0">
-            <p className="text-ink/40 text-[10px] tracking-[0.25em] uppercase">
+            <p className="text-ink/65 text-[12px] tracking-[0.25em] uppercase">
               {match.round_name}
             </p>
             <p className="font-[family-name:var(--font-display)] text-ink text-xl leading-tight mt-0.5">
@@ -637,7 +637,7 @@ function DecideSheet({
           <button
             onClick={onClose}
             aria-label="Close"
-            className="w-11 h-11 flex-shrink-0 flex items-center justify-center text-ink/40 hover:text-ink transition-colors text-xl"
+            className="w-11 h-11 flex-shrink-0 flex items-center justify-center text-ink/65 hover:text-ink transition-colors text-xl"
           >
             ✕
           </button>
@@ -658,7 +658,7 @@ function DecideSheet({
                 <p className="text-rust-deep text-base font-bold leading-snug">
                   This will void all subsequent results.
                 </p>
-                <p className="text-rust/70 text-xs leading-snug mt-1.5">
+                <p className="text-rust/70 text-[13px] leading-snug mt-1.5">
                   Every result recorded after this one in the same line of the draw is
                   cleared and must be entered again. It cannot be undone.
                 </p>
@@ -669,7 +669,7 @@ function DecideSheet({
 
         {!voiding && (
           <>
-            <label className="block text-ink/40 text-[10px] tracking-[0.2em] uppercase mt-4 mb-2">
+            <label className="block text-ink/65 text-[12px] tracking-[0.2em] uppercase mt-4 mb-2">
               Margin — optional
             </label>
             <input
@@ -677,7 +677,7 @@ function DecideSheet({
               onChange={e => setMargin(e.target.value)}
               placeholder="e.g. 3&2"
               maxLength={12}
-              className="w-full bg-surface border border-bark/12 rounded-xl px-4 py-3 text-ink text-sm placeholder:text-ink/25 focus:outline-none focus:border-accent/50 transition-colors mb-4"
+              className="w-full bg-surface border border-bark/12 rounded-xl px-4 py-3 text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/50 transition-colors mb-4"
             />
           </>
         )}
@@ -702,7 +702,7 @@ function DecideSheet({
                     : 'border-bark/12 bg-surface hover:border-bark/25'
                 }`}
               >
-                <span className="w-5 text-ink/25 text-xs tabular-nums text-right flex-shrink-0">
+                <span className="w-5 text-ink/50 text-[13px] tabular-nums text-right flex-shrink-0">
                   {side.seed ?? ''}
                 </span>
                 <span className="flex-1 min-w-0 text-left">
@@ -710,12 +710,12 @@ function DecideSheet({
                     {player?.name ?? 'Unknown player'}
                   </span>
                   {isCurrent && (
-                    <span className="block text-ink/40 text-[10px] tracking-wider uppercase mt-0.5">
+                    <span className="block text-ink/65 text-[12px] tracking-wider uppercase mt-0.5">
                       {isPicked ? 'Winner — tap to unplay' : 'Was the winner'}
                     </span>
                   )}
                 </span>
-                <span className="text-ink/40 text-sm tabular-nums flex-shrink-0">
+                <span className="text-ink/65 text-sm tabular-nums flex-shrink-0">
                   {player?.handicap ?? '—'}
                 </span>
               </button>
@@ -727,7 +727,7 @@ function DecideSheet({
         {correcting && (
           <>
             {voiding && (
-              <p className="text-ink/40 text-xs leading-snug mt-4 text-center">
+              <p className="text-ink/65 text-[13px] leading-snug mt-4 text-center">
                 Nobody selected — this match goes back to unplayed.
               </p>
             )}

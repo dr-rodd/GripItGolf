@@ -29,7 +29,7 @@ export function WelcomeBackCard({
         </p>
         <button
           onClick={onNotMe}
-          className="flex-shrink-0 t-cap uppercase tracking-[0.12em] text-ink/40 hover:text-ink/65 transition-colors duration-150"
+          className="flex-shrink-0 t-cap uppercase tracking-[0.12em] text-ink/65 hover:text-ink/80 transition-colors duration-150"
         >
           Not you?
         </button>
@@ -39,12 +39,12 @@ export function WelcomeBackCard({
         <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1.5">
           {lines.map(l => (
             <span key={l.label} className="flex items-baseline gap-1.5">
-              <span className="t-cap uppercase tracking-[0.12em] text-ink/40">
+              <span className="t-cap uppercase tracking-[0.12em] text-ink/65">
                 {l.label}
               </span>
               <span
                 className={`t-num ${
-                  l.strong ? 't-card text-accent-deep' : 't-data text-ink/65'
+                  l.strong ? 't-card text-accent-deep' : 't-data text-ink/80'
                 }`}
               >
                 {l.value}

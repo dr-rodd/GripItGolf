@@ -26,11 +26,11 @@ type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F' }
 
 const INPUT = [
   'w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5',
-  'text-ink placeholder-white/30',
+  'text-ink placeholder:text-ink/60',
   'focus:outline-none focus:border-accent/50 transition-colors',
 ].join(' ')
 
-const LABEL = 'block text-ink/65 text-xs uppercase tracking-wider mb-2'
+const LABEL = 'block text-ink/80 text-[13px] uppercase tracking-wider mb-2'
 
 // Teams are not asked for here. Whether a trip even has teams is decided by
 // the leaderboards it runs, and that question lives in trip settings — asking
@@ -390,14 +390,14 @@ export default function CreateTripForm() {
           <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-2">
             Trip Created!
           </h1>
-          <p className="text-ink/40 text-sm mb-10">
+          <p className="text-ink/65 text-sm mb-10">
             Share this code with your group to join. Next, choose what
             you&apos;re playing for in trip settings — leaderboards and teams
             live there. Finalise the trip when everyone&apos;s ready to play.
           </p>
 
           <div className="bg-surface border border-bark/25 rounded-2xl px-4 py-8 mb-4">
-            <p className="text-ink/40 text-xs tracking-widest uppercase mb-4">Your Trip Code</p>
+            <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-4">Your Trip Code</p>
             {/* Laid out as characters with a gap rather than letter-spacing:
                 tracking adds space after the final character too, which pushed
                 the code off the right edge of the box. */}
@@ -415,7 +415,7 @@ export default function CreateTripForm() {
 
           {lockSettings && (
             <div className="mb-4 px-4 py-3 bg-surface border border-bark/12 rounded-xl">
-              <p className="text-ink/65 text-xs leading-snug">
+              <p className="text-ink/80 text-[13px] leading-snug">
                 Settings are locked. Keep your passcode safe — it cannot be recovered
                 or changed.
               </p>
@@ -431,7 +431,7 @@ export default function CreateTripForm() {
 
           <Link
             href={`/trip/${resultCode}`}
-            className="block w-full py-4 bg-accent text-ink text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent-deep transition-colors"
+            className="block w-full py-4 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors"
           >
             Go to Your Trip
           </Link>
@@ -482,7 +482,7 @@ export default function CreateTripForm() {
               <BackButton onClick={goBack} />
             </div>
           )}
-          <p className="text-center text-ink/40 text-xs tracking-wider uppercase">
+          <p className="text-center text-ink/65 text-[13px] tracking-wider uppercase">
             Step {stepNum} of 3 — {STEP_LABELS[stepNum - 1]}
           </p>
         </div>
@@ -532,13 +532,13 @@ export default function CreateTripForm() {
                 placeholder="you@example.com"
                 className={INPUT}
               />
-              <p className="text-ink/40 text-xs mt-2 leading-snug">
+              <p className="text-ink/65 text-[13px] mt-2 leading-snug">
                 So we can confirm your trip and keep you updated. Leave it blank
                 if you would rather not — the trip works either way, and no other
                 player ever sees it.
               </p>
               {emailWarning(leadEmail) && (
-                <p className="text-rust/80 text-xs mt-2 leading-snug">
+                <p className="text-rust/80 text-[13px] mt-2 leading-snug">
                   {emailWarning(leadEmail)}
                 </p>
               )}
@@ -556,7 +556,7 @@ export default function CreateTripForm() {
             {/* Only once we know: an empty list mid-fetch is not a problem
                 worth reporting. */}
             {coursesLoaded && courses.length === 0 && (
-              <div className="p-4 bg-surface border border-bark/12 rounded-xl text-ink/40 text-sm text-center mb-4">
+              <div className="p-4 bg-surface border border-bark/12 rounded-xl text-ink/65 text-sm text-center mb-4">
                 No platform courses available yet. Add courses with <code className="text-accent">trip_id = NULL</code> to get started.
               </div>
             )}
@@ -575,19 +575,19 @@ export default function CreateTripForm() {
         {/* ── Step 3: Players ──────────────────────────────────────── */}
         {step === 3 && (
           <div className="space-y-4">
-            <p className="text-ink/40 text-sm mb-2">
+            <p className="text-ink/65 text-sm mb-2">
               Optional — players can also join later with the trip code.
             </p>
             {players.map((player, i) => (
               <div key={i} className="bg-surface border border-bark/12 rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-ink/40 text-xs tracking-widest uppercase">
+                  <span className="text-ink/65 text-[13px] tracking-widest uppercase">
                     {i === 0 ? 'Lead player' : `Player ${i + 1}`}
                   </span>
                   {i > 0 && (
                     <button
                       onClick={() => removePlayer(i)}
-                      className="text-ink/40 hover:text-ink/65 transition-colors p-1"
+                      className="text-ink/65 hover:text-ink/80 transition-colors p-1"
                       aria-label="Remove player"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -625,8 +625,8 @@ export default function CreateTripForm() {
                           onClick={() => updatePlayer(i, { gender: g })}
                           className={`w-12 rounded-xl text-sm font-medium transition-colors ${
                             player.gender === g
-                              ? 'bg-accent text-ink'
-                              : 'bg-surface border border-bark/12 text-ink/65 hover:border-bark/25'
+                              ? 'bg-accent-deep text-white'
+                              : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
                           }`}
                         >
                           {g}
@@ -641,7 +641,7 @@ export default function CreateTripForm() {
 
             <button
               onClick={addPlayer}
-              className="w-full py-4 border border-dashed border-bark/25 rounded-xl text-ink/40 text-sm hover:border-bark/25 hover:text-ink/65 transition-colors"
+              className="w-full py-4 border border-dashed border-bark/25 rounded-xl text-ink/65 text-sm hover:border-bark/25 hover:text-ink/80 transition-colors"
             >
               + Add another player
             </button>
@@ -653,7 +653,7 @@ export default function CreateTripForm() {
               <div className="flex items-start justify-between gap-4 bg-surface border border-bark/12 rounded-xl px-4 py-4">
                 <div className="min-w-0">
                   <p className="text-ink text-sm font-medium">Lock trip settings</p>
-                  <p className="text-ink/40 text-xs mt-0.5 leading-snug">
+                  <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
                     Ask for a passcode before anyone can change formats, players or teams
                   </p>
                 </div>
@@ -666,7 +666,7 @@ export default function CreateTripForm() {
                     <p className="text-rust-deep text-sm font-semibold leading-snug">
                       This can only be set now.
                     </p>
-                    <p className="text-rust/70 text-xs leading-snug mt-1.5">
+                    <p className="text-rust/70 text-[13px] leading-snug mt-1.5">
                       There is no way to add, change or remove it later — otherwise anyone
                       with your trip code could lock you out of your own trip. Write it down.
                     </p>
@@ -694,7 +694,7 @@ export default function CreateTripForm() {
                   />
 
                   {passcodeIssue && (passcode || passcodeConfirm) && (
-                    <p className="text-rust-deep text-xs leading-snug">{passcodeIssue}</p>
+                    <p className="text-rust-deep text-[13px] leading-snug">{passcodeIssue}</p>
                   )}
                 </div>
               )}
@@ -716,12 +716,12 @@ export default function CreateTripForm() {
             <button
               onClick={goNext}
               disabled={!canProceed}
-              className="w-full py-5 bg-accent text-ink text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full py-5 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {submitting ? 'Creating…' : isFinalStep ? 'Create Trip' : 'Continue'}
             </button>
             {isFinalStep && (
-              <p className="text-center text-ink/40 text-xs mt-3">
+              <p className="text-center text-ink/65 text-[13px] mt-3">
                 Players without a name will be skipped
               </p>
             )}

@@ -71,8 +71,8 @@ export default function MatchplayPanel({
   if (loading) {
     return (
       <section className={SECTION}>
-        <p className="text-ink/40 text-xs tracking-widest uppercase mb-3">Matchplay</p>
-        <p className="text-ink/40 text-sm">Checking…</p>
+        <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-3">Matchplay</p>
+        <p className="text-ink/65 text-sm">Checking…</p>
       </section>
     )
   }
@@ -92,17 +92,17 @@ export default function MatchplayPanel({
   return (
     <section className={SECTION}>
       <div className="flex items-center justify-between mb-1">
-        <p className="text-ink/40 text-xs tracking-widest uppercase">
+        <p className="text-ink/65 text-[13px] tracking-widest uppercase">
           {pairs ? 'Pairs Matchplay' : 'Matchplay'}
         </p>
         {exists && (
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-accent " />
-            <span className="text-accent/80 text-[10px] tracking-wider uppercase">Bracket drawn</span>
+            <span className="text-accent/80 text-[12px] tracking-wider uppercase">Bracket drawn</span>
           </span>
         )}
       </div>
-      <p className="text-ink/40 text-xs mb-4">
+      <p className="text-ink/65 text-[13px] mb-4">
         A knockout draw between {pairs ? noun.many : 'players'}. Top seeds are kept
         apart, and byes are handed out when the count isn&apos;t a power of two.
       </p>
@@ -115,10 +115,10 @@ export default function MatchplayPanel({
               {status!.matchCount} match{status!.matchCount === 1 ? '' : 'es'} across{' '}
               {status!.roundNames.length} round{status!.roundNames.length === 1 ? '' : 's'}
             </p>
-            <p className="text-ink/40 text-xs mt-1 leading-snug">
+            <p className="text-ink/65 text-[13px] mt-1 leading-snug">
               {status!.roundNames.join(' → ')}
             </p>
-            <p className="text-ink/40 text-xs mt-2">
+            <p className="text-ink/65 text-[13px] mt-2">
               {status!.byeCount > 0 && `${status!.byeCount} bye${status!.byeCount === 1 ? '' : 's'} · `}
               {played > 0
                 ? `${played} result${played === 1 ? '' : 's'} recorded`
@@ -128,7 +128,7 @@ export default function MatchplayPanel({
         ) : blocked ? (
           <p className="text-rust/90 text-sm leading-snug">{blocked}</p>
         ) : (
-          <p className="text-ink/65 text-sm leading-snug">
+          <p className="text-ink/80 text-sm leading-snug">
             {entrantCount} {entrantWord(entrantCount)} — this would draw a
             bracket of {preview!.bracketSize}
             {preview!.byeCount > 0 && ` with ${preview!.byeCount} bye${preview!.byeCount === 1 ? '' : 's'}`}
@@ -152,13 +152,13 @@ export default function MatchplayPanel({
                 This will erase {played} result{played === 1 ? '' : 's'} already recorded
                 for this bracket.
               </p>
-              <p className="text-ink/40 text-xs leading-snug mb-4">
+              <p className="text-ink/65 text-[13px] leading-snug mb-4">
                 A new draw is generated from scratch. Those match outcomes cannot be
                 recovered. Hole scores and the other leaderboards are untouched.
               </p>
             </>
           ) : (
-            <p className="text-ink/65 text-sm leading-snug mb-4">
+            <p className="text-ink/80 text-sm leading-snug mb-4">
               This will regenerate the bracket from the {entrantCount}{' '}
               {entrantWord(entrantCount)} registered now. Nothing has been played
               yet, so nothing is lost.
@@ -168,7 +168,7 @@ export default function MatchplayPanel({
             <button
               onClick={() => setConfirming(false)}
               disabled={busy}
-              className="flex-1 py-3.5 border border-bark/25 text-ink/65 rounded-xl text-sm tracking-wider uppercase hover:border-bark/25 transition-colors disabled:opacity-40"
+              className="flex-1 py-3.5 border border-bark/25 text-ink/80 rounded-xl text-sm tracking-wider uppercase hover:border-bark/25 transition-colors disabled:opacity-40"
             >
               Cancel
             </button>
@@ -178,7 +178,7 @@ export default function MatchplayPanel({
               className={`flex-1 py-3.5 rounded-xl text-sm font-bold tracking-wider uppercase transition-colors disabled:opacity-40 ${
                 played > 0
                   ? 'bg-rust-deep text-[#1a0f0a] hover:bg-rust-deep'
-                  : 'bg-accent text-ink hover:bg-accent-deep'
+                  : 'bg-accent-deep text-white hover:bg-accent'
               }`}
             >
               {busy ? 'Working…' : played > 0 ? 'Erase & Reshuffle' : 'Reshuffle'}
@@ -193,7 +193,7 @@ export default function MatchplayPanel({
           <button
             onClick={() => setConfirming(true)}
             disabled={busy || !!blocked}
-            className="w-full py-3.5 border border-bark/25 text-ink/65 rounded-xl text-sm tracking-wider uppercase hover:border-bark/25 hover:text-ink transition-colors disabled:opacity-40"
+            className="w-full py-3.5 border border-bark/25 text-ink/80 rounded-xl text-sm tracking-wider uppercase hover:border-bark/25 hover:text-ink transition-colors disabled:opacity-40"
           >
             Reshuffle
           </button>
@@ -201,7 +201,7 @@ export default function MatchplayPanel({
           <button
             onClick={generate}
             disabled={busy || !!blocked}
-            className="w-full py-3.5 bg-accent text-ink rounded-xl text-sm font-bold tracking-wider uppercase hover:bg-accent-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full py-3.5 bg-accent-deep text-white rounded-xl text-sm font-bold tracking-wider uppercase hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {busy ? 'Drawing…' : 'Create Matchplay'}
           </button>
@@ -211,14 +211,14 @@ export default function MatchplayPanel({
       {exists && (
         <Link
           href={`/trip/${tripCode}/matchplay`}
-          className="block text-center text-accent/70 text-xs tracking-wider uppercase mt-3 hover:text-accent transition-colors"
+          className="block text-center text-accent/70 text-[13px] tracking-wider uppercase mt-3 hover:text-accent transition-colors"
         >
           View the draw →
         </Link>
       )}
 
       {exists && canEdit && (
-        <p className="text-ink/25 text-xs mt-3 leading-snug">
+        <p className="text-ink/50 text-[13px] mt-3 leading-snug">
           {pairs ? 'Pairings changing' : 'Players joining or leaving'} after the draw
           doesn&apos;t change it. Reshuffle when you want the bracket to match the
           current {pairs ? 'team sheet' : 'roster'}.

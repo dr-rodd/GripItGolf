@@ -39,7 +39,7 @@ export function SectionTitle({
   return (
     <div className={className}>
       <h2 className="t-h2 text-ink">{children}</h2>
-      {hint && <p className="t-cap text-ink/40 mt-1">{hint}</p>}
+      {hint && <p className="t-cap text-ink/65 mt-1">{hint}</p>}
     </div>
   )
 }
@@ -47,7 +47,7 @@ export function SectionTitle({
 /** The small all-caps line that labels a group. */
 export function Eyebrow({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <p className={`t-cap uppercase tracking-[0.18em] text-ink/40 ${className}`}>
+    <p className={`t-cap uppercase tracking-[0.18em] text-ink/65 ${className}`}>
       {children}
     </p>
   )
@@ -69,12 +69,12 @@ export const buttonClass = (
 ) => {
   const look =
     variant === 'primary'
-      ? 'bg-accent text-white hover:bg-accent-deep'
+      ? 'bg-accent-deep text-white hover:bg-accent'
       : variant === 'secondary'
         ? 'bg-surface text-ink border border-bark/25 hover:border-bark/40'
         : variant === 'danger'
           ? 'bg-surface text-rust-deep border border-rust/40 hover:bg-rust/[0.06]'
-          : 'text-ink/60 hover:text-ink'
+          : 'text-ink/80 hover:text-ink'
   return `${BUTTON_BASE} ${look} ${full ? 'w-full' : ''}`.trim()
 }
 
@@ -154,7 +154,7 @@ export function EmptyState({
 }) {
   return (
     <div className={`text-center py-12 px-6 ${className}`.trim()}>
-      <p className="t-body text-ink/65 max-w-[24rem] mx-auto">{message}</p>
+      <p className="t-body text-ink/80 max-w-[24rem] mx-auto">{message}</p>
       {actionLabel && actionHref && (
         <div className="mt-5 flex justify-center">
           <ButtonLink href={actionHref} full={false}>{actionLabel}</ButtonLink>
@@ -168,8 +168,8 @@ export function EmptyState({
 
 export const FIELD =
   'w-full bg-surface border border-bark/25 rounded-xl px-4 py-3.5 ' +
-  'text-ink placeholder:text-ink/40 ' +
+  'text-ink placeholder:text-ink/65 ' +
   'focus:outline-none focus:border-accent transition-colors duration-150 ' +
   'disabled:opacity-50 disabled:cursor-not-allowed'
 
-export const FIELD_LABEL = 'block t-label text-ink/65 mb-2'
+export const FIELD_LABEL = 'block t-label text-ink/80 mb-2'

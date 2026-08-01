@@ -48,14 +48,19 @@ body {
 /* ── Type scale ────────────────────────────────────────────────
    Mobile sizes. Desktop is secondary and inherits these. */
 
-.t-h1    { font-family: var(--font-display); font-weight: 600; font-size: 28px; line-height: 1.15; letter-spacing: -0.01em; }
+/* Sizes are floored at 13px. This is read one-handed, outdoors, in daylight,
+   often by someone who left their reading glasses in the car — the old 11px
+   caption and 12px label were too small for that, and nothing here is dense
+   enough to need them back. */
 
-.t-h2    { font-family: var(--font-display); font-weight: 600; font-size: 19px; line-height: 1.2; }
-.t-card  { font-family: var(--font-display); font-weight: 600; font-size: 15px; line-height: 1.25; }
-.t-body  { font-family: var(--font-serif);   font-weight: 400; font-size: 15px; line-height: 1.55; }
-.t-data  { font-family: var(--font-serif);   font-weight: 400; font-size: 14px; line-height: 1.35; }
-.t-label { font-family: var(--font-ui);      font-weight: 600; font-size: 12px; line-height: 1.2; }
-.t-cap   { font-family: var(--font-ui);      font-weight: 400; font-size: 11px; line-height: 1.3; }
+.t-h1    { font-family: var(--font-display); font-weight: 600; font-size: 30px; line-height: 1.15; letter-spacing: -0.01em; }
+
+.t-h2    { font-family: var(--font-display); font-weight: 600; font-size: 21px; line-height: 1.25; }
+.t-card  { font-family: var(--font-display); font-weight: 600; font-size: 16px; line-height: 1.3; }
+.t-body  { font-family: var(--font-serif);   font-weight: 400; font-size: 17px; line-height: 1.6; }
+.t-data  { font-family: var(--font-serif);   font-weight: 400; font-size: 15px; line-height: 1.4; }
+.t-label { font-family: var(--font-ui);      font-weight: 600; font-size: 13px; line-height: 1.3; }
+.t-cap   { font-family: var(--font-ui);      font-weight: 400; font-size: 13px; line-height: 1.45; }
 
 /* The green dot as a full stop, closing a title the way it closes the
    wordmark.
@@ -150,8 +155,10 @@ input, select, textarea {
   font-size: 16px;
   color: var(--color-ink);
 }
+/* A placeholder still has to be read. At 40% it sat at 2.4:1 against the
+   page, which is below anything WCAG calls text. */
 input::placeholder, textarea::placeholder {
-  color: rgba(43, 33, 24, 0.4);
+  color: rgba(43, 33, 24, 0.6);
 }
 
 /* A date input's intrinsic width overflows a grid column; min-width:0

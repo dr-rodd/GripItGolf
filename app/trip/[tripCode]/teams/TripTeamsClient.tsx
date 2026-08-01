@@ -39,7 +39,7 @@ function PlayerTile({ player, faded = false }: { player: Player; faded?: boolean
         {player.name}
       </span>
       <span
-        className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
+        className={`text-[12px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
           player.gender === 'F'
             ? 'bg-rust/40 text-rose-300'
             : 'bg-bark/40 text-blue-300'
@@ -119,8 +119,8 @@ function TeamColumn({
           onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
           className="flex-1 min-w-0 bg-transparent text-ink text-sm font-semibold outline-none border-b border-transparent focus:border-accent/50 transition-colors"
         />
-        <span className={`text-xs flex-shrink-0 tabular-nums ${
-          over ? 'text-rust-deep' : 'text-ink/25'
+        <span className={`text-[13px] flex-shrink-0 tabular-nums ${
+          over ? 'text-rust-deep' : 'text-ink/50'
         }`}>
           {sizeLimit !== null ? `${players.length}/${sizeLimit}` : players.length} · {totalHandicap}
         </span>
@@ -145,10 +145,10 @@ function TeamColumn({
       <div className="p-2 space-y-2 flex-1">
         {players.map(p => <DraggablePlayer key={p.id} player={p} />)}
         {players.length === 0 && (
-          <p className="text-ink/25 text-sm text-center py-8 select-none">Drop here</p>
+          <p className="text-ink/50 text-sm text-center py-8 select-none">Drop here</p>
         )}
         {full && !over && (
-          <p className="text-ink/25 text-[10px] tracking-wider uppercase text-center pb-2 select-none">
+          <p className="text-ink/50 text-[12px] tracking-wider uppercase text-center pb-2 select-none">
             Full
           </p>
         )}
@@ -169,13 +169,13 @@ function UnassignedZone({ players }: { players: Player[] }) {
       }`}
     >
       <div className="px-4 py-3 border-b border-bark/12 flex items-center justify-between">
-        <span className="text-ink/40 text-xs tracking-[0.2em] uppercase">Unassigned</span>
-        <span className="text-ink/25 text-xs tabular-nums">{players.length}</span>
+        <span className="text-ink/65 text-[13px] tracking-[0.2em] uppercase">Unassigned</span>
+        <span className="text-ink/50 text-[13px] tabular-nums">{players.length}</span>
       </div>
       <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 min-h-[72px]">
         {players.map(p => <DraggablePlayer key={p.id} player={p} />)}
         {players.length === 0 && (
-          <p className="text-ink/25 text-sm py-4 col-span-full text-center select-none">
+          <p className="text-ink/50 text-sm py-4 col-span-full text-center select-none">
             Everyone has a team
           </p>
         )}
@@ -392,7 +392,7 @@ export default function TripTeamsClient({
 
         {/* Team count */}
         <div>
-          <label className="block text-ink/65 text-xs uppercase tracking-wider mb-2">
+          <label className="block text-ink/80 text-[13px] uppercase tracking-wider mb-2">
             Number of {noun.many}
           </label>
           <div className="flex gap-2 flex-wrap">
@@ -403,8 +403,8 @@ export default function TripTeamsClient({
                 disabled={busy}
                 className={`flex-1 min-w-[48px] py-3 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
                   teams.length === n
-                    ? 'bg-accent text-ink'
-                    : 'bg-surface border border-bark/12 text-ink/65 hover:border-bark/25'
+                    ? 'bg-accent-deep text-white'
+                    : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
                 }`}
               >
                 {n}
@@ -424,7 +424,7 @@ export default function TripTeamsClient({
           </button>
         )}
 
-        <p className="text-ink/40 text-xs text-center">
+        <p className="text-ink/65 text-[13px] text-center">
           Drag players between {noun.many}. On a phone, press and hold briefly first.
         </p>
 
@@ -445,7 +445,7 @@ export default function TripTeamsClient({
         </div>
 
         {teams.length === 0 && (
-          <p className="text-ink/40 text-sm text-center py-8">
+          <p className="text-ink/65 text-sm text-center py-8">
             Pick a number of {noun.many} above to get started.
           </p>
         )}

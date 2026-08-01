@@ -95,7 +95,7 @@ export default function TripCountdown({
                     >
                       {String(value).padStart(2, '0')}
                     </span>
-                    <span className="text-[10px] tracking-[0.25em] uppercase text-ink/40 font-light">
+                    <span className="text-[12px] tracking-[0.25em] uppercase text-ink/65 font-light">
                       {label}
                     </span>
                   </div>

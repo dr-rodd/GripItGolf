@@ -27,7 +27,7 @@ export default function DateField({
   return (
     <div className={`min-w-0 ${className}`}>
       {label && (
-        <label className="block text-ink/65 text-xs uppercase tracking-wider mb-2">
+        <label className="block text-ink/80 text-[13px] uppercase tracking-wider mb-2">
           {label}
         </label>
       )}

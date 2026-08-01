@@ -68,14 +68,14 @@ function Tile({
       </span>
       <span className="flex-1 min-w-0">
         <span className="block t-card text-ink truncate">{title}</span>
-        {detail && <span className="block t-cap text-ink/40 mt-0.5 truncate">{detail}</span>}
+        {detail && <span className="block t-cap text-ink/65 mt-0.5 truncate">{detail}</span>}
       </span>
       {onRemove && (
         <button
           type="button"
           onClick={onRemove}
           aria-label={`Remove ${title}`}
-          className="flex-shrink-0 w-9 h-9 flex items-center justify-center text-ink/25 hover:text-rust transition-colors duration-150"
+          className="flex-shrink-0 w-9 h-9 flex items-center justify-center text-ink/50 hover:text-rust transition-colors duration-150"
         >
           <IconX size={16} />
         </button>
@@ -178,7 +178,7 @@ function Stepper({
           className="flex-1 text-center t-h2 text-ink tabular-nums"
           aria-live="polite"
         >
-          {value} <span className="t-cap text-ink/40">{unit(value)}</span>
+          {value} <span className="t-cap text-ink/65">{unit(value)}</span>
         </span>
         <button
           type="button" onClick={() => step(1)} disabled={value >= max}
@@ -217,7 +217,7 @@ function Sheet({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="w-11 h-11 -mr-2 flex items-center justify-center text-ink/40 hover:text-ink"
+            className="w-11 h-11 -mr-2 flex items-center justify-center text-ink/65 hover:text-ink"
           >
             <IconX size={18} />
           </button>
@@ -380,11 +380,11 @@ export default function ItineraryBuilder({
                   className={`flex-shrink-0 px-3 py-2 rounded-xl border transition-colors duration-150 ${
                     active
                       ? 'border-accent bg-accent/[0.10] text-ink'
-                      : 'border-bark/12 bg-surface text-ink/65 hover:border-bark/25'
+                      : 'border-bark/12 bg-surface text-ink/80 hover:border-bark/25'
                   }`}
                 >
                   <span className="block t-label">Day {i + 1}</span>
-                  <span className="block t-cap text-ink/40 mt-0.5">
+                  <span className="block t-cap text-ink/65 mt-0.5">
                     {count === 0 ? 'empty' : `${count} item${count === 1 ? '' : 's'}`}
                   </span>
                 </button>
@@ -394,7 +394,7 @@ export default function ItineraryBuilder({
         </div>
 
         <p className="t-h2 text-ink mb-1">{describeDay(dateForDay(startDate, openDay), openDay)}</p>
-        <p className="t-cap text-ink/40 mb-4">
+        <p className="t-cap text-ink/65 mb-4">
           {dayItems.length === 0
             ? 'Nothing yet — add golf, a stay or a journey below.'
             : 'Press and hold a tile to move it.'}
@@ -416,7 +416,7 @@ export default function ItineraryBuilder({
 
         {dayItems.length === 0 && (
           <div className="border border-dashed border-bark/25 rounded-xl py-10 text-center">
-            <p className="t-body text-ink/40">This day is empty.</p>
+            <p className="t-body text-ink/65">This day is empty.</p>
           </div>
         )}
       </div>
@@ -458,7 +458,7 @@ export default function ItineraryBuilder({
             onClick={() => (lastDay ? onContinue() : setOpenDay(d => d + 1))}
             className={`w-full mt-2 min-h-[52px] rounded-xl border t-label transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${
               lastDay
-                ? 'border-accent bg-accent text-white hover:bg-accent-deep'
+                ? 'border-accent bg-accent-deep text-white hover:bg-accent'
                 : 'border-bark/25 bg-surface text-ink hover:border-bark/40'
             }`}
           >
@@ -491,7 +491,7 @@ export default function ItineraryBuilder({
                   </option>
                 ))}
               </select>
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink/40">
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink/65">
                 <IconChevronDown size={16} />
               </span>
             </div>
@@ -525,7 +525,7 @@ export default function ItineraryBuilder({
             onChange={setTeeCount}
           />
 
-          <p className="t-cap text-ink/40">
+          <p className="t-cap text-ink/65">
             One round is created for this course. More tee times just means more
             groups going off.
           </p>
@@ -553,7 +553,7 @@ export default function ItineraryBuilder({
             onChange={setNights}
           />
 
-          <p className="t-cap text-ink/40">
+          <p className="t-cap text-ink/65">
             {nights > 1
               ? `Added to each of the next ${nights} days, so every night has somewhere to sleep on it.`
               : 'Staying more than one night? It will be added to each day.'}
@@ -572,7 +572,7 @@ export default function ItineraryBuilder({
                   className={`min-h-[48px] rounded-xl border t-label capitalize transition-colors duration-150 ${
                     mode === m
                       ? 'border-accent bg-accent/[0.10] text-ink'
-                      : 'border-bark/25 bg-surface text-ink/65'
+                      : 'border-bark/25 bg-surface text-ink/80'
                   }`}
                 >
                   {m}

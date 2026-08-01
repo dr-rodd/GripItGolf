@@ -42,12 +42,12 @@ export default async function TripCoursePortalPage({
       </div>
 
       <div className="max-w-lg mx-auto px-4 py-6">
-        <p className="text-ink/40 text-xs tracking-[0.2em] uppercase mb-4">
+        <p className="text-ink/65 text-[13px] tracking-[0.2em] uppercase mb-4">
           Choose a round
         </p>
 
         {(rounds ?? []).length === 0 && (
-          <p className="text-ink/40 text-sm py-8 text-center">
+          <p className="text-ink/65 text-sm py-8 text-center">
             No rounds set up for this trip yet.
           </p>
         )}
@@ -62,7 +62,7 @@ export default async function TripCoursePortalPage({
                 className="flex items-center justify-between w-full px-5 py-5 border border-bark/12 rounded-xl hover:border-accent/40 hover:bg-surface transition-colors"
               >
                 <div className="min-w-0">
-                  <p className="text-ink/40 text-[10px] tracking-[0.25em] uppercase mb-1">
+                  <p className="text-ink/65 text-[12px] tracking-[0.25em] uppercase mb-1">
                     Round {round.round_number}
                     {round.status === 'completed' && ' · Completed'}
                     {round.status === 'active' && ' · In play'}
@@ -71,7 +71,7 @@ export default async function TripCoursePortalPage({
                     {course?.name ?? `Round ${round.round_number}`}
                   </p>
                   {course?.location && (
-                    <p className="text-ink/25 text-xs mt-1 truncate">{course.location}</p>
+                    <p className="text-ink/50 text-[13px] mt-1 truncate">{course.location}</p>
                   )}
                 </div>
                 <span className="text-accent text-lg flex-shrink-0 ml-4">→</span>

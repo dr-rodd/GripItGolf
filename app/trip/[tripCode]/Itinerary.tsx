@@ -63,7 +63,7 @@ export default function Itinerary({
       <div className="flex items-baseline justify-between gap-3 mb-3">
         <h2 className="t-h2 text-ink">The plan</h2>
         {progress && progress.done > 0 && (
-          <p className="t-cap text-ink/40 tabular-nums">
+          <p className="t-cap text-ink/65 tabular-nums">
             {progress.done} of {progress.total} done
           </p>
         )}
@@ -82,7 +82,7 @@ export default function Itinerary({
 
           return (
             <li key={day} className={allPast ? 'opacity-45' : ''}>
-              <p className="t-cap uppercase tracking-[0.18em] text-ink/40 mb-2">
+              <p className="t-cap uppercase tracking-[0.18em] text-ink/65 mb-2">
                 {describeDay(date, day)}
               </p>
 
@@ -112,13 +112,13 @@ export default function Itinerary({
                       <span className="flex-1 min-w-0">
                         <span
                           className={`block t-card truncate ${
-                            state === 'past' ? 'text-ink/65 line-through decoration-ink/25' : 'text-ink'
+                            state === 'past' ? 'text-ink/80 line-through decoration-ink/25' : 'text-ink'
                           }`}
                         >
                           {title}
                         </span>
                         {detail && (
-                          <span className="block t-cap text-ink/40 truncate mt-0.5">{detail}</span>
+                          <span className="block t-cap text-ink/65 truncate mt-0.5">{detail}</span>
                         )}
                       </span>
 

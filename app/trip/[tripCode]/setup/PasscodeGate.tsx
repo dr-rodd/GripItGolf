@@ -65,7 +65,7 @@ export default function PasscodeGate({
         <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink leading-tight mb-2">
           Settings are locked
         </h1>
-        <p className="text-ink/40 text-sm mb-8 leading-relaxed">
+        <p className="text-ink/65 text-sm mb-8 leading-relaxed">
           {tripName} was set up with a passcode. Ask whoever created the trip.
         </p>
 
@@ -79,7 +79,7 @@ export default function PasscodeGate({
             placeholder="Passcode"
             maxLength={MAX_PASSCODE}
             autoFocus
-            className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-center text-lg tracking-[0.3em] placeholder:tracking-normal placeholder:text-ink/25 focus:outline-none focus:border-accent/60 transition-colors"
+            className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-center text-lg tracking-[0.3em] placeholder:tracking-normal placeholder:text-ink/50 focus:outline-none focus:border-accent/60 transition-colors"
           />
 
           {error && <p className="text-rust-deep text-sm">{error}</p>}
@@ -87,7 +87,7 @@ export default function PasscodeGate({
           <button
             type="submit"
             disabled={busy || !code}
-            className="w-full py-4 bg-accent text-ink text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent-deep transition-colors disabled:opacity-40"
+            className="w-full py-4 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40"
           >
             {busy ? 'Checking…' : 'Unlock'}
           </button>
