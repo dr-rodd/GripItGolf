@@ -19,15 +19,9 @@ import {
 // ── Types ─────────────────────────────────────────────────────────────────
 
 type Course = { id: string; name: string }
-type TeamInput = { name: string; color: string }
-type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F'; teamIndex: number }
+type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F' }
 
 // ── Constants ─────────────────────────────────────────────────────────────
-
-const PRESET_COLORS = [
-  '#DC2626', '#2563EB', '#16A34A', '#9333EA',
-  '#EA580C', '#DB2777', '#0D9488', '#0A9D56',
-]
 
 const INPUT = [
   'w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5',
@@ -37,7 +31,10 @@ const INPUT = [
 
 const LABEL = 'block text-ink/65 text-xs uppercase tracking-wider mb-2'
 
-const STEP_LABELS = ['Trip details', 'Itinerary', 'Teams', 'Players']
+// Teams are not asked for here. Whether a trip even has teams is decided by
+// the leaderboards it runs, and that question lives in trip settings — asking
+// it twice is how the two answers come to disagree.
+const STEP_LABELS = ['Trip details', 'Itinerary', 'Players']
 
 // Presets cover the common cases; the + button goes beyond them.
 
@@ -67,7 +64,7 @@ function generateCode(): string {
 // ── Root component ────────────────────────────────────────────────────────
 
 export default function CreateTripForm({ courses }: { courses: Course[] }) {
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 'done'>(1)
+  const [step, setStep] = useState<1 | 2 | 3 | 'done'>(1)
 
   // Step 1
   const [tripName, setTripName] = useState('')
@@ -80,16 +77,8 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
   const [itinerary, setItinerary] = useState<ItineraryItem[]>([])
 
   // Step 3
-  const [useTeams, setUseTeams] = useState(true)
-  const [numTeams, setNumTeams] = useState(2)
-  const [teams, setTeams] = useState<TeamInput[]>([
-    { name: 'Team A', color: PRESET_COLORS[0] },
-    { name: 'Team B', color: PRESET_COLORS[1] },
-  ])
-
-  // Step 4
   const [players, setPlayers] = useState<PlayerInput[]>([
-    { name: '', handicap: '', gender: 'M', teamIndex: -1 },
+    { name: '', handicap: '', gender: 'M' },
   ])
 
   // Settings lock — can only ever be set here, at creation
@@ -112,13 +101,11 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
   const plannedGolf = golfItems(itinerary)
   const step2Valid = plannedGolf.length > 0 && !roundCountError(plannedGolf.length)
 
-  const step3Valid = !useTeams || teams.every(t => t.name.trim())
-
   const passcodeIssue = !lockSettings
     ? null
     : passcodeError(passcode) ??
       (passcode !== passcodeConfirm ? 'The two passcodes do not match.' : null)
-  const step4Valid = !passcodeIssue
+  const step3Valid = !passcodeIssue
 
   // ── Navigation ───────────────────────────────────────────────────────────
 
@@ -128,8 +115,6 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
     } else if (step === 2) {
       setStep(3)
     } else if (step === 3) {
-      setStep(4)
-    } else if (step === 4) {
       handleSubmit()
     }
   }
@@ -138,35 +123,12 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
     setError(null)
     if (step === 2) setStep(1)
     else if (step === 3) setStep(2)
-    else if (step === 4) setStep(3)
-  }
-
-  // ── Team helpers ─────────────────────────────────────────────────────────
-
-  function setTeamCount(n: number) {
-    setNumTeams(n)
-    setTeams(prev => {
-      if (n > prev.length) {
-        return [
-          ...prev,
-          ...Array.from({ length: n - prev.length }, (_, i) => ({
-            name: `Team ${String.fromCharCode(65 + prev.length + i)}`,
-            color: PRESET_COLORS[(prev.length + i) % PRESET_COLORS.length],
-          })),
-        ]
-      }
-      return prev.slice(0, n)
-    })
-  }
-
-  function updateTeam(i: number, patch: Partial<TeamInput>) {
-    setTeams(prev => prev.map((t, idx) => idx === i ? { ...t, ...patch } : t))
   }
 
   // ── Player helpers ───────────────────────────────────────────────────────
 
   function addPlayer() {
-    setPlayers(prev => [...prev, { name: '', handicap: '', gender: 'M', teamIndex: -1 }])
+    setPlayers(prev => [...prev, { name: '', handicap: '', gender: 'M' }])
   }
 
   function removePlayer(i: number) {
@@ -205,16 +167,13 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
       status: 'upcoming',
       start_date: startDate || null,
       end_date: endDate || null,
-      // A starting point, not the final answer — the decision tree in trip
-      // settings is where the competition is actually chosen.
+      // A starting point, not the final answer — trip settings is where the
+      // competition, and with it whether there are teams at all, is chosen.
       formats: {
         ...DEFAULT_FORMATS,
-        individual: !useTeams,
-        teams: useTeams,
         league: { ...DEFAULT_FORMATS.league },
         matchplay: { ...DEFAULT_FORMATS.matchplay },
       },
-      num_teams: useTeams ? teams.length : 2,
     }
     // Only sent when a passcode was actually set, so a database that has not
     // had that column added yet can still create ordinary trips.
@@ -240,23 +199,11 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
     const tripId = trip.id
 
-    // 2. Teams
-    let teamIds: string[] = []
-    if (useTeams && teams.length > 0) {
-      const { data: inserted, error: teamsErr } = await supabase
-        .from('teams')
-        .insert(teams.map(t => ({ trip_id: tripId, name: t.name.trim(), color: t.color })))
-        .select('id')
-
-      if (teamsErr || !inserted) {
-        setError(`Trip created, but the teams failed. ${describeError(teamsErr)}`)
-        setSubmitting(false)
-        return
-      }
-      teamIds = inserted.map(t => t.id)
-    }
-
-    // 3. Players (skip blanks)
+    // 2. Players (skip blanks)
+    //
+    // Nobody is put in a team here. There are no teams yet, and there may
+    // never be any — the leaderboards a trip runs decide that, and they are
+    // chosen in settings. Everyone starts unassigned.
     const validPlayers = players.filter(p => p.name.trim())
     let playerRows: { id: string; handicap: number; is_lead?: boolean }[] = []
     if (validPlayers.length > 0) {
@@ -273,7 +220,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
             // The organiser entered themselves, so they're in. Everyone else
             // named here is a placeholder until they claim their own slot.
             claimed: i === 0,
-            team_id: useTeams && p.teamIndex >= 0 ? teamIds[p.teamIndex] ?? null : null,
+            team_id: null,
           }))
         )
         .select('id, handicap, is_lead')
@@ -294,7 +241,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
       if (lead) rememberPlayer(code, lead.id)
     }
 
-    // 4. The itinerary, and the rounds that come out of it.
+    // 3. The itinerary, and the rounds that come out of it.
     //
     // Written first so each row has a real id, then the golf ones become
     // rounds pointing back at the item that created them. Order is day then
@@ -353,7 +300,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
       return
     }
 
-    // 5. Round handicaps — one row per player per round
+    // 4. Round handicaps — one row per player per round
     // WHS formula: PH = HI × Slope/113 + (CR − Par). With no tee data yet,
     // slope=113 and CR=Par cancel out, leaving PH = HI rounded to nearest integer.
     if (playerRows.length > 0) {
@@ -409,8 +356,9 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
             Trip Created!
           </h1>
           <p className="text-ink/40 text-sm mb-10">
-            Share this code with your group to join. Your trip starts in setup
-            mode — finalise it from the trip page when everyone&apos;s ready to play.
+            Share this code with your group to join. Next, choose what
+            you&apos;re playing for in trip settings — leaderboards and teams
+            live there. Finalise the trip when everyone&apos;s ready to play.
           </p>
 
           <div className="bg-surface border border-bark/25 rounded-2xl px-4 py-8 mb-4">
@@ -459,14 +407,13 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
   // ── Multi-step form ──────────────────────────────────────────────────────
 
-  const stepNum = step as 1 | 2 | 3 | 4
-  const isFinalStep = stepNum === 4
+  const stepNum = step as 1 | 2 | 3
+  const isFinalStep = stepNum === 3
   const canProceed =
     !submitting &&
     !(step === 1 && !step1Valid) &&
     !(step === 2 && !step2Valid) &&
-    !(step === 3 && !step3Valid) &&
-    !(step === 4 && !step4Valid)
+    !(step === 3 && !step3Valid)
 
   return (
     <div className="min-h-dvh bg-cream text-ink">
@@ -485,7 +432,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
       {/* Progress bar + step label */}
       <div className="border-b border-bark/12">
         <div className="max-w-lg mx-auto px-4 pt-3 pb-1 flex gap-1.5">
-          {[1, 2, 3, 4].map(s => (
+          {[1, 2, 3].map(s => (
             <div
               key={s}
               className={`h-1 flex-1 rounded-full transition-colors ${s <= stepNum ? 'bg-accent' : 'bg-bark/[0.06]'}`}
@@ -493,7 +440,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
           ))}
         </div>
         <p className="text-center text-ink/40 text-xs py-2 tracking-wider uppercase">
-          Step {stepNum} of 4 — {STEP_LABELS[stepNum - 1]}
+          Step {stepNum} of 3 — {STEP_LABELS[stepNum - 1]}
         </p>
       </div>
 
@@ -577,76 +524,8 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
           </div>
         )}
 
+        {/* ── Step 3: Players ──────────────────────────────────────── */}
         {step === 3 && (
-          <div className="space-y-6">
-            {/* Toggle */}
-            <div className="flex items-center justify-between bg-surface border border-bark/12 rounded-xl px-4 py-4">
-              <div>
-                <p className="text-ink text-sm font-medium">Use teams?</p>
-                <p className="text-ink/40 text-xs mt-0.5">Enables the team leaderboard</p>
-              </div>
-              <Toggle checked={useTeams} onChange={setUseTeams} label="Use teams" />
-            </div>
-
-            {useTeams && (
-              <>
-                <div>
-                  <label className={LABEL}>Number of teams</label>
-                  <div className="flex gap-2">
-                    {[2, 3, 4, 5, 6].map(n => (
-                      <button
-                        key={n}
-                        onClick={() => setTeamCount(n)}
-                        className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors ${
-                          numTeams === n
-                            ? 'bg-accent text-ink'
-                            : 'bg-surface border border-bark/12 text-ink/65 hover:border-bark/25'
-                        }`}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {teams.map((team, i) => (
-                    <div key={i} className="bg-surface border border-bark/12 rounded-2xl p-4">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} />
-                        <input
-                          type="text"
-                          value={team.name}
-                          onChange={e => updateTeam(i, { name: e.target.value })}
-                          placeholder={`Team ${i + 1}`}
-                          className="flex-1 bg-transparent text-ink placeholder-white/30 focus:outline-none text-sm font-medium"
-                        />
-                      </div>
-                      <div className="flex gap-2.5 flex-wrap">
-                        {PRESET_COLORS.map(color => (
-                          <button
-                            key={color}
-                            onClick={() => updateTeam(i, { color })}
-                            style={{ backgroundColor: color }}
-                            className={`w-7 h-7 rounded-full transition-transform hover:scale-110 ${
-                              team.color === color
-                                ? 'ring-2 ring-bark/40 ring-offset-2 ring-offset-cream scale-110'
-                                : ''
-                            }`}
-                            aria-label={`Select colour ${color}`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ── Step 4: Players ──────────────────────────────────────── */}
-        {step === 4 && (
           <div className="space-y-4">
             <p className="text-ink/40 text-sm mb-2">
               Optional — players can also join later with the trip code.
@@ -708,27 +587,6 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
                     </div>
                   </div>
 
-                  {useTeams && (
-                    <div className="relative">
-                      <select
-                        value={player.teamIndex}
-                        onChange={e => updatePlayer(i, { teamIndex: parseInt(e.target.value) })}
-                        className={`${INPUT} appearance-none pr-10`}
-                      >
-                        <option value={-1} className="bg-cream">No team assigned</option>
-                        {teams.map((t, ti) => (
-                          <option key={ti} value={ti} className="bg-cream">
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ink/40">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M6 9l6 6 6-6" />
-                        </svg>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             ))}

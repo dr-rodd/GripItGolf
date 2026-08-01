@@ -77,11 +77,11 @@ section('The itinerary replaces the rounds picker')
   ok(!formHtml.includes('Number of rounds'), 'there is no rounds counter any more')
   ok(!formHtml.includes('aria-label="Add a round"'), 'nor an add-a-round control')
 
-  const labels = formHtml.match(/Step \d of 4 — ([^<]+)/)
+  const labels = formHtml.match(/Step \d of 3 — ([^<]+)/)
   ok(labels !== null, 'the wizard says which step it is on')
 
   const src = fs.readFileSync('app/dashboard/create/CreateTripForm.tsx', 'utf-8')
-  ok(src.includes("'Trip details', 'Itinerary', 'Teams', 'Players'"),
+  ok(src.includes("'Trip details', 'Itinerary', 'Players'"),
     'and step two is the itinerary')
   ok(src.includes('<ItineraryBuilder'), 'which renders the builder')
 
@@ -94,6 +94,31 @@ section('The itinerary replaces the rounds picker')
   ok(src.includes('plannedGolf.map'), 'rounds are written from the golf items')
   ok(src.includes('itinerary_item_id'), 'and each round remembers the item that made it')
   ok(src.includes("from('itinerary_items')"), 'with the itinerary saved alongside')
+}
+
+// ─── Teams are settings' business, not creation's ──────────────
+
+section('Creation does not ask about teams')
+{
+  // Whether a trip has teams at all follows from the leaderboards it runs,
+  // and those are chosen in settings. Asking here as well gave the same
+  // question two answers, and the creation one was the one nothing read.
+  const src = fs.readFileSync('app/dashboard/create/CreateTripForm.tsx', 'utf-8')
+
+  ok(!src.includes('Use teams?'), 'no use-teams toggle')
+  ok(!src.includes('Number of teams'), 'no team count')
+  ok(!src.includes("from('teams')"), 'and no teams are written')
+  ok(!/teamIndex/.test(src), 'a player is not put in a team here')
+  ok(src.includes('team_id: null'), 'everyone starts unassigned')
+
+  // Three steps, and the third is the last one
+  ok(src.includes("useState<1 | 2 | 3 | 'done'>(1)"), 'the wizard is three steps')
+  ok(src.includes('const isFinalStep = stepNum === 3'), 'and finishes on the third')
+  ok(!/step === 4/.test(src), 'there is no fourth step left behind')
+
+  // The progress bar has to agree with the steps, or it stalls short of full
+  const bar = src.match(/\{\[([\d, ]+)\]\.map\(s =>/)
+  eq(bar?.[1], '1, 2, 3', 'the progress bar has one segment per step')
 }
 
 // ─── Date fields stay inside their container ───────────────────
