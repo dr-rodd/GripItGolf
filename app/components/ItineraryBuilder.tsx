@@ -1,15 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   DndContext, DragEndEvent, DragStartEvent, DragOverlay,
-  MouseSensor, TouchSensor, useSensor, useSensors, useDroppable, useDraggable,
+  type DropAnimation, defaultDropAnimationSideEffects,
+  MouseSensor, TouchSensor, useSensor, useSensors,
 } from '@dnd-kit/core'
+import {
+  SortableContext, verticalListSortingStrategy, useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import {
   type ItineraryItem, type ItemKind, type TravelMode,
   TRAVEL_MODES, MAX_TEE_TIMES,
-  addItem, removeItem, moveItem, itemsForDay, dayCount, dateForDay,
-  describeDay, describeItem, itemError,
+  addItem, addStay, removeItem, moveItem, itemsForDay, dayCount, dateForDay,
+  describeDay, describeItem, itemError, nightsAvailable,
 } from '@/lib/itinerary'
 import {
   IconFlag, IconHome, IconArrowRight, IconPlus, IconX, IconChevronDown,
@@ -20,9 +25,9 @@ import { FIELD, FIELD_LABEL, buttonClass, Badge } from './ui'
  * Building a trip's running order, a day at a time.
  *
  * One day is open at a time. Its items are tiles in the order they happen,
- * and the three add buttons are pinned to the bottom of the screen — on a
- * phone that is where the thumb already is, and the alternative is an add
- * button per day repeated down a long page.
+ * and the way forward is pinned to the bottom of the screen — on a phone
+ * that is where the thumb already is, and the alternative is an add button
+ * per day repeated down a long page.
  *
  * Everything is held in the caller's state. This component never talks to a
  * database: the trip creation flow writes the lot at the end, and the model
@@ -54,8 +59,8 @@ function Tile({
 
   return (
     <div
-      className={`flex items-center gap-3 bg-surface border rounded-xl px-3 py-3 transition-opacity ${
-        dragging ? 'border-accent/50 opacity-90' : 'border-bark/12'
+      className={`flex items-center gap-3 bg-surface border rounded-xl px-3 py-3 ${
+        dragging ? 'border-accent/50' : 'border-bark/12'
       }`}
     >
       <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-bark/[0.06] flex items-center justify-center text-bark">
@@ -79,29 +84,110 @@ function Tile({
   )
 }
 
-function DraggableTile(props: {
+/**
+ * A tile that can be dragged, and that slides aside when another one is
+ * dragged over it.
+ *
+ * The sliding is the point. A list that only reorders on release leaves the
+ * reader working out afterwards what moved and where it went; the tiles
+ * moving out of the way as you go is what makes the drop predictable before
+ * you let go. dnd-kit drives that through a transform and a transition it
+ * hands back here, so `.itin-tile` exists purely to give the reduced-motion
+ * rule in globals.css something to switch off.
+ */
+function SortableTile(props: {
   item: ItineraryItem; courseName?: string | null; onRemove: () => void
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: props.item.id })
+  const {
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
+  } = useSortable({ id: props.item.id })
+
   return (
-    <div ref={setNodeRef} {...listeners} {...attributes} className="touch-none">
-      <div style={{ opacity: isDragging ? 0.3 : 1 }}>
-        <Tile {...props} />
-      </div>
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      className="itin-tile touch-none mb-2"
+      style={{
+        transform: CSS.Translate.toString(transform),
+        transition,
+        // Left in place as a gap so the list keeps its height while the
+        // overlay carries the tile around
+        opacity: isDragging ? 0.35 : 1,
+      }}
+    >
+      <Tile {...props} />
     </div>
   )
 }
 
-/** A slot between two tiles, and at the end of every day. */
-function DropSlot({ dayIndex, position }: { dayIndex: number; position: number }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `slot:${dayIndex}:${position}` })
+/**
+ * The tile settling into its new slot on release.
+ *
+ * Without this the overlay disappears the instant a finger lifts and the
+ * tile reappears elsewhere, which reads as a glitch rather than a move.
+ * Ease-out, inside the 250–350ms the guide allows for something this size.
+ */
+const DROP_ANIMATION: DropAnimation = {
+  duration: 260,
+  easing: 'ease-out',
+  sideEffects: defaultDropAnimationSideEffects({
+    styles: { active: { opacity: '0.35' } },
+  }),
+}
+
+// ─── A stepper ─────────────────────────────────────────────────
+
+/**
+ * A number chosen by tapping rather than typed.
+ *
+ * A number input cannot be cleared without going through an empty string,
+ * and an empty string coerced back to the minimum means the field snaps to
+ * 1 the moment you delete the digit — so it reads as only ever being 1 or
+ * 10. Two buttons and a read-only figure cannot get into that state, and on
+ * a phone they are the easier target anyway.
+ */
+function Stepper({
+  label, value, min, max, unit, onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  unit: (n: number) => string
+  onChange: (n: number) => void
+}) {
+  const step = (by: number) => onChange(Math.max(min, Math.min(max, value + by)))
+  const btn =
+    'w-14 h-14 flex-shrink-0 rounded-xl border border-bark/25 bg-surface text-ink ' +
+    'flex items-center justify-center text-2xl leading-none ' +
+    'hover:border-bark/40 transition-colors duration-150 ' +
+    'disabled:opacity-30 disabled:cursor-not-allowed'
+
   return (
-    <div
-      ref={setNodeRef}
-      className={`transition-all duration-150 rounded-full ${
-        isOver ? 'h-8 bg-accent/[0.18] border border-dashed border-accent/50' : 'h-2'
-      }`}
-    />
+    <div>
+      <label className={FIELD_LABEL}>{label}</label>
+      <div className="flex items-center gap-3">
+        <button
+          type="button" onClick={() => step(-1)} disabled={value <= min}
+          aria-label={`Fewer — ${label}`} className={btn}
+        >
+          −
+        </button>
+        <span
+          className="flex-1 text-center t-h2 text-ink tabular-nums"
+          aria-live="polite"
+        >
+          {value} <span className="t-cap text-ink/40">{unit(value)}</span>
+        </span>
+        <button
+          type="button" onClick={() => step(1)} disabled={value >= max}
+          aria-label={`More — ${label}`} className={btn}
+        >
+          +
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -153,13 +239,17 @@ function Sheet({
 // ─── Main ──────────────────────────────────────────────────────
 
 export default function ItineraryBuilder({
-  startDate, endDate, courses, items, onChange,
+  startDate, endDate, courses, items, onChange, onContinue, blockedReason = null,
 }: {
   startDate: string | null
   endDate: string | null
   courses: Course[]
   items: ItineraryItem[]
   onChange: (items: ItineraryItem[]) => void
+  /** Called from the last day, once there is nowhere further to go. */
+  onContinue: () => void
+  /** Why the trip cannot be taken further yet, if anything. */
+  blockedReason?: string | null
 }) {
   const days = dayCount(startDate, endDate)
   const [openDay, setOpenDay] = useState(0)
@@ -172,6 +262,7 @@ export default function ItineraryBuilder({
   const [teeTime, setTeeTime] = useState('')
   const [teeCount, setTeeCount] = useState(1)
   const [stayName, setStayName] = useState('')
+  const [nights, setNights] = useState(1)
   const [mode, setMode] = useState<TravelMode>('car')
   const [fromPlace, setFromPlace] = useState('')
   const [toPlace, setToPlace] = useState('')
@@ -187,29 +278,61 @@ export default function ItineraryBuilder({
   const courseName = (id?: string | null) =>
     courses.find(c => c.id === id)?.name ?? null
 
+  /**
+   * A key for a tile that has not been saved yet.
+   *
+   * A counter rather than a clock and a random number: both are impure, and
+   * a component has no business reaching for either. Seeded past whatever is
+   * already on the list the first time it is asked, so stepping away to the
+   * players screen and back cannot hand out a key that is still in use.
+   * These live only until the trip is created, when the database issues the
+   * real ids.
+   */
+  const nextKey = useRef(-1)
+  function newId() {
+    if (nextKey.current < 0) {
+      nextKey.current = items.reduce((max, i) => {
+        const n = Number(/^tmp-(\d+)/.exec(i.id)?.[1] ?? NaN)
+        return Number.isFinite(n) ? Math.max(max, n + 1) : max
+      }, 0)
+    }
+    return `tmp-${nextKey.current++}`
+  }
+
+  const lastDay = openDay >= days - 1
+  const maxNights = nightsAvailable(openDay, days)
+
   function openSheet(kind: ItemKind) {
     setError(null)
     setCourseId(''); setTeeTime(''); setTeeCount(1)
-    setStayName('')
+    setStayName(''); setNights(1)
     setMode('car'); setFromPlace(''); setToPlace(''); setHours(''); setMins('')
     setSheet(kind)
   }
 
   function commit() {
     if (!sheet) return
-    const id = `tmp-${Date.now()}-${Math.round(Math.random() * 1e6)}`
+    const id = newId()
     const duration =
       (parseInt(hours) || 0) * 60 + (parseInt(mins) || 0)
+
+    // A stay is entered once and lands on every night it covers, so it is
+    // built through its own function rather than as a single draft.
+    if (sheet === 'stay') {
+      const problem = itemError({ kind: 'stay', stayName })
+      if (problem) { setError(problem); return }
+      onChange(addStay(items, { id, dayIndex: openDay, stayName }, nights, days))
+      setSheet(null)
+      return
+    }
 
     const draft: Omit<ItineraryItem, 'position'> =
       sheet === 'golf'
         ? { id, dayIndex: openDay, kind: 'golf', courseId, teeTime: teeTime || null, teeCount }
-        : sheet === 'stay'
-          ? { id, dayIndex: openDay, kind: 'stay', stayName }
-          : {
-              id, dayIndex: openDay, kind: 'travel', travelMode: mode,
-              fromPlace, toPlace, durationMins: duration || null,
-            }
+        : {
+            id, dayIndex: openDay, kind: 'travel', travelMode: mode,
+            fromPlace, toPlace, durationMins: duration || null,
+          }
 
     const problem = itemError(draft)
     if (problem) { setError(problem); return }
@@ -220,11 +343,12 @@ export default function ItineraryBuilder({
 
   function handleDragEnd({ active, over }: DragEndEvent) {
     setDragging(null)
-    if (!over) return
-    const target = String(over.id)
-    if (!target.startsWith('slot:')) return
-    const [, day, position] = target.split(':')
-    onChange(moveItem(items, String(active.id), Number(day), Number(position)))
+    if (!over || active.id === over.id) return
+    // Both ids are tiles in the open day, so the target's index is where the
+    // dragged one is going.
+    const to = dayItems.findIndex(i => i.id === over.id)
+    if (to < 0) return
+    onChange(moveItem(items, String(active.id), openDay, to))
   }
 
   const dayItems = itemsForDay(items, openDay)
@@ -235,8 +359,11 @@ export default function ItineraryBuilder({
       onDragStart={({ active }: DragStartEvent) =>
         setDragging(items.find(i => i.id === active.id) ?? null)}
       onDragEnd={handleDragEnd}
+      onDragCancel={() => setDragging(null)}
     >
-      <div className="pb-28">
+      {/* Clearance for the pinned footer: three add buttons, the way
+          forward under them, and the home indicator below that. */}
+      <div className="pb-48">
 
         {/* Day picker. Horizontal, because a week does not fit vertically
             above the content it is filtering. */}
@@ -274,19 +401,18 @@ export default function ItineraryBuilder({
         </p>
 
         {/* The day's running order */}
-        <div>
-          <DropSlot dayIndex={openDay} position={0} />
-          {dayItems.map((item, i) => (
-            <div key={item.id}>
-              <DraggableTile
+        <SortableContext items={dayItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
+          <div>
+            {dayItems.map(item => (
+              <SortableTile
+                key={item.id}
                 item={item}
                 courseName={courseName(item.courseId)}
                 onRemove={() => onChange(removeItem(items, item.id))}
               />
-              <DropSlot dayIndex={openDay} position={i + 1} />
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </SortableContext>
 
         {dayItems.length === 0 && (
           <div className="border border-dashed border-bark/25 rounded-xl py-10 text-center">
@@ -295,28 +421,53 @@ export default function ItineraryBuilder({
         )}
       </div>
 
-      {/* Add buttons, pinned where the thumb is */}
+      {/* The way forward, pinned where the thumb is. The three ways to fill
+          a day sit above the way out of it, and carry the extra height —
+          they are what this screen is for, and the one underneath is where
+          you go when you are finished with it. */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-30 bg-cream/95 border-t border-bark/12"
+        className="fixed bottom-0 left-0 right-0 z-30 bg-cream/95 backdrop-blur-sm border-t border-bark/12"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 10px)' }}
       >
-        <div className="max-w-lg mx-auto px-4 pt-3 grid grid-cols-3 gap-2">
-          {(['golf', 'stay', 'travel'] as const).map(kind => {
-            const Icon = KIND_ICON[kind]
-            return (
-              <button
-                key={kind}
-                type="button"
-                onClick={() => openSheet(kind)}
-                className="flex flex-col items-center justify-center gap-1 min-h-[52px] rounded-xl border border-bark/25 bg-surface text-ink hover:border-accent transition-colors duration-150"
-              >
-                <span className="flex items-center gap-1 text-accent">
-                  <IconPlus size={13} /><Icon size={16} />
-                </span>
-                <span className="t-label">{KIND_LABEL[kind]}</span>
-              </button>
-            )
-          })}
+        <div className="max-w-lg mx-auto px-4 pt-3">
+          <div className="grid grid-cols-3 gap-2">
+            {(['golf', 'stay', 'travel'] as const).map(kind => {
+              const Icon = KIND_ICON[kind]
+              return (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => openSheet(kind)}
+                  className="flex flex-col items-center justify-center gap-1.5 min-h-[64px] rounded-xl border border-bark/25 bg-surface text-ink hover:border-accent transition-colors duration-150"
+                >
+                  <span className="flex items-center gap-1 text-accent">
+                    <IconPlus size={14} /><Icon size={18} />
+                  </span>
+                  <span className="t-label">{KIND_LABEL[kind]}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Never disabled by an empty day — a day with nothing planned on
+              it is a normal day, not an unfinished one. Only a genuine
+              problem with the trip as a whole stops it. */}
+          <button
+            type="button"
+            disabled={lastDay && !!blockedReason}
+            onClick={() => (lastDay ? onContinue() : setOpenDay(d => d + 1))}
+            className={`w-full mt-2 min-h-[52px] rounded-xl border t-label transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${
+              lastDay
+                ? 'border-accent bg-accent text-white hover:bg-accent-deep'
+                : 'border-bark/25 bg-surface text-ink hover:border-bark/40'
+            }`}
+          >
+            {lastDay ? 'Proceed to Add Players' : `Continue to Day ${openDay + 2}`}
+          </button>
+
+          {lastDay && blockedReason && (
+            <p className="t-cap text-rust-deep text-center mt-2">{blockedReason}</p>
+          )}
         </div>
       </div>
 
@@ -346,24 +497,34 @@ export default function ItineraryBuilder({
             </div>
           </div>
 
-          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-            <div>
-              <label className={FIELD_LABEL} htmlFor="it-tee">First tee time</label>
-              <input
-                id="it-tee" type="time" value={teeTime}
-                onChange={e => setTeeTime(e.target.value)} className={FIELD}
-              />
-            </div>
-            <div>
-              <label className={FIELD_LABEL} htmlFor="it-count">Tee times</label>
-              <input
-                id="it-count" type="number" inputMode="numeric" min={1} max={MAX_TEE_TIMES}
-                value={teeCount}
-                onChange={e => setTeeCount(Math.max(1, Math.min(MAX_TEE_TIMES, parseInt(e.target.value) || 1)))}
-                className={FIELD}
-              />
-            </div>
+          {/* Full width, and stacked. Side by side, a native time control
+              claims its own intrinsic width and runs into whatever is next
+              to it — the same thing DateField exists to stop. */}
+          <div>
+            <label className={FIELD_LABEL} htmlFor="it-tee">First tee time</label>
+            <input
+              id="it-tee" type="time" value={teeTime}
+              onChange={e => setTeeTime(e.target.value)}
+              className={`${FIELD} block min-w-0 max-w-full`}
+              style={{
+                // Stops iOS sizing the field to the native control's preference
+                WebkitAppearance: 'none',
+                appearance: 'none',
+                minWidth: 0,
+                maxWidth: '100%',
+              }}
+            />
           </div>
+
+          <Stepper
+            label="Tee times"
+            value={teeCount}
+            min={1}
+            max={MAX_TEE_TIMES}
+            unit={n => (n === 1 ? 'group' : 'groups')}
+            onChange={setTeeCount}
+          />
+
           <p className="t-cap text-ink/40">
             One round is created for this course. More tee times just means more
             groups going off.
@@ -374,14 +535,29 @@ export default function ItineraryBuilder({
       {sheet === 'stay' && (
         <Sheet title="Add a stay" onClose={() => setSheet(null)} onAdd={commit} addLabel="Add stay" error={error}>
           <div>
-            <label className={FIELD_LABEL} htmlFor="it-stay">Where are you staying?</label>
+            <label className={FIELD_LABEL} htmlFor="it-stay">Accommodation</label>
             <input
               id="it-stay" type="text" value={stayName} autoFocus
               onChange={e => setStayName(e.target.value)}
-              placeholder="Ballina guesthouse"
+              placeholder="Where are you staying?"
               className={FIELD}
             />
           </div>
+
+          <Stepper
+            label="How many nights"
+            value={Math.min(nights, maxNights)}
+            min={1}
+            max={maxNights}
+            unit={n => (n === 1 ? 'night' : 'nights')}
+            onChange={setNights}
+          />
+
+          <p className="t-cap text-ink/40">
+            {nights > 1
+              ? `Added to each of the next ${nights} days, so every night has somewhere to sleep on it.`
+              : 'Staying more than one night? It will be added to each day.'}
+          </p>
         </Sheet>
       )}
 
@@ -406,15 +582,17 @@ export default function ItineraryBuilder({
           </div>
 
           <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-            <div>
+            <div className="min-w-0">
               <label className={FIELD_LABEL} htmlFor="it-from">From</label>
               <input id="it-from" type="text" value={fromPlace}
-                onChange={e => setFromPlace(e.target.value)} placeholder="Dublin" className={FIELD} />
+                onChange={e => setFromPlace(e.target.value)} placeholder="Dublin"
+                className={`${FIELD} min-w-0`} />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className={FIELD_LABEL} htmlFor="it-to">To</label>
               <input id="it-to" type="text" value={toPlace}
-                onChange={e => setToPlace(e.target.value)} placeholder="Carne" className={FIELD} />
+                onChange={e => setToPlace(e.target.value)} placeholder="Carne"
+                className={`${FIELD} min-w-0`} />
             </div>
           </div>
 
@@ -422,15 +600,17 @@ export default function ItineraryBuilder({
             <label className={FIELD_LABEL}>How long</label>
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
               <input type="number" inputMode="numeric" min={0} max={48} value={hours}
-                onChange={e => setHours(e.target.value)} placeholder="Hours" className={FIELD} />
+                onChange={e => setHours(e.target.value)} placeholder="Hours"
+                className={`${FIELD} min-w-0`} />
               <input type="number" inputMode="numeric" min={0} max={59} value={mins}
-                onChange={e => setMins(e.target.value)} placeholder="Minutes" className={FIELD} />
+                onChange={e => setMins(e.target.value)} placeholder="Minutes"
+                className={`${FIELD} min-w-0`} />
             </div>
           </div>
         </Sheet>
       )}
 
-      <DragOverlay dropAnimation={null}>
+      <DragOverlay dropAnimation={DROP_ANIMATION}>
         {dragging && (
           <div className="w-[calc(100vw-2rem)] max-w-lg shadow-lg shadow-bark/20">
             <Tile item={dragging} courseName={courseName(dragging.courseId)} dragging />

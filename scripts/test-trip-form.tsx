@@ -85,15 +85,49 @@ section('The itinerary replaces the rounds picker')
     'and step two is the itinerary')
   ok(src.includes('<ItineraryBuilder'), 'which renders the builder')
 
-  // A trip with no golf has nothing to score, so it cannot move on
-  ok(src.includes('plannedGolf.length > 0'), 'a trip needs at least one round')
+  // A trip with no golf has nothing to score, so it cannot move on. It is a
+  // reason rather than a disabled button now — an empty Tuesday should not
+  // grey out the way forward, so the check happens once, at the end.
+  ok(src.includes('plannedGolf.length === 0'), 'a trip needs at least one round')
   ok(src.includes('roundCountError(plannedGolf.length)'),
     'and the cap on rounds still applies, counted from the golf items')
+  ok(src.includes('blockedReason={itineraryBlocked}'),
+    'with the reason handed to the builder, which owns the button')
+  ok(!/step === 2 && !step2Valid/.test(src),
+    'and the form no longer greys its own button on step two')
 
   // The golf items are what the rounds table is built from
   ok(src.includes('plannedGolf.map'), 'rounds are written from the golf items')
   ok(src.includes('itinerary_item_id'), 'and each round remembers the item that made it')
   ok(src.includes("from('itinerary_items')"), 'with the itinerary saved alongside')
+}
+
+// ─── The itinerary's own footer ────────────────────────────────
+
+section('The way forward is pinned under the add buttons')
+{
+  // Two buttons fighting for the bottom of the screen was the glitch: the
+  // builder pins its own, so the form must not also render one on step two.
+  const src = fs.readFileSync('app/dashboard/create/CreateTripForm.tsx', 'utf-8')
+  ok(src.includes('{step !== 2 && ('), 'the form hides its CTA on the itinerary step')
+
+  const b = fs.readFileSync('app/components/ItineraryBuilder.tsx', 'utf-8')
+
+  // Continue walks the days, and only becomes the way out on the last one
+  ok(b.includes('Proceed to Add Players'),
+    'the last day offers the way out of the itinerary')
+  ok(/Continue to Day \$\{openDay \+ 2\}/.test(b),
+    'and every other day continues to the next one')
+  ok(b.includes('lastDay ? onContinue() : setOpenDay(d => d + 1)'),
+    'so the button walks the trip rather than leaving it early')
+
+  // An empty day is a normal day. Only a problem with the whole trip stops it
+  ok(b.includes('disabled={lastDay && !!blockedReason}'),
+    'and is never disabled by a day with nothing planned on it')
+
+  // The add buttons carry the extra height, and sit above it
+  ok(b.indexOf('min-h-[64px]') < b.indexOf('min-h-[52px]'),
+    'the add buttons are taller, and come first')
 }
 
 // ─── Teams are settings' business, not creation's ──────────────

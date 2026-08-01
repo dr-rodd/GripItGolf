@@ -459,7 +459,15 @@ A trip is a drive to the coast, a tee time, another drive, a guesthouse — in t
 
 **Golf items are the source of truth for rounds.** A round exists because a golf item does. On save the itinerary is written first so every row has an id, then golf items become rounds in `(day_index, position)` order — which is the order they are numbered in — each carrying `rounds.itinerary_item_id` back to the item that made it. The rounds-count picker is gone; the cap still applies, counted from the golf items.
 
-**Positions are gapless**, renumbered on every add, delete and move. These lists are a handful of items long and a sequence you can read is worth more than avoiding a rewrite of four rows. Drag and drop moves items within a day or between days (`@dnd-kit`, press-and-hold on touch so a drag is never started by a scroll).
+**Positions are gapless**, renumbered on every add, delete and move. These lists are a handful of items long and a sequence you can read is worth more than avoiding a rewrite of four rows. Drag and drop reorders a day with `@dnd-kit/sortable`, press-and-hold on touch so a drag is never started by a scroll.
+
+**The tiles slide out of the way as you drag, and settle on release.** That is `@dnd-kit/sortable` rather than plain `core` with drop targets: a list that only reorders on release leaves the reader working out afterwards what moved, and the overlay vanishing the instant a finger lifts reads as a glitch rather than a move. The transition is an inline style dnd-kit hands back, so `.itin-tile` exists purely to give the `prefers-reduced-motion` rule in globals.css something to switch off.
+
+**A stay is entered once and lands on every night it covers** (`addStay`). Four nights in the same guesthouse is one thing an organiser knows and four tiles on the running order, because the running order is what each day looks like. Each night is a separate item with its own id, so one can be deleted or moved without disturbing the rest, and nights past the end of the trip are dropped rather than refused.
+
+**The way forward is pinned under the add buttons**, inside the builder — the creation form hides its own CTA on that step, because two buttons competing for the bottom of the screen was the original glitch. Continue walks the days and only becomes "Proceed to Add Players" on the last one. **It is never disabled by an empty day**: a day with nothing planned on it is a normal day. Only a problem with the whole trip — no golf at all, or past the rounds cap — blocks it, and then only on the last day, as `blockedReason`.
+
+**Counts are stepped, not typed.** A number input cannot be cleared without passing through an empty string, and coercing that back to the minimum makes the field snap to 1 the moment the digit is deleted — so it reads as only ever being 1 or 10. Tee times and nights are both `Stepper`.
 
 The schema uses one wide table with a `kind` column and a check constraint that each kind carries its own detail and none of anyone else's — without it a half-edited row can claim to be a drive with a tee time. Verified against Postgres: 5 valid shapes accepted, 8 malformed ones refused.
 

@@ -139,6 +139,12 @@ body {
   .page-enter, .score-flash, .dot-live, .skeleton {
     animation: none !important;
   }
+  /* Reordering tiles slide out of each other's way. The transition is an
+     inline style from dnd-kit, so it takes an !important to switch off —
+     the reorder still happens, it just arrives rather than travels. */
+  .itin-tile {
+    transition: none !important;
+  }
 }
 
 /* ── Forms ─────────────────────────────────────────────────────

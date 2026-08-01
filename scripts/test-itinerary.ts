@@ -17,7 +17,8 @@ import {
   addItem, removeItem, moveItem, itemsForDay, renumber, golfItems,
   dayCount, dateForDay, describeDay, describeDuration, describeTime,
   describeItem, itemState, tripProgress, itemError,
-  MAX_TEE_TIMES,
+  addStay, nightsAvailable,
+  MAX_TEE_TIMES, MAX_NIGHTS,
 } from '../lib/itinerary'
 
 let passed = 0, failed = 0
@@ -287,6 +288,62 @@ section('What an item needs before it can be added')
     'and a journey cannot take a week')
   eq(itemError({ kind: 'travel', toPlace: 'Carne' }), null,
     'while a duration is optional, like the tee time')
+}
+
+// ─── A stay over several nights ────────────────────────────────
+
+section('A stay is entered once and lands on every night it covers')
+{
+  const four = addStay([], { id: 's', dayIndex: 0, stayName: 'The guesthouse' }, 4, 5)
+  eq(four.length, 4, 'four nights is four tiles')
+  eq(four.map(i => i.dayIndex), [0, 1, 2, 3], 'on four consecutive days')
+  eq(new Set(four.map(i => i.stayName)).size, 1, 'all carrying the same name')
+
+  // Each night is its own item, so one can be deleted without the rest
+  eq(new Set(four.map(i => i.id)).size, 4, 'and each one has an id of its own')
+  eq(removeItem(four, four[1].id).length, 3, 'so a single night can be dropped')
+
+  // The default is the plain single-night stay it replaced
+  const one = addStay([], { id: 's', dayIndex: 0, stayName: 'The guesthouse' }, 1, 5)
+  eq(one.length, 1, 'one night is one tile')
+  eq(one[0].kind, 'stay', 'and it is still a stay')
+}
+
+section('A stay cannot run off the end of the trip')
+{
+  // Three nights asked for, starting on the last day of a three-day trip
+  const late = addStay([], { id: 's', dayIndex: 2, stayName: 'Guesthouse' }, 3, 3)
+  eq(late.map(i => i.dayIndex), [2], 'only the nights the trip actually has are added')
+
+  const mid = addStay([], { id: 's', dayIndex: 1, stayName: 'Guesthouse' }, 5, 3)
+  eq(mid.map(i => i.dayIndex), [1, 2], 'and it stops at the last day rather than overrunning')
+
+  // Junk counts settle to one night rather than to none
+  eq(addStay([], { id: 's', dayIndex: 0, stayName: 'X' }, 0, 3).length, 1, 'zero nights is one')
+  eq(addStay([], { id: 's', dayIndex: 0, stayName: 'X' }, -2, 3).length, 1, 'and so is a negative')
+  eq(addStay([], { id: 's', dayIndex: 0, stayName: 'X' }, 99, 30).length, MAX_NIGHTS,
+    'while a silly number is capped')
+}
+
+section('A stay slots in beside whatever is already on those days')
+{
+  // Golf on day 1 already; the stay should land after it, not on top of it
+  let list = addItem([], { id: 'g', dayIndex: 1, kind: 'golf', courseId: 'c1', teeCount: 1 })
+  list = addStay(list, { id: 's', dayIndex: 0, stayName: 'Guesthouse' }, 2, 3)
+
+  eq(itemsForDay(list, 1).map(i => i.kind), ['golf', 'stay'],
+    'the night is added after the golf that was already there')
+  eq(itemsForDay(list, 1).map(i => i.position), [0, 1], 'with positions still gapless')
+  eq(itemsForDay(list, 0).map(i => i.kind), ['stay'], 'and the first night stands alone')
+}
+
+section('How many nights the form can offer')
+{
+  eq(nightsAvailable(0, 5), 5, 'from the first day of a five-day trip, five')
+  eq(nightsAvailable(3, 5), 2, 'from the fourth, two')
+  eq(nightsAvailable(4, 5), 1, 'from the last, one')
+  eq(nightsAvailable(9, 5), 1, 'and never fewer than one, whatever it is asked')
+  eq(nightsAvailable(0, 60), MAX_NIGHTS, 'nor more than the cap')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

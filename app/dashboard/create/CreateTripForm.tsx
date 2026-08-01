@@ -98,8 +98,15 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
   // A trip needs somewhere to play. Stays and journeys are optional
   // decoration; without golf there is nothing to score.
+  //
+  // This is checked once, at the end of the itinerary, rather than on every
+  // day: a day with nothing planned on it is a normal day, and greying out
+  // the way forward because Tuesday is empty says the opposite.
   const plannedGolf = golfItems(itinerary)
-  const step2Valid = plannedGolf.length > 0 && !roundCountError(plannedGolf.length)
+  const itineraryBlocked =
+    plannedGolf.length === 0
+      ? 'Add at least one round of golf — there is nothing to score without it.'
+      : roundCountError(plannedGolf.length)
 
   const passcodeIssue = !lockSettings
     ? null
@@ -109,11 +116,12 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
   // ── Navigation ───────────────────────────────────────────────────────────
 
+  // Step 2 carries its own way forward, inside the itinerary builder — the
+  // add buttons are pinned to the bottom of that screen and a second button
+  // floating underneath them was the glitch.
   function goNext() {
     if (step === 1) {
       setStep(2)
-    } else if (step === 2) {
-      setStep(3)
     } else if (step === 3) {
       handleSubmit()
     }
@@ -409,10 +417,11 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
 
   const stepNum = step as 1 | 2 | 3
   const isFinalStep = stepNum === 3
+  // Step 2 is not here: its own footer decides when the itinerary can be
+  // left, and it is the only thing that knows which day is open.
   const canProceed =
     !submitting &&
     !(step === 1 && !step1Valid) &&
-    !(step === 2 && !step2Valid) &&
     !(step === 3 && !step3Valid)
 
   return (
@@ -520,6 +529,8 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
               courses={courses}
               items={itinerary}
               onChange={setItinerary}
+              onContinue={() => setStep(3)}
+              blockedReason={itineraryBlocked}
             />
           </div>
         )}
@@ -661,21 +672,24 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
           </div>
         )}
 
-        {/* Primary CTA */}
-        <div className="mt-8">
-          <button
-            onClick={goNext}
-            disabled={!canProceed}
-            className="w-full py-5 bg-accent text-ink text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {submitting ? 'Creating…' : isFinalStep ? 'Create Trip' : 'Continue'}
-          </button>
-          {isFinalStep && (
-            <p className="text-center text-ink/40 text-xs mt-3">
-              Players without a name will be skipped
-            </p>
-          )}
-        </div>
+        {/* Primary CTA. Absent on step 2, which pins its own to the bottom
+            of the screen beneath the add buttons. */}
+        {step !== 2 && (
+          <div className="mt-8">
+            <button
+              onClick={goNext}
+              disabled={!canProceed}
+              className="w-full py-5 bg-accent text-ink text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {submitting ? 'Creating…' : isFinalStep ? 'Create Trip' : 'Continue'}
+            </button>
+            {isFinalStep && (
+              <p className="text-center text-ink/40 text-xs mt-3">
+                Players without a name will be skipped
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

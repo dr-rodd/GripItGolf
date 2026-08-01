@@ -38,6 +38,9 @@ export type ItineraryItem = {
 /** The most tee times one round can sensibly have. */
 export const MAX_TEE_TIMES = 12
 
+/** The most consecutive nights one stay can be entered as at once. */
+export const MAX_NIGHTS = 14
+
 /** The longest single journey the form will take, in minutes. Two days. */
 export const MAX_DURATION = 2880
 
@@ -79,6 +82,48 @@ export function addItem(
 
 export function removeItem(items: readonly ItineraryItem[], id: string): ItineraryItem[] {
   return renumber(items.filter(i => i.id !== id))
+}
+
+/** How many nights are still left in the trip from this day on. */
+export function nightsAvailable(dayIndex: number, days: number): number {
+  return Math.max(1, Math.min(MAX_NIGHTS, days - dayIndex))
+}
+
+/**
+ * A stay, entered once and spread over the nights it covers.
+ *
+ * Four nights in the same guesthouse is one thing an organiser knows and
+ * four tiles on the running order, because the running order is what each
+ * day looks like — a day with nowhere to sleep on it is a day missing
+ * something. Each night is its own item, so one can be deleted or moved
+ * without disturbing the rest.
+ *
+ * Nights past the end of the trip are dropped rather than refused: the
+ * count is capped in the form, and a stay running one night long is not
+ * worth stopping somebody over.
+ */
+export function addStay(
+  items: readonly ItineraryItem[],
+  draft: { id: string; dayIndex: number; stayName: string },
+  nights: number,
+  days: number,
+): ItineraryItem[] {
+  const wanted = Math.max(1, Math.min(Math.floor(nights) || 1, MAX_NIGHTS))
+  const lastDay = Math.max(0, days - 1)
+
+  let out: ItineraryItem[] = [...items]
+  for (let n = 0; n < wanted; n++) {
+    const dayIndex = draft.dayIndex + n
+    if (dayIndex > lastDay) break
+    out = addItem(out, {
+      // Each night needs an id of its own, or React renders one tile
+      id: `${draft.id}-n${n}`,
+      dayIndex,
+      kind: 'stay',
+      stayName: draft.stayName,
+    })
+  }
+  return out
 }
 
 /**
