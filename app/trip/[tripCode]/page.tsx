@@ -243,7 +243,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       {/* Settled from the first pixel. The collapse lives on the landing
           page now: this screen is opened to be read, and the brand
           performing on the way in only delays it. */}
-      <TripHeader tripCode={tripCode} />
+      <TripHeader backTo={`/trip/${tripCode}`} />
 
       {/* ── Hero ── */}
       <section className="flex flex-col items-center px-6 pt-6 pb-12">

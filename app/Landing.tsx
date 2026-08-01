@@ -31,18 +31,42 @@ import { buttonClass } from '@/app/components/ui'
  * near to nothing as it can be.
  */
 
-/** How long the mark takes to travel into the bar. */
-const TRAVEL_MS = 380
+/**
+ * The shake before the move: the words loosen in place, out of step with one
+ * another, so the collapse reads as something the mark does rather than
+ * something done to it.
+ */
+const WOBBLE_MS = 340
 
-/** The content clears out of the way first, and quickly. */
-const FADE_MS = 160
+/** How long the mark then takes to travel into the bar. */
+const TRAVEL_MS = 700
+
+/** The content clears out of the way from the first frame. */
+const FADE_MS = 220
+
+/**
+ * Starts and ends at rest.
+ *
+ * The words each decelerate inside their own window already, but the
+ * sequence as a whole ran at a constant rate, so it set off at full speed
+ * the instant the shake finished. Smoothing the driver is what makes the
+ * mark leave gently and arrive gently.
+ */
+const smooth = (p: number) => p * p * (3 - 2 * p)
 
 export default function Landing() {
   const router = useRouter()
-  const [progress, setProgress] = useState(0)
-  const [leaving, setLeaving] = useState(false)
+  // One clock. Both the shake and the travel are read off it, so they cannot
+  // drift apart or overlap by accident.
+  const [elapsed, setElapsed] = useState<number | null>(null)
   const frame = useRef<number | null>(null)
   const going = useRef(false)
+
+  const leaving = elapsed !== null
+  const wobble = elapsed === null ? 0 : Math.min(1, elapsed / WOBBLE_MS)
+  const progress = elapsed === null
+    ? 0
+    : smooth(Math.max(0, Math.min(1, (elapsed - WOBBLE_MS) / TRAVEL_MS)))
 
   useEffect(() => {
     router.prefetch('/dashboard/create')
@@ -69,17 +93,18 @@ export default function Landing() {
         return
       }
 
-      setLeaving(true)
+      setElapsed(0)
 
       // The clock comes from the frame itself rather than from a reading
       // taken beforehand, so the first frame is t=0 however long the browser
       // took to schedule it.
+      const total = WOBBLE_MS + TRAVEL_MS
       let start = 0
       const step = (now: number) => {
         if (start === 0) start = now
-        const t = Math.min(1, (now - start) / TRAVEL_MS)
-        setProgress(t)
-        if (t < 1) {
+        const t = now - start
+        setElapsed(t)
+        if (t < total) {
           frame.current = requestAnimationFrame(step)
         } else {
           frame.current = null
@@ -95,7 +120,7 @@ export default function Landing() {
 
       {/* No trip to go back to yet, so the mark is not a link. It stands
           full size until a tap sends it up into the bar. */}
-      <TripHeader progress={progress} />
+      <TripHeader progress={progress} wobble={wobble} />
 
       {/* The room the mark occupies. It does not close as the mark leaves:
           the content below is on its way out too, and moving it up while it

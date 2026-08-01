@@ -1,10 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import Wordmark from '@/app/components/Wordmark'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import BackButton from '@/app/components/BackButton'
+import TripHeader from '@/app/components/TripHeader'
 
 export default function JoinForm({ initialCode }: { initialCode: string }) {
   const [code, setCode] = useState(initialCode.toUpperCase())
@@ -33,13 +32,14 @@ export default function JoinForm({ initialCode }: { initialCode: string }) {
   }
 
   return (
-    <main className="min-h-dvh flex flex-col items-center justify-center bg-cream px-6 page-enter">
-      <div className="w-full max-w-xs">
+    <main className="min-h-dvh bg-cream page-enter">
 
-        {/* The mark */}
-        <div className="mb-6 -ml-2">
-          <Wordmark width={150} />
-        </div>
+      {/* The mark, exactly where it arrives from the landing page — and the
+          way back there, so this screen needs no back button of its own. */}
+      <TripHeader backTo="/" />
+
+      <div className="flex flex-col items-center justify-center px-6 py-12">
+        <div className="w-full max-w-xs">
 
         <h1 className="font-[family-name:var(--font-display)] text-4xl text-ink mb-2">
           Join a Trip
@@ -75,10 +75,7 @@ export default function JoinForm({ initialCode }: { initialCode: string }) {
           </button>
         </form>
 
-        <div className="mt-10">
-          <BackButton href="/" label="Home" />
         </div>
-
       </div>
     </main>
   )

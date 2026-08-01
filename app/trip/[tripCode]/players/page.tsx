@@ -38,7 +38,7 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
 
   return (
     <main className="min-h-dvh bg-cream has-tabbar page-enter">
-      <TripHeader tripCode={tripCode} />
+      <TripHeader backTo={`/trip/${tripCode}`} />
 
       <div className="max-w-md mx-auto px-6 py-10">
 

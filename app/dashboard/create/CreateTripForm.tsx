@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import BackButton from '@/app/components/BackButton'
+import TripHeader from '@/app/components/TripHeader'
 import DateField from '@/app/components/DateField'
 import { roundCountError } from '@/lib/tripLimits'
 import { DEFAULT_FORMATS } from '@/lib/formats'
@@ -427,18 +428,14 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
   return (
     <div className="min-h-dvh bg-cream text-ink page-enter">
 
-      {/* Header */}
-      <div className="border-b border-bark/12">
-        <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
-          {stepNum > 1 ? <BackButton onClick={goBack} /> : <BackButton href="/" />}
-          <h1 className="font-[family-name:var(--font-display)] text-xl text-ink tracking-wide">
-            Create a Trip
-          </h1>
-          <div className="w-11" />
-        </div>
-      </div>
+      {/* The mark, exactly where it arrives from the landing page — and the
+          way back there, so there is no home button on this screen. */}
+      <TripHeader backTo="/" />
 
-      {/* Progress bar + step label */}
+      {/* Progress bar + step label. The back control here means one step, not
+          one screen: the mark above goes home, this goes to the answers you
+          just gave, and losing a half-filled form to a logo would be a poor
+          trade for one fewer button. */}
       <div className="border-b border-bark/12">
         <div className="max-w-lg mx-auto px-4 pt-3 pb-1 flex gap-1.5">
           {[1, 2, 3].map(s => (
@@ -448,9 +445,16 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
             />
           ))}
         </div>
-        <p className="text-center text-ink/40 text-xs py-2 tracking-wider uppercase">
-          Step {stepNum} of 3 — {STEP_LABELS[stepNum - 1]}
-        </p>
+        <div className="max-w-lg mx-auto px-4 py-2 relative flex items-center justify-center">
+          {stepNum > 1 && (
+            <div className="absolute left-4">
+              <BackButton onClick={goBack} />
+            </div>
+          )}
+          <p className="text-center text-ink/40 text-xs tracking-wider uppercase">
+            Step {stepNum} of 3 — {STEP_LABELS[stepNum - 1]}
+          </p>
+        </div>
       </div>
 
       <div className="max-w-lg mx-auto px-4 py-8">

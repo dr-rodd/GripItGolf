@@ -40,6 +40,12 @@ import { STACKED_BOX, LINE_BOX, MORPH_WORDS } from './wordmarkMorph'
  * the logo, re-run it, and the animation still lands.
  */
 
+/** Degrees a word tips at the peak of the shake. */
+const WOBBLE_DEG = 2.6
+
+/** How many times it swings through before setting off. */
+const WOBBLE_CYCLES = 2
+
 type Window = [number, number]
 
 /**
@@ -95,6 +101,7 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 
 export default function MorphWordmark({
   progress,
+  wobble = 0,
   heroWidth,
   lineWidth,
   heroOrigin,
@@ -103,6 +110,15 @@ export default function MorphWordmark({
 }: {
   /** 0 = stacked, 1 = the single line. */
   progress: number
+  /**
+   * How far through the shake-loose, 0 → 1. The words tip a little, out of
+   * step with one another, before any of them travels.
+   *
+   * Enveloped so it starts and ends at rest: 0 and 1 both sit still, which
+   * is what lets it hand over to the move without a seam. Left at 0 on every
+   * screen but the one leaving the landing page.
+   */
+  wobble?: number
   /** Width of the whole mark at rest, in px. */
   heroWidth: number
   /** Width of the whole mark once it is in the header, in px. */
@@ -124,6 +140,12 @@ export default function MorphWordmark({
   // Tying the scale to the word's own rise means a word that has not moved is
   // exactly where it was, at full size. It shrinks as it climbs, and is at
   // its final size by the time it slides left.
+  // The words tip a little before they go. Enveloped by a half sine so the
+  // shake grows out of stillness and settles back into it, and each word is
+  // a quarter-cycle behind the last so the mark loosens rather than rocking
+  // as one block.
+  const shake = Math.sin(Math.PI * Math.min(1, Math.max(0, wobble)))
+
   const heroUnit = heroWidth / STACKED_BOX[2]
   const lineUnit = lineWidth / LINE_BOX[2]
 
@@ -131,7 +153,7 @@ export default function MorphWordmark({
   // being nudged about inside a frame that is itself moving. That is what
   // keeps the motion honest: the mark shrinks towards its left edge, so as
   // it contracts each word moves left, and none of them ever moves right.
-  const words = MORPH_WORDS.map(word => {
+  const words = MORPH_WORDS.map((word, i) => {
     const ty = ramp(TIMING[word.id].y, progress)
     const tx = ramp(TIMING[word.id].x, progress)
 
@@ -157,6 +179,8 @@ export default function MorphWordmark({
       width: word.box[2] * unit,
       // Only the word that leaves fades, and only as it leaves the frame.
       opacity: word.fades ? Math.max(0, 1 - ty * 1.8) : 1,
+      tilt: shake * WOBBLE_DEG
+        * Math.sin(2 * Math.PI * WOBBLE_CYCLES * wobble + i * (Math.PI / 2)),
     }
   })
 
@@ -178,7 +202,11 @@ export default function MorphWordmark({
             width: w.width,
             height: 'auto',
             opacity: w.opacity,
-            // Driven entirely by scroll, so a CSS transition here would fight
+            // Rotation only — the position is set outright, never scaled or
+            // translated, which is what keeps every word moving left.
+            transform: w.tilt ? `rotate(${w.tilt.toFixed(3)}deg)` : undefined,
+            transformOrigin: 'center',
+            // Every frame is computed, so a CSS transition here would fight
             // the position rather than smooth it.
             transition: 'none',
           }}

@@ -32,12 +32,17 @@ import {
  */
 
 export default function TripHeader({
-  tripCode,
+  backTo,
   title = 'green-dot',
   progress,
+  wobble,
 }: {
-  /** The trip to go back to. Omitted where there is no trip yet. */
-  tripCode?: string
+  /**
+   * Where tapping the mark goes — the trip hub from inside a trip, the
+   * start from the screens that come before one. Omitted on the landing
+   * page, which is already there.
+   */
+  backTo?: string
   /** What stands in the bar: the mark, or this page's name as artwork. */
   title?: 'green-dot' | TitleMarkKey
   /**
@@ -48,6 +53,8 @@ export default function TripHeader({
    * has no opinion about what drives the movement or how long it takes.
    */
   progress?: number
+  /** How far through the shake that precedes the move, 0 → 1. */
+  wobble?: number
 }) {
   // A named page has no stacked form to collapse out of, and the word is a
   // label rather than a brand moment — so it is always settled.
@@ -95,10 +102,11 @@ export default function TripHeader({
       }}
     >
       <div ref={row} className="max-w-lg mx-auto h-full px-4 relative">
-        {tripCode && (
+        {backTo && (
           <Link
-            href={`/trip/${tripCode}`}
-            aria-label="Back to the trip"
+            href={backTo}
+            // Only a logo, so where it goes has to be said out loud
+            aria-label={backTo === '/' ? 'Back to the start' : 'Back to the trip'}
             className="absolute inset-0 rounded-lg"
             // The tap target is the header bar itself. The mark overflows it
             // while it is still down in the hero, and a link the size of the
@@ -109,6 +117,7 @@ export default function TripHeader({
         {title === 'green-dot' ? (
           <MorphWordmark
             progress={t}
+            wobble={wobble}
             heroWidth={HERO_W}
             lineWidth={LINE_W}
             heroOrigin={heroOrigin}

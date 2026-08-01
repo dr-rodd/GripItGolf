@@ -244,8 +244,9 @@ section('The mark is the header, and the way back')
 
   ok(src.includes('sticky top-0'), 'it sticks to the top')
   ok(metrics.includes('HEADER_H = 52'), 'at a known height')
-  ok(src.includes('href={`/trip/${tripCode}`}'), 'and tapping it goes to the trip hub')
-  ok(src.includes("aria-label=\"Back to the trip\""), 'which is said out loud, since it is only a logo')
+  ok(src.includes('href={backTo}'), 'and tapping it goes wherever it was pointed')
+  ok(src.includes("backTo === '/' ? 'Back to the start' : 'Back to the trip'"),
+    'which is said out loud, since it is only a logo')
   ok(src.includes('<MorphWordmark'), 'the header carries the mark itself')
 
   // The board's own sticky row has to clear it, or the column headings
@@ -279,8 +280,26 @@ section('The collapse happens on leaving the landing page, and nowhere else')
   // finger runs at whatever speed the finger moves, and can stop halfway.
   ok(landing.includes('requestAnimationFrame'), 'the landing page animates the mark itself')
   ok(landing.includes('const TRAVEL_MS'), 'over a named length of time')
-  const ms = Number(landing.match(/TRAVEL_MS = (\d+)/)?.[1] ?? 0)
-  ok(ms > 0 && ms <= 400, `and inside the guide's ceiling (${ms}ms)`)
+
+  // The words shake themselves loose before any of them travels
+  ok(landing.includes('const WOBBLE_MS'), 'after a named shake, which comes first')
+  const wob = Number(landing.match(/WOBBLE_MS = (\d+)/)?.[1] ?? 0)
+  const ms  = Number(landing.match(/TRAVEL_MS = (\d+)/)?.[1] ?? 0)
+  ok(wob > 0 && ms > 0, 'both have a length')
+
+  // A deliberate exception to the 400ms the guide allows ordinary UI motion.
+  // This is a page transition with a shake in front of it, and it was asked
+  // to be slower — but it is still bounded, so it cannot creep.
+  ok(ms > 400, 'the move is slower than the ceiling for ordinary UI motion')
+  ok(wob + ms <= 1400, `and the whole thing still ends promptly (${wob + ms}ms)`)
+
+  // Started at rest and finished at rest, or the hand-over shows a seam
+  ok(landing.includes('const smooth ='), 'the driver is smoothed, not linear')
+  const mark = read('app/components/MorphWordmark.tsx')
+  ok(mark.includes('Math.sin(Math.PI * Math.min(1, Math.max(0, wobble)))'),
+    'the shake is enveloped, so it grows out of stillness and settles back into it')
+  ok(/i \* \(Math\.PI \/ 2\)/.test(mark),
+    'and each word is a quarter-cycle behind the last, so the mark loosens rather than rocking as one')
 
   // Nothing on the page reacts to scrolling any more
   ok(!/addEventListener\(\s*'scroll'/.test(landing + src), 'nothing listens for a scroll')
@@ -296,7 +315,7 @@ section('The collapse happens on leaving the landing page, and nowhere else')
   // straight past all of this
   ok(landing.indexOf('setLeaving(true)') < landing.lastIndexOf('router.push(href)'),
     'the content clears before the next screen is asked for')
-  ok(/if \(t < 1\)[\s\S]{0,120}router\.push/.test(landing),
+  ok(/if \(t < total\)[\s\S]{0,120}router\.push/.test(landing),
     'which happens only once the mark has landed')
   ok(landing.includes("router.prefetch('/dashboard/create')") &&
      landing.includes("router.prefetch('/join')"),
@@ -699,6 +718,46 @@ section('No glows')
   ok(dot.includes('dot-live'), 'and breathes')
   ok(!dot.includes('shadow'), 'without a glow')
   ok(dot.includes('w-1.5 h-1.5'), 'kept small, so it stays a punctuation mark')
+}
+
+// ─── One header, everywhere ────────────────────────────────────
+
+section('The screens before a trip wear the same header')
+{
+  // The mark lands in the bar on the way off the landing page. If the screen
+  // it lands on did not have it there, the collapse would be explaining a
+  // move to somewhere the mark does not end up.
+  for (const f of ['app/join/JoinForm.tsx', 'app/dashboard/create/CreateTripForm.tsx']) {
+    const src = read(f)
+    const name = f.split('/').pop()
+    ok(src.includes('<TripHeader backTo="/" />'),
+      `${name} carries the mark, pointed home`)
+    ok(!src.includes('<Wordmark'), `  …and does not draw a second one of its own`)
+    ok(!/BackButton href="\/"/.test(src),
+      `  …nor a home button, which the mark now is`)
+  }
+
+  // The wizard's own step-back is a different thing from site navigation and
+  // stays: the mark goes home, this goes to the answers you just gave.
+  const create = read('app/dashboard/create/CreateTripForm.tsx')
+  ok(create.includes('<BackButton onClick={goBack} />'),
+    'the create wizard keeps a way back one step')
+  ok(/stepNum > 1 &&[\s\S]{0,120}BackButton onClick=\{goBack\}/.test(create),
+    'shown only where there is a step to go back to')
+
+  // Everything inside a trip points at the trip, and nothing points at a
+  // trip code that no longer travels as its own prop
+  for (const f of [
+    'app/trip/[tripCode]/page.tsx',
+    'app/trip/[tripCode]/leaderboard/page.tsx',
+    'app/trip/[tripCode]/course/page.tsx',
+    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
+  ]) {
+    ok(/<TripHeader backTo=\{`\/trip\/\$\{[\w.]+\}`\}/.test(read(f)),
+      `${f.split('/').slice(-2).join('/')} points its mark at the trip`)
+  }
+  eq(uiFiles().filter(f => /<TripHeader[^>]*tripCode=/.test(read(f))), [],
+    'and no call site still passes a trip code')
 }
 
 // ─── The header's numbers cross the client boundary ────────────

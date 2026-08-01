@@ -803,7 +803,7 @@ export default function TripSetupClient({
 
       {/* The page names itself in the header, the way the leaderboard and
           the scoring screens do. Tapping the mark is the way back. */}
-      <TripHeader tripCode={trip.trip_code} title="settings" />
+      <TripHeader backTo={`/trip/${trip.trip_code}`} title="settings" />
 
       <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
 

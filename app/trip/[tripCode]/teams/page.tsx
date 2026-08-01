@@ -45,7 +45,7 @@ export default async function TripTeamsPage({
 
   return (
     <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
-      <TripHeader tripCode={tripCode} />
+      <TripHeader backTo={`/trip/${tripCode}`} />
       <div className="bg-cream border-b border-bark/12">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <BackButton href={`/trip/${tripCode}/setup`} />

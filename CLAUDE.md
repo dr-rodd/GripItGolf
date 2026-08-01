@@ -97,7 +97,7 @@ The supplied stacked file has a cream background baked in, a shade off our own. 
 
 ### The sticky header
 
-`app/components/TripHeader.tsx` — the mark at the top of every trip screen, and the way back to the trip hub from anywhere. 52px, `HEADER_H` in `headerMetrics.ts` so the leaderboard's own sticky column row can clear it.
+`app/components/TripHeader.tsx` — the mark at the top of every screen past the landing page, and the way back: `backTo` is the trip hub from inside a trip, and `/` from the screens that come before one. 52px, `HEADER_H` in `headerMetrics.ts` so the leaderboard's own sticky column row can clear it.
 
 The mark is the same on every screen; what changes is the word in it.
 
@@ -113,15 +113,25 @@ They are PNGs derived from the supplied artwork rather than vectors. Rendered as
 
 ### Leaving the landing page
 
-**The collapse runs on the tap, not on a scroll** (`app/Landing.tsx`). Tapping Create or Join fades the content, collapses the mark out of the middle of the page and into the header bar over `TRAVEL_MS` (380ms), and only then asks for the next screen — which fades up underneath, so the whole thing reads as one movement rather than a page swap.
+**The collapse runs on the tap, not on a scroll** (`app/Landing.tsx`). Tapping Create or Join fades the content, the words **shake themselves loose in place** over `WOBBLE_MS` (340ms), the mark then collapses into the header bar over `TRAVEL_MS` (700ms), and only then is the next screen asked for — fading up underneath, so the whole thing reads as one movement rather than a page swap.
 
-A timed animation runs at the speed it was written to run at. One driven by a finger runs at whatever speed the finger moves and can stop halfway, which is what the scroll version did. It also puts the movement where it means something: you are leaving, and the bar is where the mark lives on the screen you are going to.
+A timed animation runs at the speed it was written to run at. One driven by a finger runs at whatever speed the finger moves and can stop halfway, which is what the scroll version did.
 
-- Both destinations are **prefetched on mount**, so the pause after the mark lands is as near to nothing as it can be, and both carry `page-enter` so they fade up rather than appear.
-- The clock comes from the animation frame itself, not from a reading taken beforehand, so the first frame is t=0 however long the browser took to schedule it.
+**The shake is enveloped by a half sine**, so it grows out of stillness and settles back into it — that is what lets it hand over to the travel without a seam. Each word is a quarter-cycle behind the last (`WOBBLE_DEG`, `WOBBLE_CYCLES` in `MorphWordmark.tsx`), so the mark loosens rather than rocking as one block. Measured peak: 2.4° at 217ms.
+
+**The driver is smoothed, not linear.** Each word already decelerates inside its own window, but the sequence as a whole ran at a constant rate and so set off at full speed the instant the shake ended.
+
+**This is a deliberate exception to the 400ms ceiling** the guide sets for UI motion. It is a page transition with a shake in front of it, not a control responding to a touch. `test:branding` pins it as an exception rather than a violation — the move must be *over* 400ms, and the whole sequence under 1400ms so it cannot creep.
+
+- Both destinations are **prefetched on mount** and carry `page-enter`, so the pause after the mark lands is as near to nothing as it can be and the arrival fades rather than appears.
+- The clock comes from the animation frame itself, not a reading taken beforehand, so the first frame is t=0 however long the browser took to schedule it. One clock drives both phases, so they cannot drift apart.
 - A second tap cannot start a second animation over the first.
-- **Reduced motion goes straight there** — no collapse, no fade. Measured: 128ms against 498ms.
+- **Reduced motion goes straight there** — no shake, no collapse, no fade.
 - The buttons stay real `<Link>`s, so they prefetch, survive a long press, and navigate normally without JavaScript.
+
+**The screens the mark lands on wear it too.** `/join` and `/dashboard/create` carry `<TripHeader backTo="/" />` — the same bar, the same mark, in the same place it just travelled to. That is what makes the collapse mean something: it is not decoration, it is showing you where the mark lives from here on, and why `green dot golf` became `green dot`. Tapping it goes home, so neither screen has a back button of its own.
+
+The create wizard keeps a **step**-back on steps 2 and 3, which is a different thing from site navigation: the mark goes home, that goes to the answers you just gave. Losing a half-filled form to a logo would be a poor trade for one fewer button.
 
 `useScrollProgress` and `HeroPin` are gone with the scroll version, along with `TRAVEL` and `RELEASE_AT`. The landing page no longer scrolls at all.
 
