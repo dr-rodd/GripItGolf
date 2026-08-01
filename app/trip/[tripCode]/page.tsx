@@ -10,7 +10,7 @@ import {
 } from '@/lib/playerSummary'
 import TripCountdown from './TripCountdown'
 import WelcomeBack from './WelcomeBack'
-import TripHeader, { HeroWordmark } from '@/app/components/TripHeader'
+import TripHeader, { HeroWordmarkSpace } from '@/app/components/TripHeader'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import TabBar from '@/app/components/TabBar'
@@ -219,8 +219,9 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       <section className="flex flex-col items-center px-6 pt-6 pb-12">
         <div className="w-full max-w-sm flex flex-col items-center text-center">
 
-          {/* The full mark. It contracts into the header as the page moves. */}
-          <HeroWordmark />
+          {/* The mark itself lives in the header and travels up into it;
+              this is the room it occupies on the way. */}
+          <HeroWordmarkSpace />
 
           {/* Only for somebody this device already knows. A stranger sees the
               page exactly as it was before this feature existed. */}

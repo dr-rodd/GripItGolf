@@ -1,23 +1,23 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
-import Wordmark from './Wordmark'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import MorphWordmark from './MorphWordmark'
 
 /**
  * The mark at the top of every trip screen, and the way back to the trip.
  *
  * Two behaviours, one component:
  *
- *   morph  The trip hub. The stacked mark stands full size in the hero and,
- *          as you scroll, rises and contracts into the single-line mark in
- *          the header — so the header is where the logo went, not a second
- *          logo that happens to be there too.
+ *   morph  The trip hub. The mark stands full size below the header and
+ *          travels up into it as you scroll — the same element throughout,
+ *          its words moving at different rates. Nothing crossfades, so the
+ *          header genuinely is where the logo went.
  *
- *   fixed  The leaderboard and the scoring screens. Just the single-line
- *          mark, sticky from the first pixel. Those screens are read while
- *          standing on a tee; nothing on them should be moving that is not
- *          a score.
+ *   fixed  The leaderboard and the scoring screens. The settled line mark,
+ *          from the first pixel, never moving. Those screens are read while
+ *          standing on a tee; nothing on them should move that is not a
+ *          score.
  *
  * Tapping it goes to the trip hub, from anywhere.
  */
@@ -26,22 +26,27 @@ import Wordmark from './Wordmark'
 export const HEADER_H = 52
 
 /** Scroll distance the morph takes. Short enough to finish in one flick. */
-const TRAVEL = 132
+const TRAVEL = 190
 
+/** Width of the mark at each end of the journey. */
+const HERO_W = 208
+const LINE_W = 118
+
+/** How far below the header the mark starts. */
+const HERO_DROP = 104
 
 /**
  * How far through the morph the page has scrolled, 0 → 1.
  *
  * One hook rather than a copy in each component: they have to agree exactly,
- * or the stacked mark and the header mark drift apart mid-scroll and the
- * illusion breaks. Sharing it also means the reduced-motion escape and the
- * frame coalescing exist once and cannot be true in one place and not the
- * other.
+ * or the mark and the space reserved for it drift apart mid-scroll. Sharing
+ * it also means the reduced-motion escape and the frame coalescing exist
+ * once and cannot be true in one place and not the other.
  *
  * Returns 1 immediately for anyone who asked for less motion — the end state,
  * not a slower version of the journey.
  */
-function useScrollProgress(enabled: boolean): { progress: number; reduced: boolean } {
+export function useScrollProgress(enabled: boolean): { progress: number; reduced: boolean } {
   const [progress, setProgress] = useState(enabled ? 0 : 1)
   const [reduced, setReduced] = useState(false)
   const frame = useRef<number | null>(null)
@@ -73,6 +78,8 @@ function useScrollProgress(enabled: boolean): { progress: number; reduced: boole
   return { progress, reduced }
 }
 
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t
+
 export default function TripHeader({
   tripCode,
   variant = 'fixed',
@@ -80,39 +87,63 @@ export default function TripHeader({
   tripCode: string
   variant?: 'fixed' | 'morph'
 }) {
-  // 0 = the mark is still in the hero, 1 = it has arrived in the header.
   const { progress, reduced } = useScrollProgress(variant === 'morph')
+  const settled = variant === 'fixed' || reduced
+  const t = settled ? 1 : progress
 
-  // The line mark arrives over the back half of the travel, so the two are
-  // never both at full strength — that overlap is what reads as a morph
-  // rather than as one thing swapping for another.
-  const arrival = Math.max(0, (progress - 0.45) / 0.55)
-  const settled = variant === 'fixed' || reduced || arrival >= 1
+  // The mark centres itself in the hero, which means knowing how wide the
+  // row is. Measured rather than assumed: this is a phone-first app and the
+  // row is whatever the viewport allows up to max-w-lg.
+  const row = useRef<HTMLDivElement>(null)
+  const [rowWidth, setRowWidth] = useState(0)
+
+  useLayoutEffect(() => {
+    const el = row.current
+    if (!el) return
+    const measure = () => setRowWidth(el.clientWidth)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  // Size, and where it sits. The mark scales about its own left edge, so
+  // centring it is a matter of pushing it right by half the leftover room.
+  const scale = lerp(HERO_W / LINE_W, 1, t)
+  const markW = LINE_W * scale
+  const offsetX = rowWidth > 0 ? ((rowWidth - markW) / 2) * (1 - t) : 0
+  const offsetY = HERO_DROP * (1 - t)
 
   return (
     <header
-      className="sticky top-0 z-30 bg-cream/95 backdrop-blur-[2px]"
+      className="sticky top-0 z-30"
       style={{
         height: HEADER_H,
-        // The rule appears only once the mark has, so an untouched hub has no
-        // line across it.
-        borderBottom: `1px solid rgba(74, 55, 40, ${0.12 * arrival})`,
+        // The bar itself only appears once the mark has arrived, so an
+        // untouched hub has no band across the top of it.
+        backgroundColor: `rgba(246, 244, 240, ${0.35 + 0.6 * t})`,
+        borderBottom: `1px solid rgba(74, 55, 40, ${0.12 * t})`,
+        backdropFilter: t > 0.9 ? 'blur(2px)' : undefined,
       }}
     >
-      <div className="max-w-lg mx-auto h-full px-4 flex items-center">
+      <div ref={row} className="max-w-lg mx-auto h-full px-4 relative">
         <Link
           href={`/trip/${tripCode}`}
           aria-label="Back to the trip"
-          className="inline-flex items-center h-full -ml-1 px-1 rounded-lg"
+          className="absolute left-4 rounded-lg"
           style={{
-            opacity: settled ? 1 : arrival,
-            // Rises the last few pixels into place rather than fading in flat
-            transform: `translateY(${(1 - arrival) * 6}px)`,
+            // Anchored to the middle of the bar, then pushed down and out to
+            // wherever it is in its journey.
+            top: '50%',
+            transform: `translate(${offsetX}px, calc(-50% + ${offsetY}px)) scale(${scale})`,
+            transformOrigin: 'left center',
+            // Driven entirely by scroll, so a CSS transition here would fight
+            // the position rather than smooth it.
             transition: 'none',
-            pointerEvents: arrival > 0.5 ? 'auto' : 'none',
+            willChange: settled ? undefined : 'transform',
           }}
         >
-          <Wordmark variant="line" width={118} />
+          <MorphWordmark progress={t} width={LINE_W} />
         </Link>
       </div>
     </header>
@@ -120,36 +151,16 @@ export default function TripHeader({
 }
 
 /**
- * The stacked mark in the hub's hero, which is the thing that appears to
- * become the header.
+ * The room the mark needs while it is still down in the hero.
  *
- * It shrinks towards the header's size and rises towards it, so the two
- * movements meet. Kept as a separate export because it lives in the page
- * body, not in the header, and only the hub has one.
+ * The mark itself lives in the header and is positioned over the page, so
+ * without this the hub's content would start underneath it. The spacer
+ * closes as the mark leaves, which is what pulls the page up behind it.
  */
-export function HeroWordmark() {
+export function HeroWordmarkSpace() {
   const { progress, reduced } = useScrollProgress(true)
+  const t = reduced ? 1 : progress
+  const height = (HERO_DROP + HERO_W * 0.42) * (1 - t)
 
-  // Leaves over the front half, as the line mark is arriving over the back.
-  const leaving = reduced ? 0 : Math.min(1, progress / 0.7)
-
-  return (
-    <div
-      className="flex justify-center"
-      style={{
-        // Scale and lift, not a fade in place: the mark should look like it
-        // went somewhere, and where it went is the header.
-        transform: `translateY(${-leaving * 34}px) scale(${1 - leaving * 0.42})`,
-        opacity: 1 - leaving,
-        transformOrigin: 'center top',
-        transition: 'none',
-        // Collapses its own height as it goes, so the page does not keep a
-        // hole where it used to be.
-        marginBottom: `${-leaving * 40}px`,
-        pointerEvents: leaving > 0.5 ? 'none' : 'auto',
-      }}
-    >
-      <Wordmark variant="stacked" width={200} priority ariaHidden />
-    </div>
-  )
+  return <div aria-hidden="true" style={{ height, transition: 'none' }} />
 }

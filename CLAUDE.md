@@ -97,7 +97,20 @@ The supplied stacked file has a cream background baked in, a shade off our own. 
 
 Two behaviours:
 
-- **`morph`** — the trip hub only. The stacked mark stands full size in the hero and, as you scroll, contracts and rises while the single-line mark arrives in the header. The two overlap (the stacked leaves over the front 70% of the travel, the line arrives over the back 55%) — that overlap is what reads as a morph rather than as one thing swapping for another. 132px of scroll.
+- **`morph`** — the trip hub only. **One element the whole way**: the mark starts large and centred below the header and travels up into it over 190px of scroll. Nothing crossfades and no letter is drawn twice.
+
+  The words move separately, which is what makes it read as a transformation rather than a slide (`MorphWordmark.tsx`):
+
+  | Word | Motion |
+  |---|---|
+  | `golf` | leaves first — slides out and fades, freeing the room before anything needs it |
+  | `green` | the anchor; settles early, and the others line up against it |
+  | `dot` | across into clear air first, **then** up onto the line |
+  | `.` | last, by the same route — punctuation arriving after its sentence |
+
+  **The two axes are timed separately on purpose.** `dot` sits below `green` and ends up to its right, so a straight diagonal drags it through the middle of the other word — letters collide for about a third of the travel. Sideways first, then up, keeps every word in clear air.
+
+  The offsets come from `app/components/wordmarkMorph.ts`, **generated** by `npm run logo:line` from the artwork's own word groups. Replace the logo, re-run it, and the animation still lands.
 - **`fixed`** — everywhere else. Just the line mark, sticky from the first pixel. **The leaderboard and scoring screens never morph**: they are read standing on a tee, and nothing on them should move that is not a score.
 
 `useScrollProgress` is one hook shared by both marks. Two copies would drift apart mid-scroll and the morph would come apart in the middle. The listener is passive and frame-coalesced; reduced motion settles to the end state immediately rather than animating slower.
