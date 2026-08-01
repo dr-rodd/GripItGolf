@@ -252,6 +252,18 @@ This replaced a model where every choice was a flag on one object, so any combin
 
 Anything stored that cannot be understood is **dropped, not repaired** — a half-understood board would quietly score a trip wrongly, while no board sends the organiser back to a form that says so.
 
+### From settings to the board
+
+`lib/boardRows.ts` is the join. `buildRows(board, context)` takes **one** leaderboard and the trip's scores and returns that board's rows; everything it needs comes off the board itself. Two boards on one trip can therefore be scored genuinely differently — Stableford keeping every card beside Strokes dropping the worst. Under the old model discard was one number on the trip and the team format one setting on the trip, so that was not expressible: it was one answer applied twice.
+
+The leaderboard page renders `Leaderboard[]` and nothing else. Tabs are the league boards in list order; matchplay is a button, never a tab, because a draw is not a table.
+
+`aggregation: 'custom_points'` on a team league places each round on its raw team points and pays the table. **The round column then shows what the position was worth, not the points that earned it** — otherwise the total would not add up beside its own columns.
+
+**Old trips are read, not migrated.** `lib/leaderboardsCompat.ts` turns `trips.formats` into the boards those flags always described: teams first, then each individual board ticked (all inheriting the single trip-wide discard, exactly as they always did), then the draw. A stored list always wins; an empty one means a trip from before the column existed, not a trip playing for nothing. Delete the file whole once no trip has an empty `leaderboards`.
+
+**Team format options survive the switch.** `better_ball` with three scores counting and a grandstand finish is not expressible as a leaderboard — the form asks for the format only. `teamScoringFor(board, legacy)` hands back the trip's old `team_scoring` verbatim when the format matches, so a trip mid-way through is never silently re-scored. Options from a *different* format are not carried across. `aggregate` was retired from the form but stays in `ALL_TEAM_FORMATS` so trips running it still read and score as themselves.
+
 ### Pairing names
 
 A pairing is written as its players' names with `&`. Duplicate first names take as much surname as they need and no more, and everyone in a clash grows together so the names stay the same length: `Ross Gr & Ross Ga`, or `Ross Grad / Ross Gran / Ross Gree` with three. `shortNames` in `lib/matchplayEntrants.ts`.
@@ -462,7 +474,10 @@ Trips predating this feature were marked `live` by migration 010, so nothing cha
 | `app/page.tsx` | Landing page |
 | `app/layout.tsx` | Root layout |
 | `lib/supabase.ts` | Supabase client |
-| `lib/formats.ts` | What a trip runs — the decision-tree model |
+| `lib/leaderboards.ts` | What a trip plays for — the list of complete competitions |
+| `lib/boardRows.ts` | Scores into leaderboard rows, one board at a time |
+| `lib/leaderboardsCompat.ts` | Reading a pre-migration trip's flags as boards |
+| `lib/formats.ts` | The superseded decision-tree model, still read for old trips |
 | `lib/tripSetupFlow.ts` | The tree itself: which questions, in what order |
 | `lib/teamLimits.ts` | Team size rules and the pairing/team wording |
 | `lib/matchplayEntrants.ts` | Players or pairings as one shape, and how they are named |
@@ -496,7 +511,7 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:bracket-render` | The bracket component at every size, singles and pairs |
 | `test:progress` | Recording and correcting winners, and the cascade |
 | `test:trip-form` | Trip creation |
-| `test:leaderboard` | Every board, live vs finalised, score ownership |
+| `test:leaderboard` | Every board, live vs finalised, score ownership, per-board rules, and old trips read through the shim |
 | `test:admin` | Optional email, derived trip status, admin session signing |
 | `test:recognition` | The per-trip cookie, the personal summary, the greeting |
 | `test:support` | The donation link, and that it vanishes when unconfigured |

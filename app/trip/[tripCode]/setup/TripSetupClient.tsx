@@ -890,7 +890,8 @@ export default function TripSetupClient({
               </p>
               <LeaderboardSetup
                 boards={boards}
-                fieldSize={players.length}
+                playerCount={players.length}
+                teamCount={teams.length}
                 onChange={saveBoards}
               />
               {boards.length > 0 && needsTeams(boards) && teams.length === 0 && (

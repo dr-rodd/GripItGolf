@@ -18,8 +18,14 @@ export type Competition = 'league' | 'matchplay'
 /** How an individual league turns a card into points. */
 export type Scoring = 'stableford' | 'strokes' | 'custom'
 
-/** How a team's members combine into one score for a round. */
-export type TeamFormat = 'better_ball' | 'hero' | 'cut_dead_weight'
+/**
+ * How a team's members combine into one score for a round.
+ *
+ * `aggregate` is not offered any more — better ball with every score counting
+ * says the same thing — but trips already running it have to keep scoring the
+ * way they always have, so it stays a format this model knows about.
+ */
+export type TeamFormat = 'better_ball' | 'hero' | 'cut_dead_weight' | 'aggregate'
 
 /** How a team league adds its rounds together. */
 export type Aggregation = 'cumulative' | 'custom_points'
@@ -60,6 +66,19 @@ export const TEAM_FORMATS: { key: TeamFormat; label: string; hint: string }[] = 
     hint: 'The best single card in the team that day carries it.' },
   { key: 'cut_dead_weight', label: 'Cut the dead weight',
     hint: 'Everyone counts except the worst card of the day. They are back in next round.' },
+]
+
+/**
+ * Every format that can be read back, including the one no longer offered.
+ *
+ * Naming and parsing look here; the form offers `TEAM_FORMATS`. Keeping the
+ * two lists apart is what lets a format be retired without the trips already
+ * running it losing their board.
+ */
+export const ALL_TEAM_FORMATS: { key: TeamFormat; label: string; hint: string }[] = [
+  ...TEAM_FORMATS,
+  { key: 'aggregate', label: 'Aggregate',
+    hint: 'Every score in the team counts.' },
 ]
 
 export const AGGREGATIONS: { key: Aggregation; label: string; hint: string }[] = [
@@ -191,7 +210,7 @@ export function boardTitle(lb: Leaderboard): string {
   if (lb.audience === 'individual') {
     return SCORINGS.find(s => s.key === lb.scoring)?.label ?? 'League'
   }
-  const format = TEAM_FORMATS.find(f => f.key === lb.teamFormat)?.label ?? 'Team'
+  const format = ALL_TEAM_FORMATS.find(f => f.key === lb.teamFormat)?.label ?? 'Team'
   return `Team ${format.toLowerCase()}`
 }
 
@@ -210,7 +229,7 @@ export function boardRules(lb: Leaderboard): string {
       parts.push(`Worst ${lb.discardWorst === 1 ? 'round' : `${lb.discardWorst} rounds`} dropped`)
     }
   } else {
-    parts.push(TEAM_FORMATS.find(f => f.key === lb.teamFormat)?.hint ?? '')
+    parts.push(ALL_TEAM_FORMATS.find(f => f.key === lb.teamFormat)?.hint ?? '')
     parts.push(AGGREGATIONS.find(a => a.key === lb.aggregation)?.hint ?? '')
   }
   return parts.filter(Boolean).join(' ')
@@ -257,7 +276,7 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
     }
 
     if (competition === 'league' && audience === 'team') {
-      const teamFormat = TEAM_FORMATS.find(f => f.key === r.teamFormat)?.key
+      const teamFormat = ALL_TEAM_FORMATS.find(f => f.key === r.teamFormat)?.key
       const aggregation = AGGREGATIONS.find(a => a.key === r.aggregation)?.key
       if (!teamFormat || !aggregation) continue
       lb.teamFormat = teamFormat

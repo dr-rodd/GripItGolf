@@ -2,11 +2,15 @@
 
 import { Fragment, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { leaderboardTabs, matchplayOn, type BoardKey, type TripFormats } from '@/lib/formats'
+import { resolveCustomPoints } from '@/lib/customPoints'
+import type { TeamScoring } from '@/lib/teamScoring'
 import {
-  resolveCustomPoints, awardRound, totalAfterDiscard, discardedIndices,
-} from '@/lib/customPoints'
-import { describeTeamScoring, teamRoundPoints, type TeamScoring } from '@/lib/teamScoring'
+  type Leaderboard, boardTitle, boardRules, hasMatchplay,
+} from '@/lib/leaderboards'
+import {
+  type BoardRow, type ResolvedScore, type RowContext,
+  buildRows, effectivePar,
+} from '@/lib/boardRows'
 import { HEADER_H } from '@/app/components/TripHeader'
 
 // ─── Types ─────────────────────────────────────────────────────
@@ -25,10 +29,20 @@ type RoundHcp   = { round_id: string; player_id: string; playing_handicap: numbe
 
 interface Props {
   tripCode: string
-  formats: TripFormats
+  /**
+   * Everything this trip is playing for, each board carrying its own complete
+   * rules. Old trips arrive here too — the page reads their flags as boards
+   * before this component sees them, so there is one shape to render.
+   */
+  boards: Leaderboard[]
   /** Rounds with a scorecard open right now. */
   activeRoundIds: string[]
-  teamScoring: TeamScoring
+  /**
+   * The old trip-wide team setting, passed only for trips that predate the
+   * board list. It carries options the new model does not ask for, so a trip
+   * already running one keeps scoring the way it always has.
+   */
+  legacyTeamScoring: TeamScoring | null
   rounds: Round[]
   teams: Team[]
   players: Player[]
@@ -38,79 +52,11 @@ interface Props {
   roundHandicaps: RoundHcp[]
 }
 
-/** A score resolved from either the committed or the in-progress table. */
-type ResolvedScore = {
-  playerId: string
-  roundId: string
-  holeId: string
-  holeNumber: number
-  gross: number | null
-  points: number
-  noReturn: boolean
-  /**
-   * Still in the in-progress table — the card has not been finalised.
-   *
-   * This is what decides whether a round shows green or gold, and whether it
-   * shows how far ahead of level someone is or their finished total.
-   */
-  live: boolean
-}
-
-/** One line on the board — a player or a team, depending on the tab. */
-type BoardRow = {
-  id: string
-  name: string
-  subLabel: string
-  color?: string
-  perRound: Record<string, number>
-  /**
-   * Rounds this row actually took part in. A zero in `perRound` is a real
-   * score for these and a blank for any other round — losing every match
-   * is not the same as not turning up.
-   */
-  playedRounds: string[]
-  /** Rounds set aside by the discard rule — shown struck through. */
-  droppedRounds?: string[]
-  /**
-   * Rounds with a card still open. Those show green and read as how far
-   * ahead of level the player is; a finalised round shows gold and reads as
-   * the total, which is the number that matters once the card is in.
-   */
-  liveRounds?: string[]
-  /**
-   * How far ahead of level a round stands while it is in play. Against two
-   * points a hole on Stableford, against par on Strokes. Null where the
-   * question does not apply — a prize table has no "level".
-   */
-  relativeByRound?: Record<string, number>
-  total: number
-  isLive: boolean
-  /** Whose card the scorecard sheet shows when this row is opened. */
-  playerIds: string[]
-  /** Hero mode: who carried the team, per round. */
-  heroByRound?: Record<string, string | null>
-}
-
 // ─── Donegal Masters scorecard styling ─────────────────────────
 
 const SC_SF    = { fontFamily: 'var(--font-serif)' }
 const SC_MUTED = 'text-[rgba(43,33,24,0.45)]'
 const SC_DARK  = 'text-[#2B2118]'
-
-// ─── Scoring helpers ───────────────────────────────────────────
-
-function shotsReceived(playingHandicap: number, strokeIndex: number) {
-  const whole = Math.floor(playingHandicap / 18)
-  const remainder = Math.round(playingHandicap) % 18
-  return whole + (strokeIndex <= remainder ? 1 : 0)
-}
-
-function effectivePar(hole: Hole, gender: string) {
-  return gender === 'F' && hole.par_ladies != null ? hole.par_ladies : hole.par
-}
-function effectiveSI(hole: Hole, gender: string) {
-  return gender === 'F' && hole.stroke_index_ladies != null ? hole.stroke_index_ladies : hole.stroke_index
-}
 
 const firstName = (n: string) => n.split(' ')[0]
 
@@ -659,13 +605,17 @@ function MatchplayButton({ tripCode, enabled }: { tripCode: string; enabled: boo
 // ─── Main ──────────────────────────────────────────────────────
 
 export default function TripLeaderboardClient({
-  tripCode, formats, activeRoundIds, teamScoring, rounds, teams, players,
+  tripCode, boards, activeRoundIds, legacyTeamScoring, rounds, teams, players,
   holes, scores, liveScores, roundHandicaps,
 }: Props) {
-  // Matchplay has its own route, so it is a button rather than a tab
-  const tabs = leaderboardTabs(formats)
-  const [active, setActive] = useState<BoardKey>(tabs[0]?.key ?? 'stableford')
+  // Matchplay has its own route, so it is a button rather than a tab. Every
+  // other board is a table, and its own rules travel with it.
+  const tabs = useMemo(() => boards.filter(b => b.competition === 'league'), [boards])
+  const [activeId, setActiveId] = useState<string>(tabs[0]?.id ?? '')
   const [card, setCard] = useState<{ row: BoardRow; round: Round } | null>(null)
+
+  // A board can be removed in settings while this page is open
+  const activeBoard = tabs.find(b => b.id === activeId) ?? tabs[0] ?? null
 
   const sortedRounds = useMemo(
     () => [...rounds].sort((a, b) => a.round_number - b.round_number),
@@ -733,246 +683,41 @@ export default function TripLeaderboardClient({
   )
   const inPlay = openRoundIds.size > 0
 
-  const discard = formats.league.discardWorst
-  const customTable = useMemo(
-    () => resolveCustomPoints(formats.league.customPoints, players.length),
-    [formats.league.customPoints, players.length]
-  )
-
   const hcpFor = useMemo(() => {
     const m = new Map<string, number>()
     for (const h of roundHandicaps) m.set(`${h.round_id}:${h.player_id}`, h.playing_handicap)
     return m
   }, [roundHandicaps])
 
-  const isLiveFor = (playerIds: string[]) =>
-    resolved.some(s => playerIds.includes(s.playerId) && liveRoundIds.has(s.roundId))
+  // ── The rows for every board ────────────────────────────────
+  //
+  // Each board is scored under its own rules, so two boards on the same trip
+  // can genuinely differ — Stableford keeping every card beside Strokes
+  // dropping the worst, or two team boards splitting the same cards two ways.
 
-  // ── Individual Stableford ───────────────────────────────────
+  const rowContext: RowContext = useMemo(() => ({
+    players,
+    teams,
+    holes,
+    rounds: sortedRounds,
+    resolved,
+    hcpFor,
+    liveRoundIds,
+    legacyTeamScoring,
+  }), [players, teams, holes, sortedRounds, resolved, hcpFor, liveRoundIds, legacyTeamScoring])
 
-  const stablefordRows: BoardRow[] = useMemo(() => {
-    return players
-      .map(p => {
-        const perRound: Record<string, number> = {}
-        const relativeByRound: Record<string, number> = {}
-        const playedRounds: string[] = []
-        const liveRounds: string[] = []
-        let holesPlayed = 0
-        for (const r of sortedRounds) {
-          const mine = resolved.filter(s => s.playerId === p.id && s.roundId === r.id)
-          perRound[r.id] = mine.reduce((sum, s) => sum + s.points, 0)
-          // Two points a hole is level, so this is how far ahead they stand
-          // on the holes they have actually played
-          relativeByRound[r.id] = perRound[r.id] - mine.length * 2
-          holesPlayed += mine.length
-          if (mine.length > 0) playedRounds.push(r.id)
-          if (mine.some(s => s.live)) liveRounds.push(r.id)
-        }
-        // Worst rounds are set aside before totalling, if the trip says so
-        const played = playedRounds.map(id => perRound[id])
-        const total = totalAfterDiscard(played, discard)
-        const dropped = new Set(
-          discardedIndices(played, discard).map(i => playedRounds[i])
-        )
-        // Display against the 2pts-a-hole baseline, as on the DM board
-        const diff = total - holesPlayed * 2
-        const row: BoardRow = {
-          id: p.id,
-          name: p.name,
-          subLabel: `${holesPlayed} hole${holesPlayed === 1 ? '' : 's'} · ${
-            diff === 0 ? 'level' : diff > 0 ? `+${diff}` : diff
-          }`,
-          perRound,
-          playedRounds,
-          droppedRounds: [...dropped],
-          liveRounds,
-          relativeByRound,
-          total,
-          isLive: isLiveFor([p.id]),
-          playerIds: [p.id],
-        }
-        return { row, holesPlayed }
-      })
-      .filter(r => r.holesPlayed > 0)
-      .map(r => r.row)
-      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
-  }, [players, sortedRounds, resolved, discard]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Individual Strokeplay ───────────────────────────────────
-  // Lower is better, so the board shows nett as the headline and the
-  // total column carries it. Rows are sorted ascending.
-
-  const strokeRows: BoardRow[] = useMemo(() => {
-    const holeById = new Map(holes.map(h => [h.id, h]))
-    return players
-      .map(p => {
-        const perRound: Record<string, number> = {}
-        const relativeByRound: Record<string, number> = {}
-        const playedRounds: string[] = []
-        const liveRounds: string[] = []
-        let gross = 0, nett = 0, holesPlayed = 0
-        for (const r of sortedRounds) {
-          const mine = resolved.filter(s => s.playerId === p.id && s.roundId === r.id && s.gross != null)
-          const g = mine.reduce((sum, s) => sum + (s.gross ?? 0), 0)
-          const shots = mine.reduce((sum, s) => {
-            const hole = holeById.get(s.holeId)
-            if (!hole) return sum
-            const ph = hcpFor.get(`${r.id}:${p.id}`) ?? p.handicap ?? 0
-            return sum + shotsReceived(ph, effectiveSI(hole, p.gender))
-          }, 0)
-          perRound[r.id] = g - shots
-          // Par of the holes actually played, so a card nine holes in reads
-          // against nine holes of par rather than eighteen
-          const parPlayed = mine.reduce((sum, sc) => {
-            const hole = holeById.get(sc.holeId)
-            return hole ? sum + effectivePar(hole, p.gender) : sum
-          }, 0)
-          relativeByRound[r.id] = perRound[r.id] - parPlayed
-          gross += g
-          holesPlayed += mine.length
-          if (mine.length > 0) playedRounds.push(r.id)
-          if (mine.some(sc => sc.live)) liveRounds.push(r.id)
-        }
-        // Low scores win here, so the worst round is the highest one
-        const playedNett = playedRounds.map(id => perRound[id])
-        nett = totalAfterDiscard(playedNett, discard, { lowerWins: true })
-        const dropped = new Set(
-          discardedIndices(playedNett, discard, { lowerWins: true }).map(i => playedRounds[i])
-        )
-        const row: BoardRow = {
-          id: p.id,
-          name: p.name,
-          subLabel: `${holesPlayed} hole${holesPlayed === 1 ? '' : 's'} · ${gross} gross`,
-          perRound,
-          playedRounds,
-          droppedRounds: [...dropped],
-          liveRounds,
-          relativeByRound,
-          total: nett,
-          isLive: isLiveFor([p.id]),
-          playerIds: [p.id],
-        }
-        return { row, holesPlayed }
-      })
-      .filter(r => r.holesPlayed > 0)
-      .map(r => r.row)
-      .sort((a, b) => a.total - b.total)
-  }, [players, sortedRounds, resolved, holes, hcpFor, discard]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Custom points ───────────────────────────────────────────
-  // Each round is scored on its own Stableford result, positions are paid
-  // from the trip's table, and the board is the sum across rounds.
-
-  const customRows: BoardRow[] = useMemo(() => {
-    const perRound = new Map<string, Map<string, number>>()
-    for (const r of sortedRounds) {
-      const standings = players
-        .map(p => {
-          const mine = resolved.filter(s => s.playerId === p.id && s.roundId === r.id)
-          return mine.length > 0
-            ? { playerId: p.id, score: mine.reduce((sum, s) => sum + s.points, 0) }
-            : null
-        })
-        .filter(Boolean) as { playerId: string; score: number }[]
-      perRound.set(r.id, awardRound(standings, customTable))
-    }
-
-    return players
-      .map(p => {
-        const byRound: Record<string, number> = {}
-        const playedRounds: string[] = []
-        const liveRounds: string[] = []
-        for (const r of sortedRounds) {
-          const awarded = perRound.get(r.id)?.get(p.id)
-          if (awarded === undefined) continue
-          byRound[r.id] = awarded
-          playedRounds.push(r.id)
-          // No relative figure here on purpose: a prize table pays finishing
-          // position, and there is no "level" to be ahead of. The green still
-          // says the position can move before the card is in.
-          if (resolved.some(sc => sc.playerId === p.id && sc.roundId === r.id && sc.live)) {
-            liveRounds.push(r.id)
-          }
-        }
-        const played = playedRounds.map(id => byRound[id])
-        const total = totalAfterDiscard(played, discard)
-        const dropped = new Set(discardedIndices(played, discard).map(i => playedRounds[i]))
-
-        const row: BoardRow = {
-          id: p.id,
-          name: p.name,
-          subLabel: playedRounds.length > 0
-            ? `${playedRounds.length} round${playedRounds.length === 1 ? '' : 's'}`
-            : '',
-          perRound: byRound,
-          playedRounds,
-          droppedRounds: [...dropped],
-          liveRounds,
-          total,
-          isLive: isLiveFor([p.id]),
-          playerIds: [p.id],
-        }
-        return { row, played: playedRounds.length }
-      })
-      .filter(r => r.played > 0)
-      .map(r => r.row)
-      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
-  }, [players, sortedRounds, resolved, customTable, discard]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Teams ───────────────────────────────────────────────────
-
-  const teamRows: BoardRow[] = useMemo(() => {
-    return teams
-      .map(team => {
-        const members   = players.filter(p => p.team_id === team.id)
-        const memberIds = members.map(m => m.id)
-        const perRound: Record<string, number> = {}
-        const heroByRound: Record<string, string | null> = {}
-        const playedRounds: string[] = []
-        const liveRounds: string[] = []
-        let total = 0
-
-        for (const r of sortedRounds) {
-          const res = teamRoundPoints(memberIds, r.id, resolved, teamScoring)
-          perRound[r.id] = res.points
-          heroByRound[r.id] = res.heroPlayerId
-          total += res.points
-          if (res.played) playedRounds.push(r.id)
-          // No relative figure: what counts as level depends on the mode and
-          // the team's size, so a signed number here would mislead. Green
-          // still says the total can move.
-          if (resolved.some(sc => memberIds.includes(sc.playerId) && sc.roundId === r.id && sc.live)) {
-            liveRounds.push(r.id)
-          }
-        }
-
-        const row: BoardRow = {
-          id: team.id,
-          name: team.name,
-          color: team.color,
-          subLabel: members.map(m => firstName(m.name)).join(', '),
-          perRound,
-          playedRounds,
-          liveRounds,
-          total,
-          isLive: isLiveFor(memberIds),
-          playerIds: memberIds,
-          heroByRound,
-        }
-        return { row, size: members.length }
-      })
-      .filter(r => r.size > 0)
-      .map(r => r.row)
-      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
-  }, [teams, players, sortedRounds, resolved, teamScoring]) // eslint-disable-line react-hooks/exhaustive-deps
+  const rowsByBoard = useMemo(
+    () => new Map(tabs.map(b => [b.id, buildRows(b, rowContext)])),
+    [tabs, rowContext]
+  )
 
   // ── Render ──────────────────────────────────────────────────
 
-  const showMatchplay = matchplayOn(formats)
+  const showMatchplay = hasMatchplay(boards)
 
   // Matchplay lives on its own page, so a matchplay-only trip legitimately
   // has no tabs here — show the button rather than an empty board.
-  if (tabs.length === 0) {
+  if (!activeBoard) {
     return (
       <div className="max-w-lg mx-auto px-4 py-6">
         <MatchplayButton tripCode={tripCode} enabled={showMatchplay} />
@@ -981,40 +726,29 @@ export default function TripLeaderboardClient({
     )
   }
 
-  const currentRows =
-    active === 'stableford' ? stablefordRows :
-    active === 'strokes'    ? strokeRows :
-    active === 'custom'     ? customRows :
-                              teamRows
+  const currentRows = rowsByBoard.get(activeBoard.id) ?? []
 
   const emptyMessage =
-    active === 'teams'
+    activeBoard.audience === 'team'
       ? 'No teams with players yet. Set them up in Trip Setup.'
       : 'No scores yet. The board fills in as play starts.'
 
-  // What this board is and how it is being scored. Shown whenever more than
-  // one competition is running, so a glance tells you which you are looking at.
-  const boardTitle =
-    active === 'stableford' ? 'Stableford' :
-    active === 'strokes'    ? 'Strokeplay' :
-    active === 'custom'     ? 'Custom points' :
-                              'Team Play'
-
   // Stableford and Strokes have a level to be ahead of; a prize table and a
   // team total do not, so those only change colour while a card is open.
-  const relativeBoard = active === 'stableford' || active === 'strokes'
+  const relativeBoard = activeBoard.audience === 'individual'
+    && (activeBoard.scoring === 'stableford' || activeBoard.scoring === 'strokes')
 
-  const boardRules: string[] = (() => {
-    const out: string[] = []
-    if (active === 'stableford') out.push('Total points, highest wins')
-    if (active === 'strokes')    out.push('Nett totals, lowest wins')
-    if (active === 'custom')     out.push(describeCustomTable(customTable))
-    if (active === 'teams')      out.push(describeTeamScoring(teamScoring))
-    if (active !== 'teams' && discard > 0) {
-      out.push(`worst ${discard === 1 ? 'round' : `${discard} rounds`} dropped`)
-    }
-    return out
-  })()
+  // A prize table is worth naming — "10 / 5 / 3 a round" is what an organiser
+  // recognises their own competition by, where "points by position" is not.
+  const paysByPosition =
+    activeBoard.scoring === 'custom' || activeBoard.aggregation === 'custom_points'
+  const rules: string[] = [boardRules(activeBoard)]
+  if (paysByPosition) {
+    rules.push(describeCustomTable(resolveCustomPoints(
+      activeBoard.customPoints ?? [],
+      activeBoard.audience === 'team' ? teams.length : players.length,
+    )))
+  }
 
   // Team cards show every member side by side; individual tabs show one column
   const cardPlayers = card
@@ -1031,15 +765,15 @@ export default function TripLeaderboardClient({
         <div className="flex gap-1.5 mb-4 overflow-x-auto -mx-1 px-1 pb-1">
           {tabs.map(t => (
             <button
-              key={t.key}
-              onClick={() => setActive(t.key)}
+              key={t.id}
+              onClick={() => setActiveId(t.id)}
               className={`flex-shrink-0 px-4 py-2.5 t-label transition-colors duration-150 rounded-xl border ${
-                active === t.key
+                activeBoard.id === t.id
                   ? 'bg-accent text-ink font-bold border-accent'
                   : 'bg-surface border-bark/12 text-ink/40 hover:text-ink/65'
               }`}
             >
-              {t.tabLabel}
+              {boardTitle(t)}
             </button>
           ))}
         </div>
@@ -1050,20 +784,20 @@ export default function TripLeaderboardClient({
         <div className="bg-surface border border-bark/12 rounded-2xl px-4 py-3 mb-3">
           <div className="flex items-center justify-between gap-3">
             <p className="font-[family-name:var(--font-display)] text-ink text-base leading-tight">
-              {boardTitle}
+              {boardTitle(activeBoard)}
             </p>
             {inPlay && <InPlayBadge />}
           </div>
-          {boardRules.length > 0 && (
+          {rules.length > 0 && (
             <p className="text-ink/40 text-xs mt-1 leading-snug">
-              {boardRules.join(' · ')}
+              {rules.join(' · ')}
             </p>
           )}
         </div>
       ) : (
         <div className="flex items-center justify-between gap-3 mb-3">
           <p className="text-ink/40 text-xs leading-relaxed min-w-0">
-            {boardRules.join(' · ')}
+            {rules.join(' · ')}
           </p>
           {inPlay && <InPlayBadge />}
         </div>
@@ -1083,7 +817,7 @@ export default function TripLeaderboardClient({
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-accent" />
             <span className="text-ink/40 text-[10px] tracking-wider uppercase">
-              Card in — {active === 'strokes' ? 'nett total' : 'total'}
+              Card in — {activeBoard.scoring === 'strokes' ? 'nett total' : 'total'}
             </span>
           </span>
         </div>
@@ -1093,7 +827,7 @@ export default function TripLeaderboardClient({
         ? <EmptyState message={emptyMessage} />
         : (
           <Board
-            key={active}
+            key={activeBoard.id}
             rows={currentRows}
             rounds={sortedRounds}
             showRoundColumns={showRoundColumns}

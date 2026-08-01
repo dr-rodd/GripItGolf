@@ -1,16 +1,20 @@
 /**
  * Leaderboard render tests. Run with: npm run test:leaderboard
  *
- * Drives the real board with real scores: the Custom table paying out by
- * position, worst rounds being set aside, the title card that appears once
- * more than one competition is running, and the In play badge.
+ * Drives the real board with real scores. Every board carries its own rules,
+ * so most of what is checked here is that two boards on the same trip can
+ * genuinely be scored differently — and that a trip set up before that was
+ * possible still reads and scores exactly as it always did.
  */
 
 import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import TripLeaderboardClient from '../app/trip/[tripCode]/leaderboard/TripLeaderboardClient'
 import { parseFormats, type TripFormats } from '../lib/formats'
-import { DEFAULT_TEAM_SCORING } from '../lib/teamScoring'
+import { DEFAULT_TEAM_SCORING, type TeamScoring } from '../lib/teamScoring'
+import type { Leaderboard } from '../lib/leaderboards'
+import { boardsFromFormats, tripBoards, isLegacy } from '../lib/leaderboardsCompat'
+import { teamScoringFor } from '../lib/boardRows'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -64,17 +68,18 @@ type RenderOpts = {
   scores?: unknown[]
   teams?: unknown[]
   players?: unknown[]
-  teamScoring?: unknown
+  rounds?: unknown[]
+  legacyTeamScoring?: TeamScoring | null
 }
 
-function render(formats: TripFormats, opts: RenderOpts = {}) {
+function render(boards: Leaderboard[], opts: RenderOpts = {}) {
   return renderToStaticMarkup(
     React.createElement(TripLeaderboardClient, {
       tripCode: 'ABC123',
-      formats,
+      boards,
       activeRoundIds: opts.activeRoundIds ?? [],
-      teamScoring: opts.teamScoring ?? DEFAULT_TEAM_SCORING,
-      rounds,
+      legacyTeamScoring: opts.legacyTeamScoring ?? null,
+      rounds: opts.rounds ?? rounds,
       teams: opts.teams ?? [],
       players: opts.players ?? players,
       holes,
@@ -93,22 +98,54 @@ function liveHoles(playerId: string, roundId: string, upTo: number, pointsPerHol
   }))
 }
 
-/** A trip running an individual league with the given boards ticked. */
-const F = (league: Partial<TripFormats['league']>, rest: Record<string, unknown> = {}) =>
-  parseFormats({ individual: true, league: { on: true, ...league }, ...rest })
+// ─── The boards themselves ─────────────────────────────────────
 
-// ─── Tabs follow the boards that are on ────────────────────────
+const SF = (discardWorst = 0): Leaderboard =>
+  ({ id: 'b-sf', audience: 'individual', competition: 'league', scoring: 'stableford', discardWorst })
+
+const ST = (discardWorst = 0): Leaderboard =>
+  ({ id: 'b-st', audience: 'individual', competition: 'league', scoring: 'strokes', discardWorst })
+
+const CU = (customPoints: number[] = [], discardWorst = 0): Leaderboard =>
+  ({ id: 'b-cu', audience: 'individual', competition: 'league', scoring: 'custom', customPoints, discardWorst })
+
+const TEAM = (
+  teamFormat: Leaderboard['teamFormat'] = 'better_ball',
+  aggregation: Leaderboard['aggregation'] = 'cumulative',
+  customPoints?: number[],
+): Leaderboard =>
+  ({ id: 'b-team', audience: 'team', competition: 'league', teamFormat, aggregation, customPoints })
+
+const MP = (audience: Leaderboard['audience'] = 'individual'): Leaderboard =>
+  ({ id: 'b-mp', audience, competition: 'matchplay' })
+
+/** A trip stored under the old flags, read back as the boards it described. */
+const F = (league: Partial<TripFormats['league']>, rest: Record<string, unknown> = {}) =>
+  boardsFromFormats(
+    parseFormats({ individual: true, league: { on: true, ...league }, ...rest }),
+    DEFAULT_TEAM_SCORING,
+  )
+
+// ─── Tabs follow the boards that exist ─────────────────────────
 
 section('Tabs')
 {
-  const one = render(F({ stableford: true }))
+  const one = render([SF()])
   ok(one.includes('Alice'), 'a single board renders')
-  ok(!one.includes('>Strokes<'), 'no Strokes tab when that board is off')
+  ok(!one.includes('>Strokes<'), 'no Strokes tab when that board is not being run')
 
-  const all = render(F({ stableford: true, strokes: true, custom: true }))
+  const all = render([SF(), ST(), CU()])
   ok(all.includes('>Stableford<'), 'Stableford tab shown')
   ok(all.includes('>Strokes<'), 'Strokes tab shown')
-  ok(all.includes('>Custom<'), 'Custom tab shown')
+  ok(all.includes('>Custom points<'), 'Custom tab shown')
+
+  // Tabs follow the list, not a fixed order — the first board leads
+  const teamFirst = render([TEAM('hero'), SF()], {
+    teams: [{ id: 't1', name: 'Reds', color: '#DC2626' }],
+    players: players.map(p => ({ ...p, team_id: 't1' })),
+  })
+  ok(teamFirst.indexOf('>Team hero<') < teamFirst.indexOf('>Stableford<'),
+    'the primary board leads the tab strip')
 }
 
 // ─── Stableford totals, and dropping the worst round ───────────
@@ -116,14 +153,14 @@ section('Tabs')
 section('Stableford')
 {
   // No discard: Alice 54+18 = 72, Bob 36+36 = 72, Cara 18+54 = 72
-  const plain = render(F({ stableford: true }))
+  const plain = render([SF()])
   eq((plain.match(/>72</g) ?? []).length, 3, 'all three total 72 with every round counting')
   ok(!plain.includes('line-through'), 'nothing is struck through')
 
   // Drop the worst: Alice keeps 54, Bob keeps 36, Cara keeps 54 — so Bob
   // falls to last. Dropping the *best* by mistake would put Bob top instead,
   // which is what the ordering assertion below actually catches.
-  const dropped = render(F({ stableford: true, discardWorst: 1 }))
+  const dropped = render([SF(1)])
   ok(dropped.includes('line-through'), 'the dropped round is struck through')
   ok(dropped.includes('Set aside'), 'and says why on hover')
   eq((dropped.match(/>72</g) ?? []).length, 0, 'nobody still totals both rounds')
@@ -136,6 +173,25 @@ section('Stableford')
     'and is certainly not top, which is where dropping the best round would put him')
 }
 
+// ─── Discard belongs to the board, not to the trip ─────────────
+
+section('Two boards on one trip can discard differently')
+{
+  // This is the whole point of the restructure. Under the old model discard
+  // was one number on the trip, so these two boards could not disagree.
+  const sfKeeps = render([SF(0), ST(1)])
+  ok(!sfKeeps.includes('line-through'),
+    'the Stableford board keeps every card, though the Strokes board beside it drops one')
+
+  const stDrops = render([ST(1), SF(0)])
+  ok(stDrops.includes('line-through'),
+    'and the Strokes board drops one, though the Stableford board beside it keeps every card')
+
+  // Same two boards, same scores — only which one is showing has changed
+  ok(sfKeeps.includes('Alice') && stDrops.includes('Alice'),
+    'both boards are built from the same cards')
+}
+
 // ─── Custom points ─────────────────────────────────────────────
 
 section('Custom points')
@@ -144,21 +200,24 @@ section('Custom points')
   // R1: Alice 1st (3), Bob 2nd (2), Cara 3rd (1)
   // R2: Cara 1st (3), Bob 2nd (2), Alice 3rd (1)
   // Totals: Alice 4, Bob 4, Cara 4
-  const html = render(F({ custom: true }))
+  const html = render([CU()])
   ok(html.includes('Alice') && html.includes('Bob') && html.includes('Cara'),
     'every player appears')
   eq((html.match(/>4</g) ?? []).length >= 3, true,
     'all three finish on 4 with the default 3/2/1 table')
 
   // A custom table pays what it says
-  const rich = render(F({ custom: true, customPoints: [10, 5, 1] }))
+  const rich = render([CU([10, 5, 1])])
   ok(rich.includes('>11<'), 'Alice takes 10 + 1 with a 10/5/1 table')
   ok(rich.includes('>10<'), 'Bob takes 5 + 5')
   ok(rich.includes('11'), 'and Cara likewise 1 + 10')
 
   // Zero is a legitimate value for a position
-  const zeroed = render(F({ custom: true, customPoints: [10, 0, 0] }))
+  const zeroed = render([CU([10, 0, 0])])
   ok(zeroed.includes('>10<'), 'a table paying only the winner still works')
+
+  // The table itself is named on the board, not just described
+  ok(rich.includes('10 / 5 / 1'), 'the prize table is spelled out')
 }
 
 section('Custom points when players tie')
@@ -167,16 +226,8 @@ section('Custom points when players tie')
   const tied = [
     ...scoresFor('p1', 'r1', 2), ...scoresFor('p2', 'r1', 2), ...scoresFor('p3', 'r1', 2),
   ]
-  const html = renderToStaticMarkup(
-    React.createElement(TripLeaderboardClient, {
-      tripCode: 'ABC123',
-      formats: F({ custom: true, customPoints: [10, 5, 3] }),
-      activeRoundIds: [],
-      teamScoring: DEFAULT_TEAM_SCORING,
-      rounds: [rounds[0]], teams: [], players, holes, scores: tied,
-      liveScores: [], roundHandicaps,
-    } as never)
-  )
+  const html = render([CU([10, 5, 3])], { rounds: [rounds[0]], scores: tied })
+
   // 10 + 5 + 3 = 18 shared three ways = 6 each. Each player shows it twice —
   // once as the round's award and once as the total.
   eq((html.match(/>6</g) ?? []).length, 6,
@@ -188,7 +239,7 @@ section('Custom points when players tie')
 section('Custom points with the worst round dropped')
 {
   // 10/5/1, dropping the worst: Alice keeps 10, Bob keeps 5, Cara keeps 10
-  const html = render(F({ custom: true, customPoints: [10, 5, 1], discardWorst: 1 }))
+  const html = render([CU([10, 5, 1], 1)])
   ok(html.includes('line-through'), 'the weaker round is struck through')
   ok(html.includes('>10<'), 'and the better one carries the total')
 }
@@ -199,45 +250,43 @@ section('Title card appears once more than one board is running')
 {
   const CARD = 'bg-surface border border-bark/12 rounded-2xl px-4 py-3 mb-3'
 
-  const single = render(F({ stableford: true }))
+  const single = render([SF()])
   ok(!single.includes(CARD), 'a lone board gets no title card, just its rule line')
-  ok(single.includes('Total points, highest wins'), 'the rule is still stated')
+  ok(single.includes('Highest wins'), 'the rule is still stated')
 
-  const multi = render(F({ stableford: true, strokes: true }))
+  const multi = render([SF(), ST()])
   ok(multi.includes(CARD), 'a second board brings the title card in')
-  ok(multi.includes('Total points, highest wins'), 'with how the board is scored')
+  ok(multi.includes('Highest wins'), 'with how the board is scored')
   // The tab strip also says "Stableford", so the card must be identified by
   // its own markup rather than by the word appearing anywhere
   ok(multi.split(CARD).length === 2, 'exactly one title card, for the active board')
 
-  const withDiscard = render(F({ stableford: true, strokes: true, discardWorst: 2 }))
-  ok(withDiscard.includes('worst 2 rounds dropped'),
+  const withDiscard = render([SF(2), ST()])
+  ok(withDiscard.includes('Worst 2 rounds dropped'),
     'the discard rule is spelled out on the card')
-
-  const custom = render(F({ stableford: true, custom: true, customPoints: [10, 5, 1] }))
-  ok(custom.includes('Stableford'), 'the first board is titled')
-  ok(custom.includes('Total points, highest wins'), 'with its rule')
+  ok(!render([SF(0), ST()]).includes('rounds dropped'),
+    'and is absent when the board keeps every card')
 }
 
 // ─── In play ───────────────────────────────────────────────────
 
 section('In play badge')
 {
-  const idle = render(F({ stableford: true }))
+  const idle = render([SF()])
   ok(!idle.includes('In play'), 'nothing shown when no scorecard is open')
 
-  const live = render(F({ stableford: true }), { activeRoundIds: ['r1'] })
+  const live = render([SF()], { activeRoundIds: ['r1'] })
   ok(live.includes('In play'), 'shown while a scorecard is open')
   ok(live.includes('bg-accent'), 'with an emerald dot')
   ok(live.includes('dot-live'), 'that breathes rather than blinks')
   ok(!live.includes('box-shadow'), 'and does not glow — the guide has none')
 
   // It belongs to the trip, not to one board
-  const liveMulti = render(F({ stableford: true, strokes: true }), { activeRoundIds: ['r2'] })
+  const liveMulti = render([SF(), ST()], { activeRoundIds: ['r2'] })
   ok(liveMulti.includes('In play'), 'shown on a multi-board leaderboard too')
 
   // A round that merely has scores is finished, not in play
-  ok(!render(F({ stableford: true }), { activeRoundIds: [] }).includes('In play'),
+  ok(!render([SF()], { activeRoundIds: [] }).includes('In play'),
     'recorded scores alone do not mean a round is in play')
 }
 
@@ -245,13 +294,24 @@ section('In play badge')
 
 section('Matchplay')
 {
-  const off = render(F({ stableford: true }))
-  ok(off.includes('Switch it on in Trip Setup'), 'the button is disabled when matchplay is off')
+  const off = render([SF()])
+  ok(off.includes('Switch it on in Trip Setup'), 'the button is disabled when there is no draw')
 
-  const on = render(F({ stableford: true }, { matchplay: true }))
-  ok(on.includes('/trip/ABC123/matchplay'), 'and links out when it is on')
-  ok(!on.includes('>Matchplay<') || !on.includes('role="tab"'),
-    'it never becomes a tab')
+  const on = render([SF(), MP()])
+  ok(on.includes('/trip/ABC123/matchplay'), 'and links out when a draw is being run')
+
+  // A draw is not a table. The tab strip is league boards only — checked by
+  // reading the strip itself, since "Matchplay" appears on the button too.
+  const three = render([SF(), ST(), MP()])
+  const strip = three.split('overflow-x-auto -mx-1 px-1 pb-1')[1]?.split('</div>')[0] ?? ''
+  ok(strip.includes('Stableford') && strip.includes('Strokes'),
+    'every league board is a tab')
+  ok(!strip.includes('Matchplay'), 'and the draw never becomes one — it has its own page')
+
+  // A trip whose only competition is a draw has no table at all
+  const drawOnly = render([MP()])
+  ok(drawOnly.includes('/trip/ABC123/matchplay'), 'a matchplay-only trip still gets its button')
+  ok(!drawOnly.includes('Alice'), 'and no board underneath it')
 }
 
 // ─── Live vs finalised ─────────────────────────────────────────
@@ -260,7 +320,7 @@ section('A card still open reads against level, in green')
 {
   // Alice nine holes into round 1 at 3 points a hole: 27 points, which is
   // nine ahead of the eighteen that nine holes of level would give.
-  const html = render(F({ stableford: true }), {
+  const html = render([SF()], {
     scores: [],
     liveScores: liveHoles('p1', 'r1', 9, 3),
     activeRoundIds: ['r1'],
@@ -278,14 +338,14 @@ section('A card still open reads against level, in green')
   ok(html.includes('In play'), 'with the board marked as in play')
 
   // Exactly level reads as E, the way a scoreboard has always shown it
-  const level = render(F({ stableford: true }), {
+  const level = render([SF()], {
     scores: [], liveScores: liveHoles('p2', 'r1', 9, 2), activeRoundIds: ['r1'],
   })
   ok(level.includes('>E<'), 'two points a hole is level, shown as E')
   ok(!level.includes('+0'), 'not as +0')
 
   // Behind level carries its sign
-  const behind = render(F({ stableford: true }), {
+  const behind = render([SF()], {
     scores: [], liveScores: liveHoles('p3', 'r1', 9, 1), activeRoundIds: ['r1'],
   })
   ok(behind.includes('-9'), 'behind level shows a minus')
@@ -294,7 +354,7 @@ section('A card still open reads against level, in green')
 section('A finalised card reads as its total, in plain ink')
 {
   // The default fixture is entirely committed scores
-  const html = render(F({ stableford: true }))
+  const html = render([SF()])
 
   ok(html.includes('>54<'), 'a finished round shows the total it scored')
   // Emerald means live. There is no second accent, so a finished round is
@@ -315,7 +375,7 @@ section('Committed always wins over in-progress for the same hole')
 {
   // The same hole in both tables: the committed one is the truth, and the
   // round is no longer live because nothing uncommitted is left.
-  const html = render(F({ stableford: true }), {
+  const html = render([SF()], {
     scores: scoresFor('p1', 'r1', 3),
     liveScores: liveHoles('p1', 'r1', 18, 1),
     activeRoundIds: ['r1'],
@@ -328,7 +388,7 @@ section('Strokes measures against par, not against two points a hole')
 {
   // Nine holes of par 4 is 36. Alice plays them in 3 gross each — but off 10
   // she also receives shots, so the nett is what the board compares to par.
-  const html = render(F({ strokes: true }), {
+  const html = render([ST()], {
     scores: [], liveScores: liveHoles('p1', 'r1', 9, 3), activeRoundIds: ['r1'],
   })
   ok(html.includes('text-accent'), 'an open card carries the accent here too')
@@ -338,6 +398,71 @@ section('Strokes measures against par, not against two points a hole')
   ok(html.includes('>18<'), 'while the total column keeps the nett total')
   ok(html.indexOf('-18') < html.lastIndexOf('>18<'),
     'the round reading against par, the total reading as a total')
+}
+
+// ─── Team formats ──────────────────────────────────────────────
+
+const oneTeam = [{ id: 't1', name: 'Reds', color: '#DC2626' }]
+const allInReds = players.map(p => ({ ...p, team_id: 't1' }))
+
+section('A team format is a property of its own board')
+{
+  // Round 1: Alice 54, Bob 36, Cara 18.
+  // Hero takes the best single card; cut-the-dead-weight takes everyone
+  // except the worst. Those are 54 and 90 — the same three cards, two
+  // genuinely different answers.
+  const hero = render([TEAM('hero')], {
+    teams: oneTeam, players: allInReds, rounds: [rounds[0]],
+  })
+  ok(hero.includes('>54<'), 'hero counts the best single card in the team')
+  ok(hero.includes('Carried by Alice') || hero.includes('Alice'),
+    'and names who carried it')
+
+  const cut = render([TEAM('cut_dead_weight')], {
+    teams: oneTeam, players: allInReds, rounds: [rounds[0]],
+  })
+  ok(cut.includes('>90<'), 'cutting the worst card counts the other two: 54 + 36')
+  ok(!cut.includes('>108<'), 'not everybody — Cara\'s 18 is the card that is cut')
+
+  // Same cards, same trip, different board
+  ok(!hero.includes('>90<'), 'the hero board is not scored as the other one')
+}
+
+section('Cutting the dead weight leaves a lone player their card')
+{
+  // With one member there is nothing to cut. Dropping them would leave the
+  // team with no score at all, which is not what the rule means.
+  const solo = players.map(p => p.id === 'p1' ? { ...p, team_id: 't1' } : p)
+  const html = render([TEAM('cut_dead_weight')], {
+    teams: oneTeam, players: solo, rounds: [rounds[0]],
+  })
+  ok(html.includes('>54<'), 'a team of one keeps its only card')
+  ok(!html.includes('>0<'), 'rather than being cut to nothing')
+}
+
+section('A team league can be paid by position instead of added up')
+{
+  const twoTeams = [
+    { id: 't1', name: 'Reds',  color: '#DC2626' },
+    { id: 't2', name: 'Blues', color: '#2563EB' },
+  ]
+  // Reds: Alice (54 in round 1). Blues: Bob (36) and Cara (18).
+  const split = players.map(p => ({ ...p, team_id: p.id === 'p1' ? 't1' : 't2' }))
+
+  const added = render([TEAM('hero', 'cumulative')], {
+    teams: twoTeams, players: split, rounds: [rounds[0]],
+  })
+  ok(added.includes('>54<') && added.includes('>36<'),
+    'added up, the board carries the points themselves')
+
+  const paid = render([TEAM('hero', 'custom_points', [10, 3])], {
+    teams: twoTeams, players: split, rounds: [rounds[0]],
+  })
+  ok(paid.includes('>10<'), 'paid by position, the round winner takes what the table says')
+  ok(paid.includes('>3<'), 'and second place takes second place')
+  ok(!paid.includes('>54<'),
+    'with the points that earned the position no longer the number shown')
+  ok(paid.includes('10 / 3'), 'and the table named on the board')
 }
 
 // ─── Players own their scores, not teams ───────────────────────
@@ -351,16 +476,11 @@ section('A player carries their scores to whichever team they end up in')
   const inReds = players.map(p => p.id === 'p1' ? { ...p, team_id: 't1' } : { ...p, team_id: 't2' })
   const inBlues = players.map(p => ({ ...p, team_id: 't2' }))
 
-  const teamFormats = parseFormats({
-    individual: false, teams: true,
-    league: { on: true, stableford: true },
-  })
+  const before = render([TEAM()], { teams, players: inReds })
+  const after  = render([TEAM()], { teams, players: inBlues })
 
-  const before = render(teamFormats, { teams, players: inReds })
-  const after  = render(teamFormats, { teams, players: inBlues })
-
-  // Alice's 54 and 18 move with her. Under hero scoring the Reds had her
-  // card and nothing else; once she moves they have nobody left.
+  // Alice's 54 and 18 move with her. The Reds had her card and nothing else;
+  // once she moves they have nobody left.
   ok(before.includes('Reds'), 'the Reds are on the board while she is in them')
   // A team with no players is not a row — it has no scores to show
   ok(!after.includes('Reds'), 'and drop off it once nobody is left in them')
@@ -380,28 +500,87 @@ section('A player with no team is on the individual board but no team board')
   // Alice is in a team; Bob and Cara joined later and have not been placed
   const partly = players.map(p => p.id === 'p1' ? { ...p, team_id: 't1' } : p)
 
-  const both = parseFormats({
-    individual: true, teams: true,
-    league: { on: true, stableford: true },
-  })
-
-  const html = render(both, { teams, players: partly })
+  const html = render([TEAM(), SF()], { teams, players: partly })
 
   // Teams lead, so the team tab is the one showing
   ok(html.includes('Reds'), 'the team with a player in it is on the board')
-  ok(html.includes('>Teams<'), 'the team tab is present')
+  ok(html.includes('>Team better ball<'), 'the team tab is present')
   ok(html.includes('>Stableford<'), 'and so is the individual one')
 
   // Every player is on the individual board whether or not they have a team.
-  // Rendering only shows the active tab, so this is asserted on the tab list
-  // plus the fact that an unplaced player is not silently dropped from the
-  // roster the board is built from.
-  const individualOnly = parseFormats({
-    individual: true, league: { on: true, stableford: true },
-  })
-  const solo = render(individualOnly, { players: partly })
+  // Rendering only shows the active tab, so this is asserted by putting the
+  // individual board first.
+  const solo = render([SF()], { players: partly })
   ok(solo.includes('Alice') && solo.includes('Bob') && solo.includes('Cara'),
     'all three are on the individual board, placed or not')
+}
+
+// ─── Trips that predate the board list ─────────────────────────
+
+section('An old trip is read as the boards its flags described')
+{
+  ok(isLegacy([]), 'an empty list means a trip from before the column existed')
+  ok(!isLegacy([SF()]), 'and a stored list is never treated as legacy')
+
+  // A stored list always wins over the flags, whatever they say
+  const stored = tripBoards([SF()], parseFormats({ teams: true }), DEFAULT_TEAM_SCORING)
+  eq(stored.map(b => b.id), ['b-sf'], 'a stored list is used as it stands')
+
+  const derived = tripBoards([], parseFormats({
+    individual: true, teams: true,
+    league: { on: true, stableford: true, strokes: true, discardWorst: 1 },
+    matchplay: { on: true, format: 'pairs' },
+  }), DEFAULT_TEAM_SCORING)
+
+  eq(derived.map(b => b.audience + ':' + b.competition), [
+    'team:league', 'individual:league', 'individual:league', 'team:matchplay',
+  ], 'teams lead, then the individual boards, then the draw')
+  eq(derived.filter(b => b.scoring).map(b => b.scoring), ['stableford', 'strokes'],
+    'every board that was ticked is there')
+  eq(derived.filter(b => b.scoring).map(b => b.discardWorst), [1, 1],
+    'and the one discard rule the old model had applies to both, as it always did')
+
+  // It renders, which is the thing that actually matters to an existing trip
+  const html = render(F({ stableford: true, strokes: true, discardWorst: 1 }))
+  ok(html.includes('Alice'), 'an old trip still gets its board')
+  ok(html.includes('line-through'), 'with its discard rule still applied')
+}
+
+section('An old team trip keeps the options the new model does not ask for')
+{
+  // Better ball with three scores counting and a grandstand finish is not
+  // expressible as a leaderboard — the new form asks for the format only. A
+  // trip already playing it must not be silently re-scored to the default.
+  const legacy: TeamScoring = {
+    mode: 'better_ball', countingScores: 3, aggregateFinish: 6, aggregateHoles: 18,
+  }
+  eq(teamScoringFor(TEAM('better_ball'), legacy), legacy,
+    'the old settings are carried through verbatim')
+
+  // A board chosen under the new model has no old settings to inherit
+  eq(teamScoringFor(TEAM('better_ball'), null), DEFAULT_TEAM_SCORING,
+    'a board with no legacy behind it takes the defaults')
+
+  // And a legacy setting for a different format is not applied to this one
+  eq(teamScoringFor(TEAM('hero'), legacy).mode, 'hero',
+    'the board names the format; the legacy row only fills in its options')
+  eq(teamScoringFor(TEAM('hero'), legacy).countingScores, DEFAULT_TEAM_SCORING.countingScores,
+    'and options from a different format are not carried across')
+
+  // Aggregate was retired but is still readable, so a trip running it scores
+  // and reads the way it always has
+  const aggregate: TeamScoring = { ...DEFAULT_TEAM_SCORING, mode: 'aggregate', aggregateHoles: 3 }
+  const derived = boardsFromFormats(
+    parseFormats({ teams: true, league: { on: true, stableford: true } }), aggregate)
+  eq(derived[0].teamFormat, 'aggregate', 'a retired format still comes back as itself')
+
+  // Last 3 holes only, everyone counting: Alice 3 + Bob 2 + Cara 1 = 6 a hole
+  const html = render(derived, {
+    teams: oneTeam, players: allInReds, rounds: [rounds[0]],
+    legacyTeamScoring: aggregate,
+  })
+  ok(html.includes('>18<'), 'and is scored by its own old settings — 3 holes, everyone counting')
+  ok(!html.includes('>108<'), 'not over all eighteen, which the defaults would have given')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

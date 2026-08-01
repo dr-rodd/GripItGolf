@@ -125,15 +125,22 @@ function PointsTable({
 // ─── The cascade ───────────────────────────────────────────────
 
 function Builder({
-  existing, fieldSize, onSave, onCancel,
+  existing, playerCount, teamCount, onSave, onCancel,
 }: {
   existing: Leaderboard[]
-  fieldSize: number
+  playerCount: number
+  teamCount: number
   onSave: (lb: Leaderboard) => void
   onCancel: (() => void) | null
 }) {
   const [draft, setDraft] = useState<Partial<Leaderboard>>({})
   const set = (patch: Partial<Leaderboard>) => setDraft(d => ({ ...d, ...patch }))
+
+  // A prize table is one row per finisher, and on a team board the finishers
+  // are the teams. Sized off the players it would pay places nobody can come
+  // in. Two is the floor: teams are usually picked after this is answered,
+  // and a table with no rows cannot be answered at all.
+  const fieldSize = Math.max(2, draft.audience === 'team' ? teamCount : playerCount)
 
   const drawTaken = hasMatchplay(existing)
   const missing = unanswered(draft)
@@ -296,11 +303,13 @@ function Builder({
 // ─── Main ──────────────────────────────────────────────────────
 
 export default function LeaderboardSetup({
-  boards, fieldSize, onChange,
+  boards, playerCount, teamCount, onChange,
 }: {
   boards: Leaderboard[]
-  /** How many players, so a prize table can be built from the field. */
-  fieldSize: number
+  /** The field an individual prize table pays out to. */
+  playerCount: number
+  /** The field a team prize table pays out to. */
+  teamCount: number
   onChange: (boards: Leaderboard[]) => void
 }) {
   const [adding, setAdding] = useState(false)
@@ -336,7 +345,8 @@ export default function LeaderboardSetup({
       {(!done || adding) && (
         <Builder
           existing={boards}
-          fieldSize={fieldSize}
+          playerCount={playerCount}
+          teamCount={teamCount}
           onSave={lb => { onChange([...boards, lb]); setAdding(false) }}
           onCancel={done ? () => setAdding(false) : null}
         />

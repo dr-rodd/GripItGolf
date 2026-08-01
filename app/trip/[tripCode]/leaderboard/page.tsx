@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { parseFormats } from '@/lib/formats'
+import { parseLeaderboards } from '@/lib/leaderboards'
+import { tripBoards, isLegacy } from '@/lib/leaderboardsCompat'
 import { parseTeamScoring } from '@/lib/teamScoring'
 import Poller from '@/app/components/Poller'
 import TripLeaderboardClient from './TripLeaderboardClient'
@@ -19,7 +21,7 @@ export default async function TripLeaderboardPage({
 
   const { data: trip } = await supabase
     .from('trips')
-    .select('id, name, formats, team_scoring')
+    .select('id, name, formats, leaderboards, team_scoring')
     .eq('trip_code', tripCode)
     .single()
   if (!trip) notFound()
@@ -63,6 +65,13 @@ export default async function TripLeaderboardPage({
         .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
     ])
 
+  // What the trip plays for. A stored list wins; a trip created before the
+  // column existed has its old flags read as the boards they described, so
+  // the client only ever renders one shape.
+  const stored = parseLeaderboards(trip.leaderboards)
+  const teamScoring = parseTeamScoring(trip.team_scoring)
+  const boards = tripBoards(stored, parseFormats(trip.formats), teamScoring)
+
   const activeRoundIds = [...new Set((openRes.data ?? []).map(r => r.round_id as string))]
   const hasActiveRound =
     activeRoundIds.length > 0 || (rounds ?? []).some((r: any) => r.status === 'active')
@@ -83,9 +92,9 @@ export default async function TripLeaderboardPage({
 
       <TripLeaderboardClient
         tripCode={tripCode}
-        formats={parseFormats(trip.formats)}
+        boards={boards}
         activeRoundIds={activeRoundIds}
-        teamScoring={parseTeamScoring(trip.team_scoring)}
+        legacyTeamScoring={isLegacy(stored) ? teamScoring : null}
         rounds={(rounds ?? []) as any}
         teams={teamsRes.data ?? []}
         players={playersRes.data ?? []}
