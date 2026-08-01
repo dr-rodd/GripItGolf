@@ -1,7 +1,7 @@
 // How a team's points for a round are worked out. One setting per trip,
 // stored on trips.team_scoring.
 
-export type TeamScoringMode = 'hero' | 'better_ball' | 'aggregate'
+export type TeamScoringMode = 'hero' | 'better_ball' | 'aggregate' | 'cut_dead_weight'
 
 export type TeamScoring = {
   mode: TeamScoringMode
@@ -31,6 +31,11 @@ export const TEAM_SCORING_MODES: {
     key: 'better_ball',
     label: 'Better Ball',
     description: 'A composite card built hole by hole from the team\'s best scores. Can open up to everyone for a grandstand finish.',
+  },
+  {
+    key: 'cut_dead_weight',
+    label: 'Cut the dead weight',
+    description: 'Everyone counts except the worst card of the day. That player is back in next round.',
   },
   {
     key: 'aggregate',
@@ -97,6 +102,18 @@ export type TeamRoundResult = {
 }
 
 /**
+ * The single worst card of a round.
+ *
+ * Ties are broken by id so the same player is cut every time the same round
+ * is scored — a total that changed depending on query order would be worse
+ * than any particular choice of who to drop.
+ */
+function worstOf(totals: { id: string; total: number }[]): { id: string; total: number } {
+  return totals.reduce((worst, m) =>
+    m.total < worst.total || (m.total === worst.total && m.id < worst.id) ? m : worst)
+}
+
+/**
  * Points a team scored in one round under the given mode.
  * `memberIds` may be any size — teams are deliberately not fixed at three.
  */
@@ -125,6 +142,32 @@ export function teamRoundPoints(
       if (hasPlayed && total > best) { best = total; bestId = id }
     }
     return { roundId, points: Math.max(0, best), heroPlayerId: bestId, played: true }
+  }
+
+  if (scoring.mode === 'cut_dead_weight') {
+    // Every member counts except whoever had the worst round. Judged on the
+    // whole card, not hole by hole: it is one bad day being set aside, and
+    // that player is eligible again next round.
+    const totals = memberIds
+      .map(id => ({
+        id,
+        played: mine.some(s => s.playerId === id),
+        total: mine.filter(s => s.playerId === id).reduce((sum, s) => sum + s.points, 0),
+      }))
+      .filter(m => m.played)
+
+    // With one player there is nothing to cut — dropping them would leave
+    // the team with no score at all.
+    const counting = totals.length > 1
+      ? totals.filter(m => m.id !== worstOf(totals).id)
+      : totals
+
+    return {
+      roundId,
+      points: counting.reduce((sum, m) => sum + m.total, 0),
+      heroPlayerId: null,
+      played: true,
+    }
   }
 
   if (scoring.mode === 'better_ball') {

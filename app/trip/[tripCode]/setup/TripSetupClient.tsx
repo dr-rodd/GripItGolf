@@ -24,6 +24,8 @@ import {
 import MatchplayPanel from './MatchplayPanel'
 import DateField from '@/app/components/DateField'
 import BackButton from '@/app/components/BackButton'
+import LeaderboardSetup from '@/app/components/LeaderboardSetup'
+import { type Leaderboard, needsTeams, needsPairings } from '@/lib/leaderboards'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -34,6 +36,7 @@ type Trip = {
   start_date: string | null
   end_date: string | null
   formats: TripFormats
+  leaderboards: Leaderboard[]
   team_scoring: TeamScoring
   setup_status: string
   edit_permission: string
@@ -228,6 +231,9 @@ export default function TripSetupClient({
   const [startDate, setStartDate] = useState(trip.start_date ?? '')
   const [endDate, setEndDate] = useState(trip.end_date ?? '')
   const [formats, setFormats] = useState<TripFormats>(trip.formats)
+  // What the trip is playing for. A list of complete competitions, replacing
+  // the old object of flags — see lib/leaderboards.ts.
+  const [boards, setBoards] = useState<Leaderboard[]>(trip.leaderboards ?? [])
   const [teamScoring, setTeamScoring] = useState<TeamScoring>(trip.team_scoring)
   const [editPermission, setEditPermission] = useState(trip.edit_permission)
   const [setupStatus, setSetupStatus] = useState(trip.setup_status)
@@ -353,6 +359,12 @@ export default function TripSetupClient({
     const table = resolveCustomPoints(formats.league.customPoints, players.length)
     table[index] = clampPoints(raw === '' ? 0 : raw)
     setLeague({ customPoints: table })
+  }
+
+  async function saveBoards(next: Leaderboard[]) {
+    const prev = boards
+    setBoards(next)
+    if (!(await saveTrip({ leaderboards: next }))) setBoards(prev)
   }
 
   async function saveTeamScoring(patch: Partial<TeamScoring>) {
@@ -866,9 +878,32 @@ export default function TripSetupClient({
               </div>
             </section>
 
-            {/* ── The decision tree ──
-                One question at a time, in the order set by lib/tripSetupFlow.ts.
-                A question only appears once the answer above has opened it. */}
+            {/* ── What the trip plays for ──
+                The first thing asked, because it is what turns a scorecard
+                into a position. Nothing below it can be answered sensibly
+                until this is settled. */}
+            <section className={SECTION}>
+              <p className="t-label text-accent-deep uppercase tracking-[0.18em] mb-1">Leaderboards</p>
+              <p className="t-body text-ink/65 mb-4">
+                What this trip is playing for. Every board here is scored from
+                the same cards.
+              </p>
+              <LeaderboardSetup
+                boards={boards}
+                fieldSize={players.length}
+                onChange={saveBoards}
+              />
+              {boards.length > 0 && needsTeams(boards) && teams.length === 0 && (
+                <p className="t-cap text-rust-deep mt-3">
+                  {needsPairings(boards)
+                    ? 'A pairs draw needs pairings — pick them below.'
+                    : 'A team board needs teams — pick them below.'}
+                </p>
+              )}
+            </section>
+
+            {/* ── The rest of setup ──
+                One question at a time, in the order set by lib/tripSetupFlow.ts. */}
             {steps.map(step => (
               <Question key={step.key} step={step}>
                 {questionBody(step)}

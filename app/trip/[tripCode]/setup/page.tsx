@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import BackButton from '@/app/components/BackButton'
 import { parseFormats } from '@/lib/formats'
+import { parseLeaderboards } from '@/lib/leaderboards'
 import { parseTeamScoring } from '@/lib/teamScoring'
 import TripSetupClient from './TripSetupClient'
 import PasscodeGate from './PasscodeGate'
@@ -70,6 +71,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         start_date: trip.start_date ?? null,
         end_date: trip.end_date ?? null,
         formats: parseFormats(trip.formats),
+        leaderboards: parseLeaderboards(trip.leaderboards),
         team_scoring: parseTeamScoring(trip.team_scoring),
         setup_status: trip.setup_status ?? 'live',
         edit_permission: trip.edit_permission ?? 'everyone',

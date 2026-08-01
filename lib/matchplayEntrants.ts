@@ -46,6 +46,60 @@ export function joinNames(names: readonly string[]): string {
   return `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`
 }
 
+/**
+ * Short names that tell people apart.
+ *
+ * A pairing is written as its players' first names — "Ross & Dave". On a
+ * trip with two Rosses that is useless, so a duplicated first name takes as
+ * much of the surname as it needs and no more: "Ross G" against "Dave", but
+ * "Ross Gr" against "Ross Ga" when the initial does not settle it either.
+ *
+ * Everyone sharing a first name grows together, so the names stay the same
+ * length as each other and the list reads evenly.
+ */
+export function shortNames(fullNames: readonly string[]): string[] {
+  const firsts = fullNames.map(firstName)
+
+  return fullNames.map((full, i) => {
+    const clash = firsts.filter((f, j) => j !== i && f === firsts[i])
+    if (clash.length === 0) return firsts[i]
+
+    const rest = surname(full)
+    if (!rest) return firsts[i]
+
+    // Take one more letter at a time until this name is unlike every other
+    // name it collides with. Everyone in the clash uses the same length, so
+    // "Ross Gr" and "Ross Ga" rather than "Ross G" and "Ross Ga".
+    const rivals = fullNames.filter((other, j) => j !== i && firsts[j] === firsts[i])
+    let take = 1
+    while (take < rest.length && rivals.some(r => surname(r).slice(0, take) === rest.slice(0, take))) {
+      take++
+    }
+    // Match the longest any of the clashing names needed, so they agree
+    const needed = Math.max(take, ...rivals.map(r => lengthNeeded(r, fullNames, firsts)))
+    return `${firsts[i]} ${rest.slice(0, Math.min(needed, rest.length))}`
+  })
+}
+
+/** How many surname letters one name needs to stand apart from its clashes. */
+function lengthNeeded(full: string, all: readonly string[], firsts: readonly string[]): number {
+  const i = all.indexOf(full)
+  const rest = surname(full)
+  if (!rest) return 1
+  const rivals = all.filter((other, j) => j !== i && firsts[j] === firsts[i])
+  let take = 1
+  while (take < rest.length && rivals.some(r => surname(r).slice(0, take) === rest.slice(0, take))) {
+    take++
+  }
+  return take
+}
+
+/** Everything after the first name, or '' when there is nothing after it. */
+function surname(full: string): string {
+  const parts = full.trim().split(/\s+/)
+  return parts.length > 1 ? parts.slice(1).join(' ') : ''
+}
+
 export type PlayerRow = { id: string; name: string; handicap?: number | null }
 export type TeamRow = { id: string; name: string }
 
@@ -72,6 +126,9 @@ export function pairEntrant(team: TeamRow, members: readonly PlayerRow[]): Entra
   )
   const names = ordered.map(m => m.name)
   const withHandicaps = ordered.filter(m => m.handicap != null)
+  // Short names are worked out against the pairing's own members. Two Rosses
+  // in the same pairing is the case that has to read.
+  const short = shortNames(names)
 
   return {
     id: team.id,
@@ -79,7 +136,7 @@ export function pairEntrant(team: TeamRow, members: readonly PlayerRow[]): Entra
     // A pairing with nobody in it has nothing to show but the team name, and
     // an unnamed gap on the draw is worse than a placeholder.
     name: names.length > 0 ? joinNames(names) : team.name,
-    shortName: names.length > 0 ? joinNames(names.map(firstName)) : team.name,
+    shortName: names.length > 0 ? joinNames(short) : team.name,
     handicap: withHandicaps.length > 0
       ? withHandicaps.reduce((sum, m) => sum + (m.handicap ?? 0), 0)
       : null,

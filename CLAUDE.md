@@ -231,7 +231,35 @@ points         = GREATEST(0, par + 2 - net_score)
 
 One state at a time. Finalised players cannot be reselected unless manually unfinalised via settings.
 
-## Competition formats
+## Leaderboards — what a trip plays for
+
+**`lib/leaderboards.ts` is the current model.** A trip carries an ordered **list** of complete competitions in `trips.leaderboards` (migration 022). The first is the primary.
+
+This replaced a model where every choice was a flag on one object, so any combination was expressible — including meaningless ones like a team format on an individual board. **A leaderboard is either fully answered or it is not in the list.** That is what lets the scoring module trust what it is handed.
+
+| Board | Questions asked |
+|---|---|
+| Individual · League | scoring (Stableford / Strokes / Custom) → discard (not for Custom) → prize table (Custom only) |
+| Individual · Matchplay | none — the draw is random |
+| Team · League | team format → how rounds are added up → prize table (if by position) |
+| Team · Matchplay | none — pairings, random draw |
+
+**Team formats** (`lib/teamScoring.ts`): `better_ball` (best Stableford per hole), `hero` (best single card carries it), `cut_dead_weight` (everyone counts except the worst card of the day — that player is back in next round; ties broken by id so the same total is produced every time).
+
+**Uniqueness.** `slotKey` decides what makes two boards the same competition: leagues are told apart by how they are scored, so Stableford and Strokes are genuinely two boards. **Matchplay is capped at one per trip**, whoever it is between — a second draw is a different tournament, not a second view of this one. `parseLeaderboards` enforces this on read too, not only in the form.
+
+**The form** (`LeaderboardSetup.tsx`) populates as it is answered, one question opening the next. "Add another leaderboard" sits underneath from the start so it is clear more is possible, but is disabled until the primary is complete. Adding a second offers the same cascade with whatever is running shown as **In use**.
+
+Anything stored that cannot be understood is **dropped, not repaired** — a half-understood board would quietly score a trip wrongly, while no board sends the organiser back to a form that says so.
+
+### Pairing names
+
+A pairing is written as its players' names with `&`. Duplicate first names take as much surname as they need and no more, and everyone in a clash grows together so the names stay the same length: `Ross Gr & Ross Ga`, or `Ross Grad / Ross Gran / Ross Gree` with three. `shortNames` in `lib/matchplayEntrants.ts`.
+
+## Competition formats (superseded)
+
+> The model below is the **previous** one. `parseFormats` still reads it so existing trips keep working, and the leaderboard page still uses it where it has not been migrated. New work should use `lib/leaderboards.ts`.
+
 
 Trip settings are a **decision tree** — questions asked in order as the organiser scrolls, each answer opening what it opens. The tree is `lib/tripSetupFlow.ts` (pure); `TripSetupClient.tsx` renders it rather than deciding it, so the order has one source of truth. Stored in the `formats` JSONB column on `trips`; the model is `lib/formats.ts`.
 
