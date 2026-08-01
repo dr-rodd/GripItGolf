@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo } from "next/font/google";
+import { Archivo, Baloo_2 } from "next/font/google";
 import "./globals.css";
 
 /**
@@ -17,6 +17,20 @@ const archivo = Archivo({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-archivo",
+  display: "swap",
+});
+
+/**
+ * Baloo 2 is one exception to "three families, never mixed" — it is used
+ * for exactly one element, the trip name at the top of the trip page, which
+ * carries more visual weight than any other title in the app. On Google
+ * Fonts, so it comes through next/font like Archivo: self-hosted, no CDN
+ * dependency.
+ */
+const baloo2 = Baloo_2({
+  subsets: ["latin"],
+  weight: ["700"],
+  variable: "--font-baloo",
   display: "swap",
 });
 
@@ -50,7 +64,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://cdn.fontshare.com" crossOrigin="" />
         <link rel="stylesheet" href={FONTSHARE} />
       </head>
-      <body className={`${archivo.variable} antialiased`}>
+      <body className={`${archivo.variable} ${baloo2.variable} antialiased`}>
         {children}
       </body>
     </html>

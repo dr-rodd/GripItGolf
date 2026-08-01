@@ -72,6 +72,8 @@ Three families, one job each, never mixed. Clash Display (headlines), Bespoke Se
 
 Clash Display and Bespoke Serif are **Fontshare** fonts loaded from their CDN in `layout.tsx`; Archivo is self-hosted via `next/font`. The fallback chain degrades to a sans and a serif respectively, so a blocked CDN changes the faces but not the register.
 
+**One deliberate exception: the trip name at the top of the trip page.** It is the most prominent text on the page, so it carries its own face rather than sharing `t-h1` — **Baloo 2, Bold**, `.t-trip-title` in `globals.css`, `clamp(40px, 11vw, 48px)`, well past the standard H1 range. Loaded via `next/font/google` like Archivo, so no CDN dependency. Lowercase is forced in CSS (`text-transform`) so it holds the "leaderboard.", "settings." period-title pattern regardless of how a trip name was typed — "Northwest" renders as "northwest." The period is `.t-trip-title-dot`: emerald, `1.63em`, kept on the baseline explicitly rather than left to inherit, since a period that much larger than its line floats above the text otherwise. Left-aligned, matching the logo and the content below it — the rest of that hero is a centred column, so the title breaks out of it rather than inheriting the centring.
+
 ### The wordmark
 
 Two forms of one mark, both files, both rendered by `app/components/Wordmark.tsx` as an `<img>`. Never recreated in a webfont, never recoloured per page — brown on cream or brown on white, nothing else. Replacing either file needs no code change.
