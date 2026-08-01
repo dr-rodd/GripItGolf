@@ -65,7 +65,7 @@ export default async function TripCoursePage({
     // screen. No tab bar here: the bottom of a scoring screen is score entry,
     // and a nav bar under it is a mis-tap waiting to happen.
     <div className="min-h-dvh bg-cream">
-      <TripHeader tripCode={tripCode} />
+      <TripHeader tripCode={tripCode} title="scoring" />
       <CourseDashboardClient
         courseName={(thisRound.courses as any).name}
         courseId={courseId}

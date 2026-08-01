@@ -101,7 +101,7 @@ The supplied stacked file has a cream background baked in, a shade off our own. 
 
 Two behaviours:
 
-- **`morph`** — the trip hub only. **One element the whole way**: the mark starts large and centred below the header and travels up into it over 190px of scroll. Nothing crossfades and no letter is drawn twice.
+- **`morph`** — **the landing page only.** That is the one screen where the mark is the point; a trip screen is opened to be read, and the brand performing on the way in only delays it. **One element the whole way**: the mark starts large and centred below the header and travels up into it over 190px of scroll. Nothing crossfades and no letter is drawn twice.
 
   **The page is genuinely frozen while it happens** (`HeroPin`). Two parts, both needed:
 
@@ -128,7 +128,17 @@ Two behaviours:
   `test:branding` samples the whole travel and asserts no two words ever collide, allowing for the overlap the artwork's own kerning already has at rest.
 
   The offsets come from `app/components/wordmarkMorph.ts`, **generated** by `npm run logo:line` from the artwork's own word groups. Replace the logo, re-run it, and the animation still lands.
-- **`fixed`** — everywhere else. Just the line mark, sticky from the first pixel. **The leaderboard and scoring screens never morph**: they are read standing on a tee, and nothing on them should move that is not a score.
+- **`fixed`** — every trip screen, the hub included. Sticky from the first pixel, never moving. They are read standing on a tee, and nothing on them should move that is not a score.
+
+**A page can wear its own name instead of the mark.** `TitleMark.tsx` holds the supplied lettering — `leaderboard.` `settings.` `scoring.` — each closed by the emerald dot the way the wordmark is, set at the same height and the same left inset as the line mark settles at. So moving between screens changes the word and nothing else. A named page never morphs: there is no stacked form of "leaderboard." to collapse out of, and the word is a label rather than a brand moment.
+
+All four are cropped to one shared baseline and one common height, so the descender in `scoring.` does not make it sit differently from `leaderboard.`; only the width varies, which is why each carries its own ratio and the header sizes by height. `trip.` is drawn and kept but **not in use** — the trip hub shows the green dot.
+
+They are PNGs derived from the supplied artwork rather than vectors. Rendered as `<img>` for the same reason as the wordmark, so dropping in an SVG of the same proportions needs no code change.
+
+**The header's numbers live in `headerMetrics.ts`, not in `TripHeader.tsx`.** The landing page is a server component and sizes itself from `TRAVEL`; a value exported from a `'use client'` module arrives in a server component as a client *reference*, not as the number, and dropping one into a template literal writes a stub function into the markup. TypeScript sees a number the whole way through and the build says nothing — the only symptom is a style attribute full of nonsense in the rendered page. `test:branding` pins the module as non-client and the import path with it.
+
+The landing page carries a `min-height` of one screen plus `TRAVEL`. The spacer `HeroPin` holds for the mark closes as the mark rises, so a page sized to its own content **shrinks while it is being scrolled**, which caps the scroll, which stalls the animation halfway and strands the mark. The floor cannot do that, and it makes the page's whole scroll range exactly the length of the collapse.
 
 `useScrollProgress` is one hook shared by both marks. Two copies would drift apart mid-scroll and the morph would come apart in the middle. The listener is passive and frame-coalesced; reduced motion settles to the end state immediately rather than animating slower.
 

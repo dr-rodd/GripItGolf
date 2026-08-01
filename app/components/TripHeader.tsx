@@ -3,70 +3,37 @@
 import Link from 'next/link'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import MorphWordmark from './MorphWordmark'
-import { STACKED_BOX, LINE_BOX } from './wordmarkMorph'
+import TitleMark, { type TitleMarkKey } from './TitleMark'
+import { LINE_BOX } from './wordmarkMorph'
+import {
+  HEADER_H, HERO_W, LINE_W, HERO_TOP, LINE_INSET, HERO_SPACE, TRAVEL, RELEASE_AT,
+} from './headerMetrics'
 
 /**
- * The mark at the top of every trip screen, and the way back to the trip.
+ * The mark at the top of the screen, and the way back to the trip.
  *
  * Two behaviours, one component:
  *
- *   morph  The trip hub. The mark stands full size below the header and
+ *   morph  The landing page. The mark stands full size below the header and
  *          travels up into it as the page scrolls, one word at a time. The
  *          page itself stays put while that happens — the first pull of the
  *          scroll moves only the logo, and the content catches up once the
- *          mark has landed.
+ *          mark has landed. It lives on the entry screen because that is the
+ *          one place the mark is the point; a trip screen is opened to be
+ *          read, and the brand performing on the way in gets in the way.
  *
- *   fixed  The leaderboard and the scoring screens. The settled line mark,
- *          from the first pixel, never moving. Those screens are read while
- *          standing on a tee; nothing on them should move that is not a
- *          score.
+ *   fixed  Everywhere else. Settled from the first pixel, never moving.
+ *          These screens are read while standing on a tee; nothing on them
+ *          should move that is not a score.
  *
- * Tapping it goes to the trip hub, from anywhere.
+ * What sits in the bar is either the green dot mark or the page's own name
+ * as artwork — "leaderboard.", "settings.", "scoring." — set at the same
+ * height, in the same place, so moving between screens changes the word and
+ * nothing else.
+ *
+ * Tapping it goes to the trip hub. Without a trip to go back to — the
+ * landing page — it is not a link at all.
  */
-
-/** Header height. The leaderboard's own sticky row sits directly below it. */
-export const HEADER_H = 52
-
-/** Width of the mark at each end of the journey. */
-const HERO_W = 196
-const LINE_W = 118
-
-/** How far below the header the mark stands at rest. */
-const HERO_TOP = 58
-
-/** The mark's resting distance from the left edge once it has landed. */
-const LINE_INSET = 6
-
-/** The height of the mark at rest, from the artwork's own proportions. */
-const HERO_H = (STACKED_BOX[3] / STACKED_BOX[2]) * HERO_W
-
-/** The room the mark occupies below the header before it moves. */
-export const HERO_SPACE = HERO_TOP + HERO_H + 20
-
-/**
- * The scroll the whole sequence takes.
- *
- * Deliberately longer than the space the mark occupies. They used to be the
- * same number, which left the page's catch-up crammed into whatever scroll
- * was left after the mark had landed — the content shot up two or three
- * times faster than the finger moving it. Giving the sequence more room lets
- * the collapse finish unhurried and the page follow at a readable speed.
- */
-const TRAVEL = Math.round(HERO_SPACE * 1.5)
-
-/**
- * How far through the scroll the page starts catching up.
- *
- * Before this the content is completely still — the scroll moves the logo and
- * nothing else. After it the gap the mark leaves closes and the page comes up
- * to meet the header.
- *
- * Set to overlap the tail of the sequence rather than to follow it. The words
- * are in place by now and only the emerald dot is still sliding, so the page
- * rising alongside it reads as everything resolving together. Waiting for the
- * very last movement left a stretch where nothing happened at all.
- */
-const RELEASE_AT = 0.60
 
 /**
  * How far through the morph the page has scrolled, 0 → 1.
@@ -114,12 +81,19 @@ export function useScrollProgress(enabled: boolean): { progress: number; reduced
 export default function TripHeader({
   tripCode,
   variant = 'fixed',
+  title = 'green-dot',
 }: {
-  tripCode: string
+  /** The trip to go back to. Omitted where there is no trip yet. */
+  tripCode?: string
   variant?: 'fixed' | 'morph'
+  /** What stands in the bar: the mark, or this page's name as artwork. */
+  title?: 'green-dot' | TitleMarkKey
 }) {
-  const { progress, reduced } = useScrollProgress(variant === 'morph')
-  const settled = variant === 'fixed' || reduced
+  // A named page never morphs — there is no stacked form of "leaderboard."
+  // to collapse, and the word is a label rather than a brand moment.
+  const morphs = variant === 'morph' && title === 'green-dot'
+  const { progress, reduced } = useScrollProgress(morphs)
+  const settled = !morphs || reduced
   const t = settled ? 1 : progress
 
   // The mark centres itself at rest, which means knowing how wide the row is.
@@ -164,22 +138,36 @@ export default function TripHeader({
       }}
     >
       <div ref={row} className="max-w-lg mx-auto h-full px-4 relative">
-        <Link
-          href={`/trip/${tripCode}`}
-          aria-label="Back to the trip"
-          className="absolute inset-0 rounded-lg"
-          // The tap target is the header bar itself. The mark overflows it
-          // while it is still down in the hero, and a link the size of the
-          // mark would then swallow taps meant for the page behind it.
-          style={{ zIndex: 1 }}
-        />
-        <MorphWordmark
-          progress={t}
-          heroWidth={HERO_W}
-          lineWidth={LINE_W}
-          heroOrigin={heroOrigin}
-          lineOrigin={lineOrigin}
-        />
+        {tripCode && (
+          <Link
+            href={`/trip/${tripCode}`}
+            aria-label="Back to the trip"
+            className="absolute inset-0 rounded-lg"
+            // The tap target is the header bar itself. The mark overflows it
+            // while it is still down in the hero, and a link the size of the
+            // mark would then swallow taps meant for the page behind it.
+            style={{ zIndex: 1 }}
+          />
+        )}
+        {title === 'green-dot' ? (
+          <MorphWordmark
+            progress={t}
+            heroWidth={HERO_W}
+            lineWidth={LINE_W}
+            heroOrigin={heroOrigin}
+            lineOrigin={lineOrigin}
+          />
+        ) : (
+          // Exactly where the line mark comes to rest, and exactly as tall,
+          // so a page that names itself and a page that shows the mark put
+          // the same weight in the same place.
+          <span
+            className="absolute pointer-events-none"
+            style={{ left: lineOrigin[0], top: lineOrigin[1] }}
+          >
+            <TitleMark name={title} height={lineH} />
+          </span>
+        )}
       </div>
     </header>
   )

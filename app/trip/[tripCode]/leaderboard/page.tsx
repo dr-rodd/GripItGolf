@@ -78,7 +78,7 @@ export default async function TripLeaderboardPage({
 
   return (
     <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
-      <TripHeader tripCode={tripCode} />
+      <TripHeader tripCode={tripCode} title="leaderboard" />
 
       <div className="bg-cream border-b border-bark/12">
         <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">

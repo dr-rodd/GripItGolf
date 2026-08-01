@@ -237,9 +237,12 @@ section('The bottom tab bar')
 section('The mark is the header, and the way back')
 {
   const src = read('app/components/TripHeader.tsx')
+  // The numbers live outside the client component so a server page can read
+  // them — see the comment at the top of headerMetrics.ts.
+  const metrics = read('app/components/headerMetrics.ts')
 
   ok(src.includes('sticky top-0'), 'it sticks to the top')
-  ok(src.includes('HEADER_H = 52'), 'at a known height')
+  ok(metrics.includes('HEADER_H = 52'), 'at a known height')
   ok(src.includes('href={`/trip/${tripCode}`}'), 'and tapping it goes to the trip hub')
   ok(src.includes("aria-label=\"Back to the trip\""), 'which is said out loud, since it is only a logo')
   ok(src.includes('<MorphWordmark'), 'the header carries the mark itself')
@@ -265,23 +268,27 @@ section('The mark is the header, and the way back')
   }
 }
 
-section('The morph happens on the hub, and nowhere else')
+section('The morph happens on the landing page, and nowhere else')
 {
   const src = read('app/components/TripHeader.tsx')
-  const hub = read('app/trip/[tripCode]/page.tsx')
+  const metrics = read('app/components/headerMetrics.ts')
+  const landing = read('app/page.tsx')
 
-  ok(hub.includes('variant="morph"'), 'the hub asks for the morph')
-  ok(hub.includes('<HeroPin>'), 'and wraps its content so the page holds still')
+  // The entry screen is the one place the mark is the point. A trip screen
+  // is opened to be read, and the brand performing on the way in delays it.
+  ok(landing.includes('variant="morph"'), 'the landing page asks for the morph')
+  ok(landing.includes('<HeroPin>'), 'and wraps its content so the page holds still')
 
-  // The delicate screens get the settled header and nothing moving
+  // Every trip screen, the hub included, is settled from the first pixel
   for (const f of [
+    'app/trip/[tripCode]/page.tsx',
     'app/trip/[tripCode]/leaderboard/page.tsx',
     'app/trip/[tripCode]/course/page.tsx',
     'app/trip/[tripCode]/course/[roundNumber]/page.tsx',
   ]) {
     ok(!read(f).includes('variant="morph"'),
       `${f.split('/').slice(-2).join('/')} does not morph — it is read standing on a tee`)
-    ok(!read(f).includes('HeroWordmark'), '  …and has no hero mark to morph from')
+    ok(!read(f).includes('HeroPin'), '  …and holds nothing still, because nothing moves')
   }
 
   // Scroll handlers fire constantly on a phone; this one coalesces
@@ -312,16 +319,16 @@ section('The morph happens on the hub, and nowhere else')
     'the content is pushed back by exactly the distance scrolled')
   ok(src.includes('HERO_SPACE * (1 - release)'),
     'and the gap the mark leaves closes separately')
-  ok(src.includes('const RELEASE_AT'), 'with the catch-up starting at a named point')
+  ok(metrics.includes('RELEASE_AT'), 'with the catch-up starting at a named point')
 
-  const releaseAt = Number(src.match(/const RELEASE_AT = ([\d.]+)/)?.[1] ?? 0)
+  const releaseAt = Number(metrics.match(/RELEASE_AT = ([\d.]+)/)?.[1] ?? 0)
   ok(releaseAt >= 0.6, 'late enough that the collapse finishes first')
   ok(releaseAt < 1, 'but early enough that the page does catch up')
 
   // The travel is longer than the space the mark occupies, which is what
   // leaves room for the catch-up to happen at a readable speed rather than
   // being crammed into whatever scroll is left.
-  const travelMul = Number(src.match(/HERO_SPACE \* ([\d.]+)\)/)?.[1] ?? 0)
+  const travelMul = Number(metrics.match(/HERO_SPACE \* ([\d.]+)\)/)?.[1] ?? 0)
   ok(travelMul > 1, 'the sequence runs over more scroll than the mark occupies')
 
   // Anyone who asked for less motion gets the end state, not a slow version
@@ -509,7 +516,7 @@ section('The words move separately, and never through each other')
     // The landing inset is read from the header rather than assumed, so this
     // tracks the real value instead of quietly passing against a stand-in.
     const inset = Number(
-      read('app/components/TripHeader.tsx').match(/const LINE_INSET = ([\d.]+)/)?.[1] ?? -1)
+      read('app/components/headerMetrics.ts').match(/LINE_INSET = ([\d.]+)/)?.[1] ?? -1)
     ok(inset >= 4, 'the mark lands with a margin from the edge, not flush against it')
     const MARK = {
       heroWidth: 210, lineWidth: 118,
@@ -694,13 +701,96 @@ section('No glows')
   ok(dot.includes('w-1.5 h-1.5'), 'kept small, so it stays a punctuation mark')
 }
 
+// ─── The header's numbers cross the client boundary ────────────
+
+section('Header metrics are readable from a server component')
+{
+  // The landing page is a server component and sizes itself from TRAVEL. A
+  // value exported from a 'use client' module arrives there as a client
+  // reference rather than as the number, and dropping one into a template
+  // literal writes a stub function into the markup. TypeScript sees a number
+  // the whole way and the build says nothing — the only symptom is a style
+  // attribute full of nonsense in the rendered page.
+  const metrics = read('app/components/headerMetrics.ts')
+  // Checked as the directive, not as a mention: the file's own comment
+  // explains the trap and names it.
+  ok(!/^\s*['"]use client['"]/.test(metrics), 'the metrics module is not client-only')
+
+  for (const name of ['HEADER_H', 'HERO_SPACE', 'TRAVEL', 'RELEASE_AT', 'LINE_INSET']) {
+    ok(new RegExp(`export const ${name}\\b`).test(metrics), `${name} is exported from it`)
+  }
+
+  // …and nothing re-exports them from the client component, which would put
+  // the same trap back with a different import path
+  const header = read('app/components/TripHeader.tsx')
+  for (const name of ['HEADER_H', 'HERO_SPACE', 'TRAVEL']) {
+    ok(!new RegExp(`export const ${name}\\b`).test(header),
+      `TripHeader does not re-export ${name}`)
+  }
+
+  // The server pages that need a number take it from the right place
+  ok(read('app/page.tsx').includes("from \"@/app/components/headerMetrics\""),
+    'the landing page reads TRAVEL from the metrics module')
+}
+
+// ─── The page's name as artwork ────────────────────────────────
+
+section('A page can name itself in the header')
+{
+  const src = read('app/components/TitleMark.tsx')
+  const header = read('app/components/TripHeader.tsx')
+
+  // Every mark is a file, exactly like the wordmark — never retyped in a
+  // webfont, so replacing one needs no code change
+  for (const name of ['leaderboard', 'settings', 'scoring', 'trip']) {
+    ok(src.includes(`/title-${name}.png`), `${name}. is a file`)
+    ok(fs.existsSync(`public/title-${name}.png`), `  …and the file is there`)
+  }
+  ok(src.includes('<img'), 'rendered as an image, not as type')
+
+  // Same place, same height as the mark it stands in for. The header sizes
+  // by height and lets each word's own width follow.
+  ok(header.includes('<TitleMark name={title} height={lineH} />'),
+    'set to the height the line mark settles at')
+  ok(header.includes('style={{ left: lineOrigin[0], top: lineOrigin[1] }}'),
+    'and to the place it settles in')
+
+  // A word has no stacked form to collapse out of
+  ok(header.includes("variant === 'morph' && title === 'green-dot'"),
+    'a named page never morphs')
+
+  // Which page wears which
+  const wears: [string, string][] = [
+    ['app/trip/[tripCode]/leaderboard/page.tsx', 'leaderboard'],
+    ['app/trip/[tripCode]/course/page.tsx', 'scoring'],
+    ['app/trip/[tripCode]/course/[roundNumber]/page.tsx', 'scoring'],
+    ['app/trip/[tripCode]/setup/TripSetupClient.tsx', 'settings'],
+  ]
+  for (const [file, name] of wears) {
+    ok(read(file).includes(`title="${name}"`),
+      `${file.split('/').slice(-2).join('/')} wears ${name}.`)
+  }
+
+  // The hub keeps the mark — "trip." is drawn but not in use yet
+  ok(!read('app/trip/[tripCode]/page.tsx').includes('title="trip"'),
+    'the trip hub still shows the green dot, not its own name')
+
+  // The old text heading is gone from settings, or the page says it twice
+  ok(!read('app/trip/[tripCode]/setup/TripSetupClient.tsx').includes('>Trip Setup<'),
+    'and settings does not also spell its name out in type')
+}
+
 // ─── Landing page ──────────────────────────────────────────────
 
 const home = renderToStaticMarkup(React.createElement(Home))
 
 section('Landing page')
 {
-  ok(home.includes('/logo.svg'), 'the wordmark is the page')
+  // The mark is the header's now, and it is drawn from the artwork's own
+  // paths rather than loaded as a file, so it is the ink that is checked.
+  ok(home.includes('<svg'), 'the wordmark is the page')
+  ok(/#4a3728/i.test(home), '  …in the artwork\'s own brown')
+  ok(/#0a9d56/i.test(home), '  …closed by the emerald dot')
   ok(!home.includes('<h1'), 'and is not restated as a heading beneath itself')
 
   // "a simple title underneath explaining that the user should tap the nav

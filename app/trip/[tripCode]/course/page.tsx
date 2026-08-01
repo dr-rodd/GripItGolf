@@ -33,7 +33,7 @@ export default async function TripCoursePortalPage({
   return (
     <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
 
-      <TripHeader tripCode={tripCode} />
+      <TripHeader tripCode={tripCode} title="scoring" />
 
       <div className="border-b border-bark/12 bg-cream">
         <div className="max-w-lg mx-auto px-4 py-4">

@@ -23,8 +23,8 @@ import {
 } from '@/lib/teamLimits'
 import MatchplayPanel from './MatchplayPanel'
 import DateField from '@/app/components/DateField'
-import BackButton from '@/app/components/BackButton'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
+import TripHeader from '@/app/components/TripHeader'
 import { type Leaderboard, needsTeams, needsPairings } from '@/lib/leaderboards'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -801,14 +801,9 @@ export default function TripSetupClient({
   return (
     <main className="min-h-dvh bg-cream text-ink pb-16">
 
-      {/* Header */}
-      <div className="border-b border-bark/12">
-        <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
-          <BackButton href={`/trip/${trip.trip_code}`} />
-          <h1 className="font-[family-name:var(--font-display)] text-xl tracking-wide">Trip Setup</h1>
-          <div className="w-11" />
-        </div>
-      </div>
+      {/* The page names itself in the header, the way the leaderboard and
+          the scoring screens do. Tapping the mark is the way back. */}
+      <TripHeader tripCode={trip.trip_code} title="settings" />
 
       <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
 

@@ -11,7 +11,7 @@ import {
   type BoardRow, type ResolvedScore, type RowContext,
   buildRows, effectivePar,
 } from '@/lib/boardRows'
-import { HEADER_H } from '@/app/components/TripHeader'
+import { HEADER_H } from '@/app/components/headerMetrics'
 
 // ─── Types ─────────────────────────────────────────────────────
 
