@@ -62,12 +62,10 @@ section('Round count limit')
 
 // ─── The form renders the control ──────────────────────────────
 
-const courses = [
-  { id: 'c1', name: 'Ballyliffin Old' },
-  { id: 'c2', name: 'Portsalon' },
-]
+// The form fetches its own courses now, so the route can stay static and be
+// prefetched whole. Nothing to hand in.
 const formHtml = renderToStaticMarkup(
-  React.createElement(CreateTripForm, { courses })
+  React.createElement(CreateTripForm)
 )
 
 section('The itinerary replaces the rounds picker')

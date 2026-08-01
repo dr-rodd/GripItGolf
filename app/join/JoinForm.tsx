@@ -1,12 +1,29 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 
-export default function JoinForm({ initialCode }: { initialCode: string }) {
-  const [code, setCode] = useState(initialCode.toUpperCase())
+/**
+ * The code a shared link carries, if any.
+ *
+ * Read through useSyncExternalStore rather than in an effect: the server has
+ * no URL to read, so it renders empty and the browser fills it in on
+ * hydration without a mismatch and without a second render pass. Taking it
+ * from searchParams on the server instead would make this route dynamic, and
+ * a dynamic route cannot be prefetched whole — which is the gap this was all
+ * about.
+ */
+const subscribe = () => () => {}
+const readFromUrl = () => new URLSearchParams(window.location.search).get('code') ?? ''
+const readOnServer = () => ''
+
+export default function JoinForm() {
+  const linkCode = useSyncExternalStore(subscribe, readFromUrl, readOnServer)
+  // Null until somebody types: until then the link's code is what shows.
+  const [typed, setTyped] = useState<string | null>(null)
+  const code = typed ?? linkCode.toUpperCase().slice(0, 6)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
@@ -32,13 +49,16 @@ export default function JoinForm({ initialCode }: { initialCode: string }) {
   }
 
   return (
-    <main className="min-h-dvh bg-cream page-enter">
+    <main className="min-h-dvh bg-cream">
 
       {/* The mark, exactly where it arrives from the landing page — and the
           way back there, so this screen needs no back button of its own. */}
       <TripHeader backTo="/" />
 
-      <div className="flex flex-col items-center justify-center px-6 py-12">
+      {/* The fade starts below the header. The mark has just travelled into
+          that bar from the landing page and is in exactly the same place
+          here — fading it in would blink it out and back for no reason. */}
+      <div className="flex flex-col items-center justify-center px-6 py-12 page-enter">
         <div className="w-full max-w-xs">
 
         <h1 className="font-[family-name:var(--font-display)] text-4xl text-ink mb-2">
@@ -52,7 +72,7 @@ export default function JoinForm({ initialCode }: { initialCode: string }) {
           <input
             type="text"
             value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            onChange={(e) => setTyped(e.target.value.toUpperCase())}
             maxLength={6}
             placeholder="GX7K2P"
             className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-xl tracking-[0.4em] uppercase text-center placeholder:text-ink/25 placeholder:tracking-[0.4em] focus:outline-none focus:border-accent/60 transition-colors"

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import BackButton from '@/app/components/BackButton'
@@ -64,7 +64,33 @@ function generateCode(): string {
 
 // ── Root component ────────────────────────────────────────────────────────
 
-export default function CreateTripForm({ courses }: { courses: Course[] }) {
+export default function CreateTripForm() {
+  /**
+   * The platform course list, fetched here rather than handed down.
+   *
+   * Doing it on the server made this route dynamic, and a dynamic route
+   * cannot be prefetched whole — so arriving from the landing page meant a
+   * round trip and a query after the mark had already landed. They are not
+   * wanted until step two, so they load while the trip is being named.
+   */
+  const [courses, setCourses] = useState<Course[]>([])
+  const [coursesLoaded, setCoursesLoaded] = useState(false)
+
+  useEffect(() => {
+    let live = true
+    supabase
+      .from('courses')
+      .select('id, name')
+      .is('trip_id', null)
+      .order('name')
+      .then(({ data }) => {
+        if (!live) return
+        setCourses(data ?? [])
+        setCoursesLoaded(true)
+      })
+    return () => { live = false }
+  }, [])
+
   const [step, setStep] = useState<1 | 2 | 3 | 'done'>(1)
 
   // Step 1
@@ -426,11 +452,16 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
     !(step === 3 && !step3Valid)
 
   return (
-    <div className="min-h-dvh bg-cream text-ink page-enter">
+    <div className="min-h-dvh bg-cream text-ink">
 
       {/* The mark, exactly where it arrives from the landing page — and the
           way back there, so there is no home button on this screen. */}
       <TripHeader backTo="/" />
+
+      {/* The fade starts below the header. The mark has just travelled into
+          that bar from the landing page and is in exactly the same place
+          here — fading it in would blink it out and back for no reason. */}
+      <div className="page-enter">
 
       {/* Progress bar + step label. The back control here means one step, not
           one screen: the mark above goes home, this goes to the answers you
@@ -522,7 +553,9 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
             thing being built and the rounds fall out of it. */}
         {step === 2 && (
           <div>
-            {courses.length === 0 && (
+            {/* Only once we know: an empty list mid-fetch is not a problem
+                worth reporting. */}
+            {coursesLoaded && courses.length === 0 && (
               <div className="p-4 bg-surface border border-bark/12 rounded-xl text-ink/40 text-sm text-center mb-4">
                 No platform courses available yet. Add courses with <code className="text-accent">trip_id = NULL</code> to get started.
               </div>
@@ -694,6 +727,8 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
             )}
           </div>
         )}
+      </div>
+
       </div>
     </div>
   )

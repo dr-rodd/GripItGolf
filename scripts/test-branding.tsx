@@ -720,6 +720,37 @@ section('No glows')
   ok(dot.includes('w-1.5 h-1.5'), 'kept small, so it stays a punctuation mark')
 }
 
+// ─── The screens the mark lands on are already there ───────────
+
+section('The destinations are prefetchable whole')
+{
+  // A dynamic route cannot be prefetched whole, so arriving at one is a
+  // server round trip — which lands after the animation has finished and
+  // reads as a gap. Measured before this was fixed: 480ms on join, 314ms on
+  // create, and create still had a database query in front of it.
+  for (const f of ['app/join/page.tsx', 'app/dashboard/create/page.tsx']) {
+    const src = read(f)
+    const name = f.split('/').slice(-2).join('/')
+    ok(!src.includes('force-dynamic'), `${name} is not forced dynamic`)
+    ok(!/await\s+searchParams/.test(src), `  …and does not read searchParams, which would make it so`)
+    ok(!src.includes('supabase'), `  …nor query anything, which would too`)
+  }
+
+  // What moved off the server had to land somewhere
+  ok(read('app/join/JoinForm.tsx').includes('window.location.search'),
+    'the join code is read from the URL on the client instead')
+  const create = read('app/dashboard/create/CreateTripForm.tsx')
+  ok(create.includes("from('courses')"), 'and the course list is fetched by the form')
+  ok(create.includes('coursesLoaded && courses.length === 0'),
+    'which only reports an empty list once it actually knows')
+
+  // Prefetched on the landing page, or none of the above helps
+  const landing = read('app/Landing.tsx')
+  ok(landing.includes("router.prefetch('/dashboard/create')") &&
+     landing.includes("router.prefetch('/join')"),
+    'both are prefetched while the landing page sits there')
+}
+
 // ─── One header, everywhere ────────────────────────────────────
 
 section('The screens before a trip wear the same header')
