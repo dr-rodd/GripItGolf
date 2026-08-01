@@ -52,7 +52,7 @@ export const HERO_SPACE = HERO_TOP + HERO_H + 20
  * times faster than the finger moving it. Giving the sequence more room lets
  * the collapse finish unhurried and the page follow at a readable speed.
  */
-const TRAVEL = Math.round(HERO_SPACE * 1.7)
+const TRAVEL = Math.round(HERO_SPACE * 1.5)
 
 /**
  * How far through the scroll the page starts catching up.
@@ -60,8 +60,13 @@ const TRAVEL = Math.round(HERO_SPACE * 1.7)
  * Before this the content is completely still — the scroll moves the logo and
  * nothing else. After it the gap the mark leaves closes and the page comes up
  * to meet the header.
+ *
+ * Set to overlap the tail of the sequence rather than to follow it. The words
+ * are in place by now and only the emerald dot is still sliding, so the page
+ * rising alongside it reads as everything resolving together. Waiting for the
+ * very last movement left a stretch where nothing happened at all.
  */
-const RELEASE_AT = 0.68
+const RELEASE_AT = 0.60
 
 /**
  * How far through the morph the page has scrolled, 0 → 1.

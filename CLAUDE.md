@@ -112,14 +112,14 @@ Two behaviours:
 
   **Up, then left — strictly, one word at a time** (`MorphWordmark.tsx`):
 
-  | Word | Motion |
-  |---|---|
-  | `green` | rises first, alone — the whole opening of the scroll is just this |
-  | `dot` | waits for green to clear left, then rises, then follows it left |
-  | `golf` | drops **down** and out, fading. Up would take it through `dot` and `green` |
-  | `.` | last, by the same route — punctuation arriving after its sentence |
+  | Word | Motion | Window |
+  |---|---|---|
+  | `green` | up, then away left — leads | y 0–.16 · x .16–.44 |
+  | `dot` | rises while green is still sliding, then follows | y .20–.50 · x .50–.74 |
+  | `golf` | drops **down** and out, fading. Up would take it through `dot` and `green` | y 0–.30 |
+  | `.` | rises with the words, lands last | y .24–.52 · x .52–.80 |
 
-  A word never moves on both axes at once: its vertical window closes before its horizontal one opens. `EXIT_DROP` is in pixels rather than artwork units, because everything in units is multiplied by a scale that shrinks to a third — a generous drop in units came out tiny on screen, and with the rest of the mark rising past it `golf` appeared to drift *upwards*.
+  A word never moves on both axes at once: its vertical window closes before its horizontal one opens. **Between** words the windows overlap heavily — the only real constraint is that green must be clear of the spot dot lands on before dot gets there, and `easeOut` carries green most of the way in the first third of its slide, so dot needs a short head start rather than a long wait. Staggering them any further reads as dead air. `EXIT_DROP` is in pixels rather than artwork units, because everything in units is multiplied by a scale that shrinks to a third — a generous drop in units came out tiny on screen, and with the rest of the mark rising past it `golf` appeared to drift *upwards*.
 
   `test:branding` samples the whole travel and asserts no two words ever collide, allowing for the overlap the artwork's own kerning already has at rest.
 

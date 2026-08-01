@@ -321,8 +321,8 @@ section('The morph happens on the hub, and nowhere else')
   // The travel is longer than the space the mark occupies, which is what
   // leaves room for the catch-up to happen at a readable speed rather than
   // being crammed into whatever scroll is left.
-  ok(/const TRAVEL = Math\.round\(HERO_SPACE \* 1\.\d\)/.test(src),
-    'the sequence runs over more scroll than the mark occupies')
+  const travelMul = Number(src.match(/HERO_SPACE \* ([\d.]+)\)/)?.[1] ?? 0)
+  ok(travelMul > 1, 'the sequence runs over more scroll than the mark occupies')
 
   // Anyone who asked for less motion gets the end state, not a slow version
   ok(src.includes('prefers-reduced-motion'), 'reduced motion is honoured')
@@ -372,7 +372,15 @@ section('The words move separately, and never through each other')
 
   eq(windows.golf.y[0], 0, 'golf starts leaving straight away')
   ok(windows.mark.y[0] > windows.dot.y[0], 'and the dot follows the words, not leads them')
-  ok(windows.mark.x[1] >= 0.9, 'landing last of all')
+  // Last to land, but by a small margin — a long tail here left the end of
+  // the scroll doing nothing.
+  const finishes = Object.entries(windows).map(([id, w]) => [id, Math.max(w.x[1], w.y[1])] as const)
+  const last = finishes.reduce((a, b) => (b[1] > a[1] ? b : a))
+  eq(last[0], 'mark', 'landing last of all')
+
+  // And the whole sequence is over well before the scroll is, so the tail
+  // is the page catching up rather than an empty wait.
+  ok(last[1] <= 0.85, 'with the sequence finished before the scroll ends')
 
   // ── Nothing moves right ──
   // Checked against the geometry rather than asserted in prose. The mark
@@ -518,9 +526,12 @@ section('The words move separately, and never through each other')
       return found
     }
 
-    const rest = tops(0)
-    const early = tops(0.22)   // green is rising; dot has not started
-    const late  = tops(0.60)   // dot is rising
+    // Sampled where green is well into its rise and dot has not begun.
+    // Those points move whenever the timings are compressed, so they are
+    // derived from the table rather than written in by hand.
+    const rest  = tops(0)
+    const early = tops(windows.dot.y[0] - 0.04)
+    const late  = tops(windows.dot.y[1])
 
     // The whole mark is shrinking throughout, so every word drifts a little
     // even before its own window opens. What matters is that green is doing
@@ -548,7 +559,7 @@ section('The words move separately, and never through each other')
       return found
     }
     const atRest = lefts(0)
-    const early2 = lefts(0.2)
+    const early2 = lefts(Math.min(windows.dot.y[0], windows.mark.y[0]) - 0.02)
     eq(+(early2.dot - atRest.dot).toFixed(2), 0,
       'dot has not moved sideways at all before its turn')
     eq(+(early2.mark - atRest.mark).toFixed(2), 0,

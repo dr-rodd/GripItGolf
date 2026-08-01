@@ -51,19 +51,22 @@ type Window = [number, number]
  * that the two axes are strictly ordered.
  */
 const TIMING: Record<string, { y: Window; x: Window }> = {
-  // Green goes first and is quick about it: up, then left, and done inside
-  // the first half. Long enough to read as leading, short enough that the
-  // rest are visibly following rather than waiting their turn.
-  green: { y: [0.00, 0.28], x: [0.28, 0.50] },
-  // Straight in behind, starting as green begins to move left — so the two
-  // overlap in time without ever overlapping in space.
-  dot:   { y: [0.32, 0.60], x: [0.60, 0.80] },
+  // Green leads, and is brisk about it — up quickly, then away left.
+  green: { y: [0.00, 0.16], x: [0.16, 0.44] },
+  // Rises while green is still sliding left. The only real constraint in the
+  // whole sequence is that green must be clear of the spot dot lands on
+  // before dot gets there, and easeOut carries green most of the way in the
+  // first third of its slide — so dot needs a short head start, not a long
+  // wait. Everything past that was dead air.
+  dot:   { y: [0.20, 0.50], x: [0.50, 0.74] },
   // Straight down and out, never sideways. It is the only word heading that
   // way, so it crosses nothing on its way off the screen.
-  golf:  { y: [0.00, 0.36], x: [0.00, 0.00] },
-  // Close behind the words rather than long after them. Punctuation follows
-  // its sentence; it does not arrive in a later paragraph.
-  mark:  { y: [0.54, 0.78], x: [0.78, 0.96] },
+  golf:  { y: [0.00, 0.30], x: [0.00, 0.00] },
+  // Rises with the words rather than long after them. It still lands last,
+  // but because it starts from the far right of the stacked mark and has the
+  // furthest to come — not because it waits its turn. A long window here
+  // left the last third of the scroll doing nothing.
+  mark:  { y: [0.24, 0.52], x: [0.52, 0.80] },
 }
 
 /**
