@@ -15,7 +15,8 @@
 
 import type { Leaderboard } from './leaderboards'
 import {
-  type TeamScoring, DEFAULT_TEAM_SCORING, teamRoundPoints,
+  type TeamScoring, type TeamScoreInput, type ScoringBasis,
+  DEFAULT_TEAM_SCORING, teamRoundPoints,
 } from './teamScoring'
 import {
   resolveCustomPoints, awardRound, totalAfterDiscard, discardedIndices,
@@ -152,20 +153,24 @@ export function teamScoringFor(lb: Leaderboard, legacy: TeamScoring | null): Tea
   return { ...DEFAULT_TEAM_SCORING, mode }
 }
 
-// ─── Building a board ──────────────────────────────────────────
+
+// ─── The two shells ────────────────────────────────────────────
 
 /**
  * The rows for one leaderboard, in finishing order.
+ *
+ * Two shells, not one per format: an individual board and a team board, each
+ * taking how a round is scored and how the rounds add up. Every board a trip
+ * can run is a set of arguments to one of these, which is what makes the
+ * grid finite — settings selects a cell, it never asks for maths that has to
+ * be written.
  *
  * Matchplay returns nothing: a draw is not a table, and it lives on its own
  * route. The caller decides what to show in its place.
  */
 export function buildRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   if (lb.competition === 'matchplay') return []
-  if (lb.audience === 'team') return teamRows(lb, ctx)
-  if (lb.scoring === 'strokes') return strokeRows(lb, ctx)
-  if (lb.scoring === 'custom') return customRows(lb, ctx)
-  return stablefordRows(lb, ctx)
+  return lb.audience === 'team' ? teamRows(lb, ctx) : individualRows(lb, ctx)
 }
 
 /** Whether any of these players has a round still open. */
@@ -173,259 +178,271 @@ function liveFor(playerIds: string[], ctx: RowContext): boolean {
   return ctx.resolved.some(s => playerIds.includes(s.playerId) && ctx.liveRoundIds.has(s.roundId))
 }
 
-// ── Individual Stableford ──
+/** Lowest wins on strokes, so sorting and discarding both reverse. */
+const lowerWins = (lb: Leaderboard) => lb.scoring === 'strokes'
 
-function stablefordRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
-  const discard = lb.discardWorst ?? 0
-
-  return ctx.players
-    .map(p => {
-      const perRound: Record<string, number> = {}
-      const relativeByRound: Record<string, number> = {}
-      const playedRounds: string[] = []
-      const liveRounds: string[] = []
-      let holesPlayed = 0
-
-      for (const r of ctx.rounds) {
-        const mine = ctx.resolved.filter(s => s.playerId === p.id && s.roundId === r.id)
-        perRound[r.id] = mine.reduce((sum, s) => sum + s.points, 0)
-        // Two points a hole is level, so this is how far ahead they stand on
-        // the holes they have actually played
-        relativeByRound[r.id] = perRound[r.id] - mine.length * 2
-        holesPlayed += mine.length
-        if (mine.length > 0) playedRounds.push(r.id)
-        if (mine.some(s => s.live)) liveRounds.push(r.id)
-      }
-
-      const played = playedRounds.map(id => perRound[id])
-      const total = totalAfterDiscard(played, discard)
-      const dropped = discardedIndices(played, discard).map(i => playedRounds[i])
-      const diff = total - holesPlayed * 2
-
-      const row: BoardRow = {
-        id: p.id,
-        name: p.name,
-        subLabel: `${holesPlayed} hole${holesPlayed === 1 ? '' : 's'} · ${
-          diff === 0 ? 'level' : diff > 0 ? `+${diff}` : diff
-        }`,
-        perRound,
-        playedRounds,
-        droppedRounds: dropped,
-        liveRounds,
-        relativeByRound,
-        total,
-        isLive: liveFor([p.id], ctx),
-        playerIds: [p.id],
-      }
-      return { row, holesPlayed }
-    })
-    .filter(r => r.holesPlayed > 0)
-    .map(r => r.row)
-    .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
+/**
+ * One round, for one entrant, before the board decides what to do with it.
+ *
+ * `relative` is how far ahead of level the round stands while it is still
+ * being played — against two points a hole on Stableford, against the par of
+ * the holes played on strokes. Null where there is no level to be ahead of.
+ */
+type RoundScore = {
+  roundId: string
+  score: number
+  relative: number | null
+  live: boolean
+  played: boolean
+  heroPlayerId?: string | null
 }
 
-// ── Individual Strokeplay ──
-// Lower is better, so nett is the headline and rows sort ascending.
+/**
+ * Turn a row's rounds into its columns and its total.
+ *
+ * This is the second axis, and it is the same for individuals and teams. A
+ * board either adds the rounds up — dropping the worst if it says so — or
+ * places each round and pays the table.
+ */
+function combineRounds(
+  lb: Leaderboard,
+  rows: { id: string; rounds: RoundScore[] }[],
+  fieldSize: number,
+): Map<string, { perRound: Record<string, number>; dropped: string[]; total: number }> {
+  const out = new Map<string, { perRound: Record<string, number>; dropped: string[]; total: number }>()
+  const byPosition = lb.combine === 'position'
+  const table = byPosition ? resolveCustomPoints(lb.customPoints ?? [], fieldSize) : []
 
-function strokeRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
-  const discard = lb.discardWorst ?? 0
-  const holeById = new Map(ctx.holes.map(h => [h.id, h]))
-
-  return ctx.players
-    .map(p => {
-      const perRound: Record<string, number> = {}
-      const relativeByRound: Record<string, number> = {}
-      const playedRounds: string[] = []
-      const liveRounds: string[] = []
-      let gross = 0, holesPlayed = 0
-
-      for (const r of ctx.rounds) {
-        const mine = ctx.resolved.filter(
-          s => s.playerId === p.id && s.roundId === r.id && s.gross != null
-        )
-        const g = mine.reduce((sum, s) => sum + (s.gross ?? 0), 0)
-        const shots = mine.reduce((sum, s) => {
-          const hole = holeById.get(s.holeId)
-          if (!hole) return sum
-          const ph = ctx.hcpFor.get(`${r.id}:${p.id}`) ?? p.handicap ?? 0
-          return sum + shotsReceived(ph, effectiveSI(hole, p.gender))
-        }, 0)
-        perRound[r.id] = g - shots
-
-        // Par of the holes actually played, so a card nine holes in reads
-        // against nine holes of par rather than eighteen
-        const parPlayed = mine.reduce((sum, sc) => {
-          const hole = holeById.get(sc.holeId)
-          return hole ? sum + effectivePar(hole, p.gender) : sum
-        }, 0)
-        relativeByRound[r.id] = perRound[r.id] - parPlayed
-
-        gross += g
-        holesPlayed += mine.length
-        if (mine.length > 0) playedRounds.push(r.id)
-        if (mine.some(sc => sc.live)) liveRounds.push(r.id)
-      }
-
-      // Low scores win here, so the worst round is the highest one
-      const playedNett = playedRounds.map(id => perRound[id])
-      const nett = totalAfterDiscard(playedNett, discard, { lowerWins: true })
-      const dropped = discardedIndices(playedNett, discard, { lowerWins: true })
-        .map(i => playedRounds[i])
-
-      const row: BoardRow = {
-        id: p.id,
-        name: p.name,
-        subLabel: `${holesPlayed} hole${holesPlayed === 1 ? '' : 's'} · ${gross} gross`,
-        perRound,
-        playedRounds,
-        droppedRounds: dropped,
-        liveRounds,
-        relativeByRound,
-        total: nett,
-        isLive: liveFor([p.id], ctx),
-        playerIds: [p.id],
-      }
-      return { row, holesPlayed }
-    })
-    .filter(r => r.holesPlayed > 0)
-    .map(r => r.row)
-    .sort((a, b) => a.total - b.total)
-}
-
-// ── Individual custom points ──
-// Each round is placed on its own Stableford result, positions are paid from
-// this board's table, and the total is the sum across rounds.
-
-function customRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
-  const discard = lb.discardWorst ?? 0
-  const table = resolveCustomPoints(lb.customPoints ?? [], ctx.players.length)
-
-  const awardedByRound = new Map<string, Map<string, number>>()
-  for (const r of ctx.rounds) {
-    const standings = ctx.players
-      .map(p => {
-        const mine = ctx.resolved.filter(s => s.playerId === p.id && s.roundId === r.id)
-        return mine.length > 0
-          ? { playerId: p.id, score: mine.reduce((sum, s) => sum + s.points, 0) }
-          : null
-      })
-      .filter(Boolean) as { playerId: string; score: number }[]
-    awardedByRound.set(r.id, awardRound(standings, table))
+  // Paid by position: each round is placed on its own result, and what shows
+  // in the round column is what that position was worth — not the score that
+  // earned it, which would leave the total not adding up beside its columns.
+  const awarded = new Map<string, Map<string, number>>()
+  if (byPosition) {
+    const roundIds = new Set(rows.flatMap(r => r.rounds.filter(x => x.played).map(x => x.roundId)))
+    for (const roundId of roundIds) {
+      const standings = rows
+        .map(r => {
+          const rs = r.rounds.find(x => x.roundId === roundId && x.played)
+          return rs ? { playerId: r.id, score: rs.score } : null
+        })
+        .filter(Boolean) as { playerId: string; score: number }[]
+      awarded.set(roundId, awardRound(standings, table, { lowerWins: lowerWins(lb) }))
+    }
   }
 
-  return ctx.players
-    .map(p => {
-      const perRound: Record<string, number> = {}
-      const playedRounds: string[] = []
-      const liveRounds: string[] = []
+  for (const row of rows) {
+    const played = row.rounds.filter(r => r.played)
+    const perRound: Record<string, number> = {}
+    for (const r of row.rounds) {
+      perRound[r.roundId] = byPosition
+        ? awarded.get(r.roundId)?.get(row.id) ?? 0
+        : r.score
+    }
 
-      for (const r of ctx.rounds) {
-        const awarded = awardedByRound.get(r.id)?.get(p.id)
-        if (awarded === undefined) continue
-        perRound[r.id] = awarded
-        playedRounds.push(r.id)
-        // No relative figure on purpose: a prize table pays finishing
-        // position, and there is no level to be ahead of. The green still
-        // says the position can move before the card is in.
-        if (ctx.resolved.some(sc => sc.playerId === p.id && sc.roundId === r.id && sc.live)) {
-          liveRounds.push(r.id)
+    // Prize points are always higher-is-better, whatever earned them
+    const opts = { lowerWins: byPosition ? false : lowerWins(lb) }
+    const values = played.map(r => perRound[r.roundId])
+    const discard = lb.discardWorst ?? 0
+
+    out.set(row.id, {
+      perRound,
+      dropped: discardedIndices(values, discard, opts).map(i => played[i].roundId),
+      total: totalAfterDiscard(values, discard, opts),
+    })
+  }
+  return out
+}
+
+/** Highest total wins, unless the board is nett strokes added up. */
+function sortRows(lb: Leaderboard, rows: BoardRow[]): BoardRow[] {
+  const ascending = lowerWins(lb) && lb.combine !== 'position'
+  return rows.sort((a, b) =>
+    (ascending ? a.total - b.total : b.total - a.total) || a.name.localeCompare(b.name))
+}
+
+// ── Individuals ──
+
+function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
+  const holeById = new Map(ctx.holes.map(h => [h.id, h]))
+  const strokes = lb.scoring === 'strokes'
+
+  const perPlayer = ctx.players.map(p => {
+    let holesPlayed = 0, gross = 0
+
+    const rounds: RoundScore[] = ctx.rounds.map(r => {
+      const mine = ctx.resolved.filter(s =>
+        s.playerId === p.id && s.roundId === r.id && (!strokes || s.gross != null))
+      holesPlayed += mine.length
+
+      if (!strokes) {
+        const score = mine.reduce((sum, s) => sum + s.points, 0)
+        return {
+          roundId: r.id,
+          score,
+          // Two points a hole is level, so this is how far ahead they stand
+          // on the holes they have actually played
+          relative: score - mine.length * 2,
+          live: mine.some(s => s.live),
+          played: mine.length > 0,
         }
       }
 
-      const played = playedRounds.map(id => perRound[id])
-      const total = totalAfterDiscard(played, discard)
-      const dropped = discardedIndices(played, discard).map(i => playedRounds[i])
+      const g = mine.reduce((sum, s) => sum + (s.gross ?? 0), 0)
+      const ph = ctx.hcpFor.get(`${r.id}:${p.id}`) ?? p.handicap ?? 0
+      const shots = mine.reduce((sum, s) => {
+        const hole = holeById.get(s.holeId)
+        return hole ? sum + shotsReceived(ph, effectiveSI(hole, p.gender)) : sum
+      }, 0)
+      // Par of the holes actually played, so a card nine holes in reads
+      // against nine holes of par rather than eighteen
+      const parPlayed = mine.reduce((sum, s) => {
+        const hole = holeById.get(s.holeId)
+        return hole ? sum + effectivePar(hole, p.gender) : sum
+      }, 0)
+      gross += g
 
-      const row: BoardRow = {
-        id: p.id,
-        name: p.name,
-        subLabel: playedRounds.length > 0
-          ? `${playedRounds.length} round${playedRounds.length === 1 ? '' : 's'}`
-          : '',
-        perRound,
-        playedRounds,
-        droppedRounds: dropped,
-        liveRounds,
-        total,
-        isLive: liveFor([p.id], ctx),
-        playerIds: [p.id],
+      return {
+        roundId: r.id,
+        score: g - shots,
+        relative: g - shots - parPlayed,
+        live: mine.some(s => s.live),
+        played: mine.length > 0,
       }
-      return { row, played: playedRounds.length }
     })
-    .filter(r => r.played > 0)
-    .map(r => r.row)
-    .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
+
+    return { player: p, rounds, holesPlayed, gross }
+  }).filter(r => r.holesPlayed > 0)
+
+  const combined = combineRounds(lb, perPlayer.map(r => ({ id: r.player.id, rounds: r.rounds })),
+    ctx.players.length)
+
+  const rows = perPlayer.map(({ player, rounds, holesPlayed, gross }) => {
+    const c = combined.get(player.id)!
+    const holes = `${holesPlayed} hole${holesPlayed === 1 ? '' : 's'}`
+    // Prize points have no level to be ahead of, so the summary just counts
+    // the rounds that have been placed
+    const played = rounds.filter(r => r.played).length
+    const summary = lb.combine === 'position'
+      ? `${played} round${played === 1 ? '' : 's'}`
+      : strokes
+        ? `${gross} gross`
+        : relativeToLevel(c.total - holesPlayed * 2)
+
+    const row: BoardRow = {
+      id: player.id,
+      name: player.name,
+      subLabel: `${holes} · ${summary}`,
+      perRound: c.perRound,
+      playedRounds: rounds.filter(r => r.played).map(r => r.roundId),
+      droppedRounds: c.dropped,
+      liveRounds: rounds.filter(r => r.live).map(r => r.roundId),
+      relativeByRound: relatives(lb, rounds),
+      total: c.total,
+      isLive: liveFor([player.id], ctx),
+      playerIds: [player.id],
+    }
+    return row
+  })
+
+  return sortRows(lb, rows)
+}
+
+const relativeToLevel = (diff: number) =>
+  diff === 0 ? 'level' : diff > 0 ? `+${diff}` : String(diff)
+
+/**
+ * The against-level figures, but only where they mean something.
+ *
+ * A board paid by position has no level: what is showing in that column is
+ * what a finishing place was worth, and a signed number beside it would be
+ * answering a question nobody asked.
+ */
+function relatives(lb: Leaderboard, rounds: RoundScore[]): Record<string, number> | undefined {
+  if (lb.combine === 'position') return undefined
+  const out: Record<string, number> = {}
+  for (const r of rounds) if (r.relative !== null) out[r.roundId] = r.relative
+  return out
 }
 
 // ── Teams ──
 
 function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const scoring = teamScoringFor(lb, ctx.legacyTeamScoring)
-  const byPosition = lb.aggregation === 'custom_points'
-  const table = byPosition
-    ? resolveCustomPoints(lb.customPoints ?? [], ctx.teams.length)
-    : []
+  const basis: ScoringBasis = lb.scoring === 'strokes' ? 'strokes' : 'stableford'
+  const inputs = teamScoreInputs(ctx)
 
-  // Every team's raw points for every round, before the trip decides how the
-  // rounds are added together.
-  const raw = ctx.teams.map(team => {
+  const perTeam = ctx.teams.map(team => {
     const memberIds = ctx.players.filter(p => p.team_id === team.id).map(p => p.id)
-    const perRound: Record<string, number> = {}
-    const heroByRound: Record<string, string | null> = {}
-    const playedRounds: string[] = []
-    const liveRounds: string[] = []
-
-    for (const r of ctx.rounds) {
-      const res = teamRoundPoints(memberIds, r.id, ctx.resolved, scoring)
-      perRound[r.id] = res.points
-      heroByRound[r.id] = res.heroPlayerId
-      if (res.played) playedRounds.push(r.id)
-      // No relative figure: what counts as level depends on the mode and the
-      // team's size, so a signed number here would mislead.
-      if (ctx.resolved.some(sc => memberIds.includes(sc.playerId) && sc.roundId === r.id && sc.live)) {
-        liveRounds.push(r.id)
+    const rounds: RoundScore[] = ctx.rounds.map(r => {
+      const res = teamRoundPoints(memberIds, r.id, inputs, scoring, basis)
+      return {
+        roundId: r.id,
+        score: res.score,
+        // No level here: what counts as level depends on the format and the
+        // team's size, so a signed number would mislead. Green still says
+        // the total can move.
+        relative: null,
+        live: ctx.resolved.some(s =>
+          memberIds.includes(s.playerId) && s.roundId === r.id && s.live),
+        played: res.played,
+        heroPlayerId: res.heroPlayerId,
       }
-    }
-    return { team, memberIds, perRound, heroByRound, playedRounds, liveRounds }
+    })
+    return { team, memberIds, rounds }
   }).filter(t => t.memberIds.length > 0)
 
-  // Paid by position: each round is placed on its raw points, and what shows
-  // in the round column is what that position was worth — not the points that
-  // earned it, which would make the total look wrong beside its own columns.
-  const awardedByRound = new Map<string, Map<string, number>>()
-  if (byPosition) {
-    for (const r of ctx.rounds) {
-      const standings = raw
-        .filter(t => t.playedRounds.includes(r.id))
-        .map(t => ({ playerId: t.team.id, score: t.perRound[r.id] }))
-      awardedByRound.set(r.id, awardRound(standings, table))
+  const combined = combineRounds(lb, perTeam.map(t => ({ id: t.team.id, rounds: t.rounds })),
+    ctx.teams.length)
+
+  const rows = perTeam.map(({ team, memberIds, rounds }) => {
+    const c = combined.get(team.id)!
+    const members = ctx.players.filter(p => p.team_id === team.id)
+    const row: BoardRow = {
+      id: team.id,
+      name: team.name,
+      color: team.color,
+      subLabel: members.map(m => firstName(m.name)).join(', '),
+      perRound: c.perRound,
+      playedRounds: rounds.filter(r => r.played).map(r => r.roundId),
+      droppedRounds: c.dropped,
+      liveRounds: rounds.filter(r => r.live).map(r => r.roundId),
+      total: c.total,
+      isLive: liveFor(memberIds, ctx),
+      playerIds: memberIds,
+      heroByRound: Object.fromEntries(rounds.map(r => [r.roundId, r.heroPlayerId ?? null])),
     }
-  }
+    return row
+  })
 
-  return raw
-    .map(t => {
-      const perRound = byPosition
-        ? Object.fromEntries(
-            t.playedRounds.map(id => [id, awardedByRound.get(id)?.get(t.team.id) ?? 0])
-          )
-        : t.perRound
-      const total = t.playedRounds.reduce((sum, id) => sum + (perRound[id] ?? 0), 0)
+  return sortRows(lb, rows)
+}
 
-      const members = ctx.players.filter(p => p.team_id === t.team.id)
-      const row: BoardRow = {
-        id: t.team.id,
-        name: t.team.name,
-        color: t.team.color,
-        subLabel: members.map(m => firstName(m.name)).join(', '),
-        perRound,
-        playedRounds: t.playedRounds,
-        liveRounds: t.liveRounds,
-        total,
-        isLive: liveFor(t.memberIds, ctx),
-        playerIds: t.memberIds,
-        heroByRound: t.heroByRound,
-      }
-      return row
-    })
-    .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
+/**
+ * Every score with both a points value and a nett stroke value on it.
+ *
+ * A team format asks the same question either way — best on the hole, best
+ * card, everyone but the worst — so the format code takes both and reads
+ * whichever the board is scored on. Working the nett out here means it is
+ * done once per page rather than once per team.
+ */
+function teamScoreInputs(ctx: RowContext): TeamScoreInput[] {
+  const holeById = new Map(ctx.holes.map(h => [h.id, h]))
+  const genderOf = new Map(ctx.players.map(p => [p.id, p.gender]))
+  const handicapOf = new Map(ctx.players.map(p => [p.id, p.handicap]))
+
+  return ctx.resolved.map(s => {
+    const hole = holeById.get(s.holeId)
+    const gender = genderOf.get(s.playerId) ?? 'M'
+    const ph = ctx.hcpFor.get(`${s.roundId}:${s.playerId}`) ?? handicapOf.get(s.playerId) ?? 0
+    const nett = hole && s.gross != null
+      ? s.gross - shotsReceived(ph, effectiveSI(hole, gender))
+      : undefined
+    return {
+      playerId: s.playerId,
+      roundId: s.roundId,
+      holeNumber: s.holeNumber,
+      points: s.points,
+      nett,
+    }
+  })
 }

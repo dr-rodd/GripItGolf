@@ -84,21 +84,39 @@ export function describeTeamScoring(ts: TeamScoring): string {
 
 // ─── Calculation ───────────────────────────────────────────────
 
+/**
+ * What a round is being scored on.
+ *
+ * The team formats are the same shape of question either way — best on the
+ * hole, best card, everyone but the worst — but the direction reverses. On
+ * Stableford the best score is the highest; on strokes it is the lowest, and
+ * a team's round is a nett stroke total rather than a points total.
+ */
+export type ScoringBasis = 'stableford' | 'strokes'
+
 /** The minimum a score needs to expose for team scoring. */
 export type TeamScoreInput = {
   playerId: string
   roundId: string
   holeNumber: number
   points: number
+  /** Nett strokes for the hole. Only read when the basis is strokes. */
+  nett?: number
 }
 
 export type TeamRoundResult = {
   roundId: string
-  points: number
+  /** The team's score for the round, in whatever the basis was. */
+  score: number
   /** Hero mode only — who carried the team this round. */
   heroPlayerId: string | null
   /** True once anyone on the team has scored a hole in this round. */
   played: boolean
+}
+
+/** Lower wins on strokes, higher on Stableford. One rule, used everywhere. */
+export function beats(a: number, b: number, basis: ScoringBasis): boolean {
+  return basis === 'strokes' ? a < b : a > b
 }
 
 /**
@@ -108,13 +126,17 @@ export type TeamRoundResult = {
  * is scored — a total that changed depending on query order would be worse
  * than any particular choice of who to drop.
  */
-function worstOf(totals: { id: string; total: number }[]): { id: string; total: number } {
+function worstOf(
+  totals: { id: string; total: number }[],
+  basis: ScoringBasis,
+): { id: string; total: number } {
   return totals.reduce((worst, m) =>
-    m.total < worst.total || (m.total === worst.total && m.id < worst.id) ? m : worst)
+    beats(worst.total, m.total, basis) || (m.total === worst.total && m.id < worst.id) ? m : worst)
 }
 
 /**
- * Points a team scored in one round under the given mode.
+ * A team's score for one round under the given mode.
+ *
  * `memberIds` may be any size — teams are deliberately not fixed at three.
  */
 export function teamRoundPoints(
@@ -122,26 +144,28 @@ export function teamRoundPoints(
   roundId: string,
   scores: TeamScoreInput[],
   scoring: TeamScoring,
+  basis: ScoringBasis = 'stableford',
 ): TeamRoundResult {
   const members = new Set(memberIds)
   const mine = scores.filter(s => s.roundId === roundId && members.has(s.playerId))
+  const value = (s: TeamScoreInput) => basis === 'strokes' ? s.nett ?? 0 : s.points
 
   if (mine.length === 0) {
-    return { roundId, points: 0, heroPlayerId: null, played: false }
+    return { roundId, score: 0, heroPlayerId: null, played: false }
   }
 
   if (scoring.mode === 'hero') {
     let bestId: string | null = null
-    let best = -1
+    let best: number | null = null
     for (const id of memberIds) {
+      // A player with no scores at all shouldn't win the hero slot with 0
+      if (!mine.some(s => s.playerId === id)) continue
       const total = mine
         .filter(s => s.playerId === id)
-        .reduce((sum, s) => sum + s.points, 0)
-      // A player with no scores at all shouldn't win the hero slot with 0
-      const hasPlayed = mine.some(s => s.playerId === id)
-      if (hasPlayed && total > best) { best = total; bestId = id }
+        .reduce((sum, s) => sum + value(s), 0)
+      if (best === null || beats(total, best, basis)) { best = total; bestId = id }
     }
-    return { roundId, points: Math.max(0, best), heroPlayerId: bestId, played: true }
+    return { roundId, score: best ?? 0, heroPlayerId: bestId, played: true }
   }
 
   if (scoring.mode === 'cut_dead_weight') {
@@ -152,19 +176,19 @@ export function teamRoundPoints(
       .map(id => ({
         id,
         played: mine.some(s => s.playerId === id),
-        total: mine.filter(s => s.playerId === id).reduce((sum, s) => sum + s.points, 0),
+        total: mine.filter(s => s.playerId === id).reduce((sum, s) => sum + value(s), 0),
       }))
       .filter(m => m.played)
 
     // With one player there is nothing to cut — dropping them would leave
     // the team with no score at all.
     const counting = totals.length > 1
-      ? totals.filter(m => m.id !== worstOf(totals).id)
+      ? totals.filter(m => m.id !== worstOf(totals, basis).id)
       : totals
 
     return {
       roundId,
-      points: counting.reduce((sum, m) => sum + m.total, 0),
+      score: counting.reduce((sum, m) => sum + m.total, 0),
       heroPlayerId: null,
       played: true,
     }
@@ -181,18 +205,18 @@ export function teamRoundPoints(
     for (let hole = 1; hole <= 18; hole++) {
       const holeScores = mine
         .filter(s => s.holeNumber === hole)
-        .map(s => s.points)
-        .sort((a, b) => b - a)
+        .map(value)
+        .sort((a, b) => basis === 'strokes' ? a - b : b - a)
       const counting = hole >= finishFrom ? holeScores.length : scoring.countingScores
       total += holeScores.slice(0, counting).reduce((sum, p) => sum + p, 0)
     }
-    return { roundId, points: total, heroPlayerId: null, played: true }
+    return { roundId, score: total, heroPlayerId: null, played: true }
   }
 
   // aggregate — every score counts, over the closing `aggregateHoles` holes
   const firstHole = 18 - scoring.aggregateHoles + 1
   const total = mine
     .filter(s => s.holeNumber >= firstHole)
-    .reduce((sum, s) => sum + s.points, 0)
-  return { roundId, points: total, heroPlayerId: null, played: true }
+    .reduce((sum, s) => sum + value(s), 0)
+  return { roundId, score: total, heroPlayerId: null, played: true }
 }

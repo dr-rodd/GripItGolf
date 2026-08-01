@@ -2,10 +2,12 @@
  * Leaderboard model tests. Run with: npm run test:leaderboards
  *
  * A trip runs a list of complete competitions rather than one object full of
- * flags. Three things have to hold:
+ * flags. Four things have to hold:
  *
  *   · a board is either fully answered or it does not exist — the scoring
  *     module is handed rules it can trust, never a half-filled object
+ *   · the three questions are genuinely independent, so every combination of
+ *     them is a board that exists and can be scored
  *   · a trip runs one knockout draw and one of each league, and the form
  *     shows what is already taken rather than letting it be chosen twice
  *   · anything stored that cannot be understood is dropped, not repaired.
@@ -14,9 +16,9 @@
 
 import {
   type Leaderboard,
-  SCORINGS, TEAM_FORMATS, AGGREGATIONS, MAX_DISCARD,
+  SCORINGS, TEAM_FORMATS, COMBINES, MAX_DISCARD,
   slotKey, isSlotFree, hasMatchplay, freeScorings, freeTeamFormats, canAddMore,
-  unanswered, isComplete, offersDiscard, needsTeams, needsPairings,
+  everyBoard, unanswered, isComplete, offersDiscard, needsTeams, needsPairings,
   boardTitle, boardRules, primary, parseLeaderboards,
 } from '../lib/leaderboards'
 
@@ -33,11 +35,12 @@ function eq(got: unknown, want: unknown, label: string) {
 }
 const section = (n: string) => console.log(`\n${n}`)
 
-const sf: Leaderboard = { id: 'a', audience: 'individual', competition: 'league', scoring: 'stableford', discardWorst: 0 }
-const strokes: Leaderboard = { id: 'b', audience: 'individual', competition: 'league', scoring: 'strokes', discardWorst: 0 }
+const sf: Leaderboard = { id: 'a', audience: 'individual', competition: 'league', scoring: 'stableford', combine: 'total', discardWorst: 0 }
+const strokes: Leaderboard = { id: 'b', audience: 'individual', competition: 'league', scoring: 'strokes', combine: 'total', discardWorst: 0 }
+const prize: Leaderboard = { id: 'p', audience: 'individual', competition: 'league', scoring: 'stableford', combine: 'position', customPoints: [10, 5, 1] }
 const draw: Leaderboard = { id: 'c', audience: 'individual', competition: 'matchplay' }
 const pairsDraw: Leaderboard = { id: 'd', audience: 'team', competition: 'matchplay' }
-const teamBB: Leaderboard = { id: 'e', audience: 'team', competition: 'league', teamFormat: 'better_ball', aggregation: 'cumulative' }
+const teamBB: Leaderboard = { id: 'e', audience: 'team', competition: 'league', scoring: 'stableford', teamFormat: 'better_ball', combine: 'total' }
 
 // ─── A board is complete or it is nothing ──────────────────────
 
@@ -46,26 +49,28 @@ section('The form cannot be left half-answered')
   eq(unanswered({}), ['Who is being ranked'], 'nothing chosen asks who is playing')
   eq(unanswered({ audience: 'individual' }), ['League or matchplay'], 'then what they play')
 
-  ok(unanswered({ audience: 'individual', competition: 'league' }).includes('How it is scored'),
-    'an individual league needs a scoring')
-  eq(unanswered({ audience: 'individual', competition: 'league', scoring: 'stableford' }), [],
-    'and with one it is finished')
-
-  // Custom pays by position, so the table is part of the answer
-  ok(unanswered({ audience: 'individual', competition: 'league', scoring: 'custom' })
-    .includes('What each position is worth'), 'custom points needs its table')
-  eq(unanswered({ audience: 'individual', competition: 'league', scoring: 'custom', customPoints: [10, 5] }), [],
-    'and is finished once it has one')
-
-  // A team league has two more questions
-  const teamPartial = { audience: 'team' as const, competition: 'league' as const }
-  eq(unanswered(teamPartial).length, 2, 'a team league asks about format and aggregation')
-  eq(unanswered({ ...teamPartial, teamFormat: 'hero' as const }), ['How rounds are added up'],
-    'the format alone is not enough')
-  eq(unanswered({ ...teamPartial, teamFormat: 'hero' as const, aggregation: 'cumulative' as const }), [],
+  const solo = { audience: 'individual' as const, competition: 'league' as const }
+  eq(unanswered(solo), ['How a round is scored', 'How the rounds add up'],
+    'an individual league asks how a round is scored and how the rounds add up')
+  eq(unanswered({ ...solo, scoring: 'stableford' as const }), ['How the rounds add up'],
+    'the scoring alone is not a competition')
+  eq(unanswered({ ...solo, scoring: 'stableford' as const, combine: 'total' as const }), [],
     'both of them is')
-  ok(unanswered({ ...teamPartial, teamFormat: 'hero' as const, aggregation: 'custom_points' as const })
-    .includes('What each position is worth'), 'unless it pays by position, which needs a table')
+
+  // Paying by position needs to say what a position is worth
+  ok(unanswered({ ...solo, scoring: 'stableford' as const, combine: 'position' as const })
+    .includes('What each position is worth'), 'a prize table board needs its table')
+  eq(unanswered({ ...solo, scoring: 'strokes' as const, combine: 'position' as const, customPoints: [10, 5] }), [],
+    'and is finished once it has one — on either scoring')
+
+  // A team league asks the same questions plus one
+  const team = { audience: 'team' as const, competition: 'league' as const }
+  eq(unanswered(team).length, 3, 'a team league asks one question more')
+  eq(unanswered({ ...team, scoring: 'strokes' as const }),
+    ['How a team\'s players combine', 'How the rounds add up'],
+    'the extra one being how the players in a team combine')
+  eq(unanswered({ ...team, scoring: 'strokes' as const, teamFormat: 'hero' as const, combine: 'total' as const }), [],
+    'and all three finishes it')
 
   // A draw has nothing else to decide — it is generated at random
   eq(unanswered({ audience: 'individual', competition: 'matchplay' }), [],
@@ -73,22 +78,58 @@ section('The form cannot be left half-answered')
   eq(unanswered({ audience: 'team', competition: 'matchplay' }), [],
     'and so is a pairs draw')
 
-  ok(isComplete(sf) && isComplete(teamBB) && isComplete(draw), 'complete boards report as complete')
+  ok(isComplete(sf) && isComplete(teamBB) && isComplete(draw) && isComplete(prize),
+    'complete boards report as complete')
   ok(!isComplete({ audience: 'team', competition: 'league' }), 'and half-filled ones do not')
 }
 
-section('The discard question is only asked where it means something')
+// ─── The three questions are independent ───────────────────────
+
+section('Every combination of the three answers is a real board')
+{
+  const grid = everyBoard()
+
+  // 2 scorings × 2 combines for individuals; the same again per team format
+  eq(grid.filter(b => b.audience === 'individual').length,
+    SCORINGS.length * COMBINES.length, 'every individual cell exists')
+  eq(grid.filter(b => b.audience === 'team').length,
+    SCORINGS.length * TEAM_FORMATS.length * COMBINES.length, 'and every team cell')
+
+  // The grid is the shape of every competition. A prize table is a value the
+  // organiser fills in, not part of which competition this is — so a cell is
+  // complete once it has one, and the ones that do not pay by position are
+  // complete as they stand.
+  ok(grid.every(b => isComplete(b.combine === 'position' ? { ...b, customPoints: [1] } : b)),
+    'and every one of them is a complete, scoreable board')
+  ok(grid.filter(b => b.combine !== 'position').every(isComplete),
+    'with no outstanding question beyond what a position pays')
+  eq(new Set(grid.map(slotKey)).size, grid.length, 'with no two cells the same competition')
+
+  // The point of the grid: no answer silently rules another one out
+  for (const scoring of SCORINGS.map(s => s.key)) {
+    for (const combine of COMBINES.map(c => c.key)) {
+      ok(grid.some(b => b.audience === 'individual' && b.scoring === scoring && b.combine === combine),
+        `individual ${scoring} ${combine === 'position' ? 'paid by position' : 'added up'} is available`)
+    }
+  }
+  for (const format of TEAM_FORMATS.map(f => f.key)) {
+    ok(grid.some(b => b.teamFormat === format && b.scoring === 'strokes'),
+      `${format} can be played on strokes, not only Stableford`)
+  }
+}
+
+section('Dropping a round is asked of every league board')
 {
   ok(offersDiscard({ audience: 'individual', competition: 'league', scoring: 'stableford' }),
     'stableford can drop a round')
   ok(offersDiscard({ audience: 'individual', competition: 'league', scoring: 'strokes' }),
     'so can strokes')
-  ok(!offersDiscard({ audience: 'individual', competition: 'league', scoring: 'custom' }),
-    'but custom pays by position — dropping a round there is a different idea')
-  ok(!offersDiscard({ audience: 'team', competition: 'league', teamFormat: 'hero' }),
-    'and it is not asked of a team league at all')
+  ok(offersDiscard({ audience: 'individual', competition: 'league', scoring: 'stableford', combine: 'position' }),
+    'and so can a prize-table board — a bad day stops counting either way')
+  ok(offersDiscard({ audience: 'team', competition: 'league', scoring: 'stableford', teamFormat: 'hero' }),
+    'a team league too')
   ok(!offersDiscard({ audience: 'individual', competition: 'matchplay' }),
-    'nor of a draw')
+    'but not a draw, which has no rounds to drop')
   eq(MAX_DISCARD, 2, 'at most two rounds can be dropped')
 }
 
@@ -98,33 +139,36 @@ section('One draw, and one of each league')
 {
   eq(slotKey(draw), 'matchplay', 'a draw is a draw')
   eq(slotKey(pairsDraw), 'matchplay', 'whoever it is between — there is only one')
-  ok(slotKey(sf) !== slotKey(strokes), 'but stableford and strokes are two different boards')
-  ok(slotKey(teamBB) !== slotKey(sf), 'and a team league is different again')
+  ok(slotKey(sf) !== slotKey(strokes), 'stableford and strokes are two different boards')
+  ok(slotKey(sf) !== slotKey(prize),
+    'and so are the same scoring totalled and paid by position — an order of merit is not a daily prize')
+  ok(slotKey(teamBB) !== slotKey(sf), 'a team league is different again')
 
   ok(hasMatchplay([draw]), 'a trip with a draw has one')
   ok(!isSlotFree([draw], pairsDraw), 'so a second draw is refused, even a pairs one')
   ok(isSlotFree([draw], sf), 'while a league is still free')
   ok(!isSlotFree([sf], sf), 'and a league already running is not')
+  ok(isSlotFree([sf], prize), 'the same scoring paid differently is still free')
 }
 
 section('The cascade offers what is left')
 {
-  eq(freeScorings([]), ['stableford', 'strokes', 'custom'], 'a new trip can pick any scoring')
-  eq(freeScorings([sf]), ['strokes', 'custom'], 'and one already running drops out')
-  eq(freeScorings([sf, strokes]), ['custom'], 'and another')
+  eq(freeScorings([], 'individual'), ['stableford', 'strokes'], 'a new trip can pick either scoring')
+  ok(freeScorings([sf], 'individual').includes('stableford'),
+    'a scoring stays on offer while any way of adding it up is still free')
+  eq(freeScorings([sf, prize], 'individual'), ['strokes'],
+    'and drops out only once every board using it is running')
 
   eq(freeTeamFormats([]).length, TEAM_FORMATS.length, 'every team format is available at first')
-  eq(freeTeamFormats([teamBB]), ['hero', 'cut_dead_weight'], 'minus the one in use')
+  ok(freeTeamFormats([teamBB], 'stableford').includes('better_ball'),
+    'better ball on stableford is still free — the prize-table version is untouched')
+  ok(freeTeamFormats([teamBB], 'strokes').includes('better_ball'),
+    'and on strokes it is a different board entirely')
 
   ok(canAddMore([]), 'there is always something to add to an empty trip')
   ok(canAddMore([sf]), 'and plenty after one board')
 
-  // Everything running at once: three scorings, three team formats, one draw
-  const everything: Leaderboard[] = [
-    ...SCORINGS.map((s, i) => ({ id: `s${i}`, audience: 'individual' as const, competition: 'league' as const, scoring: s.key })),
-    ...TEAM_FORMATS.map((f, i) => ({ id: `t${i}`, audience: 'team' as const, competition: 'league' as const, teamFormat: f.key, aggregation: 'cumulative' as const })),
-    draw,
-  ]
+  const everything = [...everyBoard(), draw]
   ok(!canAddMore(everything), 'until there is genuinely nothing left')
 }
 
@@ -146,16 +190,19 @@ section('What the trip has to have set up')
 section('Boards are titled the way people would say them')
 {
   eq(boardTitle(sf), 'Stableford', 'an individual board is named by its scoring')
+  eq(boardTitle(strokes), 'Strokes', 'either scoring')
   eq(boardTitle(teamBB), 'Team better ball', 'a team board says team and its format')
   eq(boardTitle(draw), 'Matchplay', 'a singles draw is just matchplay')
   eq(boardTitle(pairsDraw), 'Pairs matchplay', 'and a pairs draw says so')
 
   ok(boardRules(sf).length > 0, 'every board states how it is scored')
+  ok(boardRules(sf).includes('running total'), 'and how the rounds add up')
+  ok(boardRules(prize).includes('winning a round is worth'), 'a prize board says it pays by position')
   ok(boardRules({ ...sf, discardWorst: 1 }).includes('Worst round dropped'),
     'including its discard rule')
   ok(boardRules({ ...sf, discardWorst: 2 }).includes('2 rounds'), 'in the plural where it is plural')
   ok(boardRules(pairsDraw).includes('pairings'), 'a pairs draw says who it is between')
-  ok(boardRules(teamBB).includes('running total'), 'and a cumulative team board says so')
+  ok(boardRules(teamBB).includes('best score on every hole'), 'a team board names its format')
 
   eq(primary([teamBB, sf])?.id, teamBB.id, 'the first board made is the primary')
   eq(primary([]), null, 'and an empty trip has none')
@@ -167,6 +214,7 @@ section('Stored boards read back, and nonsense does not')
 {
   eq(parseLeaderboards([sf, teamBB]).length, 2, 'a good list reads back whole')
   eq(parseLeaderboards([sf])[0].scoring, 'stableford', 'with its settings')
+  eq(parseLeaderboards([prize])[0].customPoints, [10, 5, 1], 'including its prize table')
 
   eq(parseLeaderboards(null), [], 'null is no boards')
   eq(parseLeaderboards({}), [], 'and neither is an object — this is a list')
@@ -175,8 +223,8 @@ section('Stored boards read back, and nonsense does not')
   // A board that cannot be understood is dropped rather than guessed at
   eq(parseLeaderboards([{ audience: 'individual', competition: 'league' }]), [],
     'an individual league with no scoring is not a board')
-  eq(parseLeaderboards([{ audience: 'team', competition: 'league', teamFormat: 'better_ball' }]), [],
-    'nor a team league with no aggregation')
+  eq(parseLeaderboards([{ audience: 'team', competition: 'league', scoring: 'stableford' }]), [],
+    'nor a team league with no format')
   eq(parseLeaderboards([{ audience: 'nobody', competition: 'league', scoring: 'stableford' }]), [],
     'nor one nobody is playing')
   eq(parseLeaderboards([{ audience: 'individual', competition: 'bingo' }]), [],
@@ -186,6 +234,8 @@ section('Stored boards read back, and nonsense does not')
   // The uniqueness rules hold on read too, not only in the form
   eq(parseLeaderboards([draw, pairsDraw]).length, 1, 'a second draw is dropped on read')
   eq(parseLeaderboards([sf, { ...sf, id: 'dup' }]).length, 1, 'and so is a duplicated league')
+  eq(parseLeaderboards([sf, prize]).length, 2,
+    'but the same scoring paid by position is a second board, not a duplicate')
 
   // Stored values are clamped rather than trusted
   const junk = parseLeaderboards([
@@ -193,7 +243,7 @@ section('Stored boards read back, and nonsense does not')
   ])
   eq(junk[0].discardWorst, MAX_DISCARD, 'a silly discard is clamped')
   const table = parseLeaderboards([
-    { audience: 'individual', competition: 'league', scoring: 'custom', customPoints: [999, -4, 'x'] },
+    { audience: 'individual', competition: 'league', scoring: 'stableford', combine: 'position', customPoints: [999, -4, 'x'] },
   ])
   eq(table[0].customPoints, [100, 0, 0], 'and a silly prize table too')
 
@@ -201,7 +251,33 @@ section('Stored boards read back, and nonsense does not')
   const ordered = parseLeaderboards([teamBB, sf])
   eq(ordered[0].audience, 'team', 'the stored order is kept, because the first one leads')
 
-  eq(AGGREGATIONS.length, 2, 'a team league is added up one of two ways')
+  eq(COMBINES.length, 2, 'rounds are put together one of two ways')
+}
+
+section('The first shape of this model still reads back')
+{
+  // "Custom points" was written as a third way of scoring a round. It never
+  // was one — it is Stableford, paid out by position — so it reads back as
+  // what it always described rather than being dropped.
+  const old = parseLeaderboards([
+    { id: 'x', audience: 'individual', competition: 'league', scoring: 'custom', customPoints: [10, 5] },
+  ])
+  eq(old.length, 1, 'a board stored as "custom" scoring is still a board')
+  eq(old[0].scoring, 'stableford', 'scored on stableford, which is what it always was')
+  eq(old[0].combine, 'position', 'and paid by position, which is what "custom" meant')
+  eq(old[0].customPoints, [10, 5], 'keeping its table')
+
+  // Teams asked the same question under a different name
+  const oldTeam = parseLeaderboards([
+    { id: 'y', audience: 'team', competition: 'league', teamFormat: 'hero', aggregation: 'custom_points', customPoints: [10, 3] },
+  ])
+  eq(oldTeam[0].combine, 'position', 'a team board stored with an aggregation reads as its combine')
+  eq(oldTeam[0].scoring, 'stableford', 'on stableford, the only scoring that model had')
+
+  const oldCumulative = parseLeaderboards([
+    { id: 'z', audience: 'team', competition: 'league', teamFormat: 'hero', aggregation: 'cumulative' },
+  ])
+  eq(oldCumulative[0].combine, 'total', 'and a cumulative one reads as a total')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

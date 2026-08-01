@@ -30,15 +30,16 @@ export function boardsFromFormats(f: TripFormats, teamScoring: TeamScoring): Lea
   const out: Leaderboard[] = []
 
   // The old model scored teams on Stableford whatever else was on, so a team
-  // league exists whenever teams do. There is no aggregation question to
-  // answer — rounds were always simply added up.
+  // league exists whenever teams do, and the rounds were always simply added
+  // up — there was no way to say anything else.
   if (f.teams) {
     out.push({
       id: 'legacy-team',
       audience: 'team',
       competition: 'league',
       teamFormat: teamScoring.mode,
-      aggregation: 'cumulative',
+      scoring: 'stableford',
+      combine: 'total',
     })
   }
 
@@ -54,6 +55,7 @@ export function boardsFromFormats(f: TripFormats, teamScoring: TeamScoring): Lea
         audience: 'individual',
         competition: 'league',
         scoring: 'stableford',
+        combine: 'total',
         discardWorst,
       })
     }
@@ -63,6 +65,7 @@ export function boardsFromFormats(f: TripFormats, teamScoring: TeamScoring): Lea
         audience: 'individual',
         competition: 'league',
         scoring: 'strokes',
+        combine: 'total',
         discardWorst,
       })
     }
@@ -71,7 +74,10 @@ export function boardsFromFormats(f: TripFormats, teamScoring: TeamScoring): Lea
         id: 'legacy-custom',
         audience: 'individual',
         competition: 'league',
-        scoring: 'custom',
+        // "Custom points" was never a way of scoring a round — it is
+        // Stableford, paid out by finishing position each round.
+        scoring: 'stableford',
+        combine: 'position',
         discardWorst,
         customPoints: [...f.league.customPoints],
       })

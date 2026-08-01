@@ -101,20 +101,22 @@ function liveHoles(playerId: string, roundId: string, upTo: number, pointsPerHol
 // ─── The boards themselves ─────────────────────────────────────
 
 const SF = (discardWorst = 0): Leaderboard =>
-  ({ id: 'b-sf', audience: 'individual', competition: 'league', scoring: 'stableford', discardWorst })
+  ({ id: 'b-sf', audience: 'individual', competition: 'league', scoring: 'stableford', combine: 'total', discardWorst })
 
 const ST = (discardWorst = 0): Leaderboard =>
-  ({ id: 'b-st', audience: 'individual', competition: 'league', scoring: 'strokes', discardWorst })
+  ({ id: 'b-st', audience: 'individual', competition: 'league', scoring: 'strokes', combine: 'total', discardWorst })
 
+/** Stableford, paid out by finishing position each round. */
 const CU = (customPoints: number[] = [], discardWorst = 0): Leaderboard =>
-  ({ id: 'b-cu', audience: 'individual', competition: 'league', scoring: 'custom', customPoints, discardWorst })
+  ({ id: 'b-cu', audience: 'individual', competition: 'league', scoring: 'stableford', combine: 'position', customPoints, discardWorst })
 
 const TEAM = (
   teamFormat: Leaderboard['teamFormat'] = 'better_ball',
-  aggregation: Leaderboard['aggregation'] = 'cumulative',
+  combine: Leaderboard['combine'] = 'total',
   customPoints?: number[],
+  scoring: Leaderboard['scoring'] = 'stableford',
 ): Leaderboard =>
-  ({ id: 'b-team', audience: 'team', competition: 'league', teamFormat, aggregation, customPoints })
+  ({ id: 'b-team', audience: 'team', competition: 'league', scoring, teamFormat, combine, customPoints })
 
 const MP = (audience: Leaderboard['audience'] = 'individual'): Leaderboard =>
   ({ id: 'b-mp', audience, competition: 'matchplay' })
@@ -137,7 +139,8 @@ section('Tabs')
   const all = render([SF(), ST(), CU()])
   ok(all.includes('>Stableford<'), 'Stableford tab shown')
   ok(all.includes('>Strokes<'), 'Strokes tab shown')
-  ok(all.includes('>Custom points<'), 'Custom tab shown')
+  ok(all.includes('>Stableford prizes<'),
+    'and the prize-table board is told apart from the Stableford it is scored on')
 
   // Tabs follow the list, not a fixed order — the first board leads
   const teamFirst = render([TEAM('hero'), SF()], {
@@ -449,13 +452,13 @@ section('A team league can be paid by position instead of added up')
   // Reds: Alice (54 in round 1). Blues: Bob (36) and Cara (18).
   const split = players.map(p => ({ ...p, team_id: p.id === 'p1' ? 't1' : 't2' }))
 
-  const added = render([TEAM('hero', 'cumulative')], {
+  const added = render([TEAM('hero', 'total')], {
     teams: twoTeams, players: split, rounds: [rounds[0]],
   })
   ok(added.includes('>54<') && added.includes('>36<'),
     'added up, the board carries the points themselves')
 
-  const paid = render([TEAM('hero', 'custom_points', [10, 3])], {
+  const paid = render([TEAM('hero', 'position', [10, 3])], {
     teams: twoTeams, players: split, rounds: [rounds[0]],
   })
   ok(paid.includes('>10<'), 'paid by position, the round winner takes what the table says')
@@ -463,6 +466,76 @@ section('A team league can be paid by position instead of added up')
   ok(!paid.includes('>54<'),
     'with the points that earned the position no longer the number shown')
   ok(paid.includes('10 / 3'), 'and the table named on the board')
+}
+
+// ─── The cells the re-cut opened up ────────────────────────────
+
+section('The same scoring can be totalled and paid by position at once')
+{
+  // An order of merit and a daily prize off the same cards. Under the old
+  // model these were one slot, so a trip could only have one of them.
+  const html = render([SF(), CU([10, 5, 1])])
+  ok(html.includes('>Stableford<'), 'the order of merit is a tab')
+  ok(html.includes('>Stableford prizes<'), 'and the daily prize is another')
+  ok(html.includes('>72<'), 'with the active board showing its own totals')
+  ok(!html.includes('>11<'), 'not the other board\'s prize money')
+}
+
+section('Strokes can be paid by position too')
+{
+  // Nett round 1: Alice 44, Bob 58, Cara 72. Lowest wins, so Alice takes the
+  // ten. Reading it the Stableford way round would pay Cara instead, which is
+  // what this actually pins.
+  const html = render([
+    { id: 'b', audience: 'individual', competition: 'league',
+      scoring: 'strokes', combine: 'position', customPoints: [10, 3, 1] },
+  ], { rounds: [rounds[0]] })
+
+  const order = ['Alice', 'Bob', 'Cara'].sort((a, b) => html.indexOf(a) - html.indexOf(b))
+  eq(order[0], 'Alice', 'the lowest nett takes the round')
+  eq(order[2], 'Cara', 'and the highest takes least')
+  ok(html.includes('>10<'), 'paying what the table says')
+  ok(!html.includes('>44<'), 'rather than the nett that earned it')
+}
+
+section('Team formats work on strokes, not only on Stableford')
+{
+  // One team of three. Nett cards in round 1 are Alice 44, Bob 58, Cara 72.
+  const opts = { teams: oneTeam, players: allInReds, rounds: [rounds[0]] }
+
+  const hero = render([TEAM('hero', 'total', undefined, 'strokes')], opts)
+  ok(hero.includes('>44<'), 'hero on strokes is the lowest nett card in the team')
+  ok(!hero.includes('>72<'),
+    'not the highest — which is what reading it as Stableford would have given')
+
+  const cut = render([TEAM('cut_dead_weight', 'total', undefined, 'strokes')], opts)
+  ok(cut.includes('>102<'), 'cutting the dead weight drops the worst card: 44 + 58')
+  ok(!cut.includes('>130<'), 'and the worst card on strokes is the highest one, not the lowest')
+
+  // Same team, same cards, scored the Stableford way — a different board
+  const points = render([TEAM('hero', 'total', undefined, 'stableford')], opts)
+  ok(points.includes('>54<'), 'the Stableford version of the same format is its own board')
+}
+
+section('A nett strokes board is won by the lowest total')
+{
+  // Nett over both rounds: Alice 124, Bob 116, Cara 108
+  const html = render([ST()])
+  const order = ['Alice', 'Bob', 'Cara'].sort((a, b) => html.indexOf(a) - html.indexOf(b))
+  eq(order, ['Cara', 'Bob', 'Alice'], 'lowest nett first, highest last')
+  ok(html.includes('>108<'), 'with the winning nett on the board')
+
+  // And a team strokes board sorts the same way
+  const teams = [
+    { id: 't1', name: 'Reds',  color: '#DC2626' },
+    { id: 't2', name: 'Blues', color: '#2563EB' },
+  ]
+  const split = players.map(p => ({ ...p, team_id: p.id === 'p1' ? 't1' : 't2' }))
+  const team = render([TEAM('hero', 'total', undefined, 'strokes')], {
+    teams, players: split, rounds: [rounds[0]],
+  })
+  ok(team.indexOf('Reds') < team.indexOf('Blues'),
+    'the team with the lower nett leads, rather than being sorted as though more were better')
 }
 
 // ─── Players own their scores, not teams ───────────────────────
@@ -535,9 +608,10 @@ section('An old trip is read as the boards its flags described')
   eq(derived.map(b => b.audience + ':' + b.competition), [
     'team:league', 'individual:league', 'individual:league', 'team:matchplay',
   ], 'teams lead, then the individual boards, then the draw')
-  eq(derived.filter(b => b.scoring).map(b => b.scoring), ['stableford', 'strokes'],
+  const individual = derived.filter(b => b.audience === 'individual' && b.competition === 'league')
+  eq(individual.map(b => b.scoring), ['stableford', 'strokes'],
     'every board that was ticked is there')
-  eq(derived.filter(b => b.scoring).map(b => b.discardWorst), [1, 1],
+  eq(individual.map(b => b.discardWorst), [1, 1],
     'and the one discard rule the old model had applies to both, as it always did')
 
   // It renders, which is the thing that actually matters to an existing trip

@@ -3,12 +3,13 @@
 import { useState } from 'react'
 import {
   type Leaderboard, type Audience,
-  SCORINGS, TEAM_FORMATS, AGGREGATIONS, MAX_DISCARD,
+  SCORINGS, TEAM_FORMATS, COMBINES, MAX_DISCARD,
   unanswered, isComplete, offersDiscard, slotKey, isSlotFree,
+  freeScorings, freeTeamFormats,
   hasMatchplay, canAddMore, boardTitle, boardRules,
 } from '@/lib/leaderboards'
 import { defaultCustomPoints, resolveCustomPoints, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
-import { IconUsers, IconFlag, IconTrophy, IconPlus, IconX, IconCheck } from './icons'
+import { IconTrophy, IconPlus, IconX, IconCheck } from './icons'
 import { Card, Badge, buttonClass, FIELD, FIELD_LABEL } from './ui'
 
 /**
@@ -145,13 +146,20 @@ function Builder({
   const drawTaken = hasMatchplay(existing)
   const missing = unanswered(draft)
   const ready = isComplete(draft)
+  const league = draft.competition === 'league'
+
+  // Teams answer one question more than individuals, so the numbers are
+  // counted rather than written down — a form that skips from 3 to 5 reads
+  // as though something went missing.
+  let q = 0
+  const next = () => ++q
 
   return (
     <Card className="p-5 flex flex-col gap-5">
-      <Question n={1} title="Who is being ranked?">
+      <Question n={next()} title="Who is being ranked?">
         {([
-          { key: 'individual' as Audience, label: 'Individuals', hint: 'Every player ranked on their own card.', Icon: IconFlag },
-          { key: 'team' as Audience, label: 'Teams', hint: 'Players grouped, and the teams ranked against each other.', Icon: IconUsers },
+          { key: 'individual' as Audience, label: 'Individuals', hint: 'Every player ranked on their own card.' },
+          { key: 'team' as Audience, label: 'Teams', hint: 'Players grouped, and the teams ranked against each other.' },
         ]).map(a => (
           <Choice
             key={a.key}
@@ -164,12 +172,12 @@ function Builder({
       </Question>
 
       {draft.audience && (
-        <Question n={2} title="What are they playing?">
+        <Question n={next()} title="What are they playing?">
           <Choice
-            on={draft.competition === 'league'}
+            on={league}
             label="League"
             hint="Every round counts towards a running table."
-            onClick={() => set({ competition: 'league', scoring: undefined, teamFormat: undefined, aggregation: undefined })}
+            onClick={() => set({ competition: 'league', scoring: undefined, teamFormat: undefined, combine: undefined })}
           />
           <Choice
             on={draft.competition === 'matchplay'}
@@ -183,27 +191,70 @@ function Builder({
         </Question>
       )}
 
-      {/* ── Individual league ── */}
-      {draft.audience === 'individual' && draft.competition === 'league' && (
-        <Question n={3} title="How is it scored?">
+      {/* The three league questions, asked in the same order every time.
+          They are genuinely independent — how a round is scored says nothing
+          about how the rounds add up — so none of them hides another. */}
+      {draft.audience && league && (
+        <Question n={next()} title="How is a round scored?">
           {SCORINGS.map(s => (
             <Choice
               key={s.key}
               on={draft.scoring === s.key}
               label={s.label}
               hint={s.hint}
-              taken={!isSlotFree(existing, { audience: 'individual', competition: 'league', scoring: s.key })}
+              taken={!freeScorings(existing, draft.audience!).includes(s.key)}
+              onClick={() => set({ scoring: s.key })}
+            />
+          ))}
+        </Question>
+      )}
+
+      {draft.audience === 'team' && league && draft.scoring && (
+        <Question n={next()} title="How do a team's players combine?">
+          {TEAM_FORMATS.map(f => (
+            <Choice
+              key={f.key}
+              on={draft.teamFormat === f.key}
+              label={f.label}
+              hint={f.hint}
+              taken={!freeTeamFormats(existing, draft.scoring).includes(f.key)}
+              onClick={() => set({ teamFormat: f.key })}
+            />
+          ))}
+        </Question>
+      )}
+
+      {league && draft.scoring && (draft.audience === 'individual' || draft.teamFormat) && (
+        <Question n={next()} title="How do the rounds add up?">
+          {COMBINES.map(c => (
+            <Choice
+              key={c.key}
+              on={draft.combine === c.key}
+              label={c.label}
+              hint={c.hint}
+              taken={!isSlotFree(existing, { ...draft, combine: c.key } as Leaderboard)}
               onClick={() => set({
-                scoring: s.key,
-                customPoints: s.key === 'custom' ? defaultCustomPoints(Math.max(fieldSize, 1)) : undefined,
+                combine: c.key,
+                customPoints: c.key === 'position' ? defaultCustomPoints(fieldSize) : undefined,
               })}
             />
           ))}
         </Question>
       )}
 
+      {/* The prize table, once the board says it pays by position */}
+      {draft.combine === 'position' && (
+        <PointsTable
+          table={draft.customPoints ?? []}
+          fieldSize={fieldSize}
+          onChange={t => set({ customPoints: t })}
+        />
+      )}
+
+      {/* Asked of every league board. Dropping your worst round means the
+          same thing whether that round was worth points or worth a place. */}
       {offersDiscard(draft) && (
-        <Question n={4} title="Drop anyone's worst round?">
+        <Question n={next()} title="Drop anyone's worst round?">
           <div className="grid grid-cols-3 gap-2">
             {Array.from({ length: MAX_DISCARD + 1 }, (_, n) => (
               <button
@@ -222,50 +273,6 @@ function Builder({
           </div>
           <p className="t-cap text-ink/40">A bad day stops defining the week.</p>
         </Question>
-      )}
-
-      {/* ── Team league ── */}
-      {draft.audience === 'team' && draft.competition === 'league' && (
-        <Question n={3} title="How is a team's score worked out?">
-          {TEAM_FORMATS.map(f => (
-            <Choice
-              key={f.key}
-              on={draft.teamFormat === f.key}
-              label={f.label}
-              hint={f.hint}
-              taken={!isSlotFree(existing, { audience: 'team', competition: 'league', teamFormat: f.key })}
-              onClick={() => set({ teamFormat: f.key })}
-            />
-          ))}
-        </Question>
-      )}
-
-      {draft.audience === 'team' && draft.competition === 'league' && draft.teamFormat && (
-        <Question n={4} title="How are the rounds added up?">
-          {AGGREGATIONS.map(a => (
-            <Choice
-              key={a.key}
-              on={draft.aggregation === a.key}
-              label={a.label}
-              hint={a.hint}
-              onClick={() => set({
-                aggregation: a.key,
-                customPoints: a.key === 'custom_points'
-                  ? defaultCustomPoints(Math.max(fieldSize, 1))
-                  : undefined,
-              })}
-            />
-          ))}
-        </Question>
-      )}
-
-      {/* The prize table, for whichever answer asked for one */}
-      {((draft.scoring === 'custom') || (draft.aggregation === 'custom_points')) && (
-        <PointsTable
-          table={draft.customPoints ?? []}
-          fieldSize={fieldSize}
-          onChange={t => set({ customPoints: t })}
-        />
       )}
 
       {draft.competition === 'matchplay' && (

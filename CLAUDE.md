@@ -237,18 +237,28 @@ One state at a time. Finalised players cannot be reselected unless manually unfi
 
 This replaced a model where every choice was a flag on one object, so any combination was expressible — including meaningless ones like a team format on an individual board. **A leaderboard is either fully answered or it is not in the list.** That is what lets the scoring module trust what it is handed.
 
-| Board | Questions asked |
+### Three independent questions
+
+A league board is three answers, and they do not constrain one another:
+
+| Question | Answers |
 |---|---|
-| Individual · League | scoring (Stableford / Strokes / Custom) → discard (not for Custom) → prize table (Custom only) |
-| Individual · Matchplay | none — the draw is random |
-| Team · League | team format → how rounds are added up → prize table (if by position) |
-| Team · Matchplay | none — pairings, random draw |
+| Who is ranked | individuals · teams |
+| How a round is scored | Stableford · Strokes |
+| *(teams only)* how the players combine | better ball · hero · cut the dead weight |
+| How the rounds add up | total them · pay by finishing position |
 
-**Team formats** (`lib/teamScoring.ts`): `better_ball` (best Stableford per hole), `hero` (best single card carries it), `cut_dead_weight` (everyone counts except the worst card of the day — that player is back in next round; ties broken by id so the same total is produced every time).
+Discard (0–2 worst rounds) is asked of **every** league board. A draw asks nothing — it is generated at random.
 
-**Uniqueness.** `slotKey` decides what makes two boards the same competition: leagues are told apart by how they are scored, so Stableford and Strokes are genuinely two boards. **Matchplay is capped at one per trip**, whoever it is between — a second draw is a different tournament, not a second view of this one. `parseLeaderboards` enforces this on read too, not only in the form.
+**Every combination is a board that exists and is implemented.** `everyBoard()` is that grid, and the form offers cells from it and nothing else, so settings can never ask for maths that has not been written. This is the whole design: the renderer's capability is the fixed thing and the form is a selector over it, rather than each new option needing new scoring code.
 
-**The form** (`LeaderboardSetup.tsx`) populates as it is answered, one question opening the next. "Add another leaderboard" sits underneath from the start so it is clear more is possible, but is disabled until the primary is complete. Adding a second offers the same cascade with whatever is running shown as **In use**.
+**"Custom points" used to sit beside Stableford and Strokes as a third way of scoring a round.** It never was one — it is Stableford, paid out by position — and having it in the wrong slot is what forced discard to be switched off for it, made the prize table hang off two unrelated fields, and made teams ask the same question again under the name `aggregation`. Splitting scoring from combining is what opened up nett-strokes team formats and strokes paid by position, neither of which was expressible before.
+
+**Team formats** (`lib/teamScoring.ts`): `better_ball` (best score on each hole), `hero` (best single card carries it), `cut_dead_weight` (everyone counts except the worst card of the day — that player is back in next round; ties broken by id so the same total is produced every time). Each works on either scoring: `teamRoundPoints` takes a `basis`, and `beats()` is the one place the direction lives — lowest wins on strokes, highest on Stableford.
+
+**Uniqueness.** `slotKey` is every answer that changes the maths, so two boards are the same only when they would produce the same table. **Stableford totalled and Stableford paid by position are two boards** — an order of merit and a daily prize are a normal pair to run together, and the old model could only hold one of them. The tab names them apart (`Stableford` / `Stableford prizes`). **Matchplay is capped at one per trip**, whoever it is between — a second draw is a different tournament, not a second view of this one. `parseLeaderboards` enforces all of this on read too, not only in the form.
+
+**The form** (`LeaderboardSetup.tsx`) asks the same questions in the same order every time, each opening the next; nothing is hidden by an earlier answer. Question numbers are counted rather than written down, since teams ask one more. "Add another leaderboard" sits underneath from the start so it is clear more is possible, but is disabled until the primary is complete. Adding a second offers the same cascade with whatever is running shown as **In use**.
 
 Anything stored that cannot be understood is **dropped, not repaired** — a half-understood board would quietly score a trip wrongly, while no board sends the organiser back to a form that says so.
 
@@ -258,9 +268,11 @@ Anything stored that cannot be understood is **dropped, not repaired** — a hal
 
 The leaderboard page renders `Leaderboard[]` and nothing else. Tabs are the league boards in list order; matchplay is a button, never a tab, because a draw is not a table.
 
-`aggregation: 'custom_points'` on a team league places each round on its raw team points and pays the table. **The round column then shows what the position was worth, not the points that earned it** — otherwise the total would not add up beside its own columns.
+**Two shells, not one builder per format.** `individualRows` and `teamRows`, each taking how a round is scored and how the rounds add up; `combineRounds` is the second axis and is shared by both, because totalling rounds or paying positions means the same thing whoever is being ranked.
 
-**Old trips are read, not migrated.** `lib/leaderboardsCompat.ts` turns `trips.formats` into the boards those flags always described: teams first, then each individual board ticked (all inheriting the single trip-wide discard, exactly as they always did), then the draw. A stored list always wins; an empty one means a trip from before the column existed, not a trip playing for nothing. Delete the file whole once no trip has an empty `leaderboards`.
+`combine: 'position'` places each round on its own result and pays the table. **The round column then shows what the position was worth, not the score that earned it** — otherwise the total would not add up beside its own columns. Prize points are always higher-is-better, whatever earned them, so a nett-strokes prize board is placed lowest-first and then totalled highest-first.
+
+**Old trips are read, not migrated.** `lib/leaderboardsCompat.ts` turns `trips.formats` into the boards those flags always described: teams first, then each individual board ticked (all inheriting the single trip-wide discard, exactly as they always did), then the draw. `parseLeaderboards` also reads the first shape of the current model — `scoring: 'custom'` and `aggregation: 'custom_points'` both come back as Stableford paid by position, and a team board with no scoring at all reads as Stableford, which is the only thing that model could mean. A stored list always wins; an empty one means a trip from before the column existed, not a trip playing for nothing. Delete the file whole once no trip has an empty `leaderboards`.
 
 **Team format options survive the switch.** `better_ball` with three scores counting and a grandstand finish is not expressible as a leaderboard — the form asks for the format only. `teamScoringFor(board, legacy)` hands back the trip's old `team_scoring` verbatim when the format matches, so a trip mid-way through is never silently re-scored. Options from a *different* format are not carried across. `aggregate` was retired from the form but stays in `ALL_TEAM_FORMATS` so trips running it still read and score as themselves.
 

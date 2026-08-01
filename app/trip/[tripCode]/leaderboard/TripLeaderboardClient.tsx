@@ -733,15 +733,15 @@ export default function TripLeaderboardClient({
       ? 'No teams with players yet. Set them up in Trip Setup.'
       : 'No scores yet. The board fills in as play starts.'
 
-  // Stableford and Strokes have a level to be ahead of; a prize table and a
-  // team total do not, so those only change colour while a card is open.
-  const relativeBoard = activeBoard.audience === 'individual'
-    && (activeBoard.scoring === 'stableford' || activeBoard.scoring === 'strokes')
+  // An individual board added up has a level to be ahead of. A prize table
+  // has none — it pays a place — and neither does a team total, where level
+  // depends on the format and the size of the team.
+  const relativeBoard =
+    activeBoard.audience === 'individual' && activeBoard.combine !== 'position'
 
   // A prize table is worth naming — "10 / 5 / 3 a round" is what an organiser
   // recognises their own competition by, where "points by position" is not.
-  const paysByPosition =
-    activeBoard.scoring === 'custom' || activeBoard.aggregation === 'custom_points'
+  const paysByPosition = activeBoard.combine === 'position'
   const rules: string[] = [boardRules(activeBoard)]
   if (paysByPosition) {
     rules.push(describeCustomTable(resolveCustomPoints(
