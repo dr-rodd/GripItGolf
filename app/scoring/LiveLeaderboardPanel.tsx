@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, Fragment } from "react"
 import { supabase } from "@/lib/supabase"
 import BackButton from "@/app/components/BackButton"
+import ScoreShape from "@/app/components/ScoreShape"
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -119,37 +120,23 @@ export function InlineScorecard({
   courseId: string
 }) {
   const sf    = { fontFamily: "Georgia, serif" }
-  const muted = "text-[#7A7060]"
-  const dark  = "text-[#3A3A2E]"
+  const muted = "text-ink/65"
+  const dark  = "text-ink"
   const grid  = "grid grid-cols-[2fr_2fr_2fr_3fr_2fr] w-full"
 
   const scoreByHole = new Map(playerScores.map(ls => [ls.hole_number, ls]))
 
-  const scoreSymbol = (gross: number | null, ePar: number) => {
-    if (gross === null) return <span className={`${muted} text-sm`} style={sf}>—</span>
-    const diff = gross - ePar
-    const n = <span className="text-sm font-semibold leading-none">{gross}</span>
-    if (diff <= -2) return (
-      <span className="relative inline-flex items-center justify-center w-6 h-6 rounded-full border border-[#C9A84C]">
-        <span className="absolute inset-[2px] rounded-full border border-[#C9A84C]" />
-        <span className="relative text-[10px] font-semibold leading-none text-[#7B5C1E]">{gross}</span>
-      </span>
-    )
-    if (diff === -1) return <span className="w-6 h-6 rounded-full border border-[#C9A84C] flex items-center justify-center text-[#7B5C1E]">{n}</span>
-    if (diff === 0)  return <span className={`${dark} text-sm font-semibold`} style={sf}>{gross}</span>
-    if (diff === 1)  return <span className="w-6 h-6 rounded-md border border-[#9B8860] flex items-center justify-center text-[#5A4F3A]">{n}</span>
-    return (
-      <span className="relative inline-flex items-center justify-center w-6 h-6 rounded-md border border-[#9B8860]">
-        <span className="absolute inset-[2px] rounded-sm border border-[#9B8860]" />
-        <span className="relative text-[10px] font-semibold leading-none text-[#5A4F3A]">{gross}</span>
-      </span>
-    )
-  }
+  // One shape for every card in the app — see ScoreShape.
+  const scoreSymbol = (gross: number | null, ePar: number) =>
+    gross === null
+      ? <span className={`${muted} text-sm`} style={sf}>—</span>
+      : <ScoreShape gross={gross} par={ePar} size="sm" />
+
 
   const ptsColor = (pts: number | null) =>
     pts === null ? muted :
-    pts === 0    ? "text-[#A89880] opacity-50" :
-                   "text-[#7B6C3E] font-bold"
+    pts === 0    ? "text-ink/65 opacity-50" :
+                   "text-ink/65 font-bold"
 
   // Build rows
   const rows = courseHoles.map((hole, idx) => {
@@ -180,13 +167,13 @@ export function InlineScorecard({
   const totalPts   = front9Pts + back9Pts
 
   return (
-    <div style={{ background: "#F5F0E8" }}>
+    <div style={{ background: "#FFFFFF" }}>
 
       {/* Player details */}
-      <div className="flex items-end gap-4 px-3 py-2 border-b border-[#D4CBBA]" style={{ background: "#EAE4D5" }}>
+      <div className="flex items-end gap-4 px-3 py-2 border-b border-bark/12" style={{ background: "rgba(74,55,40,0.05)" }}>
         <div className="flex flex-col flex-1 min-w-0">
           <span className={`text-[10px] tracking-[0.15em] uppercase ${muted}`} style={sf}>Player</span>
-          <span className="font-[family-name:var(--font-playfair)] text-lg text-[#2C2C1E] font-semibold leading-tight truncate">{player.name}</span>
+          <span className="font-[family-name:var(--font-playfair)] text-lg text-ink font-semibold leading-tight truncate">{player.name}</span>
         </div>
         <div className="flex flex-col items-end flex-shrink-0">
           <span className={`text-[10px] tracking-[0.15em] uppercase ${muted}`} style={sf}>PH</span>
@@ -195,7 +182,7 @@ export function InlineScorecard({
       </div>
 
       {/* Column headers */}
-      <div className={`${grid} px-3 py-1.5 border-b border-[#D4CBBA]`} style={{ background: "#EAE4D5" }}>
+      <div className={`${grid} px-3 py-1.5 border-b border-bark/12`} style={{ background: "rgba(74,55,40,0.05)" }}>
         {(["Hole", "Par", "SI", "Score", "Pts"] as const).map((h, i) => (
           <span key={h} className={`text-[10px] tracking-[0.15em] uppercase font-semibold ${muted} ${i === 3 ? "text-center" : i === 4 ? "text-right" : ""}`} style={sf}>{h}</span>
         ))}
@@ -203,7 +190,7 @@ export function InlineScorecard({
 
       {/* Front 9 */}
       {front9.map(({ hole, idx, ePar, eSI, gross, pts }) => (
-        <div key={hole.hole_number} className={`${grid} px-3 py-1.5 items-center border-b border-[#E2DAC8] ${idx % 2 === 1 ? "bg-[#EEE8D6]" : ""}`}>
+        <div key={hole.hole_number} className={`${grid} px-3 py-1.5 items-center border-b border-bark/12 ${idx % 2 === 1 ? "bg-accent/[0.10]" : ""}`}>
           <span className={`text-sm font-semibold ${dark}`} style={sf}>{hole.hole_number}</span>
           <span className={`text-sm ${muted}`} style={sf}>{ePar}</span>
           <span className={`text-sm ${muted}`} style={sf}>{eSI}</span>
@@ -213,17 +200,17 @@ export function InlineScorecard({
       ))}
 
       {/* Out subtotal */}
-      <div className={`${grid} px-3 py-2 items-center border-b border-[#C9A84C]/20`} style={{ background: "rgba(201,168,76,0.16)" }}>
-        <span className="text-xs font-bold tracking-widest uppercase text-[#5C4520]" style={sf}>Out</span>
-        <span className={`text-sm font-bold text-[#5C4520]`} style={sf}>{front9Par}</span>
+      <div className={`${grid} px-3 py-2 items-center border-b border-accent/20`} style={{ background: "rgba(201,168,76,0.16)" }}>
+        <span className="text-xs font-bold tracking-widest uppercase text-ink/80" style={sf}>Out</span>
+        <span className={`text-sm font-bold text-ink/80`} style={sf}>{front9Par}</span>
         <span />
-        <span className="text-center text-sm font-bold text-[#5C4520]" style={sf}>{front9HasScores ? front9Gross : "—"}</span>
-        <span className={`text-right text-sm font-bold text-[#7B6C3E]`} style={sf}>{front9HasScores ? front9Pts : "—"}</span>
+        <span className="text-center text-sm font-bold text-ink/80" style={sf}>{front9HasScores ? front9Gross : "—"}</span>
+        <span className={`text-right text-sm font-bold text-ink/65`} style={sf}>{front9HasScores ? front9Pts : "—"}</span>
       </div>
 
       {/* Back 9 */}
       {back9.map(({ hole, idx, ePar, eSI, gross, pts }) => (
-        <div key={hole.hole_number} className={`${grid} px-3 py-1.5 items-center border-b border-[#E2DAC8] ${idx % 2 === 0 ? "bg-[#EEE8D6]" : ""}`}>
+        <div key={hole.hole_number} className={`${grid} px-3 py-1.5 items-center border-b border-bark/12 ${idx % 2 === 0 ? "bg-accent/[0.10]" : ""}`}>
           <span className={`text-sm font-semibold ${dark}`} style={sf}>{hole.hole_number}</span>
           <span className={`text-sm ${muted}`} style={sf}>{ePar}</span>
           <span className={`text-sm ${muted}`} style={sf}>{eSI}</span>
@@ -233,21 +220,21 @@ export function InlineScorecard({
       ))}
 
       {/* In subtotal */}
-      <div className={`${grid} px-3 py-2 items-center border-b border-[#C9A84C]/20`} style={{ background: "rgba(201,168,76,0.16)" }}>
-        <span className="text-xs font-bold tracking-widest uppercase text-[#5C4520]" style={sf}>In</span>
-        <span className={`text-sm font-bold text-[#5C4520]`} style={sf}>{back9Par}</span>
+      <div className={`${grid} px-3 py-2 items-center border-b border-accent/20`} style={{ background: "rgba(201,168,76,0.16)" }}>
+        <span className="text-xs font-bold tracking-widest uppercase text-ink/80" style={sf}>In</span>
+        <span className={`text-sm font-bold text-ink/80`} style={sf}>{back9Par}</span>
         <span />
-        <span className="text-center text-sm font-bold text-[#5C4520]" style={sf}>{back9HasScores ? back9Gross : "—"}</span>
-        <span className={`text-right text-sm font-bold text-[#7B6C3E]`} style={sf}>{back9HasScores ? back9Pts : "—"}</span>
+        <span className="text-center text-sm font-bold text-ink/80" style={sf}>{back9HasScores ? back9Gross : "—"}</span>
+        <span className={`text-right text-sm font-bold text-ink/65`} style={sf}>{back9HasScores ? back9Pts : "—"}</span>
       </div>
 
       {/* Tot row */}
       <div className={`${grid} px-3 py-2.5 items-center`} style={{ background: "rgba(201,168,76,0.35)" }}>
-        <span className="text-xs font-bold tracking-widest uppercase text-[#4A3810]" style={sf}>Tot</span>
-        <span className={`text-sm font-bold text-[#4A3810]`} style={sf}>{totalPar}</span>
+        <span className="text-xs font-bold tracking-widest uppercase text-accent-deep" style={sf}>Tot</span>
+        <span className={`text-sm font-bold text-accent-deep`} style={sf}>{totalPar}</span>
         <span />
-        <span className="text-center text-sm font-bold text-[#4A3810]" style={sf}>{totalGross || "—"}</span>
-        <span className="text-right text-base font-extrabold text-[#5C4520] font-[family-name:var(--font-playfair)]">{totalPts}</span>
+        <span className="text-center text-sm font-bold text-accent-deep" style={sf}>{totalGross || "—"}</span>
+        <span className="text-right text-base font-extrabold text-ink/80 font-[family-name:var(--font-playfair)]">{totalPts}</span>
       </div>
 
     </div>
@@ -401,8 +388,8 @@ export default function LiveLeaderboardPanel({
       {/* Header — scrolls away */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-green-400 text-sm tracking-[0.2em] uppercase">{roundLabel}</span>
+          <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+          <span className="text-accent-deep text-sm tracking-[0.2em] uppercase">{roundLabel}</span>
         </div>
         {showBackButton && onClose && (
           <BackButton onClick={onClose} />
@@ -410,13 +397,13 @@ export default function LiveLeaderboardPanel({
       </div>
 
       {/* Mode toggle */}
-      <div className="flex border border-[#1e3d28]">
+      <div className="flex border border-bark/12">
         {(["stableford", "strokes"] as Mode[]).map(m => (
           <button
             key={m}
             onClick={() => setMode(m)}
             className={`flex-1 py-2.5 text-sm tracking-[0.15em] uppercase transition-colors
-              ${mode === m ? "bg-[#1e3d28] text-[#C9A84C]" : "text-white/40 hover:text-white/60"}`}
+              ${mode === m ? "bg-bark/[0.06] text-accent-deep" : "text-ink/65 hover:text-ink/80"}`}
           >
             {m === "stableford" ? "Stableford" : "Strokes"}
           </button>
@@ -426,13 +413,13 @@ export default function LiveLeaderboardPanel({
       {/* Leaderboard table */}
       {mode === "strokes" && (
         <div className="flex justify-end -mb-2">
-          <div className="flex rounded-full border border-[#1e3d28] overflow-hidden">
+          <div className="flex rounded-full border border-bark/12 overflow-hidden">
             {(["nett", "gross"] as StrokesView[]).map(sv => (
               <button
                 key={sv}
                 onClick={() => setStrokesView(sv)}
                 className={`px-3 py-1 text-[10px] tracking-[0.12em] uppercase transition-colors
-                  ${strokesView === sv ? "bg-[#1e3d28] text-white/70" : "text-white/30 hover:text-white/50"}`}
+                  ${strokesView === sv ? "bg-bark/[0.06] text-ink/80" : "text-ink/50 hover:text-ink/65"}`}
               >
                 {sv}
               </button>
@@ -441,18 +428,18 @@ export default function LiveLeaderboardPanel({
         </div>
       )}
       {sortedRows.length === 0 ? (
-        <div className="border border-[#1e3d28] px-4 py-10 text-center">
-          <div className="text-white/20 text-sm">No scores yet</div>
-          <div className="text-white/10 text-xs mt-1">Scores appear as holes are completed</div>
+        <div className="border border-bark/12 px-4 py-10 text-center">
+          <div className="text-ink/50 text-sm">No scores yet</div>
+          <div className="text-ink/50 text-xs mt-1">Scores appear as holes are completed</div>
         </div>
       ) : (
-        <div className="border border-[#1e3d28]">
+        <div className="border border-bark/12">
           {/* Column headers — sticky below main nav */}
-          <div className="sticky top-[77px] z-10 flex items-center gap-3 px-4 py-2 bg-[#0a1a0e] border-b border-[#1e3d28]">
-            <span className="text-[10px] tracking-[0.15em] uppercase text-white/30 w-6 flex-shrink-0">Pos</span>
-            <span className="text-[10px] tracking-[0.15em] uppercase text-white/30 flex-1 min-w-0">Player</span>
-            <span className="text-[10px] tracking-[0.15em] uppercase text-white/30 flex-shrink-0 min-w-[3.5rem] text-center">Score</span>
-            <span className="text-[10px] tracking-[0.15em] uppercase text-white/30 flex-shrink-0 w-9 text-right">Thru</span>
+          <div className="sticky top-[77px] z-10 flex items-center gap-3 px-4 py-2 bg-cream border-b border-bark/12">
+            <span className="text-[10px] tracking-[0.15em] uppercase text-ink/50 w-6 flex-shrink-0">Pos</span>
+            <span className="text-[10px] tracking-[0.15em] uppercase text-ink/50 flex-1 min-w-0">Player</span>
+            <span className="text-[10px] tracking-[0.15em] uppercase text-ink/50 flex-shrink-0 min-w-[3.5rem] text-center">Score</span>
+            <span className="text-[10px] tracking-[0.15em] uppercase text-ink/50 flex-shrink-0 w-9 text-right">Thru</span>
           </div>
 
           {sortedRows.map((row, idx) => {
@@ -473,18 +460,18 @@ export default function LiveLeaderboardPanel({
               relativeValue = stablefordRelative
               scoreDisplay  = fmtRelative(relativeValue)
               scorePillClass = relativeValue > 0
-                ? "bg-[#C9A84C]/15 text-[#C9A84C]"
+                ? "bg-accent-deep/15 text-accent-deep"
                 : relativeValue < 0
-                  ? "bg-green-900/25 text-green-400"
-                  : "bg-white/5 text-white/45"
+                  ? "bg-accent/15 text-accent-deep"
+                  : "bg-bark/[0.04] text-ink/65"
             } else {
               relativeValue  = strokesView === "gross" ? grossRelative : nettRelative
               scoreDisplay   = fmtRelative(relativeValue)
               scorePillClass = relativeValue < 0
-                ? "bg-[#C9A84C]/15 text-[#C9A84C]"
+                ? "bg-accent-deep/15 text-accent-deep"
                 : relativeValue > 0
-                  ? "bg-green-900/25 text-green-400"
-                  : "bg-white/5 text-white/45"
+                  ? "bg-accent/15 text-accent-deep"
+                  : "bg-bark/[0.04] text-ink/65"
             }
 
             // ── Col 3 override for finalised: show absolute total ─
@@ -509,11 +496,11 @@ export default function LiveLeaderboardPanel({
               <Fragment key={player.id}>
                 <button
                   onClick={() => setExpandedPlayerId(isExpanded ? null : player.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 text-left active:bg-white/5 transition-colors ${!isLast || isExpanded ? "border-b border-[#1e3d28]" : ""}`}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left active:bg-bark/[0.04] transition-colors ${!isLast || isExpanded ? "border-b border-bark/12" : ""}`}
                 >
 
                   {/* Col 1: position */}
-                  <span className="text-white/40 text-base font-semibold w-6 flex-shrink-0 tabular-nums">
+                  <span className="text-ink/65 text-base font-semibold w-6 flex-shrink-0 tabular-nums">
                     {positions[idx]}
                   </span>
 
@@ -525,7 +512,7 @@ export default function LiveLeaderboardPanel({
                         style={{ backgroundColor: player.teams.color }}
                       />
                     )}
-                    <span className="text-base text-white/80 truncate">{player.name}</span>
+                    <span className="text-base text-ink/80 truncate">{player.name}</span>
                   </div>
 
                   {/* Col 3: relative score pill */}
@@ -536,14 +523,14 @@ export default function LiveLeaderboardPanel({
 
                   {/* Col 4: holes or finalised total */}
                   <span className={`flex-shrink-0 w-9 text-right tabular-nums text-base
-                    ${isFinalised ? "text-white/60 font-semibold" : "text-white/30"}`}>
+                    ${isFinalised ? "text-ink/80 font-semibold" : "text-ink/50"}`}>
                     {col4}
                   </span>
 
                 </button>
 
                 {isExpanded && (
-                  <div className={!isLast ? "border-b border-[#1e3d28]" : ""}>
+                  <div className={!isLast ? "border-b border-bark/12" : ""}>
                     <InlineScorecard
                       player={player}
                       playingHcp={playingHcp}
@@ -561,7 +548,7 @@ export default function LiveLeaderboardPanel({
 
       {/* Last update */}
       {lastFetch && (
-        <div className="text-center text-white/20 text-xs">
+        <div className="text-center text-ink/50 text-xs">
           Updated {lastFetch.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
         </div>
       )}

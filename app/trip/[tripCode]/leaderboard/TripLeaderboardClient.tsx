@@ -12,6 +12,7 @@ import {
   buildRows, effectivePar,
 } from '@/lib/boardRows'
 import { HEADER_H } from '@/app/components/headerMetrics'
+import ScoreShape, { NoReturnShape } from '@/app/components/ScoreShape'
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -143,40 +144,11 @@ function ScorecardSheet({
   const scoreFor = (playerId: string, holeNumber: number) =>
     resolved.find(s => s.playerId === playerId && s.roundId === round.id && s.holeNumber === holeNumber)
 
-  // Ink-style symbols: rings for under par, rounded squares for over
+  // One shape for every card in the app — see ScoreShape.
   const scoreSymbol = (gross: number | null, par: number, isNR: boolean) => {
-    if (isNR) {
-      return (
-        <span className="inline-flex items-center justify-center w-9 h-9 border border-rust/60 rounded-sm text-rust text-[13px] font-semibold">
-          NR
-        </span>
-      )
-    }
+    if (isNR) return <NoReturnShape size="lg" />
     if (gross === null) return <span className={`${SC_MUTED} text-lg`} style={SC_SF}>—</span>
-    const diff = gross - par
-    if (diff <= -2) return (
-      <span className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-accent">
-        <span className="absolute inset-[3px] rounded-full border border-accent" />
-        <span className="relative text-sm font-semibold leading-none text-[#0A6B3C]">{gross}</span>
-      </span>
-    )
-    if (diff === -1) return (
-      <span className="inline-flex w-9 h-9 rounded-full border border-accent items-center justify-center text-[#0A6B3C] text-lg font-semibold leading-none">
-        {gross}
-      </span>
-    )
-    if (diff === 0) return <span className={`${SC_DARK} text-lg font-semibold`} style={SC_SF}>{gross}</span>
-    if (diff === 1) return (
-      <span className="inline-flex w-9 h-9 rounded-md border border-[rgba(74,55,40,0.55)] items-center justify-center text-[#4A3728] text-lg font-semibold leading-none">
-        {gross}
-      </span>
-    )
-    return (
-      <span className="relative inline-flex items-center justify-center w-9 h-9 rounded-md border border-[rgba(74,55,40,0.55)]">
-        <span className="absolute inset-[3px] rounded-sm border border-[rgba(74,55,40,0.55)]" />
-        <span className="relative text-sm font-semibold leading-none text-[#4A3728]">{gross}</span>
-      </span>
-    )
+    return <ScoreShape gross={gross} par={par} size="lg" />
   }
 
   const nine = (from: number, to: number) => courseHoles.filter(h => h.hole_number >= from && h.hole_number <= to)

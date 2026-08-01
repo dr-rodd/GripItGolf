@@ -155,7 +155,20 @@ Deliberately **absent from the scoring flow**, where the bottom of the screen is
 
 ### Scoring symbols
 
-Thick emerald ring (eagle), thin emerald ring (birdie), bare number (par), thin bark square (bogey), thick bark square (double+). The paper scorecard is now white on cream with bark rules rather than parchment.
+**Filled, never outlined** — `app/components/ScoreShape.tsx`, one component used by every card in the app so a birdie cannot look like one thing in the scoring flow and another on the leaderboard.
+
+| Score | Mark |
+|---|---|
+| Eagle or better | solid `accent-deep` disc, white numeral |
+| Birdie | `accent/25` disc |
+| Par | the bare number, nothing behind it |
+| Bogey | `bark/[0.10]` rounded square |
+| Double or worse | the same square at `bark/[0.20]` |
+| No return | `rust/15`, and never a number |
+
+The old card drew rings and boxes in thin strokes, which turned a scorecard into a grid of outlines and made a bogey look like an event. **Most amateur holes are a bogey or a double**, so those two are a wash of bark low enough to group by eye and no more; the colour goes where the emphasis belongs, under par. `test:scorecard` pins the ordering and the ceiling so they cannot creep up.
+
+The scoring screens are the cream system now — white cards on cream, emerald summary bands, bark rules. **Tee swatches keep their real colours**, because a blue tee is blue: they are data, not brand, and each carries a hairline ring so the pale ones survive a white card.
 
 - Touch targets minimum 48px
 - Leaderboard, scoring and bracket screens stay tight (4–16px). Generous spacing is for entry screens only
@@ -550,7 +563,8 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:admin` | Optional email, derived trip status, admin session signing |
 | `test:recognition` | The per-trip cookie, the personal summary, the greeting |
 | `test:support` | The donation link, and that it vanishes when unconfigured |
-| `test:branding` | The green dot, the wordmark, back controls |
+| `test:scorecard` | Every score shape, and that the nett/no-return arithmetic is untouched |
+| `test:branding` | The green dot, the wordmark, back controls, contrast and type size |
 
 **Mutation testing is the standard, not an extra.** Break the code deliberately, confirm a test fails, restore. It has repeatedly found suites that passed while testing nothing — most recently a pair-size assertion written against the constant it was meant to pin, so changing `PAIR_SIZE` to 3 left every check green.
 
