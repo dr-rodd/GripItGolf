@@ -72,7 +72,9 @@ Three families, one job each, never mixed. Clash Display (headlines), Bespoke Se
 
 Clash Display and Bespoke Serif are **Fontshare** fonts loaded from their CDN in `layout.tsx`; Archivo is self-hosted via `next/font`. The fallback chain degrades to a sans and a serif respectively, so a blocked CDN changes the faces but not the register.
 
-**One deliberate exception: the trip name at the top of the trip page.** It is the most prominent text on the page, so it carries its own face rather than sharing `t-h1` — **Baloo 2, Bold**, `.t-trip-title` in `globals.css`, `clamp(40px, 11vw, 48px)`, well past the standard H1 range. Loaded via `next/font/google` like Archivo, so no CDN dependency. Lowercase is forced in CSS (`text-transform`) so it holds the "leaderboard.", "settings." period-title pattern regardless of how a trip name was typed — "Northwest" renders as "northwest." The period is `.t-trip-title-dot`: emerald, `1.63em`, kept on the baseline explicitly rather than left to inherit, since a period that much larger than its line floats above the text otherwise. Left-aligned, matching the logo and the content below it — the rest of that hero is a centred column, so the title breaks out of it rather than inheriting the centring.
+**A title can close with the green dot** — `.t-title-dot`, an oversized emerald full stop set slightly right of the last letter and a touch below the line, the way the dot closes the wordmark. The trip name on the trip hub uses it; the face is `t-h1`, the same as every other title.
+
+It is a **drawn circle, not the font's own period**. The mark's dot is round and a display face's full stop is as likely to be squared off, so the glyph would match on one font and not the next — and Clash Display arrives over a CDN that is allowed to fail. The proportions are the mark's own, measured off the artwork's line layout: round at ~0.38 of the text height, `0.17em` clear of the last letter, sitting on the baseline with a small nudge below it. All in `em`, so it holds at every size a title scales through.
 
 ### The wordmark
 

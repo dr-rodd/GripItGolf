@@ -262,12 +262,11 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
             </div>
           )}
 
-          {/* Trip name — the reason you opened the page, so it carries more
-              weight than any other title in the app. Left-aligned to match
-              the logo and the content below it, breaking out of the
-              centred column the rest of the hero sits in. */}
-          <h1 className="t-trip-title text-ink text-balance self-start text-left w-full">
-            {trip.name}<span className="t-trip-title-dot text-accent">.</span>
+          {/* Trip name — the reason you opened the page, so it leads.
+              Scales with the viewport and wraps rather than shrinking to fit.
+              The green dot closes it the way it closes the wordmark. */}
+          <h1 className="t-h1 text-ink text-balance" style={{ fontSize: 'clamp(26px, 8vw, 34px)' }}>
+            {trip.name}<span className="t-title-dot" aria-hidden="true" />
           </h1>
 
           {/* Dates */}
