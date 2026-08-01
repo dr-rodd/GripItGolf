@@ -425,7 +425,7 @@ export default function CreateTripForm({ courses }: { courses: Course[] }) {
     !(step === 3 && !step3Valid)
 
   return (
-    <div className="min-h-dvh bg-cream text-ink">
+    <div className="min-h-dvh bg-cream text-ink page-enter">
 
       {/* Header */}
       <div className="border-b border-bark/12">

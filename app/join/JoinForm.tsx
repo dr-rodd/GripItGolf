@@ -33,7 +33,7 @@ export default function JoinForm({ initialCode }: { initialCode: string }) {
   }
 
   return (
-    <main className="min-h-dvh flex flex-col items-center justify-center bg-cream px-6">
+    <main className="min-h-dvh flex flex-col items-center justify-center bg-cream px-6 page-enter">
       <div className="w-full max-w-xs">
 
         {/* The mark */}

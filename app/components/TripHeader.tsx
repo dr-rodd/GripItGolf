@@ -1,30 +1,26 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import MorphWordmark from './MorphWordmark'
 import TitleMark, { type TitleMarkKey } from './TitleMark'
 import { LINE_BOX } from './wordmarkMorph'
 import {
-  HEADER_H, HERO_W, LINE_W, HERO_TOP, LINE_INSET, HERO_SPACE, TRAVEL, RELEASE_AT,
+  HEADER_H, HERO_W, LINE_W, HERO_TOP, LINE_INSET,
 } from './headerMetrics'
 
 /**
  * The mark at the top of the screen, and the way back to the trip.
  *
- * Two behaviours, one component:
+ * Settled everywhere by default: the mark sits in the bar from the first
+ * pixel and never moves. These screens are read standing on a tee, and
+ * nothing on them should move that is not a score.
  *
- *   morph  The landing page. The mark stands full size below the header and
- *          travels up into it as the page scrolls, one word at a time. The
- *          page itself stays put while that happens — the first pull of the
- *          scroll moves only the logo, and the content catches up once the
- *          mark has landed. It lives on the entry screen because that is the
- *          one place the mark is the point; a trip screen is opened to be
- *          read, and the brand performing on the way in gets in the way.
- *
- *   fixed  Everywhere else. Settled from the first pixel, never moving.
- *          These screens are read while standing on a tee; nothing on them
- *          should move that is not a score.
+ * The landing page is the exception, and it drives the movement itself by
+ * passing `progress`. The header only renders the position it is handed —
+ * it has no opinion about what moves the mark or how long it takes, which
+ * is what lets the entry screen animate the collapse on a tap rather than
+ * against a finger on a scrollbar.
  *
  * What sits in the bar is either the green dot mark or the page's own name
  * as artwork — "leaderboard.", "settings.", "scoring." — set at the same
@@ -35,66 +31,27 @@ import {
  * landing page — it is not a link at all.
  */
 
-/**
- * How far through the morph the page has scrolled, 0 → 1.
- *
- * One hook rather than a copy in each component: the mark and the space
- * reserved for it have to agree exactly, or the page shifts under the
- * animation. Sharing it also means the reduced-motion escape and the frame
- * coalescing exist once and cannot be true in one place and not the other.
- *
- * Returns 1 immediately for anyone who asked for less motion — the end state,
- * not a slower version of the journey.
- */
-export function useScrollProgress(enabled: boolean): { progress: number; reduced: boolean } {
-  const [progress, setProgress] = useState(enabled ? 0 : 1)
-  const [reduced, setReduced] = useState(false)
-  const frame = useRef<number | null>(null)
-
-  useEffect(() => {
-    if (!enabled) return
-
-    const query = window.matchMedia('(prefers-reduced-motion: reduce)')
-    if (query.matches) { setReduced(true); setProgress(1); return }
-
-    const read = () => {
-      frame.current = null
-      setProgress(Math.min(1, Math.max(0, (window.scrollY || 0) / TRAVEL)))
-    }
-    // Scroll fires constantly on a phone, so the work is coalesced into a
-    // frame and the listener is passive so it can never block the scroll.
-    const onScroll = () => {
-      if (frame.current === null) frame.current = requestAnimationFrame(read)
-    }
-
-    read()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => {
-      window.removeEventListener('scroll', onScroll)
-      if (frame.current !== null) cancelAnimationFrame(frame.current)
-    }
-  }, [enabled])
-
-  return { progress, reduced }
-}
-
 export default function TripHeader({
   tripCode,
-  variant = 'fixed',
   title = 'green-dot',
+  progress,
 }: {
   /** The trip to go back to. Omitted where there is no trip yet. */
   tripCode?: string
-  variant?: 'fixed' | 'morph'
   /** What stands in the bar: the mark, or this page's name as artwork. */
   title?: 'green-dot' | TitleMarkKey
+  /**
+   * How far the mark has travelled from its full size into the bar, 0 → 1.
+   *
+   * Left out on every screen but the landing page, where it settles at once.
+   * The landing page hands in a number it is animating itself, so the header
+   * has no opinion about what drives the movement or how long it takes.
+   */
+  progress?: number
 }) {
-  // A named page never morphs — there is no stacked form of "leaderboard."
-  // to collapse, and the word is a label rather than a brand moment.
-  const morphs = variant === 'morph' && title === 'green-dot'
-  const { progress, reduced } = useScrollProgress(morphs)
-  const settled = !morphs || reduced
-  const t = settled ? 1 : progress
+  // A named page has no stacked form to collapse out of, and the word is a
+  // label rather than a brand moment — so it is always settled.
+  const t = title === 'green-dot' ? (progress ?? 1) : 1
 
   // The mark centres itself at rest, which means knowing how wide the row is.
   // Measured rather than assumed: this is a phone-first app and the row is
@@ -170,50 +127,5 @@ export default function TripHeader({
         )}
       </div>
     </header>
-  )
-}
-
-/**
- * Holds the page still while the mark collapses into the header.
- *
- * Wraps everything on the hub below the header. Two things happen at once:
- *
- *   · a spacer stands where the mark is, and closes as the mark shrinks
- *   · the whole block is pushed back down by exactly the distance scrolled
- *
- * Together those mean the content does not scroll during the animation — it
- * only rises by as much as the mark above it shrinks, closing the gap the
- * logo leaves behind. The page scrolling past mid-animation was what made
- * the movement hard to follow.
- *
- * Once the mark has landed the offset stops growing and the page scrolls
- * normally from there.
- *
- * Without both halves the arithmetic goes wrong in a way that is easy to
- * miss: a shrinking spacer on its own moves the content up at twice the
- * speed of the scroll, because the spacer is closing and the page is moving.
- */
-export function HeroPin({ children }: { children: React.ReactNode }) {
-  const { progress, reduced } = useScrollProgress(true)
-  const t = reduced ? 1 : progress
-
-  // Pushed down by exactly the distance scrolled. On its own this holds the
-  // block completely still: the page moves under it and it does not.
-  const offset = TRAVEL * t
-
-  // The gap the mark leaves closes only once the mark has essentially landed.
-  // Closing it during the animation is what made the content scroll past
-  // mid-movement and pull the eye off the logo.
-  //
-  // Linear, not eased: this is driven by a finger on a screen, and a curve on
-  // top of that reads as the page lurching rather than as the person moving
-  // it. The scroll itself supplies the feel.
-  const release = Math.min(1, Math.max(0, (t - RELEASE_AT) / (1 - RELEASE_AT)))
-
-  return (
-    <div style={{ transform: `translateY(${offset}px)`, willChange: 'transform' }}>
-      <div aria-hidden="true" style={{ height: HERO_SPACE * (1 - release) }} />
-      {children}
-    </div>
   )
 }

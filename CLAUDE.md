@@ -97,38 +97,11 @@ The supplied stacked file has a cream background baked in, a shade off our own. 
 
 ### The sticky header
 
-`app/components/TripHeader.tsx` — the mark at the top of every trip screen, and the way back to the trip hub from anywhere. 52px, exported as `HEADER_H` so the leaderboard's own sticky column row can clear it.
+`app/components/TripHeader.tsx` — the mark at the top of every trip screen, and the way back to the trip hub from anywhere. 52px, `HEADER_H` in `headerMetrics.ts` so the leaderboard's own sticky column row can clear it.
 
-Two behaviours:
+The mark is the same on every screen; what changes is the word in it.
 
-- **`morph`** — **the landing page only.** That is the one screen where the mark is the point; a trip screen is opened to be read, and the brand performing on the way in only delays it. **One element the whole way**: the mark starts large and centred below the header and travels up into it over 190px of scroll. Nothing crossfades and no letter is drawn twice.
-
-  **The page is genuinely frozen while it happens** (`HeroPin`). Two parts, both needed:
-
-  - the content is pushed back down by exactly the distance scrolled, so it does not move at all
-  - the gap the mark leaves closes separately, and only from `RELEASE_AT` (0.68) — once the mark has essentially landed
-
-  A shrinking spacer *alone* moves content up at **twice** the scroll speed, because the spacer is closing and the page is moving. `TRAVEL` is deliberately longer than `HERO_SPACE` (×1.7): when they were equal the catch-up was crammed into whatever scroll remained and the page shot up at 3×.
-
-  **Each word shrinks on its own rise**, not on one shared curve. A shared shrink measures every word's resting position from an edge that is itself moving, so words visibly drift left *before their turn* — the emerald dot especially.
-
-  Every word is positioned in **screen pixels**, not nudged inside a scaling frame. That matters: in a frame, `dot` has to travel right to reach its place after `green`, so it lurched right while the mark as a whole moved left. Positioned in screen space, the mark shrinks towards its left edge and *every* word genuinely moves left.
-
-  **Up, then left — strictly, one word at a time** (`MorphWordmark.tsx`):
-
-  | Word | Motion | Window |
-  |---|---|---|
-  | `green` | up, then away left — leads | y 0–.16 · x .16–.44 |
-  | `dot` | rises while green is still sliding, then follows | y .20–.50 · x .50–.74 |
-  | `golf` | drops **down** and out, fading. Up would take it through `dot` and `green` | y 0–.30 |
-  | `.` | rises with the words, lands last | y .24–.52 · x .52–.80 |
-
-  A word never moves on both axes at once: its vertical window closes before its horizontal one opens. **Between** words the windows overlap heavily — the only real constraint is that green must be clear of the spot dot lands on before dot gets there, and `easeOut` carries green most of the way in the first third of its slide, so dot needs a short head start rather than a long wait. Staggering them any further reads as dead air. `EXIT_DROP` is in pixels rather than artwork units, because everything in units is multiplied by a scale that shrinks to a third — a generous drop in units came out tiny on screen, and with the rest of the mark rising past it `golf` appeared to drift *upwards*.
-
-  `test:branding` samples the whole travel and asserts no two words ever collide, allowing for the overlap the artwork's own kerning already has at rest.
-
-  The offsets come from `app/components/wordmarkMorph.ts`, **generated** by `npm run logo:line` from the artwork's own word groups. Replace the logo, re-run it, and the animation still lands.
-- **`fixed`** — every trip screen, the hub included. Sticky from the first pixel, never moving. They are read standing on a tee, and nothing on them should move that is not a score.
+**Settled everywhere.** The mark sits in the bar from the first pixel and never moves. These screens are read standing on a tee, and nothing on them should move that is not a score. `TripHeader` renders the position it is handed and has no opinion about what moves the mark — which is what let the driver change from a scrollbar to a tap without touching the animation itself.
 
 **A page can wear its own name instead of the mark.** `TitleMark.tsx` holds the supplied lettering — `leaderboard.` `settings.` `scoring.` — each closed by the emerald dot the way the wordmark is, set at the same height and the same left inset as the line mark settles at. So moving between screens changes the word and nothing else. A named page never morphs: there is no stacked form of "leaderboard." to collapse out of, and the word is a label rather than a brand moment.
 
@@ -136,11 +109,21 @@ All four are cropped to one shared baseline and one common height, so the descen
 
 They are PNGs derived from the supplied artwork rather than vectors. Rendered as `<img>` for the same reason as the wordmark, so dropping in an SVG of the same proportions needs no code change.
 
-**The header's numbers live in `headerMetrics.ts`, not in `TripHeader.tsx`.** The landing page is a server component and sizes itself from `TRAVEL`; a value exported from a `'use client'` module arrives in a server component as a client *reference*, not as the number, and dropping one into a template literal writes a stub function into the markup. TypeScript sees a number the whole way through and the build says nothing — the only symptom is a style attribute full of nonsense in the rendered page. `test:branding` pins the module as non-client and the import path with it.
+**The header's numbers live in `headerMetrics.ts`, not in `TripHeader.tsx`.** A value exported from a `'use client'` module arrives in a server component as a client *reference*, not as the number, and dropping one into a template literal writes a stub function into the markup. TypeScript sees a number the whole way through and the build says nothing — the only symptom is a style attribute full of nonsense in the rendered page. `test:branding` pins the module as non-client and the import path with it.
 
-The landing page carries a `min-height` of one screen plus `TRAVEL`. The spacer `HeroPin` holds for the mark closes as the mark rises, so a page sized to its own content **shrinks while it is being scrolled**, which caps the scroll, which stalls the animation halfway and strands the mark. The floor cannot do that, and it makes the page's whole scroll range exactly the length of the collapse.
+### Leaving the landing page
 
-`useScrollProgress` is one hook shared by both marks. Two copies would drift apart mid-scroll and the morph would come apart in the middle. The listener is passive and frame-coalesced; reduced motion settles to the end state immediately rather than animating slower.
+**The collapse runs on the tap, not on a scroll** (`app/Landing.tsx`). Tapping Create or Join fades the content, collapses the mark out of the middle of the page and into the header bar over `TRAVEL_MS` (380ms), and only then asks for the next screen — which fades up underneath, so the whole thing reads as one movement rather than a page swap.
+
+A timed animation runs at the speed it was written to run at. One driven by a finger runs at whatever speed the finger moves and can stop halfway, which is what the scroll version did. It also puts the movement where it means something: you are leaving, and the bar is where the mark lives on the screen you are going to.
+
+- Both destinations are **prefetched on mount**, so the pause after the mark lands is as near to nothing as it can be, and both carry `page-enter` so they fade up rather than appear.
+- The clock comes from the animation frame itself, not from a reading taken beforehand, so the first frame is t=0 however long the browser took to schedule it.
+- A second tap cannot start a second animation over the first.
+- **Reduced motion goes straight there** — no collapse, no fade. Measured: 128ms against 498ms.
+- The buttons stay real `<Link>`s, so they prefetch, survive a long press, and navigate normally without JavaScript.
+
+`useScrollProgress` and `HeroPin` are gone with the scroll version, along with `TRAVEL` and `RELEASE_AT`. The landing page no longer scrolls at all.
 
 ### Navigation
 

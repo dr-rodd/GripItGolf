@@ -19,6 +19,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import fs from 'fs'
 import Home from '../app/page'
+import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime'
 import Wordmark from '../app/components/Wordmark'
 import MorphWordmark from '../app/components/MorphWordmark'
 import { Badge, LiveDot, EmptyState, buttonClass } from '../app/components/ui'
@@ -268,34 +269,68 @@ section('The mark is the header, and the way back')
   }
 }
 
-section('The morph happens on the landing page, and nowhere else')
+section('The collapse happens on leaving the landing page, and nowhere else')
 {
   const src = read('app/components/TripHeader.tsx')
-  const metrics = read('app/components/headerMetrics.ts')
-  const landing = read('app/page.tsx')
+  const landing = read('app/Landing.tsx')
 
-  // The entry screen is the one place the mark is the point. A trip screen
-  // is opened to be read, and the brand performing on the way in delays it.
-  ok(landing.includes('variant="morph"'), 'the landing page asks for the morph')
-  ok(landing.includes('<HeroPin>'), 'and wraps its content so the page holds still')
+  // Driven by a tap on the way out, not by scrolling the page. A timed
+  // animation runs at the speed it was written to run at; one driven by a
+  // finger runs at whatever speed the finger moves, and can stop halfway.
+  ok(landing.includes('requestAnimationFrame'), 'the landing page animates the mark itself')
+  ok(landing.includes('const TRAVEL_MS'), 'over a named length of time')
+  const ms = Number(landing.match(/TRAVEL_MS = (\d+)/)?.[1] ?? 0)
+  ok(ms > 0 && ms <= 400, `and inside the guide's ceiling (${ms}ms)`)
 
-  // Every trip screen, the hub included, is settled from the first pixel
+  // Nothing on the page reacts to scrolling any more
+  ok(!/addEventListener\(\s*'scroll'/.test(landing + src), 'nothing listens for a scroll')
+  ok(!landing.includes('HeroPin'), 'and nothing has to be held still while it happens')
+
+  // The frame loop is cleaned up, and a second tap cannot start a second one
+  ok(landing.includes('cancelAnimationFrame'), 'the frame loop is torn down on unmount')
+  ok(landing.includes('if (going.current) return'),
+    'and a second tap cannot start a second animation over the first')
+
+  // The order is: fade what is leaving, land the mark, then navigate
+  // lastIndexOf, because the reduced-motion path pushes first and skips
+  // straight past all of this
+  ok(landing.indexOf('setLeaving(true)') < landing.lastIndexOf('router.push(href)'),
+    'the content clears before the next screen is asked for')
+  ok(/if \(t < 1\)[\s\S]{0,120}router\.push/.test(landing),
+    'which happens only once the mark has landed')
+  ok(landing.includes("router.prefetch('/dashboard/create')") &&
+     landing.includes("router.prefetch('/join')"),
+    'both destinations are prefetched, so the wait after it is as short as it can be')
+
+  // …and the screen it arrives at fades up rather than appearing
+  for (const f of ['app/join/JoinForm.tsx', 'app/dashboard/create/CreateTripForm.tsx']) {
+    ok(read(f).includes('page-enter'), `${f.split('/').pop()} fades up under it`)
+  }
+
+  // Anyone who asked for less motion is simply taken there
+  ok(landing.includes('prefers-reduced-motion'), 'reduced motion is honoured')
+  ok(/prefers-reduced-motion[\s\S]{0,120}router\.push\(href\)[\s\S]{0,40}return/.test(landing),
+    'by going straight to the page, with no collapse and no fade')
+
+  // Every other screen is settled from the first pixel, and says nothing
+  // about progress at all
   for (const f of [
     'app/trip/[tripCode]/page.tsx',
     'app/trip/[tripCode]/leaderboard/page.tsx',
     'app/trip/[tripCode]/course/page.tsx',
     'app/trip/[tripCode]/course/[roundNumber]/page.tsx',
   ]) {
-    ok(!read(f).includes('variant="morph"'),
-      `${f.split('/').slice(-2).join('/')} does not morph — it is read standing on a tee`)
-    ok(!read(f).includes('HeroPin'), '  …and holds nothing still, because nothing moves')
+    // The prop, not the word — "in-progress scores" is a different thing
+    ok(!/progress=/.test(read(f)),
+      `${f.split('/').slice(-2).join('/')} does not move — it is read standing on a tee`)
   }
 
-  // Scroll handlers fire constantly on a phone; this one coalesces
-  ok(src.includes('requestAnimationFrame'), 'the scroll listener is frame-coalesced')
-  ok(src.includes('{ passive: true }'), 'and passive, so it never blocks a scroll')
-  ok(src.includes('removeEventListener'), 'and is torn down')
-  ok(src.includes('cancelAnimationFrame'), 'along with any frame still pending')
+  // The header renders the position it is handed and nothing more. It has no
+  // opinion about what drives the mark, which is what let the driver change
+  // from a scrollbar to a tap without touching the animation itself.
+  ok(src.includes('const t = title === \'green-dot\' ? (progress ?? 1) : 1'),
+    'the header settles unless it is handed a position')
+  ok(!src.includes('useScrollProgress'), 'and computes nothing from the page itself')
 
   // One element the whole way, not two crossfading
   eq((src.match(/<MorphWordmark/g) ?? []).length, 1,
@@ -306,43 +341,8 @@ section('The morph happens on the landing page, and nowhere else')
     'and the size at each end')
   // The mark itself is positioned, not transformed: a scaling frame is what
   // made "dot" appear to lurch right while the mark as a whole moved left.
-  // (HeroPin does use a transform, but that is the page, not the mark.)
   ok(!/<MorphWordmark[\s\S]{0,200}transform/.test(src),
     'the mark is positioned rather than transformed as a block')
-
-  // ── The page holds still while the mark moves ──
-  //
-  // Two halves, and both are needed. The offset pushes the content back down
-  // by exactly the distance scrolled, freezing it. The spacer then closes,
-  // but only once the mark has essentially landed.
-  ok(src.includes('const offset = TRAVEL * t'),
-    'the content is pushed back by exactly the distance scrolled')
-  ok(src.includes('HERO_SPACE * (1 - release)'),
-    'and the gap the mark leaves closes separately')
-  ok(metrics.includes('RELEASE_AT'), 'with the catch-up starting at a named point')
-
-  const releaseAt = Number(metrics.match(/RELEASE_AT = ([\d.]+)/)?.[1] ?? 0)
-  ok(releaseAt >= 0.6, 'late enough that the collapse finishes first')
-  ok(releaseAt < 1, 'but early enough that the page does catch up')
-
-  // The travel is longer than the space the mark occupies, which is what
-  // leaves room for the catch-up to happen at a readable speed rather than
-  // being crammed into whatever scroll is left.
-  const travelMul = Number(metrics.match(/HERO_SPACE \* ([\d.]+)\)/)?.[1] ?? 0)
-  ok(travelMul > 1, 'the sequence runs over more scroll than the mark occupies')
-
-  // Anyone who asked for less motion gets the end state, not a slow version
-  ok(src.includes('prefers-reduced-motion'), 'reduced motion is honoured')
-  ok(src.includes('if (query.matches) { setReduced(true); setProgress(1); return }'),
-    'by settling immediately rather than animating slower')
-
-  // Both marks read the same number, from one hook. Two copies of this drift
-  // apart mid-scroll and the morph comes apart in the middle.
-  ok(src.includes('function useScrollProgress'), 'the scroll position is computed once')
-  eq((src.match(/requestAnimationFrame/g) ?? []).length, 1, 'with one frame loop, not two')
-  eq((src.match(/addEventListener/g) ?? []).length, 1, 'and one listener')
-  eq((src.match(/useScrollProgress\(/g) ?? []).length, 3,
-    'defined once and used by both the header and the hero mark')
 }
 
 section('The words move separately, and never through each other')
@@ -716,21 +716,21 @@ section('Header metrics are readable from a server component')
   // explains the trap and names it.
   ok(!/^\s*['"]use client['"]/.test(metrics), 'the metrics module is not client-only')
 
-  for (const name of ['HEADER_H', 'HERO_SPACE', 'TRAVEL', 'RELEASE_AT', 'LINE_INSET']) {
+  for (const name of ['HEADER_H', 'HERO_SPACE', 'LINE_INSET']) {
     ok(new RegExp(`export const ${name}\\b`).test(metrics), `${name} is exported from it`)
   }
 
   // …and nothing re-exports them from the client component, which would put
   // the same trap back with a different import path
   const header = read('app/components/TripHeader.tsx')
-  for (const name of ['HEADER_H', 'HERO_SPACE', 'TRAVEL']) {
+  for (const name of ['HEADER_H', 'HERO_SPACE']) {
     ok(!new RegExp(`export const ${name}\\b`).test(header),
       `TripHeader does not re-export ${name}`)
   }
 
-  // The server pages that need a number take it from the right place
-  ok(read('app/page.tsx').includes("from \"@/app/components/headerMetrics\""),
-    'the landing page reads TRAVEL from the metrics module')
+  // The pages that need a number take it from the right place
+  ok(read('app/Landing.tsx').includes("from '@/app/components/headerMetrics'"),
+    'the landing page reads HERO_SPACE from the metrics module')
 }
 
 // ─── The page's name as artwork ────────────────────────────────
@@ -756,8 +756,8 @@ section('A page can name itself in the header')
     'and to the place it settles in')
 
   // A word has no stacked form to collapse out of
-  ok(header.includes("variant === 'morph' && title === 'green-dot'"),
-    'a named page never morphs')
+  ok(header.includes("title === 'green-dot' ? (progress ?? 1) : 1"),
+    'a named page never morphs, whatever it is handed')
 
   // Which page wears which
   const wears: [string, string][] = [
@@ -782,7 +782,23 @@ section('A page can name itself in the header')
 
 // ─── Landing page ──────────────────────────────────────────────
 
-const home = renderToStaticMarkup(React.createElement(Home))
+/**
+ * The landing page is a client component that reaches for the app router, so
+ * a bare render throws "expected app router to be mounted". Rendering it
+ * inside the context Next would give it is what lets the markup be checked
+ * here at all — and the stub only has to exist, since nothing is navigated.
+ */
+const noop = () => {}
+const stubRouter = {
+  push: noop, replace: noop, refresh: noop, back: noop, forward: noop, prefetch: noop,
+}
+const home = renderToStaticMarkup(
+  React.createElement(
+    AppRouterContext.Provider,
+    { value: stubRouter as never },
+    React.createElement(Home),
+  )
+)
 
 section('Landing page')
 {
