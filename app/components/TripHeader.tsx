@@ -28,24 +28,40 @@ import { STACKED_BOX, LINE_BOX } from './wordmarkMorph'
 export const HEADER_H = 52
 
 /** Width of the mark at each end of the journey. */
-const HERO_W = 210
+const HERO_W = 196
 const LINE_W = 118
 
 /** How far below the header the mark stands at rest. */
-const HERO_TOP = 96
+const HERO_TOP = 58
+
+/** The mark's resting distance from the left edge once it has landed. */
+const LINE_INSET = 6
 
 /** The height of the mark at rest, from the artwork's own proportions. */
 const HERO_H = (STACKED_BOX[3] / STACKED_BOX[2]) * HERO_W
 
+/** The room the mark occupies below the header before it moves. */
+export const HERO_SPACE = HERO_TOP + HERO_H + 20
+
 /**
- * The room the mark occupies below the header before it moves.
+ * The scroll the whole sequence takes.
  *
- * This is also the scroll distance the whole animation takes, and the two
- * being equal is what pins the page: the spacer shrinks by exactly as much
- * as the page has scrolled, so the content underneath does not move until
- * the mark has arrived and the spacer is spent.
+ * Deliberately longer than the space the mark occupies. They used to be the
+ * same number, which left the page's catch-up crammed into whatever scroll
+ * was left after the mark had landed — the content shot up two or three
+ * times faster than the finger moving it. Giving the sequence more room lets
+ * the collapse finish unhurried and the page follow at a readable speed.
  */
-export const HERO_SPACE = HERO_TOP + HERO_H + 28
+const TRAVEL = Math.round(HERO_SPACE * 1.7)
+
+/**
+ * How far through the scroll the page starts catching up.
+ *
+ * Before this the content is completely still — the scroll moves the logo and
+ * nothing else. After it the gap the mark leaves closes and the page comes up
+ * to meet the header.
+ */
+const RELEASE_AT = 0.68
 
 /**
  * How far through the morph the page has scrolled, 0 → 1.
@@ -71,7 +87,7 @@ export function useScrollProgress(enabled: boolean): { progress: number; reduced
 
     const read = () => {
       frame.current = null
-      setProgress(Math.min(1, Math.max(0, (window.scrollY || 0) / HERO_SPACE)))
+      setProgress(Math.min(1, Math.max(0, (window.scrollY || 0) / TRAVEL)))
     }
     // Scroll fires constantly on a phone, so the work is coalesced into a
     // frame and the listener is passive so it can never block the scroll.
@@ -128,7 +144,7 @@ export default function TripHeader({
     rowWidth > 0 ? (rowWidth - HERO_W) / 2 : 0,
     HERO_TOP,
   ]
-  const lineOrigin: [number, number] = [0, (HEADER_H - lineH) / 2]
+  const lineOrigin: [number, number] = [LINE_INSET, (HEADER_H - lineH) / 2]
 
   return (
     <header
@@ -165,16 +181,46 @@ export default function TripHeader({
 }
 
 /**
- * The room the mark needs while it is still standing below the header.
+ * Holds the page still while the mark collapses into the header.
  *
- * The mark lives in the header and is drawn over the page, so without this
- * the hub's content would start underneath it. Because the spacer shrinks by
- * exactly the distance scrolled, the content below holds still while the mark
- * moves — the first pull of the scroll animates the logo and nothing else.
- * Once the spacer is spent, the page scrolls normally.
+ * Wraps everything on the hub below the header. Two things happen at once:
+ *
+ *   · a spacer stands where the mark is, and closes as the mark shrinks
+ *   · the whole block is pushed back down by exactly the distance scrolled
+ *
+ * Together those mean the content does not scroll during the animation — it
+ * only rises by as much as the mark above it shrinks, closing the gap the
+ * logo leaves behind. The page scrolling past mid-animation was what made
+ * the movement hard to follow.
+ *
+ * Once the mark has landed the offset stops growing and the page scrolls
+ * normally from there.
+ *
+ * Without both halves the arithmetic goes wrong in a way that is easy to
+ * miss: a shrinking spacer on its own moves the content up at twice the
+ * speed of the scroll, because the spacer is closing and the page is moving.
  */
-export function HeroWordmarkSpace() {
+export function HeroPin({ children }: { children: React.ReactNode }) {
   const { progress, reduced } = useScrollProgress(true)
   const t = reduced ? 1 : progress
-  return <div aria-hidden="true" style={{ height: HERO_SPACE * (1 - t) }} />
+
+  // Pushed down by exactly the distance scrolled. On its own this holds the
+  // block completely still: the page moves under it and it does not.
+  const offset = TRAVEL * t
+
+  // The gap the mark leaves closes only once the mark has essentially landed.
+  // Closing it during the animation is what made the content scroll past
+  // mid-movement and pull the eye off the logo.
+  //
+  // Linear, not eased: this is driven by a finger on a screen, and a curve on
+  // top of that reads as the page lurching rather than as the person moving
+  // it. The scroll itself supplies the feel.
+  const release = Math.min(1, Math.max(0, (t - RELEASE_AT) / (1 - RELEASE_AT)))
+
+  return (
+    <div style={{ transform: `translateY(${offset}px)`, willChange: 'transform' }}>
+      <div aria-hidden="true" style={{ height: HERO_SPACE * (1 - release) }} />
+      {children}
+    </div>
+  )
 }

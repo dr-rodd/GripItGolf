@@ -10,7 +10,7 @@ import {
 } from '@/lib/playerSummary'
 import TripCountdown from './TripCountdown'
 import WelcomeBack from './WelcomeBack'
-import TripHeader, { HeroWordmarkSpace } from '@/app/components/TripHeader'
+import TripHeader, { HeroPin } from '@/app/components/TripHeader'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import TabBar from '@/app/components/TabBar'
@@ -212,16 +212,15 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   return (
     <main className="min-h-dvh bg-cream has-tabbar page-enter">
 
-      {/* The mark starts in the hero below and arrives up here as you scroll */}
+      {/* The mark starts below and arrives up here as you scroll. Everything
+          under it is held still while that happens. */}
       <TripHeader tripCode={tripCode} variant="morph" />
+
+      <HeroPin>
 
       {/* ── Hero ── */}
       <section className="flex flex-col items-center px-6 pt-6 pb-12">
         <div className="w-full max-w-sm flex flex-col items-center text-center">
-
-          {/* The mark itself lives in the header and travels up into it;
-              this is the room it occupies on the way. */}
-          <HeroWordmarkSpace />
 
           {/* Only for somebody this device already knows. A stranger sees the
               page exactly as it was before this feature existed. */}
@@ -441,6 +440,8 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       <div className="px-6 pb-10 flex justify-center">
         <BackButton href="/" label="All trips" />
       </div>
+
+      </HeroPin>
 
       <TabBar tripCode={tripCode} />
 

@@ -99,7 +99,14 @@ Two behaviours:
 
 - **`morph`** — the trip hub only. **One element the whole way**: the mark starts large and centred below the header and travels up into it over 190px of scroll. Nothing crossfades and no letter is drawn twice.
 
-  **The page holds still while it happens.** The spacer below the header shrinks by exactly the distance scrolled, so the first pull of the scroll animates the logo and nothing else; the content catches up once the mark has landed. `HERO_SPACE` is both the spacer height and the scroll distance, and they must stay equal or the page shifts under the animation.
+  **The page is genuinely frozen while it happens** (`HeroPin`). Two parts, both needed:
+
+  - the content is pushed back down by exactly the distance scrolled, so it does not move at all
+  - the gap the mark leaves closes separately, and only from `RELEASE_AT` (0.68) — once the mark has essentially landed
+
+  A shrinking spacer *alone* moves content up at **twice** the scroll speed, because the spacer is closing and the page is moving. `TRAVEL` is deliberately longer than `HERO_SPACE` (×1.7): when they were equal the catch-up was crammed into whatever scroll remained and the page shot up at 3×.
+
+  **Each word shrinks on its own rise**, not on one shared curve. A shared shrink measures every word's resting position from an edge that is itself moving, so words visibly drift left *before their turn* — the emerald dot especially.
 
   Every word is positioned in **screen pixels**, not nudged inside a scaling frame. That matters: in a frame, `dot` has to travel right to reach its place after `green`, so it lurched right while the mark as a whole moved left. Positioned in screen space, the mark shrinks towards its left edge and *every* word genuinely moves left.
 

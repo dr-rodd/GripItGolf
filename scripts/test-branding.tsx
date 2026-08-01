@@ -271,7 +271,7 @@ section('The morph happens on the hub, and nowhere else')
   const hub = read('app/trip/[tripCode]/page.tsx')
 
   ok(hub.includes('variant="morph"'), 'the hub asks for the morph')
-  ok(hub.includes('<HeroWordmarkSpace'), 'and reserves the room the mark travels through')
+  ok(hub.includes('<HeroPin>'), 'and wraps its content so the page holds still')
 
   // The delicate screens get the settled header and nothing moving
   for (const f of [
@@ -297,17 +297,32 @@ section('The morph happens on the hub, and nowhere else')
     'the header hands it both ends of the journey in screen pixels')
   ok(src.includes('HERO_W') && src.includes('LINE_W'),
     'and the size at each end')
-  // Positioned, not transformed: a scaling frame is what made "dot" appear
-  // to lurch right while the mark as a whole moved left.
-  ok(!/transform: `?(translate|scale)/.test(src),
+  // The mark itself is positioned, not transformed: a scaling frame is what
+  // made "dot" appear to lurch right while the mark as a whole moved left.
+  // (HeroPin does use a transform, but that is the page, not the mark.)
+  ok(!/<MorphWordmark[\s\S]{0,200}transform/.test(src),
     'the mark is positioned rather than transformed as a block')
 
-  // The page holds still while the mark moves: the spacer shrinks by exactly
-  // the distance scrolled, so the first pull of the scroll animates the logo
-  // and nothing else. The two being the same number is what makes that work.
-  ok(src.includes('HERO_SPACE * (1 - t)'), 'the room below the mark closes as it leaves')
-  ok(src.includes('window.scrollY || 0) / HERO_SPACE'),
-    'and the animation runs over exactly that distance, so the page does not shift')
+  // ── The page holds still while the mark moves ──
+  //
+  // Two halves, and both are needed. The offset pushes the content back down
+  // by exactly the distance scrolled, freezing it. The spacer then closes,
+  // but only once the mark has essentially landed.
+  ok(src.includes('const offset = TRAVEL * t'),
+    'the content is pushed back by exactly the distance scrolled')
+  ok(src.includes('HERO_SPACE * (1 - release)'),
+    'and the gap the mark leaves closes separately')
+  ok(src.includes('const RELEASE_AT'), 'with the catch-up starting at a named point')
+
+  const releaseAt = Number(src.match(/const RELEASE_AT = ([\d.]+)/)?.[1] ?? 0)
+  ok(releaseAt >= 0.6, 'late enough that the collapse finishes first')
+  ok(releaseAt < 1, 'but early enough that the page does catch up')
+
+  // The travel is longer than the space the mark occupies, which is what
+  // leaves room for the catch-up to happen at a readable speed rather than
+  // being crammed into whatever scroll is left.
+  ok(/const TRAVEL = Math\.round\(HERO_SPACE \* 1\.\d\)/.test(src),
+    'the sequence runs over more scroll than the mark occupies')
 
   // Anyone who asked for less motion gets the end state, not a slow version
   ok(src.includes('prefers-reduced-motion'), 'reduced motion is honoured')
@@ -356,7 +371,8 @@ section('The words move separately, and never through each other')
   }
 
   eq(windows.golf.y[0], 0, 'golf starts leaving straight away')
-  ok(windows.mark.x[1] >= 0.99, 'and the dot is the last thing to land')
+  ok(windows.mark.y[0] > windows.dot.y[0], 'and the dot follows the words, not leads them')
+  ok(windows.mark.x[1] >= 0.9, 'landing last of all')
 
   // ── Nothing moves right ──
   // Checked against the geometry rather than asserted in prose. The mark
@@ -369,7 +385,7 @@ section('The words move separately, and never through each other')
     const stackedBox = box('STACKED_BOX'), lineBox = box('LINE_BOX')
     const heroW = 210, lineW = 118, rowW = 390
     const heroUnit = heroW / stackedBox[2], lineUnit = lineW / lineBox[2]
-    const heroX = (rowW - heroW) / 2, lineX = 0
+    const heroX = (rowW - heroW) / 2, lineX = 6
 
     const words = [...geom.matchAll(
       /"id": "(\w+)",[\s\S]*?"stacked": \[\s*([-\d.]+),[\s\S]*?"line": \[\s*([-\d.]+),/g)]
@@ -407,8 +423,6 @@ section('The words move separately, and never through each other')
       b <= a ? (p >= b ? 1 : 0) : p <= a ? 0 : p >= b ? 1 : ease((p - a) / (b - a))
     const mix = (a: number, b: number, t: number) => a + (b - a) * t
 
-    const sizeWin = src.match(/const SIZE: Window = \[([\d.]+), ([\d.]+)\]/)!
-    const SIZE: [number, number] = [+sizeWin[1], +sizeWin[2]]
     // Defensive: if the fade is ever removed this must read as a failure,
     // not throw on a null match and take the whole run with it.
     const fadeMatch = src.match(/1 - ty \* ([\d.]+)/)
@@ -416,10 +430,11 @@ section('The words move separately, and never through each other')
     const fadeK = fadeMatch ? Number(fadeMatch[1]) : 0
 
     const rectsAt = (p: number) => {
-      const unit = mix(heroW / stackedBox[2], lineW / lineBox[2], rampAt(SIZE, p))
       return words.map(w => {
         const ty = rampAt(windows[w.id].y as [number, number], p)
         const tx = rampAt(windows[w.id].x as [number, number], p)
+        // Each word shrinks on its own rise, so the scale is per word too
+        const unit = mix(heroW / stackedBox[2], lineW / lineBox[2], ty)
         return {
           id: w.id,
           opacity: w.fades ? Math.max(0, 1 - ty * fadeK) : 1,
@@ -483,10 +498,15 @@ section('The words move separately, and never through each other')
   // at a moment when green has moved, dot has not.
   {
     // Representative geometry: a phone-width row, the mark at its two sizes.
+    // The landing inset is read from the header rather than assumed, so this
+    // tracks the real value instead of quietly passing against a stand-in.
+    const inset = Number(
+      read('app/components/TripHeader.tsx').match(/const LINE_INSET = ([\d.]+)/)?.[1] ?? -1)
+    ok(inset >= 4, 'the mark lands with a margin from the edge, not flush against it')
     const MARK = {
       heroWidth: 210, lineWidth: 118,
       heroOrigin: [90, 96] as [number, number],
-      lineOrigin: [0, 14] as [number, number],
+      lineOrigin: [inset, 14] as [number, number],
     }
     const tops = (progress: number) => {
       const html = renderToStaticMarkup(
@@ -511,6 +531,32 @@ section('The words move separately, and never through each other')
     ok(dotEarly < greenEarly / 3,
       'while dot has barely stirred — they are not on one clock')
     ok(Math.abs(late.dot - rest.dot) > 40, 'and dot makes its own move later')
+
+    // ── Nothing drifts before its turn ──
+    //
+    // The defect this replaced: one shrink for the whole mark meant a word's
+    // resting position was measured from an edge that was itself moving, so
+    // words slid left before they had started. Tying the scale to each word's
+    // own rise means an unmoved word is exactly where it was.
+    const lefts = (progress: number) => {
+      const html = renderToStaticMarkup(
+        React.createElement(MorphWordmark, { progress, ...MARK }))
+      const order = ['green', 'dot', 'golf', 'mark']
+      const found: Record<string, number> = {}
+      const ms = [...html.matchAll(/left:\s*([-\d.]+)px/g)]
+      ms.forEach((m, i) => { if (order[i]) found[order[i]] = Number(m[1]) })
+      return found
+    }
+    const atRest = lefts(0)
+    const early2 = lefts(0.2)
+    eq(+(early2.dot - atRest.dot).toFixed(2), 0,
+      'dot has not moved sideways at all before its turn')
+    eq(+(early2.mark - atRest.mark).toFixed(2), 0,
+      'and neither has the emerald dot')
+
+    // ── It does not land flush against the edge ──
+    const landed = lefts(1)
+    ok(landed.green > 2, 'the mark keeps a margin from the left edge when it lands')
 
     // golf leaves downwards, away from everything else
     ok(tops(0.3).golf > rest.golf + 40, 'golf drops away from the others')

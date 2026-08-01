@@ -51,21 +51,20 @@ type Window = [number, number]
  * that the two axes are strictly ordered.
  */
 const TIMING: Record<string, { y: Window; x: Window }> = {
-  // The first pull of the scroll is green rising, alone.
-  green: { y: [0.00, 0.26], x: [0.26, 0.50] },
-  // Only once green has moved left. Rising while green still sat in the
-  // middle put the two words on top of each other for a quarter of the
-  // travel — dot has to come up into space green has already vacated.
-  dot:   { y: [0.44, 0.68], x: [0.68, 0.90] },
+  // Green goes first and is quick about it: up, then left, and done inside
+  // the first half. Long enough to read as leading, short enough that the
+  // rest are visibly following rather than waiting their turn.
+  green: { y: [0.00, 0.28], x: [0.28, 0.50] },
+  // Straight in behind, starting as green begins to move left — so the two
+  // overlap in time without ever overlapping in space.
+  dot:   { y: [0.32, 0.60], x: [0.60, 0.80] },
   // Straight down and out, never sideways. It is the only word heading that
   // way, so it crosses nothing on its way off the screen.
-  golf:  { y: [0.00, 0.42], x: [0.00, 0.00] },
-  // Last, after the words have settled. Punctuation follows its sentence.
-  mark:  { y: [0.60, 0.82], x: [0.82, 1.00] },
+  golf:  { y: [0.00, 0.36], x: [0.00, 0.00] },
+  // Close behind the words rather than long after them. Punctuation follows
+  // its sentence; it does not arrive in a later paragraph.
+  mark:  { y: [0.54, 0.78], x: [0.78, 0.96] },
 }
-
-/** How the whole mark shrinks. Runs under everything, start to finish. */
-const SIZE: Window = [0.00, 0.86]
 
 /**
  * How far the leaving word drops, in screen pixels.
@@ -111,10 +110,19 @@ export default function MorphWordmark({
   lineOrigin: readonly [number, number]
   className?: string
 }) {
-  // The mark's overall scale, from source units to screen px. One curve for
-  // the whole mark: the words rearrange within it, but they shrink together.
-  const size = ramp(SIZE, progress)
-  const unit = lerp(heroWidth / STACKED_BOX[2], lineWidth / LINE_BOX[2], size)
+  // Each word shrinks on its own clock, as it rises.
+  //
+  // A single shrink for the whole mark looks like a bug: a word's resting
+  // position is measured from the mark's left edge, so as the mark contracts
+  // every word slides left towards it — before its own move has begun. Words
+  // that had not started yet visibly drifted, and the emerald dot in
+  // particular ended up adrift of where it began.
+  //
+  // Tying the scale to the word's own rise means a word that has not moved is
+  // exactly where it was, at full size. It shrinks as it climbs, and is at
+  // its final size by the time it slides left.
+  const heroUnit = heroWidth / STACKED_BOX[2]
+  const lineUnit = lineWidth / LINE_BOX[2]
 
   // Every word interpolates between two real screen positions, rather than
   // being nudged about inside a frame that is itself moving. That is what
@@ -123,6 +131,9 @@ export default function MorphWordmark({
   const words = MORPH_WORDS.map(word => {
     const ty = ramp(TIMING[word.id].y, progress)
     const tx = ramp(TIMING[word.id].x, progress)
+
+    // Shrinks with the rise, so it is the right size before it moves across.
+    const unit = lerp(heroUnit, lineUnit, ty)
 
     const fromX = heroOrigin[0] + (word.stacked[0] - STACKED_BOX[0]) * unit
     const fromY = heroOrigin[1] + (word.stacked[1] - STACKED_BOX[1]) * unit
