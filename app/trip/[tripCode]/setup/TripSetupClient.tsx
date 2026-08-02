@@ -25,6 +25,7 @@ import MatchplayPanel from './MatchplayPanel'
 import DateField from '@/app/components/DateField'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import TripHeader from '@/app/components/TripHeader'
+import { IconSettings, IconX } from '@/app/components/icons'
 import { type Leaderboard, needsTeams, needsPairings } from '@/lib/leaderboards'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -230,6 +231,7 @@ export default function TripSetupClient({
   const [name, setName] = useState(trip.name)
   const [startDate, setStartDate] = useState(trip.start_date ?? '')
   const [endDate, setEndDate] = useState(trip.end_date ?? '')
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [formats, setFormats] = useState<TripFormats>(trip.formats)
   // What the trip is playing for. A list of complete competitions, replacing
   // the old object of flags — see lib/leaderboards.ts.
@@ -805,6 +807,69 @@ export default function TripSetupClient({
           the scoring screens do. Tapping the mark is the way back. */}
       <TripHeader backTo={`/trip/${trip.trip_code}`} title="settings" />
 
+      {/* The trip's own details — its name and its dates — sit behind the
+          gear rather than at the top of the page. They are set once at
+          creation and almost never touched again, so they were taking the
+          first screenful away from the thing this page is actually for. */}
+      <div className="max-w-lg mx-auto px-4 pt-4 flex justify-end">
+        <button
+          type="button"
+          onClick={() => setDetailsOpen(true)}
+          aria-label="Trip name and dates"
+          className="w-11 h-11 rounded-xl border border-bark/12 bg-surface text-ink/65 hover:text-ink hover:border-bark/25 flex items-center justify-center transition-colors duration-150"
+        >
+          <IconSettings size={18} />
+        </button>
+      </div>
+
+      {detailsOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={() => setDetailsOpen(false)}>
+          <div className="absolute inset-0 bg-ink/40" />
+          <div
+            className="relative bg-cream rounded-t-2xl max-h-[88vh] overflow-y-auto"
+            style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-cream px-4 pt-4 pb-3 flex items-center justify-between border-b border-bark/12">
+              <h2 className="t-h2 text-ink">Trip details</h2>
+              <button
+                type="button"
+                onClick={() => setDetailsOpen(false)}
+                aria-label="Close"
+                className="w-11 h-11 -mr-2 flex items-center justify-center text-ink/65 hover:text-ink"
+              >
+                <IconX size={18} />
+              </button>
+            </div>
+
+            <div className="px-4 py-5 space-y-4">
+              <div>
+                <label className={LABEL}>Trip name</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  onBlur={saveName}
+                  disabled={locked}
+                  className={INPUT}
+                />
+              </div>
+              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                <DateField label="Start date" value={startDate}
+                  onChange={v => saveDates(v, endDate)} disabled={locked} />
+                <DateField label="End date" value={endDate}
+                  onChange={v => saveDates(startDate, v)} disabled={locked} />
+              </div>
+              {locked && (
+                <p className="t-cap text-ink/65">
+                  The trip is live. Unlock it below to change these.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
 
         {/* ── Status banner ── */}
@@ -841,48 +906,12 @@ export default function TripSetupClient({
 
         {isDraft && (
           <>
-            {/* ── Trip details ── */}
-            <section className={SECTION}>
-              <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-4">Trip details</p>
-              <div className="space-y-4">
-                <div>
-                  <label className={LABEL}>Trip name</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    onBlur={saveName}
-                    disabled={locked}
-                    className={INPUT}
-                  />
-                </div>
-                <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-                  <DateField
-                    label="Start date"
-                    value={startDate}
-                    onChange={v => saveDates(v, endDate)}
-                    disabled={locked}
-                  />
-                  <DateField
-                    label="End date"
-                    value={endDate}
-                    onChange={v => saveDates(startDate, v)}
-                    disabled={locked}
-                  />
-                </div>
-              </div>
-            </section>
-
             {/* ── What the trip plays for ──
                 The first thing asked, because it is what turns a scorecard
                 into a position. Nothing below it can be answered sensibly
                 until this is settled. */}
             <section className={SECTION}>
               <p className="t-label text-accent-deep uppercase tracking-[0.18em] mb-1">Leaderboards</p>
-              <p className="t-body text-ink/80 mb-4">
-                What this trip is playing for. Every board here is scored from
-                the same cards.
-              </p>
               <LeaderboardSetup
                 boards={boards}
                 playerCount={players.length}
@@ -898,21 +927,70 @@ export default function TripSetupClient({
               )}
             </section>
 
-            {/* ── The rest of setup ──
-                One question at a time, in the order set by lib/tripSetupFlow.ts. */}
-            {steps.map(step => (
-              <Question key={step.key} step={step}>
-                {questionBody(step)}
-              </Question>
-            ))}
-
-            {/* What is still outstanding, so the page has an end */}
-            {pending && (
-              <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
-                <p className="text-ink/65 text-[13px] leading-snug">
-                  Next up — <span className="text-ink/80">{pending.title}</span>: {pending.question}
+            {/* ── Teams ──
+                The only question the leaderboards do not already answer. The
+                old decision tree used to render seven more cards here — who
+                competes, league or matchplay, scoring, discard, the prize
+                table, the draw format, team scoring — every one of which the
+                leaderboard cards above now ask properly. They were asked
+                twice and answered into a model nothing read. */}
+            {needsTeams(boards) && (
+              <section className={SECTION}>
+                <p className="t-label text-accent-deep uppercase tracking-[0.18em] mb-1">
+                  {noun.Many}
                 </p>
+                <p className="t-body text-ink/80 mb-4">
+                  {needsPairings(boards)
+                    ? 'Your draw is between pairings, so teams are fixed at two.'
+                    : 'Pick who plays with whom.'}
+                </p>
+    <>
+      {/* A pairs draw fixes the size, so say so before anyone picks */}
+      {sizeBanner && (
+        <div className="flex items-start gap-3 px-4 py-3 mb-3 bg-accent/10 border border-accent/40 rounded-xl">
+          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0" />
+          <p className="text-accent text-[13px] leading-snug">{sizeBanner}</p>
+        </div>
+      )}
+
+      {teams.length > 0 && (
+        <div className="space-y-2 mb-4">
+          {teams.map(team => {
+            const members = players.filter(p => p.team_id === team.id)
+            const over = oversize.some(o => o.teamId === team.id)
+            return (
+              <div
+                key={team.id}
+                className={`flex items-center gap-3 px-3 py-2.5 border rounded-xl ${
+                  over ? 'border-rust/50 bg-rust/10' : 'border-bark/12 bg-surface'
+                }`}
+              >
+                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} />
+                <span className="text-ink text-sm flex-1 min-w-0 truncate">{team.name}</span>
+                <span className={`text-[13px] flex-shrink-0 ${over ? 'text-rust-deep' : 'text-ink/65'}`}>
+                  {members.length} player{members.length === 1 ? '' : 's'}
+                </span>
               </div>
+            )
+          })}
+        </div>
+      )}
+
+      {!locked && (
+        <Link
+          href={`/trip/${trip.trip_code}/teams`}
+          className="block w-full py-3.5 border border-accent/40 text-accent rounded-xl text-sm tracking-wider uppercase text-center hover:bg-accent/10 transition-colors"
+        >
+          Pick {noun.many}
+        </Link>
+      )}
+
+      <p className="text-ink/65 text-[13px] mt-3 leading-snug">
+        {noun.Many} can be changed at any point. Players own their scores and
+        carry them to whichever {noun.one} they end up in.
+      </p>
+    </>
+              </section>
             )}
 
 

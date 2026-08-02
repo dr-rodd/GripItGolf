@@ -156,6 +156,17 @@ function Builder({
 
   return (
     <Card className="p-5 flex flex-col gap-5">
+      <div>
+        <p className="t-h2 text-ink">
+          {existing.length === 0 ? 'First, your primary leaderboard' : 'A second leaderboard'}
+        </p>
+        <p className="t-cap text-ink/65 mt-1 leading-snug">
+          {existing.length === 0
+            ? 'What this trip is playing for. Everything else follows from it.'
+            : 'Scored from the same cards, running alongside the first.'}
+        </p>
+      </div>
+
       <Question n={next()} title="Who is being ranked?">
         {([
           { key: 'individual' as Audience, label: 'Individuals', hint: 'Every player ranked on their own card.' },
@@ -362,25 +373,33 @@ export default function LeaderboardSetup({
       {/* Offered from the start so it is clear more is possible, but not
           usable until the trip has something to play for. */}
       {!adding && (
-        <div>
+        <Card className={`p-5 ${done && more ? '' : 'opacity-55'}`}>
+          <div className="flex items-start gap-3">
+            <span className={`flex-shrink-0 mt-0.5 ${done && more ? 'text-accent-deep' : 'text-ink/50'}`}>
+              <IconTrophy size={18} />
+            </span>
+            <div className="min-w-0">
+              <p className="t-card text-ink">Create a secondary leaderboard</p>
+              <p className="t-cap text-ink/65 mt-1 leading-snug">
+                {!done
+                  ? 'Once your primary leaderboard is set, you can add more.'
+                  : !more
+                    ? 'Every leaderboard this trip can run is already running.'
+                    : 'A trip can run several events in parallel off the same cards — an order of merit alongside a daily prize, or a knockout beside a league.'}
+              </p>
+            </div>
+          </div>
+
           <button
             type="button"
             disabled={!done || !more}
             onClick={() => setAdding(true)}
-            className={buttonClass('secondary')}
+            className={`${buttonClass('secondary')} mt-4`}
           >
-            <IconTrophy size={16} />
-            Add another leaderboard
-            {!done && <IconPlus size={14} />}
+            <IconPlus size={15} />
+            Add a leaderboard
           </button>
-          <p className="t-cap text-ink/65 mt-2 text-center">
-            {!done
-              ? 'Finish your main leaderboard first — you can add more after.'
-              : !more
-                ? 'Every leaderboard this trip can run is already running.'
-                : 'A trip can run several boards off the same cards.'}
-          </p>
-        </div>
+        </Card>
       )}
     </div>
   )

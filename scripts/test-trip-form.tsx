@@ -217,9 +217,39 @@ section('The trip setup page uses the same field')
       teams: [], players: [], rounds: [],
     } as never)
   )
-  ok(html.includes('type="date"'), 'setup renders date fields')
-  ok(html.includes('min-width:0'), 'with the same shrink fix')
-  ok(html.includes('repeat(2, minmax(0, 1fr))'), 'and the same two-column row')
+  // The trip's name and dates moved behind the gear in the header. They are
+  // set once at creation and hardly touched again, so they were taking the
+  // first screenful away from the thing the page is for.
+  ok(!html.includes('type="date"'), 'setup does not put date fields on the page itself')
+  ok(html.includes('aria-label="Trip name and dates"'), 'it offers them behind the gear')
+
+  const src = fs.readFileSync('app/trip/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
+  ok(src.includes('<DateField'), 'and still uses the shared date field inside the sheet')
+  ok(src.includes("repeat(2, minmax(0, 1fr))"), 'in the same two-column row')
+  ok(src.includes('setDetailsOpen'), 'which the gear opens and closes')
+}
+
+// ─── Settings asks each question exactly once ──────────────────
+
+section('The old decision tree is gone from settings')
+{
+  const src = fs.readFileSync('app/trip/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
+
+  // Seven of its eight cards asked what the leaderboard cards now ask
+  // properly — who competes, league or matchplay, scoring, discard, the
+  // prize table, the draw format, team scoring. Every one was answered into
+  // a model nothing downstream read.
+  ok(!/\{steps\.map\(step =>/.test(src),
+    'settings no longer renders the old question tree')
+  ok(!src.includes('Next up —'), 'nor its "what is left" note')
+
+  // The one question it asked that the leaderboards do not: who is on which
+  // team. That stays, and is driven by the boards rather than the old flags.
+  ok(src.includes('needsTeams(boards)'), 'teams are still picked, off the boards')
+  ok(src.includes('needsPairings(boards)'), 'and a pairs draw still fixes them at two')
+
+  // The leaderboard section is the only place a competition is chosen
+  ok(src.includes('<LeaderboardSetup'), 'the leaderboard cards are the one question area')
 }
 
 // ─── Toggle ────────────────────────────────────────────────────
