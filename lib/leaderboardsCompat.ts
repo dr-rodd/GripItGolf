@@ -16,9 +16,9 @@
 //
 // Pure. No I/O.
 
-import type { TripFormats } from './formats'
-import type { TeamScoring } from './teamScoring'
-import type { Leaderboard } from './leaderboards'
+import { parseFormats, type TripFormats } from './formats'
+import { parseTeamScoring, type TeamScoring } from './teamScoring'
+import { parseLeaderboards, type Leaderboard } from './leaderboards'
 
 /**
  * The boards an old trip was running.
@@ -111,6 +111,30 @@ export function tripBoards(
   teamScoring: TeamScoring,
 ): Leaderboard[] {
   return stored.length > 0 ? stored : boardsFromFormats(formats, teamScoring)
+}
+
+/** The three columns any page needs to know what a trip plays for. */
+export type TripBoardColumns = {
+  formats: unknown
+  leaderboards: unknown
+  team_scoring: unknown
+}
+
+/**
+ * What a trip plays for, straight off its row.
+ *
+ * Every page that asks the question asks it the same way — parse all three
+ * columns, prefer the stored list, fall back to the flags. Doing that by hand
+ * in each page is how the matchplay screen came to read a flag nothing writes
+ * any more, and answered "matchplay isn't switched on" for a trip whose
+ * primary leaderboard was a knockout.
+ */
+export function boardsForTrip(trip: TripBoardColumns): Leaderboard[] {
+  return tripBoards(
+    parseLeaderboards(trip.leaderboards),
+    parseFormats(trip.formats),
+    parseTeamScoring(trip.team_scoring),
+  )
 }
 
 /**

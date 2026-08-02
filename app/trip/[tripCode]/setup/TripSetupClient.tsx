@@ -4,18 +4,6 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import {
-  type TripFormats, type LeagueSettings, type MatchplayFormat,
-  isEmpty, LEAGUE_BOARDS, MAX_DISCARD,
-} from '@/lib/formats'
-import {
-  defaultCustomPoints, resolveCustomPoints, clampPoints, MAX_CUSTOM_POINTS,
-} from '@/lib/customPoints'
-import {
-  TEAM_SCORING_MODES, describeTeamScoring,
-  type TeamScoring, type TeamScoringMode,
-} from '@/lib/teamScoring'
-import { emptyFormatsReason } from '@/lib/tripSetupFlow'
-import {
   teamNoun, teamSizeBanner, teamSizeLimit, oversizedTeams, canJoinTeam,
   pairsBlockedReason,
 } from '@/lib/teamLimits'
@@ -25,7 +13,7 @@ import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import TripHeader from '@/app/components/TripHeader'
 import { IconSettings, IconX } from '@/app/components/icons'
 import {
-  type Leaderboard, needsTeams, needsPairings, finaliseBlockedReason,
+  type Leaderboard, needsTeams, needsPairings, hasMatchplay, finaliseBlockedReason,
 } from '@/lib/leaderboards'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -36,9 +24,7 @@ type Trip = {
   name: string
   start_date: string | null
   end_date: string | null
-  formats: TripFormats
   leaderboards: Leaderboard[]
-  team_scoring: TeamScoring
   setup_status: string
   edit_permission: string
 }
@@ -69,13 +55,6 @@ const LABEL = 'block text-ink/80 text-[13px] uppercase tracking-wider mb-2'
 
 const SECTION = 'bg-surface border border-bark/12 rounded-2xl p-5'
 
-/** 1st, 2nd, 3rd, 4th … */
-function ordinal(n: number): string {
-  const rem100 = n % 100
-  if (rem100 >= 11 && rem100 <= 13) return `${n}th`
-  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
-}
-
 // ── Component ─────────────────────────────────────────────────────────────
 
 export default function TripSetupClient({
@@ -94,16 +73,16 @@ export default function TripSetupClient({
   const [startDate, setStartDate] = useState(trip.start_date ?? '')
   const [endDate, setEndDate] = useState(trip.end_date ?? '')
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [formats, setFormats] = useState<TripFormats>(trip.formats)
   // What the trip is playing for. A list of complete competitions, replacing
-  // the old object of flags — see lib/leaderboards.ts.
+  // the old object of flags — see lib/leaderboards.ts. Nothing on this screen
+  // reads `trips.formats` any more: every question it used to answer is now
+  // asked properly by a leaderboard card.
   const [boards, setBoards] = useState<Leaderboard[]>(trip.leaderboards ?? [])
-  const [teamScoring, setTeamScoring] = useState<TeamScoring>(trip.team_scoring)
   const [editPermission, setEditPermission] = useState(trip.edit_permission)
   const [setupStatus, setSetupStatus] = useState(trip.setup_status)
 
   // Collections
-  const [teams, setTeams] = useState<Team[]>(initialTeams)
+  const [teams] = useState<Team[]>(initialTeams)
   const [players, setPlayers] = useState<Player[]>(initialPlayers)
 
   // New player form
@@ -126,11 +105,6 @@ export default function TripSetupClient({
   const isDraft = setupStatus === 'draft'
   const canEdit = isDraft && (editPermission === 'everyone' || isOwner)
   const locked = !canEdit || busy
-  const unassignedCount = players.filter(p => !p.team_id).length
-  const smallestTeamSize = teams.length > 0
-    ? Math.min(...teams.map(t => players.filter(p => p.team_id === t.id).length))
-    : 0
-
   function flashError(msg: string) {
     setError(msg)
     setTimeout(() => setError(''), 4000)
@@ -160,82 +134,10 @@ export default function TripSetupClient({
     }
   }
 
-  /**
-   * Save an answer, unless it would leave the trip with nothing to play for.
-   *
-   * A trip with no competition cannot be stored: parseFormats refuses to
-   * return one, so reloading the page would quietly replace it with the
-   * default and throw away the rest of the organiser's answers. The refusal
-   * therefore says which switch to reach for instead of just saying no —
-   * turning the league off is a different action from unticking its last board.
-   */
-  async function saveFormats(next: TripFormats) {
-    if (isEmpty(next)) {
-      flashError(emptyFormatsReason(next))
-      return
-    }
-    const prev = formats
-    setFormats(next)
-    if (!(await saveTrip({ formats: next }))) setFormats(prev)
-  }
-
-  /** Answer question 1 — who is being ranked. Both is allowed. */
-  function toggleCompetitor(key: 'individual' | 'teams') {
-    const next: TripFormats = { ...formats, [key]: !formats[key] }
-    // A pairs draw is between teams. Without them it can only be singles.
-    if (!next.teams) next.matchplay = { ...next.matchplay, format: 'singles' }
-    saveFormats(next)
-  }
-
-  /** Answer question 2 — league, matchplay, or both. */
-  function toggleCompetition(key: 'league' | 'matchplay') {
-    const next: TripFormats =
-      key === 'league'
-        ? { ...formats, league: { ...formats.league, on: !formats.league.on } }
-        : { ...formats, matchplay: { ...formats.matchplay, on: !formats.matchplay.on } }
-    // Turning matchplay on with teams already picked means pairs by default —
-    // it is the only thing a team can play a knockout as.
-    if (key === 'matchplay' && next.matchplay.on && next.teams && !next.individual) {
-      next.matchplay = { ...next.matchplay, format: 'pairs' }
-    }
-    saveFormats(next)
-  }
-
-  function setMatchplayFormat(format: MatchplayFormat) {
-    saveFormats({ ...formats, matchplay: { ...formats.matchplay, format } })
-  }
-
-  /** The league is off once no board is ticked — an empty league is no league. */
-  function toggleBoard(key: 'stableford' | 'strokes' | 'custom') {
-    const league: LeagueSettings = { ...formats.league, [key]: !formats.league[key] }
-    // Turning Custom on for the first time seeds a table from the field
-    if (key === 'custom' && league.custom && league.customPoints.length === 0) {
-      league.customPoints = defaultCustomPoints(players.length)
-    }
-    saveFormats({ ...formats, league })
-  }
-
-  function setLeague(patch: Partial<LeagueSettings>) {
-    saveFormats({ ...formats, league: { ...formats.league, ...patch } })
-  }
-
-  function setCustomPoint(index: number, raw: string) {
-    const table = resolveCustomPoints(formats.league.customPoints, players.length)
-    table[index] = clampPoints(raw === '' ? 0 : raw)
-    setLeague({ customPoints: table })
-  }
-
   async function saveBoards(next: Leaderboard[]) {
     const prev = boards
     setBoards(next)
     if (!(await saveTrip({ leaderboards: next }))) setBoards(prev)
-  }
-
-  async function saveTeamScoring(patch: Partial<TeamScoring>) {
-    const prev = teamScoring
-    const next = { ...teamScoring, ...patch }
-    setTeamScoring(next)
-    if (!(await saveTrip({ team_scoring: next }))) setTeamScoring(prev)
   }
 
   async function savePermission(next: string) {
@@ -308,9 +210,9 @@ export default function TripSetupClient({
    * to let it save and break the draw later.
    */
   async function movePlayerToTeam(id: string, teamId: string | null) {
-    if (teamId && !canJoinTeam(formats, teamId, players)) {
+    if (teamId && !canJoinTeam(boards, teamId, players)) {
       const team = teams.find(t => t.id === teamId)
-      flashError(`${team?.name ?? 'That ' + teamNoun(formats).one} is already full`)
+      flashError(`${team?.name ?? 'That ' + teamNoun(boards).one} is already full`)
       return
     }
     await updatePlayer(id, { team_id: teamId })
@@ -367,25 +269,16 @@ export default function TripSetupClient({
 
   const viewOnly = isDraft && !canEdit
 
-  // The decision tree. Which questions show, and whether each has an answer,
-  // is decided in lib/tripSetupFlow.ts — this file only draws them.
-  const customTable = resolveCustomPoints(formats.league.customPoints, players.length)
-  const flowCtx = {
-    players,
-    teams,
-    teamScoring,
-    customTableLength: customTable.length,
-  }
   // What a trip plays for is its boards, so that is what finalise asks. It
   // used to ask trips.formats, which a new trip carries as the defaults — so
   // a trip with nothing at all to play for could go live.
   const blocked =
     finaliseBlockedReason(boards, teams.length)
-    ?? (needsPairings(boards) ? pairsBlockedReason(formats, teams, players) : null)
-  const noun     = teamNoun(formats)
-  const sizeBanner = teamSizeBanner(formats)
-  const sizeLimit  = teamSizeLimit(formats)
-  const oversize   = oversizedTeams(formats, teams, players)
+    ?? (needsPairings(boards) ? pairsBlockedReason(boards, teams, players) : null)
+  const noun     = teamNoun(boards)
+  const sizeBanner = teamSizeBanner(boards)
+  const sizeLimit  = teamSizeLimit(boards)
+  const oversize   = oversizedTeams(boards, teams, players)
 
   /** The answer controls for one question. */
   return (
@@ -652,7 +545,7 @@ export default function TripSetupClient({
                           </button>
                         ))}
                       </div>
-                      {formats.teams && (
+                      {needsTeams(boards) && (
                         <div className="relative flex-1 min-w-0">
                           <select
                             value={player.team_id ?? ''}
@@ -725,7 +618,7 @@ export default function TripSetupClient({
                         ))}
                       </div>
                     </div>
-                    {formats.teams && teams.length > 0 && (
+                    {needsTeams(boards) && teams.length > 0 && (
                       <div className="relative">
                         <select
                           value={newTeamId}
@@ -828,12 +721,12 @@ export default function TripSetupClient({
             These sit outside the draft-only block on purpose. A bracket is
             normally drawn once the roster has settled, which is at or after
             finalising, so the panel has to survive the switch to live. */}
-        {formats.matchplay.on && (
+        {hasMatchplay(boards) && (
           <MatchplayPanel
             tripId={trip.id}
             tripCode={trip.trip_code}
             canEdit={editPermission === 'everyone' || isOwner}
-            formats={formats}
+            boards={boards}
             teams={teams}
             players={players}
           />

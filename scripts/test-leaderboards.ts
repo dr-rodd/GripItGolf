@@ -21,6 +21,9 @@ import {
   everyBoard, unanswered, isComplete, offersDiscard, needsTeams, needsPairings,
   boardTitle, boardRules, primary, parseLeaderboards,
 } from '../lib/leaderboards'
+import { DEFAULT_FORMATS, parseFormats, matchplayOn } from '../lib/formats'
+import { DEFAULT_TEAM_SCORING } from '../lib/teamScoring'
+import { boardsForTrip } from '../lib/leaderboardsCompat'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -278,6 +281,42 @@ section('The first shape of this model still reads back')
     { id: 'z', audience: 'team', competition: 'league', teamFormat: 'hero', aggregation: 'cumulative' },
   ])
   eq(oldCumulative[0].combine, 'total', 'and a cumulative one reads as a total')
+}
+
+section('A trip row is read the same way by every page that asks')
+{
+  // The regression: /matchplay, /teams and the trip hub each asked
+  // `trips.formats` whether the trip ran a knockout. Nothing writes that
+  // column any more, so a trip whose primary leaderboard IS a knockout came
+  // back as "matchplay isn't switched on" — with a button back to the settings
+  // screen that had just switched it on. Around and around.
+  const newTrip = {
+    formats: DEFAULT_FORMATS,
+    leaderboards: [
+      { id: 'x', audience: 'team', competition: 'matchplay' },
+    ],
+    team_scoring: DEFAULT_TEAM_SCORING,
+  }
+  ok(!matchplayOn(parseFormats(newTrip.formats)),
+    'the old flags say this trip runs no knockout')
+  ok(hasMatchplay(boardsForTrip(newTrip)),
+    'and the boards say it runs one — the boards are right')
+  ok(needsPairings(boardsForTrip(newTrip)),
+    'between pairings, so the teams screen has to lock them at two')
+
+  // An old trip still reads as itself through the same door
+  const oldTrip = {
+    formats: parseFormats({ teams: true, matchplay: { on: true, format: 'pairs' } }),
+    leaderboards: [],
+    team_scoring: DEFAULT_TEAM_SCORING,
+  }
+  ok(hasMatchplay(boardsForTrip(oldTrip)), 'a pre-migration draw is still a draw')
+  ok(needsPairings(boardsForTrip(oldTrip)), 'and still between pairings')
+
+  // A trip playing for nothing at all claims no knockout
+  ok(!hasMatchplay(boardsForTrip({
+    formats: DEFAULT_FORMATS, leaderboards: [], team_scoring: DEFAULT_TEAM_SCORING,
+  })), 'and a trip with nothing chosen runs nothing')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

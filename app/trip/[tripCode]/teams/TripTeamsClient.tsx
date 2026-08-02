@@ -7,7 +7,7 @@ import {
   useDroppable, useDraggable,
 } from '@dnd-kit/core'
 import { supabase } from '@/lib/supabase'
-import { type TripFormats } from '@/lib/formats'
+import { type Leaderboard } from '@/lib/leaderboards'
 import {
   teamNoun, teamSizeLimit, teamSizeBanner, teamCountOptions, canJoinTeam,
   PAIR_SIZE,
@@ -189,13 +189,13 @@ function UnassignedZone({ players }: { players: Player[] }) {
 export default function TripTeamsClient({
   tripId,
   numTeams: initialNumTeams,
-  formats,
+  boards,
   teams: initialTeams,
   players: initialPlayers,
 }: {
   tripId: string
   numTeams: number
-  formats: TripFormats
+  boards: readonly Leaderboard[]
   teams: Team[]
   players: Player[]
 }) {
@@ -205,12 +205,13 @@ export default function TripTeamsClient({
   const [busy, setBusy]   = useState(false)
   const [error, setError] = useState('')
 
-  // What a team is, and how big it may be, both follow from the format
-  const noun         = teamNoun(formats)
-  const sizeLimit    = teamSizeLimit(formats)
-  const banner       = teamSizeBanner(formats)
+  // What a team is, and how big it may be, both follow from what the trip
+  // is playing for — a pairs draw is the only thing that fixes a size.
+  const noun         = teamNoun(boards)
+  const sizeLimit    = teamSizeLimit(boards)
+  const banner       = teamSizeBanner(boards)
   const pairs        = sizeLimit !== null
-  const countOptions = teamCountOptions(formats, players.length)
+  const countOptions = teamCountOptions(boards, players.length)
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
@@ -241,7 +242,7 @@ export default function TripTeamsClient({
 
     // A pairs draw is between teams of two, so a third player is not a thing
     // the bracket can represent. Refuse the drop rather than let it save.
-    if (targetTeamId && !canJoinTeam(formats, targetTeamId, players)) {
+    if (targetTeamId && !canJoinTeam(boards, targetTeamId, players)) {
       const team = teams.find(t => t.id === targetTeamId)
       flashError(`${team?.name ?? noun.One} already has ${PAIR_SIZE} players`)
       return

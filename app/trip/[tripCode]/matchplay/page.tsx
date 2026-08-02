@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { parseFormats, isPairsMatchplay, matchplayOn } from '@/lib/formats'
+import { hasMatchplay, needsPairings } from '@/lib/leaderboards'
+import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { playerEntrant, pairEntrant, type Entrant } from '@/lib/matchplayEntrants'
 import BackButton from '@/app/components/BackButton'
 import TabBar from '@/app/components/TabBar'
@@ -28,16 +29,20 @@ export default async function MatchplayPage({
 
   const { data: trip, error: tripError } = await supabase
     .from('trips')
-    .select('id, name, formats')
+    .select('id, name, formats, leaderboards, team_scoring')
     .eq('trip_code', tripCode)
     .single()
 
   if (tripError) console.error('MatchplayPage trip query failed:', tripError)
   if (!trip) notFound()
 
-  const formats = parseFormats(trip.formats)
-  const enabled = matchplayOn(formats)
-  const pairs   = isPairsMatchplay(formats)
+  // Read off what the trip plays for. This used to ask `trips.formats`,
+  // which nothing writes any more — so a knockout chosen in settings landed
+  // here as "matchplay isn't switched on", with a button back to the
+  // settings screen that had just switched it on.
+  const boards  = boardsForTrip(trip)
+  const enabled = hasMatchplay(boards)
+  const pairs   = needsPairings(boards)
 
   const [matchesRes, playersRes, teamsRes] = await Promise.all([
     supabase
@@ -118,8 +123,12 @@ export default async function MatchplayPage({
           />
         ) : matches.length === 0 ? (
           <EmptyState
-            title="No bracket has been created for this trip yet"
-            body="Open Trip Setup and use Create Matchplay to draw the bracket."
+            title="No bracket has been drawn yet"
+            body={
+              pairs
+                ? 'Pick the pairings in Trip Setup, then use Create Matchplay to draw the bracket.'
+                : 'Open Trip Setup and use Create Matchplay to draw the bracket.'
+            }
             tripCode={tripCode}
           />
         ) : (

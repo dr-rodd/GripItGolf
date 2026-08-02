@@ -1,20 +1,28 @@
-// What a team is allowed to be, given what the trip is running.
+// What a team is allowed to be, given what the trip is playing for.
 //
 // A team league puts no ceiling on team size — lib/teamScoring.ts takes any
 // number of players. A pairs matchplay draw does: a pairing IS a team of two,
 // so the draw only makes sense if every team holds exactly two.
 //
+// Read off the trip's leaderboards, not off `trips.formats`. The old model
+// answered this from a flag nothing writes any more, so a pairs draw chosen
+// in settings was never recognised as one: teams were never called pairings,
+// never capped at two, and the draw itself could not be drawn at all.
+//
 // Pure, so the setup screen, the teams screen and the tests share one rule.
 
-import { isPairsMatchplay, type TripFormats } from './formats'
+import { needsPairings, type Leaderboard } from './leaderboards'
 
 export const PAIR_SIZE = 2
+
+/** What the trip is playing for — every rule here is read off this. */
+export type Boards = readonly Leaderboard[]
 
 /** What a team is called on screen. Pairings, in a pairs draw. */
 export type TeamNoun = { one: string; many: string; One: string; Many: string }
 
-export function teamNoun(f: TripFormats): TeamNoun {
-  return isPairsMatchplay(f)
+export function teamNoun(boards: Boards): TeamNoun {
+  return needsPairings(boards)
     ? { one: 'pairing', many: 'pairings', One: 'Pairing', Many: 'Pairings' }
     : { one: 'team', many: 'teams', One: 'Team', Many: 'Teams' }
 }
@@ -23,13 +31,13 @@ export function teamNoun(f: TripFormats): TeamNoun {
  * The hard ceiling on team size, or null when there isn't one.
  * Only a pairs draw sets one.
  */
-export function teamSizeLimit(f: TripFormats): number | null {
-  return isPairsMatchplay(f) ? PAIR_SIZE : null
+export function teamSizeLimit(boards: Boards): number | null {
+  return needsPairings(boards) ? PAIR_SIZE : null
 }
 
 /** The banner shown above team selection when a limit applies. */
-export function teamSizeBanner(f: TripFormats): string | null {
-  return isPairsMatchplay(f)
+export function teamSizeBanner(boards: Boards): string | null {
+  return needsPairings(boards)
     ? `Max ${PAIR_SIZE} per pairing — a pairs draw is played between teams of two.`
     : null
 }
@@ -41,8 +49,8 @@ export function teamSizeBanner(f: TripFormats): string | null {
  * odd field leaves one pairing a player short rather than silently dropping
  * somebody. Elsewhere the organiser picks from the usual options.
  */
-export function teamCountOptions(f: TripFormats, playerCount: number): number[] {
-  if (isPairsMatchplay(f)) {
+export function teamCountOptions(boards: Boards, playerCount: number): number[] {
+  if (needsPairings(boards)) {
     const needed = Math.ceil(playerCount / PAIR_SIZE)
     return needed >= 1 ? [needed] : []
   }
@@ -61,11 +69,11 @@ export type TeamSizeProblem = {
 
 /** Teams holding more than the limit allows. Empty when there is no limit. */
 export function oversizedTeams(
-  f: TripFormats,
+  boards: Boards,
   teams: readonly TeamLike[],
   players: readonly MemberLike[],
 ): TeamSizeProblem[] {
-  const limit = teamSizeLimit(f)
+  const limit = teamSizeLimit(boards)
   if (limit === null) return []
   return teams
     .map(t => ({
@@ -82,11 +90,11 @@ export function oversizedTeams(
  * Used to refuse a drag rather than let it fail at the database.
  */
 export function canJoinTeam(
-  f: TripFormats,
+  boards: Boards,
   teamId: string,
   players: readonly MemberLike[],
 ): boolean {
-  const limit = teamSizeLimit(f)
+  const limit = teamSizeLimit(boards)
   if (limit === null) return true
   return players.filter(p => p.team_id === teamId).length < limit
 }
@@ -99,11 +107,11 @@ export function canJoinTeam(
  * pairing of one is a different competition.
  */
 export function pairsBlockedReason(
-  f: TripFormats,
+  boards: Boards,
   teams: readonly TeamLike[],
   players: readonly MemberLike[],
 ): string | null {
-  if (!isPairsMatchplay(f)) return null
+  if (!needsPairings(boards)) return null
   if (teams.length === 0) return 'Pick the pairings before drawing the bracket.'
 
   const sizes = teams.map(t => ({

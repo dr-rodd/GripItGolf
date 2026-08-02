@@ -52,6 +52,20 @@ function fmt(patch: {
   }
 }
 
+// What a trip plays for. The team rules are read off these now, not off the
+// old flags — a pairs draw chosen in this model is what has to lock teams at
+// two, and for a while nothing did.
+const PAIRS_DRAW: Leaderboard[] = [
+  { id: 'mp', audience: 'team', competition: 'matchplay' },
+]
+const SINGLES_DRAW: Leaderboard[] = [
+  { id: 'mp', audience: 'individual', competition: 'matchplay' },
+]
+const TEAM_LEAGUE: Leaderboard[] = [
+  { id: 'tl', audience: 'team', competition: 'league',
+    scoring: 'stableford', teamFormat: 'better_ball', combine: 'total' },
+]
+
 const team = (id: string, name = id.toUpperCase()) => ({ id, name })
 const player = (id: string, teamId: string | null = null) => ({ id, team_id: teamId })
 
@@ -74,8 +88,8 @@ function ctx(opts: {
 
 section('A pairs draw locks teams at two')
 {
-  const pairs  = fmt({ teams: true, matchplay: { on: true, format: 'pairs' } })
-  const league = fmt({ teams: true, league: { on: true, stableford: true } })
+  const pairs  = PAIRS_DRAW
+  const league = TEAM_LEAGUE
 
   // Literal 2, not PAIR_SIZE: the constant moving is exactly the regression
   // this is here to catch. A pairing is two players, by definition.
@@ -94,11 +108,25 @@ section('A pairs draw locks teams at two')
   eq(teamCountOptions(pairs, 8), [4], 'eight players make four pairings')
   eq(teamCountOptions(pairs, 7), [4], 'seven still make four — nobody is dropped')
   eq(teamCountOptions(league, 8), [2, 3, 4, 5, 6, 8], 'a league picks from the usual counts')
+
+  // The regression this whole file now guards: the rules are read off the
+  // boards. When they were read off `trips.formats` instead — which nothing
+  // writes any anymore — a pairs draw chosen in settings capped nothing,
+  // called nothing a pairing, and could not be drawn at all.
+  eq(teamSizeLimit(SINGLES_DRAW), null, 'a singles draw is not between pairings')
+  eq(teamNoun(SINGLES_DRAW).one, 'team', 'so its teams are teams')
+  eq(teamSizeLimit([]), null, 'and a trip playing for nothing caps nothing')
+
+  // Both at once: a team league as the primary board with a pairs draw
+  // running beside it is still a pairs draw.
+  const both = [...TEAM_LEAGUE, ...PAIRS_DRAW]
+  eq(teamSizeLimit(both), 2, 'a draw alongside a league still caps the teams')
+  eq(teamNoun(both).one, 'pairing', 'and still calls them pairings')
 }
 
 section('An over-full pairing is refused, not saved')
 {
-  const pairs = fmt({ teams: true, matchplay: { on: true, format: 'pairs' } })
+  const pairs = PAIRS_DRAW
   const teams = [team('t1'), team('t2')]
 
   const one  = [player('a', 't1')]
@@ -109,7 +137,7 @@ section('An over-full pairing is refused, not saved')
   ok(canJoinTeam(pairs, 't2', full), 'but can join an empty one')
 
   // Without a cap there is no such thing as full
-  const league = fmt({ teams: true, league: { on: true, stableford: true } })
+  const league = TEAM_LEAGUE
   ok(canJoinTeam(league, 't1', full), 'a team league takes as many as you like')
 
   // Existing over-full teams are reported rather than quietly tolerated
@@ -128,7 +156,7 @@ section('An over-full pairing is refused, not saved')
 
 section('A pairs draw will not be drawn from a broken sheet')
 {
-  const pairs = fmt({ teams: true, matchplay: { on: true, format: 'pairs' } })
+  const pairs = PAIRS_DRAW
   const teams = [team('t1', 'Alpha'), team('t2', 'Bravo')]
 
   ok(pairsBlockedReason(pairs, [], [])?.includes('Pick the pairings') === true,
@@ -152,7 +180,7 @@ section('A pairs draw will not be drawn from a broken sheet')
   eq(pairsBlockedReason(pairs, teams, good), null, 'two full pairings is fine')
 
   // A team league has none of these constraints
-  const league = fmt({ teams: true, league: { on: true, stableford: true } })
+  const league = TEAM_LEAGUE
   eq(pairsBlockedReason(league, teams, short), null, 'and a team league is never blocked by size')
 }
 

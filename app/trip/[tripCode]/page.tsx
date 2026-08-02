@@ -1,7 +1,8 @@
 import { cookies } from 'next/headers'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-import { enabledSummary, isPairsMatchplay, matchplayOn, parseFormats } from '@/lib/formats'
+import { hasMatchplay, needsPairings, boardTitle } from '@/lib/leaderboards'
+import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { isLocked } from '@/lib/passcode'
 import { playerCookieName, readPlayerId } from '@/lib/playerCookie'
 import {
@@ -146,8 +147,10 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   const everyoneIn = players.length > 0 && pendingCount === 0
   const settingsLocked = isLocked(trip.settings_passcode_hash)
   const isDraft = (trip.setup_status ?? 'live') === 'draft'
-  const formats = parseFormats(trip.formats)
-  const formatLine = enabledSummary(formats).join(' · ')
+  // What the trip plays for, read off its boards. The hub used to name the
+  // old flags, which no longer describe a trip set up in this model.
+  const boards = boardsForTrip(trip)
+  const formatLine = boards.map(boardTitle).join(' · ')
 
   // ── Do we know who this is? ──
   //
@@ -169,7 +172,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
         .from('scores')
         .select('player_id, round_id, stableford_points')
         .eq('trip_id', trip.id),
-      matchplayOn(formats)
+      hasMatchplay(boards)
         ? supabase
             .from('matchplay_matches')
             .select('player_a_id, player_b_id, winner_player_id, ' +
@@ -195,7 +198,12 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       roundId: s.round_id,
       points: s.stableford_points ?? 0,
     }))
-    const board = standings(scored, formats.league.discardWorst)
+    // Under the trip's own discard rule, so the hub and the leaderboard
+    // cannot disagree. Discard is per-board now, so it is the leading
+    // Stableford board's rule — the one the greeting is quoting a total from.
+    const headline = boards.find(b =>
+      b.competition === 'league' && b.scoring === 'stableford')
+    const board = standings(scored, headline?.discardWorst ?? 0)
     const mine  = standingFor(me.id, board)
 
     if (mine) {
@@ -209,9 +217,9 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
     }
 
     // In a pairs draw the entrant is their pairing, not them
-    const entrantId = isPairsMatchplay(formats) ? me.team_id ?? null : me.id
+    const entrantId = needsPairings(boards) ? me.team_id ?? null : me.id
     if (entrantId && matchRows.length > 0) {
-      const pairs = isPairsMatchplay(formats)
+      const pairs = needsPairings(boards)
       const asSides: SummaryMatch[] = matchRows.map(m => ({
         sideA:  pairs ? m.team_a_id : m.player_a_id,
         sideB:  pairs ? m.team_b_id : m.player_b_id,

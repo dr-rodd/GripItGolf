@@ -6,34 +6,34 @@ import {
   getBracketStatus, createBracket, previewBracket, bracketBlockedReason,
   type BracketStatus,
 } from '@/lib/matchplayStore'
-import { isPairsMatchplay, type TripFormats } from '@/lib/formats'
+import { needsPairings, type Leaderboard } from '@/lib/leaderboards'
 import { pairsBlockedReason, teamNoun } from '@/lib/teamLimits'
 import type { MemberLike, TeamLike } from '@/lib/teamLimits'
 
 /**
- * Settings for the matchplay format. Appears when matchplay is switched on
- * for the trip; switching the format on does not generate anything by itself,
- * so creating the bracket is a deliberate click in here.
+ * Settings for the matchplay format. Appears when the trip runs a knockout;
+ * choosing one does not generate anything by itself, so drawing the bracket is
+ * a deliberate click in here.
  *
  * Deliberately not gated on the trip being in draft: an organiser generally
  * wants to draw the bracket once the roster has settled, which is at or after
  * finalising the trip.
  */
 export default function MatchplayPanel({
-  tripId, tripCode, canEdit, formats, teams, players,
+  tripId, tripCode, canEdit, boards, teams, players,
 }: {
   tripId: string
   tripCode: string
   canEdit: boolean
-  formats: TripFormats
+  boards: readonly Leaderboard[]
   teams: TeamLike[]
   players: MemberLike[]
 }) {
   // A pairs draw is between pairings, so it is drawn from the team sheet
   // rather than the roster — and cannot be drawn from a broken one.
-  const pairs = isPairsMatchplay(formats)
+  const pairs = needsPairings(boards)
   const kind  = pairs ? 'pair' as const : 'player' as const
-  const noun  = teamNoun(formats)
+  const noun  = teamNoun(boards)
   const [status, setStatus]   = useState<BracketStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy]       = useState(false)
@@ -81,7 +81,7 @@ export default function MatchplayPanel({
   // A broken pairing sheet is the more useful thing to say, so it wins over
   // the generic "not enough entrants" message.
   const blocked = pairs
-    ? pairsBlockedReason(formats, teams, players) ?? bracketBlockedReason(entrantCount)
+    ? pairsBlockedReason(boards, teams, players) ?? bracketBlockedReason(entrantCount)
     : bracketBlockedReason(entrantCount)
   const preview = previewBracket(entrantCount)
   const exists  = status?.exists ?? false

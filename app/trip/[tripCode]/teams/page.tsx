@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { parseFormats } from '@/lib/formats'
+import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { teamNoun } from '@/lib/teamLimits'
 import BackButton from '@/app/components/BackButton'
 import TripTeamsClient from './TripTeamsClient'
@@ -18,7 +18,7 @@ export default async function TripTeamsPage({
 
   const { data: trip, error: tripError } = await supabase
     .from('trips')
-    .select('id, name, num_teams, formats')
+    .select('id, name, num_teams, formats, leaderboards, team_scoring')
     .eq('trip_code', tripCode)
     .single()
 
@@ -26,9 +26,9 @@ export default async function TripTeamsPage({
   if (!trip) notFound()
 
   // A pairs draw calls its teams pairings and locks them at two, so the page
-  // has to know what the trip is running before it draws anything.
-  const formats = parseFormats(trip.formats)
-  const noun = teamNoun(formats)
+  // has to know what the trip is playing for before it draws anything.
+  const boards = boardsForTrip(trip)
+  const noun = teamNoun(boards)
 
   const [teamsRes, playersRes] = await Promise.all([
     supabase.from('teams').select('id, name, color').eq('trip_id', trip.id).order('created_at'),
@@ -60,7 +60,7 @@ export default async function TripTeamsPage({
         <TripTeamsClient
           tripId={trip.id}
           numTeams={trip.num_teams ?? 2}
-          formats={formats}
+          boards={boards}
           teams={teamsRes.data ?? []}
           players={playersRes.data ?? []}
         />

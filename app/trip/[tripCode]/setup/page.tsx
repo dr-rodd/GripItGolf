@@ -1,8 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import BackButton from '@/app/components/BackButton'
-import { parseFormats } from '@/lib/formats'
-import { parseLeaderboards } from '@/lib/leaderboards'
-import { parseTeamScoring } from '@/lib/teamScoring'
+import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import TripSetupClient from './TripSetupClient'
 import PasscodeGate from './PasscodeGate'
 import { isLocked } from '@/lib/passcode'
@@ -70,9 +68,10 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         name: trip.name,
         start_date: trip.start_date ?? null,
         end_date: trip.end_date ?? null,
-        formats: parseFormats(trip.formats),
-        leaderboards: parseLeaderboards(trip.leaderboards),
-        team_scoring: parseTeamScoring(trip.team_scoring),
+        // Through the compat reader, so a trip set up before the column
+        // existed arrives with the boards its old flags described rather
+        // than a blank slate. Its first save writes them down for real.
+        leaderboards: boardsForTrip(trip),
         setup_status: trip.setup_status ?? 'live',
         edit_permission: trip.edit_permission ?? 'everyone',
       }}
