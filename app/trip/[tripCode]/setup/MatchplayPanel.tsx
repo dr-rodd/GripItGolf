@@ -7,6 +7,7 @@ import {
   type BracketStatus,
 } from '@/lib/matchplayStore'
 import { needsPairings, type Leaderboard } from '@/lib/leaderboards'
+import { MAIN_SET, setOf } from '@/lib/teamSets'
 import { pairsBlockedReason, teamNoun } from '@/lib/teamLimits'
 import type { MemberLike, TeamLike } from '@/lib/teamLimits'
 
@@ -34,6 +35,11 @@ export default function MatchplayPanel({
   const pairs = needsPairings(boards)
   const kind  = pairs ? 'pair' as const : 'player' as const
   const noun  = teamNoun(boards)
+  // The draw's own sheet. A trip running a league between fours and this
+  // knockout between pairings has two, and seating the bracket from the
+  // wrong one would put four players on a side.
+  const draw  = boards.find(lb => lb.competition === 'matchplay')
+  const sheet = draw ? setOf(draw) : MAIN_SET
   const [status, setStatus]   = useState<BracketStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy]       = useState(false)
@@ -42,14 +48,14 @@ export default function MatchplayPanel({
 
   const refresh = useCallback(async () => {
     try {
-      setStatus(await getBracketStatus(tripId, kind))
+      setStatus(await getBracketStatus(tripId, kind, sheet))
       setError('')
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setLoading(false)
     }
-  }, [tripId, kind])
+  }, [tripId, kind, sheet])
 
   useEffect(() => { refresh() }, [refresh])
 
@@ -57,7 +63,7 @@ export default function MatchplayPanel({
     setBusy(true)
     setError('')
     try {
-      setStatus(await createBracket(tripId, kind))
+      setStatus(await createBracket(tripId, kind, sheet))
       setConfirming(false)
     } catch (e) {
       setError((e as Error).message)

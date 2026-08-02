@@ -4,6 +4,7 @@ import { parseFormats } from '@/lib/formats'
 import { parseLeaderboards } from '@/lib/leaderboards'
 import { tripBoards, isLegacy } from '@/lib/leaderboardsCompat'
 import { parseTeamScoring } from '@/lib/teamScoring'
+import { fetchMemberships } from '@/lib/teamMembers'
 import Poller from '@/app/components/Poller'
 import TripLeaderboardClient from './TripLeaderboardClient'
 import SupportLink from '@/app/components/SupportLink'
@@ -37,11 +38,12 @@ export default async function TripLeaderboardPage({
   const courseIds = (rounds ?? []).map(r => (r.courses as any)?.id).filter(Boolean)
   const nilId     = '00000000-0000-0000-0000-000000000000'
 
-  const [teamsRes, playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes, openRes] =
+  const [teamsRes, playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes, openRes,
+         memberships] =
     await Promise.all([
-      supabase.from('teams').select('id, name, color').eq('trip_id', trip.id).order('created_at'),
+      supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
       supabase.from('players')
-        .select('id, name, handicap, gender, team_id, is_composite')
+        .select('id, name, handicap, gender, is_composite')
         .eq('trip_id', trip.id).eq('is_composite', false).order('name'),
       supabase.from('holes')
         .select('id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies')
@@ -63,6 +65,10 @@ export default async function TripLeaderboardPage({
         .select('round_id')
         .eq('status', 'active')
         .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
+      // Who is in which team, on every sheet. A trip can run a league between
+      // fours and a knockout between pairings, so this cannot be a field on
+      // the player — see lib/teamSets.ts.
+      fetchMemberships(trip.id),
     ])
 
   // What the trip plays for. A stored list wins; a trip created before the
@@ -97,6 +103,7 @@ export default async function TripLeaderboardPage({
         legacyTeamScoring={isLegacy(stored) ? teamScoring : null}
         rounds={(rounds ?? []) as any}
         teams={teamsRes.data ?? []}
+        memberships={memberships}
         players={playersRes.data ?? []}
         holes={holesRes.data ?? []}
         scores={scoresRes.data ?? []}

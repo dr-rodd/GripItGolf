@@ -8,6 +8,8 @@ import {
 } from '@dnd-kit/core'
 import { supabase } from '@/lib/supabase'
 import { type Leaderboard } from '@/lib/leaderboards'
+import { MAIN_SET } from '@/lib/teamSets'
+import { setTeam, clearMirror } from '@/lib/teamMembers'
 import {
   teamNoun, teamSizeLimit, teamSizeBanner, teamCountOptions, canJoinTeam,
   PAIR_SIZE,
@@ -188,14 +190,20 @@ function UnassignedZone({ players }: { players: Player[] }) {
 
 export default function TripTeamsClient({
   tripId,
-  numTeams: initialNumTeams,
   boards,
+  teamSet,
   teams: initialTeams,
   players: initialPlayers,
 }: {
   tripId: string
-  numTeams: number
   boards: readonly Leaderboard[]
+  /**
+   * Which team sheet is being picked. A trip can run a league between fours
+   * and a knockout between pairings; each is its own sheet, and a player
+   * holds a place on both. `team_id` on the players handed in is already
+   * their place on THIS sheet — see lib/teamSets.ts.
+   */
+  teamSet: string
   teams: Team[]
   players: Player[]
 }) {
@@ -251,12 +259,7 @@ export default function TripTeamsClient({
     const prev = players
     setPlayers(ps => ps.map(p => (p.id === playerId ? { ...p, team_id: targetTeamId } : p)))
 
-    const { error: err } = await supabase
-      .from('players')
-      .update({ team_id: targetTeamId })
-      .eq('id', playerId)
-
-    if (err) {
+    if (!(await setTeam(tripId, playerId, teamSet, targetTeamId))) {
       setPlayers(prev)
       flashError('Could not move player — try again')
     }
@@ -273,6 +276,7 @@ export default function TripTeamsClient({
         const idx = teams.length + i
         return {
           trip_id: tripId,
+          team_set: teamSet,
           name: `Team ${String.fromCharCode(65 + idx)}`,
           color: PRESET_COLORS[idx % PRESET_COLORS.length],
         }
@@ -294,14 +298,11 @@ export default function TripTeamsClient({
         setBusy(false)
         return
       }
-      const { error: clearErr } = await supabase
-        .from('players')
-        .update({ team_id: null })
-        .in('team_id', doomedIds)
-      if (clearErr) {
-        flashError('Could not unassign players')
-        setBusy(false)
-        return
+      // Deleting the teams cascades their memberships, so nothing has to
+      // unassign anybody first. players.team_id is only a mirror for the
+      // archive routes, and it is ours to clear.
+      if (teamSet === MAIN_SET) {
+        await clearMirror(players.filter(p => p.team_id && doomedIds.includes(p.team_id)).map(p => p.id))
       }
       const { error: err } = await supabase.from('teams').delete().in('id', doomedIds)
       if (err) {
@@ -314,7 +315,9 @@ export default function TripTeamsClient({
       }
     }
 
-    await supabase.from('trips').update({ num_teams: n }).eq('id', tripId)
+    // `trips.num_teams` used to be written here and was never read back. It
+    // cannot describe a trip with two sheets of different sizes anyway, so it
+    // is not written at all now — the teams themselves are the count.
     setBusy(false)
   }
 
@@ -363,10 +366,10 @@ export default function TripTeamsClient({
 
     const results = await Promise.all(
       [...assignment.entries()].map(([playerId, teamId]) =>
-        supabase.from('players').update({ team_id: teamId }).eq('id', playerId)
+        setTeam(tripId, playerId, teamSet, teamId)
       )
     )
-    if (results.some(r => r.error)) {
+    if (results.some(r => !r)) {
       setPlayers(prev)
       flashError(`Could not set the ${noun.many} — try again`)
     }

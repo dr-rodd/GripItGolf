@@ -15,6 +15,8 @@ import { recordWinner, clearWinner } from './matchplayProgress'
 import {
   playerEntrant, pairEntrant, type Entrant, type EntrantKind,
 } from './matchplayEntrants'
+import { MAIN_SET, membersOf } from './teamSets'
+import { fetchMemberships } from './teamMembers'
 
 /**
  * A match as the rest of the app sees it: two sides, whoever they are.
@@ -148,10 +150,19 @@ export type BracketStatus = {
  * bracket and then have nobody to play it. They are dropped here rather than
  * seeded and dealt with later.
  */
-export async function fetchEntrants(tripId: string, kind: EntrantKind): Promise<Entrant[]> {
+export async function fetchEntrants(
+  tripId: string,
+  kind: EntrantKind,
+  /**
+   * Which team sheet the pairings come from. A trip can run a league between
+   * fours and this draw between pairings; seating it from the league's teams
+   * would put four players on one side of a match.
+   */
+  teamSet: string = MAIN_SET,
+): Promise<Entrant[]> {
   const { data: players, error: playersError } = await supabase
     .from('players')
-    .select('id, name, handicap, team_id, created_at')
+    .select('id, name, handicap, created_at')
     .eq('trip_id', tripId)
     .eq('is_composite', false)
     .order('created_at')
@@ -163,16 +174,23 @@ export async function fetchEntrants(tripId: string, kind: EntrantKind): Promise<
     return sortPlayersBySeed(roster).map(playerEntrant)
   }
 
-  const { data: teams, error: teamsError } = await supabase
-    .from('teams')
-    .select('id, name, created_at')
-    .eq('trip_id', tripId)
-    .order('created_at')
+  const [teamsRes, memberships] = await Promise.all([
+    supabase
+      .from('teams')
+      .select('id, name, created_at, team_set')
+      .eq('trip_id', tripId)
+      .eq('team_set', teamSet)
+      .order('created_at'),
+    fetchMemberships(tripId),
+  ])
 
-  if (teamsError) throw new MatchplayError('Could not read the pairings. Please try again.')
+  if (teamsRes.error) throw new MatchplayError('Could not read the pairings. Please try again.')
 
-  return sortPlayersBySeed(teams ?? [])
-    .map(t => pairEntrant(t, roster.filter(p => p.team_id === t.id)))
+  return sortPlayersBySeed(teamsRes.data ?? [])
+    .map(t => {
+      const ids = membersOf(memberships, t.id)
+      return pairEntrant(t, roster.filter(p => ids.includes(p.id)))
+    })
     .filter(e => e.memberNames.length > 0)
 }
 
@@ -191,10 +209,11 @@ export async function loadBracket(tripId: string): Promise<StoredMatch[]> {
 export async function getBracketStatus(
   tripId: string,
   kind: EntrantKind = 'player',
+  teamSet: string = MAIN_SET,
 ): Promise<BracketStatus> {
   const [matches, entrants] = await Promise.all([
     loadBracket(tripId),
-    fetchEntrants(tripId, kind),
+    fetchEntrants(tripId, kind, teamSet),
   ])
 
   const byes = matches.filter(m => m.player_a_is_bye || m.player_b_is_bye)
@@ -236,8 +255,9 @@ export async function deleteBracket(tripId: string): Promise<void> {
 export async function createBracket(
   tripId: string,
   kind: EntrantKind = 'player',
+  teamSet: string = MAIN_SET,
 ): Promise<BracketStatus> {
-  const entrants = await fetchEntrants(tripId, kind)
+  const entrants = await fetchEntrants(tripId, kind, teamSet)
 
   const blocked = bracketBlockedReason(entrants.length)
   if (blocked) throw new MatchplayError(blocked)
@@ -256,7 +276,7 @@ export async function createBracket(
     throw new MatchplayError('Could not save the bracket. Please try again.')
   }
 
-  return getBracketStatus(tripId, kind)
+  return getBracketStatus(tripId, kind, teamSet)
 }
 
 /**

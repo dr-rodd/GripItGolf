@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import BackButton from '@/app/components/BackButton'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
+import { fetchMemberships } from '@/lib/teamMembers'
 import TripSetupClient from './TripSetupClient'
 import PasscodeGate from './PasscodeGate'
 import { isLocked } from '@/lib/passcode'
@@ -28,10 +29,10 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
     )
   }
 
-  const [teamsResult, playersResult, roundsResult] = await Promise.all([
+  const [teamsResult, playersResult, roundsResult, memberships] = await Promise.all([
     supabase
       .from('teams')
-      .select('id, name, color')
+      .select('id, name, color, team_set')
       .eq('trip_id', trip.id)
       .order('created_at'),
     supabase
@@ -44,6 +45,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       .select('id, round_number, course_id')
       .eq('trip_id', trip.id)
       .order('round_number'),
+    fetchMemberships(trip.id),
   ])
 
   if (teamsResult.error) console.error('TripSetupPage teams query failed:', teamsResult.error)
@@ -75,8 +77,9 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         setup_status: trip.setup_status ?? 'live',
         edit_permission: trip.edit_permission ?? 'everyone',
       }}
-      teams={teamsResult.data ?? []}
+      teams={(teamsResult.data ?? []).map(t => ({ ...t, team_set: t.team_set ?? 'main' }))}
       players={playersResult.data ?? []}
+      memberships={memberships}
       rounds={rounds.map(r => ({
         id: r.id,
         round_number: r.round_number,

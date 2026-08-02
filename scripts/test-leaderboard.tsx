@@ -70,9 +70,26 @@ type RenderOpts = {
   players?: unknown[]
   rounds?: unknown[]
   legacyTeamScoring?: TeamScoring | null
+  memberships?: unknown[]
+}
+
+/**
+ * Membership from the fixtures' `team_id`.
+ *
+ * A player used to carry the one team they were in, which is all a trip with
+ * one team sheet ever needed. It now takes a row per sheet, so the fixtures
+ * keep writing what reads best — `{...p, team_id: 't1'}` — and this turns it
+ * into the sheet the board is played on. Tests that want two sheets pass
+ * `memberships` directly.
+ */
+function membershipsFrom(ps: unknown[], teamSet = 'main') {
+  return (ps as { id: string; team_id?: string | null }[])
+    .filter(p => p.team_id)
+    .map(p => ({ team_id: p.team_id as string, team_set: teamSet, player_id: p.id }))
 }
 
 function render(boards: Leaderboard[], opts: RenderOpts = {}) {
+  const ps = opts.players ?? players
   return renderToStaticMarkup(
     React.createElement(TripLeaderboardClient, {
       tripCode: 'ABC123',
@@ -81,7 +98,8 @@ function render(boards: Leaderboard[], opts: RenderOpts = {}) {
       legacyTeamScoring: opts.legacyTeamScoring ?? null,
       rounds: opts.rounds ?? rounds,
       teams: opts.teams ?? [],
-      players: opts.players ?? players,
+      memberships: opts.memberships ?? membershipsFrom(ps),
+      players: ps,
       holes,
       scores: opts.scores ?? scores,
       liveScores: opts.liveScores ?? [],
@@ -655,6 +673,61 @@ section('An old team trip keeps the options the new model does not ask for')
   })
   ok(html.includes('>18<'), 'and is scored by its own old settings — 3 holes, everyone counting')
   ok(!html.includes('>108<'), 'not over all eighteen, which the defaults would have given')
+}
+
+section('Two team boards, two sets of teams')
+{
+  // The trip the whole feature exists for: a league between big teams, and a
+  // knockout between pairings, off the same cards. Before sheets, a player
+  // carried one team_id and picking the pairings tore up the league.
+  const league: Leaderboard = { ...TEAM('better_ball'), id: 'b-league', teamSet: 'main' }
+  const pairsBoard: Leaderboard = { ...TEAM('better_ball'), id: 'b-pairs', teamSet: 'set-2' }
+
+  const teams = [
+    { id: 't1', name: 'Reds',   color: '#DC2626', team_set: 'main' },
+    { id: 'p1p2', name: 'Pair One', color: '#2563EB', team_set: 'set-2' },
+    { id: 'p3solo', name: 'Pair Two', color: '#16A34A', team_set: 'set-2' },
+  ]
+  // All three in Reds for the league; split two-and-one for the pairings.
+  const memberships = [
+    ...players.map(p => ({ team_id: 't1', team_set: 'main', player_id: p.id })),
+    { team_id: 'p1p2',   team_set: 'set-2', player_id: 'p1' },
+    { team_id: 'p1p2',   team_set: 'set-2', player_id: 'p2' },
+    { team_id: 'p3solo', team_set: 'set-2', player_id: 'p3' },
+  ]
+
+  const opts = { teams, memberships, rounds: [rounds[0]] }
+
+  const leagueHtml = render([league], opts)
+  ok(leagueHtml.includes('Reds'), 'the league board ranks the league teams')
+  ok(!leagueHtml.includes('Pair One'), 'and does not show the pairings')
+
+  const pairsHtml = render([pairsBoard], opts)
+  ok(pairsHtml.includes('Pair One') && pairsHtml.includes('Pair Two'),
+    'the pairings board ranks the pairings')
+  ok(!pairsHtml.includes('Reds'), 'and does not show the league teams')
+
+  // The same players, arranged twice — which is the point. A player holding
+  // a place on both sheets counts on both boards.
+  ok(leagueHtml.includes('Alice') && pairsHtml.includes('Alice'),
+    'a player counts on both boards at once')
+
+  // And the two are genuinely scored apart. Reds is all three players'
+  // better ball; Pair Two is Cara on her own.
+  ok(leagueHtml !== pairsHtml, 'two sheets are two tables, not one shown twice')
+
+  // Sharing a sheet is still sharing. Two boards on 'main' rank the same
+  // teams, whatever else differs between them.
+  const shared: Leaderboard = { ...TEAM('hero'), id: 'b-hero', teamSet: 'main' }
+  const sharedHtml = render([shared], opts)
+  ok(sharedHtml.includes('Reds') && !sharedHtml.includes('Pair One'),
+    'a second board on the same sheet ranks the same teams')
+
+  // A board with no sheet stored at all is a board from before sheets, and
+  // belongs to the trip's only one.
+  const legacyBoard: Leaderboard = { ...TEAM('better_ball'), id: 'b-old' }
+  ok(render([legacyBoard], opts).includes('Reds'),
+    'a board stored before sheets existed is on the main sheet')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

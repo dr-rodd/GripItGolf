@@ -6,8 +6,12 @@ import {
   SCORINGS, TEAM_FORMATS, COMBINES, MAX_DISCARD,
   unanswered, isComplete, offersDiscard, slotKey, isSlotFree,
   freeScorings, freeTeamFormats,
-  hasMatchplay, canAddMore, boardTitle, boardRules,
+  hasMatchplay, boardTitle, boardRules,
 } from '@/lib/leaderboards'
+import {
+  MAIN_SET, setOf, sheetsInUse, nextSheetId, canShareSheet, sheetName,
+  sheetSubtitle,
+} from '@/lib/teamSets'
 import { defaultCustomPoints, resolveCustomPoints, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
 import { IconTrophy, IconPlus, IconX, IconCheck } from './icons'
 import { Card, Badge, buttonClass, FIELD, FIELD_LABEL } from './ui'
@@ -147,6 +151,18 @@ function Builder({
   const missing = unanswered(draft)
   const ready = isComplete(draft)
   const league = draft.competition === 'league'
+  // Switching back to a shared sheet can make an already-answered board a
+  // duplicate of one that is running. It cannot be saved, and the form has to
+  // say so rather than let the button look ready.
+  const clashes = draft.audience != null && draft.competition != null
+    && !isSlotFree(existing, draft as Leaderboard)
+
+  // Which teams this board is played by. Only worth asking once the trip
+  // already has a sheet to share — the first team board makes one.
+  const sheets = sheetsInUse(existing)
+  const asksSheet = draft.audience === 'team' && canShareSheet(existing)
+  const freshSheet = nextSheetId(existing)
+  const sheet = setOf(draft)
 
   // Teams answer one question more than individuals, so the numbers are
   // counted rather than written down — a form that skips from 3 to 5 reads
@@ -177,10 +193,39 @@ function Builder({
             on={draft.audience === a.key}
             label={a.label}
             hint={a.hint}
-            onClick={() => setDraft({ audience: a.key })}
+            // Sharing is the pre-checked answer: most trips play their
+            // second team board with the teams they already picked.
+            onClick={() => setDraft(a.key === 'team'
+              ? { audience: 'team', teamSet: sheetsInUse(existing)[0] ?? MAIN_SET }
+              : { audience: 'individual' })}
           />
         ))}
       </Question>
+
+      {/* Same teams?
+          A group may run a team league AND a pairings knockout — the same
+          players, arranged twice. So a team board names the sheet it is
+          played on, and everything from the team sizes to the leaderboard
+          rows follows the sheet rather than the trip. */}
+      {asksSheet && (
+        <Question n={next()} title="Same teams?">
+          {sheets.map(id => (
+            <Choice
+              key={id}
+              on={sheet === id}
+              label={`The same ${sheetName(existing, id).toLowerCase()}`}
+              hint={`As used by ${sheetSubtitle(existing, id, boardTitle)}.`}
+              onClick={() => set({ teamSet: id })}
+            />
+          ))}
+          <Choice
+            on={sheet === freshSheet}
+            label="A different set of teams"
+            hint="Picked separately, from the same players. A player can hold a place in both."
+            onClick={() => set({ teamSet: freshSheet })}
+          />
+        </Question>
+      )}
 
       {draft.audience && (
         <Question n={next()} title="What are they playing?">
@@ -213,7 +258,7 @@ function Builder({
               on={draft.scoring === s.key}
               label={s.label}
               hint={s.hint}
-              taken={!freeScorings(existing, draft.audience!).includes(s.key)}
+              taken={!freeScorings(existing, draft.audience!, draft.teamSet).includes(s.key)}
               onClick={() => set({ scoring: s.key })}
             />
           ))}
@@ -228,7 +273,7 @@ function Builder({
               on={draft.teamFormat === f.key}
               label={f.label}
               hint={f.hint}
-              taken={!freeTeamFormats(existing, draft.scoring).includes(f.key)}
+              taken={!freeTeamFormats(existing, draft.scoring, draft.teamSet).includes(f.key)}
               onClick={() => set({ teamFormat: f.key })}
             />
           ))}
@@ -299,6 +344,13 @@ function Builder({
         <p className="t-cap text-ink/65">Still to answer: {missing.join(' · ')}</p>
       )}
 
+      {clashes && missing.length === 0 && (
+        <p className="t-cap text-rust-deep leading-snug">
+          This trip already runs that leaderboard. Change an answer, or play it
+          with a different set of teams.
+        </p>
+      )}
+
       <div className="flex gap-2">
         {onCancel && (
           <button type="button" onClick={onCancel} className={buttonClass('secondary')}>
@@ -307,8 +359,8 @@ function Builder({
         )}
         <button
           type="button"
-          disabled={!ready}
-          onClick={() => ready && onSave({ ...(draft as Leaderboard), id: `lb-${Date.now()}` })}
+          disabled={!ready || clashes}
+          onClick={() => ready && !clashes && onSave({ ...(draft as Leaderboard), id: `lb-${Date.now()}` })}
           className={buttonClass('primary')}
         >
           {existing.length === 0 ? 'Create leaderboard' : 'Add leaderboard'}
@@ -333,7 +385,6 @@ export default function LeaderboardSetup({
   const [adding, setAdding] = useState(false)
 
   const done = boards.length > 0
-  const more = canAddMore(boards)
 
   return (
     <div className="flex flex-col gap-4">
@@ -373,9 +424,9 @@ export default function LeaderboardSetup({
       {/* Offered from the start so it is clear more is possible, but not
           usable until the trip has something to play for. */}
       {!adding && (
-        <Card className={`p-5 ${done && more ? '' : 'opacity-55'}`}>
+        <Card className={`p-5 ${done ? '' : 'opacity-55'}`}>
           <div className="flex items-start gap-3">
-            <span className={`flex-shrink-0 mt-0.5 ${done && more ? 'text-accent-deep' : 'text-ink/50'}`}>
+            <span className={`flex-shrink-0 mt-0.5 ${done ? 'text-accent-deep' : 'text-ink/50'}`}>
               <IconTrophy size={18} />
             </span>
             <div className="min-w-0">
@@ -383,16 +434,14 @@ export default function LeaderboardSetup({
               <p className="t-cap text-ink/65 mt-1 leading-snug">
                 {!done
                   ? 'Once your primary leaderboard is set, you can add more.'
-                  : !more
-                    ? 'Every leaderboard this trip can run is already running.'
-                    : 'A trip can run several events in parallel off the same cards — an order of merit alongside a daily prize, or a knockout beside a league.'}
+                  : 'A trip can run several events in parallel off the same cards — an order of merit alongside a daily prize, or a knockout between different teams beside a league.'}
               </p>
             </div>
           </div>
 
           <button
             type="button"
-            disabled={!done || !more}
+            disabled={!done}
             onClick={() => setAdding(true)}
             className={`${buttonClass('secondary')} mt-4`}
           >

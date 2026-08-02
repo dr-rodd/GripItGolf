@@ -16,7 +16,8 @@
 import { type TripFormats } from '../lib/formats'
 import { DEFAULT_TEAM_SCORING, type TeamScoring } from '../lib/teamScoring'
 import { emptyFormatsReason } from '../lib/tripSetupFlow'
-import { finaliseBlockedReason, type Leaderboard } from '../lib/leaderboards'
+import { type Leaderboard } from '../lib/leaderboards'
+import { finaliseBlockedReason } from '../lib/teamSets'
 import {
   PAIR_SIZE, teamNoun, teamSizeLimit, teamSizeBanner, teamCountOptions,
   oversizedTeams, canJoinTeam, pairsBlockedReason,
@@ -226,19 +227,43 @@ section('Finalise is gated on the boards, not the old flags')
   }
   const pairs: Leaderboard = { id: 'c', audience: 'team', competition: 'matchplay' }
 
+  const sheet = (n: number, set = 'main') =>
+    Array.from({ length: n }, (_, i) => ({ id: `${set}-t${i}`, name: `T${i}`, team_set: set }))
+  const none: { id: string; name: string; team_set: string }[] = []
+
   // The old gate read trips.formats, which a new trip carries as the
   // defaults — so it said yes to a trip with nothing to play for at all.
-  ok(finaliseBlockedReason([], 2) !== null, 'a trip with no leaderboard cannot go live')
-  ok(/playing for/i.test(finaliseBlockedReason([], 2)!), 'and is told what is missing')
+  ok(finaliseBlockedReason([], sheet(2)) !== null, 'a trip with no leaderboard cannot go live')
+  ok(/playing for/i.test(finaliseBlockedReason([], sheet(2))!), 'and is told what is missing')
 
-  eq(finaliseBlockedReason([solo], 0), null,
+  eq(finaliseBlockedReason([solo], none), null,
     'an individual board needs no teams')
 
-  ok(finaliseBlockedReason([team], 0) !== null, 'a team board with no teams is blocked')
-  eq(finaliseBlockedReason([team], 2), null, 'and clears once they exist')
+  ok(finaliseBlockedReason([team], none) !== null, 'a team board with no teams is blocked')
+  eq(finaliseBlockedReason([team], sheet(2)), null, 'and clears once they exist')
 
-  ok(/pairing/i.test(finaliseBlockedReason([pairs], 0)!),
+  ok(/pairing/i.test(finaliseBlockedReason([pairs], none)!),
     'a pairs draw asks for pairings by name')
+
+  // Per sheet: a league between fours and a draw between pairings need two
+  // team sheets filled in, and the trip cannot go live on one of them.
+  const league2: Leaderboard = { ...team, teamSet: 'main' }
+  const draw2:   Leaderboard = { ...pairs, teamSet: 'set-2' }
+  const both = [league2, draw2]
+
+  ok(finaliseBlockedReason(both, sheet(4, 'main')) !== null,
+    'the league\'s teams alone are not enough')
+  ok(/pairing/i.test(finaliseBlockedReason(both, sheet(4, 'main'))!),
+    'and it is the pairings that are named as missing')
+  ok(finaliseBlockedReason(both, sheet(6, 'set-2')) !== null,
+    'nor are the pairings alone')
+  eq(finaliseBlockedReason(both, [...sheet(4, 'main'), ...sheet(6, 'set-2')]), null,
+    'both sheets filled in, and it can go live')
+
+  // Sharing one sheet is one sheet to fill
+  const shared = [league2, { ...pairs, teamSet: 'main' }]
+  eq(finaliseBlockedReason(shared, sheet(4, 'main')), null,
+    'two boards on one sheet need that sheet and no other')
 }
 
 

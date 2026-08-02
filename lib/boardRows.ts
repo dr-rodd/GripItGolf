@@ -14,6 +14,7 @@
 // Pure. No I/O, no React.
 
 import type { Leaderboard } from './leaderboards'
+import { setOf, teamsOnSheet, membersOf, type Membership } from './teamSets'
 import {
   type TeamScoring, type TeamScoreInput, type ScoringBasis,
   DEFAULT_TEAM_SCORING, teamRoundPoints,
@@ -29,10 +30,15 @@ export type RowPlayer = {
   name: string
   handicap: number | null
   gender: string
-  team_id: string | null
 }
 
-export type RowTeam = { id: string; name: string; color: string }
+export type RowTeam = {
+  id: string
+  name: string
+  color: string
+  /** Which sheet this team is on. Absent means the trip's first. */
+  team_set?: string | null
+}
 
 export type RowHole = {
   id: string
@@ -97,7 +103,16 @@ export type BoardRow = {
 
 export type RowContext = {
   players: RowPlayer[]
+  /** Every team on the trip, across every sheet. A board takes its own. */
   teams: RowTeam[]
+  /**
+   * Who is in which team, on every sheet.
+   *
+   * Not a field on the player: a trip can run a league between fours and a
+   * knockout between pairings, so one person holds two places at once. Which
+   * of them counts is decided by the board — see lib/teamSets.ts.
+   */
+  memberships: Membership[]
   holes: RowHole[]
   /** In round order. */
   rounds: RowRound[]
@@ -371,8 +386,14 @@ function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const basis: ScoringBasis = lb.scoring === 'strokes' ? 'strokes' : 'stableford'
   const inputs = teamScoreInputs(ctx)
 
-  const perTeam = ctx.teams.map(team => {
-    const memberIds = ctx.players.filter(p => p.team_id === team.id).map(p => p.id)
+  // This board's own teams. A trip running a league and a knockout between
+  // different sides has two sheets of them, and ranking one board against
+  // the other's teams would produce a table of strangers.
+  const sheet = setOf(lb)
+  const teams = teamsOnSheet(ctx.teams, sheet) as RowTeam[]
+
+  const perTeam = teams.map(team => {
+    const memberIds = membersOf(ctx.memberships, team.id)
     const rounds: RoundScore[] = ctx.rounds.map(r => {
       const res = teamRoundPoints(memberIds, r.id, inputs, scoring, basis)
       return {
@@ -392,11 +413,11 @@ function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   }).filter(t => t.memberIds.length > 0)
 
   const combined = combineRounds(lb, perTeam.map(t => ({ id: t.team.id, rounds: t.rounds })),
-    ctx.teams.length)
+    teams.length)
 
   const rows = perTeam.map(({ team, memberIds, rounds }) => {
     const c = combined.get(team.id)!
-    const members = ctx.players.filter(p => p.team_id === team.id)
+    const members = ctx.players.filter(p => memberIds.includes(p.id))
     const row: BoardRow = {
       id: team.id,
       name: team.name,

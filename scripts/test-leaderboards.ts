@@ -17,8 +17,7 @@
 import {
   type Leaderboard,
   SCORINGS, TEAM_FORMATS, COMBINES, MAX_DISCARD,
-  slotKey, isSlotFree, hasMatchplay, freeScorings, freeTeamFormats, canAddMore,
-  everyBoard, unanswered, isComplete, offersDiscard, needsTeams, needsPairings,
+  slotKey, isSlotFree, hasMatchplay, freeScorings, freeTeamFormats,   everyBoard, unanswered, isComplete, offersDiscard, needsTeams, needsPairings,
   boardTitle, boardRules, primary, parseLeaderboards,
 } from '../lib/leaderboards'
 import { DEFAULT_FORMATS, parseFormats, matchplayOn } from '../lib/formats'
@@ -168,11 +167,17 @@ section('The cascade offers what is left')
   ok(freeTeamFormats([teamBB], 'strokes').includes('better_ball'),
     'and on strokes it is a different board entirely')
 
-  ok(canAddMore([]), 'there is always something to add to an empty trip')
-  ok(canAddMore([sf]), 'and plenty after one board')
-
+  // Every league board on the main sheet, plus the one draw. Under the old
+  // model that was the end of the grid; a board can now name its own team
+  // sheet, and a fresh sheet reopens every team format — so a slot key
+  // carries the sheet, and these are all still free on a second one.
   const everything = [...everyBoard(), draw]
-  ok(!canAddMore(everything), 'until there is genuinely nothing left')
+  ok(everything.every(b => !isSlotFree(everything, b)),
+    'a full main sheet has no free cell left on it')
+  ok(TEAM_FORMATS.every(f => isSlotFree(everything, {
+    audience: 'team', competition: 'league', scoring: 'stableford',
+    teamFormat: f.key, combine: 'total', teamSet: 'set-2',
+  })), 'but every team format is free again on a second sheet')
 }
 
 // ─── What a board implies for the rest of the trip ─────────────

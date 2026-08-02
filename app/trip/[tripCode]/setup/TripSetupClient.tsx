@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import {
   teamNoun, teamSizeBanner, teamSizeLimit, oversizedTeams, canJoinTeam,
-  pairsBlockedReason,
+  pairsBlockedReason, type TeamNoun,
 } from '@/lib/teamLimits'
 import MatchplayPanel from './MatchplayPanel'
 import DateField from '@/app/components/DateField'
@@ -13,8 +13,13 @@ import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import TripHeader from '@/app/components/TripHeader'
 import { IconSettings, IconX } from '@/app/components/icons'
 import {
-  type Leaderboard, needsTeams, needsPairings, hasMatchplay, finaliseBlockedReason,
+  type Leaderboard, needsTeams, needsPairings, hasMatchplay, boardTitle,
 } from '@/lib/leaderboards'
+import {
+  finaliseBlockedReason, sheetsInUse, sheetName, sheetSubtitle, teamsOnSheet,
+  teamFor, asMembers, setOf, MAIN_SET, type Membership,
+} from '@/lib/teamSets'
+import { setTeam } from '@/lib/teamMembers'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -29,7 +34,7 @@ type Trip = {
   edit_permission: string
 }
 
-type Team = { id: string; name: string; color: string }
+type Team = { id: string; name: string; color: string; team_set: string }
 
 type Player = {
   id: string
@@ -55,17 +60,81 @@ const LABEL = 'block text-ink/80 text-[13px] uppercase tracking-wider mb-2'
 
 const SECTION = 'bg-surface border border-bark/12 rounded-2xl p-5'
 
+/**
+ * Which team a player is in, on one sheet.
+ *
+ * One of these per sheet, because a player holds one place on each: a team in
+ * the league and a pairing in the draw are two different answers about the
+ * same person, and one dropdown cannot hold both.
+ */
+function TeamSelect({
+  label, value, teams, sizes, sizeLimit, noun, disabled, wide, onChange,
+}: {
+  label: string | null
+  value: string
+  teams: Team[]
+  sizes: Record<string, number>
+  sizeLimit: number | null
+  noun: TeamNoun
+  disabled: boolean
+  /** The add-player form is full width; a player row shares a line. */
+  wide: boolean
+  onChange: (teamId: string | null) => void
+}) {
+  const select = (
+    <div className="relative flex-1 min-w-0">
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value || null)}
+        disabled={disabled}
+        aria-label={label ?? `Which ${noun.one}`}
+        className={wide
+          ? `${INPUT} appearance-none pr-10`
+          : 'w-full bg-surface border border-bark/12 rounded-lg px-3 py-2.5 text-ink text-sm appearance-none focus:outline-none focus:border-accent/50 disabled:opacity-40'}
+      >
+        <option value="" className="bg-cream">No {noun.one}</option>
+        {teams.map(t => {
+          const size = sizes[t.id] ?? 0
+          const full = sizeLimit !== null && size >= sizeLimit && t.id !== value
+          return (
+            <option key={t.id} value={t.id} disabled={full} className="bg-cream">
+              {t.name}{sizeLimit !== null ? ` (${size}/${sizeLimit})` : ''}{full ? ' — full' : ''}
+            </option>
+          )
+        })}
+      </select>
+      <div className={`pointer-events-none absolute ${wide ? 'right-4' : 'right-3'} top-1/2 -translate-y-1/2 text-ink/65`}>
+        <svg width={wide ? 14 : 12} height={wide ? 14 : 12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </div>
+    </div>
+  )
+
+  // Labelled only when there is more than one sheet. With one, the label
+  // would say "Teams" above the only team control on the screen.
+  if (!label) return select
+  return (
+    <div className="flex items-center gap-2">
+      <span className="t-cap text-ink/65 w-24 flex-shrink-0 truncate">{label}</span>
+      {select}
+    </div>
+  )
+}
+
 // ── Component ─────────────────────────────────────────────────────────────
 
 export default function TripSetupClient({
   trip,
   teams: initialTeams,
   players: initialPlayers,
+  memberships: initialMemberships,
   rounds,
 }: {
   trip: Trip
   teams: Team[]
   players: Player[]
+  memberships: Membership[]
   rounds: RoundInfo[]
 }) {
   // Trip fields
@@ -84,12 +153,15 @@ export default function TripSetupClient({
   // Collections
   const [teams] = useState<Team[]>(initialTeams)
   const [players, setPlayers] = useState<Player[]>(initialPlayers)
+  // Who is in which team, on every sheet. A player holds one place per sheet,
+  // so this cannot be a field on the player — see lib/teamSets.ts.
+  const [memberships, setMemberships] = useState<Membership[]>(initialMemberships)
 
   // New player form
   const [newName, setNewName] = useState('')
   const [newHandicap, setNewHandicap] = useState('')
   const [newGender, setNewGender] = useState<'M' | 'F'>('M')
-  const [newTeamId, setNewTeamId] = useState('')
+  const [newTeams, setNewTeams] = useState<Record<string, string>>({})
 
   // UI state
   const [busy, setBusy] = useState(false)
@@ -102,6 +174,7 @@ export default function TripSetupClient({
     } catch { /* localStorage unavailable */ }
   }, [trip.trip_code])
 
+  const playerIds = players.map(p => p.id)
   const isDraft = setupStatus === 'draft'
   const canEdit = isDraft && (editPermission === 'everyone' || isOwner)
   const locked = !canEdit || busy
@@ -164,18 +237,28 @@ export default function TripSetupClient({
         handicap: hcp,
         gender: newGender,
         role: 'player',
-        team_id: newTeamId || null,
       })
       .select('id, name, handicap, gender, team_id, is_lead')
       .single()
     if (err || !data) {
       flashError('Could not add player')
-    } else {
-      setPlayers(prev => [...prev, data])
-      setNewName('')
-      setNewHandicap('')
-      setNewTeamId('')
+      setBusy(false)
+      return
     }
+
+    setPlayers(prev => [...prev, data])
+    // A place on each sheet they were assigned to, one write per sheet.
+    for (const [teamSet, teamId] of Object.entries(newTeams)) {
+      if (!teamId) continue
+      if (await setTeam(trip.id, data.id, teamSet, teamId)) {
+        setMemberships(ms => [...ms, { team_id: teamId, team_set: teamSet, player_id: data.id }])
+      } else {
+        flashError('Player added, but their team could not be saved')
+      }
+    }
+    setNewName('')
+    setNewHandicap('')
+    setNewTeams({})
     setBusy(false)
   }
 
@@ -203,19 +286,30 @@ export default function TripSetupClient({
   }
 
   /**
-   * Move a player between teams, refusing rather than overfilling.
+   * Move a player between teams on one sheet, refusing rather than overfilling.
    *
    * A pairs draw is played between teams of two, so a third player in a
    * pairing is not a thing the bracket can represent. Better to say so than
-   * to let it save and break the draw later.
+   * to let it save and break the draw later. The cap is the SHEET's, not the
+   * trip's: a draw between pairings has no business resizing the league's
+   * teams, which is exactly what it used to do.
    */
-  async function movePlayerToTeam(id: string, teamId: string | null) {
-    if (teamId && !canJoinTeam(boards, teamId, players)) {
+  async function movePlayerToTeam(id: string, teamSet: string, teamId: string | null) {
+    const onSheet = sheetBoards(teamSet)
+    if (teamId && !canJoinTeam(onSheet, teamId, asMembers(playerIds, memberships, teamSet))) {
       const team = teams.find(t => t.id === teamId)
-      flashError(`${team?.name ?? 'That ' + teamNoun(boards).one} is already full`)
+      flashError(`${team?.name ?? 'That ' + teamNoun(onSheet).one} is already full`)
       return
     }
-    await updatePlayer(id, { team_id: teamId })
+    const prev = memberships
+    setMemberships(ms => [
+      ...ms.filter(m => !(m.player_id === id && m.team_set === teamSet)),
+      ...(teamId ? [{ team_id: teamId, team_set: teamSet, player_id: id }] : []),
+    ])
+    if (!(await setTeam(trip.id, id, teamSet, teamId))) {
+      setMemberships(prev)
+      flashError('Could not save that team — try again')
+    }
   }
 
   async function removePlayer(id: string) {
@@ -272,13 +366,34 @@ export default function TripSetupClient({
   // What a trip plays for is its boards, so that is what finalise asks. It
   // used to ask trips.formats, which a new trip carries as the defaults — so
   // a trip with nothing at all to play for could go live.
+  //
+  // Every team rule below is asked of one sheet at a time. A trip can run a
+  // league between fours and a knockout between pairings, and the rules for
+  // one say nothing about the other.
+  const sheets = sheetsInUse(boards)
+  const sheetBoards = (id: string) => boards.filter(b => b.audience === 'team' && setOf(b) === id)
+  // How full each team on each sheet is, so a dropdown can say (2/2) and
+  // grey out what is full rather than let the write fail.
+  const draw = boards.find(b => b.competition === 'matchplay')
+  const drawSheet = draw ? setOf(draw) : MAIN_SET
+  const sheetSizes: Record<string, Record<string, number>> = Object.fromEntries(
+    sheets.map(id => [
+      id,
+      Object.fromEntries(teamsOnSheet(teams, id).map(t => [
+        t.id, memberships.filter(m => m.team_id === t.id).length,
+      ])),
+    ]),
+  )
   const blocked =
-    finaliseBlockedReason(boards, teams.length)
-    ?? (needsPairings(boards) ? pairsBlockedReason(boards, teams, players) : null)
-  const noun     = teamNoun(boards)
-  const sizeBanner = teamSizeBanner(boards)
-  const sizeLimit  = teamSizeLimit(boards)
-  const oversize   = oversizedTeams(boards, teams, players)
+    finaliseBlockedReason(boards, teams)
+    ?? sheets
+      .map(id => pairsBlockedReason(
+        sheetBoards(id),
+        teamsOnSheet(teams, id),
+        asMembers(playerIds, memberships, id),
+      ))
+      .find(Boolean)
+    ?? null
 
   /** The answer controls for one question. */
   return (
@@ -408,72 +523,93 @@ export default function TripSetupClient({
               )}
             </section>
 
-            {/* ── Teams ──
+            {/* ── Teams, one card per sheet ──
+                A trip can run a league between fours and a knockout between
+                pairings — the same players, arranged twice. Each sheet is
+                picked separately and carries its own rules, because a pairs
+                draw fixing ITS teams at two has no business resizing the
+                league's.
+
                 The only question the leaderboards do not already answer. The
                 old decision tree used to render seven more cards here — who
                 competes, league or matchplay, scoring, discard, the prize
                 table, the draw format, team scoring — every one of which the
                 leaderboard cards above now ask properly. They were asked
                 twice and answered into a model nothing read. */}
-            {needsTeams(boards) && (
-              <section className={SECTION}>
-                <p className="t-label text-accent-deep uppercase tracking-[0.18em] mb-1">
-                  {noun.Many}
-                </p>
-                <p className="t-body text-ink/80 mb-4">
-                  {needsPairings(boards)
-                    ? 'Your draw is between pairings, so teams are fixed at two.'
-                    : 'Pick who plays with whom.'}
-                </p>
-    <>
-      {/* A pairs draw fixes the size, so say so before anyone picks */}
-      {sizeBanner && (
-        <div className="flex items-start gap-3 px-4 py-3 mb-3 bg-accent/10 border border-accent/40 rounded-xl">
-          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0" />
-          <p className="text-accent text-[13px] leading-snug">{sizeBanner}</p>
-        </div>
-      )}
+            {sheets.map(id => {
+              const onSheet   = sheetBoards(id)
+              const sheetTeams = teamsOnSheet(teams, id)
+              const members   = asMembers(playerIds, memberships, id)
+              const noun      = teamNoun(onSheet)
+              const banner    = teamSizeBanner(onSheet)
+              const oversize  = oversizedTeams(onSheet, sheetTeams, members)
+              return (
+                <section key={id} className={SECTION}>
+                  <p className="t-label text-accent-deep uppercase tracking-[0.18em] mb-1">
+                    {noun.Many}
+                  </p>
+                  {/* Which board these teams play for. With one sheet it is
+                      obvious; with two it is the only thing telling them
+                      apart on this screen. */}
+                  {sheets.length > 1 && (
+                    <p className="t-cap text-ink/65 mb-2">
+                      {sheetSubtitle(boards, id, boardTitle)}
+                    </p>
+                  )}
+                  <p className="t-body text-ink/80 mb-4">
+                    {needsPairings(onSheet)
+                      ? 'Your draw is between pairings, so teams are fixed at two.'
+                      : 'Pick who plays with whom.'}
+                  </p>
 
-      {teams.length > 0 && (
-        <div className="space-y-2 mb-4">
-          {teams.map(team => {
-            const members = players.filter(p => p.team_id === team.id)
-            const over = oversize.some(o => o.teamId === team.id)
-            return (
-              <div
-                key={team.id}
-                className={`flex items-center gap-3 px-3 py-2.5 border rounded-xl ${
-                  over ? 'border-rust/50 bg-rust/10' : 'border-bark/12 bg-surface'
-                }`}
-              >
-                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} />
-                <span className="text-ink text-sm flex-1 min-w-0 truncate">{team.name}</span>
-                <span className={`text-[13px] flex-shrink-0 ${over ? 'text-rust-deep' : 'text-ink/65'}`}>
-                  {members.length} player{members.length === 1 ? '' : 's'}
-                </span>
-              </div>
-            )
-          })}
-        </div>
-      )}
+                  {/* A pairs draw fixes the size, so say so before anyone picks */}
+                  {banner && (
+                    <div className="flex items-start gap-3 px-4 py-3 mb-3 bg-accent/10 border border-accent/40 rounded-xl">
+                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0" />
+                      <p className="text-accent text-[13px] leading-snug">{banner}</p>
+                    </div>
+                  )}
 
-      {!locked && (
-        <Link
-          href={`/trip/${trip.trip_code}/teams`}
-          className="block w-full py-3.5 border border-accent/40 text-accent rounded-xl text-sm tracking-wider uppercase text-center hover:bg-accent/10 transition-colors"
-        >
-          Pick {noun.many}
-        </Link>
-      )}
+                  {sheetTeams.length > 0 && (
+                    <div className="space-y-2 mb-4">
+                      {sheetTeams.map(team => {
+                        const size = members.filter(m => m.team_id === team.id).length
+                        const over = oversize.some(o => o.teamId === team.id)
+                        return (
+                          <div
+                            key={team.id}
+                            className={`flex items-center gap-3 px-3 py-2.5 border rounded-xl ${
+                              over ? 'border-rust/50 bg-rust/10' : 'border-bark/12 bg-surface'
+                            }`}
+                          >
+                            <span className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: teams.find(t => t.id === team.id)?.color }} />
+                            <span className="text-ink text-sm flex-1 min-w-0 truncate">{team.name}</span>
+                            <span className={`text-[13px] flex-shrink-0 ${over ? 'text-rust-deep' : 'text-ink/65'}`}>
+                              {size} player{size === 1 ? '' : 's'}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
 
-      <p className="text-ink/65 text-[13px] mt-3 leading-snug">
-        {noun.Many} can be changed at any point. Players own their scores and
-        carry them to whichever {noun.one} they end up in.
-      </p>
-    </>
-              </section>
-            )}
+                  {!locked && (
+                    <Link
+                      href={`/trip/${trip.trip_code}/teams?set=${encodeURIComponent(id)}`}
+                      className="block w-full py-3.5 border border-accent/40 text-accent rounded-xl text-sm tracking-wider uppercase text-center hover:bg-accent/10 transition-colors"
+                    >
+                      Pick {noun.many}
+                    </Link>
+                  )}
 
+                  <p className="text-ink/65 text-[13px] mt-3 leading-snug">
+                    {noun.Many} can be changed at any point. Players own their scores and
+                    carry them to whichever {noun.one} they end up in.
+                  </p>
+                </section>
+              )
+            })}
 
             {/* ── Players ── */}
             <section className={SECTION}>
@@ -545,32 +681,43 @@ export default function TripSetupClient({
                           </button>
                         ))}
                       </div>
-                      {needsTeams(boards) && (
-                        <div className="relative flex-1 min-w-0">
-                          <select
-                            value={player.team_id ?? ''}
-                            onChange={e => movePlayerToTeam(player.id, e.target.value || null)}
-                            disabled={locked}
-                            className="w-full bg-surface border border-bark/12 rounded-lg px-3 py-2.5 text-ink text-sm appearance-none focus:outline-none focus:border-accent/50 disabled:opacity-40"
-                          >
-                            <option value="" className="bg-cream">No {noun.one}</option>
-                            {teams.map(t => {
-                              const size = players.filter(p => p.team_id === t.id).length
-                              return (
-                                <option key={t.id} value={t.id} className="bg-cream">
-                                  {t.name}{sizeLimit !== null ? ` (${size}/${sizeLimit})` : ''}
-                                </option>
-                              )
-                            })}
-                          </select>
-                          <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink/65">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <path d="M6 9l6 6 6-6" />
-                            </svg>
-                          </div>
-                        </div>
+                      {/* One sheet keeps the dropdown on the same line as
+                          the handicap, where it has always been. */}
+                      {sheets.length === 1 && (
+                        <TeamSelect
+                          label={null}
+                          value={teamFor(memberships, player.id, sheets[0]) ?? ''}
+                          teams={teamsOnSheet(teams, sheets[0]) as Team[]}
+                          sizes={sheetSizes[sheets[0]]}
+                          sizeLimit={teamSizeLimit(sheetBoards(sheets[0]))}
+                          noun={teamNoun(sheetBoards(sheets[0]))}
+                          disabled={locked}
+                          wide={false}
+                          onChange={id => movePlayerToTeam(player.id, sheets[0], id)}
+                        />
                       )}
                     </div>
+
+                    {/* Two, and each needs naming — a league team and a
+                        pairing are two answers about the same person. */}
+                    {sheets.length > 1 && (
+                      <div className="flex flex-col gap-2 mt-2">
+                        {sheets.map(id => (
+                          <TeamSelect
+                            key={id}
+                            label={teamNoun(sheetBoards(id)).One}
+                            value={teamFor(memberships, player.id, id) ?? ''}
+                            teams={teamsOnSheet(teams, id) as Team[]}
+                            sizes={sheetSizes[id]}
+                            sizeLimit={teamSizeLimit(sheetBoards(id))}
+                            noun={teamNoun(sheetBoards(id))}
+                            disabled={locked}
+                            wide={false}
+                            onChange={teamId => movePlayerToTeam(player.id, id, teamId)}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
 
@@ -618,31 +765,21 @@ export default function TripSetupClient({
                         ))}
                       </div>
                     </div>
-                    {needsTeams(boards) && teams.length > 0 && (
-                      <div className="relative">
-                        <select
-                          value={newTeamId}
-                          onChange={e => setNewTeamId(e.target.value)}
-                          className={`${INPUT} appearance-none pr-10`}
-                        >
-                          <option value="" className="bg-cream">No {noun.one} assigned</option>
-                          {teams.map(t => {
-                            const size = players.filter(p => p.team_id === t.id).length
-                            const full = sizeLimit !== null && size >= sizeLimit
-                            return (
-                              <option key={t.id} value={t.id} disabled={full} className="bg-cream">
-                                {t.name}{sizeLimit !== null ? ` (${size}/${sizeLimit})` : ''}{full ? ' — full' : ''}
-                              </option>
-                            )
-                          })}
-                        </select>
-                        <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ink/65">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <path d="M6 9l6 6 6-6" />
-                          </svg>
-                        </div>
-                      </div>
-                    )}
+                    {sheets.map(id => teamsOnSheet(teams, id).length > 0 && (
+                      <TeamSelect
+                        key={id}
+                        label={sheets.length > 1 ? teamNoun(sheetBoards(id)).One : null}
+                        value={newTeams[id] ?? ''}
+                        teams={teamsOnSheet(teams, id) as Team[]}
+                        sizes={sheetSizes[id]}
+                        sizeLimit={teamSizeLimit(sheetBoards(id))}
+                        noun={teamNoun(sheetBoards(id))}
+                        disabled={false}
+                        wide={sheets.length === 1}
+                        onChange={teamId =>
+                          setNewTeams(t => ({ ...t, [id]: teamId ?? '' }))}
+                      />
+                    ))}
                     <button
                       onClick={addPlayer}
                       disabled={busy || !newName.trim() || !newHandicap}
@@ -727,8 +864,11 @@ export default function TripSetupClient({
             tripCode={trip.trip_code}
             canEdit={editPermission === 'everyone' || isOwner}
             boards={boards}
-            teams={teams}
-            players={players}
+            // The draw's own sheet. A knockout between pairings running
+            // beside a league of fours must be drawn from the pairings, and
+            // judged complete against the pairings.
+            teams={teamsOnSheet(teams, drawSheet)}
+            players={asMembers(playerIds, memberships, drawSheet)}
           />
         )}
 

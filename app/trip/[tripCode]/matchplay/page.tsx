@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { hasMatchplay, needsPairings } from '@/lib/leaderboards'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
+import { MAIN_SET, setOf, teamsOnSheet, membersOf } from '@/lib/teamSets'
+import { fetchMemberships } from '@/lib/teamMembers'
 import { playerEntrant, pairEntrant, type Entrant } from '@/lib/matchplayEntrants'
 import BackButton from '@/app/components/BackButton'
 import TabBar from '@/app/components/TabBar'
@@ -44,7 +46,7 @@ export default async function MatchplayPage({
   const enabled = hasMatchplay(boards)
   const pairs   = needsPairings(boards)
 
-  const [matchesRes, playersRes, teamsRes] = await Promise.all([
+  const [matchesRes, playersRes, teamsRes, memberships] = await Promise.all([
     supabase
       .from('matchplay_matches')
       .select(
@@ -58,14 +60,15 @@ export default async function MatchplayPage({
       .order('slot'),
     supabase
       .from('players')
-      .select('id, name, handicap, team_id')
+      .select('id, name, handicap')
       .eq('trip_id', trip.id),
     // Only needed for a pairs draw, but asking for it unconditionally keeps
     // this a single round trip rather than a conditional second one.
     supabase
       .from('teams')
-      .select('id, name')
+      .select('id, name, team_set')
       .eq('trip_id', trip.id),
+    fetchMemberships(trip.id),
   ])
 
   if (matchesRes.error) console.error('MatchplayPage matches query failed:', matchesRes.error)
@@ -87,8 +90,19 @@ export default async function MatchplayPage({
   // against the wrong kind of entrant renders a column of blanks.
   const storedAsPairs = rawMatches.some(m => m.entrant_type === 'pair')
 
+  // A pairs draw seats ITS sheet's pairings. A trip running a league between
+  // fours alongside this knockout has two sheets of teams, and naming the
+  // bracket off the wrong one would show four players on a side.
+  const draw = boards.find(lb => lb.competition === 'matchplay')
+  const sheet = draw ? setOf(draw) : MAIN_SET
   const entrants: Entrant[] = storedAsPairs
-    ? (teamsRes.data ?? []).map(t => pairEntrant(t, roster.filter(p => p.team_id === t.id)))
+    ? teamsOnSheet(
+        (teamsRes.data ?? []).map(t => ({ ...t, team_set: t.team_set ?? MAIN_SET })),
+        sheet,
+      ).map(t => {
+        const ids = membersOf(memberships, t.id)
+        return pairEntrant(t, roster.filter(p => ids.includes(p.id)))
+      })
     : roster.map(playerEntrant)
 
   // A pairs row keeps its sides in the team columns; everything downstream

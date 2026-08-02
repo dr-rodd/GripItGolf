@@ -47,6 +47,14 @@ export type Leaderboard = {
   audience: Audience
   competition: Competition
 
+  /**
+   * Which team sheet this board is played on. Team boards only; absent means
+   * the trip's first sheet. Two team boards on different sheets rank
+   * different teams — a league of fours and a draw between pairings, from the
+   * same roster. See lib/teamSets.ts.
+   */
+  teamSet?: string
+
   /** League only. */
   scoring?: Scoring
   combine?: Combine
@@ -111,7 +119,7 @@ export const COMBINES: { key: Combine; label: string; hint: string }[] = [
  * Matchplay is not keyed on anything: one draw is a draw, and a second would
  * be a different tournament rather than a second view of this one.
  */
-export function slotKey(lb: Pick<Leaderboard, 'audience' | 'competition' | 'scoring' | 'teamFormat' | 'combine'>): string {
+export function slotKey(lb: Pick<Leaderboard, 'audience' | 'competition' | 'scoring' | 'teamFormat' | 'combine' | 'teamSet'>): string {
   if (lb.competition === 'matchplay') return 'matchplay'
   return [
     lb.audience,
@@ -119,13 +127,17 @@ export function slotKey(lb: Pick<Leaderboard, 'audience' | 'competition' | 'scor
     lb.scoring ?? '?',
     lb.audience === 'team' ? lb.teamFormat ?? '?' : '-',
     lb.combine ?? '?',
+    // The same format played by different teams is a different competition —
+    // better ball between the fours and better ball between the pairings are
+    // two tables, not one shown twice.
+    lb.audience === 'team' ? lb.teamSet || 'main' : '-',
   ].join(':')
 }
 
 /** Is this competition still free, given what the trip already runs? */
 export function isSlotFree(
   existing: readonly Leaderboard[],
-  candidate: Pick<Leaderboard, 'audience' | 'competition' | 'scoring' | 'teamFormat' | 'combine'>,
+  candidate: Pick<Leaderboard, 'audience' | 'competition' | 'scoring' | 'teamFormat' | 'combine' | 'teamSet'>,
 ): boolean {
   const key = slotKey(candidate)
   return !existing.some(lb => slotKey(lb) === key)
@@ -160,30 +172,38 @@ export function everyBoard(): Leaderboard[] {
   return out
 }
 
+// `canAddMore` is gone. It answered whether the grid still had a free cell,
+// and once a board can name its own team sheet the answer is always yes: a
+// fresh sheet reopens every team format, because better ball between the
+// fours and better ball between the pairings are two different tables. A
+// function that cannot return false is worse than no function — it makes a
+// button look conditional when it never is.
+
 /**
- * Whether there is anything left to add.
+ * Scorings that still lead somewhere, given what is already running.
  *
- * The "add another" button is offered only when it would lead somewhere — a
- * disabled button with no explanation is worse than no button.
+ * `teamSet` matters: a board on its own sheet ranks different teams, so
+ * nothing played on another sheet takes anything away from it.
  */
-export function canAddMore(boards: readonly Leaderboard[]): boolean {
-  return everyBoard().some(b => isSlotFree(boards, b)) || !hasMatchplay(boards)
-}
-
-/** Scorings that still lead somewhere, given what is already running. */
-export function freeScorings(boards: readonly Leaderboard[], audience: Audience): Scoring[] {
+export function freeScorings(
+  boards: readonly Leaderboard[], audience: Audience, teamSet?: string,
+): Scoring[] {
   return SCORINGS.map(s => s.key).filter(scoring =>
-    everyBoard().some(b => b.audience === audience && b.scoring === scoring && isSlotFree(boards, b)))
+    everyBoard().some(b =>
+      b.audience === audience && b.scoring === scoring
+      && isSlotFree(boards, { ...b, teamSet })))
 }
 
-/** Team formats that still lead somewhere. */
-export function freeTeamFormats(boards: readonly Leaderboard[], scoring?: Scoring): TeamFormat[] {
+/** Team formats that still lead somewhere, on this sheet. */
+export function freeTeamFormats(
+  boards: readonly Leaderboard[], scoring?: Scoring, teamSet?: string,
+): TeamFormat[] {
   return TEAM_FORMATS.map(f => f.key).filter(teamFormat =>
     everyBoard().some(b =>
       b.audience === 'team'
       && b.teamFormat === teamFormat
       && (!scoring || b.scoring === scoring)
-      && isSlotFree(boards, b)))
+      && isSlotFree(boards, { ...b, teamSet })))
 }
 
 // ─── Is one finished? ──────────────────────────────────────────
@@ -243,26 +263,8 @@ export function needsPairings(boards: readonly Leaderboard[]): boolean {
   return boards.some(lb => lb.audience === 'team' && lb.competition === 'matchplay')
 }
 
-/**
- * Why this trip cannot go live yet, or null if it can.
- *
- * Read off the boards, because the boards are what a trip plays for. This
- * used to be answered from `trips.formats`, which a new trip carries as the
- * defaults — so it said yes to a trip with nothing to play for at all, and
- * never noticed a pairs draw chosen in this model.
- */
-export function finaliseBlockedReason(
-  boards: readonly Leaderboard[],
-  teamCount: number,
-): string | null {
-  if (boards.length === 0) return 'Choose what this trip is playing for first.'
-  if (needsTeams(boards) && teamCount === 0) {
-    return needsPairings(boards)
-      ? 'Your draw is between pairings — pick them first.'
-      : 'A team leaderboard needs teams — pick them first.'
-  }
-  return null
-}
+// The gate on going live lives in lib/teamSets.ts, because what it has left
+// to check is per team sheet: a trip may need two of them filled in.
 
 // ─── Naming ────────────────────────────────────────────────────
 
@@ -362,6 +364,12 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
         if (!teamFormat) continue
         lb.teamFormat = teamFormat
       }
+    }
+
+    // Which teams it is played by. A board stored before sheets existed has
+    // none, and is on the trip's only sheet — which is what 'main' is.
+    if (audience === 'team') {
+      lb.teamSet = typeof r.teamSet === 'string' && r.teamSet ? r.teamSet : 'main'
     }
 
     // One draw only, whichever arrives first

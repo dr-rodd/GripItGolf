@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { hasMatchplay, needsPairings, boardTitle } from '@/lib/leaderboards'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
+import { MAIN_SET, setOf, teamFor } from '@/lib/teamSets'
+import { fetchMemberships } from '@/lib/teamMembers'
 import { isLocked } from '@/lib/passcode'
 import { playerCookieName, readPlayerId } from '@/lib/playerCookie'
 import {
@@ -216,8 +218,13 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       })
     }
 
-    // In a pairs draw the entrant is their pairing, not them
-    const entrantId = needsPairings(boards) ? me.team_id ?? null : me.id
+    // In a pairs draw the entrant is their pairing, not them — and the
+    // pairing is their place on the DRAW's sheet, which need not be the
+    // team they play the league in.
+    const draw = boards.find(b => b.competition === 'matchplay')
+    const entrantId = needsPairings(boards)
+      ? teamFor(await fetchMemberships(trip.id), me.id, draw ? setOf(draw) : MAIN_SET)
+      : me.id
     if (entrantId && matchRows.length > 0) {
       const pairs = needsPairings(boards)
       const asSides: SummaryMatch[] = matchRows.map(m => ({

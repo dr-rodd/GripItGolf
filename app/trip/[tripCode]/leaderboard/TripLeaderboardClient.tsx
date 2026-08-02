@@ -11,6 +11,7 @@ import {
   type BoardRow, type ResolvedScore, type RowContext,
   buildRows, effectivePar,
 } from '@/lib/boardRows'
+import { type Membership } from '@/lib/teamSets'
 import { HEADER_H } from '@/app/components/headerMetrics'
 import ScoreShape, { NoReturnShape } from '@/app/components/ScoreShape'
 
@@ -18,8 +19,8 @@ import ScoreShape, { NoReturnShape } from '@/app/components/ScoreShape'
 
 type Course = { id: string; name: string }
 type Round  = { id: string; round_number: number; status?: string; courses: Course | null }
-type Team   = { id: string; name: string; color: string }
-type Player = { id: string; name: string; handicap: number | null; gender: string; team_id: string | null }
+type Team   = { id: string; name: string; color: string; team_set?: string | null }
+type Player = { id: string; name: string; handicap: number | null; gender: string }
 type Hole   = {
   id: string; hole_number: number; par: number; stroke_index: number; course_id: string
   par_ladies?: number | null; stroke_index_ladies?: number | null
@@ -45,7 +46,14 @@ interface Props {
    */
   legacyTeamScoring: TeamScoring | null
   rounds: Round[]
+  /** Every team on the trip, across every sheet. Each board takes its own. */
   teams: Team[]
+  /**
+   * Who is in which team. Not a field on the player: a trip can run a league
+   * between fours and a knockout between pairings, so one person holds two
+   * places at once. See lib/teamSets.ts.
+   */
+  memberships: Membership[]
   players: Player[]
   holes: Hole[]
   scores: Score[]
@@ -589,8 +597,8 @@ function MatchplayButton({ tripCode, enabled }: { tripCode: string; enabled: boo
 // ─── Main ──────────────────────────────────────────────────────
 
 export default function TripLeaderboardClient({
-  tripCode, boards, activeRoundIds, legacyTeamScoring, rounds, teams, players,
-  holes, scores, liveScores, roundHandicaps,
+  tripCode, boards, activeRoundIds, legacyTeamScoring, rounds, teams, memberships,
+  players, holes, scores, liveScores, roundHandicaps,
 }: Props) {
   // Matchplay has its own route, so it is a button rather than a tab. Every
   // other board is a table, and its own rules travel with it.
@@ -682,13 +690,14 @@ export default function TripLeaderboardClient({
   const rowContext: RowContext = useMemo(() => ({
     players,
     teams,
+    memberships,
     holes,
     rounds: sortedRounds,
     resolved,
     hcpFor,
     liveRoundIds,
     legacyTeamScoring,
-  }), [players, teams, holes, sortedRounds, resolved, hcpFor, liveRoundIds, legacyTeamScoring])
+  }), [players, teams, memberships, holes, sortedRounds, resolved, hcpFor, liveRoundIds, legacyTeamScoring])
 
   const rowsByBoard = useMemo(
     () => new Map(tabs.map(b => [b.id, buildRows(b, rowContext)])),
