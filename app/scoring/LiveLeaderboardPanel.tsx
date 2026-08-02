@@ -119,7 +119,7 @@ export function InlineScorecard({
   playerScores: LiveScoreRow[]
   courseId: string
 }) {
-  const sf    = { fontFamily: "Georgia, serif" }
+  const sf    = { fontFamily: "var(--font-serif)" }
   const muted = "text-ink/65"
   const dark  = "text-ink"
   const grid  = "grid grid-cols-[2fr_2fr_2fr_3fr_2fr] w-full"
@@ -190,7 +190,7 @@ export function InlineScorecard({
 
       {/* Front 9 */}
       {front9.map(({ hole, idx, ePar, eSI, gross, pts }) => (
-        <div key={hole.hole_number} className={`${grid} px-3 py-1.5 items-center border-b border-bark/12 ${idx % 2 === 1 ? "bg-bark/[0.07]" : ""}`}>
+        <div key={hole.hole_number} className={`${grid} px-3 py-1.5 items-center border-b border-bark/12 ${idx % 2 === 1 ? "bg-bark/[0.04]" : ""}`}>
           <span className={`text-sm font-semibold ${dark}`} style={sf}>{hole.hole_number}</span>
           <span className={`text-sm ${muted}`} style={sf}>{ePar}</span>
           <span className={`text-sm ${muted}`} style={sf}>{eSI}</span>
@@ -210,7 +210,7 @@ export function InlineScorecard({
 
       {/* Back 9 */}
       {back9.map(({ hole, idx, ePar, eSI, gross, pts }) => (
-        <div key={hole.hole_number} className={`${grid} px-3 py-1.5 items-center border-b border-bark/12 ${idx % 2 === 0 ? "bg-bark/[0.07]" : ""}`}>
+        <div key={hole.hole_number} className={`${grid} px-3 py-1.5 items-center border-b border-bark/12 ${idx % 2 === 0 ? "bg-bark/[0.04]" : ""}`}>
           <span className={`text-sm font-semibold ${dark}`} style={sf}>{hole.hole_number}</span>
           <span className={`text-sm ${muted}`} style={sf}>{ePar}</span>
           <span className={`text-sm ${muted}`} style={sf}>{eSI}</span>
@@ -517,7 +517,7 @@ export default function LiveLeaderboardPanel({
 
                   {/* Col 3: relative score pill */}
                   <span className={`flex-shrink-0 inline-flex items-center justify-center
-                    px-2 py-0.5 rounded-sm text-lg font-bold tabular-nums min-w-[3.5rem] ${scorePillClass}`}>
+                    px-2 py-0.5 rounded-xl text-lg font-bold tabular-nums min-w-[3.5rem] ${scorePillClass}`}>
                     {scoreDisplay}
                   </span>
 

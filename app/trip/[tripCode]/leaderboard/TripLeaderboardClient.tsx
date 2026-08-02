@@ -64,7 +64,7 @@ const SC_SF    = { fontFamily: 'var(--font-serif)' }
 const SC_MUTED = 'text-ink/65'
 const SC_DARK  = 'text-ink'
 /** The Out / In / Total bands. Brown, to sit with the page rather than shout. */
-const SC_BAND  = 'rgba(74,55,40,0.07)'
+const SC_BAND  = 'rgba(74,55,40,0.04)'
 
 const firstName = (n: string) => n.split(' ')[0]
 

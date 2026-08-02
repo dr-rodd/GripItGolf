@@ -6,11 +6,11 @@ A multi-trip golf platform. Any group leader creates a trip, gets a shareable co
 
 Your handicap is the best 8 of your last 20 rounds. On a handicap graph those eight show as green dots — so a green dot is a round that counted. Every golfer teeing off is chasing one.
 
-The mark is `app/components/GreenDot.tsx`: a glowing green dot that breathes and sends out a slow ripple. It appears beneath the wordmark on the landing page and at the top of every trip hub. Keyframes live in `app/globals.css` and are disabled under `prefers-reduced-motion`.
+The dot is part of the supplied wordmark (`public/logo.svg`) and is drawn again as a full stop closing a title — `.t-title-dot` in `app/globals.css`. There is no `GreenDot` component: the breathing dot is `.dot-live`, and it marks a card that is still open, not the brand.
 
-Gold (`#C9A84C`) remains the accent for scores and actions. Green is reserved for the dot and for live/won states — the two should not be mixed in the mark itself.
+**There is no gold anywhere.** `#C9A84C` was the Donegal Masters accent and is gone from every screen; emerald is the only accent, and `test:branding` fails on the old hex. Green means the dot, a live state, and a win.
 
-Forked from Donegal Masters — a single-trip family golf app. This project converts it into a platform where anyone can run their own trip. The Donegal Masters UX is the gold standard for look and feel.
+Forked from Donegal Masters — a single-trip family golf app. This project converts it into a platform where anyone can run their own trip. **Its look is not the target.** The scoring screens were the last of it and have been brought onto the Green Dot system; where the two disagree, this style book wins.
 
 ## Who is building this
 

@@ -1037,7 +1037,7 @@ export default function LiveScoringFlow({
               )
 
               return (
-                <div key={hole.id} className={`bg-surface border rounded-sm ${hs.isNR ? "border-rust/40" : "border-bark/12"}`}>
+                <div key={hole.id} className={`bg-surface border rounded-xl ${hs.isNR ? "border-rust/40" : "border-bark/12"}`}>
                   {/* Hole info row */}
                   <div className="flex items-center justify-between px-4 pt-3 pb-2">
                     <div className="flex items-baseline gap-3">
@@ -1047,7 +1047,7 @@ export default function LiveScoringFlow({
                     </div>
                     <button
                       onClick={toggleNR}
-                      className={`text-sm tracking-widest uppercase border rounded-sm px-2.5 py-1 transition-colors
+                      className={`text-sm tracking-widest uppercase border rounded-xl px-2.5 py-1 transition-colors
                         ${hs.isNR
                           ? "border-rust/50 text-rust-deep bg-rust/10"
                           : "border-bark/12 text-ink/50 hover:border-rust/40 hover:text-rust-deep/60"}`}
@@ -1060,7 +1060,7 @@ export default function LiveScoringFlow({
                   <div className="flex items-center gap-3 px-4 pb-3">
                     <button
                       onClick={() => stepScore(-1)} disabled={hs.isNR}
-                      className="flex-1 h-16 rounded-sm border border-bark/12 text-ink/80 text-4xl leading-none
+                      className="flex-1 h-16 rounded-xl border border-bark/12 text-ink/80 text-4xl leading-none
                         hover:border-accent hover:text-accent-deep active:scale-95 transition-all
                         flex items-center justify-center disabled:opacity-20 disabled:cursor-not-allowed"
                     >−</button>
@@ -1072,18 +1072,18 @@ export default function LiveScoringFlow({
                         value={hs.gross === null ? "" : String(hs.gross)}
                         onChange={onInput}
                         className={`font-[family-name:var(--font-playfair)] text-4xl text-center bg-transparent
-                          outline-none text-ink caret-accent border rounded-sm transition-colors p-0 w-20 h-16
+                          outline-none text-ink caret-accent border rounded-xl transition-colors p-0 w-20 h-16
                           ${hs.gross === null ? "border-accent/50" : "border-accent/15"}`}
                         style={{ lineHeight: "4rem" }}
                       />
                     )}
                     <button
                       onClick={() => stepScore(1)} disabled={hs.isNR}
-                      className="flex-1 h-16 rounded-sm border border-bark/12 text-ink/80 text-4xl leading-none
+                      className="flex-1 h-16 rounded-xl border border-bark/12 text-ink/80 text-4xl leading-none
                         hover:border-accent hover:text-accent-deep active:scale-95 transition-all
                         flex items-center justify-center disabled:opacity-20 disabled:cursor-not-allowed"
                     >+</button>
-                    <div className={`flex-shrink-0 flex items-baseline gap-1 px-2.5 py-1.5 rounded-sm border ${ptsBadge}`}>
+                    <div className={`flex-shrink-0 flex items-baseline gap-1 px-2.5 py-1.5 rounded-xl border ${ptsBadge}`}>
                       <span className="text-lg font-bold leading-none font-[family-name:var(--font-playfair)]">{pts ?? "·"}</span>
                       <span className="text-[10px] opacity-60">pts</span>
                     </div>
@@ -1102,7 +1102,7 @@ export default function LiveScoringFlow({
               onClick={saveEditDraft}
               disabled={editSaving}
               className="w-full py-4 bg-accent-deep text-ink text-base tracking-[0.2em] uppercase font-bold
-                hover:bg-accent disabled:opacity-50 transition-colors rounded-sm"
+                hover:bg-accent disabled:opacity-50 transition-colors rounded-xl"
             >
               {editSaving ? "Saving…" : "Confirm"}
             </button>
@@ -1124,7 +1124,7 @@ export default function LiveScoringFlow({
                 <button
                   key={player.id}
                   onClick={() => setSelectedSummaryPlayerId(player.id)}
-                  className={`flex-shrink-0 flex flex-col items-start px-3.5 py-2.5 rounded-sm border transition-colors min-w-[100px]
+                  className={`flex-shrink-0 flex flex-col items-start px-3.5 py-2.5 rounded-xl border transition-colors min-w-[100px]
                     ${isSel
                       ? "border-accent bg-accent/10"
                       : "border-bark/12 bg-surface hover:border-bark/12"}`}
@@ -1202,15 +1202,15 @@ export default function LiveScoringFlow({
 
           // fr columns fill full card width; Score gets extra space for symbol
           const grid  = "grid grid-cols-[2fr_3fr_2fr_2fr_3fr_2fr] w-full"
-          const sf    = { fontFamily: "Georgia, serif" }
+          const sf    = { fontFamily: "var(--font-serif)" }
           const muted = "text-ink/65"
           const dark  = "text-ink"
 
           return (
-            <div className="rounded-xl border border-bark/12 relative" style={{ background: "#FFFFFF" }}>
+            <div className="rounded-2xl border border-bark/12 bg-surface relative">
 
               {/* Course banner — scrolls with page, does not stick */}
-              <div className="rounded-t-xl px-4 py-3 border-b border-bark/25" style={{ background: "rgba(74,55,40,0.07)" }}>
+              <div className="rounded-t-2xl px-4 py-3 border-b border-bark/25" style={{ background: "rgba(74,55,40,0.04)" }}>
                 <p className="text-ink text-base font-semibold" style={sf}>{courseNameLabel}</p>
               </div>
 
@@ -1246,7 +1246,7 @@ export default function LiveScoringFlow({
 
               {/* Front 9 */}
               {rows.slice(0, 9).map(({ hole, idx, isNR, gross, pts, ePar, eSI, yardage }) => (
-                <div key={hole.id} className={`${grid} px-3 py-2 items-center border-b border-bark/12 ${idx % 2 === 1 ? "bg-bark/[0.07]" : ""}`}>
+                <div key={hole.id} className={`${grid} px-3 py-2 items-center border-b border-bark/12 ${idx % 2 === 1 ? "bg-bark/[0.04]" : ""}`}>
                   <span className={`text-base font-semibold ${dark}`} style={sf}>{hole.hole_number}</span>
                   <span className={`text-base ${muted}`} style={sf}>{yardage ?? "—"}</span>
                   <span className={`text-base ${dark}`} style={sf}>{ePar}</span>
@@ -1268,7 +1268,7 @@ export default function LiveScoringFlow({
 
               {/* Back 9 — pos = idx+1; bg when idx is even (pos is odd) */}
               {rows.slice(9).map(({ hole, idx, isNR, gross, pts, ePar, eSI, yardage }) => (
-                <div key={hole.id} className={`${grid} px-3 py-2 items-center border-b border-bark/12 ${idx % 2 === 0 ? "bg-bark/[0.07]" : ""}`}>
+                <div key={hole.id} className={`${grid} px-3 py-2 items-center border-b border-bark/12 ${idx % 2 === 0 ? "bg-bark/[0.04]" : ""}`}>
                   <span className={`text-base font-semibold ${dark}`} style={sf}>{hole.hole_number}</span>
                   <span className={`text-base ${muted}`} style={sf}>{yardage ?? "—"}</span>
                   <span className={`text-base ${dark}`} style={sf}>{ePar}</span>
@@ -1308,14 +1308,14 @@ export default function LiveScoringFlow({
         <div className="flex gap-3 pt-1">
           <button
             onClick={() => enterEditMode(selectedId)}
-            className="flex-1 py-4 border border-bark/12 text-ink/80 text-base tracking-[0.15em] uppercase hover:border-bark/25 transition-colors rounded-sm"
+            className="flex-1 py-4 border border-bark/12 text-ink/80 text-base tracking-[0.15em] uppercase hover:border-bark/25 transition-colors rounded-xl"
           >
             Edit Scorecard
           </button>
           <button
             onClick={handleCommit}
             disabled={saving}
-            className="flex-[2] py-4 bg-accent-deep text-ink text-base tracking-[0.2em] uppercase font-bold hover:bg-accent disabled:opacity-50 transition-colors rounded-sm"
+            className="flex-[2] py-4 bg-accent-deep text-ink text-base tracking-[0.2em] uppercase font-bold hover:bg-accent disabled:opacity-50 transition-colors rounded-xl"
           >
             {saving ? "Saving…" : "Commit All"}
           </button>
@@ -1416,7 +1416,7 @@ function HoleCard({
         <button
           onClick={onBack}
           className="flex-1 py-4 border border-bark/12 text-ink/65 text-2xl
-            hover:border-bark/25 hover:text-ink/80 active:bg-bark/[0.04] transition-colors rounded-sm"
+            hover:border-bark/25 hover:text-ink/80 active:bg-bark/[0.04] transition-colors rounded-xl"
           aria-label="Previous hole"
         >
           ←
@@ -1426,7 +1426,7 @@ function HoleCard({
           disabled={!allHaveGross}
           className="flex-[2] py-4 bg-accent-deep text-ink text-2xl font-bold
             hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed
-            active:scale-[0.98] transition-all rounded-sm"
+            active:scale-[0.98] transition-all rounded-xl"
           aria-label="Next hole"
         >
           →
@@ -1491,7 +1491,7 @@ function LivePlayerTile({
   }
 
   return (
-    <div className={`bg-surface border rounded-sm transition-colors
+    <div className={`bg-surface border rounded-xl transition-colors
       ${isNR ? "border-rust/40" : "border-bark/12"}`}>
 
       {/* Player name header */}
@@ -1518,7 +1518,7 @@ function LivePlayerTile({
           </div>
           <button
             onClick={onToggleNR}
-            className={`text-sm tracking-widest uppercase border rounded-sm px-3 py-1.5 transition-colors
+            className={`text-sm tracking-widest uppercase border rounded-xl px-3 py-1.5 transition-colors
               ${isNR
                 ? "border-rust/50 text-rust-deep bg-rust/10"
                 : "border-bark/12 text-ink/50 hover:border-rust/40 hover:text-rust-deep/60"}`}
@@ -1532,7 +1532,7 @@ function LivePlayerTile({
           <button
             onClick={() => handleStep(-1)}
             disabled={isNR}
-            className="flex-1 h-16 rounded-sm border border-bark/12 text-ink/80 text-4xl leading-none
+            className="flex-1 h-16 rounded-xl border border-bark/12 text-ink/80 text-4xl leading-none
               hover:border-accent hover:text-accent-deep active:scale-95 transition-all
               flex items-center justify-center disabled:opacity-20 disabled:cursor-not-allowed"
           >
@@ -1551,7 +1551,7 @@ function LivePlayerTile({
               value={score === null ? "" : String(score)}
               onChange={handleInputChange}
               className={`font-[family-name:var(--font-playfair)] text-4xl text-center bg-transparent
-                outline-none text-ink caret-accent border rounded-sm transition-colors p-0 w-20 h-16
+                outline-none text-ink caret-accent border rounded-xl transition-colors p-0 w-20 h-16
                 ${score === null ? "border-accent/50" : "border-accent/15"}`}
               style={{ lineHeight: "4rem" }}
             />
@@ -1559,7 +1559,7 @@ function LivePlayerTile({
           <button
             onClick={() => handleStep(1)}
             disabled={isNR}
-            className="flex-1 h-16 rounded-sm border border-bark/12 text-ink/80 text-4xl leading-none
+            className="flex-1 h-16 rounded-xl border border-bark/12 text-ink/80 text-4xl leading-none
               hover:border-accent hover:text-accent-deep active:scale-95 transition-all
               flex items-center justify-center disabled:opacity-20 disabled:cursor-not-allowed"
           >
@@ -1572,7 +1572,7 @@ function LivePlayerTile({
           <span className={`text-base font-semibold ${color || "text-ink/50"}`}>
             {label || "—"}
           </span>
-          <div className={`flex items-baseline gap-1.5 px-3 py-1.5 rounded-sm border ${ptsBadge}`}>
+          <div className={`flex items-baseline gap-1.5 px-3 py-1.5 rounded-xl border ${ptsBadge}`}>
             <span className="text-2xl font-bold leading-none font-[family-name:var(--font-playfair)]">
               {pts ?? "·"}
             </span>
@@ -1616,7 +1616,7 @@ function LivePlayerTile({
               value={score === null ? "" : String(score)}
               onChange={handleInputChange}
               className={`font-[family-name:var(--font-playfair)] text-4xl text-center bg-transparent
-                outline-none text-ink caret-accent border rounded-sm transition-colors p-0 w-14 h-14
+                outline-none text-ink caret-accent border rounded-xl transition-colors p-0 w-14 h-14
                 ${score === null ? "border-accent/50" : "border-accent/15"}`}
               style={{ lineHeight: "3.5rem" }}
             />
@@ -1632,7 +1632,7 @@ function LivePlayerTile({
           </button>
           <button
             onClick={onToggleNR}
-            className={`text-sm tracking-widest uppercase border rounded-sm px-2 py-1.5 flex-shrink-0 transition-colors
+            className={`text-sm tracking-widest uppercase border rounded-xl px-2 py-1.5 flex-shrink-0 transition-colors
               ${isNR
                 ? "border-rust/50 text-rust-deep bg-rust/10"
                 : "border-bark/12 text-ink/50 hover:border-rust/40 hover:text-rust-deep/60"}`}
@@ -1642,7 +1642,7 @@ function LivePlayerTile({
         </div>
 
         {/* Pts badge */}
-        <div className={`w-9 h-9 rounded-sm flex flex-col items-center justify-center flex-shrink-0
+        <div className={`w-9 h-9 rounded-xl flex flex-col items-center justify-center flex-shrink-0
           ${isNR ? "bg-rust/15 text-rust-deep/70"
             : pts === null ? "bg-transparent text-ink/50"
             : pts >= 3 ? "bg-accent-deep text-ink"

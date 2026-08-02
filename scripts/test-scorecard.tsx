@@ -161,8 +161,33 @@ section('Scorecards are brown and cream, not green')
       `  …nor any parchment or gold`)
   }
   ok(read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
-    .includes("SC_BAND  = 'rgba(74,55,40,0.07)'"),
+    .includes("SC_BAND  = 'rgba(74,55,40,0.04)'"),
     'the summary bands are a wash of bark')
+}
+
+// ─── The card is the app's card ────────────────────────────────
+
+section('Scorecards are the same card as everywhere else')
+{
+  const cards = [
+    'app/scoring/LiveScoringFlow.tsx',
+    'app/scoring/LiveLeaderboardPanel.tsx',
+    'app/scoring/[slug]/CourseDashboardClient.tsx',
+  ]
+  for (const f of cards) {
+    const src = read(f)
+    const name = f.split('/').pop()
+    // Donegal's 2px corners. Everything in this app is rounded-xl or -2xl.
+    ok(!/\brounded-sm\b/.test(src), `${name} has no square Donegal corners`)
+    // "No gradients. No glows." — one of these was a green halo on a live dot
+    ok(!/shadow-\[0_0/.test(src), `  …and no glow`)
+    // The serif is a token, not a font stack typed out by hand
+    ok(!src.includes('Georgia'), `  …and names no font by hand`)
+  }
+
+  ok(read('app/scoring/LiveScoringFlow.tsx')
+    .includes('rounded-2xl border border-bark/12 bg-surface'),
+    'the scorecard is the same card as a settings section')
 }
 
 // ─── The maths the whole thing rests on ────────────────────────

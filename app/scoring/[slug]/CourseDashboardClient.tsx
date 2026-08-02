@@ -434,16 +434,16 @@ export default function CourseDashboardClient({
             {showLiveLeaderboard ? (
               <button
                 onClick={() => setShowLiveLeaderboard(false)}
-                className="w-full py-2.5 flex items-center justify-center gap-2.5 border border-accent/25 bg-accent/[0.07] hover:bg-accent/10 transition-colors rounded-sm"
+                className="w-full py-2.5 flex items-center justify-center gap-2.5 border border-accent/25 bg-accent/[0.07] hover:bg-accent/10 transition-colors rounded-xl"
               >
                 <span className="text-accent-deep text-sm tracking-[0.2em] uppercase">← Scorecard</span>
               </button>
             ) : (
               <button
                 onClick={() => setShowLiveLeaderboard(true)}
-                className="w-full py-2.5 flex items-center justify-center gap-2.5 border border-accent/25 bg-accent/[0.08] hover:bg-accent/15 transition-colors rounded-sm"
+                className="w-full py-2.5 flex items-center justify-center gap-2.5 border border-accent/25 bg-accent/[0.08] hover:bg-accent/15 transition-colors rounded-xl"
               >
-                <span className="w-2 h-2 rounded-full bg-accent animate-pulse shadow-[0_0_8px_3px_rgba(34,197,94,0.5)]" />
+                <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
                 <span className="text-accent-deep text-sm tracking-[0.2em] uppercase">Live Leaderboard</span>
               </button>
             )}
@@ -460,9 +460,9 @@ export default function CourseDashboardClient({
           {firstLiveRound && (
             <button
               onClick={() => setView("live-board")}
-              className="w-full py-3 flex items-center justify-center gap-2.5 border border-accent/25 bg-accent/[0.08] hover:bg-accent/15 transition-colors rounded-sm"
+              className="w-full py-3 flex items-center justify-center gap-2.5 border border-accent/25 bg-accent/[0.08] hover:bg-accent/15 transition-colors rounded-xl"
             >
-              <span className="w-2 h-2 rounded-full bg-accent animate-pulse shadow-[0_0_8px_3px_rgba(34,197,94,0.5)]" />
+              <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
               <span className="text-accent-deep text-sm tracking-[0.2em] uppercase">Live Leaderboard</span>
             </button>
           )}
@@ -474,7 +474,7 @@ export default function CourseDashboardClient({
                 Scorecards
               </p>
               {scorecards.some(s => !s.finalised && s.playerNames.length > 0) && scorecards.some(s => s.finalised) && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm border border-bark/25 bg-bark/[0.08] text-ink/80 text-xs tracking-wide font-semibold">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl border border-bark/25 bg-bark/[0.08] text-ink/80 text-xs tracking-wide font-semibold">
                   Mixed
                 </span>
               )}
@@ -483,7 +483,7 @@ export default function CourseDashboardClient({
             {loading ? (
               <p className="text-ink/50 text-base py-4">Loading…</p>
             ) : scorecards.length === 0 ? (
-              <div className="border border-bark/12 rounded-sm px-4 py-5">
+              <div className="border border-bark/12 rounded-xl px-4 py-5">
                 <p className="text-ink/50 text-base">No active scorecards</p>
               </div>
             ) : (
@@ -506,7 +506,7 @@ export default function CourseDashboardClient({
                     <div key={liveRound.id}>
                       <div
                         onClick={() => !finalised ? openScoring(liveRound) : undefined}
-                        className={`w-full text-left border rounded-sm px-4 py-4 transition-colors
+                        className={`w-full text-left border rounded-xl px-4 py-4 transition-colors
                           ${finalised
                             ? "border-accent/30 bg-accent/[0.07]"
                             : "border-bark/12 hover:border-accent/50 bg-surface hover:bg-surface cursor-pointer"
@@ -522,7 +522,7 @@ export default function CourseDashboardClient({
                             </p>
                           </div>
                           {playerNames.length > 0 && (finalised ? (
-                            <span className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-sm border border-accent/40 bg-accent/10 text-accent-deep text-sm font-semibold tracking-wide">
+                            <span className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border border-accent/40 bg-accent/10 text-accent-deep text-sm font-semibold tracking-wide">
                               ✓ Done
                             </span>
                           ) : (
@@ -565,7 +565,7 @@ export default function CourseDashboardClient({
             <button
               onClick={startNewScorecard}
               disabled={starting || isSessionFinalised}
-              className="w-full py-4 border border-accent/40 text-accent-deep text-base tracking-[0.2em] uppercase hover:bg-accent/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded-sm"
+              className="w-full py-4 border border-accent/40 text-accent-deep text-base tracking-[0.2em] uppercase hover:bg-accent/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded-xl"
             >
               {starting ? "Starting…" : isSessionFinalised ? "Session Finalised" : "+ Start New Scorecard"}
             </button>
@@ -610,7 +610,7 @@ export default function CourseDashboardClient({
                 <section>
                   <p className="text-ink/50 text-xs tracking-[0.2em] uppercase mb-3">Void Scorecard</p>
                   {staffedScorecards.length === 0 ? (
-                    <p className="text-ink/50 text-base border border-bark/12 px-4 py-4 rounded-sm">No scorecards with players</p>
+                    <p className="text-ink/50 text-base border border-bark/12 px-4 py-4 rounded-xl">No scorecards with players</p>
                   ) : (
                     <div className="space-y-2">
                       {staffedScorecards.map(s => {
@@ -618,7 +618,7 @@ export default function CourseDashboardClient({
                         return (
                           <div key={s.liveRound.id}>
                             <div
-                              className={`border rounded-sm px-4 py-3 flex items-center justify-between gap-3 transition-colors
+                              className={`border rounded-xl px-4 py-3 flex items-center justify-between gap-3 transition-colors
                                 ${isConfirming ? "border-rust/40 bg-rust/[0.08]" : "border-bark/12 bg-surface"}`}
                             >
                               <div className="min-w-0">
@@ -630,7 +630,7 @@ export default function CourseDashboardClient({
                               {!isConfirming ? (
                                 <button
                                   onClick={() => setSettingsVoidId(s.liveRound.id)}
-                                  className="flex-shrink-0 px-3 py-1.5 text-sm text-rust border border-rust/40 hover:border-rust/60 hover:text-rust-deep transition-colors rounded-sm"
+                                  className="flex-shrink-0 px-3 py-1.5 text-sm text-rust border border-rust/40 hover:border-rust/60 hover:text-rust-deep transition-colors rounded-xl"
                                 >
                                   Void
                                 </button>
@@ -638,14 +638,14 @@ export default function CourseDashboardClient({
                                 <div className="flex items-center gap-2 flex-shrink-0">
                                   <button
                                     onClick={() => setSettingsVoidId(null)}
-                                    className="px-3 py-1.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-sm"
+                                    className="px-3 py-1.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-xl"
                                   >
                                     Cancel
                                   </button>
                                   <button
                                     onClick={() => voidScorecard(s.liveRound.id)}
                                     disabled={settingsWorking}
-                                    className="px-3 py-1.5 text-sm text-rust-deep border border-rust/40 hover:border-rust/70 disabled:opacity-50 transition-colors rounded-sm"
+                                    className="px-3 py-1.5 text-sm text-rust-deep border border-rust/40 hover:border-rust/70 disabled:opacity-50 transition-colors rounded-xl"
                                   >
                                     {settingsWorking ? "…" : "Confirm"}
                                   </button>
@@ -663,7 +663,7 @@ export default function CourseDashboardClient({
                 <section>
                   <p className="text-ink/50 text-xs tracking-[0.2em] uppercase mb-3">Players</p>
                   {allPlayersList.length === 0 ? (
-                    <p className="text-ink/50 text-base border border-bark/12 px-4 py-4 rounded-sm">No active or finalised players</p>
+                    <p className="text-ink/50 text-base border border-bark/12 px-4 py-4 rounded-xl">No active or finalised players</p>
                   ) : (
                     <div className="space-y-2">
                       {/* Active players */}
@@ -675,7 +675,7 @@ export default function CourseDashboardClient({
                             return (
                               <div
                                 key={id + liveRoundId}
-                                className={`border rounded-sm px-4 py-3 flex items-center justify-between gap-3 transition-colors
+                                className={`border rounded-xl px-4 py-3 flex items-center justify-between gap-3 transition-colors
                                   ${isConfirming ? "border-rust/40 bg-rust/[0.08]" : "border-bark/12 bg-surface"}`}
                               >
                                 <div className="min-w-0">
@@ -687,7 +687,7 @@ export default function CourseDashboardClient({
                                 {!isConfirming ? (
                                   <button
                                     onClick={() => setPlayerConfirm({ type: "remove", playerId: id, liveRoundId, roundId, playerName: name })}
-                                    className="flex-shrink-0 px-3 py-1.5 text-sm text-rust border border-rust/40 hover:border-rust/60 hover:text-rust-deep transition-colors rounded-sm"
+                                    className="flex-shrink-0 px-3 py-1.5 text-sm text-rust border border-rust/40 hover:border-rust/60 hover:text-rust-deep transition-colors rounded-xl"
                                   >
                                     Remove
                                   </button>
@@ -695,14 +695,14 @@ export default function CourseDashboardClient({
                                   <div className="flex items-center gap-2 flex-shrink-0">
                                     <button
                                       onClick={() => setPlayerConfirm(null)}
-                                      className="px-3 py-1.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-sm"
+                                      className="px-3 py-1.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-xl"
                                     >
                                       Cancel
                                     </button>
                                     <button
                                       onClick={() => removePlayerFromScorecard(id, liveRoundId)}
                                       disabled={settingsWorking}
-                                      className="px-3 py-1.5 text-sm text-rust-deep border border-rust/40 hover:border-rust/70 disabled:opacity-50 transition-colors rounded-sm"
+                                      className="px-3 py-1.5 text-sm text-rust-deep border border-rust/40 hover:border-rust/70 disabled:opacity-50 transition-colors rounded-xl"
                                     >
                                       {settingsWorking ? "…" : "Confirm"}
                                     </button>
@@ -722,7 +722,7 @@ export default function CourseDashboardClient({
                             return (
                               <div
                                 key={id + liveRoundId}
-                                className={`border rounded-sm px-4 py-3 flex items-center justify-between gap-3 transition-colors
+                                className={`border rounded-xl px-4 py-3 flex items-center justify-between gap-3 transition-colors
                                   ${isConfirming ? "border-accent/40 bg-accent/[0.07]" : "border-bark/12 bg-surface"}`}
                               >
                                 <div className="min-w-0">
@@ -734,7 +734,7 @@ export default function CourseDashboardClient({
                                 {!isConfirming ? (
                                   <button
                                     onClick={() => setPlayerConfirm({ type: "unfinalise", playerId: id, liveRoundId, roundId, playerName: name })}
-                                    className="flex-shrink-0 px-3 py-1.5 text-sm text-accent-deep/60 border border-accent/25 hover:border-accent/50 hover:text-accent-deep transition-colors rounded-sm"
+                                    className="flex-shrink-0 px-3 py-1.5 text-sm text-accent-deep/60 border border-accent/25 hover:border-accent/50 hover:text-accent-deep transition-colors rounded-xl"
                                   >
                                     Unfinalise
                                   </button>
@@ -742,14 +742,14 @@ export default function CourseDashboardClient({
                                   <div className="flex items-center gap-2 flex-shrink-0">
                                     <button
                                       onClick={() => setPlayerConfirm(null)}
-                                      className="px-3 py-1.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-sm"
+                                      className="px-3 py-1.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-xl"
                                     >
                                       Cancel
                                     </button>
                                     <button
                                       onClick={() => unfinalisePlayer(id, liveRoundId, roundId)}
                                       disabled={settingsWorking}
-                                      className="px-3 py-1.5 text-sm text-accent-deep border border-accent/50 hover:border-accent/80 disabled:opacity-50 transition-colors rounded-sm"
+                                      className="px-3 py-1.5 text-sm text-accent-deep border border-accent/50 hover:border-accent/80 disabled:opacity-50 transition-colors rounded-xl"
                                     >
                                       {settingsWorking ? "…" : "Confirm"}
                                     </button>
@@ -771,26 +771,26 @@ export default function CourseDashboardClient({
                     {!settingsUnfinaliseSession ? (
                       <button
                         onClick={() => setSettingsUnfinaliseSession(true)}
-                        className="w-full py-3 border border-accent/30 text-accent-deep/60 text-base tracking-[0.15em] uppercase hover:border-accent/60 hover:text-accent-deep transition-colors rounded-sm"
+                        className="w-full py-3 border border-accent/30 text-accent-deep/60 text-base tracking-[0.15em] uppercase hover:border-accent/60 hover:text-accent-deep transition-colors rounded-xl"
                       >
                         Unfinalise Round
                       </button>
                     ) : (
-                      <div className="border border-accent/30 bg-accent/[0.07] rounded-sm px-4 py-4 space-y-3">
+                      <div className="border border-accent/30 bg-accent/[0.07] rounded-xl px-4 py-4 space-y-3">
                         <p className="text-ink/80 text-base">
                           Reverts all finalised scorecards to active and clears the session finalised flag. New scorecards can be started.
                         </p>
                         <div className="flex gap-2">
                           <button
                             onClick={() => setSettingsUnfinaliseSession(false)}
-                            className="flex-1 py-2.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-sm uppercase tracking-wider"
+                            className="flex-1 py-2.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-xl uppercase tracking-wider"
                           >
                             Cancel
                           </button>
                           <button
                             onClick={unfinaliseSession}
                             disabled={settingsWorking}
-                            className="flex-1 py-2.5 text-sm text-accent-deep border border-accent/50 hover:border-accent/80 disabled:opacity-50 transition-colors rounded-sm uppercase tracking-wider"
+                            className="flex-1 py-2.5 text-sm text-accent-deep border border-accent/50 hover:border-accent/80 disabled:opacity-50 transition-colors rounded-xl uppercase tracking-wider"
                           >
                             {settingsWorking ? "…" : "Confirm"}
                           </button>
@@ -807,12 +807,12 @@ export default function CourseDashboardClient({
                     {!settingsFinaliseSession ? (
                       <button
                         onClick={() => setSettingsFinaliseSession(true)}
-                        className="w-full py-3 border border-accent/40 text-accent-deep/70 text-base tracking-[0.15em] uppercase hover:border-accent/70 hover:text-accent-deep transition-colors rounded-sm"
+                        className="w-full py-3 border border-accent/40 text-accent-deep/70 text-base tracking-[0.15em] uppercase hover:border-accent/70 hover:text-accent-deep transition-colors rounded-xl"
                       >
                         Finalise Session
                       </button>
                     ) : (
-                      <div className="border border-accent/30 bg-accent/[0.07] rounded-sm px-4 py-4 space-y-3">
+                      <div className="border border-accent/30 bg-accent/[0.07] rounded-xl px-4 py-4 space-y-3">
                         <p className="text-ink/80 text-base">
                           {scorecards.filter(s => !s.finalised && s.playerNames.length > 0).length > 0
                             ? `${scorecards.filter(s => !s.finalised && s.playerNames.length > 0).length} active scorecard(s) will be discarded and those players released. Finalised scores are kept.`
@@ -822,14 +822,14 @@ export default function CourseDashboardClient({
                         <div className="flex gap-2">
                           <button
                             onClick={() => setSettingsFinaliseSession(false)}
-                            className="flex-1 py-2.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-sm uppercase tracking-wider"
+                            className="flex-1 py-2.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-xl uppercase tracking-wider"
                           >
                             Cancel
                           </button>
                           <button
                             onClick={finaliseSession}
                             disabled={settingsWorking}
-                            className="flex-1 py-2.5 text-sm text-accent-deep border border-accent/50 hover:border-accent/80 disabled:opacity-50 transition-colors rounded-sm uppercase tracking-wider"
+                            className="flex-1 py-2.5 text-sm text-accent-deep border border-accent/50 hover:border-accent/80 disabled:opacity-50 transition-colors rounded-xl uppercase tracking-wider"
                           >
                             {settingsWorking ? "Finalising…" : "Confirm"}
                           </button>
@@ -845,24 +845,24 @@ export default function CourseDashboardClient({
                   {!settingsVoidSession ? (
                     <button
                       onClick={() => setSettingsVoidSession(true)}
-                      className="w-full py-3 border border-rust/40 text-rust text-base tracking-[0.15em] uppercase hover:border-rust/40 hover:text-rust-deep transition-colors rounded-sm"
+                      className="w-full py-3 border border-rust/40 text-rust text-base tracking-[0.15em] uppercase hover:border-rust/40 hover:text-rust-deep transition-colors rounded-xl"
                     >
                       Clear All Live Data
                     </button>
                   ) : (
-                    <div className="border border-rust/40 bg-rust/[0.08] rounded-sm px-4 py-4 space-y-3">
+                    <div className="border border-rust/40 bg-rust/[0.08] rounded-xl px-4 py-4 space-y-3">
                       <p className="text-ink/80 text-base">This will delete all scorecards, scores, and player locks for {courseName}. This cannot be undone.</p>
                       <div className="flex gap-2">
                         <button
                           onClick={() => setSettingsVoidSession(false)}
-                          className="flex-1 py-2.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-sm uppercase tracking-wider"
+                          className="flex-1 py-2.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-xl uppercase tracking-wider"
                         >
                           Cancel
                         </button>
                         <button
                           onClick={voidLiveSession}
                           disabled={settingsWorking}
-                          className="flex-1 py-2.5 text-sm text-rust-deep border border-rust/40 hover:border-rust/70 disabled:opacity-50 transition-colors rounded-sm uppercase tracking-wider"
+                          className="flex-1 py-2.5 text-sm text-rust-deep border border-rust/40 hover:border-rust/70 disabled:opacity-50 transition-colors rounded-xl uppercase tracking-wider"
                         >
                           {settingsWorking ? "Clearing…" : "Void Session"}
                         </button>
