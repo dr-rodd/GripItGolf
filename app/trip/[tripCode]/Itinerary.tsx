@@ -43,6 +43,47 @@ function useMinute(): Date | null {
 
 const KIND_ICON = { golf: IconFlag, stay: IconHome, travel: IconArrowRight } as const
 
+/**
+ * A stay or a journey — how and where, nothing more.
+ *
+ * No card. Golf is what a trip is for, so it is the only thing that gets a
+ * white surface to stand on; a stay or a journey is context around it, read
+ * in passing rather than tapped. The icon and the two lines sit directly on
+ * the page, at roughly a third the visual weight of a round.
+ */
+function SubtleRow({
+  item, state, title, detail,
+}: {
+  item: ItineraryItem
+  state: 'past' | 'now' | 'future'
+  title: string
+  detail: string
+}) {
+  const Icon = KIND_ICON[item.kind]
+  // "Past" dims the whole row rather than reaching for a lighter text tier —
+  // the same technique the golf card uses. Nothing below ink/50 clears the
+  // 3:1 floor the style guide checks, so opacity is the only lever left.
+  return (
+    <li className={`flex items-center gap-2.5 px-1 py-1 transition-opacity duration-200 ${
+      state === 'past' ? 'opacity-50' : ''
+    }`}>
+      <span className="flex-shrink-0 text-ink/50">
+        <Icon size={13} />
+      </span>
+      <span className="flex-1 min-w-0 flex items-baseline gap-1.5">
+        <span className={`t-cap truncate text-ink/65 ${state === 'past' ? 'line-through decoration-ink/25' : ''}`}>
+          {title}
+        </span>
+        {detail && (
+          <span className="t-cap flex-shrink-0 text-ink/50">
+            {detail}
+          </span>
+        )}
+      </span>
+    </li>
+  )
+}
+
 export default function Itinerary({
   items, startDate, courseNames, days,
 }: {
@@ -89,29 +130,40 @@ export default function Itinerary({
               <ul className="flex flex-col gap-1.5">
                 {dayItems.map(item => {
                   const state = now ? itemState(item, date, now) : 'future'
-                  const Icon = KIND_ICON[item.kind]
                   const { title, detail } = describeItem(item, courseNames[item.courseId ?? ''])
+
+                  // Golf is what the trip is for, so it is the only thing
+                  // that gets a white card. A stay or a journey is context
+                  // around it — how and where, not a thing to tap — and sits
+                  // straight on the page instead.
+                  if (item.kind !== 'golf') {
+                    return (
+                      <SubtleRow key={item.id} item={item} state={state} title={title} detail={detail} />
+                    )
+                  }
+
+                  const Icon = KIND_ICON.golf
 
                   return (
                     <li
                       key={item.id}
-                      className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-opacity duration-200 ${
+                      className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 transition-opacity duration-200 ${
                         state === 'now'
                           ? 'border-accent/40 bg-accent/[0.07]'
                           : 'border-bark/12 bg-surface'
                       } ${state === 'past' ? 'opacity-50' : ''}`}
                     >
                       <span
-                        className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${
+                        className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
                           state === 'now' ? 'text-accent-deep bg-accent/[0.14]' : 'text-bark bg-bark/[0.06]'
                         }`}
                       >
-                        <Icon size={15} />
+                        <Icon size={16} />
                       </span>
 
                       <span className="flex-1 min-w-0">
                         <span
-                          className={`block t-card truncate ${
+                          className={`block t-card font-medium truncate ${
                             state === 'past' ? 'text-ink/80 line-through decoration-ink/25' : 'text-ink'
                           }`}
                         >

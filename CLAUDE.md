@@ -509,7 +509,24 @@ The schema uses one wide table with a `kind` column and a check constraint that 
 
 `Itinerary.tsx` shows the running order and **dims what has already happened**, so the eye lands on what is next. A day whose items are all past fades as a whole; the item happening now carries the emerald tint and the live dot.
 
+**Golf is the only thing that gets a white card.** It is what a trip is for, so it is the main event — a `bg-surface` tile with a bigger icon box and a bold title, exactly the tile creation's own builder shows. A stay or a journey is context around it, not a thing to tap: `SubtleRow` sits straight on the page with no card, no border, at roughly a third the visual weight, and reads the whole thing as "how and where" in one glance. "Past" dims the row with `opacity-50` rather than reaching for a lighter text tier — nothing below `ink/50` clears the style guide's 3:1 floor, and the golf card already used this technique before subtle rows existed.
+
 `itemState` takes `now` as an argument and is judged by day first, then by tee time — a round is roughly four and a half hours plus ten minutes a group. The component reads the clock through `useSyncExternalStore`, bucketed to the minute: the server has no idea what time it is where the reader is, so rendering against `new Date()` directly is a hydration error, and a snapshot that changed every render would loop.
+
+### Editing after creation
+
+The gear icon in trip settings opens `ItineraryEditor.tsx` — the same `ItineraryBuilder` creation uses, wrapped to load what is already saved and write back only what changed. Its own full-screen overlay rather than living inside the "Trip details" sheet: the builder already pins a footer of its own to the bottom of the screen, and a second one competing with it is exactly the glitch that footer exists to avoid.
+
+**Stays and journeys are always editable.** Nothing downstream depends on them, so add, move and remove all work regardless of the trip's lifecycle state.
+
+**Golf is editable only while `canEditGolf` — draft, and no round on the trip has a score or a live session anywhere.** A course change would orphan real data, so editing golf at all is refused rather than any single edit — `ItineraryBuilder`'s `lockGolf` prop hides the remove button on golf tiles and disables the Golf add button, with a banner explaining why. `canEditGolf` is computed server-side in `setup/page.tsx` on every load; **Unlock does not clear it** — the lifecycle rule is explicit that scores are never touched by that switch, so a draft trip can still be carrying them from an earlier live spell, and this is checked directly rather than inferred from `setup_status` alone.
+
+**The write path never risks a round with real data in it** (`lib/itineraryStore.ts`). `lib/itinerarySync.ts` is the pure half — `diffItems` turns the edited list into inserts, updates and deletes by reusing `ItineraryBuilder`'s own `tmp-N` convention for a row that has not been saved yet, and `touchesGolf` is the same refusal check made again at the moment of the write, in case scores appeared on another device since the editor opened. The store itself:
+
+1. Deletes what's gone.
+2. Moves every surviving row to its final slot in **one** `upsert` call. `uq_itinerary_slot` is `DEFERRABLE INITIALLY DEFERRED`, so two rows swapping positions inside one statement never trips over each other — verified directly against Postgres. A sequence of separate `UPDATE`s would not have been safe: the constraint is only deferred within a single statement, and each Supabase call is its own.
+3. Inserts what's new — by then, everything else is already in its final place, so a new row can only ever land in a genuinely empty slot.
+4. If golf changed: deletes the round behind a removed golf item (refusing, with a message, if `scores` or `live_rounds` exist for it — the belt to `canEditGolf`'s braces), updates `course_id`/`scheduled_date` for a moved or recoursed one, and creates a fresh round — with `round_handicaps` for every current player, same placeholder formula as creation — for a new one. Existing round numbers are never renumbered; a new round simply takes the next one.
 
 ## Trip lifecycle
 
@@ -568,7 +585,7 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:bracket-layout` | Column geometry and connectors |
 | `test:bracket-render` | The bracket component at every size, singles and pairs |
 | `test:progress` | Recording and correcting winners, and the cascade |
-| `test:itinerary` | The running order — golf, stay and travel items, and the rounds they generate |
+| `test:itinerary` | The running order — golf, stay and travel items, the rounds they generate, and diffing an edit back into writes |
 | `test:trip-form` | Trip creation |
 | `test:leaderboard` | Every board, live vs finalised, score ownership, per-board rules, two team boards on two sheets, and old trips read through the shim |
 | `test:recognition` | The per-trip cookie, the personal summary, the greeting |

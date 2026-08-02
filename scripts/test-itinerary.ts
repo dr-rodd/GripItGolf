@@ -20,6 +20,7 @@ import {
   addStay, nightsAvailable,
   MAX_TEE_TIMES, MAX_NIGHTS,
 } from '../lib/itinerary'
+import { isTempId, diffItems, toItemRow, touchesGolf } from '../lib/itinerarySync'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -344,6 +345,90 @@ section('How many nights the form can offer')
   eq(nightsAvailable(4, 5), 1, 'from the last, one')
   eq(nightsAvailable(9, 5), 1, 'and never fewer than one, whatever it is asked')
   eq(nightsAvailable(0, 60), MAX_NIGHTS, 'nor more than the cap')
+}
+
+// ─── Saving an edit back ────────────────────────────────────────
+//
+// lib/itinerarySync.ts turns an edited list into what to write. The store
+// that actually writes it (lib/itineraryStore.ts) is not exercised here —
+// no database in this suite — but everything it decides *from* is pure and
+// lives here instead.
+
+section('An id issued locally is not a saved row yet')
+{
+  ok(isTempId('tmp-0'), 'a freshly issued id is temporary')
+  ok(isTempId('tmp-41'), 'whatever number it carries')
+  ok(!isTempId('11111111-1111-1111-1111-111111111111'), 'a real id is not')
+  ok(!isTempId(''), 'nor is nothing at all')
+}
+
+section('The diff between what was loaded and what is about to be saved')
+{
+  const golf: ItineraryItem = { id: 'g1', dayIndex: 0, position: 0, kind: 'golf', courseId: 'c1', teeCount: 1 }
+  const stay: ItineraryItem = { id: 's1', dayIndex: 1, position: 0, kind: 'stay', stayName: 'Inn' }
+  const before = [golf, stay]
+
+  eq(diffItems(before, before), { toInsert: [], toUpdate: before, toDelete: [] },
+    'nothing changed reads as everything surviving, nothing new or gone')
+
+  const removed = [golf]
+  eq(diffItems(before, removed).toDelete, ['s1'], 'a dropped item is the only one deleted')
+  eq(diffItems(before, removed).toUpdate, [golf], 'and the survivor is still written')
+
+  const added: ItineraryItem = { id: 'tmp-0', dayIndex: 0, position: 1, kind: 'travel', fromPlace: 'A', toPlace: 'B' }
+  const withNew = [...before, added]
+  eq(diffItems(before, withNew).toInsert, [added], 'a temp-id item is new, whatever kind it is')
+  eq(diffItems(before, withNew).toUpdate, before, 'and the ones that already existed are unaffected')
+
+  const moved = [{ ...golf, position: 5 }, stay]
+  eq(diffItems(before, moved).toUpdate.find(i => i.id === 'g1')?.position, 5,
+    'a moved item carries its new slot into the write')
+  eq(diffItems(before, moved).toInsert, [], 'moving is not adding')
+  eq(diffItems(before, moved).toDelete, [], 'nor is it removing')
+}
+
+section('A row is only ever one kind of thing')
+{
+  const golf: ItineraryItem = {
+    id: 'g1', dayIndex: 0, position: 0, kind: 'golf', courseId: 'c1', teeTime: '13:00', teeCount: 2,
+  }
+  const row = toItemRow('trip-1', golf)
+  eq(row.course_id, 'c1', 'golf carries its course')
+  eq(row.tee_time, '13:00', 'and its time')
+  eq(row.stay_name, null, 'but nothing a stay would carry')
+  eq(row.travel_mode, null, 'nor a journey')
+
+  const travel: ItineraryItem = {
+    id: 'tmp-3', dayIndex: 0, position: 0, kind: 'travel',
+    travelMode: 'car', fromPlace: 'Dublin', toPlace: 'Carne', durationMins: 240,
+  }
+  const trow = toItemRow('trip-1', travel)
+  eq(trow.course_id, null, 'a journey carries no course')
+  eq(trow.from_place, 'Dublin', 'but does carry where it starts')
+  eq('id' in trow, false, 'and a not-yet-saved item sends no id at all')
+
+  eq('id' in toItemRow('trip-1', golf), true, 'while a real one sends its own')
+  eq(toItemRow('trip-1', golf).id, 'g1', 'unchanged')
+}
+
+section('Whether a save would touch golf at all')
+{
+  const golf: ItineraryItem = { id: 'g1', dayIndex: 0, position: 0, kind: 'golf', courseId: 'c1', teeCount: 1 }
+  const stay: ItineraryItem = { id: 's1', dayIndex: 1, position: 0, kind: 'stay', stayName: 'Inn' }
+  const before = [golf, stay]
+
+  ok(!touchesGolf(before, before), 'nothing changed touches nothing')
+  ok(!touchesGolf(before, [golf, { ...stay, stayName: 'A different inn' }]),
+    'a stay changing on its own does not')
+
+  ok(touchesGolf(before, [{ ...golf, courseId: 'c2' }, stay]), 'a different course does')
+  ok(touchesGolf(before, [{ ...golf, dayIndex: 1 }, stay]), 'moving golf to another day does')
+  ok(!touchesGolf(before, [{ ...golf, teeTime: '09:00' }, stay]),
+    'but a tee time on its own does not — no round column holds it')
+
+  const newGolf: ItineraryItem = { id: 'tmp-1', dayIndex: 1, position: 1, kind: 'golf', courseId: 'c3', teeCount: 1 }
+  ok(touchesGolf(before, [...before, newGolf]), 'adding a round does')
+  ok(touchesGolf(before, [stay]), 'and removing one does')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

@@ -8,11 +8,13 @@ import {
   pairsBlockedReason, type TeamNoun,
 } from '@/lib/teamLimits'
 import MatchplayPanel from './MatchplayPanel'
+import ItineraryEditor from './ItineraryEditor'
 import DateField from '@/app/components/DateField'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import TripHeader from '@/app/components/TripHeader'
 import SupportLink from '@/app/components/SupportLink'
-import { IconSettings, IconX } from '@/app/components/icons'
+import { IconSettings, IconX, IconFlag } from '@/app/components/icons'
+import type { ItineraryItem } from '@/lib/itinerary'
 import {
   type Leaderboard, needsTeams, needsPairings, hasMatchplay, boardTitle,
 } from '@/lib/leaderboards'
@@ -47,6 +49,8 @@ type Player = {
 }
 
 type RoundInfo = { id: string; round_number: number; courseName: string }
+
+type Course = { id: string; name: string; location: string | null }
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -131,18 +135,35 @@ export default function TripSetupClient({
   players: initialPlayers,
   memberships: initialMemberships,
   rounds,
+  itinerary,
+  courses,
+  canEditGolf,
 }: {
   trip: Trip
   teams: Team[]
   players: Player[]
   memberships: Membership[]
   rounds: RoundInfo[]
+  /** The running order — golf, stays and journeys. Empty for a trip made
+   * before the itinerary existed; the editor still opens on one and lets an
+   * organiser start building it from nothing. */
+  itinerary: ItineraryItem[]
+  /** The platform course list, for the golf sheet inside the editor. */
+  courses: Course[]
+  /**
+   * Whether golf can be edited at all. False once any round on the trip has
+   * a score or a live session recorded — a course change would orphan real
+   * data, so the editor locks golf rather than risk it. Stays and journeys
+   * are unaffected either way.
+   */
+  canEditGolf: boolean
 }) {
   // Trip fields
   const [name, setName] = useState(trip.name)
   const [startDate, setStartDate] = useState(trip.start_date ?? '')
   const [endDate, setEndDate] = useState(trip.end_date ?? '')
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [itineraryOpen, setItineraryOpen] = useState(false)
   // What the trip is playing for. A list of complete competitions, replacing
   // the old object of flags — see lib/leaderboards.ts. Nothing on this screen
   // reads `trips.formats` any more: every question it used to answer is now
@@ -462,9 +483,41 @@ export default function TripSetupClient({
                   The trip is live. Unlock it below to change these.
                 </p>
               )}
+
+              <div className="pt-2 border-t border-bark/12">
+                <button
+                  type="button"
+                  disabled={locked}
+                  onClick={() => { setDetailsOpen(false); setItineraryOpen(true) }}
+                  className="w-full flex items-center gap-3 py-3.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <span className="flex-shrink-0 w-9 h-9 rounded-lg bg-bark/[0.06] flex items-center justify-center text-bark">
+                    <IconFlag size={16} />
+                  </span>
+                  <span className="flex-1 min-w-0 text-left">
+                    <span className="block t-card text-ink">Itinerary</span>
+                    <span className="block t-cap text-ink/65 mt-0.5">
+                      Courses, tee times, stays and journeys
+                    </span>
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
+      )}
+
+      {itineraryOpen && (
+        <ItineraryEditor
+          tripId={trip.id}
+          startDate={startDate || null}
+          endDate={endDate || null}
+          courses={courses}
+          initialItems={itinerary}
+          canEditGolf={canEditGolf}
+          players={players}
+          onClose={() => setItineraryOpen(false)}
+        />
       )}
 
       <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">

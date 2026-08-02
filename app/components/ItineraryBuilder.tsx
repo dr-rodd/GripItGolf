@@ -95,19 +95,21 @@ function Tile({
  * hands back here, so `.itin-tile` exists purely to give the reduced-motion
  * rule in globals.css something to switch off.
  */
-function SortableTile(props: {
-  item: ItineraryItem; courseName?: string | null; onRemove: () => void
+function SortableTile({
+  item, courseName, onRemove, locked = false,
+}: {
+  item: ItineraryItem; courseName?: string | null; onRemove: () => void; locked?: boolean
 }) {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
-  } = useSortable({ id: props.item.id })
+  } = useSortable({ id: item.id, disabled: locked })
 
   return (
     <div
       ref={setNodeRef}
-      {...listeners}
+      {...(locked ? {} : listeners)}
       {...attributes}
-      className="itin-tile touch-none mb-2"
+      className={`itin-tile mb-2 ${locked ? '' : 'touch-none'}`}
       style={{
         transform: CSS.Translate.toString(transform),
         transition,
@@ -116,7 +118,7 @@ function SortableTile(props: {
         opacity: isDragging ? 0.35 : 1,
       }}
     >
-      <Tile {...props} />
+      <Tile item={item} courseName={courseName} onRemove={locked ? undefined : onRemove} />
     </div>
   )
 }
@@ -240,6 +242,7 @@ function Sheet({
 
 export default function ItineraryBuilder({
   startDate, endDate, courses, items, onChange, onContinue, blockedReason = null,
+  lockGolf = false, continueLabel = 'Proceed to Add Players',
 }: {
   startDate: string | null
   endDate: string | null
@@ -250,6 +253,22 @@ export default function ItineraryBuilder({
   onContinue: () => void
   /** Why the trip cannot be taken further yet, if anything. */
   blockedReason?: string | null
+  /**
+   * What the last day's button says. Creation is walking towards the next
+   * step of the wizard; the settings editor is walking towards a save, and
+   * "Proceed to Add Players" says something that has already happened.
+   */
+  continueLabel?: string
+  /**
+   * Golf cannot be added, moved or removed — only stays and journeys can.
+   *
+   * Used when the trip already has scores recorded somewhere: a course
+   * change would orphan real data, so editing golf at all is what has to be
+   * refused rather than any single edit. The golf tiles still show, so the
+   * running order still reads as a whole — they simply carry no remove
+   * button and cannot be dragged.
+   */
+  lockGolf?: boolean
 }) {
   const days = dayCount(startDate, endDate)
   const [openDay, setOpenDay] = useState(0)
@@ -365,6 +384,16 @@ export default function ItineraryBuilder({
           forward under them, and the home indicator below that. */}
       <div className="pb-48">
 
+        {lockGolf && (
+          <div className="flex items-start gap-3 px-4 py-3 mb-4 bg-accent/10 border border-accent/40 rounded-xl">
+            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0" />
+            <p className="text-accent text-[13px] leading-snug">
+              Scores already exist on this trip, so rounds are locked. Stays and journeys can
+              still be added, moved or removed.
+            </p>
+          </div>
+        )}
+
         {/* Day picker. Horizontal, because a week does not fit vertically
             above the content it is filtering. */}
         <div className="-mx-4 px-4 overflow-x-auto mb-5">
@@ -409,6 +438,7 @@ export default function ItineraryBuilder({
                 item={item}
                 courseName={courseName(item.courseId)}
                 onRemove={() => onChange(removeItem(items, item.id))}
+                locked={lockGolf && item.kind === 'golf'}
               />
             ))}
           </div>
@@ -433,12 +463,14 @@ export default function ItineraryBuilder({
           <div className="grid grid-cols-3 gap-2">
             {(['golf', 'stay', 'travel'] as const).map(kind => {
               const Icon = KIND_ICON[kind]
+              const disabled = lockGolf && kind === 'golf'
               return (
                 <button
                   key={kind}
                   type="button"
+                  disabled={disabled}
                   onClick={() => openSheet(kind)}
-                  className="flex flex-col items-center justify-center gap-1.5 min-h-[64px] rounded-xl border border-bark/25 bg-surface text-ink hover:border-accent transition-colors duration-150"
+                  className="flex flex-col items-center justify-center gap-1.5 min-h-[64px] rounded-xl border border-bark/25 bg-surface text-ink hover:border-accent transition-colors duration-150 disabled:opacity-30 disabled:hover:border-bark/25 disabled:cursor-not-allowed"
                 >
                   <span className="flex items-center gap-1 text-accent">
                     <IconPlus size={14} /><Icon size={18} />
@@ -462,7 +494,7 @@ export default function ItineraryBuilder({
                 : 'border-bark/25 bg-surface text-ink hover:border-bark/40'
             }`}
           >
-            {lastDay ? 'Proceed to Add Players' : `Continue to Day ${openDay + 2}`}
+            {lastDay ? continueLabel : `Continue to Day ${openDay + 2}`}
           </button>
 
           {lastDay && blockedReason && (
