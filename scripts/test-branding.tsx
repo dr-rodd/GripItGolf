@@ -353,6 +353,43 @@ section('The bottom tab bar')
   ok(css.includes('.has-tabbar'), 'and the room is a token, not a magic number per page')
 }
 
+// ─── The support footer ─────────────────────────────────────────
+
+section('The footer is sitewide, once inside a trip')
+{
+  // Every screen inside a trip except the ones where score entry happens —
+  // it used to be only the trip hub and the leaderboard, so most of a trip
+  // never showed it at all. Settings has no tab bar of its own, but it still
+  // carries the footer.
+  const carriers = [
+    'app/trip/[tripCode]/page.tsx',
+    'app/trip/[tripCode]/leaderboard/page.tsx',
+    'app/trip/[tripCode]/course/page.tsx',
+    'app/trip/[tripCode]/teams/page.tsx',
+    'app/trip/[tripCode]/players/page.tsx',
+    'app/trip/[tripCode]/matchplay/page.tsx',
+    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
+  ]
+  for (const f of carriers) {
+    ok(read(f).includes('<SupportLink'), `${f.split('/').slice(-2).join('/')} carries the footer`)
+  }
+
+  // The one screen it must never sit near: the guide is explicit that it
+  // "must not sit anywhere near someone entering a score."
+  const scoring = read('app/trip/[tripCode]/course/[roundNumber]/page.tsx')
+  ok(!scoring.includes('SupportLink'), 'the live scoring dashboard does not carry it')
+  const dashboard = read('app/scoring/[slug]/CourseDashboardClient.tsx')
+  ok(!dashboard.includes('SupportLink'), 'nor does the shared scoring client behind it')
+
+  // A drawn bracket used to lose both the tab bar and the footer at once —
+  // TabBar lived inside the matchplay page's EmptyState, so it vanished the
+  // moment there was a real bracket to show instead.
+  const matchplay = read('app/trip/[tripCode]/matchplay/page.tsx')
+  const emptyState = matchplay.slice(matchplay.indexOf('function EmptyState'))
+  ok(!emptyState.includes('<TabBar'), 'the tab bar no longer hides inside the empty state')
+  ok(!emptyState.includes('<SupportLink'), 'and neither does the footer')
+}
+
 // ─── The sticky header ─────────────────────────────────────────
 
 section('The mark is the header, and the way back')

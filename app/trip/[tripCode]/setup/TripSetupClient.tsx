@@ -11,6 +11,7 @@ import MatchplayPanel from './MatchplayPanel'
 import DateField from '@/app/components/DateField'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import TripHeader from '@/app/components/TripHeader'
+import SupportLink from '@/app/components/SupportLink'
 import { IconSettings, IconX } from '@/app/components/icons'
 import {
   type Leaderboard, needsTeams, needsPairings, hasMatchplay, boardTitle,
@@ -888,6 +889,8 @@ export default function TripSetupClient({
             <p className="text-rust-deep text-sm whitespace-nowrap">{error}</p>
           </div>
         )}
+
+        <SupportLink className="pb-4" />
 
       </div>
     </main>

@@ -105,6 +105,8 @@ The supplied stacked file has a cream background baked in, a shade off our own. 
 
 `app/components/TripHeader.tsx` — the mark at the top of every screen past the landing page, and the way back: `backTo` is the trip hub from inside a trip, and `/` from the screens that come before one. 52px, `HEADER_H` in `headerMetrics.ts` so the leaderboard's own sticky column row can clear it.
 
+**The mark itself is sized by `LINE_W`, not by the bar's height.** `HEADER_H` is the right height for the bar; the mark inside it wants to be bigger than that alone implies, or the bar reads as mostly whitespace. `LINE_W` (132) sets the line mark's width, and its height follows the artwork's own ratio — every named-page title (`TitleMark`) sizes off that same derived height, so bumping one bumps all of them together.
+
 **The board card must not carry `overflow-hidden`.** `position: sticky` measures its offset from the nearest scrollport, and an ancestor with `overflow: hidden` is one — so `top: HEADER_H` counted from the card's own top edge rather than the viewport's, and dropped the column headings 52px down the card onto whoever was leading. The corners round without it; `test:scorecard` pins it.
 
 The mark is the same on every screen; what changes is the word in it.
@@ -464,12 +466,16 @@ The summary reuses `totalAfterDiscard` — the trip's own discard rule — so th
 
 ## Support link
 
-An optional "support the app" link in the footer of the trip hub and the leaderboard. `app/components/SupportLink.tsx`, reading `NEXT_PUBLIC_DONATION_URL`.
+An optional "support the app" link in the footer, `app/components/SupportLink.tsx`, reading `NEXT_PUBLIC_DONATION_URL`.
 
+- **Sitewide, once inside a trip.** Every trip screen carries it — hub, leaderboard, settings, teams, players, the round picker, matchplay — not only the hub and the leaderboard. It has no server-only dependency, so it renders the same from a server page or from a `'use client'` one (settings imports it directly).
+- **Never on the scoring pages.** `/trip/[tripCode]/course/[roundNumber]` and the shared `CourseDashboardClient` behind it carry no footer — it must not sit anywhere near someone entering a score. The round *picker* (`/trip/[tripCode]/course`) is not scoring itself and does carry it.
 - **Unset means gone.** No link, no wrapper, no gap — `SupportLink` returns `null`, so removing the variable removes the feature completely.
 - The value is sanitised before it becomes an `href` (`lib/donation.ts`). An href is one of the few places a bad string becomes executable, so `javascript:` and `data:` are refused and render nothing.
 - `target="_blank"` with **both** `noopener` and `noreferrer`.
-- Never a modal, banner or popup, and never on the scoring pages — it must not sit anywhere near someone entering a score.
+- Never a modal, banner or popup.
+
+`test:branding` pins the carrier list and the scoring exclusion. It also caught a real bug while the footer was being made sitewide: `/trip/[tripCode]/matchplay` rendered its `<TabBar>` from inside the `EmptyState` component, so a drawn bracket showed neither the tab bar nor the footer — both are now rendered once, at the page's own root.
 
 ## The itinerary
 
@@ -553,20 +559,25 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | Suite | Covers |
 |---|---|
 | `test:formats` | The format model and all three generations of stored settings |
-| `test:setup-flow` | The decision tree, team size limits, pairs blocking |
+| `test:leaderboards` | The leaderboard model — slots, team sheets, storage round-trip |
+| `test:setup-flow` | Team size limits and pairs blocking, read off the boards |
+| `test:team-sets` | Team sheets in isolation — naming, membership, the finalise gate per sheet |
 | `test:matchplay` | Bracket generation and seeding |
 | `test:entrants` | Player/pairing naming, and the real column-mapping functions |
 | `test:custom-points` | The prize table and discard rules |
 | `test:bracket-layout` | Column geometry and connectors |
 | `test:bracket-render` | The bracket component at every size, singles and pairs |
 | `test:progress` | Recording and correcting winners, and the cascade |
+| `test:itinerary` | The running order — golf, stay and travel items, and the rounds they generate |
 | `test:trip-form` | Trip creation |
-| `test:leaderboard` | Every board, live vs finalised, score ownership, per-board rules, and old trips read through the shim |
-| `test:admin` | Optional email, derived trip status, admin session signing |
+| `test:leaderboard` | Every board, live vs finalised, score ownership, per-board rules, two team boards on two sheets, and old trips read through the shim |
 | `test:recognition` | The per-trip cookie, the personal summary, the greeting |
+| `test:admin` | Optional email, derived trip status, admin session signing |
 | `test:support` | The donation link, and that it vanishes when unconfigured |
 | `test:scorecard` | Every score shape, and that the nett/no-return arithmetic is untouched |
-| `test:branding` | The green dot, the wordmark, back controls, contrast and type size |
+| `test:branding` | The green dot, the wordmark, back controls, contrast, type size, and the footer/tab-bar carrier list |
+
+Order above follows `npm test`'s own chain in `package.json`, which is worth keeping in step: it is the fastest way to tell whether a new suite was wired in or just left as a standalone script.
 
 **Mutation testing is the standard, not an extra.** Break the code deliberately, confirm a test fails, restore. It has repeatedly found suites that passed while testing nothing — most recently a pair-size assertion written against the constant it was meant to pin, so changing `PAIR_SIZE` to 3 left every check green.
 

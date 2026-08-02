@@ -7,6 +7,7 @@ import { MAIN_SET, setOf, teamsOnSheet, membersOf } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { playerEntrant, pairEntrant, type Entrant } from '@/lib/matchplayEntrants'
 import BackButton from '@/app/components/BackButton'
+import SupportLink from '@/app/components/SupportLink'
 import TabBar from '@/app/components/TabBar'
 import TripHeader from '@/app/components/TripHeader'
 import MatchplayBracket, {
@@ -152,6 +153,11 @@ export default async function MatchplayPage({
           />
         )}
       </div>
+      {/* Rendered once here rather than inside EmptyState, so a drawn bracket
+          keeps the tab bar and the footer exactly like every other screen —
+          before this, both vanished the moment there was a bracket to show. */}
+      <SupportLink className="px-4 pb-12" />
+      <TabBar tripCode={tripCode} />
     </div>
   )
 }
@@ -175,7 +181,6 @@ function EmptyState({
       >
         Trip Setup
       </Link>
-      <TabBar tripCode={tripCode} />
     </div>
   )
 }

@@ -9,6 +9,7 @@ import { fetchMemberships } from '@/lib/teamMembers'
 import { teamNoun } from '@/lib/teamLimits'
 import BackButton from '@/app/components/BackButton'
 import TripTeamsClient from './TripTeamsClient'
+import SupportLink from '@/app/components/SupportLink'
 import TabBar from '@/app/components/TabBar'
 import TripHeader from '@/app/components/TripHeader'
 
@@ -105,6 +106,7 @@ export default async function TripTeamsPage({
           }))}
         />
       </div>
+      <SupportLink className="px-4 pb-12" />
       <TabBar tripCode={tripCode} />
     </div>
   )

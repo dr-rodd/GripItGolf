@@ -17,7 +17,10 @@ export const HEADER_H = 52
 
 /** Width of the mark at each end of the journey. */
 export const HERO_W = 196
-export const LINE_W = 118
+// Slightly larger than the mark first shipped at — the header bar itself
+// (HEADER_H) is the right height, but the mark sat small inside it, leaving
+// more air above and below than the bar's own height explains.
+export const LINE_W = 132
 
 /** How far below the header the mark stands at rest. */
 export const HERO_TOP = 58

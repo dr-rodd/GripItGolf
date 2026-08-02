@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import SupportLink from '@/app/components/SupportLink'
 import TabBar from '@/app/components/TabBar'
 import TripHeader from '@/app/components/TripHeader'
 
@@ -80,6 +81,7 @@ export default async function TripCoursePortalPage({
           })}
         </div>
       </div>
+      <SupportLink className="px-4 pb-12" />
       <TabBar tripCode={tripCode} />
     </div>
   )
