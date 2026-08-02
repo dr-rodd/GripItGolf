@@ -243,6 +243,27 @@ export function needsPairings(boards: readonly Leaderboard[]): boolean {
   return boards.some(lb => lb.audience === 'team' && lb.competition === 'matchplay')
 }
 
+/**
+ * Why this trip cannot go live yet, or null if it can.
+ *
+ * Read off the boards, because the boards are what a trip plays for. This
+ * used to be answered from `trips.formats`, which a new trip carries as the
+ * defaults — so it said yes to a trip with nothing to play for at all, and
+ * never noticed a pairs draw chosen in this model.
+ */
+export function finaliseBlockedReason(
+  boards: readonly Leaderboard[],
+  teamCount: number,
+): string | null {
+  if (boards.length === 0) return 'Choose what this trip is playing for first.'
+  if (needsTeams(boards) && teamCount === 0) {
+    return needsPairings(boards)
+      ? 'Your draw is between pairings — pick them first.'
+      : 'A team leaderboard needs teams — pick them first.'
+  }
+  return null
+}
+
 // ─── Naming ────────────────────────────────────────────────────
 
 /** "Team better ball", "Strokes", "Pairs matchplay" — a board's tab. */

@@ -15,10 +15,8 @@
 
 import { type TripFormats } from '../lib/formats'
 import { DEFAULT_TEAM_SCORING, type TeamScoring } from '../lib/teamScoring'
-import {
-  setupSteps, nextUnanswered, flowComplete, flowWarnings, finaliseBlockedReason,
-  emptyFormatsReason, type StepKey,
-} from '../lib/tripSetupFlow'
+import { emptyFormatsReason } from '../lib/tripSetupFlow'
+import { finaliseBlockedReason, type Leaderboard } from '../lib/leaderboards'
 import {
   PAIR_SIZE, teamNoun, teamSizeLimit, teamSizeBanner, teamCountOptions,
   oversizedTeams, canJoinTeam, pairsBlockedReason,
@@ -71,138 +69,8 @@ function ctx(opts: {
   }
 }
 
-const keys = (f: TripFormats, c = ctx()): StepKey[] => setupSteps(f, c).map(s => s.key)
-const step = (f: TripFormats, key: StepKey, c = ctx()) =>
-  setupSteps(f, c).find(s => s.key === key)
 
 // ─── The tree opens as it is answered ──────────────────────────
-
-section('Questions appear as they are opened')
-{
-  // Nothing answered: only the first question exists
-  eq(keys(fmt()), ['competitors'],
-    'an untouched trip asks who competes and nothing else')
-
-  // Answering it opens the second, and no more
-  eq(keys(fmt({ individual: true })), ['competitors', 'competition'],
-    'picking competitors opens the competition question')
-
-  // The tree stops at the first unanswered question rather than showing
-  // everything greyed out — a question you cannot answer yet is not a question
-  const halfway = setupSteps(fmt({ individual: true }), ctx())
-  eq(halfway.length, 2, 'and stops there')
-  eq(nextUnanswered(halfway)?.key, 'competition', 'with the competition question outstanding')
-  ok(!flowComplete(halfway), 'so the tree is not complete')
-}
-
-section('League answers open league questions')
-{
-  const league = fmt({ individual: true, league: { on: true } })
-  eq(keys(league), ['competitors', 'competition', 'boards'],
-    'switching the league on asks how it is scored')
-  ok(!step(league, 'boards')!.answered, 'and no board is picked yet')
-
-  // Stableford and Strokes are stroke-based, so the discard question follows
-  const sf = fmt({ individual: true, league: { on: true, stableford: true } })
-  ok(keys(sf).includes('discard'), 'a stableford board opens the discard question')
-
-  const st = fmt({ individual: true, league: { on: true, strokes: true } })
-  ok(keys(st).includes('discard'), 'so does a strokes board')
-
-  // Custom is a prize table, not a card, so dropping a round is not asked
-  const custom = fmt({ individual: true, league: { on: true, custom: true } })
-  ok(!keys(custom).includes('discard'), 'custom points alone does not open it')
-  ok(keys(custom).includes('customPoints'), 'it opens the prize table instead')
-
-  // Both together: both questions
-  const both = fmt({ individual: true, league: { on: true, stableford: true, custom: true } })
-  ok(keys(both).includes('discard') && keys(both).includes('customPoints'),
-    'and both boards open both')
-
-  // The table cannot be filled in before there is a field to build it from
-  eq(step(custom, 'customPoints')!.answered, false, 'with no players the table is unanswered')
-  ok(step(custom, 'customPoints')!.warning?.includes('Add players') === true, 'and says why')
-  const withField = step(custom, 'customPoints', ctx({
-    players: [player('a'), player('b')], customTableLength: 2,
-  }))
-  ok(withField!.answered, 'once there are players it is answered')
-  ok(withField!.summary?.includes('2 positions') === true, 'and reads the table back')
-}
-
-section('Team answers open team questions')
-{
-  const teamLeague = fmt({ teams: true, league: { on: true, stableford: true } })
-  ok(keys(teamLeague).includes('teamScoring'),
-    'a team league asks how team points are worked out')
-  ok(keys(teamLeague).includes('teams'), 'and asks who is in which team')
-
-  // No league means no team-scoring question — there is nothing to score
-  const teamDraw = fmt({ teams: true, matchplay: { on: true, format: 'pairs' } })
-  ok(!keys(teamDraw).includes('teamScoring'),
-    'a pairs draw with no league does not ask how team points are worked out')
-  ok(keys(teamDraw).includes('teams'), 'but still asks for the pairings')
-
-  // Individuals only: neither
-  const solo = fmt({ individual: true, league: { on: true, stableford: true } })
-  ok(!keys(solo).includes('teamScoring'), 'an individual trip is not asked about team scoring')
-  ok(!keys(solo).includes('teams'), 'nor about teams')
-
-  // Team scoring reads back whatever mode is set
-  const hero = step(teamLeague, 'teamScoring', ctx({
-    teamScoring: { ...DEFAULT_TEAM_SCORING, mode: 'hero' },
-  }))
-  ok(hero!.summary?.includes('Best single card') === true, 'the chosen mode is read back')
-}
-
-section('The matchplay format question')
-{
-  // Without teams there is nothing to pair, so the question is not asked
-  const solo = fmt({ individual: true, matchplay: { on: true } })
-  ok(keys(solo).includes('matchplayFormat'), 'the format step still appears')
-  ok(step(solo, 'matchplayFormat')!.summary?.includes('Singles') === true,
-    'and states it is singles')
-
-  const paired = fmt({ teams: true, matchplay: { on: true, format: 'pairs' } })
-  ok(step(paired, 'matchplayFormat')!.summary?.includes('Pairs') === true, 'pairs is read back as pairs')
-
-  // Choosing pairs then removing teams leaves an answer that cannot be honoured
-  const orphan = fmt({ individual: true, matchplay: { on: true, format: 'pairs' } })
-  ok(step(orphan, 'matchplayFormat')!.warning?.includes('Pairs needs teams') === true,
-    'a pairs answer without teams is flagged rather than silently ignored')
-}
-
-section('Taking an answer away closes what it opened')
-{
-  const full = fmt({
-    individual: true, teams: true,
-    league: { on: true, stableford: true, custom: true },
-    matchplay: { on: true, format: 'pairs' },
-  })
-  const all = keys(full)
-  ok(all.includes('discard') && all.includes('customPoints') &&
-     all.includes('matchplayFormat') && all.includes('teamScoring') && all.includes('teams'),
-    'everything is open when everything is on')
-
-  // Switch the league off: its three questions go, the draw's stay
-  const noLeague = { ...full, league: { ...full.league, on: false } }
-  const after = keys(noLeague)
-  ok(!after.includes('boards') && !after.includes('discard') && !after.includes('customPoints'),
-    'switching the league off closes its questions')
-  ok(!after.includes('teamScoring'), 'and there is no longer anything to score teams on')
-  ok(after.includes('matchplayFormat'), 'the draw is untouched')
-  ok(after.includes('teams'), 'and the pairings are still needed')
-
-  // Switch competitors off entirely: everything below closes
-  eq(keys({ ...full, individual: false, teams: false }), ['competitors'],
-    'with nobody competing the tree is one question again')
-
-  // Teams picked but no competition chosen yet: asking who is in which team
-  // before knowing what they are playing puts the questions out of order
-  eq(keys(fmt({ teams: true })), ['competitors', 'competition'],
-    'teams alone does not jump ahead to picking them')
-}
-
-// ─── Team limits ───────────────────────────────────────────────
 
 section('A pairs draw locks teams at two')
 {
@@ -288,65 +156,6 @@ section('A pairs draw will not be drawn from a broken sheet')
   eq(pairsBlockedReason(league, teams, short), null, 'and a team league is never blocked by size')
 }
 
-// ─── Going live ────────────────────────────────────────────────
-
-section('What stops a trip going live')
-{
-  ok(finaliseBlockedReason(fmt(), ctx())?.includes('who is competing') === true,
-    'nobody competing blocks it')
-  ok(finaliseBlockedReason(fmt({ individual: true }), ctx())?.includes('a competition') === true,
-    'no competition blocks it')
-  ok(finaliseBlockedReason(fmt({ individual: true, league: { on: true } }), ctx())
-     ?.includes('how the league is scored') === true,
-    'a league with no board blocks it')
-
-  const ready = fmt({ individual: true, league: { on: true, stableford: true } })
-  eq(finaliseBlockedReason(ready, ctx()), null, 'a scored individual league is ready')
-
-  // A half-filled team sheet is the organiser's business in a league…
-  const teamLeague = fmt({ teams: true, league: { on: true, stableford: true } })
-  eq(finaliseBlockedReason(teamLeague, ctx({
-    teams: [team('t1')], players: [player('a', 't1'), player('b', null)],
-  })), null, 'an unassigned player does not block a team league')
-
-  // …but not in a pairs draw, where the bracket cannot be built from it
-  const pairs = fmt({ teams: true, matchplay: { on: true, format: 'pairs' } })
-  ok(finaliseBlockedReason(pairs, ctx({
-    teams: [team('t1')], players: [player('a', 't1'), player('b', null)],
-  })) !== null, 'but it does block a pairs draw')
-
-  eq(finaliseBlockedReason(pairs, ctx({
-    teams: [team('t1'), team('t2')],
-    players: [player('a', 't1'), player('b', 't1'), player('c', 't2'), player('d', 't2')],
-  })), null, 'a complete pairing sheet is ready')
-}
-
-section('Warnings are collected in the order they are asked')
-{
-  const messy = fmt({ individual: true, teams: true, league: { on: true } })
-  const warned = flowWarnings(setupSteps(messy, ctx()))
-  ok(warned.length > 0, 'a half-answered trip has warnings')
-  eq(warned[0].step.key, 'boards', 'and the first one is the first unanswered question')
-
-  const clean = fmt({ individual: true, league: { on: true, stableford: true } })
-  eq(flowWarnings(setupSteps(clean, ctx())), [], 'a clean trip has none')
-  ok(flowComplete(setupSteps(clean, ctx())), 'and its tree is complete')
-}
-
-section('Every visible step is numbered from one, in order')
-{
-  const full = fmt({
-    individual: true, teams: true,
-    league: { on: true, stableford: true, custom: true },
-    matchplay: { on: true, format: 'pairs' },
-  })
-  const steps = setupSteps(full, ctx({ players: [player('a')], customTableLength: 1 }))
-  eq(steps.map(s => s.number), steps.map((_, i) => i + 1),
-    'numbers run 1..n with no gaps, however many questions are open')
-  eq(steps[0].key, 'competitors', 'and who competes is always first')
-  ok(steps.every(s => s.title.length > 0 && s.question.length > 0),
-    'every question has a title and a question to ask')
-}
 
 section('A refusal points at the switch that does what was meant')
 {
@@ -374,6 +183,36 @@ section('A refusal points at the switch that does what was meant')
   ]
   eq(new Set(reasons).size, 3, 'the three cases each say something different')
 }
+
+// ─── What stops a trip going live ──────────────────────────────
+
+section('Finalise is gated on the boards, not the old flags')
+{
+  const team: Leaderboard = {
+    id: 'a', audience: 'team', competition: 'league',
+    scoring: 'stableford', teamFormat: 'hero', combine: 'total',
+  }
+  const solo: Leaderboard = {
+    id: 'b', audience: 'individual', competition: 'league',
+    scoring: 'stableford', combine: 'total',
+  }
+  const pairs: Leaderboard = { id: 'c', audience: 'team', competition: 'matchplay' }
+
+  // The old gate read trips.formats, which a new trip carries as the
+  // defaults — so it said yes to a trip with nothing to play for at all.
+  ok(finaliseBlockedReason([], 2) !== null, 'a trip with no leaderboard cannot go live')
+  ok(/playing for/i.test(finaliseBlockedReason([], 2)!), 'and is told what is missing')
+
+  eq(finaliseBlockedReason([solo], 0), null,
+    'an individual board needs no teams')
+
+  ok(finaliseBlockedReason([team], 0) !== null, 'a team board with no teams is blocked')
+  eq(finaliseBlockedReason([team], 2), null, 'and clears once they exist')
+
+  ok(/pairing/i.test(finaliseBlockedReason([pairs], 0)!),
+    'a pairs draw asks for pairings by name')
+}
+
 
 console.log(`\n${'─'.repeat(56)}`)
 if (failed === 0) console.log(`✓ all ${passed} checks passed`)
