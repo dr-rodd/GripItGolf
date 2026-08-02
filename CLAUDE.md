@@ -105,6 +105,8 @@ The supplied stacked file has a cream background baked in, a shade off our own. 
 
 `app/components/TripHeader.tsx` — the mark at the top of every screen past the landing page, and the way back: `backTo` is the trip hub from inside a trip, and `/` from the screens that come before one. 52px, `HEADER_H` in `headerMetrics.ts` so the leaderboard's own sticky column row can clear it.
 
+**The board card must not carry `overflow-hidden`.** `position: sticky` measures its offset from the nearest scrollport, and an ancestor with `overflow: hidden` is one — so `top: HEADER_H` counted from the card's own top edge rather than the viewport's, and dropped the column headings 52px down the card onto whoever was leading. The corners round without it; `test:scorecard` pins it.
+
 The mark is the same on every screen; what changes is the word in it.
 
 **Settled everywhere.** The mark sits in the bar from the first pixel and never moves. These screens are read standing on a tee, and nothing on them should move that is not a score. `TripHeader` renders the position it is handed and has no opinion about what moves the mark — which is what let the driver change from a scrollbar to a tap without touching the animation itself.
@@ -168,7 +170,7 @@ Deliberately **absent from the scoring flow**, where the bottom of the screen is
 
 The old card drew rings and boxes in thin strokes, which turned a scorecard into a grid of outlines and made a bogey look like an event. **Most amateur holes are a bogey or a double**, so those two are a wash of bark low enough to group by eye and no more; the colour goes where the emphasis belongs, under par. `test:scorecard` pins the ordering and the ceiling so they cannot creep up.
 
-The scoring screens are the cream system now — white cards on cream, emerald summary bands, bark rules. **Tee swatches keep their real colours**, because a blue tee is blue: they are data, not brand, and each carries a hairline ring so the pale ones survive a white card.
+The scoring screens are the cream system now — white cards on cream, **bark** summary bands, bark rules. The Out / In / Total bands and the course banner are a wash of bark (`SC_BAND`, 7%), not emerald: green is the accent, and a scorecard that is half green stops the accent meaning anything. **Tee swatches keep their real colours**, because a blue tee is blue: they are data, not brand, and each carries a hairline ring so the pale ones survive a white card.
 
 - Touch targets minimum 48px
 - Leaderboard, scoring and bracket screens stay tight (4–16px). Generous spacing is for entry screens only

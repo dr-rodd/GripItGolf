@@ -53,11 +53,18 @@ interface Props {
   roundHandicaps: RoundHcp[]
 }
 
-// ─── Donegal Masters scorecard styling ─────────────────────────
+// ─── Scorecard styling ─────────────────────────────────────────
+//
+// A white card on cream with bark rules, like every other card in the app.
+// The summary bands are a wash of bark rather than emerald: green is the
+// accent, and a scorecard that is half green stops the accent meaning
+// anything. Nothing here is trying to look like paper any more.
 
 const SC_SF    = { fontFamily: 'var(--font-serif)' }
-const SC_MUTED = 'text-[rgba(43,33,24,0.62)]'
-const SC_DARK  = 'text-[#2B2118]'
+const SC_MUTED = 'text-ink/65'
+const SC_DARK  = 'text-ink'
+/** The Out / In / Total bands. Brown, to sit with the page rather than shout. */
+const SC_BAND  = 'rgba(74,55,40,0.07)'
 
 const firstName = (n: string) => n.split(' ')[0]
 
@@ -116,7 +123,7 @@ function EmptyState({ message }: { message: string }) {
   )
 }
 
-// ─── Parchment scorecard sheet ─────────────────────────────────
+// ─── The scorecard sheet ───────────────────────────────────────
 
 function ScorecardSheet({
   title, subtitle, players, round, holes, resolved, roundHandicaps, onClose,
@@ -166,19 +173,19 @@ function ScorecardSheet({
 
   const SummaryRow = ({ label, hs }: { label: string; hs: Hole[] }) => (
     <div
-      style={{ ...gridCols, background: 'rgba(10,157,86,0.12)' }}
-      className="px-3 py-2 items-center border-y border-[rgba(74,55,40,0.18)]"
+      style={{ ...gridCols, background: SC_BAND }}
+      className="px-3 py-2 items-center border-y border-bark/12"
     >
-      <span className="text-[13px] font-bold tracking-widest uppercase text-[#0A6B3C]" style={SC_SF}>{label}</span>
-      <span className="text-base font-bold text-[#0A6B3C]" style={SC_SF}>
+      <span className="text-[13px] font-bold tracking-widest uppercase text-ink/80" style={SC_SF}>{label}</span>
+      <span className="text-base font-bold text-ink" style={SC_SF}>
         {sumPar(hs, players[0]?.gender ?? 'M')}
       </span>
       {players.map(p => (
-        <span key={p.id} className="text-center text-base font-bold text-[#0A6B3C]" style={SC_SF}>
+        <span key={p.id} className="text-center text-base font-bold text-ink" style={SC_SF}>
           {sumGross(hs, p.id) > 0 ? sumGross(hs, p.id) : '—'}
         </span>
       ))}
-      <span className="text-right text-lg font-bold text-[#0A6B3C] font-[family-name:var(--font-display)]">
+      <span className="text-right text-lg font-bold text-ink font-[family-name:var(--font-display)]">
         {players.reduce((s, p) => s + sumPts(hs, p.id), 0)}
       </span>
     </div>
@@ -291,7 +298,7 @@ function ScorecardSheet({
                       )
                     })}
                     <span
-                      className={`text-right text-base ${rowPts > 0 ? 'text-[#0A6B3C] font-bold' : `${SC_MUTED} opacity-60`}`}
+                      className={`text-right text-base ${rowPts > 0 ? 'text-ink font-bold' : `${SC_MUTED} opacity-60`}`}
                       style={SC_SF}
                     >
                       {rowPts > 0 ? rowPts : '—'}
@@ -306,19 +313,19 @@ function ScorecardSheet({
               <>
                 {back.length > 0 && <SummaryRow label="In" hs={back} />}
                 <div
-                  style={{ ...gridCols, background: 'rgba(10,157,86,0.12)' }}
+                  style={{ ...gridCols, background: SC_BAND }}
                   className="px-3 py-2.5 items-center"
                 >
-                  <span className="text-sm font-bold tracking-widest uppercase text-[#0A6B3C]" style={SC_SF}>Tot</span>
-                  <span className="text-lg font-bold text-[#0A6B3C]" style={SC_SF}>
+                  <span className="text-sm font-bold tracking-widest uppercase text-ink/80" style={SC_SF}>Tot</span>
+                  <span className="text-lg font-bold text-ink" style={SC_SF}>
                     {sumPar(courseHoles, players[0]?.gender ?? 'M')}
                   </span>
                   {players.map(p => (
-                    <span key={p.id} className="text-center text-lg font-bold text-[#0A6B3C]" style={SC_SF}>
+                    <span key={p.id} className="text-center text-lg font-bold text-ink" style={SC_SF}>
                       {sumGross(courseHoles, p.id) > 0 ? sumGross(courseHoles, p.id) : '—'}
                     </span>
                   ))}
-                  <span className="text-right text-2xl font-extrabold text-[#0A6B3C] font-[family-name:var(--font-display)]">
+                  <span className="text-right text-2xl font-extrabold text-ink font-[family-name:var(--font-display)]">
                     {players.reduce((s, p) => s + sumPts(courseHoles, p.id), 0)}
                   </span>
                 </div>
@@ -417,14 +424,19 @@ function Board({
     alignItems: 'center',
   } as const
 
+  // No overflow-hidden on this card, deliberately. It would make the card its
+  // own scrollport, and the sticky row below would then measure its offset
+  // from the card's top edge rather than the viewport's — dropping the column
+  // headings exactly HEADER_H down the card and parking them on top of
+  // whoever is leading. The corners round without it.
   return (
-    <div className="bg-surface border border-bark/12 rounded-2xl overflow-hidden">
+    <div className="bg-surface border border-bark/12 rounded-2xl">
       {/* Sticky column headers */}
       <div
         // Sits directly under the wordmark header, which is 52px tall. A
         // hard 0 here would slide the column headings under the mark.
         style={{ ...gridStyle, top: HEADER_H }}
-        className="sticky z-10 px-3 py-1.5 bg-surface border-b border-bark/12"
+        className="sticky z-10 px-3 py-1.5 bg-surface border-b border-bark/12 rounded-t-2xl"
       >
         <span className="text-[12px] tracking-widest uppercase text-ink/65">Pos</span>
         <span className="text-[12px] tracking-widest uppercase text-ink/65">Name</span>

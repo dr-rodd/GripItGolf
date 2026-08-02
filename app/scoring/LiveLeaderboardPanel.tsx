@@ -190,7 +190,7 @@ export function InlineScorecard({
 
       {/* Front 9 */}
       {front9.map(({ hole, idx, ePar, eSI, gross, pts }) => (
-        <div key={hole.hole_number} className={`${grid} px-3 py-1.5 items-center border-b border-bark/12 ${idx % 2 === 1 ? "bg-accent/[0.10]" : ""}`}>
+        <div key={hole.hole_number} className={`${grid} px-3 py-1.5 items-center border-b border-bark/12 ${idx % 2 === 1 ? "bg-bark/[0.07]" : ""}`}>
           <span className={`text-sm font-semibold ${dark}`} style={sf}>{hole.hole_number}</span>
           <span className={`text-sm ${muted}`} style={sf}>{ePar}</span>
           <span className={`text-sm ${muted}`} style={sf}>{eSI}</span>
@@ -210,7 +210,7 @@ export function InlineScorecard({
 
       {/* Back 9 */}
       {back9.map(({ hole, idx, ePar, eSI, gross, pts }) => (
-        <div key={hole.hole_number} className={`${grid} px-3 py-1.5 items-center border-b border-bark/12 ${idx % 2 === 0 ? "bg-accent/[0.10]" : ""}`}>
+        <div key={hole.hole_number} className={`${grid} px-3 py-1.5 items-center border-b border-bark/12 ${idx % 2 === 0 ? "bg-bark/[0.07]" : ""}`}>
           <span className={`text-sm font-semibold ${dark}`} style={sf}>{hole.hole_number}</span>
           <span className={`text-sm ${muted}`} style={sf}>{ePar}</span>
           <span className={`text-sm ${muted}`} style={sf}>{eSI}</span>

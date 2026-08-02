@@ -1210,7 +1210,7 @@ export default function LiveScoringFlow({
             <div className="rounded-xl border border-bark/12 relative" style={{ background: "#FFFFFF" }}>
 
               {/* Course banner — scrolls with page, does not stick */}
-              <div className="rounded-t-xl px-4 py-3 border-b border-bark/25" style={{ background: "rgba(10,157,86,0.10)" }}>
+              <div className="rounded-t-xl px-4 py-3 border-b border-bark/25" style={{ background: "rgba(74,55,40,0.07)" }}>
                 <p className="text-ink text-base font-semibold" style={sf}>{courseNameLabel}</p>
               </div>
 
@@ -1246,7 +1246,7 @@ export default function LiveScoringFlow({
 
               {/* Front 9 */}
               {rows.slice(0, 9).map(({ hole, idx, isNR, gross, pts, ePar, eSI, yardage }) => (
-                <div key={hole.id} className={`${grid} px-3 py-2 items-center border-b border-bark/12 ${idx % 2 === 1 ? "bg-accent/[0.10]" : ""}`}>
+                <div key={hole.id} className={`${grid} px-3 py-2 items-center border-b border-bark/12 ${idx % 2 === 1 ? "bg-bark/[0.07]" : ""}`}>
                   <span className={`text-base font-semibold ${dark}`} style={sf}>{hole.hole_number}</span>
                   <span className={`text-base ${muted}`} style={sf}>{yardage ?? "—"}</span>
                   <span className={`text-base ${dark}`} style={sf}>{ePar}</span>
@@ -1268,7 +1268,7 @@ export default function LiveScoringFlow({
 
               {/* Back 9 — pos = idx+1; bg when idx is even (pos is odd) */}
               {rows.slice(9).map(({ hole, idx, isNR, gross, pts, ePar, eSI, yardage }) => (
-                <div key={hole.id} className={`${grid} px-3 py-2 items-center border-b border-bark/12 ${idx % 2 === 0 ? "bg-accent/[0.10]" : ""}`}>
+                <div key={hole.id} className={`${grid} px-3 py-2 items-center border-b border-bark/12 ${idx % 2 === 0 ? "bg-bark/[0.07]" : ""}`}>
                   <span className={`text-base font-semibold ${dark}`} style={sf}>{hole.hole_number}</span>
                   <span className={`text-base ${muted}`} style={sf}>{yardage ?? "—"}</span>
                   <span className={`text-base ${dark}`} style={sf}>{ePar}</span>

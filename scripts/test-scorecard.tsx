@@ -120,6 +120,51 @@ section('Every card in the app draws the same shape')
   }
 }
 
+// ─── The sticky header must not sit on the leader ──────────────
+
+section('The column headings stay above the board')
+{
+  const src = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+
+  // position: sticky measures its offset from the nearest scrollport. An
+  // ancestor with overflow-hidden *is* one, so `top: HEADER_H` then counted
+  // from the card's own top edge instead of the viewport's and dropped the
+  // headings 52px down the card, straight onto whoever was leading.
+  const card = src.match(/<div className="bg-surface border border-bark\/12 rounded-2xl[^"]*">\s*\{\/\* Sticky column headers/)
+  ok(card !== null, 'the board card is found')
+  ok(!/rounded-2xl overflow-hidden">\s*\{\/\* Sticky column headers/.test(src),
+    'and does not clip its own overflow, which would break the sticky offset')
+
+  ok(src.includes('style={{ ...gridStyle, top: HEADER_H }}'),
+    'the headings still pin below the wordmark bar')
+  ok(src.includes("className=\"sticky z-10"), 'and are still sticky')
+}
+
+// ─── The card is the app's, not Donegal's ──────────────────────
+
+section('Scorecards are brown and cream, not green')
+{
+  const cards = [
+    'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
+    'app/scoring/LiveScoringFlow.tsx',
+    'app/scoring/LiveLeaderboardPanel.tsx',
+  ]
+  for (const f of cards) {
+    const src = read(f)
+    const name = f.split('/').pop()
+    // Emerald is the accent. A card that is half green stops it meaning
+    // anything, and the summary bands were the biggest green on the screen.
+    ok(!/rgba\(10,\s*157,\s*86/.test(src), `${name} has no emerald wash`)
+    ok(!src.includes('0A6B3C'), `  …and no emerald text left over from the old card`)
+    // …and nothing is pretending to be paper any more
+    ok(!/#(EEE8D6|EAE4D5|E2DAC8|D4CBBA|F5F0E8|C9A84C)/i.test(src),
+      `  …nor any parchment or gold`)
+  }
+  ok(read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+    .includes("SC_BAND  = 'rgba(74,55,40,0.07)'"),
+    'the summary bands are a wash of bark')
+}
+
 // ─── The maths the whole thing rests on ────────────────────────
 
 section('Nett and no-return arithmetic is untouched')
