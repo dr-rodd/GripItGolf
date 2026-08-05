@@ -299,6 +299,20 @@ points         = GREATEST(0, par + 2 - net_score)
 
 One state at a time. Finalised players cannot be reselected unless manually unfinalised via settings.
 
+### Leaving a card and coming back
+
+**`live_scores` is the record of a round in progress, not the component's state.** Every hole is written there as it is entered. The card in memory is a view of it, and a view can be incomplete — a resume that failed, a reload, a second device.
+
+**A hole is only a no return when nothing anywhere has a score for it.** `lib/liveScores.ts` (`mergeSaved`) folds what was saved into the card before commit decides anything, and memory wins only where it actually has an answer. Committing from memory alone is what caused a live data-loss bug: the resume asked `live_scores` for `no_return` — a column that exists on `scores` and not on `live_scores` — so the select failed, a `?? []` swallowed the error, the card opened blank on hole 1, and committing after re-entering a few holes wrote the rest of the round off as NRs with a max score.
+
+Three rules came out of it, and all three are pinned:
+
+- **Never ask `live_scores` for `no_return`.** An NR in live play is stored as its max-gross equivalent; there is no flag to read.
+- **A read that fails must not fall through to a blank card.** Blank is indistinguishable from "nothing played yet", and the next commit writes that over the real round. The resume shows the failure and refuses to open.
+- **Commit reconciles before it writes**, refuses an entirely blank card, and no longer deletes the round's scores first — every hole is upserted anyway, so the delete removed nothing the upsert would not have replaced while opening a window where a failure between the two left the round with none.
+
+**Every entry point that can open a card must pass `autoResume`.** The trip dashboard does; the legacy `/scoring` route did not, so "Join Live Round" always started at player setup however far the round had got.
+
 ## Leaderboards — what a trip plays for
 
 **`lib/leaderboards.ts` is the current model.** A trip carries an ordered **list** of complete competitions in `trips.leaderboards` (migration 022). The first is the primary.
@@ -645,7 +659,8 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:recognition` | The per-trip cookie, the personal summary, the greeting |
 | `test:admin` | Optional email, derived trip status, admin session signing |
 | `test:support` | The donation link, and that it vanishes when unconfigured |
-| `test:scorecard` | Every score shape, and that the nett/no-return arithmetic is untouched |
+| `test:live-scores` | Reconciling a part-entered card with what was saved, so a partial one cannot erase a full one |
+| `test:scorecard` | Every score shape, the nett/no-return arithmetic, and that a card survives being left and reopened |
 | `test:branding` | The green dot, the wordmark, back controls, contrast, type size, and the footer/tab-bar carrier list |
 
 Order above follows `npm test`'s own chain in `package.json`, which is worth keeping in step: it is the fastest way to tell whether a new suite was wired in or just left as a standalone script.

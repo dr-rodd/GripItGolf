@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
+import { mergeSaved, anyScored } from "@/lib/liveScores"
 import type { ActiveLiveRound } from "./ScoringClient"
 import LiveLeaderboardPanel from "./LiveLeaderboardPanel"
 import BackButton from "@/app/components/BackButton"
@@ -256,6 +257,10 @@ export default function LiveScoringFlow({
   const [error, setError] = useState<string | null>(null)
   const [closeConfirm, setCloseConfirm] = useState(false)
   const [selectedSummaryPlayerId, setSelectedSummaryPlayerId] = useState("")
+  // Set when a resume cannot read the card. Never falls through to a blank
+  // one: blank is indistinguishable from "nothing played yet", and the next
+  // commit would write that over the real round.
+  const [resumeError, setResumeError] = useState<string | null>(null)
 
   // Edit mode (within summary)
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null)
@@ -363,11 +368,30 @@ export default function LiveScoringFlow({
         .eq("round_id", rId)
         .in("player_id", lockedIds)
 
-      const { data: existingScores } = await supabase
+      // No `no_return` here: that column is on `scores`, not on
+      // `live_scores`. Asking for it made the whole select fail, the error was
+      // swallowed by a `?? []`, and the card came back empty — so every
+      // resume dropped you on hole 1 with nothing, and committing from there
+      // wrote the rest of the round off as no returns. An NR in live play is
+      // already stored as its max-gross equivalent, so nothing is lost by not
+      // asking for a flag that was never written.
+      const { data: existingScores, error: scoresError } = await supabase
         .from("live_scores")
-        .select("player_id, hole_number, gross_score, stableford_points, no_return")
+        .select("player_id, hole_number, gross_score, stableford_points")
         .in("player_id", lockedIds)
         .eq("round_id", rId)
+
+      // A card that cannot be read must not open as a blank one. Blank is
+      // indistinguishable from "nothing played yet", and the next commit
+      // would write that over the real round.
+      if (scoresError) {
+        console.error("Resume failed to read live_scores:", scoresError)
+        setResumeError(
+          "Could not load the scores already on this card. Check your connection and try again — " +
+          "nothing has been lost, but do not re-enter them until they appear."
+        )
+        return
+      }
 
       // Pick tees: first gender-matching tee for the course (playing_handicap
       // already stored in round_handicaps so tee choice only affects yardage display)
@@ -380,19 +404,10 @@ export default function LiveScoringFlow({
         if (tee) teeMap[pid] = tee.id
       }
 
-      // Rebuild scores state from live_scores
-      const scoreState: Record<number, Record<string, HoleScore>> = {}
-      for (const row of (existingScores ?? [])) {
-        if (row.gross_score === null) continue
-        const idx = cHoles.findIndex(h => h.hole_number === row.hole_number)
-        if (idx === -1) continue
-        if (!scoreState[idx]) scoreState[idx] = {}
-        scoreState[idx][row.player_id] = {
-          gross: row.gross_score,
-          isNR: row.no_return === true,
-          stableford: row.stableford_points,
-        }
-      }
+      // Rebuild the card from what was saved. `live_scores` carries no NR
+      // flag — an NR is written as its max-gross equivalent while playing —
+      // so everything read back is a gross score.
+      const scoreState = mergeSaved({}, existingScores ?? [], cHoles.map(h => h.hole_number))
 
       // Find first hole where not all players have a score yet
       let resumeIdx = 0
@@ -605,20 +620,47 @@ export default function LiveScoringFlow({
         )
       )
 
-      // 2. Delete existing scores for these players then insert fresh
-      // TODO(error-handling): check error, revert optimistic UI, toast on failure
-      await Promise.all(
-        playerSetups.map(({ player }) =>
-          supabase.from("scores").delete()
-            .eq("player_id", player.id).eq("round_id", roundId)
-        )
-      )
+      // 2. Reconcile the card with what was actually saved while it was
+      //    played. `live_scores` is the record; this component's state is a
+      //    view of it, and a view can be incomplete — a resume that failed, a
+      //    reload, a second device. Committing from memory alone is what
+      //    turned holes 4–18 into no returns after a bad resume.
+      const { data: savedRows, error: savedErr } = await supabase
+        .from("live_scores")
+        .select("player_id, hole_number, gross_score, stableford_points")
+        .in("player_id", playerSetups.map(ps => ps.player.id))
+        .eq("round_id", roundId)
+      if (savedErr) throw savedErr
 
-      // 3. Upsert scores — every hole for every player; missing/blank → NR
+      const finalCard = mergeSaved(
+        scores, savedRows ?? [], courseHoles.map(h => h.hole_number))
+
+      // An entirely blank card is never what anyone meant: it would write
+      // eighteen no returns per player over whatever was already there.
+      if (!anyScored(finalCard)) {
+        throw new Error(
+          "There are no scores on this card to submit. If scores were entered earlier, " +
+          "go back and reopen it rather than submitting an empty card."
+        )
+      }
+
+      // 3. Upsert scores — every hole for every player. A hole with nothing
+      //    anywhere is a genuine no return; one that is merely absent from
+      //    this device is not, which is what step 2 is for.
+      //
+      //    No delete-then-insert here any more. Every hole of the course is
+      //    written below, so the delete removed nothing the upsert would not
+      //    have replaced — but it opened a window where a failure between the
+      //    two left the round with no scores at all.
       const scoreRows: any[] = []
       for (const [hIdx, hole] of courseHoles.entries()) {
         for (const setup of playerSetups) {
-          const hs = scores[hIdx]?.[setup.player.id]
+          const hs = finalCard[hIdx]?.[setup.player.id]
+          // Unchanged from before: an explicit pick-up is a no return, and so
+          // is a hole nothing anywhere has a score for. What changed is that
+          // `finalCard` has already been reconciled with what was saved, so
+          // "absent" now means genuinely absent rather than merely not on
+          // this device.
           const noReturn = hs?.isNR === true || hs?.gross == null
           const p = effectivePar(hole, setup.player.gender)
           const si = effectiveSI(hole, setup.player.gender)
@@ -702,6 +744,28 @@ export default function LiveScoringFlow({
   // ─── Resuming step ────────────────────────────────────────
 
   if (step === "resuming") {
+    if (resumeError) {
+      return (
+        <div className="max-w-lg mx-auto w-full px-4 py-10 flex flex-col gap-4">
+          <div className="bg-surface border border-rust/40 rounded-2xl px-5 py-6">
+            <p className="t-card text-rust-deep mb-2">Scorecard could not be loaded</p>
+            <p className="t-body text-ink/80 leading-relaxed">{resumeError}</p>
+          </div>
+          <button
+            onClick={() => { setResumeError(null); setStep("resuming") }}
+            className="w-full py-4 bg-accent-deep text-white rounded-xl text-base tracking-[0.2em] uppercase font-bold hover:bg-accent transition-colors"
+          >
+            Try again
+          </button>
+          <button
+            onClick={onBack}
+            className="w-full py-3.5 border border-bark/25 text-ink/80 rounded-xl text-base tracking-wider uppercase hover:border-bark/40 transition-colors"
+          >
+            Back
+          </button>
+        </div>
+      )
+    }
     return (
       <div className="flex items-center justify-center min-h-[calc(100dvh-57px)]">
         <p className="text-ink/50 text-base tracking-wide">Loading scorecard…</p>

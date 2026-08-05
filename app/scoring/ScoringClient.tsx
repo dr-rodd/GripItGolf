@@ -116,6 +116,11 @@ export default function ScoringClient({ players, rounds, holes, tees, roundHandi
           tees={tees}
           roundHandicaps={roundHandicaps}
           activeLiveRound={liveRound}
+          // Joining a round already in progress has to restore the card, not
+          // offer a blank one. This route never passed the flag at all, so it
+          // dropped straight to player setup however far the round had got —
+          // and committing from there would have written the round off.
+          autoResume={liveRound !== null}
           onBack={() => { setView("landing"); setShowLiveLeaderboard(false) }}
           onLiveRoundChange={setLiveRound}
           showLeaderboard={showLiveLeaderboard}

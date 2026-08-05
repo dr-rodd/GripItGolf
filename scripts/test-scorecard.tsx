@@ -365,6 +365,66 @@ section('A round tile says what has happened on it')
   ok(ROUND_NOTE.live === 'In play', 'and the live tile says so in words too')
 }
 
+// ─── Coming back to a card ─────────────────────────────────────
+
+section('A scorecard survives being left and reopened')
+{
+  const flow = read('app/scoring/LiveScoringFlow.tsx')
+
+  // The bug: the resume named `no_return`, which exists on `scores` but not
+  // on `live_scores`. The select failed, `?? []` swallowed it, and every
+  // resume opened a blank card on hole 1.
+  const liveSelects = [...flow.matchAll(/from\("live_scores"\)[\s\S]{0,200}?\.select\("([^"]*)"/g)]
+    .map(m => m[1])
+  ok(liveSelects.length > 0, 'the flow reads live_scores')
+  for (const cols of liveSelects) {
+    ok(!cols.includes('no_return'),
+      `live_scores is never asked for no_return — it has no such column (${cols.slice(0, 40)}…)`)
+  }
+
+  // The whole app, not just this file: one bad column name is what caused it
+  for (const f of [
+    'app/scoring/LiveScoringFlow.tsx',
+    'app/scoring/LiveLeaderboardPanel.tsx',
+    'app/scoring/[slug]/CourseDashboardClient.tsx',
+    'app/trip/[tripCode]/leaderboard/page.tsx',
+    'app/trip/[tripCode]/course/page.tsx',
+  ]) {
+    const src = read(f)
+    const selects = [...src.matchAll(/from\(["']live_scores["']\)[\s\S]{0,200}?\.select\(["']([^"']*)["']/g)]
+    for (const m of selects) {
+      ok(!m[1].includes('no_return'),
+        `${f.split('/').pop()} does not ask live_scores for no_return`)
+    }
+  }
+
+  // A read that fails must not fall through to a blank card — blank is
+  // indistinguishable from "nothing played yet", and the next commit writes
+  // that over the real round.
+  // Scoped to the resume itself: another function reads `scores` (which does
+  // have no_return) and guards it its own way — that one is not this bug.
+  const resumeBody = flow.slice(flow.indexOf('async function doResume'),
+                                flow.indexOf('async function lockPlayers'))
+  ok(/error: scoresError/.test(resumeBody), 'a failed read is captured rather than ignored')
+  ok(/setResumeError\(/.test(resumeBody), '  …and stops the resume')
+  ok(!/\(existingScores \?\? \[\]\)/.test(resumeBody),
+    '  …rather than falling through to an empty card')
+
+  // Commit reconciles with what was saved before deciding what is an NR
+  ok(/mergeSaved\(/.test(flow), 'commit merges the card with what was saved')
+  ok(/anyScored\(/.test(flow), '  …and refuses an entirely blank one')
+  ok(!/from\("scores"\)\s*\.delete\(\)/.test(flow.replace(/\s+/g, ' ')) ||
+     !/Delete existing scores/.test(flow),
+    'and no longer deletes the round\'s scores before rewriting them')
+
+  // Every access point that can open a card has to restore it
+  const dash = read('app/scoring/[slug]/CourseDashboardClient.tsx')
+  ok(/autoResume=\{/.test(dash), 'the trip dashboard resumes an open card')
+  const legacy = read('app/scoring/ScoringClient.tsx')
+  ok(/autoResume=\{/.test(legacy),
+    'and so does the route that offers to join a round in progress')
+}
+
 console.log(`\n${'─'.repeat(56)}`)
 if (failed === 0) console.log(`✓ all ${passed} checks passed`)
 else {
