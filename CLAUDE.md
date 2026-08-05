@@ -121,6 +121,10 @@ They are PNGs derived from the supplied artwork rather than vectors. Rendered as
 
 **The header's numbers live in `headerMetrics.ts`, not in `TripHeader.tsx`.** A value exported from a `'use client'` module arrives in a server component as a client *reference*, not as the number, and dropping one into a template literal writes a stub function into the markup. TypeScript sees a number the whole way through and the build says nothing — the only symptom is a style attribute full of nonsense in the rendered page. `test:branding` pins the module as non-client and the import path with it.
 
+**The legacy scoring shell is a different header, 77px not 52.** `CourseDashboardClient.tsx` and everything it renders (`LiveScoringFlow.tsx`, `LiveLeaderboardPanel.tsx`) never adopted `TripHeader` — they draw their own back-button-plus-title bar, and it is taller. That height lives in `app/scoring/scoringHeaderMetrics.ts` as `LEGACY_HEADER_H`, not `HEADER_H`: `LiveLeaderboardPanel`'s sticky column headings were imported against `HEADER_H` (52) by mistake, so they started sticking 25px before the real 77px header had scrolled clear of them and the top third of the row rendered under it. Measure before trusting arithmetic here — 77 is the back button's 44px plus 16px of padding top and bottom plus a 1px border, and it was only confirmed by rendering the built CSS and reading `getBoundingClientRect()`, not by adding those up by eye.
+
+Not exact for every embedding — the standalone dark-themed `/scoring` route (`ScoringClient.tsx`) draws a shorter header again (`py-2`, not `py-4`) and nothing accounts for that difference yet.
+
 ### Leaving the landing page
 
 **The collapse runs on the tap, not on a scroll** (`app/Landing.tsx`). Tapping Create or Join fades the content, the words **shake themselves loose in place** over `WOBBLE_MS` (340ms), the mark then collapses into the header bar over `TRAVEL_MS` (700ms), and only then is the next screen asked for — fading up underneath, so the whole thing reads as one movement rather than a page swap.

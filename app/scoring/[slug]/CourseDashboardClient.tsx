@@ -386,30 +386,45 @@ export default function CourseDashboardClient({
     : <BackButton onClick={goBack} />
 
   const headerRight = view === "scoring"
-    ? <div className="w-[80px]" />
+    ? <div className="w-[80px] flex-shrink-0" />
     : view === "dashboard"
         ? <button
             onClick={() => setView("settings")}
             aria-label="Settings"
-            className="text-ink/50 hover:text-ink/80 transition-colors w-[80px] flex justify-end"
+            className="text-ink/50 hover:text-ink/80 transition-colors w-[80px] flex-shrink-0 flex justify-end"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
           </button>
-        : <div className="w-[80px]" />
+        : <div className="w-[80px] flex-shrink-0" />
 
   // ─── Render ───────────────────────────────────────────────
 
   return (
     <div className="min-h-dvh bg-cream text-ink">
 
-      {/* Sticky header */}
+      {/* Sticky header.
+          `justify-between` on three flex items with no growth claimed left
+          the title's own box sized by ordinary flex-shrink math rather than
+          by the space actually free between the two side controls — for
+          some course names that meant wrapping a word earlier than it
+          needed to, with the true available width sitting empty on the
+          right. `flex-1 min-w-0` makes the title claim exactly what is left
+          after the back button and the right-hand control, so it only wraps
+          when it genuinely has to. `min-w-0` is what lets it shrink below
+          its own text's natural width at all — without it a long course
+          name pushes the header wider than the screen instead of wrapping.
+
+          The `ml-3` is deliberate and one-sided: only the gap from the back
+          button was reported as too tight, and spending width on a matching
+          gap against the right-hand control as well would cost the title
+          room it does not need to give up. */}
       <div className="border-b border-bark/12 sticky top-0 z-20 bg-cream">
-        <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-lg mx-auto px-4 py-4 flex items-center">
           {headerLeft}
-          <h1 className="font-[family-name:var(--font-playfair)] text-xl text-ink tracking-wide">
+          <h1 className="flex-1 min-w-0 ml-3 font-[family-name:var(--font-playfair)] text-xl text-ink tracking-wide">
             {courseName}
           </h1>
           {headerRight}

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { mergeSaved, anyScored } from "@/lib/liveScores"
+import { LEGACY_HEADER_H } from "./scoringHeaderMetrics"
 import type { ActiveLiveRound } from "./ScoringClient"
 import LiveLeaderboardPanel from "./LiveLeaderboardPanel"
 import BackButton from "@/app/components/BackButton"
@@ -1074,10 +1075,13 @@ export default function LiveScoringFlow({
       const { player, playingHcp } = editSetup
 
       return (
-        <div className="flex flex-col" style={{ minHeight: "calc(100dvh - 77px)" }}>
+        <div className="flex flex-col" style={{ minHeight: `calc(100dvh - ${LEGACY_HEADER_H}px)` }}>
 
           {/* Sub-header */}
-          <div className="sticky top-[77px] z-10 bg-cream border-b border-bark/12 px-4 py-3 flex items-center justify-between">
+          <div
+            className="sticky z-10 bg-cream border-b border-bark/12 px-4 py-3 flex items-center justify-between"
+            style={{ top: LEGACY_HEADER_H }}
+          >
             <BackButton onClick={() => setEditingPlayerId(null)} />
             <div className="flex items-center gap-2">
               {player.teams && (
@@ -1305,7 +1309,7 @@ export default function LiveScoringFlow({
               </div>
 
               {/* Sticky: player details row + column header row */}
-              <div className="sticky top-[77px] z-10">
+              <div className="sticky z-10" style={{ top: LEGACY_HEADER_H }}>
 
                 {/* Tee and playing handicap.
                     The name is here only when nothing else is showing it —
@@ -1474,7 +1478,26 @@ function HoleCard({
   }
 
   return (
-    <div className="max-w-lg mx-auto w-full px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] flex flex-col gap-4">
+    // `justify-end` inside a `min-h` reaching down to the fixed nav bar is
+    // what connects the card to the Next button. Without it, a short card —
+    // one or two players, the common case — sat at the TOP of the page with
+    // the button pinned to the bottom of a much taller viewport, leaving
+    // several hundred px of bare cream between them: not "the button is a
+    // bit far away", but a page that visually reads as broken in two
+    // pieces. A long list still simply flows top-down and scrolls, since
+    // `justify-end` only has an effect while there is free space to give.
+    //
+    // The `6.5rem` (104px) reserves the nav bar's own real height —
+    // measured at 91px, not the 72px this previously reserved — plus a
+    // deliberate 13px of breathing room, still on top of the safe-area
+    // inset that clears the iPhone home indicator. Under-reserving here
+    // does not show as visible overlap, since the fixed bar is opaque, but
+    // it does mean "connected" tips into "touching" the moment a device's
+    // safe-area inset runs a few px larger than this one was measured on.
+    <div
+      className="max-w-lg mx-auto w-full px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] flex flex-col justify-end gap-4"
+      style={{ minHeight: `calc(100dvh - ${LEGACY_HEADER_H}px)` }}
+    >
 
       {/* One tile per player */}
       <div className="flex flex-col gap-3">
