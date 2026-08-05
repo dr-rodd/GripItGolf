@@ -988,12 +988,13 @@ section('The screens before a trip wear the same header')
 
 // ─── The bar at the bottom ─────────────────────────────────────
 
-section('The tab bar is there unless the screen is a scorecard')
+section('The tab bar is on every screen inside a trip')
 {
-  // The app should read as an app: the navigation is present on every screen
-  // you can navigate from. The exception is score entry — a discrete applet
-  // with its own way out, where a nav bar under the last row of the card is a
-  // mis-tap waiting to happen.
+  // The app should read as an app: the navigation is present everywhere,
+  // score entry included. That screen was the exception once — the bottom of
+  // it is the last row of a scorecard — and the room for the bar is now
+  // reserved inside the card's own height so the Next button comes to rest
+  // above it rather than beneath it.
   const tabbed = [
     'app/trip/[tripCode]/page.tsx',
     'app/trip/[tripCode]/leaderboard/page.tsx',
@@ -1016,9 +1017,26 @@ section('The tab bar is there unless the screen is a scorecard')
     ok(bar.includes(`/${leaf}`), `the bar still offers ${leaf}`)
   }
 
+  // Score entry is the one that has to reserve the room itself: its shell
+  // sizes the card against the window, so padding added outside it would make
+  // the page taller than the screen and pull the card up off the Next button.
   const scoring = read('app/trip/[tripCode]/course/[roundNumber]/page.tsx')
-  ok(!/<TabBar/.test(scoring),
-    'and score entry does not, because it is a card with its own way out')
+  ok(/<TabBar/.test(scoring), 'score entry carries the bar too')
+  ok(/bottomInset=\{TABBAR_SPACE\}/.test(scoring),
+    '  …and reserves the room for it inside the card, not around it')
+
+  const shell = read('app/scoring/[slug]/CourseDashboardClient.tsx')
+  ok(/paddingBottom: bottomInset/.test(shell),
+    'the scoring shell leaves that room at the bottom of its own box')
+  ok(/minHeight: `calc\(100dvh - \$\{stickyTop\}px\)`/.test(shell),
+    'and still reaches exactly to the bottom of the window, no further')
+
+  // One measurement, written once in TS and once in CSS because CSS cannot
+  // import a constant. They have to agree.
+  const metrics = read('app/components/tabbarMetrics.ts')
+  ok(/TABBAR_H = 64/.test(metrics), 'the bar is 64px tall')
+  ok(/64px/.test(css.slice(css.indexOf('.has-tabbar'), css.indexOf('.has-tabbar') + 120)),
+    'and .has-tabbar reserves the same 64px')
 }
 
 // ─── The header's numbers cross the client boundary ────────────

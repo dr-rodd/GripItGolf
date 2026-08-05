@@ -10,6 +10,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { revalidateTrip } from '@/app/actions/revalidate'
 import { boardTitle, boardRules, isSlotFree, type Leaderboard } from '@/lib/leaderboards'
+import { TABBAR_SPACE } from '@/app/components/tabbarMetrics'
 import {
   MAIN_SET, setOf, teamBoards, isBoardOpen, sheetForSelection, withSheet,
   sheetChanges, teamsOnSheet, teamFor, membersOf, type Membership,
@@ -66,7 +67,7 @@ const PRESET_COLORS = [
  * Clear of the tab bar, which is fixed at the bottom of every trip screen.
  * A sticky action bar at `bottom-4` sits underneath it and cannot be tapped.
  */
-const ABOVE_TABBAR = 'calc(64px + env(safe-area-inset-bottom) + 1rem)'
+const ABOVE_TABBAR = `calc(${TABBAR_SPACE} + 1rem)`
 
 // ─── Player tile ───────────────────────────────────────────────
 

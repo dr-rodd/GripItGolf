@@ -61,11 +61,17 @@ An optional "support the app" link in the footer, `app/components/SupportLink.ts
 
 ## The tab bar
 
-The bottom bar (`app/components/TabBar.tsx`) is the app's primary navigation, and it is on **every** screen you can navigate from: hub, leaderboard, round picker, teams, players, matchplay and settings. A screen reached by tapping a tab that cannot be left the same way reads as a dead end — settings was exactly that until it was given the bar.
+The bottom bar (`app/components/TabBar.tsx`) is the app's primary navigation and it is on **every** screen inside a trip, score entry included: hub, leaderboard, round picker, teams, players, matchplay, settings and the scorecard itself. A screen the app's own navigation abandons reads as a dead end.
 
-**The one exception is score entry.** `/trip/[tripCode]/course/[roundNumber]` is a discrete applet with its own clear way out, and the bottom of that screen is the last row of a scorecard: a nav bar under it is a mis-tap waiting to happen. Any screen carrying the bar also needs `has-tabbar` on its root, or its last element sits underneath it.
+Most screens reserve the room with `has-tabbar` on their root, or the last thing on the page sits under the bar.
 
-`test:branding` pins both halves of that rule, the carrier list and the scoring exclusion. It also caught a real bug while the footer was being made sitewide: `/trip/[tripCode]/matchplay` rendered its `<TabBar>` from inside the `EmptyState` component, so a drawn bracket showed neither the tab bar nor the footer — both are now rendered once, at the page's own root.
+**Score entry reserves it differently, and has to.** `CourseDashboardClient` sizes itself against the window — `minHeight: calc(100dvh - stickyTop)` — because the score-entry card has to reach from the header down to the Next button and no further. Padding added *around* that box would make the page taller than the screen, which is exactly the bug the min-height comment there warns about: enough scroll to pull the card up off the button it is meant to sit against. So the room goes *inside* the box, as `bottomInset` → `padding-bottom`, and the Next button comes to rest just above the bar rather than beneath it.
+
+The screens before a trip — `/`, `/join`, `/dashboard/create` — carry no bar. It is trip-scoped and there is nowhere for it to point.
+
+**One measurement, written twice.** `TABBAR_H`/`TABBAR_SPACE` in `app/components/tabbarMetrics.ts` for TypeScript, `.has-tabbar` in `app/globals.css` for the pages that only need padding. CSS cannot import a constant, so the 64 appears in both and `test:branding` checks they agree. Its own file rather than inside `TabBar.tsx` for the same reason the header's numbers are separate: a value exported from a `'use client'` module reaches a server component as a client reference, not as the number, and the build says nothing.
+
+`test:branding` pins the carrier list, the reservation on both kinds of screen, and the two copies of the number. It also caught a real bug while the footer was being made sitewide: `/trip/[tripCode]/matchplay` rendered its `<TabBar>` from inside the `EmptyState` component, so a drawn bracket showed neither the tab bar nor the footer — both are now rendered once, at the page's own root.
 
 ## Voiding a scorecard
 

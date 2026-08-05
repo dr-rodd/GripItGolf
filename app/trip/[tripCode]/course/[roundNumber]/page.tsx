@@ -4,7 +4,9 @@ import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { allowanceCycle } from '@/lib/handicapAllowance'
 import CourseDashboardClient from '@/app/scoring/[slug]/CourseDashboardClient'
 import TripHeader from '@/app/components/TripHeader'
+import TabBar from '@/app/components/TabBar'
 import { HEADER_H } from '@/app/components/headerMetrics'
+import { TABBAR_SPACE } from '@/app/components/tabbarMetrics'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,9 +72,13 @@ export default async function TripCoursePage({
   ])
 
   return (
-    // The mark is the way back from a scorecard, and the only chrome on the
-    // screen. No tab bar here: the bottom of a scoring screen is score entry,
-    // and a nav bar under it is a mis-tap waiting to happen.
+    // The mark is the way back from a scorecard, and the bar is the way
+    // anywhere else. Score entry used to be the one screen without it — the
+    // bottom of it is the last row of a scorecard, and a nav bar under that
+    // reads as a mis-tap waiting to happen — but a screen the app's own
+    // navigation abandons is worse, so the room for it is reserved inside the
+    // card's height instead. The Next button comes to rest just above the bar
+    // rather than beneath it.
     <div className="min-h-dvh bg-cream">
       <TripHeader backTo={`/trip/${tripCode}`} title="scoring" />
       <CourseDashboardClient
@@ -91,7 +97,9 @@ export default async function TripCoursePage({
         // header sticks to the same place and, being the lower z-index, ends
         // up behind it.
         stickyTop={HEADER_H}
+        bottomInset={TABBAR_SPACE}
       />
+      <TabBar tripCode={tripCode} />
     </div>
   )
 }

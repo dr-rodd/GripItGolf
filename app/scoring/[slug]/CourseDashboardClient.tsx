@@ -92,6 +92,15 @@ interface Props {
   allowances?: number[]
   /** Which of them the card opens on — the primary board's. */
   allowanceStart?: number
+  /**
+   * Room to leave at the bottom for anything fixed over this screen.
+   *
+   * The trip route puts the tab bar there. The legacy /scoring/[slug] route
+   * has nothing below it and leaves this at 0 — a bare `0` rather than a
+   * length, which is a valid `padding-bottom` and keeps that screen exactly
+   * where it was.
+   */
+  bottomInset?: string
 }
 
 type View = "dashboard" | "scoring" | "live-board" | "settings"
@@ -101,7 +110,7 @@ type View = "dashboard" | "scoring" | "live-board" | "settings"
 export default function CourseDashboardClient({
   courseName, courseId, players, rounds, holes, tees, roundHandicaps,
   backHref = "/scoring", roundId, stickyTop = 0,
-  allowances = [FULL_ALLOWANCE], allowanceStart = 0,
+  allowances = [FULL_ALLOWANCE], allowanceStart = 0, bottomInset = "0",
 }: Props) {
   const [view, setView]                       = useState<View>("dashboard")
   const [scoringLiveRound, setScoringLiveRound] = useState<ActiveLiveRound | null>(null)
@@ -458,6 +467,11 @@ export default function CourseDashboardClient({
         // against, and reveal a band of bare cream underneath. It reaches to
         // the bottom of the window, not to a window's worth below the header.
         minHeight: `calc(100dvh - ${stickyTop}px)`,
+        // The tab bar is fixed, so it sits over whatever is under it. This is
+        // the room left for it — inside the height above rather than added to
+        // it, so nothing grows taller than the window and the Next button
+        // comes to rest just clear of the bar rather than beneath it.
+        paddingBottom: bottomInset,
       } as React.CSSProperties}
     >
 
