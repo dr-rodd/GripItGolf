@@ -151,4 +151,10 @@ There used to be a `setup_status` of `draft` or `live`, flipped by a **Finalise 
 
 **One thing still locks, and it is not a flag.** `canEditGolf` — rounds and courses are editable only while no round on the trip has a score or a live session anywhere. A course change would orphan real data, which is a fact about the data rather than a phase of the trip. It is computed server-side in `setup/page.tsx` on every load.
 
-`edit_permission` is `everyone` or `owner`. Owner is a device flag in localStorage (`gig-owner-<TRIP_CODE>`) set at creation — placeholder until auth lands. That is the only thing that makes settings read-only now.
+`edit_permission` is `everyone` or `owner`, and it is the only thing that makes settings read-only now. Owner is a device flag in localStorage (`gig-owner-<TRIP_CODE>`) written once, by `CreateTripForm`, on the device the trip was created on — a placeholder until auth lands.
+
+**It changes what other people can do, so from the owner's own phone it appears to do nothing.** That phone is where it is set from, and `mayChange` is satisfied by `isOwner` whichever way the setting goes, so no control on the screen moves. The section says so in as many words rather than leaving it looking broken.
+
+**A device that is not the owner cannot select "Owner only".** There is no way to hand the flag to another device, so that tap would lock the screen — including the control itself — with nothing anywhere able to undo it. The option is disabled, not just discouraged.
+
+The flag's fragility is the known weakness: clear the browser storage, or open the trip on a new phone, and the owner is an ordinary player. With `everyone` that costs nothing. With `owner` it is a one-way door, which is why nothing can walk through it by accident. Real ownership needs auth.

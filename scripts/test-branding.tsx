@@ -1270,6 +1270,37 @@ section('The old branding is gone')
   }
 }
 
+// ─── Who can edit ──────────────────────────────────────────────
+
+section('The edit-permission toggle says what it did')
+{
+  // It changes what OTHER people can do, so from the owner's own phone —
+  // which is the phone it is set from — nothing on screen moves, and it reads
+  // as a control that does nothing at all.
+  const setup = read('app/trip/[tripCode]/setup/TripSetupClient.tsx')
+  const section_ = setup.slice(setup.indexOf('{/* ── Edit permission ── */}'))
+  const block = section_.slice(0, section_.indexOf('</section>'))
+
+  ok(/editPermission === 'owner' \?/.test(block),
+    'the screen states the effect of whichever setting is on')
+  ok(/isOwner\s*$|isOwner$|isOwner/m.test(block),
+    'and whether this device is the one that can act on it')
+  ok(block.includes('Nothing changes for you'),
+    'the owner is told outright why their own screen did not move')
+
+  // Ownership is a flag on one device with no way to hand it over, so a
+  // device that does not hold it must not be able to choose "owner only" —
+  // that locks this screen, this control included, with no way back.
+  ok(/wouldLockMeOut = o\.value === 'owner' && !isOwner/.test(block),
+    'a device that is not the owner cannot lock itself out')
+  ok(/disabled=\{locked \|\| wouldLockMeOut\}/.test(block),
+    'and the option is genuinely disabled, not merely explained')
+
+  // The copy no longer describes a phase the trip does not have
+  ok(!/while it&apos;s in setup|while it's in setup/.test(block),
+    'and does not describe a setup phase that no longer exists')
+}
+
 // ─── A trip is open from the moment it exists ──────────────────
 
 section('Nothing has to be finalised before it can be played')

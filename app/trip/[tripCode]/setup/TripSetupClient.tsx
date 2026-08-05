@@ -833,26 +833,54 @@ export default function TripSetupClient({
           {/* ── Edit permission ── */}
           <section className={SECTION}>
             <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-1">Who can edit</p>
-            <p className="text-ink/65 text-[13px] mb-4">Controls who can change this trip while it&apos;s in setup</p>
+            <p className="text-ink/65 text-[13px] mb-4">
+              Who can change this trip&apos;s players, teams, format and dates.
+              Joining and scoring are open to everyone either way.
+            </p>
             <div className="flex gap-2">
               {[
                 { value: 'everyone', label: 'Any player' },
                 { value: 'owner', label: 'Owner only' },
-              ].map(o => (
-                <button
-                  key={o.value}
-                  onClick={() => savePermission(o.value)}
-                  disabled={locked}
-                  className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
-                    editPermission === o.value
-                      ? 'bg-accent-deep text-white'
-                      : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                  }`}
-                >
-                  {o.label}
-                </button>
-              ))}
+              ].map(o => {
+                // Owner is a flag on the device the trip was created on, and
+                // there is no way to hand it to another one. A device that
+                // does not hold it choosing "owner only" would lock this
+                // screen — this control included — the instant it was tapped,
+                // with nothing anywhere able to undo it.
+                const wouldLockMeOut = o.value === 'owner' && !isOwner
+                return (
+                  <button
+                    key={o.value}
+                    onClick={() => savePermission(o.value)}
+                    disabled={locked || wouldLockMeOut}
+                    className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                      editPermission === o.value
+                        ? 'bg-accent-deep text-white'
+                        : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                )
+              })}
             </div>
+
+            {/* What it actually did.
+                This setting changes what OTHER people can do, so from the
+                owner's own phone — which is the phone it is usually set from —
+                nothing on screen moves and it reads as a control that does
+                nothing at all. So it says so. */}
+            <p className="t-cap text-ink/65 mt-3 leading-snug">
+              {editPermission === 'owner' ? (
+                isOwner
+                  ? 'Only the device this trip was created on can change it — this one. Nothing changes for you; it is everybody else who can now read this screen but not touch it.'
+                  : 'Only the device this trip was created on can change it.'
+              ) : (
+                isOwner
+                  ? 'Anyone who opens this screen can change the trip. This is the device it was created on, so "Owner only" would leave it to you.'
+                  : 'Anyone who opens this screen can change the trip. "Owner only" is set from the device the trip was created on, which is not this one.'
+              )}
+            </p>
           </section>
 
         {/* Anything that would make the trip unplayable — no leaderboard at
