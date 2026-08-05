@@ -1302,6 +1302,13 @@ section('A screen names itself once')
   // something they already knew, in the width a long course name needs.
   ok(!picker.includes('Open →'), 'a round tile does not label itself Open')
   ok(picker.includes('dot-live'), 'though a live round still wears its dot')
+
+  // The leaderboard is the one page that is all table, and a band across the
+  // top carrying the trip's own name cost it a fixed slice of every screen —
+  // to say something you knew, on the screen you reached it from.
+  const board = stripComments(read('app/trip/[tripCode]/leaderboard/page.tsx'))
+  ok(!board.includes('{trip.name}'), 'the leaderboard does not band the trip name across the top')
+  ok(/<TripHeader[^>]*title="leaderboard"/.test(board), 'the header names it instead')
 }
 
 // ─── Pinned headers ────────────────────────────────────────────
