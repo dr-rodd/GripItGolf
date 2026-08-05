@@ -92,7 +92,8 @@ Calculated by the Postgres trigger `trg_scores_stableford` on every insert/updat
 - Act immediately on single-file, routine changes — no need to ask first.
 - Pause and confirm first for anything multi-file, or touching schema/migrations: list what's about to change, then wait for a yes.
 - Build in stages — test between dependent steps, don't chain too many changes at once.
-- Commit and push directly to `master` — never a new branch.
+- **Always push to `master`. Never a branch, never a PR** — `master` is what Vercel deploys to greendot.live, so work anywhere else is invisible to Big Dog. If a session is started on a branch (some tooling does this automatically), say so at the start and push to `master` anyway.
+- Before reporting a fix as done, check that what was tested is what is deployed: `git log --oneline origin/master -1`. A screenshot from greendot.live is always `master`, never the working tree — a fix left on an unmerged branch comes back as "that didn't work" when the fix was fine and simply not live.
 - Never expose the service role key client-side.
 - All queries must filter by `trip_id`.
 - When changing a function's signature, grep every call site by function name (not by argument variable names) and check each by hand.
@@ -102,3 +103,19 @@ Calculated by the Postgres trigger `trg_scores_stableford` on every insert/updat
 ## Terminal use — last resort only
 
 Prefer built-in file/commit/push tools, the GitHub website, or a committed SQL migration file over a terminal command. If the terminal is genuinely the only option, explain what the command does before running it — never run one silently.
+
+### Never discard uncommitted work — this keeps happening
+
+`git checkout -- <file>`, `git checkout HEAD -- <file>`, `git stash`, `git restore` and `git reset --hard` all throw away uncommitted changes **silently and unrecoverably**. There is no reflog for a working tree that was never committed. This has bitten more than once, both times in the same shape: hours of edits sitting unstaged, a "quick revert" of something unrelated, and the real work gone with it.
+
+The trap is that the intent is always innocent — undoing a temporary edit, cleaning up after an experiment, reverting a deliberately-broken file used to check that a test fails. The command does exactly what it says; it just also takes everything else in that file.
+
+**The rule: commit before running any command that can discard changes.** A commit can be amended, reworded, or reverted later — nothing is lost by making one early. Specifically:
+
+- Finish the work and **commit it first**, then experiment. Never the other way round.
+- To temporarily break a file (checking a test really fails, isolating a cause), commit the real work first, then mutate, then `git checkout HEAD -- <file>` to restore. That restores to the commit, which is what you want.
+- Never `git stash` as a way to "see the old version" — use `git show HEAD:<path>` or `git diff`, which read without touching the working tree.
+- `git stash --staged` stashes the *staged* changes, so `git add -A` followed by it empties the working tree. Two different mistakes with the same result.
+- Before any destructive git command, run `git status` and read it. If anything is modified and uncommitted, commit it first.
+
+If work is lost anyway: say so plainly, redo it, and re-run the full verification from scratch — a redo from memory is not the same as the original and cannot be assumed correct.
