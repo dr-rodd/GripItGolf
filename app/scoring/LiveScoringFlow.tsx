@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { mergeSaved, anyScored } from "@/lib/liveScores"
-import { LEGACY_HEADER_H } from "./scoringHeaderMetrics"
+import { CHROME } from "./scoringHeaderMetrics"
 import type { ActiveLiveRound } from "./ScoringClient"
 import LiveLeaderboardPanel from "./LiveLeaderboardPanel"
 import BackButton from "@/app/components/BackButton"
@@ -1075,12 +1075,12 @@ export default function LiveScoringFlow({
       const { player, playingHcp } = editSetup
 
       return (
-        <div className="flex flex-col" style={{ minHeight: `calc(100dvh - ${LEGACY_HEADER_H}px)` }}>
+        <div className="flex flex-col" style={{ minHeight: `calc(100dvh - ${CHROME})` }}>
 
           {/* Sub-header */}
           <div
             className="sticky z-10 bg-cream border-b border-bark/12 px-4 py-3 flex items-center justify-between"
-            style={{ top: LEGACY_HEADER_H }}
+            style={{ top: CHROME }}
           >
             <BackButton onClick={() => setEditingPlayerId(null)} />
             <div className="flex items-center gap-2">
@@ -1309,7 +1309,7 @@ export default function LiveScoringFlow({
               </div>
 
               {/* Sticky: player details row + column header row */}
-              <div className="sticky z-10" style={{ top: LEGACY_HEADER_H }}>
+              <div className="sticky z-10" style={{ top: CHROME }}>
 
                 {/* Tee and playing handicap.
                     The name is here only when nothing else is showing it —
@@ -1496,7 +1496,7 @@ function HoleCard({
     // safe-area inset runs a few px larger than this one was measured on.
     <div
       className="max-w-lg mx-auto w-full px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] flex flex-col justify-end gap-4"
-      style={{ minHeight: `calc(100dvh - ${LEGACY_HEADER_H}px)` }}
+      style={{ minHeight: `calc(100dvh - ${CHROME})` }}
     >
 
       {/* One tile per player */}

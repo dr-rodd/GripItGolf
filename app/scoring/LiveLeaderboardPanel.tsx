@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase"
 import BackButton from "@/app/components/BackButton"
 import ScoreShape from "@/app/components/ScoreShape"
 import { scoreTone, TONE_PILL } from "@/lib/leaderboardStyle"
-import { LEGACY_HEADER_H } from "./scoringHeaderMetrics"
+import { CHROME } from "./scoringHeaderMetrics"
 import {
   SC_SF, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL,
   SC_MUTED, SC_DARK, scRow, scPoints, teeDot,
@@ -427,9 +427,9 @@ export default function LiveLeaderboardPanel({
         // the sticky heading below would measure its offset from the card
         // rather than the viewport. The corners round without it.
         <div className="bg-surface border border-bark/12 rounded-2xl">
-          {/* Column headers — sticky below the site header */}
+          {/* Column headers — sticky below whatever chrome is above them */}
           <div
-            style={{ top: LEGACY_HEADER_H }}
+            style={{ top: CHROME }}
             className="sticky z-10 flex items-center gap-3 px-3 py-1.5 bg-surface border-b border-bark/12 rounded-t-2xl"
           >
             <span className="text-[12px] tracking-widest uppercase text-ink/65 w-6 flex-shrink-0">Pos</span>

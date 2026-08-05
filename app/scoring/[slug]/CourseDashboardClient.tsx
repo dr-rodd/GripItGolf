@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import LiveScoringFlow from "../LiveScoringFlow"
 import LiveLeaderboardPanel from "../LiveLeaderboardPanel"
 import type { ActiveLiveRound } from "../ScoringClient"
 import BackButton from "@/app/components/BackButton"
+import { CHROME_VAR, LEGACY_CHROME } from "../scoringHeaderMetrics"
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -63,6 +64,17 @@ interface Props {
    * against the wrong one. The trip route already knows which was asked for.
    */
   roundId?: string
+  /**
+   * How much sticky chrome is already pinned above this screen, in px.
+   *
+   * A trip route puts the site-wide TripHeader above this component, and both
+   * are sticky. Left at 0 this header pinned to the very top of the viewport —
+   * the same place TripHeader was already sitting — and, being the lower of
+   * the two z-indexes, slid underneath it: the course name disappeared behind
+   * the site header the moment the page was scrolled. The legacy
+   * /scoring/[slug] route has nothing above it and leaves this at 0.
+   */
+  stickyTop?: number
 }
 
 type View = "dashboard" | "scoring" | "live-board" | "settings"
@@ -71,7 +83,7 @@ type View = "dashboard" | "scoring" | "live-board" | "settings"
 
 export default function CourseDashboardClient({
   courseName, courseId, players, rounds, holes, tees, roundHandicaps,
-  backHref = "/scoring", roundId,
+  backHref = "/scoring", roundId, stickyTop = 0,
 }: Props) {
   const [view, setView]                       = useState<View>("dashboard")
   const [scoringLiveRound, setScoringLiveRound] = useState<ActiveLiveRound | null>(null)
@@ -89,6 +101,30 @@ export default function CourseDashboardClient({
   const [settingsVoidSession, setSettingsVoidSession]     = useState(false)
   const [settingsWorking, setSettingsWorking]             = useState(false)
   const [settingsError, setSettingsError]                 = useState<string | null>(null)
+
+  // ─── How far down the chrome reaches ──────────────────────
+  //
+  // The header below is not one fixed height: during score entry it grows a
+  // hole-progress row and a Live Leaderboard banner, so it is 77px on this
+  // dashboard and around 185px mid-round. Everything sticky underneath it,
+  // and the score-entry card that has to reach from it down to the fixed Next
+  // button, needs the real number for the view being shown — see
+  // ../scoringHeaderMetrics for why a constant could never be right.
+  //
+  // Measured rather than derived: the header's contents are ordinary flow
+  // content, and a course name long enough to wrap changes its height too.
+  const headerRef = useRef<HTMLDivElement>(null)
+  const [chrome, setChrome] = useState(stickyTop + LEGACY_CHROME)
+
+  useLayoutEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const measure = () => setChrome(stickyTop + el.getBoundingClientRect().height)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [stickyTop])
 
   const nonComposite = players.filter(p => !p.is_composite)
 
@@ -385,43 +421,65 @@ export default function CourseDashboardClient({
     ? <BackButton href={backHref} />
     : <BackButton onClick={goBack} />
 
-  const headerRight = view === "scoring"
-    ? <div className="w-[80px] flex-shrink-0" />
-    : view === "dashboard"
-        ? <button
+  // Only the dashboard has anything to put on the right. The other views
+  // reserved an 80px spacer there anyway, which cost the course name a quarter
+  // of the row: "Doonbeg Greg Norman Course" wrapped to two lines with 80px of
+  // the header sitting empty beside it. Nothing is centred against that slot —
+  // the title is left-aligned beside the back button — so reserving it bought
+  // nothing, and no view without a control needs it.
+  const headerRight = view === "dashboard"
+    ? <button
             onClick={() => setView("settings")}
             aria-label="Settings"
-            className="text-ink/50 hover:text-ink/80 transition-colors w-[80px] flex-shrink-0 flex justify-end"
+            // A 44px square: the icon is 20px, but this is tapped with a thumb
+            // on a tee box. Wide enough to hit, no wider than it has to be.
+            className="text-ink/50 hover:text-ink/80 transition-colors w-11 h-11 flex-shrink-0 flex items-center justify-end"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
           </button>
-        : <div className="w-[80px] flex-shrink-0" />
+    : null
 
   // ─── Render ───────────────────────────────────────────────
 
   return (
-    <div className="min-h-dvh bg-cream text-ink">
+    // The measured bottom edge of the header goes out as a custom property so
+    // that everything below — the sticky rows in LiveScoringFlow, the live
+    // board's column headings, the score-entry card's height — can pin itself
+    // to the real one for the view on screen.
+    <div
+      className="bg-cream text-ink"
+      style={{
+        [CHROME_VAR]: `${chrome}px`,
+        // A full `100dvh` here, with a 52px site header already above it, made
+        // every scoring screen 52px taller than the window — enough scroll to
+        // pull the score-entry card up off the Next button it is meant to sit
+        // against, and reveal a band of bare cream underneath. It reaches to
+        // the bottom of the window, not to a window's worth below the header.
+        minHeight: `calc(100dvh - ${stickyTop}px)`,
+      } as React.CSSProperties}
+    >
 
       {/* Sticky header.
-          `justify-between` on three flex items with no growth claimed left
-          the title's own box sized by ordinary flex-shrink math rather than
-          by the space actually free between the two side controls — for
-          some course names that meant wrapping a word earlier than it
-          needed to, with the true available width sitting empty on the
-          right. `flex-1 min-w-0` makes the title claim exactly what is left
-          after the back button and the right-hand control, so it only wraps
-          when it genuinely has to. `min-w-0` is what lets it shrink below
-          its own text's natural width at all — without it a long course
-          name pushes the header wider than the screen instead of wrapping.
+          `top` is whatever is already pinned above this screen rather than 0:
+          on a trip route that is the site-wide TripHeader, and sticking at 0
+          put this header in the same place, underneath it, hiding the course
+          name entirely once the page was scrolled.
 
-          The `ml-3` is deliberate and one-sided: only the gap from the back
-          button was reported as too tight, and spending width on a matching
-          gap against the right-hand control as well would cost the title
-          room it does not need to give up. */}
-      <div className="border-b border-bark/12 sticky top-0 z-20 bg-cream">
+          The title takes `flex-1 min-w-0` so it claims the width genuinely
+          left over rather than being sized by flex-shrink arithmetic against
+          a reserved slot on the right. `min-w-0` is what lets it shrink below
+          its own text's natural width at all — without it a long course name
+          pushes the header wider than the screen instead of wrapping. `ml-3`
+          is the breathing room from the back button, which the title was
+          otherwise butting straight up against. */}
+      <div
+        ref={headerRef}
+        className="border-b border-bark/12 sticky z-20 bg-cream"
+        style={{ top: stickyTop }}
+      >
         <div className="max-w-lg mx-auto px-4 py-4 flex items-center">
           {headerLeft}
           <h1 className="flex-1 min-w-0 ml-3 font-[family-name:var(--font-playfair)] text-xl text-ink tracking-wide">

@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import CourseDashboardClient from '@/app/scoring/[slug]/CourseDashboardClient'
 import TripHeader from '@/app/components/TripHeader'
+import { HEADER_H } from '@/app/components/headerMetrics'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,6 +77,10 @@ export default async function TripCoursePage({
         roundHandicaps={hcpsRes.data ?? []}
         backHref={`/trip/${tripCode}/course`}
         roundId={thisRound.id}
+        // TripHeader above is sticky too. Without this the scoring shell's own
+        // header sticks to the same place and, being the lower z-index, ends
+        // up behind it.
+        stickyTop={HEADER_H}
       />
     </div>
   )

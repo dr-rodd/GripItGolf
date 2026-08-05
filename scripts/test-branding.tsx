@@ -1009,6 +1009,59 @@ section('Header metrics are readable from a server component')
     'the landing page reads HERO_SPACE from the metrics module')
 }
 
+// ─── Two sticky headers, one stack ─────────────────────────────
+
+section('The scoring shell stacks under the site header, not behind it')
+{
+  // Both headers are sticky. TripHeader pins at the top of the window; the
+  // scoring shell's own header has to pin below it, or — being the lower
+  // z-index — it slides underneath and the course name vanishes the moment
+  // the page is scrolled. This has now been got wrong twice, each time by
+  // someone reaching for a constant, so what is pinned here is that nobody
+  // reaches for one again.
+  const shell = read('app/scoring/[slug]/CourseDashboardClient.tsx')
+  const page  = read('app/trip/[tripCode]/course/[roundNumber]/page.tsx')
+
+  ok(page.includes('stickyTop={HEADER_H}'),
+    'the trip round route tells the shell how much chrome is above it')
+  ok(page.includes("from '@/app/components/headerMetrics'"),
+    '  …reading the height from the metrics module, not retyping it')
+  ok(/style=\{\{ top: stickyTop \}\}/.test(shell),
+    'the shell sticks at that offset rather than at the top of the window')
+  ok(!/sticky top-0/.test(shell),
+    'and nothing in the shell is pinned to top-0')
+
+  // The distance from the top of the window down to the bottom of the shell's
+  // header is not a constant: the header grows a hole-progress row and a
+  // leaderboard banner during score entry, and the trip route adds 52px of
+  // site header above it that the legacy route does not have. So it is
+  // measured and published, and everything below reads the published value.
+  const metrics = read('app/scoring/scoringHeaderMetrics.ts')
+  ok(/export const CHROME\b/.test(metrics), 'the chrome depth is a published CSS variable')
+  ok(shell.includes('ResizeObserver'), 'the shell measures its own header')
+  ok(shell.includes('[CHROME_VAR]'), '  …and publishes the total on its root')
+
+  for (const file of ['app/scoring/LiveScoringFlow.tsx', 'app/scoring/LiveLeaderboardPanel.tsx']) {
+    const src = read(file)
+    const name = file.split('/').pop()
+    ok(src.includes('scoringHeaderMetrics'), `${name} reads the published depth`)
+    // The two literals that were the bug both times: 52 was the site header
+    // alone, 77 the shell's title row alone. Each was right on one screen.
+    ok(!/top-\[\d+px\]|top: (52|77)\b/.test(src), `  …and pins nothing at a hardcoded offset`)
+    // The spaced form is what a JS style object writes. (The unspaced
+    // `calc(100dvh-57px)` inside Tailwind's arbitrary values is a separate
+    // pre-existing wart on two centring wrappers, not a sticky offset.)
+    ok(!/calc\(100dvh - \d+px\)/.test(src), `  …nor sizes anything against one`)
+  }
+
+  // The score-entry card reaches from the chrome down to the fixed Next bar,
+  // which is what keeps the two reading as one unit instead of drifting
+  // several hundred px apart on a one- or two-player card.
+  const flow = read('app/scoring/LiveScoringFlow.tsx')
+  ok(flow.includes('justify-end'), 'the score-entry card sits against the bottom of its box')
+  ok(flow.includes('calc(100dvh - ${CHROME})'), '  …and that box ends where the chrome does')
+}
+
 // ─── The page's name as artwork ────────────────────────────────
 
 section('A page can name itself in the header')
