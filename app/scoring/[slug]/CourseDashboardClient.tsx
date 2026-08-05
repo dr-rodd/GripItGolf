@@ -526,7 +526,7 @@ export default function CourseDashboardClient({
       >
         <div className="max-w-lg mx-auto px-4 py-4 flex items-center">
           {headerLeft}
-          <h1 className="flex-1 min-w-0 ml-3 font-[family-name:var(--font-playfair)] text-xl text-ink tracking-wide">
+          <h1 className="flex-1 min-w-0 ml-3 font-[family-name:var(--font-playfair)] text-2xl text-ink tracking-wide">
             {courseName}
           </h1>
           {headerRight}

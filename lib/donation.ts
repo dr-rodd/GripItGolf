@@ -10,6 +10,25 @@
 // mistyped variable should produce no link rather than a broken or dangerous
 // one. Costs three lines.
 
+/**
+ * Whether the support link is offered at all.
+ *
+ * Off for now, by decision rather than by configuration —
+ * `NEXT_PUBLIC_DONATION_URL` is left exactly where it is, and every line of
+ * the feature is left exactly as it was. Flip this back to `true` and the
+ * link returns, unchanged, on every screen it used to sit on. That is the
+ * whole redeploy.
+ *
+ * A constant rather than a second environment variable: one feature with two
+ * switches is a feature nobody can confidently say the state of, and the
+ * variable that already exists is the address, not the decision.
+ *
+ * `test:support` follows this. With the link off it checks that nothing
+ * renders whatever the address says; the markup and safety checks are still
+ * there and resume the moment this goes back to true.
+ */
+export const SUPPORT_ENABLED = false
+
 /** Schemes an href may use. Anything else is not a payment page. */
 const ALLOWED = ['https:', 'http:']
 
@@ -44,5 +63,6 @@ export function sanitiseDonationUrl(raw: string | null | undefined): string | nu
  * computed lookup would come back undefined in the browser.
  */
 export function donationUrl(): string | null {
+  if (!SUPPORT_ENABLED) return null
   return sanitiseDonationUrl(process.env.NEXT_PUBLIC_DONATION_URL)
 }

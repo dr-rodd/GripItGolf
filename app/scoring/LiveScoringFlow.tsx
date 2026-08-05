@@ -142,6 +142,19 @@ function shotsReceived(si: number, hcp: number) {
 function calcStableford(gross: number, par: number, si: number, hcp: number) {
   return Math.max(0, par + 2 - (gross - shotsReceived(si, hcp)))
 }
+/**
+ * The gross a no return is stored as: net double bogey off the FULL handicap.
+ *
+ * Every caller passes `playingHcp`, never `displayHcp`, and that is not an
+ * oversight. A no return is a fact about the hole, not about the competition
+ * reading it — so what gets written must not move when the allowance control
+ * is tapped, or the same picked-up ball would be a different gross depending
+ * on which board happened to be showing when the card was signed.
+ *
+ * It stays consistent under a reduction for free: the stored gross is net
+ * double bogey at the full handicap, and a reduced handicap gives at most the
+ * same number of shots, so the hole still scores zero on every board.
+ */
 function nrGross(par: number, si: number, hcp: number) {
   return par + 2 + shotsReceived(si, hcp)
 }

@@ -19,7 +19,10 @@ NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 CRON_SECRET=...
 ADMIN_PASSWORD=...           # server only, no NEXT_PUBLIC_ prefix
-NEXT_PUBLIC_DONATION_URL=... # unset = support link vanishes entirely
+NEXT_PUBLIC_DONATION_URL=... # unset = support link vanishes entirely.
+                             # Currently moot: SUPPORT_ENABLED in lib/donation.ts
+                             # is false, so the link is off whatever this says.
+                             # Flip that constant to bring it back.
 ```
 
 ## Reference docs — open only the one the task needs

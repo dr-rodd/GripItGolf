@@ -12,6 +12,7 @@ import ItineraryEditor from './ItineraryEditor'
 import DateField from '@/app/components/DateField'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import TripHeader from '@/app/components/TripHeader'
+import TabBar from '@/app/components/TabBar'
 import SupportLink from '@/app/components/SupportLink'
 import { IconSettings, IconX, IconFlag } from '@/app/components/icons'
 import type { ItineraryItem } from '@/lib/itinerary'
@@ -445,7 +446,7 @@ export default function TripSetupClient({
 
   /** The answer controls for one question. */
   return (
-    <main className="min-h-dvh bg-cream text-ink pb-16">
+    <main className="min-h-dvh bg-cream text-ink has-tabbar">
 
       {/* The page names itself in the header, the way the leaderboard and
           the scoring screens do. Tapping the mark is the way back. */}
@@ -980,6 +981,11 @@ export default function TripSetupClient({
         <SupportLink className="pb-4" />
 
       </div>
+
+      {/* Settings is a tab destination, so it carries the bar like every
+          other one. A screen you arrive at by tapping a tab and cannot leave
+          the same way reads as a dead end. */}
+      <TabBar tripCode={trip.trip_code} />
     </main>
   )
 }

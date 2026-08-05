@@ -50,6 +50,8 @@ The summary reuses `totalAfterDiscard` — the trip's own discard rule — so th
 
 An optional "support the app" link in the footer, `app/components/SupportLink.tsx`, reading `NEXT_PUBLIC_DONATION_URL`.
 
+**Currently switched off.** `SUPPORT_ENABLED` in `lib/donation.ts` is `false`, so `donationUrl()` returns null and nothing renders on any screen. The address, the component and every check below are untouched — flipping that one constant back to `true` is the whole redeploy. It is a constant rather than a second environment variable because one feature with two switches is a feature nobody can confidently say the state of, and the variable that already exists is the address, not the decision. `test:support` follows the switch: with it off it checks that nothing renders whatever the address says, and the markup and safety checks below run again the moment it goes back on.
+
 - **Sitewide, once inside a trip.** Every trip screen carries it — hub, leaderboard, settings, teams, players, the round picker, matchplay — not only the hub and the leaderboard. It has no server-only dependency, so it renders the same from a server page or from a `'use client'` one (settings imports it directly).
 - **Never on the scoring pages.** `/trip/[tripCode]/course/[roundNumber]` and the shared `CourseDashboardClient` behind it carry no footer — it must not sit anywhere near someone entering a score. The round *picker* (`/trip/[tripCode]/course`) is not scoring itself and does carry it.
 - **Unset means gone.** No link, no wrapper, no gap — `SupportLink` returns `null`, so removing the variable removes the feature completely.
@@ -57,7 +59,13 @@ An optional "support the app" link in the footer, `app/components/SupportLink.ts
 - `target="_blank"` with **both** `noopener` and `noreferrer`.
 - Never a modal, banner or popup.
 
-`test:branding` pins the carrier list and the scoring exclusion. It also caught a real bug while the footer was being made sitewide: `/trip/[tripCode]/matchplay` rendered its `<TabBar>` from inside the `EmptyState` component, so a drawn bracket showed neither the tab bar nor the footer — both are now rendered once, at the page's own root.
+## The tab bar
+
+The bottom bar (`app/components/TabBar.tsx`) is the app's primary navigation, and it is on **every** screen you can navigate from: hub, leaderboard, round picker, teams, players, matchplay and settings. A screen reached by tapping a tab that cannot be left the same way reads as a dead end — settings was exactly that until it was given the bar.
+
+**The one exception is score entry.** `/trip/[tripCode]/course/[roundNumber]` is a discrete applet with its own clear way out, and the bottom of that screen is the last row of a scorecard: a nav bar under it is a mis-tap waiting to happen. Any screen carrying the bar also needs `has-tabbar` on its root, or its last element sits underneath it.
+
+`test:branding` pins both halves of that rule, the carrier list and the scoring exclusion. It also caught a real bug while the footer was being made sitewide: `/trip/[tripCode]/matchplay` rendered its `<TabBar>` from inside the `EmptyState` component, so a drawn bracket showed neither the tab bar nor the footer — both are now rendered once, at the page's own root.
 
 ## The itinerary
 

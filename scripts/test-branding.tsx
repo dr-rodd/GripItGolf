@@ -962,10 +962,9 @@ section('The screens before a trip wear the same header')
   ok(/stepNum > 1 &&[\s\S]{0,120}BackButton onClick=\{goBack\}/.test(create),
     'shown only where there is a step to go back to')
 
-  // Everything inside a trip points at the trip, and nothing points at a
-  // trip code that no longer travels as its own prop
+  // Every screen inside a trip points its mark at the trip hub, and nothing
+  // points at a trip code that no longer travels as its own prop
   for (const f of [
-    'app/trip/[tripCode]/page.tsx',
     'app/trip/[tripCode]/leaderboard/page.tsx',
     'app/trip/[tripCode]/course/page.tsx',
     'app/trip/[tripCode]/setup/TripSetupClient.tsx',
@@ -975,6 +974,51 @@ section('The screens before a trip wear the same header')
   }
   eq(uiFiles().filter(f => /<TripHeader[^>]*tripCode=/.test(read(f))), [],
     'and no call site still passes a trip code')
+
+  // The hub is the exception, because it IS the trip: pointing the mark here
+  // made the one obvious tap on the screen do nothing. It goes to the start
+  // of the site instead, and Home on the tab bar is what comes back here.
+  ok(/<TripHeader backTo="\/" \/>/.test(read('app/trip/[tripCode]/page.tsx')),
+    'the hub points its mark at the start of the site, not at itself')
+
+  // A tap target with only a logo in it has to say where it goes
+  ok(read('app/components/TripHeader.tsx').includes("'Back to the start'"),
+    'and says so out loud for anyone who cannot see the mark')
+}
+
+// ─── The bar at the bottom ─────────────────────────────────────
+
+section('The tab bar is there unless the screen is a scorecard')
+{
+  // The app should read as an app: the navigation is present on every screen
+  // you can navigate from. The exception is score entry — a discrete applet
+  // with its own way out, where a nav bar under the last row of the card is a
+  // mis-tap waiting to happen.
+  const tabbed = [
+    'app/trip/[tripCode]/page.tsx',
+    'app/trip/[tripCode]/leaderboard/page.tsx',
+    'app/trip/[tripCode]/course/page.tsx',
+    'app/trip/[tripCode]/teams/page.tsx',
+    'app/trip/[tripCode]/players/page.tsx',
+    'app/trip/[tripCode]/matchplay/page.tsx',
+    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
+  ]
+  for (const f of tabbed) {
+    const src = read(f)
+    ok(/<TabBar\s/.test(src), `${f.split('/').slice(-2).join('/')} carries the tab bar`)
+    ok(/has-tabbar/.test(src),
+      `  …and leaves room for it, so the last thing on the page is reachable`)
+  }
+
+  // Every destination the bar offers is one of the screens that carries it.
+  const bar = read('app/components/TabBar.tsx')
+  for (const leaf of ['leaderboard', 'course', 'setup']) {
+    ok(bar.includes(`/${leaf}`), `the bar still offers ${leaf}`)
+  }
+
+  const scoring = read('app/trip/[tripCode]/course/[roundNumber]/page.tsx')
+  ok(!/<TabBar/.test(scoring),
+    'and score entry does not, because it is a card with its own way out')
 }
 
 // ─── The header's numbers cross the client boundary ────────────

@@ -27,11 +27,12 @@ import {
   type Leaderboard, parseLeaderboards, boardRules, offersAllowance,
 } from '../lib/leaderboards'
 import {
-  buildRows, scoresForBoard,
+  buildRows, scoresForBoard, shotsReceived,
   type RowContext, type ResolvedScore,
 } from '../lib/boardRows'
 import { exactCourseHandicap, courseHandicap } from '../lib/courseHandicap'
 import { runningStablefordTotals, resolveCourseHandicap } from '../app/scoring/LiveScoringFlow'
+import { readFileSync } from 'fs'
 import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import LeaderboardSetup from '../app/components/LeaderboardSetup'
@@ -460,6 +461,41 @@ section('The tee beats the placeholder')
     'with no tee, the stored whole number is all there is')
   eq(resolveCourseHandicap(undefined, player, undefined), 10,
     'and with neither, the index is the last resort rather than a zero')
+}
+
+// ─── What a no return is stored as ─────────────────────────────
+
+section('A no return is written off the full handicap')
+{
+  const flow = readFileSync('app/scoring/LiveScoringFlow.tsx', 'utf-8')
+
+  // Three places write a gross for a picked-up ball: the hole as it is
+  // entered, an edit on the summary, and the commit. All three must reach for
+  // the full course handicap — a no return is a fact about the hole, not about
+  // whichever board happened to be on screen when the card was signed.
+  // Call sites only — the declaration itself matches `nrGross(` too.
+  const calls = [...flow.matchAll(/nrGross\(p, si, [^)]*\)/g)].map(m => m[0])
+  eq(calls.length, 3, 'three places write a no return')
+  ok(calls.every(c => /playingHcp/.test(c) && !/displayHcp/.test(c)),
+    'and every one of them uses the full handicap, never the reduced one')
+
+  // And the reason that stays consistent: net double bogey off the full
+  // handicap still scores nothing once the handicap is cut, because a cut
+  // handicap gives no more shots than the full one did.
+  const par = 4
+  for (const si of [1, 9, 18]) {
+    for (const full of [0, 7, 12, 18, 28]) {
+      const stored = par + 2 + shotsReceived(full, si)
+      for (const pct of [100, 95, 90, 85, 50]) {
+        const reduced = allowedHandicap(full, pct)
+        const pts = Math.max(0, par + 2 - (stored - shotsReceived(reduced, si)))
+        if (pts !== 0) {
+          ok(false, `SI ${si}, handicap ${full} at ${pct}%: a no return scored ${pts}`)
+        }
+      }
+    }
+  }
+  ok(true, 'a stored no return scores zero at every allowance, on every stroke index')
 }
 
 // ─── On the settings screen ────────────────────────────────────

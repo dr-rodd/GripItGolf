@@ -13,7 +13,7 @@
 
 import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
-import { sanitiseDonationUrl } from '../lib/donation'
+import { sanitiseDonationUrl, SUPPORT_ENABLED } from '../lib/donation'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -82,6 +82,20 @@ function renderWith(url: string | undefined): string {
   return renderToStaticMarkup(React.createElement(Mod.default))
 }
 
+// Everything below is about the link as it appears on screen, and the link is
+// currently switched off in lib/donation.ts. Rather than delete the checks —
+// the feature is meant to come back, and untested markup is how it comes back
+// broken — they are held behind the same switch and resume with it.
+
+if (!SUPPORT_ENABLED) {
+  section('The support link is switched off')
+  {
+    eq(renderWith(REVOLUT), '', 'nothing renders, however the address is configured')
+    eq(renderWith(undefined), '', 'and nothing renders without one either')
+    ok(true, 'the markup and safety checks below resume when SUPPORT_ENABLED goes back to true')
+  }
+} else {
+
 section('With an address set, the link is there')
 {
   const html = renderWith(REVOLUT)
@@ -137,6 +151,8 @@ section('It never renders an empty shell')
 
 // Leave the environment as it was found
 delete process.env.NEXT_PUBLIC_DONATION_URL
+
+} // end of the on-screen checks, held behind SUPPORT_ENABLED
 
 console.log(`\n${'─'.repeat(56)}`)
 if (failed === 0) console.log(`✓ all ${passed} checks passed`)

@@ -53,10 +53,15 @@ body {
    caption and 12px label were too small for that, and nothing here is dense
    enough to need them back. */
 
-.t-h1    { font-family: var(--font-display); font-weight: 600; font-size: 30px; line-height: 1.15; letter-spacing: -0.01em; }
+/* The three display sizes carry every heading in the app, so they are also
+   what makes it read as an app rather than as a page: a heading that only
+   just outranks the paragraph under it reads as a document. Nudged up a step
+   together, keeping the intervals — h1 leads, h2 heads a section, card names
+   a tile, and each is clearly the one above the next. */
+.t-h1    { font-family: var(--font-display); font-weight: 600; font-size: 32px; line-height: 1.15; letter-spacing: -0.01em; }
 
-.t-h2    { font-family: var(--font-display); font-weight: 600; font-size: 21px; line-height: 1.25; }
-.t-card  { font-family: var(--font-display); font-weight: 600; font-size: 16px; line-height: 1.3; }
+.t-h2    { font-family: var(--font-display); font-weight: 600; font-size: 23px; line-height: 1.25; }
+.t-card  { font-family: var(--font-display); font-weight: 600; font-size: 17px; line-height: 1.3; }
 .t-body  { font-family: var(--font-serif);   font-weight: 400; font-size: 17px; line-height: 1.6; }
 .t-data  { font-family: var(--font-serif);   font-weight: 400; font-size: 15px; line-height: 1.4; }
 .t-label { font-family: var(--font-ui);      font-weight: 600; font-size: 13px; line-height: 1.3; }

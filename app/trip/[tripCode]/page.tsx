@@ -257,8 +257,14 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
       {/* Settled from the first pixel. The collapse lives on the landing
           page now: this screen is opened to be read, and the brand
-          performing on the way in only delays it. */}
-      <TripHeader backTo={`/trip/${tripCode}`} />
+          performing on the way in only delays it.
+
+          The mark goes to the start of the site, not to this page. This IS
+          the trip hub, so pointing it here made the one obvious tap on the
+          screen do nothing at all — and the platform has somewhere to go
+          back to now that a trip is not the whole app. Home on the tab bar
+          below is what returns to this screen. */}
+      <TripHeader backTo="/" />
 
       {/* ── Hero ── */}
       <section className="flex flex-col items-center px-6 pt-6 pb-12">
