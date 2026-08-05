@@ -67,6 +67,23 @@ The bottom bar (`app/components/TabBar.tsx`) is the app's primary navigation, an
 
 `test:branding` pins both halves of that rule, the carrier list and the scoring exclusion. It also caught a real bug while the footer was being made sitewide: `/trip/[tripCode]/matchplay` rendered its `<TabBar>` from inside the `EmptyState` component, so a drawn bracket showed neither the tab bar nor the footer — both are now rendered once, at the page's own root.
 
+## Voiding a scorecard
+
+`lib/scorecardVoid.ts`. **A void erases the scores, it does not merely release the players** — that is what it used to do, and the round it was meant to undo carried on standing on the leaderboard as though the card had been signed, with nothing afterwards that would ever take it off.
+
+Two tables hold them and both go:
+
+- `live_scores` — every hole is written here as it is entered, so a card voided halfway through has real rows in it. The trip leaderboard merges that table in by round so the board moves during play, and it has no idea a lock was released.
+- `scores` — a card finalised before being voided has committed rows too, and settings offers Void on a finalised card.
+
+**`round_handicaps` is deliberately left.** It is a snapshot, not a score: nothing appears on a leaderboard because of it, `finalise()` writes one for every player of every round anyway, and starting a new card overwrites it.
+
+**Order matters, and getting it wrong fails silently.** The locks are the only record of who was on the card, so they are read first and released last. Release them first and the delete is scoped to an empty list of players: every call succeeds, and nothing at all is erased. Scoping is per player and never by round alone — two groups can be out on the same round, and voiding one must not touch the other.
+
+Four routes in, all through the module: discarding from inside the card, voiding one from settings, taking a single player off one (their round goes with them — *unfinalising* is the opposite operation and keeps the scores), and finalising a session, which discards every card still open. `voidLiveSession` — "Clear All Live Data" — is round-wide rather than card-wide and already deleted everything on its own terms.
+
+`test:scorecard-void` pins all of it structurally, including that no screen releases players by hand again. That is how the bug shipped: three call sites each doing the two easy deletes themselves.
+
 ## The itinerary
 
 A trip is a drive to the coast, a tee time, another drive, a guesthouse — in that order, on a given day. `itinerary_items` (migration 021) holds that running order; `lib/itinerary.ts` is the model, pure.

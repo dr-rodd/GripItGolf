@@ -70,6 +70,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `lib/leaderboards.ts` | Current leaderboard model |
 | `lib/boardRows.ts` | Scores → leaderboard rows, per board |
 | `lib/courseHandicap.ts` | The WHS course handicap, the only copy. Unrounded is primary — an allowance comes off that, not off the whole number |
+| `lib/scorecardVoid.ts` | Voiding a card. **Erases its scores from `live_scores` and `scores`**, not just the locks. Every void route goes through it |
 | `lib/handicapAllowance.ts` | Playing off a percentage of the course handicap. **Never stored reduced** — applied when a board reads the cards |
 | `lib/leaderboardsCompat.ts` / `lib/formats.ts` / `lib/tripSetupFlow.ts` | Reading old trips' stored settings — don't extend, only read |
 | `lib/teamLimits.ts` | Team size rules, pairing wording |

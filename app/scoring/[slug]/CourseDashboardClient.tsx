@@ -9,6 +9,11 @@ import type { ActiveLiveRound } from "../ScoringClient"
 import BackButton from "@/app/components/BackButton"
 import { CHROME_VAR, LEGACY_CHROME } from "../scoringHeaderMetrics"
 import { FULL_ALLOWANCE, hasReduction } from "@/lib/handicapAllowance"
+import {
+  voidScorecard as voidScorecardData,
+  removePlayerFromScorecard as removePlayerData,
+} from "@/lib/scorecardVoid"
+import { why } from "@/lib/writeFailure"
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -280,21 +285,31 @@ export default function CourseDashboardClient({
     fetchScorecards()
   }
 
-  async function voidScorecard(liveRoundId: string) {
+  async function voidScorecard(liveRoundId: string, voidRoundId: string) {
     setSettingsWorking(true)
-    await Promise.all([
-      supabase.from("live_rounds").update({ status: "closed" }).eq("id", liveRoundId),
-      supabase.from("live_player_locks").delete().eq("live_round_id", liveRoundId),
-    ])
-    setSettingsVoidId(null)
+    setSettingsError(null)
+    // Erases the scores as well as releasing the players. Releasing them alone
+    // is what "void" used to mean, and the round it was meant to undo carried
+    // on standing on the leaderboard.
+    const failure = await voidScorecardData(liveRoundId, voidRoundId)
+    if (failure) setSettingsError(`Could not void that scorecard${why(failure)}`)
+    else setSettingsVoidId(null)
     setSettingsWorking(false)
     fetchScorecards()
   }
 
-  async function removePlayerFromScorecard(playerId: string, liveRoundId: string) {
+  async function removePlayerFromScorecard(playerId: string, liveRoundId: string, playerRoundId: string) {
     setSettingsWorking(true)
-    await supabase.from("live_player_locks").delete()
-      .eq("live_round_id", liveRoundId).eq("player_id", playerId)
+    setSettingsError(null)
+    // Their round goes with them, for the same reason a voided card's does.
+    // Unfinalising is the opposite operation and keeps the scores.
+    const failure = await removePlayerData(liveRoundId, playerRoundId, playerId)
+    if (failure) {
+      setSettingsError(`Could not remove that player${why(failure)}`)
+      setSettingsWorking(false)
+      fetchScorecards()
+      return
+    }
     // Close round if now empty
     const { count } = await supabase
       .from("live_player_locks").select("*", { count: "exact", head: true })
@@ -330,18 +345,23 @@ export default function CourseDashboardClient({
 
   async function finaliseSession() {
     setSettingsWorking(true)
+    setSettingsError(null)
 
-    // 1. Void every active scorecard (with or without players)
+    // 1. Void every active scorecard (with or without players).
+    //    Genuinely void: the confirmation says those cards are discarded, so
+    //    their part-played rounds must come off the leaderboard too rather
+    //    than being frozen onto it by the very act of finalising.
     const activeScorecards = scorecards.filter(s => !s.finalised)
     if (activeScorecards.length > 0) {
-      await Promise.all(activeScorecards.flatMap(s => [
-        supabase.from("live_rounds")
-          .update({ status: "closed", closed_at: new Date().toISOString() })
-          .eq("id", s.liveRound.id),
-        supabase.from("live_player_locks")
-          .delete()
-          .eq("live_round_id", s.liveRound.id),
-      ]))
+      const failures = await Promise.all(activeScorecards.map(
+        s => voidScorecardData(s.liveRound.id, s.liveRound.round_id)))
+      const firstFailure = failures.find(Boolean)
+      if (firstFailure) {
+        setSettingsError(`Could not discard the open scorecards${why(firstFailure)}`)
+        setSettingsWorking(false)
+        fetchScorecards()
+        return
+      }
     }
 
     // 2. Stamp session_finalised_at on all finalised rounds so the portal
@@ -747,6 +767,17 @@ export default function CourseDashboardClient({
                                 <p className="text-ink/50 text-sm mt-0.5">
                                   {s.finalised ? "Finalised" : `Through ${s.holesThrough || "0"}`}
                                 </p>
+                                {/* Voiding erases the round, so it says so
+                                    before the second tap rather than after —
+                                    a finalised card's scores are already on
+                                    the leaderboard being read. */}
+                                {isConfirming && (
+                                  <p className="text-rust text-sm mt-1 leading-snug">
+                                    {s.finalised
+                                      ? "Deletes this card's scores and takes the round off the leaderboard. It cannot be undone."
+                                      : "Deletes the holes already entered on this card. It cannot be undone."}
+                                  </p>
+                                )}
                               </div>
                               {!isConfirming ? (
                                 <button
@@ -764,7 +795,7 @@ export default function CourseDashboardClient({
                                     Cancel
                                   </button>
                                   <button
-                                    onClick={() => voidScorecard(s.liveRound.id)}
+                                    onClick={() => voidScorecard(s.liveRound.id, s.liveRound.round_id)}
                                     disabled={settingsWorking}
                                     className="px-3 py-1.5 text-sm text-rust-deep border border-rust/40 hover:border-rust/70 disabled:opacity-50 transition-colors rounded-xl"
                                   >
@@ -821,7 +852,7 @@ export default function CourseDashboardClient({
                                       Cancel
                                     </button>
                                     <button
-                                      onClick={() => removePlayerFromScorecard(id, liveRoundId)}
+                                      onClick={() => removePlayerFromScorecard(id, liveRoundId, roundId)}
                                       disabled={settingsWorking}
                                       className="px-3 py-1.5 text-sm text-rust-deep border border-rust/40 hover:border-rust/70 disabled:opacity-50 transition-colors rounded-xl"
                                     >

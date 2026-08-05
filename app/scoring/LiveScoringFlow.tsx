@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabase"
 import { mergeSaved, anyScored } from "@/lib/liveScores"
 import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
 import { exactCourseHandicap, courseHandicap, type TeeRating } from "@/lib/courseHandicap"
+import { voidScorecard as voidScorecardData } from "@/lib/scorecardVoid"
+import { why } from "@/lib/writeFailure"
 import { CHROME } from "./scoringHeaderMetrics"
 import type { ActiveLiveRound } from "./ScoringClient"
 import LiveLeaderboardPanel from "./LiveLeaderboardPanel"
@@ -646,17 +648,18 @@ export default function LiveScoringFlow({
   async function handleCloseRound() {
     if (!liveRound) return
     setSaving(true)
-    await Promise.all([
-      supabase
-        .from("live_rounds")
-        .update({ status: "closed", closed_at: new Date().toISOString() })
-        .eq("id", liveRound.id),
-      supabase
-        .from("live_player_locks")
-        .delete()
-        .eq("live_round_id", liveRound.id),
-    ])
+    setError(null)
+    // "Scores will not be saved" is what the confirmation promises, and every
+    // hole was written to `live_scores` as it was entered — so discarding has
+    // to erase them. Releasing the players alone left the part-played round on
+    // the leaderboard, where nothing afterwards would ever take it off.
+    const failure = await voidScorecardData(liveRound.id, liveRound.round_id)
     setSaving(false)
+    if (failure) {
+      setError(`Could not discard this scorecard${why(failure)}`)
+      setCloseConfirm(false)
+      return
+    }
     setCloseConfirm(false)
     resetFlow()
     onBack()
@@ -846,7 +849,7 @@ export default function LiveScoringFlow({
       <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6 py-12">
         <div className="text-center">
           <h2 className="font-[family-name:var(--font-playfair)] text-2xl text-ink mb-2">Discard Scorecard?</h2>
-          <p className="text-ink/65 text-base">This voids the scorecard and releases all players. Scores will not be saved.</p>
+          <p className="text-ink/65 text-base">This voids the scorecard and releases all players. Every hole already entered on it is deleted, and the round comes off the leaderboard.</p>
         </div>
         <div className="flex gap-3 w-full max-w-xs">
           <button onClick={() => setCloseConfirm(false)} className="flex-1 py-3 border border-bark/12 text-ink/80 text-base uppercase tracking-wider hover:border-bark/25 transition-colors">
