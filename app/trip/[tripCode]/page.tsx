@@ -19,7 +19,6 @@ import { type ItineraryItem, dayCount } from '@/lib/itinerary'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import TabBar from '@/app/components/TabBar'
-import { Badge } from '@/app/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -140,7 +139,6 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
   const dateRange  = [formatDate(trip.start_date), formatDate(trip.end_date)].filter(Boolean).join(' – ')
 
-  // Trips created before the lifecycle migration have no setup_status — treat as live
   // A player is confirmed once a real person has claimed that slot;
   // organiser-created placeholders stay pending until someone does.
   const confirmedCount = players.filter(p => p.claimed === true).length
@@ -148,7 +146,6 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
   const everyoneIn = players.length > 0 && pendingCount === 0
   const settingsLocked = isLocked(trip.settings_passcode_hash)
-  const isDraft = (trip.setup_status ?? 'live') === 'draft'
   // What the trip plays for, read off its boards. The hub used to name the
   // old flags, which no longer describe a trip set up in this model.
   const boards = boardsForTrip(trip)
@@ -337,13 +334,6 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
             <p className="t-cap uppercase tracking-[0.18em] text-ink/65 mt-6">{formatLine}</p>
           )}
 
-          {/* Setup badge */}
-          {isDraft && (
-            <div className="mt-6">
-              <Badge>In setup</Badge>
-            </div>
-          )}
-
           {/* Countdown wrapping nav */}
           <TripCountdown target={trip.start_date ?? null}>
             <nav className="flex flex-col gap-3 w-full max-w-xs mx-auto">
@@ -362,55 +352,37 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                 {everyoneIn ? 'Players' : 'Join Trip'}
               </Link>
 
-              {isDraft ? (
-                <>
-                  {/* Trip Setup — the organiser's home while drafting */}
-                  <Link
-                    href={`/trip/${tripCode}/setup`}
-                    className="w-full py-[18px] bg-accent-deep text-white rounded-xl text-sm font-bold tracking-[0.25em] uppercase text-center hover:bg-accent transition-colors inline-flex items-center justify-center gap-2"
-                  >
-                    Trip Setup
-                    {settingsLocked && <LockIcon />}
-                  </Link>
-
-                  {lockedButton('Live Scoring')}
-                  {lockedButton('Leaderboard')}
-                  <p className="text-ink/50 text-[13px] mt-1">
-                    Scoring opens when the trip is finalised
-                  </p>
-                </>
+              {/* Live Scoring — locked only when there is nothing to score.
+                  It used to be locked until the trip was "finalised", which
+                  is a state a trip no longer has: scoring is open from the
+                  moment there is a round to open it on. */}
+              {rounds.length > 0 ? (
+                <Link
+                  href={`/trip/${tripCode}/course`}
+                  className="w-full py-[18px] border-2 border-bark/25 text-ink/80 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-bark/25 hover:text-ink/80 transition-colors"
+                >
+                  Live Scoring
+                </Link>
               ) : (
-                <>
-                  {/* Live Scoring — links to round 1 */}
-                  {rounds.length > 0 ? (
-                    <Link
-                      href={`/trip/${tripCode}/course`}
-                      className="w-full py-[18px] border-2 border-bark/25 text-ink/80 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-bark/25 hover:text-ink/80 transition-colors"
-                    >
-                      Live Scoring
-                    </Link>
-                  ) : (
-                    lockedButton('Live Scoring')
-                  )}
-
-                  {/* Leaderboard */}
-                  <Link
-                    href={`/trip/${tripCode}/leaderboard`}
-                    className="w-full py-[18px] border-2 border-bark/25 text-ink/80 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-bark/25 hover:text-ink/80 transition-colors"
-                  >
-                    Leaderboard
-                  </Link>
-
-                  {/* Settings — leads to setup page with unlock option */}
-                  <Link
-                    href={`/trip/${tripCode}/setup`}
-                    className="text-ink/50 text-[13px] tracking-wide hover:text-ink/65 transition-colors mt-1 inline-flex items-center justify-center gap-1.5"
-                  >
-                    Trip settings
-                    {settingsLocked && <LockIcon />}
-                  </Link>
-                </>
+                lockedButton('Live Scoring')
               )}
+
+              {/* Leaderboard */}
+              <Link
+                href={`/trip/${tripCode}/leaderboard`}
+                className="w-full py-[18px] border-2 border-bark/25 text-ink/80 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-bark/25 hover:text-ink/80 transition-colors"
+              >
+                Leaderboard
+              </Link>
+
+              {/* Trip settings */}
+              <Link
+                href={`/trip/${tripCode}/setup`}
+                className="text-ink/50 text-[13px] tracking-wide hover:text-ink/65 transition-colors mt-1 inline-flex items-center justify-center gap-1.5"
+              >
+                Trip settings
+                {settingsLocked && <LockIcon />}
+              </Link>
 
             </nav>
           </TripCountdown>

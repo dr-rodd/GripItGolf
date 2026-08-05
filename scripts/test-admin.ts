@@ -103,51 +103,43 @@ section('The warning waits until it is a mistake')
 
 const TODAY = '2026-07-30'
 
-section('A trip in setup is in setup')
+section('A trip is placed by its dates, and by nothing else')
 {
-  // Whatever the dates say: the organiser has not opened scoring
-  eq(tripState({ setup_status: 'draft' }, TODAY).key, 'draft', 'a draft trip is in setup')
-  eq(tripState({ setup_status: 'draft', start_date: '2020-01-01', end_date: '2020-01-05' }, TODAY).key,
-    'draft', 'even with dates long past')
-  eq(tripState({ setup_status: 'draft' }, TODAY).label, 'In setup', 'and says so')
-}
+  const at = (start: string | null, end: string | null) =>
+    tripState({ start_date: start, end_date: end }, TODAY).key
 
-section('A live trip is placed by its dates')
-{
-  const live = (start: string | null, end: string | null) =>
-    tripState({ setup_status: 'live', start_date: start, end_date: end }, TODAY).key
-
-  eq(live('2026-08-10', '2026-08-14'), 'upcoming', 'starting later is upcoming')
-  eq(live('2026-07-28', '2026-08-02'), 'active', 'started and not finished is playing')
-  eq(live('2026-07-01', '2026-07-05'), 'completed', 'finished is completed')
+  eq(at('2026-08-10', '2026-08-14'), 'upcoming', 'starting later is upcoming')
+  eq(at('2026-07-28', '2026-08-02'), 'active', 'started and not finished is playing')
+  eq(at('2026-07-01', '2026-07-05'), 'completed', 'finished is completed')
 
   // The edges, which is where a naive comparison goes wrong
-  eq(live('2026-07-30', '2026-08-02'), 'active', 'a trip starting today is playing, not upcoming')
-  eq(live('2026-07-25', '2026-07-30'), 'active', 'and one ending today is still playing')
-  eq(live('2026-07-25', '2026-07-29'), 'completed', 'it completes the day after it ends')
+  eq(at('2026-07-30', '2026-08-02'), 'active', 'a trip starting today is playing, not upcoming')
+  eq(at('2026-07-25', '2026-07-30'), 'active', 'and one ending today is still playing')
+  eq(at('2026-07-25', '2026-07-29'), 'completed', 'it completes the day after it ends')
 
   // Missing dates are common — nothing forces them at creation
-  eq(live(null, null), 'active', 'a live trip with no dates is playing')
-  eq(live(null, '2026-07-01'), 'completed', 'an end date alone is enough to complete it')
-  eq(live('2026-08-10', null), 'upcoming', 'and a start date alone is enough to postpone it')
+  eq(at(null, null), 'active', 'a trip with no dates is playing')
+  eq(at(null, '2026-07-01'), 'completed', 'an end date alone is enough to complete it')
+  eq(at('2026-08-10', null), 'upcoming', 'and a start date alone is enough to postpone it')
 }
 
-section('Trips from before the lifecycle column read as live')
+section('There is no state above the dates')
 {
-  // Migration 010 marked them all live; rows read without the column are the
-  // same thing, and must not come back as drafts
-  eq(tripState({ start_date: '2026-07-01', end_date: '2026-07-05' }, TODAY).key, 'completed',
-    'a missing setup_status is live, not draft')
-  eq(tripState({ setup_status: null }, TODAY).key, 'active', 'and so is an explicit null')
+  // A trip used to be able to sit "in setup" whatever the calendar said,
+  // until the organiser pressed Finalise & Go Live. Nothing writes that
+  // column now, so a row still carrying it reads like every other trip
+  // rather than being frozen out of its own dates for good.
+  const keys = ['upcoming', 'active', 'completed']
+  ok(!keys.includes('draft'), 'a trip has no state that outranks its dates')
+  eq(tripState({ start_date: '2020-01-01', end_date: '2020-01-05' }, TODAY).key, 'completed',
+    'a trip whose dates have passed is completed, whatever was stored against it')
 }
 
 section('Open means somebody is still doing something')
 {
-  eq(tripState({ setup_status: 'draft' }, TODAY).open, true, 'a trip in setup is open')
-  eq(tripState({ setup_status: 'live', start_date: '2026-08-10' }, TODAY).open, true,
-    'an upcoming one is open')
-  eq(tripState({ setup_status: 'live', end_date: '2026-07-01' }, TODAY).open, false,
-    'a completed one is not')
+  eq(tripState({}, TODAY).open, true, 'a trip with no dates at all is open')
+  eq(tripState({ start_date: '2026-08-10' }, TODAY).open, true, 'an upcoming one is open')
+  eq(tripState({ end_date: '2026-07-01' }, TODAY).open, false, 'a completed one is not')
 }
 
 section('Today is a plain date, not a moment')

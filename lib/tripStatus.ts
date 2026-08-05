@@ -1,15 +1,15 @@
 // What state a trip is in, worked out from what is already stored.
 //
 // There is no status field that means what the admin overview wants to show.
-// `trips.status` is the old Donegal Masters lifecycle, `setup_status` says
-// whether scoring has been opened, and the dates say when it is happening.
-// The useful answer is a combination, so it is derived here rather than
-// guessed at each call site.
+// `trips.status` is the old Donegal Masters lifecycle and `setup_status` was
+// the newer one, which said whether scoring had been opened. Neither is
+// written any more: a trip is open from the moment it exists. The dates are
+// what is left, and they are what this answers from.
 //
 // Pure — takes plain fields, does no I/O, and takes "today" as an argument so
 // it can be tested without waiting for a Tuesday.
 
-export type TripStateKey = 'draft' | 'upcoming' | 'active' | 'completed'
+export type TripStateKey = 'upcoming' | 'active' | 'completed'
 
 export type TripState = {
   key: TripStateKey
@@ -19,13 +19,11 @@ export type TripState = {
 }
 
 export type TripDates = {
-  setup_status?: string | null
   start_date?: string | null
   end_date?: string | null
 }
 
 const STATES: Record<TripStateKey, TripState> = {
-  draft:     { key: 'draft',     label: 'In setup',  open: true },
   upcoming:  { key: 'upcoming',  label: 'Upcoming',  open: true },
   active:    { key: 'active',    label: 'Playing',   open: true },
   completed: { key: 'completed', label: 'Completed', open: false },
@@ -45,14 +43,14 @@ function day(d: string | null | undefined): number | null {
  * `today` is a plain date string ("2026-07-30"), so a trip that ends today is
  * still being played rather than finishing at midnight in some other timezone.
  *
- * A trip still in setup is in setup whatever its dates say — the organiser has
- * not opened scoring, so nobody is playing it yet. Trips created before the
- * lifecycle column existed have no setup_status and were all marked live, so
- * a missing value reads as live.
+ * Read from the dates alone. A trip used to be able to sit in a "draft" state
+ * that outranked them — the organiser had not pressed Finalise, so nobody was
+ * playing it whatever the calendar said. There is no such state now: a trip is
+ * open from the moment it exists, and `setup_status` is a column nothing
+ * writes. A trip left holding "draft" from before reads by its dates like
+ * every other one.
  */
 export function tripState(trip: TripDates, today: string): TripState {
-  if ((trip.setup_status ?? 'live') === 'draft') return STATES.draft
-
   const now   = day(today)
   const start = day(trip.start_date)
   const end   = day(trip.end_date)

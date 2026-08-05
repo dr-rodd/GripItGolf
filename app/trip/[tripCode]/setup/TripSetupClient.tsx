@@ -35,7 +35,6 @@ type Trip = {
   start_date: string | null
   end_date: string | null
   leaderboards: Leaderboard[]
-  setup_status: string
   edit_permission: string
 }
 
@@ -172,7 +171,6 @@ export default function TripSetupClient({
   // asked properly by a leaderboard card.
   const [boards, setBoards] = useState<Leaderboard[]>(trip.leaderboards ?? [])
   const [editPermission, setEditPermission] = useState(trip.edit_permission)
-  const [setupStatus, setSetupStatus] = useState(trip.setup_status)
 
   // Collections
   const [teams] = useState<Team[]>(initialTeams)
@@ -199,9 +197,16 @@ export default function TripSetupClient({
   }, [trip.trip_code])
 
   const playerIds = players.map(p => p.id)
-  const isDraft = setupStatus === 'draft'
+  // A trip has no draft and no live: it is always both. There was a
+  // Finalise & Go Live button here that flipped a flag, and the flag locked
+  // the players, the teams and the format behind an Unlock. Nothing about a
+  // trip needs announcing — scoring is open from the moment there is
+  // something to score, and a roster that changes on the first tee is the
+  // normal case rather than the exception.
   const mayChange = editPermission === 'everyone' || isOwner
-  const canEdit = isDraft && mayChange
+  const canEdit = mayChange
+  /** Somebody who is not allowed to change this trip, looking at it anyway. */
+  const viewOnly = !canEdit
   const locked = !canEdit || busy
 
   /**
@@ -361,49 +366,6 @@ export default function TripSetupClient({
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
 
-  async function finalise() {
-    if (!window.confirm('Finalise this trip and go live? Scoring and the leaderboard will open. You can unlock it again later.')) return
-    setBusy(true)
-    // Every player needs a handicap row for every round before scoring works.
-    // Existing rows (e.g. confirmed in a previous live spell) are left untouched.
-    if (players.length > 0 && rounds.length > 0) {
-      const rows = rounds.flatMap(r =>
-        players.map(p => ({
-          round_id: r.id,
-          player_id: p.id,
-          playing_handicap: Math.round(p.handicap ?? 0),
-        }))
-      )
-      const { error: hcpErr } = await supabase
-        .from('round_handicaps')
-        .upsert(rows, { onConflict: 'round_id,player_id', ignoreDuplicates: true })
-      if (hcpErr) {
-        flashError('Could not prepare handicaps — trip not finalised')
-        setBusy(false)
-        return
-      }
-    }
-    const ok = await saveTrip({ setup_status: 'live', finalised_at: new Date().toISOString() })
-    if (ok) setSetupStatus('live')
-    setBusy(false)
-  }
-
-  async function unlock() {
-    if (!window.confirm('Unlock this trip for editing? Scoring pauses until you finalise again. All existing scores are kept.')) return
-    setBusy(true)
-    const ok = await saveTrip({ setup_status: 'draft' })
-    if (ok) setSetupStatus('draft')
-    setBusy(false)
-  }
-
-  // ── Render ───────────────────────────────────────────────────────────────
-
-  const viewOnly = isDraft && !canEdit
-
-  // What a trip plays for is its boards, so that is what finalise asks. It
-  // used to ask trips.formats, which a new trip carries as the defaults — so
-  // a trip with nothing at all to play for could go live.
-  //
   // Every team rule below is asked of one sheet at a time. A trip can run a
   // league between fours and a knockout between pairings, and the rules for
   // one say nothing about the other.
@@ -549,30 +511,6 @@ export default function TripSetupClient({
 
       <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
 
-        {/* ── Status banner ── */}
-        {isDraft ? (
-          <div className="flex items-center gap-3 px-4 py-3.5 bg-accent/10 border border-bark/25 rounded-xl">
-            <span className="w-2 h-2 rounded-full bg-accent flex-shrink-0" />
-            <p className="text-sm text-accent">
-              In setup — finalise below when everyone&apos;s ready to play
-            </p>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between gap-3 px-4 py-3.5 bg-accent/10 border border-accent/30 rounded-xl">
-            <div className="flex items-center gap-3">
-              <span className="w-2 h-2 rounded-full bg-accent flex-shrink-0 animate-pulse" />
-              <p className="text-sm text-accent">Trip is live — scoring is open</p>
-            </div>
-            <button
-              onClick={unlock}
-              disabled={busy}
-              className="flex-shrink-0 px-4 py-2 border border-bark/25 rounded-lg text-[13px] tracking-wider uppercase text-ink/80 hover:border-bark/25 hover:text-ink transition-colors disabled:opacity-40"
-            >
-              Unlock
-            </button>
-          </div>
-        )}
-
         {viewOnly && (
           <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
             <p className="text-ink/65 text-sm">
@@ -590,12 +528,10 @@ export default function TripSetupClient({
             score. */}
         <section className={SECTION}>
           <p className="t-label text-accent-deep uppercase tracking-[0.18em] mb-1">Leaderboards</p>
-          {!isDraft && (
-            <p className="t-cap text-ink/65 mb-3 leading-snug">
-              Safe to change mid-trip. Every card already entered is re-read
-              under the new rules.
-            </p>
-          )}
+          <p className="t-cap text-ink/65 mb-3 leading-snug">
+            Safe to change mid-trip. Every card already entered is re-read
+            under the new rules.
+          </p>
           <LeaderboardSetup
             boards={boards}
             playerCount={players.length}
@@ -698,249 +634,236 @@ export default function TripSetupClient({
           </section>
         )}
 
-        {isDraft && (
-          <>
-            {/* ── Players ── */}
-            <section className={SECTION}>
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-ink/65 text-[13px] tracking-widest uppercase">Players</p>
-                <span className="text-ink/65 text-[13px]">{players.length}</span>
-              </div>
+          {/* ── Players ── */}
+          <section className={SECTION}>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-ink/65 text-[13px] tracking-widest uppercase">Players</p>
+              <span className="text-ink/65 text-[13px]">{players.length}</span>
+            </div>
 
-              <div className="space-y-3">
-                {players.map(player => (
-                  <div key={player.id} className="bg-surface border border-bark/12 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <input
-                        type="text"
-                        defaultValue={player.name}
-                        onBlur={e => {
-                          const v = e.target.value.trim()
-                          if (v && v !== player.name) updatePlayer(player.id, { name: v })
-                        }}
-                        disabled={locked}
-                        className="flex-1 bg-transparent text-ink text-sm font-medium focus:outline-none disabled:opacity-40"
-                      />
-                      {player.is_lead && (
-                        <span className="text-ink/65 text-[12px] tracking-widest uppercase flex-shrink-0">Lead</span>
-                      )}
-                      {!locked && (
-                        <button
-                          onClick={() => removePlayer(player.id)}
-                          className="w-9 h-9 flex items-center justify-center text-ink/65 hover:text-ink/80 transition-colors flex-shrink-0"
-                          aria-label={`Remove ${player.name}`}
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M18 6L6 18M6 6l12 12" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <div className="w-24 flex-shrink-0">
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          defaultValue={player.handicap ?? ''}
-                          onBlur={e => {
-                            const v = parseFloat(e.target.value)
-                            if (!isNaN(v) && v !== player.handicap) updatePlayer(player.id, { handicap: v })
-                          }}
-                          disabled={locked}
-                          min="0"
-                          max="54"
-                          step="0.1"
-                          placeholder="HCP"
-                          className="w-full bg-surface border border-bark/12 rounded-lg px-3 py-2.5 text-ink text-sm focus:outline-none focus:border-accent/50 disabled:opacity-40"
-                        />
-                      </div>
-                      <div className="flex gap-1 flex-shrink-0">
-                        {(['M', 'F'] as const).map(g => (
-                          <button
-                            key={g}
-                            onClick={() => player.gender !== g && updatePlayer(player.id, { gender: g })}
-                            disabled={locked}
-                            className={`w-11 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 ${
-                              player.gender === g
-                                ? 'bg-accent-deep text-white'
-                                : 'bg-surface border border-bark/12 text-ink/65'
-                            }`}
-                          >
-                            {g}
-                          </button>
-                        ))}
-                      </div>
-                      {/* One sheet keeps the dropdown on the same line as
-                          the handicap, where it has always been. */}
-                      {pickedSheets.length === 1 && (
-                        <TeamSelect
-                          label={null}
-                          value={teamFor(memberships, player.id, pickedSheets[0]) ?? ''}
-                          teams={teamsOnSheet(teams, pickedSheets[0]) as Team[]}
-                          sizes={sheetSizes[pickedSheets[0]]}
-                          sizeLimit={teamSizeLimit(sheetBoards(pickedSheets[0]))}
-                          noun={teamNoun(sheetBoards(pickedSheets[0]))}
-                          disabled={locked}
-                          wide={false}
-                          onChange={id => movePlayerToTeam(player.id, pickedSheets[0], id)}
-                        />
-                      )}
-                    </div>
-
-                    {/* Two, and each needs naming — a league team and a
-                        pairing are two answers about the same person. */}
-                    {pickedSheets.length > 1 && (
-                      <div className="flex flex-col gap-2 mt-2">
-                        {pickedSheets.map(id => (
-                          <TeamSelect
-                            key={id}
-                            label={teamNoun(sheetBoards(id)).One}
-                            value={teamFor(memberships, player.id, id) ?? ''}
-                            teams={teamsOnSheet(teams, id) as Team[]}
-                            sizes={sheetSizes[id]}
-                            sizeLimit={teamSizeLimit(sheetBoards(id))}
-                            noun={teamNoun(sheetBoards(id))}
-                            disabled={locked}
-                            wide={false}
-                            onChange={teamId => movePlayerToTeam(player.id, id, teamId)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {players.length === 0 && (
-                  <p className="text-ink/65 text-sm text-center py-2">
-                    No players yet — add them below or share the trip code
-                  </p>
-                )}
-
-                {/* Add player */}
-                {!locked && (
-                  <div className="border border-dashed border-bark/25 rounded-xl p-4 space-y-3">
+            <div className="space-y-3">
+              {players.map(player => (
+                <div key={player.id} className="bg-surface border border-bark/12 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
                     <input
                       type="text"
-                      value={newName}
-                      onChange={e => setNewName(e.target.value)}
-                      placeholder="Player name"
-                      className={INPUT}
+                      defaultValue={player.name}
+                      onBlur={e => {
+                        const v = e.target.value.trim()
+                        if (v && v !== player.name) updatePlayer(player.id, { name: v })
+                      }}
+                      disabled={locked}
+                      className="flex-1 bg-transparent text-ink text-sm font-medium focus:outline-none disabled:opacity-40"
                     />
-                    <div className="flex gap-2">
+                    {player.is_lead && (
+                      <span className="text-ink/65 text-[12px] tracking-widest uppercase flex-shrink-0">Lead</span>
+                    )}
+                    {!locked && (
+                      <button
+                        onClick={() => removePlayer(player.id)}
+                        className="w-9 h-9 flex items-center justify-center text-ink/65 hover:text-ink/80 transition-colors flex-shrink-0"
+                        aria-label={`Remove ${player.name}`}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="w-24 flex-shrink-0">
                       <input
                         type="number"
                         inputMode="decimal"
-                        value={newHandicap}
-                        onChange={e => setNewHandicap(e.target.value)}
-                        placeholder="Handicap"
+                        defaultValue={player.handicap ?? ''}
+                        onBlur={e => {
+                          const v = parseFloat(e.target.value)
+                          if (!isNaN(v) && v !== player.handicap) updatePlayer(player.id, { handicap: v })
+                        }}
+                        disabled={locked}
                         min="0"
                         max="54"
                         step="0.1"
-                        className={`${INPUT} flex-1`}
+                        placeholder="HCP"
+                        className="w-full bg-surface border border-bark/12 rounded-lg px-3 py-2.5 text-ink text-sm focus:outline-none focus:border-accent/50 disabled:opacity-40"
                       />
-                      <div className="flex gap-1 flex-shrink-0">
-                        {(['M', 'F'] as const).map(g => (
-                          <button
-                            key={g}
-                            onClick={() => setNewGender(g)}
-                            className={`w-12 rounded-xl text-sm font-medium transition-colors ${
-                              newGender === g
-                                ? 'bg-accent-deep text-white'
-                                : 'bg-surface border border-bark/12 text-ink/65'
-                            }`}
-                          >
-                            {g}
-                          </button>
-                        ))}
-                      </div>
                     </div>
-                    {pickedSheets.map(id => (
+                    <div className="flex gap-1 flex-shrink-0">
+                      {(['M', 'F'] as const).map(g => (
+                        <button
+                          key={g}
+                          onClick={() => player.gender !== g && updatePlayer(player.id, { gender: g })}
+                          disabled={locked}
+                          className={`w-11 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 ${
+                            player.gender === g
+                              ? 'bg-accent-deep text-white'
+                              : 'bg-surface border border-bark/12 text-ink/65'
+                          }`}
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
+                    {/* One sheet keeps the dropdown on the same line as
+                        the handicap, where it has always been. */}
+                    {pickedSheets.length === 1 && (
                       <TeamSelect
-                        key={id}
-                        label={pickedSheets.length > 1 ? teamNoun(sheetBoards(id)).One : null}
-                        value={newTeams[id] ?? ''}
-                        teams={teamsOnSheet(teams, id) as Team[]}
-                        sizes={sheetSizes[id]}
-                        sizeLimit={teamSizeLimit(sheetBoards(id))}
-                        noun={teamNoun(sheetBoards(id))}
-                        disabled={false}
-                        wide={pickedSheets.length === 1}
-                        onChange={teamId =>
-                          setNewTeams(t => ({ ...t, [id]: teamId ?? '' }))}
+                        label={null}
+                        value={teamFor(memberships, player.id, pickedSheets[0]) ?? ''}
+                        teams={teamsOnSheet(teams, pickedSheets[0]) as Team[]}
+                        sizes={sheetSizes[pickedSheets[0]]}
+                        sizeLimit={teamSizeLimit(sheetBoards(pickedSheets[0]))}
+                        noun={teamNoun(sheetBoards(pickedSheets[0]))}
+                        disabled={locked}
+                        wide={false}
+                        onChange={id => movePlayerToTeam(player.id, pickedSheets[0], id)}
                       />
-                    ))}
-                    <button
-                      onClick={addPlayer}
-                      disabled={busy || !newName.trim() || !newHandicap}
-                      className="w-full py-3.5 border border-accent/40 text-accent rounded-xl text-sm tracking-wider uppercase hover:bg-accent/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      + Add player
-                    </button>
+                    )}
                   </div>
-                )}
-              </div>
-            </section>
 
-            {/* ── Rounds (read-only summary) ── */}
-            {rounds.length > 0 && (
-              <section className={SECTION}>
-                <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-4">Rounds</p>
-                <div className="space-y-2">
-                  {rounds.map(r => (
-                    <div key={r.id} className="flex items-center gap-3 text-sm">
-                      <span className="text-ink/65 w-16 flex-shrink-0">Round {r.round_number}</span>
-                      <span className="text-ink/80">{r.courseName}</span>
+                  {/* Two, and each needs naming — a league team and a
+                      pairing are two answers about the same person. */}
+                  {pickedSheets.length > 1 && (
+                    <div className="flex flex-col gap-2 mt-2">
+                      {pickedSheets.map(id => (
+                        <TeamSelect
+                          key={id}
+                          label={teamNoun(sheetBoards(id)).One}
+                          value={teamFor(memberships, player.id, id) ?? ''}
+                          teams={teamsOnSheet(teams, id) as Team[]}
+                          sizes={sheetSizes[id]}
+                          sizeLimit={teamSizeLimit(sheetBoards(id))}
+                          noun={teamNoun(sheetBoards(id))}
+                          disabled={locked}
+                          wide={false}
+                          onChange={teamId => movePlayerToTeam(player.id, id, teamId)}
+                        />
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              </section>
-            )}
+              ))}
 
-            {/* ── Edit permission ── */}
-            <section className={SECTION}>
-              <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-1">Who can edit</p>
-              <p className="text-ink/65 text-[13px] mb-4">Controls who can change this trip while it&apos;s in setup</p>
-              <div className="flex gap-2">
-                {[
-                  { value: 'everyone', label: 'Any player' },
-                  { value: 'owner', label: 'Owner only' },
-                ].map(o => (
+              {players.length === 0 && (
+                <p className="text-ink/65 text-sm text-center py-2">
+                  No players yet — add them below or share the trip code
+                </p>
+              )}
+
+              {/* Add player */}
+              {!locked && (
+                <div className="border border-dashed border-bark/25 rounded-xl p-4 space-y-3">
+                  <input
+                    type="text"
+                    value={newName}
+                    onChange={e => setNewName(e.target.value)}
+                    placeholder="Player name"
+                    className={INPUT}
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={newHandicap}
+                      onChange={e => setNewHandicap(e.target.value)}
+                      placeholder="Handicap"
+                      min="0"
+                      max="54"
+                      step="0.1"
+                      className={`${INPUT} flex-1`}
+                    />
+                    <div className="flex gap-1 flex-shrink-0">
+                      {(['M', 'F'] as const).map(g => (
+                        <button
+                          key={g}
+                          onClick={() => setNewGender(g)}
+                          className={`w-12 rounded-xl text-sm font-medium transition-colors ${
+                            newGender === g
+                              ? 'bg-accent-deep text-white'
+                              : 'bg-surface border border-bark/12 text-ink/65'
+                          }`}
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {pickedSheets.map(id => (
+                    <TeamSelect
+                      key={id}
+                      label={pickedSheets.length > 1 ? teamNoun(sheetBoards(id)).One : null}
+                      value={newTeams[id] ?? ''}
+                      teams={teamsOnSheet(teams, id) as Team[]}
+                      sizes={sheetSizes[id]}
+                      sizeLimit={teamSizeLimit(sheetBoards(id))}
+                      noun={teamNoun(sheetBoards(id))}
+                      disabled={false}
+                      wide={pickedSheets.length === 1}
+                      onChange={teamId =>
+                        setNewTeams(t => ({ ...t, [id]: teamId ?? '' }))}
+                    />
+                  ))}
                   <button
-                    key={o.value}
-                    onClick={() => savePermission(o.value)}
-                    disabled={locked}
-                    className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
-                      editPermission === o.value
-                        ? 'bg-accent-deep text-white'
-                        : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                    }`}
+                    onClick={addPlayer}
+                    disabled={busy || !newName.trim() || !newHandicap}
+                    className="w-full py-3.5 border border-accent/40 text-accent rounded-xl text-sm tracking-wider uppercase hover:bg-accent/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    {o.label}
+                    + Add player
                   </button>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* ── Rounds (read-only summary) ── */}
+          {rounds.length > 0 && (
+            <section className={SECTION}>
+              <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-4">Rounds</p>
+              <div className="space-y-2">
+                {rounds.map(r => (
+                  <div key={r.id} className="flex items-center gap-3 text-sm">
+                    <span className="text-ink/65 w-16 flex-shrink-0">Round {r.round_number}</span>
+                    <span className="text-ink/80">{r.courseName}</span>
+                  </div>
                 ))}
               </div>
             </section>
+          )}
 
-            {/* ── Finalise ──
-                Blocked only by answers that would make the trip unplayable —
-                a half-filled team sheet is the organiser's business. */}
-            {canEdit && (
-              <>
-                {blocked && (
-                  <div className="px-4 py-3.5 bg-rust/10 border border-rust/40 rounded-xl">
-                    <p className="text-rust-deep text-sm leading-snug">{blocked}</p>
-                  </div>
-                )}
+          {/* ── Edit permission ── */}
+          <section className={SECTION}>
+            <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-1">Who can edit</p>
+            <p className="text-ink/65 text-[13px] mb-4">Controls who can change this trip while it&apos;s in setup</p>
+            <div className="flex gap-2">
+              {[
+                { value: 'everyone', label: 'Any player' },
+                { value: 'owner', label: 'Owner only' },
+              ].map(o => (
                 <button
-                  onClick={finalise}
-                  disabled={busy || blocked !== null}
-                  className="w-full py-5 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  key={o.value}
+                  onClick={() => savePermission(o.value)}
+                  disabled={locked}
+                  className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
+                    editPermission === o.value
+                      ? 'bg-accent-deep text-white'
+                      : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
+                  }`}
                 >
-                  {busy ? 'Working…' : 'Finalise & Go Live'}
+                  {o.label}
                 </button>
-              </>
-            )}
-          </>
+              ))}
+            </div>
+          </section>
+
+        {/* Anything that would make the trip unplayable — no leaderboard at
+            all, a pairs draw with a team of three. Standing information
+            rather than a gate: it used to be the small print under a
+            Finalise button, and it is worth saying whether or not there is
+            a button to disable. */}
+        {canEdit && blocked && (
+          <div className="px-4 py-3.5 bg-rust/10 border border-rust/40 rounded-xl">
+            <p className="text-rust-deep text-sm leading-snug">{blocked}</p>
+          </div>
         )}
 
         {/* ── Per-format settings ──
@@ -959,16 +882,6 @@ export default function TripSetupClient({
             teams={teamsOnSheet(teams, drawSheet)}
             players={asMembers(playerIds, memberships, drawSheet)}
           />
-        )}
-
-        {/* Live-mode summary */}
-        {!isDraft && (
-          <div className={SECTION}>
-            <p className="text-ink/65 text-sm leading-relaxed">
-              The trip is finalised and play is live. To change players, teams, or the format,
-              unlock the trip above — all scores entered so far are kept.
-            </p>
-          </div>
         )}
 
         {/* Error toast */}

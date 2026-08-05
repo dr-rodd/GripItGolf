@@ -82,7 +82,7 @@ Two tables hold them and both go:
 - `live_scores` — every hole is written here as it is entered, so a card voided halfway through has real rows in it. The trip leaderboard merges that table in by round so the board moves during play, and it has no idea a lock was released.
 - `scores` — a card finalised before being voided has committed rows too, and settings offers Void on a finalised card.
 
-**`round_handicaps` is deliberately left.** It is a snapshot, not a score: nothing appears on a leaderboard because of it, `finalise()` writes one for every player of every round anyway, and starting a new card overwrites it.
+**`round_handicaps` is deliberately left.** It is a snapshot, not a score: nothing appears on a leaderboard because of it, creation and adding a round both write one for every player, and starting a card overwrites it.
 
 **Order matters, and getting it wrong fails silently.** The locks are the only record of who was on the card, so they are read first and released last. Release them first and the delete is scoped to an empty list of players: every call succeeds, and nothing at all is erased. Scoping is per player and never by round alone — two groups can be out on the same round, and voiding one must not touch the other.
 
@@ -130,9 +130,9 @@ The schema uses one wide table with a `kind` column and a check constraint that 
 
 The gear icon in trip settings opens `ItineraryEditor.tsx` — the same `ItineraryBuilder` creation uses, wrapped to load what is already saved and write back only what changed. Its own full-screen overlay rather than living inside the "Trip details" sheet: the builder already pins a footer of its own to the bottom of the screen, and a second one competing with it is exactly the glitch that footer exists to avoid.
 
-**Stays and journeys are always editable.** Nothing downstream depends on them, so add, move and remove all work regardless of the trip's lifecycle state.
+**Stays and journeys are always editable.** Nothing downstream depends on them, so add, move and remove always work.
 
-**Golf is editable only while `canEditGolf` — draft, and no round on the trip has a score or a live session anywhere.** A course change would orphan real data, so editing golf at all is refused rather than any single edit — `ItineraryBuilder`'s `lockGolf` prop hides the remove button on golf tiles and disables the Golf add button, with a banner explaining why. `canEditGolf` is computed server-side in `setup/page.tsx` on every load; **Unlock does not clear it** — the lifecycle rule (below) is explicit that scores are never touched by that switch, so a draft trip can still be carrying them from an earlier live spell, and this is checked directly rather than inferred from `setup_status` alone.
+**Golf is editable only while `canEditGolf` — no round on the trip has a score or a live session anywhere.** A course change would orphan real data, so editing golf at all is refused rather than any single edit — `ItineraryBuilder`'s `lockGolf` prop hides the remove button on golf tiles and disables the Golf add button, with a banner explaining why. `canEditGolf` is computed server-side in `setup/page.tsx` on every load, and it is checked against the scores directly: it is the only thing on that screen that locks anything, and it answers a question about the data rather than about a phase the trip is in.
 
 **The write path never risks a round with real data in it** (`lib/itineraryStore.ts`). `lib/itinerarySync.ts` is the pure half — `diffItems` turns the edited list into inserts, updates and deletes by reusing `ItineraryBuilder`'s own `tmp-N` convention for a row that has not been saved yet, and `touchesGolf` is the same refusal check made again at the moment of the write, in case scores appeared on another device since the editor opened. The store itself:
 
@@ -141,14 +141,14 @@ The gear icon in trip settings opens `ItineraryEditor.tsx` — the same `Itinera
 3. Inserts what's new — by then, everything else is already in its final place, so a new row can only ever land in a genuinely empty slot.
 4. If golf changed: deletes the round behind a removed golf item (refusing, with a message, if `scores` or `live_rounds` exist for it — the belt to `canEditGolf`'s braces), updates `course_id`/`scheduled_date` for a moved or recoursed one, and creates a fresh round — with `round_handicaps` for every current player, same placeholder formula as creation — for a new one. Existing round numbers are never renumbered; a new round simply takes the next one.
 
-## Trip lifecycle
+## Trip lifecycle — there isn't one
 
-Trips have a `setup_status` of `draft` or `live`.
+**A trip is open from the moment it exists.** Scoring and the leaderboard work as soon as there is a round to open them on, and the players, teams and format stay editable for as long as the trip does.
 
-- **Draft** — everything editable: name, dates, formats, teams, players, handicaps. Scoring and the leaderboard are locked on the trip hub. Players can still join with the trip code.
-- **Finalise** — writes a `round_handicaps` row for every player on every round (this is what catches players who joined after creation), then flips to `live` and opens scoring.
-- **Unlock** — returns a live trip to `draft`. **Scores are never touched by the switch.** Re-finalising only fills gaps; it never overwrites existing handicap rows.
+There used to be a `setup_status` of `draft` or `live`, flipped by a **Finalise & Go Live** button in settings. Draft locked Live Scoring and the Leaderboard on the hub; live locked the players, the teams and the format behind an **Unlock**. It was removed because it announced a state nobody needed and gated the two things a trip is for. Note the trap in removing only the button: draft was the *default*, so a trip with no way to leave it could never be scored at all — the state had to go with it.
 
-`edit_permission` is `everyone` or `owner`. Owner is a device flag in localStorage (`gig-owner-<TRIP_CODE>`) set at creation — placeholder until auth lands.
+`setup_status` still exists on `trips`. Nothing writes it, and `tripState` no longer reads it — a trip is placed by its dates alone, so a row still carrying `draft` reads like any other rather than being frozen out of its own calendar. Left in place rather than migrated away; dropping a column buys nothing and cannot be replayed safely.
 
-Trips predating this feature were marked `live` by migration 010, so nothing changed for them.
+**One thing still locks, and it is not a flag.** `canEditGolf` — rounds and courses are editable only while no round on the trip has a score or a live session anywhere. A course change would orphan real data, which is a fact about the data rather than a phase of the trip. It is computed server-side in `setup/page.tsx` on every load.
+
+`edit_permission` is `everyone` or `owner`. Owner is a device flag in localStorage (`gig-owner-<TRIP_CODE>`) set at creation — placeholder until auth lands. That is the only thing that makes settings read-only now.

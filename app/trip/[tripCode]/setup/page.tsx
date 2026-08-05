@@ -91,12 +91,10 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
     }))
 
   // Golf can only be edited while nothing has been scored yet — a course
-  // change would orphan real data. Unlocking a live trip does not touch
-  // scores either (see the lifecycle rule in docs/features.md), so a draft trip can
-  // still be carrying them from an earlier live spell; the check is against
-  // the scores themselves; `isDraft` guards it in step with everything else
-  // this screen locks once live.
-  const isDraft = (trip.setup_status ?? 'live') === 'draft'
+  // change would orphan real data. The check is against the scores
+  // themselves, which is now the only thing that locks anything on this
+  // screen: a trip has no draft and no live, and everything else here stays
+  // editable for as long as the trip does.
   const roundIds = rounds.map(r => r.id)
   const [scoresRes, liveRoundsRes] = roundIds.length > 0
     ? await Promise.all([
@@ -104,7 +102,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         supabase.from('live_rounds').select('id', { count: 'exact', head: true }).in('round_id', roundIds),
       ])
     : [{ count: 0, error: null }, { count: 0, error: null }]
-  const canEditGolf = isDraft && (scoresRes.count ?? 0) === 0 && (liveRoundsRes.count ?? 0) === 0
+  const canEditGolf = (scoresRes.count ?? 0) === 0 && (liveRoundsRes.count ?? 0) === 0
 
   const settings = (
     <TripSetupClient
@@ -118,7 +116,6 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         // existed arrives with the boards its old flags described rather
         // than a blank slate. Its first save writes them down for real.
         leaderboards: boardsForTrip(trip),
-        setup_status: trip.setup_status ?? 'live',
         edit_permission: trip.edit_permission ?? 'everyone',
       }}
       teams={(teamsResult.data ?? []).map(t => ({ ...t, team_set: t.team_set ?? 'main' }))}

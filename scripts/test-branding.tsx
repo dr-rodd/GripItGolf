@@ -1270,6 +1270,39 @@ section('The old branding is gone')
   }
 }
 
+// ─── A trip is open from the moment it exists ──────────────────
+
+section('Nothing has to be finalised before it can be played')
+{
+  // A trip used to sit in "draft" until Finalise & Go Live was pressed, and
+  // draft meant Live Scoring and the Leaderboard were locked on the hub. The
+  // button is gone, so the state it set has to go with it — leaving one
+  // behind would have made every new trip permanently unable to score.
+  const setup = stripComments(read('app/trip/[tripCode]/setup/TripSetupClient.tsx'))
+  ok(!setup.includes('Finalise & Go Live'), 'settings has no finalise button')
+  ok(!/isDraft/.test(setup), 'and nothing on that screen asks whether the trip is a draft')
+  ok(!/setup_status/.test(setup), 'nor writes the flag it used to set')
+
+  const hub = stripComments(read('app/trip/[tripCode]/page.tsx'))
+  ok(!/isDraft/.test(hub), 'the hub does not ask either')
+  ok(!hub.includes('Scoring opens when the trip is finalised'),
+    'and never says scoring is waiting on something')
+  // Locked only when there is genuinely nothing to score
+  ok(/rounds\.length > 0 \? \(/.test(hub),
+    'Live Scoring is locked by having no rounds, and by nothing else')
+
+  const status = stripComments(read('lib/tripStatus.ts'))
+  ok(!/setup_status/.test(status), 'a trip is placed by its dates alone')
+  ok(!/'draft'/.test(status), 'with no state that outranks them')
+
+  // The one thing that does still lock: golf structure, once scores exist.
+  // A course change would orphan real data, which no flag was ever needed to
+  // know.
+  const page = stripComments(read('app/trip/[tripCode]/setup/page.tsx'))
+  ok(/canEditGolf = \(scoresRes\.count \?\? 0\) === 0/.test(page),
+    'rounds and courses still lock once anything has been scored')
+}
+
 // ─── The hole you are on ───────────────────────────────────────
 
 section('The progress row shows a position, not a scale')
