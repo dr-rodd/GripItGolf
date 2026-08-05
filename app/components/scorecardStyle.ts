@@ -46,8 +46,27 @@ export const SC_BAND = 'bg-bark/[0.05]'
 /** The total. The same wash, one step up, so the eye lands there last. */
 export const SC_BAND_TOTAL = 'bg-bark/[0.10]'
 
-/** Column headings and the details strip above them. */
+/**
+ * Column headings and the details strip above them.
+ *
+ * A tint, not a colour: 5% bark over whatever is behind it. On a card that is
+ * the white surface, which is the look intended.
+ *
+ * **Anything sticky wearing this needs `SC_STICKY` on the box that pins it.**
+ * A tint has nothing behind it once the rows start sliding underneath, and
+ * eighteen holes scrolling through the column headings is not a subtle effect.
+ */
 export const SC_HEAD = 'bg-bark/[0.05]'
+
+/**
+ * The backing a pinned header sits on: the card's own white, made explicit.
+ *
+ * Kept apart from `SC_HEAD` rather than folded into it because the tint is
+ * applied per row — the details strip and the headings are two bands with a
+ * rule between them — while the opaque backing belongs once, to the box that
+ * does the pinning.
+ */
+export const SC_STICKY = 'bg-surface'
 
 /** A column heading: small caps, quiet, never smaller than the type floor. */
 export const SC_HEAD_TEXT =

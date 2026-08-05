@@ -1208,6 +1208,53 @@ section('The old branding is gone')
   }
 }
 
+// ─── Pinned headers ────────────────────────────────────────────
+//
+// Two ways a pinned row goes wrong, both of which have shipped:
+//
+//   · it is transparent, and the content it is meant to hold still for scrolls
+//     visibly through it
+//   · something above it quietly becomes a scrollport, and it measures its
+//     offset from that instead of from the window — landing halfway down the
+//     list it is supposed to head
+//
+// Neither shows up in a typecheck and neither is visible until a page is long
+// enough to scroll, which is why they are pinned here.
+
+section('A pinned header holds still, and holds its own background')
+{
+  // `overflow-x: hidden` does NOT leave the other axis visible: the spec
+  // computes `overflow-y: visible` to `auto` beside it, making the element a
+  // scrollport. Any sticky descendant then measures against that box. `clip`
+  // cuts the overflow without establishing one.
+  const scoringFlow = stripComments(read('app/scoring/LiveScoringFlow.tsx'))
+  ok(!scoringFlow.includes('overflow-x-hidden'),
+    'the swipe track clips its sideways overflow rather than hiding it — ' +
+    'hiding it makes the box a scrollport and unmoors every sticky heading below')
+  ok(scoringFlow.includes('overflow-x-clip'), 'and it does still clip it')
+
+  // The scorecard bands are a 5% tint. A tint pinned over moving content shows
+  // all of it, so the box doing the pinning carries the card's own white.
+  const style = read('app/components/scorecardStyle.ts')
+  ok(style.includes('SC_STICKY'), 'the opaque backing for a pinned band is named once')
+  const stickyBands = scoringFlow.match(/sticky[^"'`]*\$\{SC_STICKY\}/)
+  ok(stickyBands !== null,
+    'and the end-of-round card pins its details strip and column headings on it')
+
+  // Every other sticky box in the platform names its own background rather
+  // than inheriting whatever happens to be behind it.
+  for (const f of uiFiles()) {
+    const src = stripComments(read(f))
+    for (const m of src.matchAll(/className=[{`"']([^`"']*\bsticky\b[^`"']*)[`"']/g)) {
+      const cls = m[1]
+      // `bottom-` bars float over content on purpose and are styled inline.
+      if (/\bbottom-/.test(cls) || /\bz-30\b/.test(cls)) continue
+      ok(/\bbg-/.test(cls) || /\$\{SC_STICKY\}/.test(cls),
+        `${f.split('/').pop()}: a sticky row names its own background`)
+    }
+  }
+}
+
 console.log(`\n${'─'.repeat(56)}`)
 if (failed === 0) console.log(`✓ all ${passed} checks passed`)
 else {

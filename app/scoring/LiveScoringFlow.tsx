@@ -11,7 +11,7 @@ import LiveLeaderboardPanel from "./LiveLeaderboardPanel"
 import BackButton from "@/app/components/BackButton"
 import ScoreShape, { NoReturnShape } from "@/app/components/ScoreShape"
 import {
-  SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL,
+  SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL, SC_STICKY,
   scRow, teeDot,
 } from "@/app/components/scorecardStyle"
 
@@ -1153,9 +1153,22 @@ export default function LiveScoringFlow({
       }
     }
 
+    // `clip`, not `hidden`, on the swipe box below.
+    //
+    // `overflow-x: hidden` beside an `overflow-y: visible` does not leave the
+    // other axis visible: the spec computes it to `auto`, which makes that div
+    // a scrollport. The live board's column headings are sticky against
+    // whatever chrome is above them, and once this box was the nearest
+    // scrollport they measured that offset from here rather than from the
+    // window — so they were pushed the height of the header down the card and
+    // came to rest below the first player instead of above them.
+    //
+    // `clip` cuts the sideways overflow the swipe needs cut without
+    // establishing a scrollport, so the headings resolve against the window
+    // again and land where the header ends.
     return (
       <div
-        className="overflow-x-hidden"
+        className="overflow-x-clip"
         onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX }}
         onTouchEnd={(e) => {
           if (touchStartX.current === null) return
@@ -1457,8 +1470,11 @@ export default function LiveScoringFlow({
                 <p className="text-ink text-base font-semibold" style={sf}>{courseNameLabel}</p>
               </div>
 
-              {/* Sticky: player details row + column header row */}
-              <div className="sticky z-10" style={{ top: CHROME }}>
+              {/* Sticky: player details row + column header row.
+                  `SC_STICKY` is what stops eighteen holes scrolling visibly
+                  through them — the bands themselves are a 5% tint, and a tint
+                  pinned over moving content shows all of it. */}
+              <div className={`sticky z-10 ${SC_STICKY}`} style={{ top: CHROME }}>
 
                 {/* Tee and playing handicap.
                     The name is here only when nothing else is showing it —
