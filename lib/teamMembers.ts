@@ -14,6 +14,7 @@
 
 import { supabase } from '@/lib/supabase'
 import { MAIN_SET, type Membership } from './teamSets'
+import { failed, type WriteFailure } from './writeFailure'
 
 /** Every membership on a trip, both sheets. */
 export async function fetchMemberships(tripId: string): Promise<Membership[]> {
@@ -37,36 +38,38 @@ export async function fetchMemberships(tripId: string): Promise<Membership[]> {
  * available to us here, and the unique constraint would refuse the insert
  * anyway — better to make the order explicit than to rely on an upsert
  * resolving a conflict on a key it does not own.
+ *
+ * Returns null when the player is where they were asked to be, and the
+ * failure otherwise — which step, and what the database said. It used to
+ * return a bare boolean, and a screen that can only say "could not move
+ * player" cannot tell a missing table from a foreign key from a policy.
+ * See lib/writeFailure.ts.
  */
 export async function setTeam(
   tripId: string,
   playerId: string,
   teamSet: string,
   teamId: string | null,
-): Promise<boolean> {
+): Promise<WriteFailure | null> {
   const { error: delError } = await supabase
     .from('team_members')
     .delete()
     .eq('player_id', playerId)
     .eq('team_set', teamSet)
 
-  if (delError) {
-    console.error('setTeam delete failed:', delError)
-    return false
-  }
+  if (delError) return failed('team_members delete', delError)
 
   if (teamId) {
     const { error: insError } = await supabase
       .from('team_members')
       .insert({ trip_id: tripId, team_id: teamId, team_set: teamSet, player_id: playerId })
-    if (insError) {
-      console.error('setTeam insert failed:', insError)
-      return false
-    }
+    if (insError) return failed('team_members insert', insError)
   }
 
   // The frozen archive routes read players.team_id, so the main sheet keeps
-  // it true. A second sheet has nowhere to mirror to and does not try.
+  // it true. A second sheet has nowhere to mirror to and does not try. A
+  // failure here is logged, not returned: the membership is the real answer
+  // and it is already saved, so refusing the move would be a lie.
   if (teamSet === MAIN_SET) {
     const { error: mirrorError } = await supabase
       .from('players')
@@ -75,7 +78,7 @@ export async function setTeam(
     if (mirrorError) console.error('setTeam mirror to players.team_id failed:', mirrorError)
   }
 
-  return true
+  return null
 }
 
 /**
@@ -85,11 +88,13 @@ export async function setTeam(
  * are deleted, and the database cascades their memberships — but the mirror
  * on `players.team_id` is ours to clear.
  */
-export async function clearMirror(playerIds: readonly string[]): Promise<void> {
-  if (playerIds.length === 0) return
+export async function clearMirror(
+  playerIds: readonly string[],
+): Promise<WriteFailure | null> {
+  if (playerIds.length === 0) return null
   const { error } = await supabase
     .from('players')
     .update({ team_id: null })
     .in('id', playerIds as string[])
-  if (error) console.error('clearMirror failed:', error)
+  return failed('players.team_id clear', error)
 }

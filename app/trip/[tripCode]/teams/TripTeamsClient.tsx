@@ -15,6 +15,7 @@ import {
   sheetChanges, teamsOnSheet, teamFor, membersOf, type Membership,
 } from '@/lib/teamSets'
 import { setTeam, clearMirror } from '@/lib/teamMembers'
+import { failed, why } from '@/lib/writeFailure'
 import {
   teamNoun, teamSizeLimit, teamSizeBanner, teamCountOptions, canJoinTeam,
   PAIR_SIZE,
@@ -66,23 +67,6 @@ const PRESET_COLORS = [
  * A sticky action bar at `bottom-4` sits underneath it and cannot be tapped.
  */
 const ABOVE_TABBAR = 'calc(64px + env(safe-area-inset-bottom) + 1rem)'
-
-/**
- * What Supabase actually said, so a failure can be fixed rather than guessed.
- *
- * "Could not add teams" on its own says only that a write failed, which is
- * the one thing already obvious. The Postgres code is what tells a missing
- * column apart from a row-level-security policy apart from a constraint, and
- * it costs a few words on screen. The whole error goes to the console too —
- * `details` and `hint` are often the actual answer.
- */
-function why(where: string, e: unknown): string {
-  if (!e) return ''
-  console.error(`${where} failed:`, e)
-  const err = e as { message?: string; code?: string }
-  const code = err.code ? ` (${err.code})` : ''
-  return err.message ? ` — ${err.message}${code}` : code
-}
 
 // ─── Player tile ───────────────────────────────────────────────
 
@@ -503,9 +487,10 @@ export default function TripTeamsClient({
       ...(targetTeamId ? [{ team_id: targetTeamId, team_set: sheet, player_id: playerId }] : []),
     ])
 
-    if (!(await setTeam(tripId, playerId, sheet, targetTeamId))) {
+    const fail = await setTeam(tripId, playerId, sheet, targetTeamId)
+    if (fail) {
       setMemberships(prev)
-      flashError('Could not move player — try again')
+      flashError(`Could not move ${dragged.name}${why(fail)}`)
     }
   }
 
@@ -529,7 +514,7 @@ export default function TripTeamsClient({
         .from('teams').insert(toAdd).select('id, name, color, team_set')
       // Say what the database said. "Could not add teams" on its own has sent
       // more than one afternoon looking in the wrong place.
-      if (err || !data) flashError(`Could not add ${noun.many}${why('teams insert', err)}`)
+      if (err || !data) flashError(`Could not add ${noun.many}${why(failed('teams insert', err))}`)
       else setTeams(prev => [...prev, ...(data as Team[])])
     } else {
       // Remove from the end; their players fall back to unassigned
@@ -549,11 +534,13 @@ export default function TripTeamsClient({
       // unassign anybody first. players.team_id is only a mirror for the
       // archive routes, and it is ours to clear.
       if (sheet === MAIN_SET) {
-        await clearMirror(placed.filter(p => p.team_id && doomedIds.includes(p.team_id)).map(p => p.id))
+        const mirrorFail = await clearMirror(
+          placed.filter(p => p.team_id && doomedIds.includes(p.team_id)).map(p => p.id))
+        if (mirrorFail) flashError(`Teams removed, but one record did not clear${why(mirrorFail)}`)
       }
       const { error: err } = await supabase.from('teams').delete().in('id', doomedIds)
       if (err) {
-        flashError(`Could not remove ${noun.many}${why('teams delete', err)}`)
+        flashError(`Could not remove ${noun.many}${why(failed('teams delete', err))}`)
       } else {
         setTeams(prev => prev.filter(t => !doomedIds.includes(t.id)))
         setMemberships(ms => ms.filter(m => !doomedIds.includes(m.team_id)))
@@ -569,14 +556,14 @@ export default function TripTeamsClient({
     const prev = teams
     setTeams(ts => ts.map(t => (t.id === id ? { ...t, name } : t)))
     const { error: err } = await supabase.from('teams').update({ name }).eq('id', id)
-    if (err) { setTeams(prev); flashError(`Could not rename${why('team rename', err)}`) }
+    if (err) { setTeams(prev); flashError(`Could not rename${why(failed('team rename', err))}`) }
   }
 
   async function recolourTeam(id: string, color: string) {
     const prev = teams
     setTeams(ts => ts.map(t => (t.id === id ? { ...t, color } : t)))
     const { error: err } = await supabase.from('teams').update({ color }).eq('id', id)
-    if (err) { setTeams(prev); flashError(`Could not change colour${why('team recolour', err)}`) }
+    if (err) { setTeams(prev); flashError(`Could not change colour${why(failed('team recolour', err))}`) }
   }
 
   // ── Auto-balance ─────────────────────────────────────────────
@@ -610,14 +597,14 @@ export default function TripTeamsClient({
         ({ player_id, team_id, team_set: sheet })),
     ])
 
-    const results = await Promise.all(
+    const fails = (await Promise.all(
       [...assignment.entries()].map(([playerId, teamId]) =>
         setTeam(tripId, playerId, sheet, teamId)
       )
-    )
-    if (results.some(r => !r)) {
+    )).filter(Boolean)
+    if (fails.length > 0) {
       setMemberships(prev)
-      flashError(`Could not set the ${noun.many} — try again`)
+      flashError(`Could not set the ${noun.many}${why(fails[0])}`)
     }
     setBusy(false)
   }
@@ -641,7 +628,7 @@ export default function TripTeamsClient({
       const { error: err } = await supabase
         .from('trips').update({ leaderboards: next }).eq('id', tripId)
       if (err) {
-        flashError(`Could not save which leaderboards these ${noun.many} play for${why('leaderboards update', err)}`)
+        flashError(`Could not save which leaderboards these ${noun.many} play for${why(failed('leaderboards update', err))}`)
         setBusy(false)
         return
       }

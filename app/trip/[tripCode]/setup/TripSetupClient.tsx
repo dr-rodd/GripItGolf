@@ -23,6 +23,7 @@ import {
   teamFor, asMembers, setOf, MAIN_SET, type Membership,
 } from '@/lib/teamSets'
 import { setTeam } from '@/lib/teamMembers'
+import { why } from '@/lib/writeFailure'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -286,11 +287,9 @@ export default function TripSetupClient({
     // A place on each sheet they were assigned to, one write per sheet.
     for (const [teamSet, teamId] of Object.entries(newTeams)) {
       if (!teamId) continue
-      if (await setTeam(trip.id, data.id, teamSet, teamId)) {
-        setMemberships(ms => [...ms, { team_id: teamId, team_set: teamSet, player_id: data.id }])
-      } else {
-        flashError('Player added, but their team could not be saved')
-      }
+      const fail = await setTeam(trip.id, data.id, teamSet, teamId)
+      if (fail) flashError(`Player added, but their team could not be saved${why(fail)}`)
+      else setMemberships(ms => [...ms, { team_id: teamId, team_set: teamSet, player_id: data.id }])
     }
     setNewName('')
     setNewHandicap('')
@@ -342,9 +341,10 @@ export default function TripSetupClient({
       ...ms.filter(m => !(m.player_id === id && m.team_set === teamSet)),
       ...(teamId ? [{ team_id: teamId, team_set: teamSet, player_id: id }] : []),
     ])
-    if (!(await setTeam(trip.id, id, teamSet, teamId))) {
+    const fail = await setTeam(trip.id, id, teamSet, teamId)
+    if (fail) {
       setMemberships(prev)
-      flashError('Could not save that team — try again')
+      flashError(`Could not save that team${why(fail)}`)
     }
   }
 
