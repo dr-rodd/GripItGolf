@@ -4,16 +4,13 @@ import { useState } from 'react'
 import {
   type Leaderboard, type Audience,
   SCORINGS, TEAM_FORMATS, COMBINES, MAX_DISCARD,
-  unanswered, isComplete, offersDiscard, slotKey, isSlotFree,
+  unanswered, isComplete, offersDiscard, slotKey, isFormatFree,
   freeScorings, freeTeamFormats,
   hasMatchplay, boardTitle, boardRules,
 } from '@/lib/leaderboards'
-import {
-  MAIN_SET, setOf, sheetsInUse, nextSheetId, canShareSheet, sheetName,
-  sheetSubtitle,
-} from '@/lib/teamSets'
+import { nextSheetId } from '@/lib/teamSets'
 import { defaultCustomPoints, resolveCustomPoints, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
-import { IconTrophy, IconPlus, IconX, IconCheck } from './icons'
+import { IconTrophy, IconPlus, IconX, IconCheck, IconSettings } from './icons'
 import { Card, Badge, buttonClass, FIELD, FIELD_LABEL } from './ui'
 
 /**
@@ -29,6 +26,17 @@ import { Card, Badge, buttonClass, FIELD, FIELD_LABEL } from './ui'
  *
  * Adding a second board offers the same cascade with whatever is already
  * running shown as taken.
+ *
+ * A board can be reopened and changed afterwards, on the same cascade that
+ * made it. That is safe because a leaderboard owns no data: scores are the
+ * player's, and a board is only a way of reading them. Changing one re-reads
+ * the cards that are already in — it never rewrites them. The board being
+ * edited is left out of the "in use" checks, or it would report itself as a
+ * clash with itself.
+ *
+ * Which teams a board is played by is NOT asked here. Every team board is
+ * made on a sheet of its own and apportioned on the team screen, where the
+ * teams themselves are picked — see lib/teamSets.ts.
  */
 
 const CHOICE =
@@ -130,15 +138,18 @@ function PointsTable({
 // ─── The cascade ───────────────────────────────────────────────
 
 function Builder({
-  existing, playerCount, teamCount, onSave, onCancel,
+  existing, initial, playerCount, teamCount, onSave, onCancel,
 }: {
+  /** What the trip already runs, NOT counting the board being edited. */
   existing: Leaderboard[]
+  /** The board being changed, or null when making a new one. */
+  initial: Leaderboard | null
   playerCount: number
   teamCount: number
   onSave: (lb: Leaderboard) => void
   onCancel: (() => void) | null
 }) {
-  const [draft, setDraft] = useState<Partial<Leaderboard>>({})
+  const [draft, setDraft] = useState<Partial<Leaderboard>>(initial ?? {})
   const set = (patch: Partial<Leaderboard>) => setDraft(d => ({ ...d, ...patch }))
 
   // A prize table is one row per finisher, and on a team board the finishers
@@ -147,22 +158,16 @@ function Builder({
   // and a table with no rows cannot be answered at all.
   const fieldSize = Math.max(2, draft.audience === 'team' ? teamCount : playerCount)
 
+  const editing = initial !== null
   const drawTaken = hasMatchplay(existing)
   const missing = unanswered(draft)
   const ready = isComplete(draft)
   const league = draft.competition === 'league'
-  // Switching back to a shared sheet can make an already-answered board a
-  // duplicate of one that is running. It cannot be saved, and the form has to
-  // say so rather than let the button look ready.
+  // Changing an answer can land a board on a competition the trip already
+  // runs. It cannot be saved, and the form has to say so rather than let the
+  // button look ready.
   const clashes = draft.audience != null && draft.competition != null
-    && !isSlotFree(existing, draft as Leaderboard)
-
-  // Which teams this board is played by. Only worth asking once the trip
-  // already has a sheet to share — the first team board makes one.
-  const sheets = sheetsInUse(existing)
-  const asksSheet = draft.audience === 'team' && canShareSheet(existing)
-  const freshSheet = nextSheetId(existing)
-  const sheet = setOf(draft)
+    && !isFormatFree(existing, draft as Leaderboard)
 
   // Teams answer one question more than individuals, so the numbers are
   // counted rather than written down — a form that skips from 3 to 5 reads
@@ -174,12 +179,16 @@ function Builder({
     <Card className="p-5 flex flex-col gap-5">
       <div>
         <p className="t-h2 text-ink">
-          {existing.length === 0 ? 'First, your primary leaderboard' : 'A second leaderboard'}
+          {editing
+            ? 'Change this leaderboard'
+            : existing.length === 0 ? 'First, your primary leaderboard' : 'A second leaderboard'}
         </p>
         <p className="t-cap text-ink/65 mt-1 leading-snug">
-          {existing.length === 0
-            ? 'What this trip is playing for. Everything else follows from it.'
-            : 'Scored from the same cards, running alongside the first.'}
+          {editing
+            ? 'Every card already entered is re-read under the new rules. Nobody re-enters a score.'
+            : existing.length === 0
+              ? 'What this trip is playing for. Everything else follows from it.'
+              : 'Scored from the same cards, running alongside the first.'}
         </p>
       </div>
 
@@ -193,39 +202,13 @@ function Builder({
             on={draft.audience === a.key}
             label={a.label}
             hint={a.hint}
-            // Sharing is the pre-checked answer: most trips play their
-            // second team board with the teams they already picked.
-            onClick={() => setDraft(a.key === 'team'
-              ? { audience: 'team', teamSet: sheetsInUse(existing)[0] ?? MAIN_SET }
-              : { audience: 'individual' })}
+            // Who is ranked is the question everything else hangs off, so
+            // changing it starts the cascade again. The sheet is not carried
+            // across either — teams are apportioned on the team screen.
+            onClick={() => setDraft({ audience: a.key })}
           />
         ))}
       </Question>
-
-      {/* Same teams?
-          A group may run a team league AND a pairings knockout — the same
-          players, arranged twice. So a team board names the sheet it is
-          played on, and everything from the team sizes to the leaderboard
-          rows follows the sheet rather than the trip. */}
-      {asksSheet && (
-        <Question n={next()} title="Same teams?">
-          {sheets.map(id => (
-            <Choice
-              key={id}
-              on={sheet === id}
-              label={`The same ${sheetName(existing, id).toLowerCase()}`}
-              hint={`As used by ${sheetSubtitle(existing, id, boardTitle)}.`}
-              onClick={() => set({ teamSet: id })}
-            />
-          ))}
-          <Choice
-            on={sheet === freshSheet}
-            label="A different set of teams"
-            hint="Picked separately, from the same players. A player can hold a place in both."
-            onClick={() => set({ teamSet: freshSheet })}
-          />
-        </Question>
-      )}
 
       {draft.audience && (
         <Question n={next()} title="What are they playing?">
@@ -258,7 +241,7 @@ function Builder({
               on={draft.scoring === s.key}
               label={s.label}
               hint={s.hint}
-              taken={!freeScorings(existing, draft.audience!, draft.teamSet).includes(s.key)}
+              taken={!freeScorings(existing, draft.audience!).includes(s.key)}
               onClick={() => set({ scoring: s.key })}
             />
           ))}
@@ -273,7 +256,7 @@ function Builder({
               on={draft.teamFormat === f.key}
               label={f.label}
               hint={f.hint}
-              taken={!freeTeamFormats(existing, draft.scoring, draft.teamSet).includes(f.key)}
+              taken={!freeTeamFormats(existing, draft.scoring).includes(f.key)}
               onClick={() => set({ teamFormat: f.key })}
             />
           ))}
@@ -288,7 +271,7 @@ function Builder({
               on={draft.combine === c.key}
               label={c.label}
               hint={c.hint}
-              taken={!isSlotFree(existing, { ...draft, combine: c.key } as Leaderboard)}
+              taken={!isFormatFree(existing, { ...draft, combine: c.key } as Leaderboard)}
               onClick={() => set({
                 combine: c.key,
                 customPoints: c.key === 'position' ? defaultCustomPoints(fieldSize) : undefined,
@@ -346,8 +329,8 @@ function Builder({
 
       {clashes && missing.length === 0 && (
         <p className="t-cap text-rust-deep leading-snug">
-          This trip already runs that leaderboard. Change an answer, or play it
-          with a different set of teams.
+          This trip already runs that leaderboard. Change an answer — two
+          boards scored the same way would print the same table twice.
         </p>
       )}
 
@@ -360,10 +343,17 @@ function Builder({
         <button
           type="button"
           disabled={!ready || clashes}
-          onClick={() => ready && !clashes && onSave({ ...(draft as Leaderboard), id: `lb-${Date.now()}` })}
+          onClick={() => ready && !clashes && onSave({
+            ...(draft as Leaderboard),
+            // An edit keeps its identity, so the tab it is on and the teams
+            // already picked for it stay with it.
+            id: initial?.id ?? `lb-${Date.now()}`,
+          })}
           className={buttonClass('primary')}
         >
-          {existing.length === 0 ? 'Create leaderboard' : 'Add leaderboard'}
+          {editing
+            ? 'Save changes'
+            : existing.length === 0 ? 'Create leaderboard' : 'Add leaderboard'}
         </button>
       </div>
     </Card>
@@ -373,57 +363,120 @@ function Builder({
 // ─── Main ──────────────────────────────────────────────────────
 
 export default function LeaderboardSetup({
-  boards, playerCount, teamCount, onChange,
+  boards, playerCount, teamCount, readOnly = false, onChange,
 }: {
   boards: Leaderboard[]
   /** The field an individual prize table pays out to. */
   playerCount: number
   /** The field a team prize table pays out to. */
   teamCount: number
+  /** Shown but not changeable — somebody who is not the trip's owner. */
+  readOnly?: boolean
   onChange: (boards: Leaderboard[]) => void
 }) {
   const [adding, setAdding] = useState(false)
+  /** The id of the board open in the cascade, or null. */
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const done = boards.length > 0
+  const editing = boards.find(b => b.id === editingId) ?? null
+  // The board being changed is not competition for itself.
+  const others = boards.filter(b => b.id !== editingId)
+
+  /**
+   * Where a saved board lands.
+   *
+   * A team board needs a sheet of its own the moment it exists, so the team
+   * screen has something to apportion. It keeps the sheet it already had when
+   * one is still a team board after the edit; a board that stops ranking
+   * teams gives its sheet up, and one that starts ranking them takes a fresh
+   * one rather than inheriting somebody else's teams.
+   */
+  function placed(lb: Leaderboard, was: Leaderboard | null): Leaderboard {
+    if (lb.audience !== 'team') {
+      const rest = { ...lb }
+      delete rest.teamSet
+      return rest
+    }
+    if (was?.audience === 'team' && was.teamSet) return { ...lb, teamSet: was.teamSet }
+    return { ...lb, teamSet: nextSheetId(boards.filter(b => b.id !== lb.id)) }
+  }
+
+  function save(lb: Leaderboard) {
+    const was = boards.find(b => b.id === lb.id) ?? null
+    const next = placed(lb, was)
+    onChange(was
+      ? boards.map(b => (b.id === next.id ? next : b))
+      : [...boards, next])
+    setAdding(false)
+    setEditingId(null)
+  }
 
   return (
     <div className="flex flex-col gap-4">
 
       {boards.map((lb, i) => (
-        <Card key={lb.id ?? slotKey(lb)} className="p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="t-h2 text-ink">{boardTitle(lb)}</span>
-                {i === 0 && <Badge tone="win">Primary</Badge>}
+        editingId === lb.id ? (
+          <Builder
+            key={lb.id ?? slotKey(lb)}
+            existing={others}
+            initial={lb}
+            playerCount={playerCount}
+            teamCount={teamCount}
+            onSave={save}
+            onCancel={() => setEditingId(null)}
+          />
+        ) : (
+          <Card key={lb.id ?? slotKey(lb)} className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="t-h2 text-ink">{boardTitle(lb)}</span>
+                  {i === 0 && <Badge tone="win">Primary</Badge>}
+                </div>
+                <p className="t-cap text-ink/65 mt-1 leading-snug">{boardRules(lb)}</p>
               </div>
-              <p className="t-cap text-ink/65 mt-1 leading-snug">{boardRules(lb)}</p>
+              {/* A board is a way of reading the cards, not a place the cards
+                  live, so changing one is safe at any point in the trip. */}
+              {!readOnly && (
+                <div className="flex-shrink-0 flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => { setAdding(false); setEditingId(lb.id) }}
+                    aria-label={`Change ${boardTitle(lb)}`}
+                    className="w-9 h-9 flex items-center justify-center text-ink/50 hover:text-accent-deep transition-colors duration-150"
+                  >
+                    <IconSettings size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onChange(boards.filter(b => b.id !== lb.id))}
+                    aria-label={`Remove ${boardTitle(lb)}`}
+                    className="w-9 h-9 flex items-center justify-center text-ink/50 hover:text-rust transition-colors duration-150"
+                  >
+                    <IconX size={16} />
+                  </button>
+                </div>
+              )}
             </div>
-            <button
-              type="button"
-              onClick={() => onChange(boards.filter(b => b.id !== lb.id))}
-              aria-label={`Remove ${boardTitle(lb)}`}
-              className="flex-shrink-0 w-9 h-9 flex items-center justify-center text-ink/50 hover:text-rust transition-colors duration-150"
-            >
-              <IconX size={16} />
-            </button>
-          </div>
-        </Card>
+          </Card>
+        )
       ))}
 
-      {(!done || adding) && (
+      {!readOnly && !editing && (!done || adding) && (
         <Builder
           existing={boards}
+          initial={null}
           playerCount={playerCount}
           teamCount={teamCount}
-          onSave={lb => { onChange([...boards, lb]); setAdding(false) }}
+          onSave={save}
           onCancel={done ? () => setAdding(false) : null}
         />
       )}
 
       {/* Offered from the start so it is clear more is possible, but not
           usable until the trip has something to play for. */}
-      {!adding && (
+      {!readOnly && !adding && !editing && (
         <Card className={`p-5 ${done ? '' : 'opacity-55'}`}>
           <div className="flex items-start gap-3">
             <span className={`flex-shrink-0 mt-0.5 ${done ? 'text-accent-deep' : 'text-ink/50'}`}>

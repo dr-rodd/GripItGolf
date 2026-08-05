@@ -15,6 +15,12 @@
 //
 // Pure. No I/O — see lib/teamMembers.ts for reading and writing membership.
 
+// Which boards share a sheet is no longer asked when a board is made. Every
+// team board is created on a sheet of its own, and the team screen is where
+// they are apportioned: pick the boards that should share teams, pick the
+// teams, confirm. Confirming writes the chosen sheet onto every board in the
+// selection, which is what merges them. See `sheetForSelection`/`withSheet`.
+
 import { boardTitle, needsPairings, type Leaderboard } from './leaderboards'
 
 /**
@@ -67,12 +73,9 @@ export function nextSheetId(boards: readonly Leaderboard[]): string {
   }
 }
 
-/**
- * Whether a new team board can offer to share a sheet — that is, whether
- * there is one to share. The question is only worth asking the second time.
- */
-export function canShareSheet(boards: readonly Leaderboard[]): boolean {
-  return sheetsInUse(boards).length > 0
+/** Every board that ranks teams, in list order. */
+export function teamBoards(boards: readonly Leaderboard[]): Leaderboard[] {
+  return boards.filter(lb => lb.audience === 'team')
 }
 
 /**
@@ -138,6 +141,87 @@ export function finaliseBlockedReason(
       : 'A team leaderboard needs teams — pick them first.'
   }
   return null
+}
+
+// ─── Apportioning teams to boards ──────────────────────────────
+//
+// A team board is made in settings on a sheet of its own and starts OPEN:
+// nobody has been put in a team for it yet. The team screen is where that is
+// answered, and answering it for several boards at once is what makes them
+// share teams.
+//
+// "Open" is read off the teams that exist rather than off a flag, so there is
+// no second copy of the answer to fall out of step with the first. A sheet
+// with teams on it has been picked; a sheet with none has not.
+
+/** Has anybody been put in a team on this sheet? */
+export function sheetHasTeams(teams: readonly TeamRow[], teamSet: string): boolean {
+  return teamsOnSheet(teams, teamSet).length > 0
+}
+
+/** A team board still waiting for its teams. */
+export function isBoardOpen(lb: Leaderboard, teams: readonly TeamRow[]): boolean {
+  return lb.audience === 'team' && !sheetHasTeams(teams, setOf(lb))
+}
+
+/** The team boards with no teams picked for them yet. */
+export function openBoards(
+  boards: readonly Leaderboard[],
+  teams: readonly TeamRow[],
+): Leaderboard[] {
+  return teamBoards(boards).filter(lb => isBoardOpen(lb, teams))
+}
+
+/**
+ * The sheet a selection of boards should be played on.
+ *
+ * A board that already has teams keeps them, and anything selected alongside
+ * it joins them — picking an existing sheet over making a new one is what
+ * stops a confirmation quietly throwing away teams somebody has already
+ * arranged. With nothing picked yet, the trip's first free sheet is used, so
+ * a single-sheet trip stays on `main` and keeps mirroring `players.team_id`.
+ */
+export function sheetForSelection(
+  boards: readonly Leaderboard[],
+  selectedIds: readonly string[],
+  teams: readonly TeamRow[],
+): string {
+  const selected = boards.filter(lb => selectedIds.includes(lb.id))
+  const picked = selected.map(setOf).filter(s => sheetHasTeams(teams, s))
+  // `main` leads when more than one selected board already has teams: it is
+  // the sheet `players.team_id` mirrors, so merging onto it loses least.
+  if (picked.includes(MAIN_SET)) return MAIN_SET
+  if (picked.length > 0) return picked[0]
+  const sheets = selected.map(setOf)
+  return sheets.includes(MAIN_SET) ? MAIN_SET : sheets[0] ?? MAIN_SET
+}
+
+/**
+ * The same boards, with the named ones moved onto one sheet.
+ *
+ * Pure — the caller writes the result to `trips.leaderboards`. Boards not
+ * named are untouched, including any that were sharing the sheet being moved
+ * away from: leaving a board where it is leaves its teams where they are.
+ */
+export function withSheet(
+  boards: readonly Leaderboard[],
+  boardIds: readonly string[],
+  teamSet: string,
+): Leaderboard[] {
+  return boards.map(lb =>
+    lb.audience === 'team' && boardIds.includes(lb.id) && setOf(lb) !== teamSet
+      ? { ...lb, teamSet }
+      : lb)
+}
+
+/** Whether moving these boards onto that sheet would change anything. */
+export function sheetChanges(
+  boards: readonly Leaderboard[],
+  boardIds: readonly string[],
+  teamSet: string,
+): boolean {
+  return boards.some(lb =>
+    lb.audience === 'team' && boardIds.includes(lb.id) && setOf(lb) !== teamSet)
 }
 
 // ─── Membership ────────────────────────────────────────────────

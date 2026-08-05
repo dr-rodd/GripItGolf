@@ -17,8 +17,10 @@
  */
 
 import {
-  MAIN_SET, setOf, boardsOnSheet, sheetsInUse, nextSheetId, canShareSheet,
+  MAIN_SET, setOf, boardsOnSheet, sheetsInUse, nextSheetId,
   sheetName, sheetSubtitle, teamSheet, teamsOnSheet, membersOf, teamFor,
+  teamBoards, sheetHasTeams, isBoardOpen, openBoards, sheetForSelection,
+  withSheet, sheetChanges,
   asMembers, finaliseBlockedReason, type Membership,
 } from '../lib/teamSets'
 import {
@@ -81,12 +83,8 @@ section('A board names the sheet it is played on')
     'and an individual board is on none of them')
 }
 
-section('A fresh sheet is offered once there is one to share')
+section('Every team board is made on a sheet of its own')
 {
-  ok(!canShareSheet([]), 'nothing to share on an empty trip')
-  ok(!canShareSheet([solo]), 'nor with only an individual board')
-  ok(canShareSheet([league()]), 'but the second team board can share the first\'s')
-
   eq(nextSheetId([]), MAIN_SET, 'the first sheet is the main one')
   eq(nextSheetId([solo]), MAIN_SET, 'still, with no team board')
   eq(nextSheetId([league()]), 'set-2', 'the second is numbered from two')
@@ -108,16 +106,16 @@ section('The sheet is part of what makes a board itself')
   ok(isSlotFree([a], b), 'so running one leaves the other free')
   ok(!isSlotFree([a], league('main')), 'while the same sheet does not')
 
-  // The whole grid reopens on a fresh sheet — that is the point of one
-  // Every format AND every way of adding the rounds up — a format stays on
-  // offer while any board using it is still free.
+  // The form no longer knows which teams a board will be played by — that is
+  // settled on the team screen — so it offers formats rather than slots. A
+  // format stays on offer while any way of adding its rounds up is still free.
   const everyFormat = TEAM_FORMATS.flatMap(f =>
     (['total', 'position'] as const).map(combine =>
       ({ ...league('main'), teamFormat: f.key, combine })))
-  eq(freeTeamFormats(everyFormat, 'stableford', 'main'), [],
-    'a sheet with every format on it has none left')
-  eq(freeTeamFormats(everyFormat, 'stableford', 'set-2').length, TEAM_FORMATS.length,
-    'and a second sheet has all of them again')
+  eq(freeTeamFormats(everyFormat, 'stableford'), [],
+    'a trip running every format has none left')
+  eq(freeTeamFormats([], 'stableford').length, TEAM_FORMATS.length,
+    'and a trip running none has all of them')
 
   // An individual board has no sheet, so the sheet must not enter its key
   eq(slotKey({ ...solo, teamSet: 'set-9' }), slotKey(solo),
@@ -152,6 +150,67 @@ section('A stored board reads back onto a sheet')
     { id: 'w', audience: 'individual', competition: 'league', scoring: 'strokes', teamSet: 'set-2' },
   ])
   eq(ind[0].teamSet, undefined, 'an individual board is given no sheet at all')
+}
+
+// ─── Apportioning teams to boards ──────────────────────────────
+//
+// A team board is made without teams and starts open. The team screen is
+// where it gets them, and giving several boards their teams at once is what
+// makes those boards share a sheet.
+
+section('A board with no teams is open')
+{
+  const boards = [league('main'), draw('set-2'), solo]
+
+  eq(teamBoards(boards).map(b => b.id), ['lg', 'mp'],
+    'only the boards that rank teams are apportioned')
+
+  ok(!sheetHasTeams([], 'main'), 'a sheet nobody is on has no teams')
+  ok(sheetHasTeams([team('reds')], 'main'), 'and one with a team on it does')
+
+  ok(isBoardOpen(league('main'), []), 'a board whose sheet is empty is open')
+  ok(!isBoardOpen(league('main'), [team('reds')]), 'and one whose sheet has teams is not')
+  ok(!isBoardOpen(solo, []), 'an individual board is never open — it has no teams to pick')
+  ok(isBoardOpen(draw('set-2'), [team('reds', 'main')]),
+    'and teams on ANOTHER sheet leave a board open')
+
+  eq(openBoards(boards, [team('reds', 'main')]).map(b => b.id), ['mp'],
+    'so the league is picked and the draw is still waiting')
+  eq(openBoards(boards, []).map(b => b.id), ['lg', 'mp'], 'both, with nothing picked')
+  eq(openBoards(boards, [team('reds'), team('p1', 'set-2')]).map(b => b.id), [],
+    'and neither, once both have teams')
+}
+
+section('Confirming a selection settles which sheet it plays on')
+{
+  const boards = [league('main'), draw('set-2'), solo]
+
+  // Nothing picked yet: main leads, so a one-sheet trip keeps mirroring
+  // players.team_id and never wanders onto set-2 for no reason.
+  eq(sheetForSelection(boards, ['lg', 'mp'], []), MAIN_SET,
+    'two open boards confirmed together go onto the main sheet')
+  eq(sheetForSelection(boards, ['mp'], []), 'set-2',
+    'while a board picked on its own keeps its own sheet')
+  eq(sheetForSelection(boards, [], []), MAIN_SET, 'and nothing selected is the main sheet')
+
+  // The teams that exist win. Merging onto them is what stops a confirmation
+  // silently throwing away an arrangement somebody has already made.
+  eq(sheetForSelection(boards, ['lg', 'mp'], [team('p1', 'set-2')]), 'set-2',
+    'a board that already has teams keeps them, and the other joins')
+  eq(sheetForSelection(boards, ['lg', 'mp'],
+    [team('reds', 'main'), team('p1', 'set-2')]), MAIN_SET,
+    'and with teams on both, main leads — it is the sheet players.team_id mirrors')
+
+  const merged = withSheet(boards, ['lg', 'mp'], MAIN_SET)
+  eq(merged.map(setOf), [MAIN_SET, MAIN_SET, MAIN_SET],
+    'the selected boards move onto the sheet')
+  eq(merged[2], solo, 'and an individual board is untouched, sheet or not')
+  eq(withSheet(boards, ['mp'], 'set-3')[0], boards[0],
+    'a board left out of the selection is left exactly where it was')
+
+  ok(sheetChanges(boards, ['lg', 'mp'], MAIN_SET), 'moving the draw is a change')
+  ok(!sheetChanges(boards, ['lg'], MAIN_SET), 'confirming a board where it already is is not')
+  ok(!sheetChanges(boards, ['so'], 'set-9'), 'nor is naming an individual board')
 }
 
 // ─── Membership ────────────────────────────────────────────────

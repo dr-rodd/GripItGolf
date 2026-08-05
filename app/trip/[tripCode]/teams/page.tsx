@@ -1,12 +1,8 @@
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
-import { boardTitle } from '@/lib/leaderboards'
-import {
-  MAIN_SET, sheetsInUse, boardsOnSheet, sheetSubtitle, teamsOnSheet, teamFor,
-} from '@/lib/teamSets'
+import { MAIN_SET } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
-import { teamNoun } from '@/lib/teamLimits'
 import BackButton from '@/app/components/BackButton'
 import TripTeamsClient from './TripTeamsClient'
 import SupportLink from '@/app/components/SupportLink'
@@ -15,38 +11,32 @@ import TripHeader from '@/app/components/TripHeader'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * Team selection.
+ *
+ * The screen is about apportioning teams to the leaderboards that need them,
+ * so it is handed every team board, every team on the trip and every
+ * membership — not one sheet chosen by a query string. Which sheet is being
+ * edited is a decision the organiser makes on the screen by picking boards,
+ * not something a link has to carry.
+ */
 export default async function TripTeamsPage({
-  params, searchParams,
+  params,
 }: {
   params: Promise<{ tripCode: string }>
-  searchParams: Promise<{ set?: string }>
 }) {
   const { tripCode } = await params
-  const { set } = await searchParams
 
   const { data: trip, error: tripError } = await supabase
     .from('trips')
-    .select('id, name, formats, leaderboards, team_scoring')
+    .select('id, trip_code, name, formats, leaderboards, team_scoring')
     .eq('trip_code', tripCode)
     .single()
 
   if (tripError) console.error('TripTeamsPage trip query failed:', tripError)
   if (!trip) notFound()
 
-  // Which sheet is being picked. A trip can run a league between fours and a
-  // knockout between pairings — the same players, arranged twice — so the
-  // screen has to be told which of the two it is editing. An unknown or
-  // missing `?set=` falls back to the trip's first sheet rather than 404ing:
-  // a stale link should land somewhere real.
-  const boards  = boardsForTrip(trip)
-  const sheets  = sheetsInUse(boards)
-  const teamSet = set && sheets.includes(set) ? set : sheets[0] ?? MAIN_SET
-
-  // A pairs draw calls its teams pairings and locks them at two — of ITS
-  // sheet. A draw running alongside a league has no business resizing the
-  // league's teams, which is what a trip-wide rule did.
-  const onSheet = boardsOnSheet(boards, teamSet)
-  const noun = teamNoun(onSheet)
+  const boards = boardsForTrip(trip)
 
   const [teamsRes, playersRes, memberships] = await Promise.all([
     supabase.from('teams')
@@ -63,7 +53,7 @@ export default async function TripTeamsPage({
   if (teamsRes.error) console.error('TripTeamsPage teams query failed:', teamsRes.error)
   if (playersRes.error) console.error('TripTeamsPage players query failed:', playersRes.error)
 
-  const allTeams = (teamsRes.data ?? []).map(t => ({
+  const teams = (teamsRes.data ?? []).map(t => ({
     id: t.id as string,
     name: t.name as string,
     color: t.color as string,
@@ -78,15 +68,8 @@ export default async function TripTeamsPage({
           <BackButton href={`/trip/${tripCode}/setup`} />
           <div className="min-w-0 text-center">
             <h1 className="font-[family-name:var(--font-display)] text-lg text-ink tracking-wide">
-              {noun.Many}
+              Teams
             </h1>
-            {/* Which board these teams play for. With one sheet it is
-                obvious; with two it is the only thing telling them apart. */}
-            {sheets.length > 1 && (
-              <p className="t-cap text-ink/65 truncate">
-                {sheetSubtitle(boards, teamSet, boardTitle)}
-              </p>
-            )}
           </div>
           <div className="w-[60px]" />
         </div>
@@ -95,15 +78,13 @@ export default async function TripTeamsPage({
       <div className="max-w-3xl mx-auto px-4 py-6">
         <TripTeamsClient
           tripId={trip.id}
-          boards={onSheet}
-          teamSet={teamSet}
-          teams={teamsOnSheet(allTeams, teamSet) as { id: string; name: string; color: string }[]}
-          // `team_id` here is their place on THIS sheet, so the picker works
-          // in one shape whichever sheet it is showing.
-          players={(playersRes.data ?? []).map(p => ({
-            ...p,
-            team_id: teamFor(memberships, p.id, teamSet),
-          }))}
+          tripCode={tripCode}
+          boards={boards}
+          teams={teams}
+          players={(playersRes.data ?? []) as {
+            id: string; name: string; handicap: number | null; gender: string
+          }[]}
+          memberships={memberships}
         />
       </div>
       <SupportLink className="px-4 pb-12" />

@@ -143,6 +143,28 @@ export function isSlotFree(
   return !existing.some(lb => slotKey(lb) === key)
 }
 
+/**
+ * The competition ignoring which teams play it.
+ *
+ * Settings no longer asks a team board which sheet it is on — teams are
+ * apportioned to boards on the team screen, after the boards exist. So the
+ * form cannot tell two boards apart by their sheet while they are being made,
+ * and a second "Team better ball" would be offered as though it were a new
+ * competition when its tab would read exactly the same as the first.
+ */
+export function formatKey(lb: Parameters<typeof slotKey>[0]): string {
+  return slotKey({ ...lb, teamSet: undefined })
+}
+
+/** Is this format still free, whoever ends up playing it? */
+export function isFormatFree(
+  existing: readonly Leaderboard[],
+  candidate: Parameters<typeof slotKey>[0],
+): boolean {
+  const key = formatKey(candidate)
+  return !existing.some(lb => formatKey(lb) === key)
+}
+
 /** A trip may run exactly one knockout draw, whoever it is between. */
 export function hasMatchplay(boards: readonly Leaderboard[]): boolean {
   return boards.some(lb => lb.competition === 'matchplay')
@@ -182,28 +204,29 @@ export function everyBoard(): Leaderboard[] {
 /**
  * Scorings that still lead somewhere, given what is already running.
  *
- * `teamSet` matters: a board on its own sheet ranks different teams, so
- * nothing played on another sheet takes anything away from it.
+ * Asked of the format rather than the slot, because the form no longer knows
+ * which teams a board will be played by — that is settled afterwards, on the
+ * team screen.
  */
 export function freeScorings(
-  boards: readonly Leaderboard[], audience: Audience, teamSet?: string,
+  boards: readonly Leaderboard[], audience: Audience,
 ): Scoring[] {
   return SCORINGS.map(s => s.key).filter(scoring =>
     everyBoard().some(b =>
       b.audience === audience && b.scoring === scoring
-      && isSlotFree(boards, { ...b, teamSet })))
+      && isFormatFree(boards, b)))
 }
 
-/** Team formats that still lead somewhere, on this sheet. */
+/** Team formats that still lead somewhere. */
 export function freeTeamFormats(
-  boards: readonly Leaderboard[], scoring?: Scoring, teamSet?: string,
+  boards: readonly Leaderboard[], scoring?: Scoring,
 ): TeamFormat[] {
   return TEAM_FORMATS.map(f => f.key).filter(teamFormat =>
     everyBoard().some(b =>
       b.audience === 'team'
       && b.teamFormat === teamFormat
       && (!scoring || b.scoring === scoring)
-      && isSlotFree(boards, { ...b, teamSet })))
+      && isFormatFree(boards, b)))
 }
 
 // ─── Is one finished? ──────────────────────────────────────────

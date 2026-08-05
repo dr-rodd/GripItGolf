@@ -17,7 +17,9 @@
 import {
   type Leaderboard,
   SCORINGS, TEAM_FORMATS, COMBINES, MAX_DISCARD,
-  slotKey, isSlotFree, hasMatchplay, freeScorings, freeTeamFormats,   everyBoard, unanswered, isComplete, offersDiscard, needsTeams, needsPairings,
+  slotKey, isSlotFree, formatKey, isFormatFree, hasMatchplay,
+  freeScorings, freeTeamFormats, everyBoard,
+  unanswered, isComplete, offersDiscard, needsTeams, needsPairings,
   boardTitle, boardRules, primary, parseLeaderboards,
 } from '../lib/leaderboards'
 import { DEFAULT_FORMATS, parseFormats, matchplayOn } from '../lib/formats'
@@ -167,17 +169,35 @@ section('The cascade offers what is left')
   ok(freeTeamFormats([teamBB], 'strokes').includes('better_ball'),
     'and on strokes it is a different board entirely')
 
-  // Every league board on the main sheet, plus the one draw. Under the old
-  // model that was the end of the grid; a board can now name its own team
-  // sheet, and a fresh sheet reopens every team format — so a slot key
-  // carries the sheet, and these are all still free on a second one.
+  // Every league board on the main sheet, plus the one draw. That is the
+  // whole grid, and once it is running there is nothing left to add.
   const everything = [...everyBoard(), draw]
   ok(everything.every(b => !isSlotFree(everything, b)),
-    'a full main sheet has no free cell left on it')
-  ok(TEAM_FORMATS.every(f => isSlotFree(everything, {
+    'a full grid has no free cell left in it')
+  ok(TEAM_FORMATS.every(f => !isFormatFree(everything, {
     audience: 'team', competition: 'league', scoring: 'stableford',
     teamFormat: f.key, combine: 'total', teamSet: 'set-2',
-  })), 'but every team format is free again on a second sheet')
+  })), 'and naming a different sheet does not reopen one — the tab would read the same')
+}
+
+section('The form asks about the format, not about which teams play it')
+{
+  // Which teams a board is played by is settled afterwards, on the team
+  // screen, so the form cannot tell two boards apart by their sheet while
+  // they are being made — and a second "Team better ball" would print the
+  // same table under the same tab.
+  const onMain = { ...teamBB, teamSet: 'main' }
+  const onTwo  = { ...teamBB, teamSet: 'set-2' }
+
+  ok(slotKey(onMain) !== slotKey(onTwo), 'two sheets are still two competitions to score')
+  eq(formatKey(onMain), formatKey(onTwo), 'but one format to choose')
+  ok(isSlotFree([onMain], onTwo), 'so the slot is free')
+  ok(!isFormatFree([onMain], onTwo), 'while the format is not')
+
+  ok(isFormatFree([sf], prize), 'the same scoring paid differently is a different format')
+  ok(isFormatFree([sf], teamBB), 'and a team league is different again')
+  ok(!isFormatFree([draw], { ...pairsDraw, teamSet: 'set-2' }),
+    'one draw per trip, whichever teams it is between')
 }
 
 // ─── What a board implies for the rest of the trip ─────────────
