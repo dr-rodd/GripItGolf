@@ -8,6 +8,7 @@ import LiveLeaderboardPanel from "../LiveLeaderboardPanel"
 import type { ActiveLiveRound } from "../ScoringClient"
 import BackButton from "@/app/components/BackButton"
 import { CHROME_VAR, LEGACY_CHROME } from "../scoringHeaderMetrics"
+import { FULL_ALLOWANCE, hasReduction } from "@/lib/handicapAllowance"
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -75,6 +76,18 @@ interface Props {
    * /scoring/[slug] route has nothing above it and leaves this at 0.
    */
   stickyTop?: number
+  /**
+   * Every handicap allowance this trip's leaderboards play off, highest first.
+   *
+   * One scorecard can be feeding a four-ball at 85% and a singles board at
+   * 95%, so the handicap beside a player's name is not one number and the
+   * scorer has to be able to see each of them. A single step means nothing is
+   * reduced and no control appears at all. The legacy /scoring route knows
+   * nothing about a trip's boards and leaves this alone.
+   */
+  allowances?: number[]
+  /** Which of them the card opens on — the primary board's. */
+  allowanceStart?: number
 }
 
 type View = "dashboard" | "scoring" | "live-board" | "settings"
@@ -84,6 +97,7 @@ type View = "dashboard" | "scoring" | "live-board" | "settings"
 export default function CourseDashboardClient({
   courseName, courseId, players, rounds, holes, tees, roundHandicaps,
   backHref = "/scoring", roundId, stickyTop = 0,
+  allowances = [FULL_ALLOWANCE], allowanceStart = 0,
 }: Props) {
   const [view, setView]                       = useState<View>("dashboard")
   const [scoringLiveRound, setScoringLiveRound] = useState<ActiveLiveRound | null>(null)
@@ -101,6 +115,13 @@ export default function CourseDashboardClient({
   const [settingsVoidSession, setSettingsVoidSession]     = useState(false)
   const [settingsWorking, setSettingsWorking]             = useState(false)
   const [settingsError, setSettingsError]                 = useState<string | null>(null)
+
+  // Which handicap the card is currently showing. Display only: what gets
+  // written stays at the full course handicap whatever this says, and every
+  // board applies its own percentage when it reads the cards back.
+  const [allowanceIdx, setAllowanceIdx] = useState(allowanceStart)
+  const allowance = allowances[allowanceIdx] ?? FULL_ALLOWANCE
+  const cycleAllowance = () => setAllowanceIdx(i => (i + 1) % allowances.length)
 
   // ─── How far down the chrome reaches ──────────────────────
   //
@@ -421,13 +442,36 @@ export default function CourseDashboardClient({
     ? <BackButton href={backHref} />
     : <BackButton onClick={goBack} />
 
-  // Only the dashboard has anything to put on the right. The other views
-  // reserved an 80px spacer there anyway, which cost the course name a quarter
-  // of the row: "Doonbeg Greg Norman Course" wrapped to two lines with 80px of
-  // the header sitting empty beside it. Nothing is centred against that slot —
-  // the title is left-aligned beside the back button — so reserving it bought
-  // nothing, and no view without a control needs it.
-  const headerRight = view === "dashboard"
+  // Only the dashboard and score entry have anything to put on the right. The
+  // other views reserved an 80px spacer there anyway, which cost the course
+  // name a quarter of the row: "Doonbeg Greg Norman Course" wrapped to two
+  // lines with 80px of the header sitting empty beside it. Nothing is centred
+  // against that slot — the title is left-aligned beside the back button — so
+  // reserving it bought nothing, and no view without a control needs it.
+  //
+  // Score entry puts the handicap allowance there, opposite the back button
+  // and wearing the same box: it is the one thing on that screen you change
+  // about the card rather than about a score. It only exists when the trip
+  // actually reduces a handicap somewhere.
+  const allowanceButton = hasReduction(allowances) ? (
+    <button
+      type="button"
+      onClick={cycleAllowance}
+      aria-label={`Showing ${allowance}% of course handicap. Tap for the next allowance.`}
+      className={`inline-flex items-center justify-center flex-shrink-0 h-11 min-w-11 px-3
+        rounded-xl border tabular-nums text-base font-semibold
+        transition-colors duration-150
+        ${allowance === FULL_ALLOWANCE
+          ? "border-bark/12 bg-surface text-ink/80 hover:border-bark/25"
+          : "border-accent/50 bg-accent/[0.10] text-accent-deep hover:bg-accent/15"}`}
+    >
+      {allowance}%
+    </button>
+  ) : null
+
+  const headerRight = view === "scoring"
+    ? allowanceButton
+    : view === "dashboard"
     ? <button
             onClick={() => setView("settings")}
             aria-label="Settings"
@@ -966,6 +1010,8 @@ export default function CourseDashboardClient({
           roundHandicaps={roundHandicaps}
           activeLiveRound={scoringLiveRound}
           autoResume={isResuming}
+          allowance={allowance}
+          allowances={allowances}
           onBack={goBack}
           onLiveRoundChange={r => {
             setScoringLiveRound(r)

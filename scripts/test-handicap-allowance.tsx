@@ -30,6 +30,10 @@ import {
   buildRows, scoresForBoard,
   type RowContext, type ResolvedScore,
 } from '../lib/boardRows'
+import { runningStablefordTotals } from '../app/scoring/LiveScoringFlow'
+import { renderToStaticMarkup } from 'react-dom/server'
+import React from 'react'
+import LeaderboardSetup from '../app/components/LeaderboardSetup'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -294,6 +298,70 @@ section('The scorecard agrees with the board it opened from')
     'and only where the shot was actually lost')
   eq(mine.map(s => s.gross).filter(g => g !== 5).length, 0,
     'gross is never touched by any of it')
+}
+
+// ─── The card being scored ─────────────────────────────────────
+//
+// The running total on a score-entry tile is worked out from the gross rather
+// than read off the points the card cached — those were computed at the full
+// handicap, so trusting them would leave the total sitting still while the
+// allowance control changed everything else on the screen. Every card in play
+// goes through this, allowance or no allowance, so it is pinned rather than
+// left to the one screen that shows it.
+
+section('The running total on a card being scored')
+{
+  const entryHoles = holes.map(h => ({ par: h.par, stroke_index: h.stroke_index }))
+  const played = (upTo: number, gross: number) =>
+    Object.fromEntries(Array.from({ length: upTo }, (_, i) =>
+      [i, { p1: { gross, isNR: false, stableford: 2 } }]))
+
+  eq(runningStablefordTotals(played(18, 5), entryHoles, [{ id: 'p1', gender: 'M', displayHcp: 18 }]),
+    { p1: 36 }, 'eighteen holes of nett par is 36 points')
+  eq(runningStablefordTotals(played(9, 5), entryHoles, [{ id: 'p1', gender: 'M', displayHcp: 18 }]),
+    { p1: 18 }, 'and nine of them is 18 — a running total counts what is in, not what is left')
+
+  eq(runningStablefordTotals(played(18, 5), entryHoles, [{ id: 'p1', gender: 'M', displayHcp: 15 }]),
+    { p1: 33 }, 'the same card off 85% is 33, so the total moves with the control')
+
+  // The card is keyed by position on the course and the holes are in that
+  // order. Pair them up wrongly and every stroke index is off by one — which
+  // is a total that is plausible, wrong, and silent.
+  const backNine = Object.fromEntries(Array.from({ length: 9 }, (_, i) =>
+    [i + 9, { p1: { gross: 5, isNR: false, stableford: 2 } }]))
+  eq(runningStablefordTotals(backNine, entryHoles, [{ id: 'p1', gender: 'M', displayHcp: 9 }]),
+    { p1: 9 },
+    'holes 10-18 off a handicap of 9 get no shots — nine bogeys, nine points')
+
+  eq(runningStablefordTotals(
+    { 0: { p1: { gross: null, isNR: true, stableford: 0 } } },
+    entryHoles, [{ id: 'p1', gender: 'M', displayHcp: 18 }]),
+    { p1: 0 }, 'a no return adds nothing')
+  eq(runningStablefordTotals(
+    { 0: { p1: { gross: null, isNR: false, stableford: null } } },
+    entryHoles, [{ id: 'p1', gender: 'M', displayHcp: 18 }]),
+    { p1: 0 }, 'and neither does a hole nobody has entered yet')
+
+  eq(runningStablefordTotals({}, entryHoles, []), {}, 'an empty card totals nothing for nobody')
+}
+
+// ─── On the settings screen ────────────────────────────────────
+
+section('What settings says about a board')
+{
+  const setup = (boards: Leaderboard[]) => renderToStaticMarkup(
+    React.createElement(LeaderboardSetup, {
+      boards, playerCount: 8, teamCount: 2, onChange: () => {},
+    }))
+
+  const reduced = setup([TEAM(85)])
+  ok(reduced.includes('85% of course handicap'),
+    'a board carrying a reduction says so on its card, in words')
+
+  const full = setup([TEAM()])
+  ok(!full.includes('course handicap'),
+    'and a board without one says nothing — every trip made before this ' +
+    'question existed is one of those')
 }
 
 // ─── Result ────────────────────────────────────────────────────

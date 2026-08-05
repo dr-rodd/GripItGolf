@@ -4,10 +4,14 @@ import { useState } from 'react'
 import {
   type Leaderboard, type Audience,
   SCORINGS, TEAM_FORMATS, COMBINES, MAX_DISCARD,
-  unanswered, isComplete, offersDiscard, slotKey, isFormatFree,
+  unanswered, isComplete, offersDiscard, offersAllowance, slotKey, isFormatFree,
   freeScorings, freeTeamFormats,
   hasMatchplay, boardTitle, boardRules,
 } from '@/lib/leaderboards'
+import {
+  FULL_ALLOWANCE, MIN_ALLOWANCE, ALLOWANCE_PRESETS,
+  clampAllowance, allowanceOf, suggestedAllowance,
+} from '@/lib/handicapAllowance'
 import { nextSheetId } from '@/lib/teamSets'
 import { defaultCustomPoints, resolveCustomPoints, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
 import { IconTrophy, IconPlus, IconX, IconCheck, IconSettings } from './icons'
@@ -131,6 +135,108 @@ function PointsTable({
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// ─── Handicap allowance ────────────────────────────────────────
+
+/** The chips, and the box the keypad answer sits in. Same box as everything. */
+const CHIP =
+  'min-h-[48px] rounded-xl border t-label transition-colors duration-150 tabular-nums'
+const chipClass = (on: boolean) =>
+  `${CHIP} ${on ? 'border-accent bg-accent/[0.08] text-ink' : 'border-bark/25 bg-surface text-ink/80'}`
+
+/**
+ * What percentage of their course handicap this board is played off.
+ *
+ * The recommended figure is named rather than pre-selected. A reduction
+ * changes what every card on the trip is worth, and one applied because
+ * nobody scrolled far enough to see it is the sort of thing that is noticed
+ * when the prizes are being handed out. So the answer starts at "off", and
+ * the recommendation is a sentence the organiser can act on.
+ *
+ * Four taps cover almost every trip; the keypad is there for the society with
+ * its own rule, because "whatever you like" was the ask.
+ */
+function AllowancePicker({
+  value, suggested, onChange,
+}: {
+  value: number
+  suggested: number
+  onChange: (pct: number) => void
+}) {
+  const presets = ALLOWANCE_PRESETS as readonly number[]
+  const [custom, setCustom] = useState(!presets.includes(value))
+  const [text, setText] = useState(String(value))
+
+  const pick = (pct: number) => { setCustom(false); setText(String(pct)); onChange(pct) }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-4 gap-2">
+        {presets.map(pct => (
+          <button
+            key={pct}
+            type="button"
+            onClick={() => pick(pct)}
+            className={chipClass(!custom && value === pct)}
+          >
+            {pct === FULL_ALLOWANCE ? 'Off' : `${pct}%`}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setCustom(true)}
+          className={`${chipClass(custom)} px-4 flex-shrink-0`}
+        >
+          Something else
+        </button>
+        {custom && (
+          <>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={MIN_ALLOWANCE}
+              max={FULL_ALLOWANCE}
+              value={text}
+              aria-label="Handicap allowance, per cent"
+              onChange={e => {
+                setText(e.target.value)
+                const n = Number(e.target.value)
+                // Committed as it is typed while it reads as a real answer;
+                // half-typed numbers are left alone rather than snapped to the
+                // floor, which is what makes "8" on the way to "80" bearable.
+                if (Number.isFinite(n) && n >= MIN_ALLOWANCE && n <= FULL_ALLOWANCE) {
+                  onChange(Math.round(n))
+                }
+              }}
+              onBlur={() => {
+                const pct = clampAllowance(text)
+                setText(String(pct))
+                onChange(pct)
+              }}
+              className={`${FIELD} flex-1 min-w-0 tabular-nums`}
+            />
+            <span className="t-cap text-ink/50 flex-shrink-0">%</span>
+          </>
+        )}
+      </div>
+
+      <p className="t-cap text-ink/65 leading-snug">
+        {suggested === FULL_ALLOWANCE
+          ? 'This board is played off the full course handicap.'
+          : <>
+              <span className="text-accent-deep">{suggested}% is the standard allowance</span>
+              {' for this kind of competition. '}
+              {value === FULL_ALLOWANCE
+                ? 'Leave it off and everyone plays off the full figure.'
+                : `Everyone's course handicap is cut to ${value}% of it, rounded to the nearest shot. Gross scores are unaffected, and every other leaderboard keeps its own allowance.`}
+            </>}
+      </p>
     </div>
   )
 }
@@ -311,6 +417,23 @@ function Builder({
             ))}
           </div>
           <p className="t-cap text-ink/65">A bad day stops defining the week.</p>
+        </Question>
+      )}
+
+      {/* Last, because it is the one answer that is a suggestion rather than a
+          question — a trip that ignores it plays off the full handicap, which
+          is what every trip did before it was asked. */}
+      {offersAllowance(draft) && (
+        <Question n={next()} title="Cut everyone's handicap for this board?">
+          <AllowancePicker
+            value={allowanceOf(draft)}
+            suggested={suggestedAllowance(draft)}
+            // Not stored when there is no reduction, so a board that leaves
+            // this alone is the object it has always been.
+            onChange={pct => set({
+              handicapAllowance: pct === FULL_ALLOWANCE ? undefined : pct,
+            })}
+          />
         </Question>
       )}
 

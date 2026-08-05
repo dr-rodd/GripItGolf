@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { mergeSaved, anyScored } from "@/lib/liveScores"
+import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
 import { CHROME } from "./scoringHeaderMetrics"
 import type { ActiveLiveRound } from "./ScoringClient"
 import LiveLeaderboardPanel from "./LiveLeaderboardPanel"
@@ -40,7 +41,20 @@ interface HoleScore {
   isNR: boolean
   stableford: number | null
 }
-interface PlayerSetup { player: Player; tee: Tee; playingHcp: number }
+/**
+ * A player on this card, and the two handicaps they have.
+ *
+ * `playingHcp` is the full WHS course handicap and is the only one that is
+ * ever written down — to `round_handicaps`, and into every stableford figure
+ * saved alongside a score. `displayHcp` is that figure cut to whatever
+ * allowance the card is currently showing, and it never leaves the screen.
+ *
+ * They are separate fields rather than one value that changes because a card
+ * being read at 85% is still a card played off the full figure: a board on a
+ * different allowance has to be able to work its own number out from what was
+ * stored, and it cannot if the stored one was already reduced.
+ */
+interface PlayerSetup { player: Player; tee: Tee; playingHcp: number; displayHcp: number }
 
 interface Props {
   players: Player[]
@@ -59,6 +73,16 @@ interface Props {
   /** Called whenever the active hole changes (step=holes). Receives (-1, 0)
    *  when not in the holes step so the parent can clear any hole display. */
   onHoleChange?: (holeIdx: number, totalHoles: number) => void
+  /**
+   * The handicap allowance the card is being read at, as a percentage.
+   *
+   * Display only. The control that changes it lives in the shell's header —
+   * it is the one thing on this screen you change about the card rather than
+   * about a score — and nothing this component writes moves when it does.
+   */
+  allowance?: number
+  /** Every allowance the trip's boards play off, for the player picker. */
+  allowances?: number[]
 }
 
 type LiveStep = "activate" | "setup" | "holes" | "summary" | "committed" | "resuming"
@@ -132,6 +156,46 @@ function scoreToPar(gross: number, par: number): { label: string; color: string 
   if (d === 0)  return { label: "Par",      color: "text-ink/65" }
   if (d === 1)  return { label: "Bogey",    color: "text-rust-deep/80" }
   return { label: `+${d}`, color: "text-rust" }
+}
+
+/**
+ * Each player's running Stableford total, at the handicap being shown.
+ *
+ * Worked out from the gross rather than read off the points cached on the
+ * card. Those were computed at the full course handicap and written to
+ * `live_scores` as such — correctly, because that is what is stored — so
+ * trusting them here would leave the running total sitting still while the
+ * allowance control changed every other number on the screen.
+ *
+ * The card is keyed by position on the course and the holes are in that same
+ * order, which is what the index lookup relies on. Exported so that stays
+ * pinned: every card in play runs through this, whether or not the trip has
+ * ever heard of an allowance.
+ */
+export function runningStablefordTotals(
+  card: Record<number, Record<string, HoleScore>>,
+  courseHoles: { par: number; stroke_index: number; par_ladies?: number; stroke_index_ladies?: number }[],
+  setups: { id: string; gender: string; displayHcp: number }[],
+): Record<string, number> {
+  const totals: Record<string, number> = {}
+  for (const { id, gender, displayHcp } of setups) {
+    let total = 0
+    for (const [idx, byPlayer] of Object.entries(card)) {
+      const hs = byPlayer[id]
+      // A no return is worth nothing, and so is a hole not played yet
+      if (!hs || hs.isNR || hs.gross == null) continue
+      const hole = courseHoles[Number(idx)]
+      if (!hole) continue
+      total += calcStableford(
+        hs.gross,
+        effectivePar(hole as Hole, gender),
+        effectiveSI(hole as Hole, gender),
+        displayHcp,
+      )
+    }
+    totals[id] = total
+  }
+  return totals
 }
 
 // ─── Composite generation ─────────────────────────────────
@@ -241,6 +305,8 @@ export default function LiveScoringFlow({
   showLeaderboard, onLeaderboardChange,
   autoResume = false,
   onHoleChange,
+  allowance = FULL_ALLOWANCE,
+  allowances = [FULL_ALLOWANCE],
 }: Props) {
   const [liveRound, setLiveRound] = useState<ActiveLiveRound | null>(activeLiveRound)
   const [step, setStep] = useState<LiveStep>(
@@ -309,7 +375,7 @@ export default function LiveScoringFlow({
       const tee = tees.find(t => t.id === playerTeeIds[id])!
       const existingHcp = effectiveRoundHandicaps.find(rh => rh.round_id === roundId && rh.player_id === id)
       const playingHcp = resolvePlayingHandicap(existingHcp, player, tee, `round=${roundId}`)
-      return { player, tee, playingHcp }
+      return { player, tee, playingHcp, displayHcp: allowedHandicap(playingHcp, allowance) }
     })
 
   const canStart = selectedPlayerIds.length >= 1 &&
@@ -911,9 +977,26 @@ export default function LiveScoringFlow({
                         })
                       )}
                     </div>
+                    {/* The playing handicap, and what it becomes on every
+                        allowance the trip's boards are played off. There is
+                        room to the right of one number for the two or three
+                        that actually matter, and knowing them before the
+                        round starts is worth more than finding out at the
+                        prize-giving. */}
                     {playingHcp !== null && (
-                      <p className="text-ink/65 text-sm">
-                        Playing HC: <span className="text-accent-deep font-semibold">{playingHcp}</span>
+                      <p className="text-ink/65 text-sm flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <span>
+                          Playing HC: <span className="text-accent-deep font-semibold">{playingHcp}</span>
+                        </span>
+                        {allowances
+                          .filter(pct => pct !== FULL_ALLOWANCE)
+                          .map(pct => (
+                            <span key={pct} className="text-ink/50 tabular-nums">
+                              {pct}%: <span className="text-ink/80 font-semibold">
+                                {allowedHandicap(playingHcp, pct)}
+                              </span>
+                            </span>
+                          ))}
                       </p>
                     )}
                     {!selectedTeeId && playerCourseTees.length > 0 && (
@@ -954,17 +1037,12 @@ export default function LiveScoringFlow({
     const existingHoleScores = scores[holeIdx] ?? {}
 
     // Running stableford total per player across all submitted holes
-    const runningTotals: Record<string, number> = {}
-    for (const { player } of playerSetups) {
-      let total = 0
-      for (const hScores of Object.values(scores)) {
-        const hs = hScores[player.id]
-        if (!hs) continue
-        if (hs.stableford != null) total += hs.stableford
-        // isNR contributes 0 — no addition needed
-      }
-      runningTotals[player.id] = total
-    }
+    const runningTotals = runningStablefordTotals(
+      scores, courseHoles,
+      playerSetups.map(({ player, displayHcp }) => ({
+        id: player.id, gender: player.gender, displayHcp,
+      })),
+    )
 
     function handleHoleBack() {
       if (holeIdx === 0) { setStep("setup"); return }
@@ -1072,7 +1150,8 @@ export default function LiveScoringFlow({
     if (editingPlayerId) {
       const editSetup = playerSetups.find(ps => ps.player.id === editingPlayerId)
       if (!editSetup) { setEditingPlayerId(null); return null }
-      const { player, playingHcp } = editSetup
+      // Display only — `saveEditDraft` writes from the full handicap.
+      const { player, displayHcp: playingHcp } = editSetup
 
       return (
         <div className="flex flex-col" style={{ minHeight: `calc(100dvh - ${CHROME})` }}>
@@ -1212,7 +1291,7 @@ export default function LiveScoringFlow({
         {/* Player selector tiles — 2+ players only */}
         {playerSetups.length >= 2 && (
           <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-4 px-4">
-            {playerSetups.map(({ player, playingHcp }) => {
+            {playerSetups.map(({ player, displayHcp }) => {
               const isSel = player.id === selectedId
               return (
                 <button
@@ -1231,7 +1310,7 @@ export default function LiveScoringFlow({
                       {player.name.split(" ")[0]}
                     </span>
                   </div>
-                  <span className={`text-sm ${isSel ? "text-accent-deep" : "text-ink/50"}`}>HC {playingHcp}</span>
+                  <span className={`text-sm ${isSel ? "text-accent-deep" : "text-ink/50"}`}>HC {displayHcp}</span>
                 </button>
               )
             })}
@@ -1240,7 +1319,10 @@ export default function LiveScoringFlow({
 
         {/* Paper scorecard */}
         {selectedSetup && (() => {
-          const { player, playingHcp, tee } = selectedSetup
+          // The card is *read* at whatever allowance the header is showing;
+          // `handleCommit` writes from the full handicap regardless, and the
+          // gross columns below never move whichever is on screen.
+          const { player, displayHcp: playingHcp, tee } = selectedSetup
 
           const currentRound = rounds.find(r => r.id === liveRound?.round_id)
           const courseNameLabel = currentRound?.courses?.name ?? ""
@@ -1258,8 +1340,11 @@ export default function LiveScoringFlow({
             const isNR      = hs?.isNR === true
             const gross     = isNR ? null : (hs?.gross ?? null)  // null for NR display
             const grossFull = hs?.gross ?? null                   // NR max gross for subtotals
+            // Recomputed rather than read off the card's cached points: those
+            // were worked out at the full handicap, which is what is stored
+            // and is not necessarily what is being shown.
             const pts       = isNR ? 0 : gross !== null
-              ? (hs?.stableford ?? calcStableford(gross, ePar, eSI, playingHcp))
+              ? calcStableford(gross, ePar, eSI, playingHcp)
               : null
             const yardage = yardageForTee(hole, tee.name)
 
@@ -1328,6 +1413,13 @@ export default function LiveScoringFlow({
                   <span className="flex items-baseline gap-1.5">
                     <span className={SC_LABEL}>PH</span>
                     <span className={`text-[15px] font-semibold ${dark}`} style={sf}>{playingHcp}</span>
+                    {/* Which allowance this figure is. The header's control
+                        says the same thing, but a signed card is read on its
+                        own and a bare "PH 15" off a handicap of 18 invites
+                        exactly one question. */}
+                    {allowance !== FULL_ALLOWANCE && (
+                      <span className={SC_LABEL}>{allowance}%</span>
+                    )}
                   </span>
                 </div>
 
@@ -1501,7 +1593,7 @@ function HoleCard({
 
       {/* One tile per player */}
       <div className="flex flex-col gap-3">
-        {playerSetups.map(({ player, playingHcp, tee }) => {
+        {playerSetups.map(({ player, displayHcp, tee }) => {
           const hs   = holeScores[player.id] ?? { gross: null, isNR: false, stableford: null }
           const ePar = effectivePar(hole, player.gender)
           const eSI  = effectiveSI(hole, player.gender)
@@ -1515,7 +1607,10 @@ function HoleCard({
               teamColor={player.teams?.color}
               score={hs.gross}
               isNR={hs.isNR}
-              playingHcp={playingHcp}
+              // The allowance the card is being read at. What this tile
+              // writes on submit is computed from the full handicap in
+              // handleHoleSubmit, which does not see this number.
+              playingHcp={displayHcp}
               runningTotal={runningTotals[player.id] ?? 0}
               yardage={yardageForTee(hole, tee.name)}
               onChange={v  => set(player.id, { gross: v, isNR: false })}

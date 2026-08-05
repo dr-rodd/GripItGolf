@@ -9,7 +9,7 @@ import {
 } from '@/lib/leaderboards'
 import {
   type BoardRow, type ResolvedScore, type RowContext,
-  buildRows, effectivePar,
+  buildRows, scoresForBoard, effectivePar,
 } from '@/lib/boardRows'
 import { type Membership } from '@/lib/teamSets'
 import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundState'
@@ -800,6 +800,13 @@ export default function TripLeaderboardClient({
     [tabs, rowContext]
   )
 
+  // What the scorecard sheet shows when a row is opened: the same cards the
+  // active board is scoring, restated at the allowance that board plays off.
+  const cardScores = useMemo(
+    () => (activeBoard ? scoresForBoard(activeBoard, rowContext) : resolved),
+    [activeBoard, rowContext, resolved]
+  )
+
   // ── Render ──────────────────────────────────────────────────
 
   const showMatchplay = hasMatchplay(boards)
@@ -941,7 +948,10 @@ export default function TripLeaderboardClient({
           players={cardPlayers}
           round={card.round}
           holes={holes}
-          resolved={resolved}
+          // The board's own reading of the cards, not the raw one. A board
+          // totalling 33 whose scorecard adds up to 36 is a bug report, and
+          // the difference between them is the allowance it is played off.
+          resolved={cardScores}
           roundHandicaps={roundHandicaps}
           onClose={() => setCard(null)}
         />

@@ -27,7 +27,7 @@
     "logo:line": "tsx scripts/make-line-logo.ts",
     "test:itinerary": "tsx scripts/test-itinerary.ts",
     "test:leaderboards": "tsx scripts/test-leaderboards.ts",
-    "test:handicap-allowance": "tsx scripts/test-handicap-allowance.ts",
+    "test:handicap-allowance": "NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder tsx scripts/test-handicap-allowance.tsx",
     "test:scorecard": "NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder tsx scripts/test-scorecard.tsx",
     "test:team-sets": "tsx scripts/test-team-sets.ts",
     "test:live-scores": "tsx scripts/test-live-scores.ts"

@@ -8,6 +8,7 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 |---|---|
 | `test:formats` | The format model and all three generations of stored settings |
 | `test:leaderboards` | The leaderboard model — slots, team sheets, storage round-trip |
+| `test:handicap-allowance` | Playing off a percentage of the course handicap — the rounding, the recommended figures, storage, the cycle a scorecard walks, and every board scored both at full and reduced |
 | `test:setup-flow` | Team size limits and pairs blocking, read off the boards |
 | `test:team-sets` | Team sheets in isolation — naming, membership, the finalise gate per sheet |
 | `test:matchplay` | Bracket generation and seeding |

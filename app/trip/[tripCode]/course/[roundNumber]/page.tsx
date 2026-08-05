@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { boardsForTrip } from '@/lib/leaderboardsCompat'
+import { allowanceCycle } from '@/lib/handicapAllowance'
 import CourseDashboardClient from '@/app/scoring/[slug]/CourseDashboardClient'
 import TripHeader from '@/app/components/TripHeader'
 import { HEADER_H } from '@/app/components/headerMetrics'
@@ -18,10 +20,16 @@ export default async function TripCoursePage({
   // Look up trip
   const { data: trip } = await supabase
     .from('trips')
-    .select('id, name')
+    .select('id, name, formats, leaderboards, team_scoring')
     .eq('trip_code', tripCode)
     .single()
   if (!trip) notFound()
+
+  // The handicaps this card has to be able to show. A group can be playing for
+  // a four-ball at 85% and a singles board at 95% off the one scorecard, so
+  // the number beside a player's name is not one number — see
+  // lib/handicapAllowance.ts.
+  const allowances = allowanceCycle(boardsForTrip(trip as never))
 
   // All rounds for this trip (needed for CourseDashboardClient + round_handicaps scope)
   const { data: allRounds } = await supabase
@@ -77,6 +85,8 @@ export default async function TripCoursePage({
         roundHandicaps={hcpsRes.data ?? []}
         backHref={`/trip/${tripCode}/course`}
         roundId={thisRound.id}
+        allowances={allowances.steps}
+        allowanceStart={allowances.startIndex}
         // TripHeader above is sticky too. Without this the scoring shell's own
         // header sticks to the same place and, being the lower z-index, ends
         // up behind it.

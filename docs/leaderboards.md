@@ -33,6 +33,27 @@ Discard (0–2 worst rounds) is asked of **every** league board. A draw asks not
 
 Anything stored that cannot be understood is **dropped, not repaired** — a half-understood board would quietly score a trip wrongly, while no board sends the organiser back to a form that says so.
 
+## Handicap allowance
+
+**A board can be played off a percentage of the course handicap** (`lib/handicapAllowance.ts`). It is the last question of the cascade, asked of league boards only, and stored as `handicapAllowance` on the board.
+
+| Competition | Standard allowance |
+|---|---|
+| Four-ball stroke play / Stableford — i.e. any team board here | 85% |
+| Individual (singles) | 95%, and clubs may scale 85–100% locally |
+| Foursomes (alternate shot) | 50% of the partners' **combined** handicaps — no format on this platform to attach it to yet |
+| Four-ball match play | 90% of the difference from the lowest player — a different shape of calculation; the draw is left at full |
+
+`suggestedAllowance` names the recommended figure; it is **not** pre-selected. A reduction changes what every card on the trip is worth, and one applied because nobody scrolled far enough is noticed at the prize-giving. The organiser can pick any whole percentage from 10 to 100, or leave it off.
+
+**Nothing is ever stored at a reduced handicap.** `round_handicaps.playing_handicap` is the full WHS figure, `scores.stableford_points` is what the trigger computed from it, and gross is gross. `buildRows` applies the board's own percentage when it reads the cards — Stableford points recomputed from the gross, strokes nett off the reduced figure. At 100% the stored points are returned untouched, so a board that never asked scores exactly as it always did.
+
+That is the whole reason it is applied on read. Store the reduction and a second board on a different allowance becomes unscoreable: the number it needs was rounded away when the first one was written. It is also what makes `scoresForBoard` necessary — the scorecard sheet that opens off a board row has to restate the card at that board's allowance, or a board totalling 33 opens a card adding to 36.
+
+The reduction rounds to the nearest shot, per WHS, **not** truncated: 16 off 85% is 14, not 13.
+
+**On the scoring card**, the allowance is display only. `allowanceCycle` collects every percentage the trip's boards play off (always including 100), highest first, opening on the primary board's. A control in the top-right of the scoring header — the same box as the back button opposite it — walks that list, and the playing handicap, the points badges, the running totals and the confirmation scorecard all follow it. It only exists when something is actually reduced. What gets written does not move when it is tapped: `PlayerSetup` carries `playingHcp` (full, written) and `displayHcp` (reduced, shown) as two separate fields for exactly that reason. The player picker lists every allowance beside the playing handicap before the round starts.
+
 ## From settings to the board
 
 `lib/boardRows.ts` is the join. `buildRows(board, context)` takes **one** leaderboard and the trip's scores and returns that board's rows; everything it needs comes off the board itself. Two boards on one trip can therefore be scored genuinely differently — Stableford keeping every card beside Strokes dropping the worst. Under the old model discard was one number on the trip and the team format one setting on the trip, so that was not expressible: it was one answer applied twice.
