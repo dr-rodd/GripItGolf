@@ -1255,13 +1255,30 @@ export default function LiveScoringFlow({
             style={{ top: CHROME }}
           >
             <BackButton onClick={() => setEditingPlayerId(null)} />
-            <div className="flex items-center gap-2">
+            {/* The handicap every points figure below is worked out from, so
+                it is on the screen where those figures are being changed. It
+                follows the allowance control in the header above — the same
+                card read at 85% gives different points for the same gross,
+                and editing against a number you cannot see is guesswork. */}
+            <div className="flex items-baseline gap-2 min-w-0">
               {player.teams && (
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: player.teams.color }} />
+                <span
+                  className="w-2 h-2 rounded-full flex-shrink-0 self-center"
+                  style={{ backgroundColor: player.teams.color }}
+                />
               )}
-              <span className="text-ink/80 text-base font-semibold">{player.name}</span>
+              <span className="text-ink/80 text-base font-semibold truncate">{player.name}</span>
+              <span className="flex-shrink-0 flex items-baseline gap-1.5">
+                <span className={SC_LABEL}>PH</span>
+                <span className="text-ink text-[15px] font-semibold tabular-nums" style={{ fontFamily: 'var(--font-serif)' }}>
+                  {playingHcp}
+                </span>
+                {allowance !== FULL_ALLOWANCE && (
+                  <span className={SC_LABEL}>{allowance}%</span>
+                )}
+              </span>
             </div>
-            <div className="w-[60px]" />
+            <div className="w-[60px] flex-shrink-0" />
           </div>
 
           {/* Scrollable holes */}
