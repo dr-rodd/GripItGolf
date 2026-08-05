@@ -118,8 +118,24 @@ export type RowContext = {
   /** In round order. */
   rounds: RowRound[]
   resolved: ResolvedScore[]
-  /** Playing handicap, keyed `${roundId}:${playerId}`. */
+  /** Playing handicap as stored — a whole number — keyed `${roundId}:${playerId}`. */
   hcpFor: Map<string, number>
+  /**
+   * The same handicaps before rounding, where the tee they were played off is
+   * known. Same keys.
+   *
+   * A board's allowance is a percentage of the real course handicap, not of
+   * the whole number stored beside it — 11.63 shows as 12, but 90% of those
+   * two are 10 and 11. `round_handicaps` cannot hold the unrounded figure
+   * (the Postgres trigger reads that column and disagrees with itself about
+   * fractions), so it is worked out again here from the tee recorded against
+   * the round.
+   *
+   * Absent for a round whose handicap row was written before a tee was put
+   * against it, and for boards at the full handicap, where it would change
+   * nothing. `hcpFor` is the fallback.
+   */
+  exactHcpFor?: Map<string, number>
   /** Rounds with a card open or uncommitted scores against them. */
   liveRoundIds: Set<string>
   /**
@@ -172,16 +188,26 @@ const firstName = (n: string) => n.split(' ')[0]
 /**
  * The handicap this board scores a player off, for this round.
  *
- * `round_handicaps` is the answer when there is one; a player's own handicap
- * is the fallback for a round that never got a snapshot written. The allowance
- * is applied to whichever it was.
+ * The unrounded course handicap is preferred, because that is what an
+ * allowance is a percentage of. Behind it: the whole number snapshotted in
+ * `round_handicaps`, and behind that a player's own handicap, for a round
+ * that never got a snapshot at all. The allowance is applied to whichever was
+ * found, and the result is always whole — `shotsReceived` splits a handicap
+ * into whole shots and a remainder and would read a fraction as a different
+ * player.
  */
 function boardHandicap(
   ctx: RowContext, roundId: string, playerId: string,
   fallback: number | null | undefined, allowance: number,
 ): number {
-  const full = ctx.hcpFor.get(`${roundId}:${playerId}`) ?? fallback ?? 0
-  return allowedHandicap(full, allowance)
+  const key = `${roundId}:${playerId}`
+  // Only a board taking a percentage reaches for the unrounded figure. At the
+  // full handicap the snapshot is used exactly as it always has been, so
+  // switching this on cannot quietly re-score a round that is already played:
+  // the two can disagree, because a snapshot written before a tee was chosen
+  // holds the player's index rather than their course handicap.
+  const exact = allowance === FULL_ALLOWANCE ? undefined : ctx.exactHcpFor?.get(key)
+  return allowedHandicap(exact ?? ctx.hcpFor.get(key) ?? fallback ?? 0, allowance)
 }
 
 /**

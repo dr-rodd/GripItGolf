@@ -469,7 +469,7 @@ export default function CourseDashboardClient({
     </button>
   ) : null
 
-  const headerRight = view === "scoring"
+  const headerRight = view === "scoring" || view === "live-board"
     ? allowanceButton
     : view === "dashboard"
     ? <button
@@ -1031,6 +1031,7 @@ export default function CourseDashboardClient({
           holes={holes}
           roundHandicaps={roundHandicaps}
           tees={tees}
+          allowance={allowance}
           onClose={goBack}
           showBackButton={false}
         />

@@ -50,15 +50,21 @@ export function allowanceOf(lb: Pick<Leaderboard, 'handicapAllowance'>): number 
 /**
  * A course handicap reduced to the allowance, to the nearest whole shot.
  *
- * Rounded, not truncated: WHS rounds the playing handicap to the nearest
- * integer after the allowance is applied, so 18 off 85% is 15.3 → 15 and 17
- * off 85% is 14.45 → 14. Truncating would quietly cost a shot at exactly the
- * handicaps where it is most argued about.
+ * **Give it the unrounded course handicap.** The percentage is taken off the
+ * real figure, not off the whole number a card happens to show, and rounding
+ * twice loses a shot: 11.63 shows as 12, but 90% of it is 10.47 → 10, where
+ * 90% of the 12 would have been 11. `exactCourseHandicap` in
+ * lib/courseHandicap.ts is what to hand it; the rounding happens here, once.
  *
- * A plus handicap is negative and rounds the same way.
+ * Rounded, not truncated, so 18 off 85% is 15.3 → 15 and 16 off 85% is
+ * 13.6 → 14. Truncating would quietly cost a shot at exactly the handicaps
+ * where it is most argued about. A plus handicap is negative and rounds the
+ * same way.
+ *
+ * At the full allowance this is simply the whole number the card shows.
  */
 export function allowedHandicap(courseHandicap: number, allowance: number): number {
-  if (allowance === FULL_ALLOWANCE) return courseHandicap
+  if (allowance === FULL_ALLOWANCE) return Math.round(courseHandicap)
   return Math.round(courseHandicap * allowance / 100)
 }
 

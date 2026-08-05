@@ -30,7 +30,8 @@ import {
   buildRows, scoresForBoard,
   type RowContext, type ResolvedScore,
 } from '../lib/boardRows'
-import { runningStablefordTotals } from '../app/scoring/LiveScoringFlow'
+import { exactCourseHandicap, courseHandicap } from '../lib/courseHandicap'
+import { runningStablefordTotals, resolveCourseHandicap } from '../app/scoring/LiveScoringFlow'
 import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import LeaderboardSetup from '../app/components/LeaderboardSetup'
@@ -50,9 +51,37 @@ const section = (n: string) => console.log(`\n${n}`)
 
 // ─── The reduction itself ──────────────────────────────────────
 
+section('The course handicap itself')
+{
+  const scratch = { slope: 113, course_rating: 72, par: 72 }
+  eq(exactCourseHandicap(10, scratch), 10, 'a standard-slope course of rating par returns the index')
+
+  // The reported case: index 10, a course that plays two shots harder than
+  // its par off a slope of 128.
+  const tee = { slope: 128, course_rating: 72.6, par: 72 }
+  const exact = exactCourseHandicap(10, tee)
+  ok(Math.abs(exact - 11.9274) < 0.001, 'the formula is HI × slope ÷ 113 + (CR − par)')
+  eq(courseHandicap(10, tee), 12, 'which shows as 12 on a card')
+
+  // And the reason the unrounded figure has to be kept: 90% of 11.93 and 90%
+  // of 12 are a shot apart, and the card would be wrong either way round if
+  // it rounded first.
+  eq(allowedHandicap(exact, 90), 11, '90% of the real figure is 11')
+  eq(allowedHandicap(exact, 85), 10, 'and 85% of it is 10')
+  eq(allowedHandicap(courseHandicap(10, tee), 85), 10,
+    'rounding first happens to agree here')
+
+  const edgy = { slope: 113, course_rating: 72, par: 72 }
+  const e = exactCourseHandicap(11.6, edgy)
+  eq(courseHandicap(11.6, edgy), 12, '11.6 shows as 12')
+  eq(allowedHandicap(e, 90), 10, 'but 90% of it is 10.44 → 10')
+  eq(allowedHandicap(12, 90), 11, 'where 90% of the rounded 12 would have been 11')
+}
+
 section('A course handicap reduced to an allowance')
 {
   eq(allowedHandicap(18, 100), 18, 'the full allowance is the handicap untouched')
+  eq(allowedHandicap(11.63, 100), 12, 'and turns an exact figure into the whole number a card shows')
   eq(allowedHandicap(0, 85), 0, 'scratch stays scratch')
 
   // 18 × 0.85 = 15.3. Truncation and rounding agree here.
@@ -283,6 +312,31 @@ section('A team format under a reduction')
   eq(buildRows(TEAM(85), ctx)[0].total, 66, 'and off 85%, six points worse between them')
 }
 
+section('A board takes its percentage off the unrounded handicap')
+{
+  // The realistic shape of the problem on an already-played trip: the stored
+  // snapshot is the placeholder written at finalise — the player's index — and
+  // the real course handicap off the tee they played is far higher.
+  const withExact: RowContext = {
+    ...ctxOf(bothCards),
+    hcpFor: new Map(players.map(p => [`r1:${p.id}`, 10])),
+    exactHcpFor: new Map(players.map(p => [`r1:${p.id}`, 17.6])),
+  }
+  const ST = (allowance?: number): Leaderboard => ({
+    id: 'st', audience: 'individual', competition: 'league',
+    scoring: 'strokes', combine: 'total', handicapAllowance: allowance,
+  })
+
+  eq(buildRows(ST(), withExact)[0].total, 80,
+    'at the full handicap the stored snapshot is used exactly as it always was')
+  eq(buildRows(ST(90), withExact)[0].total, 74,
+    'and only a board taking a percentage reaches past it for the real figure')
+
+  // 17.6 → 90% → 15.84 → 16 shots. Off the stored 10 it would have been 9.
+  eq(buildRows(ST(90), { ...withExact, exactHcpFor: undefined })[0].total, 81,
+    'with no tee recorded there is nothing to reach for, and the snapshot stands')
+}
+
 section('The scorecard agrees with the board it opened from')
 {
   ok(scoresForBoard(SF(), ctx) === ctx.resolved,
@@ -343,6 +397,47 @@ section('The running total on a card being scored')
     { p1: 0 }, 'and neither does a hole nobody has entered yet')
 
   eq(runningStablefordTotals({}, entryHoles, []), {}, 'an empty card totals nothing for nobody')
+}
+
+// ─── Which handicap a scorecard is scored off ──────────────────
+//
+// `round_handicaps` gets a row for every player of every round long before
+// anyone tees off — at trip creation, at finalise, and again whenever a
+// handicap is edited. All three store the player's *index*, because no tee has
+// been chosen and there is nothing else to store.
+//
+// Preferring that row is what made the player picker and the score card
+// disagree: the picker worked the handicap out from the tee just chosen, the
+// card read the placeholder underneath, and locking the players in wrote the
+// placeholder back over the real answer.
+
+section('The tee beats the placeholder')
+{
+  const player = { id: 'p1', handicap: 10 }
+  const tee = { slope: 128, course_rating: 72.6, par: 72 }
+  // What creation, finalise and every handicap edit write: the index.
+  const placeholder = { round_id: 'r1', player_id: 'p1', playing_handicap: 10 }
+
+  const off = resolveCourseHandicap(placeholder, player, tee)
+  ok(Math.abs(off - 11.9274) < 0.001,
+    'a card with a tee works the handicap out from it, placeholder or no placeholder')
+  eq(Math.round(off), 12, 'so the card shows 12 — the same number the picker showed')
+  eq(allowedHandicap(off, 90), 11, 'and 90% of it is 11, off the real figure')
+
+  // Which is the whole bug: reading the placeholder gave 10, and 90% of that
+  // is 9. Two shots adrift of the picker on the previous screen.
+  eq(allowedHandicap(placeholder.playing_handicap, 90), 9,
+    'where the placeholder would have given 9')
+
+  eq(resolveCourseHandicap(undefined, player, tee), off,
+    'no stored row at all changes nothing when there is a tee')
+
+  // The one case the stored row is still the answer: a session resumed on a
+  // handicap row written before any tee was recorded against it.
+  eq(resolveCourseHandicap(placeholder, player, undefined), 10,
+    'with no tee, the stored whole number is all there is')
+  eq(resolveCourseHandicap(undefined, player, undefined), 10,
+    'and with neither, the index is the last resort rather than a zero')
 }
 
 // ─── On the settings screen ────────────────────────────────────

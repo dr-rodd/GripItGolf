@@ -38,7 +38,7 @@ export default async function TripLeaderboardPage({
   const courseIds = (rounds ?? []).map(r => (r.courses as any)?.id).filter(Boolean)
   const nilId     = '00000000-0000-0000-0000-000000000000'
 
-  const [teamsRes, playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes, openRes,
+  const [teamsRes, playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes,
          memberships] =
     await Promise.all([
       supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
@@ -56,9 +56,17 @@ export default async function TripLeaderboardPage({
       supabase.from('live_scores')
         .select('player_id, round_id, hole_number, gross_score, stableford_points')
         .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
+      // `tee_id` comes with them: a board playing off a percentage needs the
+      // course handicap before it was rounded, and that can only be worked out
+      // again from the tee it was played off.
       supabase.from('round_handicaps')
-        .select('round_id, player_id, playing_handicap')
+        .select('round_id, player_id, playing_handicap, tee_id')
         .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
+      // The ratings behind those tees, so the unrounded course handicap can be
+      // rebuilt. Only a board playing off a percentage reads it.
+      supabase.from('tees')
+        .select('id, slope, course_rating, par')
+        .in('course_id', courseIds.length > 0 ? courseIds : [nilId]),
       // A round is "in play" when a scorecard is open on it — not merely
       // because a score was once entered against it. The locks come with it:
       // who is on that card is what decides which rows wear the live dot, and
@@ -121,6 +129,7 @@ export default async function TripLeaderboardPage({
         scores={scoresRes.data ?? []}
         liveScores={liveScoresRes.data ?? []}
         roundHandicaps={hcpsRes.data ?? []}
+        tees={teesRes.data ?? []}
       />
 
       {/* Below the board, after everything worth reading */}

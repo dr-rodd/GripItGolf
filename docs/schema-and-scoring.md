@@ -52,9 +52,11 @@ points         = GREATEST(0, par + 2 - net_score)
 - Leaderboard display: relative to 2pts/hole baseline. 36 points = "E", 38 = "+2"
 - Team leaderboard: best individual stableford score per hole per team, summed across 18 holes
 
-Handicap formula is full Golf Ireland WHS: `PH = HI × Slope ÷ 113 + CR − Par`. Do not truncate HI before the slope multiplication. Fetch `round_handicaps` live alongside scores so PH doesn't show as 0 on live leaderboards.
+Handicap formula is full Golf Ireland WHS: `PH = HI × Slope ÷ 113 + CR − Par`, and it lives in **one place** — `lib/courseHandicap.ts`. Do not truncate HI before the slope multiplication. Fetch `round_handicaps` live alongside scores so PH doesn't show as 0 on live leaderboards.
 
-**A competition allowance — 85% for a four-ball, 95% for a singles — is never applied here and never stored.** `round_handicaps.playing_handicap` is the full figure and `stableford_points` is what the trigger computed from it. Each leaderboard applies its own percentage when it reads the cards, which is what lets one set of scorecards feed two boards on two different allowances. See `docs/leaderboards.md` and `lib/handicapAllowance.ts`.
+**`round_handicaps.playing_handicap` is seeded with the handicap *index*, not the course handicap.** Trip creation, finalise, adding a round and every handicap edit write `Math.round(players.handicap)` — no tee has been chosen at that point, and a course handicap needs a slope and a rating. It becomes a real course handicap only when a scoring session locks players in against a tee. **Anything with a tee in hand must compute from the tee rather than trust the snapshot**, or it will be several shots out.
+
+**A competition allowance — 85% for a four-ball, 95% for a singles — is never applied here and never stored.** Each leaderboard applies its own percentage when it reads the cards, which is what lets one set of scorecards feed two boards on two different allowances. The percentage comes off the *unrounded* course handicap; the column stays whole because this trigger reads it and `FLOOR(h/18)` disagrees with `MOD(h::INT,18)` about fractions. See `docs/leaderboards.md`, `lib/handicapAllowance.ts` and `lib/courseHandicap.ts`.
 
 Ladies tees apply across **all** courses, not just one — stableford triggers, `effectivePar`, and `effectiveSI` must pull gender-specific par and stroke index for every course. Never special-case one course.
 

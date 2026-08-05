@@ -11,6 +11,7 @@ import {
   type BoardRow, type ResolvedScore, type RowContext,
   buildRows, scoresForBoard, effectivePar,
 } from '@/lib/boardRows'
+import { exactCourseHandicap } from '@/lib/courseHandicap'
 import { type Membership } from '@/lib/teamSets'
 import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundState'
 import { HEADER_H } from '@/app/components/headerMetrics'
@@ -32,7 +33,13 @@ type Hole   = {
 }
 type Score      = { player_id: string; hole_id: string; gross_score: number | null; stableford_points: number; no_return: boolean; round_id: string }
 type LiveScore  = { player_id: string; round_id: string; hole_number: number; gross_score: number | null; stableford_points: number | null }
-type RoundHcp   = { round_id: string; player_id: string; playing_handicap: number }
+type RoundHcp   = {
+  round_id: string; player_id: string; playing_handicap: number
+  /** The tee it was played off, where the session recorded one. */
+  tee_id?: string | null
+}
+/** Just the ratings — enough to rebuild a course handicap before rounding. */
+type TeeRatingRow = { id: string; slope: number; course_rating: number; par: number }
 
 interface Props {
   tripCode: string
@@ -72,6 +79,8 @@ interface Props {
   scores: Score[]
   liveScores: LiveScore[]
   roundHandicaps: RoundHcp[]
+  /** Ratings only. Read by boards playing off a percentage of the handicap. */
+  tees?: TeeRatingRow[]
 }
 
 // Every scorecard in the app wears the same clothes — see
@@ -696,6 +705,7 @@ function MatchplayButton({ tripCode, enabled }: { tripCode: string; enabled: boo
 export default function TripLeaderboardClient({
   tripCode, boards, activeRoundIds, livePlayerIds, legacyTeamScoring, rounds,
   teams, memberships, players, holes, scores, liveScores, roundHandicaps,
+  tees = [],
 }: Props) {
   // Matchplay has its own route, so it is a button rather than a tab. Every
   // other board is a table, and its own rules travel with it.
@@ -775,6 +785,24 @@ export default function TripLeaderboardClient({
     return m
   }, [roundHandicaps])
 
+  // The same handicaps before they were rounded, rebuilt from the tee each
+  // round was played off. A board taking a percentage needs the real figure —
+  // 11.63 is stored as 12, and 90% of those two are a shot apart. Only rounds
+  // with a tee recorded against them appear; the rest fall back to the stored
+  // whole number, which is all that was ever known about them.
+  const exactHcpFor = useMemo(() => {
+    const teeById = new Map(tees.map(t => [t.id, t]))
+    const indexOf = new Map(players.map(p => [p.id, p.handicap]))
+    const m = new Map<string, number>()
+    for (const h of roundHandicaps) {
+      const tee = h.tee_id ? teeById.get(h.tee_id) : undefined
+      const index = indexOf.get(h.player_id)
+      if (!tee || index == null) continue
+      m.set(`${h.round_id}:${h.player_id}`, exactCourseHandicap(index, tee))
+    }
+    return m
+  }, [roundHandicaps, tees, players])
+
   // ── The rows for every board ────────────────────────────────
   //
   // Each board is scored under its own rules, so two boards on the same trip
@@ -789,10 +817,11 @@ export default function TripLeaderboardClient({
     rounds: sortedRounds,
     resolved,
     hcpFor,
+    exactHcpFor,
     liveRoundIds,
     livePlayerIds: livePlayers,
     legacyTeamScoring,
-  }), [players, teams, memberships, holes, sortedRounds, resolved, hcpFor,
+  }), [players, teams, memberships, holes, sortedRounds, resolved, hcpFor, exactHcpFor,
        liveRoundIds, livePlayers, legacyTeamScoring])
 
   const rowsByBoard = useMemo(

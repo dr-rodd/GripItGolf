@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { mergeSaved, anyScored } from "@/lib/liveScores"
 import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
+import { exactCourseHandicap, courseHandicap, type TeeRating } from "@/lib/courseHandicap"
 import { CHROME } from "./scoringHeaderMetrics"
 import type { ActiveLiveRound } from "./ScoringClient"
 import LiveLeaderboardPanel from "./LiveLeaderboardPanel"
@@ -35,26 +36,45 @@ interface Tee {
   id: string; course_id: string; name: string; gender: string
   par: number; course_rating: number; slope: number
 }
-interface RoundHandicap { round_id: string; player_id: string; playing_handicap: number }
+interface RoundHandicap {
+  round_id: string; player_id: string; playing_handicap: number
+  /** The tee the session recorded. Absent on rows written before one was picked. */
+  tee_id?: string | null
+}
 interface HoleScore {
   gross: number | null
   isNR: boolean
   stableford: number | null
 }
 /**
- * A player on this card, and the two handicaps they have.
+ * A player on this card, and the three handicaps they have.
  *
- * `playingHcp` is the full WHS course handicap and is the only one that is
- * ever written down — to `round_handicaps`, and into every stableford figure
- * saved alongside a score. `displayHcp` is that figure cut to whatever
- * allowance the card is currently showing, and it never leaves the screen.
+ * `exactHcp` is the WHS course handicap off the tee they are playing, before
+ * anything rounds it. It is the figure every other number here comes from,
+ * and it is the one an allowance is taken off — a percentage of a rounded
+ * handicap is not a percentage of the real one, and the gap is a shot.
  *
- * They are separate fields rather than one value that changes because a card
- * being read at 85% is still a card played off the full figure: a board on a
- * different allowance has to be able to work its own number out from what was
- * stored, and it cannot if the stored one was already reduced.
+ * `playingHcp` is that figure as a whole number, and is the only one ever
+ * written down: to `round_handicaps`, and into every stableford value saved
+ * beside a score. It stays whole because the Postgres trigger reads it and
+ * disagrees with itself about fractions — see lib/courseHandicap.ts.
+ *
+ * `displayHcp` is the exact figure cut to whatever allowance the card is
+ * currently showing, rounded once. It never leaves the screen.
+ *
+ * The last two are separate fields rather than one value that changes,
+ * because a card being read at 85% is still a card played off the full
+ * figure: a board on a different allowance has to be able to work its own
+ * number out from what was stored, and it cannot if the stored one was
+ * already reduced.
  */
-interface PlayerSetup { player: Player; tee: Tee; playingHcp: number; displayHcp: number }
+interface PlayerSetup {
+  player: Player
+  tee: Tee
+  exactHcp: number
+  playingHcp: number
+  displayHcp: number
+}
 
 interface Props {
   players: Player[]
@@ -116,9 +136,6 @@ const TEE_ACTIVE: Record<string, string> = {
 
 // ─── Helpers ──────────────────────────────────────────────
 
-function calcPlayingHandicap(hcpIndex: number, slope: number, courseRating: number, par: number) {
-  return Math.round(hcpIndex * (slope / 113) + (courseRating - par))
-}
 function shotsReceived(si: number, hcp: number) {
   return Math.floor(hcp / 18) + (si <= hcp % 18 ? 1 : 0)
 }
@@ -134,15 +151,39 @@ function effectivePar(hole: Hole, gender: string) {
 function effectiveSI(hole: Hole, gender: string) {
   return gender === "F" && hole.stroke_index_ladies ? hole.stroke_index_ladies : hole.stroke_index
 }
-function resolvePlayingHandicap(
+/**
+ * The course handicap this card is scored off, unrounded.
+ *
+ * **The tee wins whenever there is one.** `round_handicaps` gets a row for
+ * every player of every round long before anyone tees off — at trip creation,
+ * at finalise, and again whenever a handicap is edited — and every one of
+ * those writes stores the player's *index*, because no tee has been chosen
+ * yet and there is nothing else to store. `players.handicap` is an index; a
+ * course handicap needs a slope and a rating, and until the scorer picks a
+ * tee nobody knows which.
+ *
+ * Preferring that stored figure is what made the player picker and the score
+ * card disagree: the picker worked the handicap out from the tee just chosen
+ * and showed it, while the card read the placeholder underneath — and
+ * `lockPlayers` then wrote the placeholder straight back over the real answer.
+ *
+ * So the stored row is a fallback, for the one case where the tee is genuinely
+ * unknown: a resumed session whose `round_handicaps` row predates tees being
+ * recorded against it. There the whole number is all there is, and a whole
+ * number is what comes back.
+ */
+export function resolveCourseHandicap(
   existingHcp: RoundHandicap | undefined,
-  player: Player,
-  tee: Tee,
-  context: string,
+  player: Pick<Player, 'id' | 'handicap'>,
+  // Only the ratings matter here, so a bare set of them is enough — which is
+  // also what lets this be driven without inventing a whole tee row.
+  tee: TeeRating | undefined,
+  context = 'unknown',
 ): number {
+  if (tee) return exactCourseHandicap(player.handicap, tee)
   if (existingHcp?.playing_handicap !== undefined) return existingHcp.playing_handicap
-  console.warn(`[handicap-fallback] no round_handicap for player ${player.id} — recomputing. context=${context}`)
-  return calcPlayingHandicap(player.handicap, tee.slope, tee.course_rating, tee.par)
+  console.warn(`[handicap-fallback] no tee and no round_handicap for player ${player.id}. context=${context}`)
+  return player.handicap
 }
 function yardageForTee(hole: Hole, teeName: string): number | null {
   const key = `yardage_${teeName.toLowerCase()}` as keyof Hole
@@ -374,8 +415,12 @@ export default function LiveScoringFlow({
       const player = players.find(p => p.id === id)!
       const tee = tees.find(t => t.id === playerTeeIds[id])!
       const existingHcp = effectiveRoundHandicaps.find(rh => rh.round_id === roundId && rh.player_id === id)
-      const playingHcp = resolvePlayingHandicap(existingHcp, player, tee, `round=${roundId}`)
-      return { player, tee, playingHcp, displayHcp: allowedHandicap(playingHcp, allowance) }
+      const exactHcp = resolveCourseHandicap(existingHcp, player, tee, `round=${roundId}`)
+      return {
+        player, tee, exactHcp,
+        playingHcp: Math.round(exactHcp),
+        displayHcp: allowedHandicap(exactHcp, allowance),
+      }
     })
 
   const canStart = selectedPlayerIds.length >= 1 &&
@@ -431,7 +476,7 @@ export default function LiveScoringFlow({
       // organiser corrected a handicap after this page loaded.
       const { data: freshHcps } = await supabase
         .from("round_handicaps")
-        .select("round_id, player_id, playing_handicap")
+        .select("round_id, player_id, playing_handicap, tee_id")
         .eq("round_id", rId)
         .in("player_id", lockedIds)
 
@@ -460,14 +505,22 @@ export default function LiveScoringFlow({
         return
       }
 
-      // Pick tees: first gender-matching tee for the course (playing_handicap
-      // already stored in round_handicaps so tee choice only affects yardage display)
+      // The tee the session actually recorded, which is now what the handicap
+      // is worked out from rather than merely what names the yardage column.
+      // Guessing the first gender-matching tee was harmless while the stored
+      // whole number was the handicap; it is not harmless now, because a
+      // different tee is a different slope and rating and therefore a
+      // different number of shots. The guess stays as the fallback for rows
+      // written before a tee was ever put against them.
       const courseTees = tees.filter(t => t.course_id === cId)
       const teeMap: Record<string, string> = {}
       for (const pid of lockedIds) {
         const player = players.find(p => p.id === pid)
         if (!player) continue
-        const tee = courseTees.find(t => t.gender === player.gender) ?? courseTees[0]
+        const recordedId = (freshHcps ?? []).find(h => h.player_id === pid)?.tee_id
+        const tee = courseTees.find(t => t.id === recordedId)
+          ?? courseTees.find(t => t.gender === player.gender)
+          ?? courseTees[0]
         if (tee) teeMap[pid] = tee.id
       }
 
@@ -803,6 +856,8 @@ export default function LiveScoringFlow({
         players={players}
         holes={holes}
         roundHandicaps={roundHandicaps}
+        tees={tees}
+        allowance={allowance}
         onClose={() => onLeaderboardChange(false)}
       />
     )
@@ -930,9 +985,13 @@ export default function LiveScoringFlow({
             const playerCourseTees = courseTees.filter(t => t.gender === player.gender)
             const selectedTeeId = playerTeeIds[player.id] ?? ""
             const selectedTee = tees.find(t => t.id === selectedTeeId)
-            const playingHcp = selectedTee
-              ? calcPlayingHandicap(player.handicap, selectedTee.slope, selectedTee.course_rating, selectedTee.par)
+            // The same figure the card will use, off the same tee, through
+            // the same function. These two screens used to work it out two
+            // different ways and disagree by several shots.
+            const exactHcp = selectedTee
+              ? exactCourseHandicap(player.handicap, selectedTee)
               : null
+            const playingHcp = selectedTee ? courseHandicap(player.handicap, selectedTee) : null
 
             return (
               <div key={player.id}>
@@ -983,7 +1042,7 @@ export default function LiveScoringFlow({
                         that actually matter, and knowing them before the
                         round starts is worth more than finding out at the
                         prize-giving. */}
-                    {playingHcp !== null && (
+                    {playingHcp !== null && exactHcp !== null && (
                       <p className="text-ink/65 text-sm flex flex-wrap items-baseline gap-x-3 gap-y-1">
                         <span>
                           Playing HC: <span className="text-accent-deep font-semibold">{playingHcp}</span>
@@ -993,7 +1052,7 @@ export default function LiveScoringFlow({
                           .map(pct => (
                             <span key={pct} className="text-ink/50 tabular-nums">
                               {pct}%: <span className="text-ink/80 font-semibold">
-                                {allowedHandicap(playingHcp, pct)}
+                                {allowedHandicap(exactHcp, pct)}
                               </span>
                             </span>
                           ))}
@@ -1132,6 +1191,11 @@ export default function LiveScoringFlow({
                 players={players}
                 holes={holes}
                 roundHandicaps={roundHandicaps}
+                tees={tees}
+                // The board beside the card answers the same question the
+                // card does. Swiping between two different handicaps would
+                // read as two different rounds.
+                allowance={allowance}
               />
             )}
           </div>

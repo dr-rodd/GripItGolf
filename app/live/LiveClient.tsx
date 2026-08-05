@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
 import BackButton from "@/app/components/BackButton"
+import { courseHandicap } from "@/lib/courseHandicap"
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -66,10 +67,6 @@ interface Props {
 }
 
 // ─── Helpers ──────────────────────────────────────────────
-
-function calcPlayingHandicap(hcpIndex: number, slope: number, courseRating: number, par: number) {
-  return Math.round(hcpIndex * (slope / 113) + (courseRating - par))
-}
 
 function shotsReceived(si: number, playingHcp: number) {
   return Math.floor(playingHcp / 18) + (si <= playingHcp % 18 ? 1 : 0)
@@ -219,7 +216,7 @@ function EntryFlow({ players, rounds, holes, tees, roundHandicaps }: {
     const playingHcp = existingHcp
       ? existingHcp.playing_handicap
       : selectedTee
-        ? calcPlayingHandicap(player.handicap, selectedTee.slope, selectedTee.course_rating, selectedTee.par)
+        ? courseHandicap(player.handicap, selectedTee)
         : Math.round(player.handicap)
     return { player, tee: selectedTee!, playingHcp }
   })

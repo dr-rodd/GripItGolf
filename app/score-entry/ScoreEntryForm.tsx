@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import { supabase } from "@/lib/supabase"
 import BackButton from "@/app/components/BackButton"
+import { courseHandicap } from "@/lib/courseHandicap"
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -44,11 +45,6 @@ const COURSE_LOGO: Record<string, string> = {
 type Phase = "selecting" | "entering" | "submitting" | "done"
 
 // ─── Helpers ──────────────────────────────────────────────
-
-/** WHS playing handicap formula */
-function calcPlayingHandicap(hcpIndex: number, slope: number, courseRating: number, par: number): number {
-  return Math.round(hcpIndex * (slope / 113) + (courseRating - par))
-}
 
 function shotsReceived(si: number, playingHcp: number): number {
   return Math.floor(playingHcp / 18) + (si <= playingHcp % 18 ? 1 : 0)
@@ -569,7 +565,7 @@ export default function ScoreEntryForm({ players, courses }: { players: Player[]
   const filteredTees = playerGender ? tees.filter(t => t.gender === playerGender) : tees
 
   const playingHcp = selectedTee && player
-    ? calcPlayingHandicap(player.handicap, selectedTee.slope, selectedTee.course_rating, selectedTee.par)
+    ? courseHandicap(player.handicap, selectedTee)
     : Math.round(player?.handicap ?? 0)
 
   // Fetch tees when course or player changes, auto-default by role

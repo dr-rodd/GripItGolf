@@ -5,6 +5,9 @@ import { supabase } from "@/lib/supabase"
 import BackButton from "@/app/components/BackButton"
 import ScoreShape from "@/app/components/ScoreShape"
 import { scoreTone, TONE_PILL } from "@/lib/leaderboardStyle"
+import { shotsReceived } from "@/lib/boardRows"
+import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
+import { exactCourseHandicap } from "@/lib/courseHandicap"
 import { CHROME } from "./scoringHeaderMetrics"
 import {
   SC_SF, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL,
@@ -25,6 +28,8 @@ interface Player {
   id: string
   name: string
   gender: string
+  /** Handicap index. Needed to rebuild a course handicap under an allowance. */
+  handicap?: number
   teams: { name: string; color: string } | null
 }
 
@@ -45,7 +50,11 @@ interface RoundHandicap {
   tee_id?: string | null
 }
 
-interface Tee { id: string; name: string }
+/** Ratings are optional: the legacy screens pass tees only to name them. */
+interface Tee {
+  id: string; name: string
+  slope?: number; course_rating?: number; par?: number
+}
 
 interface LiveScoreRow {
   player_id: string
@@ -55,6 +64,26 @@ interface LiveScoreRow {
 }
 
 // ─── Helpers ──────────────────────────────────────────────
+
+/**
+ * What a hole is worth on this board, at the handicap being shown.
+ *
+ * At the full handicap that is the number already stored — computed by the
+ * Postgres trigger for a committed card, or written beside the live score as
+ * it was entered. Under an allowance there is no stored answer, because the
+ * reduction belongs to the leaderboard rather than to the card, so it is
+ * worked out from the gross. Which is the only figure a reduction never
+ * changes.
+ */
+function pointsFor(
+  gross: number | null, stored: number | null,
+  hole: Hole, gender: string, hcp: number, allowance: number,
+): number | null {
+  if (gross == null) return null
+  if (allowance === FULL_ALLOWANCE) return stored ?? 0
+  return Math.max(0, effectivePar(hole, gender) + 2
+    - (gross - shotsReceived(hcp, effectiveSI(hole, gender))))
+}
 
 function effectivePar(hole: Hole, gender: string) {
   return gender === "F" && hole.par_ladies ? hole.par_ladies : hole.par
@@ -122,13 +151,16 @@ function compareRows(a: PlayerRow, b: PlayerRow, mode: Mode, sv: StrokesView): n
 
 export function InlineScorecard({
   playingHcp, teeName, courseHoles, playerScores, gender,
+  allowance = FULL_ALLOWANCE,
 }: {
+  /** Already reduced to the allowance below, if there is one. */
   playingHcp: number
   /** The tee they played off, once the session has recorded one. */
   teeName: string | null
   courseHoles: Hole[]
   playerScores: LiveScoreRow[]
   gender: string
+  allowance?: number
 }) {
   const scoreByHole = new Map(playerScores.map(ls => [ls.hole_number, ls]))
   const grid = 'grid grid-cols-[2fr_2fr_2fr_3fr_2fr] w-full'
@@ -146,7 +178,9 @@ export function InlineScorecard({
       ePar: effectivePar(hole, gender),
       eSI: effectiveSI(hole, gender),
       gross: ls?.gross_score ?? null,
-      pts: ls?.stableford_points ?? null,
+      pts: pointsFor(
+        ls?.gross_score ?? null, ls?.stableford_points ?? null,
+        hole, gender, playingHcp, allowance),
     }
   })
 
@@ -232,6 +266,14 @@ interface Props {
   roundHandicaps: RoundHandicap[]
   /** Named on each card. Optional so the legacy screens can leave it out. */
   tees?: Tee[]
+  /**
+   * The handicap allowance this board is being read at, as a percentage.
+   *
+   * Display only, and driven by the same control as the scorecard beside it —
+   * the board and the card have to be answering the same question, or swiping
+   * between them is two different rounds.
+   */
+  allowance?: number
   onClose?: () => void
   showBackButton?: boolean
 }
@@ -239,7 +281,8 @@ interface Props {
 // ─── Component ────────────────────────────────────────────
 
 export default function LiveLeaderboardPanel({
-  liveRound, players, holes, roundHandicaps, tees = [], onClose, showBackButton = false,
+  liveRound, players, holes, roundHandicaps, tees = [],
+  allowance = FULL_ALLOWANCE, onClose, showBackButton = false,
 }: Props) {
   const [liveScores, setLiveScores]     = useState<LiveScoreRow[]>([])
   const [validPlayerIds, setValidPlayerIds] = useState<Set<string>>(new Set())
@@ -252,6 +295,26 @@ export default function LiveLeaderboardPanel({
   const courseHoles = holes
     .filter(h => h.course_id === liveRound.course_id)
     .sort((a, b) => a.hole_number - b.hole_number)
+
+  /**
+   * The handicap to show for a player, and the tee it came off.
+   *
+   * The tee recorded against the round is what the course handicap is rebuilt
+   * from, because an allowance is a percentage of the real figure rather than
+   * of the whole number stored beside it. Where no tee was recorded — a row
+   * written before anyone teed off — the stored number is all there is.
+   */
+  const handicapFor = (player: Player) => {
+    const rh = roundHandicaps.find(
+      r => r.player_id === player.id && r.round_id === liveRound.round_id)
+    const tee = tees.find(t => t.id === rh?.tee_id)
+    const rated = tee?.slope != null && tee.course_rating != null && tee.par != null
+    const exact = rated && player.handicap != null
+      ? exactCourseHandicap(player.handicap,
+          { slope: tee!.slope!, course_rating: tee!.course_rating!, par: tee!.par! })
+      : rh?.playing_handicap ?? 0
+    return { hcp: allowedHandicap(exact, allowance), teeName: tee?.name ?? null }
+  }
 
   const fetchScores = useCallback(async () => {
     const [scoresRes, liveRoundsRes] = await Promise.all([
@@ -318,7 +381,17 @@ export default function LiveLeaderboardPanel({
       )
       if (playerScores.length === 0) return []
 
-      const totalStableford = playerScores.reduce((s, ls) => s + (ls.stableford_points ?? 0), 0)
+      // Points as this board reads them. Under an allowance the stored figure
+      // is the wrong answer to the question being asked — it was computed at
+      // the full handicap — so it is worked out again from the gross.
+      const { hcp } = handicapFor(player)
+      const pointsOn = (ls: LiveScoreRow) => {
+        const hole = courseHoles.find(h => h.hole_number === ls.hole_number)
+        if (!hole) return ls.stableford_points ?? 0
+        return pointsFor(ls.gross_score, ls.stableford_points, hole, player.gender, hcp, allowance) ?? 0
+      }
+
+      const totalStableford = playerScores.reduce((s, ls) => s + pointsOn(ls), 0)
       const totalGross      = playerScores.reduce((s, ls) => s + (ls.gross_score ?? 0), 0)
 
       let totalParPlayed = 0
@@ -344,7 +417,7 @@ export default function LiveLeaderboardPanel({
         nettRelative: holesCompleted * 2 - totalStableford,
         perHoleStableford: playerScores.map(ls => ({
           hole_number: ls.hole_number,
-          pts: ls.stableford_points ?? 0,
+          pts: pointsOn(ls),
         })),
       }]
     })
@@ -475,11 +548,7 @@ export default function LiveLeaderboardPanel({
             // ── Col 4: holes through or F ─────────────────
             const col4 = isFinalised ? "F" : `${holesCompleted}`
 
-            const rh = roundHandicaps.find(
-              r => r.player_id === player.id && r.round_id === liveRound.round_id
-            )
-            const playingHcp = rh?.playing_handicap ?? 0
-            const teeName = tees.find(t => t.id === rh?.tee_id)?.name ?? null
+            const { hcp: playingHcp, teeName } = handicapFor(player)
 
             return (
               <Fragment key={player.id}>
@@ -526,6 +595,7 @@ export default function LiveLeaderboardPanel({
                       playingHcp={playingHcp}
                       teeName={teeName}
                       gender={player.gender}
+                      allowance={allowance}
                       courseHoles={courseHoles}
                       playerScores={liveScores.filter(ls => ls.player_id === player.id)}
                     />
