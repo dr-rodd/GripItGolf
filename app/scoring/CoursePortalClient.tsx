@@ -15,7 +15,6 @@ interface LiveRound {
   course_id: string
   round_id: string
   status: string
-  session_finalised_at: string | null
 }
 
 const COURSES: Course[] = [
@@ -42,7 +41,7 @@ export default function CoursePortalClient({ courseIds, totalPlayers }: { course
   async function fetchState() {
     const { data } = await supabase
       .from("live_rounds")
-      .select("id, course_id, round_id, status, session_finalised_at")
+      .select("id, course_id, round_id, status")
       .in("status", ["active", "finalised"])
 
     const liveRounds: LiveRound[] = data ?? []
@@ -67,11 +66,14 @@ export default function CoursePortalClient({ courseIds, totalPlayers }: { course
       const activePlayers    = new Set(lockRows.filter(l => activeIds.has(l.live_round_id)).map(l => l.player_id))
       const finalisedPlayers = new Set(lockRows.filter(l => finalisedIds.has(l.live_round_id)).map(l => l.player_id))
 
-      const sessionFinalised = courseRounds.some(lr => lr.session_finalised_at != null)
+      // A round is complete when everyone who was out on it has signed, and
+      // nothing else. There used to be a "finalise session" that stamped a
+      // flag saying so; it was a second answer to a question the cards
+      // already answer, and it locked the round against a late card.
       const allFinalised = totalPlayers > 0 && finalisedPlayers.size === totalPlayers && activePlayers.size === 0
 
       let status: CardStatus
-      if (allFinalised || sessionFinalised) {
+      if (allFinalised) {
         status = "complete"
       } else if (activePlayers.size > 0) {
         status = "live"

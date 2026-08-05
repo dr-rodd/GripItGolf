@@ -19,7 +19,6 @@ import { why } from "@/lib/writeFailure"
 
 interface LiveRoundFull extends ActiveLiveRound {
   activated_at: string
-  session_finalised_at: string | null
 }
 
 interface ScorecardInfo {
@@ -115,8 +114,6 @@ export default function CourseDashboardClient({
   const [liveHole, setLiveHole]                           = useState<{ idx: number; total: number } | null>(null)
   const [settingsVoidId, setSettingsVoidId]               = useState<string | null>(null)
   const [playerConfirm, setPlayerConfirm]                 = useState<{ type: "remove" | "unfinalise"; playerId: string; liveRoundId: string; roundId: string; playerName: string } | null>(null)
-  const [settingsFinaliseSession, setSettingsFinaliseSession] = useState(false)
-  const [settingsUnfinaliseSession, setSettingsUnfinaliseSession] = useState(false)
   const [settingsVoidSession, setSettingsVoidSession]     = useState(false)
   const [settingsWorking, setSettingsWorking]             = useState(false)
   const [settingsError, setSettingsError]                 = useState<string | null>(null)
@@ -166,7 +163,7 @@ export default function CourseDashboardClient({
     // has two sets of scorecards, and they must not appear together.
     let query = supabase
       .from("live_rounds")
-      .select("id, course_id, round_id, status, session_finalised_at, activated_at, activated_by, rounds(round_number), courses(name)")
+      .select("id, course_id, round_id, status, activated_at, activated_by, rounds(round_number), courses(name)")
       .in("status", ["active", "finalised"])
     query = roundId ? query.eq("round_id", roundId) : query.eq("course_id", courseId)
     const { data: liveRoundsData } = await query
@@ -229,8 +226,6 @@ export default function CourseDashboardClient({
     (scorecards.find(s => !s.finalised) ?? scorecards[0])?.liveRound ?? null
   ) as ActiveLiveRound | null
 
-  const isSessionFinalised = scorecards.some(s => s.liveRound.session_finalised_at != null)
-
   // ─── Navigation helpers ───────────────────────────────────
 
   function goBack() {
@@ -253,7 +248,7 @@ export default function CourseDashboardClient({
     const courseRound = roundId
       ? rounds.find(r => r.id === roundId)
       : rounds.find(r => r.courses?.id === courseId)
-    if (!courseRound || isSessionFinalised) return
+    if (!courseRound) return
     setStarting(true)
     setStartError(null)
 
@@ -341,66 +336,6 @@ export default function CourseDashboardClient({
     setPlayerConfirm(null)
     setSettingsWorking(false)
     fetchScorecards()
-  }
-
-  async function finaliseSession() {
-    setSettingsWorking(true)
-    setSettingsError(null)
-
-    // 1. Void every active scorecard (with or without players).
-    //    Genuinely void: the confirmation says those cards are discarded, so
-    //    their part-played rounds must come off the leaderboard too rather
-    //    than being frozen onto it by the very act of finalising.
-    const activeScorecards = scorecards.filter(s => !s.finalised)
-    if (activeScorecards.length > 0) {
-      const failures = await Promise.all(activeScorecards.map(
-        s => voidScorecardData(s.liveRound.id, s.liveRound.round_id)))
-      const firstFailure = failures.find(Boolean)
-      if (firstFailure) {
-        setSettingsError(`Could not discard the open scorecards${why(firstFailure)}`)
-        setSettingsWorking(false)
-        fetchScorecards()
-        return
-      }
-    }
-
-    // 2. Stamp session_finalised_at on all finalised rounds so the portal
-    //    can show ✓ Completed even if some players were never assigned.
-    const finalisedIds = scorecards.filter(s => s.finalised).map(s => s.liveRound.id)
-    if (finalisedIds.length > 0) {
-      await supabase.from("live_rounds")
-        .update({ session_finalised_at: new Date().toISOString() })
-        .in("id", finalisedIds)
-    }
-
-    setSettingsFinaliseSession(false)
-    setSettingsWorking(false)
-    fetchScorecards()
-  }
-
-  async function unfinaliseSession() {
-    setSettingsWorking(true)
-    setSettingsError(null)
-    try {
-      // Revert all finalised rounds to active and clear the session flag
-      await supabase
-        .from("live_rounds")
-        .update({ status: "active", session_finalised_at: null })
-        .eq("course_id", courseId)
-        .eq("status", "finalised")
-      // Also clear flag on any active rounds that may have it set
-      await supabase
-        .from("live_rounds")
-        .update({ session_finalised_at: null })
-        .eq("course_id", courseId)
-        .not("session_finalised_at", "is", null)
-      setSettingsUnfinaliseSession(false)
-    } catch (e: any) {
-      setSettingsError(e?.message ?? "Unfinalise failed — please try again")
-    } finally {
-      setSettingsWorking(false)
-      fetchScorecards()
-    }
   }
 
   async function voidLiveSession() {
@@ -705,10 +640,10 @@ export default function CourseDashboardClient({
           <div className="space-y-3 pt-1">
             <button
               onClick={startNewScorecard}
-              disabled={starting || isSessionFinalised}
+              disabled={starting}
               className="w-full py-4 border border-accent/40 text-accent-deep text-base tracking-[0.2em] uppercase hover:bg-accent/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded-xl"
             >
-              {starting ? "Starting…" : isSessionFinalised ? "Session Finalised" : "+ Start New Scorecard"}
+              {starting ? "Starting…" : "+ Start New Scorecard"}
             </button>
             {startError && (
               <p className="text-rust-deep/80 text-sm text-center">{startError}</p>
@@ -740,9 +675,6 @@ export default function CourseDashboardClient({
                 roundId: s.liveRound.round_id,
               })))
             const allPlayersList = [...activePlayersList, ...finalisedPlayersList]
-
-            // Legacy alias for Finalise Session visibility check
-            const finalisedPlayers = finalisedPlayersList
 
             return (
               <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
@@ -915,81 +847,6 @@ export default function CourseDashboardClient({
                     </div>
                   )}
                 </section>
-
-                {/* ── Unfinalise Round ── */}
-                {isSessionFinalised && (
-                  <section>
-                    <p className="text-ink/50 text-xs tracking-[0.2em] uppercase mb-3">Unfinalise Round</p>
-                    {!settingsUnfinaliseSession ? (
-                      <button
-                        onClick={() => setSettingsUnfinaliseSession(true)}
-                        className="w-full py-3 border border-accent/30 text-accent-deep/60 text-base tracking-[0.15em] uppercase hover:border-accent/60 hover:text-accent-deep transition-colors rounded-xl"
-                      >
-                        Unfinalise Round
-                      </button>
-                    ) : (
-                      <div className="border border-accent/30 bg-accent/[0.07] rounded-xl px-4 py-4 space-y-3">
-                        <p className="text-ink/80 text-base">
-                          Reverts all finalised scorecards to active and clears the session finalised flag. New scorecards can be started.
-                        </p>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => setSettingsUnfinaliseSession(false)}
-                            className="flex-1 py-2.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-xl uppercase tracking-wider"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={unfinaliseSession}
-                            disabled={settingsWorking}
-                            className="flex-1 py-2.5 text-sm text-accent-deep border border-accent/50 hover:border-accent/80 disabled:opacity-50 transition-colors rounded-xl uppercase tracking-wider"
-                          >
-                            {settingsWorking ? "…" : "Confirm"}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </section>
-                )}
-
-                {/* ── Finalise Session ── */}
-                {finalisedPlayers.length > 0 && !isSessionFinalised && (
-                  <section>
-                    <p className="text-ink/50 text-xs tracking-[0.2em] uppercase mb-3">Finalise Session</p>
-                    {!settingsFinaliseSession ? (
-                      <button
-                        onClick={() => setSettingsFinaliseSession(true)}
-                        className="w-full py-3 border border-accent/40 text-accent-deep/70 text-base tracking-[0.15em] uppercase hover:border-accent/70 hover:text-accent-deep transition-colors rounded-xl"
-                      >
-                        Finalise Session
-                      </button>
-                    ) : (
-                      <div className="border border-accent/30 bg-accent/[0.07] rounded-xl px-4 py-4 space-y-3">
-                        <p className="text-ink/80 text-base">
-                          {scorecards.filter(s => !s.finalised && s.playerNames.length > 0).length > 0
-                            ? `${scorecards.filter(s => !s.finalised && s.playerNames.length > 0).length} active scorecard(s) will be discarded and those players released. Finalised scores are kept.`
-                            : "The session will be marked as complete. Finalised scores are kept."
-                          }
-                        </p>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => setSettingsFinaliseSession(false)}
-                            className="flex-1 py-2.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-xl uppercase tracking-wider"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={finaliseSession}
-                            disabled={settingsWorking}
-                            className="flex-1 py-2.5 text-sm text-accent-deep border border-accent/50 hover:border-accent/80 disabled:opacity-50 transition-colors rounded-xl uppercase tracking-wider"
-                          >
-                            {settingsWorking ? "Finalising…" : "Confirm"}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </section>
-                )}
 
                 {/* ── Void Live Session ── */}
                 <section>

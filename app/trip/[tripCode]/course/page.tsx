@@ -62,12 +62,6 @@ export default async function TripCoursePortalPage({
 
       <TripHeader backTo={`/trip/${tripCode}`} title="scoring" />
 
-      <div className="border-b border-bark/12 bg-cream">
-        <div className="max-w-lg mx-auto px-4 py-4">
-          <h1 className="t-h2 text-ink">Live scoring</h1>
-        </div>
-      </div>
-
       <div className="max-w-lg mx-auto px-4 py-6">
         <p className="text-ink/65 text-[13px] tracking-[0.2em] uppercase mb-4">
           Choose a round
@@ -100,12 +94,16 @@ export default async function TripCoursePortalPage({
                     {course?.location ? `${course.location} · ` : ''}{ROUND_NOTE[tone]}
                   </p>
                 </div>
-                <span className="flex-shrink-0 ml-4 flex items-center gap-2">
-                  {tone === 'live' && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-accent dot-live" aria-hidden="true" />
-                  )}
-                  <span className="text-ink/65 text-sm">Open →</span>
-                </span>
+                {/* The whole tile is the link, so "Open →" was a label for
+                    something already obvious — and it was taking the width a
+                    long course name needs. The live dot stays: it says
+                    something the tile does not. */}
+                {tone === 'live' && (
+                  <span
+                    className="flex-shrink-0 ml-4 w-1.5 h-1.5 rounded-full bg-accent dot-live"
+                    aria-hidden="true"
+                  />
+                )}
               </Link>
             )
           })}

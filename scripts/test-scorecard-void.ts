@@ -125,13 +125,15 @@ section('Nothing voids a card any other way')
   ok(dash.includes('removePlayerFromScorecard as removePlayerData'),
     'and taking a player off one')
 
-  // Finalising a session discards every card still open, and the confirmation
-  // says so — those rounds must come off the board rather than be frozen onto
-  // it by the act of finalising.
-  const finalise = dash.slice(dash.indexOf('async function finaliseSession'))
-    .slice(0, dash.slice(dash.indexOf('async function finaliseSession')).indexOf('\n  async function'))
-  ok(finalise.includes('voidScorecardData('),
-    'finalising a session genuinely discards the cards still open on it')
+  // There is no "finalise session" any more. It was a second answer to a
+  // question the cards already answer — a round is done when everyone who was
+  // out on it has signed — and it discarded whatever was still open, which is
+  // a destructive act hiding inside a bookkeeping one. A late card is now just
+  // added in.
+  ok(!dash.includes('finaliseSession'),
+    'nothing finalises a session, so nothing discards open cards as a side effect')
+  ok(!dash.includes('session_finalised_at'),
+    'and the flag that said so is not read anywhere')
 
   // `voidLiveSession` is the nuclear one and already deleted everything; it is
   // round-wide rather than card-wide, so it does not go through the module.
@@ -152,7 +154,7 @@ section('Nothing voids a card any other way')
     const end = rest.indexOf('\n  async function')
     return end < 0 ? rest : rest.slice(0, end)
   }
-  for (const name of ['voidScorecard', 'removePlayerFromScorecard', 'finaliseSession']) {
+  for (const name of ['voidScorecard', 'removePlayerFromScorecard']) {
     const fn = fnBody(dash, name)
     ok(fn.length > 0, `${name} is still there to check`)
     ok(!/from\("live_player_locks"\)\s*\.delete\(\)/.test(fn),

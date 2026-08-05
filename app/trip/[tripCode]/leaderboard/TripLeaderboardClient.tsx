@@ -17,7 +17,7 @@ import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundS
 import { HEADER_H } from '@/app/components/headerMetrics'
 import ScoreShape, { NoReturnShape } from '@/app/components/ScoreShape'
 import {
-  SC_SF, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_HEAD_TIGHT, SC_LABEL,
+  SC_CARD, SC_SF, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_HEAD_TIGHT, SC_LABEL,
   SC_MUTED, SC_DARK, scRow, scPoints,
 } from '@/app/components/scorecardStyle'
 
@@ -244,11 +244,27 @@ export function ScorecardSheet({
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
+    // A card on the page, not a takeover of it. It used to be a sheet pinned
+    // to the bottom edge, full-bleed and 90vh tall, which reads as leaving the
+    // leaderboard rather than looking closer at one row of it — and the board
+    // it came from disappeared entirely behind it.
+    //
+    // Same clothes as the live leaderboard's card, which is the other place in
+    // the app that shows a card inside a list: white, hairline border,
+    // rounded-2xl. Inset on every side so the board stays visible around it,
+    // which is also what makes tapping outside to close an obvious thing to
+    // try. See app/components/scorecardStyle.ts.
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{
+        paddingTop: 'max(env(safe-area-inset-top), 16px)',
+        paddingBottom: 'max(env(safe-area-inset-bottom), 16px)',
+      }}
+      onClick={onClose}
+    >
       <div className="absolute inset-0 bg-ink/50" />
       <div
-        className="relative bg-cream rounded-t-2xl flex flex-col max-h-[90vh]"
-        style={{ paddingTop: 'max(env(safe-area-inset-top), 16px)' }}
+        className={`relative w-full max-w-lg flex flex-col max-h-full overflow-hidden ${SC_CARD}`}
         onClick={e => e.stopPropagation()}
       >
         {/* Title — never scrolls */}
@@ -268,7 +284,7 @@ export function ScorecardSheet({
           </button>
         </div>
 
-        <div className="flex flex-col flex-1 min-h-0 rounded-t-2xl overflow-hidden bg-surface">
+        <div className="flex flex-col flex-1 min-h-0 bg-surface">
 
           {/* Who is on the card, and off what handicap.
               Its own scrolling box once the team is bigger than fits, so a

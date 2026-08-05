@@ -1252,6 +1252,40 @@ section('The old branding is gone')
   }
 }
 
+// ─── A card, not a takeover ────────────────────────────────────
+
+section('The scorecard opens as a card on the board, not over it')
+{
+  const board = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const sheet = board.slice(board.indexOf('export function ScorecardSheet'))
+
+  ok(sheet.includes('${SC_CARD}'),
+    'it wears the same clothes as the live leaderboard\'s card — white, hairline border, rounded')
+  ok(!/fixed inset-0 z-50 flex flex-col justify-end/.test(sheet),
+    'it is no longer a sheet pinned to the bottom edge of the screen')
+  ok(/items-center justify-center/.test(sheet), 'it sits in the middle')
+  ok(/max-w-lg/.test(sheet) && /p-4/.test(sheet),
+    'inset on every side, so the board it came from is still visible around it')
+  ok(!/max-h-\[9\d?vh\]/.test(sheet), 'and not sized to most of the window')
+}
+
+section('A screen names itself once')
+{
+  // The header already carries the page's name as artwork. A heading directly
+  // under it saying the same thing spends the widest line on the screen
+  // repeating the word above it.
+  // Comments stripped: the note explaining why "Open →" went would match a
+  // check looking for it.
+  const picker = stripComments(read('app/trip/[tripCode]/course/page.tsx'))
+  ok(/<TripHeader[^>]*title="scoring"/.test(picker), 'the round picker is named in the header')
+  ok(!/Live scoring<\/h1>/.test(picker), 'and does not say it again underneath')
+
+  // The whole tile is the link, so labelling it "Open" told the reader
+  // something they already knew, in the width a long course name needs.
+  ok(!picker.includes('Open →'), 'a round tile does not label itself Open')
+  ok(picker.includes('dot-live'), 'though a live round still wears its dot')
+}
+
 // ─── Pinned headers ────────────────────────────────────────────
 //
 // Two ways a pinned row goes wrong, both of which have shipped:

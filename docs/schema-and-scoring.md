@@ -20,7 +20,7 @@
 
 | Table | Description |
 |---|---|
-| `live_rounds` | Active scoring sessions per player/round. `session_finalised_at` marks completion |
+| `live_rounds` | Active scoring sessions per player/round. `session_finalised_at` is **dead** — nothing writes or reads it (see below) |
 | `live_scores` | Hole-by-hole scores during active play, before finalisation |
 | `live_player_locks` | Prevents concurrent scoring sessions for same player/round |
 
@@ -59,6 +59,14 @@ Handicap formula is full Golf Ireland WHS: `PH = HI × Slope ÷ 113 + CR − Par
 **A competition allowance — 85% for a four-ball, 95% for a singles — is never applied here and never stored.** Each leaderboard applies its own percentage when it reads the cards, which is what lets one set of scorecards feed two boards on two different allowances. The percentage comes off the *unrounded* course handicap; the column stays whole because this trigger reads it and `FLOOR(h/18)` disagrees with `MOD(h::INT,18)` about fractions. See `docs/leaderboards.md`, `lib/handicapAllowance.ts` and `lib/courseHandicap.ts`.
 
 Ladies tees apply across **all** courses, not just one — stableford triggers, `effectivePar`, and `effectiveSI` must pull gender-specific par and stroke index for every course. Never special-case one course.
+
+### A round is finished when the cards say so
+
+**Nothing finalises a session.** A round reads as complete when everyone who was out on it has signed their card — `status = 'finalised'` on every live round, with nobody still active — and that is the only rule.
+
+There used to be a Finalise Session control that stamped `session_finalised_at` and then barred new scorecards on that round. It was a second answer to a question the cards already answer, and it made a late card impossible: someone who played with another group and submitted afterwards had no way in. A late card is now simply added, and the round goes back to reading as in-play until it is signed too.
+
+The column still exists on `live_rounds`; it is no longer written or read. Left in place rather than migrated away — dropping it buys nothing and a migration that removes a column cannot be replayed safely.
 
 ## Player states (live scoring)
 
