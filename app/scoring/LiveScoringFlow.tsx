@@ -1478,26 +1478,26 @@ function HoleCard({
   }
 
   return (
-    // `justify-end` inside a `min-h` reaching down to the fixed nav bar is
-    // what connects the card to the Next button. Without it, a short card —
-    // one or two players, the common case — sat at the TOP of the page with
-    // the button pinned to the bottom of a much taller viewport, leaving
-    // several hundred px of bare cream between them: not "the button is a
-    // bit far away", but a page that visually reads as broken in two
-    // pieces. A long list still simply flows top-down and scrolls, since
-    // `justify-end` only has an effect while there is free space to give.
+    // The card starts at the top of the screen and the Next button follows it
+    // down the page, 16px below the last tile. Nothing here is stretched to
+    // the height of the window and nothing is pinned to the bottom of it.
     //
-    // The `6.5rem` (104px) reserves the nav bar's own real height —
-    // measured at 91px, not the 72px this previously reserved — plus a
-    // deliberate 13px of breathing room, still on top of the safe-area
-    // inset that clears the iPhone home indicator. Under-reserving here
-    // does not show as visible overlap, since the fixed bar is opaque, but
-    // it does mean "connected" tips into "touching" the moment a device's
-    // safe-area inset runs a few px larger than this one was measured on.
-    <div
-      className="max-w-lg mx-auto w-full px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] flex flex-col justify-end gap-4"
-      style={{ minHeight: `calc(100dvh - ${CHROME})` }}
-    >
+    // Both of those were tried and both were wrong. The nav bar below used to
+    // be `fixed bottom-0` — but this card renders inside the swipe track,
+    // which carries `transform: translateX(...)`, and a transform makes an
+    // element the containing block for any `fixed` descendant. So the bar was
+    // never fixed to the window at all: it was pinned to the bottom of the
+    // track, which is as tall as the taller of its two panels. On a one-player
+    // card that put it 118px below the fold — the Next button was not on the
+    // screen. Stretching the card to `100dvh` and pushing it down with
+    // `justify-end` was an attempt to reach that button, and it only added
+    // 165px of bare cream between the header and the card.
+    //
+    // In flow, both problems are the same problem and it does not exist: the
+    // card sits under the header, the button sits under the card, and on a
+    // four-player card the whole thing simply scrolls, ending at the button
+    // you were scrolling towards anyway.
+    <div className="max-w-lg mx-auto w-full px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] flex flex-col gap-4">
 
       {/* One tile per player */}
       <div className="flex flex-col gap-3">
@@ -1525,8 +1525,9 @@ function HoleCard({
         })}
       </div>
 
-      {/* Nav bar — fixed to viewport bottom, hidden when leaderboard is active */}
-      <div className={`fixed bottom-0 left-0 z-50 w-screen px-4 bg-cream border-t border-bark/12 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] flex gap-3${showLeaderboard ? " hidden" : ""}`}>
+      {/* Nav bar — the last row of the card, hidden when the board is showing.
+          Not `fixed`: see the note on the container above. */}
+      <div className={`flex gap-3${showLeaderboard ? " hidden" : ""}`}>
         <button
           onClick={onBack}
           className="flex-1 py-4 border border-bark/12 text-ink/65 text-2xl

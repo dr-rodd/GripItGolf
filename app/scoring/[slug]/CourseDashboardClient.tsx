@@ -106,9 +106,9 @@ export default function CourseDashboardClient({
   //
   // The header below is not one fixed height: during score entry it grows a
   // hole-progress row and a Live Leaderboard banner, so it is 77px on this
-  // dashboard and around 185px mid-round. Everything sticky underneath it,
-  // and the score-entry card that has to reach from it down to the fixed Next
-  // button, needs the real number for the view being shown — see
+  // dashboard and around 185px mid-round. Everything that pins itself below
+  // the header — the summary's sub-headers, the live board's column headings —
+  // needs the real number for the view being shown, and see
   // ../scoringHeaderMetrics for why a constant could never be right.
   //
   // Measured rather than derived: the header's contents are ordinary flow

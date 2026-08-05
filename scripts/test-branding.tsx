@@ -1063,17 +1063,38 @@ section('The scoring shell stacks under the site header, not behind it')
   // which is what keeps the two reading as one unit instead of drifting
   // several hundred px apart on a one- or two-player card.
   const flow = read('app/scoring/LiveScoringFlow.tsx')
-  // The card's own container, not any mention of the class — the comment above
-  // it explains `justify-end` twice, so a looser check passes with the class
-  // itself deleted.
-  ok(/className="max-w-lg mx-auto w-full px-4 pt-4 pb-\[calc\(6\.5rem[^"]*flex flex-col justify-end/.test(flow),
-    'the score-entry card sits against the bottom of its box')
-  ok(flow.includes('calc(100dvh - ${CHROME})'), '  …and that box ends where the chrome does')
-  // The card's bottom padding and the fixed bar's own both carry the safe-area
-  // inset, which is what holds the 13px gap steady on a phone with a home
-  // indicator instead of letting the bar creep up onto the card.
-  ok(/pb-\[calc\(6\.5rem\+env\(safe-area-inset-bottom,0px\)\)\]/.test(flow),
-    '  …clearing the fixed bar, safe-area inset included')
+  // Nothing inside the swipe track may be `position: fixed`. The track carries
+  // `transform: translateX(...)` — always, `translateX(0)` when it is not
+  // moving — and a transform makes an element the containing block for any
+  // fixed descendant. The Next button was `fixed bottom-0` for exactly this
+  // reason: it was not pinned to the window, it was pinned to the bottom of
+  // the track, which is as tall as the taller of its two panels. On a
+  // one-player card that put the button 118px below the fold, off the screen
+  // entirely. Measured, not reasoned about: a harness that leaves the track
+  // out reports the button sitting neatly at the bottom of the window.
+  // Assert on code, not on the prose explaining it — the notes above these
+  // lines name `fixed bottom-0` and `justify-end` in order to warn people off
+  // them, and a check that reads the comments passes on the very thing it is
+  // meant to forbid.
+  const flowCode = stripComments(flow)
+  ok(!/\bfixed bottom-0\b/.test(flowCode), 'nothing in the scoring flow is pinned with position: fixed')
+  ok(/transform: showLeaderboard \? "translateX\(-50%\)" : "translateX\(0\)"/.test(flowCode),
+    '  …and the swipe track is still the transformed ancestor that made it so')
+
+  // The card runs top-down from the header with the button as its last row,
+  // which is what "one connected unit" means once nothing is pinned.
+  ok(/className="max-w-lg mx-auto w-full px-4 pt-4 pb-\[calc\(1rem\+env\(safe-area-inset-bottom,0px\)\)\] flex flex-col gap-4"/.test(flowCode),
+    'the score-entry card flows from the top, safe-area inset kept')
+  ok(!/justify-end/.test(flowCode), '  …not stretched and pushed to the bottom of the window')
+  // Scoped to HoleCard's own body: the summary and edit screens further up
+  // legitimately size themselves against the window, and matching the whole
+  // file would read their `calc()` as this one.
+  const holeCard = flowCode.slice(
+    flowCode.indexOf('function HoleCard('),
+    flowCode.indexOf('function LivePlayerTile('),
+  )
+  ok(holeCard.length > 500, '  (HoleCard\'s body was found to check)')
+  ok(!/100dvh/.test(holeCard), '  …and not sized against the window height')
 }
 
 // ─── The page's name as artwork ────────────────────────────────
