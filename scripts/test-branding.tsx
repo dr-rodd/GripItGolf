@@ -95,8 +95,20 @@ section('The old identity is gone')
   eq(offenders(/bg-gradient|linear-gradient|radial-gradient/), [], 'no gradients')
 
   // "No pure gray anywhere. Every neutral is derived from #4A3728."
-  eq(offenders(/\b(text|bg|border)-(gray|slate|zinc|neutral|stone)-\d/), [],
+  //
+  // The one exception the guide itself names: a tee swatch keeps the tee's
+  // real colour, because a blue tee is blue — they are data, not brand, and
+  // Slate and Granite are tees. Exempted by file, not by pattern, so a grey
+  // creeping into anything else is still caught.
+  const TEE_SWATCHES = 'components/scorecardStyle.ts'
+  eq(offenders(/\b(text|bg|border)-(gray|slate|zinc|neutral|stone)-\d/)
+       .filter(f => f !== TEE_SWATCHES), [],
     'no grey utility classes — every neutral comes from bark')
+
+  // …and that exemption only covers the swatch map itself
+  const swatches = read(`app/${TEE_SWATCHES}`)
+  ok(/TEE_DOT/.test(swatches),
+    'the exempted file is the tee swatch map, and nothing else uses those greys')
 }
 
 section('Emerald is an accent, not a wash')

@@ -18,6 +18,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import fs from 'fs'
 import ScoreShape, { NoReturnShape } from '../app/components/ScoreShape'
+import { ScorecardSheet } from '../app/trip/[tripCode]/leaderboard/TripLeaderboardClient'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -173,9 +174,31 @@ section('Scorecards are brown and cream, not green')
     ok(!/#(EEE8D6|EAE4D5|E2DAC8|D4CBBA|F5F0E8|C9A84C)/i.test(src),
       `  …nor any parchment or gold`)
   }
-  ok(read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
-    .includes("SC_BAND  = 'rgba(74,55,40,0.04)'"),
-    'the summary bands are a wash of bark')
+  // The bands live in one place now, and all three cards read them from it —
+  // they used to be three copies, two of them still Donegal gold.
+  const style = read('app/components/scorecardStyle.ts')
+  ok(/SC_BAND\s*=\s*'bg-bark\//.test(style), 'the summary bands are a wash of bark')
+  ok(/SC_BAND_TOTAL\s*=\s*'bg-bark\//.test(style), 'and the total is a stronger one')
+
+  const bandOf = (name: string) =>
+    Number(style.match(new RegExp(`${name}\\s*=\\s*'bg-bark/\\[([\\d.]+)\\]`))?.[1] ?? 0)
+  ok(bandOf('SC_BAND_TOTAL') > bandOf('SC_BAND'),
+    'with the total the heavier of the two, so the eye lands there last')
+
+  // Every card reads them rather than rolling its own
+  for (const f of [
+    'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
+    'app/scoring/LiveLeaderboardPanel.tsx',
+    'app/scoring/LiveScoringFlow.tsx',
+  ]) {
+    ok(read(f).includes("from \"@/app/components/scorecardStyle\"")
+       || read(f).includes("from '@/app/components/scorecardStyle'"),
+      `${f.split('/').pop()} takes its bands from the shared card style`)
+  }
+
+  // White base, alternating rows nudged towards the page's cream
+  ok(/scRow/.test(style) && /bg-cream\//.test(style),
+    'rows alternate white against a wash of cream')
 }
 
 // ─── The card is the app's card ────────────────────────────────
@@ -229,6 +252,70 @@ section('Nett and no-return arithmetic is untouched')
     'a picked-up hole is written as that capped gross, not as null')
   ok(flow.includes('stableford_points: hs.isNR ? 0 : calcStableford'),
     'and scores zero points, without disturbing the stroke total')
+}
+
+// ─── The team card, rendered ───────────────────────────────────
+
+section('A team card keeps the holes in view however big the team')
+{
+  const holes = Array.from({ length: 18 }, (_, i) => ({
+    id: `h${i + 1}`, hole_number: i + 1, par: 4,
+    stroke_index: i + 1, course_id: 'c1',
+  }))
+  const round = { id: 'r1', round_number: 1, courses: { id: 'c1', name: 'Carne' } }
+
+  const card = (n: number, opts: { pointsForFirstHole?: number } = {}) => {
+    const players = Array.from({ length: n }, (_, i) => ({
+      id: `p${i + 1}`, name: `Player${i + 1} Surname`, handicap: 10 + i, gender: 'M',
+    }))
+    const resolved = players.flatMap(p =>
+      holes.slice(0, 9).map(h => ({
+        playerId: p.id, roundId: 'r1', holeId: h.id, holeNumber: h.hole_number,
+        gross: 5,
+        points: h.hole_number === 1 ? (opts.pointsForFirstHole ?? 2) : 2,
+        noReturn: false, live: false,
+      })))
+    return renderToStaticMarkup(
+      React.createElement(ScorecardSheet, {
+        title: 'The Reds', subtitle: 'Carne', players, round, holes, resolved,
+        roundHandicaps: players.map(p => ({
+          round_id: 'r1', player_id: p.id, playing_handicap: p.handicap,
+        })),
+        onClose: () => {},
+      } as never)
+    )
+  }
+
+  // Three fit; more than that and the columns have to start scrolling or the
+  // holes get squeezed into nothing.
+  const small = card(3)
+  const big   = card(6)
+  ok(!small.includes('scroll-strip'), 'a small team does not scroll — everything fits')
+  ok(big.includes('scroll-strip'), 'a big one does')
+
+  // Whatever the size, the two things you navigate by are outside the
+  // scroller, so they cannot be scrolled away from
+  for (const [label, html] of [['small', small], ['big', big]] as const) {
+    const beforeStrip = html.slice(0, html.indexOf('scroll-strip') >= 0 ? html.indexOf('scroll-strip') : html.length)
+    ok(beforeStrip.includes('Hole') && beforeStrip.includes('Par'),
+      `${label}: hole and par come before the scrolling columns`)
+  }
+  ok(big.includes('Pts'), 'and the team total is still shown')
+
+  // The member list is capped and scrolls rather than pushing the card down
+  ok(big.includes('overflow-y-auto'), 'a long team list scrolls in a fixed space')
+  ok(!small.includes('max-h-[3.25rem]'), 'a short one is not boxed in for no reason')
+
+  // Every member is named with their handicap, so a column can be told apart
+  for (const n of [1, 2, 3, 4, 5, 6]) {
+    ok(big.includes(`Player${n}`), `Player${n} is named on the card`)
+  }
+
+  // A hole played for nothing is a nought, not a blank — a wiped-out hole is
+  // exactly the one worth being able to see.
+  const wiped = card(1, { pointsForFirstHole: 0 })
+  const firstRow = wiped.slice(wiped.indexOf('>1<'))
+  ok(/>0</.test(firstRow.slice(0, 600)), 'a hole scored for no points prints a nought')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

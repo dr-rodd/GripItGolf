@@ -56,7 +56,7 @@ export default async function TripCoursePage({
       .eq('course_id', courseId),
     supabase
       .from('round_handicaps')
-      .select('round_id, player_id, playing_handicap')
+      .select('round_id, player_id, playing_handicap, tee_id')
       .in('round_id', roundIds.length > 0 ? roundIds : ['00000000-0000-0000-0000-000000000000']),
   ])
 

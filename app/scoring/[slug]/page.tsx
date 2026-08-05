@@ -50,7 +50,7 @@ export default async function CourseDashboardPage({
       .select("id, course_id, name, gender, par, course_rating, slope"),
     supabase
       .from("round_handicaps")
-      .select("round_id, player_id, playing_handicap"),
+      .select("round_id, player_id, playing_handicap, tee_id"),
   ])
 
   const course = (coursesRes.data ?? []).find(c =>

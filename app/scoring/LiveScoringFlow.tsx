@@ -6,6 +6,10 @@ import type { ActiveLiveRound } from "./ScoringClient"
 import LiveLeaderboardPanel from "./LiveLeaderboardPanel"
 import BackButton from "@/app/components/BackButton"
 import ScoreShape, { NoReturnShape } from "@/app/components/ScoreShape"
+import {
+  SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL,
+  scRow, teeDot,
+} from "@/app/components/scorecardStyle"
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -67,17 +71,21 @@ type LiveStep = "activate" | "setup" | "holes" | "summary" | "committed" | "resu
  * ones would otherwise vanish, so every swatch carries a hairline ring and
  * the selected state is set in ink rather than in a tint of its own colour.
  */
-const TEE_RING = 'ring-1 ring-bark/25'
-const TEE_STYLES: Record<string, { dot: string; active: string }> = {
-  Black:     { dot: `bg-zinc-800 ${TEE_RING}`,   active: "border-zinc-700 text-ink" },
-  Blue:      { dot: `bg-blue-500 ${TEE_RING}`,   active: "border-blue-500 text-ink" },
-  White:     { dot: `bg-white ${TEE_RING}`,      active: "border-bark/40 text-ink" },
-  Red:       { dot: `bg-red-500 ${TEE_RING}`,    active: "border-red-500 text-ink" },
-  Yellow:    { dot: `bg-yellow-400 ${TEE_RING}`, active: "border-yellow-500 text-ink" },
-  Sandstone: { dot: `bg-amber-300 ${TEE_RING}`,  active: "border-amber-400 text-ink" },
-  Slate:     { dot: `bg-slate-400 ${TEE_RING}`,  active: "border-slate-500 text-ink" },
-  Granite:   { dot: `bg-stone-400 ${TEE_RING}`,  active: "border-stone-500 text-ink" },
-  Claret:    { dot: `bg-rose-800 ${TEE_RING}`,   active: "border-rose-800 text-ink" },
+/**
+ * The border a selected tee button wears. The swatch itself comes from
+ * `teeDot` in components/scorecardStyle.ts — one copy, shared with every
+ * scorecard, so the tee you pick and the tee your card names look the same.
+ */
+const TEE_ACTIVE: Record<string, string> = {
+  Black:     "border-zinc-700 text-ink",
+  Blue:      "border-blue-500 text-ink",
+  White:     "border-bark/40 text-ink",
+  Red:       "border-red-500 text-ink",
+  Yellow:    "border-yellow-500 text-ink",
+  Sandstone: "border-amber-400 text-ink",
+  Slate:     "border-slate-500 text-ink",
+  Granite:   "border-stone-500 text-ink",
+  Claret:    "border-rose-800 text-ink",
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -424,6 +432,24 @@ export default function LiveScoringFlow({
         playerSetups.map(({ player }) => ({ live_round_id: liveRound.id, player_id: player.id })),
         { onConflict: "live_round_id,player_id" }
       )
+
+    // The handicap and the tee, written at the start rather than only at
+    // commit. Both are decided on the setup step and neither changes during
+    // the round, and the live leaderboard's card needs them WHILE the round
+    // is being played — waiting until the card is signed is too late for the
+    // one screen that exists to be read mid-round. Finalising a trip already
+    // wrote a placeholder handicap row with no tee against it; this is the
+    // real answer arriving over it.
+    // TODO(error-handling): check error, surface a failure
+    await supabase.from("round_handicaps").upsert(
+      playerSetups.map(({ player, playingHcp, tee }) => ({
+        round_id: liveRound.round_id,
+        player_id: player.id,
+        playing_handicap: playingHcp,
+        tee_id: tee?.id ?? null,
+      })),
+      { onConflict: "round_id,player_id" },
+    )
   }
 
   function syncLiveRound(r: ActiveLiveRound | null) {
@@ -571,9 +597,9 @@ export default function LiveScoringFlow({
       // 1. Upsert round_handicaps
       // TODO(error-handling): check error, revert optimistic UI, toast on failure
       await Promise.all(
-        playerSetups.map(({ player, playingHcp }) =>
+        playerSetups.map(({ player, playingHcp, tee }) =>
           supabase.from("round_handicaps").upsert(
-            { round_id: roundId, player_id: player.id, playing_handicap: playingHcp },
+            { round_id: roundId, player_id: player.id, playing_handicap: playingHcp, tee_id: tee?.id ?? null },
             { onConflict: "round_id,player_id" }
           )
         )
@@ -804,7 +830,7 @@ export default function LiveScoringFlow({
                         <span className="text-ink/50 text-sm">No tees for this course</span>
                       ) : (
                         playerCourseTees.map(tee => {
-                          const style = TEE_STYLES[tee.name] ?? { dot: "bg-bark/25 ring-1 ring-bark/25", active: "border-bark/25 text-ink/80" }
+                          const style = { dot: teeDot(tee.name), active: TEE_ACTIVE[tee.name] ?? "border-bark/25 text-ink/80" }
                           const isActive = selectedTeeId === tee.id
                           return (
                             <button
@@ -1210,43 +1236,44 @@ export default function LiveScoringFlow({
             <div className="rounded-2xl border border-bark/12 bg-surface relative">
 
               {/* Course banner — scrolls with page, does not stick */}
-              <div className="rounded-t-2xl px-4 py-3 border-b border-bark/25" style={{ background: "rgba(74,55,40,0.04)" }}>
+              <div className={`rounded-t-2xl px-4 py-3 ${SC_RULE} ${SC_BAND}`}>
                 <p className="text-ink text-base font-semibold" style={sf}>{courseNameLabel}</p>
               </div>
 
               {/* Sticky: player details row + column header row */}
               <div className="sticky top-[77px] z-10">
 
-                {/* Player details row */}
-                <div className="flex items-end gap-4 px-4 py-2.5 border-b border-bark/12" style={{ background: "rgba(74,55,40,0.05)" }}>
-                  <div className="flex flex-col flex-1 min-w-0">
-                    <span className={`text-[10px] tracking-[0.15em] uppercase ${muted}`} style={sf}>Player</span>
-                    <span className="font-[family-name:var(--font-playfair)] text-xl text-ink font-semibold leading-tight truncate">{player.name}</span>
-                  </div>
-                  <div className="flex flex-col items-end flex-shrink-0">
-                    <span className={`text-[10px] tracking-[0.15em] uppercase ${muted}`} style={sf}>Tee</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`w-3 h-3 rounded-full flex-shrink-0 ${TEE_STYLES[tee.name]?.dot ?? "bg-bark/25 ring-1 ring-bark/25"}`} />
-                      <span className={`text-base font-semibold ${dark}`} style={sf}>{tee.name}</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end flex-shrink-0">
-                    <span className={`text-[10px] tracking-[0.15em] uppercase ${muted}`} style={sf}>PH</span>
-                    <span className={`text-base font-semibold ${dark}`} style={sf}>{playingHcp}</span>
-                  </div>
+                {/* Tee and playing handicap.
+                    The name is here only when nothing else is showing it —
+                    with two or more players the selector tiles above are the
+                    name, and printing it again spends the widest line on the
+                    card repeating the thing that was just tapped. */}
+                <div className={`flex items-center gap-5 px-4 py-2.5 ${SC_RULE} ${SC_HEAD}`}>
+                  {playerSetups.length < 2 && (
+                    <span className="flex-1 min-w-0 t-card text-ink truncate">{player.name}</span>
+                  )}
+                  <span className="flex items-center gap-1.5">
+                    <span className={SC_LABEL}>Tee</span>
+                    <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${teeDot(tee.name)}`} />
+                    <span className={`text-[15px] font-semibold ${dark}`} style={sf}>{tee.name}</span>
+                  </span>
+                  <span className="flex items-baseline gap-1.5">
+                    <span className={SC_LABEL}>PH</span>
+                    <span className={`text-[15px] font-semibold ${dark}`} style={sf}>{playingHcp}</span>
+                  </span>
                 </div>
 
                 {/* Column headers */}
-                <div className={`${grid} px-3 py-2 border-b border-bark/12`} style={{ background: "rgba(74,55,40,0.05)" }}>
+                <div className={`${grid} px-3 py-2 ${SC_RULE} ${SC_HEAD}`}>
                   {(["Hole","Yds","Par","SI","Score","Pts"] as const).map((h, i) => (
-                    <span key={h} className={`text-[11px] tracking-[0.15em] uppercase font-semibold ${muted} ${i === 4 ? "text-center" : i === 5 ? "text-right" : ""}`} style={sf}>{h}</span>
+                    <span key={h} className={`${SC_HEAD_TEXT} ${i === 4 ? "text-center" : i === 5 ? "text-right" : ""}`} style={sf}>{h}</span>
                   ))}
                 </div>
               </div>
 
               {/* Front 9 */}
-              {rows.slice(0, 9).map(({ hole, idx, isNR, gross, pts, ePar, eSI, yardage }) => (
-                <div key={hole.id} className={`${grid} px-3 py-2 items-center border-b border-bark/12 ${idx % 2 === 1 ? "bg-bark/[0.04]" : ""}`}>
+              {rows.slice(0, 9).map(({ hole, isNR, gross, pts, ePar, eSI, yardage }) => (
+                <div key={hole.id} className={`${grid} px-3 py-2 items-center ${SC_RULE} ${scRow(hole.hole_number)}`}>
                   <span className={`text-base font-semibold ${dark}`} style={sf}>{hole.hole_number}</span>
                   <span className={`text-base ${muted}`} style={sf}>{yardage ?? "—"}</span>
                   <span className={`text-base ${dark}`} style={sf}>{ePar}</span>
@@ -1257,7 +1284,7 @@ export default function LiveScoringFlow({
               ))}
 
               {/* Out subtotal — gold fill, bolder text */}
-              <div className={`${grid} px-3 py-2.5 items-center border-b border-accent/20`} style={{ background: "rgba(201,168,76,0.16)" }}>
+              <div className={`${grid} px-3 py-2.5 items-center ${SC_RULE} ${SC_BAND}`}>
                 <span className="text-sm font-bold tracking-widest uppercase text-ink/80" style={sf}>Out</span>
                 <span className={`text-sm ${muted}`} style={sf}>{front9Yards > 0 ? front9Yards : "—"}</span>
                 <span className={`text-sm font-bold ${dark}`} style={sf}>{front9Par}</span>
@@ -1267,8 +1294,8 @@ export default function LiveScoringFlow({
               </div>
 
               {/* Back 9 — pos = idx+1; bg when idx is even (pos is odd) */}
-              {rows.slice(9).map(({ hole, idx, isNR, gross, pts, ePar, eSI, yardage }) => (
-                <div key={hole.id} className={`${grid} px-3 py-2 items-center border-b border-bark/12 ${idx % 2 === 0 ? "bg-bark/[0.04]" : ""}`}>
+              {rows.slice(9).map(({ hole, isNR, gross, pts, ePar, eSI, yardage }) => (
+                <div key={hole.id} className={`${grid} px-3 py-2 items-center ${SC_RULE} ${scRow(hole.hole_number)}`}>
                   <span className={`text-base font-semibold ${dark}`} style={sf}>{hole.hole_number}</span>
                   <span className={`text-base ${muted}`} style={sf}>{yardage ?? "—"}</span>
                   <span className={`text-base ${dark}`} style={sf}>{ePar}</span>
@@ -1279,7 +1306,7 @@ export default function LiveScoringFlow({
               ))}
 
               {/* In subtotal — gold fill, bolder text */}
-              <div className={`${grid} px-3 py-2.5 items-center border-b border-accent/20`} style={{ background: "rgba(201,168,76,0.16)" }}>
+              <div className={`${grid} px-3 py-2.5 items-center ${SC_RULE} ${SC_BAND}`}>
                 <span className="text-sm font-bold tracking-widest uppercase text-ink/80" style={sf}>In</span>
                 <span className={`text-sm ${muted}`} style={sf}>{back9Yards > 0 ? back9Yards : "—"}</span>
                 <span className={`text-sm font-bold ${dark}`} style={sf}>{back9Par}</span>
@@ -1289,8 +1316,8 @@ export default function LiveScoringFlow({
               </div>
 
               {/* Total — deepest gold, heaviest weight */}
-              <div className={`${grid} px-3 py-3 items-center border-t border-accent/35 rounded-b-xl`} style={{ background: "rgba(201,168,76,0.35)" }}>
-                <span className="text-sm font-bold tracking-widest uppercase text-accent-deep" style={sf}>Tot</span>
+              <div className={`${grid} px-3 py-3 items-center rounded-b-2xl ${SC_BAND_TOTAL}`}>
+                <span className="text-[13px] font-bold tracking-widest uppercase text-ink/80" style={sf}>Tot</span>
                 <span className={`text-sm font-semibold ${muted}`} style={sf}>{totalYards > 0 ? totalYards : "—"}</span>
                 <span className={`text-sm font-bold ${dark}`} style={sf}>{totalPar}</span>
                 <span />

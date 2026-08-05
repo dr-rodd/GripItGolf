@@ -6,6 +6,10 @@ import BackButton from "@/app/components/BackButton"
 import ScoreShape from "@/app/components/ScoreShape"
 import { scoreTone, TONE_PILL } from "@/lib/leaderboardStyle"
 import { HEADER_H } from "@/app/components/headerMetrics"
+import {
+  SC_SF, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL,
+  SC_MUTED, SC_DARK, scRow, scPoints, teeDot,
+} from "@/app/components/scorecardStyle"
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -37,7 +41,11 @@ interface RoundHandicap {
   round_id: string
   player_id: string
   playing_handicap: number
+  /** Written when the session starts, so the card can name the tee mid-round. */
+  tee_id?: string | null
 }
+
+interface Tee { id: string; name: string }
 
 interface LiveScoreRow {
   player_id: string
@@ -113,131 +121,103 @@ function compareRows(a: PlayerRow, b: PlayerRow, mode: Mode, sv: StrokesView): n
 // ─── Inline Scorecard ─────────────────────────────────────
 
 export function InlineScorecard({
-  player, playingHcp, courseHoles, playerScores, courseId,
+  playingHcp, teeName, courseHoles, playerScores, gender,
 }: {
-  player: Player
   playingHcp: number
+  /** The tee they played off, once the session has recorded one. */
+  teeName: string | null
   courseHoles: Hole[]
   playerScores: LiveScoreRow[]
-  courseId: string
+  gender: string
 }) {
-  const sf    = { fontFamily: "var(--font-serif)" }
-  const muted = "text-ink/65"
-  const dark  = "text-ink"
-  const grid  = "grid grid-cols-[2fr_2fr_2fr_3fr_2fr] w-full"
-
   const scoreByHole = new Map(playerScores.map(ls => [ls.hole_number, ls]))
+  const grid = 'grid grid-cols-[2fr_2fr_2fr_3fr_2fr] w-full'
 
   // One shape for every card in the app — see ScoreShape.
   const scoreSymbol = (gross: number | null, ePar: number) =>
     gross === null
-      ? <span className={`${muted} text-sm`} style={sf}>—</span>
+      ? <span className={`${SC_MUTED} text-base`} style={SC_SF}>—</span>
       : <ScoreShape gross={gross} par={ePar} size="sm" />
 
-
-  const ptsColor = (pts: number | null) =>
-    pts === null ? muted :
-    pts === 0    ? "text-ink/65 opacity-50" :
-                   "text-ink/65 font-bold"
-
-  // Build rows
-  const rows = courseHoles.map((hole, idx) => {
-    const ls     = scoreByHole.get(hole.hole_number)
-    const ePar   = effectivePar(hole, player.gender)
-    const eSI    = effectiveSI(hole, player.gender)
-    const gross  = ls?.gross_score ?? null
-    const pts    = ls?.stableford_points ?? null
-    return { hole, idx, ePar, eSI, gross, pts }
+  const rows = courseHoles.map(hole => {
+    const ls = scoreByHole.get(hole.hole_number)
+    return {
+      hole,
+      ePar: effectivePar(hole, gender),
+      eSI: effectiveSI(hole, gender),
+      gross: ls?.gross_score ?? null,
+      pts: ls?.stableford_points ?? null,
+    }
   })
 
-  // Front 9 subtotals
   const front9 = rows.slice(0, 9)
-  const front9Par   = front9.reduce((s, r) => s + r.ePar, 0)
-  const front9Gross = front9.reduce((s, r) => s + (r.gross ?? 0), 0)
-  const front9Pts   = front9.reduce((s, r) => s + (r.pts ?? 0), 0)
-  const front9HasScores = front9.some(r => r.gross !== null)
+  const back9  = rows.slice(9)
+  const sum = (rs: typeof rows, f: (r: typeof rows[number]) => number) =>
+    rs.reduce((s, r) => s + f(r), 0)
 
-  // Back 9 subtotals
-  const back9 = rows.slice(9)
-  const back9Par   = back9.reduce((s, r) => s + r.ePar, 0)
-  const back9Gross = back9.reduce((s, r) => s + (r.gross ?? 0), 0)
-  const back9Pts   = back9.reduce((s, r) => s + (r.pts ?? 0), 0)
-  const back9HasScores = back9.some(r => r.gross !== null)
+  // Plain functions rather than components declared in here: a component
+  // created during render is a new type every render, and React rebuilds the
+  // whole card each time the fetch ticks.
+  const band = (label: string, rs: typeof rows, total = false) => {
+    const scored = rs.some(r => r.gross !== null)
+    return (
+      <div className={`${grid} px-3 py-2 items-center ${total ? SC_BAND_TOTAL : SC_BAND} ${total ? '' : SC_RULE}`}>
+        <span className="text-[13px] font-bold tracking-widest uppercase text-ink/80" style={SC_SF}>{label}</span>
+        <span className="text-[15px] font-bold text-ink" style={SC_SF}>{sum(rs, r => r.ePar)}</span>
+        <span />
+        <span className="text-center text-[15px] font-bold text-ink" style={SC_SF}>
+          {scored ? sum(rs, r => r.gross ?? 0) : '—'}
+        </span>
+        <span className={`text-right font-bold text-ink ${total ? 'text-lg' : 'text-[15px]'}`} style={SC_SF}>
+          {scored ? sum(rs, r => r.pts ?? 0) : '—'}
+        </span>
+      </div>
+    )
+  }
 
-  const totalPar   = front9Par + back9Par
-  const totalGross = front9Gross + back9Gross
-  const totalPts   = front9Pts + back9Pts
+  const holeRow = (r: typeof rows[number]) => (
+    <div key={r.hole.hole_number} className={`${grid} px-3 py-1.5 items-center ${SC_RULE} ${scRow(r.hole.hole_number)}`}>
+      <span className={`text-[15px] font-semibold ${SC_DARK}`} style={SC_SF}>{r.hole.hole_number}</span>
+      <span className={`text-[15px] ${SC_MUTED}`} style={SC_SF}>{r.ePar}</span>
+      <span className={`text-[15px] ${SC_MUTED}`} style={SC_SF}>{r.eSI}</span>
+      <span className="flex justify-center">{scoreSymbol(r.gross, r.ePar)}</span>
+      <span className={`text-right text-[15px] ${scPoints(r.pts)}`} style={SC_SF}>{r.pts ?? '—'}</span>
+    </div>
+  )
 
   return (
-    <div style={{ background: "#FFFFFF" }}>
+    <div className="bg-surface">
 
-      {/* Player details */}
-      <div className="flex items-end gap-4 px-3 py-2 border-b border-bark/12" style={{ background: "rgba(74,55,40,0.05)" }}>
-        <div className="flex flex-col flex-1 min-w-0">
-          <span className={`text-[10px] tracking-[0.15em] uppercase ${muted}`} style={sf}>Player</span>
-          <span className="font-[family-name:var(--font-playfair)] text-lg text-ink font-semibold leading-tight truncate">{player.name}</span>
-        </div>
-        <div className="flex flex-col items-end flex-shrink-0">
-          <span className={`text-[10px] tracking-[0.15em] uppercase ${muted}`} style={sf}>PH</span>
-          <span className={`text-sm font-semibold ${dark}`} style={sf}>{playingHcp}</span>
-        </div>
+      {/* Playing handicap and tee.
+          No name: the row this card just dropped out of carries it, and
+          repeating it here spends the widest line on the card saying
+          something the reader tapped on a second ago. */}
+      <div className={`flex items-center gap-5 px-3 py-2 ${SC_RULE} ${SC_HEAD}`}>
+        <span className="flex items-baseline gap-1.5">
+          <span className={SC_LABEL}>PH</span>
+          <span className={`text-[15px] font-semibold ${SC_DARK}`} style={SC_SF}>{playingHcp}</span>
+        </span>
+        {teeName && (
+          <span className="flex items-center gap-1.5">
+            <span className={SC_LABEL}>Tee</span>
+            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${teeDot(teeName)}`} />
+            <span className={`text-[15px] font-semibold ${SC_DARK}`} style={SC_SF}>{teeName}</span>
+          </span>
+        )}
       </div>
 
       {/* Column headers */}
-      <div className={`${grid} px-3 py-1.5 border-b border-bark/12`} style={{ background: "rgba(74,55,40,0.05)" }}>
-        {(["Hole", "Par", "SI", "Score", "Pts"] as const).map((h, i) => (
-          <span key={h} className={`text-[10px] tracking-[0.15em] uppercase font-semibold ${muted} ${i === 3 ? "text-center" : i === 4 ? "text-right" : ""}`} style={sf}>{h}</span>
+      <div className={`${grid} px-3 py-1.5 ${SC_RULE} ${SC_HEAD}`}>
+        {(['Hole', 'Par', 'SI', 'Score', 'Pts'] as const).map((h, i) => (
+          <span key={h} className={`${SC_HEAD_TEXT} ${i === 3 ? 'text-center' : i === 4 ? 'text-right' : ''}`} style={SC_SF}>{h}</span>
         ))}
       </div>
 
-      {/* Front 9 */}
-      {front9.map(({ hole, idx, ePar, eSI, gross, pts }) => (
-        <div key={hole.hole_number} className={`${grid} px-3 py-1.5 items-center border-b border-bark/12 ${idx % 2 === 1 ? "bg-bark/[0.04]" : ""}`}>
-          <span className={`text-sm font-semibold ${dark}`} style={sf}>{hole.hole_number}</span>
-          <span className={`text-sm ${muted}`} style={sf}>{ePar}</span>
-          <span className={`text-sm ${muted}`} style={sf}>{eSI}</span>
-          <span className="flex justify-center">{scoreSymbol(gross, ePar)}</span>
-          <span className={`text-right text-sm ${ptsColor(pts)}`} style={sf}>{pts ?? "—"}</span>
-        </div>
-      ))}
-
-      {/* Out subtotal */}
-      <div className={`${grid} px-3 py-2 items-center border-b border-accent/20`} style={{ background: "rgba(201,168,76,0.16)" }}>
-        <span className="text-xs font-bold tracking-widest uppercase text-ink/80" style={sf}>Out</span>
-        <span className={`text-sm font-bold text-ink/80`} style={sf}>{front9Par}</span>
-        <span />
-        <span className="text-center text-sm font-bold text-ink/80" style={sf}>{front9HasScores ? front9Gross : "—"}</span>
-        <span className={`text-right text-sm font-bold text-ink/65`} style={sf}>{front9HasScores ? front9Pts : "—"}</span>
-      </div>
-
-      {/* Back 9 */}
-      {back9.map(({ hole, idx, ePar, eSI, gross, pts }) => (
-        <div key={hole.hole_number} className={`${grid} px-3 py-1.5 items-center border-b border-bark/12 ${idx % 2 === 0 ? "bg-bark/[0.04]" : ""}`}>
-          <span className={`text-sm font-semibold ${dark}`} style={sf}>{hole.hole_number}</span>
-          <span className={`text-sm ${muted}`} style={sf}>{ePar}</span>
-          <span className={`text-sm ${muted}`} style={sf}>{eSI}</span>
-          <span className="flex justify-center">{scoreSymbol(gross, ePar)}</span>
-          <span className={`text-right text-sm ${ptsColor(pts)}`} style={sf}>{pts ?? "—"}</span>
-        </div>
-      ))}
-
-      {/* In subtotal */}
-      <div className={`${grid} px-3 py-2 items-center border-b border-accent/20`} style={{ background: "rgba(201,168,76,0.16)" }}>
-        <span className="text-xs font-bold tracking-widest uppercase text-ink/80" style={sf}>In</span>
-        <span className={`text-sm font-bold text-ink/80`} style={sf}>{back9Par}</span>
-        <span />
-        <span className="text-center text-sm font-bold text-ink/80" style={sf}>{back9HasScores ? back9Gross : "—"}</span>
-        <span className={`text-right text-sm font-bold text-ink/65`} style={sf}>{back9HasScores ? back9Pts : "—"}</span>
-      </div>
-
-      {/* Tot row */}
-      <div className={`${grid} px-3 py-2.5 items-center`} style={{ background: "rgba(201,168,76,0.35)" }}>
-        <span className="text-xs font-bold tracking-widest uppercase text-accent-deep" style={sf}>Tot</span>
-        <span className={`text-sm font-bold text-accent-deep`} style={sf}>{totalPar}</span>
-        <span />
-        <span className="text-center text-sm font-bold text-accent-deep" style={sf}>{totalGross || "—"}</span>
-        <span className="text-right text-base font-extrabold text-ink/80 font-[family-name:var(--font-playfair)]">{totalPts}</span>
-      </div>
+      {front9.map(holeRow)}
+      {band('Out', front9)}
+      {back9.map(holeRow)}
+      {band('In', back9)}
+      {band('Tot', rows, true)}
 
     </div>
   )
@@ -250,6 +230,8 @@ interface Props {
   players: Player[]
   holes: Hole[]
   roundHandicaps: RoundHandicap[]
+  /** Named on each card. Optional so the legacy screens can leave it out. */
+  tees?: Tee[]
   onClose?: () => void
   showBackButton?: boolean
 }
@@ -257,7 +239,7 @@ interface Props {
 // ─── Component ────────────────────────────────────────────
 
 export default function LiveLeaderboardPanel({
-  liveRound, players, holes, roundHandicaps, onClose, showBackButton = false,
+  liveRound, players, holes, roundHandicaps, tees = [], onClose, showBackButton = false,
 }: Props) {
   const [liveScores, setLiveScores]     = useState<LiveScoreRow[]>([])
   const [validPlayerIds, setValidPlayerIds] = useState<Set<string>>(new Set())
@@ -493,9 +475,11 @@ export default function LiveLeaderboardPanel({
             // ── Col 4: holes through or F ─────────────────
             const col4 = isFinalised ? "F" : `${holesCompleted}`
 
-            const playingHcp = roundHandicaps.find(
-              rh => rh.player_id === player.id && rh.round_id === liveRound.round_id
-            )?.playing_handicap ?? 0
+            const rh = roundHandicaps.find(
+              r => r.player_id === player.id && r.round_id === liveRound.round_id
+            )
+            const playingHcp = rh?.playing_handicap ?? 0
+            const teeName = tees.find(t => t.id === rh?.tee_id)?.name ?? null
 
             return (
               <Fragment key={player.id}>
@@ -539,11 +523,11 @@ export default function LiveLeaderboardPanel({
                 {isExpanded && (
                   <div className={!isLast ? "border-b border-bark/12" : ""}>
                     <InlineScorecard
-                      player={player}
                       playingHcp={playingHcp}
+                      teeName={teeName}
+                      gender={player.gender}
                       courseHoles={courseHoles}
                       playerScores={liveScores.filter(ls => ls.player_id === player.id)}
-                      courseId={liveRound.course_id}
                     />
                   </div>
                 )}

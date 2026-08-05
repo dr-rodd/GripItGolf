@@ -177,6 +177,26 @@ The scoring screens are the cream system now — white cards on cream, **bark** 
 - Touch targets minimum 48px
 - Leaderboard, scoring and bracket screens stay tight (4–16px). Generous spacing is for entry screens only
 
+### The three scorecards
+
+There are three, for three different jobs, and `app/components/scorecardStyle.ts` is what they have in common — the surface, the rules, the bands, the tee swatches. What they show differs; what they look like must not, or one round reads as three documents depending which screen found it.
+
+| Card | Where | What it adds |
+|---|---|---|
+| Live drop-down | opened from a row of the live leaderboard | **no name** — the row above is the name. PH and tee instead |
+| End of round | the last look before a score is committed | **no name** when the selector tiles above are showing it; tee and PH always |
+| Pop-up | the trip leaderboard, one player or a whole team | one player: PH only, the title is the name. A team: every member and their handicap |
+
+**White, with alternating rows nudged towards the page's cream.** The card is the brightest thing on screen so the browns sit on it properly, which is why the parchment came off in the first place. A flat tint, not a literal gradient — `test:branding` bans those, and a wash between white and cream is the effect anyway.
+
+**The bands are bark.** Out and In at 5%, the total at 10%. Two of the three cards still banded them in Donegal gold (`rgba(201,168,76,…)`, which is `#C9A84C` in a spelling the branding test's hex check did not catch).
+
+**A hole played for nothing prints a nought.** Testing the total alone conflated "nobody has reached this hole" with "this hole was played and scored nothing", and a wiped-out hole is exactly the one worth being able to see.
+
+**A team card scrolls past three players.** The member list is capped at a couple of lines and scrolls; the player columns scroll sideways while **Hole / Par and the team's points hold still** — the same synced-strip arrangement the trip board's round columns use, for the same reason (see the leaderboard section). `Row` is declared at module level: it wraps the strips, so inside the sheet it would be a new component type every render and React would take the scroll position with it.
+
+**Tee swatches keep their real colours** — a blue tee is blue, they are data not brand. That is the one grey the branding test exempts, by file, so a grey creeping in anywhere else is still caught. `round_handicaps.tee_id` is written when a session *starts*, not only when it is committed: the live leaderboard's card names the tee mid-round, and waiting for the card to be signed is too late for the one screen that exists to be read while playing.
+
 ## Platform concept
 
 - A **lead player** creates a trip — no account required, open access for now

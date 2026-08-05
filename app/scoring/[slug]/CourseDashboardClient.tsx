@@ -42,7 +42,11 @@ interface Tee {
   id: string; course_id: string; name: string; gender: string
   par: number; course_rating: number; slope: number
 }
-interface RoundHandicap { round_id: string; player_id: string; playing_handicap: number }
+interface RoundHandicap {
+  round_id: string; player_id: string; playing_handicap: number
+  /** Written when a session starts, so a card can name the tee mid-round. */
+  tee_id?: string | null
+}
 
 interface Props {
   courseName: string
@@ -907,6 +911,7 @@ export default function CourseDashboardClient({
           players={nonComposite}
           holes={holes}
           roundHandicaps={roundHandicaps}
+          tees={tees}
           onClose={goBack}
           showBackButton={false}
         />

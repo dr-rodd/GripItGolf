@@ -14,6 +14,10 @@ import {
 import { type Membership } from '@/lib/teamSets'
 import { HEADER_H } from '@/app/components/headerMetrics'
 import ScoreShape, { NoReturnShape } from '@/app/components/ScoreShape'
+import {
+  SC_SF, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_HEAD_TIGHT, SC_LABEL,
+  SC_MUTED, SC_DARK, scRow, scPoints,
+} from '@/app/components/scorecardStyle'
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -69,18 +73,8 @@ interface Props {
   roundHandicaps: RoundHcp[]
 }
 
-// ─── Scorecard styling ─────────────────────────────────────────
-//
-// A white card on cream with bark rules, like every other card in the app.
-// The summary bands are a wash of bark rather than emerald: green is the
-// accent, and a scorecard that is half green stops the accent meaning
-// anything. Nothing here is trying to look like paper any more.
-
-const SC_SF    = { fontFamily: 'var(--font-serif)' }
-const SC_MUTED = 'text-ink/65'
-const SC_DARK  = 'text-ink'
-/** The Out / In / Total bands. Brown, to sit with the page rather than shout. */
-const SC_BAND  = 'rgba(74,55,40,0.04)'
+// Every scorecard in the app wears the same clothes — see
+// app/components/scorecardStyle.ts for why, and for the tokens.
 
 const firstName = (n: string) => n.split(' ')[0]
 
@@ -141,7 +135,30 @@ function EmptyState({ message }: { message: string }) {
 
 // ─── The scorecard sheet ───────────────────────────────────────
 
-function ScorecardSheet({
+/**
+ * One line of a scorecard: fixed left, scrolling middle, fixed right.
+ *
+ * At module level because it wraps the scrolling strips — declared inside the
+ * sheet it would be a new component type every render, React would rebuild
+ * the strip, and the scroll position would go with it.
+ */
+function Row({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return <div className={`flex items-center gap-2 px-3 ${className}`}>{children}</div>
+}
+
+/**
+ * The pop-up card, for one player or for a whole team.
+ *
+ * A team card is the one that gets unwieldy: every member is a column, and
+ * past about four the holes are squeezed into nothing. So the player columns
+ * scroll sideways while **Hole / Par and the team's points hold still** — the
+ * two things you navigate by — and the member list above scrolls once it is
+ * longer than fits.
+ *
+ * Same trick as the trip board's round columns: one scroller per row, kept in
+ * step, so nothing that has to stay put sits inside a scroll container.
+ */
+export function ScorecardSheet({
   title, subtitle, players, round, holes, resolved, roundHandicaps, onClose,
 }: {
   title: string
@@ -153,25 +170,24 @@ function ScorecardSheet({
   roundHandicaps: RoundHcp[]
   onClose: () => void
 }) {
+  const { register, onScroll } = useSyncedStrips()
+
   const courseHoles = holes
     .filter(h => h.course_id === (round.courses?.id ?? ''))
     .sort((a, b) => a.hole_number - b.hole_number)
 
-  // gridTemplateColumns is inline because the player count varies
-  const gridCols = {
-    display: 'grid',
-    gridTemplateColumns: `2fr 2fr ${players.map(() => '3fr').join(' ')} 2fr`,
-    width: '100%',
-  } as const
+  // Past this the player columns stop fitting and start scrolling instead.
+  const INLINE_PLAYERS = 3
+  const scrolls = players.length > INLINE_PLAYERS
 
   const scoreFor = (playerId: string, holeNumber: number) =>
     resolved.find(s => s.playerId === playerId && s.roundId === round.id && s.holeNumber === holeNumber)
 
   // One shape for every card in the app — see ScoreShape.
   const scoreSymbol = (gross: number | null, par: number, isNR: boolean) => {
-    if (isNR) return <NoReturnShape size="lg" />
+    if (isNR) return <NoReturnShape size={scrolls ? 'md' : 'lg'} />
     if (gross === null) return <span className={`${SC_MUTED} text-lg`} style={SC_SF}>—</span>
-    return <ScoreShape gross={gross} par={par} size="lg" />
+    return <ScoreShape gross={gross} par={par} size={scrolls ? 'md' : 'lg'} />
   }
 
   const nine = (from: number, to: number) => courseHoles.filter(h => h.hole_number >= from && h.hole_number <= to)
@@ -179,32 +195,34 @@ function ScorecardSheet({
   const sumPts = (hs: Hole[], playerId: string) =>
     hs.reduce((s, h) => s + (scoreFor(playerId, h.hole_number)?.points ?? 0), 0)
   const sumGross = (hs: Hole[], playerId: string) =>
-    hs.reduce((s, h) => {
-      const sc = scoreFor(playerId, h.hole_number)
-      return s + (sc?.gross ?? 0)
-    }, 0)
+    hs.reduce((s, h) => s + (scoreFor(playerId, h.hole_number)?.gross ?? 0), 0)
 
   const front = nine(1, 9)
   const back  = nine(10, 18)
+  const gender = players[0]?.gender ?? 'M'
 
-  const SummaryRow = ({ label, hs }: { label: string; hs: Hole[] }) => (
-    <div
-      style={{ ...gridCols, background: SC_BAND }}
-      className="px-3 py-2 items-center border-y border-bark/12"
-    >
-      <span className="text-[13px] font-bold tracking-widest uppercase text-ink/80" style={SC_SF}>{label}</span>
-      <span className="text-base font-bold text-ink" style={SC_SF}>
-        {sumPar(hs, players[0]?.gender ?? 'M')}
-      </span>
-      {players.map(p => (
-        <span key={p.id} className="text-center text-base font-bold text-ink" style={SC_SF}>
-          {sumGross(hs, p.id) > 0 ? sumGross(hs, p.id) : '—'}
-        </span>
-      ))}
-      <span className="text-right text-lg font-bold text-ink font-[family-name:var(--font-display)]">
+  // Fixed either side, scrolling in the middle. The widths are the same in
+  // both modes so a one-player card and a six-player card line up.
+  const HOLE_W = 'w-10 flex-shrink-0'
+  const PAR_W  = 'w-9 flex-shrink-0'
+  const PTS_W  = 'w-12 flex-shrink-0 text-right'
+  const CELL   = `${scrolls ? 'w-11' : 'flex-1'} flex-shrink-0 flex items-center justify-center`
+
+  const summary = (label: string, hs: Hole[], total = false) => (
+    <Row className={`py-2 ${total ? SC_BAND_TOTAL : SC_BAND} ${total ? '' : SC_RULE}`}>
+      <span className={`${HOLE_W} text-[13px] font-bold tracking-widest uppercase text-ink/80`} style={SC_SF}>{label}</span>
+      <span className={`${PAR_W} text-[15px] font-bold text-ink`} style={SC_SF}>{sumPar(hs, gender)}</span>
+      <Strip scrolls={scrolls} register={register} onScroll={onScroll}>
+        {players.map(p => (
+          <span key={p.id} className={`${CELL} text-[15px] font-bold text-ink`} style={SC_SF}>
+            {sumGross(hs, p.id) > 0 ? sumGross(hs, p.id) : '—'}
+          </span>
+        ))}
+      </Strip>
+      <span className={`${PTS_W} font-bold text-ink ${total ? 'text-xl' : 'text-base'}`} style={SC_SF}>
         {players.reduce((s, p) => s + sumPts(hs, p.id), 0)}
       </span>
-    </div>
+    </Row>
   )
 
   return (
@@ -221,7 +239,7 @@ function ScorecardSheet({
             <p className="font-[family-name:var(--font-display)] text-ink text-2xl leading-tight truncate">
               {title}
             </p>
-            <p className="text-accent text-base truncate">{subtitle}</p>
+            <p className="text-ink/65 text-base truncate">{subtitle}</p>
           </div>
           <button
             onClick={onClose}
@@ -232,51 +250,50 @@ function ScorecardSheet({
           </button>
         </div>
 
-        <div className="flex flex-col flex-1 min-h-0 rounded-t-xl overflow-hidden" style={{ background: '#FFFFFF' }}>
+        <div className="flex flex-col flex-1 min-h-0 rounded-t-2xl overflow-hidden bg-surface">
 
-          {/* Players + their playing handicaps */}
-          <div
-            className="flex-shrink-0 flex items-baseline gap-3 px-3 py-2 border-b border-[rgba(74,55,40,0.18)]"
-            style={{ background: '#F1EEE9' }}
-          >
-            <span className="text-[12px] tracking-[0.15em] uppercase flex-shrink-0" style={{ ...SC_SF, color: 'rgba(43,33,24,0.62)' }}>
-              {players.length > 1 ? 'Players' : 'Player'}
-            </span>
-            <div className="flex-1 min-w-0 flex items-baseline justify-between">
-              {players.map(p => {
-                const hcp = roundHandicaps.find(rh => rh.player_id === p.id && rh.round_id === round.id)?.playing_handicap
-                return (
-                  <span key={p.id} className="flex-1 text-center text-sm text-[#2B2118]" style={SC_SF}>
-                    <span className="font-[family-name:var(--font-display)] font-semibold">{firstName(p.name)}</span>
-                    {' '}
-                    <span className={`text-[12px] ${SC_MUTED}`}>{hcp ?? '—'}</span>
-                  </span>
-                )
-              })}
+          {/* Who is on the card, and off what handicap.
+              Its own scrolling box once the team is bigger than fits, so a
+              six-player team does not push the holes off the screen. */}
+          <div className={`flex-shrink-0 px-3 py-2 ${SC_RULE} ${SC_HEAD}`}>
+            <div className="flex items-baseline gap-2">
+              {/* One player needs no name here — the title directly above is
+                  the name. What is not up there is the handicap. A team does
+                  need them: the names are what tell the columns apart. */}
+              <span className={`${SC_LABEL} flex-shrink-0`}>
+                {players.length > 1 ? 'Players' : 'PH'}
+              </span>
+              <div className={`flex-1 min-w-0 flex flex-wrap gap-x-4 gap-y-1 ${
+                players.length > 4 ? 'max-h-[3.25rem] overflow-y-auto' : ''
+              }`}>
+                {players.map(p => {
+                  const hcp = roundHandicaps.find(rh => rh.player_id === p.id && rh.round_id === round.id)?.playing_handicap
+                  return (
+                    <span key={p.id} className="text-[15px] text-ink whitespace-nowrap" style={SC_SF}>
+                      {players.length > 1 && <>{firstName(p.name)}{' '}</>}
+                      <span className={players.length > 1 ? SC_MUTED : 'font-semibold'}>{hcp ?? '—'}</span>
+                    </span>
+                  )
+                })}
+              </div>
             </div>
           </div>
 
           {/* Column headers */}
-          <div
-            style={{ ...gridCols, background: '#F1EEE9' }}
-            className="flex-shrink-0 px-3 py-1.5 border-b border-[rgba(74,55,40,0.18)]"
-          >
-            {(['Hole', 'Par'] as const).map(h => (
-              <span key={h} className={`text-[12px] tracking-[0.15em] uppercase font-semibold ${SC_MUTED}`} style={SC_SF}>
-                {h}
-              </span>
-            ))}
-            {players.map((p, i) => (
-              <span key={p.id} className={`text-[12px] tracking-[0.15em] uppercase font-semibold ${SC_MUTED} text-center`} style={SC_SF}>
-                {players.length > 1 ? i + 1 : 'Score'}
-              </span>
-            ))}
-            <span className={`text-[12px] tracking-[0.15em] uppercase font-semibold ${SC_MUTED} text-right`} style={SC_SF}>
-              Pts
-            </span>
-          </div>
+          <Row className={`flex-shrink-0 py-1.5 ${SC_RULE} ${SC_HEAD}`}>
+            <span className={`${HOLE_W} ${SC_HEAD_TIGHT}`} style={SC_SF}>Hole</span>
+            <span className={`${PAR_W} ${SC_HEAD_TIGHT}`} style={SC_SF}>Par</span>
+            <Strip scrolls={scrolls} register={register} onScroll={onScroll}>
+              {players.map(p => (
+                <span key={p.id} className={`${CELL} ${SC_HEAD_TEXT}`} style={SC_SF}>
+                  {players.length > 1 ? firstName(p.name).slice(0, 3) : 'Score'}
+                </span>
+              ))}
+            </Strip>
+            <span className={`${PTS_W} ${SC_HEAD_TEXT}`} style={SC_SF}>Pts</span>
+          </Row>
 
-          {/* Hole rows — the only scrolling part */}
+          {/* Hole rows — the only vertically scrolling part */}
           <div className="overflow-y-auto flex-1 pb-8">
             {courseHoles.length === 0 && (
               <p className={`${SC_MUTED} text-sm text-center py-10`} style={SC_SF}>
@@ -285,66 +302,52 @@ function ScorecardSheet({
             )}
 
             {courseHoles.map(hole => {
-              const isNine = hole.hole_number === 9
+              // A hole nobody has reached is blank; a hole played for nothing
+              // is a nought. Testing the total alone conflated the two, and
+              // a wiped-out hole is exactly the one worth being able to see.
+              const played = players.some(p => scoreFor(p.id, hole.hole_number))
               const rowPts = players.reduce(
                 (s, p) => s + (scoreFor(p.id, hole.hole_number)?.points ?? 0), 0
               )
               return (
                 <Fragment key={hole.id}>
-                  <div
-                    style={gridCols}
-                    className="px-3 py-1.5 items-center border-b border-[rgba(74,55,40,0.10)]"
-                  >
-                    <span className={`text-base font-semibold ${SC_DARK}`} style={SC_SF}>
+                  <Row className={`py-1.5 ${SC_RULE} ${scRow(hole.hole_number)}`}>
+                    <span className={`${HOLE_W} text-[15px] font-semibold ${SC_DARK}`} style={SC_SF}>
                       {hole.hole_number}
                     </span>
-                    <span className={`text-base ${SC_MUTED}`} style={SC_SF}>
-                      {effectivePar(hole, players[0]?.gender ?? 'M')}
+                    <span className={`${PAR_W} text-[15px] ${SC_MUTED}`} style={SC_SF}>
+                      {effectivePar(hole, gender)}
                     </span>
-                    {players.map(p => {
-                      const sc = scoreFor(p.id, hole.hole_number)
-                      return (
-                        <span key={p.id} className="flex items-center justify-center">
-                          {scoreSymbol(
-                            sc ? sc.gross : null,
-                            effectivePar(hole, p.gender),
-                            sc?.noReturn ?? false
-                          )}
-                        </span>
-                      )
-                    })}
+                    <Strip scrolls={scrolls} register={register} onScroll={onScroll}>
+                      {players.map(p => {
+                        const sc = scoreFor(p.id, hole.hole_number)
+                        return (
+                          <span key={p.id} className={CELL}>
+                            {scoreSymbol(
+                              sc ? sc.gross : null,
+                              effectivePar(hole, p.gender),
+                              sc?.noReturn ?? false
+                            )}
+                          </span>
+                        )
+                      })}
+                    </Strip>
                     <span
-                      className={`text-right text-base ${rowPts > 0 ? 'text-ink font-bold' : `${SC_MUTED} opacity-60`}`}
+                      className={`${PTS_W} text-[15px] ${played ? scPoints(rowPts) : SC_MUTED}`}
                       style={SC_SF}
                     >
-                      {rowPts > 0 ? rowPts : '—'}
+                      {played ? rowPts : '—'}
                     </span>
-                  </div>
-                  {isNine && back.length > 0 && <SummaryRow label="Out" hs={front} />}
+                  </Row>
+                  {hole.hole_number === 9 && back.length > 0 && summary('Out', front)}
                 </Fragment>
               )
             })}
 
             {courseHoles.length > 0 && (
               <>
-                {back.length > 0 && <SummaryRow label="In" hs={back} />}
-                <div
-                  style={{ ...gridCols, background: SC_BAND }}
-                  className="px-3 py-2.5 items-center"
-                >
-                  <span className="text-sm font-bold tracking-widest uppercase text-ink/80" style={SC_SF}>Tot</span>
-                  <span className="text-lg font-bold text-ink" style={SC_SF}>
-                    {sumPar(courseHoles, players[0]?.gender ?? 'M')}
-                  </span>
-                  {players.map(p => (
-                    <span key={p.id} className="text-center text-lg font-bold text-ink" style={SC_SF}>
-                      {sumGross(courseHoles, p.id) > 0 ? sumGross(courseHoles, p.id) : '—'}
-                    </span>
-                  ))}
-                  <span className="text-right text-2xl font-extrabold text-ink font-[family-name:var(--font-display)]">
-                    {players.reduce((s, p) => s + sumPts(courseHoles, p.id), 0)}
-                  </span>
-                </div>
+                {back.length > 0 && summary('In', back)}
+                {summary('Tot', courseHoles, true)}
               </>
             )}
           </div>
