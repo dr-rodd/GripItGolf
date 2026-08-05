@@ -1270,6 +1270,31 @@ section('The old branding is gone')
   }
 }
 
+// ─── The hole you are on ───────────────────────────────────────
+
+section('The progress row shows a position, not a scale')
+{
+  const shell = read('app/scoring/[slug]/CourseDashboardClient.tsx')
+  const row = shell.slice(shell.indexOf('{view === "scoring" && liveHole && ('))
+  const progress = row.slice(0, row.indexOf('{/* Leaderboard / Scorecard banner'))
+
+  ok(progress.includes('{allowanceButton}'),
+    'the allowance sits on the line with the hole it applies to')
+  ok(/flexGrow: isNow \? 1\.6 : 1/.test(progress),
+    'the hole being played is wider than the seventeen that are not')
+  ok(/minWidth: isNow \? 16 : 0/.test(progress),
+    'and can never come out thinner than its neighbours')
+  ok(!/flex-1 h-1/.test(progress),
+    'the ticks are no longer equal shares of the row, which read as a scale')
+  ok(/transition-all duration-300/.test(progress),
+    'the change animates rather than jumping')
+
+  // It leaves the title row, so a long course name gets the width back — and
+  // the summary screen, which has no progress row, keeps it up there.
+  ok(/view === "live-board" \|\| \(view === "scoring" && !liveHole\)/.test(shell),
+    'the title row keeps the control only where there is no progress row to hold it')
+}
+
 // ─── A card, not a takeover ────────────────────────────────────
 
 section('The scorecard opens as a card on the board, not over it')

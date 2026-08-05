@@ -433,7 +433,10 @@ export default function CourseDashboardClient({
     </button>
   ) : null
 
-  const headerRight = view === "scoring" || view === "live-board"
+  // While a hole is on screen the allowance sits on the progress line instead,
+  // beside the hole it applies to — and out of the course name's width. The
+  // scorecard summary has no progress line, so there it stays up here.
+  const headerRight = view === "live-board" || (view === "scoring" && !liveHole)
     ? allowanceButton
     : view === "dashboard"
     ? <button
@@ -506,14 +509,35 @@ export default function CourseDashboardClient({
               <span className="font-[family-name:var(--font-playfair)] text-ink text-3xl leading-none w-8 tabular-nums">
                 {liveHole.idx + 1}
               </span>
+              {/* The hole you are on is wider than the seventeen you are not.
+                  Every tick used to be an equal share of the row, which reads
+                  as a scale rather than as a position — and the row now has a
+                  control on the end of it to make room for, so the seventeen
+                  give that room up rather than the one that matters.
+
+                  `flex-grow` and not a width: a phone is not one width, and a
+                  tick pinned to a pixel count would be the widest thing on the
+                  row at one size and the narrowest at another. The minimum is
+                  there so it can never come out thinner than its neighbours.
+
+                  It animates for free. Only the two ticks changing state have
+                  a value that changes, and the other sixteen follow because
+                  the row re-lays-out on every frame of it. */}
               <div className="flex-1 flex gap-[2px]">
-                {Array.from({ length: liveHole.total }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`flex-1 h-1 rounded-full transition-colors ${i < liveHole.idx ? "bg-accent/60" : i === liveHole.idx ? "bg-accent/70" : "bg-bark/[0.06]"}`}
-                  />
-                ))}
+                {Array.from({ length: liveHole.total }).map((_, i) => {
+                  const isNow = i === liveHole.idx
+                  return (
+                    <div
+                      key={i}
+                      className={`h-1 rounded-full transition-all duration-300 ease-out ${
+                        i < liveHole.idx ? "bg-accent/60" : isNow ? "bg-accent" : "bg-bark/[0.06]"
+                      }`}
+                      style={{ flexGrow: isNow ? 1.6 : 1, flexBasis: 0, minWidth: isNow ? 16 : 0 }}
+                    />
+                  )
+                })}
               </div>
+              {allowanceButton}
             </div>
           </div>
         )}
