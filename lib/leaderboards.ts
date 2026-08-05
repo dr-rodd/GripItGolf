@@ -24,6 +24,10 @@
 //
 // Pure. No I/O.
 
+import {
+  FULL_ALLOWANCE, allowanceOf, clampAllowance, describeAllowance,
+} from './handicapAllowance'
+
 export type Audience = 'individual' | 'team'
 export type Competition = 'league' | 'matchplay'
 
@@ -63,6 +67,17 @@ export type Leaderboard = {
 
   /** Team league only. */
   teamFormat?: TeamFormat
+
+  /**
+   * What percentage of a player's course handicap this board plays off.
+   *
+   * Absent means all of it. A four-ball is normally 85% and a singles
+   * competition 95%, and the reduction belongs to the competition rather than
+   * to the player — two boards on one trip can be scored off two different
+   * allowances from the same cards. See lib/handicapAllowance.ts, which is
+   * also where the rule that nothing is ever *stored* reduced is written down.
+   */
+  handicapAllowance?: number
 
   /** `combine: 'position'` only — what each finishing place pays. */
   customPoints?: number[]
@@ -276,6 +291,20 @@ export function offersDiscard(draft: Partial<Leaderboard>): boolean {
   return draft.competition === 'league' && !!draft.scoring
 }
 
+/**
+ * Whether to ask about the handicap allowance yet.
+ *
+ * Last question of the cascade, and only once the board knows what it is: the
+ * recommended figure depends on whether individuals or teams are being ranked,
+ * so asking before that is answered would suggest the wrong number. Matchplay
+ * is not asked at all — its allowance is a different calculation entirely, and
+ * lib/handicapAllowance.ts says why.
+ */
+export function offersAllowance(draft: Partial<Leaderboard>): boolean {
+  if (draft.competition !== 'league' || !draft.scoring) return false
+  return draft.audience === 'individual' || !!draft.teamFormat
+}
+
 /** Whether this board needs teams picked before the trip can go live. */
 export function needsTeams(boards: readonly Leaderboard[]): boolean {
   return boards.some(lb => lb.audience === 'team')
@@ -322,6 +351,10 @@ export function boardRules(lb: Leaderboard): string {
   if (lb.discardWorst) {
     parts.push(`Worst ${lb.discardWorst === 1 ? 'round' : `${lb.discardWorst} rounds`} dropped.`)
   }
+  // Only when it is one — "Full course handicap" on every board that never
+  // asked for a reduction is a sentence saying nothing.
+  const allowance = allowanceOf(lb)
+  if (allowance !== FULL_ALLOWANCE) parts.push(`Played off ${describeAllowance(allowance)}.`)
   return parts.filter(Boolean).join(' ')
 }
 
@@ -380,6 +413,11 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
       lb.scoring = scoring
       lb.combine = paidByPosition ? 'position' : 'total'
       lb.discardWorst = clamp(r.discardWorst, 0, MAX_DISCARD)
+      // Kept off the object entirely when there is no reduction, so a board
+      // that never asked for one reads back byte-for-byte as it always did.
+      // Every trip on the platform predates this question.
+      const allowance = clampAllowance(r.handicapAllowance)
+      if (allowance !== FULL_ALLOWANCE) lb.handicapAllowance = allowance
       if (lb.combine === 'position') lb.customPoints = points(r.customPoints)
 
       if (audience === 'team') {

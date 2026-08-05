@@ -14,6 +14,7 @@
 // Pure. No I/O, no React.
 
 import type { Leaderboard } from './leaderboards'
+import { FULL_ALLOWANCE, allowanceOf, allowedHandicap } from './handicapAllowance'
 import { setOf, teamsOnSheet, membersOf, type Membership } from './teamSets'
 import {
   type TeamScoring, type TeamScoreInput, type ScoringBasis,
@@ -161,6 +162,73 @@ export function effectiveSI(hole: RowHole, gender: string): number {
 
 const firstName = (n: string) => n.split(' ')[0]
 
+// ─── Playing off a percentage ──────────────────────────────────
+//
+// A board's allowance is applied here, at the moment the cards are read, and
+// nowhere else. What was written stays written at the full handicap — see
+// lib/handicapAllowance.ts for why that is the only arrangement under which a
+// trip can run two boards on two different allowances.
+
+/**
+ * The handicap this board scores a player off, for this round.
+ *
+ * `round_handicaps` is the answer when there is one; a player's own handicap
+ * is the fallback for a round that never got a snapshot written. The allowance
+ * is applied to whichever it was.
+ */
+function boardHandicap(
+  ctx: RowContext, roundId: string, playerId: string,
+  fallback: number | null | undefined, allowance: number,
+): number {
+  const full = ctx.hcpFor.get(`${roundId}:${playerId}`) ?? fallback ?? 0
+  return allowedHandicap(full, allowance)
+}
+
+/**
+ * What a hole is worth in Stableford points on this board.
+ *
+ * At the full handicap this is the number the Postgres trigger already worked
+ * out and stored, and it is returned untouched — the trigger is canonical, and
+ * recomputing it here would be a second implementation of the one formula the
+ * codebase is most careful to keep in one place.
+ *
+ * Under a reduction there is no stored answer to use, because the reduction
+ * belongs to the board rather than to the card. So it is worked out from the
+ * gross, which is the only figure an allowance never changes.
+ */
+function boardPoints(
+  s: ResolvedScore, hole: RowHole | undefined, gender: string,
+  handicap: number, allowance: number,
+): number {
+  if (allowance === FULL_ALLOWANCE) return s.points
+  if (!hole || s.noReturn || s.gross == null) return 0
+  const par = effectivePar(hole, gender)
+  const nett = s.gross - shotsReceived(handicap, effectiveSI(hole, gender))
+  return Math.max(0, par + 2 - nett)
+}
+
+/**
+ * Every score as this board reads it — points restated at its allowance.
+ *
+ * `buildRows` uses this internally. It is exported for the scorecard sheet
+ * that opens off a board row: a board totalling 34 whose card adds up to 36 is
+ * a bug report, and the fix is for both to be asking the same question.
+ */
+export function scoresForBoard(lb: Leaderboard, ctx: RowContext): ResolvedScore[] {
+  const allowance = allowanceOf(lb)
+  if (allowance === FULL_ALLOWANCE) return ctx.resolved
+
+  const holeById = new Map(ctx.holes.map(h => [h.id, h]))
+  const playerById = new Map(ctx.players.map(p => [p.id, p]))
+
+  return ctx.resolved.map(s => {
+    const player = playerById.get(s.playerId)
+    const gender = player?.gender ?? 'M'
+    const hcp = boardHandicap(ctx, s.roundId, s.playerId, player?.handicap, allowance)
+    return { ...s, points: boardPoints(s, holeById.get(s.holeId), gender, hcp, allowance) }
+  })
+}
+
 // ─── How a team's members combine ──────────────────────────────
 
 /**
@@ -297,6 +365,7 @@ function sortRows(lb: Leaderboard, rows: BoardRow[]): BoardRow[] {
 function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const holeById = new Map(ctx.holes.map(h => [h.id, h]))
   const strokes = lb.scoring === 'strokes'
+  const allowance = allowanceOf(lb)
 
   const perPlayer = ctx.players.map(p => {
     let holesPlayed = 0, gross = 0
@@ -305,9 +374,11 @@ function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
       const mine = ctx.resolved.filter(s =>
         s.playerId === p.id && s.roundId === r.id && (!strokes || s.gross != null))
       holesPlayed += mine.length
+      const ph = boardHandicap(ctx, r.id, p.id, p.handicap, allowance)
 
       if (!strokes) {
-        const score = mine.reduce((sum, s) => sum + s.points, 0)
+        const score = mine.reduce(
+          (sum, s) => sum + boardPoints(s, holeById.get(s.holeId), p.gender, ph, allowance), 0)
         return {
           roundId: r.id,
           score,
@@ -320,7 +391,6 @@ function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
       }
 
       const g = mine.reduce((sum, s) => sum + (s.gross ?? 0), 0)
-      const ph = ctx.hcpFor.get(`${r.id}:${p.id}`) ?? p.handicap ?? 0
       const shots = mine.reduce((sum, s) => {
         const hole = holeById.get(s.holeId)
         return hole ? sum + shotsReceived(ph, effectiveSI(hole, p.gender)) : sum
@@ -393,7 +463,7 @@ function relatives(lb: Leaderboard, rounds: RoundScore[]): Record<string, number
 function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const scoring = teamScoringFor(lb, ctx.legacyTeamScoring)
   const basis: ScoringBasis = lb.scoring === 'strokes' ? 'strokes' : 'stableford'
-  const inputs = teamScoreInputs(ctx)
+  const inputs = teamScoreInputs(ctx, allowanceOf(lb))
 
   // This board's own teams. A trip running a league and a knockout between
   // different sides has two sheets of them, and ranking one board against
@@ -454,8 +524,12 @@ function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
  * card, everyone but the worst — so the format code takes both and reads
  * whichever the board is scored on. Working the nett out here means it is
  * done once per page rather than once per team.
+ *
+ * Both figures are stated at the board's allowance, which is why this is per
+ * board rather than per page: a four-ball at 85% and a singles board at 95%
+ * read the same cards and must not read the same numbers off them.
  */
-function teamScoreInputs(ctx: RowContext): TeamScoreInput[] {
+function teamScoreInputs(ctx: RowContext, allowance: number): TeamScoreInput[] {
   const holeById = new Map(ctx.holes.map(h => [h.id, h]))
   const genderOf = new Map(ctx.players.map(p => [p.id, p.gender]))
   const handicapOf = new Map(ctx.players.map(p => [p.id, p.handicap]))
@@ -463,7 +537,7 @@ function teamScoreInputs(ctx: RowContext): TeamScoreInput[] {
   return ctx.resolved.map(s => {
     const hole = holeById.get(s.holeId)
     const gender = genderOf.get(s.playerId) ?? 'M'
-    const ph = ctx.hcpFor.get(`${s.roundId}:${s.playerId}`) ?? handicapOf.get(s.playerId) ?? 0
+    const ph = boardHandicap(ctx, s.roundId, s.playerId, handicapOf.get(s.playerId), allowance)
     const nett = hole && s.gross != null
       ? s.gross - shotsReceived(ph, effectiveSI(hole, gender))
       : undefined
@@ -471,7 +545,7 @@ function teamScoreInputs(ctx: RowContext): TeamScoreInput[] {
       playerId: s.playerId,
       roundId: s.roundId,
       holeNumber: s.holeNumber,
-      points: s.points,
+      points: boardPoints(s, hole, gender, ph, allowance),
       nett,
     }
   })
