@@ -23,9 +23,13 @@ Discard (0–2 worst rounds) is asked of **every** league board. A draw asks not
 
 **Team formats** (`lib/teamScoring.ts`): `better_ball` (best score on each hole), `hero` (best single card carries it), `cut_dead_weight` (everyone counts except the worst card of the day — that player is back in next round; ties broken by id so the same total is produced every time). Each works on either scoring: `teamRoundPoints` takes a `basis`, and `beats()` is the one place the direction lives — lowest wins on strokes, highest on Stableford.
 
-**Uniqueness.** `slotKey` is every answer that changes the maths, so two boards are the same only when they would produce the same table. **Stableford totalled and Stableford paid by position are two boards** — an order of merit and a daily prize are a normal pair to run together, and the old model could only hold one of them. The tab names them apart (`Stableford` / `Stableford prizes`). **Matchplay is capped at one per trip**, whoever it is between — a second draw is a different tournament, not a second view of this one. `parseLeaderboards` enforces all of this on read too, not only in the form.
+**Uniqueness.** `slotKey` is every answer that changes the maths — including which teams play it — so two boards are the same only when they would produce the same table. **Stableford totalled and Stableford paid by position are two boards** — an order of merit and a daily prize are a normal pair to run together, and the old model could only hold one of them. The tab names them apart (`Stableford` / `Stableford prizes`). **Matchplay is capped at one per trip**, whoever it is between — a second draw is a different tournament, not a second view of this one. `parseLeaderboards` enforces all of this on read too, not only in the form.
+
+`formatKey`/`isFormatFree` are the same question with the teams left out, and are what **the form** asks. It has to: which teams a board is played by is settled afterwards, on the team screen, so while a board is being made there is nothing to tell two same-format boards apart — and their tabs would read identically. Trips set up under the older form can still hold two, so the reader keeps using `slotKey`; the team screen refuses to merge them onto one sheet, which is the only way they could collapse into each other.
 
 **The form** (`LeaderboardSetup.tsx`) asks the same questions in the same order every time, each opening the next; nothing is hidden by an earlier answer. Question numbers are counted rather than written down, since teams ask one more. "Add another leaderboard" sits underneath from the start so it is clear more is possible, but is disabled until the primary is complete. Adding a second offers the same cascade with whatever is running shown as **In use**.
+
+**A board can be changed after it is made**, on the same cascade, from the gear on its card. That is safe because a board owns no data: scores are the player's, keyed by player id, and a board is only a way of reading them. Editing re-reads the cards already entered — nobody re-enters a score — so the section is **not** gated on the trip being in draft. The board being edited is left out of the "in use" checks, or it reports itself as a clash with itself. Changing *who is ranked* restarts the cascade; a board that stops ranking teams gives up its sheet, and one that starts ranking them takes a fresh one rather than inheriting somebody else's teams.
 
 Anything stored that cannot be understood is **dropped, not repaired** — a half-understood board would quietly score a trip wrongly, while no board sends the organiser back to a form that says so.
 
@@ -147,6 +151,22 @@ Past `INLINE_ROUNDS` (4) the per-round columns stop fitting a phone, so they scr
 The obvious build — one scroller around the whole table with the fixed columns `position: sticky` inside it — puts back the bug the board card's missing `overflow-hidden` exists to avoid (see `docs/design-system.md`): an element that scrolls on one axis is a scroll container on **both**, so the column headings' `top: HEADER_H` would start measuring from the card instead of the viewport. So each row owns its own strip, and `useSyncedStrips` keeps them on one scroll position; nothing above the sticky heading scrolls. Writing `scrollLeft` raises `scroll` again, so the write is flagged and the echo swallowed a frame later — clearing it in the same frame lets the strips fight each other.
 
 `Strip` is declared at module level. Inside `Board` it would be a new component type every render, so React would rebuild the div and take the scroll position with it — the one piece of state the whole arrangement exists to keep.
+
+## Team sheets, and how teams get apportioned
+
+A trip can run a team league and a pairings knockout at the same time, played by different teams: four teams of three in the league, six pairings in the draw. The same players, arranged twice. So a team board names the **sheet** it is played on (`teamSet`), teams carry `team_set`, and membership is its own table (`team_members`, migration 023) because a single `players.team_id` cannot hold two answers. `players.team_id` survives as a mirror of the `main` sheet only — the frozen Donegal Masters archive routes read it. `lib/teamSets.ts` is the pure model; `lib/teamMembers.ts` is the only place that writes.
+
+**Which boards share a sheet is answered on the team screen, not in settings.** It used to be a "Same teams?" question in the leaderboard cascade, which asks an organiser to arrange teams that do not exist yet. Now:
+
+- every team board is created on a sheet of its own (`nextSheetId`) and starts **open** — `isBoardOpen` means "no teams on this board's sheet", read off the teams themselves rather than a second copy of the answer
+- `/trip/[code]/teams` lists the team boards as tiles. Open ones tick, and **ticking several before confirming is what makes them share teams**
+- `sheetForSelection` picks where a selection lands: a board that already has teams keeps them and the rest join it, so confirming never silently discards an arrangement; `main` leads, since it is the sheet `players.team_id` mirrors
+- confirming writes the sheet onto the selection (`withSheet`, guarded by `sheetChanges`) and revalidates the trip, so the leaderboard tab shows the new tables without a reload. The teams themselves are already saved — every drag writes as it lands
+- a board that has teams opens instead, showing them, with the way back into the picker on it
+
+Team **size** rules are read off the boards in the current selection, never off the trip: a pairs draw fixes ITS teams at two and has no business resizing the league's (`lib/teamLimits.ts`).
+
+The screen stays open once the trip is live. It has to — a player who joins halfway has to land somewhere, and their cards go with them.
 
 ### Who appears on which board
 

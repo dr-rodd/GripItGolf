@@ -9,7 +9,7 @@ import {
 } from '@dnd-kit/core'
 import { supabase } from '@/lib/supabase'
 import { revalidateTrip } from '@/app/actions/revalidate'
-import { boardTitle, boardRules, type Leaderboard } from '@/lib/leaderboards'
+import { boardTitle, boardRules, isSlotFree, type Leaderboard } from '@/lib/leaderboards'
 import {
   MAIN_SET, setOf, teamBoards, isBoardOpen, sheetForSelection, withSheet,
   sheetChanges, teamsOnSheet, teamFor, membersOf, type Membership,
@@ -67,9 +67,22 @@ const PRESET_COLORS = [
  */
 const ABOVE_TABBAR = 'calc(64px + env(safe-area-inset-bottom) + 1rem)'
 
-/** What Supabase actually said, so a failure can be fixed rather than guessed. */
-const why = (e: { message?: string } | null) =>
-  e?.message ? ` — ${e.message}` : ''
+/**
+ * What Supabase actually said, so a failure can be fixed rather than guessed.
+ *
+ * "Could not add teams" on its own says only that a write failed, which is
+ * the one thing already obvious. The Postgres code is what tells a missing
+ * column apart from a row-level-security policy apart from a constraint, and
+ * it costs a few words on screen. The whole error goes to the console too —
+ * `details` and `hint` are often the actual answer.
+ */
+function why(where: string, e: unknown): string {
+  if (!e) return ''
+  console.error(`${where} failed:`, e)
+  const err = e as { message?: string; code?: string }
+  const code = err.code ? ` (${err.code})` : ''
+  return err.message ? ` — ${err.message}${code}` : code
+}
 
 // ─── Player tile ───────────────────────────────────────────────
 
@@ -397,10 +410,25 @@ export default function TripTeamsClient({
     : []
   const unassigned = placed.filter(p => !p.team_id)
 
+  /**
+   * Whether this board could join what is already selected.
+   *
+   * Two boards scored identically on the same teams are the same table twice,
+   * and the reader drops the second on the way back in — so a selection that
+   * would produce one has to be refused here rather than quietly lose a board
+   * on the next page load. Only reachable on a trip set up under the older
+   * form, which let the same format be run twice on different teams.
+   */
+  const canJoinSelection = (lb: Leaderboard, sheetId: string) =>
+    isSlotFree(
+      forBoards.filter(b => b.id !== lb.id).map(b => ({ ...b, teamSet: sheetId })),
+      { ...lb, teamSet: sheetId },
+    )
+
   // Boards with no teams that could join the sheet being edited. Ticking one
   // is how a board comes to be played by teams that already exist.
   const couldJoin = sheet
-    ? tiles.filter(lb => isOpen(lb) && !selected.includes(lb.id))
+    ? tiles.filter(lb => isOpen(lb) && !selected.includes(lb.id) && canJoinSelection(lb, sheet))
     : []
 
   // ── Selecting ────────────────────────────────────────────────
@@ -410,7 +438,17 @@ export default function TripTeamsClient({
       setExpandedId(id => (id === lb.id ? null : lb.id))
       return
     }
-    setSelected(s => (s.includes(lb.id) ? s.filter(id => id !== lb.id) : [...s, lb.id]))
+    if (selected.includes(lb.id)) {
+      setSelected(s => s.filter(id => id !== lb.id))
+      return
+    }
+    // Where these boards would land, if this one joined them
+    const landing = sheetForSelection(boards, [...selected, lb.id], teams)
+    if (!canJoinSelection(lb, landing)) {
+      flashError(`${boardTitle(lb)} is scored the same way — one set of ${noun.many} cannot play both`)
+      return
+    }
+    setSelected(s => [...s, lb.id])
   }
 
   /** Start picking teams for whatever is ticked. */
@@ -491,7 +529,7 @@ export default function TripTeamsClient({
         .from('teams').insert(toAdd).select('id, name, color, team_set')
       // Say what the database said. "Could not add teams" on its own has sent
       // more than one afternoon looking in the wrong place.
-      if (err || !data) flashError(`Could not add ${noun.many}${why(err)}`)
+      if (err || !data) flashError(`Could not add ${noun.many}${why('teams insert', err)}`)
       else setTeams(prev => [...prev, ...(data as Team[])])
     } else {
       // Remove from the end; their players fall back to unassigned
@@ -515,7 +553,7 @@ export default function TripTeamsClient({
       }
       const { error: err } = await supabase.from('teams').delete().in('id', doomedIds)
       if (err) {
-        flashError(`Could not remove ${noun.many}${why(err)}`)
+        flashError(`Could not remove ${noun.many}${why('teams delete', err)}`)
       } else {
         setTeams(prev => prev.filter(t => !doomedIds.includes(t.id)))
         setMemberships(ms => ms.filter(m => !doomedIds.includes(m.team_id)))
@@ -531,14 +569,14 @@ export default function TripTeamsClient({
     const prev = teams
     setTeams(ts => ts.map(t => (t.id === id ? { ...t, name } : t)))
     const { error: err } = await supabase.from('teams').update({ name }).eq('id', id)
-    if (err) { setTeams(prev); flashError(`Could not rename${why(err)}`) }
+    if (err) { setTeams(prev); flashError(`Could not rename${why('team rename', err)}`) }
   }
 
   async function recolourTeam(id: string, color: string) {
     const prev = teams
     setTeams(ts => ts.map(t => (t.id === id ? { ...t, color } : t)))
     const { error: err } = await supabase.from('teams').update({ color }).eq('id', id)
-    if (err) { setTeams(prev); flashError(`Could not change colour${why(err)}`) }
+    if (err) { setTeams(prev); flashError(`Could not change colour${why('team recolour', err)}`) }
   }
 
   // ── Auto-balance ─────────────────────────────────────────────
@@ -603,7 +641,7 @@ export default function TripTeamsClient({
       const { error: err } = await supabase
         .from('trips').update({ leaderboards: next }).eq('id', tripId)
       if (err) {
-        flashError(`Could not save which leaderboards these ${noun.many} play for${why(err)}`)
+        flashError(`Could not save which leaderboards these ${noun.many} play for${why('leaderboards update', err)}`)
         setBusy(false)
         return
       }
