@@ -428,8 +428,9 @@ function CourseTiles({
  * what `overflow-x` does: an element that scrolls on one axis is a scroll
  * container on both, so the column headings' `top: HEADER_H` would have
  * started measuring from the card instead of the viewport — exactly the bug
- * that put them on top of whoever was leading (see CLAUDE.md). Each strip
- * being its own scroller keeps every ancestor of that sticky row unscrolled.
+ * that put them on top of whoever was leading (see docs/design-system.md).
+ * Each strip being its own scroller keeps every ancestor of that sticky row
+ * unscrolled.
  *
  * Writing scrollLeft fires `scroll` again, so the write is flagged and the
  * echo ignored — without it the strips fight each other and judder.

@@ -92,7 +92,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
 
   // Golf can only be edited while nothing has been scored yet — a course
   // change would orphan real data. Unlocking a live trip does not touch
-  // scores either (see the lifecycle rule in CLAUDE.md), so a draft trip can
+  // scores either (see the lifecycle rule in docs/features.md), so a draft trip can
   // still be carrying them from an earlier live spell; the check is against
   // the scores themselves; `isDraft` guards it in step with everything else
   // this screen locks once live.

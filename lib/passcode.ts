@@ -7,7 +7,7 @@
 // │ changing the format mid-trip. It is not a security control.         │
 // │                                                                     │
 // │ There is no auth yet and the Supabase anon key ships to the browser │
-// │ (see the security debt section in CLAUDE.md), so anyone determined  │
+// │ (see docs/gotchas-and-debt.md), so anyone determined                │
 // │ can read the stored hash and brute-force a short numeric code in    │
 // │ moments. Hashing keeps it out of plain sight, nothing more.         │
 // │                                                                     │
