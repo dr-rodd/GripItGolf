@@ -1038,13 +1038,18 @@ section('The scoring shell stacks under the site header, not behind it')
   // measured and published, and everything below reads the published value.
   const metrics = read('app/scoring/scoringHeaderMetrics.ts')
   ok(/export const CHROME\b/.test(metrics), 'the chrome depth is a published CSS variable')
-  ok(shell.includes('ResizeObserver'), 'the shell measures its own header')
-  ok(shell.includes('[CHROME_VAR]'), '  …and publishes the total on its root')
+  ok(shell.includes('new ResizeObserver(measure)') && shell.includes('observer.observe('),
+    'the shell measures its own header, and keeps measuring it')
+  ok(shell.includes('setChrome(stickyTop + el.getBoundingClientRect().height)'),
+    '  …counting the offset above it as well as its own height')
+  ok(shell.includes('[CHROME_VAR]: `${chrome}px`'),
+    '  …and publishes the total on its root')
 
   for (const file of ['app/scoring/LiveScoringFlow.tsx', 'app/scoring/LiveLeaderboardPanel.tsx']) {
     const src = read(file)
     const name = file.split('/').pop()
-    ok(src.includes('scoringHeaderMetrics'), `${name} reads the published depth`)
+    ok(/import \{ CHROME \} from "\.\/scoringHeaderMetrics"/.test(src),
+      `${name} reads the published depth`)
     // The two literals that were the bug both times: 52 was the site header
     // alone, 77 the shell's title row alone. Each was right on one screen.
     ok(!/top-\[\d+px\]|top: (52|77)\b/.test(src), `  …and pins nothing at a hardcoded offset`)
@@ -1058,8 +1063,17 @@ section('The scoring shell stacks under the site header, not behind it')
   // which is what keeps the two reading as one unit instead of drifting
   // several hundred px apart on a one- or two-player card.
   const flow = read('app/scoring/LiveScoringFlow.tsx')
-  ok(flow.includes('justify-end'), 'the score-entry card sits against the bottom of its box')
+  // The card's own container, not any mention of the class — the comment above
+  // it explains `justify-end` twice, so a looser check passes with the class
+  // itself deleted.
+  ok(/className="max-w-lg mx-auto w-full px-4 pt-4 pb-\[calc\(6\.5rem[^"]*flex flex-col justify-end/.test(flow),
+    'the score-entry card sits against the bottom of its box')
   ok(flow.includes('calc(100dvh - ${CHROME})'), '  …and that box ends where the chrome does')
+  // The card's bottom padding and the fixed bar's own both carry the safe-area
+  // inset, which is what holds the 13px gap steady on a phone with a home
+  // indicator instead of letting the bar creep up onto the card.
+  ok(/pb-\[calc\(6\.5rem\+env\(safe-area-inset-bottom,0px\)\)\]/.test(flow),
+    '  …clearing the fixed bar, safe-area inset included')
 }
 
 // ─── The page's name as artwork ────────────────────────────────
