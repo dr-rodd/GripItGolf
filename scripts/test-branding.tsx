@@ -1279,7 +1279,10 @@ section('Nothing has to be finalised before it can be played')
   // button is gone, so the state it set has to go with it — leaving one
   // behind would have made every new trip permanently unable to score.
   const setup = stripComments(read('app/trip/[tripCode]/setup/TripSetupClient.tsx'))
-  ok(!setup.includes('Finalise & Go Live'), 'settings has no finalise button')
+  // "Go Live" rather than the whole label: the ampersand can be written as an
+  // entity, and `finaliseBlockedReason` is legitimately imported into this
+  // file, so neither "Finalise" nor the exact string is a reliable needle.
+  ok(!/go\s*live/i.test(setup), 'settings has no finalise-and-go-live button')
   ok(!/isDraft/.test(setup), 'and nothing on that screen asks whether the trip is a draft')
   ok(!/setup_status/.test(setup), 'nor writes the flag it used to set')
 
