@@ -103,15 +103,10 @@ export default async function TripLeaderboardPage({
 
   return (
     <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
+      {/* The trip's own name used to sit in a band under this, which cost a
+          fixed slice of the screen on the one page that is all table. The
+          header names the page, and you arrived here from the trip. */}
       <TripHeader backTo={`/trip/${tripCode}`} title="leaderboard" />
-
-      <div className="bg-cream border-b border-bark/12">
-        <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="t-h2 text-ink truncate">
-            {trip.name}
-          </h1>
-        </div>
-      </div>
 
       <Poller isActive={hasActiveRound} />
 

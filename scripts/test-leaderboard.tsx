@@ -374,27 +374,42 @@ section('The live dot belongs to a player, not to the trip')
   ok(dots(one) < dots(two), 'a player not on an open card is not marked live')
 }
 
-// ─── Matchplay stays a button ──────────────────────────────────
+// ─── Matchplay sits with the boards ────────────────────────────
 
 section('Matchplay')
 {
-  const off = render([SF()])
-  ok(off.includes('Switch it on in Trip Setup'), 'the button is disabled when there is no draw')
+  /** The one row of chips at the top: league boards, then the draw. */
+  const stripOf = (html: string) =>
+    html.split('overflow-x-auto -mx-1 px-1 pb-1')[1]?.split('</div>')[0] ?? ''
 
-  const on = render([SF(), MP()])
-  ok(on.includes('/trip/ABC123/matchplay'), 'and links out when a draw is being run')
-
-  // A draw is not a table. The tab strip is league boards only — checked by
-  // reading the strip itself, since "Matchplay" appears on the button too.
+  // A draw is one of the things the trip is playing for, so it sits on the
+  // same line as the boards rather than in a card of its own above them.
   const three = render([SF(), ST(), MP()])
-  const strip = three.split('overflow-x-auto -mx-1 px-1 pb-1')[1]?.split('</div>')[0] ?? ''
+  const strip = stripOf(three)
   ok(strip.includes('Stableford') && strip.includes('Strokes'),
-    'every league board is a tab')
-  ok(!strip.includes('Matchplay'), 'and the draw never becomes one — it has its own page')
+    'every league board is a chip')
+  ok(strip.includes('Matchplay'), 'and so is the draw')
+  ok(strip.includes('/trip/ABC123/matchplay'),
+    'which links out to its own page rather than switching the table below')
 
-  // A trip whose only competition is a draw has no table at all
+  // One board and a draw is a choice, so the row appears for it
+  const on = render([SF(), MP()])
+  ok(stripOf(on).includes('/trip/ABC123/matchplay'), 'one board and a draw still gets the row')
+
+  // One board and nothing else is not a choice. The row stays away, and so
+  // does any mention of a draw this trip is not running — that used to be a
+  // full-width card on every leaderboard saying where to switch it on.
+  const off = render([SF()])
+  ok(!off.includes('/trip/ABC123/matchplay'), 'a trip with no draw does not link to one')
+  ok(!off.includes('Switch it on in Trip Setup'), 'nor advertise the setting')
+  ok(!off.includes('overflow-x-auto -mx-1'), 'and shows no chip row for a single board')
+
+  // A trip whose only competition is a draw has no table at all — the chip is
+  // the only way to reach it from here, so it must not be hidden behind a
+  // "more than one" rule.
   const drawOnly = render([MP()])
-  ok(drawOnly.includes('/trip/ABC123/matchplay'), 'a matchplay-only trip still gets its button')
+  ok(stripOf(drawOnly).includes('/trip/ABC123/matchplay'),
+    'a matchplay-only trip still gets its chip')
   ok(!drawOnly.includes('Alice'), 'and no board underneath it')
 }
 

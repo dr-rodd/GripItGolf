@@ -732,51 +732,29 @@ function Board({
 
 
 /**
- * Entry point to the matchplay draw.
+ * The draw, as a chip in the same row as the boards.
  *
- * Deliberately a link to a separate route, not an inline component: none of
- * the matchplay display code should load with the leaderboard. Nothing from
- * the matchplay module is imported into this file.
+ * It sits with them because it is one of the things this trip is playing for,
+ * and a full-width card of its own above the tabs said otherwise while taking
+ * the space the table wanted.
+ *
+ * Still a link to a separate route rather than an inline component: none of
+ * the matchplay display code should load with the leaderboard, and nothing
+ * from that module is imported into this file. The arrow is what says it
+ * leaves the page — the boards beside it only change what is below.
  */
-function MatchplayButton({ tripCode, enabled }: { tripCode: string; enabled: boolean }) {
-  const base =
-    'w-full flex items-center justify-between px-5 py-4 rounded-2xl border transition-colors duration-150 mb-4'
-
-  if (!enabled) {
-    return (
-      <div
-        className={`${base} border-bark/12 bg-surface opacity-50 cursor-not-allowed`}
-        aria-disabled="true"
-      >
-        <span className="min-w-0">
-          <span className="block font-[family-name:var(--font-display)] text-ink/65 text-base leading-tight">
-            Matchplay
-          </span>
-          <span className="block text-ink/50 text-[13px] mt-0.5">
-            Switch it on in Trip Setup to use it
-          </span>
-        </span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             strokeWidth="2" className="text-ink/50 flex-shrink-0 ml-4" aria-hidden="true">
-          <rect x="3" y="11" width="18" height="11" rx="2" />
-          <path d="M7 11V7a5 5 0 0110 0v4" />
-        </svg>
-      </div>
-    )
-  }
-
+function MatchplayTab({ tripCode }: { tripCode: string }) {
   return (
     <Link
       href={`/trip/${tripCode}/matchplay`}
-      className={`${base} border-accent/50 bg-surface  hover:border-accent active:opacity-75`}
+      className="flex-shrink-0 inline-flex items-center gap-1.5 px-4 py-2.5 t-label rounded-xl
+        border bg-surface border-bark/12 text-ink/65
+        hover:text-ink/80 hover:border-accent/50 active:opacity-75
+        transition-colors duration-150"
     >
-      <span className="min-w-0">
-        <span className="block font-[family-name:var(--font-display)] text-ink text-base leading-tight">
-          Matchplay
-        </span>
-        <span className="block text-accent text-[13px] mt-0.5">View the knockout draw</span>
-      </span>
-      <span className="text-ink/65 text-sm flex-shrink-0 ml-4">View →</span>
+      Matchplay
+      {/* It leaves the page, which none of the boards beside it do. */}
+      <span aria-hidden="true" className="text-ink/50">→</span>
     </Link>
   )
 }
@@ -921,12 +899,40 @@ export default function TripLeaderboardClient({
 
   const showMatchplay = hasMatchplay(boards)
 
+  /**
+   * Everything this trip plays for, on one line: the league boards as tabs,
+   * and the draw as a link out at the end of them.
+   *
+   * Shown whenever there is a choice to make. One board and no draw is not a
+   * choice, so it stays as it was — the board's own title says what it is. A
+   * draw always counts, even on its own: it is the only way to reach it from
+   * here.
+   */
+  const strip = (tabs.length > 1 || showMatchplay) && (
+    <div className="flex gap-1.5 mb-4 overflow-x-auto -mx-1 px-1 pb-1">
+      {tabs.map(t => (
+        <button
+          key={t.id}
+          onClick={() => setActiveId(t.id)}
+          className={`flex-shrink-0 px-4 py-2.5 t-label transition-colors duration-150 rounded-xl border ${
+            activeBoard?.id === t.id
+              ? 'bg-accent-deep text-white font-bold border-accent-deep'
+              : 'bg-surface border-bark/12 text-ink/65 hover:text-ink/80'
+          }`}
+        >
+          {boardTitle(t)}
+        </button>
+      ))}
+      {showMatchplay && <MatchplayTab tripCode={tripCode} />}
+    </div>
+  )
+
   // Matchplay lives on its own page, so a matchplay-only trip legitimately
-  // has no tabs here — show the button rather than an empty board.
+  // has no table here — the strip above is what it came for.
   if (!activeBoard) {
     return (
       <div className="max-w-lg mx-auto px-4 py-6">
-        <MatchplayButton tripCode={tripCode} enabled={showMatchplay} />
+        {strip}
         {!showMatchplay && <EmptyState message="No competitions switched on for this trip." />}
       </div>
     )
@@ -964,26 +970,7 @@ export default function TripLeaderboardClient({
   return (
     <div className="max-w-lg mx-auto px-4 py-6">
 
-      <MatchplayButton tripCode={tripCode} enabled={showMatchplay} />
-
-      {/* Format tabs */}
-      {tabs.length > 1 && (
-        <div className="flex gap-1.5 mb-4 overflow-x-auto -mx-1 px-1 pb-1">
-          {tabs.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setActiveId(t.id)}
-              className={`flex-shrink-0 px-4 py-2.5 t-label transition-colors duration-150 rounded-xl border ${
-                activeBoard.id === t.id
-                  ? 'bg-accent-deep text-white font-bold border-accent-deep'
-                  : 'bg-surface border-bark/12 text-ink/65 hover:text-ink/80'
-              }`}
-            >
-              {boardTitle(t)}
-            </button>
-          ))}
-        </div>
-      )}
+      {strip}
 
       {/* Title card — only worth the space once there is more than one board */}
       {tabs.length > 1 ? (
