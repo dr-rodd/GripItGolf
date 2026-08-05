@@ -12,6 +12,7 @@ import {
   buildRows, effectivePar,
 } from '@/lib/boardRows'
 import { type Membership } from '@/lib/teamSets'
+import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundState'
 import { HEADER_H } from '@/app/components/headerMetrics'
 import ScoreShape, { NoReturnShape } from '@/app/components/ScoreShape'
 import {
@@ -376,32 +377,28 @@ function CourseTiles({
         const rel  = row.relativeByRound?.[round.id]
         const hero = row.heroByRound?.[round.id]
         const heroName = hero ? playerById.get(hero)?.name : null
+
+        // The same three states the scoring round picker shows, read the
+        // same way — see lib/roundState.ts.
+        const tone = roundTone(hasScores, live)
+        const note = live
+          ? heroName ? `In play — carried by ${firstName(heroName)}` : ROUND_NOTE.live
+          : hasScores
+            ? heroName ? `Carried by ${firstName(heroName)}` : ROUND_NOTE.played
+            : ROUND_NOTE.empty
+
         return (
           <button
             key={round.id}
             onClick={() => onTileClick(round)}
-            className={`w-full text-left rounded-xl border transition-colors duration-150 overflow-hidden active:opacity-75 ${
-              live
-                ? 'border-accent/50  bg-surface'
-                : hasScores
-                  ? 'border-accent/50  bg-surface'
-                  : 'border-bark/12 bg-surface'
-            }`}
+            className={`w-full text-left rounded-2xl transition-colors duration-150 active:opacity-75 ${ROUND_TILE[tone]}`}
           >
             <div className="px-5 py-4 flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <p className="font-[family-name:var(--font-display)] text-ink text-base leading-tight truncate">
                   {round.courses?.name ?? `Round ${round.round_number}`}
                 </p>
-                <p className={`text-sm mt-1 truncate ${
-                  live ? 'text-accent-deep' : hasScores ? 'text-ink/80' : 'text-ink/65'
-                }`}>
-                  {live
-                    ? heroName ? `In play — carried by ${firstName(heroName)}` : 'Card still open'
-                    : hasScores
-                      ? heroName ? `Carried by ${firstName(heroName)}` : 'Scores submitted'
-                      : 'No scores yet'}
-                </p>
+                <p className={`t-cap mt-1 truncate ${ROUND_NOTE_TONE[tone]}`}>{note}</p>
               </div>
               <div className="flex-shrink-0 flex items-center gap-3">
                 {hasScores && (

@@ -177,6 +177,22 @@ The scoring screens are the cream system now — white cards on cream, **bark** 
 - Touch targets minimum 48px
 - Leaderboard, scoring and bracket screens stay tight (4–16px). Generous spacing is for entry screens only
 
+### Choosing a round
+
+Two screens offer a round to open — the scoring picker (`/trip/[code]/course`) and the list that drops out of a leaderboard row. Same question, so `lib/roundState.ts` gives them one answer. Both are the app's white card; only the border changes.
+
+| State | Border | Means |
+|---|---|---|
+| `empty` | barely there, `bark/[0.08]` | nothing scored. Not news, so it does not shout |
+| `live` | `border-2 border-accent`, **and a glow** | a card is open on it right now |
+| `played` | `border-2 border-bark/45` | scores in, nothing open. Finished is a fact, not an event |
+
+**`live` wins over `played`.** A round can carry committed scores from the group that finished and an open card from the group still out; the open card is the thing worth knowing.
+
+**The glow is the one in the app**, and a deliberate exception to "no glows". The rule was written against cream on cream, where a glow reads as a smudge; this is a white card on cream, and a round in play is the thing worth spotting with the phone face-up on a bar table. `test:branding` pins it as an exception rather than allowing glows generally — exactly one `shadow-[0_0_…]`, in `lib/roundState.ts`, on the `live` state only. Anything else that glows still fails.
+
+**The picker reads what is recorded, not `rounds.status`.** That column is set by hand and drifts, and this is the screen someone checks on the way to the first tee — so it asks `live_rounds` what is open and `scores`/`live_scores` what has been entered.
+
 ### The three scorecards
 
 There are three, for three different jobs, and `app/components/scorecardStyle.ts` is what they have in common — the surface, the rules, the bands, the tee swatches. What they show differs; what they look like must not, or one round reads as three documents depending which screen found it.

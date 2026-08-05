@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import SupportLink from '@/app/components/SupportLink'
 import TabBar from '@/app/components/TabBar'
 import TripHeader from '@/app/components/TripHeader'
+import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundState'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +32,31 @@ export default async function TripCoursePortalPage({
 
   if (roundsError) console.error('TripCoursePortal rounds query failed:', roundsError)
 
+  // What has actually happened on each round, rather than what `rounds.status`
+  // claims: the status column is set by hand and drifts, and the tile is the
+  // one place someone checks before walking to the first tee.
+  const roundIds = (rounds ?? []).map(r => r.id)
+  const [openRes, scoredRes, liveScoredRes] = roundIds.length > 0
+    ? await Promise.all([
+        supabase.from('live_rounds').select('round_id')
+          .eq('status', 'active').in('round_id', roundIds),
+        supabase.from('scores').select('round_id').in('round_id', roundIds),
+        supabase.from('live_scores').select('round_id').in('round_id', roundIds),
+      ])
+    : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }]
+
+  if (openRes.error) console.error('TripCoursePortal live rounds query failed:', openRes.error)
+  if (scoredRes.error) console.error('TripCoursePortal scores query failed:', scoredRes.error)
+  if (liveScoredRes.error) console.error('TripCoursePortal live scores query failed:', liveScoredRes.error)
+
+  const openRounds = new Set((openRes.data ?? []).map(r => r.round_id as string))
+  // A round counts as played once anything has been recorded on it, committed
+  // or not — a card half-entered and abandoned is still not an empty round.
+  const scoredRounds = new Set([
+    ...(scoredRes.data ?? []).map(r => r.round_id as string),
+    ...(liveScoredRes.data ?? []).map(r => r.round_id as string),
+  ])
+
   return (
     <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
 
@@ -56,26 +82,30 @@ export default async function TripCoursePortalPage({
         <div className="flex flex-col gap-3">
           {(rounds ?? []).map(round => {
             const course = round.courses as unknown as { name: string; location: string | null } | null
+            const tone = roundTone(scoredRounds.has(round.id), openRounds.has(round.id))
             return (
               <Link
                 key={round.id}
                 href={`/trip/${tripCode}/course/${round.round_number}`}
-                className="flex items-center justify-between w-full px-5 py-5 border border-bark/12 rounded-xl hover:border-accent/40 hover:bg-surface transition-colors"
+                className={`flex items-center justify-between w-full px-5 py-4 rounded-2xl transition-colors duration-150 active:opacity-75 ${ROUND_TILE[tone]}`}
               >
                 <div className="min-w-0">
-                  <p className="text-ink/65 text-[12px] tracking-[0.25em] uppercase mb-1">
+                  <p className="t-cap uppercase tracking-[0.2em] text-ink/65 mb-1">
                     Round {round.round_number}
-                    {round.status === 'completed' && ' · Completed'}
-                    {round.status === 'active' && ' · In play'}
                   </p>
                   <p className="font-[family-name:var(--font-display)] text-ink text-lg leading-tight truncate">
                     {course?.name ?? `Round ${round.round_number}`}
                   </p>
-                  {course?.location && (
-                    <p className="text-ink/50 text-[13px] mt-1 truncate">{course.location}</p>
-                  )}
+                  <p className={`t-cap mt-1 truncate ${ROUND_NOTE_TONE[tone]}`}>
+                    {course?.location ? `${course.location} · ` : ''}{ROUND_NOTE[tone]}
+                  </p>
                 </div>
-                <span className="text-accent text-lg flex-shrink-0 ml-4">→</span>
+                <span className="flex-shrink-0 ml-4 flex items-center gap-2">
+                  {tone === 'live' && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-accent dot-live" aria-hidden="true" />
+                  )}
+                  <span className="text-ink/65 text-sm">Open →</span>
+                </span>
               </Link>
             )
           })}

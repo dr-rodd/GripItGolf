@@ -878,9 +878,26 @@ section('No glows')
 {
   // The old design glowed; on cream a glow reads as a smudge, and the guide
   // has none. The dot is solid emerald and that is all.
-  const files = uiFiles()
+  //
+  // One exception, and it is written down rather than hidden: a round with a
+  // card open on it right now. That tile is a white card on cream — not the
+  // cream-on-cream the rule was written against — and it is the one thing on
+  // the app worth spotting from across a room. It lives in lib/roundState.ts
+  // so both screens that show a round read the same class.
+  const GLOW_HOME = 'lib/roundState.ts'
+  const files = [...uiFiles(), GLOW_HOME]
   const glows = files.filter(f => /boxShadow: '0 0 |shadow-\[0_0_/.test(read(f)))
-  eq(glows, [], 'nothing glows')
+  eq(glows, [GLOW_HOME], 'nothing glows but the live round tile')
+
+  // …and there it is exactly one glow, on exactly that state
+  const roundState = read(GLOW_HOME)
+  eq((roundState.match(/shadow-\[0_0_/g) ?? []).length, 1, 'which glows once, not everywhere')
+  const liveLine = roundState.match(/live:\s*'([^']*)'/)?.[1] ?? ''
+  ok(liveLine.includes('shadow-[0_0_'), 'and it is the live state that carries it')
+  for (const dead of ['empty', 'played']) {
+    const line = roundState.match(new RegExp(`${dead}:\\s*'([^']*)'`))?.[1] ?? ''
+    ok(!line.includes('shadow'), `a ${dead} round does not glow`)
+  }
 
   const dot = renderToStaticMarkup(React.createElement(LiveDot, {}))
   ok(dot.includes('bg-accent'), 'the live dot is solid emerald')

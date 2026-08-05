@@ -19,6 +19,7 @@ import React from 'react'
 import fs from 'fs'
 import ScoreShape, { NoReturnShape } from '../app/components/ScoreShape'
 import { ScorecardSheet } from '../app/trip/[tripCode]/leaderboard/TripLeaderboardClient'
+import { roundTone, ROUND_TILE, ROUND_NOTE } from '../lib/roundState'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -316,6 +317,52 @@ section('A team card keeps the holes in view however big the team')
   const wiped = card(1, { pointsForFirstHole: 0 })
   const firstRow = wiped.slice(wiped.indexOf('>1<'))
   ok(/>0</.test(firstRow.slice(0, 600)), 'a hole scored for no points prints a nought')
+}
+
+// ─── Choosing a round ──────────────────────────────────────────
+
+section('A round tile says what has happened on it')
+{
+  // Two screens offer a round to open — the scoring picker and the list that
+  // drops out of a leaderboard row. Same question, so the same answer.
+  eq(roundTone(false, false), 'empty', 'nothing scored is empty')
+  eq(roundTone(true, false), 'played', 'scores in and nothing open is played')
+  eq(roundTone(false, true), 'live', 'a card open is live')
+
+  // A round can carry committed scores from the group that finished AND an
+  // open card from the group still out. The open card is what matters.
+  eq(roundTone(true, true), 'live', 'and an open card wins over scores already in')
+
+  // All three are the app's white card; only the border changes
+  for (const tone of ['empty', 'live', 'played'] as const) {
+    ok(ROUND_TILE[tone].includes('bg-surface'), `a ${tone} round is a white card`)
+  }
+
+  // Empty is the quietest, played is a hard brown, live is the accent
+  ok(/border-bark\/\[0\.08\]/.test(ROUND_TILE.empty), 'an empty round is barely outlined')
+  ok(ROUND_TILE.played.includes('border-bark/45'), 'a played one is a hard brown edge')
+  ok(ROUND_TILE.live.includes('border-accent'), 'and a live one is emerald')
+  ok(!ROUND_TILE.empty.includes('border-2') , 'with the quiet one the thinnest of the three')
+
+  // Both screens read the shared rule rather than rolling their own
+  for (const f of [
+    'app/trip/[tripCode]/course/page.tsx',
+    'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
+  ]) {
+    ok(read(f).includes("from '@/lib/roundState'"),
+      `${f.split('/').slice(-2).join('/')} reads the shared round states`)
+    ok(read(f).includes('ROUND_TILE[tone]'), '  …and uses it for the tile')
+  }
+
+  // The picker judges by what is actually recorded, not by rounds.status —
+  // that column is set by hand and drifts, and this is the screen someone
+  // checks on the way to the first tee.
+  const picker = read('app/trip/[tripCode]/course/page.tsx')
+  ok(picker.includes("from('live_rounds')"), 'the picker asks which cards are open')
+  ok(picker.includes("from('scores')"), '  …and which rounds have scores')
+  ok(!/round\.status === /.test(picker), '  …rather than trusting rounds.status')
+
+  ok(ROUND_NOTE.live === 'In play', 'and the live tile says so in words too')
 }
 
 console.log(`\n${'─'.repeat(56)}`)
