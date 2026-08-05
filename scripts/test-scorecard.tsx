@@ -279,9 +279,11 @@ section('A team card keeps the holes in view however big the team')
     return renderToStaticMarkup(
       React.createElement(ScorecardSheet, {
         title: 'The Reds', subtitle: 'Carne', players, round, holes, resolved,
-        roundHandicaps: players.map(p => ({
-          round_id: 'r1', player_id: p.id, playing_handicap: p.handicap,
-        })),
+        // The board that opened this card decides the handicap it prints —
+        // reduced by that board's allowance, and off the tee the round was
+        // played, rather than whatever snapshot happens to sit in the table.
+        handicapFor: (pid: string) =>
+          players.find(p => p.id === pid)?.handicap ?? null,
         onClose: () => {},
       } as never)
     )

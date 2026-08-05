@@ -68,12 +68,11 @@ interface LiveScoreRow {
 /**
  * What a hole is worth on this board, at the handicap being shown.
  *
- * At the full handicap that is the number already stored — computed by the
- * Postgres trigger for a committed card, or written beside the live score as
- * it was entered. Under an allowance there is no stored answer, because the
- * reduction belongs to the leaderboard rather than to the card, so it is
- * worked out from the gross. Which is the only figure a reduction never
- * changes.
+ * At the full handicap it is the number written beside the score as the hole
+ * was entered, off the same course handicap this panel is displaying. Under a
+ * reduction there is no stored answer — the reduction belongs to the board
+ * rather than to the card — so it comes from the gross, which is the one
+ * figure a reduction never changes.
  */
 function pointsFor(
   gross: number | null, stored: number | null,
@@ -153,7 +152,7 @@ export function InlineScorecard({
   playingHcp, teeName, courseHoles, playerScores, gender,
   allowance = FULL_ALLOWANCE,
 }: {
-  /** Already reduced to the allowance below, if there is one. */
+  /** Already reduced to the board's allowance, if it has one. */
   playingHcp: number
   /** The tee they played off, once the session has recorded one. */
   teeName: string | null
@@ -381,9 +380,8 @@ export default function LiveLeaderboardPanel({
       )
       if (playerScores.length === 0) return []
 
-      // Points as this board reads them. Under an allowance the stored figure
-      // is the wrong answer to the question being asked — it was computed at
-      // the full handicap — so it is worked out again from the gross.
+      // Points as this board reads them: from the gross and the handicap it is
+      // showing, so the board and the scorecard beside it never disagree.
       const { hcp } = handicapFor(player)
       const pointsOn = (ls: LiveScoreRow) => {
         const hole = courseHoles.find(h => h.hole_number === ls.hole_number)

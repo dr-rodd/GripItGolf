@@ -312,7 +312,7 @@ section('A team format under a reduction')
   eq(buildRows(TEAM(85), ctx)[0].total, 66, 'and off 85%, six points worse between them')
 }
 
-section('A board takes its percentage off the unrounded handicap')
+section('A board scores off the real handicap, at every allowance')
 {
   // The realistic shape of the problem on an already-played trip: the stored
   // snapshot is the placeholder written at finalise — the player's index — and
@@ -327,20 +327,42 @@ section('A board takes its percentage off the unrounded handicap')
     scoring: 'strokes', combine: 'total', handicapAllowance: allowance,
   })
 
-  eq(buildRows(ST(), withExact)[0].total, 80,
-    'at the full handicap the stored snapshot is used exactly as it always was')
+  // 17.6 → 18 shots, not the placeholder's 10. One rule at every allowance:
+  // a board that reached past the snapshot only when reduced would put the
+  // same round two places apart on two tabs of the same page.
+  eq(buildRows(ST(), withExact)[0].total, 72,
+    'the real figure is used at the full handicap too, not only under a reduction — ' +
+    'one round must not sit in two places on two tabs of the same page')
   eq(buildRows(ST(90), withExact)[0].total, 74,
-    'and only a board taking a percentage reaches past it for the real figure')
+    'and 90% of it is 16 shots — off the placeholder it would have been 9')
 
-  // 17.6 → 90% → 15.84 → 16 shots. Off the stored 10 it would have been 9.
   eq(buildRows(ST(90), { ...withExact, exactHcpFor: undefined })[0].total, 81,
     'with no tee recorded there is nothing to reach for, and the snapshot stands')
 }
 
+section('Where a reduced board gets its points')
+{
+  // The trigger is canonical, so a board at the full handicap reads what it
+  // stored. The two agree by construction once the card and the trigger are
+  // working off the same course handicap — the card writes the handicap the
+  // trigger reads.
+  //
+  // A reduced board has no stored answer to agree with, so it goes to the
+  // gross. This fixture makes that visible by caching something the gross
+  // could never produce: the full board repeats it, the reduced one does not.
+  const cached = ctxOf([...card('p1', 5, 99), ...card('p2', 5, 99)])
+
+  eq(buildRows(SF(), cached).find(r => r.id === 'p1')!.total, 99 * 18,
+    'at the full handicap the stored points are the answer, whatever they say')
+  eq(buildRows(SF(85), cached).find(r => r.id === 'p1')!.total, 33,
+    'and a reduced board ignores them entirely, working from the gross')
+}
+
 section('The scorecard agrees with the board it opened from')
 {
-  ok(scoresForBoard(SF(), ctx) === ctx.resolved,
-    'a board at the full handicap reads the stored points, untouched')
+  eq(scoresForBoard(SF(), ctx).filter(s => s.playerId === 'p1')
+    .reduce((sum, s) => sum + s.points, 0), 36,
+    'a card at the full handicap adds up to what the board says')
 
   const restated = scoresForBoard(SF(85), ctx)
   const mine = restated.filter(s => s.playerId === 'p1')

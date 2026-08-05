@@ -9,7 +9,7 @@ import {
 } from '@/lib/leaderboards'
 import {
   type BoardRow, type ResolvedScore, type RowContext,
-  buildRows, scoresForBoard, effectivePar,
+  buildRows, scoresForBoard, boardHandicapFor, effectivePar,
 } from '@/lib/boardRows'
 import { exactCourseHandicap } from '@/lib/courseHandicap'
 import { type Membership } from '@/lib/teamSets'
@@ -169,7 +169,7 @@ function Row({ children, className = '' }: { children: React.ReactNode; classNam
  * step, so nothing that has to stay put sits inside a scroll container.
  */
 export function ScorecardSheet({
-  title, subtitle, players, round, holes, resolved, roundHandicaps, onClose,
+  title, subtitle, players, round, holes, resolved, handicapFor, onClose,
 }: {
   title: string
   subtitle: string
@@ -177,7 +177,15 @@ export function ScorecardSheet({
   round: Round
   holes: Hole[]
   resolved: ResolvedScore[]
-  roundHandicaps: RoundHcp[]
+  /**
+   * The handicap the board this card opened from scores each player off.
+   *
+   * Not the stored snapshot, which is neither reduced by the board's allowance
+   * nor necessarily the figure the round was played off. The points below come
+   * from this number, so printing anything else invites the reader to check
+   * the arithmetic and find it wrong.
+   */
+  handicapFor: (playerId: string) => number | null
   onClose: () => void
 }) {
   const { register, onScroll } = useSyncedStrips()
@@ -277,7 +285,7 @@ export function ScorecardSheet({
                 players.length > 4 ? 'max-h-[3.25rem] overflow-y-auto' : ''
               }`}>
                 {players.map(p => {
-                  const hcp = roundHandicaps.find(rh => rh.player_id === p.id && rh.round_id === round.id)?.playing_handicap
+                  const hcp = handicapFor(p.id)
                   return (
                     <span key={p.id} className="text-[15px] text-ink whitespace-nowrap" style={SC_SF}>
                       {players.length > 1 && <>{firstName(p.name)}{' '}</>}
@@ -981,7 +989,8 @@ export default function TripLeaderboardClient({
           // totalling 33 whose scorecard adds up to 36 is a bug report, and
           // the difference between them is the allowance it is played off.
           resolved={cardScores}
-          roundHandicaps={roundHandicaps}
+          handicapFor={pid =>
+            activeBoard ? boardHandicapFor(activeBoard, rowContext, card.round.id, pid) : null}
           onClose={() => setCard(null)}
         />
       )}

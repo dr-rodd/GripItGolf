@@ -132,8 +132,8 @@ export type RowContext = {
    * the round.
    *
    * Absent for a round whose handicap row was written before a tee was put
-   * against it, and for boards at the full handicap, where it would change
-   * nothing. `hcpFor` is the fallback.
+   * against it — `hcpFor` is the fallback, and is all that was ever known
+   * about those.
    */
   exactHcpFor?: Map<string, number>
   /** Rounds with a card open or uncommitted scores against them. */
@@ -178,12 +178,25 @@ export function effectiveSI(hole: RowHole, gender: string): number {
 
 const firstName = (n: string) => n.split(' ')[0]
 
-// ─── Playing off a percentage ──────────────────────────────────
+// ─── The handicap a board scores off ───────────────────────────
 //
 // A board's allowance is applied here, at the moment the cards are read, and
 // nowhere else. What was written stays written at the full handicap — see
 // lib/handicapAllowance.ts for why that is the only arrangement under which a
 // trip can run two boards on two different allowances.
+//
+// Every board takes the same handicap for a player in a round, whatever its
+// allowance: the real course handicap off the tee they played, not the whole
+// number snapshotted beside it. Those two can differ, because `round_handicaps`
+// is seeded with the player's index long before a tee is chosen. Preferring the
+// snapshot on some boards and the real figure on others would put one round in
+// two places on two tabs of the same page.
+//
+// Stableford points at the full handicap still come from the trigger, which is
+// canonical. That is not an exception to the above: the card writes the
+// handicap the trigger reads, so once both are working off the tee they agree
+// by construction. A reduced board has no stored answer to agree with, and
+// works its points out from the gross instead.
 
 /**
  * The handicap this board scores a player off, for this round.
@@ -201,26 +214,24 @@ function boardHandicap(
   fallback: number | null | undefined, allowance: number,
 ): number {
   const key = `${roundId}:${playerId}`
-  // Only a board taking a percentage reaches for the unrounded figure. At the
-  // full handicap the snapshot is used exactly as it always has been, so
-  // switching this on cannot quietly re-score a round that is already played:
-  // the two can disagree, because a snapshot written before a tee was chosen
-  // holds the player's index rather than their course handicap.
-  const exact = allowance === FULL_ALLOWANCE ? undefined : ctx.exactHcpFor?.get(key)
-  return allowedHandicap(exact ?? ctx.hcpFor.get(key) ?? fallback ?? 0, allowance)
+  return allowedHandicap(
+    ctx.exactHcpFor?.get(key) ?? ctx.hcpFor.get(key) ?? fallback ?? 0,
+    allowance,
+  )
 }
 
 /**
  * What a hole is worth in Stableford points on this board.
  *
- * At the full handicap this is the number the Postgres trigger already worked
- * out and stored, and it is returned untouched — the trigger is canonical, and
- * recomputing it here would be a second implementation of the one formula the
- * codebase is most careful to keep in one place.
+ * At the full handicap this is the number already stored — the Postgres
+ * trigger's for a committed card, the scoring card's own for one still in
+ * play. That trigger is canonical (see CLAUDE.md), and the two agree by
+ * construction now that both are working off the same course handicap: what
+ * the card writes to `round_handicaps` is what the trigger reads.
  *
  * Under a reduction there is no stored answer to use, because the reduction
- * belongs to the board rather than to the card. So it is worked out from the
- * gross, which is the only figure an allowance never changes.
+ * belongs to the board rather than to the card, so the points are worked out
+ * from the gross. Which is the only figure a reduction never changes.
  */
 function boardPoints(
   s: ResolvedScore, hole: RowHole | undefined, gender: string,
@@ -234,7 +245,7 @@ function boardPoints(
 }
 
 /**
- * Every score as this board reads it — points restated at its allowance.
+ * Every score as this board reads it — points restated at its handicap.
  *
  * `buildRows` uses this internally. It is exported for the scorecard sheet
  * that opens off a board row: a board totalling 34 whose card adds up to 36 is
@@ -253,6 +264,23 @@ export function scoresForBoard(lb: Leaderboard, ctx: RowContext): ResolvedScore[
     const hcp = boardHandicap(ctx, s.roundId, s.playerId, player?.handicap, allowance)
     return { ...s, points: boardPoints(s, holeById.get(s.holeId), gender, hcp, allowance) }
   })
+}
+
+/**
+ * The handicap this board shows for a player in a round — the same number the
+ * points above were worked out from.
+ *
+ * Exported so the scorecard sheet can print it. It used to print the stored
+ * snapshot, which is neither reduced by the board's allowance nor necessarily
+ * the handicap the round was played off.
+ */
+export function boardHandicapFor(
+  lb: Leaderboard, ctx: RowContext, roundId: string, playerId: string,
+): number | null {
+  const player = ctx.players.find(p => p.id === playerId)
+  const key = `${roundId}:${playerId}`
+  if (!ctx.exactHcpFor?.has(key) && !ctx.hcpFor.has(key) && player?.handicap == null) return null
+  return boardHandicap(ctx, roundId, playerId, player?.handicap, allowanceOf(lb))
 }
 
 // ─── How a team's members combine ──────────────────────────────
