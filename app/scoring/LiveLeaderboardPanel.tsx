@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, Fragment } from "react"
 import { supabase } from "@/lib/supabase"
 import BackButton from "@/app/components/BackButton"
 import ScoreShape from "@/app/components/ScoreShape"
+import { scoreTone, TONE_PILL } from "@/lib/leaderboardStyle"
+import { HEADER_H } from "@/app/components/headerMetrics"
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -396,30 +398,36 @@ export default function LiveLeaderboardPanel({
         )}
       </div>
 
-      {/* Mode toggle */}
-      <div className="flex border border-bark/12">
+      {/* Mode toggle — the same tab pills the trip leaderboard uses, so the
+          two boards read as one system rather than two eras of the app. */}
+      <div className="flex gap-1.5">
         {(["stableford", "strokes"] as Mode[]).map(m => (
           <button
             key={m}
             onClick={() => setMode(m)}
-            className={`flex-1 py-2.5 text-sm tracking-[0.15em] uppercase transition-colors
-              ${mode === m ? "bg-bark/[0.06] text-accent-deep" : "text-ink/65 hover:text-ink/80"}`}
+            className={`flex-1 px-4 py-2.5 t-label rounded-xl border transition-colors duration-150 ${
+              mode === m
+                ? "bg-accent-deep text-white font-bold border-accent-deep"
+                : "bg-surface border-bark/12 text-ink/65 hover:text-ink/80"
+            }`}
           >
             {m === "stableford" ? "Stableford" : "Strokes"}
           </button>
         ))}
       </div>
 
-      {/* Leaderboard table */}
+      {/* Nett / gross. A second question about the same board, so it is
+          quieter than the tabs above rather than a second row of them. */}
       {mode === "strokes" && (
-        <div className="flex justify-end -mb-2">
-          <div className="flex rounded-full border border-bark/12 overflow-hidden">
+        <div className="flex justify-end -mt-1">
+          <div className="inline-flex gap-1 p-1 rounded-xl bg-bark/[0.06]">
             {(["nett", "gross"] as StrokesView[]).map(sv => (
               <button
                 key={sv}
                 onClick={() => setStrokesView(sv)}
-                className={`px-3 py-1 text-[10px] tracking-[0.12em] uppercase transition-colors
-                  ${strokesView === sv ? "bg-bark/[0.06] text-ink/80" : "text-ink/50 hover:text-ink/65"}`}
+                className={`px-3 py-1.5 rounded-lg t-cap uppercase tracking-[0.12em] transition-colors duration-150 ${
+                  strokesView === sv ? "bg-surface text-ink" : "text-ink/65 hover:text-ink/80"
+                }`}
               >
                 {sv}
               </button>
@@ -428,18 +436,24 @@ export default function LiveLeaderboardPanel({
         </div>
       )}
       {sortedRows.length === 0 ? (
-        <div className="border border-bark/12 px-4 py-10 text-center">
-          <div className="text-ink/50 text-sm">No scores yet</div>
-          <div className="text-ink/50 text-xs mt-1">Scores appear as holes are completed</div>
+        <div className="bg-surface border border-bark/12 rounded-2xl px-4 py-14 text-center">
+          <p className="t-body text-ink/80">No scores yet</p>
+          <p className="t-cap text-ink/65 mt-1">Scores appear as holes are completed</p>
         </div>
       ) : (
-        <div className="border border-bark/12">
-          {/* Column headers — sticky below main nav */}
-          <div className="sticky top-[77px] z-10 flex items-center gap-3 px-4 py-2 bg-cream border-b border-bark/12">
-            <span className="text-[10px] tracking-[0.15em] uppercase text-ink/50 w-6 flex-shrink-0">Pos</span>
-            <span className="text-[10px] tracking-[0.15em] uppercase text-ink/50 flex-1 min-w-0">Player</span>
-            <span className="text-[10px] tracking-[0.15em] uppercase text-ink/50 flex-shrink-0 min-w-[3.5rem] text-center">Score</span>
-            <span className="text-[10px] tracking-[0.15em] uppercase text-ink/50 flex-shrink-0 w-9 text-right">Thru</span>
+        // No overflow-hidden: it would make this card its own scrollport and
+        // the sticky heading below would measure its offset from the card
+        // rather than the viewport. The corners round without it.
+        <div className="bg-surface border border-bark/12 rounded-2xl">
+          {/* Column headers — sticky below the site header */}
+          <div
+            style={{ top: HEADER_H }}
+            className="sticky z-10 flex items-center gap-3 px-3 py-1.5 bg-surface border-b border-bark/12 rounded-t-2xl"
+          >
+            <span className="text-[12px] tracking-widest uppercase text-ink/65 w-6 flex-shrink-0">Pos</span>
+            <span className="text-[12px] tracking-widest uppercase text-ink/65 flex-1 min-w-0">Name</span>
+            <span className="text-[12px] tracking-widest uppercase text-ink/65 flex-shrink-0 min-w-[3.5rem] text-center">Score</span>
+            <span className="text-[12px] tracking-widest uppercase text-ink/65 flex-shrink-0 w-9 text-right">Thru</span>
           </div>
 
           {sortedRows.map((row, idx) => {
@@ -452,27 +466,18 @@ export default function LiveLeaderboardPanel({
             const isLast = idx === sortedRows.length - 1
 
             // ── Col 3: relative score ──────────────────────
-            let relativeValue: number
-            let scoreDisplay: string
-            let scorePillClass: string
-
-            if (mode === "stableford") {
-              relativeValue = stablefordRelative
-              scoreDisplay  = fmtRelative(relativeValue)
-              scorePillClass = relativeValue > 0
-                ? "bg-accent-deep/15 text-accent-deep"
-                : relativeValue < 0
-                  ? "bg-accent/15 text-accent-deep"
-                  : "bg-bark/[0.04] text-ink/65"
-            } else {
-              relativeValue  = strokesView === "gross" ? grossRelative : nettRelative
-              scoreDisplay   = fmtRelative(relativeValue)
-              scorePillClass = relativeValue < 0
-                ? "bg-accent-deep/15 text-accent-deep"
-                : relativeValue > 0
-                  ? "bg-accent/15 text-accent-deep"
-                  : "bg-bark/[0.04] text-ink/65"
-            }
+            //
+            // Under par is the only side that gets colour. Both sides used to
+            // be emerald here, so a round four over looked exactly as good as
+            // one four under; worse than level is brown now, and more of it
+            // than level itself carries. Stableford counts up and strokes
+            // count down, so the direction is passed in rather than assumed.
+            const lowerIsBetter = mode === "strokes"
+            const relativeValue = mode === "stableford"
+              ? stablefordRelative
+              : strokesView === "gross" ? grossRelative : nettRelative
+            let scoreDisplay = fmtRelative(relativeValue)
+            const scorePillClass = TONE_PILL[scoreTone(relativeValue, lowerIsBetter)]
 
             // ── Col 3 override for finalised: show absolute total ─
             if (isFinalised) {
@@ -496,34 +501,36 @@ export default function LiveLeaderboardPanel({
               <Fragment key={player.id}>
                 <button
                   onClick={() => setExpandedPlayerId(isExpanded ? null : player.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 text-left active:bg-bark/[0.04] transition-colors ${!isLast || isExpanded ? "border-b border-bark/12" : ""}`}
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-left active:bg-bark/[0.04] transition-colors ${!isLast || isExpanded ? "border-b border-bark/12" : ""}`}
                 >
 
                   {/* Col 1: position */}
-                  <span className="text-ink/65 text-base font-semibold w-6 flex-shrink-0 tabular-nums">
+                  <span className="t-cap text-ink/65 tabular-nums w-6 flex-shrink-0">
                     {positions[idx]}
                   </span>
 
                   {/* Col 2: team dot + name */}
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
                     {player.teams && (
                       <span
                         className="w-2 h-2 rounded-full flex-shrink-0"
                         style={{ backgroundColor: player.teams.color }}
                       />
                     )}
-                    <span className="text-base text-ink/80 truncate">{player.name}</span>
+                    {/* No live dot here: the Thru column already says F or a
+                        hole count, and a dot beside it would say it twice. */}
+                    <span className="t-card text-ink truncate">{player.name}</span>
                   </div>
 
                   {/* Col 3: relative score pill */}
                   <span className={`flex-shrink-0 inline-flex items-center justify-center
-                    px-2 py-0.5 rounded-xl text-lg font-bold tabular-nums min-w-[3.5rem] ${scorePillClass}`}>
+                    px-2 py-1 rounded-xl text-xl font-semibold tabular-nums min-w-[3.5rem] ${scorePillClass}`}>
                     {scoreDisplay}
                   </span>
 
                   {/* Col 4: holes or finalised total */}
-                  <span className={`flex-shrink-0 w-9 text-right tabular-nums text-base
-                    ${isFinalised ? "text-ink/80 font-semibold" : "text-ink/50"}`}>
+                  <span className={`flex-shrink-0 w-9 text-right tabular-nums t-data
+                    ${isFinalised ? "text-ink/80 font-semibold" : "text-ink/65"}`}>
                     {col4}
                   </span>
 

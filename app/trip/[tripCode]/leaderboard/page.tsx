@@ -60,9 +60,12 @@ export default async function TripLeaderboardPage({
         .select('round_id, player_id, playing_handicap')
         .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
       // A round is "in play" when a scorecard is open on it — not merely
-      // because a score was once entered against it
+      // because a score was once entered against it. The locks come with it:
+      // who is on that card is what decides which rows wear the live dot, and
+      // it has to be per player — not everybody plays every round, and a
+      // signed card is not live however busy the rest of the trip is.
       supabase.from('live_rounds')
-        .select('round_id')
+        .select('id, round_id, live_player_locks(player_id)')
         .eq('status', 'active')
         .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
       // Who is in which team, on every sheet. A trip can run a league between
@@ -78,7 +81,15 @@ export default async function TripLeaderboardPage({
   const teamScoring = parseTeamScoring(trip.team_scoring)
   const boards = tripBoards(stored, parseFormats(trip.formats), teamScoring)
 
-  const activeRoundIds = [...new Set((openRes.data ?? []).map(r => r.round_id as string))]
+  type OpenRound = {
+    round_id: string
+    live_player_locks: { player_id: string }[] | null
+  }
+  const openRounds = (openRes.data ?? []) as unknown as OpenRound[]
+  const activeRoundIds = [...new Set(openRounds.map(r => r.round_id))]
+  const livePlayerIds = [...new Set(
+    openRounds.flatMap(r => (r.live_player_locks ?? []).map(l => l.player_id))
+  )]
   const hasActiveRound =
     activeRoundIds.length > 0 || (rounds ?? []).some((r: any) => r.status === 'active')
 
@@ -100,6 +111,7 @@ export default async function TripLeaderboardPage({
         tripCode={tripCode}
         boards={boards}
         activeRoundIds={activeRoundIds}
+        livePlayerIds={livePlayerIds}
         legacyTeamScoring={isLegacy(stored) ? teamScoring : null}
         rounds={(rounds ?? []) as any}
         teams={teamsRes.data ?? []}

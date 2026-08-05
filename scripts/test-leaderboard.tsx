@@ -13,6 +13,7 @@ import TripLeaderboardClient from '../app/trip/[tripCode]/leaderboard/TripLeader
 import { parseFormats, type TripFormats } from '../lib/formats'
 import { DEFAULT_TEAM_SCORING, type TeamScoring } from '../lib/teamScoring'
 import type { Leaderboard } from '../lib/leaderboards'
+import { scoreTone, TONE_PILL } from '../lib/leaderboardStyle'
 import { boardsFromFormats, tripBoards, isLegacy } from '../lib/leaderboardsCompat'
 import { teamScoringFor } from '../lib/boardRows'
 
@@ -64,6 +65,7 @@ const roundHandicaps = players.flatMap(p =>
 
 type RenderOpts = {
   activeRoundIds?: string[]
+  livePlayerIds?: string[]
   liveScores?: unknown[]
   scores?: unknown[]
   teams?: unknown[]
@@ -95,6 +97,7 @@ function render(boards: Leaderboard[], opts: RenderOpts = {}) {
       tripCode: 'ABC123',
       boards,
       activeRoundIds: opts.activeRoundIds ?? [],
+      livePlayerIds: opts.livePlayerIds ?? [],
       legacyTeamScoring: opts.legacyTeamScoring ?? null,
       rounds: opts.rounds ?? rounds,
       teams: opts.teams ?? [],
@@ -309,6 +312,66 @@ section('In play badge')
   // A round that merely has scores is finished, not in play
   ok(!render([SF()], { activeRoundIds: [] }).includes('In play'),
     'recorded scores alone do not mean a round is in play')
+}
+
+section('Under par is coloured; over par is weighted')
+{
+  // The bug: the live board painted BOTH sides of level emerald, so a round
+  // four over looked exactly as good as one four under. Under par is the
+  // only side that gets the accent; over par gets more brown than level.
+  const sf = (n: number) => scoreTone(n, false)   // Stableford counts up
+  const st = (n: number) => scoreTone(n, true)    // strokes count down
+
+  eq(sf(4), 'good', 'four points ahead of level is good')
+  eq(sf(0), 'level', 'level is level')
+  eq(sf(-4), 'bad', 'and four behind is not')
+
+  // The same numbers mean the opposite on strokes, which is exactly why the
+  // direction is passed in rather than guessed from the sign.
+  eq(st(4), 'bad', 'four over par is bad')
+  eq(st(0), 'level', 'level is still level')
+  eq(st(-4), 'good', 'and four under is good')
+
+  // Emerald appears once and only on the good side
+  ok(TONE_PILL.good.includes('accent'), 'good is the only tone that is emerald')
+  ok(!TONE_PILL.bad.includes('accent'), 'bad is not emerald — that was the bug')
+  ok(!TONE_PILL.level.includes('accent'), 'nor is level')
+
+  // Worse than level is browner than level, not lighter. Both are bark, and
+  // the bad one carries more of it.
+  const barkOf = (cls: string) => Number(cls.match(/bg-bark\/\[([\d.]+)\]/)?.[1] ?? 0)
+  ok(barkOf(TONE_PILL.bad) > barkOf(TONE_PILL.level),
+    'and it is a stronger bark than level, not a paler one')
+  ok(barkOf(TONE_PILL.level) > 0, 'while level is still a wash rather than nothing')
+}
+
+section('The live dot belongs to a player, not to the trip')
+{
+  // The regression: the dot was inferred from "this player has a score in a
+  // round that is in play", so every player who had ever teed off wore one
+  // from the moment anyone opened a card — and kept it after signing their
+  // own. It is read off the open cards themselves now.
+  const dot = /dot-live/g
+  const dots = (html: string) => (html.match(dot) ?? []).length
+
+  // A round open but nobody's card still going — every card signed. The
+  // trip-wide "In play" badge carries a dot of its own, so one is the floor;
+  // what matters is that no ROW has one.
+  const none = render([SF()], { activeRoundIds: ['r1'], livePlayerIds: [] })
+  eq(dots(none), 1, 'with every card signed, only the trip badge has a dot')
+
+  // One player out on the course. The badge counts as one, the row as another
+  const one = render([SF()], { activeRoundIds: ['r1'], livePlayerIds: ['p1'] })
+  ok(dots(one) > dots(none), 'the player holding a card gets one')
+  eq(dots(one), 2, 'exactly one row, plus the trip-wide In play badge')
+
+  // Two out: one more dot, and no more than that
+  const two = render([SF()], { activeRoundIds: ['r1'], livePlayerIds: ['p1', 'p2'] })
+  eq(dots(two), 3, 'and a second card open adds exactly one more')
+
+  // The point of the fix: a player who is NOT on an open card gets nothing,
+  // even though the round they played is in play for somebody else.
+  ok(dots(one) < dots(two), 'a player not on an open card is not marked live')
 }
 
 // ─── Matchplay stays a button ──────────────────────────────────

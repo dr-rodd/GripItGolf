@@ -122,6 +122,16 @@ export type RowContext = {
   /** Rounds with a card open or uncommitted scores against them. */
   liveRoundIds: Set<string>
   /**
+   * Players with a scorecard open right now — a `live_player_locks` row on a
+   * session still `active`.
+   *
+   * Per player, not per round. A row used to count as live because *some*
+   * round was in play, so every player on the trip wore the live dot the
+   * moment anyone teed off, and kept it after their own card was signed.
+   * Not everyone plays every round, and a finished card is not live.
+   */
+  livePlayerIds: Set<string>
+  /**
    * The trip's old single team-scoring setting, when these boards were
    * derived from `trips.formats` rather than chosen as leaderboards. It
    * carries options the new model does not ask for — how many scores count
@@ -188,9 +198,16 @@ export function buildRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   return lb.audience === 'team' ? teamRows(lb, ctx) : individualRows(lb, ctx)
 }
 
-/** Whether any of these players has a round still open. */
+/**
+ * Whether any of these players has a card open right now.
+ *
+ * Read off the open sessions themselves rather than inferred from a score
+ * sitting in a round that happens to be in play — a finalised card leaves its
+ * scores behind, and inferring from them marked everybody live for the rest
+ * of the trip.
+ */
 function liveFor(playerIds: string[], ctx: RowContext): boolean {
-  return ctx.resolved.some(s => playerIds.includes(s.playerId) && ctx.liveRoundIds.has(s.roundId))
+  return playerIds.some(id => ctx.livePlayerIds.has(id))
 }
 
 /** Lowest wins on strokes, so sorting and discarding both reverse. */
@@ -331,22 +348,17 @@ function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const combined = combineRounds(lb, perPlayer.map(r => ({ id: r.player.id, rounds: r.rounds })),
     ctx.players.length)
 
-  const rows = perPlayer.map(({ player, rounds, holesPlayed, gross }) => {
+  const rows = perPlayer.map(({ player, rounds }) => {
     const c = combined.get(player.id)!
-    const holes = `${holesPlayed} hole${holesPlayed === 1 ? '' : 's'}`
-    // Prize points have no level to be ahead of, so the summary just counts
-    // the rounds that have been placed
-    const played = rounds.filter(r => r.played).length
-    const summary = lb.combine === 'position'
-      ? `${played} round${played === 1 ? '' : 's'}`
-      : strokes
-        ? `${gross} gross`
-        : relativeToLevel(c.total - holesPlayed * 2)
-
+    // An individual row carries no second line. It used to count the holes
+    // and rounds played — "42 holes · 3 rounds" — under every name, which is
+    // a lot of type saying something the round columns already show, on the
+    // one board that is meant to be read at a glance. What is worth knowing
+    // about a round is in that round's own column.
     const row: BoardRow = {
       id: player.id,
       name: player.name,
-      subLabel: `${holes} · ${summary}`,
+      subLabel: '',
       perRound: c.perRound,
       playedRounds: rounds.filter(r => r.played).map(r => r.roundId),
       droppedRounds: c.dropped,
@@ -361,9 +373,6 @@ function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
 
   return sortRows(lb, rows)
 }
-
-const relativeToLevel = (diff: number) =>
-  diff === 0 ? 'level' : diff > 0 ? `+${diff}` : String(diff)
 
 /**
  * The against-level figures, but only where they mean something.

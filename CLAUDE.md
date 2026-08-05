@@ -377,9 +377,11 @@ The bracket page reads `entrant_type` from the **rows**, not from current settin
 
 Each active board is a tab, teams first when teams are on. With more than one running, a title card above the board names it and states how it is being scored.
 
+**The two boards are two jobs.** The **live** board is what the course is playing right now, and stays afterwards as that day's record — over and under par are coloured, because it is the vibe of a round. The **trip** board is the standing, and is more impartial: emerald on it means one thing only, still being played.
+
 A round is **In play** — a glowing green badge — when a `live_rounds` row for it has status `active`. Recorded scores alone do not count; the scorecard has to be open.
 
-**Green while the card is open, gold once it is in.** A round with uncommitted `live_scores` shows green and reads as *how far ahead of level it stands*. Once finalised it turns gold and reverts to the total.
+**Green while the card is open, plain ink once it is in.** A round with uncommitted `live_scores` shows green and reads as *how far ahead of level it stands*. Once finalised it reverts to the total in ink. The legend's two swatches must not both be emerald — after the gold was swept out they were, so it drew two identical dots and claimed they told two states apart.
 
 | Board | While in play | Once finalised |
 |---|---|---|
@@ -388,9 +390,25 @@ A round is **In play** — a glowing green badge — when a `live_rounds` row fo
 | Custom | colour only — a prize table pays position, there is no level | the points awarded |
 | Teams | colour only — level depends on the mode and team size | the total |
 
-Level prints as `E`. The row's live dot is **green**, not gold — gold now means the opposite, and both being gold would say nothing. A legend appears while anything is in play.
+Level prints as `E`.
+
+**A row's live dot is that player's, not the trip's.** It is on when a `live_player_locks` row puts them on a session still `active` — read off the open cards themselves, per player. It used to be inferred from "this player has a score in a round that is in play", so everyone who had teed off wore one the moment anybody opened a card, and kept it after signing their own. Not everybody plays every round, and a signed card is not live.
+
+**An individual row carries no second line.** It used to count holes and rounds under every name — "42 holes · 3 rounds" — which is a lot of type saying what the round columns already show.
 
 Committed scores always win over in-progress ones for the same hole.
+
+#### Over par is weight, not colour
+
+`lib/leaderboardStyle.ts` is the one place that decides, and both boards read it. Better than level is emerald; level is a quiet bark wash; **worse than level is *more* bark, never emerald.** The live board used to paint both sides of level emerald, so a round four over looked exactly as good as one four under. Which direction is better is passed in rather than guessed — Stableford counts up, strokes count down.
+
+#### The round columns scroll
+
+Past `INLINE_ROUNDS` (4) the per-round columns stop fitting a phone, so they scroll sideways while **Pos / Name and Tot stay put**.
+
+The obvious build — one scroller around the whole table with the fixed columns `position: sticky` inside it — puts back the bug the board card's missing `overflow-hidden` exists to avoid: an element that scrolls on one axis is a scroll container on **both**, so the column headings' `top: HEADER_H` would start measuring from the card instead of the viewport. So each row owns its own strip, and `useSyncedStrips` keeps them on one scroll position; nothing above the sticky heading scrolls. Writing `scrollLeft` raises `scroll` again, so the write is flagged and the echo swallowed a frame later — clearing it in the same frame lets the strips fight each other.
+
+`Strip` is declared at module level. Inside `Board` it would be a new component type every render, so React would rebuild the div and take the scroll position with it — the one piece of state the whole arrangement exists to keep.
 
 ### Who appears on which board
 
@@ -587,7 +605,7 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:progress` | Recording and correcting winners, and the cascade |
 | `test:itinerary` | The running order — golf, stay and travel items, the rounds they generate, and diffing an edit back into writes |
 | `test:trip-form` | Trip creation |
-| `test:leaderboard` | Every board, live vs finalised, score ownership, per-board rules, two team boards on two sheets, and old trips read through the shim |
+| `test:leaderboard` | Every board, live vs finalised, score ownership, per-board rules, two team boards on two sheets, the per-player live dot, the over/under colour rule, and old trips read through the shim |
 | `test:recognition` | The per-trip cookie, the personal summary, the greeting |
 | `test:admin` | Optional email, derived trip status, admin session signing |
 | `test:support` | The donation link, and that it vanishes when unconfigured |

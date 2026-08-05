@@ -135,9 +135,22 @@ section('The column headings stay above the board')
   ok(!/rounded-2xl overflow-hidden">\s*\{\/\* Sticky column headers/.test(src),
     'and does not clip its own overflow, which would break the sticky offset')
 
-  ok(src.includes('style={{ ...gridStyle, top: HEADER_H }}'),
+  ok(/style=\{\{ top: HEADER_H \}\}/.test(src),
     'the headings still pin below the wordmark bar')
-  ok(src.includes("className=\"sticky z-10"), 'and are still sticky')
+  ok(/className="sticky z-10/.test(src), 'and are still sticky')
+
+  // The round columns scroll sideways once a trip outgrows the width. The
+  // obvious way to build that — one scroller around the whole table with the
+  // fixed columns sticky inside it — puts the same bug back, because an
+  // element that scrolls on one axis is a scroll container on BOTH. So the
+  // scrollers are the per-row strips, and the sticky heading must never be
+  // inside one.
+  const header = src.slice(src.indexOf('{/* Sticky column headers */}'))
+  const headerBlock = header.slice(0, header.indexOf('{rows.map('))
+  ok(!/overflow-x-auto[\s\S]*?sticky z-10/.test(src.slice(0, src.indexOf('Sticky column headers'))),
+    'nothing above the headings scrolls sideways')
+  ok(headerBlock.includes('<Strip '),
+    'the headings scroll with the strips rather than in a scroller of their own')
 }
 
 // ─── The card is the app's, not Donegal's ──────────────────────

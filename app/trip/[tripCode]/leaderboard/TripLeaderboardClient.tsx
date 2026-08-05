@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useCallback, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { resolveCustomPoints } from '@/lib/customPoints'
 import type { TeamScoring } from '@/lib/teamScoring'
@@ -39,6 +39,14 @@ interface Props {
   boards: Leaderboard[]
   /** Rounds with a scorecard open right now. */
   activeRoundIds: string[]
+  /**
+   * Players with a card open right now, from the locks on those rounds.
+   *
+   * Per player rather than per round: not everybody plays every round, and a
+   * card that has been signed is not live just because someone else is still
+   * out on the course.
+   */
+  livePlayerIds: string[]
   /**
    * The old trip-wide team setting, passed only for trips that predate the
    * board list. It carries options the new model does not ask for, so a trip
@@ -412,25 +420,106 @@ function CourseTiles({
 
 // ─── The board ─────────────────────────────────────────────────
 
+/**
+ * Keeps every row's round strip on the same horizontal scroll position.
+ *
+ * The alternative was one scroller around the whole table with the fixed
+ * columns `position: sticky` inside it. That reads well until you remember
+ * what `overflow-x` does: an element that scrolls on one axis is a scroll
+ * container on both, so the column headings' `top: HEADER_H` would have
+ * started measuring from the card instead of the viewport — exactly the bug
+ * that put them on top of whoever was leading (see CLAUDE.md). Each strip
+ * being its own scroller keeps every ancestor of that sticky row unscrolled.
+ *
+ * Writing scrollLeft fires `scroll` again, so the write is flagged and the
+ * echo ignored — without it the strips fight each other and judder.
+ */
+function useSyncedStrips() {
+  const strips = useRef<Set<HTMLDivElement>>(new Set())
+  const syncing = useRef(false)
+
+  // Always returns a cleanup, never sometimes — React 19 treats a returned
+  // function as the detach hook, and a callback that returns one only on
+  // some renders leaves stale nodes in the set when the board changes.
+  const register = useCallback((el: HTMLDivElement | null) => {
+    const set = strips.current
+    if (el) set.add(el)
+    return () => { if (el) set.delete(el) }
+  }, [])
+
+  const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (syncing.current) return
+    syncing.current = true
+    const source = e.currentTarget
+    const left = source.scrollLeft
+    // Applied on the next frame rather than inline: a scroll handler runs
+    // very often, and batching the writes into the frame keeps a flick on a
+    // phone smooth. The flag is cleared in the same frame, after the writes,
+    // so the scroll events they raise are the ones it swallows.
+    requestAnimationFrame(() => {
+      for (const el of strips.current) {
+        if (el !== source && el.scrollLeft !== left) el.scrollLeft = left
+      }
+      // Released a frame later, not here: the writes above raise scroll
+      // events of their own and those arrive after this frame, so clearing
+      // the flag now would let the echo back in and the strips would fight.
+      requestAnimationFrame(() => { syncing.current = false })
+    })
+  }, [])
+
+  return { register, onScroll }
+}
+
+/**
+ * The scrolling middle of a row. Identical in both modes bar its overflow.
+ *
+ * Declared here rather than inside Board: a component created during render is
+ * a new type on every render, so React would tear the div down and build it
+ * again — taking the strip's scroll position with it, which is the one piece
+ * of state this whole arrangement exists to keep.
+ */
+function Strip({
+  scrolls, register, onScroll, children,
+}: {
+  scrolls: boolean
+  register: (el: HTMLDivElement | null) => () => void
+  onScroll: (e: React.UIEvent<HTMLDivElement>) => void
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      ref={scrolls ? register : undefined}
+      onScroll={scrolls ? onScroll : undefined}
+      className={`min-w-0 flex-1 ${scrolls ? 'overflow-x-auto scroll-strip' : ''}`}
+    >
+      <div className={`flex gap-2 ${scrolls ? 'w-max' : 'justify-end'}`}>{children}</div>
+    </div>
+  )
+}
+
+/** Round columns beyond this stop fitting a phone, so they start scrolling. */
+const INLINE_ROUNDS = 4
+
 function Board({
-  rows, rounds, showRoundColumns, playerById, onOpenCard,
+  rows, rounds, playerById, onOpenCard,
 }: {
   rows: BoardRow[]
   rounds: Round[]
-  showRoundColumns: boolean
   playerById: Map<string, Player>
   onOpenCard: (row: BoardRow, round: Round) => void
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const { register, onScroll } = useSyncedStrips()
 
-  const gridStyle = {
-    display: 'grid',
-    gridTemplateColumns: showRoundColumns
-      ? `20px 1fr ${rounds.map(() => '40px').join(' ')} 56px`
-      : '20px 1fr 56px',
-    columnGap: '0.5rem',
-    alignItems: 'center',
-  } as const
+  // Under the limit nothing scrolls and the strip is just a row of columns;
+  // over it, the same markup scrolls and the columns either side hold still.
+  const scrolls = rounds.length > INLINE_ROUNDS
+  const showRounds = rounds.length > 0
+
+  // Narrower once the rounds scroll — every pixel the name gives up is
+  // another round column visible before you have to swipe.
+  const NAME_W = scrolls ? 'w-[6.5rem]' : 'flex-1'
+  const CELL = `${scrolls ? 'w-9' : 'w-10'} flex-shrink-0 text-center`
 
   // No overflow-hidden on this card, deliberately. It would make the card its
   // own scrollport, and the sticky row below would then measure its offset
@@ -443,17 +532,21 @@ function Board({
       <div
         // Sits directly under the wordmark header, which is 52px tall. A
         // hard 0 here would slide the column headings under the mark.
-        style={{ ...gridStyle, top: HEADER_H }}
-        className="sticky z-10 px-3 py-1.5 bg-surface border-b border-bark/12 rounded-t-2xl"
+        style={{ top: HEADER_H }}
+        className="sticky z-10 flex items-center gap-2 px-3 py-1.5 bg-surface border-b border-bark/12 rounded-t-2xl"
       >
-        <span className="text-[12px] tracking-widest uppercase text-ink/65">Pos</span>
-        <span className="text-[12px] tracking-widest uppercase text-ink/65">Name</span>
-        {showRoundColumns && rounds.map(r => (
-          <span key={r.id} className="text-[13px] text-ink/65 text-center tabular-nums">
-            {r.round_number}
-          </span>
-        ))}
-        <span className="text-[12px] tracking-widest uppercase text-ink/65 text-right">Tot</span>
+        <span className="text-[12px] tracking-widest uppercase text-ink/65 w-5 flex-shrink-0">Pos</span>
+        <span className={`text-[12px] tracking-widest uppercase text-ink/65 min-w-0 ${NAME_W}`}>Name</span>
+        {showRounds && (
+          <Strip scrolls={scrolls} register={register} onScroll={onScroll}>
+            {rounds.map(r => (
+              <span key={r.id} className={`${CELL} text-[13px] text-ink/65 tabular-nums`}>
+                {r.round_number}
+              </span>
+            ))}
+          </Strip>
+        )}
+        <span className="text-[12px] tracking-widest uppercase text-ink/65 w-14 flex-shrink-0 text-right">Tot</span>
       </div>
 
       {rows.map((row, i) => {
@@ -463,14 +556,13 @@ function Board({
           <Fragment key={row.id}>
             <button
               onClick={() => setExpandedId(prev => (prev === row.id ? null : row.id))}
-              style={gridStyle}
-              className={`w-full px-3 py-1 text-left active:bg-surface transition-colors ${
+              className={`w-full flex items-center gap-2 px-3 py-2 text-left active:bg-bark/[0.04] transition-colors ${
                 !isLast || isExpanded ? 'border-b border-bark/12' : ''
               }`}
             >
-              <span className="t-cap text-ink/65 tabular-nums pt-0.5">{i + 1}</span>
+              <span className="t-cap text-ink/65 tabular-nums w-5 flex-shrink-0">{i + 1}</span>
 
-              <div className="min-w-0">
+              <div className={`min-w-0 ${NAME_W}`}>
                 <div className="flex items-center gap-1.5">
                   {row.color && (
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} />
@@ -485,43 +577,47 @@ function Board({
                 )}
               </div>
 
-              {showRoundColumns && rounds.map(r => {
-                const played  = row.playedRounds.includes(r.id)
-                const dropped = row.droppedRounds?.includes(r.id) ?? false
-                const live    = row.liveRounds?.includes(r.id) ?? false
-                const pts     = row.perRound[r.id] ?? 0
-                const rel     = row.relativeByRound?.[r.id]
+              {showRounds && (
+                <Strip scrolls={scrolls} register={register} onScroll={onScroll}>
+                  {rounds.map(r => {
+                    const played  = row.playedRounds.includes(r.id)
+                    const dropped = row.droppedRounds?.includes(r.id) ?? false
+                    const live    = row.liveRounds?.includes(r.id) ?? false
+                    const pts     = row.perRound[r.id] ?? 0
+                    const rel     = row.relativeByRound?.[r.id]
 
-                // In play: how far ahead of level, in green. Finalised: the
-                // total, in gold. A dropped round is neither — it is set aside.
-                const showRelative = live && !dropped && rel !== undefined
-                return (
-                  <span
-                    key={r.id}
-                    title={
-                      dropped ? 'Set aside — worst round dropped'
-                        : live ? 'Card still open — against level so far'
-                        : undefined
-                    }
-                    className={`text-center tabular-nums font-semibold ${
-                      showRelative ? 'text-xl' : 'text-2xl'
-                    } ${
-                      !played ? 'text-ink/50'
-                        : dropped ? 'text-ink/50 line-through decoration-ink/30'
-                        : live ? 'text-accent'
-                        : 'text-ink'
-                    }`}
-                  >
-                    {!played ? '—' : showRelative ? formatRelative(rel) : formatScore(pts)}
-                  </span>
-                )
-              })}
+                    // In play: how far ahead of level. Finalised: the total.
+                    // A dropped round is neither — it is set aside.
+                    const showRelative = live && !dropped && rel !== undefined
+                    return (
+                      <span
+                        key={r.id}
+                        title={
+                          dropped ? 'Set aside — worst round dropped'
+                            : live ? 'Card still open — against level so far'
+                            : undefined
+                        }
+                        className={`${CELL} tabular-nums font-semibold ${
+                          showRelative ? 'text-lg' : 'text-xl'
+                        } ${
+                          !played ? 'text-ink/65'
+                            : dropped ? 'text-ink/65 line-through decoration-ink/30'
+                            : live ? 'text-accent-deep'
+                            : 'text-ink'
+                        }`}
+                      >
+                        {!played ? '—' : showRelative ? formatRelative(rel) : formatScore(pts)}
+                      </span>
+                    )
+                  })}
+                </Strip>
+              )}
 
               {/* Rows are pre-filtered to those who have played, so the
                   total is always a real number — including a legitimate 0. */}
               {/* The total is the primary datum, so it is plain ink. Emerald
                   on this board means one thing only: still being played. */}
-              <span className="text-right t-num font-semibold text-2xl text-ink">
+              <span className="w-14 flex-shrink-0 text-right t-num font-semibold text-xl text-ink">
                 {formatScore(row.total)}
               </span>
             </button>
@@ -597,8 +693,8 @@ function MatchplayButton({ tripCode, enabled }: { tripCode: string; enabled: boo
 // ─── Main ──────────────────────────────────────────────────────
 
 export default function TripLeaderboardClient({
-  tripCode, boards, activeRoundIds, legacyTeamScoring, rounds, teams, memberships,
-  players, holes, scores, liveScores, roundHandicaps,
+  tripCode, boards, activeRoundIds, livePlayerIds, legacyTeamScoring, rounds,
+  teams, memberships, players, holes, scores, liveScores, roundHandicaps,
 }: Props) {
   // Matchplay has its own route, so it is a button rather than a tab. Every
   // other board is a table, and its own rules travel with it.
@@ -613,10 +709,6 @@ export default function TripLeaderboardClient({
     () => [...rounds].sort((a, b) => a.round_number - b.round_number),
     [rounds]
   )
-  // Per-round columns stop fitting a phone beyond four rounds; the
-  // accordion still shows every round as a tile.
-  const showRoundColumns = sortedRounds.length > 0 && sortedRounds.length <= 4
-
   const playerById = useMemo(() => new Map(players.map(p => [p.id, p])), [players])
 
   // ── Merge committed + in-progress scores ────────────────────
@@ -674,6 +766,7 @@ export default function TripLeaderboardClient({
     [liveScores, activeRoundIds]
   )
   const inPlay = openRoundIds.size > 0
+  const livePlayers = useMemo(() => new Set(livePlayerIds), [livePlayerIds])
 
   const hcpFor = useMemo(() => {
     const m = new Map<string, number>()
@@ -696,8 +789,10 @@ export default function TripLeaderboardClient({
     resolved,
     hcpFor,
     liveRoundIds,
+    livePlayerIds: livePlayers,
     legacyTeamScoring,
-  }), [players, teams, memberships, holes, sortedRounds, resolved, hcpFor, liveRoundIds, legacyTeamScoring])
+  }), [players, teams, memberships, holes, sortedRounds, resolved, hcpFor,
+       liveRoundIds, livePlayers, legacyTeamScoring])
 
   const rowsByBoard = useMemo(
     () => new Map(tabs.map(b => [b.id, buildRows(b, rowContext)])),
@@ -808,7 +903,11 @@ export default function TripLeaderboardClient({
             </span>
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+            {/* Ink, not emerald. Both swatches were emerald after the gold
+                was swept out, so the legend drew two identical dots and
+                claimed they told two states apart. A finished round is the
+                plain ink the column actually prints it in. */}
+            <span className="w-1.5 h-1.5 rounded-full bg-ink/80" aria-hidden="true" />
             <span className="text-ink/65 text-[12px] tracking-wider uppercase">
               Card in — {activeBoard.scoring === 'strokes' ? 'nett total' : 'total'}
             </span>
@@ -823,15 +922,14 @@ export default function TripLeaderboardClient({
             key={activeBoard.id}
             rows={currentRows}
             rounds={sortedRounds}
-            showRoundColumns={showRoundColumns}
             playerById={playerById}
             onOpenCard={(row, round) => setCard({ row, round })}
           />
         )}
 
-      {!showRoundColumns && sortedRounds.length > 4 && (
-        <p className="text-ink/50 text-[13px] mt-3 text-center">
-          Tap a row to see every round.
+      {sortedRounds.length > INLINE_ROUNDS && currentRows.length > 0 && (
+        <p className="text-ink/65 text-[13px] mt-3 text-center">
+          Swipe the rounds sideways, or tap a row to see them all.
         </p>
       )}
 

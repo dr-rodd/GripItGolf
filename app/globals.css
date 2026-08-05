@@ -147,6 +147,20 @@ body {
   }
 }
 
+/* ── A strip that scrolls sideways without saying so ───────────
+   The leaderboard's round columns scroll horizontally once a trip runs
+   more rounds than fit. Every row scrolls as one, so a scrollbar under
+   each of them would be a stack of identical bars saying the same thing;
+   the one under the column headings is the only one worth showing, and
+   it is the fixed columns either side that tell you there is more. */
+.scroll-strip {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll-strip::-webkit-scrollbar {
+  display: none;
+}
+
 /* ── Forms ─────────────────────────────────────────────────────
    iOS zooms the page when a focused input's text is under 16px, which
    on a scoring screen is genuinely disruptive. Never shrink these. */
