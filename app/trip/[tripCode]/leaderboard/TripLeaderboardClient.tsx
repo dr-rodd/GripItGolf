@@ -208,6 +208,43 @@ export function ScorecardSheet({
     return <ScoreShape gross={gross} par={par} size={scrolls ? 'md' : 'lg'} />
   }
 
+  /**
+   * What this player's own score was worth, set small and raised beside it.
+   *
+   * A team card shows a column of gross scores per player and one points
+   * figure for the team, which says what the hole was worth but not who made
+   * it worth that. On a better ball especially, the whole question a team card
+   * is read to answer is which of them carried the hole — and the card had no
+   * answer on it.
+   *
+   * Only on a team card. With one player the points column beside it is
+   * already their points, and printing the same number twice on one row says
+   * nothing the second time.
+   *
+   * A nought is shown rather than hidden: a hole played for nothing is a fact
+   * about who contributed, and the most useful one on the row.
+   *
+   * 12px is the floor the app sets for anything hand-sized, and this sits on
+   * it rather than under it. A figure small enough to be unreadable on a tee
+   * box in daylight is not a smaller version of this feature, it is the
+   * absence of it — the weight and the opacity are what make it secondary.
+   */
+  const contributed = players.length > 1
+  const points = (pts: number | null | undefined) => {
+    if (!contributed || pts == null) return null
+    return (
+      <span
+        className={`text-[12px] leading-none mt-0.5 tabular-nums ${
+          pts > 0 ? 'text-ink/80 font-semibold' : 'text-ink/50'
+        }`}
+        style={SC_SF}
+        title={`${pts} ${pts === 1 ? 'point' : 'points'}`}
+      >
+        {pts}
+      </span>
+    )
+  }
+
   const nine = (from: number, to: number) => courseHoles.filter(h => h.hole_number >= from && h.hole_number <= to)
   const sumPar = (hs: Hole[], gender: string) => hs.reduce((s, h) => s + effectivePar(h, gender), 0)
   const sumPts = (hs: Hole[], playerId: string) =>
@@ -225,17 +262,36 @@ export function ScorecardSheet({
   const PAR_W  = 'w-9 flex-shrink-0'
   const PTS_W  = 'w-12 flex-shrink-0 text-right'
   const CELL   = `${scrolls ? 'w-11' : 'flex-1'} flex-shrink-0 flex items-center justify-center`
+  /**
+   * The same cell, top-aligned, for a score with its points raised beside it.
+   *
+   * A separate constant rather than `${CELL} items-start`: both are
+   * `align-items` utilities, and which one wins is decided by their order in
+   * the generated stylesheet rather than by their order in the class
+   * attribute. That is a coin toss, and it would land differently between a
+   * dev build and a production one.
+   *
+   * With nothing beside the score the two are identical anyway — one child
+   * centres and top-aligns the same — so this is safe on every cell.
+   */
+  const CELL_TOP = `${scrolls ? 'w-11' : 'flex-1'} flex-shrink-0 flex items-start justify-center gap-px`
 
   const summary = (label: string, hs: Hole[], total = false) => (
     <Row className={`py-2 ${total ? SC_BAND_TOTAL : SC_BAND} ${total ? '' : SC_RULE}`}>
       <span className={`${HOLE_W} text-[13px] font-bold tracking-widest uppercase text-ink/80`} style={SC_SF}>{label}</span>
       <span className={`${PAR_W} text-[15px] font-bold text-ink`} style={SC_SF}>{sumPar(hs, gender)}</span>
       <Strip scrolls={scrolls} register={register} onScroll={onScroll}>
-        {players.map(p => (
-          <span key={p.id} className={`${CELL} text-[15px] font-bold text-ink`} style={SC_SF}>
-            {sumGross(hs, p.id) > 0 ? sumGross(hs, p.id) : '—'}
-          </span>
-        ))}
+        {players.map(p => {
+          const gross = sumGross(hs, p.id)
+          return (
+            <span key={p.id} className={CELL_TOP}>
+              <span className="text-[15px] font-bold text-ink" style={SC_SF}>
+                {gross > 0 ? gross : '—'}
+              </span>
+              {gross > 0 && points(sumPts(hs, p.id))}
+            </span>
+          )
+        })}
       </Strip>
       <span className={`${PTS_W} font-bold text-ink ${total ? 'text-xl' : 'text-base'}`} style={SC_SF}>
         {players.reduce((s, p) => s + sumPts(hs, p.id), 0)}
@@ -356,12 +412,13 @@ export function ScorecardSheet({
                       {players.map(p => {
                         const sc = scoreFor(p.id, hole.hole_number)
                         return (
-                          <span key={p.id} className={CELL}>
+                          <span key={p.id} className={CELL_TOP}>
                             {scoreSymbol(
                               sc ? sc.gross : null,
                               effectivePar(hole, p.gender),
                               sc?.noReturn ?? false
                             )}
+                            {sc && points(sc.points)}
                           </span>
                         )
                       })}

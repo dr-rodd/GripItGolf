@@ -265,7 +265,7 @@ section('A team card keeps the holes in view however big the team')
   }))
   const round = { id: 'r1', round_number: 1, courses: { id: 'c1', name: 'Carne' } }
 
-  const card = (n: number, opts: { pointsForFirstHole?: number } = {}) => {
+  const card = (n: number, opts: { pointsForFirstHole?: number; heroPoints?: number } = {}) => {
     const players = Array.from({ length: n }, (_, i) => ({
       id: `p${i + 1}`, name: `Player${i + 1} Surname`, handicap: 10 + i, gender: 'M',
     }))
@@ -273,7 +273,11 @@ section('A team card keeps the holes in view however big the team')
       holes.slice(0, 9).map(h => ({
         playerId: p.id, roundId: 'r1', holeId: h.id, holeNumber: h.hole_number,
         gross: 5,
-        points: h.hole_number === 1 ? (opts.pointsForFirstHole ?? 2) : 2,
+        // One player is given a different figure so the per-player points can
+        // be told apart from the team's total on the row.
+        points: p.id === 'p1' && opts.heroPoints != null
+          ? opts.heroPoints
+          : h.hole_number === 1 ? (opts.pointsForFirstHole ?? 2) : 2,
         noReturn: false, live: false,
       })))
     return renderToStaticMarkup(
@@ -287,6 +291,37 @@ section('A team card keeps the holes in view however big the team')
         onClose: () => {},
       } as never)
     )
+  }
+
+  // ── Who contributed ──
+  //
+  // A team card shows a column of gross scores and one points figure for the
+  // team, which says what the hole was worth but not who made it worth that.
+  // On a better ball that is the whole question the card is opened to answer.
+  {
+    // p1 scores 4 a hole, everyone else 2. Nine holes each.
+    const team = card(3, { heroPoints: 4 })
+    ok(team.includes('title="4 points"'),
+      'each player\'s own points are on the row beside their score')
+    ok(team.includes('title="2 points"'), 'including the ones who did not carry it')
+    ok(team.includes('title="36 points"'),
+      'and the nine adds up per player as well as for the team — 9 × 4')
+    ok(team.includes('title="18 points"'), 'against 9 × 2 for the others')
+
+    // Raised and small, so the gross is still what the eye lands on.
+    ok(/text-\[12px\][^"]*tabular-nums/.test(team),
+      'set small, but on the 12px floor rather than under it — this is read outdoors')
+    ok(team.includes('items-start'), 'and raised beside the score rather than under it')
+
+    // A nought is worth showing: a hole played for nothing is a fact about who
+    // contributed, and the most useful one on the row.
+    const blown = card(3, { heroPoints: 0 })
+    ok(blown.includes('title="0 points"'), 'a hole played for nothing shows its nought')
+
+    // One player has a points column of their own directly beside the score,
+    // so the same number twice on one row would say nothing the second time.
+    const solo = card(1)
+    ok(!solo.includes('points"'), 'a single-player card does not repeat itself')
   }
 
   // Three fit; more than that and the columns have to start scrolling or the
