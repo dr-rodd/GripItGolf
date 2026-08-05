@@ -650,7 +650,9 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 
 Order above follows `npm test`'s own chain in `package.json`, which is worth keeping in step: it is the fastest way to tell whether a new suite was wired in or just left as a standalone script.
 
-**Mutation testing is the standard, not an extra.** Break the code deliberately, confirm a test fails, restore. It has repeatedly found suites that passed while testing nothing — most recently a pair-size assertion written against the constant it was meant to pin, so changing `PAIR_SIZE` to 3 left every check green.
+**Mutation testing is the standard for logic, not for everything.** Break the code deliberately, confirm a test fails, restore. It has repeatedly found suites that passed while testing nothing — most recently a pair-size assertion written against the constant it was meant to pin, so changing `PAIR_SIZE` to 3 left every check green.
+
+Worth it for scoring, money, state and anything that decides what a number says. **Not worth it for a small change** — a colour, a label, a spacing tweak, a class swap. Run `npm test`, and move on.
 
 ## Data insertion order
 
@@ -674,6 +676,20 @@ Abandoned scorecard cleanup: Vercel cron route. Requires `CRON_SECRET`. Implemen
 - Vercel auto-deploys from master via GitHub integration — no manual deploy steps needed
 - Never expose service role key client-side
 - All queries must filter by `trip_id`
+
+### How much checking a change is worth
+
+`npm test`, a typecheck and a build are the floor — always, whatever the change. Above that, scale the effort to the risk:
+
+| Change | What it gets |
+|---|---|
+| A colour, a label, spacing, a class swap | The floor. Ship it |
+| A new component or a restyle | The floor. Render it only if the layout is genuinely new |
+| Scoring, handicaps, money, state, a schema | Everything: a test that pins it, mutation-tested, and rendered or exercised if it has a surface |
+
+**Rendering in a browser is for layouts that can fail silently** — a scroll container, a sticky offset, a fixed column, something that has to fit a phone. Not for a tint or a border. **Mutation testing is for logic that decides a number**, not for a class name.
+
+Bias to shipping on small things. A screenshot of a border costs more than it finds.
 
 ## Terminal use — last resort only
 
