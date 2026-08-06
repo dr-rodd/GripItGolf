@@ -20,12 +20,23 @@ function getTimeLeft(target: Date): TimeLeft | null {
   }
 }
 
+/**
+ * The countdown to the first tee, and whatever sits under it.
+ *
+ * It reads directly under the trip's name, which is where somebody looking
+ * at a trip that has not started yet is looking. `children` is optional
+ * because of that move: the block used to wrap the three buttons, and now
+ * they stand on their own further down the page.
+ *
+ * The collapse when it reaches zero is unchanged — a grid row from 1fr to
+ * 0fr, so whatever is beneath rises into the space rather than jumping.
+ */
 export default function TripCountdown({
   target,
   children,
 }: {
   target: string | null  // ISO date string (YYYY-MM-DD or full ISO); null = skip countdown
-  children: React.ReactNode
+  children?: React.ReactNode
 }) {
   const [mounted, setMounted]     = useState(false)
   const [timeLeft, setTimeLeft]   = useState<TimeLeft | null>(null)

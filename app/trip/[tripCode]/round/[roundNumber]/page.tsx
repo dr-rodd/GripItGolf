@@ -134,7 +134,17 @@ export default async function RoundSummaryPage({
     <main className="min-h-dvh bg-cream has-tabbar page-enter">
       <TripHeader backTo={`/trip/${tripCode}`} />
 
-      <div className="max-w-lg mx-auto px-4 py-6 flex flex-col gap-8">
+      {/* The way back, top left, where a phone puts one.
+          This page is opened from the itinerary to read one thing — a tee
+          time, the card, who won — and then left again. The mark in the
+          header goes to the hub and the tab bar is always there, but neither
+          reads as "back", and a page reached by tapping a round should be
+          leavable without hunting for how. */}
+      <div className="max-w-lg mx-auto px-4 pt-4">
+        <BackButton href={`/trip/${tripCode}`} label="Trip" />
+      </div>
+
+      <div className="max-w-lg mx-auto px-4 pt-4 pb-6 flex flex-col gap-8">
 
         {problems.length > 0 && (
           <p className="text-rust-deep text-sm leading-snug text-center">
@@ -268,10 +278,6 @@ export default async function RoundSummaryPage({
           <IconClipboardList size={16} />
           Live Scoring
         </Link>
-
-        <div className="flex justify-center">
-          <BackButton href={`/trip/${tripCode}`} label="Trip" />
-        </div>
       </div>
 
       <SupportLink className="px-6 pb-8" />

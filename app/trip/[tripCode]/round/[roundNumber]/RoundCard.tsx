@@ -22,6 +22,11 @@ const TOTAL_COL = '2.75rem'
  *
  * No yardage row. Those columns exist in the schema and have never held a
  * value, and an empty column is worse than no column.
+ *
+ * No total par either. Each nine already ends with its own, and a third
+ * figure that is only those two added together is a number the card makes
+ * the reader check rather than one it tells them. Which card is being shown
+ * is not redundant, so that line stays — without a par beside it.
  */
 export default function RoundCard({ card }: { card: CourseCard }) {
   return (
@@ -29,12 +34,11 @@ export default function RoundCard({ card }: { card: CourseCard }) {
       <Nine label="Out" nine={card.front} />
       <Nine label="In" nine={card.back} />
 
-      <div className="flex items-baseline justify-between border-t border-bark/12 pt-3">
-        <span className="t-cap uppercase tracking-[0.18em] text-ink/65">
-          Par{card.ladies ? ' · ladies card' : ''}
-        </span>
-        <span className="t-card text-ink tabular-nums">{card.par}</span>
-      </div>
+      {card.ladies && (
+        <p className="t-cap uppercase tracking-[0.18em] text-ink/50 text-center">
+          Ladies card
+        </p>
+      )}
     </div>
   )
 }

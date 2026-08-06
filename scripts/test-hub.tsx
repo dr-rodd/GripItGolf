@@ -670,6 +670,16 @@ section('The card is one set of numbers, never two')
   ok(!/yardage/i.test(cardFile), 'and no yardage row anywhere')
   const summary = code('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
   ok(!/yardage/i.test(summary), '  …on the page either')
+
+  // Nor a total par. Each nine prints its own at the end of its row, and a
+  // third figure that is only those two added together makes the reader
+  // check the card rather than read it.
+  ok(!/card\.par/.test(cardFile), 'the card prints no total par')
+  ok(/nine\.par/.test(cardFile), '  …though each nine still ends with its own')
+
+  // Which card is being shown is not redundant, so that line stays — as
+  // words, with no number beside it.
+  ok(/card\.ladies/.test(cardFile), 'a ladies card still says that it is one')
 }
 
 section('The round summary reuses, and invents nothing')
@@ -694,6 +704,14 @@ section('The round summary reuses, and invents nothing')
 
   // The scoring shortcut goes to the renamed route.
   ok(page.includes('/scoring/${round.round_number}'), 'the shortcut routes into live scoring')
+
+  // The way back is at the top left, where a phone puts one. This page is
+  // opened from the itinerary to read one thing and then left again, and the
+  // mark in the header does not read as "back" to anybody.
+  const back = page.indexOf('<BackButton')
+  const body = page.indexOf('The course, the day')
+  ok(back > 0 && back < body, 'the back button is above the page, not under it')
+  eq((page.match(/<BackButton/g) ?? []).length, 1, 'and there is only the one')
 
   // No glow, anywhere.
   ok(!/shadow-\[0_0_/.test(page), 'the page adds no glow')
@@ -748,6 +766,44 @@ section('The hub is the sections it should be, and nothing else')
 
   // A failed query is said out loud rather than rendering as an absence.
   ok(hubCode.includes('standingError'), 'a standing that could not be worked out says so')
+}
+
+section('The countdown is the first thing under the trip name')
+{
+  const hub = read('app/trip/[tripCode]/page.tsx')
+
+  // It used to sit below the status block, wrapped around the three buttons,
+  // which put the headline act of a trip that has not started yet a long way
+  // down the page. Order in the source is order on the screen here — this is
+  // a server component rendering straight down.
+  const countdown = hub.indexOf('<TripCountdown')
+  const status    = hub.indexOf('<StatusBlock')
+  const nav       = hub.indexOf('The three ways in')
+  ok(countdown > 0 && status > 0 && nav > 0, 'all three blocks are on the page')
+  ok(countdown < status, 'the countdown comes before the status block')
+  ok(status < nav, '  …and the buttons come after both')
+
+  // It no longer wraps anything, so it must not be given children again
+  // without somebody deciding where those children should now sit.
+  ok(!/<TripCountdown[^/>]*>[\s\S]*?<\/TripCountdown>/.test(hub),
+    'and it stands on its own rather than wrapping the buttons')
+}
+
+section('There is one door to the settings, not two')
+{
+  const hub = code('app/trip/[tripCode]/page.tsx')
+  const tabs = code('app/components/TabBar.tsx')
+
+  // The tab bar carries Settings on every screen in the trip. A gear in the
+  // corner of one of them is a second door to the same room.
+  ok(tabs.includes('/setup'), 'the tab bar goes to the trip settings')
+  ok(!hub.includes('IconSettings'), 'and the hub draws no gear of its own')
+  ok(!/href=\{`\/trip\/\$\{tripCode\}\/setup`\}/.test(hub),
+    '  …nor any other link into the settings')
+
+  // The passcode padlock rode that gear. Nothing on the hub reads the hash
+  // any more, so nothing on the hub should still be asking about it.
+  ok(!hub.includes('isLocked'), 'and the padlock went with it')
 }
 
 section('One section is open at a time')

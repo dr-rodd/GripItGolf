@@ -6,14 +6,12 @@ import { parseLeaderboards } from '@/lib/leaderboards'
 import { parseTeamScoring } from '@/lib/teamScoring'
 import { MAIN_SET, setOf, teamFor } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
-import { isLocked } from '@/lib/passcode'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { isConfirmed, confirmedCount as countConfirmed } from '@/lib/roster'
 import { ROUND_TILE } from '@/lib/roundState'
 import { fetchPlacing } from '@/lib/hubStanding'
 import { describePlacing } from '@/lib/standing'
 import { nextMatch, describeNextMatch, type DrawMatch } from '@/lib/nextMatch'
-import { IconSettings } from '@/app/components/icons'
 import { SectionStack } from '@/app/components/Section'
 import TripCountdown from './TripCountdown'
 import StatusBlock from './StatusBlock'
@@ -42,17 +40,6 @@ function formatDay(d: string | null | undefined) {
 function formatDate(d: string | null) {
   if (!d) return null
   return new Date(d).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-/** Marks a trip whose settings need a passcode. */
-function LockIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2.5" className="flex-shrink-0 opacity-70" aria-label="Passcode required">
-      <rect x="3" y="11" width="18" height="11" rx="2" />
-      <path d="M7 11V7a5 5 0 0110 0v4" />
-    </svg>
-  )
 }
 
 export default async function TripPage({ params }: { params: Promise<{ tripCode: string }> }) {
@@ -171,7 +158,6 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   const pendingCount   = players.length - confirmedCount
 
   const everyoneIn = players.length > 0 && pendingCount === 0
-  const settingsLocked = isLocked(trip.settings_passcode_hash)
 
   // What the trip plays for, read off its boards. `primary` is the first one
   // — the board the trip is about, and the one the standing line quotes.
@@ -324,25 +310,11 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
           not to this page — this IS the trip hub. */}
       <TripHeader backTo="/" />
 
-      {/* Settings, where the settings screen itself keeps its gear: top
-          right, under the header. The padlock rides the corner of it when
-          the trip's settings are passcoded. */}
-      <div className="max-w-lg mx-auto px-4 pt-4 flex justify-end">
-        <Link
-          href={`/trip/${tripCode}/setup`}
-          aria-label={settingsLocked ? 'Trip settings — passcode required' : 'Trip settings'}
-          className="relative w-11 h-11 rounded-xl border border-bark/12 bg-surface text-ink/65 hover:text-ink hover:border-bark/25 flex items-center justify-center transition-colors duration-150"
-        >
-          <IconSettings size={18} />
-          {settingsLocked && (
-            <span className="absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full bg-surface border border-bark/12 flex items-center justify-center">
-              <LockIcon />
-            </span>
-          )}
-        </Link>
-      </div>
+      {/* No gear here. The tab bar already carries Settings, on every screen
+          in the trip, and a second door to the same room in the corner of one
+          of them is a control to explain rather than one to use. */}
 
-      <div className="max-w-lg mx-auto px-4 pb-10">
+      <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
 
         {/* ── Trip name, dates, and what it is played for ── */}
         <div className="flex flex-col items-center text-center pt-2 pb-7">
@@ -356,6 +328,13 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
             <p className="t-cap uppercase tracking-[0.18em] text-ink/50 mt-1.5">{formatLine}</p>
           )}
         </div>
+
+        {/* ── How long until the first tee ──
+            Directly under the name, because on a trip that has not started
+            it is the thing being looked for. It used to sit below the status
+            block wrapped around the three buttons, which put the trip's own
+            headline act three screens' worth of reading down. */}
+        <TripCountdown target={trip.start_date ?? null} />
 
         {/* ── Who this device is, and what happens next ── */}
         <StatusBlock
@@ -378,40 +357,38 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
         {/* ── The three ways in ── */}
         <div className="mt-7 mb-8">
-          <TripCountdown target={trip.start_date ?? null}>
-            <nav className="flex flex-col gap-3 w-full max-w-xs mx-auto">
-              {rounds.length > 0 ? (
-                <Link
-                  href={`/trip/${tripCode}/scoring`}
-                  className="w-full py-[18px] border-2 border-bark/25 text-ink/80 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-bark/25 hover:text-ink/80 transition-colors"
-                >
-                  Live Scoring
-                </Link>
-              ) : (
-                lockedButton('Live Scoring')
-              )}
-
+          <nav className="flex flex-col gap-3 w-full max-w-xs mx-auto">
+            {rounds.length > 0 ? (
               <Link
-                href={`/trip/${tripCode}/leaderboard`}
+                href={`/trip/${tripCode}/scoring`}
                 className="w-full py-[18px] border-2 border-bark/25 text-ink/80 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-bark/25 hover:text-ink/80 transition-colors"
               >
-                Leaderboard
+                Live Scoring
               </Link>
+            ) : (
+              lockedButton('Live Scoring')
+            )}
 
-              {/* Emerald while somebody is still expected; once the whole
-                  field is in there is nothing left to prompt. */}
-              <Link
-                href={`/trip/${tripCode}/players`}
-                className={`w-full py-[18px] border-2 rounded-xl text-sm tracking-[0.25em] uppercase text-center transition-colors ${
-                  everyoneIn
-                    ? 'border-bark/12 text-ink/65 hover:border-bark/25 hover:text-ink/80'
-                    : 'border-accent text-accent hover:bg-accent/10'
-                }`}
-              >
-                Players
-              </Link>
-            </nav>
-          </TripCountdown>
+            <Link
+              href={`/trip/${tripCode}/leaderboard`}
+              className="w-full py-[18px] border-2 border-bark/25 text-ink/80 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-bark/25 hover:text-ink/80 transition-colors"
+            >
+              Leaderboard
+            </Link>
+
+            {/* Emerald while somebody is still expected; once the whole
+                field is in there is nothing left to prompt. */}
+            <Link
+              href={`/trip/${tripCode}/players`}
+              className={`w-full py-[18px] border-2 rounded-xl text-sm tracking-[0.25em] uppercase text-center transition-colors ${
+                everyoneIn
+                  ? 'border-bark/12 text-ink/65 hover:border-bark/25 hover:text-ink/80'
+                  : 'border-accent text-accent hover:bg-accent/10'
+              }`}
+            >
+              Players
+            </Link>
+          </nav>
         </div>
 
         {/* ── The rest, one heading at a time ── */}
