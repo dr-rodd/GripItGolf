@@ -41,6 +41,12 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         .from('players')
         .select('id, name, handicap, gender, team_id, is_lead')
         .eq('trip_id', trip.id)
+        // A composite is a synthetic scorecard, not a person. The join screen
+        // has always excluded them; this page did not, so the no-two-same-
+        // names check here was comparing against machine-generated names the
+        // other check never saw — and against names the database constraint
+        // deliberately does not cover either. All three agree now.
+        .eq('is_composite', false)
         .order('created_at'),
       supabase
         .from('rounds')

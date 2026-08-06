@@ -26,7 +26,7 @@ import {
 import { setTeam } from '@/lib/teamMembers'
 import { why } from '@/lib/writeFailure'
 import { HANDICAP_INPUT, parseHandicap, formatHandicap } from '@/lib/handicap'
-import { duplicateName, duplicateNameError } from '@/lib/roster'
+import { duplicateName, duplicateNameError, isDuplicateNameError } from '@/lib/roster'
 import { syncRoundHandicaps } from '@/lib/roundHandicaps'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -293,7 +293,11 @@ export default function TripSetupClient({
       .select('id, name, handicap, gender, team_id, is_lead')
       .single()
     if (err || !data) {
-      flashError('Could not add player')
+      // The check above ran before this insert; another phone could have
+      // taken the name in between. Same sentence, from the other side.
+      flashError(isDuplicateNameError(err)
+        ? duplicateNameError(trimmed)
+        : 'Could not add player')
       setBusy(false)
       return
     }
@@ -325,7 +329,9 @@ export default function TripSetupClient({
     const { error: err } = await supabase.from('players').update(patch).eq('id', id)
     if (err) {
       setPlayers(prev)
-      flashError('Could not save player')
+      flashError(isDuplicateNameError(err) && patch.name != null
+        ? duplicateNameError(patch.name)
+        : 'Could not save player')
       return
     }
     // Keep the handicap snapshot used for scoring in step with edits. The

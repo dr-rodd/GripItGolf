@@ -15,6 +15,7 @@ import fs from 'fs'
 import {
   isConfirmed, confirmedCount, sortForClaiming,
   nameKey, sameName, duplicateName, firstDuplicateIndex, duplicateNameError,
+  isDuplicateNameError,
 } from '../lib/roster'
 import { playerFromRoster } from '../lib/currentPlayer'
 import { handicapRows } from '../lib/roundHandicaps'
@@ -138,6 +139,71 @@ section('Every name path checks it')
   const setup = read('app/trip/[tripCode]/setup/TripSetupClient.tsx')
   eq((setup.match(/duplicateName\(/g) ?? []).length, 3,
     'settings checks on add, on rename, and once more as a backstop')
+}
+
+section('The database refuses the one duplicate the browser cannot see')
+{
+  // Two people typing the same name into two phones both pass a check that
+  // ran before either insert. Only the database sees the second one coming.
+  const migration = read('supabase/migrations/20260101000025_unique_player_names.sql')
+
+  ok(/CREATE UNIQUE INDEX/i.test(migration), 'there is a unique index')
+  ok(/lower\(btrim\(name\)\)/i.test(migration),
+    'over the name trimmed and case-folded — the rule as lib/roster.ts states it')
+  ok(/trip_id/.test(migration), 'scoped to the trip, so two trips may each have a John Smith')
+  ok(/WHERE\s+is_composite\s*=\s*false/i.test(migration),
+    'and partial: a composite is a synthetic scorecard, not a person')
+  ok(/IF NOT EXISTS/i.test(migration), 'and re-runnable')
+
+  // 23505 is unique_violation. Narrow on purpose: telling somebody whose
+  // wifi died that their name is taken would be worse than saying nothing.
+  ok(isDuplicateNameError({ code: '23505' }), 'a unique violation is recognised')
+  ok(!isDuplicateNameError({ code: '23503' }), 'a foreign key violation is not')
+  ok(!isDuplicateNameError({ code: '42703' }), 'nor a missing column')
+  ok(!isDuplicateNameError({ message: 'duplicate key value' }),
+    'and not a message that merely sounds like one')
+  ok(!isDuplicateNameError(null), 'nothing at all is not a duplicate')
+  ok(!isDuplicateNameError(undefined), 'and neither is nothing missing')
+}
+
+section('Every write that can hit it says the same thing')
+{
+  // Three writes can trip the constraint: adding yourself, adding somebody
+  // in settings, and renaming. Each surfaces it through the channel it
+  // already had — a persistent inline error on the join screen, a flash in
+  // settings — and each says exactly what the pre-check says.
+  for (const f of [
+    'app/trip/[tripCode]/players/PlayersClient.tsx',
+    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
+  ]) {
+    const src = code(f)
+    ok(src.includes('isDuplicateNameError'), `${f.split('/').pop()} recognises the refusal`)
+    ok(!/23505/.test(src), '  …by name rather than by pasting the code in')
+  }
+
+  const client = code('app/trip/[tripCode]/players/PlayersClient.tsx')
+  ok(/isDuplicateNameError\(err\)[\s\S]{0,120}duplicateNameError\(name\)/.test(client),
+    'the join screen answers with the same sentence as its own pre-check')
+
+  const setup = code('app/trip/[tripCode]/setup/TripSetupClient.tsx')
+  eq((setup.match(/isDuplicateNameError\(/g) ?? []).length, 2,
+    'settings catches it on both the insert and the rename')
+  ok(/flashError\(isDuplicateNameError/.test(setup),
+    '  …through flashError, the channel that screen already uses')
+}
+
+section('All three checks cover the same people')
+{
+  // The join screen always excluded composites; settings did not, so its
+  // no-two-same-names check compared against machine-generated names the
+  // other check never saw and the constraint deliberately does not cover.
+  const setupPage = code('app/trip/[tripCode]/setup/page.tsx')
+  ok(setupPage.includes("eq('is_composite', false)"),
+    'settings loads the roster without composites')
+  const joinPage = code('app/trip/[tripCode]/players/page.tsx')
+  ok(joinPage.includes("eq('is_composite', false)"), 'as the join screen always did')
+  const migration = read('supabase/migrations/20260101000025_unique_player_names.sql')
+  ok(/is_composite\s*=\s*false/.test(migration), 'and as the constraint does')
 }
 
 // ─── Recognition ───────────────────────────────────────────

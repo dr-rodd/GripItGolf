@@ -7,7 +7,9 @@ import { rememberPlayer } from '@/lib/playerCookie'
 import { HANDICAP_INPUT, parseHandicap, formatHandicap } from '@/lib/handicap'
 import { syncRoundHandicaps } from '@/lib/roundHandicaps'
 import { ROUND_TILE } from '@/lib/roundState'
-import { isConfirmed, duplicateName, duplicateNameError } from '@/lib/roster'
+import {
+  isConfirmed, duplicateName, duplicateNameError, isDuplicateNameError,
+} from '@/lib/roster'
 
 type Player = {
   id: string
@@ -143,7 +145,12 @@ export default function PlayersClient({
       .select('id')
       .single()
     if (err || !data) {
-      setError('Could not add player — try again')
+      // The check above ran before this insert. Somebody else on another
+      // phone could have taken the name in between, and only the database
+      // sees that — so the same sentence, from the other side.
+      setError(isDuplicateNameError(err)
+        ? `${duplicateNameError(name)} If that is you, tap your name above.`
+        : 'Could not add player — try again')
       setAdding(false)
       return
     }

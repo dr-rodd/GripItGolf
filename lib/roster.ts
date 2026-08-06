@@ -114,3 +114,26 @@ export function firstDuplicateIndex(names: string[]): number {
 export function duplicateNameError(name: string): string {
   return `${name.trim()} is already on this trip. Use a different name.`
 }
+
+/**
+ * Whether a write failed because the database refused a duplicate name.
+ *
+ * `duplicateName` above runs before the write and catches all but one case:
+ * two people typing the same name into two phones between one check and the
+ * other's insert. Nothing in the browser can see that coming, so
+ * `uq_players_trip_name` (migration 025) refuses the second one and this
+ * recognises the refusal.
+ *
+ * **23505 is `unique_violation`, and on `players` it can only be this.** That
+ * table carries exactly two unique things: its primary key, defaulted from
+ * `gen_random_uuid()`, and the name index. A colliding UUID is not a case
+ * worth writing code for.
+ *
+ * Deliberately narrow. Every other failure — a missing column, a dropped
+ * connection, a permission — falls straight through to whatever the caller
+ * says about writes that did not work, because "that name is taken" is a
+ * terrible thing to tell somebody whose wifi died.
+ */
+export function isDuplicateNameError(err: unknown): boolean {
+  return !!err && typeof err === 'object' && (err as { code?: string }).code === '23505'
+}
