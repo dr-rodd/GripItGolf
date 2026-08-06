@@ -161,6 +161,15 @@ section('Linking a device changes nothing about who is confirmed')
   ok(link.includes('rememberPlayer') || link.includes('linkDevice'), 'it remembers them on this device')
   ok(!link.includes('supabase'), '  …and touches the database not at all')
 
+  // And it happens on the tap. There is nothing in between: no dialog, no
+  // second button, no state holding a player waiting on a yes. A mis-tap is
+  // undone by "Not you?" on the screen it lands on.
+  const tap = client.slice(client.indexOf('function handleTap'), client.indexOf('async function handleAdd'))
+  ok(/isConfirmed\(player\)\)?\s*handleLink\(player\)/.test(tap),
+    'a confirmed name links straight away')
+  ok(!/useState[^\n]*linkTarget|linkTarget/.test(client), '  …with nothing held back for a confirmation step')
+  ok(!client.includes('role="dialog"'), '  …and no dialog in the way')
+
   // "Not you?" reassigns a handset. The player it forgets stays confirmed.
   const welcome = code('app/trip/[tripCode]/WelcomeBack.tsx')
   ok(welcome.includes('forgetPlayer'), 'Not you? forgets this device')

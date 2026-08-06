@@ -25,11 +25,12 @@ type Player = {
  * the state:
  *
  *   unconfirmed  claim the slot and link this device
- *   confirmed    link this device, after asking, and change nothing else
+ *   confirmed    link this device, and change nothing else
  *
- * The second is not an error and must not look like one. Somebody opening
- * the trip on a tablet after joining on their phone is doing the expected
- * thing; the confirmation step is there for the mis-tap, not for them.
+ * Neither asks anything first, and the second is not an error state. Somebody
+ * opening the trip on a tablet after joining on their phone is doing the
+ * expected thing, and a mis-tap onto the wrong name costs one tap of
+ * "Not you?" on the hub it lands on.
  *
  * The tile borders are the round tiles' borders, from `lib/roundState.ts` —
  * confirmed reads as finalised the way a played round does, unconfirmed as
@@ -53,8 +54,6 @@ export default function PlayersClient({
 }) {
   const router = useRouter()
   const [claimingId, setClaimingId] = useState<string | null>(null)
-  /** The already-confirmed player waiting on a yes. */
-  const [linkTarget, setLinkTarget] = useState<Player | null>(null)
   const [addName, setAddName] = useState('')
   const [addHandicap, setAddHandicap] = useState('')
   const [addGender, setAddGender] = useState<'M' | 'F'>('M')
@@ -89,14 +88,17 @@ export default function PlayersClient({
   }
 
   /**
-   * A name already confirmed: link this device to it.
+   * A name already confirmed: link this device to it, straight away.
    *
    * **No database write.** `claimed` is already true and stays true —
    * confirmation belongs to the player, not to the handset. A second device
    * is a second cookie and nothing more.
+   *
+   * Nothing is asked first. Somebody opening the trip on a tablet after
+   * joining on their phone is doing the expected thing, and a mis-tap costs
+   * one tap of "Not you?" on the screen it lands on.
    */
   function handleLink(player: Player) {
-    setLinkTarget(null)
     setClaimingId(player.id)
     linkDevice(player.id)
   }
@@ -104,7 +106,7 @@ export default function PlayersClient({
   function handleTap(player: Player) {
     if (busy) return
     setError('')
-    if (isConfirmed(player)) setLinkTarget(player)
+    if (isConfirmed(player)) handleLink(player)
     else handleClaim(player)
   }
 
@@ -259,49 +261,6 @@ export default function PlayersClient({
           </button>
         </form>
       </section>
-
-      {/* ── Is this your device? ──
-          Confirmed players stay tappable so a second handset can be linked,
-          which also means a mis-tap onto the wrong name is now possible. One
-          question, asked plainly, and nothing about it says "error". */}
-      {linkTarget && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center px-6"
-          onClick={() => setLinkTarget(null)}
-        >
-          <div className="absolute inset-0 bg-ink/40" />
-          <div
-            className="relative w-full max-w-xs bg-cream border border-bark/12 rounded-2xl p-5"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Confirm this device"
-            onClick={e => e.stopPropagation()}
-          >
-            <p className="t-card text-ink">
-              {linkTarget.name} is already confirmed.
-            </p>
-            <p className="text-ink/65 text-sm leading-snug mt-2">
-              Is this your device? You will be signed in as them on this phone.
-            </p>
-            <div className="flex flex-col gap-2.5 mt-5">
-              <button
-                type="button"
-                onClick={() => handleLink(linkTarget)}
-                className="w-full py-4 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors"
-              >
-                Yes, that&apos;s me
-              </button>
-              <button
-                type="button"
-                onClick={() => setLinkTarget(null)}
-                className="w-full py-3.5 border border-bark/12 text-ink/65 text-sm tracking-[0.15em] uppercase rounded-xl hover:border-bark/25 hover:text-ink/80 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   )
