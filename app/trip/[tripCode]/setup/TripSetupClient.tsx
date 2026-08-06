@@ -25,6 +25,7 @@ import {
 } from '@/lib/teamSets'
 import { setTeam } from '@/lib/teamMembers'
 import { why } from '@/lib/writeFailure'
+import { HANDICAP_INPUT, parseHandicap, formatHandicap } from '@/lib/handicap'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -266,8 +267,8 @@ export default function TripSetupClient({
 
   async function addPlayer() {
     const trimmed = newName.trim()
-    const hcp = parseFloat(newHandicap)
-    if (!trimmed || isNaN(hcp)) {
+    const hcp = parseHandicap(newHandicap)
+    if (!trimmed || hcp === null) {
       flashError('Enter a name and handicap first')
       return
     }
@@ -673,16 +674,13 @@ export default function TripSetupClient({
                   <div className="flex gap-2">
                     <div className="w-24 flex-shrink-0">
                       <input
-                        type="number"
-                        inputMode="decimal"
-                        defaultValue={player.handicap ?? ''}
+                        {...HANDICAP_INPUT}
+                        defaultValue={player.handicap == null ? '' : formatHandicap(player.handicap)}
                         onBlur={e => {
-                          const v = parseFloat(e.target.value)
-                          if (!isNaN(v) && v !== player.handicap) updatePlayer(player.id, { handicap: v })
+                          const v = parseHandicap(e.target.value)
+                          if (v !== null && v !== player.handicap) updatePlayer(player.id, { handicap: v })
                         }}
                         disabled={locked}
-                        min="0"
-                        max="54"
                         step="0.1"
                         placeholder="HCP"
                         className="w-full bg-surface border border-bark/12 rounded-lg px-3 py-2.5 text-ink text-sm focus:outline-none focus:border-accent/50 disabled:opacity-40"
@@ -762,14 +760,10 @@ export default function TripSetupClient({
                   />
                   <div className="flex gap-2">
                     <input
-                      type="number"
-                      inputMode="decimal"
+                      {...HANDICAP_INPUT}
                       value={newHandicap}
                       onChange={e => setNewHandicap(e.target.value)}
-                      placeholder="Handicap"
-                      min="0"
-                      max="54"
-                      step="0.1"
+                      placeholder="Handicap, or +1"
                       className={`${INPUT} flex-1`}
                     />
                     <div className="flex gap-1 flex-shrink-0">

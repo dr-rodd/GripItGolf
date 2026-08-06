@@ -69,6 +69,7 @@ Don't read these up front. Open the matching file when the task actually touches
 |---|---|
 | `lib/leaderboards.ts` | Current leaderboard model |
 | `lib/boardRows.ts` | Scores → leaderboard rows, per board |
+| `lib/handicap.ts` | Shots received on a hole, and how a handicap is written and read. **A plus handicap is negative** and gives shots back from SI 18 down |
 | `lib/courseHandicap.ts` | The WHS course handicap, the only copy. Unrounded is primary — an allowance comes off that, not off the whole number |
 | `lib/scorecardVoid.ts` | Voiding a card. **Erases its scores from `live_scores` and `scores`**, not just the locks. Every void route goes through it |
 | `lib/handicapAllowance.ts` | Playing off a percentage of the course handicap. **Never stored reduced** — applied when a board reads the cards |
@@ -86,6 +87,15 @@ shots_received = FLOOR(handicap / 18) + (1 if stroke_index <= handicap % 18 else
 net_score = gross_score - shots_received
 points = GREATEST(0, par + 2 - net_score)
 ```
+
+**A plus handicap is the mirror of that, and is stored as a negative number.** A player better than scratch GIVES shots back, from the easiest hole down — a +1 gives one back on SI 18 and is level par by birdieing it and paring the other seventeen. `shots_received` is negative for them:
+
+```
+given_back    = FLOOR(|handicap| / 18) + (1 if stroke_index >= 19 - |handicap| % 18 else 0)
+shots_received = -given_back
+```
+
+Never write either of these out again: `lib/handicap.ts` is the only copy, and `shots_received()` in migration 024 is the SQL twin the trigger calls. It was written out five times and every copy had the plus case wrong — `stroke_index <= -1` is false on all eighteen holes, so only `FLOOR(-1/18) = -1` survived and a +1 gave a shot back everywhere. `test:handicap` runs the two implementations against each other for every handicap on every stroke index.
 
 Calculated by the Postgres trigger `trg_scores_stableford` on every insert/update to `scores`. Full detail (WHS playing-handicap formula, player states, tee data): `docs/schema-and-scoring.md`.
 

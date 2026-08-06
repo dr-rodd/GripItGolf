@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase"
 import { mergeSaved, anyScored } from "@/lib/liveScores"
 import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
 import { exactCourseHandicap, courseHandicap, type TeeRating } from "@/lib/courseHandicap"
+import { shotsReceived, formatHandicap } from "@/lib/handicap"
 import { voidScorecard as voidScorecardData } from "@/lib/scorecardVoid"
 import { why } from "@/lib/writeFailure"
 import { CHROME } from "./scoringHeaderMetrics"
@@ -138,11 +139,8 @@ const TEE_ACTIVE: Record<string, string> = {
 
 // ─── Helpers ──────────────────────────────────────────────
 
-function shotsReceived(si: number, hcp: number) {
-  return Math.floor(hcp / 18) + (si <= hcp % 18 ? 1 : 0)
-}
 function calcStableford(gross: number, par: number, si: number, hcp: number) {
-  return Math.max(0, par + 2 - (gross - shotsReceived(si, hcp)))
+  return Math.max(0, par + 2 - (gross - shotsReceived(hcp, si)))
 }
 /**
  * The gross a no return is stored as: net double bogey off the FULL handicap.
@@ -158,7 +156,7 @@ function calcStableford(gross: number, par: number, si: number, hcp: number) {
  * same number of shots, so the hole still scores zero on every board.
  */
 function nrGross(par: number, si: number, hcp: number) {
-  return par + 2 + shotsReceived(si, hcp)
+  return par + 2 + shotsReceived(hcp, si)
 }
 function effectivePar(hole: Hole, gender: string) {
   return gender === "F" && hole.par_ladies ? hole.par_ladies : hole.par
@@ -1025,7 +1023,7 @@ export default function LiveScoringFlow({
                     )}
                     <span>{player.name}</span>
                   </div>
-                  <span className="text-sm opacity-50">HCP {player.handicap}</span>
+                  <span className="text-sm opacity-50">HCP {formatHandicap(player.handicap)}</span>
                 </button>
 
                 {/* Tee selector — only for selected players */}
@@ -1061,14 +1059,14 @@ export default function LiveScoringFlow({
                     {playingHcp !== null && exactHcp !== null && (
                       <p className="text-ink/65 text-sm flex flex-wrap items-baseline gap-x-3 gap-y-1">
                         <span>
-                          Playing HC: <span className="text-accent-deep font-semibold">{playingHcp}</span>
+                          Playing HC: <span className="text-accent-deep font-semibold">{formatHandicap(playingHcp)}</span>
                         </span>
                         {allowances
                           .filter(pct => pct !== FULL_ALLOWANCE)
                           .map(pct => (
                             <span key={pct} className="text-ink/50 tabular-nums">
                               {pct}%: <span className="text-ink/80 font-semibold">
-                                {allowedHandicap(exactHcp, pct)}
+                                {formatHandicap(allowedHandicap(exactHcp, pct))}
                               </span>
                             </span>
                           ))}
@@ -1271,7 +1269,7 @@ export default function LiveScoringFlow({
               <span className="flex-shrink-0 flex items-baseline gap-1.5">
                 <span className={SC_LABEL}>PH</span>
                 <span className="text-ink text-[15px] font-semibold tabular-nums" style={{ fontFamily: 'var(--font-serif)' }}>
-                  {playingHcp}
+                  {formatHandicap(playingHcp)}
                 </span>
                 {allowance !== FULL_ALLOWANCE && (
                   <span className={SC_LABEL}>{allowance}%</span>
@@ -1287,7 +1285,7 @@ export default function LiveScoringFlow({
               const hs = editDraft[idx] ?? { gross: null, isNR: false, stableford: null }
               const ePar = effectivePar(hole, player.gender)
               const eSI  = effectiveSI(hole, player.gender)
-              const netParGross = ePar + shotsReceived(eSI, playingHcp)
+              const netParGross = ePar + shotsReceived(playingHcp, eSI)
               const pts = hs.isNR ? 0 : hs.gross !== null
                 ? calcStableford(hs.gross, ePar, eSI, playingHcp)
                 : null
@@ -1420,7 +1418,7 @@ export default function LiveScoringFlow({
                       {player.name.split(" ")[0]}
                     </span>
                   </div>
-                  <span className={`text-sm ${isSel ? "text-accent-deep" : "text-ink/50"}`}>HC {displayHcp}</span>
+                  <span className={`text-sm ${isSel ? "text-accent-deep" : "text-ink/50"}`}>HC {formatHandicap(displayHcp)}</span>
                 </button>
               )
             })}
@@ -1525,7 +1523,7 @@ export default function LiveScoringFlow({
                   </span>
                   <span className="flex items-baseline gap-1.5">
                     <span className={SC_LABEL}>PH</span>
-                    <span className={`text-[15px] font-semibold ${dark}`} style={sf}>{playingHcp}</span>
+                    <span className={`text-[15px] font-semibold ${dark}`} style={sf}>{formatHandicap(playingHcp)}</span>
                     {/* Which allowance this figure is. The header's control
                         says the same thing, but a signed card is read on its
                         own and a bare "PH 15" off a handicap of 18 invites
@@ -1783,7 +1781,7 @@ function LivePlayerTile({
   onChange: (v: number | null) => void
   onToggleNR: () => void
 }) {
-  const netParGross = effectivePar + shotsReceived(effectiveSI, playingHcp)
+  const netParGross = effectivePar + shotsReceived(playingHcp, effectiveSI)
   const hasScore    = score !== null
 
   const pts = isNR ? 0 : hasScore ? calcStableford(score, effectivePar, effectiveSI, playingHcp) : null
@@ -1824,7 +1822,7 @@ function LivePlayerTile({
         )}
         <span className="text-ink/80 text-base font-semibold flex-1">{playerName}</span>
         <span className="text-accent-deep text-base font-bold">{runningTotal} pts</span>
-        <span className="text-ink/50 text-sm">HC {playingHcp}</span>
+        <span className="text-ink/50 text-sm">HC {formatHandicap(playingHcp)}</span>
       </div>
 
       {/* ══ MOBILE LAYOUT (hidden at sm+) ══ */}

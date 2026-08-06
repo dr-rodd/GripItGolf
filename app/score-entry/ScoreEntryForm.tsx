@@ -5,6 +5,7 @@ import Image from "next/image"
 import { supabase } from "@/lib/supabase"
 import BackButton from "@/app/components/BackButton"
 import { courseHandicap } from "@/lib/courseHandicap"
+import { shotsReceived, formatHandicap } from "@/lib/handicap"
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -46,16 +47,12 @@ type Phase = "selecting" | "entering" | "submitting" | "done"
 
 // ─── Helpers ──────────────────────────────────────────────
 
-function shotsReceived(si: number, playingHcp: number): number {
-  return Math.floor(playingHcp / 18) + (si <= playingHcp % 18 ? 1 : 0)
-}
-
 function calcStableford(gross: number, par: number, si: number, playingHcp: number): number {
-  return Math.max(0, par + 2 - (gross - shotsReceived(si, playingHcp)))
+  return Math.max(0, par + 2 - (gross - shotsReceived(playingHcp, si)))
 }
 
 function nrGross(par: number, si: number, playingHcp: number): number {
-  return par + 2 + shotsReceived(si, playingHcp)
+  return par + 2 + shotsReceived(playingHcp, si)
 }
 
 function scoreToPar(gross: number, par: number) {
@@ -308,7 +305,7 @@ function SubmittedScorecard({ snapshot, a11y }: { snapshot: SubmittedSnapshot; a
               Index: <span className="font-bold text-gray-900">{handicapIndex}</span>
             </div>
             <div className={`${txHcp} text-gray-800 ${crimson}`}>
-              Playing: <span className="font-bold text-gray-900">{playingHcp}</span>
+              Playing: <span className="font-bold text-gray-900">{formatHandicap(playingHcp)}</span>
             </div>
           </div>
         </div>
@@ -356,7 +353,7 @@ function HoleCard({
   onChange: (v: number | null) => void
   onToggleNR: () => void
 }) {
-  const netParGross = hole.par + shotsReceived(hole.stroke_index, playingHcp)
+  const netParGross = hole.par + shotsReceived(playingHcp, hole.stroke_index)
   const hasScore = score !== null
 
   const pts = isNR ? 0 : hasScore ? calcStableford(score, hole.par, hole.stroke_index, playingHcp) : null
@@ -652,7 +649,7 @@ export default function ScoreEntryForm({ players, courses }: { players: Player[]
       player_id:   playerId,
       hole_id:     hole.id,
       gross_score: nrs[i] ? nrGross(hole.par, hole.stroke_index, playingHcp)
-                           : (scores[i] ?? hole.par + shotsReceived(hole.stroke_index, playingHcp)),
+                           : (scores[i] ?? hole.par + shotsReceived(playingHcp, hole.stroke_index)),
       no_return:   nrs[i],
     }))
 
@@ -782,7 +779,7 @@ export default function ScoreEntryForm({ players, courses }: { players: Player[]
               className="w-full bg-[#0f2418] border border-[#1e3d28] text-white px-4 py-3 rounded-sm appearance-none focus:outline-none focus:border-[#C9A84C] text-sm">
               <option value="">Select a player…</option>
               {nonCompositePlayers.map(p => (
-                <option key={p.id} value={p.id}>{p.name} ({p.handicap})</option>
+                <option key={p.id} value={p.id}>{p.name} ({formatHandicap(p.handicap)})</option>
               ))}
             </select>
           </div>
@@ -823,7 +820,7 @@ export default function ScoreEntryForm({ players, courses }: { players: Player[]
               {selectedTee && player && (
                 <div className="mt-3 flex items-center gap-2 text-sm text-white/40">
                   <span>Playing handicap:</span>
-                  <span className="text-[#C9A84C] font-semibold">{playingHcp}</span>
+                  <span className="text-[#C9A84C] font-semibold">{formatHandicap(playingHcp)}</span>
                 </div>
               )}
             </div>
@@ -851,7 +848,7 @@ export default function ScoreEntryForm({ players, courses }: { players: Player[]
                 {selectedTee && (
                   <span className={`flex items-center gap-1 text-sm ${teeStyle(selectedTee.name).text}`}>
                     <span className={`w-2 h-2 rounded-full ${teeStyle(selectedTee.name).dot}`} />
-                    {selectedTee.name} · PH {playingHcp}
+                    {selectedTee.name} · PH {formatHandicap(playingHcp)}
                   </span>
                 )}
               </div>

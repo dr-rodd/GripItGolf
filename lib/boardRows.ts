@@ -15,6 +15,7 @@
 
 import type { Leaderboard } from './leaderboards'
 import { FULL_ALLOWANCE, allowanceOf, allowedHandicap } from './handicapAllowance'
+import { shotsReceived } from './handicap'
 import { setOf, teamsOnSheet, membersOf, type Membership } from './teamSets'
 import {
   type TeamScoring, type TeamScoreInput, type ScoringBasis,
@@ -160,11 +161,15 @@ export type RowContext = {
 
 // ─── Handicap arithmetic ───────────────────────────────────────
 
-export function shotsReceived(playingHandicap: number, strokeIndex: number): number {
-  const whole = Math.floor(playingHandicap / 18)
-  const remainder = Math.round(playingHandicap) % 18
-  return whole + (strokeIndex <= remainder ? 1 : 0)
-}
+/**
+ * Re-exported, not defined here.
+ *
+ * It lives in lib/handicap.ts because a plus handicap gives shots back rather
+ * than receiving them, and that is a fact about a handicap rather than about a
+ * leaderboard. It was written out five times across the app and every copy had
+ * the plus case wrong.
+ */
+export { shotsReceived }
 
 export function effectivePar(hole: RowHole, gender: string): number {
   return gender === 'F' && hole.par_ladies != null ? hole.par_ladies : hole.par

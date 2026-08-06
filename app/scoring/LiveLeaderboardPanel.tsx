@@ -8,6 +8,7 @@ import { scoreTone, TONE_PILL } from "@/lib/leaderboardStyle"
 import { shotsReceived } from "@/lib/boardRows"
 import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
 import { exactCourseHandicap } from "@/lib/courseHandicap"
+import { formatHandicap } from "@/lib/handicap"
 import { CHROME } from "./scoringHeaderMetrics"
 import {
   SC_SF, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL,
@@ -228,7 +229,7 @@ export function InlineScorecard({
       <div className={`flex items-center gap-5 px-3 py-2 ${SC_RULE} ${SC_HEAD}`}>
         <span className="flex items-baseline gap-1.5">
           <span className={SC_LABEL}>PH</span>
-          <span className={`text-[15px] font-semibold ${SC_DARK}`} style={SC_SF}>{playingHcp}</span>
+          <span className={`text-[15px] font-semibold ${SC_DARK}`} style={SC_SF}>{formatHandicap(playingHcp)}</span>
         </span>
         {teeName && (
           <span className="flex items-center gap-1.5">

@@ -20,6 +20,7 @@ import fs from 'fs'
 import ScoreShape, { NoReturnShape } from '../app/components/ScoreShape'
 import { ScorecardSheet } from '../app/trip/[tripCode]/leaderboard/TripLeaderboardClient'
 import { roundTone, ROUND_TILE, ROUND_NOTE } from '../lib/roundState'
+import { shotsReceived } from '../lib/handicap'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -233,19 +234,28 @@ section('Nett and no-return arithmetic is untouched')
 {
   const flow = read('app/scoring/LiveScoringFlow.tsx')
 
-  // Straight out of CLAUDE.md: shots = floor(hcp/18) + (1 if si <= hcp%18)
-  ok(/function shotsReceived\(si: number, hcp: number\)/.test(flow),
-    'shotsReceived still takes (si, hcp) — in that order')
-  ok(flow.includes('Math.floor(hcp / 18) + (si <= hcp % 18 ? 1 : 0)'),
-    'and is the WHS allocation, unchanged')
+  // Straight out of CLAUDE.md: shots = floor(hcp/18) + (1 if si <= hcp%18).
+  // Checked by running it rather than by reading it — the formula lived in
+  // five files and is now in one, and what matters is the answer.
+  eq([1, 2, 18].map(si => shotsReceived(1, si)), [1, 0, 0],
+    'a handicap of 1 receives its shot on the hardest hole and nowhere else')
+  eq([1, 18].map(si => shotsReceived(18, si)), [1, 1], 'eighteen receives one everywhere')
+  eq([1, 2, 18].map(si => shotsReceived(19, si)), [2, 1, 1], 'nineteen doubles up on SI 1')
+
+  // A plus handicap gives them back, from the easiest hole down. This is the
+  // mirror image and it was the case every copy of the formula got wrong.
+  eq([1, 17, 18].map(si => shotsReceived(-1, si)), [0, 0, -1],
+    'a plus one gives its shot back on the EASIEST hole, not on all of them')
+  eq([1, 16, 17, 18].map(si => shotsReceived(-2, si)), [0, 0, -1, -1],
+    'and a plus two on the two easiest')
 
   // points = max(0, par + 2 - nett)
-  ok(flow.includes('Math.max(0, par + 2 - (gross - shotsReceived(si, hcp)))'),
+  ok(flow.includes('Math.max(0, par + 2 - (gross - shotsReceived(hcp, si)))'),
     'stableford is still par + 2 - nett, floored at zero')
 
   // A no return is capped at the score that scores nothing — this is what
   // makes nett strokes work when somebody picks up
-  ok(flow.includes('return par + 2 + shotsReceived(si, hcp)'),
+  ok(flow.includes('return par + 2 + shotsReceived(hcp, si)'),
     'a no return still counts as nett double bogey, which is what nett strokes need')
 
   // The call sites that decide which of the two is used

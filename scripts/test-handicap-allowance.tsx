@@ -514,7 +514,9 @@ section('The card being edited says what it is being edited against')
                          flow.indexOf('{/* Scrollable holes */}'))
   ok(sub.length > 0, 'the edit sub-header is there to check')
   ok(sub.includes('{player.name}'), 'it names whose card it is')
-  ok(sub.includes('{playingHcp}'), 'and prints the handicap beside the name')
+  ok(sub.includes('formatHandicap(playingHcp)'),
+    'and prints the handicap beside the name, written the way golf writes one — ' +
+    'a plus handicap is "+1", never "-1"')
   ok(sub.includes('{allowance}%'),
     'with the allowance it is at, so a reduced figure is not read as the full one')
   ok(!/\{setup\.playingHcp\}|\{exactHcp\}/.test(sub),

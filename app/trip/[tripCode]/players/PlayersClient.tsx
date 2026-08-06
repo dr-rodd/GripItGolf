@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { rememberPlayer } from '@/lib/playerCookie'
+import { HANDICAP_INPUT, parseHandicap, formatHandicap } from '@/lib/handicap'
 
 type Player = {
   id: string
@@ -53,8 +54,8 @@ export default function PlayersClient({
     setError('')
     setAdding(true)
     const name = addName.trim()
-    const handicap = parseFloat(addHandicap)
-    if (!name || isNaN(handicap)) {
+    const handicap = parseHandicap(addHandicap)
+    if (!name || handicap === null) {
       setError('Please enter a valid name and handicap')
       setAdding(false)
       return
@@ -97,7 +98,7 @@ export default function PlayersClient({
                 <div>
                   <p className="text-ink text-sm font-medium">{p.name}</p>
                   {p.handicap != null && (
-                    <p className="text-ink/65 text-[13px] mt-0.5">HCP {p.handicap}</p>
+                    <p className="text-ink/65 text-[13px] mt-0.5">HCP {formatHandicap(p.handicap)}</p>
                   )}
                 </div>
                 <span className="text-accent text-lg">
@@ -121,14 +122,10 @@ export default function PlayersClient({
             className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/60 transition-colors"
           />
           <input
-            type="number"
-            inputMode="decimal"
+            {...HANDICAP_INPUT}
             value={addHandicap}
             onChange={(e) => setAddHandicap(e.target.value)}
-            placeholder="Handicap (e.g. 14.2)"
-            step="0.1"
-            min="0"
-            max="54"
+            placeholder="Handicap (e.g. 14.2, or +1)"
             required
             className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/60 transition-colors"
           />

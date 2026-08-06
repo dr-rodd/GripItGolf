@@ -293,16 +293,26 @@ section('Handicap inputs bring up a keypad')
   ]
   for (const f of files) {
     const src = require('fs').readFileSync(f, 'utf-8')
-    const fields  = (src.match(/placeholder="(Handicap|HCP)/g) ?? []).length
-    const keypads = (src.match(/inputMode="decimal"/g) ?? []).length
+    const fields = (src.match(/placeholder="(Handicap|HCP)/g) ?? []).length
+    const shared = (src.match(/\{\.\.\.HANDICAP_INPUT\}/g) ?? []).length
     const name = f.split('/').pop()
     ok(fields > 0, `${name} has a handicap field`)
-    ok(keypads >= fields, `${name}: every handicap field asks for the decimal keypad`)
+    // Every one of them is the shared field. It used to be a decimal keypad,
+    // which is the right keyboard for 14.2 and the wrong one for +1 — there
+    // is no plus on it — and `min="0"` on top of that refused a plus handicap
+    // outright. The shared props take text and `parseHandicap` reads the sign.
+    ok(shared >= fields, `${name}: every handicap field is the shared one`)
+    ok(!/inputMode="decimal"[\s\S]{0,200}placeholder="Handicap/.test(src),
+      `  …and none of them still asks for a keypad with no plus on it`)
+    ok(!/placeholder="Handicap[\s\S]{0,200}min="0"/.test(src),
+      `  …nor refuses anything better than scratch`)
   }
-  // A handicap carries a decimal, so the whole-number keypad would be wrong
-  const create = require('fs').readFileSync(files[0], 'utf-8')
-  ok(!/inputMode="numeric"[\s\S]{0,80}placeholder="Handicap"/.test(create),
-    'not the whole-number keypad, since handicaps have a decimal')
+
+  // A plus handicap has to survive being typed
+  const setup = require('fs').readFileSync(files[1], 'utf-8')
+  ok(setup.includes('parseHandicap('), 'a handicap is read with parseHandicap, not parseFloat')
+  ok(!/parseFloat\((newHandicap|e\.target\.value)\)/.test(setup),
+    '  …because parseFloat("+1") is 1, and stores a plus one as an ordinary one')
 }
 
 // ─── Passcode ──────────────────────────────────────────────────

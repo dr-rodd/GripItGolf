@@ -49,6 +49,7 @@ points         = GREATEST(0, par + 2 - net_score)
 
 - NR = 0 points
 - Max nett capped at score giving 0 points (net double bogey)
+- **A plus handicap is stored negative and gives shots back, from SI 18 down.** A +1 gives one on SI 18 and is level par by birdieing it and paring the rest. `lib/handicap.ts` is the only copy of the allocation; `shots_received()` in migration 024 is its SQL twin, and `test:handicap` runs the two against each other. Handicap fields accept "+1" and every screen prints it that way — never "-1"
 - Leaderboard display: relative to 2pts/hole baseline. 36 points = "E", 38 = "+2"
 - Team leaderboard: best individual stableford score per hole per team, summed across 18 holes
 

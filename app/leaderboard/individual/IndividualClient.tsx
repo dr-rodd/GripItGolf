@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { shotsReceived } from "@/lib/handicap"
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -49,12 +50,8 @@ function playerRoundStableford(playerId: string, roundId: string, scores: Score[
     .reduce((sum, s) => sum + s.stableford_points, 0)
 }
 
-function shotsReceived(si: number, hcp: number) {
-  return Math.floor(hcp / 18) + (si <= hcp % 18 ? 1 : 0)
-}
-
 function nrGross(hole: Hole, playingHandicap: number): number {
-  return hole.par + 2 + shotsReceived(hole.stroke_index, playingHandicap)
+  return hole.par + 2 + shotsReceived(playingHandicap, hole.stroke_index)
 }
 
 function playerRoundGross(playerId: string, roundId: string, scores: Score[], holes: Hole[], roundHandicaps: RoundHcp[]) {

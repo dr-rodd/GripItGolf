@@ -16,6 +16,7 @@ import Toggle from '@/app/components/Toggle'
 import {
   MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError,
 } from '@/lib/passcode'
+import { HANDICAP_INPUT, parseHandicap } from '@/lib/handicap'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -248,7 +249,7 @@ export default function CreateTripForm() {
           validPlayers.map((p, i) => ({
             trip_id: tripId,
             name: p.name.trim(),
-            handicap: parseFloat(p.handicap) || 0,
+            handicap: parseHandicap(p.handicap) ?? 0,
             gender: p.gender,
             role: 'player',
             is_lead: i === 0,
@@ -608,14 +609,10 @@ export default function CreateTripForm() {
 
                   <div className="flex gap-3">
                     <input
-                      type="number"
-                      inputMode="decimal"
+                      {...HANDICAP_INPUT}
                       value={player.handicap}
                       onChange={e => updatePlayer(i, { handicap: e.target.value })}
-                      placeholder="Handicap"
-                      min="0"
-                      max="54"
-                      step="0.1"
+                      placeholder="Handicap, or +1"
                       className={`${INPUT} flex-1`}
                     />
                     <div className="flex gap-1.5 flex-shrink-0">

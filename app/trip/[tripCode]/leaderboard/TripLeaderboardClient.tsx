@@ -12,6 +12,7 @@ import {
   buildRows, scoresForBoard, boardHandicapFor, effectivePar,
 } from '@/lib/boardRows'
 import { exactCourseHandicap } from '@/lib/courseHandicap'
+import { formatHandicap } from '@/lib/handicap'
 import { type Membership } from '@/lib/teamSets'
 import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundState'
 import { HEADER_H } from '@/app/components/headerMetrics'
@@ -361,7 +362,7 @@ export function ScorecardSheet({
                   return (
                     <span key={p.id} className="text-[15px] text-ink whitespace-nowrap" style={SC_SF}>
                       {players.length > 1 && <>{firstName(p.name)}{' '}</>}
-                      <span className={players.length > 1 ? SC_MUTED : 'font-semibold'}>{hcp ?? '—'}</span>
+                      <span className={players.length > 1 ? SC_MUTED : 'font-semibold'}>{hcp == null ? '—' : formatHandicap(hcp)}</span>
                     </span>
                   )
                 })}

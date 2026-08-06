@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
 import BackButton from "@/app/components/BackButton"
 import { courseHandicap } from "@/lib/courseHandicap"
+import { shotsReceived } from "@/lib/handicap"
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -68,15 +69,11 @@ interface Props {
 
 // ─── Helpers ──────────────────────────────────────────────
 
-function shotsReceived(si: number, playingHcp: number) {
-  return Math.floor(playingHcp / 18) + (si <= playingHcp % 18 ? 1 : 0)
-}
-
 function calcStableford(gross: number, par: number, si: number, playingHcp: number) {
-  return Math.max(0, par + 2 - (gross - shotsReceived(si, playingHcp)))
+  return Math.max(0, par + 2 - (gross - shotsReceived(playingHcp, si)))
 }
 function nrGross(par: number, si: number, playingHcp: number) {
-  return par + 2 + shotsReceived(si, playingHcp)
+  return par + 2 + shotsReceived(playingHcp, si)
 }
 
 function effectivePar(hole: Hole, gender: string) {
@@ -756,7 +753,7 @@ function HoleCard({
           const hs = holeScores[player.id]
           const p = effectivePar(hole, player.gender)
           const si = effectiveSI(hole, player.gender)
-          const shots = shotsReceived(si, playingHcp)
+          const shots = shotsReceived(playingHcp, si)
           const stableford = hs.gross !== null ? calcStableford(hs.gross, p, si, playingHcp) : null
           const showFairway = (p === 4 || p === 5)
 
