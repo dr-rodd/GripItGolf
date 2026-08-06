@@ -36,7 +36,7 @@ A player joins without an account, so a cookie is the only way to greet them nex
 | Name | `gg_player_<TRIP_CODE>` — one per trip, so two trips can never be confused |
 | Value | the player's own `players.id`; no second identifier to keep in step |
 | Life | 180 days, `path=/`, `samesite=lax`, `secure` only over https |
-| Set on | claiming a slot, adding yourself, and creating a trip (the organiser) |
+| Set on | claiming a slot, adding yourself, linking a second device, and creating a trip (the organiser) |
 
 **It is not a credential and must not become one.** It decides whose name is greeted and whose summary is shown, and every one of those facts is already visible to anyone holding the trip code. It is deliberately JavaScript-readable, since the join flow sets it in the browser. If it ever starts gating something — editing scores, seeing an email — it needs real auth behind it.
 
@@ -44,7 +44,26 @@ The id is checked for UUID shape and then against *this trip's* roster, so a sta
 
 **Nothing is fetched for a stranger.** The scores and matchplay queries sit inside `if (me)`, so a first-time visitor pays nothing for a greeting they will not see.
 
-The summary reuses `totalAfterDiscard` — the trip's own discard rule — so the hub and the leaderboard cannot disagree. A **"Not you?"** control clears the cookie: a phone gets handed round on a golf trip, and without it the first person to join on a shared handset owns that device's greeting for six months.
+The summary reuses `totalAfterDiscard` — the trip's own discard rule — so the hub and the leaderboard cannot disagree. A **"Not you?"** control clears the cookie and lands on the player list: a phone gets handed round on a golf trip, and without it the first person to join on a shared handset owns that device's greeting for six months.
+
+## Claiming a slot, and a second device
+
+`/trip/[tripCode]/players` lists **every player on the trip** — leads included, confirmed or not — with everyone still to confirm first and alphabetical within each group. That list is both the join flow and the way a second device gets linked, which is why nobody drops off it. Composites are excluded: they are synthetic scorecards, not people.
+
+| Tapping | Does |
+|---|---|
+| an unconfirmed name | sets `claimed = true`, writes the cookie, back to the hub |
+| a confirmed name | asks "is this your device?", then writes the cookie **and nothing else** |
+
+**Confirmation belongs to the player, not to the handset.** Linking a second device writes no row; `claimed` is already true and stays true. "Not you?" does not un-confirm the player it forgets either. The same person can be linked on any number of devices, and none of it creates a duplicate player.
+
+Before this, the list asked for unclaimed non-lead players only, so a confirmed player vanished from it and a second device had nothing to do but "Add yourself" — which makes a second copy of somebody already on the trip. The organiser was excluded outright and could never link a second device at all.
+
+Confirmed players wear `ROUND_TILE.played` and unconfirmed `ROUND_TILE.empty` from `lib/roundState.ts`, on both this screen and the hub's player block — confirmed reads as finalised the way a played round does. Only those two are imported by name; the live state carries the app's one pinned glow.
+
+**Two people on one trip cannot share a name.** Compared trimmed and case-folded, per trip, and refused at all three creation points (trip creation, "Add yourself", settings) and on rename. Internal spacing is not collapsed, so "John  Smith" with two spaces still gets through — the rule is `lower(btrim(name))`, which is the rule a database constraint could index. There is no such constraint yet. `lib/roster.ts`, tested in `scripts/test-claim.tsx`.
+
+**A player who adds themselves gets `round_handicaps` for the rounds that already exist.** They had none, which meant a late joiner was scored off nothing. `lib/roundHandicaps.ts` is the one copy of that write, shared with the handicap edit in settings.
 
 ## Support link
 
