@@ -2,25 +2,28 @@
 //
 // `buildRows` takes a `RowContext`: players, teams, memberships, holes,
 // rounds, every score resolved from both tables, and two maps of handicaps.
-// Assembling one is a dozen lines of merging that have nothing to do with
-// scoring, and the hub needs the same assembly the leaderboard does — one
-// line saying where a player stands has to agree with the board it claims to
-// be quoting.
+// Assembling one is where the competition's rules quietly live — which
+// version of a score counts, what a handicap really was before it was
+// rounded, whose card is still open — and it is **the only place that
+// assembly happens**.
 //
-// ┌─────────────────────────────────────────────────────────────────────┐
-// │ TripLeaderboardClient still assembles its own, inline, in useMemo.  │
-// │ It predates this file and was left exactly as it was: Phase 2 reads │
-// │ from the leaderboard, it does not change it, and rewiring the one   │
-// │ screen the whole trip is scored on was not worth the risk this week.│
-// │                                                                     │
-// │ So there are two copies of this merge. Consolidating them — having  │
-// │ that useMemo call `resolveScores` — is a small, mechanical follow-up │
-// │ and should happen once the trip is over.                            │
-// └─────────────────────────────────────────────────────────────────────┘
+// That matters more than it sounds. Two screens ask the same question: the
+// leaderboard, which is a client component handed its rows as props, and the
+// trip hub, which is a server component that fetches its own. They once had
+// an assembly apiece, copied from one another. They agreed on the day they
+// were written and had already drifted by the time anybody looked — see the
+// `legacyTeamScoring` note on `buildRowContext` below.
+//
+// So: **fetching stays with each caller, deciding never does.** The two get
+// their rows in whatever way suits them and hand them to one function.
 //
 // Pure. No I/O — the caller does the queries and hands the rows in.
 
-import type { ResolvedScore, RowHole, RowRound } from './boardRows'
+import type {
+  ResolvedScore, RowHole, RowRound, RowContext, RowPlayer, RowTeam,
+} from './boardRows'
+import type { Membership } from './teamSets'
+import type { TeamScoring } from './teamScoring'
 import { exactCourseHandicap, type TeeRating } from './courseHandicap'
 
 /** A committed score, as `scores` stores it. */
@@ -142,7 +145,88 @@ export function exactHandicapMap(
   return m
 }
 
-/** Rounds in the order they are played, which is the order a board columns them. */
-export function sortRounds(rounds: readonly RowRound[]): RowRound[] {
+/**
+ * Rounds in the order they are played, which is the order a board columns
+ * them — and the order the leaderboard prints them across the top.
+ *
+ * Generic over the row so both callers get their own shape back: the board
+ * needs only an id and a number, while the screen also carries the course
+ * the round is played on.
+ */
+export function sortRounds<T extends RowRound>(rounds: readonly T[]): T[] {
   return [...rounds].sort((a, b) => a.round_number - b.round_number)
+}
+
+// ─── The one assembly ──────────────────────────────────────
+
+/** Everything the two callers have between them, as their queries return it. */
+export type RowContextInput = {
+  players: RowPlayer[]
+  teams: RowTeam[]
+  memberships: Membership[]
+  holes: RowHole[]
+  /** In any order — they are sorted here. */
+  rounds: RowRound[]
+  /** Round id → the id of the course it is played on. */
+  courseByRound: ReadonlyMap<string, string>
+  scores: readonly ScoreRow[]
+  liveScores: readonly LiveScoreRow[]
+  roundHandicaps: readonly HandicapRow[]
+  /** Ratings only. Read by boards playing off a percentage of the handicap. */
+  tees: readonly TeeRow[]
+  /** Rounds with a scorecard open right now. */
+  activeRoundIds: readonly string[]
+  /** Players with a card open right now, from the locks on those rounds. */
+  livePlayerIds: readonly string[]
+  /**
+   * The trip's old single team-scoring setting, or null.
+   *
+   * **Supplied by the caller, deliberately, and this is the sharp edge of
+   * the whole module.** It should be the trip's setting only when the boards
+   * were derived from `trips.formats` rather than chosen — `isLegacy(stored)`
+   * — because a trip that has since picked real boards must not be scored on
+   * options the new model never asked for.
+   *
+   * It is an input rather than something worked out here because the two
+   * callers do not pass the same thing today, and unifying them silently
+   * inside an extraction would have hidden a real behaviour change inside a
+   * commit that claimed to move code and nothing else.
+   */
+  legacyTeamScoring: TeamScoring | null
+}
+
+/**
+ * The context a board is built from.
+ *
+ * Everything conditional in here is conditional for a reason, and the
+ * reasons are on the functions above: a committed score always beats an
+ * in-progress one for the same hole, a score whose hole is not in the list
+ * is dropped rather than guessed at, and a handicap is only rebuilt
+ * unrounded where the tee it was played off was actually recorded.
+ */
+export function buildRowContext(input: RowContextInput): RowContext {
+  return {
+    players: input.players,
+    teams: input.teams,
+    memberships: input.memberships,
+    holes: input.holes,
+    rounds: sortRounds(input.rounds),
+    resolved: resolveScores(
+      input.scores, input.liveScores, input.holes, input.courseByRound,
+    ),
+    hcpFor: handicapMap(input.roundHandicaps),
+    exactHcpFor: exactHandicapMap(
+      input.roundHandicaps,
+      input.tees,
+      new Map(input.players.map(p => [p.id, p.handicap])),
+    ),
+    // A round is in play when a card is open on it, or when it still has
+    // uncommitted scores sitting against it.
+    liveRoundIds: new Set([
+      ...input.liveScores.map(s => s.round_id),
+      ...input.activeRoundIds,
+    ]),
+    livePlayerIds: new Set(input.livePlayerIds),
+    legacyTeamScoring: input.legacyTeamScoring,
+  }
 }

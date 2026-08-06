@@ -77,7 +77,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `lib/roster.ts` | Who is confirmed, the join list's order, and the no-two-same-names rule. **Confirmed is `players.claimed === true`** — the column is nullable, so `!claimed` and `.eq('claimed', false)` are both wrong |
 | `lib/upNext.ts` | What happens next on the trip. **Only golf can be counted down to** — a stay or a journey carries a day and nothing finer. Joins `rounds.scheduled_date` to `itinerary_items.tee_time`, the one place the two meet |
 | `lib/standing.ts` / `lib/hubStanding.ts` | Where a player stands. Two paths: one query for an individual Stableford total, the full `buildRows` context for anything else. `test:hub` holds them against each other |
-| `lib/rowContext.ts` | Raw rows → a `RowContext`. **`TripLeaderboardClient` still has its own inline copy** — consolidate after the trip |
+| `lib/rowContext.ts` | Raw rows → a `RowContext`, via `buildRowContext`. **The only assembly there is** — the leaderboard and the hub both call it. Fetching is each caller's own; deciding never is |
 | `lib/nextMatch.ts` | The next tie: opponent known, undecided, a bye, or out. In a pairs draw the entrant is the pairing on *that draw's* sheet |
 | `app/components/Section.tsx` | The collapsible hub sections. One open at a time — the stack owns that, not the section |
 | `lib/currentPlayer.ts` | Cookie → the player holding this phone, matched against this trip's roster. **Personalises, never authorises** |
@@ -110,6 +110,14 @@ Calculated by the Postgres trigger `trg_scores_stableford` on every insert/updat
 `handicap` here is always the **full** course handicap. A competition allowance (85% for a four-ball, 95% for a singles) belongs to the leaderboard, not to the card: it is applied when a board reads the scores and is never written to `round_handicaps` or `scores`. Store it reduced and a second board on a different allowance can no longer be scored. The percentage comes off the *unrounded* course handicap — 11.63 shows as 12, but 90% of those two are a shot apart.
 
 **`round_handicaps.playing_handicap` starts life as the handicap _index_**, not a course handicap — creation, finalise and every handicap edit write it before any tee exists. Anything holding a tee must compute from the tee instead of trusting that snapshot.
+
+## Two orderings, on purpose and not
+
+`lib/boardRows.ts` `sortRows` is the leaderboard's order: by total, ties broken alphabetically by name. `lib/playerSummary.ts` `standings` is the hub's cheap path for an individual Stableford total, and `test:hub` holds the two against each other.
+
+**`app/scoring/LiveLeaderboardPanel.tsx` `compareRows` is a third, and it disagrees.** It breaks a Stableford tie by **countback** — back 9, then back 6, then back 3, then back 2, then holes played — where `sortRows` breaks it by name. So two players level can be ordered one way on the in-play panel inside the scoring card and the other way on the trip leaderboard.
+
+That panel is reachable from platform trips: `CourseDashboardClient` renders it, and that is what `/trip/[tripCode]/course/[roundNumber]` shows. Countback is arguably the more correct answer in golf, so this is a decision to make rather than a bug to patch — and it sits inside the scoring entry flow, which is why the extraction left it alone. Left documented rather than reconciled.
 
 ## Data insertion order
 

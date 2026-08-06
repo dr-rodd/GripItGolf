@@ -11,7 +11,7 @@ import {
   type BoardRow, type ResolvedScore, type RowContext,
   buildRows, scoresForBoard, boardHandicapFor, effectivePar,
 } from '@/lib/boardRows'
-import { exactCourseHandicap } from '@/lib/courseHandicap'
+import { buildRowContext, sortRounds } from '@/lib/rowContext'
 import { formatHandicap } from '@/lib/handicap'
 import { type Membership } from '@/lib/teamSets'
 import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundState'
@@ -776,113 +776,35 @@ export default function TripLeaderboardClient({
   // A board can be removed in settings while this page is open
   const activeBoard = tabs.find(b => b.id === activeId) ?? tabs[0] ?? null
 
-  const sortedRounds = useMemo(
-    () => [...rounds].sort((a, b) => a.round_number - b.round_number),
-    [rounds]
-  )
   const playerById = useMemo(() => new Map(players.map(p => [p.id, p])), [players])
 
-  // ── Merge committed + in-progress scores ────────────────────
+  // ── Everything a board is built from ────────────────────────
+  //
+  // The merging, the handicap maps and the live sets used to sit here as
+  // half a dozen useMemos. They are one call now, shared with the trip hub —
+  // which needs the same answer for one line and had a copy of this to get
+  // it. Two copies of the rules of the competition is how the hub comes to
+  // say a player is third while this screen says fourth.
+  //
+  // Fetching is still each screen's own: this one is handed its rows as
+  // props, the hub queries for them. Only the deciding is shared.
+  const rowContext: RowContext = useMemo(() => buildRowContext({
+    players, teams, memberships, holes, rounds,
+    courseByRound: new Map(rounds.map(r => [r.id, r.courses?.id ?? ''])),
+    scores, liveScores, roundHandicaps, tees,
+    activeRoundIds, livePlayerIds,
+    legacyTeamScoring,
+  }), [players, teams, memberships, holes, rounds, scores, liveScores,
+       roundHandicaps, tees, activeRoundIds, livePlayerIds, legacyTeamScoring])
 
-  const resolved: ResolvedScore[] = useMemo(() => {
-    const holeById = new Map(holes.map(h => [h.id, h]))
-    const out: ResolvedScore[] = []
-    const seen = new Set<string>()
-
-    for (const s of scores) {
-      const hole = holeById.get(s.hole_id)
-      if (!hole) continue
-      seen.add(`${s.player_id}:${s.round_id}:${hole.hole_number}`)
-      out.push({
-        playerId: s.player_id,
-        roundId: s.round_id,
-        holeId: s.hole_id,
-        holeNumber: hole.hole_number,
-        gross: s.no_return ? null : s.gross_score,
-        points: s.stableford_points ?? 0,
-        noReturn: s.no_return,
-        live: false,
-      })
-    }
-
-    const courseByRound = new Map(rounds.map(r => [r.id, r.courses?.id ?? '']))
-    const holeByCourseAndNumber = new Map(holes.map(h => [`${h.course_id}:${h.hole_number}`, h]))
-
-    for (const ls of liveScores) {
-      if (seen.has(`${ls.player_id}:${ls.round_id}:${ls.hole_number}`)) continue
-      if (ls.gross_score == null) continue
-      const courseId = courseByRound.get(ls.round_id)
-      const hole = courseId ? holeByCourseAndNumber.get(`${courseId}:${ls.hole_number}`) : undefined
-      if (!hole) continue
-      out.push({
-        playerId: ls.player_id,
-        roundId: ls.round_id,
-        holeId: hole.id,
-        holeNumber: ls.hole_number,
-        gross: ls.gross_score,
-        points: ls.stableford_points ?? 0,
-        noReturn: false,
-        live: true,
-      })
-    }
-
-    return out
-  }, [scores, liveScores, holes, rounds])
+  const resolved = rowContext.resolved
+  // The same order the board columns them in, on the fuller row this screen
+  // carries — a board needs an id and a number, this also needs the course.
+  const sortedRounds = useMemo(() => sortRounds(rounds), [rounds])
 
   // A round counts as in play when a scorecard is actually open on it, not
   // merely because someone once entered a score into it.
-  const openRoundIds = useMemo(() => new Set(activeRoundIds), [activeRoundIds])
-  const liveRoundIds = useMemo(
-    () => new Set([...liveScores.map(ls => ls.round_id), ...activeRoundIds]),
-    [liveScores, activeRoundIds]
-  )
-  const inPlay = openRoundIds.size > 0
-  const livePlayers = useMemo(() => new Set(livePlayerIds), [livePlayerIds])
-
-  const hcpFor = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const h of roundHandicaps) m.set(`${h.round_id}:${h.player_id}`, h.playing_handicap)
-    return m
-  }, [roundHandicaps])
-
-  // The same handicaps before they were rounded, rebuilt from the tee each
-  // round was played off. A board taking a percentage needs the real figure —
-  // 11.63 is stored as 12, and 90% of those two are a shot apart. Only rounds
-  // with a tee recorded against them appear; the rest fall back to the stored
-  // whole number, which is all that was ever known about them.
-  const exactHcpFor = useMemo(() => {
-    const teeById = new Map(tees.map(t => [t.id, t]))
-    const indexOf = new Map(players.map(p => [p.id, p.handicap]))
-    const m = new Map<string, number>()
-    for (const h of roundHandicaps) {
-      const tee = h.tee_id ? teeById.get(h.tee_id) : undefined
-      const index = indexOf.get(h.player_id)
-      if (!tee || index == null) continue
-      m.set(`${h.round_id}:${h.player_id}`, exactCourseHandicap(index, tee))
-    }
-    return m
-  }, [roundHandicaps, tees, players])
-
-  // ── The rows for every board ────────────────────────────────
-  //
-  // Each board is scored under its own rules, so two boards on the same trip
-  // can genuinely differ — Stableford keeping every card beside Strokes
-  // dropping the worst, or two team boards splitting the same cards two ways.
-
-  const rowContext: RowContext = useMemo(() => ({
-    players,
-    teams,
-    memberships,
-    holes,
-    rounds: sortedRounds,
-    resolved,
-    hcpFor,
-    exactHcpFor,
-    liveRoundIds,
-    livePlayerIds: livePlayers,
-    legacyTeamScoring,
-  }), [players, teams, memberships, holes, sortedRounds, resolved, hcpFor, exactHcpFor,
-       liveRoundIds, livePlayers, legacyTeamScoring])
+  const inPlay = activeRoundIds.length > 0
 
   const rowsByBoard = useMemo(
     () => new Map(tabs.map(b => [b.id, buildRows(b, rowContext)])),

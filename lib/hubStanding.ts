@@ -12,15 +12,13 @@
 import { supabase } from './supabase'
 import { type Leaderboard } from './leaderboards'
 import { parseTeamScoring } from './teamScoring'
-import { buildRows, type RowContext, type RowHole } from './boardRows'
+import { buildRows, type RowHole } from './boardRows'
 import { standings, type SummaryScore } from './playerSummary'
 import { fetchMemberships } from './teamMembers'
 import {
   usesSimpleStandings, placingFromStandings, placingFromRows, type Placing,
 } from './standing'
-import {
-  resolveScores, handicapMap, exactHandicapMap, sortRounds,
-} from './rowContext'
+import { buildRowContext } from './rowContext'
 
 export type PlacingResult = {
   placing: Placing | null
@@ -161,35 +159,25 @@ async function fullPlacing(
   type OpenRound = { round_id: string; live_player_locks: { player_id: string }[] | null }
   const open = (openRes.data ?? []) as unknown as OpenRound[]
 
-  const ctx: RowContext = {
+  // The same assembly the leaderboard uses, from the same function. This
+  // screen fetches its own rows; what it does with them is not its own.
+  const ctx = buildRowContext({
     players,
     teams: teamsRes.data ?? [],
     memberships,
     holes,
-    rounds: sortRounds(roundRows.map(r => ({ id: r.id, round_number: r.round_number }))),
-    resolved: resolveScores(
-      scoresRes.data ?? [],
-      liveScoresRes.data ?? [],
-      holes,
-      new Map(roundRows.map(r => [r.id as string, r.course_id as string])),
-    ),
-    hcpFor: handicapMap(hcpsRes.data ?? []),
-    exactHcpFor: exactHandicapMap(
-      hcpsRes.data ?? [],
-      teesRes.data ?? [],
-      new Map(players.map(p => [p.id, p.handicap])),
-    ),
-    liveRoundIds: new Set([
-      ...(liveScoresRes.data ?? []).map(s => s.round_id as string),
-      ...open.map(r => r.round_id),
-    ]),
-    livePlayerIds: new Set(
-      open.flatMap(r => (r.live_player_locks ?? []).map(l => l.player_id)),
-    ),
+    rounds: roundRows.map(r => ({ id: r.id, round_number: r.round_number })),
+    courseByRound: new Map(roundRows.map(r => [r.id as string, r.course_id as string])),
+    scores: scoresRes.data ?? [],
+    liveScores: liveScoresRes.data ?? [],
+    roundHandicaps: hcpsRes.data ?? [],
+    tees: teesRes.data ?? [],
+    activeRoundIds: open.map(r => r.round_id),
+    livePlayerIds: open.flatMap(r => (r.live_player_locks ?? []).map(l => l.player_id)),
     // The old trip-wide team setting, for boards derived from `trips.formats`
-    // rather than chosen. It carries options the new model does not ask for.
+    // rather than chosen.
     legacyTeamScoring: parseTeamScoring(legacy),
-  }
+  })
 
   return { placing: placingFromRows([playerId], buildRows(lead, ctx)), error: null }
 }
