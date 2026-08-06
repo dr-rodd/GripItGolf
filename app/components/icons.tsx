@@ -144,3 +144,48 @@ export const IconHeart = (p: IconProps) => (
     <path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572" />
   </Svg>
 )
+
+// ─── Getting there ─────────────────────────────────────────────
+//
+// One per mode the itinerary can store, and no more. `travel_mode` allows
+// exactly car, flight and train — a ferry or a bus cannot be entered, so an
+// icon for either would be an icon nothing can ever select. A stay takes
+// IconHome above.
+//
+// Every journey used to share one arrow, which told you a journey was a
+// journey and nothing else. On a trip whose itinerary is a flight, two drives
+// and a train, the mode is the useful half of the line.
+
+export const IconCar = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+    <path d="M17 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+    <path d="M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6" />
+    <path d="M6 11h13" />
+  </Svg>
+)
+
+export const IconPlane = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M16 10h4a2 2 0 0 1 0 4h-4l-4 7h-3l2 -7h-4l-2 2h-3l2 -4l-2 -4h3l2 2h4l-2 -7h3z" />
+  </Svg>
+)
+
+export const IconTrain = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M21 13a3 3 0 0 0 -3 -3h-12a3 3 0 0 0 -3 3v3a3 3 0 0 0 3 3h12a3 3 0 0 0 3 -3v-3z" />
+    <path d="M3 14h18" />
+    <path d="M12 10v-6" />
+    <path d="M7 4h10" />
+    <path d="M7 19l-2 2" />
+    <path d="M17 19l2 2" />
+  </Svg>
+)
+
+/** On the maps link beside a place. */
+export const IconMapPin = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 11m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+    <path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z" />
+  </Svg>
+)

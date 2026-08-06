@@ -171,10 +171,12 @@ section('Linking a device changes nothing about who is confirmed')
   ok(!client.includes('role="dialog"'), '  …and no dialog in the way')
 
   // "Not you?" reassigns a handset. The player it forgets stays confirmed.
-  const welcome = code('app/trip/[tripCode]/WelcomeBack.tsx')
-  ok(welcome.includes('forgetPlayer'), 'Not you? forgets this device')
-  ok(!welcome.includes('claimed'), '  …without un-confirming anybody')
-  ok(welcome.includes('/players'), '  …and lands on the list, where they can pick a name')
+  // It lives on the status block now — the card it used to sit on was
+  // replaced when the hub was restructured.
+  const status = code('app/trip/[tripCode]/StatusBlock.tsx')
+  ok(status.includes('forgetPlayer'), 'Not you? forgets this device')
+  ok(!status.includes('claimed'), '  …without un-confirming anybody')
+  ok(status.includes('/players'), '  …and lands on the list, where they can pick a name')
 }
 
 // ─── The two states look different ─────────────────────────

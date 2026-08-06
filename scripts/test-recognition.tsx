@@ -13,8 +13,7 @@
  * was before any of this existed. No error, no empty block, no gap.
  */
 
-import { renderToStaticMarkup } from 'react-dom/server'
-import React from 'react'
+import fs from 'fs'
 import {
   playerCookieName, isPlayerId, readPlayerId, buildCookie, clearCookie,
   COOKIE_DAYS,
@@ -23,7 +22,6 @@ import {
   standings, standingFor, matchRecord, describePosition, formatRelative, ordinal,
   type SummaryScore, type SummaryMatch,
 } from '../lib/playerSummary'
-import { WelcomeBackCard } from '../app/trip/[tripCode]/WelcomeBack'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -208,39 +206,42 @@ section('A matchplay record counts matches, not byes')
 }
 
 // ─── The greeting ──────────────────────────────────────────────
+//
+// The card that used to live here carried the player's Points, Level,
+// Position, Rounds and Matches. Those tiles are gone — deleted, not moved:
+// stats are their own phase, and a heading promising them with nothing
+// behind it is worse than not mentioning them. What is left is a name, what
+// happens next, and one line saying where they stand.
 
-section('A recognised player is greeted, with their line')
+section('A recognised player is greeted by name, and nothing more')
 {
-  const html = renderToStaticMarkup(
-    React.createElement(WelcomeBackCard, {
-      name: 'Ross',
-      onNotMe: () => {},
-      lines: [
-        { label: 'Points', value: '72', strong: true },
-        { label: 'Position', value: '1st of 8' },
-      ],
-    })
-  )
+  const status = fs.readFileSync('app/trip/[tripCode]/StatusBlock.tsx', 'utf-8')
 
-  ok(html.includes('Welcome back'), 'they are welcomed back')
-  ok(html.includes('Ross'), 'by name')
-  ok(html.includes('>72<'), 'with their points')
-  ok(html.includes('1st of 8'), 'and their position')
+  ok(status.includes('firstName'), 'they are greeted by their first name')
+  ok(status.includes('Not you?'), 'with a way to say it is not them, for a shared phone')
 
-  // The way out, for a shared phone
-  ok(html.includes('Not you?'), 'and a way to say it is not them')
+  // The tiles, by the labels they printed. None of them may come back here.
+  for (const label of ['Points', 'Level', 'Rounds', 'Matches']) {
+    ok(!new RegExp(`>\\s*${label}\\s*<|'${label}'|"${label}"`).test(status),
+      `no ${label} tile`)
+  }
+
+  // Nor may an empty heading standing in for the phase that will hold them.
+  ok(!/coming soon/i.test(status), 'and nothing promising a section that does not exist')
 }
 
-section('A greeting with nothing to report is still a greeting')
+section('A device nobody has claimed is told what to do')
 {
-  const html = renderToStaticMarkup(
-    React.createElement(WelcomeBackCard, { name: 'Ross', onNotMe: () => {}, lines: [] })
-  )
-  ok(html.includes('Welcome back'), 'someone who has not played is still welcomed')
-  ok(html.includes('Ross'), 'by name')
-  ok(!html.includes('Points'), 'with no empty stat labels')
-  ok(!html.includes('undefined'), 'and nothing half-rendered')
-  ok(!html.includes('NaN'), 'and no stray arithmetic')
+  const status = fs.readFileSync('app/trip/[tripCode]/StatusBlock.tsx', 'utf-8')
+
+  ok(status.includes('Claim your spot'), 'an unlinked device is asked to claim a spot')
+  ok(status.includes('/players'), '  …and pointed at the player list')
+
+  // Up next and the standing are personal. A stranger sees neither: there is
+  // no player to personalise them to.
+  const claim = status.slice(status.indexOf('function ClaimSpot'))
+  ok(!claim.includes('upNext'), 'with no up-next card')
+  ok(!claim.includes('placing'), '  …and no standing')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

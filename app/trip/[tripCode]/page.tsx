@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-import { hasMatchplay, needsPairings, boardTitle } from '@/lib/leaderboards'
+import { hasMatchplay, needsPairings, boardTitle, primary } from '@/lib/leaderboards'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { MAIN_SET, setOf, teamFor } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
@@ -8,13 +8,14 @@ import { isLocked } from '@/lib/passcode'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { isConfirmed, confirmedCount as countConfirmed } from '@/lib/roster'
 import { ROUND_TILE } from '@/lib/roundState'
+import { fetchPlacing } from '@/lib/hubStanding'
+import { describePlacing } from '@/lib/standing'
+import { nextMatch, describeNextMatch, type DrawMatch } from '@/lib/nextMatch'
 import { IconSettings } from '@/app/components/icons'
-import {
-  standings, standingFor, matchRecord, describePosition, formatRelative,
-  type SummaryScore, type SummaryMatch,
-} from '@/lib/playerSummary'
+import { SectionStack } from '@/app/components/Section'
 import TripCountdown from './TripCountdown'
-import WelcomeBack from './WelcomeBack'
+import StatusBlock from './StatusBlock'
+import TravelStays from './TravelStays'
 import TripHeader from '@/app/components/TripHeader'
 import Itinerary from './Itinerary'
 import { type ItineraryItem, dayCount } from '@/lib/itinerary'
@@ -74,15 +75,20 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   }
 
   const [roundsResult, playersResult, itineraryResult] = await Promise.all([
+    // `itinerary_item_id` is the join that makes a countdown possible: the
+    // date lives here and the tee time lives on the itinerary item, and this
+    // is the only column tying the two together.
     supabase
       .from('rounds')
-      .select('round_number, course_id, scheduled_date')
+      .select('round_number, course_id, scheduled_date, itinerary_item_id')
       .eq('trip_id', trip.id)
       .order('round_number'),
     supabase
       .from('players')
       .select('id, name, handicap, claimed, team_id')
       .eq('trip_id', trip.id)
+      // A composite is a synthetic scorecard, not a person.
+      .eq('is_composite', false)
       .order('name'),
     supabase
       .from('itinerary_items')
@@ -114,6 +120,12 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       fromPlace: r.from_place, toPlace: r.to_place, durationMins: r.duration_mins,
     }))
 
+  // Which round each golf item became, so the up-next card can put the
+  // round's date beside the item's tee time.
+  const roundDates: [string, string | null][] = rounds
+    .filter(r => r.itinerary_item_id)
+    .map(r => [r.itinerary_item_id as string, r.scheduled_date as string | null])
+
   // Courses for both the rounds list and the itinerary's golf tiles
   const courseIds = [
     ...rounds.map(r => r.course_id),
@@ -128,7 +140,8 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   const courseMap = Object.fromEntries((courses ?? []).map(c => [c.id, c.name]))
 
   // Grouped by the day they are played, so a two-round day reads as one day
-  // with two courses rather than as two unrelated entries.
+  // with two courses rather than as two unrelated entries. Only reached by a
+  // trip made before the itinerary existed.
   const days: { key: string; label: string | null; courses: string[] }[] = []
   for (const r of rounds) {
     const name = courseMap[r.course_id]
@@ -148,96 +161,98 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
   const everyoneIn = players.length > 0 && pendingCount === 0
   const settingsLocked = isLocked(trip.settings_passcode_hash)
-  // What the trip plays for, read off its boards. The hub used to name the
-  // old flags, which no longer describe a trip set up in this model.
+
+  // What the trip plays for, read off its boards. `primary` is the first one
+  // — the board the trip is about, and the one the standing line quotes.
   const boards = boardsForTrip(trip)
   const formatLine = boards.map(boardTitle).join(' · ')
+  const lead = primary(boards)
 
   // ── Do we know who this is? ──
   //
   // A cookie left on this device when they joined, matched against this
   // trip's own roster so a stale or copied one finds nobody rather than
-  // greeting a stranger. The lookup lives in `lib/currentPlayer.ts` now:
-  // every section this page is growing needs the same answer, and so do the
-  // screens after it. Nothing is fetched for it until it turns out to name
-  // somebody real, so a first-time visitor pays nothing for a greeting they
-  // will not see.
+  // greeting a stranger. Nothing below is fetched until it turns out to name
+  // somebody real, so a first-time visitor pays nothing for a personalised
+  // page they will not see.
   const me = await currentPlayer(tripCode, players)
 
-  const summaryLines: { label: string; value: string; strong?: boolean }[] = []
+  let placingLine = ''
+  let nextMatchLine = ''
+  let standingError: string | null = null
 
   if (me) {
-    const [scoresResult, matchesResult] = await Promise.all([
-      supabase
-        .from('scores')
-        .select('player_id, round_id, stableford_points')
-        .eq('trip_id', trip.id),
+    const [placingResult, draw] = await Promise.all([
+      fetchPlacing(trip.id, lead, me.id, trip.team_scoring),
       hasMatchplay(boards)
         ? supabase
             .from('matchplay_matches')
-            .select('player_a_id, player_b_id, winner_player_id, ' +
-                    'team_a_id, team_b_id, winner_team_id, ' +
-                    'player_a_is_bye, player_b_is_bye, entrant_type')
+            .select('round_number, round_name, player_a_id, player_b_id, ' +
+                    'player_a_is_bye, player_b_is_bye, ' +
+                    'team_a_id, team_b_id, winner_player_id, winner_team_id, entrant_type')
             .eq('trip_id', trip.id)
+            .order('round_number')
         : Promise.resolve({ data: [], error: null }),
     ])
 
-    if (scoresResult.error) console.error('TripPage scores query failed:', scoresResult.error)
-    if (matchesResult.error) console.error('TripPage matchplay query failed:', matchesResult.error)
+    placingLine = describePlacing(placingResult.placing)
+    standingError = placingResult.error
 
-    type MatchRow = {
-      player_a_id: string | null; player_b_id: string | null; winner_player_id: string | null
-      team_a_id: string | null;   team_b_id: string | null;   winner_team_id: string | null
-      player_a_is_bye: boolean;   player_b_is_bye: boolean
-    }
-    const matchRows = (matchesResult.data ?? []) as unknown as MatchRow[]
-
-    // The same totals the leaderboard shows, under the same discard rule
-    const scored: SummaryScore[] = (scoresResult.data ?? []).map(s => ({
-      playerId: s.player_id,
-      roundId: s.round_id,
-      points: s.stableford_points ?? 0,
-    }))
-    // Under the trip's own discard rule, so the hub and the leaderboard
-    // cannot disagree. Discard is per-board now, so it is the leading
-    // Stableford board's rule — the one the greeting is quoting a total from.
-    const headline = boards.find(b =>
-      b.competition === 'league' && b.scoring === 'stableford')
-    const board = standings(scored, headline?.discardWorst ?? 0)
-    const mine  = standingFor(me.id, board)
-
-    if (mine) {
-      summaryLines.push({ label: 'Points', value: String(mine.total), strong: true })
-      summaryLines.push({ label: 'Level', value: formatRelative(mine.relative) })
-      summaryLines.push({ label: 'Position', value: describePosition(mine, board.length) })
-      summaryLines.push({
-        label: 'Rounds',
-        value: `${mine.rounds} of ${rounds.length || mine.rounds}`,
-      })
+    if (draw.error) {
+      console.error('TripPage matchplay query failed:', draw.error)
+      standingError = standingError ?? 'Could not read the matchplay draw.'
     }
 
-    // In a pairs draw the entrant is their pairing, not them — and the
-    // pairing is their place on the DRAW's sheet, which need not be the
-    // team they play the league in.
-    const draw = boards.find(b => b.competition === 'matchplay')
-    const entrantId = needsPairings(boards)
-      ? teamFor(await fetchMemberships(trip.id), me.id, draw ? setOf(draw) : MAIN_SET)
-      : me.id
-    if (entrantId && matchRows.length > 0) {
-      const pairs = needsPairings(boards)
-      const asSides: SummaryMatch[] = matchRows.map(m => ({
-        sideA:  pairs ? m.team_a_id : m.player_a_id,
-        sideB:  pairs ? m.team_b_id : m.player_b_id,
-        winner: pairs ? m.winner_team_id : m.winner_player_id,
-        isBye:  m.player_a_is_bye || m.player_b_is_bye,
-      }))
-      const record = matchRecord(entrantId, asSides)
-      if (record.played > 0) {
-        summaryLines.push({ label: 'Matches', value: `${record.won} of ${record.played}` })
-      } else if (record.stillIn) {
-        summaryLines.push({ label: 'Matchplay', value: 'In the draw' })
+    // The board leading decides what the standing line is. A knockout has no
+    // table, so it shows the next match alone; anything else shows the
+    // position, and the next match underneath when a draw is also running.
+    const drawBoard = boards.find(b => b.competition === 'matchplay')
+    if (drawBoard) {
+      type Row = {
+        round_number: number; round_name: string
+        player_a_id: string | null; player_b_id: string | null
+        player_a_is_bye: boolean;   player_b_is_bye: boolean
+        team_a_id: string | null;   team_b_id: string | null
+        winner_player_id: string | null; winner_team_id: string | null
       }
+      const rows = (draw.data ?? []) as unknown as Row[]
+
+      // In a pairs draw the entrant is the PAIRING, not the player — and the
+      // pairing is their place on that draw's sheet, which need not be the
+      // team they play the league in.
+      const pairs = needsPairings(boards)
+      const memberships = pairs ? await fetchMemberships(trip.id) : []
+      const entrantId = pairs
+        ? teamFor(memberships, me.id, drawBoard ? setOf(drawBoard) : MAIN_SET)
+        : me.id
+
+      const asDraw: DrawMatch[] = rows.map(m => ({
+        roundNumber: m.round_number,
+        roundName: m.round_name,
+        sideA: pairs ? m.team_a_id : m.player_a_id,
+        sideB: pairs ? m.team_b_id : m.player_b_id,
+        aIsBye: m.player_a_is_bye,
+        bIsBye: m.player_b_is_bye,
+        winner: pairs ? m.winner_team_id : m.winner_player_id,
+      }))
+
+      // Naming the opponent: a player on a singles draw, a pairing on a
+      // pairs one. Teams are only fetched when there is a draw to name.
+      let nameOf: (id: string) => string | null = id =>
+        players.find(p => p.id === id)?.name ?? null
+      if (pairs) {
+        const { data: teams } = await supabase
+          .from('teams').select('id, name').eq('trip_id', trip.id)
+        const byId = new Map((teams ?? []).map(t => [t.id as string, t.name as string]))
+        nameOf = id => byId.get(id) ?? null
+      }
+
+      nextMatchLine = describeNextMatch(nextMatch(entrantId, asDraw), nameOf)
     }
+
+    // A knockout is the whole story when it leads. No stroke position beside
+    // it — there may not even be a board with one.
+    if (lead?.competition === 'matchplay') placingLine = ''
   }
 
   const lockedButton = (label: string) => (
@@ -250,24 +265,47 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
     </div>
   )
 
+  // ── The itinerary, or the list of rounds a pre-itinerary trip has ──
+  const itinerarySection = itinerary.length > 0 ? (
+    <Itinerary
+      items={itinerary}
+      startDate={trip.start_date ?? null}
+      courseNames={courseMap}
+      days={dayCount(trip.start_date ?? null, trip.end_date ?? null)}
+    />
+  ) : days.length > 0 ? (
+    <ul className="flex flex-col gap-2">
+      {days.map((d, i) => (
+        <li key={d.key} className="rounded-xl border border-bark/12 bg-surface px-4 py-3">
+          <p className="t-cap uppercase tracking-[0.18em] text-ink/65">
+            {d.label ?? `Round ${i + 1}`}
+          </p>
+          <div className="mt-1.5 flex flex-col gap-0.5">
+            {d.courses.map((name, j) => (
+              <p key={j} className="t-card text-ink">{name}</p>
+            ))}
+          </div>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p className="t-cap text-ink/65 text-center py-2">
+      Nothing on the itinerary yet.
+    </p>
+  )
+
   return (
     <main className="min-h-dvh bg-cream has-tabbar page-enter">
 
       {/* Settled from the first pixel. The collapse lives on the landing
-          page now: this screen is opened to be read, and the brand
-          performing on the way in only delays it.
-
-          The mark goes to the start of the site, not to this page. This IS
-          the trip hub, so pointing it here made the one obvious tap on the
-          screen do nothing at all — and the platform has somewhere to go
-          back to now that a trip is not the whole app. Home on the tab bar
-          below is what returns to this screen. */}
+          page: this screen is opened to be read, and the brand performing on
+          the way in only delays it. The mark goes to the start of the site,
+          not to this page — this IS the trip hub. */}
       <TripHeader backTo="/" />
 
       {/* Settings, where the settings screen itself keeps its gear: top
           right, under the header. The padlock rides the corner of it when
-          the trip's settings are passcoded, which is what the text link
-          below the nav used to say in words. */}
+          the trip's settings are passcoded. */}
       <div className="max-w-lg mx-auto px-4 pt-4 flex justify-end">
         <Link
           href={`/trip/${tripCode}/setup`}
@@ -283,99 +321,43 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
         </Link>
       </div>
 
-      {/* ── Hero ── */}
-      <section className="flex flex-col items-center px-6 pt-2 pb-12">
-        <div className="w-full max-w-sm flex flex-col items-center text-center">
+      <div className="max-w-lg mx-auto px-4 pb-10">
 
-          {/* Only for somebody this device already knows. A stranger sees the
-              page exactly as it was before this feature existed. */}
-          {me && (
-            <div className="w-full mb-5">
-              <WelcomeBack
-                tripCode={tripCode}
-                name={me.name.split(' ')[0]}
-                lines={summaryLines}
-              />
-            </div>
-          )}
-
-          {/* Trip name — the reason you opened the page, so it leads.
-              Scales with the viewport and wraps rather than shrinking to fit.
-              The green dot closes it the way it closes the wordmark. */}
+        {/* ── Trip name, dates, and what it is played for ── */}
+        <div className="flex flex-col items-center text-center pt-2 pb-7">
           <h1 className="t-h1 text-ink text-balance" style={{ fontSize: 'clamp(26px, 8vw, 34px)' }}>
             {trip.name}<span className="t-title-dot" aria-hidden="true" />
           </h1>
-
-          {/* Dates */}
           {dateRange && (
             <p className="t-cap uppercase tracking-[0.18em] text-ink/65 mt-3">{dateRange}</p>
           )}
-
-          {/* The running order, dimming as the trip happens. Falls back to
-              the plain list of rounds for trips made before the itinerary. */}
-          {itinerary.length > 0 ? (
-            <div className="w-full mt-7 text-left">
-              <Itinerary
-                items={itinerary}
-                startDate={trip.start_date ?? null}
-                courseNames={courseMap}
-                days={dayCount(trip.start_date ?? null, trip.end_date ?? null)}
-              />
-            </div>
-          ) : days.length > 0 && (
-            <div className="w-full mt-7">
-              <ul className="flex flex-col gap-2">
-                {days.map((d, i) => (
-                  <li
-                    key={d.key}
-                    className="rounded-xl border border-bark/12 bg-surface px-4 py-3"
-                  >
-                    <p className="t-cap uppercase tracking-[0.18em] text-ink/65">
-                      {d.label ?? `Round ${i + 1}`}
-                    </p>
-                    <div className="mt-1.5 flex flex-col gap-0.5">
-                      {d.courses.map((name, j) => (
-                        <p
-                          key={j}
-                          className="t-card text-ink"
-                        >
-                          {name}
-                        </p>
-                      ))}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Format line */}
           {formatLine && (
-            <p className="t-cap uppercase tracking-[0.18em] text-ink/65 mt-6">{formatLine}</p>
+            <p className="t-cap uppercase tracking-[0.18em] text-ink/50 mt-1.5">{formatLine}</p>
           )}
+        </div>
 
-          {/* Countdown wrapping nav */}
+        {/* ── Who this device is, and what happens next ── */}
+        <StatusBlock
+          tripCode={tripCode}
+          player={me ? {
+            firstName: me.name.split(' ')[0],
+            placing: placingLine,
+            nextMatch: nextMatchLine,
+          } : null}
+          items={itinerary}
+          startDate={trip.start_date ?? null}
+          roundDates={roundDates}
+          courseNames={courseMap}
+        />
+
+        {standingError && (
+          <p className="text-rust-deep text-sm text-center mt-3 leading-snug">{standingError}</p>
+        )}
+
+        {/* ── The three ways in ── */}
+        <div className="mt-7 mb-8">
           <TripCountdown target={trip.start_date ?? null}>
             <nav className="flex flex-col gap-3 w-full max-w-xs mx-auto">
-
-              {/* Join Trip. Gold while someone is still expected; once the
-                  whole field is in there is nothing left to prompt, so it
-                  settles back to a plain button. */}
-              <Link
-                href={`/trip/${tripCode}/players`}
-                className={`w-full py-[18px] border-2 rounded-xl text-sm tracking-[0.25em] uppercase text-center transition-colors ${
-                  everyoneIn
-                    ? 'border-bark/12 text-ink/65 hover:border-bark/25 hover:text-ink/80'
-                    : 'border-accent text-accent hover:bg-accent/10'
-                }`}
-              >
-                {everyoneIn ? 'Players' : 'Join Trip'}
-              </Link>
-
-              {/* Live Scoring — locked only when there is nothing to score.
-                  It used to be locked until the trip was "finalised", which
-                  is a state a trip no longer has: scoring is open from the
-                  moment there is a round to open it on. */}
               {rounds.length > 0 ? (
                 <Link
                   href={`/trip/${tripCode}/course`}
@@ -387,7 +369,6 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                 lockedButton('Live Scoring')
               )}
 
-              {/* Leaderboard */}
               <Link
                 href={`/trip/${tripCode}/leaderboard`}
                 className="w-full py-[18px] border-2 border-bark/25 text-ink/80 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-bark/25 hover:text-ink/80 transition-colors"
@@ -395,89 +376,51 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                 Leaderboard
               </Link>
 
-              {/* Settings is the gear at the top right of the screen now,
-                  where every other page keeps it — and the tab bar below.
-                  A third way to the same screen was clutter on a page this
-                  phase exists to declutter. */}
-
+              {/* Emerald while somebody is still expected; once the whole
+                  field is in there is nothing left to prompt. */}
+              <Link
+                href={`/trip/${tripCode}/players`}
+                className={`w-full py-[18px] border-2 rounded-xl text-sm tracking-[0.25em] uppercase text-center transition-colors ${
+                  everyoneIn
+                    ? 'border-bark/12 text-ink/65 hover:border-bark/25 hover:text-ink/80'
+                    : 'border-accent text-accent hover:bg-accent/10'
+                }`}
+              >
+                Players
+              </Link>
             </nav>
           </TripCountdown>
-
         </div>
-      </section>
 
-      {/* ── Players ── */}
-      {players.length > 0 && (
-        <section className="px-6 pb-16">
-          <div className="max-w-xs mx-auto">
+        {/* ── The rest, one heading at a time ── */}
+        <SectionStack
+          initial="itinerary"
+          sections={[
+            {
+              key: 'itinerary',
+              title: 'Itinerary',
+              content: itinerarySection,
+            },
+            {
+              key: 'travel',
+              title: 'Travel & accommodation',
+              content: <TravelStays items={itinerary} startDate={trip.start_date ?? null} />,
+            },
+            {
+              key: 'players',
+              title: 'Players',
+              meta: players.length > 0 ? `${confirmedCount} of ${players.length} in` : undefined,
+              content: <PlayersPanel
+                players={players}
+                pendingCount={pendingCount}
+                tripCode={tripCode}
+              />,
+            },
+          ]}
+        />
 
-            <div className="flex items-baseline justify-between mb-3">
-              <p className="text-ink/65 text-[13px] tracking-[0.2em] uppercase">Players</p>
-              <p className="text-ink/50 text-[13px] tabular-nums">
-                {confirmedCount} of {players.length} in
-              </p>
-            </div>
+      </div>
 
-            {/* Legend — and it has to be telling the truth.
-                Both swatches were emerald and both borders were the same
-                width, so this drew one state twice and claimed it was two.
-                Confirmed now carries the hard brown edge a finished round
-                carries; pending is the barely-there outline of one nothing
-                has happened on yet. Same rule, from the same file, as the
-                player list on the join screen. */}
-            <div className="flex items-center gap-4 mb-4">
-              <span className="flex items-center gap-1.5">
-                <span className={`w-2.5 h-2.5 rounded-sm ${ROUND_TILE.played}`} aria-hidden="true" />
-                <span className="text-ink/65 text-[12px] tracking-wider uppercase">Confirmed</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className={`w-2.5 h-2.5 rounded-sm ${ROUND_TILE.empty}`} aria-hidden="true" />
-                <span className="text-ink/65 text-[12px] tracking-wider uppercase">Pending</span>
-              </span>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              {players.map(p => {
-                const confirmed = isConfirmed(p)
-                return (
-                  <div
-                    key={p.id}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
-                      confirmed ? ROUND_TILE.played : ROUND_TILE.empty
-                    }`}
-                  >
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-ink text-sm truncate">{p.name}</span>
-                      <span
-                        className={`block text-[12px] tracking-wider uppercase mt-0.5 ${
-                          confirmed ? 'text-ink/80' : 'text-ink/50'
-                        }`}
-                      >
-                        {confirmed ? 'Confirmed' : 'Pending'}
-                      </span>
-                    </span>
-                    {p.handicap != null && (
-                      <span className="font-[family-name:var(--font-display)] text-accent text-base leading-none flex-shrink-0">
-                        {p.handicap}
-                      </span>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-
-            {pendingCount > 0 && (
-              <p className="text-ink/50 text-[13px] mt-4 leading-relaxed">
-                {pendingCount === 1 ? 'One player has' : `${pendingCount} players have`} still
-                to join. Share the code <span className="text-accent">{tripCode}</span> and
-                they can claim their spot.
-              </p>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* ── Footer ── */}
       <SupportLink className="px-6 pb-8" />
 
       <div className="px-6 pb-10 flex justify-center">
@@ -487,5 +430,84 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       <TabBar tripCode={tripCode} />
 
     </main>
+  )
+}
+
+/**
+ * The roster, as the hub shows it.
+ *
+ * Confirmed carries the hard brown edge a finished round carries and pending
+ * the barely-there outline of one nothing has happened on — the same two
+ * treatments, from the same file, as the join list. Both states were drawn
+ * identically before Phase 1, with the ternaries still in place claiming
+ * otherwise.
+ */
+function PlayersPanel({
+  players, pendingCount, tripCode,
+}: {
+  players: { id: string; name: string; handicap: number | null; claimed?: boolean | null }[]
+  pendingCount: number
+  tripCode: string
+}) {
+  if (players.length === 0) {
+    return (
+      <p className="t-cap text-ink/65 text-center py-2">
+        Nobody has joined this trip yet.
+      </p>
+    )
+  }
+
+  return (
+    <div className="max-w-xs mx-auto">
+      {/* Legend — and it has to be telling the truth. */}
+      <div className="flex items-center gap-4 mb-4">
+        <span className="flex items-center gap-1.5">
+          <span className={`w-2.5 h-2.5 rounded-sm ${ROUND_TILE.played}`} aria-hidden="true" />
+          <span className="text-ink/65 text-[12px] tracking-wider uppercase">Confirmed</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className={`w-2.5 h-2.5 rounded-sm ${ROUND_TILE.empty}`} aria-hidden="true" />
+          <span className="text-ink/65 text-[12px] tracking-wider uppercase">Pending</span>
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {players.map(p => {
+          const confirmed = isConfirmed(p)
+          return (
+            <div
+              key={p.id}
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+                confirmed ? ROUND_TILE.played : ROUND_TILE.empty
+              }`}
+            >
+              <span className="flex-1 min-w-0">
+                <span className="block text-ink text-sm truncate">{p.name}</span>
+                <span
+                  className={`block text-[12px] tracking-wider uppercase mt-0.5 ${
+                    confirmed ? 'text-ink/80' : 'text-ink/50'
+                  }`}
+                >
+                  {confirmed ? 'Confirmed' : 'Pending'}
+                </span>
+              </span>
+              {p.handicap != null && (
+                <span className="font-[family-name:var(--font-display)] text-accent text-base leading-none flex-shrink-0">
+                  {p.handicap}
+                </span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {pendingCount > 0 && (
+        <p className="text-ink/50 text-[13px] mt-4 leading-relaxed">
+          {pendingCount === 1 ? 'One player has' : `${pendingCount} players have`} still
+          to join. Share the code <span className="text-accent">{tripCode}</span> and
+          they can claim their spot.
+        </p>
+      )}
+    </div>
   )
 }

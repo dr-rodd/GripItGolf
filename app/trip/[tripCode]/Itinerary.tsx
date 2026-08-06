@@ -1,11 +1,11 @@
 'use client'
 
-import { useCallback, useSyncExternalStore } from 'react'
 import {
   type ItineraryItem, itemsForDay, dateForDay, describeDay, describeItem,
   itemState, tripProgress,
 } from '@/lib/itinerary'
 import { IconFlag, IconHome, IconArrowRight } from '@/app/components/icons'
+import { useMinute } from '@/app/components/useMinute'
 
 /**
  * The trip's running order on the hub, dimming as it happens.
@@ -21,25 +21,6 @@ import { IconFlag, IconHome, IconArrowRight } from '@/app/components/icons'
  * error. The server snapshot is simply "no clock", so the first paint shows
  * everything as still to come and the real time arrives on hydration.
  */
-
-/**
- * The current minute, or null before hydration.
- *
- * Bucketed to the minute so the snapshot is stable between renders — the
- * finest thing on this list is a tee time, and a value that changed on every
- * render would loop forever.
- */
-function useMinute(): Date | null {
-  const minute = useSyncExternalStore(
-    useCallback((onChange: () => void) => {
-      const timer = setInterval(onChange, 30_000)
-      return () => clearInterval(timer)
-    }, []),
-    () => Math.floor(Date.now() / 60_000),
-    () => null,
-  )
-  return minute === null ? null : new Date(minute * 60_000)
-}
 
 const KIND_ICON = { golf: IconFlag, stay: IconHome, travel: IconArrowRight } as const
 
@@ -101,14 +82,15 @@ export default function Itinerary({
 
   return (
     <section className="w-full">
-      <div className="flex items-baseline justify-between gap-3 mb-3">
-        <h2 className="t-h2 text-ink">The plan</h2>
-        {progress && progress.done > 0 && (
-          <p className="t-cap text-ink/65 tabular-nums">
-            {progress.done} of {progress.total} done
-          </p>
-        )}
-      </div>
+      {/* The heading is the collapsible's own now — this carried one of its
+          own before, and two headings over one list is one too many. The
+          progress line stays: it is the only thing here that changes during
+          the trip. */}
+      {progress && progress.done > 0 && (
+        <p className="t-cap text-ink/65 tabular-nums mb-3 text-right">
+          {progress.done} of {progress.total} done
+        </p>
+      )}
 
       <ol className="flex flex-col gap-4">
         {Array.from({ length: days }, (_, day) => {

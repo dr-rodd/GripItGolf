@@ -75,6 +75,11 @@ Don't read these up front. Open the matching file when the task actually touches
 | `lib/handicapAllowance.ts` | Playing off a percentage of the course handicap. **Never stored reduced** — applied when a board reads the cards |
 | `lib/leaderboardsCompat.ts` / `lib/formats.ts` / `lib/tripSetupFlow.ts` | Reading old trips' stored settings — don't extend, only read |
 | `lib/roster.ts` | Who is confirmed, the join list's order, and the no-two-same-names rule. **Confirmed is `players.claimed === true`** — the column is nullable, so `!claimed` and `.eq('claimed', false)` are both wrong |
+| `lib/upNext.ts` | What happens next on the trip. **Only golf can be counted down to** — a stay or a journey carries a day and nothing finer. Joins `rounds.scheduled_date` to `itinerary_items.tee_time`, the one place the two meet |
+| `lib/standing.ts` / `lib/hubStanding.ts` | Where a player stands. Two paths: one query for an individual Stableford total, the full `buildRows` context for anything else. `test:hub` holds them against each other |
+| `lib/rowContext.ts` | Raw rows → a `RowContext`. **`TripLeaderboardClient` still has its own inline copy** — consolidate after the trip |
+| `lib/nextMatch.ts` | The next tie: opponent known, undecided, a bye, or out. In a pairs draw the entrant is the pairing on *that draw's* sheet |
+| `app/components/Section.tsx` | The collapsible hub sections. One open at a time — the stack owns that, not the section |
 | `lib/currentPlayer.ts` | Cookie → the player holding this phone, matched against this trip's roster. **Personalises, never authorises** |
 | `lib/roundHandicaps.ts` | The `round_handicaps` snapshot, written on a handicap edit and when somebody joins after the rounds exist |
 | `lib/teamLimits.ts` | Team size rules, pairing wording |

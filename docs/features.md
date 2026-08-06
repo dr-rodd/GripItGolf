@@ -25,7 +25,7 @@ Never shown to other players. Only surfaced on `/admin/trips`.
 
 ## Returning players
 
-A player joins without an account, so a cookie is the only way to greet them next time. `lib/playerCookie.ts`, `lib/playerSummary.ts`, `WelcomeBack.tsx`.
+A player joins without an account, so a cookie is the only way to greet them next time. `lib/playerCookie.ts`, `lib/currentPlayer.ts`, `StatusBlock.tsx`.
 
 **A cookie, not an IP address.** A household shares one IP, a club's wifi shares one across everybody in the bar, and a phone's changes on mobile data. None of that identifies a person.
 
@@ -44,7 +44,7 @@ The id is checked for UUID shape and then against *this trip's* roster, so a sta
 
 **Nothing is fetched for a stranger.** The scores and matchplay queries sit inside `if (me)`, so a first-time visitor pays nothing for a greeting they will not see.
 
-The summary reuses `totalAfterDiscard` — the trip's own discard rule — so the hub and the leaderboard cannot disagree. A **"Not you?"** control clears the cookie and lands on the player list: a phone gets handed round on a golf trip, and without it the first person to join on a shared handset owns that device's greeting for six months.
+A **"Not you?"** control clears the cookie and lands on the player list: a phone gets handed round on a golf trip, and without it the first person to join on a shared handset owns that device's greeting for six months.
 
 ## Claiming a slot, and a second device
 
@@ -53,7 +53,9 @@ The summary reuses `totalAfterDiscard` — the trip's own discard rule — so th
 | Tapping | Does |
 |---|---|
 | an unconfirmed name | sets `claimed = true`, writes the cookie, back to the hub |
-| a confirmed name | asks "is this your device?", then writes the cookie **and nothing else** |
+| a confirmed name | writes the cookie **and nothing else**, on the tap |
+
+Tapping a confirmed name asks nothing first. Somebody opening the trip on a tablet after joining on their phone taps their own name and means it, and a mis-tap costs one tap of "Not you?" on the screen it lands on.
 
 **Confirmation belongs to the player, not to the handset.** Linking a second device writes no row; `claimed` is already true and stays true. "Not you?" does not un-confirm the player it forgets either. The same person can be linked on any number of devices, and none of it creates a duplicate player.
 
@@ -177,3 +179,54 @@ There used to be a `setup_status` of `draft` or `live`, flipped by a **Finalise 
 **A device that is not the owner cannot select "Owner only".** There is no way to hand the flag to another device, so that tap would lock the screen — including the control itself — with nothing anywhere able to undo it. The option is disabled, not just discouraged.
 
 The flag's fragility is the known weakness: clear the browser storage, or open the trip on a new phone, and the owner is an ordinary player. With `everyone` that costs nothing. With `owner` it is a one-way door, which is why nothing can walk through it by accident. Real ownership needs auth.
+
+## The trip hub
+
+Rebuilt in phases. The order, top to bottom: header with the settings gear, trip name and dates with the format line beneath, the status block, the three nav buttons inside `TripCountdown`, then collapsible sections — Itinerary (open on arrival), Travel & accommodation, Players (closed).
+
+**One section is open at a time.** `app/components/Section.tsx` — `SectionStack` owns which, because a rule about all of them cannot live inside any one of them. Panels stay mounted when closed, so the itinerary and the roster are in the HTML for a reader who never taps. 300ms, ease-out, grid `0fr → 1fr` so no height has to be measured.
+
+### The status block
+
+Replaces the old welcome-back card. Two states.
+
+**Nobody yet** — one thing, taking the whole block: **Claim your spot**, routing to the player list. No up-next and no standing: there is no player to personalise them to, and a countdown shown to a stranger counts down to something they may not be on.
+
+**Somebody** — greeting (first name, one line, with "Not you?"), then Up next, then the standing line.
+
+**The Points / Level / Rounds / Matches tiles are deleted, not moved.** Stats are their own phase. There is no "Your stats" or "Trip stats" heading, and there must not be one until something is behind it.
+
+### Up next
+
+The next thing on the running order that has not happened, `lib/upNext.ts`. The rule, in order: anything behind us is out; the first remaining item **whose day has arrived** takes the card; otherwise the next **golf** item leads, because it is the only kind that can carry a countdown.
+
+**"Behind us" is more than `itemState`.** An item with no clock reads as `now` for the whole of its day and never becomes `past` until the day ends — right for the itinerary, which dims a day as it goes, wrong here, where at nine in the evening the card would still offer this morning's drive. So the running order is treated as running: anything sitting before something that has finished is behind us too.
+
+**The countdown is golf only**, built from `rounds.scheduled_date` joined to `itinerary_items.tee_time` via `rounds.itinerary_item_id` — the only place in the codebase those two meet. The moment is constructed in **local clock time**, deliberately unlike every other date in this codebase: "four hours until you tee off" has to be four hours on the phone in your pocket.
+
+**Never a personal tee time.** Nothing on the platform records who is in which group, so the card says how many groups go off and when the first one does — "3 groups from 9:20 am". Anything narrower would be invented.
+
+With no clock — the server render — nothing has arrived and nothing is past, so the rule falls to "the next golf item". Stable to paint, corrected on hydration.
+
+### The standing line
+
+Which line depends on `primary(boardsForTrip(trip))` — the first board, the one the trip is about.
+
+| Primary board | Shows |
+|---|---|
+| matchplay | the next match alone, no position |
+| anything else | the position, plus the next match beneath it when a draw also runs |
+
+No scores, or no position: the line is omitted. A zero is worse than nothing.
+
+**Two paths to a position, because one is nine queries.** `usesSimpleStandings` takes the cheap path only for an individual Stableford board totalled up — every clause load-bearing: strokes sorts the other way, a team board ranks teams, a prize table pays by place rather than by the points that earned it. Everything else builds the real board. `test:hub` runs both against the same cards and asserts they agree, at two discard settings.
+
+### Travel & accommodation
+
+`lib/stays.ts`. A four-night stay is four rows — the running order needs somewhere to sleep on every day — so **consecutive nights in one place fold back into one booking** here. Consecutive means the same name *and* the next day; a night elsewhere splits the run, because reading it as one stay would be a lie about the middle night. The Itinerary section still lists every night.
+
+Icon-led and centred, the way a course is presented. The icon carries more weight than the guide's defaults would allow for a list item — the deliberate exception this section is granted, and what makes it scannable rather than readable.
+
+**One icon per mode the itinerary can store: car, flight, train.** `travel_mode` allows no others, so a ferry or a bus icon would be one nothing can select. Adding them is a migration and is post-13-August work.
+
+**Every place gets a maps link and nothing gets a dead one.** `lib/places.ts` — no phone or address detection: these fields hold names ("The Shandon Hotel", "Carne") because that is what the form asks for, and a maps *search* takes a name perfectly well. Scheme and host are fixed, only the query is interpolated, so nothing typed can change where the link goes.

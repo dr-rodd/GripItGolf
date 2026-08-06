@@ -180,8 +180,15 @@ export function dateForDay(startDate: string | null, dayIndex: number): string |
   return d.toISOString().slice(0, 10)
 }
 
-/** A date-only string as a UTC day number, or null if it is not one. */
-function dayNumber(d: string | null | undefined): number | null {
+/**
+ * A date-only string as a UTC day number, or null if it is not one.
+ *
+ * Exported because "has this day arrived?" is asked outside this file now —
+ * `lib/upNext.ts` decides whether a stay or a journey has come round yet, and
+ * it has to answer with the same arithmetic `itemState` uses or the two will
+ * disagree about what day it is.
+ */
+export function dayNumber(d: string | null | undefined): number | null {
   if (!d) return null
   const [y, m, day] = d.slice(0, 10).split('-').map(Number)
   if (!y || !m || !day) return null
