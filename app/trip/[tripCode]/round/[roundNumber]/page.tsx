@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -201,29 +202,37 @@ export default async function RoundSummaryPage({
         {tees.length > 0 && (
           <section>
             <h2 className="t-h2 text-ink mb-3">Tees</h2>
+            {/* One grid for the whole table, not one per row.
+                Each row was its own grid before, so every `auto` column sized
+                itself against that row's own contents — which meant the
+                headings and the figures under them lined up with nothing.
+                One grid, fixed numeric columns, and the columns are columns. */}
             <div className="rounded-xl border border-bark/12 bg-surface overflow-hidden">
-              <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 px-4 py-2.5 border-b border-bark/[0.08]">
-                <span className="t-cap uppercase tracking-wider text-ink/50">Tee</span>
-                <span className="t-cap uppercase tracking-wider text-ink/50 text-right">Par</span>
-                <span className="t-cap uppercase tracking-wider text-ink/50 text-right">CR</span>
-                <span className="t-cap uppercase tracking-wider text-ink/50 text-right">Slope</span>
+              <div className="grid grid-cols-[minmax(0,1fr)_3rem_3.5rem_3.5rem]">
+
+                <Cell head>Tee</Cell>
+                <Cell head right>Par</Cell>
+                <Cell head right>CR</Cell>
+                <Cell head right>Slope</Cell>
+
+                {tees.map((t, i) => {
+                  const rule = i < tees.length - 1
+                  return (
+                    <Fragment key={`${t.name}-${t.gender}`}>
+                      <Cell rule={rule}>
+                        <span className="text-ink truncate block">
+                          {t.name}
+                          <span className="text-ink/50"> · {t.gender === 'F' ? 'Ladies' : 'Men'}</span>
+                        </span>
+                      </Cell>
+                      <Cell right rule={rule}>{t.par}</Cell>
+                      <Cell right rule={rule}>{t.course_rating}</Cell>
+                      <Cell right rule={rule}>{t.slope}</Cell>
+                    </Fragment>
+                  )
+                })}
+
               </div>
-              {tees.map((t, i) => (
-                <div
-                  key={`${t.name}-${t.gender}`}
-                  className={`grid grid-cols-[1fr_auto_auto_auto] gap-x-4 px-4 py-2.5 ${
-                    i < tees.length - 1 ? 'border-b border-bark/[0.08]' : ''
-                  }`}
-                >
-                  <span className="text-ink text-sm truncate">
-                    {t.name}
-                    <span className="text-ink/50"> · {t.gender === 'F' ? 'Ladies' : 'Men'}</span>
-                  </span>
-                  <span className="text-ink/80 text-sm tabular-nums text-right">{t.par}</span>
-                  <span className="text-ink/80 text-sm tabular-nums text-right">{t.course_rating}</span>
-                  <span className="text-ink/80 text-sm tabular-nums text-right">{t.slope}</span>
-                </div>
-              ))}
             </div>
           </section>
         )}
@@ -268,6 +277,35 @@ export default async function RoundSummaryPage({
       <SupportLink className="px-6 pb-8" />
       <TabBar tripCode={tripCode} />
     </main>
+  )
+}
+
+/**
+ * One cell of the tee table.
+ *
+ * Every cell is a direct child of the one grid, which is what makes a column
+ * a column — the heading and the figures beneath it share a track rather than
+ * each row negotiating its own widths.
+ */
+function Cell({
+  children, head = false, right = false, rule = true,
+}: {
+  children: React.ReactNode
+  head?: boolean
+  right?: boolean
+  /** The rule under a row. Off on the last one, and under the headings. */
+  rule?: boolean
+}) {
+  return (
+    <span
+      className={`px-3 py-2.5 text-sm tabular-nums min-w-0 ${
+        right ? 'text-right' : ''
+      } ${rule ? 'border-b border-bark/[0.08]' : ''} ${
+        head ? 't-cap uppercase tracking-wider text-ink/50' : 'text-ink/80'
+      }`}
+    >
+      {children}
+    </span>
   )
 }
 

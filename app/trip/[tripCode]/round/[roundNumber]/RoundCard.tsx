@@ -1,6 +1,14 @@
 import { type CardNine, type CourseCard } from '@/lib/courseCard'
 
 /**
+ * The width of the out/in column, on both nines.
+ *
+ * Fixed so the front and the back line up. Wide enough for "Out" and for a
+ * three-figure par, which is as much as either can ever hold.
+ */
+const TOTAL_COL = '2.75rem'
+
+/**
  * The course's card, two nines deep.
  *
  * Eighteen across does not fit a phone and is not how a scorecard has ever
@@ -36,7 +44,14 @@ function Nine({ label, nine }: { label: string; nine: CardNine }) {
 
   return (
     <div className="rounded-xl border border-bark/12 bg-surface overflow-hidden">
-      <div className="grid" style={{ gridTemplateColumns: `repeat(${nine.holes.length}, minmax(0, 1fr)) auto` }}>
+      {/* The trailing column is a fixed width, not `auto`. Sized to its
+          content it was as wide as the word in it — "Out" being wider than
+          "In" — which left the two nines with different hole columns and a
+          card that did not line up with itself. */}
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: `repeat(${nine.holes.length}, minmax(0, 1fr)) ${TOTAL_COL}` }}
+      >
 
         <Row cells={nine.holes.map(h => String(h.number))} total={label}
              head className="text-ink/65" />
@@ -79,7 +94,7 @@ function Row({
         </span>
       ))}
       <span
-        className={`${base} ${border} px-3 bg-bark/[0.04] uppercase tracking-wider ${
+        className={`${base} ${border} bg-bark/[0.04] uppercase tracking-wider ${
           head ? 'text-ink/65' : 'text-ink/80'
         }`}
       >
