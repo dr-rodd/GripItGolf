@@ -24,6 +24,11 @@ import {
   isScored, mergeSaved, anyScored, holesScored,
   type Card, type SavedScore,
 } from '../lib/liveScores'
+import {
+  cardsToClose, deadScoreKeys, lastActivity,
+  EMPTY_AFTER_HOURS, ABANDONED_AFTER_HOURS, RESIDUE_AFTER_HOURS,
+  type LiveCard, type CardLock, type ScoreActivity,
+} from '../lib/staleLive'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -176,6 +181,163 @@ section('Counting a player\'s answers')
   eq(holesScored(card, 'p1'), 2, 'a pick-up counts towards a player\'s holes')
   eq(holesScored(card, 'p2'), 1, 'an empty slot does not')
   eq(holesScored(card, 'nobody'), 0, 'and somebody not on the card has none')
+}
+
+// ─── Cards nobody came back to ─────────────────────────────
+//
+// The other half of the same table. Above is what happens when a part-played
+// card is picked back up; this is what happens when it never is.
+
+const NOW = new Date('2026-08-13T20:00:00Z')
+const hoursAgo = (h: number) =>
+  new Date(NOW.getTime() - h * 3_600_000).toISOString()
+
+const card = (id: string, over: Partial<LiveCard> = {}): LiveCard => ({
+  id, roundId: 'r1', status: 'active', activatedAt: hoursAgo(1), ...over,
+})
+const lock = (liveRoundId: string, playerId: string): CardLock =>
+  ({ liveRoundId, playerId })
+const hole = (playerId: string, roundId: string, h: number): ScoreActivity =>
+  ({ playerId, roundId, submittedAt: hoursAgo(h) })
+
+section('The thresholds are the ones written down')
+{
+  eq(EMPTY_AFTER_HOURS, 2, 'an empty card is given two hours')
+  eq(ABANDONED_AFTER_HOURS, 12, 'a part-played one is given twelve, so it crosses a night')
+  eq(RESIDUE_AFTER_HOURS, 48, 'and its rows survive a day and a half beyond that')
+  ok(RESIDUE_AFTER_HOURS > ABANDONED_AFTER_HOURS,
+    'closing always comes first — a card is never erased in the run that closes it')
+}
+
+section('A card with nothing on it closes on the old rule, unchanged')
+{
+  const fresh = [card('c1', { activatedAt: hoursAgo(1) })]
+  eq(cardsToClose(fresh, [], [], NOW), [], 'a card opened an hour ago is left alone')
+
+  const stale = [card('c1', { activatedAt: hoursAgo(3) })]
+  eq(cardsToClose(stale, [], [], NOW), [{ id: 'c1', reason: 'empty' }],
+    'and one opened three hours ago with nothing on it is closed')
+
+  // The original job treated a card with no locks as empty. It still does.
+  const locked = [card('c1', { activatedAt: hoursAgo(3) })]
+  eq(cardsToClose(locked, [lock('c1', 'p1')], [], NOW),
+    [{ id: 'c1', reason: 'empty' }],
+    'a card with players selected but no hole entered is empty too')
+}
+
+section('A part-played card closes on the last hole entered, not on when it opened')
+{
+  const cards = [card('c1', { activatedAt: hoursAgo(72) })]
+  const locks = [lock('c1', 'p1')]
+
+  // The one that matters most. A long round, a card resumed the next
+  // morning, a group that started three days ago and is playing right now —
+  // all of them are still in play, and closing one takes the scores off the
+  // board mid-round.
+  eq(cardsToClose(cards, locks, [hole('p1', 'r1', 0.2)], NOW), [],
+    'a card opened three days ago and scored ten minutes ago is still in play')
+  eq(cardsToClose(cards, locks, [hole('p1', 'r1', 5)], NOW), [],
+    'and one last touched five hours ago is a round still going')
+
+  eq(cardsToClose(cards, locks, [hole('p1', 'r1', 13)], NOW),
+    [{ id: 'c1', reason: 'abandoned' }],
+    'thirteen hours since the last hole is a card nobody came back to')
+
+  // The newest hole is what counts, not the oldest.
+  eq(cardsToClose(cards, locks, [hole('p1', 'r1', 30), hole('p1', 'r1', 2)], NOW), [],
+    'the most recent hole is what says whether anybody is still there')
+}
+
+section('Only an active card is ever closed')
+{
+  const locks = [lock('c1', 'p1')]
+  const old = [hole('p1', 'r1', 200)]
+
+  eq(cardsToClose([card('c1', { status: 'finalised' })], locks, old, NOW), [],
+    'a finalised card is a signed scorecard and is never touched')
+  eq(cardsToClose([card('c1', { status: 'closed' })], locks, old, NOW), [],
+    'and a closed one is already closed')
+}
+
+section('A card only counts its own players, on its own round')
+{
+  const cards = [card('c1'), card('c2', { roundId: 'r2' })]
+  const locks = [lock('c1', 'p1'), lock('c2', 'p2')]
+
+  // p2 is playing right now, on another round. That must not hold c1 open.
+  eq(lastActivity(cards[0], locks, [hole('p2', 'r2', 0.1)]), null,
+    'another group\'s card is not this one\'s activity')
+  // p1 scoring on a different round is not this card's activity either.
+  eq(lastActivity(cards[0], locks, [hole('p1', 'r2', 0.1)]), null,
+    'and neither is this player on a different round')
+  ok(lastActivity(cards[0], locks, [hole('p1', 'r1', 0.1)]) !== null,
+    'this player, this round, is')
+}
+
+section('A row is dead only when no card can reach it')
+{
+  const old = [hole('p1', 'r1', 100)]
+
+  eq(deadScoreKeys(old, [card('c1')], [lock('c1', 'p1')], NOW), [],
+    'an active card can be resumed, so its rows stay')
+  eq(deadScoreKeys(old, [card('c1', { status: 'finalised' })], [lock('c1', 'p1')], NOW), [],
+    'a finalised card keeps its locks so unfinalising works, so its rows stay too')
+
+  eq(deadScoreKeys(old, [card('c1', { status: 'closed' })], [lock('c1', 'p1')], NOW),
+    [{ playerId: 'p1', roundId: 'r1' }],
+    'a closed card can be reached by nothing, so its rows go')
+  eq(deadScoreKeys(old, [], [], NOW), [{ playerId: 'p1', roundId: 'r1' }],
+    'and rows whose card was deleted outright go as well')
+}
+
+section('An unreachable row is still given a day and a half')
+{
+  const closed = [card('c1', { status: 'closed' })]
+  const locks = [lock('c1', 'p1')]
+
+  eq(deadScoreKeys([hole('p1', 'r1', 5)], closed, locks, NOW), [],
+    'a card closed this morning keeps its scores — a wrong close is recoverable')
+  eq(deadScoreKeys([hole('p1', 'r1', 47)], closed, locks, NOW), [],
+    'so does one just under the two days')
+  eq(deadScoreKeys([hole('p1', 'r1', 49)], closed, locks, NOW),
+    [{ playerId: 'p1', roundId: 'r1' }],
+    'past it, the rows are removed for good')
+
+  // The whole card has to be old, not just its first hole.
+  eq(deadScoreKeys([hole('p1', 'r1', 100), hole('p1', 'r1', 3)], closed, locks, NOW), [],
+    'a card is residue only once all of it is old')
+}
+
+section('A card closed by this run counts as gone in the same run')
+{
+  const cards = [card('c1', { activatedAt: hoursAgo(72) })]
+  const locks = [lock('c1', 'p1')]
+  const activity = [hole('p1', 'r1', 60)]
+
+  const closing = cardsToClose(cards, locks, activity, NOW)
+  eq(closing, [{ id: 'c1', reason: 'abandoned' }], 'the card is abandoned and closes')
+
+  // Without this the row would be reachable through the card the run is in
+  // the middle of closing, and wait a further day for no reason.
+  eq(deadScoreKeys(activity, cards, locks, NOW, new Set(closing.map(c => c.id))),
+    [{ playerId: 'p1', roundId: 'r1' }],
+    '  …and its sixty-hour-old rows go with it, not a day later')
+  eq(deadScoreKeys(activity, cards, locks, NOW), [],
+    'though on its own the card still reads as active')
+}
+
+section('Two groups on one round are separated')
+{
+  // The mistake lib/scorecardVoid.ts exists to warn about, on the other side:
+  // deleting by round would take the group still playing with it.
+  const cards = [card('live'), card('dead', { status: 'closed' })]
+  const locks = [lock('live', 'p1'), lock('dead', 'p2')]
+  const activity = [hole('p1', 'r1', 0.5), hole('p2', 'r1', 100)]
+
+  eq(cardsToClose(cards, locks, activity, NOW), [],
+    'the group still out is not closed by the abandoned one beside it')
+  eq(deadScoreKeys(activity, cards, locks, NOW), [{ playerId: 'p2', roundId: 'r1' }],
+    'and only the abandoned card\'s player loses their rows')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

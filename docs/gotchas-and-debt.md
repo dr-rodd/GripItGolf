@@ -91,12 +91,32 @@ The current CC Behaviour rule in the main `CLAUDE.md` (act immediately on single
 
 `live_scores` has **no foreign key to `live_rounds`**. Migration 003 rekeyed it to `(player_id, round_id, hole_number)` so the client never has to join `holes` to submit a score, and in doing so dropped the link back to the session. `live_player_locks` still cascades from `live_rounds`; the scores do not.
 
-So when a session ends — closed, deleted, or simply abandoned — its locks vanish and its half-entered holes stay in the table for good. The hourly cleanup (`app/api/cleanup/route.ts`) makes this more likely rather than less: it will only close an old session that has **zero** scores against it, deliberately, so a part-played abandoned card is exactly the thing it never touches.
+So when a session ends — closed, deleted, or voided — its half-entered holes stay in the table unless something deletes them by hand.
+
+**But the commoner case was worse, and the first diagnosis here had it backwards.** An abandoned card does not end at all. Nothing in the app ever closed it: the nightly job would only close an old session with **zero** scores against it, deliberately, so the moment a card had one hole on it, it stayed `status = 'active'` for good. That is not an inert leftover — an open card is the definition of a round in play. Its part-played scores stood on the leaderboard as a round that never settled, and its players stayed locked into it, so that round could never be scored properly on a new card.
 
 Read back without a guard, those rows are indistinguishable from a card being played right now. They stood on the leaderboard as a partial score, marked the round in play, made the round picker say "Scores in", and — once round summaries existed — gave a round a podium nobody earned.
 
 **The rule now: a live score counts only while its round has a card open on it.** One line in `buildRowContext` (`lib/rowContext.ts`), and the same rule restated in the round picker. `liveRoundIds` is the open sessions and nothing else — it used to also include any round with uncommitted scores, which is the same phantom seen from the other side.
 
-**The orphaned rows are ignored, not deleted.** Nothing is removed on the strength of an inference about a session that ended. A real cleanup — delete `live_scores` where the round has no open session and no committed counterpart — is a separate job and needs somebody to look at the data first.
-
 Pinned in `test:hub`, and the leaderboard's golden master carries a `live-scores-with-no-open-card` case: before the fix it rendered a partial score of `+7` and a total of 75; after, that round reads as unplayed. Every other case in that fixture is byte-identical across the change.
+
+### Closing the card, and clearing what it leaves
+
+The read-side guard stops the phantom being *shown*. It does not stop it existing, and it cannot help the round that stays unplayable because its players are still locked into a card from three days ago. That is the nightly job's work, and `lib/staleLive.ts` is the rule it follows — pure, so `test:live-scores` drives it without a database.
+
+**A card is closed on the last hole entered, never on when it opened.** `live_scores.submitted_at` is what says when anybody last touched it. Keying off `activated_at` would close a group who started early and are still out on the course, which is the one thing this must never do.
+
+| | Threshold | What happens |
+|---|---|---|
+| Card with nothing on it | 2 hours from opening | Closed. The original rule, unchanged. |
+| Part-played card | 12 hours from the last hole | Closed — crosses a night, so a real interruption never trips it. |
+| Its rows | 48 hours from the last hole | Deleted. |
+
+Closing writes nothing away: it takes the card off the leaderboard, stops the round reading as in play, and releases the players so the round can be scored again. Only the third step is destructive, and the gap before it is the point — a card closed in error can be rescued by hand for a day and a half, because its scores are all still there.
+
+A row is deleted only when **no card can reach it**: no active card to resume it, and no finalised one to unfinalise. A finalised card keeps its locks on purpose, so its rows are reachable and are never touched. Deletes are scoped by player *and* round — a delete by round alone would take the group still out on that round with it, which is the mistake `lib/scorecardVoid.ts` exists to warn about.
+
+`GET /api/cleanup?dryRun=1` reports exactly what both steps would do and writes nothing. Worth running first, and worth running again after.
+
+**Still open:** `live_scores` has no `live_round_id`, so a resume and a commit both read every row for a player and round whichever card wrote it. Between a card being closed and its rows aging out, a new card on the same round for the same player would merge them in. The window is 36 hours and the flow makes it hard to reach — but the real fix is the missing column, and that is a schema job inside the scoring entry flow.
