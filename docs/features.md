@@ -234,3 +234,25 @@ Icon-led and centred, the way a course is presented. The icon carries more weigh
 **One icon per mode the itinerary can store: car, flight, train.** `travel_mode` allows no others, so a ferry or a bus icon would be one nothing can select. Adding them is a migration and is post-13-August work.
 
 **Every place gets a maps link and nothing gets a dead one.** `lib/places.ts` — no phone or address detection: these fields hold names ("The Shandon Hotel", "Carne") because that is what the form asks for, and a maps *search* takes a name perfectly well. Scheme and host are fixed, only the query is interpolated, so nothing typed can change where the link goes.
+
+## Round summary pages
+
+`/trip/[tripCode]/round/[roundNumber]` — keyed on the round, not the course, because a trip can play the same course twice and a result belongs to a day rather than to a place.
+
+Reached from the itinerary (golf items are tappable; a stay or a journey is not, and has no page) and from the Up next card when the next thing is golf. **No tab bar entry, and no tab lights on it** — a summary is reached from the running order, not from the scoring flow, and lighting Scoring would say the reader is somewhere they are not. Pinned in `test:branding`.
+
+In order: course name and location, the day and how many groups go off, weather, directions, the card, the tees, the result, and a button into live scoring.
+
+**Weather is two empty slots and no data.** Nothing on the platform fetches a forecast — no client, no key, no column, no cache. The slots say "Not available yet" in as many words rather than showing a dash somebody could read as "no wind". Shaped as they will be filled, so a real source is a swap and not a re-layout.
+
+**The card is one set of numbers.** `lib/courseCard.ts` — two nines, par over stroke index, each nine's par at the end. A woman on a course carrying `par_ladies` and `stroke_index_ladies` reads the ladies card; everybody else, including a device that recognises nobody, reads the men's. Never both: four rows of small figures do not fit a phone. `ladies_data_verified` is not consulted — Cleanup 1 established it never reaches the calculation, and a flag that does not gate the maths should not gate the display of the same numbers.
+
+**No yardage row.** The eight `yardage_*` columns exist and have never been populated. An empty column is worse than no column.
+
+**Tee ratings are absent, not empty, where a course has none.** Three of the 26 platform courses carry no tee rows.
+
+**The podium is the shared calculation, over one round.** `fetchRoundRows` in `lib/hubStanding.ts` builds a `RowContext` through `buildRowContext` and runs `buildRows` for the primary board over that round alone; `podium()` in `lib/standing.ts` reads places off the order it hands back. **No comparator exists on this page or in that reader** — two level share second and the next is fourth, because that is what the one ordering already does.
+
+**A round result drops the trip's discard rule.** `discardWorst` is zeroed for a single round: `totalAfterDiscard([x], 1)` sets aside the only card there is and puts the whole field on nothing. A trip-level rule about your worst round has nothing to say inside one round.
+
+An unplayed round has no result section and no leaderboard link — not an empty state, not a promise. `buildRows` drops anyone with no holes recorded, so an empty row list *is* the answer.

@@ -61,6 +61,7 @@ export default function StatusBlock({
   items,
   startDate,
   roundDates,
+  roundNumbers,
   courseNames,
 }: {
   tripCode: string
@@ -70,6 +71,8 @@ export default function StatusBlock({
   startDate: string | null
   /** Round date by the itinerary item that made it — the date half of the join. */
   roundDates: [string, string | null][]
+  /** Itinerary item id → round number, for the golf items that have a page. */
+  roundNumbers: Record<string, number>
   courseNames: Record<string, string>
 }) {
   const router = useRouter()
@@ -85,6 +88,10 @@ export default function StatusBlock({
   const countdown = next?.startsAt && now
     ? describeCountdown(next.startsAt.getTime() - now.getTime())
     : ''
+  // Only a golf item has a round behind it, and only a round has a page.
+  const nextRoundNumber = next?.item.kind === 'golf'
+    ? roundNumbers[next.item.id] ?? null
+    : null
 
   return (
     <div className="w-full rounded-2xl border border-bark/12 bg-surface px-4 py-4">
@@ -104,9 +111,22 @@ export default function StatusBlock({
         </button>
       </div>
 
-      {/* ── Up next ── */}
+      {/* ── Up next ──
+          Golf links through to its round summary; a stay or a journey has
+          no page to open and stays plain. */}
       <div className="mt-3.5 pt-3.5 border-t border-bark/[0.08]">
-        {next ? <UpNextLines next={next} countdown={countdown} /> : <TripOver />}
+        {next ? (
+          nextRoundNumber != null ? (
+            <Link
+              href={`/trip/${tripCode}/round/${nextRoundNumber}`}
+              className="block active:opacity-75 transition-opacity duration-150"
+            >
+              <UpNextLines next={next} countdown={countdown} />
+            </Link>
+          ) : (
+            <UpNextLines next={next} countdown={countdown} />
+          )
+        ) : <TripOver />}
       </div>
 
       {/* ── Standing ──

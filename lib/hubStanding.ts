@@ -12,7 +12,7 @@
 import { supabase } from './supabase'
 import { type Leaderboard } from './leaderboards'
 import { type TeamScoring } from './teamScoring'
-import { buildRows, type RowHole } from './boardRows'
+import { buildRows, type RowHole, type BoardRow } from './boardRows'
 import { standings, type SummaryScore } from './playerSummary'
 import { fetchMemberships } from './teamMembers'
 import {
@@ -109,6 +109,53 @@ async function fullPlacing(
   playerId: string,
   legacyTeamScoring: TeamScoring | null,
 ): Promise<PlacingResult> {
+  const { rows, error } = await fetchBoardRows(tripId, lead, legacyTeamScoring)
+  if (error) return { placing: null, error }
+  return { placing: placingFromRows([playerId], rows), error: null }
+}
+
+/**
+ * One round's board, for a round summary's podium.
+ *
+ * **The discard rule is dropped, and it has to be.** A trip that throws away
+ * your worst round has nothing to say about a table built from exactly one —
+ * `totalAfterDiscard([x], 1)` sets aside the only card there is and puts the
+ * whole field on nothing. A round result is that round's result.
+ *
+ * Everything else about the board travels: its scoring, its allowance, who it
+ * ranks. And the rows come back in the same finishing order the leaderboard
+ * would put them in, from the same `buildRows`, because that is the only
+ * ordering in this codebase.
+ *
+ * An empty list is the ordinary answer for a round nobody has played —
+ * `buildRows` drops anyone with no holes on it.
+ */
+export async function fetchRoundRows(
+  tripId: string,
+  roundId: string,
+  lead: Leaderboard | null,
+  legacyTeamScoring: TeamScoring | null,
+): Promise<{ rows: BoardRow[]; error: string | null }> {
+  // A knockout is not a table, so it has no podium.
+  if (!lead || lead.competition === 'matchplay') return { rows: [], error: null }
+  return fetchBoardRows(
+    tripId, { ...lead, discardWorst: 0 }, legacyTeamScoring, [roundId],
+  )
+}
+
+/**
+ * A board's rows, over every round or over some of them.
+ *
+ * The nine queries. Shared by the hub's standing line and the round summary's
+ * podium so there is one place that knows what a board needs. They differ only
+ * in which rounds they ask about.
+ */
+async function fetchBoardRows(
+  tripId: string,
+  lead: Leaderboard,
+  legacyTeamScoring: TeamScoring | null,
+  onlyRoundIds?: string[],
+): Promise<{ rows: BoardRow[]; error: string | null }> {
   const { data: rounds, error: roundsError } = await supabase
     .from('rounds')
     .select('id, round_number, course_id')
@@ -116,12 +163,15 @@ async function fullPlacing(
     .order('round_number')
 
   if (roundsError) {
-    console.error('fetchPlacing rounds query failed:', roundsError)
-    return { placing: null, error: 'Could not read the rounds for your standing.' }
+    console.error('fetchBoardRows rounds query failed:', roundsError)
+    return { rows: [], error: 'Could not read the rounds.' }
   }
 
-  const roundRows = rounds ?? []
-  if (roundRows.length === 0) return NONE
+  const all = rounds ?? []
+  const roundRows = onlyRoundIds
+    ? all.filter(r => onlyRoundIds.includes(r.id as string))
+    : all
+  if (roundRows.length === 0) return { rows: [], error: null }
 
   const roundIds = roundRows.map(r => r.id as string)
   const courseIds = [...new Set(roundRows.map(r => r.course_id as string).filter(Boolean))]
@@ -159,8 +209,8 @@ async function fullPlacing(
   const failed = [playersRes, teamsRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes]
     .find(r => r.error)
   if (failed?.error) {
-    console.error('fetchPlacing board query failed:', failed.error)
-    return { placing: null, error: 'Could not work out your standing.' }
+    console.error('fetchBoardRows board query failed:', failed.error)
+    return { rows: [], error: 'Could not work out the standings.' }
   }
 
   const players = playersRes.data ?? []
@@ -187,5 +237,5 @@ async function fullPlacing(
     legacyTeamScoring,
   })
 
-  return { placing: placingFromRows([playerId], buildRows(lead, ctx)), error: null }
+  return { rows: buildRows(lead, ctx), error: null }
 }

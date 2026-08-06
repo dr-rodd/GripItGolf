@@ -95,3 +95,36 @@ export function describePlacing(p: Placing | null): string {
   if (!p || p.position < 1 || p.field < 1) return ''
   return `${ordinal(p.position)} of ${p.field}`
 }
+
+// ─── The top of a board ────────────────────────────────────
+
+/** One line of a podium: who, what they scored, and where that puts them. */
+export type PodiumPlace = {
+  id: string
+  name: string
+  total: number
+  /** Shared where level, the way a scoreboard reads. */
+  position: number
+}
+
+/**
+ * The top few, off a board's rows.
+ *
+ * **No comparator here, and there must never be one.** `buildRows` hands its
+ * rows back in finishing order and `placingFromRows` already reads a shared
+ * place off them the same way — the first row on a given total is the place
+ * everybody on that total occupies. This is that rule, applied down the list
+ * instead of to one entrant.
+ *
+ * Which means a three-way tie for first returns three rows at position 1 when
+ * `count` is 3, and two level for second are both second with the next fourth.
+ * A round summary does not get its own tie rule; it gets this one.
+ */
+export function podium(rows: readonly BoardRow[], count = 3): PodiumPlace[] {
+  return rows.slice(0, count).map(row => ({
+    id: row.id,
+    name: row.name,
+    total: row.total,
+    position: rows.findIndex(r => r.total === row.total) + 1,
+  }))
+}

@@ -4,6 +4,7 @@ import {
   type ItineraryItem, itemsForDay, dateForDay, describeDay, describeItem,
   itemState, tripProgress,
 } from '@/lib/itinerary'
+import Link from 'next/link'
 import { IconFlag, IconHome, IconArrowRight } from '@/app/components/icons'
 import { useMinute } from '@/app/components/useMinute'
 
@@ -66,13 +67,22 @@ function SubtleRow({
 }
 
 export default function Itinerary({
-  items, startDate, courseNames, days,
+  items, startDate, courseNames, days, tripCode, roundNumbers,
 }: {
   items: ItineraryItem[]
   startDate: string | null
   /** Course id → name. Resolved on the server, where the query already was. */
   courseNames: Record<string, string>
   days: number
+  tripCode: string
+  /**
+   * Itinerary item id → the round it became.
+   *
+   * Only golf items appear. A stay or a journey has no page to open — there
+   * is nothing to say about a guesthouse beyond its name, which is already
+   * on the tile — so they stay as they are and are not tappable.
+   */
+  roundNumbers: Record<string, number>
 }) {
   const now = useMinute()
 
@@ -125,16 +135,16 @@ export default function Itinerary({
                   }
 
                   const Icon = KIND_ICON.golf
+                  const roundNumber = roundNumbers[item.id]
 
-                  return (
-                    <li
-                      key={item.id}
-                      className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 transition-opacity duration-200 ${
-                        state === 'now'
-                          ? 'border-accent/40 bg-accent/[0.07]'
-                          : 'border-bark/12 bg-surface'
-                      } ${state === 'past' ? 'opacity-50' : ''}`}
-                    >
+                  const tile = `flex items-center gap-3 rounded-xl border px-3.5 py-3 transition-opacity duration-200 ${
+                    state === 'now'
+                      ? 'border-accent/40 bg-accent/[0.07]'
+                      : 'border-bark/12 bg-surface'
+                  } ${state === 'past' ? 'opacity-50' : ''}`
+
+                  const inside = (
+                    <>
                       <span
                         className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
                           state === 'now' ? 'text-accent-deep bg-accent/[0.14]' : 'text-bark bg-bark/[0.06]'
@@ -158,6 +168,26 @@ export default function Itinerary({
 
                       {state === 'now' && (
                         <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-accent dot-live" aria-label="Happening now" role="img" />
+                      )}
+                    </>
+                  )
+
+                  // A golf item became a round, and a round has a page: the
+                  // card, the tee ratings, and what happened on it. An item
+                  // with no round behind it — a trip whose itinerary was
+                  // edited after its rounds were made — stays a plain tile
+                  // rather than a link to nowhere.
+                  return (
+                    <li key={item.id}>
+                      {roundNumber != null ? (
+                        <Link
+                          href={`/trip/${tripCode}/round/${roundNumber}`}
+                          className={`${tile} active:opacity-75`}
+                        >
+                          {inside}
+                        </Link>
+                      ) : (
+                        <div className={tile}>{inside}</div>
                       )}
                     </li>
                   )

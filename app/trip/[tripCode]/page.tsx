@@ -128,6 +128,15 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
     .filter(r => r.itinerary_item_id)
     .map(r => [r.itinerary_item_id as string, r.scheduled_date as string | null])
 
+  // And which round *number*, so a golf item opens its own summary page.
+  // Only golf items appear here — a stay or a journey has no page and is not
+  // tappable, which is the difference the itinerary reads off this map.
+  const roundNumbers: Record<string, number> = Object.fromEntries(
+    rounds
+      .filter(r => r.itinerary_item_id)
+      .map(r => [r.itinerary_item_id as string, r.round_number as number]),
+  )
+
   // Courses for both the rounds list and the itinerary's golf tiles
   const courseIds = [
     ...rounds.map(r => r.course_id),
@@ -282,6 +291,8 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       startDate={trip.start_date ?? null}
       courseNames={courseMap}
       days={dayCount(trip.start_date ?? null, trip.end_date ?? null)}
+      tripCode={tripCode}
+      roundNumbers={roundNumbers}
     />
   ) : days.length > 0 ? (
     <ul className="flex flex-col gap-2">
@@ -357,6 +368,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
           items={itinerary}
           startDate={trip.start_date ?? null}
           roundDates={roundDates}
+          roundNumbers={roundNumbers}
           courseNames={courseMap}
         />
 

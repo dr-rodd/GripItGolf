@@ -56,6 +56,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `/trip/[tripCode]/setup` | Formats, players, finalise/unlock |
 | `/trip/[tripCode]/teams` | Team assignment |
 | `/trip/[tripCode]/players` | Join / claim a player slot |
+| `/trip/[tripCode]/round/[roundNumber]` | Round summary — card, tees, result |
 | `/trip/[tripCode]/scoring` | Round picker |
 | `/trip/[tripCode]/scoring/[roundNumber]` | Live scoring |
 | `/trip/[tripCode]/leaderboard` | Leaderboard tabs |
@@ -78,6 +79,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `lib/upNext.ts` | What happens next on the trip. **Only golf can be counted down to** — a stay or a journey carries a day and nothing finer. Joins `rounds.scheduled_date` to `itinerary_items.tee_time`, the one place the two meet |
 | `lib/standing.ts` / `lib/hubStanding.ts` | Where a player stands. Two paths: one query for an individual Stableford total, the full `buildRows` context for anything else. `test:hub` holds them against each other |
 | `lib/rowContext.ts` | Raw rows → a `RowContext`, via `buildRowContext`. **The only assembly there is** — the leaderboard and the hub both call it. Fetching is each caller's own; deciding never is |
+| `lib/courseCard.ts` | A course's card, two nines with their pars. **One set of numbers, never two** — the ladies card or the men's, decided by who is holding the phone. No yardages: those columns have never held a value |
 | `lib/nextMatch.ts` | The next tie: opponent known, undecided, a bye, or out. In a pairs draw the entrant is the pairing on *that draw's* sheet |
 | `app/components/Section.tsx` | The collapsible hub sections. One open at a time — the stack owns that, not the section |
 | `lib/currentPlayer.ts` | Cookie → the player holding this phone, matched against this trip's roster. **Personalises, never authorises** |

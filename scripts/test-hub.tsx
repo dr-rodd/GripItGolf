@@ -21,9 +21,11 @@ import { stayRuns, travelLegs, describeStayRun } from '../lib/stays'
 import { mapsUrl } from '../lib/places'
 import {
   usesSimpleStandings, placingFromStandings, placingFromRows, describePlacing,
+  podium,
 } from '../lib/standing'
+import { courseCard, hasCard, hasLadiesCard } from '../lib/courseCard'
 import { standings, type SummaryScore } from '../lib/playerSummary'
-import { buildRows, type RowContext, type RowHole } from '../lib/boardRows'
+import { buildRows, type RowContext, type RowHole, type BoardRow } from '../lib/boardRows'
 import { resolveScores, handicapMap, sortRounds, buildRowContext } from '../lib/rowContext'
 import { parseTeamScoring } from '../lib/teamScoring'
 import { isLegacy } from '../lib/leaderboardsCompat'
@@ -475,6 +477,141 @@ section('Journeys carry their mode')
   ok(travelSection.includes('IconCar') && travelSection.includes('IconPlane')
      && travelSection.includes('IconTrain'), 'and the section draws all three')
   ok(travelSection.includes('IconHome'), 'with the existing home icon for a stay')
+}
+
+// ─── The round summary ─────────────────────────────────────
+
+section('A podium reads places off the shared order, and never sorts')
+{
+  const row = (id: string, name: string, total: number): BoardRow => ({
+    id, name, subLabel: '', perRound: {}, playedRounds: [], total,
+    isLive: false, playerIds: [id],
+  })
+
+  // Already in finishing order — that is what buildRows hands back, and this
+  // reads places off it rather than deciding any.
+  const clear = [row('a', 'Alice', 82), row('b', 'Bob', 74), row('c', 'Cara', 70), row('d', 'Dan', 66)]
+  eq(podium(clear).map(p => [p.name, p.position]),
+    [['Alice', 1], ['Bob', 2], ['Cara', 3]], 'three names, three places')
+  eq(podium(clear).length, 3, 'and no more than three')
+
+  // Two level for second: both second, and the next one is fourth.
+  const tied = [row('a', 'Alice', 82), row('b', 'Bob', 74), row('c', 'Cara', 74), row('d', 'Dan', 66)]
+  eq(podium(tied).map(p => p.position), [1, 2, 2], 'two level share second')
+  eq(podium(tied, 4).map(p => p.position), [1, 2, 2, 4], '  …and the next is fourth, not third')
+
+  // Three level at the top are all first.
+  const three = [row('a', 'A', 74), row('b', 'B', 74), row('c', 'C', 74), row('d', 'D', 66)]
+  eq(podium(three).map(p => p.position), [1, 1, 1], 'three level are all first')
+  eq(podium(three, 4).map(p => p.position), [1, 1, 1, 4], '  …and the next is fourth')
+
+  eq(podium([]), [], 'a round nobody played has no podium')
+  eq(podium([row('a', 'Alice', 74)]).length, 1, 'and a field of one is a field of one')
+
+  // The tie rule is the same one the standing line reads.
+  eq(podium(tied)[1].position, placingFromRows(['b'], tied)?.position,
+    'and it is the same place the standing line would give them')
+
+  // No comparator anywhere on the page or in the reader.
+  const standing = code('lib/standing.ts')
+  ok(!/\.sort\(/.test(standing), 'lib/standing.ts sorts nothing')
+  const page = code('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
+  ok(!/\.sort\(/.test(page), 'and neither does the round summary')
+  ok(page.includes('podium('), '  …it reads the shared one')
+  ok(page.includes('fetchRoundRows'), '  …built through the shared assembly')
+}
+
+section('A round result drops the trip\'s discard rule')
+{
+  // A trip that throws away your worst round has nothing to say about a
+  // table built from exactly one: discarding the only card puts the whole
+  // field on nothing.
+  const hub = code('lib/hubStanding.ts')
+  ok(/discardWorst: 0/.test(hub), 'the round podium zeroes the discard')
+  ok(/fetchRoundRows/.test(hub), '  …in the one place that fetches a round\'s board')
+}
+
+section('The card is one set of numbers, never two')
+{
+  const holes: RowHole[] = Array.from({ length: 18 }, (_, i) => ({
+    id: `h${i + 1}`, hole_number: i + 1, par: 4, stroke_index: i + 1, course_id: 'c1',
+    par_ladies: i < 6 ? 5 : 4, stroke_index_ladies: 18 - i,
+  }))
+  const plain: RowHole[] = holes.map(h => ({ ...h, par_ladies: null, stroke_index_ladies: null }))
+
+  ok(hasLadiesCard(holes), 'a course with both ladies columns has a ladies card')
+  ok(!hasLadiesCard(plain), 'and one with neither does not')
+  ok(!hasLadiesCard(holes.map(h => ({ ...h, stroke_index_ladies: null }))),
+    'half a ladies card is not one — it would print two sets of numbers at once')
+
+  const mens = courseCard(holes, 'M')
+  const ladies = courseCard(holes, 'F')
+  eq(mens.par, 72, 'the men play a par 72 here')
+  eq(ladies.par, 78, 'and the ladies card is six shots longer')
+  ok(!mens.ladies, 'the card knows which it is showing')
+  ok(ladies.ladies, '  …either way')
+
+  // A course with no ladies data shows the men's to everybody.
+  eq(courseCard(plain, 'F').par, 72, 'no ladies data, no ladies card')
+  ok(!courseCard(plain, 'F').ladies, '  …and it does not claim to be one')
+
+  eq(mens.front.holes.length, 9, 'nine out')
+  eq(mens.back.holes.length, 9, 'nine in')
+  eq(mens.front.par + mens.back.par, mens.par, 'and the two add up to the total')
+  eq(mens.front.holes[0].number, 1, 'the front nine starts at one')
+  eq(mens.back.holes[0].number, 10, 'and the back nine at ten')
+
+  ok(!hasCard([]), 'a course with no holes recorded has no card')
+
+  // Yardages exist as columns and have never held a value. No empty column.
+  // Comments stripped: explaining why there is no yardage row is fine, and
+  // is worth keeping. Rendering one is not.
+  const cardFile = code('app/trip/[tripCode]/round/[roundNumber]/RoundCard.tsx')
+  ok(!/yardage/i.test(cardFile), 'and no yardage row anywhere')
+  const summary = code('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
+  ok(!/yardage/i.test(summary), '  …on the page either')
+}
+
+section('The round summary reuses, and invents nothing')
+{
+  const page = read('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
+
+  for (const [what, token] of [
+    ['who is holding the phone', 'currentPlayer'],
+    ['the maps link', 'mapsUrl'],
+    ['the tee-time phrasing', 'describeGroups'],
+    ['the day phrasing', 'describeDay'],
+    ['the shared board fetch', 'fetchRoundRows'],
+    ['the shared podium reader', 'podium'],
+  ] as const) {
+    ok(page.includes(token), `it reuses ${what}`)
+  }
+
+  // Weather: two slots, no data, and nothing that looks like a reading.
+  ok(/Not available yet/.test(page), 'weather says plainly that it is not there')
+  eq((page.match(/WeatherSlot label=/g) ?? []).length, 2, 'two slots: now, and at the tee')
+  ok(!/°|celsius|fahrenheit|mph|km\/h/i.test(page), 'and no invented figure of any kind')
+
+  // The scoring shortcut goes to the renamed route.
+  ok(page.includes('/scoring/${round.round_number}'), 'the shortcut routes into live scoring')
+
+  // No glow, anywhere.
+  ok(!/shadow-\[0_0_/.test(page), 'the page adds no glow')
+  ok(!page.includes('ROUND_TILE.live'), '  …and never touches the state that carries one')
+}
+
+section('Only golf opens a page')
+{
+  const itin = code('app/trip/[tripCode]/Itinerary.tsx')
+  ok(itin.includes('roundNumbers'), 'the itinerary is told which items became rounds')
+  ok(/kind !== 'golf'[\s\S]{0,200}SubtleRow/.test(itin),
+    'a stay or a journey is still the plain row it was')
+  ok(/roundNumber != null \?[\s\S]{0,200}Link/.test(itin),
+    'and a golf item with a round behind it becomes a link')
+
+  const status = code('app/trip/[tripCode]/StatusBlock.tsx')
+  ok(/next\?\.item\.kind === 'golf'/.test(status),
+    'up next links through only when the next thing is golf')
 }
 
 // ─── The page itself ───────────────────────────────────────

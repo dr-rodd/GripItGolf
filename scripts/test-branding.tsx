@@ -1042,6 +1042,12 @@ section('The tab bar is on every screen inside a trip')
     // The legacy route at the root of the app shares a word and nothing else.
     ok(lit('/scoring/old-tom-morris') !== 'scoring',
       'and neither does the legacy /scoring route, which is not inside a trip')
+
+    // A round summary is reached from the itinerary, not from the scoring
+    // flow. Lighting Scoring on it would say the reader is somewhere they
+    // are not — the card is one tap further on, behind a button.
+    eq(lit(`${base}/round/2`), null, 'a round summary lights no tab at all')
+    ok(lit(`${base}/round/2`) !== 'scoring', '  …and certainly not Scoring')
   }
 
   // Every destination the bar offers is one of the screens that carries it.
