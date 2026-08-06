@@ -353,7 +353,7 @@ section('The bottom tab bar')
   const carriers = [
     'app/trip/[tripCode]/page.tsx',
     'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/course/page.tsx',
+    'app/trip/[tripCode]/scoring/page.tsx',
     'app/trip/[tripCode]/teams/page.tsx',
     'app/trip/[tripCode]/players/page.tsx',
     'app/trip/[tripCode]/matchplay/page.tsx',
@@ -376,7 +376,7 @@ section('The footer is sitewide, once inside a trip')
   const carriers = [
     'app/trip/[tripCode]/page.tsx',
     'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/course/page.tsx',
+    'app/trip/[tripCode]/scoring/page.tsx',
     'app/trip/[tripCode]/teams/page.tsx',
     'app/trip/[tripCode]/players/page.tsx',
     'app/trip/[tripCode]/matchplay/page.tsx',
@@ -388,7 +388,7 @@ section('The footer is sitewide, once inside a trip')
 
   // The one screen it must never sit near: the guide is explicit that it
   // "must not sit anywhere near someone entering a score."
-  const scoring = read('app/trip/[tripCode]/course/[roundNumber]/page.tsx')
+  const scoring = read('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')
   ok(!scoring.includes('SupportLink'), 'the live scoring dashboard does not carry it')
   const dashboard = read('app/scoring/[slug]/CourseDashboardClient.tsx')
   ok(!dashboard.includes('SupportLink'), 'nor does the shared scoring client behind it')
@@ -428,8 +428,8 @@ section('The mark is the header, and the way back')
   const carriers = [
     'app/trip/[tripCode]/page.tsx',
     'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/course/page.tsx',
-    'app/trip/[tripCode]/course/[roundNumber]/page.tsx',
+    'app/trip/[tripCode]/scoring/page.tsx',
+    'app/trip/[tripCode]/scoring/[roundNumber]/page.tsx',
     'app/trip/[tripCode]/teams/page.tsx',
     'app/trip/[tripCode]/players/page.tsx',
     'app/trip/[tripCode]/matchplay/page.tsx',
@@ -505,8 +505,8 @@ section('The collapse happens on leaving the landing page, and nowhere else')
   for (const f of [
     'app/trip/[tripCode]/page.tsx',
     'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/course/page.tsx',
-    'app/trip/[tripCode]/course/[roundNumber]/page.tsx',
+    'app/trip/[tripCode]/scoring/page.tsx',
+    'app/trip/[tripCode]/scoring/[roundNumber]/page.tsx',
   ]) {
     // The prop, not the word — "in-progress scores" is a different thing
     ok(!/progress=/.test(read(f)),
@@ -966,7 +966,7 @@ section('The screens before a trip wear the same header')
   // points at a trip code that no longer travels as its own prop
   for (const f of [
     'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/course/page.tsx',
+    'app/trip/[tripCode]/scoring/page.tsx',
     'app/trip/[tripCode]/setup/TripSetupClient.tsx',
   ]) {
     ok(/<TripHeader backTo=\{`\/trip\/\$\{[\w.]+\}`\}/.test(read(f)),
@@ -998,7 +998,7 @@ section('The tab bar is on every screen inside a trip')
   const tabbed = [
     'app/trip/[tripCode]/page.tsx',
     'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/course/page.tsx',
+    'app/trip/[tripCode]/scoring/page.tsx',
     'app/trip/[tripCode]/teams/page.tsx',
     'app/trip/[tripCode]/players/page.tsx',
     'app/trip/[tripCode]/matchplay/page.tsx',
@@ -1011,16 +1011,49 @@ section('The tab bar is on every screen inside a trip')
       `  …and leaves room for it, so the last thing on the page is reachable`)
   }
 
+  // Which tab lights, on every route inside a trip.
+  //
+  // The scoring subtree was called `course` until the round summary needed
+  // that word. The matcher is a prefix, so it is worth checking by hand that
+  // it lights on both scoring screens and on nothing else — a tab lit on the
+  // wrong page is the kind of thing nobody reports and everybody notices.
+  {
+    const base = '/trip/ABC123'
+    const lit = (pathname: string) => {
+      if (pathname === base || pathname === `${base}/`) return 'home'
+      if (pathname.startsWith(`${base}/leaderboard`)) return 'leaderboard'
+      if (pathname.startsWith(`${base}/scoring`)) return 'scoring'
+      if (pathname.startsWith(`${base}/setup`) || pathname.startsWith(`${base}/teams`)) return 'settings'
+      return null
+    }
+    // The matcher above is the one in TabBar. If that changes, this is stale.
+    const matcher = read('app/components/TabBar.tsx')
+    ok(matcher.includes('pathname.startsWith(`${base}/scoring`)'),
+      'the bar matches the scoring subtree by prefix')
+
+    eq(lit(`${base}/scoring`), 'scoring', 'the round picker lights Scoring')
+    eq(lit(`${base}/scoring/2`), 'scoring', 'and so does a card open on a round')
+    eq(lit(base), 'home', 'the hub lights Home, not Scoring')
+    eq(lit(`${base}/leaderboard`), 'leaderboard', 'the leaderboard lights its own')
+    eq(lit(`${base}/setup`), 'settings', 'and settings lights Settings')
+    for (const other of ['/players', '/teams', '/matchplay']) {
+      ok(lit(`${base}${other}`) !== 'scoring', `${other} does not light Scoring`)
+    }
+    // The legacy route at the root of the app shares a word and nothing else.
+    ok(lit('/scoring/old-tom-morris') !== 'scoring',
+      'and neither does the legacy /scoring route, which is not inside a trip')
+  }
+
   // Every destination the bar offers is one of the screens that carries it.
   const bar = read('app/components/TabBar.tsx')
-  for (const leaf of ['leaderboard', 'course', 'setup']) {
+  for (const leaf of ['leaderboard', 'scoring', 'setup']) {
     ok(bar.includes(`/${leaf}`), `the bar still offers ${leaf}`)
   }
 
   // Score entry is the one that has to reserve the room itself: its shell
   // sizes the card against the window, so padding added outside it would make
   // the page taller than the screen and pull the card up off the Next button.
-  const scoring = read('app/trip/[tripCode]/course/[roundNumber]/page.tsx')
+  const scoring = read('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')
   ok(/<TabBar/.test(scoring), 'score entry carries the bar too')
   ok(/bottomInset=\{TABBAR_SPACE\}/.test(scoring),
     '  …and reserves the room for it inside the card, not around it')
@@ -1082,7 +1115,7 @@ section('The scoring shell stacks under the site header, not behind it')
   // someone reaching for a constant, so what is pinned here is that nobody
   // reaches for one again.
   const shell = read('app/scoring/[slug]/CourseDashboardClient.tsx')
-  const page  = read('app/trip/[tripCode]/course/[roundNumber]/page.tsx')
+  const page  = read('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')
 
   ok(page.includes('stickyTop={HEADER_H}'),
     'the trip round route tells the shell how much chrome is above it')
@@ -1188,8 +1221,8 @@ section('A page can name itself in the header')
   // Which page wears which
   const wears: [string, string][] = [
     ['app/trip/[tripCode]/leaderboard/page.tsx', 'leaderboard'],
-    ['app/trip/[tripCode]/course/page.tsx', 'scoring'],
-    ['app/trip/[tripCode]/course/[roundNumber]/page.tsx', 'scoring'],
+    ['app/trip/[tripCode]/scoring/page.tsx', 'scoring'],
+    ['app/trip/[tripCode]/scoring/[roundNumber]/page.tsx', 'scoring'],
     ['app/trip/[tripCode]/setup/TripSetupClient.tsx', 'settings'],
   ]
   for (const [file, name] of wears) {
@@ -1386,7 +1419,7 @@ section('A screen names itself once')
   // repeating the word above it.
   // Comments stripped: the note explaining why "Open →" went would match a
   // check looking for it.
-  const picker = stripComments(read('app/trip/[tripCode]/course/page.tsx'))
+  const picker = stripComments(read('app/trip/[tripCode]/scoring/page.tsx'))
   ok(/<TripHeader[^>]*title="scoring"/.test(picker), 'the round picker is named in the header')
   ok(!/Live scoring<\/h1>/.test(picker), 'and does not say it again underneath')
 

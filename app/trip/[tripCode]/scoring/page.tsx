@@ -80,7 +80,7 @@ export default async function TripCoursePortalPage({
             return (
               <Link
                 key={round.id}
-                href={`/trip/${tripCode}/course/${round.round_number}`}
+                href={`/trip/${tripCode}/scoring/${round.round_number}`}
                 className={`flex items-center justify-between w-full px-5 py-4 rounded-2xl transition-colors duration-150 active:opacity-75 ${ROUND_TILE[tone]}`}
               >
                 <div className="min-w-0">

@@ -370,7 +370,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
             <nav className="flex flex-col gap-3 w-full max-w-xs mx-auto">
               {rounds.length > 0 ? (
                 <Link
-                  href={`/trip/${tripCode}/course`}
+                  href={`/trip/${tripCode}/scoring`}
                   className="w-full py-[18px] border-2 border-bark/25 text-ink/80 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-bark/25 hover:text-ink/80 transition-colors"
                 >
                   Live Scoring

@@ -89,7 +89,7 @@ export default async function TripCoursePage({
         holes={(holesRes.data ?? []) as any}
         tees={(teesRes.data ?? []) as any}
         roundHandicaps={hcpsRes.data ?? []}
-        backHref={`/trip/${tripCode}/course`}
+        backHref={`/trip/${tripCode}/scoring`}
         roundId={thisRound.id}
         allowances={allowances.steps}
         allowanceStart={allowances.startIndex}

@@ -155,7 +155,7 @@ The scoring screens are the cream system now — white cards on cream, **bark** 
 
 ### Choosing a round
 
-Two screens offer a round to open — the scoring picker (`/trip/[code]/course`) and the list that drops out of a leaderboard row. Same question, so `lib/roundState.ts` gives them one answer. Both are the app's white card; only the border changes.
+Two screens offer a round to open — the scoring picker (`/trip/[code]/scoring`) and the list that drops out of a leaderboard row. Same question, so `lib/roundState.ts` gives them one answer. Both are the app's white card; only the border changes.
 
 | State | Border | Means |
 |---|---|---|

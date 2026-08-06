@@ -393,7 +393,7 @@ section('A round tile says what has happened on it')
 
   // Both screens read the shared rule rather than rolling their own
   for (const f of [
-    'app/trip/[tripCode]/course/page.tsx',
+    'app/trip/[tripCode]/scoring/page.tsx',
     'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
   ]) {
     ok(read(f).includes("from '@/lib/roundState'"),
@@ -404,7 +404,7 @@ section('A round tile says what has happened on it')
   // The picker judges by what is actually recorded, not by rounds.status —
   // that column is set by hand and drifts, and this is the screen someone
   // checks on the way to the first tee.
-  const picker = read('app/trip/[tripCode]/course/page.tsx')
+  const picker = read('app/trip/[tripCode]/scoring/page.tsx')
   ok(picker.includes("from('live_rounds')"), 'the picker asks which cards are open')
   ok(picker.includes("from('scores')"), '  …and which rounds have scores')
   ok(!/round\.status === /.test(picker), '  …rather than trusting rounds.status')
@@ -435,7 +435,7 @@ section('A scorecard survives being left and reopened')
     'app/scoring/LiveLeaderboardPanel.tsx',
     'app/scoring/[slug]/CourseDashboardClient.tsx',
     'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/course/page.tsx',
+    'app/trip/[tripCode]/scoring/page.tsx',
   ]) {
     const src = read(f)
     const selects = [...src.matchAll(/from\(["']live_scores["']\)[\s\S]{0,200}?\.select\(["']([^"']*)["']/g)]

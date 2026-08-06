@@ -24,7 +24,7 @@ import {
 const ITEMS = [
   { key: 'home',        label: 'Home',        icon: IconHome,          path: (t: string) => `/trip/${t}` },
   { key: 'leaderboard', label: 'Leaderboard', icon: IconTrophy,        path: (t: string) => `/trip/${t}/leaderboard` },
-  { key: 'scoring',     label: 'Scoring',     icon: IconClipboardList, path: (t: string) => `/trip/${t}/course` },
+  { key: 'scoring',     label: 'Scoring',     icon: IconClipboardList, path: (t: string) => `/trip/${t}/scoring` },
   { key: 'settings',    label: 'Settings',    icon: IconSettings,      path: (t: string) => `/trip/${t}/setup` },
 ] as const
 
@@ -43,7 +43,7 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
   const activeKey = (() => {
     if (pathname === base || pathname === `${base}/`) return 'home'
     if (pathname.startsWith(`${base}/leaderboard`)) return 'leaderboard'
-    if (pathname.startsWith(`${base}/course`)) return 'scoring'
+    if (pathname.startsWith(`${base}/scoring`)) return 'scoring'
     if (pathname.startsWith(`${base}/setup`) || pathname.startsWith(`${base}/teams`)) return 'settings'
     // Players, matchplay and anything else: no tab claims it rather than a
     // wrong one being lit.

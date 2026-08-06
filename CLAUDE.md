@@ -56,8 +56,8 @@ Don't read these up front. Open the matching file when the task actually touches
 | `/trip/[tripCode]/setup` | Formats, players, finalise/unlock |
 | `/trip/[tripCode]/teams` | Team assignment |
 | `/trip/[tripCode]/players` | Join / claim a player slot |
-| `/trip/[tripCode]/course` | Round picker |
-| `/trip/[tripCode]/course/[roundNumber]` | Live scoring |
+| `/trip/[tripCode]/scoring` | Round picker |
+| `/trip/[tripCode]/scoring/[roundNumber]` | Live scoring |
 | `/trip/[tripCode]/leaderboard` | Leaderboard tabs |
 | `/dashboard` | Lead player's trip list (future — post auth) |
 | `/dashboard/create` | Trip creation wizard |
@@ -117,7 +117,7 @@ Calculated by the Postgres trigger `trg_scores_stableford` on every insert/updat
 
 **`app/scoring/LiveLeaderboardPanel.tsx` `compareRows` is a third, and it disagrees.** It breaks a Stableford tie by **countback** — back 9, then back 6, then back 3, then back 2, then holes played — where `sortRows` breaks it by name. So two players level can be ordered one way on the in-play panel inside the scoring card and the other way on the trip leaderboard.
 
-That panel is reachable from platform trips: `CourseDashboardClient` renders it, and that is what `/trip/[tripCode]/course/[roundNumber]` shows. Countback is arguably the more correct answer in golf, so this is a decision to make rather than a bug to patch — and it sits inside the scoring entry flow, which is why the extraction left it alone. Left documented rather than reconciled.
+That panel is reachable from platform trips: `CourseDashboardClient` renders it, and that is what `/trip/[tripCode]/scoring/[roundNumber]` shows. Countback is arguably the more correct answer in golf, so this is a decision to make rather than a bug to patch — and it sits inside the scoring entry flow, which is why the extraction left it alone. Left documented rather than reconciled.
 
 ## Data insertion order
 
