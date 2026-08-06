@@ -1,7 +1,9 @@
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { hasMatchplay, needsPairings, boardTitle, primary } from '@/lib/leaderboards'
-import { boardsForTrip } from '@/lib/leaderboardsCompat'
+import { boardsForTrip, isLegacy } from '@/lib/leaderboardsCompat'
+import { parseLeaderboards } from '@/lib/leaderboards'
+import { parseTeamScoring } from '@/lib/teamScoring'
 import { MAIN_SET, setOf, teamFor } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { isLocked } from '@/lib/passcode'
@@ -183,7 +185,15 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
   if (me) {
     const [placingResult, draw] = await Promise.all([
-      fetchPlacing(trip.id, lead, me.id, trip.team_scoring),
+      // Gated exactly as the leaderboard page gates it. A trip that has
+      // chosen real boards must not be scored on the old trip-wide options,
+      // or this screen and that one disagree about who is where.
+      fetchPlacing(
+        trip.id, lead, me.id,
+        isLegacy(parseLeaderboards(trip.leaderboards))
+          ? parseTeamScoring(trip.team_scoring)
+          : null,
+      ),
       hasMatchplay(boards)
         ? supabase
             .from('matchplay_matches')

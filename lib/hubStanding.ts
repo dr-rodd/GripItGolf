@@ -11,7 +11,7 @@
 
 import { supabase } from './supabase'
 import { type Leaderboard } from './leaderboards'
-import { parseTeamScoring } from './teamScoring'
+import { type TeamScoring } from './teamScoring'
 import { buildRows, type RowHole } from './boardRows'
 import { standings, type SummaryScore } from './playerSummary'
 import { fetchMemberships } from './teamMembers'
@@ -39,14 +39,24 @@ export async function fetchPlacing(
   tripId: string,
   lead: Leaderboard | null,
   playerId: string,
-  legacy: unknown,
+  /**
+   * The trip's old team-scoring setting, or null.
+   *
+   * **Already gated by the caller**, the same way the leaderboard page gates
+   * it: `isLegacy(stored) ? teamScoring : null`. It used to be the raw column
+   * value, parsed here unconditionally, which meant a trip that had since
+   * chosen real boards was still scored on options the new model never asks
+   * for — and only on this screen. The leaderboard gated it and the hub did
+   * not, so the two could put a player in different places.
+   */
+  legacyTeamScoring: TeamScoring | null,
 ): Promise<PlacingResult> {
   // A knockout is not a table. The next-match line carries that board.
   if (!lead || lead.competition === 'matchplay') return NONE
 
   return usesSimpleStandings(lead)
     ? simplePlacing(tripId, lead, playerId)
-    : fullPlacing(tripId, lead, playerId, legacy)
+    : fullPlacing(tripId, lead, playerId, legacyTeamScoring)
 }
 
 /**
@@ -97,7 +107,7 @@ async function fullPlacing(
   tripId: string,
   lead: Leaderboard,
   playerId: string,
-  legacy: unknown,
+  legacyTeamScoring: TeamScoring | null,
 ): Promise<PlacingResult> {
   const { data: rounds, error: roundsError } = await supabase
     .from('rounds')
@@ -174,9 +184,7 @@ async function fullPlacing(
     tees: teesRes.data ?? [],
     activeRoundIds: open.map(r => r.round_id),
     livePlayerIds: open.flatMap(r => (r.live_player_locks ?? []).map(l => l.player_id)),
-    // The old trip-wide team setting, for boards derived from `trips.formats`
-    // rather than chosen.
-    legacyTeamScoring: parseTeamScoring(legacy),
+    legacyTeamScoring,
   })
 
   return { placing: placingFromRows([playerId], buildRows(lead, ctx)), error: null }

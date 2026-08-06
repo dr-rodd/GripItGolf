@@ -24,7 +24,10 @@ import {
 } from '../lib/standing'
 import { standings, type SummaryScore } from '../lib/playerSummary'
 import { buildRows, type RowContext, type RowHole } from '../lib/boardRows'
-import { resolveScores, handicapMap, sortRounds } from '../lib/rowContext'
+import { resolveScores, handicapMap, sortRounds, buildRowContext } from '../lib/rowContext'
+import { parseTeamScoring } from '../lib/teamScoring'
+import { isLegacy } from '../lib/leaderboardsCompat'
+import { parseLeaderboards } from '../lib/leaderboards'
 import type { Leaderboard } from '../lib/leaderboards'
 
 let passed = 0, failed = 0
@@ -262,6 +265,89 @@ section('Both standing paths give the same position on the same board')
 
   eq(describePlacing({ position: 1, field: 12 }), '1st of 12', 'and it reads as a place')
   eq(describePlacing(null), '', 'with nothing to read when there is no place')
+}
+
+section('The hub gates the old team setting the way the leaderboard does')
+{
+  // A trip that has chosen real boards must not be scored on the trip-wide
+  // options the old model carried. The leaderboard has always gated on
+  // `isLegacy(stored)`; the hub parsed the column unconditionally, so a
+  // leftover in `trips.team_scoring` scored the same cards two ways and put
+  // a player in two different places on two screens.
+  //
+  // Reds score 2 a hole each, Blues 3 and 0. Both cards counting: Reds 72,
+  // Blues 54. Only the best counting: Reds 36, Blues 54 — the lead changes
+  // hands, and so does Alice's position.
+  const holes: RowHole[] = Array.from({ length: 18 }, (_, i) => ({
+    id: `h${i + 1}`, hole_number: i + 1, par: 4, stroke_index: i + 1, course_id: 'c1',
+  }))
+  const people = [
+    { id: 'p1', name: 'Alice', handicap: 0, gender: 'M' },
+    { id: 'p2', name: 'Bob',   handicap: 0, gender: 'M' },
+    { id: 'p3', name: 'Cara',  handicap: 0, gender: 'M' },
+    { id: 'p4', name: 'Dan',   handicap: 0, gender: 'M' },
+  ]
+  const flat = (pid: string, pts: number) => holes.map(h => ({
+    player_id: pid, round_id: 'r1', hole_id: h.id,
+    gross_score: 6 - pts, stableford_points: pts, no_return: false,
+  }))
+
+  const stored = parseLeaderboards([{
+    id: 'b-team', audience: 'team', competition: 'league', scoring: 'stableford',
+    combine: 'total', teamFormat: 'better_ball', teamSet: 'main',
+  }])
+  const board = stored[0]
+  // Left behind on the trip row by the model that came before the boards.
+  const leftover = { mode: 'better_ball', countingScores: 1, aggregateFinish: 0, aggregateHoles: 18 }
+
+  const base = {
+    players: people,
+    teams: [
+      { id: 't1', name: 'Reds',  color: '#B5533C', team_set: 'main' },
+      { id: 't2', name: 'Blues', color: '#0A9D56', team_set: 'main' },
+    ],
+    memberships: [
+      { team_id: 't1', team_set: 'main', player_id: 'p1' },
+      { team_id: 't1', team_set: 'main', player_id: 'p2' },
+      { team_id: 't2', team_set: 'main', player_id: 'p3' },
+      { team_id: 't2', team_set: 'main', player_id: 'p4' },
+    ],
+    holes,
+    rounds: [{ id: 'r1', round_number: 1 }],
+    courseByRound: new Map([['r1', 'c1']]),
+    scores: [...flat('p1', 2), ...flat('p2', 2), ...flat('p3', 3), ...flat('p4', 0)],
+    liveScores: [],
+    roundHandicaps: people.map(p => ({ round_id: 'r1', player_id: p.id, playing_handicap: 0 })),
+    tees: [],
+    activeRoundIds: [],
+    livePlayerIds: [],
+  }
+
+  ok(!isLegacy(stored), 'a trip with a stored board list is not a legacy trip')
+
+  const gated = buildRows(board, buildRowContext({
+    ...base, legacyTeamScoring: isLegacy(stored) ? parseTeamScoring(leftover) : null,
+  }))
+  const ungated = buildRows(board, buildRowContext({
+    ...base, legacyTeamScoring: parseTeamScoring(leftover),
+  }))
+
+  // The bug, stated as the thing it did: the two disagree, and not subtly.
+  eq(gated.map(r => r.total), [72, 54], 'gated, both cards count and Reds lead')
+  eq(ungated.map(r => r.total), [54, 36], 'ungated, only the best counts and Blues lead')
+  eq(placingFromRows(['p1'], gated), { position: 1, field: 2 }, 'Alice is first on the gated board')
+  eq(placingFromRows(['p1'], ungated), { position: 2, field: 2 }, '  …and second on the ungated one')
+
+  // So the hub must gate. It takes the setting already gated, from the page,
+  // exactly as the leaderboard page hands it to the leaderboard.
+  const hub = code('lib/hubStanding.ts')
+  ok(!hub.includes('parseTeamScoring('),
+    'hubStanding does not parse the column itself any more')
+  ok(hub.includes('legacyTeamScoring: TeamScoring | null'),
+    '  …it is handed the setting, already decided')
+  const hubPage = code('app/trip/[tripCode]/page.tsx')
+  ok(/isLegacy\(parseLeaderboards\(trip\.leaderboards\)\)/.test(hubPage),
+    'and the hub page gates it on isLegacy, the same expression the leaderboard page uses')
 }
 
 // ─── The draw ──────────────────────────────────────────────
