@@ -60,20 +60,47 @@ export async function fetchPlacing(
 }
 
 /**
- * One query, for the board most trips run.
+ * Two queries, for the board most trips run.
  *
  * The same totals under the same discard rule the leaderboard applies, so
  * the hub and the board cannot disagree about who is winning.
+ *
+ * **`scores` has no `trip_id`, and never has.** It is scoped through the round
+ * it belongs to — `scores.round_id → rounds.trip_id` — which is why every
+ * other query in this codebase asks for a trip's rounds first and then the
+ * scores on them. This one asked for `scores.trip_id` directly, which is not a
+ * filter that matches nothing but a column that does not exist: Postgres
+ * returns 42703 and the hub printed "Could not read the scores for your
+ * standing" for every trip on the cheap path, which is most of them.
+ *
+ * So: the rounds, then the scores on them. Still cheap — two, against the full
+ * path's nine.
  */
 async function simplePlacing(
   tripId: string,
   lead: Leaderboard,
   playerId: string,
 ): Promise<PlacingResult> {
+  const { data: rounds, error: roundsError } = await supabase
+    .from('rounds')
+    .select('id')
+    .eq('trip_id', tripId)
+
+  if (roundsError) {
+    console.error('fetchPlacing rounds query failed:', roundsError)
+    return { placing: null, error: 'Could not read the rounds for your standing.' }
+  }
+
+  // No rounds, no scores, no position. An ordinary answer for a trip that has
+  // not started, not an error — and asking `.in('round_id', [])` for it would
+  // be a wasted round trip.
+  const roundIds = (rounds ?? []).map(r => r.id as string)
+  if (roundIds.length === 0) return NONE
+
   const { data, error } = await supabase
     .from('scores')
     .select('player_id, round_id, stableford_points')
-    .eq('trip_id', tripId)
+    .in('round_id', roundIds)
 
   if (error) {
     console.error('fetchPlacing scores query failed:', error)

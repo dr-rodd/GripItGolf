@@ -184,6 +184,62 @@ section('The cheap standing path is taken only where it is right')
   ok(!usesSimpleStandings(null), 'a trip playing for nothing has no standing')
 }
 
+section('A score is scoped through its round, because that is the only way it can be')
+{
+  // `scores` has no `trip_id` and never has had one. It hangs off a round,
+  // and the round carries the trip: scores.round_id → rounds.trip_id. So does
+  // every other table on the scoring side — holes, round_handicaps, tees, and
+  // all three live tables.
+  //
+  // The cheap standing path asked for `scores.trip_id` anyway. That is not a
+  // filter matching nothing, which would have shown as a missing standing and
+  // been noticed: it is a column that does not exist, so Postgres answers
+  // 42703 and the hub printed "Could not read the scores for your standing"
+  // to everybody on the path most trips take.
+  //
+  // Nothing in the unit tests could catch it — they hand rows in rather than
+  // fetch them — so what is pinned is the query itself, across every file.
+  const ROUND_SCOPED = [
+    'scores', 'live_scores', 'holes', 'round_handicaps',
+    'live_rounds', 'live_player_locks', 'tees',
+  ]
+
+  const sources = (() => {
+    const out: string[] = []
+    const walk = (dir: string) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = `${dir}/${e.name}`
+        if (e.isDirectory()) walk(p)
+        else if (/\.tsx?$/.test(e.name)) out.push(p)
+      }
+    }
+    walk('lib'); walk('app')
+    return out
+  })()
+
+  // One query at a time: the text from a `from('x')` up to the next `from(`,
+  // so a later query's own trip filter cannot be read as this one's.
+  const offenders: string[] = []
+  for (const file of sources) {
+    const src = code(file)
+    for (const m of src.matchAll(/from\('(\w+)'\)/g)) {
+      if (!ROUND_SCOPED.includes(m[1])) continue
+      const start = m.index! + m[0].length
+      const rest = src.slice(start)
+      const end = rest.search(/from\(/)
+      const query = end === -1 ? rest : rest.slice(0, end)
+      if (query.includes("'trip_id'")) offenders.push(`${file} — ${m[1]}`)
+    }
+  }
+  eq(offenders, [], 'no round-scoped table is queried by trip_id')
+
+  const hub = code('lib/hubStanding.ts')
+  ok(/from\('rounds'\)[\s\S]*?from\('scores'\)/.test(hub),
+    'the cheap path asks for the trip\'s rounds first')
+  ok(/\.in\('round_id', roundIds\)/.test(hub),
+    '  …then for the scores on them')
+}
+
 section('Both standing paths give the same position on the same board')
 {
   // The two paths exist because the full one costs nine queries and most
