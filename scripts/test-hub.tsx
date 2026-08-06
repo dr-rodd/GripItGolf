@@ -479,6 +479,50 @@ section('Journeys carry their mode')
   ok(travelSection.includes('IconHome'), 'with the existing home icon for a stay')
 }
 
+section('A live score counts only while its card is open')
+{
+  // `live_scores` has no foreign key to `live_rounds` — migration 003 rekeyed
+  // it to (player_id, round_id, hole_number), and only the locks cascade when
+  // a session ends. So a card half-entered and abandoned leaves its holes in
+  // the table for good, and the hourly cleanup deliberately will not close a
+  // session that has any scores against it.
+  const holes: RowHole[] = Array.from({ length: 18 }, (_, i) => ({
+    id: `h${i + 1}`, hole_number: i + 1, par: 4, stroke_index: i + 1, course_id: 'c1',
+  }))
+  const base = {
+    players: [{ id: 'p1', name: 'Alice', handicap: 0, gender: 'M' }],
+    teams: [], memberships: [], holes,
+    rounds: [{ id: 'r1', round_number: 1 }],
+    courseByRound: new Map([['r1', 'c1']]),
+    scores: [],
+    roundHandicaps: [{ round_id: 'r1', player_id: 'p1', playing_handicap: 0 }],
+    tees: [], livePlayerIds: [], legacyTeamScoring: null,
+  }
+  const orphans = [1, 2, 3, 4, 5, 6, 7].map(n => ({
+    player_id: 'p1', round_id: 'r1', hole_number: n, gross_score: 4, stableford_points: 2,
+  }))
+
+  const abandoned = buildRowContext({ ...base, liveScores: orphans, activeRoundIds: [] })
+  eq(abandoned.resolved.length, 0, 'scores with no card open are not read at all')
+  eq([...abandoned.liveRoundIds], [], '  …and the round they sit on is not in play')
+
+  const openCard = buildRowContext({ ...base, liveScores: orphans, activeRoundIds: ['r1'] })
+  eq(openCard.resolved.length, 7, 'the same rows count while the card is open')
+  ok(openCard.resolved.every(s => s.live), '  …and every one of them reads as in progress')
+  eq([...openCard.liveRoundIds], ['r1'], '  …with the round in play')
+
+  // The orphans are ignored, not deleted. Nothing is removed on the strength
+  // of an inference about a session that ended.
+  const ctx = code('lib/rowContext.ts')
+  ok(!/delete/i.test(ctx), 'nothing is deleted to achieve it')
+
+  // The round picker applies the same rule, or a tile says "Scores in" on a
+  // round the board shows as empty.
+  const picker = code('app/trip/[tripCode]/scoring/page.tsx')
+  ok(/openRounds\.has\(id\)/.test(picker),
+    'the round picker counts uncommitted scores only against an open card')
+}
+
 // ─── The round summary ─────────────────────────────────────
 
 section('A podium reads places off the shared order, and never sorts')

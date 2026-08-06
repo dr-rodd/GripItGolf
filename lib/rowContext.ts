@@ -205,6 +205,26 @@ export type RowContextInput = {
  * unrounded where the tee it was played off was actually recorded.
  */
 export function buildRowContext(input: RowContextInput): RowContext {
+  // ── Only a card that is open counts as in progress ──
+  //
+  // `live_scores` has no foreign key to `live_rounds`: migration 003 rekeyed
+  // it to (player_id, round_id, hole_number), and only `live_player_locks`
+  // cascades when a session ends. So a card half-entered and abandoned leaves
+  // its holes in the table for good, and the hourly cleanup deliberately will
+  // not close a session that has any scores against it.
+  //
+  // Read back without this filter, those rows are indistinguishable from a
+  // card being played right now: they stand on the leaderboard as a partial
+  // score, they mark the round in play, and — since the round summary — they
+  // give a round a podium nobody earned.
+  //
+  // A live score therefore only counts while its round actually has a card
+  // open on it. The orphaned rows stay in the table and stop being read,
+  // which is the safe direction: nothing is deleted on the strength of an
+  // inference about a session that ended.
+  const open = new Set(input.activeRoundIds)
+  const liveScores = input.liveScores.filter(s => open.has(s.round_id))
+
   return {
     players: input.players,
     teams: input.teams,
@@ -212,7 +232,7 @@ export function buildRowContext(input: RowContextInput): RowContext {
     holes: input.holes,
     rounds: sortRounds(input.rounds),
     resolved: resolveScores(
-      input.scores, input.liveScores, input.holes, input.courseByRound,
+      input.scores, liveScores, input.holes, input.courseByRound,
     ),
     hcpFor: handicapMap(input.roundHandicaps),
     exactHcpFor: exactHandicapMap(
@@ -220,12 +240,11 @@ export function buildRowContext(input: RowContextInput): RowContext {
       input.tees,
       new Map(input.players.map(p => [p.id, p.handicap])),
     ),
-    // A round is in play when a card is open on it, or when it still has
-    // uncommitted scores sitting against it.
-    liveRoundIds: new Set([
-      ...input.liveScores.map(s => s.round_id),
-      ...input.activeRoundIds,
-    ]),
+    // A round is in play when a card is open on it. It used to also count a
+    // round with uncommitted scores against it, which is the same phantom
+    // seen from the other side — an abandoned card left its round reading as
+    // in play for the rest of the trip.
+    liveRoundIds: new Set(input.activeRoundIds),
     livePlayerIds: new Set(input.livePlayerIds),
     legacyTeamScoring: input.legacyTeamScoring,
   }

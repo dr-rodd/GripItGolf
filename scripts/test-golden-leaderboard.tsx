@@ -257,6 +257,19 @@ const CASES: Record<string, () => string> = {
     livePlayerIds: ['p1', 'p2'],
   }),
 
+  // ── The phantom ──
+  //
+  // Live scores sitting against a round with no card open on it. They get
+  // there because `live_scores` has no foreign key to `live_rounds` — the
+  // locks cascade when a session ends and the scores do not — so a card
+  // half-entered and abandoned leaves its holes behind for good.
+  'live-scores-with-no-open-card': () => render([SF(0)], {
+    scores: scores.filter(s => s.round_id === 'r1'),
+    liveScores: liveCard('p1', 'r2', 7, 3),
+    activeRoundIds: [],
+    livePlayerIds: [],
+  }),
+
   // Committed always wins over in-progress for the same hole.
   'live-overlapping-committed': () => render([SF(0)], {
     liveScores: liveCard('p1', 'r1', 18, 1),

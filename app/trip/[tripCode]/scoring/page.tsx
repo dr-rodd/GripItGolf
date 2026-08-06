@@ -50,11 +50,19 @@ export default async function TripCoursePortalPage({
   if (liveScoredRes.error) console.error('TripCoursePortal live scores query failed:', liveScoredRes.error)
 
   const openRounds = new Set((openRes.data ?? []).map(r => r.round_id as string))
-  // A round counts as played once anything has been recorded on it, committed
-  // or not — a card half-entered and abandoned is still not an empty round.
+  // A round counts as played once anything has been committed to it, or once
+  // there are uncommitted scores against a card that is **still open**.
+  //
+  // That second clause used to be "uncommitted scores, full stop", which is
+  // the phantom: `live_scores` has no foreign key to `live_rounds`, so a card
+  // half-entered and abandoned leaves its holes behind for good and the tile
+  // read "Scores in" on a round nobody finished. The same rule the board
+  // applies — see the note on `buildRowContext` in lib/rowContext.ts.
   const scoredRounds = new Set([
     ...(scoredRes.data ?? []).map(r => r.round_id as string),
-    ...(liveScoredRes.data ?? []).map(r => r.round_id as string),
+    ...(liveScoredRes.data ?? [])
+      .map(r => r.round_id as string)
+      .filter(id => openRounds.has(id)),
   ])
 
   return (

@@ -86,3 +86,17 @@ The current CC Behaviour rule in the main `CLAUDE.md` (act immediately on single
 - Prompts scoped to specific files. Avoid broad "audit the codebase" requests.
 - Automated/CLI approaches preferred over manual dashboard steps.
 - Decisions not written into CLAUDE.md cause inconsistency across sessions. Keep CLAUDE.md current.
+
+## Phantom in-progress scores
+
+`live_scores` has **no foreign key to `live_rounds`**. Migration 003 rekeyed it to `(player_id, round_id, hole_number)` so the client never has to join `holes` to submit a score, and in doing so dropped the link back to the session. `live_player_locks` still cascades from `live_rounds`; the scores do not.
+
+So when a session ends — closed, deleted, or simply abandoned — its locks vanish and its half-entered holes stay in the table for good. The hourly cleanup (`app/api/cleanup/route.ts`) makes this more likely rather than less: it will only close an old session that has **zero** scores against it, deliberately, so a part-played abandoned card is exactly the thing it never touches.
+
+Read back without a guard, those rows are indistinguishable from a card being played right now. They stood on the leaderboard as a partial score, marked the round in play, made the round picker say "Scores in", and — once round summaries existed — gave a round a podium nobody earned.
+
+**The rule now: a live score counts only while its round has a card open on it.** One line in `buildRowContext` (`lib/rowContext.ts`), and the same rule restated in the round picker. `liveRoundIds` is the open sessions and nothing else — it used to also include any round with uncommitted scores, which is the same phantom seen from the other side.
+
+**The orphaned rows are ignored, not deleted.** Nothing is removed on the strength of an inference about a session that ended. A real cleanup — delete `live_scores` where the round has no open session and no committed counterpart — is a separate job and needs somebody to look at the data first.
+
+Pinned in `test:hub`, and the leaderboard's golden master carries a `live-scores-with-no-open-card` case: before the fix it rendered a partial score of `+7` and a total of 75; after, that round reads as unplayed. Every other case in that fixture is byte-identical across the change.
