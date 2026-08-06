@@ -24,15 +24,37 @@ export function defaultCustomPoints(playerCount: number): number[] {
 }
 
 /**
+ * Whether this table is exactly the one `defaultCustomPoints` would make —
+ * that is, whether anybody has actually decided anything about it.
+ */
+export function isDefaultCustomPoints(table: readonly number[]): boolean {
+  if (table.length === 0) return false
+  const fresh = defaultCustomPoints(table.length)
+  return table.every((v, i) => v === fresh[i])
+}
+
+/**
  * The table to use, grown or trimmed to the current player count.
  *
- * Players join after a table is set, so a stored table is padded with zeroes
- * rather than regenerated — editing the top of the table should not be undone
- * by somebody signing up.
+ * An **edited** table is padded with zeroes rather than regenerated: deciding
+ * that the winner gets ten should not be undone by somebody signing up.
+ *
+ * An **untouched default** is not a set of numbers, though — it is a shape,
+ * "a point per player, dropping one by one" — so it follows the field. That
+ * distinction is the whole of this function, and missing it is what left a
+ * trip of six paying first and second only: the board had been made while
+ * the field was two, `[2, 1]` was stored, and every later arrival was padded
+ * in on nought. A team board made it certain rather than merely likely, since
+ * teams are picked after the board exists and the field is therefore always
+ * empty at that point.
+ *
+ * A table that has been edited into the exact shape of a default is treated
+ * as one. There is nothing to tell them apart, and following the field is the
+ * better guess about what was meant.
  */
 export function resolveCustomPoints(stored: number[], playerCount: number): number[] {
   const n = Math.max(0, Math.floor(playerCount))
-  if (stored.length === 0) return defaultCustomPoints(n)
+  if (stored.length === 0 || isDefaultCustomPoints(stored)) return defaultCustomPoints(n)
   return Array.from({ length: n }, (_, i) => clampPoints(stored[i] ?? 0))
 }
 

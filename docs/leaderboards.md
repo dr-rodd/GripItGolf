@@ -125,7 +125,8 @@ A prize table paid by finishing position each round — 10 for the winner, 5 for
 
 - Default table is the inverse of the field: eight players gives 8, 7, 6 … 1
 - Any position may be edited, 0 to 100. Zero is allowed
-- A stored table is padded rather than regenerated when players join, so edits survive
+- **An untouched default follows the field; an edited table is padded with zeroes.** `resolveCustomPoints` tells them apart with `isDefaultCustomPoints`, and both the form and `boardRows` go through it. A default is a *shape* — a point per player, dropping one — not a set of numbers, so it has to keep up; a decision is a decision and must survive somebody signing up. Padding everything is what left a trip of six paying first and second only: the board was made while the field was two, `[2, 1]` went into storage, and every later arrival was padded in on nought. **A team prize board makes this certain rather than merely likely** — teams are picked after the board exists, so the field is always empty at the moment the table is generated
+- The field is the players, or on a team board the **teams**. Two is the floor in the form, because a table with no rows cannot be answered — but that floor is a guess, and the note under the table says so when nobody has joined yet
 - Positions are decided on that round's Stableford result
 - **Players level on the day share the places they occupy** — two tied for first with a 10/6 table take eight each. The total awarded is the same however a round finishes
 

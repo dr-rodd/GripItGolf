@@ -98,11 +98,25 @@ function ordinal(n: number): string {
   return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
 }
 
+/**
+ * The prize table.
+ *
+ * `fieldSize` is who could finish — the players, or on a team board the
+ * teams. It is often not known yet: teams are picked after the board exists,
+ * and players go on joining afterwards. So the table is not frozen at
+ * whatever the field happened to be. An untouched default follows the field
+ * wherever it ends up (`resolveCustomPoints`); an edited one is kept and
+ * padded, because a decision should survive somebody signing up.
+ */
 function PointsTable({
-  table, fieldSize, onChange,
+  table, fieldSize, known, unit, onChange,
 }: {
   table: number[]
   fieldSize: number
+  /** False when nobody has joined or no teams are picked — the field is a guess. */
+  known: boolean
+  /** What is being ranked: "players", or "teams". */
+  unit: string
   onChange: (t: number[]) => void
 }) {
   const rows = resolveCustomPoints(table, Math.max(fieldSize, 1))
@@ -135,6 +149,11 @@ function PointsTable({
           </div>
         ))}
       </div>
+      <p className="t-cap text-ink/65 mt-2 leading-snug">
+        {known
+          ? `One row per finisher, for the ${fieldSize} ${unit} on this trip. Leave it as it stands and it keeps up as more join; change a figure and it stays changed.`
+          : `The ${unit} are not picked yet, so this is a placeholder — leave it and the table sizes itself to them. Change a figure and it stays changed.`}
+      </p>
     </div>
   )
 }
@@ -260,9 +279,15 @@ function Builder({
 
   // A prize table is one row per finisher, and on a team board the finishers
   // are the teams. Sized off the players it would pay places nobody can come
-  // in. Two is the floor: teams are usually picked after this is answered,
-  // and a table with no rows cannot be answered at all.
-  const fieldSize = Math.max(2, draft.audience === 'team' ? teamCount : playerCount)
+  // in. Two is the floor, because a table with no rows cannot be answered at
+  // all — but a floor is a guess, and a guess must not become the answer:
+  // teams are always picked after the board exists, and players go on
+  // joining. `resolveCustomPoints` is what keeps an untouched table in step
+  // with the field it turns out to have.
+  const teamBoard = draft.audience === 'team'
+  const field = teamBoard ? teamCount : playerCount
+  const fieldSize = Math.max(2, field)
+  const unit = teamBoard ? 'teams' : 'players'
 
   const editing = initial !== null
   const drawTaken = hasMatchplay(existing)
@@ -392,6 +417,8 @@ function Builder({
         <PointsTable
           table={draft.customPoints ?? []}
           fieldSize={fieldSize}
+          known={field > 0}
+          unit={unit}
           onChange={t => set({ customPoints: t })}
         />
       )}
@@ -471,6 +498,12 @@ function Builder({
             // An edit keeps its identity, so the tab it is on and the teams
             // already picked for it stay with it.
             id: initial?.id ?? `lb-${Date.now()}`,
+            // Store the table that was on screen. Reopening a board whose
+            // field has grown shows the resolved rows, and saving without
+            // touching them should not put the short version back.
+            ...(draft.combine === 'position'
+              ? { customPoints: resolveCustomPoints(draft.customPoints ?? [], fieldSize) }
+              : {}),
           })}
           className={buttonClass('primary')}
         >

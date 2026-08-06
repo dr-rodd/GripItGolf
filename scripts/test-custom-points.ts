@@ -10,7 +10,7 @@
  */
 
 import {
-  defaultCustomPoints, resolveCustomPoints, clampPoints, customPointsError,
+  defaultCustomPoints, resolveCustomPoints, isDefaultCustomPoints, clampPoints, customPointsError,
   awardRound, totalAfterDiscard, discardedIndices, MAX_CUSTOM_POINTS,
 } from '../lib/customPoints'
 
@@ -60,6 +60,36 @@ section('Resolving a stored table against the current field')
   // Nonsense in storage is repaired rather than trusted
   eq(resolveCustomPoints([999, -4, 2.6] as number[], 3), [100, 0, 3],
     'out-of-range values are clamped on the way out')
+}
+
+section('An untouched default follows the field; an edited table does not')
+{
+  // A board is nearly always made before the field is known — teams are
+  // picked afterwards, and players go on joining — so a default is a shape
+  // rather than a set of numbers, and it has to keep up.
+  ok(isDefaultCustomPoints([2, 1]), 'the two-row table a fresh board starts with is a default')
+  ok(isDefaultCustomPoints(defaultCustomPoints(6)), 'and so is one of any size')
+  ok(!isDefaultCustomPoints([10, 5, 3]), 'a table somebody has decided on is not')
+  ok(!isDefaultCustomPoints([2, 1, 0, 0]), 'nor is a default that was padded out')
+  ok(!isDefaultCustomPoints([]), 'and an empty table is nothing at all')
+
+  // The bug this exists for: a board made while the field was two, six
+  // players on the trip, and third to sixth paid nothing.
+  eq(resolveCustomPoints([2, 1], 6), [6, 5, 4, 3, 2, 1],
+    'an untouched default grows to the field rather than padding with noughts')
+  eq(resolveCustomPoints([6, 5, 4, 3, 2, 1], 3), [3, 2, 1],
+    'and shrinks with it, rather than paying places nobody can come in')
+
+  // A decision is a decision, whatever the field does afterwards
+  eq(resolveCustomPoints([10, 5], 6), [10, 5, 0, 0, 0, 0],
+    'an edited table is still padded — deciding the winner gets ten is not undone by a joiner')
+  eq(resolveCustomPoints([0, 0], 4), [0, 0, 0, 0],
+    'and a table edited to nothing stays nothing')
+
+  // A team board makes it certain rather than merely likely: there are never
+  // any teams at the moment the board is made.
+  eq(resolveCustomPoints(defaultCustomPoints(2), 4), [4, 3, 2, 1],
+    'a team prize board sized against no teams pays every team once they exist')
 }
 
 section('Clamping and validation')
