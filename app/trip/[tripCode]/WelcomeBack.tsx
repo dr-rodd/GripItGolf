@@ -67,6 +67,16 @@ export function WelcomeBackCard({
  * That control is worth its fifteen lines. A phone gets handed round on a
  * golf trip, and without it the first person to join on a shared handset owns
  * that device's greeting for six months with no way back.
+ *
+ * It goes to the player list rather than refreshing in place. Refreshing left
+ * somebody standing on a hub that had just stopped recognising them, with no
+ * indication of what to do about it; the list is what to do about it, and now
+ * that it offers confirmed players too, whoever is actually holding the phone
+ * can find their own name on it.
+ *
+ * **Nobody is un-confirmed by this.** `claimed` stays true for the player
+ * being forgotten — confirmation belongs to the player, not to the handset,
+ * and a device changing hands says nothing about whether they are on the trip.
  */
 export default function WelcomeBack({
   tripCode, name, lines,
@@ -88,10 +98,10 @@ export default function WelcomeBack({
       lines={lines}
       onNotMe={() => {
         forgetPlayer(tripCode)
+        // Hidden first, so the card does not sit there through the
+        // navigation still greeting somebody this device has forgotten.
         setDismissed(true)
-        // Re-render the server component, so the greeting is gone for good
-        // rather than hidden until the next navigation.
-        router.refresh()
+        router.push(`/trip/${tripCode}/players`)
       }}
     />
   )

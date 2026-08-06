@@ -17,6 +17,7 @@ import {
   MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError,
 } from '@/lib/passcode'
 import { HANDICAP_INPUT, parseHandicap } from '@/lib/handicap'
+import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -140,7 +141,16 @@ export default function CreateTripForm() {
     ? null
     : passcodeError(passcode) ??
       (passcode !== passcodeConfirm ? 'The two passcodes do not match.' : null)
-  const step3Valid = !passcodeIssue
+  // Two people on one trip cannot share a name. Caught on the form rather
+  // than on the insert, so it is said while the box that caused it is still
+  // on screen — and said before a trip, its itinerary and its rounds have
+  // all been written and only the players fail.
+  const duplicateIndex = firstDuplicateIndex(players.map(p => p.name))
+  const duplicateIssue = duplicateIndex === -1
+    ? null
+    : duplicateNameError(players[duplicateIndex].name)
+
+  const step3Valid = !passcodeIssue && !duplicateIssue
 
   // ── Navigation ───────────────────────────────────────────────────────────
 
@@ -604,8 +614,17 @@ export default function CreateTripForm() {
                     value={player.name}
                     onChange={e => updatePlayer(i, { name: e.target.value })}
                     placeholder="Full name"
-                    className={INPUT}
+                    // Swapped, not appended: two border-colour classes in one
+                    // string leaves which one wins up to stylesheet order.
+                    className={i === duplicateIndex
+                      ? INPUT.replace('border-bark/12', 'border-rust/60')
+                      : INPUT}
                   />
+                  {i === duplicateIndex && (
+                    <p className="text-rust-deep text-[13px] leading-snug">
+                      {duplicateIssue}
+                    </p>
+                  )}
 
                   <div className="flex gap-3">
                     <input

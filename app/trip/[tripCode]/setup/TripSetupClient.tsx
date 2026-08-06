@@ -26,6 +26,8 @@ import {
 import { setTeam } from '@/lib/teamMembers'
 import { why } from '@/lib/writeFailure'
 import { HANDICAP_INPUT, parseHandicap, formatHandicap } from '@/lib/handicap'
+import { duplicateName, duplicateNameError } from '@/lib/roster'
+import { syncRoundHandicaps } from '@/lib/roundHandicaps'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -272,6 +274,12 @@ export default function TripSetupClient({
       flashError('Enter a name and handicap first')
       return
     }
+    // Two people on one trip cannot share a name: the join list is a list of
+    // names, and two of the same is a coin toss over whose card is whose.
+    if (duplicateName(trimmed, players)) {
+      flashError(duplicateNameError(trimmed))
+      return
+    }
     setBusy(true)
     const { data, error: err } = await supabase
       .from('players')
@@ -305,6 +313,13 @@ export default function TripSetupClient({
   }
 
   async function updatePlayer(id: string, patch: Partial<Player>) {
+    // The backstop on a rename. The name field refuses a duplicate itself,
+    // because it is the only place that can put the old value back in the
+    // box — this catches any other caller that ever patches a name.
+    if (patch.name != null && duplicateName(patch.name, players, id)) {
+      flashError(duplicateNameError(patch.name))
+      return
+    }
     const prev = players
     setPlayers(ps => ps.map(p => (p.id === id ? { ...p, ...patch } : p)))
     const { error: err } = await supabase.from('players').update(patch).eq('id', id)
@@ -313,16 +328,13 @@ export default function TripSetupClient({
       flashError('Could not save player')
       return
     }
-    // Keep the handicap snapshot used for scoring in step with edits
+    // Keep the handicap snapshot used for scoring in step with edits. The
+    // same call the join screen makes for a player who adds themselves after
+    // the rounds already exist — see `lib/roundHandicaps.ts`.
     if (patch.handicap != null && rounds.length > 0) {
-      const rows = rounds.map(r => ({
-        round_id: r.id,
-        player_id: id,
-        playing_handicap: Math.round(patch.handicap as number),
-      }))
-      const { error: hcpErr } = await supabase
-        .from('round_handicaps')
-        .upsert(rows, { onConflict: 'round_id,player_id' })
+      const hcpErr = await syncRoundHandicaps(
+        rounds.map(r => r.id), id, patch.handicap as number,
+      )
       if (hcpErr) flashError('Handicap saved but round handicaps failed to update')
     }
   }
@@ -651,7 +663,17 @@ export default function TripSetupClient({
                       defaultValue={player.name}
                       onBlur={e => {
                         const v = e.target.value.trim()
-                        if (v && v !== player.name) updatePlayer(player.id, { name: v })
+                        if (!v || v === player.name) return
+                        // Refused here rather than inside updatePlayer,
+                        // because this is the only place holding the input
+                        // itself — the box is uncontrolled, so putting the
+                        // stored name back is a DOM write, not a re-render.
+                        if (duplicateName(v, players, player.id)) {
+                          flashError(duplicateNameError(v))
+                          e.target.value = player.name
+                          return
+                        }
+                        updatePlayer(player.id, { name: v })
                       }}
                       disabled={locked}
                       className="flex-1 bg-transparent text-ink text-sm font-medium focus:outline-none disabled:opacity-40"

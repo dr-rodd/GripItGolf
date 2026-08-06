@@ -1,4 +1,3 @@
-import { cookies } from 'next/headers'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { hasMatchplay, needsPairings, boardTitle } from '@/lib/leaderboards'
@@ -6,7 +5,10 @@ import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { MAIN_SET, setOf, teamFor } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { isLocked } from '@/lib/passcode'
-import { playerCookieName, readPlayerId } from '@/lib/playerCookie'
+import { currentPlayer } from '@/lib/currentPlayer'
+import { isConfirmed, confirmedCount as countConfirmed } from '@/lib/roster'
+import { ROUND_TILE } from '@/lib/roundState'
+import { IconSettings } from '@/app/components/icons'
 import {
   standings, standingFor, matchRecord, describePosition, formatRelative,
   type SummaryScore, type SummaryMatch,
@@ -141,7 +143,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
   // A player is confirmed once a real person has claimed that slot;
   // organiser-created placeholders stay pending until someone does.
-  const confirmedCount = players.filter(p => p.claimed === true).length
+  const confirmedCount = countConfirmed(players)
   const pendingCount   = players.length - confirmedCount
 
   const everyoneIn = players.length > 0 && pendingCount === 0
@@ -153,15 +155,14 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
   // ── Do we know who this is? ──
   //
-  // A cookie left on this device when they joined. Nothing is fetched for it
-  // until it turns out to name somebody real, so a first-time visitor pays
-  // nothing for a greeting they will not see.
-  const jar = await cookies()
-  const knownId = readPlayerId(jar.get(playerCookieName(tripCode))?.value)
-  // The id has to belong to *this* trip. A cookie is per-trip already, but
-  // checking against the roster means a stale or copied one finds nobody
-  // rather than greeting a stranger from someone else's trip.
-  const me = knownId ? players.find(p => p.id === knownId) ?? null : null
+  // A cookie left on this device when they joined, matched against this
+  // trip's own roster so a stale or copied one finds nobody rather than
+  // greeting a stranger. The lookup lives in `lib/currentPlayer.ts` now:
+  // every section this page is growing needs the same answer, and so do the
+  // screens after it. Nothing is fetched for it until it turns out to name
+  // somebody real, so a first-time visitor pays nothing for a greeting they
+  // will not see.
+  const me = await currentPlayer(tripCode, players)
 
   const summaryLines: { label: string; value: string; strong?: boolean }[] = []
 
@@ -263,8 +264,27 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
           below is what returns to this screen. */}
       <TripHeader backTo="/" />
 
+      {/* Settings, where the settings screen itself keeps its gear: top
+          right, under the header. The padlock rides the corner of it when
+          the trip's settings are passcoded, which is what the text link
+          below the nav used to say in words. */}
+      <div className="max-w-lg mx-auto px-4 pt-4 flex justify-end">
+        <Link
+          href={`/trip/${tripCode}/setup`}
+          aria-label={settingsLocked ? 'Trip settings — passcode required' : 'Trip settings'}
+          className="relative w-11 h-11 rounded-xl border border-bark/12 bg-surface text-ink/65 hover:text-ink hover:border-bark/25 flex items-center justify-center transition-colors duration-150"
+        >
+          <IconSettings size={18} />
+          {settingsLocked && (
+            <span className="absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full bg-surface border border-bark/12 flex items-center justify-center">
+              <LockIcon />
+            </span>
+          )}
+        </Link>
+      </div>
+
       {/* ── Hero ── */}
-      <section className="flex flex-col items-center px-6 pt-6 pb-12">
+      <section className="flex flex-col items-center px-6 pt-2 pb-12">
         <div className="w-full max-w-sm flex flex-col items-center text-center">
 
           {/* Only for somebody this device already knows. A stranger sees the
@@ -375,14 +395,10 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                 Leaderboard
               </Link>
 
-              {/* Trip settings */}
-              <Link
-                href={`/trip/${tripCode}/setup`}
-                className="text-ink/50 text-[13px] tracking-wide hover:text-ink/65 transition-colors mt-1 inline-flex items-center justify-center gap-1.5"
-              >
-                Trip settings
-                {settingsLocked && <LockIcon />}
-              </Link>
+              {/* Settings is the gear at the top right of the screen now,
+                  where every other page keeps it — and the tab bar below.
+                  A third way to the same screen was clutter on a page this
+                  phase exists to declutter. */}
 
             </nav>
           </TripCountdown>
@@ -402,43 +418,39 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
               </p>
             </div>
 
-            {/* Legend — makes the colours mean something at a glance */}
+            {/* Legend — and it has to be telling the truth.
+                Both swatches were emerald and both borders were the same
+                width, so this drew one state twice and claimed it was two.
+                Confirmed now carries the hard brown edge a finished round
+                carries; pending is the barely-there outline of one nothing
+                has happened on yet. Same rule, from the same file, as the
+                player list on the join screen. */}
             <div className="flex items-center gap-4 mb-4">
               <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-accent " />
+                <span className={`w-2.5 h-2.5 rounded-sm ${ROUND_TILE.played}`} aria-hidden="true" />
                 <span className="text-ink/65 text-[12px] tracking-wider uppercase">Confirmed</span>
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+                <span className={`w-2.5 h-2.5 rounded-sm ${ROUND_TILE.empty}`} aria-hidden="true" />
                 <span className="text-ink/65 text-[12px] tracking-wider uppercase">Pending</span>
               </span>
             </div>
 
             <div className="flex flex-col gap-2">
               {players.map(p => {
-                const confirmed = p.claimed === true
+                const confirmed = isConfirmed(p)
                 return (
                   <div
                     key={p.id}
-                    className={`flex items-center gap-3 px-4 py-3 border rounded-xl transition-colors ${
-                      confirmed
-                        ? 'border-accent/50 bg-accent/[0.06] '
-                        : 'border-accent/45 bg-accent/[0.06]'
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+                      confirmed ? ROUND_TILE.played : ROUND_TILE.empty
                     }`}
                   >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                        confirmed
-                          ? 'bg-accent '
-                          : 'bg-accent'
-                      }`}
-                      aria-hidden="true"
-                    />
                     <span className="flex-1 min-w-0">
                       <span className="block text-ink text-sm truncate">{p.name}</span>
                       <span
                         className={`block text-[12px] tracking-wider uppercase mt-0.5 ${
-                          confirmed ? 'text-accent/70' : 'text-accent/70'
+                          confirmed ? 'text-ink/80' : 'text-ink/50'
                         }`}
                       >
                         {confirmed ? 'Confirmed' : 'Pending'}
