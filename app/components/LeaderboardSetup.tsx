@@ -312,6 +312,11 @@ function Builder({
   return (
     <Card className="p-5 flex flex-col gap-5">
       <div>
+        {/* "Another", not "A second". The heading counted for you, and it
+            counted wrong every time after the first: adding a fifth board
+            was still announced as adding a second. Counting is the one thing
+            this line does not need to do — how many are already running is
+            visible in the list directly behind this form. */}
         <p className="t-h2 text-ink">
           {editing
             ? 'Change this leaderboard'

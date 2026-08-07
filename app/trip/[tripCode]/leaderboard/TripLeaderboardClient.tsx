@@ -19,7 +19,7 @@ import { HEADER_H } from '@/app/components/headerMetrics'
 import ScoreShape, { NoReturnShape } from '@/app/components/ScoreShape'
 import {
   SC_CARD, SC_SF, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_HEAD_TIGHT, SC_LABEL,
-  SC_MUTED, SC_DARK, scRow, scPoints,
+  SC_MUTED, SC_DARK, SC_NUM, scRow, scPoints,
 } from '@/app/components/scorecardStyle'
 
 // ─── Types ─────────────────────────────────────────────────────
@@ -280,13 +280,13 @@ export function ScorecardSheet({
   const summary = (label: string, hs: Hole[], total = false) => (
     <Row className={`py-2 ${total ? SC_BAND_TOTAL : SC_BAND} ${total ? '' : SC_RULE}`}>
       <span className={`${HOLE_W} text-[13px] font-bold tracking-widest uppercase text-ink/80`} style={SC_SF}>{label}</span>
-      <span className={`${PAR_W} text-[15px] font-bold text-ink`} style={SC_SF}>{sumPar(hs, gender)}</span>
+      <span className={`${PAR_W} ${SC_NUM} font-bold text-ink`} style={SC_SF}>{sumPar(hs, gender)}</span>
       <Strip scrolls={scrolls} register={register} onScroll={onScroll}>
         {players.map(p => {
           const gross = sumGross(hs, p.id)
           return (
             <span key={p.id} className={CELL_TOP}>
-              <span className="text-[15px] font-bold text-ink" style={SC_SF}>
+              <span className={`${SC_NUM} font-bold text-ink`} style={SC_SF}>
                 {gross > 0 ? gross : '—'}
               </span>
               {gross > 0 && points(sumPts(hs, p.id))}
@@ -403,10 +403,10 @@ export function ScorecardSheet({
               return (
                 <Fragment key={hole.id}>
                   <Row className={`py-1.5 ${SC_RULE} ${scRow(hole.hole_number)}`}>
-                    <span className={`${HOLE_W} text-[15px] font-semibold ${SC_DARK}`} style={SC_SF}>
+                    <span className={`${HOLE_W} ${SC_NUM} font-semibold ${SC_DARK}`} style={SC_SF}>
                       {hole.hole_number}
                     </span>
-                    <span className={`${PAR_W} text-[15px] ${SC_MUTED}`} style={SC_SF}>
+                    <span className={`${PAR_W} ${SC_NUM} ${SC_MUTED}`} style={SC_SF}>
                       {effectivePar(hole, gender)}
                     </span>
                     <Strip scrolls={scrolls} register={register} onScroll={onScroll}>
@@ -425,7 +425,7 @@ export function ScorecardSheet({
                       })}
                     </Strip>
                     <span
-                      className={`${PTS_W} text-[15px] ${played ? scPoints(rowPts) : SC_MUTED}`}
+                      className={`${PTS_W} ${SC_NUM} ${played ? scPoints(rowPts) : SC_MUTED}`}
                       style={SC_SF}
                     >
                       {played ? rowPts : '—'}
@@ -571,20 +571,34 @@ function useSyncedStrips() {
  * of state this whole arrangement exists to keep.
  */
 function Strip({
-  scrolls, register, onScroll, children,
+  scrolls, register, onScroll, children, fade = false, gap = 'gap-2',
 }: {
   scrolls: boolean
   register: (el: HTMLDivElement | null) => () => void
   onScroll: (e: React.UIEvent<HTMLDivElement>) => void
   children: React.ReactNode
+  /**
+   * Paint the right-hand shadow while columns are still hidden.
+   *
+   * Off by default, and off on the scorecard sheet: the cover half of the
+   * effect is the surface colour, and the sheet's rows alternate towards
+   * cream — it would read as a white block on every other hole. The board's
+   * rows are all one colour, so there it is invisible until it is wanted.
+   */
+  fade?: boolean
+  /** Tightened on the board once the columns scroll, to fit one more in. */
+  gap?: string
 }) {
   return (
     <div
       ref={scrolls ? register : undefined}
       onScroll={scrolls ? onScroll : undefined}
-      className={`min-w-0 flex-1 ${scrolls ? 'overflow-x-auto scroll-strip' : ''}`}
+      className={['min-w-0 flex-1',
+        scrolls && 'overflow-x-auto scroll-strip',
+        scrolls && fade && 'scroll-fade',
+      ].filter(Boolean).join(' ')}
     >
-      <div className={`flex gap-2 ${scrolls ? 'w-max' : 'justify-end'}`}>{children}</div>
+      <div className={`flex ${gap} ${scrolls ? 'w-max' : 'justify-end'}`}>{children}</div>
     </div>
   )
 }
@@ -609,9 +623,15 @@ function Board({
   const showRounds = rounds.length > 0
 
   // Narrower once the rounds scroll — every pixel the name gives up is
-  // another round column visible before you have to swipe.
-  const NAME_W = scrolls ? 'w-[6.5rem]' : 'flex-1'
-  const CELL = `${scrolls ? 'w-9' : 'w-10'} flex-shrink-0 text-center`
+  // another round column visible before you have to swipe. Tightened again
+  // since: name, cell and gap each gave up a little, which together is one
+  // more round on screen before the first swipe. On a 375px phone that is
+  // roughly two and a half columns becoming three and a half — and the half
+  // is the point, because a column cut in two is itself a cue that there is
+  // more to the right.
+  const NAME_W = scrolls ? 'w-[5.5rem]' : 'flex-1'
+  const CELL = `${scrolls ? 'w-8' : 'w-10'} flex-shrink-0 text-center`
+  const GAP  = scrolls ? 'gap-1.5' : 'gap-2'
 
   // No overflow-hidden on this card, deliberately. It would make the card its
   // own scrollport, and the sticky row below would then measure its offset
@@ -630,7 +650,7 @@ function Board({
         <span className="text-[13px] tracking-widest uppercase text-ink/65 w-5 flex-shrink-0">Pos</span>
         <span className={`text-[13px] tracking-widest uppercase text-ink/65 min-w-0 ${NAME_W}`}>Name</span>
         {showRounds && (
-          <Strip scrolls={scrolls} register={register} onScroll={onScroll}>
+          <Strip scrolls={scrolls} register={register} onScroll={onScroll} fade gap={GAP}>
             {rounds.map(r => (
               <span key={r.id} className={`${CELL} text-[13px] text-ink/65 tabular-nums`}>
                 {r.round_number}
@@ -670,7 +690,7 @@ function Board({
               </div>
 
               {showRounds && (
-                <Strip scrolls={scrolls} register={register} onScroll={onScroll}>
+                <Strip scrolls={scrolls} register={register} onScroll={onScroll} fade gap={GAP}>
                   {rounds.map(r => {
                     const played  = row.playedRounds.includes(r.id)
                     const dropped = row.droppedRounds?.includes(r.id) ?? false
@@ -741,21 +761,23 @@ function Board({
  *
  * Still a link to a separate route rather than an inline component: none of
  * the matchplay display code should load with the leaderboard, and nothing
- * from that module is imported into this file. The arrow is what says it
- * leaves the page — the boards beside it only change what is below.
+ * from that module is imported into this file.
+ *
+ * It carried an arrow to say it leaves the page while the boards beside it
+ * only change what is below. That distinction is real and the arrow was not
+ * worth it: it made one chip in a row of chips wider and busier than the
+ * rest, and nobody is misled by a tap that opens the draw.
  */
 function MatchplayTab({ tripCode }: { tripCode: string }) {
   return (
     <Link
       href={`/trip/${tripCode}/matchplay`}
-      className="flex-shrink-0 inline-flex items-center gap-1.5 px-4 py-2.5 t-label rounded-xl
+      className="flex-shrink-0 inline-flex items-center px-4 py-2.5 t-label rounded-xl
         border bg-surface border-bark/12 text-ink/65
         hover:text-ink/80 hover:border-accent/50 active:opacity-75
         transition-colors duration-150"
     >
       Matchplay
-      {/* It leaves the page, which none of the boards beside it do. */}
-      <span aria-hidden="true" className="text-ink/50">→</span>
     </Link>
   )
 }

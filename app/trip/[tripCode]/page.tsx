@@ -385,7 +385,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
             },
             {
               key: 'travel',
-              title: 'Travel & accommodation',
+              title: 'Travel & Accommodation',
               content: <TravelStays items={itinerary} startDate={trip.start_date ?? null} />,
             },
             {

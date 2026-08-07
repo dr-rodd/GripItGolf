@@ -94,6 +94,33 @@ section('The old identity is gone')
   // "No gradients anywhere."
   eq(offenders(/bg-gradient|linear-gradient|radial-gradient/), [], 'no gradients')
 
+  // That rule only ever scanned the components, never the stylesheet — so it
+  // would not have caught one written straight into globals.css. It does now,
+  // with exactly one exception, named here rather than left as a loophole.
+  //
+  // `.scroll-fade` is the leaderboard's right-hand scroll shadow. The guide's
+  // ban is on gradients as decoration — the old design's gold washes — and a
+  // shadow marking an edge you can scroll past is not decoration; it is the
+  // scrollbar the design deliberately hides, put back in a form that suits a
+  // stack of a dozen rows. Nothing else in the stylesheet may have one.
+  {
+    const rules = css.split('}').filter(r => /linear-gradient|radial-gradient/.test(r))
+    const strays = rules.filter(r => !r.includes('.scroll-fade')).map(r => r.trim().split('{')[0].trim())
+    eq(strays, [], 'the stylesheet has no gradient but the scroll shadow')
+
+    // Both halves or the effect is broken rather than merely different: the
+    // shadow is painted against the visible box, the cover against the
+    // content. Drop `local` and the cue never clears at the end of the
+    // scroll; drop `scroll` and there is no cue at all.
+    const fade = css.split('.scroll-fade')[1]?.split('}')[0] ?? ''
+    ok(/linear-gradient[^;]*\blocal\b/.test(fade),
+      'the scroll shadow carries its cover, anchored to the content')
+    ok(/radial-gradient[^;]*\bscroll\b/.test(fade),
+      '  …and its shadow, anchored to the box you can see')
+    ok(fade.includes('var(--color-surface)'),
+      '  …with the cover in the colour the board rows actually sit on')
+  }
+
   // "No pure gray anywhere. Every neutral is derived from #4A3728."
   //
   // The one exception the guide itself names: a tee swatch keeps the tee's

@@ -192,6 +192,35 @@ body {
   display: none;
 }
 
+/* ── …and the shadow that says so after all ────────────────────
+   Hiding the scrollbar left the leaderboard with no cue at all that
+   there were rounds off the right-hand edge, so a trip of six read as a
+   trip of three. This is that cue: a soft shadow down the right edge,
+   present only while something is still hidden over there.
+
+   Two background layers and no JavaScript. The shadow is painted
+   `scroll`, so it is anchored to the box you can see. The cover above it
+   is painted `local`, so it is anchored to the *content* and rides along
+   with it — parked off-screen past the last column while there is more
+   to come, and arriving exactly over the shadow when the last column
+   does. So the cue clears itself at the end of the scroll with no
+   listener, no state and no re-render on every frame of a flick.
+
+   The cover is `--color-surface` because that is what the board's rows
+   sit on. On a striped card it would show as a white block on every
+   other row, which is why this is a prop on the strip rather than
+   something `.scroll-strip` carries for everyone.
+
+   `rgba(255,255,255,0)` rather than `transparent`: Safari interpolates
+   the keyword through black and the fade comes out dirty. */
+.scroll-fade {
+  background:
+    linear-gradient(to left, var(--color-surface), rgba(255, 255, 255, 0))
+      right center / 28px 100% no-repeat local,
+    radial-gradient(farthest-side at 100% 50%, rgba(74, 55, 40, 0.18), rgba(255, 255, 255, 0))
+      right center / 14px 100% no-repeat scroll;
+}
+
 /* ── Forms ─────────────────────────────────────────────────────
    iOS zooms the page when a focused input's text is under 16px, which
    on a scoring screen is genuinely disruptive. Never shrink these. */

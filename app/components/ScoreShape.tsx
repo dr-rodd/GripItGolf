@@ -23,10 +23,19 @@
 
 export type ScoreShapeSize = 'sm' | 'md' | 'lg'
 
+/**
+ * Every step lifted once — 13/15/17 became 15/17/19, with the box growing
+ * with the numeral so the shapes keep their proportions.
+ *
+ * These are the figures somebody reads standing on a tee in the sun with the
+ * phone at arm's length, and at the old sizes they were the smallest type on
+ * a card rather than the largest. The ordering and the ratios are unchanged;
+ * the whole scale simply sits a step higher.
+ */
 const BOX: Record<ScoreShapeSize, string> = {
-  sm: 'w-6 h-6 text-[13px]',
-  md: 'w-7 h-7 text-[15px]',
-  lg: 'w-8 h-8 text-[17px]',
+  sm: 'w-7 h-7 text-[15px]',
+  md: 'w-8 h-8 text-[17px]',
+  lg: 'w-9 h-9 text-[19px]',
 }
 
 const base = (size: ScoreShapeSize) =>

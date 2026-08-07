@@ -41,11 +41,18 @@ export function scoreTone(relative: number, lowerIsBetter: boolean): ScoreTone {
  * Bark at two strengths for level and worse, the same two steps ScoreShape
  * uses for a bogey and a double — so a card and a leaderboard grade the same
  * round the same way.
+ *
+ * The two steps were 6% and 14%, and side by side down a live board they were
+ * too close to tell apart at a glance: level looked like a mild version of
+ * over rather than its own state. They are 4% and 20% now — level barely
+ * tinted, over unmistakably shaded — which is the same ordering, further
+ * apart. Level stays above nothing at all on purpose: a bare number in that
+ * column would read as a missing pill rather than as level.
  */
 export const TONE_PILL: Record<ScoreTone, string> = {
   good:  'bg-accent/[0.14] text-accent-deep',
-  level: 'bg-bark/[0.06] text-ink/80',
-  bad:   'bg-bark/[0.14] text-ink',
+  level: 'bg-bark/[0.04] text-ink/80',
+  bad:   'bg-bark/[0.20] text-ink',
 }
 
 /** The same three tones as bare text, for a column too tight for a pill. */

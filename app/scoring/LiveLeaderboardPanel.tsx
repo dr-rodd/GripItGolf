@@ -11,7 +11,7 @@ import { exactCourseHandicap } from "@/lib/courseHandicap"
 import { formatHandicap } from "@/lib/handicap"
 import { CHROME } from "./scoringHeaderMetrics"
 import {
-  SC_SF, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL,
+  SC_SF, SC_NUM, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL,
   SC_MUTED, SC_DARK, scRow, scPoints, teeDot,
 } from "@/app/components/scorecardStyle"
 
@@ -197,12 +197,12 @@ export function InlineScorecard({
     return (
       <div className={`${grid} px-3 py-2 items-center ${total ? SC_BAND_TOTAL : SC_BAND} ${total ? '' : SC_RULE}`}>
         <span className="text-[13px] font-bold tracking-widest uppercase text-ink/80" style={SC_SF}>{label}</span>
-        <span className="text-[15px] font-bold text-ink" style={SC_SF}>{sum(rs, r => r.ePar)}</span>
+        <span className={`${SC_NUM} font-bold text-ink`} style={SC_SF}>{sum(rs, r => r.ePar)}</span>
         <span />
-        <span className="text-center text-[15px] font-bold text-ink" style={SC_SF}>
+        <span className={`text-center ${SC_NUM} font-bold text-ink`} style={SC_SF}>
           {scored ? sum(rs, r => r.gross ?? 0) : '—'}
         </span>
-        <span className={`text-right font-bold text-ink ${total ? 'text-lg' : 'text-[15px]'}`} style={SC_SF}>
+        <span className={`text-right font-bold text-ink ${total ? 'text-xl' : SC_NUM}`} style={SC_SF}>
           {scored ? sum(rs, r => r.pts ?? 0) : '—'}
         </span>
       </div>
@@ -211,11 +211,11 @@ export function InlineScorecard({
 
   const holeRow = (r: typeof rows[number]) => (
     <div key={r.hole.hole_number} className={`${grid} px-3 py-1.5 items-center ${SC_RULE} ${scRow(r.hole.hole_number)}`}>
-      <span className={`text-[15px] font-semibold ${SC_DARK}`} style={SC_SF}>{r.hole.hole_number}</span>
-      <span className={`text-[15px] ${SC_MUTED}`} style={SC_SF}>{r.ePar}</span>
-      <span className={`text-[15px] ${SC_MUTED}`} style={SC_SF}>{r.eSI}</span>
+      <span className={`${SC_NUM} font-semibold ${SC_DARK}`} style={SC_SF}>{r.hole.hole_number}</span>
+      <span className={`${SC_NUM} ${SC_MUTED}`} style={SC_SF}>{r.ePar}</span>
+      <span className={`${SC_NUM} ${SC_MUTED}`} style={SC_SF}>{r.eSI}</span>
       <span className="flex justify-center">{scoreSymbol(r.gross, r.ePar)}</span>
-      <span className={`text-right text-[15px] ${scPoints(r.pts)}`} style={SC_SF}>{r.pts ?? '—'}</span>
+      <span className={`text-right ${SC_NUM} ${scPoints(r.pts)}`} style={SC_SF}>{r.pts ?? '—'}</span>
     </div>
   )
 
@@ -229,13 +229,13 @@ export function InlineScorecard({
       <div className={`flex items-center gap-5 px-3 py-2 ${SC_RULE} ${SC_HEAD}`}>
         <span className="flex items-baseline gap-1.5">
           <span className={SC_LABEL}>PH</span>
-          <span className={`text-[15px] font-semibold ${SC_DARK}`} style={SC_SF}>{formatHandicap(playingHcp)}</span>
+          <span className={`${SC_NUM} font-semibold ${SC_DARK}`} style={SC_SF}>{formatHandicap(playingHcp)}</span>
         </span>
         {teeName && (
           <span className="flex items-center gap-1.5">
             <span className={SC_LABEL}>Tee</span>
             <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${teeDot(teeName)}`} />
-            <span className={`text-[15px] font-semibold ${SC_DARK}`} style={SC_SF}>{teeName}</span>
+            <span className={`${SC_NUM} font-semibold ${SC_DARK}`} style={SC_SF}>{teeName}</span>
           </span>
         )}
       </div>
@@ -471,16 +471,26 @@ export default function LiveLeaderboardPanel({
       </div>
 
       {/* Nett / gross. A second question about the same board, so it is
-          quieter than the tabs above rather than a second row of them. */}
+          quieter than the tabs above rather than a second row of them.
+
+          Sized down deliberately. It inherited `t-cap`, and when captions
+          were lifted to 15px this came with them — which left a secondary
+          switch set in the same type as the Stableford/Strokes tabs directly
+          above it, competing with the thing it is subordinate to. It is at
+          the 13px floor now, with the padding pulled in to match.
+
+          The height is not reduced as far as the type: `py-1.5` keeps each
+          half around 26px tall, over the 24px minimum a target has to clear.
+          It is a thumb on a golf course, not a mouse. */}
       {mode === "strokes" && (
         <div className="flex justify-end -mt-1">
-          <div className="inline-flex gap-1 p-1 rounded-xl bg-bark/[0.06]">
+          <div className="inline-flex gap-0.5 p-0.5 rounded-lg bg-bark/[0.06]">
             {(["nett", "gross"] as StrokesView[]).map(sv => (
               <button
                 key={sv}
                 onClick={() => setStrokesView(sv)}
-                className={`px-3 py-1.5 rounded-lg t-cap uppercase tracking-[0.12em] transition-colors duration-150 ${
-                  strokesView === sv ? "bg-surface text-ink" : "text-ink/65 hover:text-ink/80"
+                className={`px-2.5 py-1.5 rounded-md text-[13px] uppercase tracking-[0.10em] transition-colors duration-150 ${
+                  strokesView === sv ? "bg-surface text-ink font-semibold" : "text-ink/65 hover:text-ink/80"
                 }`}
               >
                 {sv}

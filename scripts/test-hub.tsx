@@ -782,7 +782,7 @@ section('The hub is the sections it should be, and nothing else')
   ok(hub.includes('SectionStack'), 'the collapsible sections are one shared component')
   ok(hub.includes("initial=\"itinerary\""), 'and the itinerary is the one open on arrival')
 
-  for (const title of ['Your Itinerary', 'Travel & accommodation', 'Players']) {
+  for (const title of ['Your Itinerary', 'Travel & Accommodation', 'Players']) {
     ok(hub.includes(`'${title}'`) || hub.includes(`"${title}"`), `there is a ${title} section`)
   }
 

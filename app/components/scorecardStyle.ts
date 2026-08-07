@@ -24,6 +24,22 @@
 /** Dense figures — every scorecard number is set in the serif. */
 export const SC_SF = { fontFamily: 'var(--font-serif)' } as const
 
+/**
+ * How big a figure on a card is set: a hole number, a par, a stroke index, a
+ * points total, an Out/In/Total.
+ *
+ * It was 15px, written out by hand at a dozen call sites across two cards,
+ * and it was too small — these are read at arm's length in daylight, and they
+ * were a step below the body copy on the same screen. One constant now, so
+ * the next move is one edit rather than a dozen, and so the two cards cannot
+ * drift apart.
+ *
+ * The score shapes moved with it — see `BOX` in `ScoreShape.tsx`, which lifted
+ * every step by the same amount. The two have to stay in step or the gross
+ * score ends up smaller than the par beside it.
+ */
+export const SC_NUM = 'text-[17px]'
+
 /** The card itself. White, so the score shapes have somewhere to sit. */
 export const SC_CARD = 'bg-surface border border-bark/12 rounded-2xl'
 

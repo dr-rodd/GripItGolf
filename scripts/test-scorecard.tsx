@@ -123,6 +123,44 @@ section('Every card in the app draws the same shape')
   }
 }
 
+// ─── A card is read at arm's length ────────────────────────────
+
+section('Every figure on a card is set from one size, and the shapes match it')
+{
+  // The figures were 15px, written by hand at a dozen call sites across two
+  // cards, and too small for a phone held at arm's length in daylight. They
+  // come from `SC_NUM` now — one constant, so the next move is one edit and
+  // the two cards cannot drift apart.
+  const style = read('app/components/scorecardStyle.ts')
+  const num = Number(style.match(/SC_NUM\s*=\s*'text-\[(\d+)px\]'/)?.[1] ?? 0)
+  ok(num >= 17, `a figure on a card is at least 17px (${num}px)`)
+
+  // The score shape holds the gross score — the one number on the row that
+  // matters most. Set it below the par beside it and the card reads upside
+  // down, which is exactly what happened while the figures moved and the
+  // shapes did not.
+  const shapes = read('app/components/ScoreShape.tsx')
+  const box = (size: string) =>
+    Number(shapes.match(new RegExp(`${size}: 'w-\\d+ h-\\d+ text-\\[(\\d+)px\\]'`))?.[1] ?? 0)
+  const [sm, md, lg] = ['sm', 'md', 'lg'].map(box)
+  ok(sm > 0 && md > 0 && lg > 0, 'all three shape sizes are readable from the source')
+  ok(sm < md && md < lg, 'and still step up in order')
+  ok(md >= num, `the medium shape is not set below the figures around it (${md}px vs ${num}px)`)
+
+  // Both cards go through the constant rather than writing the old size out.
+  for (const f of [
+    'app/scoring/LiveLeaderboardPanel.tsx',
+    'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
+  ]) {
+    const src = read(f)
+    ok(src.includes('SC_NUM'), `${f.split('/').pop()} sets its figures from SC_NUM`)
+    // The details strip above the grid keeps its own size, so this is not a
+    // ban on 15px in the file — only on it reappearing in the hole rows.
+    ok(!/text-\[15px\] \$\{SC_MUTED\}/.test(src),
+      `  …and none of its hole rows is back on a hand-written size`)
+  }
+}
+
 // ─── The sticky header must not sit on the leader ──────────────
 
 section('The column headings stay above the board')

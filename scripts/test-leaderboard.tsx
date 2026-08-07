@@ -9,6 +9,7 @@
 
 import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
+import fs from 'fs'
 import TripLeaderboardClient from '../app/trip/[tripCode]/leaderboard/TripLeaderboardClient'
 import { parseFormats, type TripFormats } from '../lib/formats'
 import { DEFAULT_TEAM_SCORING, type TeamScoring } from '../lib/teamScoring'
@@ -29,6 +30,7 @@ function eq(got: unknown, want: unknown, label: string) {
   else { failed++; failures.push(label); console.log(`  FAIL  ${label}\n        got  ${g}\n        want ${w}`) }
 }
 const section = (n: string) => console.log(`\n${n}`)
+const read = (p: string) => fs.readFileSync(p, 'utf-8')
 
 // ─── Fixture: 3 players, 2 rounds, every hole scored ───────────
 
@@ -343,6 +345,15 @@ section('Under par is coloured; over par is weighted')
   ok(barkOf(TONE_PILL.bad) > barkOf(TONE_PILL.level),
     'and it is a stronger bark than level, not a paler one')
   ok(barkOf(TONE_PILL.level) > 0, 'while level is still a wash rather than nothing')
+
+  // Ordered was not enough. At 6% and 14% they were ordered and still hard to
+  // tell apart down a live board, so level read as a mild version of over
+  // rather than as its own state. Far enough apart to separate at a glance,
+  // and level light enough to be a tint rather than a shade.
+  ok(barkOf(TONE_PILL.bad) - barkOf(TONE_PILL.level) >= 0.12,
+    'the two are far enough apart to tell apart at a glance')
+  ok(barkOf(TONE_PILL.level) <= 0.05, 'level is barely tinted')
+  ok(barkOf(TONE_PILL.bad) <= 0.25, 'and over par never becomes a block of colour')
 }
 
 section('The live dot belongs to a player, not to the trip')
@@ -411,6 +422,55 @@ section('Matchplay')
   ok(stripOf(drawOnly).includes('/trip/ABC123/matchplay'),
     'a matchplay-only trip still gets its chip')
   ok(!drawOnly.includes('Alice'), 'and no board underneath it')
+
+  // The chip used to carry a trailing arrow to say it left the page. It made
+  // one chip in a row of chips wider and busier than the rest, for a
+  // distinction nobody was confused by.
+  ok(!strip.includes('→'), 'the draw chip carries no arrow')
+}
+
+// ─── There is more to the right ────────────────────────────────
+
+section('A board with columns off the edge says so')
+{
+  // The scrollbar is hidden on these strips — one per row would be a stack of
+  // identical bars saying the same thing — which left a six-round trip
+  // looking exactly like a three-round one. `scroll-fade` is the shadow that
+  // replaces it, and it is painted only where something is actually hidden.
+  const roundsFor = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `r${i + 1}`, round_number: i + 1, status: 'completed',
+      courses: { id: 'c1', name: 'Ballyliffin' },
+    }))
+
+  const few  = render([SF()], { rounds: roundsFor(4) })
+  const many = render([SF()], { rounds: roundsFor(6) })
+
+  ok(!few.includes('overflow-x-auto scroll-strip'),
+    'four rounds fit, so nothing scrolls')
+  ok(!few.includes('scroll-fade'),
+    '  …and a board with nothing hidden shows no shadow')
+
+  ok(many.includes('overflow-x-auto scroll-strip'), 'six rounds scroll')
+  ok(many.includes('scroll-fade'), '  …and carry the shadow that says so')
+
+  // The shadow's other half is a cover painted at the content's own origin,
+  // so it clears itself at the end of the scroll. That is CSS rather than
+  // markup, which is why the rule itself is pinned in test:branding.
+
+  // One more column on screen before the first swipe: the name column, the
+  // cell and the gap each gave up a little. All three, or the column that
+  // was gained goes back.
+  ok(many.includes('w-[5.5rem]'), 'the name column narrows once the rounds scroll')
+  ok(many.includes('w-8 flex-shrink-0 text-center'), 'the round cells narrow with it')
+  ok(many.includes('flex gap-1.5 w-max'), 'and the gap between them tightens')
+
+  // The scorecard sheet uses the same Strip and must NOT take the fade: its
+  // rows alternate towards cream, and the cover half of the effect is the
+  // surface colour — it would read as a white block on every other hole.
+  const sheet = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const fadeUses = sheet.split('\n').filter(l => l.includes('<Strip') && l.includes('fade'))
+  eq(fadeUses.length, 2, 'only the board\'s two strips ask for the fade, not the sheet\'s')
 }
 
 // ─── Live vs finalised ─────────────────────────────────────────
