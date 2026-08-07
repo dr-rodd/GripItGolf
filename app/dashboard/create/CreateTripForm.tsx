@@ -12,6 +12,7 @@ import { normaliseEmail, emailWarning, MAX_EMAIL } from '@/lib/email'
 import { rememberPlayer } from '@/lib/playerCookie'
 import ItineraryBuilder from '@/app/components/ItineraryBuilder'
 import { type ItineraryItem, golfItems, dateForDay } from '@/lib/itinerary'
+import { toItemRow } from '@/lib/itinerarySync'
 import Toggle from '@/app/components/Toggle'
 import {
   MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError,
@@ -302,20 +303,12 @@ export default function CreateTripForm() {
     // Written first so each row has a real id, then the golf ones become
     // rounds pointing back at the item that created them. Order is day then
     // position, which is exactly the order rounds are numbered in.
-    const itineraryRows = itinerary.map(item => ({
-      trip_id: tripId,
-      day_index: item.dayIndex,
-      position: item.position,
-      kind: item.kind,
-      course_id: item.kind === 'golf' ? item.courseId ?? null : null,
-      tee_time: item.kind === 'golf' ? item.teeTime || null : null,
-      tee_count: item.kind === 'golf' ? item.teeCount ?? 1 : null,
-      stay_name: item.kind === 'stay' ? item.stayName ?? null : null,
-      travel_mode: item.kind === 'travel' ? item.travelMode ?? null : null,
-      from_place: item.kind === 'travel' ? item.fromPlace || null : null,
-      to_place: item.kind === 'travel' ? item.toPlace || null : null,
-      duration_mins: item.kind === 'travel' ? item.durationMins ?? null : null,
-    }))
+    // `toItemRow` rather than a second copy of the same mapping. This file
+    // had one, field for field, and the two had to be edited together every
+    // time a kind gained a column — which is precisely the kind of pairing
+    // that gets missed. Every item here carries a `tmp-` id from the builder,
+    // so the helper leaves `id` off and the database issues the real one.
+    const itineraryRows = itinerary.map(item => toItemRow(tripId, item))
 
     const { data: savedItems, error: itinErr } = itineraryRows.length > 0
       ? await supabase.from('itinerary_items').insert(itineraryRows)

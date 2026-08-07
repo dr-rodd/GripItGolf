@@ -60,7 +60,8 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       supabase
         .from('itinerary_items')
         .select('id, day_index, position, kind, course_id, tee_time, tee_count, ' +
-                'stay_name, travel_mode, from_place, to_place, duration_mins')
+                'stay_name, travel_mode, from_place, to_place, duration_mins, ' +
+                'activity_name, activity_time')
         .eq('trip_id', trip.id)
         .order('day_index')
         .order('position'),
@@ -82,6 +83,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
     course_id: string | null; tee_time: string | null; tee_count: number | null
     stay_name: string | null; travel_mode: TravelMode | null
     from_place: string | null; to_place: string | null; duration_mins: number | null
+    activity_name: string | null; activity_time: string | null
   }
   const itinerary: ItineraryItem[] = ((itineraryResult.data ?? []) as unknown as ItinRow[])
     .map(r => ({
@@ -89,6 +91,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       courseId: r.course_id, teeTime: r.tee_time, teeCount: r.tee_count,
       stayName: r.stay_name, travelMode: r.travel_mode,
       fromPlace: r.from_place, toPlace: r.to_place, durationMins: r.duration_mins,
+      activityName: r.activity_name, activityTime: r.activity_time,
     }))
 
   // Golf can only be edited while nothing has been scored yet — a course

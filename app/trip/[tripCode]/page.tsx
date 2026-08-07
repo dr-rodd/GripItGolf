@@ -18,7 +18,7 @@ import StatusBlock from './StatusBlock'
 import TravelStays from './TravelStays'
 import TripHeader from '@/app/components/TripHeader'
 import Itinerary from './Itinerary'
-import { type ItineraryItem, dayCount } from '@/lib/itinerary'
+import { type ItemKind, type ItineraryItem, dayCount } from '@/lib/itinerary'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import TabBar from '@/app/components/TabBar'
@@ -82,7 +82,8 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
     supabase
       .from('itinerary_items')
       .select('id, day_index, position, kind, course_id, tee_time, tee_count, ' +
-              'stay_name, travel_mode, from_place, to_place, duration_mins')
+              'stay_name, travel_mode, from_place, to_place, duration_mins, ' +
+                'activity_name, activity_time')
       .eq('trip_id', trip.id)
       .order('day_index')
       .order('position'),
@@ -96,10 +97,11 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   const players = playersResult.data ?? []
 
   type ItinRow = {
-    id: string; day_index: number; position: number; kind: 'golf' | 'stay' | 'travel'
+    id: string; day_index: number; position: number; kind: ItemKind
     course_id: string | null; tee_time: string | null; tee_count: number | null
     stay_name: string | null; travel_mode: 'car' | 'flight' | 'train' | null
     from_place: string | null; to_place: string | null; duration_mins: number | null
+    activity_name: string | null; activity_time: string | null
   }
   const itinerary: ItineraryItem[] = ((itineraryResult.data ?? []) as unknown as ItinRow[])
     .map(r => ({
@@ -107,6 +109,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       courseId: r.course_id, teeTime: r.tee_time, teeCount: r.tee_count,
       stayName: r.stay_name, travelMode: r.travel_mode,
       fromPlace: r.from_place, toPlace: r.to_place, durationMins: r.duration_mins,
+      activityName: r.activity_name, activityTime: r.activity_time,
     }))
 
   // Which round each golf item became, so the up-next card can put the

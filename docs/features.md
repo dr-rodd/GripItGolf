@@ -117,17 +117,22 @@ Four routes in, all through the module: discarding from inside the card, voiding
 
 ## The itinerary
 
-A trip is a drive to the coast, a tee time, another drive, a guesthouse — in that order, on a given day. `itinerary_items` (migration 021) holds that running order; `lib/itinerary.ts` is the model, pure.
+A trip is a drive to the coast, a tee time, another drive, a guesthouse, a table booked for eight — in that order, on a given day. `itinerary_items` (migration 021, widened by 027) holds that running order; `lib/itinerary.ts` is the model, pure.
 
 **Creation is three steps** — trip details, the itinerary, players. It does not ask about teams. Whether a trip has teams at all follows from the leaderboards it runs, and those are chosen in settings; asking at creation as well gave one question two answers, and the creation one was the answer nothing read. No `teams` rows are written and every player starts with `team_id = null`.
 
-**Creation step 2 is the itinerary builder**, replacing the old "pick a course per round" list. One day open at a time, tiles in the order they happen, and three add buttons pinned to the bottom of the screen — on a phone that is where the thumb already is.
+**Creation step 2 is the itinerary builder**, replacing the old "pick a course per round" list. One day open at a time, tiles in the order they happen, and four add buttons pinned to the bottom of the screen — on a phone that is where the thumb already is.
 
 | Kind | Carries |
 |---|---|
 | `golf` | course (platform list only), first tee time, number of tee times |
 | `stay` | a name. Free text on purpose — an organiser knows what "the guesthouse in Ballina" means |
 | `travel` | car / flight / train, from, to, duration |
+| `activity` | a name, and optionally a time. Dinner, a boat trip, anything that is not golf. The time is optional on purpose — "pub quiz" with no time is a real plan, and refusing it pushes it back off the itinerary, which is the gap activities exist to close |
+
+**A fourth kind, not a fourth table.** Everything reads this the same way — give me this day, in order — so the four share one row shape and `ck_itinerary_shape` keeps each kind to its own columns. Adding activities needed no code at all in `Itinerary.tsx`: `itineraryIcon` had an icon and `describeItem` had a title and a time, which is the whole argument for one table.
+
+**An activity is not counted down to.** `lib/upNext.ts` still answers golf only — see the note there on what a countdown can be attached to. An activity that named a time does stop reading as under way before it happens, which a stay never needed.
 
 **Golf items are the source of truth for rounds.** A round exists because a golf item does. On save the itinerary is written first so every row has an id, then golf items become rounds in `(day_index, position)` order — which is the order they are numbered in — each carrying `rounds.itinerary_item_id` back to the item that made it. The rounds-count picker is gone; the cap still applies, counted from the golf items.
 

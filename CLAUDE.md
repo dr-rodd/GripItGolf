@@ -98,7 +98,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `lib/roundHandicaps.ts` | The `round_handicaps` snapshot, written on a handicap edit and when somebody joins after the rounds exist |
 | `lib/teamLimits.ts` | Team size rules, pairing wording |
 | `lib/matchplayEntrants.ts` | Player/pairing shape and naming |
-| `lib/itinerarySync.ts` / `lib/itineraryStore.ts` | Itinerary diff-and-write |
+| `lib/itinerarySync.ts` / `lib/itineraryStore.ts` | Itinerary diff-and-write. **`toItemRow` is the only row mapping** — trip creation had a second copy of it, field for field, and a kind gaining a column reached one writer and not the other |
 | `supabase/migrations/` | All schema changes, in order. **Migration 010 has a one-time backfill — never replay it.** |
 | `config/site.ts` | Global platform branding |
 

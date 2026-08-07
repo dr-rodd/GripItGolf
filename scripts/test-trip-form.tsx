@@ -83,6 +83,15 @@ section('The itinerary replaces the rounds picker')
     'and step two is the itinerary')
   ok(src.includes('<ItineraryBuilder'), 'which renders the builder')
 
+  // Creation used to carry its own field-for-field copy of the row mapping,
+  // beside the one in itinerarySync. The two had to be edited together every
+  // time a kind gained a column — and a kind gaining a column is exactly what
+  // happens. One helper now, so a new column reaches both writers at once.
+  ok(src.includes('toItemRow(tripId, item)'),
+    'and writes its itinerary rows through the shared mapping')
+  ok(!/stay_name: item\.kind === 'stay'/.test(src),
+    '  …rather than a second copy of it')
+
   // A trip with no golf has nothing to score, so it cannot move on. It is a
   // reason rather than a disabled button now — an empty Tuesday should not
   // grey out the way forward, so the check happens once, at the end.

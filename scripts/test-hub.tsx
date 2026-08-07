@@ -543,9 +543,16 @@ section('Journeys carry their mode')
     ok(new RegExp(`'${mode}'\\) return ${icon}`).test(fn), `a ${mode} draws ${icon}`)
   }
   ok(/kind === 'stay'\) return IconHome/.test(fn), 'a stay draws the home icon')
+  ok(/kind === 'activity'\) return IconFork/.test(fn), 'an activity draws the fork')
   // A journey with no mode recorded keeps the arrow — guessing a car would
   // invent a detail the organiser never entered.
   ok(/return IconArrowRight\s*\n\}/.test(fn), 'and a journey with no mode falls back to the arrow')
+
+  // The fallback is the *journey's*, not everything's. Put the activity
+  // branch below it and every dinner on every trip becomes an arrow — the
+  // failure is silent, because an arrow is a plausible icon for a thing.
+  ok(fn.indexOf("kind === 'activity'") < fn.indexOf('return IconArrowRight'),
+    '  …which is why every kind is answered before that fallback is reached')
 
   for (const f of [
     'app/trip/[tripCode]/TravelStays.tsx',

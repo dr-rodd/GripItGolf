@@ -24,11 +24,17 @@ import { useMinute } from '@/app/components/useMinute'
  */
 
 /**
- * A stay or a journey — how and where, nothing more.
+ * Everything that is not golf — a stay, a journey, an activity. How and
+ * where, nothing more.
  *
  * No card. Golf is what a trip is for, so it is the only thing that gets a
- * white surface to stand on; a stay or a journey is context around it, read
- * in passing rather than tapped.
+ * white surface to stand on; the rest is context around it, read in passing
+ * rather than tapped.
+ *
+ * Activities needed no code here, only this note. They arrived as a fourth
+ * kind on the shared model, so `itineraryIcon` had an icon for them and
+ * `describeItem` had a title and a time — which is the whole argument for
+ * the four kinds sharing one table and one type.
  *
  * **Centred, between the cards it sits between.** Left-aligned it was a
  * fourth column of text starting where the golf tiles' text starts, which
@@ -83,9 +89,9 @@ export default function Itinerary({
   /**
    * Itinerary item id → the round it became.
    *
-   * Only golf items appear. A stay or a journey has no page to open — there
-   * is nothing to say about a guesthouse beyond its name, which is already
-   * on the tile — so they stay as they are and are not tappable.
+   * Only golf items appear. Nothing else has a page to open — there is
+   * nothing to say about a guesthouse or a dinner beyond its name, which is
+   * already on the tile — so they stay as they are and are not tappable.
    */
   roundNumbers: Record<string, number>
 }) {
@@ -130,9 +136,9 @@ export default function Itinerary({
                   const { title, detail } = describeItem(item, courseNames[item.courseId ?? ''])
 
                   // Golf is what the trip is for, so it is the only thing
-                  // that gets a white card. A stay or a journey is context
-                  // around it — how and where, not a thing to tap — and sits
-                  // straight on the page instead.
+                  // that gets a white card. A stay, a journey or an activity
+                  // is context around it — how and where, not a thing to tap
+                  // — and sits straight on the page instead.
                   if (item.kind !== 'golf') {
                     return (
                       <SubtleRow key={item.id} item={item} state={state} title={title} detail={detail} />

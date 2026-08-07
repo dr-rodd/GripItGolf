@@ -12,12 +12,12 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import {
   type ItineraryItem, type ItemKind, type TravelMode,
-  TRAVEL_MODES, MAX_TEE_TIMES,
+  TRAVEL_MODES, MAX_TEE_TIMES, MAX_ACTIVITY_NAME,
   addItem, addStay, removeItem, moveItem, itemsForDay, dayCount, dateForDay,
   describeDay, describeItem, itemError, nightsAvailable,
 } from '@/lib/itinerary'
 import {
-  IconFlag, IconHome, IconArrowRight, IconPlus, IconX, IconChevronDown,
+  IconFlag, IconHome, IconArrowRight, IconFork, IconPlus, IconX, IconChevronDown,
 } from './icons'
 import { FIELD, FIELD_LABEL, buttonClass, Badge } from './ui'
 
@@ -40,9 +40,19 @@ const KIND_ICON = {
   golf: IconFlag,
   stay: IconHome,
   travel: IconArrowRight,
+  activity: IconFork,
 } as const
 
-const KIND_LABEL = { golf: 'Golf', stay: 'Stay', travel: 'Travel' } as const
+const KIND_LABEL = { golf: 'Golf', stay: 'Stay', travel: 'Travel', activity: 'Activity' } as const
+
+/**
+ * The order the add buttons appear in, and the only list of them.
+ *
+ * Golf, a bed, getting there — then everything else the trip is. Activity is
+ * last because it is the one that is optional in a way the other three are
+ * not: a trip without a dinner booked is a trip; a trip without golf is not.
+ */
+const KINDS: ItemKind[] = ['golf', 'stay', 'travel', 'activity']
 
 // ─── A tile ────────────────────────────────────────────────────
 
@@ -287,6 +297,8 @@ export default function ItineraryBuilder({
   const [toPlace, setToPlace] = useState('')
   const [hours, setHours] = useState('')
   const [mins, setMins] = useState('')
+  const [activityName, setActivityName] = useState('')
+  const [activityTime, setActivityTime] = useState('')
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -326,6 +338,7 @@ export default function ItineraryBuilder({
     setCourseId(''); setTeeTime(''); setTeeCount(1)
     setStayName(''); setNights(1)
     setMode('car'); setFromPlace(''); setToPlace(''); setHours(''); setMins('')
+    setActivityName(''); setActivityTime('')
     setSheet(kind)
   }
 
@@ -348,6 +361,11 @@ export default function ItineraryBuilder({
     const draft: Omit<ItineraryItem, 'position'> =
       sheet === 'golf'
         ? { id, dayIndex: openDay, kind: 'golf', courseId, teeTime: teeTime || null, teeCount }
+        : sheet === 'activity'
+        ? {
+            id, dayIndex: openDay, kind: 'activity',
+            activityName, activityTime: activityTime || null,
+          }
         : {
             id, dayIndex: openDay, kind: 'travel', travelMode: mode,
             fromPlace, toPlace, durationMins: duration || null,
@@ -388,8 +406,8 @@ export default function ItineraryBuilder({
           <div className="flex items-start gap-3 px-4 py-3 mb-4 bg-accent/10 border border-accent/40 rounded-xl">
             <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0" />
             <p className="text-accent text-[13px] leading-snug">
-              Scores already exist on this trip, so rounds are locked. Stays and journeys can
-              still be added, moved or removed.
+              Scores already exist on this trip, so rounds are locked. Everything else —
+              stays, journeys and activities — can still be added, moved or removed.
             </p>
           </div>
         )}
@@ -425,7 +443,7 @@ export default function ItineraryBuilder({
         <p className="t-h2 text-ink mb-1">{describeDay(dateForDay(startDate, openDay), openDay)}</p>
         <p className="t-cap text-ink/65 mb-4">
           {dayItems.length === 0
-            ? 'Nothing yet — add golf, a stay or a journey below.'
+            ? 'Nothing yet — add golf, a stay, a journey or an activity below.'
             : 'Press and hold a tile to move it.'}
         </p>
 
@@ -451,17 +469,21 @@ export default function ItineraryBuilder({
         )}
       </div>
 
-      {/* The way forward, pinned where the thumb is. The three ways to fill
+      {/* The way forward, pinned where the thumb is. The four ways to fill
           a day sit above the way out of it, and carry the extra height —
           they are what this screen is for, and the one underneath is where
-          you go when you are finished with it. */}
+          you go when you are finished with it.
+
+          Four across rather than two rows of two: on the narrowest phone the
+          guide supports they still clear the tap-target minimum, and a
+          second row would push the way out of the day below the fold. */}
       <div
         className="fixed bottom-0 left-0 right-0 z-30 bg-cream/95 backdrop-blur-sm border-t border-bark/12"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 10px)' }}
       >
         <div className="max-w-lg mx-auto px-4 pt-3">
-          <div className="grid grid-cols-3 gap-2">
-            {(['golf', 'stay', 'travel'] as const).map(kind => {
+          <div className="grid grid-cols-4 gap-2">
+            {KINDS.map(kind => {
               const Icon = KIND_ICON[kind]
               const disabled = lockGolf && kind === 'golf'
               return (
@@ -638,6 +660,44 @@ export default function ItineraryBuilder({
                 className={`${FIELD} min-w-0`} />
             </div>
           </div>
+        </Sheet>
+      )}
+
+      {sheet === 'activity' && (
+        <Sheet title="Add an activity" onClose={() => setSheet(null)} onAdd={commit} addLabel="Add activity" error={error}>
+          <div>
+            <label className={FIELD_LABEL} htmlFor="it-activity">What is it?</label>
+            <input
+              id="it-activity" type="text" value={activityName} autoFocus
+              maxLength={MAX_ACTIVITY_NAME}
+              onChange={e => setActivityName(e.target.value)}
+              placeholder="Dinner at the Beach House"
+              className={FIELD}
+            />
+          </div>
+
+          {/* Its own row and full width, for the same reason the tee time is:
+              a native time control sizes itself to its own preference and
+              runs into whatever sits beside it. */}
+          <div>
+            <label className={FIELD_LABEL} htmlFor="it-activity-time">Time</label>
+            <input
+              id="it-activity-time" type="time" value={activityTime}
+              onChange={e => setActivityTime(e.target.value)}
+              className={`${FIELD} block min-w-0 max-w-full`}
+              style={{
+                WebkitAppearance: 'none',
+                appearance: 'none',
+                minWidth: 0,
+                maxWidth: '100%',
+              }}
+            />
+          </div>
+
+          <p className="t-cap text-ink/65">
+            Dinner, a boat trip, anything that is not golf. The time is
+            optional — leave it blank if it is not booked yet.
+          </p>
         </Sheet>
       )}
 

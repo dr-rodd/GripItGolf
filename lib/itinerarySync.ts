@@ -66,6 +66,8 @@ export type ItemRow = {
   from_place: string | null
   to_place: string | null
   duration_mins: number | null
+  activity_name: string | null
+  activity_time: string | null
 }
 
 /**
@@ -90,6 +92,12 @@ export function toItemRow(tripId: string, item: ItineraryItem): ItemRow {
     from_place: item.kind === 'travel' ? item.fromPlace || null : null,
     to_place: item.kind === 'travel' ? item.toPlace || null : null,
     duration_mins: item.kind === 'travel' ? item.durationMins ?? null : null,
+    // Every one of these is nulled for the kinds it does not belong to, which
+    // is not tidiness — `ck_itinerary_shape` refuses a row whose columns and
+    // whose kind disagree, so a leftover value from a half-filled form is a
+    // failed save rather than a wrong tile.
+    activity_name: item.kind === 'activity' ? item.activityName?.trim() || null : null,
+    activity_time: item.kind === 'activity' ? item.activityTime || null : null,
   }
 }
 

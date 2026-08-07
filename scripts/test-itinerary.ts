@@ -1,8 +1,8 @@
 /**
  * Itinerary tests. Run with: npm run test:itinerary
  *
- * The running order of a trip — golf, stays and journeys, per day. Three
- * things have to hold:
+ * The running order of a trip — golf, stays, journeys and activities, per
+ * day. Three things have to hold:
  *
  *   · positions stay gapless and in order through every add, delete and move,
  *     because rounds are numbered from that order
@@ -18,9 +18,10 @@ import {
   dayCount, dateForDay, describeDay, describeDuration, describeTime,
   describeItem, itemState, tripProgress, itemError,
   addStay, nightsAvailable,
-  MAX_TEE_TIMES, MAX_NIGHTS,
+  MAX_TEE_TIMES, MAX_NIGHTS, MAX_ACTIVITY_NAME,
 } from '../lib/itinerary'
 import { isTempId, diffItems, toItemRow, touchesGolf } from '../lib/itinerarySync'
+import fs from 'fs'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -429,6 +430,167 @@ section('Whether a save would touch golf at all')
   const newGolf: ItineraryItem = { id: 'tmp-1', dayIndex: 1, position: 1, kind: 'golf', courseId: 'c3', teeCount: 1 }
   ok(touchesGolf(before, [...before, newGolf]), 'adding a round does')
   ok(touchesGolf(before, [stay]), 'and removing one does')
+
+  // The point of the golf lock: a trip with scores can still have its dinner
+  // booked. If adding an activity counted as touching golf, the editor would
+  // refuse the save on a trip already under way — which is every trip that
+  // would actually want one.
+  const dinner: ItineraryItem = {
+    id: 'tmp-9', dayIndex: 0, position: 2, kind: 'activity',
+    activityName: 'Dinner', activityTime: '19:00',
+  }
+  ok(!touchesGolf(before, [...before, dinner]), 'adding an activity does not')
+  ok(!touchesGolf([...before, dinner], before), 'nor does removing one')
+}
+
+// ─── Activities ────────────────────────────────────────────────
+
+section('An activity is a name and, if you have one, a time')
+{
+  const dinner: ItineraryItem = {
+    id: 'a1', dayIndex: 1, position: 0, kind: 'activity',
+    activityName: 'Dinner at the Beach House', activityTime: '19:30',
+  }
+
+  eq(describeItem(dinner).title, 'Dinner at the Beach House', 'the name is the tile')
+  eq(describeItem(dinner).detail, '7:30 pm', 'and the time reads as a person says it')
+
+  // A plan without a time is still a plan — that is why the column is
+  // nullable. The tile must not announce what it does not know.
+  const quiz: ItineraryItem = { ...dinner, id: 'a2', activityName: 'Pub quiz', activityTime: null }
+  eq(describeItem(quiz).detail, '', 'no time means no detail line, not "no time"')
+
+  // A blank name never reaches the database — `itemError` refuses it — but
+  // an old row or a bad hand-write should not render an empty tile.
+  eq(describeItem({ ...dinner, activityName: null }).title, 'Activity',
+    'and a nameless one still says what it is')
+
+  eq(itemError({ kind: 'activity', activityName: 'Dinner' }), null, 'a name is all it needs')
+  eq(itemError({ kind: 'activity', activityName: '   ' }), 'Say what it is',
+    'whitespace is not a name')
+  eq(itemError({ kind: 'activity' }), 'Say what it is', 'nor is nothing')
+  ok(itemError({ kind: 'activity', activityName: 'x'.repeat(MAX_ACTIVITY_NAME) }) === null,
+    'a name right on the limit is fine')
+  ok(itemError({ kind: 'activity', activityName: 'x'.repeat(MAX_ACTIVITY_NAME + 1) }) !== null,
+    'and one over it is not')
+
+  // The time is optional, and stays optional. This is the pin that catches
+  // somebody "tidying up" by making it required.
+  eq(itemError({ kind: 'activity', activityName: 'Pub quiz', activityTime: null }), null,
+    'an activity with no time saves')
+}
+
+section('An activity carries its own columns and nobody else\'s')
+{
+  const dinner: ItineraryItem = {
+    id: 'a1', dayIndex: 0, position: 0, kind: 'activity',
+    activityName: '  Dinner  ', activityTime: '19:00',
+  }
+  const row = toItemRow('trip-1', dinner)
+  eq(row.kind, 'activity', 'the row says what it is')
+  eq(row.activity_name, 'Dinner', 'the name is trimmed on the way in')
+  eq(row.activity_time, '19:00', 'and the time goes through as it stands')
+  eq(row.course_id, null, 'no course')
+  eq(row.tee_time, null, 'no tee time')
+  eq(row.stay_name, null, 'no bed')
+  eq(row.travel_mode, null, 'and no journey')
+
+  eq(toItemRow('trip-1', { ...dinner, activityTime: null }).activity_time, null,
+    'an activity with no time writes a null, not an empty string')
+
+  // The other three must null the new columns, or `ck_itinerary_shape`
+  // refuses the row — which is a failed save, not a wrong tile, and is
+  // exactly the failure this pin exists to catch before it ships.
+  const golf: ItineraryItem = { id: 'g1', dayIndex: 0, position: 0, kind: 'golf', courseId: 'c1', teeCount: 1 }
+  const stay: ItineraryItem = { id: 's1', dayIndex: 0, position: 1, kind: 'stay', stayName: 'Inn' }
+  const travel: ItineraryItem = { id: 't1', dayIndex: 0, position: 2, kind: 'travel', toPlace: 'Carne' }
+  for (const [name, item] of [['golf', golf], ['a stay', stay], ['a journey', travel]] as const) {
+    const r = toItemRow('trip-1', item)
+    eq(r.activity_name, null, `${name} carries no activity name`)
+    eq(r.activity_time, null, `  …and no activity time`)
+  }
+
+  // A stray value on the wrong kind is dropped rather than written. The
+  // database would refuse it; this is what stops it getting that far.
+  const confused = toItemRow('trip-1', { ...golf, activityName: 'Dinner', activityTime: '19:00' })
+  eq(confused.activity_name, null, 'a golf item that somehow picked up a name writes none')
+}
+
+section('An activity with a time is not under way before it')
+{
+  const at = (h: number, m = 0) => new Date(2026, 3, 17, h, m)
+  const dinner: ItineraryItem = {
+    id: 'a1', dayIndex: 0, position: 0, kind: 'activity',
+    activityName: 'Dinner', activityTime: '19:00',
+  }
+
+  // Anything today with no time of its own counts as under way all day,
+  // which is right for a bed and wrong for a table booked for seven.
+  eq(itemState(dinner, '2026-04-17', at(9)), 'future', 'nine in the morning is not dinner time')
+  eq(itemState(dinner, '2026-04-17', at(19)), 'now', 'seven is')
+  eq(itemState(dinner, '2026-04-17', at(22)), 'now',
+    'and it stays under way to the end of the day rather than being given an invented length')
+
+  eq(itemState(dinner, '2026-04-16', at(9)), 'past', 'yesterday is behind you whatever the clock says')
+  eq(itemState(dinner, '2026-04-18', at(23)), 'future', 'and tomorrow is not')
+
+  const quiz: ItineraryItem = { ...dinner, activityTime: null }
+  eq(itemState(quiz, '2026-04-17', at(9)), 'now',
+    'without a time the whole day counts as under way, same as a stay')
+}
+
+// ─── The schema agrees with the model ──────────────────────────
+
+section('Migration 027 and lib/itinerary.ts describe the same table')
+{
+  const sql = fs.readFileSync(
+    'supabase/migrations/20260101000027_itinerary_activities.sql', 'utf-8')
+
+  ok(/kind IN \('golf', 'stay', 'travel', 'activity'\)/.test(sql),
+    'the kind check knows all four kinds')
+  ok(/ADD COLUMN IF NOT EXISTS activity_name/.test(sql), 'the name column is added')
+  ok(/ADD COLUMN IF NOT EXISTS activity_time/.test(sql), 'and the time column')
+
+  // Both constraints are replaced, not added alongside. Two overlapping
+  // CHECKs on one column is how a row comes to be refused for a reason
+  // neither of them appears to give.
+  ok(/DROP CONSTRAINT IF EXISTS itinerary_items_kind_check/.test(sql),
+    'the old kind check is dropped before the new one goes on')
+  ok(/DROP CONSTRAINT IF EXISTS ck_itinerary_shape/.test(sql),
+    'and so is the old shape check')
+
+  // The shape constraint is a CASE with no ELSE. An unmatched kind returns
+  // NULL, and a CHECK passes on NULL — so a branch that was never written
+  // would have left activity rows exempt from the shape rule entirely.
+  const shape = sql.slice(sql.indexOf('ADD CONSTRAINT ck_itinerary_shape'))
+  for (const kind of ['golf', 'stay', 'travel', 'activity']) {
+    ok(new RegExp(`WHEN '${kind}'`).test(shape), `the shape check has a branch for ${kind}`)
+  }
+  ok(/WHEN 'activity'[\s\S]*activity_name IS NOT NULL/.test(shape),
+    'an activity must carry a name')
+
+  // Every other kind nulls the new columns. `toItemRow` already does this —
+  // these two pins are what make the database refuse a row that slipped
+  // through anyway rather than storing a drive with a dinner attached.
+  for (const kind of ['golf', 'stay', 'travel']) {
+    const branch = shape.slice(shape.indexOf(`WHEN '${kind}'`))
+      .split('WHEN ').slice(0, 2).join('')
+    ok(/activity_name IS NULL/.test(branch) && /activity_time IS NULL/.test(branch),
+      `${kind} carries neither activity column`)
+  }
+
+  // Written but never read is the quiet version of this bug: the row saves,
+  // the tile is blank on reload, and nothing anywhere reports a failure.
+  for (const page of [
+    'app/trip/[tripCode]/page.tsx',
+    'app/trip/[tripCode]/setup/page.tsx',
+  ]) {
+    const src = fs.readFileSync(page, 'utf-8')
+    ok(src.includes('activity_name, activity_time'),
+      `${page.split('/').slice(-2).join('/')} selects the new columns`)
+    ok(src.includes('activityName: r.activity_name'),
+      `  …and maps them onto the item`)
+  }
 }
 
 console.log(`\n${'─'.repeat(56)}`)

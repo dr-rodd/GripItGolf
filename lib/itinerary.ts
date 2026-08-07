@@ -8,7 +8,7 @@
 // Pure. No I/O, and "now" is always an argument, so the whole thing can be
 // tested without waiting for Tuesday.
 
-export type ItemKind = 'golf' | 'stay' | 'travel'
+export type ItemKind = 'golf' | 'stay' | 'travel' | 'activity'
 export type TravelMode = 'car' | 'flight' | 'train'
 
 export const TRAVEL_MODES: TravelMode[] = ['car', 'flight', 'train']
@@ -33,7 +33,21 @@ export type ItineraryItem = {
   fromPlace?: string | null
   toPlace?: string | null
   durationMins?: number | null
+
+  /**
+   * activity — dinner, a boat trip, the walk out to the lighthouse.
+   *
+   * A name and, optionally, a time, and nothing else. An activity has no
+   * course, no bed and no destination; giving it a duration or a place would
+   * be inventing a form nobody asked to fill in.
+   */
+  activityName?: string | null
+  /** "19:00", same clock as `teeTime`. Null is legitimate, not missing data. */
+  activityTime?: string | null
 }
+
+/** The longest an activity's name may be. A tile, not a paragraph. */
+export const MAX_ACTIVITY_NAME = 60
 
 /** The most tee times one round can sensibly have. */
 export const MAX_TEE_TIMES = 12
@@ -252,6 +266,16 @@ export function describeItem(
     return { title: item.stayName?.trim() || 'Accommodation', detail: 'Overnight' }
   }
 
+  if (item.kind === 'activity') {
+    // The name is the whole tile. The detail line carries the time where
+    // there is one and stays empty where there is not — never "no time",
+    // which would be a tile announcing what it does not know.
+    return {
+      title: item.activityName?.trim() || 'Activity',
+      detail: describeTime(item.activityTime),
+    }
+  }
+
   const from = item.fromPlace?.trim()
   const to = item.toPlace?.trim()
   const journey = from && to ? `${from} to ${to}` : to || from || 'Journey'
@@ -295,6 +319,23 @@ export function itemState(
   const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
   if (day > today) return 'future'
   if (day < today) return 'past'
+
+  const minutesInto = (time: string): number | null => {
+    const [hh, mm] = time.split(':').map(Number)
+    return Number.isFinite(hh) ? hh * 60 + (mm || 0) : null
+  }
+
+  // An activity that named a time is not under way before it. Dinner at
+  // seven should not read as happening at nine in the morning, which is what
+  // "today, therefore now" gave. It stays 'now' from its time to the end of
+  // the day rather than being given an invented duration — how long a boat
+  // trip or a dinner runs for is not something this file can know.
+  if (item.kind === 'activity') {
+    if (!item.activityTime) return 'now'
+    const start = minutesInto(item.activityTime)
+    if (start === null) return 'now'
+    return now.getHours() * 60 + now.getMinutes() < start ? 'future' : 'now'
+  }
 
   // Today. Without a time of its own the whole day counts as under way.
   if (item.kind !== 'golf' || !item.teeTime) return 'now'
@@ -343,6 +384,16 @@ export function itemError(item: Partial<ItineraryItem> & { kind: ItemKind }): st
   }
   if (item.kind === 'stay') {
     return item.stayName?.trim() ? null : 'Give it a name'
+  }
+  if (item.kind === 'activity') {
+    // A name, for the same reason a stay needs one: a blank tile says
+    // nothing. The time is not required — "pub quiz" with no time is a real
+    // plan, and refusing it pushes it back off the itinerary altogether,
+    // which is the gap activities exist to close.
+    const name = item.activityName?.trim()
+    if (!name) return 'Say what it is'
+    if (name.length > MAX_ACTIVITY_NAME) return `Keep it under ${MAX_ACTIVITY_NAME} characters`
+    return null
   }
   if (!item.fromPlace?.trim() && !item.toPlace?.trim()) return 'Say where the journey goes'
   if (item.durationMins != null && (item.durationMins < 0 || item.durationMins > MAX_DURATION)) {

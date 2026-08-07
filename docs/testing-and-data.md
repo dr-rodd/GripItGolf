@@ -19,7 +19,7 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:bracket-layout` | Column geometry and connectors |
 | `test:bracket-render` | The bracket component at every size, singles and pairs |
 | `test:progress` | Recording and correcting winners, and the cascade |
-| `test:itinerary` | The running order — golf, stay and travel items, the rounds they generate, and diffing an edit back into writes |
+| `test:itinerary` | The running order — golf, stay, travel and activity items, the rounds they generate, diffing an edit back into writes, and migration 027 agreeing with the model |
 | `test:trip-form` | Trip creation |
 | `test:leaderboard` | Every board, live vs finalised, score ownership, per-board rules, two team boards on two sheets, the per-player live dot, the over/under colour rule, and old trips read through the shim |
 | `test:recognition` | The per-trip cookie, the personal summary, the greeting |

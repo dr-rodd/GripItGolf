@@ -190,6 +190,22 @@ export const IconTrain = (p: IconProps) => (
 )
 
 /**
+ * A knife and fork — an activity, which is a dinner reservation more often
+ * than it is anything else.
+ *
+ * Deliberately not a star or a generic marker. An activity is a thing at a
+ * time in a day, and a symbol that means "point of interest" says nothing
+ * about it; a table booked for eight is the case worth drawing.
+ */
+export const IconFork = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 3v6a2 2 0 0 0 2 2h0a2 2 0 0 0 2 -2v-6" />
+    <path d="M10 11v10" />
+    <path d="M17 3c-1.5 1.5 -2 3.5 -2 6c0 1.5 .5 2.5 2 3v9" />
+  </Svg>
+)
+
+/**
  * The icon for one thing on the itinerary.
  *
  * The only answer to that question. It was asked in two places and answered
@@ -201,13 +217,18 @@ export const IconTrain = (p: IconProps) => (
  * A journey with no mode recorded keeps the arrow. It is the honest icon for
  * "getting from here to there, somehow", and guessing a car would be a
  * detail the organiser never entered.
+ *
+ * `kind` is `ItemKind` by structure but written out rather than imported:
+ * this file is the icons and nothing else, and importing the itinerary model
+ * into it would pull the itinerary into every screen that draws a chevron.
  */
 export function itineraryIcon(
-  kind: 'golf' | 'stay' | 'travel',
+  kind: 'golf' | 'stay' | 'travel' | 'activity',
   travelMode?: 'car' | 'flight' | 'train' | null,
 ): (p: IconProps) => React.ReactElement {
   if (kind === 'golf') return IconFlag
   if (kind === 'stay') return IconHome
+  if (kind === 'activity') return IconFork
   if (travelMode === 'car') return IconCar
   if (travelMode === 'flight') return IconPlane
   if (travelMode === 'train') return IconTrain
