@@ -21,6 +21,7 @@ import {
   teamNoun, teamSizeLimit, teamSizeBanner, teamCountOptions, canJoinTeam,
   PAIR_SIZE,
 } from '@/lib/teamLimits'
+import { anyPointsOutOfStep, TEAM_POINTS_MISMATCH } from '@/lib/customPoints'
 import { Card, Badge, buttonClass } from '@/app/components/ui'
 import { IconCheck, IconChevronDown, IconUsers } from '@/app/components/icons'
 
@@ -546,6 +547,22 @@ export default function TripTeamsClient({
         setTeams(prev => prev.filter(t => !doomedIds.includes(t.id)))
         setMemberships(ms => ms.filter(m => !doomedIds.includes(m.team_id)))
       }
+    }
+
+    // A board on this sheet paying by position pays a fixed table of places,
+    // and the sheet just changed size. The table has already been padded or
+    // trimmed where it is read, so the competition is still scorable — this
+    // is the part `resolveCustomPoints` cannot do, which is tell anybody.
+    //
+    // Only this sheet's team boards. A trip can run a league between fours
+    // and a knockout between pairings, so the other sheet's table is
+    // measured against its own teams and is none of this change's business.
+    // Individual boards are not asked either: their field is the players,
+    // and no player arrived or left just now.
+    const sheetBoards = boards.filter(
+      b => b.audience === 'team' && (b.teamSet ?? MAIN_SET) === sheet)
+    if (anyPointsOutOfStep(sheetBoards, { players: players.length, teams: n })) {
+      window.alert(TEAM_POINTS_MISMATCH)
     }
 
     setBusy(false)

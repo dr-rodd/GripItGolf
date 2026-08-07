@@ -9,9 +9,11 @@
  * The format model itself is tested in scripts/test-formats.ts.
  */
 
+import fs from 'fs'
 import {
   defaultCustomPoints, resolveCustomPoints, isDefaultCustomPoints, clampPoints, customPointsError,
   awardRound, totalAfterDiscard, discardedIndices, MAX_CUSTOM_POINTS,
+  pointsOutOfStep, anyPointsOutOfStep, TEAM_POINTS_MISMATCH, PLAYER_POINTS_MISMATCH,
 } from '../lib/customPoints'
 
 let passed = 0, failed = 0
@@ -216,6 +218,109 @@ section('Which rounds were set aside')
   const kept = scores.filter((_, i) => !discardedIndices(scores, 2).includes(i))
   eq(kept.reduce((a, b) => a + b, 0), totalAfterDiscard(scores, 2),
     'the rounds not flagged are exactly the rounds counted')
+}
+
+section('When the table and the field disagree')
+{
+  // The board never breaks over this — `resolveCustomPoints` pads short and
+  // trims long when the rows are read. What it cannot do is tell anybody, and
+  // a place silently worth nothing is found out at the prizegiving.
+
+  // An untouched default is a shape, not a set of figures: it follows the
+  // field wherever the field goes, so it can never be out of step. Warning
+  // about it would be warning that nothing happened — and since a default is
+  // what every board starts with, getting this wrong would mean warning on
+  // every trip, every time, which is the same as never warning at all.
+  ok(!pointsOutOfStep(defaultCustomPoints(4), 6), 'an untouched default follows the field')
+  ok(!pointsOutOfStep(defaultCustomPoints(6), 4), '  …in both directions')
+  ok(!pointsOutOfStep([], 6), 'and so does no table at all')
+
+  // An edited one is kept, so it can fall behind.
+  ok(pointsOutOfStep([10, 5, 3], 4), 'an edited table one short of the field is out of step')
+  ok(pointsOutOfStep([10, 5, 3, 2, 1], 4), '  …and one too long is too')
+  ok(!pointsOutOfStep([10, 5, 3, 1], 4), 'while one that matches is not')
+
+  // An empty trip is where every board starts. A warning there is noise on
+  // the one screen it can safely be ignored on.
+  ok(!pointsOutOfStep([10, 5, 3], 0), 'nobody in the field is not a mismatch')
+
+  // A team board pays out to the teams and an individual board to the
+  // players. Size a team table off the player count and it pays places
+  // nobody can come in — which is the bug this split exists to prevent.
+  const teamBoard = { combine: 'position', audience: 'team', customPoints: [10, 5, 3] }
+  const soloBoard = { combine: 'position', audience: 'individual', customPoints: [10, 5, 3] }
+
+  ok(anyPointsOutOfStep([teamBoard], { players: 3, teams: 4 }),
+    'a team board is measured against the teams')
+  ok(!anyPointsOutOfStep([teamBoard], { players: 8, teams: 3 }),
+    '  …and not against the players, however many there are')
+  ok(anyPointsOutOfStep([soloBoard], { players: 8, teams: 3 }),
+    'an individual board is measured against the players')
+  ok(!anyPointsOutOfStep([soloBoard], { players: 3, teams: 8 }), '  …and not the teams')
+
+  // Only boards that actually pay by position are asked.
+  ok(!anyPointsOutOfStep([{ combine: 'total', audience: 'individual', customPoints: [10, 5] }],
+    { players: 8, teams: 0 }), 'a board that adds the rounds up carries no table to disagree')
+  ok(!anyPointsOutOfStep([], { players: 8, teams: 4 }), 'and a trip with no boards has nothing to say')
+
+  // One board out of step is enough, whichever it is.
+  ok(anyPointsOutOfStep([soloBoard, teamBoard], { players: 3, teams: 4 }),
+    'any one board out of step is a mismatch')
+
+  // The two messages are the copy that was asked for, word for word. Pinned
+  // because they are the only thing a reader ever sees of any of this.
+  ok(TEAM_POINTS_MISMATCH.includes("The amount of teams doesn't match the Points by Position allocation"),
+    'the team warning says what it was written to say')
+  ok(TEAM_POINTS_MISMATCH.includes('Please return to leaderboards settings to confirm.'),
+    '  …and where to go about it')
+  ok(PLAYER_POINTS_MISMATCH.includes('Check the Points by Position leaderboard settings'),
+    'and the player warning says what it was written to say')
+  ok(PLAYER_POINTS_MISMATCH.includes("player addition hasn't resulted in disruption to points allocation"),
+    '  …and what to look for')
+}
+
+// ─── The two moments that cause it ─────────────────────────────
+
+section('Both screens that change the field say so')
+{
+  const read = (f: string) => fs.readFileSync(f, 'utf-8')
+
+  // The team sheet. Only this sheet's team boards are asked: a trip can run
+  // a league between fours and a knockout between pairings, so the other
+  // sheet's table is measured against its own teams. Individual boards are
+  // not asked at all — their field is the players, and no player arrived or
+  // left when a team was added.
+  const teams = read('app/trip/[tripCode]/teams/TripTeamsClient.tsx')
+  ok(teams.includes('TEAM_POINTS_MISMATCH'), 'the team sheet warns when the count stops matching')
+  ok(/audience === 'team' && \(b\.teamSet \?\? MAIN_SET\) === sheet/.test(teams),
+    '  …about this sheet\'s team boards and no others')
+  ok(/anyPointsOutOfStep\(sheetBoards, \{ players: players\.length, teams: n \}\)/.test(teams),
+    '  …measured against the count it is changing to, not the one it is leaving')
+
+  // The roster. `players.length + 1` because `setPlayers` is queued and has
+  // not settled on the line that reads it — counting the old roster would
+  // mean the warning arrives one player late, every time.
+  const setup = read('app/trip/[tripCode]/setup/TripSetupClient.tsx')
+  ok(setup.includes('PLAYER_POINTS_MISMATCH'), 'the roster warns when a player is added')
+  ok(/players: players\.length \+ 1/.test(setup),
+    '  …counting the player being added, who is not in state yet')
+
+  // Both are told, not asked. The row has already been padded or trimmed and
+  // the write has already happened, so a question with one answer would be
+  // worse than a statement — and refusing to add a player at the range
+  // because a prize table is a row short is the wrong trade.
+  ok(/window\.alert\(TEAM_POINTS_MISMATCH\)/.test(teams), 'the team warning is acknowledged, not obeyed')
+  ok(/window\.alert\(PLAYER_POINTS_MISMATCH\)/.test(setup), 'and so is the player one')
+  ok(!/confirm\(TEAM_POINTS_MISMATCH|confirm\(PLAYER_POINTS_MISMATCH/.test(teams + setup),
+    'neither can refuse the thing it is warning about')
+
+  // After the write on the roster, or a warning would be describing
+  // something that then failed to happen.
+  // Against the call rather than the name: the name also appears in the
+  // import at the top of the file, which is before everything.
+  ok(setup.indexOf('setPlayers(prev => [...prev, data])')
+     < setup.indexOf('window.alert(PLAYER_POINTS_MISMATCH)'),
+    'and the player warning comes after the player')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

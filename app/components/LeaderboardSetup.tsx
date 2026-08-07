@@ -120,6 +120,27 @@ function PointsTable({
   onChange: (t: number[]) => void
 }) {
   const rows = resolveCustomPoints(table, Math.max(fieldSize, 1))
+
+  /**
+   * Adding and removing a place by hand.
+   *
+   * The table normally sizes itself to the field, which is right nearly all
+   * of the time — but "nearly" is doing work there. A place can be added
+   * before the team or the player who will fill it exists, and the sheet is
+   * often filled in that order: work out the prize table, then pick the
+   * teams. Without this the only way to get a fifth row was to go and make a
+   * fifth team first.
+   *
+   * A new place is worth nothing until somebody says otherwise. Guessing a
+   * figure for it — one less than the row above, say — would be inventing a
+   * decision, and a nought is visibly a thing to fill in.
+   *
+   * Removing takes the bottom row, because that is the place being taken
+   * away. Never below one: a table with no rows cannot be answered at all.
+   */
+  const addRow    = () => onChange([...rows, 0])
+  const removeRow = () => rows.length > 1 && onChange(rows.slice(0, -1))
+
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
@@ -149,6 +170,28 @@ function PointsTable({
           </div>
         ))}
       </div>
+
+      {/* Under the rows rather than beside the heading: they act on the
+          bottom of the list, and a control for the end of a list belongs at
+          the end of it. */}
+      <div className="flex items-center gap-2 mt-2">
+        <button
+          type="button"
+          onClick={addRow}
+          className="flex-1 min-h-[44px] rounded-xl border border-bark/25 bg-surface t-label text-ink hover:border-accent transition-colors duration-150"
+        >
+          Add a place
+        </button>
+        <button
+          type="button"
+          onClick={removeRow}
+          disabled={rows.length <= 1}
+          className="flex-1 min-h-[44px] rounded-xl border border-bark/25 bg-surface t-label text-ink/80 hover:border-bark/40 transition-colors duration-150 disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          Remove the last
+        </button>
+      </div>
+
       {/* Only when the field is still a guess. Once the players or the teams
           are known the table explains itself — a row per finisher, in order,
           with the figure sitting in it. */}

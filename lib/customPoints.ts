@@ -64,6 +64,74 @@ export function clampPoints(value: unknown): number {
   return Math.min(MAX_CUSTOM_POINTS, Math.max(0, Math.round(n)))
 }
 
+// ─── When the table and the field disagree ─────────────────────
+//
+// The board itself never breaks over this: `resolveCustomPoints` pads a short
+// table with noughts and trims a long one when the rows are read, so the
+// competition is always scorable. What it cannot do is tell anybody. A place
+// silently worth nothing, or a place quietly dropped off the bottom, is the
+// kind of thing found out at the prizegiving.
+//
+// So these two say it, at the two moments that cause it: a team sheet
+// changing size, and a player joining. Both are warnings rather than
+// refusals — the table has already been made sensible, and stopping somebody
+// adding a player at the range because a prize table is a row short would be
+// the worse trade.
+
+/** Shown when the number of teams stops matching the table. */
+export const TEAM_POINTS_MISMATCH =
+  "The amount of teams doesn't match the Points by Position allocation. "
+  + 'Please return to leaderboards settings to confirm.'
+
+/** Shown when a player is added to a trip that pays by position. */
+export const PLAYER_POINTS_MISMATCH =
+  'Check the Points by Position leaderboard settings to ensure that player '
+  + "addition hasn't resulted in disruption to points allocation"
+
+/**
+ * Whether a stored table has stopped matching the field it pays out to.
+ *
+ * **An untouched default is never out of step**, and that is the whole
+ * subtlety here. It is not a set of figures but a shape — a point per
+ * finisher, dropping one by one — so it follows the field wherever the field
+ * goes, and warning about it would be warning that nothing happened. Only a
+ * table somebody has actually decided can fall behind, because only that one
+ * is kept.
+ *
+ * `fieldSize` of zero is not a mismatch either: no teams picked and nobody
+ * joined is the state every board starts in, and a warning on an empty trip
+ * is noise on the one screen where it can safely be ignored.
+ */
+export function pointsOutOfStep(stored: readonly number[], fieldSize: number): boolean {
+  if (fieldSize <= 0) return false
+  if (stored.length === 0 || isDefaultCustomPoints(stored)) return false
+  return stored.length !== Math.floor(fieldSize)
+}
+
+/** The shape of a board, as much of it as this question needs. */
+type PositionBoard = {
+  combine?: string | null
+  audience?: string | null
+  customPoints?: number[]
+}
+
+/**
+ * Whether any board paying by position has fallen out of step.
+ *
+ * A team board pays out to the teams and an individual board to the players,
+ * so the two are counted separately — sizing a team board's table off the
+ * player count would pay places nobody can come in.
+ */
+export function anyPointsOutOfStep(
+  boards: readonly PositionBoard[],
+  counts: { players: number; teams: number },
+): boolean {
+  return boards.some(b =>
+    b.combine === 'position'
+    && pointsOutOfStep(b.customPoints ?? [],
+      b.audience === 'team' ? counts.teams : counts.players))
+}
+
 export function customPointsError(points: number[]): string | null {
   if (points.some(p => !Number.isFinite(p))) return 'Points must be numbers.'
   if (points.some(p => p < 0)) return 'Points cannot be negative.'

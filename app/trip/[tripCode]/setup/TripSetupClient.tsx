@@ -21,6 +21,7 @@ import type { ItineraryItem } from '@/lib/itinerary'
 import {
   type Leaderboard, needsTeams, needsPairings, hasMatchplay, boardTitle,
 } from '@/lib/leaderboards'
+import { anyPointsOutOfStep, PLAYER_POINTS_MISMATCH } from '@/lib/customPoints'
 import {
   finaliseBlockedReason, sheetsInUse, teamsOnSheet, teamBoards, isBoardOpen,
   teamFor, asMembers, setOf, MAIN_SET, type Membership,
@@ -328,6 +329,22 @@ export default function TripSetupClient({
     }
 
     setPlayers(prev => [...prev, data])
+
+    // A board paying by position pays a fixed table of places, and the field
+    // just grew. `resolveCustomPoints` has already padded the table with a
+    // nought so nothing is broken — but a place silently worth nothing is
+    // the kind of thing found out at the prizegiving, so it is said here
+    // instead. After the write, not before: the player is added either way,
+    // and asking permission to do something already decided is a question
+    // with one answer.
+    //
+    // Counted as `players.length + 1` because the state above has not
+    // settled yet — `setPlayers` is a queued update, and reading `players`
+    // on this line still gives the roster without them.
+    if (anyPointsOutOfStep(boards, { players: players.length + 1, teams: teams.length })) {
+      window.alert(PLAYER_POINTS_MISMATCH)
+    }
+
     // A place on each sheet they were assigned to, one write per sheet.
     for (const [teamSet, teamId] of Object.entries(newTeams)) {
       if (!teamId) continue
