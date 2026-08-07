@@ -40,7 +40,23 @@ export async function GET(req: NextRequest) {
   }
 
   const dryRun = req.nextUrl.searchParams.get("dryRun") === "1"
-  const supabaseAdmin = createAdminClient()
+
+  // `createAdminClient` throws when SUPABASE_SERVICE_ROLE_KEY is missing, and
+  // an uncaught throw here is a 500 with an empty body — which for a job
+  // nobody watches is indistinguishable from a night with nothing to tidy.
+  // This job could have been dead since it was written and looked identical
+  // to a job that ran perfectly.
+  let supabaseAdmin: ReturnType<typeof createAdminClient>
+  try {
+    supabaseAdmin = createAdminClient()
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e)
+    console.error("cleanup could not start:", why)
+    return NextResponse.json(
+      { error: `Cleanup could not start: ${why}` }, { status: 500 },
+    )
+  }
+
   const now = new Date()
 
   // Every card, not just the active ones: step 2 has to know about the
