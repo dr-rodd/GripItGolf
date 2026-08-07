@@ -82,7 +82,7 @@ function PlayerTile({ player, faded = false }: { player: Placed; faded?: boolean
         {player.name}
       </span>
       <span
-        className={`text-[12px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
+        className={`text-[13px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
           player.gender === 'F'
             ? 'bg-rust/40 text-rose-300'
             : 'bg-bark/40 text-blue-300'
@@ -191,7 +191,7 @@ function TeamColumn({
           <p className="text-ink/50 text-sm text-center py-8 select-none">Drop here</p>
         )}
         {full && !over && (
-          <p className="text-ink/50 text-[12px] tracking-wider uppercase text-center pb-2 select-none">
+          <p className="text-ink/50 text-[13px] tracking-wider uppercase text-center pb-2 select-none">
             Full
           </p>
         )}

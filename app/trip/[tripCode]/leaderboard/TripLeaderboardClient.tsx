@@ -235,7 +235,7 @@ export function ScorecardSheet({
     if (!contributed || pts == null) return null
     return (
       <span
-        className={`text-[12px] leading-none mt-0.5 tabular-nums ${
+        className={`text-[13px] leading-none mt-0.5 tabular-nums ${
           pts > 0 ? 'text-ink/80 font-semibold' : 'text-ink/50'
         }`}
         style={SC_SF}
@@ -627,8 +627,8 @@ function Board({
         style={{ top: HEADER_H }}
         className="sticky z-10 flex items-center gap-2 px-3 py-1.5 bg-surface border-b border-bark/12 rounded-t-2xl"
       >
-        <span className="text-[12px] tracking-widest uppercase text-ink/65 w-5 flex-shrink-0">Pos</span>
-        <span className={`text-[12px] tracking-widest uppercase text-ink/65 min-w-0 ${NAME_W}`}>Name</span>
+        <span className="text-[13px] tracking-widest uppercase text-ink/65 w-5 flex-shrink-0">Pos</span>
+        <span className={`text-[13px] tracking-widest uppercase text-ink/65 min-w-0 ${NAME_W}`}>Name</span>
         {showRounds && (
           <Strip scrolls={scrolls} register={register} onScroll={onScroll}>
             {rounds.map(r => (
@@ -638,7 +638,7 @@ function Board({
             ))}
           </Strip>
         )}
-        <span className="text-[12px] tracking-widest uppercase text-ink/65 w-14 flex-shrink-0 text-right">Tot</span>
+        <span className="text-[13px] tracking-widest uppercase text-ink/65 w-14 flex-shrink-0 text-right">Tot</span>
       </div>
 
       {rows.map((row, i) => {
@@ -926,7 +926,7 @@ export default function TripLeaderboardClient({
         <div className="flex items-center gap-4 mb-2 px-1">
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-accent" aria-hidden="true" />
-            <span className="text-ink/65 text-[12px] tracking-wider uppercase">
+            <span className="text-ink/65 text-[13px] tracking-wider uppercase">
               {relativeBoard ? 'In play — against level' : 'In play'}
             </span>
           </span>
@@ -936,7 +936,7 @@ export default function TripLeaderboardClient({
                 claimed they told two states apart. A finished round is the
                 plain ink the column actually prints it in. */}
             <span className="w-1.5 h-1.5 rounded-full bg-ink/80" aria-hidden="true" />
-            <span className="text-ink/65 text-[12px] tracking-wider uppercase">
+            <span className="text-ink/65 text-[13px] tracking-wider uppercase">
               Card in — {activeBoard.scoring === 'strokes' ? 'nett total' : 'total'}
             </span>
           </span>

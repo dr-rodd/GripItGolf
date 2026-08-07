@@ -33,6 +33,22 @@
   --font-display: 'Clash Display', var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
   --font-serif:   'Bespoke Serif', Georgia, 'Times New Roman', serif;
   --font-ui:      var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+
+  /* ── Tailwind's own small end, raised ──
+     The scale below is the design system, but a few hundred call sites
+     across the app reach for `text-sm` and `text-xs` instead, and those
+     ship at 14px and 12px — under the 13px floor the scale sets for
+     itself. Rather than rewrite every one of them, the tokens move: a
+     `text-sm` anywhere in the app is now 15px and a `text-xs` is 13px.
+
+     This is the one place a Tailwind default is overridden, and it is
+     here because it is a type decision, not a layout one. Line heights
+     move with the sizes — leave them behind and every bumped label sits
+     tighter than it did. */
+  --text-xs: 13px;
+  --text-xs--line-height: 1.35;
+  --text-sm: 15px;
+  --text-sm--line-height: 1.45;
 }
 
 html {
@@ -51,7 +67,17 @@ body {
 /* Sizes are floored at 13px. This is read one-handed, outdoors, in daylight,
    often by someone who left their reading glasses in the car — the old 11px
    caption and 12px label were too small for that, and nothing here is dense
-   enough to need them back. */
+   enough to need them back.
+
+   The floor held; what was wrong was how much of the app sat on it. A
+   caption and a label are the two steps most of the writing on a screen
+   actually lands in — every note, every unit, every uppercase heading over a
+   block — and at 13px that was most of the page set at the smallest size the
+   guide allows. They are 15px now, and the data step went with them, so the
+   distance from the bottom of the scale to body copy is one step rather than
+   three. The display sizes are untouched: the top of the scale was never the
+   problem, and lifting it too would leave the ratios exactly where they
+   started. */
 
 /* The three display sizes carry every heading in the app, so they are also
    what makes it read as an app rather than as a page: a heading that only
@@ -63,9 +89,9 @@ body {
 .t-h2    { font-family: var(--font-display); font-weight: 600; font-size: 23px; line-height: 1.25; }
 .t-card  { font-family: var(--font-display); font-weight: 600; font-size: 17px; line-height: 1.3; }
 .t-body  { font-family: var(--font-serif);   font-weight: 400; font-size: 17px; line-height: 1.6; }
-.t-data  { font-family: var(--font-serif);   font-weight: 400; font-size: 15px; line-height: 1.4; }
-.t-label { font-family: var(--font-ui);      font-weight: 600; font-size: 13px; line-height: 1.3; }
-.t-cap   { font-family: var(--font-ui);      font-weight: 400; font-size: 13px; line-height: 1.45; }
+.t-data  { font-family: var(--font-serif);   font-weight: 400; font-size: 16px; line-height: 1.4; }
+.t-label { font-family: var(--font-ui);      font-weight: 600; font-size: 15px; line-height: 1.3; }
+.t-cap   { font-family: var(--font-ui);      font-weight: 400; font-size: 15px; line-height: 1.45; }
 
 /* The green dot as a full stop, closing a title the way it closes the
    wordmark.

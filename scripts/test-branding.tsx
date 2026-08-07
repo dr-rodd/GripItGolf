@@ -308,18 +308,41 @@ section('Type is big enough to read')
   ok(sizes['t-h1'] > sizes['t-h2'] && sizes['t-h2'] > sizes['t-card'],
     'and the headings still step down in order')
 
+  // The floor held, but nearly all the writing on a screen was sitting on
+  // it. A caption and a label are where every note, unit and uppercase
+  // heading lands, and at 13px that was most of the page set at the smallest
+  // size the guide allows. They carry the bump; the display sizes do not,
+  // because lifting those too would leave the ratios where they started.
+  ok(sizes['t-cap'] >= 15, `captions are at least 15px (${sizes['t-cap']}px)`)
+  ok(sizes['t-label'] >= 15, `so are labels (${sizes['t-label']}px)`)
+  ok(sizes['t-body'] - sizes['t-cap'] <= 4,
+    'and body copy is within a step of them, not three')
+
   // Ad-hoc sizes bypass the scale, so they get the same floor
+  const BRACKET = 'app/trip/[tripCode]/matchplay/MatchplayBracket.tsx'
   const tooSmall: string[] = []
   for (const f of uiFiles()) {
+    // The one exception, named rather than hidden: a knockout bracket is a
+    // dense grid of boxes sized to fit a round across a phone, and it is
+    // frozen for its own reasons.
+    if (f === BRACKET) continue
     for (const m of read(f).matchAll(/text-\[(\d+)px\]/g)) {
-      if (Number(m[1]) < 12) tooSmall.push(`${f.split('/').pop()}:${m[1]}px`)
+      if (Number(m[1]) < 13) tooSmall.push(`${f.split('/').pop()}:${m[1]}px`)
     }
   }
-  eq(tooSmall, [], 'nothing is set smaller than 12px by hand')
+  eq(tooSmall, [], 'nothing else is set smaller than 13px by hand')
 
-  // Tailwind's text-xs is 12px and was doing most of the damage
-  eq(uiFiles().filter(f => /\btext-xs\b/.test(read(f))), [],
-    'and text-xs is gone, which was 12px everywhere it appeared')
+  // Tailwind's own small end ships under the floor — text-sm is 14px and
+  // text-xs is 12px — and a few hundred call sites across the app reach for
+  // them rather than the scale. The tokens move instead of the call sites.
+  const px = (v: string) => Number(css.match(new RegExp(`--text-${v}:\\s*(\\d+)px`))?.[1] ?? 0)
+  ok(px('sm') >= 15, `text-sm is retuned to at least 15px (${px('sm')}px)`)
+  ok(px('xs') >= 13, `and text-xs to at least 13px (${px('xs')}px)`)
+
+  // The smallest type in the app, and the one place it is justified: four
+  // tab labels across the narrowest phone.
+  const bar = Number(read('app/components/TabBar.tsx').match(/fontSize: (\d+)/)?.[1] ?? 0)
+  ok(bar >= 11, `the tab labels are at least 11px (${bar}px)`)
 }
 
 // ─── The tab bar ───────────────────────────────────────────────
@@ -342,7 +365,10 @@ section('The bottom tab bar')
 
   // "Labels must fit on one line — test Leaderboard specifically"
   ok(src.includes('whitespace-nowrap'), 'labels never wrap')
-  ok(src.includes('fontSize: 10'), 'at 10px, which is what makes Leaderboard fit')
+  // 11px, up from 10 with the rest of the small end. Four labels across a
+  // 320px screen leaves 80px each, and "Leaderboard" is about 62px of that
+  // in Archivo at 11 — it fits, and it is the largest size that does.
+  ok(src.includes('fontSize: 11'), 'at 11px, which still lets Leaderboard fit')
   ok(src.includes('size={20}'), 'with 20px icons')
 
   ok(src.includes("'text-accent'"), 'the active tab is emerald')

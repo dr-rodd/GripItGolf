@@ -318,9 +318,12 @@ section('A team card keeps the holes in view however big the team')
       'and the nine adds up per player as well as for the team — 9 × 4')
     ok(team.includes('title="18 points"'), 'against 9 × 2 for the others')
 
-    // Raised and small, so the gross is still what the eye lands on.
-    ok(/text-\[12px\][^"]*tabular-nums/.test(team),
-      'set small, but on the 12px floor rather than under it — this is read outdoors')
+    // Raised and small, so the gross is still what the eye lands on. The
+    // floor it sits on moved from 12px to 13 when the whole low end of the
+    // scale went up — this is read outdoors, at arm's length, often without
+    // the reading glasses that are still in the car.
+    ok(/text-\[13px\][^"]*tabular-nums/.test(team),
+      'set small, but on the floor rather than under it — this is read outdoors')
     ok(team.includes('items-start'), 'and raised beside the score rather than under it')
 
     // A nought is worth showing: a hole played for nothing is a fact about who

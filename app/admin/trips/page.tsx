@@ -124,7 +124,7 @@ export default async function AdminTripsPage() {
                 <thead>
                   <tr className="border-b border-bark/12 text-left">
                     {['Trip', 'Code', 'Created', 'Lead email', 'Players', 'Status'].map(h => (
-                      <th key={h} className="px-4 py-3 text-[12px] tracking-[0.2em] uppercase text-ink/65 font-normal">
+                      <th key={h} className="px-4 py-3 text-[13px] tracking-[0.2em] uppercase text-ink/65 font-normal">
                         {h}
                       </th>
                     ))}
@@ -207,7 +207,7 @@ function Field({ label, value }: { label: string; value: string | null }) {
 function StatusPill({ label, open }: { label: string; open: boolean }) {
   return (
     <span
-      className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[12px] tracking-[0.15em] uppercase ${
+      className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[13px] tracking-[0.15em] uppercase ${
         open
           ? 'border-accent/40 bg-accent/10 text-accent'
           : 'border-bark/12 bg-surface text-ink/65'

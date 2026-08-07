@@ -433,11 +433,11 @@ function PlayersPanel({
       <div className="flex items-center gap-4 mb-4">
         <span className="flex items-center gap-1.5">
           <span className={`w-2.5 h-2.5 rounded-sm ${ROUND_TILE.played}`} aria-hidden="true" />
-          <span className="text-ink/65 text-[12px] tracking-wider uppercase">Confirmed</span>
+          <span className="text-ink/65 text-[13px] tracking-wider uppercase">Confirmed</span>
         </span>
         <span className="flex items-center gap-1.5">
           <span className={`w-2.5 h-2.5 rounded-sm ${ROUND_TILE.empty}`} aria-hidden="true" />
-          <span className="text-ink/65 text-[12px] tracking-wider uppercase">Pending</span>
+          <span className="text-ink/65 text-[13px] tracking-wider uppercase">Pending</span>
         </span>
       </div>
 
@@ -454,7 +454,7 @@ function PlayersPanel({
               <span className="flex-1 min-w-0">
                 <span className="block text-ink text-sm truncate">{p.name}</span>
                 <span
-                  className={`block text-[12px] tracking-wider uppercase mt-0.5 ${
+                  className={`block text-[13px] tracking-wider uppercase mt-0.5 ${
                     confirmed ? 'text-ink/80' : 'text-ink/50'
                   }`}
                 >

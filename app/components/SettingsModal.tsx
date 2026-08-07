@@ -127,7 +127,7 @@ function LiveSessionCard({ session, onVoided }: { session: LiveSession; onVoided
             Round {roundNumber} · {courseName}
           </p>
           <p className="text-ink/65 text-[13px] mt-0.5 truncate">{players}</p>
-          <p className="text-ink/50 text-[12px] mt-0.5">Started {startedAt}</p>
+          <p className="text-ink/50 text-[13px] mt-0.5">Started {startedAt}</p>
         </div>
         <button
           onClick={toggle}
@@ -275,7 +275,7 @@ function ActionCard({ config, onSuccess }: { config: ActionConfig; onSuccess: (m
             {config.confirmText}
           </p>
           <div>
-            <label className="block text-[12px] tracking-[0.15em] uppercase text-ink/50 mb-1.5">
+            <label className="block text-[13px] tracking-[0.15em] uppercase text-ink/50 mb-1.5">
               Password
             </label>
             <input

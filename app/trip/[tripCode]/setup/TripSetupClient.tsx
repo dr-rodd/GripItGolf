@@ -778,7 +778,7 @@ export default function TripSetupClient({
                         {player.name}
                       </span>
                       {player.is_lead && (
-                        <span className="text-ink/65 text-[12px] tracking-widest uppercase flex-shrink-0">Lead</span>
+                        <span className="text-ink/65 text-[13px] tracking-widest uppercase flex-shrink-0">Lead</span>
                       )}
                       <span className="t-num text-ink/80 text-sm flex-shrink-0">
                         {player.handicap == null ? '—' : formatHandicap(player.handicap)}

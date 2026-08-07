@@ -70,10 +70,15 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
                 }`}
               >
                 <Icon size={20} />
-                {/* 10px so "Leaderboard" fits one line at every phone width */}
+                {/* The smallest type in the app, and the one place it is
+                    justified: four labels across the narrowest phone, and
+                    "Leaderboard" is eleven characters of it. 11px rather than
+                    the 10 it was — it still fits a 320px screen with room to
+                    spare, and the bar is read at arm's length like everything
+                    else. Any larger and the longest label wraps. */}
                 <span
                   className="font-[family-name:var(--font-ui)] leading-none whitespace-nowrap"
-                  style={{ fontSize: 10, fontWeight: active ? 600 : 400 }}
+                  style={{ fontSize: 11, fontWeight: active ? 600 : 400 }}
                 >
                   {item.label}
                 </span>

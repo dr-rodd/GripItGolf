@@ -104,7 +104,7 @@ export default function MatchplayPanel({
         {exists && (
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-accent " />
-            <span className="text-accent/80 text-[12px] tracking-wider uppercase">Bracket drawn</span>
+            <span className="text-accent/80 text-[13px] tracking-wider uppercase">Bracket drawn</span>
           </span>
         )}
       </div>
