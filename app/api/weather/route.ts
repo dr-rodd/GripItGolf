@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import {
-  metUrl, metUserAgent, parseForecast, isFresh, backoffOver,
-  truncCoord, DEFAULT_TTL_MINUTES, type WeatherHour,
+  metUrl, metUserAgent, parseForecast, isFresh, backoffOver, truncCoord,
+  describeWind, describeRain, describeSymbol,
+  DEFAULT_TTL_MINUTES, MET_ATTRIBUTION, type WeatherHour,
 } from '@/lib/weather'
 
 // The forecast for a course, and the only thing in this app that talks to
@@ -43,6 +44,16 @@ const MET_TIMEOUT_MS = 4_000
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/** What every answer carries, in either form. */
+type Payload = {
+  ok: boolean
+  reason?: string
+  message?: string
+  hours?: WeatherHour[]
+  fetchedAt?: string
+  stale?: boolean
+}
+
 type CacheRow = {
   latitude: number
   longitude: number
@@ -72,18 +83,20 @@ export async function GET(req: NextRequest) {
   const courseId = params.get('course') ?? ''
   const slug = (params.get('slug') ?? '').trim().toLowerCase()
 
+  // A slug is how a person asks, so a person is what is answered — unless
+  // they say otherwise. The app never sends one.
+  const human = bySlugParam(slug, courseId) && params.get('format') !== 'json'
+
   const bySlug = !courseId && slug !== '' && /^[a-z0-9-]{1,80}$/.test(slug)
   if (!bySlug && !UUID.test(courseId)) {
     // Refused before any I/O — an unusable identifier is not worth a query.
-    return NextResponse.json(
-      { error: 'A course id or slug is required.' }, { status: 400 },
-    )
+    return fault('A course id or slug is required.', 400, human)
   }
 
   const supabaseAdmin = createAdminClient()
   const now = new Date()
 
-  const lookup = supabaseAdmin.from('courses').select('id, latitude, longitude')
+  const lookup = supabaseAdmin.from('courses').select('id, name, latitude, longitude')
   const { data: course, error: courseError } = await (bySlug
     // Platform courses only. A slug is unique per trip, not globally, so
     // without this a trip could have a course whose slug shadows a real one.
@@ -92,18 +105,19 @@ export async function GET(req: NextRequest) {
 
   if (courseError) {
     console.error('weather course query failed:', courseError)
-    return NextResponse.json(
-      { ok: false, reason: 'unavailable', message: 'Could not reach the forecast.' },
-      { status: 200 },
-    )
+    return fault('Could not read the course.', 200, human)
   }
   if (!course) {
-    return NextResponse.json({ error: 'No such course.' }, { status: 404 })
+    return fault(`No such course${bySlug ? `: ${slug}` : ''}.`, 404, human)
   }
 
   // Whichever way it was found, everything below keys off the row's own id —
   // the cache is per course, not per way of naming one.
   const id = course.id as string
+
+  // Every answer below goes through this, so the human view and the app view
+  // can never drift into saying different things.
+  const reply = (payload: Payload) => json(payload, human, course.name as string)
 
   const lat = course.latitude == null ? null : Number(course.latitude)
   const lon = course.longitude == null ? null : Number(course.longitude)
@@ -112,7 +126,7 @@ export async function GET(req: NextRequest) {
   // a normal course that shows no weather, and the screen says so quietly.
   // Cacheable too — it will not change until somebody edits a migration.
   if (lat == null || lon == null || !Number.isFinite(lat) || !Number.isFinite(lon)) {
-    return json({ ok: false, reason: 'no-coordinates' })
+    return reply({ ok: false, reason: 'no-coordinates' })
   }
 
   // ── What we already hold ──
@@ -135,7 +149,7 @@ export async function GET(req: NextRequest) {
   const usable = sameSpot ? cached : null
 
   if (usable && isFresh(usable.expires_at, now)) {
-    return json({
+    return reply({
       ok: true, hours: usable.hours, fetchedAt: usable.fetched_at, stale: false,
     })
   }
@@ -143,7 +157,7 @@ export async function GET(req: NextRequest) {
   // MET refused or failed recently. Leave them alone and serve what we have —
   // an hour-old wind is far better than none, and the caller says how old.
   if (usable && !backoffOver(usable.failed_at, now)) {
-    return json({
+    return reply({
       ok: true, hours: usable.hours, fetchedAt: usable.fetched_at, stale: true,
     })
   }
@@ -167,7 +181,7 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     console.error('weather fetch failed:', e)
     await recordFailure(supabaseAdmin, id, lat, lon, usable, now, String(e))
-    return serveOrGiveUp(usable)
+    return serveOrGiveUp(usable, reply)
   }
 
   // Unchanged since we last asked. Cheapest possible answer, and the reason
@@ -178,7 +192,7 @@ export async function GET(req: NextRequest) {
       expires_at: expiryFrom(res, now),
       failed_at: null, failure: null,
     }).eq('course_id', id)
-    return json({ ok: true, hours: usable.hours, fetchedAt: now.toISOString(), stale: false })
+    return reply({ ok: true, hours: usable.hours, fetchedAt: now.toISOString(), stale: false })
   }
 
   if (!res.ok) {
@@ -187,7 +201,7 @@ export async function GET(req: NextRequest) {
     // absorbed into a generic failure.
     console.error(`weather upstream returned ${res.status} for course ${id}`)
     await recordFailure(supabaseAdmin, id, lat, lon, usable, now, `HTTP ${res.status}`)
-    return serveOrGiveUp(usable)
+    return serveOrGiveUp(usable, reply)
   }
 
   let body: unknown
@@ -196,14 +210,14 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     console.error('weather body was not JSON:', e)
     await recordFailure(supabaseAdmin, id, lat, lon, usable, now, 'unreadable body')
-    return serveOrGiveUp(usable)
+    return serveOrGiveUp(usable, reply)
   }
 
   const { hours, error: parseError } = parseForecast(body)
   if (parseError || hours.length === 0) {
     console.error('weather parse failed:', parseError)
     await recordFailure(supabaseAdmin, id, lat, lon, usable, now, parseError ?? 'empty')
-    return serveOrGiveUp(usable)
+    return serveOrGiveUp(usable, reply)
   }
 
   const fetchedAt = now.toISOString()
@@ -222,23 +236,71 @@ export async function GET(req: NextRequest) {
   // so in the log — the only cost is that the next reader asks MET again.
   if (writeError) console.error('weather cache write failed:', writeError)
 
-  return json({ ok: true, hours, fetchedAt, stale: false })
+  return reply({ ok: true, hours, fetchedAt, stale: false })
 }
 
 // ─── Helpers ───────────────────────────────────────────────────
 
 /**
- * Every successful answer, with the header that does the real work.
+ * Every answer, with the header that does the real work.
  *
  * `s-maxage` is what turns twelve players opening the hub before a round into
  * one request at the origin — and it only works because the URL is keyed on
  * the course and nothing else.
+ *
+ * `human` swaps the body for something readable and changes nothing else: the
+ * same payload, the same headers, the same status. It exists because the first
+ * check of this was done on a phone, where a JSON viewer showed a blank page
+ * and there was no way to tell a broken route from a broken browser.
  */
-function json(payload: Record<string, unknown>) {
-  return NextResponse.json(payload, {
+function json(payload: Payload, human: boolean, courseName: string) {
+  const headers = {
+    'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=3600',
+  }
+  if (!human) return NextResponse.json(payload, { status: 200, headers })
+  return new NextResponse(describe(payload, courseName), {
     status: 200,
-    headers: { 'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=3600' },
+    headers: { ...headers, 'Content-Type': 'text/plain; charset=utf-8' },
   })
+}
+
+/**
+ * The same answer, for somebody holding a phone.
+ *
+ * Deliberately not pretty-printed JSON — that is the thing that was already
+ * unreadable. A few lines saying what the wind is doing, and then the two
+ * facts a person checking this actually needs: whether the cache is being
+ * hit, and whether MET is supplying a chance of rain at all for these
+ * coordinates.
+ */
+function describe(payload: Payload, courseName: string): string {
+  const out: string[] = [courseName]
+
+  if (payload.ok !== true) {
+    out.push('', `NO FORECAST — ${payload.reason}`)
+    if (payload.message) out.push(String(payload.message))
+    return out.join('\n') + '\n'
+  }
+
+  const hours = Array.isArray(payload.hours) ? payload.hours as WeatherHour[] : []
+  out.push(`${hours.length} entries`, '')
+
+  for (const h of hours.slice(0, 3)) {
+    out.push(`${h.at}  (${h.spanHours}h)`)
+    out.push(`  ${describeSymbol(h.symbol)}${h.tempC == null ? '' : `, ${Math.round(h.tempC)}C`}`)
+    out.push(`  wind  ${describeWind(h) || '—'} m/s`)
+    out.push(`  rain  ${describeRain(h.rainChance) || 'not supplied'}`)
+    out.push('')
+  }
+
+  // The question this view was built to answer. MET does not publish a
+  // probability everywhere, and a block that prints a percentage nobody sends
+  // would print a blank on every reading.
+  const withChance = hours.filter(h => h.rainChance != null).length
+  out.push(`rain chance present on ${withChance} of ${hours.length} entries`)
+  out.push(`fetched ${payload.fetchedAt}${payload.stale ? ' (STALE)' : ''}`)
+  out.push('', MET_ATTRIBUTION)
+  return out.join('\n') + '\n'
 }
 
 /**
@@ -289,13 +351,36 @@ async function recordFailure(
  * 5xx on a page's own fetch invites the browser and every retry layer between
  * to ask again — which is the last thing a failing upstream needs.
  */
-function serveOrGiveUp(cached: CacheRow | null) {
+function serveOrGiveUp(
+  cached: CacheRow | null,
+  reply: (p: Payload) => NextResponse,
+) {
   if (cached && Array.isArray(cached.hours) && cached.hours.length > 0) {
-    return json({
+    return reply({
       ok: true, hours: cached.hours, fetchedAt: cached.fetched_at, stale: true,
     })
   }
-  return json({
+  return reply({
     ok: false, reason: 'unavailable', message: 'Could not reach the forecast.',
   })
+}
+
+/**
+ * The answers that come before a course is in hand.
+ *
+ * Plain text for a person, JSON for the app, and never an empty body either
+ * way — a blank page is indistinguishable from a route that is not there,
+ * which is the whole reason the readable view exists.
+ */
+function fault(message: string, status: number, human: boolean) {
+  if (!human) return NextResponse.json({ error: message }, { status })
+  return new NextResponse(message + '\n', {
+    status,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  })
+}
+
+/** Whether this looks like a person asking rather than the app. */
+function bySlugParam(slug: string, courseId: string): boolean {
+  return !courseId && slug.trim() !== ''
 }
