@@ -167,31 +167,39 @@ section('The column headings stay above the board')
 {
   const src = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
 
-  // position: sticky measures its offset from the nearest scrollport. An
-  // ancestor with overflow-hidden *is* one, so `top: HEADER_H` then counted
-  // from the card's own top edge instead of the viewport's and dropped the
-  // headings 52px down the card, straight onto whoever was leading.
-  const card = src.match(/<div className="bg-surface border border-bark\/12 rounded-2xl[^"]*">\s*\{\/\* Sticky column headers/)
-  ok(card !== null, 'the board card is found')
-  ok(!/rounded-2xl overflow-hidden">\s*\{\/\* Sticky column headers/.test(src),
-    'and does not clip its own overflow, which would break the sticky offset')
+  // position: sticky measures its offset from the nearest scroll container.
+  // An ancestor with `overflow-x: auto` is one — on BOTH axes, which is the
+  // trap — so `top: HEADER_H` would count from the card's own top edge
+  // instead of the viewport's and drop the headings 52px down the card,
+  // straight onto whoever was leading.
+  const board = src.slice(src.indexOf('function Board('), src.indexOf('* The draw, as a chip'))
 
-  ok(/style=\{\{ top: HEADER_H \}\}/.test(src),
+  ok(/<div className="bg-surface border border-bark\/12 rounded-2xl">/.test(board),
+    'the board card is found')
+  ok(!/rounded-2xl[^"]*overflow/.test(board),
+    'and does not scroll or clip on its own, which would break the sticky offset')
+
+  ok(/style=\{\{ top: HEADER_H \}\}/.test(board),
     'the headings still pin below the wordmark bar')
-  ok(/className="sticky z-10/.test(src), 'and are still sticky')
+  ok(/className="sticky z-20/.test(board),
+    'and are still sticky — above the rows\' own pinned columns')
 
-  // The round columns scroll sideways once a trip outgrows the width. The
-  // obvious way to build that — one scroller around the whole table with the
-  // fixed columns sticky inside it — puts the same bug back, because an
-  // element that scrolls on one axis is a scroll container on BOTH. So the
-  // scrollers are the per-row strips, and the sticky heading must never be
-  // inside one.
-  const header = src.slice(src.indexOf('{/* Sticky column headers */}'))
-  const headerBlock = header.slice(0, header.indexOf('{rows.map('))
-  ok(!/overflow-x-auto[\s\S]*?sticky z-10/.test(src.slice(0, src.indexOf('Sticky column headers'))),
-    'nothing above the headings scrolls sideways')
-  ok(headerBlock.includes('<Strip '),
-    'the headings scroll with the strips rather than in a scroller of their own')
+  // This is the invariant, stated as a rule about the source rather than
+  // about one arrangement of it: whatever the board is built from, nothing
+  // between the card and the sticky headings may scroll sideways. The board
+  // is now a single scroller with its ends pinned inside it — the very shape
+  // this check used to forbid — and it is safe only because the headings sit
+  // outside that scroller in one of their own.
+  const beforeHeadings = board.slice(0, board.indexOf('style={{ top: HEADER_H }}'))
+  ok(!/overflow-x-auto/.test(beforeHeadings),
+    'nothing between the card and the headings scrolls sideways')
+
+  // …and the headings' own scroller is inside them, not around them.
+  const headings = board.slice(board.indexOf('style={{ top: HEADER_H }}'))
+  ok(headings.indexOf('overflow-x-auto') > 0,
+    'the headings carry a scroller of their own, which follows the table')
+  ok(headings.indexOf('ref={head}') < headings.indexOf('ref={body}'),
+    '  …and it is the one synced to the table below')
 }
 
 // ─── The card is the app's, not Donegal's ──────────────────────

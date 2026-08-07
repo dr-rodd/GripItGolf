@@ -165,6 +165,7 @@ const TEAM = (handicapAllowance?: number): Leaderboard => ({
 // ─── Rendering one case ────────────────────────────────────
 
 type Opts = {
+  rounds?: unknown[]
   players?: unknown[]
   holes?: unknown[]
   scores?: unknown[]
@@ -186,7 +187,7 @@ function render(boards: Leaderboard[], opts: Opts = {}): string {
       activeRoundIds: opts.activeRoundIds ?? [],
       livePlayerIds: opts.livePlayerIds ?? [],
       legacyTeamScoring: opts.legacyTeamScoring ?? null,
-      rounds,
+      rounds: opts.rounds ?? rounds,
       teams: opts.teams ?? [],
       memberships: opts.memberships ?? [],
       players: opts.players ?? players,
@@ -203,9 +204,33 @@ function render(boards: Leaderboard[], opts: Opts = {}): string {
 // Each one is a board shape the calculation treats differently. If a change
 // to the maths cannot move any of these, it cannot move a real trip either.
 
+/**
+ * Six rounds, which is what makes the board scroll sideways.
+ *
+ * Every other case here runs two, so the board renders in its inline shape
+ * and the scrolling one — the pinned ends, the shade, the narrowed columns —
+ * had no golden coverage at all. That is the shape that gets rebuilt when
+ * somebody is unhappy with how it feels on a phone, which is exactly when a
+ * fixture is worth having.
+ */
+const sixRounds = Array.from({ length: 6 }, (_, i) => ({
+  id: `r${i + 1}`, round_number: i + 1, status: 'completed',
+  courses: { id: 'c1', name: 'Ballyliffin' },
+}))
+const sixScores = sixRounds.flatMap((r, i) =>
+  players.flatMap((p, n) => card(p.id, r.id, ((i + n) % 3) + 1)))
+const sixHandicaps = players.flatMap(p =>
+  sixRounds.map(r => ({ round_id: r.id, player_id: p.id, playing_handicap: p.handicap })))
+
 const CASES: Record<string, () => string> = {
   // The board most trips run, and the same board dropping a round.
   'stableford-discard-0': () => render([SF(0)]),
+
+  // The scrolling shape: pinned ends, narrowed columns, and the shade over
+  // whatever sits behind the total.
+  'six-rounds-scrolling': () => render([SF(0)], {
+    rounds: sixRounds, scores: sixScores, roundHandicaps: sixHandicaps,
+  }),
   'stableford-discard-1': () => render([SF(1)]),
 
   // Lowest wins, and it sorts the other way.

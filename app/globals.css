@@ -206,42 +206,49 @@ body {
 /* ── …and the shadow that says so after all ────────────────────
    Hiding the scrollbar left the leaderboard with no cue at all that
    there were rounds off the right-hand edge, so a trip of six read as a
-   trip of three. This is that cue: a soft shadow down the right edge,
-   present only while something is still hidden over there.
+   trip of three. This is that cue: a soft shade over whatever is still
+   hidden behind the pinned Total column.
 
-   Two background layers and no JavaScript. The shadow is painted
-   `scroll`, so it is anchored to the box you can see. The cover above it
-   is painted `local`, so it is anchored to the *content* and rides along
-   with it — parked off-screen past the last column while there is more
-   to come, and arriving exactly over the shadow when the last column
-   does. So the cue clears itself at the end of the scroll with no
-   listener, no state and no re-render on every frame of a flick.
+   An element rather than a background, and that is not a preference. The
+   first version of this was two background layers on the scroller — a
+   shadow anchored to the box and a cover anchored to the content, so the
+   cue cleared itself at the end of the scroll with no JavaScript at all.
+   That trick needs the scroller's own background to be visible at its
+   right edge, and the board's right edge is now the pinned Total column.
+   A background paints below content, so it was simply hidden. The board
+   flips one boolean instead; see `useBoardScroll`.
 
-   The cover is `--color-surface` because that is what the board's rows
-   sit on. On a striped card it would show as a white block on every
-   other row, which is why this is a prop on the strip rather than
-   something `.scroll-strip` carries for everyone.
-
-   **Both layers are linear, and the shadow one has to be.** It was a
-   radial gradient — `farthest-side at 100% 50%` — which is the shape you
-   want for a shadow cast by one box. But this is not one box: it is
-   painted per row, and a radial is strongest at each row's own middle and
-   fades towards that row's top and bottom. Down twelve rows that made a
-   string of separate ovals rather than an edge, and every row boundary
-   showed as a pinch. A horizontal linear gradient is flat top to bottom,
-   so the rows join into one continuous band — which is what an edge is.
-
-   Softer with it: 18% of bark was a shadow you looked at rather than a
-   hint that there was more to the right. 10% reads as depth.
+   Flat top to bottom, so the rows join into one band. It was radial once
+   — the right shape for a shadow cast by a single box, and the wrong one
+   here, where it is drawn per row and peaked at each row's own middle.
+   Down twelve rows that is a string of ovals with a pinch at every
+   boundary rather than an edge.
 
    `rgba(255,255,255,0)` rather than `transparent`: Safari interpolates
    the keyword through black and the fade comes out dirty. */
-.scroll-fade {
-  background:
-    linear-gradient(to left, var(--color-surface), rgba(255, 255, 255, 0))
-      right center / 28px 100% no-repeat local,
-    linear-gradient(to left, rgba(74, 55, 40, 0.10), rgba(255, 255, 255, 0))
-      right center / 16px 100% no-repeat scroll;
+.scroll-shade {
+  background: linear-gradient(to left, rgba(74, 55, 40, 0.10), rgba(255, 255, 255, 0));
+}
+
+/* ── An expanded row, inside a table that scrolls sideways ─────
+   The board is one horizontal scroller so its rows cannot come apart from
+   each other. That puts an expanded row's course tiles inside the
+   scroller too — they belong under their own row — where they would
+   otherwise be as wide as every column and slide away with them.
+
+   `100cqw` is the scroller's own visible width, so the tiles are exactly
+   as wide as what you can see and `sticky left-0` holds them there while
+   the columns move behind. The alternative was measuring `clientWidth` in
+   JavaScript: the same number, arriving a frame late, needing a resize
+   listener to stay true. `container-type` is what makes the unit mean the
+   scroller rather than the viewport, and it is set even when the board is
+   too narrow to scroll — a container query unit with no container falls
+   back to the viewport, which is not this box. */
+.board-scroll {
+  container-type: inline-size;
+}
+.board-wide {
+  width: 100cqw;
 }
 
 /* ── Forms ─────────────────────────────────────────────────────

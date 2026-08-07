@@ -453,63 +453,96 @@ section('A board with columns off the edge says so')
     '  …and a board with nothing hidden shows no shadow')
 
   ok(many.includes('overflow-x-auto scroll-strip'), 'six rounds scroll')
-  ok(many.includes('scroll-fade'), '  …and carry the shadow that says so')
+  ok(many.includes('scroll-shade'), '  …and carry the shade that says so')
 
-  // The shadow's other half is a cover painted at the content's own origin,
-  // so it clears itself at the end of the scroll. That is CSS rather than
-  // markup, which is why the rule itself is pinned in test:branding.
+  // The shade is an element, not a background, so it can only be painted
+  // when something is actually hidden. That is a boolean, and its starting
+  // value has to be whether the board scrolls at all — nothing has been
+  // measured yet when the server paints, and starting at false would leave
+  // every phone without the cue for a frame.
+  ok(!few.includes('scroll-shade'),
+    'a board with nothing hidden paints no shade, even before anything is measured')
 
   // One more column on screen before the first swipe: the name column, the
   // cell and the gap each gave up a little. All three, or the column that
   // was gained goes back.
   ok(many.includes('w-[5.5rem]'), 'the name column narrows once the rounds scroll')
   ok(many.includes('w-8 flex-shrink-0 text-center'), 'the round cells narrow with it')
-  ok(many.includes('flex gap-1.5 w-max'), 'and the gap between them tightens')
-
-  // The scorecard sheet uses the same Strip and must NOT take the fade: its
-  // rows alternate towards cream, and the cover half of the effect is the
-  // surface colour — it would read as a white block on every other hole.
-  const sheet = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
-  const fadeUses = sheet.split('\n').filter(l => l.includes('<Strip') && l.includes('fade'))
-  eq(fadeUses.length, 2, 'only the board\'s two strips ask for the fade, not the sheet\'s')
+  ok(many.includes('items-center gap-1.5'), 'and the gap between them tightens')
 }
 
-section('The rows move as one table, not one row and eleven followers')
+section('The board is one scroller, and the rows are one element')
 {
   const src = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
-  // Comments stripped: the note inside the hook explains what the old
-  // `syncing` boolean did and why it went, and a prose mention of it would
-  // match the check that it is gone.
-  const hook = src
-    .slice(src.indexOf('function useSyncedStrips'), src.indexOf('function Strip'))
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '')
+  const board = src.slice(src.indexOf('function Board('), src.indexOf('* The draw, as a chip'))
 
-  // Every row is its own scroller, so only the one under the thumb is
-  // scrolled by the browser. Two things made that visible, and both are
-  // pinned because both are invisible in a screenshot and obvious on a
-  // phone.
+  // The whole point. Twelve scrollers synchronised by hand could be made
+  // to keep step but never to move as one table: only the row under the
+  // thumb was scrolled by the browser, and the rest followed. The rows are
+  // the same element now, so there is nothing left to fall out of step.
+  const scrollers = board.match(/overflow-x-auto/g) ?? []
+  eq(scrollers.length, 2, 'the board has exactly two scrollers: the table, and its headings')
+  ok(!/<Strip\b/.test(board), 'and none of the per-row strips it used to have')
 
-  // 1. The bounce. At either end the touched row was the only one allowed
-  //    to overscroll and settle back, so eleven rows held still while one
-  //    sprang — which read as that player coming loose from the table.
-  const strip = css.split('.scroll-strip')[1]?.split('}')[0] ?? ''
-  ok(/overscroll-behavior-x:\s*none/.test(strip),
-    'a strip cannot rubber-band past its own stop')
+  // The headings are the second one, and they cannot be folded into the
+  // first. `position: sticky` resolves against the nearest scroll
+  // container, so a heading row inside the table's scroller would measure
+  // `top` from the card rather than the viewport and park itself HEADER_H
+  // down it, on top of the leader — a bug this app has already shipped.
+  ok(board.indexOf('style={{ top: HEADER_H }}') < board.indexOf('ref={head}'),
+    'the headings are sticky against the viewport, outside the scroller they follow')
+  ok(board.indexOf('ref={head}') < board.indexOf('ref={body}'),
+    '  …and the table is the scroller below them')
 
-  // 2. The lag. The followers were written inside a rAF, and a boolean held
-  //    across that frame dropped every scroll event inside it — including
-  //    the real ones, which during a flick arrive every frame. Same-frame
-  //    writes and a value-based echo check instead.
+  // The pinned ends pull the row's own padding into themselves. Pinned at
+  // `left-3` instead, the background starts where the content does and the
+  // cells sliding underneath show through the gutter beside it — numbers
+  // leaking out from behind the names.
+  ok(/sticky left-0[^`']*-ml-3 pl-3/.test(board),
+    'the left end pins to the card edge and paints the gutter beside it')
+  ok(/sticky right-0[^`']*-mr-3 pr-3/.test(board),
+    'and so does the right')
+
+  // Pressed is opacity, not a tint. A background tint would have stopped at
+  // the pinned columns — the middle darkening while the two ends stayed
+  // white. Opacity flattens the row first, so it lands evenly and nothing
+  // shows through the pinned columns while it does.
+  ok(/active:opacity-\d+/.test(board), 'a pressed row fades rather than tints')
+  ok(!/active:bg-/.test(board), '  …which is the only thing that lands evenly across a pinned column')
+
+  // An expanded row lives inside the scroller, because it belongs under its
+  // own row — so it has to be pinned and sized to what you can see, or the
+  // tiles slide away sideways with the columns.
+  ok(/board-wide sticky left-0/.test(board),
+    'an expanded row is pinned and sized to the visible width')
+  ok(/board-scroll/.test(board), 'which is what the container type on the scroller is for')
+}
+
+section('Nothing about the scroll can spring or lag')
+{
+  const src = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  // Comments stripped: the notes in here explain what the old mechanisms
+  // did and why they went, and a prose mention would match the checks that
+  // they are gone.
+  const strip = (t: string) =>
+    t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const hook = strip(src.slice(src.indexOf('function useBoardScroll'), src.indexOf('const INLINE_ROUNDS')))
+
+  // The bounce. Whatever scrolls, no scroller may rubber-band past its own
+  // stop — with two of them in step, the one you touch would be the only
+  // one able to.
+  const rule = css.split('.scroll-strip')[1]?.split('}')[0] ?? ''
+  ok(/overscroll-behavior-x:\s*none/.test(rule),
+    'a scroller cannot rubber-band past its own stop')
+
+  // The lag. A boolean held across a frame dropped every scroll event
+  // inside it — including the real ones, which during a flick arrive every
+  // frame. Written in the same frame, echo told apart by value instead.
   ok(!/requestAnimationFrame/.test(hook),
-    'the followers are written in the same frame as the row being dragged')
-  ok(!/syncing/.test(hook),
-    '  …with no window during which a real scroll is dropped')
+    'the headings are written in the same frame as the table')
+  ok(!/syncing/.test(hook), '  …with no window during which a real scroll is dropped')
   ok(/WeakMap/.test(hook) && /applied/.test(hook),
-    '  …and an echo is told apart by where the strip already is')
-
-  // The echo check has to come before the writes or the handler re-enters
-  // itself on its own output and the strips fight.
+    '  …and an echo is told apart by where the scroller already is')
   ok(hook.indexOf('applied.current.get(source)') < hook.indexOf('applied.current.set'),
     'and the echo is checked before anything is written')
 }

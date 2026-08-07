@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useCallback, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { resolveCustomPoints } from '@/lib/customPoints'
 import type { TeamScoring } from '@/lib/teamScoring'
@@ -512,16 +512,14 @@ function CourseTiles({
 // ─── The board ─────────────────────────────────────────────────
 
 /**
- * Keeps every row's round strip on the same horizontal scroll position.
+ * Keeps every row's strip on the same horizontal scroll position.
  *
- * The alternative was one scroller around the whole table with the fixed
- * columns `position: sticky` inside it. That reads well until you remember
- * what `overflow-x` does: an element that scrolls on one axis is a scroll
- * container on both, so the column headings' `top: HEADER_H` would have
- * started measuring from the card instead of the viewport — exactly the bug
- * that put them on top of whoever was leading (see docs/design-system.md).
- * Each strip being its own scroller keeps every ancestor of that sticky row
- * unscrolled.
+ * **The board no longer uses this — see `useBoardScroll` below.** The board
+ * is one scroller now, because a dozen of them synchronised by hand never
+ * quite moved as one table. What is left here is the scorecard sheet, where
+ * the same arrangement is fine: it is a modal, its player columns are rarely
+ * scrolled, and its rows alternate towards cream, which is what makes the
+ * opaque pinned columns the board uses awkward there.
  *
  * Writing scrollLeft fires `scroll` again, so the write has to be told apart
  * from a real one — without that the strips fight each other and judder.
@@ -594,36 +592,102 @@ function useSyncedStrips() {
  * of state this whole arrangement exists to keep.
  */
 function Strip({
-  scrolls, register, onScroll, children, fade = false, gap = 'gap-2',
+  scrolls, register, onScroll, children,
 }: {
   scrolls: boolean
   register: (el: HTMLDivElement | null) => () => void
   onScroll: (e: React.UIEvent<HTMLDivElement>) => void
   children: React.ReactNode
-  /**
-   * Paint the right-hand shadow while columns are still hidden.
-   *
-   * Off by default, and off on the scorecard sheet: the cover half of the
-   * effect is the surface colour, and the sheet's rows alternate towards
-   * cream — it would read as a white block on every other hole. The board's
-   * rows are all one colour, so there it is invisible until it is wanted.
-   */
-  fade?: boolean
-  /** Tightened on the board once the columns scroll, to fit one more in. */
-  gap?: string
 }) {
   return (
     <div
       ref={scrolls ? register : undefined}
       onScroll={scrolls ? onScroll : undefined}
-      className={['min-w-0 flex-1',
-        scrolls && 'overflow-x-auto scroll-strip',
-        scrolls && fade && 'scroll-fade',
-      ].filter(Boolean).join(' ')}
+      className={`min-w-0 flex-1 ${scrolls ? 'overflow-x-auto scroll-strip' : ''}`}
     >
-      <div className={`flex ${gap} ${scrolls ? 'w-max' : 'justify-end'}`}>{children}</div>
+      <div className={`flex gap-2 ${scrolls ? 'w-max' : 'justify-end'}`}>{children}</div>
     </div>
   )
+}
+
+/**
+ * The board's horizontal scroll: one scroller, and the headings kept level.
+ *
+ * **Why the headings are a second scroller rather than part of the first.**
+ * The column headings are `position: sticky` with `top: HEADER_H`, so they
+ * hold below the wordmark bar as the page scrolls. Sticky resolves against
+ * the nearest scroll container, and an element with `overflow-x: auto` is a
+ * scroll container — so a heading row inside the board's scroller would
+ * measure that offset from the scroller instead of the viewport and park
+ * itself HEADER_H down the card, on top of whoever is leading. That is a bug
+ * this app has already shipped once; see docs/design-system.md. `overflow-y:
+ * clip` does not get around it either — the element is still a scroll
+ * container for x, and that is what sticky binds to.
+ *
+ * So the headings sit outside, in a scroller of their own, and follow. One
+ * follower rather than a dozen, and it is not the one under anybody's thumb:
+ * every row of the table is now literally the same element and cannot come
+ * apart from itself, which is the whole point of the change.
+ *
+ * `moreRight` is the other half. The pure-CSS shadow this replaced was
+ * painted on the scroller's own background at its right edge — which is
+ * exactly where the pinned Total column now sits, and a background paints
+ * below content. So the shadow has to be an element, and an element cannot
+ * work out on its own whether anything is still hidden. One boolean, flipped
+ * at the two extremes: React bails out of the re-render whenever it has not
+ * changed, so a flick costs one render at each end and none in between.
+ */
+function useBoardScroll(scrolls: boolean) {
+  const head = useRef<HTMLDivElement | null>(null)
+  const body = useRef<HTMLDivElement | null>(null)
+  /** The offset last written to a scroller, so its echo is not mistaken for a finger. */
+  const applied = useRef(new WeakMap<HTMLElement, number>())
+  // Starts at whether the board scrolls at all, which is the right answer on
+  // every phone and is what the server paints. Measuring only ever corrects
+  // it downwards, on a window wide enough to fit the columns — so the shade
+  // is never absent for a frame on the screens that need it.
+  const [moreRight, setMoreRight] = useState(scrolls)
+
+  // A pixel of slack: scrollWidth and clientWidth are integers but scrollLeft
+  // is fractional on a zoomed or scaled display, so an exact comparison can
+  // leave the shadow up by a hair's breadth at the very end of the scroll.
+  const measure = useCallback((el: HTMLDivElement | null) => {
+    if (el) setMoreRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+  }, [])
+
+  const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const source = e.currentTarget
+    const left = source.scrollLeft
+
+    // Our own echo. Safe to skip even if a real scroll lands on exactly the
+    // offset we last wrote — both scrollers are already there.
+    if (applied.current.get(source) === left) return
+
+    const other = source === body.current ? head.current : body.current
+    if (other && other.scrollLeft !== left) {
+      // Recorded before the write. Reading `scrollLeft` back would force a
+      // synchronous layout inside a scroll handler, and the two scrollers
+      // hold the same columns at the same widths, so they clamp alike.
+      applied.current.set(other, left)
+      other.scrollLeft = left
+    }
+
+    measure(source)
+  }, [measure])
+
+  // The first answer, and again whenever the window changes shape. On a
+  // phone the columns always overflow, but a wide enough window fits six
+  // rounds and there is then nothing to cast a shadow about.
+  useEffect(() => {
+    const el = body.current
+    if (!el) return
+    measure(el)
+    const onResize = () => measure(el)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [measure])
+
+  return { head, body, onScroll, moreRight }
 }
 
 /** Round columns beyond this stop fitting a phone, so they start scrolling. */
@@ -638,138 +702,199 @@ function Board({
   onOpenCard: (row: BoardRow, round: Round) => void
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const { register, onScroll } = useSyncedStrips()
-
-  // Under the limit nothing scrolls and the strip is just a row of columns;
-  // over it, the same markup scrolls and the columns either side hold still.
+  // Under the limit nothing scrolls and the columns are just a row; over it,
+  // the same markup scrolls and the ends pin themselves.
   const scrolls = rounds.length > INLINE_ROUNDS
   const showRounds = rounds.length > 0
 
+  const { head, body, onScroll, moreRight } = useBoardScroll(scrolls)
+
   // Narrower once the rounds scroll — every pixel the name gives up is
-  // another round column visible before you have to swipe. Tightened again
-  // since: name, cell and gap each gave up a little, which together is one
-  // more round on screen before the first swipe. On a 375px phone that is
-  // roughly two and a half columns becoming three and a half — and the half
-  // is the point, because a column cut in two is itself a cue that there is
-  // more to the right.
+  // another round column visible before you have to swipe. On a 375px phone
+  // that is roughly three and a half columns, and the half is the point: a
+  // column cut in two is itself a cue that there is more to the right.
   const NAME_W = scrolls ? 'w-[5.5rem]' : 'flex-1'
   const CELL = `${scrolls ? 'w-8' : 'w-10'} flex-shrink-0 text-center`
   const GAP  = scrolls ? 'gap-1.5' : 'gap-2'
 
-  // No overflow-hidden on this card, deliberately. It would make the card its
-  // own scrollport, and the sticky row below would then measure its offset
-  // from the card's top edge rather than the viewport's — dropping the column
+  /**
+   * The two pinned ends, and the one fiddly bit of this layout.
+   *
+   * `left-0` with the row's own `px-3` pulled into the element — `-ml-3 pl-3`
+   * — rather than `left-3` with the padding left outside it. Both hold the
+   * column in the right place; only this one paints the twelve pixels beside
+   * it. Pinned at `left-3` the element's background starts where its content
+   * does, and the cells sliding underneath show through the gutter between it
+   * and the card's edge, which reads as numbers leaking out from behind the
+   * names.
+   *
+   * The net position is unchanged in both directions, so these are also
+   * correct on a board that never scrolls, where sticky simply never fires.
+   */
+  const PIN_L = `sticky left-0 z-10 bg-surface -ml-3 pl-3 flex items-center gap-2 ${
+    scrolls ? 'flex-shrink-0' : 'flex-1 min-w-0'
+  }`
+  const PIN_R = 'sticky right-0 z-10 bg-surface -mr-3 pr-3 flex-shrink-0'
+
+  /** The shade over whatever is still hidden behind the total. */
+  const shade = moreRight && (
+    <span
+      aria-hidden="true"
+      className="scroll-shade absolute right-full top-0 bottom-0 w-4 pointer-events-none"
+    />
+  )
+
+  // No overflow on this card, deliberately. It would make the card its own
+  // scrollport, and the sticky heading row below would then measure its
+  // offset from the card's top edge rather than the viewport's — dropping the
   // headings exactly HEADER_H down the card and parking them on top of
   // whoever is leading. The corners round without it.
   return (
     <div className="bg-surface border border-bark/12 rounded-2xl">
-      {/* Sticky column headers */}
+      {/* ── Column headings ──
+          Sticky against the viewport, so outside the scroller below and in a
+          thin scroller of their own that follows it. See `useBoardScroll`
+          for why they cannot simply be the table's first row. */}
       <div
         // Sits directly under the wordmark header, which is 52px tall. A
         // hard 0 here would slide the column headings under the mark.
         style={{ top: HEADER_H }}
-        className="sticky z-10 flex items-center gap-2 px-3 py-1.5 bg-surface border-b border-bark/12 rounded-t-2xl"
+        // Above the rows' own pinned columns, which carry z-10 of their own.
+        className="sticky z-20 bg-surface border-b border-bark/12 rounded-t-2xl"
       >
-        <span className="text-[13px] tracking-widest uppercase text-ink/65 w-5 flex-shrink-0">Pos</span>
-        <span className={`text-[13px] tracking-widest uppercase text-ink/65 min-w-0 ${NAME_W}`}>Name</span>
-        {showRounds && (
-          <Strip scrolls={scrolls} register={register} onScroll={onScroll} fade gap={GAP}>
-            {rounds.map(r => (
+        <div
+          ref={head}
+          onScroll={scrolls ? onScroll : undefined}
+          className={scrolls ? 'overflow-x-auto scroll-strip' : ''}
+        >
+          <div className={`flex items-center ${GAP} px-3 py-1.5 ${scrolls ? 'w-max min-w-full' : ''}`}>
+            <span className={PIN_L}>
+              <span className="text-[13px] tracking-widest uppercase text-ink/65 w-5 flex-shrink-0">Pos</span>
+              <span className={`text-[13px] tracking-widest uppercase text-ink/65 min-w-0 ${NAME_W}`}>Name</span>
+            </span>
+            {showRounds && rounds.map(r => (
               <span key={r.id} className={`${CELL} text-[13px] text-ink/65 tabular-nums`}>
                 {r.round_number}
               </span>
             ))}
-          </Strip>
-        )}
-        <span className="text-[13px] tracking-widest uppercase text-ink/65 w-14 flex-shrink-0 text-right">Tot</span>
+            <span className={`${PIN_R} relative`}>
+              {shade}
+              <span className="block w-14 text-right text-[13px] tracking-widest uppercase text-ink/65">Tot</span>
+            </span>
+          </div>
+        </div>
       </div>
 
-      {rows.map((row, i) => {
-        const isExpanded = expandedId === row.id
-        const isLast     = i === rows.length - 1
-        return (
-          <Fragment key={row.id}>
-            <button
-              onClick={() => setExpandedId(prev => (prev === row.id ? null : row.id))}
-              className={`w-full flex items-center gap-2 px-3 py-2 text-left active:bg-bark/[0.04] transition-colors ${
-                !isLast || isExpanded ? 'border-b border-bark/12' : ''
-              }`}
-            >
-              <span className="t-cap text-ink/65 tabular-nums w-5 flex-shrink-0">{i + 1}</span>
+      {/* ── The table ──
+          One scroller for every row, so the rows cannot come apart from each
+          other: they are the same element. `container-type` is what lets an
+          expanded row size itself to the width you can see rather than to the
+          width of all the columns — see `.board-scroll` in globals.css. */}
+      <div
+        ref={body}
+        onScroll={scrolls ? onScroll : undefined}
+        className={`board-scroll ${scrolls ? 'overflow-x-auto scroll-strip' : ''}`}
+      >
+        {rows.map((row, i) => {
+          const isExpanded = expandedId === row.id
+          const isLast     = i === rows.length - 1
+          return (
+            <Fragment key={row.id}>
+              <button
+                onClick={() => setExpandedId(prev => (prev === row.id ? null : row.id))}
+                // Pressed reads as opacity rather than as a tint, because the
+                // pinned columns are opaque and a background tint on the row
+                // would have stopped at them — the middle darkening while the
+                // two ends stayed white. Opacity flattens the row first and
+                // fades the result, so it lands evenly and nothing shows
+                // through the pinned columns while it does.
+                className={`flex items-center ${GAP} px-3 py-2 text-left transition-opacity duration-150 active:opacity-70 ${
+                  scrolls ? 'w-max min-w-full' : 'w-full'
+                } ${!isLast || isExpanded ? 'border-b border-bark/12' : ''}`}
+              >
+                <span className={PIN_L}>
+                  <span className="t-cap text-ink/65 tabular-nums w-5 flex-shrink-0">{i + 1}</span>
 
-              <div className={`min-w-0 ${NAME_W}`}>
-                <div className="flex items-center gap-1.5">
-                  {row.color && (
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} />
-                  )}
-                  <span className="t-card text-ink truncate">{row.name}</span>
-                  {row.isLive && <LiveDot />}
-                </div>
-                {row.subLabel && (
-                  <p className={`text-ink/65 text-[13px] truncate leading-snug ${row.color ? 'pl-3.5' : ''}`}>
-                    {row.subLabel}
-                  </p>
-                )}
-              </div>
-
-              {showRounds && (
-                <Strip scrolls={scrolls} register={register} onScroll={onScroll} fade gap={GAP}>
-                  {rounds.map(r => {
-                    const played  = row.playedRounds.includes(r.id)
-                    const dropped = row.droppedRounds?.includes(r.id) ?? false
-                    const live    = row.liveRounds?.includes(r.id) ?? false
-                    const pts     = row.perRound[r.id] ?? 0
-                    const rel     = row.relativeByRound?.[r.id]
-
-                    // In play: how far ahead of level. Finalised: the total.
-                    // A dropped round is neither — it is set aside.
-                    const showRelative = live && !dropped && rel !== undefined
-                    return (
-                      <span
-                        key={r.id}
-                        title={
-                          dropped ? 'Set aside — worst round dropped'
-                            : live ? 'Card still open — against level so far'
-                            : undefined
-                        }
-                        className={`${CELL} tabular-nums font-semibold ${
-                          showRelative ? 'text-lg' : 'text-xl'
-                        } ${
-                          !played ? 'text-ink/65'
-                            : dropped ? 'text-ink/65 line-through decoration-ink/30'
-                            : live ? 'text-accent-deep'
-                            : 'text-ink'
-                        }`}
-                      >
-                        {!played ? '—' : showRelative ? formatRelative(rel) : formatScore(pts)}
+                  <span className={`block min-w-0 ${NAME_W}`}>
+                    <span className="flex items-center gap-1.5">
+                      {row.color && (
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} />
+                      )}
+                      <span className="t-card text-ink truncate">{row.name}</span>
+                      {row.isLive && <LiveDot />}
+                    </span>
+                    {row.subLabel && (
+                      <span className={`block text-ink/65 text-[13px] truncate leading-snug ${row.color ? 'pl-3.5' : ''}`}>
+                        {row.subLabel}
                       </span>
-                    )
-                  })}
-                </Strip>
+                    )}
+                  </span>
+                </span>
+
+                {showRounds && rounds.map(r => {
+                  const played  = row.playedRounds.includes(r.id)
+                  const dropped = row.droppedRounds?.includes(r.id) ?? false
+                  const live    = row.liveRounds?.includes(r.id) ?? false
+                  const pts     = row.perRound[r.id] ?? 0
+                  const rel     = row.relativeByRound?.[r.id]
+
+                  // In play: how far ahead of level. Finalised: the total.
+                  // A dropped round is neither — it is set aside.
+                  const showRelative = live && !dropped && rel !== undefined
+                  return (
+                    <span
+                      key={r.id}
+                      title={
+                        dropped ? 'Set aside — worst round dropped'
+                          : live ? 'Card still open — against level so far'
+                          : undefined
+                      }
+                      className={`${CELL} tabular-nums font-semibold ${
+                        showRelative ? 'text-lg' : 'text-xl'
+                      } ${
+                        !played ? 'text-ink/65'
+                          : dropped ? 'text-ink/65 line-through decoration-ink/30'
+                          : live ? 'text-accent-deep'
+                          : 'text-ink'
+                      }`}
+                    >
+                      {!played ? '—' : showRelative ? formatRelative(rel) : formatScore(pts)}
+                    </span>
+                  )
+                })}
+
+                {/* Rows are pre-filtered to those who have played, so the
+                    total is always a real number — including a legitimate 0. */}
+                {/* The total is the primary datum, so it is plain ink. Emerald
+                    on this board means one thing only: still being played. */}
+                <span className={`${PIN_R} relative`}>
+                  {shade}
+                  <span className="block w-14 text-right t-num font-semibold text-xl text-ink">
+                    {formatScore(row.total)}
+                  </span>
+                </span>
+              </button>
+
+              {isExpanded && (
+                // Inside the scroller, because it belongs under its own row —
+                // but pinned and sized to the width you can see, so the tiles
+                // do not slide away sideways with the columns. `100cqw` is the
+                // scroller's own width, which is why it carries a container
+                // type; measuring it in JavaScript would be the same number
+                // arriving a frame later and needing a resize listener.
+                <div className={`board-wide sticky left-0 ${!isLast ? 'border-b border-bark/12' : ''}`}>
+                  <CourseTiles
+                    row={row}
+                    rounds={rounds}
+                    playerById={playerById}
+                    onTileClick={round => onOpenCard(row, round)}
+                  />
+                </div>
               )}
-
-              {/* Rows are pre-filtered to those who have played, so the
-                  total is always a real number — including a legitimate 0. */}
-              {/* The total is the primary datum, so it is plain ink. Emerald
-                  on this board means one thing only: still being played. */}
-              <span className="w-14 flex-shrink-0 text-right t-num font-semibold text-xl text-ink">
-                {formatScore(row.total)}
-              </span>
-            </button>
-
-            {isExpanded && (
-              <div className={!isLast ? 'border-b border-bark/12' : ''}>
-                <CourseTiles
-                  row={row}
-                  rounds={rounds}
-                  playerById={playerById}
-                  onTileClick={round => onOpenCard(row, round)}
-                />
-              </div>
-            )}
-          </Fragment>
-        )
-      })}
+            </Fragment>
+          )
+        })}
+      </div>
     </div>
   )
 }
