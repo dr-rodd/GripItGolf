@@ -173,7 +173,7 @@ export default function PlayersClient({
       setAdding(false)
       setError(
         'Added you to the trip, but your round handicaps did not save. ' +
-        'Open Trip setup and re-enter your handicap before you play.',
+        'Open Trip Setup and re-enter your handicap before you play.',
       )
       return
     }

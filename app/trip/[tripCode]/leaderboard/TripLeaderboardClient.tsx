@@ -878,7 +878,7 @@ export default function TripLeaderboardClient({
     return (
       <div className="max-w-lg mx-auto px-4 py-6">
         {strip}
-        {!showMatchplay && <EmptyState message="Create a leaderboard in Trip setup." />}
+        {!showMatchplay && <EmptyState message="Create a leaderboard in Trip Setup." />}
       </div>
     )
   }
@@ -887,7 +887,7 @@ export default function TripLeaderboardClient({
 
   const emptyMessage =
     activeBoard.audience === 'team'
-      ? 'Set teams in Trip setup'
+      ? 'Set teams in Trip Setup'
       : 'No scores yet.'
 
   // An individual board added up has a level to be ahead of. A prize table

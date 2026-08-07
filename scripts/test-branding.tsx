@@ -380,7 +380,7 @@ section('The bottom tab bar')
 
   eq(
     (src.match(/label: '([^']+)'/g) ?? []).map(s => s.replace(/label: '|'/g, '')),
-    ['Home', 'Leaderboard', 'Scoring', 'Settings'],
+    ['Home', 'Leaderboard', 'Scoring', 'Trip Setup'],
     'four items, in the order the guide sets',
   )
 

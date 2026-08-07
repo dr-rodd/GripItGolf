@@ -406,7 +406,7 @@ export default function CreateTripForm() {
           </h1>
           <p className="text-ink/65 text-sm mb-10">
             Share this code with your group to join. Next, choose leaderboard
-            formats and teams in Trip setup.
+            formats and teams in Trip Setup.
           </p>
 
           <div className="bg-surface border border-bark/25 rounded-2xl px-4 py-8 mb-4">
@@ -570,7 +570,7 @@ export default function CreateTripForm() {
                 worth reporting. */}
             {coursesLoaded && courses.length === 0 && (
               <div className="p-4 bg-surface border border-bark/12 rounded-xl text-ink/65 text-sm text-center mb-4">
-                No platform courses available yet. Add courses with <code className="text-accent">trip_id = NULL</code> to get started.
+                Adding new courses is coming soon.
               </div>
             )}
             <ItineraryBuilder

@@ -138,7 +138,7 @@ export function finaliseBlockedReason(
     // With two sheets running, "pick teams" is ambiguous — say which.
     return sheets.length > 1
       ? `The teams for ${sheetSubtitle(boards, sheet, boardTitle)} have not been picked yet.`
-      : 'A team leaderboard needs teams! Pick them in Trip setup.'
+      : 'A team leaderboard needs teams! Pick them in Trip Setup.'
   }
   return null
 }

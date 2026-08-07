@@ -137,6 +137,29 @@ That panel is reachable from platform trips: `CourseDashboardClient` renders it,
 
 `trips` → `teams` → `players` → `courses` → `holes` → `rounds` → `round_handicaps` → `scores`
 
+## What things are called on screen
+
+Settled in a sitewide copy review — `docs/copy-review.md` holds the sheet, item
+by item, and is the place to propose wording rather than changing strings
+piecemeal. Four rules came out of it, and they are rules because each one had
+three or four variants in the wild:
+
+- **The person who made the trip is the lead player.** Not organiser, not trip
+  owner, not "whoever created it".
+- **The screen at `/trip/[code]/setup` is Trip Setup** — the tab bar's fourth
+  label and every sentence that points at it. **Trip Settings is the drawer
+  inside it**, behind the gear: name, dates, itinerary, who can edit. Two
+  similar names for two different things, deliberately.
+- **Errors are calm.** "Could not X — try again", never "Failed to X" or
+  "Please…".
+- **One leaderboard is a leaderboard.** "Competition" is the golf sense of the
+  word (as in a competition allowance), not a name for the object.
+
+**A scoring or team-format `hint` in `lib/leaderboards.ts` is not only a hint.**
+`boardRules` joins the hints into the line under a saved board's title, and
+`label` becomes the board's tab, so a word changed there lands in three places.
+Both need a full stop or the joined line runs on.
+
 ## CC Behaviour
 
 - Act immediately on single-file, routine changes — no need to ask first.

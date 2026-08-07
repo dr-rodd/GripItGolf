@@ -133,7 +133,7 @@ export default async function MatchplayPage({
         {!enabled ? (
           <EmptyState
             title="Matchplay isn't switched on"
-            body="Turn it on in Trip setup, then draw the bracket."
+            body="Turn it on in Trip Setup, then draw the bracket."
             tripCode={tripCode}
           />
         ) : matches.length === 0 ? (
@@ -141,8 +141,8 @@ export default async function MatchplayPage({
             title="No bracket has been drawn yet"
             body={
               pairs
-                ? 'Pick the pairings in Trip setup, then use Create Matchplay to draw the bracket.'
-                : 'Open Trip setup and use Create Matchplay to draw the bracket.'
+                ? 'Pick the pairings in Trip Setup, then use Create Matchplay to draw the bracket.'
+                : 'Open Trip Setup and use Create Matchplay to draw the bracket.'
             }
             tripCode={tripCode}
           />
@@ -179,7 +179,7 @@ function EmptyState({
         href={`/trip/${tripCode}/setup`}
         className="inline-block px-6 py-3.5 border border-accent/40 text-ink/65 rounded-sm text-[13px] tracking-[0.2em] uppercase hover:bg-accent/10 transition-colors"
       >
-        Trip setup
+        Trip Setup
       </Link>
     </div>
   )

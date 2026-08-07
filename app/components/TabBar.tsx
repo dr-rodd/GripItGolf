@@ -15,7 +15,10 @@ import {
  * bottom row of taps lands on nothing.
  *
  * Scoped to a trip: every destination needs the trip code, and there is no
- * app-level navigation to speak of. Settings goes to trip settings.
+ * app-level navigation to speak of. The last tab goes to Trip Setup, which is
+ * what the copy across the app calls that screen — it was "Settings" here and
+ * "Trip Setup" everywhere pointing at it. Two words, but shorter than
+ * "Leaderboard" beside it, so it still fits the narrowest phone on one line.
  *
  * Deliberately not rendered on the scoring screens themselves — see the note
  * on `hide` below.
@@ -25,7 +28,7 @@ const ITEMS = [
   { key: 'home',        label: 'Home',        icon: IconHome,          path: (t: string) => `/trip/${t}` },
   { key: 'leaderboard', label: 'Leaderboard', icon: IconTrophy,        path: (t: string) => `/trip/${t}/leaderboard` },
   { key: 'scoring',     label: 'Scoring',     icon: IconClipboardList, path: (t: string) => `/trip/${t}/scoring` },
-  { key: 'settings',    label: 'Settings',    icon: IconSettings,      path: (t: string) => `/trip/${t}/setup` },
+  { key: 'settings',    label: 'Trip Setup',  icon: IconSettings,      path: (t: string) => `/trip/${t}/setup` },
 ] as const
 
 export default function TabBar({ tripCode }: { tripCode: string }) {
