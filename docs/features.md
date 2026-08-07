@@ -243,7 +243,11 @@ Reached from the itinerary (golf items are tappable; a stay or a journey is not,
 
 In order: course name and location, the day and how many groups go off, weather, directions, the card, the tees, the result, and a button into live scoring.
 
-**Weather is two empty slots and no data.** Nothing on the platform fetches a forecast — no client, no key, no column, no cache. The slots say "Not available yet" in as many words rather than showing a dash somebody could read as "no wind". Shaped as they will be filled, so a real source is a swap and not a re-layout.
+**Weather comes from MET Norway**, through `/api/weather` and `lib/weather.ts`. The round page shows the conditions now and at the first tee; coordinates are on `courses`, filled by migration 026 and looked up by course name rather than the town in `location` — Old Head's town is 11km inland of the course, and every such gap runs towards calmer wind.
+
+**MET publishes gusts and rain probability only for a limited part of Europe, and Ireland is outside it.** So on these courses there is no gust and no percentage: rain shows in millimetres and the gust clause simply never appears. That is a source limit, not a bug, and it is the reason the block prints nothing rather than a nought — a `0` where a gust belongs reads as a still day. Open-Meteo has both fields if that trade is ever worth revisiting.
+
+The forecast is cached in `weather_cache`, one row per course, honouring MET's `Expires` header — their terms require caching, and twelve players opening the hub is one request upstream. Attribution is required by the licence and appears under the block.
 
 **The card is one set of numbers.** `lib/courseCard.ts` — two nines, par over stroke index, each nine's par at the end. A woman on a course carrying `par_ladies` and `stroke_index_ladies` reads the ladies card; everybody else, including a device that recognises nobody, reads the men's. Never both: four rows of small figures do not fit a phone. `ladies_data_verified` is not consulted — Cleanup 1 established it never reaches the calculation, and a flag that does not gate the maths should not gate the display of the same numbers.
 

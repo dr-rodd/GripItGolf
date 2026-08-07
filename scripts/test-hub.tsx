@@ -726,10 +726,21 @@ section('The round summary reuses, and invents nothing')
     ok(page.includes(token), `it reuses ${what}`)
   }
 
-  // Weather: two slots, no data, and nothing that looks like a reading.
-  ok(/Not available yet/.test(page), 'weather says plainly that it is not there')
-  eq((page.match(/WeatherSlot label=/g) ?? []).length, 2, 'two slots: now, and at the tee')
-  ok(!/°|celsius|fahrenheit|mph|km\/h/i.test(page), 'and no invented figure of any kind')
+  // Weather. This used to pin the ABSENCE of the feature — two dashed slots
+  // saying "Not available yet" — because showing a plausible number nobody
+  // measured is worse than showing none. The slots are filled now, so what
+  // is worth holding is that the page still does not invent one itself.
+  ok(page.includes('<CourseWeather'), 'the weather block is the shared component')
+  ok(!/WeatherSlot/.test(page), '  …and the placeholder it replaced is gone')
+  ok(page.includes('teeAt={teeAtIso}'),
+    'it is given the round\'s own tee time, not a second reading of it')
+
+  // The units decision, inverted rather than deleted. m/s is the API's own
+  // unit and nothing converts — this is what stops somebody "helpfully"
+  // adding a conversion later, which is exactly how two screens come to
+  // quote the same wind differently.
+  ok(!/mph|km\/h|fahrenheit|knots/i.test(page),
+    'and the page names no unit the app does not use')
 
   // The scoring shortcut goes to the renamed route.
   ok(page.includes('/scoring/${round.round_number}'), 'the shortcut routes into live scoring')

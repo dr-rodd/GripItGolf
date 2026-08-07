@@ -215,6 +215,93 @@ export function itineraryIcon(
 }
 
 /** On the maps link beside a place. */
+// ─── Weather ───────────────────────────────────────────────────
+//
+// Seven, for the ~50 codes MET publishes. Forty-three of those distinctions
+// change nothing a golfer does — `lightrainshowers_day` against
+// `rainshowers_day` is the same decision about the same coat.
+//
+// The three that must NOT be folded together, and why:
+//   thunder  lightning is the one forecast condition that CLEARS a course
+//   snow     a February trip that is not happening
+//   night    a sun in the sky at ten at night reads as the block being broken
+//
+// `lib/weather.ts` maps a code to a key; `weatherIcon` maps the key to one of
+// these. One function, so the round page and the hub cannot draw the same
+// forecast differently — the mistake `itineraryIcon` was written to fix.
+
+export const IconSun = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+    <path d="M3 12h1M12 3v1M20 12h1M12 20v1M5.6 5.6l.7 .7M18.4 5.6l-.7 .7M17.7 17.7l.7 .7M6.3 17.7l-.7 .7" />
+  </Svg>
+)
+
+export const IconMoon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+  </Svg>
+)
+
+export const IconCloudSun = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M14.5 17a3.5 3.5 0 0 0 0 -7h-.5a5 4.5 0 0 0 -9.5 -1a4 4 0 0 0 -.5 8h10.5z" />
+    <path d="M17 6.6a4 4 0 0 0 -2.6 -2.6" />
+  </Svg>
+)
+
+export const IconCloud = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6.657 18c-2.572 0 -4.657 -2.007 -4.657 -4.483c0 -2.475 2.085 -4.482 4.657 -4.482c.393 -1.762 1.794 -3.2 3.675 -3.773c1.88 -.572 3.956 -.193 5.444 1c1.489 1.19 2.156 3.007 1.751 4.769h.773c1.588 0 2.875 1.343 2.875 3c0 1.657 -1.287 3 -2.875 3h-11.643z" />
+  </Svg>
+)
+
+export const IconCloudRain = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7 18a4.6 4.4 0 0 1 0 -9a5 4.5 0 0 1 11 2h1a3.5 3.5 0 0 1 0 7h-12z" />
+    <path d="M11 21v-2M7 21v-1M15 21v-2" />
+  </Svg>
+)
+
+export const IconCloudSnow = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7 18a4.6 4.4 0 0 1 0 -9a5 4.5 0 0 1 11 2h1a3.5 3.5 0 0 1 0 7h-12z" />
+    <path d="M11 20l.01 0M7 21l.01 0M15 20l.01 0" />
+  </Svg>
+)
+
+export const IconCloudStorm = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7 18a4.6 4.4 0 0 1 0 -9a5 4.5 0 0 1 11 2h1a3.5 3.5 0 0 1 0 7" />
+    <path d="M13 14l-2 4h3l-2 4" />
+  </Svg>
+)
+
+/** The wind's own arrow, rotated by the caller — see `arrowDeg`. */
+export const IconArrowUp = (p: IconProps) => (
+  <Svg {...p}><path d="M12 19V5" /><path d="M5 12l7 -7l7 7" /></Svg>
+)
+
+/**
+ * One of the seven, for a key from `symbolKey`.
+ *
+ * Exhaustive on purpose — a `SymbolKey` added later fails to compile here
+ * rather than falling through to a cloud nobody chose.
+ */
+export function weatherIcon(
+  key: 'clear' | 'clearnight' | 'partly' | 'cloud' | 'rain' | 'snow' | 'thunder',
+): (p: IconProps) => React.ReactElement {
+  switch (key) {
+    case 'clear':      return IconSun
+    case 'clearnight': return IconMoon
+    case 'partly':     return IconCloudSun
+    case 'rain':       return IconCloudRain
+    case 'snow':       return IconCloudSnow
+    case 'thunder':    return IconCloudStorm
+    case 'cloud':      return IconCloud
+  }
+}
+
 export const IconMapPin = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 11m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />

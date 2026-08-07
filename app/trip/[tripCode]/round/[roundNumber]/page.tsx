@@ -21,6 +21,7 @@ import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import { IconMapPin, IconClipboardList, IconTrophy } from '@/app/components/icons'
 import RoundCard from './RoundCard'
+import CourseWeather from '@/app/components/CourseWeather'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,7 +65,7 @@ export default async function RoundSummaryPage({
   // itinerary item is where the tee time lives — the date is on the round,
   // and `itinerary_item_id` is the only thing tying the two together.
   const [courseRes, holesRes, teesRes, itemRes, playersRes] = await Promise.all([
-    supabase.from('courses').select('name, location').eq('id', round.course_id).single(),
+    supabase.from('courses').select('name, location, latitude, longitude').eq('id', round.course_id).single(),
     supabase
       .from('holes')
       .select('id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies')
@@ -126,6 +127,14 @@ export default async function RoundSummaryPage({
   // Nobody has played it. Not an empty state — the section simply is not there.
   const played = rows.length > 0
 
+  // The first tee as an instant, for the forecast. Local clock time on the
+  // round's date — the same construction `momentOf` in lib/upNext.ts uses, so
+  // a tee time never means two different moments in one app. Null when the
+  // round has no time recorded, which leaves the block showing "right now".
+  const teeAtIso = round.scheduled_date && item?.tee_time
+    ? new Date(`${round.scheduled_date}T${item.tee_time}`).toISOString()
+    : null
+
   const day = describeDay(round.scheduled_date, item?.day_index ?? 0)
   const groups = describeGroups(item?.tee_count ?? null, describeTime(item?.tee_time))
   const directions = mapsUrl([course?.name, course?.location].filter(Boolean).join(', '))
@@ -184,17 +193,19 @@ export default async function RoundSummaryPage({
         </header>
 
         {/* ── Weather ──
-            Two slots and no data behind either. Nothing on the platform
-            fetches a forecast — no client, no key, no column — so these say
-            so plainly rather than showing a plausible number nobody measured.
-            Shaped as they will be filled, so a real source is a swap rather
-            than a re-layout. */}
+            The two slots this section was shipped empty for. The tee time is
+            the round's own — the same one printed above it, from the same
+            itinerary item, so the block and the heading cannot disagree about
+            when the group goes out. */}
         <section>
           <h2 className="t-h2 text-ink mb-3">Weather</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <WeatherSlot label="Right now" />
-            <WeatherSlot label="At the first tee" />
-          </div>
+          <CourseWeather
+            courseId={round.course_id}
+            teeAt={teeAtIso}
+            variant="block"
+            lat={course?.latitude == null ? null : Number(course.latitude)}
+            lon={course?.longitude == null ? null : Number(course.longitude)}
+          />
         </section>
 
         {/* ── The card ── */}
@@ -322,15 +333,6 @@ function Cell({
  * plausible-looking blank — invites somebody to read it as "no wind" rather
  * than "nobody asked".
  */
-function WeatherSlot({ label }: { label: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-bark/25 bg-surface/50 px-4 py-5 text-center">
-      <p className="t-cap uppercase tracking-[0.14em] text-ink/50">{label}</p>
-      <p className="t-cap text-ink/50 mt-1.5 leading-snug">Not available yet</p>
-    </div>
-  )
-}
-
 /** One place on the podium. Name, score, and where that puts them. */
 function PodiumRow({ place }: { place: PodiumPlace }) {
   return (
