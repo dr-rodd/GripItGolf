@@ -778,15 +778,40 @@ section('The countdown is the first thing under the trip name')
   // a server component rendering straight down.
   const countdown = hub.indexOf('<TripCountdown')
   const status    = hub.indexOf('<StatusBlock')
-  const nav       = hub.indexOf('The three ways in')
-  ok(countdown > 0 && status > 0 && nav > 0, 'all three blocks are on the page')
+  const stack     = hub.indexOf('<SectionStack')
+  ok(countdown > 0 && status > 0 && stack > 0, 'all three blocks are on the page')
   ok(countdown < status, 'the countdown comes before the status block')
-  ok(status < nav, '  …and the buttons come after both')
+  ok(status < stack, '  …and the sections come after both')
 
   // It no longer wraps anything, so it must not be given children again
   // without somebody deciding where those children should now sit.
   ok(!/<TripCountdown[^/>]*>[\s\S]*?<\/TripCountdown>/.test(hub),
     'and it stands on its own rather than wrapping the buttons')
+}
+
+section('The hub does not repeat the tab bar')
+{
+  const hub  = code('app/trip/[tripCode]/page.tsx')
+  const tabs = code('app/components/TabBar.tsx')
+
+  // Live Scoring and Leaderboard were large buttons here as well as tabs —
+  // the same two journeys offered twice, in two different shapes, on the one
+  // screen where the bar is always visible.
+  ok(tabs.includes('/leaderboard') && tabs.includes('/scoring'),
+    'the bar carries the leaderboard and the scoring')
+  ok(!/href=\{`\/trip\/\$\{tripCode\}\/leaderboard`\}/.test(hub),
+    'so the hub does not link to the leaderboard a second time')
+  ok(!/href=\{`\/trip\/\$\{tripCode\}\/scoring`\}/.test(hub),
+    '  …nor to the scoring')
+
+  // Players is the one that was not a duplicate: no tab claims it. Removing
+  // its button without leaving a door would have stranded the join list on
+  // any phone that has already claimed — ClaimSpot only shows to a device
+  // that is nobody yet.
+  ok(/href=\{`\/trip\/\$\{tripCode\}\/players`\}/.test(hub),
+    'the join list is still reachable from the hub')
+  ok(hub.indexOf('/players`}') > hub.indexOf('<SectionStack'),
+    '  …from the roster, below, rather than as a button up top')
 }
 
 section('There is one door to the settings, not two')

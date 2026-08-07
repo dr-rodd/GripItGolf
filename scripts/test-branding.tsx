@@ -1404,9 +1404,16 @@ section('Nothing has to be finalised before it can be played')
   ok(!/isDraft/.test(hub), 'the hub does not ask either')
   ok(!hub.includes('Scoring opens when the trip is finalised'),
     'and never says scoring is waiting on something')
-  // Locked only when there is genuinely nothing to score
-  ok(/rounds\.length > 0 \? \(/.test(hub),
-    'Live Scoring is locked by having no rounds, and by nothing else')
+  // Nothing on the hub gates the scoring at all now — the button that used
+  // to show a padlock when a trip had no rounds is gone, and the tab bar
+  // links straight through on every screen. So the picker itself has to be
+  // the one that says there is nothing to score, rather than throwing or
+  // rendering an empty list under "Choose a round".
+  const picker = read('app/trip/[tripCode]/scoring/page.tsx')
+  ok(/\(rounds \?\? \[\]\)\.length === 0 &&/.test(picker),
+    'the round picker answers for a trip with no rounds')
+  ok(picker.includes('No rounds set up for this trip yet'),
+    '  …in words, which is the only lock left on scoring')
 
   const status = stripComments(read('lib/tripStatus.ts'))
   ok(!/setup_status/.test(status), 'a trip is placed by its dates alone')

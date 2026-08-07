@@ -157,8 +157,6 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   const confirmedCount = countConfirmed(players)
   const pendingCount   = players.length - confirmedCount
 
-  const everyoneIn = players.length > 0 && pendingCount === 0
-
   // What the trip plays for, read off its boards. `primary` is the first one
   // — the board the trip is about, and the one the standing line quotes.
   const boards = boardsForTrip(trip)
@@ -260,16 +258,6 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
     if (lead?.competition === 'matchplay') placingLine = ''
   }
 
-  const lockedButton = (label: string) => (
-    <div className="w-full py-[18px] border-2 border-bark/12 rounded-xl flex items-center justify-center gap-3">
-      <span className="text-ink/50 text-sm tracking-[0.25em] uppercase">{label}</span>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-ink/50" aria-hidden="true">
-        <rect x="3" y="11" width="18" height="11" rx="2" />
-        <path d="M7 11V7a5 5 0 0110 0v4" />
-      </svg>
-    </div>
-  )
-
   // ── The itinerary, or the list of rounds a pre-itinerary trip has ──
   const itinerarySection = itinerary.length > 0 ? (
     <Itinerary
@@ -355,41 +343,18 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
           <p className="text-rust-deep text-sm text-center mt-3 leading-snug">{standingError}</p>
         )}
 
-        {/* ── The three ways in ── */}
-        <div className="mt-7 mb-8">
-          <nav className="flex flex-col gap-3 w-full max-w-xs mx-auto">
-            {rounds.length > 0 ? (
-              <Link
-                href={`/trip/${tripCode}/scoring`}
-                className="w-full py-[18px] border-2 border-bark/25 text-ink/80 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-bark/25 hover:text-ink/80 transition-colors"
-              >
-                Live Scoring
-              </Link>
-            ) : (
-              lockedButton('Live Scoring')
-            )}
+        {/* Three large buttons — Live Scoring, Leaderboard, Players — used to
+            sit here, and two of them were the tab bar written out a second
+            time. A screen offering the same journey twice in two different
+            shapes makes the reader work out whether they are the same
+            journey, and they were: the bar carries Leaderboard and Scoring on
+            every screen in the trip, this one included.
 
-            <Link
-              href={`/trip/${tripCode}/leaderboard`}
-              className="w-full py-[18px] border-2 border-bark/25 text-ink/80 rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:border-bark/25 hover:text-ink/80 transition-colors"
-            >
-              Leaderboard
-            </Link>
-
-            {/* Emerald while somebody is still expected; once the whole
-                field is in there is nothing left to prompt. */}
-            <Link
-              href={`/trip/${tripCode}/players`}
-              className={`w-full py-[18px] border-2 rounded-xl text-sm tracking-[0.25em] uppercase text-center transition-colors ${
-                everyoneIn
-                  ? 'border-bark/12 text-ink/65 hover:border-bark/25 hover:text-ink/80'
-                  : 'border-accent text-accent hover:bg-accent/10'
-              }`}
-            >
-              Players
-            </Link>
-          </nav>
-        </div>
+            Players was not a duplicate — no tab claims it — so its door moved
+            into the roster below rather than closing. Claiming is prompted by
+            the status block above anyway, in the one state that needs it: a
+            phone that is nobody yet gets "Claim your spot" as the loudest
+            thing on the screen. */}
 
         {/* ── The rest, one heading at a time ── */}
         <SectionStack
@@ -507,6 +472,19 @@ function PlayersPanel({
           they can claim their spot.
         </p>
       )}
+
+      {/* The way to the join list, and now the only one on this screen for a
+          phone that has already claimed. It used to be a button up beside
+          Leaderboard and Live Scoring; it belongs with the roster, which is
+          what a reader is looking at when the question occurs to them. No tab
+          carries Players, so without this the route would be reachable only
+          by a device that is nobody yet. */}
+      <Link
+        href={`/trip/${tripCode}/players`}
+        className="block text-center mt-5 t-cap uppercase tracking-[0.18em] text-accent-deep hover:text-accent transition-colors"
+      >
+        Claim a spot
+      </Link>
     </div>
   )
 }
