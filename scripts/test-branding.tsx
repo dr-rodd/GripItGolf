@@ -109,21 +109,41 @@ section('The old identity is gone')
     const strays = rules.filter(r => !r.includes('.scroll-shade')).map(r => r.trim().split('{')[0].trim())
     eq(strays, [], 'the stylesheet has no gradient but the scroll shade')
 
-    const shade = css.split('.scroll-shade')[1]?.split('}')[0] ?? ''
+    // One per pinned column. Read by exact rule name, not by prefix: the two
+    // differ only in which way they fade, and a `split('.scroll-shade')`
+    // lands on whichever comes first and quietly checks it twice.
+    const rule = (name: string) =>
+      css.split(new RegExp(`\\.${name}\\s*\\{`))[1]?.split('}')[0] ?? ''
+    const left  = rule('scroll-shade-l')
+    const right = rule('scroll-shade-r')
+    ok(left !== '' && right !== '', 'both pinned columns have a shade')
+
+    // Each falls away from the column casting it. Get these the wrong way
+    // round and the shadow lands on the far side of the thing making it,
+    // over the name rather than over what the name is hiding — which looks
+    // deliberate enough to survive a glance.
+    ok(/linear-gradient\(\s*to right/.test(left),
+      'the left column\'s shade falls to its right, over what it hides')
+    ok(/linear-gradient\(\s*to left/.test(right), 'and the right column\'s to its left')
 
     // Flat top to bottom, so the rows join into one band. It was radial
     // once — the right shape for a shadow cast by a single box, and the
     // wrong one here, where it is drawn per row and peaked at each row's own
     // middle. Twelve rows of that is a string of ovals with a pinch at every
     // boundary, not an edge.
-    ok(shade.includes('linear-gradient'), 'the shade is a gradient across, not out from a point')
-    ok(!shade.includes('radial-gradient'),
-      '  …so the rows join into one band rather than a string of ovals')
+    for (const [name, shade] of [['left', left], ['right', right]] as const) {
+      ok(!shade.includes('radial-gradient'),
+        `the ${name} shade is flat top to bottom, so the rows join into one band`)
 
-    // Subtle enough to be depth rather than a mark on the screen.
-    const alpha = Number(shade.match(/rgba\(74,\s*55,\s*40,\s*([\d.]+)\)/)?.[1] ?? 1)
-    ok(alpha > 0, 'it is actually painted')
-    ok(alpha <= 0.12, `and stays under 12% bark (${alpha})`)
+      // Subtle enough to be depth rather than a mark on the screen, and the
+      // same on both sides — one heavier than the other reads as a lit room
+      // rather than as an edge.
+      const alpha = Number(shade.match(/rgba\(74,\s*55,\s*40,\s*([\d.]+)\)/)?.[1] ?? 1)
+      ok(alpha > 0, `  …is actually painted`)
+      ok(alpha <= 0.12, `  …and stays under 12% bark (${alpha})`)
+    }
+    eq(left.match(/rgba\([^)]*\)/)?.[0], right.match(/rgba\([^)]*\)/)?.[0],
+      'and the two ends are shaded to exactly the same strength')
 
     // The board is one horizontal scroller, which puts an expanded row's
     // tiles inside it. This is what sizes them to what you can see rather

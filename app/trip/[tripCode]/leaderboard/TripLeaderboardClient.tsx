@@ -647,12 +647,19 @@ function useBoardScroll(scrolls: boolean) {
   // it downwards, on a window wide enough to fit the columns — so the shade
   // is never absent for a frame on the screens that need it.
   const [moreRight, setMoreRight] = useState(scrolls)
+  // Nothing is hidden to the left until something has been scrolled past it,
+  // so this one genuinely does start false — on the server and on a phone
+  // alike. Its opposite number cannot, which is why they are seeded
+  // differently rather than symmetrically.
+  const [moreLeft, setMoreLeft] = useState(false)
 
   // A pixel of slack: scrollWidth and clientWidth are integers but scrollLeft
   // is fractional on a zoomed or scaled display, so an exact comparison can
   // leave the shadow up by a hair's breadth at the very end of the scroll.
   const measure = useCallback((el: HTMLDivElement | null) => {
-    if (el) setMoreRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+    if (!el) return
+    setMoreLeft(el.scrollLeft > 1)
+    setMoreRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
   }, [])
 
   const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
@@ -687,7 +694,7 @@ function useBoardScroll(scrolls: boolean) {
     return () => window.removeEventListener('resize', onResize)
   }, [measure])
 
-  return { head, body, onScroll, moreRight }
+  return { head, body, onScroll, moreLeft, moreRight }
 }
 
 /** Round columns beyond this stop fitting a phone, so they start scrolling. */
@@ -707,7 +714,7 @@ function Board({
   const scrolls = rounds.length > INLINE_ROUNDS
   const showRounds = rounds.length > 0
 
-  const { head, body, onScroll, moreRight } = useBoardScroll(scrolls)
+  const { head, body, onScroll, moreLeft, moreRight } = useBoardScroll(scrolls)
 
   // Narrower once the rounds scroll — every pixel the name gives up is
   // another round column visible before you have to swipe. On a 375px phone
@@ -718,29 +725,59 @@ function Board({
   const GAP  = scrolls ? 'gap-1.5' : 'gap-2'
 
   /**
-   * The two pinned ends, and the one fiddly bit of this layout.
+   * The two pinned ends, and the fiddly bits of this layout. There are three,
+   * and every one of them is about the *background* rather than the position.
    *
-   * `left-0` with the row's own `px-3` pulled into the element — `-ml-3 pl-3`
-   * — rather than `left-3` with the padding left outside it. Both hold the
-   * column in the right place; only this one paints the twelve pixels beside
-   * it. Pinned at `left-3` the element's background starts where its content
-   * does, and the cells sliding underneath show through the gutter between it
-   * and the card's edge, which reads as numbers leaking out from behind the
-   * names.
+   * **Horizontally**: `left-0` with the row's own `px-3` pulled into the
+   * element — `-ml-3 pl-3` — rather than `left-3` with the padding left
+   * outside it. Both hold the column in the right place; only this one paints
+   * the twelve pixels beside it. Pinned at `left-3` the background starts
+   * where the content does, and the cells sliding underneath show through the
+   * gutter between it and the card's edge.
    *
-   * The net position is unchanged in both directions, so these are also
-   * correct on a board that never scrolls, where sticky simply never fires.
+   * **Vertically**: `self-stretch`, and this is the one that shipped wrong.
+   * The row is `items-center`, which centres each item and leaves it at its
+   * own content height — so a pinned column was as tall as the name inside
+   * it, not as tall as the row. On a row carrying a sub-label that was taller
+   * than the round cells and covered them; on a row without one it was
+   * shorter, and a sliver of each cell showed above and below the name as it
+   * scrolled past. Hence *some* rows looking transparent and not others.
+   *
+   * **And past the row's padding**: `-my-2 py-2` cancels the row's `py-2` so
+   * the pinned box fills the row's full height rather than its content box.
+   * Without it the shades below — which hang off these elements — would stop
+   * short at every row boundary, and a band with a gap every 40 pixels is the
+   * striped effect this design has now been through twice.
+   *
+   * The net position is unchanged on both axes, so these are also correct on
+   * a board that never scrolls, where sticky simply never fires.
    */
-  const PIN_L = `sticky left-0 z-10 bg-surface -ml-3 pl-3 flex items-center gap-2 ${
-    scrolls ? 'flex-shrink-0' : 'flex-1 min-w-0'
-  }`
-  const PIN_R = 'sticky right-0 z-10 bg-surface -mr-3 pr-3 flex-shrink-0'
+  const pin = (side: 'l' | 'r', padY: string) =>
+    `sticky z-10 bg-surface self-stretch flex items-center ${padY} ${
+      side === 'l'
+        ? `left-0 -ml-3 pl-3 gap-2 ${scrolls ? 'flex-shrink-0' : 'flex-1 min-w-0'}`
+        : 'right-0 -mr-3 pr-3 flex-shrink-0'
+    }`
 
-  /** The shade over whatever is still hidden behind the total. */
-  const shade = moreRight && (
+  /**
+   * The shade over whatever is hidden behind each pinned column.
+   *
+   * Absolutely positioned against the pin itself, which is `sticky` and
+   * therefore already a positioned ancestor — no `relative` needed, and
+   * adding one would be a coin toss anyway, since both are `position`
+   * utilities and which wins is decided by their order in the generated
+   * stylesheet rather than in the class attribute.
+   */
+  const shadeL = moreLeft && (
     <span
       aria-hidden="true"
-      className="scroll-shade absolute right-full top-0 bottom-0 w-4 pointer-events-none"
+      className="scroll-shade-l absolute left-full top-0 bottom-0 w-4 pointer-events-none"
+    />
+  )
+  const shadeR = moreRight && (
+    <span
+      aria-hidden="true"
+      className="scroll-shade-r absolute right-full top-0 bottom-0 w-4 pointer-events-none"
     />
   )
 
@@ -768,17 +805,18 @@ function Board({
           className={scrolls ? 'overflow-x-auto scroll-strip' : ''}
         >
           <div className={`flex items-center ${GAP} px-3 py-1.5 ${scrolls ? 'w-max min-w-full' : ''}`}>
-            <span className={PIN_L}>
+            <span className={pin('l', '-my-1.5 py-1.5')}>
               <span className="text-[13px] tracking-widest uppercase text-ink/65 w-5 flex-shrink-0">Pos</span>
               <span className={`text-[13px] tracking-widest uppercase text-ink/65 min-w-0 ${NAME_W}`}>Name</span>
+              {shadeL}
             </span>
             {showRounds && rounds.map(r => (
               <span key={r.id} className={`${CELL} text-[13px] text-ink/65 tabular-nums`}>
                 {r.round_number}
               </span>
             ))}
-            <span className={`${PIN_R} relative`}>
-              {shade}
+            <span className={pin('r', '-my-1.5 py-1.5')}>
+              {shadeR}
               <span className="block w-14 text-right text-[13px] tracking-widest uppercase text-ink/65">Tot</span>
             </span>
           </div>
@@ -812,7 +850,7 @@ function Board({
                   scrolls ? 'w-max min-w-full' : 'w-full'
                 } ${!isLast || isExpanded ? 'border-b border-bark/12' : ''}`}
               >
-                <span className={PIN_L}>
+                <span className={pin('l', '-my-2 py-2')}>
                   <span className="t-cap text-ink/65 tabular-nums w-5 flex-shrink-0">{i + 1}</span>
 
                   <span className={`block min-w-0 ${NAME_W}`}>
@@ -829,6 +867,7 @@ function Board({
                       </span>
                     )}
                   </span>
+                  {shadeL}
                 </span>
 
                 {showRounds && rounds.map(r => {
@@ -867,8 +906,8 @@ function Board({
                     total is always a real number — including a legitimate 0. */}
                 {/* The total is the primary datum, so it is plain ink. Emerald
                     on this board means one thing only: still being played. */}
-                <span className={`${PIN_R} relative`}>
-                  {shade}
+                <span className={pin('r', '-my-2 py-2')}>
+                  {shadeR}
                   <span className="block w-14 text-right t-num font-semibold text-xl text-ink">
                     {formatScore(row.total)}
                   </span>

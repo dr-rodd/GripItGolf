@@ -453,7 +453,7 @@ section('A board with columns off the edge says so')
     '  …and a board with nothing hidden shows no shadow')
 
   ok(many.includes('overflow-x-auto scroll-strip'), 'six rounds scroll')
-  ok(many.includes('scroll-shade'), '  …and carry the shade that says so')
+  ok(many.includes('scroll-shade-r'), '  …and carry the shade that says so')
 
   // The shade is an element, not a background, so it can only be painted
   // when something is actually hidden. That is a boolean, and its starting
@@ -462,6 +462,17 @@ section('A board with columns off the edge says so')
   // every phone without the cue for a frame.
   ok(!few.includes('scroll-shade'),
     'a board with nothing hidden paints no shade, even before anything is measured')
+
+  // Both ends get one, and the left-hand one is seeded the other way: it
+  // starts false, because until something has been scrolled past there is
+  // genuinely nothing hidden behind the names. Painting it on arrival would
+  // be a shadow cast by nothing.
+  ok(!many.includes('scroll-shade-l'),
+    'nothing is hidden to the left until the board has been scrolled')
+  const boardSrc = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  ok(/scroll-shade-l/.test(boardSrc), '  …but the left-hand shade exists to be shown')
+  ok(/setMoreLeft\(el\.scrollLeft > 1\)/.test(boardSrc),
+    '  …once the scroller has moved off the start')
 
   // One more column on screen before the first swipe: the name column, the
   // cell and the gap each gave up a little. All three, or the column that
@@ -494,14 +505,33 @@ section('The board is one scroller, and the rows are one element')
   ok(board.indexOf('ref={head}') < board.indexOf('ref={body}'),
     '  …and the table is the scroller below them')
 
-  // The pinned ends pull the row's own padding into themselves. Pinned at
-  // `left-3` instead, the background starts where the content does and the
-  // cells sliding underneath show through the gutter beside it — numbers
-  // leaking out from behind the names.
-  ok(/sticky left-0[^`']*-ml-3 pl-3/.test(board),
+  // Every one of these is about the pinned column's *background*, and each
+  // has its own way of leaving a gap for the cells to show through.
+
+  // Horizontally: pinned at `left-3` instead, the background starts where
+  // the content does and the cells show through the gutter beside it.
+  ok(/left-0 -ml-3 pl-3/.test(board),
     'the left end pins to the card edge and paints the gutter beside it')
-  ok(/sticky right-0[^`']*-mr-3 pr-3/.test(board),
-    'and so does the right')
+  ok(/right-0 -mr-3 pr-3/.test(board), 'and so does the right')
+
+  // Vertically: this is the one that shipped wrong. The row is
+  // `items-center`, so a pinned column sat at its own content height rather
+  // than the row's — taller than the cells on a row carrying a sub-label
+  // and shorter on a row without one, which is why *some* rows looked
+  // transparent and others did not.
+  ok(/self-stretch/.test(board),
+    'a pinned column is as tall as its row, not as tall as the name in it')
+
+  // …and past the row's own padding, or the shades that hang off these
+  // elements stop short at every row boundary.
+  ok(/-my-2 py-2/.test(board) && /-my-1\.5 py-1\.5/.test(board),
+    '  …and fills the row\'s padding too, so the shades join up between rows')
+
+  // `relative` alongside `sticky` would be a coin toss — both are position
+  // utilities and the generated stylesheet decides, not the class attribute.
+  // Sticky is already a positioned ancestor, so the shades need nothing.
+  ok(!/sticky[^`'"]*\brelative\b|\brelative\b[^`'"]*sticky/.test(board),
+    'and nothing asks for two positions at once')
 
   // Pressed is opacity, not a tint. A background tint would have stopped at
   // the pinned columns — the middle darkening while the two ends stayed

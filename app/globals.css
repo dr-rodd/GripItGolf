@@ -224,9 +224,18 @@ body {
    Down twelve rows that is a string of ovals with a pinch at every
    boundary rather than an edge.
 
+   One per pinned column, named for the column it hangs off rather than
+   for the direction it fades — `-l` is cast by the pinned Name column
+   and therefore falls to the *right* of it, over the columns hidden
+   behind it, and `-r` is the mirror. Naming them by the fade is how you
+   end up with the shadow on the wrong side of the thing casting it.
+
    `rgba(255,255,255,0)` rather than `transparent`: Safari interpolates
    the keyword through black and the fade comes out dirty. */
-.scroll-shade {
+.scroll-shade-l {
+  background: linear-gradient(to right, rgba(74, 55, 40, 0.10), rgba(255, 255, 255, 0));
+}
+.scroll-shade-r {
   background: linear-gradient(to left, rgba(74, 55, 40, 0.10), rgba(255, 255, 255, 0));
 }
 
