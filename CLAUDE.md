@@ -131,13 +131,29 @@ That panel is reachable from platform trips: `CourseDashboardClient` renders it,
 - Act immediately on single-file, routine changes — no need to ask first.
 - Pause and confirm first for anything multi-file, or touching schema/migrations: list what's about to change, then wait for a yes.
 - Build in stages — test between dependent steps, don't chain too many changes at once.
-- **Always push to `master`. Never a branch, never a PR** — `master` is what Vercel deploys to greendot.live, so work anywhere else is invisible to Big Dog. If a session is started on a branch (some tooling does this automatically), say so at the start and push to `master` anyway.
+- **Always push to `master`. Never a branch, never a PR** — `master` is what Vercel deploys to greendot.live, so work anywhere else is invisible to Big Dog. If a session is started on a branch (some tooling does this automatically), say so at the start and push to `master` anyway. Reaffirmed deliberately, not by default: see "Pushing straight to production" below.
 - Before reporting a fix as done, check that what was tested is what is deployed: `git log --oneline origin/master -1`. A screenshot from greendot.live is always `master`, never the working tree — a fix left on an unmerged branch comes back as "that didn't work" when the fix was fine and simply not live.
 - Never expose the service role key client-side.
 - All queries must filter by `trip_id`.
 - When changing a function's signature, grep every call site by function name (not by argument variable names) and check each by hand.
 - Scale verification effort to the change's risk — table in `docs/testing-and-data.md`. `npm test`, typecheck and build are the floor for everything.
 - Keep this file current — a decision made but not written here causes inconsistency across sessions.
+
+## Pushing straight to production
+
+Every push to `master` deploys to greendot.live within a minute or two. There is no staging step and, by decision, no branch to check first. That was re-examined and re-chosen — **while there are no live trips.** The reasoning, and the condition, both matter:
+
+- The cost of a bad deploy right now is a few minutes of a broken site nobody is on. Once groups are out on a course scoring, the same deploy is visible to everyone at once, mid-round, and there is no way to tell them to wait.
+- The safety net is the test suite, which is structural: it catches a component that stopped rendering, a rule that changed, a colour that fails contrast. It cannot tell whether a screen *looks right on a phone*. That check happens on greendot.live, after the fact.
+- **Instant Rollback is the real backstop.** Vercel keeps every past deployment; the project dashboard has a one-click rollback on each. Live again in about thirty seconds, and it needs nobody's help. Reach for this first when something ships broken, before debugging under pressure.
+
+**When trips go live, this decision has to be taken again** — not silently kept. Vercel builds a preview deployment for any branch push, on its own URL, with no setup: that is the protected environment for anything worth eyeballing before the field sees it. Two things to know before relying on it: preview shares the production Supabase, so it is safe for looking and not for writing test data; and `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` must be ticked for **Preview** in the Vercel environment variables, or preview builds fail on the same "Missing Supabase environment variables" error a local build without a `.env` hits.
+
+### The stop hook that cries wolf
+
+Sessions are often started on a `claude/…` branch by the tooling. The stop hook does not read the branch's configured upstream — it looks for a *remote branch of the same name*, and one is created at session start. Since every push goes to `master`, that ref never moves, and the hook reports a climbing count of "unpushed commits" that were all pushed.
+
+The fix is one command, not a nineteen-turn argument: `git checkout -B master <current HEAD>` with a clean tree. Same commit, no file touched, and the hook then compares `master` against `origin/master` and finds nothing. Do it early rather than declining the hook repeatedly.
 
 ## Terminal use — last resort only
 
