@@ -508,12 +508,60 @@ section('The route cannot become a proxy, or a cache that never hits')
     'recording a failure keeps the forecast it already had')
 }
 
+// ─── Nothing answers with nothing ──────────────────────────────
+
+async function emptyBodyCheck() {
+  section('However it fails, the route says so')
+  // Not structural — this calls the handler.
+  //
+  // The first check of this feature on a phone showed a blank page, twice.
+  // A blank page is indistinguishable from a route that was never deployed,
+  // a crash, and a browser rendering nothing — three different faults, no way
+  // to tell them apart, on the device the whole app is built for.
+  //
+  // The cause was that `createAdminClient` throws when its environment is
+  // missing, and an uncaught throw in a route handler is a 500 with an EMPTY
+  // body. This suite runs with no Supabase environment, so that is exactly
+  // the state reproduced here.
+  const { NextRequest } = await import('next/server')
+  const { GET } = await import('../app/api/weather/route')
+
+  // The handler logs the throw it catches, which is right in production and
+  // alarming in a passing test run. Silenced for the three calls below and
+  // put straight back.
+  const realError = console.error
+  console.error = () => {}
+
+  for (const [label, url] of [
+    ['a slug', 'https://x.test/api/weather?slug=old-head'],
+    ['an id', 'https://x.test/api/weather?course=00000000-0000-4000-8000-000000000000'],
+    ['nothing usable', 'https://x.test/api/weather?slug=%20'],
+  ] as const) {
+    let body = ''
+    let status = 0
+    let threw = false
+    try {
+      const res = await GET(new NextRequest(url))
+      status = res.status
+      body = await res.text()
+    } catch { threw = true }
+
+    ok(!threw, `asked with ${label}, the handler does not throw`)
+    ok(body.length > 0, `  …and answers with a body (${body.length} chars)`)
+    ok(status > 0 && status < 600, `  …and a real status (${status})`)
+  }
+
+  console.error = realError
+}
+
 // ─── Result ────────────────────────────────────────────────────
 
-console.log('\n' + '─'.repeat(56))
-if (failed === 0) console.log(`✓ all ${passed} checks passed`)
-else {
-  console.log(`✗ ${failed} of ${passed + failed} failed\n`)
-  for (const f of failures) console.log(`  · ${f}`)
-  process.exit(1)
-}
+emptyBodyCheck().then(() => {
+  console.log('\n' + '─'.repeat(56))
+  if (failed === 0) console.log(`✓ all ${passed} checks passed`)
+  else {
+    console.log(`✗ ${failed} of ${passed + failed} failed\n`)
+    for (const f of failures) console.log(`  · ${f}`)
+    process.exit(1)
+  }
+})

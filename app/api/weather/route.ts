@@ -79,6 +79,29 @@ type CacheRow = {
  * is scoped to platform courses, so it cannot reach into a trip.
  */
 export async function GET(req: NextRequest) {
+  // **Nothing gets out of here without a body.**
+  //
+  // Everything below returns one, but `createAdminClient` throws when its
+  // environment is missing and a Supabase call can throw on a network fault —
+  // and an uncaught throw in a route handler is a 500 with an EMPTY body.
+  //
+  // That is the worst possible answer, because a blank page is
+  // indistinguishable from a route that was never deployed, a crash, and a
+  // browser that renders nothing. It cost a round trip to a phone and back to
+  // find out which. Whatever breaks, this says so in words.
+  const human = !req.nextUrl.searchParams.get('course')
+    && (req.nextUrl.searchParams.get('slug') ?? '').trim() !== ''
+    && req.nextUrl.searchParams.get('format') !== 'json'
+  try {
+    return await handle(req)
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e)
+    console.error('weather route threw:', e)
+    return fault(`The forecast could not be loaded: ${why}`, 500, human)
+  }
+}
+
+async function handle(req: NextRequest) {
   const params = req.nextUrl.searchParams
   const courseId = params.get('course') ?? ''
   const slug = (params.get('slug') ?? '').trim().toLowerCase()
