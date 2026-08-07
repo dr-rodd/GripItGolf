@@ -27,7 +27,9 @@ import {
 } from '@/lib/teamSets'
 import { setTeam } from '@/lib/teamMembers'
 import { why } from '@/lib/writeFailure'
-import { parseHandicap, formatHandicap } from '@/lib/handicap'
+import {
+  parseHandicap, formatHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING,
+} from '@/lib/handicap'
 import HandicapField from '@/app/components/HandicapField'
 import { duplicateName, duplicateNameError, isDuplicateNameError } from '@/lib/roster'
 import { syncRoundHandicaps } from '@/lib/roundHandicaps'
@@ -294,6 +296,9 @@ export default function TripSetupClient({
       flashError('Enter a name and handicap first')
       return
     }
+    // Asked before the write, and only for the one value that means the
+    // opposite of what it looks like — see PLUS_HANDICAP_WARNING.
+    if (isPlusHandicap(hcp) && !window.confirm(PLUS_HANDICAP_WARNING)) return
     // Two people on one trip cannot share a name: the join list is a list of
     // names, and two of the same is a coin toss over whose card is whose.
     if (duplicateName(trimmed, players)) {
@@ -836,7 +841,13 @@ export default function TripSetupClient({
                           defaultValue={player.handicap == null ? '' : formatHandicap(player.handicap)}
                           onCommit={text => {
                             const v = parseHandicap(text)
-                            if (v !== null && v !== player.handicap) updatePlayer(player.id, { handicap: v })
+                            if (v === null || v === player.handicap) return
+                            // Once, on the change that introduces it. The
+                            // blur that follows the sign button commits the
+                            // same value, which this guard has already
+                            // returned on, so it cannot ask twice.
+                            if (isPlusHandicap(v) && !window.confirm(PLUS_HANDICAP_WARNING)) return
+                            updatePlayer(player.id, { handicap: v })
                           }}
                           placeholder="HCP"
                           disabled={locked}

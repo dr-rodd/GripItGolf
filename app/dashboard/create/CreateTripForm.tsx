@@ -16,7 +16,7 @@ import Toggle from '@/app/components/Toggle'
 import {
   MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError,
 } from '@/lib/passcode'
-import { parseHandicap } from '@/lib/handicap'
+import { parseHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
 import HandicapField from '@/app/components/HandicapField'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 
@@ -189,6 +189,15 @@ export default function CreateTripForm() {
   // ── Submit ───────────────────────────────────────────────────────────────
 
   async function handleSubmit() {
+    // Before anything is created, and named so the question can be answered.
+    // A whole roster is entered on one screen here, so "did you mean +2"
+    // with no name attached would be a riddle — see PLUS_HANDICAP_WARNING.
+    for (const p of players) {
+      if (!p.name.trim()) continue
+      if (!isPlusHandicap(parseHandicap(p.handicap))) continue
+      if (!window.confirm(`${p.name.trim()} — ${PLUS_HANDICAP_WARNING}`)) return
+    }
+
     setSubmitting(true)
     setError(null)
 

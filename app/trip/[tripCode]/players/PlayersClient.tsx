@@ -4,7 +4,9 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { rememberPlayer } from '@/lib/playerCookie'
-import { parseHandicap, formatHandicap } from '@/lib/handicap'
+import {
+  parseHandicap, formatHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING,
+} from '@/lib/handicap'
 import HandicapField from '@/app/components/HandicapField'
 import { syncRoundHandicaps } from '@/lib/roundHandicaps'
 import { ROUND_TILE } from '@/lib/roundState'
@@ -130,6 +132,9 @@ export default function PlayersClient({
       setError(`${duplicateNameError(name)} If that is you, tap your name above.`)
       return
     }
+    // The one value on this form that means the opposite of what it looks
+    // like, asked before it is written — see PLUS_HANDICAP_WARNING.
+    if (isPlusHandicap(handicap) && !window.confirm(PLUS_HANDICAP_WARNING)) return
 
     setAdding(true)
     // The id comes back from the insert — that is the id the cookie stores,

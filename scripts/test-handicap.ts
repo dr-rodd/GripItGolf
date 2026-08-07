@@ -26,6 +26,7 @@
 import { readFileSync } from 'fs'
 import {
   shotsReceived, formatHandicap, parseHandicap, HANDICAP_INPUT,
+  isPlusHandicap, PLUS_HANDICAP_WARNING,
 } from '../lib/handicap'
 
 let passed = 0, failed = 0
@@ -165,6 +166,47 @@ section('Reading one back off a keypad')
     ok(shared >= fields && shared > 0,
       `  …every handicap field there is the shared one`)
   }
+}
+
+// ─── A plus handicap is asked about before it is stored ────────
+
+section('Nothing writes a plus handicap without asking')
+{
+  // It is the one entry on these forms that means the opposite of what it
+  // looks like: "+2" is a better player than "2", is stored as -2, and gives
+  // shots back rather than receiving them. Entered by mistake, nothing
+  // downstream ever questions it — the trigger scores the card, the board
+  // reads it, and the only symptom is a leaderboard that looks wrong for a
+  // reason nobody can find.
+  eq(isPlusHandicap(-1), true, 'a plus handicap is the negative one')
+  eq(isPlusHandicap(0), false, 'scratch is not plus')
+  eq(isPlusHandicap(12), false, 'nor is an ordinary handicap')
+  eq(isPlusHandicap(null), false, 'nor is a blank')
+  ok(/Hold on there Cowboy/.test(PLUS_HANDICAP_WARNING), 'and the warning is written once, here')
+
+  // Every form that writes one asks first. Listed rather than inferred: a
+  // fifth entry point added later should fail this until it is added.
+  const fs = require('fs') as typeof import('fs')
+  const WRITERS = [
+    'app/dashboard/create/CreateTripForm.tsx',
+    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
+    'app/trip/[tripCode]/players/PlayersClient.tsx',
+  ]
+  const asksIn = (src: string) =>
+    (src.match(/isPlusHandicap\([^\n]*\)[\s\S]{0,120}?PLUS_HANDICAP_WARNING/g) ?? []).length
+
+  for (const f of WRITERS) {
+    const src = fs.readFileSync(f, 'utf-8')
+    const name = f.split('/').pop()
+    ok(asksIn(src) > 0, `${name} asks before storing one`)
+    ok(!/Hold on there/.test(src), `  …without keeping its own copy of the words`)
+  }
+
+  // Settings is the one with two ways in — the add-player form and the
+  // editable row — and a guard on only the first would leave the commonest
+  // route, correcting a handicap already on the trip, unasked.
+  eq(asksIn(fs.readFileSync(WRITERS[1], 'utf-8')), 2,
+    'settings asks on both of its paths: adding a player, and editing one')
 }
 
 // ─── Nothing prints one raw ────────────────────────────────────

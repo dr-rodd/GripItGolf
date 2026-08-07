@@ -87,6 +87,35 @@ export function parseHandicap(raw: string): number | null {
 }
 
 /**
+ * What is said before a plus handicap is stored.
+ *
+ * A plus handicap is rare and it is the one entry on these forms that means
+ * the opposite of what it looks like: "+2" is a better player than "2", and
+ * it is stored as -2 and gives shots back rather than receiving them. Typed
+ * or tapped by mistake, nothing downstream ever questions it — the trigger
+ * scores the card, the board reads it, and the only sign is a leaderboard
+ * that looks wrong for reasons nobody can find.
+ *
+ * So it is asked once, at the moment it is submitted. Every form that writes
+ * a handicap shows this same sentence, from here, rather than four of its
+ * own.
+ */
+export const PLUS_HANDICAP_WARNING =
+  'Hold on there Cowboy! Did you mean to select (+) Handicap. ' +
+  'This indicates handicaps better than scratch (0)'
+
+/**
+ * Whether a stored handicap is a plus one — better than scratch.
+ *
+ * The sign is the whole test, and it is worth a name because `h < 0` reads
+ * as "worse than nothing" everywhere it appears and means the opposite.
+ * Zero is scratch, not plus.
+ */
+export function isPlusHandicap(h: number | null | undefined): boolean {
+  return h != null && h < 0
+}
+
+/**
  * What the keyboard should offer.
  *
  * A decimal keypad, which is the right keyboard for 14.2 — and has no `+` on
