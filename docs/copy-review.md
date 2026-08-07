@@ -40,21 +40,21 @@ The site currently uses five different words for the same person: *organiser*
 created it* (passcode gate, setup), and *the device this trip was created on*
 (permissions).
 - Now: mixed — organiser / lead player / trip owner / whoever created it
-- New:
+- New: lead player
 
 **X-02 · What do we call a leaderboard?**
 Currently *leaderboard*, *board*, and *competition* are all used for the same
 object — "No competitions switched on for this trip" sits on a screen of things
 called leaderboards.
 - Now: mixed — leaderboard / board / competition
-- New:
+- New: leaderboard
 
 **X-03 · What do we call the settings screen?**
 The tab is labelled **Settings**; the create screen calls it **trip settings**;
 the matchplay screen calls it **Trip Setup**; the leaderboard calls it **Trip
 Setup** too.
 - Now: mixed — Settings / trip settings / Trip Setup
-- New:
+- New: Trip setup. Trip Settings can be the gear icon, currently Trip details.
 
 **X-04 · Button capitalisation: sentence case or Title Case?**
 Both are in use, sometimes on the same screen. Sentence case: "Create a trip",
@@ -62,14 +62,14 @@ Both are in use, sometimes on the same screen. Sentence case: "Create a trip",
 "Create Trip", "Copy Code", "Go to Your Trip", "Start Round", "Close Live
 Round", "Score Another Player", "Void Live Session", "Clear All Live Data".
 - Now: mixed
-- New:
+- New: Sentence if sentence (Create a trip). Title if title (Start Round)
 
 **X-05 · Error voice.**
 Three registers are in play: calm ("Could not save — try again"), blunt ("Failed
 to commit scores", "Void failed"), and apologetic ("Please try again"). Pick one
 shape and every error message will be rewritten to it.
 - Now: mixed — Could not… / Failed to… / Please…
-- New:
+- New: calm
 
 **X-06 · The em-dash.**
 Almost every explanation on the site is built as `statement — qualifier`. It's a
@@ -83,7 +83,7 @@ Used as *Claim your spot* (banner), *Claim a spot* (roster link), *claim their
 spot* (pending note), and *Tap your name* (the actual screen). Four phrasings
 for one action.
 - Now: mixed
-- New:
+- New:Claim your spot
 
 **X-08 · British spelling.**
 Currently British throughout — *finalise*, *organiser*, *per cent*, *towards*,
@@ -105,7 +105,7 @@ bring them into line?
 
 **L-01 · Hero line** · `app/Landing.tsx:143`
 - Now: Live scoring, leaderboards and matchplay for your golf trip. Tap below to start one, or to join a trip you have a code for.
-- New:
+- New: Live scoring, leaderboards and matchplay for your golf trip.
 
 **L-02 · Primary button** · `app/Landing.tsx:155`
 - Now: Create a trip
@@ -117,18 +117,18 @@ bring them into line?
 
 **L-04 · Footnote under the buttons** · `app/Landing.tsx:167`
 - Now: Your handicap is the best 8 of your last 20 rounds. On the graph, those eight are green dots.
-- New:
+- New: "Right now that dot is both green and not green. You decide what it becomes" - Erwin Schrödinger
 
 **L-05 · Site tagline (stored centrally, used for branding)** · `config/site.ts:8`
 - Now: Your handicap is the best 8 of your last 20. Go and get a green dot.
 - New:
 
 **L-06 · Browser tab / search-result description** · `app/layout.tsx:32`
-- Now: Your handicap is the best 8 of your last 20. Live scoring, leaderboards and matchplay for your golf trip.
+- Now: Live scoring, leaderboards and matchplay for your golf trip.
 - New:
 
 **L-07 · Browser tab title** · `app/layout.tsx:30`
-- Now: green dot.
+- Now: green dot golf.
 - New:
 
 **L-08 · Header back-link (screen readers)** · `app/components/TripHeader.tsx:109`
@@ -172,7 +172,7 @@ bring them into line?
 ### Step 1 — Trip details
 
 **C-03 · Trip name label / example** · `CreateTripForm.tsx:518,523`
-- Now: Trip name  /  e.g. Portugal 2027
+- Now: Trip name  /  e.g. Irish Links Tour 2027
 - New:
 
 **C-04 · Email label** · `CreateTripForm.tsx:541`
@@ -180,7 +180,7 @@ bring them into line?
 - New:
 
 **C-05 · Why we ask for an email** · `CreateTripForm.tsx:556`
-- Now: So we can confirm your trip and keep you updated. Leave it blank if you would rather not — the trip works either way, and no other player ever sees it.
+- Now: So we can confirm your trip and keep you updated.
 - New:
 
 ### Step 2 — Itinerary
@@ -195,7 +195,7 @@ bring them into line?
 
 **C-08 · Empty day** · `ItineraryBuilder.tsx:449`
 - Now: This day is empty.
-- New:
+- New: Nothing added yet. Get your golf in!
 
 **C-09 · Course picker label** · `ItineraryBuilder.tsx:519`
 - Now: Choose a course
@@ -207,7 +207,7 @@ bring them into line?
 
 **C-11 · What extra tee times mean** · `ItineraryBuilder.tsx:560`
 - Now: One round is created for this course. More tee times just means more groups going off.
-- New:
+- New: How many groups are going out?
 
 **C-12 · Accommodation prompt** · `ItineraryBuilder.tsx:574`
 - Now: Where are you staying?
@@ -219,7 +219,7 @@ bring them into line?
 
 **C-14 · Can't continue without golf** · `CreateTripForm.tsx:138`
 - Now: Add at least one round of golf — there is nothing to score without it.
-- New:
+- New: Add at least one round of golf — otherwise what's the point?
 
 ### Step 3 — Players and the settings lock
 
@@ -252,8 +252,8 @@ bring them into line?
 - New:
 
 **C-22 · Lock warning body** · `CreateTripForm.tsx:695`
-- Now: There is no way to add, change or remove it later — otherwise anyone with your trip code could lock you out of your own trip. Write it down.
-- New:
+- Now: There is no way to add, change or remove your passcode later — otherwise anyone with your trip code could lock you out of your own trip. Write it down.
+- New: There is no way to add, change or remove your passcode later — Write it down!
 
 **C-23 · Passcode fields** · `CreateTripForm.tsx:707,717`
 - Now: Passcode (4–8 digits)  /  Enter it again
@@ -279,7 +279,7 @@ bring them into line?
 
 **C-28 · What to do next** · `CreateTripForm.tsx:414`
 - Now: Share this code with your group to join. Next, choose what you’re playing for in trip settings — leaderboards and teams live there. Finalise the trip when everyone’s ready to play.
-- New: *(note: "Finalise the trip" points at a Finalise button that no longer exists on the settings screen — see S-04)*
+- New: Share this code with your group to join. Next, choose leaderboard formats and teams in trip settings.
 
 **C-29 · Code label** · `CreateTripForm.tsx:421`
 - Now: Your Trip Code
@@ -365,7 +365,7 @@ bring them into line?
 
 **H-13 · No travel or stays** · `TravelStays.tsx:71`
 - Now: No travel or accommodation on the itinerary yet. Add it in trip settings and it shows up here.
-- New:
+- New: No travel or accommodation on the itinerary yet. Go to trip settings to add your plans.
 
 **H-14 · Nobody joined** · `page.tsx:424`
 - Now: Nobody has joined this trip yet.
@@ -401,7 +401,7 @@ bring them into line?
 
 **P-01 · Heading** · `app/trip/[tripCode]/players/page.tsx:84`
 - Now: Who are you?
-- New:
+- New: Join the trip!
 
 **P-02 · Instruction** · `PlayersClient.tsx:189`
 - Now: Tap your name
@@ -417,7 +417,7 @@ bring them into line?
 
 **P-05 · Add-yourself link** · `PlayersClient.tsx:227`
 - Now: Not on the list? Add yourself
-- New:
+- New: Can't find your name? Add yourself below
 
 **P-06 · Handicap placeholder** · `PlayersClient.tsx:242`
 - Now: Handicap (e.g. 14.2)
@@ -463,7 +463,7 @@ bring them into line?
 
 **S-02 · Drawer button subtitle** · `TripSetupClient.tsx:484`
 - Now: Name, dates, itinerary, who can edit — everything below is the golf
-- New:
+- New: The non-golf trip details — Golf related settings are below
 
 **S-03 · Itinerary row subtitle** · `TripSetupClient.tsx:550`
 - Now: Courses, tee times, stays and journeys
@@ -471,7 +471,7 @@ bring them into line?
 
 **S-04 · Dates locked because the trip is live** · `TripSetupClient.tsx:533`
 - Now: The trip is live. Unlock it below to change these.
-- New: *(there is no Unlock control below any more — this needs rewriting whatever else changes)*
+- New: delete this line
 
 **S-05 · Itinerary editor close button** · `setup/ItineraryEditor.tsx:90`
 - Now: Close without saving
@@ -485,7 +485,7 @@ bring them into line?
 
 **S-07 · Explanation** · `TripSetupClient.tsx:565,566`
 - Now: Who can change this trip’s players, teams, format and dates. Joining and scoring are open to everyone either way.
-- New:
+- New: Who can change this trip’s players, teams, format and dates.
 
 **S-08 · The two options** · `TripSetupClient.tsx:570,571`
 - Now: Any player  /  Owner only
@@ -519,17 +519,17 @@ bring them into line?
 
 **S-15 · Section blurb** · `TripSetupClient.tsx:651`
 - Now: Safe to change mid-trip. Every card already entered is re-read under the new rules.
-- New:
+- New: Choose your Competition Leaderboards. Add as many formats as you like.
 
 **S-16 · Board needs teams** · `TripSetupClient.tsx:664,665`
 - Now: A pairs draw needs pairings — pick them below.  /  A team board needs teams — pick them below.
-- New:
+- New: This leaderboard needs pairings! Pick them below  /  A team leaderboard needs teams! — pick them below.
 
 ### Teams section
 
 **S-17 · Section blurb** · `TripSetupClient.tsx:687`
 - Now: Which {teams} play for which leaderboard.
-- New:
+- New: Pick your teams! You can pick different teams for different boards.
 
 **S-18 · A board with no teams yet** · `TripSetupClient.tsx:713`
 - Now: No {teams} yet
@@ -561,15 +561,15 @@ bring them into line?
 
 **S-24 · Nothing to play for** · `lib/teamSets.ts:131`
 - Now: Choose what this trip is playing for first.
-- New:
+- New: First you need to create a leaderboard.
 
 **S-25 · Draw needs pairings** · `lib/teamSets.ts:137`
 - Now: Your draw is between pairings — pick them first.
-- New:
+- New: Pick your pairings to see the leaderboard!
 
 **S-26 · Board needs teams** · `lib/teamSets.ts:140,141`
 - Now: The teams for {board name} have not been picked yet.  /  A team leaderboard needs teams — pick them first.
-- New:
+- New: The teams for {board name} have not been picked yet.  /  A team leaderboard needs teams! Pick them in trip settings.
 
 **S-27 · Legacy setup blockers (older trips only)** · `lib/tripSetupFlow.ts:25–33`
 - Now: A trip needs someone competing — pick teams or individuals · Switch on a league or a matchplay draw · A league needs a board — pick one, or switch the league off above · Keep at least one competition switched on
@@ -583,7 +583,7 @@ bring them into line?
 
 **S-29 · Explanation** · `setup/PasscodeGate.tsx:69`
 - Now: {Trip name} was set up with a passcode. Ask whoever created the trip.
-- New:
+- New: {Trip name} was set up with a passcode. Ask whoever created the trip!
 
 **S-30 · Field and button** · `setup/PasscodeGate.tsx:79,92`
 - Now: Passcode  /  Unlock  /  Checking…
@@ -591,7 +591,7 @@ bring them into line?
 
 **S-31 · Wrong passcode** · `setup/PasscodeGate.tsx:46`
 - Now: That passcode is not right.
-- New:
+- New: Incorrect code.
 
 ---
 
@@ -606,7 +606,7 @@ settings and is also what a new trip meets first.
 
 **B-02 · Builder heading, extra board** · `LeaderboardSetup.tsx:315`
 - Now: A second leaderboard
-- New:
+- New: Add another board
 
 **B-03 · Builder heading, editing** · `LeaderboardSetup.tsx:314`
 - Now: Change this leaderboard
@@ -614,65 +614,65 @@ settings and is also what a new trip meets first.
 
 **B-04 · Blurb, first board** · `LeaderboardSetup.tsx:321`
 - Now: What this trip is playing for. Everything else follows from it.
-- New:
+- New: This is your trip's main leaderboard for the trip. You can add secondary leaderboards as well later.
 
 **B-05 · Blurb, extra board** · `LeaderboardSetup.tsx:322`
 - Now: Scored from the same cards, running alongside the first.
-- New:
+- New: Scored from the same cards, it will run alongside your primary board.
 
 **B-06 · Blurb, editing** · `LeaderboardSetup.tsx:319`
 - Now: Every card already entered is re-read under the new rules. Nobody re-enters a score.
-- New:
+- New: Edited leaderboards will re-populate with the already entered scores.
 
 ### Question 1 — who is ranked
 
 **B-07 · Question** · `LeaderboardSetup.tsx:326`
 - Now: Who is being ranked?
-- New:
+- New: Is this a solo or team leaderboard?
 
 **B-08 · Individuals** · `LeaderboardSetup.tsx:328`
 - Now: Individuals — Every player ranked on their own card.
-- New:
+- New: Solo - Every player ranked on their own card.
 
 **B-09 · Teams** · `LeaderboardSetup.tsx:329`
 - Now: Teams — Players grouped, and the teams ranked against each other.
-- New:
+- New: Teams - Add players to teams, and the teams are ranked against each other
 
 ### Question 2 — what they're playing
 
 **B-10 · Question** · `LeaderboardSetup.tsx:345`
 - Now: What are they playing?
-- New:
+- New: Pick the format.
 
 **B-11 · League** · `LeaderboardSetup.tsx:349`
 - Now: League — Every round counts towards a running table.
-- New:
+- New: League — Everyone ranked on a running table.
 
 **B-12 · Matchplay** · `LeaderboardSetup.tsx:357`
 - Now: Matchplay — A knockout draw, generated at random.
-- New:
+- New: Matchplay — A knockout bracket.
 
 **B-13 · Matchplay already taken** · `LeaderboardSetup.tsx:356`
 - Now: This trip already has a draw — only one is possible.
-- New:
+- New: Only one matchplay bracket can be created at a time.
 
 **B-14 · Matchplay footnote** · `LeaderboardSetup.tsx:468–471`
 - Now: The draw is generated at random once the players are in. A manual draw can come later. Pairings are teams of two, named by their players.
-- New:
+- New: The draw will be generated at random.
 
 ### Question 3 — how a round is scored
 
 **B-15 · Question** · `LeaderboardSetup.tsx:368`
 - Now: How is a round scored?
-- New:
+- New: How should the rounds be scored?
 
 **B-16 · Stableford** · `lib/leaderboards.ts:89,90`
 - Now: Stableford — Points per hole against your handicap. Highest wins.
-- New:
+- New: Stableford Points - Man's greatest achievement
 
 **B-17 · Strokes** · `lib/leaderboards.ts:91,92`
 - Now: Strokes — Nett strokes. Lowest wins.
-- New:
+- New: Strokes - Simple as. 
 
 ### Question 4 — how a team combines (team boards only)
 
@@ -690,11 +690,11 @@ settings and is also what a new trip meets first.
 
 **B-21 · Cut the dead weight** · `lib/leaderboards.ts:100,101`
 - Now: Cut the dead weight — Everyone counts except the worst card of the day. They are back in next round.
-- New: *(see X-09)*
+- New: Cut the dead weight — Everyone counts except the worst card of the day.
 
 **B-22 · Aggregate** · `lib/leaderboards.ts:113,114`
 - Now: Aggregate — Every score in the team counts.
-- New:
+- New: 
 
 ### Question 5 — how the rounds add up
 
@@ -708,7 +708,7 @@ settings and is also what a new trip meets first.
 
 **B-25 · Points by position** · `lib/leaderboards.ts:120,121`
 - Now: Points by position each round — You decide what winning a round is worth.
-- New:
+- New: 
 
 ### The prize table
 
@@ -718,7 +718,7 @@ settings and is also what a new trip meets first.
 
 **B-27 · Explanation, field known** · `LeaderboardSetup.tsx:154`
 - Now: One row per finisher, for the {8} {players} on this trip. Leave it as it stands and it keeps up as more join; change a figure and it stays changed.
-- New:
+- New: No explanation needed
 
 **B-28 · Explanation, field not known** · `LeaderboardSetup.tsx:155`
 - Now: The {teams} are not picked yet, so this is a placeholder — leave it and the table sizes itself to them. Change a figure and it stays changed.
@@ -746,7 +746,7 @@ settings and is also what a new trip meets first.
 
 **B-33 · Question** · `LeaderboardSetup.tsx:454`
 - Now: Cut everyone's handicap for this board?
-- New:
+- New: Do you want to apply a handicap reduction.
 
 **B-34 · Options** · `LeaderboardSetup.tsx:204,215`
 - Now: Off  /  {85}%  /  Something else
@@ -836,10 +836,10 @@ settings and is also what a new trip meets first.
 
 **T-02 · Pick boards first** · `TripTeamsClient.tsx:675`
 - Now: Pick the leaderboards these teams should play for, then choose the teams. Tick more than one to have them share the same teams.
-- New:
+- New: Pick the leaderboards, then choose the teams.
 
 **T-03 · Boards already set** · `TripTeamsClient.tsx:677`
-- Now: Tap a leaderboard to see its teams, or to change them.
+- Now: Tap a leaderboard to see and edit teams.
 - New:
 
 **T-04 · Continue button** · `TripTeamsClient.tsx:699`
@@ -852,11 +852,11 @@ settings and is also what a new trip meets first.
 
 **T-06 · Picker blurb** · `TripTeamsClient.tsx:734`
 - Now: Every change saves as you make it. Confirm when you are happy and the leaderboard updates.
-- New:
+- New: Press confirm when you're done.
 
 **T-07 · Everyone placed** · `TripTeamsClient.tsx:222`
 - Now: Everyone has a team
-- New:
+- New: Everyone's in
 
 **T-08 · Share these teams with another board** · `TripTeamsClient.tsx:751`
 - Now: Play these {teams} for another leaderboard too?
@@ -868,7 +868,7 @@ settings and is also what a new trip meets first.
 
 **T-10 · Pairs draw not ready** · `lib/teamLimits.ts:115,124,128,132`
 - Now: Pick the pairings before drawing the bracket. · {A, B} have more than 2 players. A pairing is two. · {A} is short of a player. · {3} players still have no pairing.
-- New:
+- New: Pick the pairings before drawing the bracket. · {A, B} have more than 2 players. · {A} is short of a player. · {3} players still have no pairing.
 
 **T-11 · Save failed** · `lib/writeFailure.ts:6`
 - Now: Could not add teams
@@ -886,7 +886,7 @@ settings and is also what a new trip meets first.
 
 **M-02 · What the draw does** · `setup/MatchplayPanel.tsx:111–113`
 - Now: A knockout draw between {players}. Top seeds are kept apart, and byes are handed out when the count isn’t a power of two.
-- New:
+- New: A knockout draw between {players}. Top seeds are kept apart, byes may be needed if players don't match up equally.
 
 **M-03 · Bracket exists badge** · `setup/MatchplayPanel.tsx:107`
 - Now: Bracket drawn
@@ -902,7 +902,7 @@ settings and is also what a new trip meets first.
 
 **M-06 · Reshuffle warning, results exist** · `setup/MatchplayPanel.tsx:156,157,161`
 - Now: This will erase {4} results already recorded for this bracket.  /  A new draw is generated from scratch. Those match outcomes cannot be recovered. Hole scores and the other leaderboards are untouched.
-- New:
+- New: This will erase {4} results already recorded for this bracket.  /  A new draw will be generated from scratch. Match outcomes cannot be recovered.
 
 **M-07 · Reshuffle, nothing played** · `setup/MatchplayPanel.tsx:166–168`
 - Now: This will regenerate the bracket from the {8} players registered now. Nothing has been played yet, so nothing is lost.
@@ -936,7 +936,7 @@ settings and is also what a new trip meets first.
 
 **M-14 · Change-the-winner sheet** · `MatchplayBracket.tsx:634,658,661`
 - Now: Change the winner  /  This will void all subsequent results.  /  Every result recorded after this one in the same line of the draw is cleared and must be entered again. It cannot be undone.
-- New:
+- New: Change the winner  /  This will void all subsequent results.  /  All subsequent results will need to be entered again.
 
 **M-15 · Margin field** · `MatchplayBracket.tsx:672`
 - Now: Margin — optional
@@ -952,19 +952,19 @@ settings and is also what a new trip meets first.
 
 **D-01 · Nothing switched on** · `TripLeaderboardClient.tsx:859`
 - Now: No competitions switched on for this trip.
-- New:
+- New: Create a leaderboard in Trip Setup.
 
 **D-02 · No teams yet** · `TripLeaderboardClient.tsx:868`
 - Now: No teams with players yet. Set them up in Trip Setup.
-- New:
+- New: Set teams in Trip Setup
 
 **D-03 · No scores yet** · `TripLeaderboardClient.tsx:869`
 - Now: No scores yet. The board fills in as play starts.
-- New:
+- New: No scores yet.
 
 **D-04 · How to read the table** · `TripLeaderboardClient.tsx:959`
 - Now: Swipe the rounds sideways, or tap a row to see them all.
-- New:
+- New: Swipe to switch round.
 
 **D-05 · A round still being played** · `TripLeaderboardClient.tsx:102,689,930`
 - Now: Card still open · Card still open — against level so far · In play — against level
@@ -1032,11 +1032,11 @@ settings and is also what a new trip meets first.
 
 **R-09 · Voiding a whole card** · `CourseDashboardClient.tsx:747`
 - Now: Deletes this card's scores and takes the round off the leaderboard. It cannot be undone.
-- New:
+- New: Deletes this card's scores and takes the round off the leaderboard. This cannot be undone.
 
 **R-10 · Voiding an in-progress card** · `CourseDashboardClient.tsx:748`
 - Now: Deletes the holes already entered on this card. It cannot be undone.
-- New:
+- New: Deletes the holes already entered on this card. This cannot be undone.
 
 **R-11 · Removing one player** · `CourseDashboardClient.tsx:806,853`
 - Now: Remove from scorecard?  /  Reopens at hole 18. Other players on this card keep finalised state.
@@ -1074,7 +1074,7 @@ settings and is also what a new trip meets first.
 
 **R-19 · Resume failed** · `LiveScoringFlow.tsx:515,887`
 - Now: Could not load the scores already on this card. Check your connection and try again — …  /  Scorecard could not be loaded
-- New:
+- New: Could not load already sumbitted scores. Check your connection and try again — …  /  Scorecard could not be loaded
 
 **R-20 · Nothing to submit** · `LiveScoringFlow.tsx:776`
 - Now: There are no scores on this card to submit. If scores were entered earlier, …
@@ -1082,7 +1082,7 @@ settings and is also what a new trip meets first.
 
 **R-21 · Void confirmation** · `LiveScoringFlow.tsx:850`
 - Now: This voids the scorecard and releases all players. Every hole already entered on it is deleted, and the round comes off the leaderboard.
-- New:
+- New: This will void this scorecard and release all players. Every score already entered will be deleted, and be removed from the leaderboard.
 
 **R-22 · Submitted** · `LiveScoringFlow.tsx:1634,1639,1642`
 - Now: Saved to the official leaderboard.  /  Score Another Player  /  Close Live Round
@@ -1110,7 +1110,7 @@ settings and is also what a new trip meets first.
 
 **W-03 · Too far ahead** · `CourseWeather.tsx:121`
 - Now: Too far out for a forecast — check back nearer the day.
-- New:
+- New: Too far out for a forecast — check back nearer to the trip.
 
 **W-04 · Tee-time label** · `CourseWeather.tsx:134`
 - Now: At the first tee
