@@ -92,6 +92,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `lib/rowContext.ts` | Raw rows → a `RowContext`, via `buildRowContext`. **The only assembly there is** — the leaderboard and the hub both call it. Fetching is each caller's own; deciding never is |
 | `lib/courseCard.ts` | A course's card, two nines with their pars. **One set of numbers, never two** — the ladies card or the men's, decided by who is holding the phone. No yardages: those columns have never held a value |
 | `lib/nextMatch.ts` | The next tie: opponent known, undecided, a bye, or out. In a pairs draw the entrant is the pairing on *that draw's* sheet |
+| `app/components/CourseWeather.tsx` | The weather, in two shapes from one component — the round page's block and the hub's one line — so the two cannot disagree about the same course. Fetched in the browser: the hub does not know which round is next until hydration. **The line variant renders no anchor**, because the up-next block it sits in is already inside a `<Link>` |
 | `app/components/Section.tsx` | The collapsible hub sections. One open at a time — the stack owns that, not the section |
 | `lib/currentPlayer.ts` | Cookie → the player holding this phone, matched against this trip's roster. **Personalises, never authorises** |
 | `lib/roundHandicaps.ts` | The `round_handicaps` snapshot, written on a handicap edit and when somebody joins after the rounds exist |

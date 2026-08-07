@@ -508,6 +508,44 @@ section('The route cannot become a proxy, or a cache that never hits')
     'recording a failure keeps the forecast it already had')
 }
 
+// ─── The two placements ────────────────────────────────────────
+
+section('The hub line stays out of the link it sits inside')
+{
+  const fs = require('fs') as typeof import('fs')
+  const comp = fs.readFileSync('app/components/CourseWeather.tsx', 'utf-8')
+  const hub = fs.readFileSync('app/trip/[tripCode]/StatusBlock.tsx', 'utf-8')
+
+  // `StatusBlock` wraps the whole up-next block in a <Link> to the round page
+  // whenever the next item is golf — which is exactly when the weather line
+  // shows. An <a> inside an <a> is invalid HTML: React complains and browsers
+  // resolve it inconsistently.
+  ok(/<Link[\s\S]{0,200}<UpNextLines/.test(hub),
+    'the up-next block is inside a Link when the next item is golf')
+
+  const line = comp.slice(comp.indexOf('function Line('))
+  ok(!/<a\b/.test(line), '  …so the line variant renders no anchor of its own')
+  ok(!/yrUrl/.test(line), '  …and does not reach for the link out')
+  // The block is the one that carries the way to the full forecast, and the
+  // attribution the licence requires.
+  const block = comp.slice(comp.indexOf('function Block('), comp.indexOf('function Line('))
+  ok(/yrUrl/.test(block), 'the round-page block carries the link out instead')
+  ok(/MET_ATTRIBUTION/.test(block), '  …and the credit the licence requires')
+
+  // The hub says nothing rather than apologising. A one-line glance under
+  // "Up next" is not the place for an error message.
+  ok(/if \(state\.kind !== 'ready'\) return null/.test(line),
+    'and it is silent unless it has something to say')
+  ok(/beyondForecast/.test(line),
+    'a round past the model shows nothing rather than the nearest hour')
+
+  // Golf only, and the moment comes from upNext rather than being rebuilt.
+  ok(/next\.item\.kind === 'golf' && next\.item\.courseId/.test(hub),
+    'the hub asks for weather on golf alone')
+  ok(/teeAt=\{next\.startsAt \? next\.startsAt\.toISOString\(\) : null\}/.test(hub),
+    '  …at the instant upNext already worked out, not a second reading of it')
+}
+
 // ─── Nothing answers with nothing ──────────────────────────────
 
 async function emptyBodyCheck() {

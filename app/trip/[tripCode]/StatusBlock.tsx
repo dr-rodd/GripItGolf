@@ -9,6 +9,7 @@ import {
   upNext, describeCountdown, describeGroups, type RoundDates,
 } from '@/lib/upNext'
 import { useMinute } from '@/app/components/useMinute'
+import CourseWeather from '@/app/components/CourseWeather'
 import { IconArrowRight, IconFlag, IconHome, IconCar, IconPlane, IconTrain } from '@/app/components/icons'
 
 /**
@@ -182,6 +183,27 @@ function UpNextLines({
             so there is no moment to count down to. */}
         {countdown && (
           <p className="t-cap text-accent-deep mt-1 tabular-nums">in {countdown}</p>
+        )}
+
+        {/* What it will be doing when they get there.
+            Golf only, for the same reason as the countdown — a stay has no
+            tee to stand on. `next.startsAt` rather than a second reading of
+            the date and the tee time: `momentOf` in lib/upNext.ts already
+            turned those into an instant, and two ways of doing that is how
+            one tee time comes to mean two different moments.
+            Last, under the countdown. The countdown is the emphasised line
+            and belongs beside the day it counts from; this is the detail
+            after it.
+            **Not a link, and it cannot become one** — this whole block is
+            already inside a <Link> to the round page whenever the next item
+            is golf, and an <a> in there is invalid HTML. The way to the full
+            forecast is the round page, which carries it. */}
+        {next.item.kind === 'golf' && next.item.courseId && (
+          <CourseWeather
+            courseId={next.item.courseId}
+            teeAt={next.startsAt ? next.startsAt.toISOString() : null}
+            variant="line"
+          />
         )}
       </div>
     </div>

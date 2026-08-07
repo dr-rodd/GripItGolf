@@ -11,6 +11,7 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:handicap` | Shots received per hole, plus handicaps included, and that the Postgres trigger agrees with the app on every one |
 | `test:handicap-allowance` | Playing off a percentage of the course handicap — the rounding, the recommended figures, storage, the cycle a scorecard walks, and every board scored both at full and reduced |
 | `test:setup-flow` | Team size limits and pairs blocking, read off the boards |
+| `test:weather` | The forecast module and its route: parsing, the hour a tee time falls in, the arrow's 180°, the symbol grouping over every published MET code, the coordinates shipped in migration 026, and that the route never answers with an empty body |
 | `test:team-sets` | Team sheets in isolation — naming, membership, the finalise gate per sheet |
 | `test:matchplay` | Bracket generation and seeding |
 | `test:entrants` | Player/pairing naming, and the real column-mapping functions |
