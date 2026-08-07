@@ -21,22 +21,32 @@ function getTimeLeft(target: Date): TimeLeft | null {
 }
 
 /**
- * The countdown to the first tee, and whatever sits under it.
+ * The countdown to the first tee.
  *
- * It reads directly under the trip's name, which is where somebody looking
- * at a trip that has not started yet is looking. `children` is optional
- * because of that move: the block used to wrap the three buttons, and now
- * they stand on their own further down the page.
+ * Part of the trip's title — name, dates, then this — rather than a block of
+ * its own beneath one. It reads as the third line of a heading, which is what
+ * it is: a fact about the trip, the same kind as when it runs.
  *
- * The collapse when it reaches zero is unchanged — a grid row from 1fr to
- * 0fr, so whatever is beneath rises into the space rather than jumping.
+ * **Brown, and small.** It arrived from Donegal as four emerald figures at
+ * 48px with a glow behind them and a black drop shadow under them, which was
+ * the loudest thing on a screen it is not the subject of — and the shadow was
+ * drawn for a dark page this app does not have. Emerald is an accent here:
+ * the dot, one action, a status. A number that changes every second is none
+ * of those. So the figures are bark, the unit letters are muted, and the
+ * whole row is smaller than the dates above it.
+ *
+ * All four units stay on show even at zero. Dropping "00 d" on the morning of
+ * departure would reflow the row on the one day somebody is watching it.
+ *
+ * The collapse at zero is unchanged — a grid row from 1fr to 0fr, so the page
+ * closes over it rather than jumping. The margin lives inside the collapsing
+ * half, or the gap it held would outlive it.
  */
 export default function TripCountdown({
   target,
-  children,
 }: {
-  target: string | null  // ISO date string (YYYY-MM-DD or full ISO); null = skip countdown
-  children?: React.ReactNode
+  /** ISO date string (YYYY-MM-DD or full ISO); null skips the countdown. */
+  target: string | null
 }) {
   const [mounted, setMounted]     = useState(false)
   const [timeLeft, setTimeLeft]   = useState<TimeLeft | null>(null)
@@ -51,7 +61,7 @@ export default function TripCountdown({
     const targetDate = new Date(target)
     const initial = getTimeLeft(targetDate)
     if (!initial) {
-      // Already in the past — skip straight to nav
+      // Already under way, or over — nothing to count to
       setTimerGone(true)
       return
     }
@@ -60,73 +70,48 @@ export default function TripCountdown({
     return () => clearInterval(id)
   }, [target])
 
-  // When ticker hits zero, animate collapse then remove from DOM
+  // Reaches zero: collapse, then leave the DOM
   useEffect(() => {
     if (!mounted || timerGone || timeLeft !== null) return
     const t = setTimeout(() => setTimerGone(true), 700)
     return () => clearTimeout(t)
   }, [timeLeft, mounted, timerGone])
 
-  const collapsing = mounted && !timeLeft && !timerGone
+  if (timerGone) return null
+
+  const collapsing = mounted && !timeLeft
 
   return (
-    <div className="flex flex-col items-center w-full">
-
-      {/* Collapsible timer block — uses grid-rows trick to avoid iOS transform bug */}
-      {!timerGone && (
-        <div
-          className="grid w-full"
-          style={{
-            gridTemplateRows: collapsing ? '0fr' : '1fr',
-            transition: 'grid-template-rows 700ms ease-in-out',
-          }}
-        >
-          <div className="overflow-hidden flex flex-col items-center">
-            <div className="flex items-center gap-4 mb-2">
-              <div className="h-px w-16 bg-accent/40" />
-              <div className="w-1.5 h-1.5 rounded-full bg-accent/60" />
-              <div className="h-px w-16 bg-accent/40" />
-            </div>
-
-            {/* Placeholder preserves height before hydration to prevent layout shift */}
-            {!mounted ? (
-              <div className="h-[84px]" />
-            ) : timeLeft ? (
-              <div className="flex gap-5 sm:gap-8 bg-surface px-5 py-4 rounded-sm">
-                {[
-                  { label: 'Days',    value: timeLeft.days },
-                  { label: 'Hours',   value: timeLeft.hours },
-                  { label: 'Minutes', value: timeLeft.minutes },
-                  { label: 'Seconds', value: timeLeft.seconds },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex flex-col items-center gap-1.5">
-                    <span
-                      className="font-[family-name:var(--font-display)] text-4xl sm:text-5xl font-bold tabular-nums"
-                      style={{ color: '#0A9D56', textShadow: '0 0 30px rgba(10,157,86,0.12), 0 2px 4px rgba(0,0,0,0.8)' }}
-                    >
-                      {String(value).padStart(2, '0')}
-                    </span>
-                    <span className="text-[12px] tracking-[0.25em] uppercase text-ink/65 font-light">
-                      {label}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            <div className="mt-2" />
+    <div
+      className="grid w-full"
+      style={{
+        gridTemplateRows: collapsing ? '0fr' : '1fr',
+        transition: 'grid-template-rows 700ms ease-in-out',
+      }}
+    >
+      <div className="overflow-hidden">
+        {/* The height is held before hydration so the block below does not
+            jump up and back down as the figures arrive. */}
+        {!mounted ? (
+          <div className="h-[30px]" />
+        ) : timeLeft ? (
+          <div className="flex items-baseline justify-center gap-2.5 mt-3 tabular-nums">
+            {[
+              { unit: 'd', value: timeLeft.days },
+              { unit: 'h', value: timeLeft.hours },
+              { unit: 'm', value: timeLeft.minutes },
+              { unit: 's', value: timeLeft.seconds },
+            ].map(({ unit, value }) => (
+              <span key={unit} className="flex items-baseline gap-[1px]">
+                <span className="font-[family-name:var(--font-display)] text-bark text-[17px] leading-none">
+                  {String(value).padStart(2, '0')}
+                </span>
+                <span className="t-cap text-ink/50 leading-none">{unit}</span>
+              </span>
+            ))}
           </div>
-        </div>
-      )}
-
-      {/* Divider always present — nav slides up naturally as timer collapses */}
-      <div className="flex items-center gap-4 mb-4">
-        <div className="h-px w-16 bg-accent/40" />
-        <div className="w-1.5 h-1.5 rounded-full bg-accent/60" />
-        <div className="h-px w-16 bg-accent/40" />
+        ) : null}
       </div>
-
-      {children}
     </div>
   )
 }

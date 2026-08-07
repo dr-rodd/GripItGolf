@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-import { hasMatchplay, needsPairings, boardTitle, primary } from '@/lib/leaderboards'
+import { hasMatchplay, needsPairings, primary } from '@/lib/leaderboards'
 import { boardsForTrip, isLegacy } from '@/lib/leaderboardsCompat'
 import { parseLeaderboards } from '@/lib/leaderboards'
 import { parseTeamScoring } from '@/lib/teamScoring'
@@ -158,9 +158,10 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   const pendingCount   = players.length - confirmedCount
 
   // What the trip plays for, read off its boards. `primary` is the first one
-  // — the board the trip is about, and the one the standing line quotes.
+  // — the board the trip is about, and the one the standing line quotes. The
+  // titles are no longer printed as a line under the dates; what is left of
+  // this is the lead board, which the standing depends on.
   const boards = boardsForTrip(trip)
-  const formatLine = boards.map(boardTitle).join(' · ')
   const lead = primary(boards)
 
   // ── Do we know who this is? ──
@@ -309,20 +310,25 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
           <h1 className="t-h1 text-ink text-balance" style={{ fontSize: 'clamp(26px, 8vw, 34px)' }}>
             {trip.name}<span className="t-title-dot" aria-hidden="true" />
           </h1>
+          {/* When it runs, in the display face at reading size rather than
+              as a caption. It was 13px UI type at 65% ink, which is the
+              treatment this app gives to notes and asides — and a trip's
+              dates are the second thing anybody wants off this screen after
+              its name. */}
           {dateRange && (
-            <p className="t-cap uppercase tracking-[0.18em] text-ink/65 mt-3">{dateRange}</p>
+            <p className="t-card text-ink mt-2.5">{dateRange}</p>
           )}
-          {formatLine && (
-            <p className="t-cap uppercase tracking-[0.18em] text-ink/50 mt-1.5">{formatLine}</p>
-          )}
+
+          {/* And how long until it. Inside the title rather than below it:
+              the name, the dates and the countdown are three lines of one
+              heading, all answering what this trip is and when. */}
+          <TripCountdown target={trip.start_date ?? null} />
         </div>
 
-        {/* ── How long until the first tee ──
-            Directly under the name, because on a trip that has not started
-            it is the thing being looked for. It used to sit below the status
-            block wrapped around the three buttons, which put the trip's own
-            headline act three screens' worth of reading down. */}
-        <TripCountdown target={trip.start_date ?? null} />
+        {/* What the trip plays for used to print here, under the dates —
+            every board's title joined by a dot. It is settings written on
+            the hub: a reader either already knows the format or is about to
+            be shown it by the leaderboard, which names its own boards. */}
 
         {/* ── Who this device is, and what happens next ── */}
         <StatusBlock

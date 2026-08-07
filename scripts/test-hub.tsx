@@ -787,6 +787,40 @@ section('The countdown is the first thing under the trip name')
   // without somebody deciding where those children should now sit.
   ok(!/<TripCountdown[^/>]*>[\s\S]*?<\/TripCountdown>/.test(hub),
     'and it stands on its own rather than wrapping the buttons')
+
+  // Inside the title block, not below it: the name, the dates and the
+  // countdown are three lines of one heading.
+  const title = hub.indexOf('{trip.name}')
+  const close = hub.indexOf('</div>', title)
+  ok(title > 0 && countdown > title && countdown < close,
+    'the countdown is part of the trip title, not a block beneath it')
+}
+
+section('The countdown is brown, and quiet')
+{
+  const timer = read('app/trip/[tripCode]/TripCountdown.tsx')
+
+  // It came from Donegal as four emerald figures at 48px with a glow behind
+  // them and a black drop shadow under them — the loudest thing on a screen
+  // it is not the subject of, and the shadow drawn for a dark page this app
+  // does not have. Emerald is an accent: the dot, one action, a status. A
+  // number that changes every second is none of those.
+  ok(timer.includes('text-bark'), 'the figures are bark')
+  ok(!/#0A9D56|text-accent|bg-accent/i.test(timer), 'and no emerald is left in it')
+  ok(!/textShadow|shadow-\[0_0_/.test(timer), 'nothing glows')
+  ok(!/text-4xl|text-5xl/.test(timer), 'nor is it set at display-heading size')
+
+  // The dates above it are the second thing anybody wants off this screen
+  // after the name, and were 13px UI type at 65% ink — the treatment this
+  // app gives to asides.
+  const hub = read('app/trip/[tripCode]/page.tsx')
+  ok(/className="t-card text-ink mt-2\.5">\{dateRange\}/.test(hub),
+    'the dates read at card size in full ink')
+
+  // What the trip plays for was printed under them. It is settings written
+  // on the hub — the leaderboard names its own boards.
+  ok(!hub.includes('formatLine'), 'the format line is gone from the hub')
+  ok(!hub.includes('boardTitle'), '  …and the hub no longer titles boards at all')
 }
 
 section('The hub does not repeat the tab bar')

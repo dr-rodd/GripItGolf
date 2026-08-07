@@ -889,6 +889,14 @@ section('No glows')
   const glows = files.filter(f => /boxShadow: '0 0 |shadow-\[0_0_/.test(read(f)))
   eq(glows, [GLOW_HOME], 'nothing glows but the live round tile')
 
+  // Text can glow too, and this guard could not see it. The trip countdown
+  // carried `style={{ textShadow: '0 0 30px …, 0 2px 4px rgba(0,0,0,0.8)' }}`
+  // through every run of it: an inline style is not a class name, so a rule
+  // written against `shadow-[0_0_` never looked. The second half of that
+  // value was a black drop shadow drawn for a dark page, on cream.
+  eq(uiFiles().filter(f => /textShadow/.test(read(f))), [],
+    'and no text glows through an inline style')
+
   // …and there it is exactly one glow, on exactly that state
   const roundState = read(GLOW_HOME)
   eq((roundState.match(/shadow-\[0_0_/g) ?? []).length, 1, 'which glows once, not everywhere')

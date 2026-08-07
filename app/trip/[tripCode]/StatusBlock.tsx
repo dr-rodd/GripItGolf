@@ -209,22 +209,20 @@ function TripOver() {
  * Deliberately the loudest thing on the screen. Someone arriving on a trip
  * code has exactly one thing to do first, and every other feature on the hub
  * is better after they have done it.
+ *
+ * Three lines became one. It explained what claiming would get you — scores,
+ * standings, what is on next — and then said "Get started" underneath, which
+ * is a paragraph and a second label on a control whose own words already say
+ * what it does. What it gets you is on the other side of the tap.
  */
 function ClaimSpot({ tripCode }: { tripCode: string }) {
   return (
     <Link
       href={`/trip/${tripCode}/players`}
-      className="block w-full rounded-2xl border-2 border-accent bg-accent/[0.07] px-5 py-6 text-center transition-colors duration-150 hover:bg-accent/[0.12]"
+      className="flex items-center justify-center gap-2.5 w-full rounded-2xl border-2 border-accent bg-accent/[0.07] px-5 py-5 text-center transition-colors duration-150 hover:bg-accent/[0.12]"
     >
-      <p className="t-h2 text-ink">Claim your spot</p>
-      <p className="t-cap text-ink/65 mt-1.5 leading-snug">
-        Find your name and this phone remembers you — scores, standings and
-        what is on next.
-      </p>
-      <span className="inline-flex items-center gap-2 mt-4 text-accent-deep t-cap uppercase tracking-[0.18em]">
-        Get started
-        <IconArrowRight size={15} />
-      </span>
+      <span className="t-h2 text-ink">Claim your spot</span>
+      <IconArrowRight size={18} className="text-accent-deep flex-shrink-0" />
     </Link>
   )
 }
