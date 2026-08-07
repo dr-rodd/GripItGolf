@@ -163,10 +163,20 @@ export default function Landing() {
             </Link>
           </div>
 
-          <p className="t-cap text-ink/65 text-center mt-12 max-w-[19rem] text-balance">
-            &ldquo;Right now that dot is both green and not green. You decide
-            what it becomes&rdquo; &ndash; Erwin Schr&ouml;dinger
-          </p>
+          {/* Set as a quotation rather than as a sentence: the words sit on
+              their own and the name steps out from under them, down and to
+              the right, which is where an attribution has always gone. The
+              figure is what carries the width, so the name's right edge is
+              the quotation's right edge and not the screen's. */}
+          <figure className="mt-12 max-w-[19rem]">
+            <blockquote className="t-cap text-ink/65 text-balance">
+              &ldquo;Right now that dot is both green and not green. You decide
+              what it becomes&rdquo;
+            </blockquote>
+            <figcaption className="t-cap text-ink/50 mt-1.5 text-right">
+              &ndash; Erwin Schr&ouml;dinger
+            </figcaption>
+          </figure>
         </div>
       </div>
     </main>

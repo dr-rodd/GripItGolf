@@ -86,8 +86,12 @@ export type Leaderboard = {
 export const MAX_DISCARD = 2
 
 export const SCORINGS: { key: Scoring; label: string; hint: string }[] = [
+  // The hint is not only the hint: `boardRules` joins these into the line
+  // under a saved board's title, so it has to name the scoring as well as
+  // carry the joke. Ends with a stop like every other one, or it runs into
+  // whatever `boardRules` appends next.
   { key: 'stableford', label: 'Stableford Points',
-    hint: 'Man\'s greatest achievement' },
+    hint: 'Stableford points. Man\'s greatest achievement.' },
   { key: 'strokes', label: 'Strokes',
     hint: 'Simple as.' },
 ]
