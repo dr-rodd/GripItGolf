@@ -53,22 +53,42 @@ type CacheRow = {
   failed_at: string | null
 }
 
-/** GET /api/weather?course=<uuid> */
+/**
+ * GET /api/weather?course=<uuid>
+ * GET /api/weather?slug=<platform course slug>
+ *
+ * The app always sends `course` — it is holding a row and knows its id. `slug`
+ * is for a person with a phone: a 36-character uuid is unusable to type, and
+ * checking this by hand on the device it is built for should not require a
+ * desktop to copy from.
+ *
+ * It changes nothing about what the route will do. Both forms resolve to one
+ * row here, and the coordinates still come off that row rather than out of the
+ * request — which is the property that keeps this from being a proxy. `slug`
+ * is scoped to platform courses, so it cannot reach into a trip.
+ */
 export async function GET(req: NextRequest) {
-  const courseId = req.nextUrl.searchParams.get('course') ?? ''
-  if (!UUID.test(courseId)) {
-    // Refused before any I/O — an unparseable id is not worth a query.
-    return NextResponse.json({ error: 'A course id is required.' }, { status: 400 })
+  const params = req.nextUrl.searchParams
+  const courseId = params.get('course') ?? ''
+  const slug = (params.get('slug') ?? '').trim().toLowerCase()
+
+  const bySlug = !courseId && slug !== '' && /^[a-z0-9-]{1,80}$/.test(slug)
+  if (!bySlug && !UUID.test(courseId)) {
+    // Refused before any I/O — an unusable identifier is not worth a query.
+    return NextResponse.json(
+      { error: 'A course id or slug is required.' }, { status: 400 },
+    )
   }
 
   const supabaseAdmin = createAdminClient()
   const now = new Date()
 
-  const { data: course, error: courseError } = await supabaseAdmin
-    .from('courses')
-    .select('latitude, longitude')
-    .eq('id', courseId)
-    .maybeSingle()
+  const lookup = supabaseAdmin.from('courses').select('id, latitude, longitude')
+  const { data: course, error: courseError } = await (bySlug
+    // Platform courses only. A slug is unique per trip, not globally, so
+    // without this a trip could have a course whose slug shadows a real one.
+    ? lookup.eq('slug', slug).is('trip_id', null).maybeSingle()
+    : lookup.eq('id', courseId).maybeSingle())
 
   if (courseError) {
     console.error('weather course query failed:', courseError)
@@ -80,6 +100,10 @@ export async function GET(req: NextRequest) {
   if (!course) {
     return NextResponse.json({ error: 'No such course.' }, { status: 404 })
   }
+
+  // Whichever way it was found, everything below keys off the row's own id —
+  // the cache is per course, not per way of naming one.
+  const id = course.id as string
 
   const lat = course.latitude == null ? null : Number(course.latitude)
   const lon = course.longitude == null ? null : Number(course.longitude)
@@ -95,7 +119,7 @@ export async function GET(req: NextRequest) {
   const { data: cachedRow, error: cacheError } = await supabaseAdmin
     .from('weather_cache')
     .select('latitude, longitude, hours, fetched_at, expires_at, last_modified, failed_at')
-    .eq('course_id', courseId)
+    .eq('course_id', id)
     .maybeSingle()
 
   if (cacheError) console.error('weather cache read failed:', cacheError)
@@ -142,7 +166,7 @@ export async function GET(req: NextRequest) {
     })
   } catch (e) {
     console.error('weather fetch failed:', e)
-    await recordFailure(supabaseAdmin, courseId, lat, lon, usable, now, String(e))
+    await recordFailure(supabaseAdmin, id, lat, lon, usable, now, String(e))
     return serveOrGiveUp(usable)
   }
 
@@ -153,7 +177,7 @@ export async function GET(req: NextRequest) {
       fetched_at: now.toISOString(),
       expires_at: expiryFrom(res, now),
       failed_at: null, failure: null,
-    }).eq('course_id', courseId)
+    }).eq('course_id', id)
     return json({ ok: true, hours: usable.hours, fetchedAt: now.toISOString(), stale: false })
   }
 
@@ -161,8 +185,8 @@ export async function GET(req: NextRequest) {
     // 403 means the User-Agent was rejected and 429 that we asked too often.
     // Both are ours to fix, so both are said loudly in the log rather than
     // absorbed into a generic failure.
-    console.error(`weather upstream returned ${res.status} for course ${courseId}`)
-    await recordFailure(supabaseAdmin, courseId, lat, lon, usable, now, `HTTP ${res.status}`)
+    console.error(`weather upstream returned ${res.status} for course ${id}`)
+    await recordFailure(supabaseAdmin, id, lat, lon, usable, now, `HTTP ${res.status}`)
     return serveOrGiveUp(usable)
   }
 
@@ -171,20 +195,20 @@ export async function GET(req: NextRequest) {
     body = await res.json()
   } catch (e) {
     console.error('weather body was not JSON:', e)
-    await recordFailure(supabaseAdmin, courseId, lat, lon, usable, now, 'unreadable body')
+    await recordFailure(supabaseAdmin, id, lat, lon, usable, now, 'unreadable body')
     return serveOrGiveUp(usable)
   }
 
   const { hours, error: parseError } = parseForecast(body)
   if (parseError || hours.length === 0) {
     console.error('weather parse failed:', parseError)
-    await recordFailure(supabaseAdmin, courseId, lat, lon, usable, now, parseError ?? 'empty')
+    await recordFailure(supabaseAdmin, id, lat, lon, usable, now, parseError ?? 'empty')
     return serveOrGiveUp(usable)
   }
 
   const fetchedAt = now.toISOString()
   const { error: writeError } = await supabaseAdmin.from('weather_cache').upsert({
-    course_id: courseId,
+    course_id: id,
     latitude: truncCoord(lat),
     longitude: truncCoord(lon),
     hours,

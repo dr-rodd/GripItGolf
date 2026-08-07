@@ -461,10 +461,22 @@ section('The route cannot become a proxy, or a cache that never hits')
   // A ?lat=&lon= parameter would make this an open proxy to api.met.no under
   // our User-Agent — which is how that User-Agent gets blocked for somebody
   // else's scraping. The caller names a course; the server supplies the point.
-  ok(/searchParams\.get\('course'\)/.test(code), 'it is asked for a course')
-  ok(!/searchParams\.get\('lat'|searchParams\.get\('lon'/.test(code),
+  ok(/params\.get\('course'\)/.test(code), 'it is asked for a course')
+  ok(!/params\.get\('lat'\)|params\.get\('lon'\)/.test(code),
     '  …and never for coordinates')
   ok(/UUID\.test\(/.test(code), 'and an unparseable id is refused before any query')
+
+  // A slug is the same question in a form somebody can type on a phone. It
+  // must resolve to a row here like the id does — the coordinates come off
+  // the row either way, which is the property that keeps this from being a
+  // proxy — and it must not be able to reach into a trip: `courses.slug` is
+  // unique per trip, not globally.
+  ok(/params\.get\('slug'\)/.test(code), 'a slug is accepted too, for a phone')
+  ok(/\^\[a-z0-9-\]\{1,80\}\$/.test(code), '  …matched against a strict shape')
+  ok(/\.eq\('slug', slug\)[\s\S]{0,40}\.is\('trip_id', null\)/.test(code),
+    '  …and scoped to platform courses, so it cannot shadow one inside a trip')
+  ok(/const id = course\.id as string/.test(code),
+    'and both forms key the cache off the row, not off how it was named')
 
   // The tee time in the URL would give the CDN a different key per reader per
   // minute, and the cache below would never be hit.
