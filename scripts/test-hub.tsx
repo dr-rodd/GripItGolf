@@ -808,7 +808,17 @@ section('The countdown is brown, and quiet')
   ok(timer.includes('text-bark'), 'the figures are bark')
   ok(!/#0A9D56|text-accent|bg-accent/i.test(timer), 'and no emerald is left in it')
   ok(!/textShadow|shadow-\[0_0_/.test(timer), 'nothing glows')
-  ok(!/text-4xl|text-5xl/.test(timer), 'nor is it set at display-heading size')
+
+  // The colour was the fix; the first size overshot the other way. At 17px
+  // it sat under the dates and read as a footnote to them, when on a trip
+  // that has not started this is the line being looked for. It sits between
+  // the trip's name and its dates: not the heading, not an aside.
+  const px = Number(timer.match(/text-\[(\d+)px\]/)?.[1] ?? 0)
+  const title = Number(read('app/trip/[tripCode]/page.tsx')
+    .match(/clamp\((\d+)px/)?.[1] ?? 0)
+  ok(px >= 24, `the figures carry the block (${px}px)`)
+  ok(px < title, `  …without outranking the trip's own name (${title}px at its smallest)`)
+  ok(!/text-4xl|text-5xl/.test(timer), 'and never at the 48px it arrived as')
 
   // The dates above it are the second thing anybody wants off this screen
   // after the name, and were 13px UI type at 65% ink — the treatment this

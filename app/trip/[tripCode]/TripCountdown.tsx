@@ -27,13 +27,17 @@ function getTimeLeft(target: Date): TimeLeft | null {
  * its own beneath one. It reads as the third line of a heading, which is what
  * it is: a fact about the trip, the same kind as when it runs.
  *
- * **Brown, and small.** It arrived from Donegal as four emerald figures at
- * 48px with a glow behind them and a black drop shadow under them, which was
- * the loudest thing on a screen it is not the subject of — and the shadow was
+ * **Brown, at 24px.** It arrived from Donegal as four emerald figures at 48px
+ * with a glow behind them and a black drop shadow under them, which was the
+ * loudest thing on a screen it is not the subject of — and the shadow was
  * drawn for a dark page this app does not have. Emerald is an accent here:
  * the dot, one action, a status. A number that changes every second is none
- * of those. So the figures are bark, the unit letters are muted, and the
- * whole row is smaller than the dates above it.
+ * of those, so the figures are bark and the unit letters stay muted.
+ *
+ * The colour was the fix; the size overshot. At 17px it sat under the dates
+ * and read as a footnote to them, when on a trip that has not started this is
+ * the line being looked for. It is between the trip's name and its dates now
+ * — clearly not the heading, clearly not an aside.
  *
  * All four units stay on show even at zero. Dropping "00 d" on the morning of
  * departure would reflow the row on the one day somebody is watching it.
@@ -93,17 +97,17 @@ export default function TripCountdown({
         {/* The height is held before hydration so the block below does not
             jump up and back down as the figures arrive. */}
         {!mounted ? (
-          <div className="h-[30px]" />
+          <div className="h-[40px]" />
         ) : timeLeft ? (
-          <div className="flex items-baseline justify-center gap-2.5 mt-3 tabular-nums">
+          <div className="flex items-baseline justify-center gap-3.5 mt-4 tabular-nums">
             {[
               { unit: 'd', value: timeLeft.days },
               { unit: 'h', value: timeLeft.hours },
               { unit: 'm', value: timeLeft.minutes },
               { unit: 's', value: timeLeft.seconds },
             ].map(({ unit, value }) => (
-              <span key={unit} className="flex items-baseline gap-[1px]">
-                <span className="font-[family-name:var(--font-display)] text-bark text-[17px] leading-none">
+              <span key={unit} className="flex items-baseline gap-0.5">
+                <span className="font-[family-name:var(--font-display)] font-semibold text-bark text-[24px] leading-none">
                   {String(value).padStart(2, '0')}
                 </span>
                 <span className="t-cap text-ink/50 leading-none">{unit}</span>
