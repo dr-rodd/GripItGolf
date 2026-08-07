@@ -110,7 +110,7 @@ export default function MatchplayPanel({
       </div>
       <p className="text-ink/65 text-[13px] mb-4">
         A knockout draw between {pairs ? noun.many : 'players'}. Top seeds are kept
-        apart, and byes are handed out when the count isn&apos;t a power of two.
+        apart, byes may be needed if players don&apos;t match up equally.
       </p>
 
       {/* Current state */}
@@ -159,8 +159,8 @@ export default function MatchplayPanel({
                 for this bracket.
               </p>
               <p className="text-ink/65 text-[13px] leading-snug mb-4">
-                A new draw is generated from scratch. Those match outcomes cannot be
-                recovered. Hole scores and the other leaderboards are untouched.
+                A new draw will be generated from scratch. Match outcomes cannot be
+                recovered.
               </p>
             </>
           ) : (

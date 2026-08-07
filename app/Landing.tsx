@@ -142,7 +142,6 @@ export default function Landing() {
               so it can point at them without naming them twice. */}
           <p className="t-body text-ink/80 text-center text-balance max-w-[20rem]">
             Live scoring, leaderboards and matchplay for your golf trip.
-            Tap below to start one, or to join a trip you have a code for.
           </p>
 
           <div className="w-full flex flex-col gap-3 mt-10">
@@ -165,8 +164,8 @@ export default function Landing() {
           </div>
 
           <p className="t-cap text-ink/65 text-center mt-12 max-w-[19rem] text-balance">
-            Your handicap is the best 8 of your last 20 rounds. On the graph,
-            those eight are green dots.
+            &ldquo;Right now that dot is both green and not green. You decide
+            what it becomes&rdquo; &ndash; Erwin Schr&ouml;dinger
           </p>
         </div>
       </div>

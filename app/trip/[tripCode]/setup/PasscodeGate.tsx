@@ -43,7 +43,7 @@ export default function PasscodeGate({
       rememberUnlock(tripCode)
       setJustUnlocked(true)
     } else {
-      setError('That passcode is not right.')
+      setError('Incorrect code.')
       setCode('')
     }
     setBusy(false)
@@ -66,7 +66,7 @@ export default function PasscodeGate({
           Settings are locked
         </h1>
         <p className="text-ink/65 text-sm mb-8 leading-relaxed">
-          {tripName} was set up with a passcode. Ask whoever created the trip.
+          {tripName} was set up with a passcode. Ask your lead player!
         </p>
 
         <form onSubmit={submit} className="flex flex-col gap-3">

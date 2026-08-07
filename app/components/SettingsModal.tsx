@@ -156,7 +156,7 @@ function LiveSessionCard({ session, onVoided }: { session: LiveSession; onVoided
               ${wrongPw ? "border-red-500/70" : "border-bark/12 focus:border-accent/50"}`}
           />
           {wrongPw              && <p className="text-red-400 text-[13px]">Incorrect password.</p>}
-          {status === "error"   && <p className="text-red-400 text-[13px]">Failed to void. Try again.</p>}
+          {status === "error"   && <p className="text-red-400 text-[13px]">Could not void — try again.</p>}
           <button
             onClick={handleVoid}
             disabled={status === "loading"}
@@ -289,7 +289,7 @@ function ActionCard({ config, onSuccess }: { config: ActionConfig; onSuccess: (m
                 ${wrongPw ? "border-red-500/70" : "border-bark/12 focus:border-accent/50"}`}
             />
             {wrongPw && <p className="text-red-400 text-[13px] mt-1">Incorrect password.</p>}
-            {status === "error" && <p className="text-red-400 text-[13px] mt-1">Action failed. Try again.</p>}
+            {status === "error" && <p className="text-red-400 text-[13px] mt-1">Could not do that — try again.</p>}
           </div>
           <button
             onClick={confirm}

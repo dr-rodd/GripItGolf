@@ -128,17 +128,17 @@ export function finaliseBlockedReason(
   boards: readonly Leaderboard[],
   teams: readonly TeamRow[],
 ): string | null {
-  if (boards.length === 0) return 'Choose what this trip is playing for first.'
+  if (boards.length === 0) return 'First you need to create a leaderboard.'
 
   const sheets = sheetsInUse(boards)
   for (const sheet of sheets) {
     if (teamsOnSheet(teams, sheet).length > 0) continue
     const on = boardsOnSheet(boards, sheet)
-    if (needsPairings(on)) return 'Your draw is between pairings — pick them first.'
+    if (needsPairings(on)) return 'Pick your pairings to see the leaderboard!'
     // With two sheets running, "pick teams" is ambiguous — say which.
     return sheets.length > 1
       ? `The teams for ${sheetSubtitle(boards, sheet, boardTitle)} have not been picked yet.`
-      : 'A team leaderboard needs teams — pick them first.'
+      : 'A team leaderboard needs teams! Pick them in Trip setup.'
   }
   return null
 }

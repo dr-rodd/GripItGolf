@@ -86,10 +86,10 @@ export type Leaderboard = {
 export const MAX_DISCARD = 2
 
 export const SCORINGS: { key: Scoring; label: string; hint: string }[] = [
-  { key: 'stableford', label: 'Stableford',
-    hint: 'Points per hole against your handicap. Highest wins.' },
+  { key: 'stableford', label: 'Stableford Points',
+    hint: 'Man\'s greatest achievement' },
   { key: 'strokes', label: 'Strokes',
-    hint: 'Nett strokes. Lowest wins.' },
+    hint: 'Simple as.' },
 ]
 
 export const TEAM_FORMATS: { key: TeamFormat; label: string; hint: string }[] = [
@@ -98,7 +98,7 @@ export const TEAM_FORMATS: { key: TeamFormat; label: string; hint: string }[] = 
   { key: 'hero', label: 'Hero',
     hint: 'The best single card in the team that day carries it.' },
   { key: 'cut_dead_weight', label: 'Cut the dead weight',
-    hint: 'Everyone counts except the worst card of the day. They are back in next round.' },
+    hint: 'Everyone counts except the worst card of the day.' },
 ]
 
 /**

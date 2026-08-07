@@ -119,7 +119,7 @@ function Block({
   // Beyond the model is a different answer from bad weather, and a link into
   // an empty table is worse than no link.
   if (tee && beyondForecast(tee, now)) {
-    return <Quiet>Too far out for a forecast — check back nearer the day.</Quiet>
+    return <Quiet>Too far out for a forecast — check back nearer to the trip.</Quiet>
   }
 
   const nowHour = pickAt(state.hours, now)

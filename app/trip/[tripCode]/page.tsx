@@ -502,7 +502,7 @@ function PlayersPanel({
         href={`/trip/${tripCode}/players`}
         className="block text-center mt-5 t-cap uppercase tracking-[0.18em] text-accent-deep hover:text-accent transition-colors"
       >
-        Claim a spot
+        Claim your spot
       </Link>
     </div>
   )

@@ -234,7 +234,7 @@ section('Finalise is gated on the boards, not the old flags')
   // The old gate read trips.formats, which a new trip carries as the
   // defaults — so it said yes to a trip with nothing to play for at all.
   ok(finaliseBlockedReason([], sheet(2)) !== null, 'a trip with no leaderboard cannot go live')
-  ok(/playing for/i.test(finaliseBlockedReason([], sheet(2))!), 'and is told what is missing')
+  ok(/leaderboard/i.test(finaliseBlockedReason([], sheet(2))!), 'and is told what is missing')
 
   eq(finaliseBlockedReason([solo], none), null,
     'an individual board needs no teams')

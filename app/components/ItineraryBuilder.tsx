@@ -446,7 +446,7 @@ export default function ItineraryBuilder({
 
         {dayItems.length === 0 && (
           <div className="border border-dashed border-bark/25 rounded-xl py-10 text-center">
-            <p className="t-body text-ink/65">This day is empty.</p>
+            <p className="t-body text-ink/65">Nothing added yet. Get your golf in!</p>
           </div>
         )}
       </div>
@@ -558,8 +558,7 @@ export default function ItineraryBuilder({
           />
 
           <p className="t-cap text-ink/65">
-            One round is created for this course. More tee times just means more
-            groups going off.
+            How many groups are going out?
           </p>
         </Sheet>
       )}

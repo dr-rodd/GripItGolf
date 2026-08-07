@@ -221,7 +221,7 @@ section('The trip setup page uses the same field')
   // set once at creation and hardly touched again, so they were taking the
   // first screenful away from the thing the page is for.
   ok(!html.includes('type="date"'), 'setup does not put date fields on the page itself')
-  ok(html.includes('Trip details'), 'it offers them behind a named row')
+  ok(html.includes('Trip Settings'), 'it offers them behind a named row')
 
   const src = fs.readFileSync('app/trip/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
   ok(src.includes('<DateField'), 'and still uses the shared date field inside the sheet')
@@ -251,7 +251,7 @@ section('The gear says what is behind it')
     } as never)
   )
 
-  ok(html.includes('everything below is the golf'),
+  ok(html.includes('Golf related settings are below'),
     'the row draws the line between the trip and the golf')
 
   // Who can edit followed the name and the dates in. It is a fact about the
@@ -446,8 +446,10 @@ async function main() {
       'hashed on the device, so the code itself is never sent')
     ok(source.includes('This can only be set now'),
       'the warning states it is a one-time choice')
-    ok(/anyone\s+with your trip code could lock you out/.test(source),
-      'and explains why it cannot be changed later')
+    // The reason it cannot be handed over later was cut in the copy review;
+    // what the warning still has to do is say that it cannot.
+    ok(/no way to add, change or remove your passcode later/.test(source),
+      'and states it cannot be changed later')
     ok(source.includes('Write it down'), 'and tells you to keep it')
   }
 

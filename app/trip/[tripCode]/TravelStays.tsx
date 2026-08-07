@@ -69,8 +69,8 @@ export default function TravelStays({
   if (stays.length === 0 && legs.length === 0) {
     return (
       <p className="t-cap text-ink/65 text-center py-2 leading-relaxed">
-        No travel or accommodation on the itinerary yet. Add it in trip
-        settings and it shows up here.
+        No travel or accommodation on the itinerary yet. Go to Trip Settings
+        to add your plans.
       </p>
     )
   }

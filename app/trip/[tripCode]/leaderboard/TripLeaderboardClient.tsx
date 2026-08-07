@@ -856,7 +856,7 @@ export default function TripLeaderboardClient({
     return (
       <div className="max-w-lg mx-auto px-4 py-6">
         {strip}
-        {!showMatchplay && <EmptyState message="No competitions switched on for this trip." />}
+        {!showMatchplay && <EmptyState message="Create a leaderboard in Trip setup." />}
       </div>
     )
   }
@@ -865,8 +865,8 @@ export default function TripLeaderboardClient({
 
   const emptyMessage =
     activeBoard.audience === 'team'
-      ? 'No teams with players yet. Set them up in Trip Setup.'
-      : 'No scores yet. The board fills in as play starts.'
+      ? 'Set teams in Trip setup'
+      : 'No scores yet.'
 
   // An individual board added up has a level to be ahead of. A prize table
   // has none — it pays a place — and neither does a team total, where level
@@ -957,7 +957,7 @@ export default function TripLeaderboardClient({
 
       {sortedRounds.length > INLINE_ROUNDS && currentRows.length > 0 && (
         <p className="text-ink/65 text-[13px] mt-3 text-center">
-          Swipe the rounds sideways, or tap a row to see them all.
+          Swipe to switch round.
         </p>
       )}
 

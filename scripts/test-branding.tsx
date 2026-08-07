@@ -1346,9 +1346,11 @@ section('Landing page')
   ok(/#0a9d56/i.test(home), '  …closed by the emerald dot')
   ok(!home.includes('<h1'), 'and is not restated as a heading beneath itself')
 
-  // "a simple title underneath explaining that the user should tap the nav
-  //  buttons to start their trip"
-  ok(/tap below/i.test(home), 'one line tells you to tap below')
+  // One line underneath saying what the app is. It used to go on to tell you
+  // to tap the buttons below it; the copy review cut that half — the two
+  // buttons sit directly under it and name themselves.
+  ok(/Live scoring, leaderboards and matchplay/i.test(home),
+    'one line says what the app is for')
   ok(home.includes('/dashboard/create'), 'Create a trip is one of the two')
   ok(home.includes('/join'), 'Join a trip is the other')
   ok(/Create a trip/i.test(home) && /Join a trip/i.test(home), 'both are named plainly')
@@ -1362,8 +1364,12 @@ section('Landing page')
   eq(emeraldFills.length, 1, 'exactly one emerald button on the screen')
 
   ok(home.includes('bg-cream'), 'on the cream page')
-  ok(!home.includes('Schr'), 'the old quotation is gone')
-  ok(!home.includes('GripItGolf'), 'and so is the old name')
+  // A Schrödinger quotation was swept off this page with the rest of the old
+  // branding, and this line guarded that. The copy review put one back on
+  // purpose, so what is guarded now is the old *name* — the fact of a
+  // quotation is no longer the thing that tells the two pages apart.
+  ok(/both green and not green/i.test(home), 'the footnote is the green-dot line')
+  ok(!home.includes('GripItGolf'), 'and the old name is gone')
 }
 
 // ─── Everywhere else ───────────────────────────────────────────

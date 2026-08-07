@@ -217,7 +217,7 @@ section('What the trip has to have set up')
 
 section('Boards are titled the way people would say them')
 {
-  eq(boardTitle(sf), 'Stableford', 'an individual board is named by its scoring')
+  eq(boardTitle(sf), 'Stableford Points', 'an individual board is named by its scoring')
   eq(boardTitle(strokes), 'Strokes', 'either scoring')
   eq(boardTitle(teamBB), 'Team better ball', 'a team board says team and its format')
   eq(boardTitle(draw), 'Matchplay', 'a singles draw is just matchplay')

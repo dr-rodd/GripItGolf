@@ -219,7 +219,7 @@ function UnassignedZone({ players }: { players: Placed[] }) {
         {players.map(p => <DraggablePlayer key={p.id} player={p} />)}
         {players.length === 0 && (
           <p className="text-ink/50 text-sm py-4 col-span-full text-center select-none">
-            Everyone has a team
+            Everyone&apos;s in
           </p>
         )}
       </div>
@@ -671,7 +671,7 @@ export default function TripTeamsClient({
         <div>
           <p className="t-body text-ink/80">
             {tiles.some(isOpen)
-              ? 'Pick the leaderboards these teams should play for, then choose the teams. Tick more than one to have them share the same teams.'
+              ? 'Pick the leaderboards, then choose the teams.'
               : 'Tap a leaderboard to see its teams, or to change them.'}
           </p>
         </div>
@@ -731,8 +731,7 @@ export default function TripTeamsClient({
             {noun.Many} for {forBoards.map(boardTitle).join(' · ') || 'this trip'}
           </h2>
           <p className="t-cap text-ink/65 mt-1 leading-snug">
-            Every change saves as you make it. Confirm when you are happy and
-            the leaderboard updates.
+            Press confirm when you&apos;re done.
           </p>
         </div>
 

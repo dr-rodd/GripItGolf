@@ -512,7 +512,7 @@ export default function LiveScoringFlow({
       if (scoresError) {
         console.error("Resume failed to read live_scores:", scoresError)
         setResumeError(
-          "Could not load the scores already on this card. Check your connection and try again — " +
+          "Could not load already submitted scores. Check your connection and try again — " +
           "nothing has been lost, but do not re-enter them until they appear."
         )
         return
@@ -834,7 +834,7 @@ export default function LiveScoringFlow({
         .eq("id", liveRound.id)
       onBack()
     } catch (e: any) {
-      setError(e?.message ?? "Failed to commit scores")
+      setError(e?.message ?? "Could not save the scores — try again")
     } finally {
       setSaving(false)
     }
@@ -847,7 +847,7 @@ export default function LiveScoringFlow({
       <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6 py-12">
         <div className="text-center">
           <h2 className="font-[family-name:var(--font-playfair)] text-2xl text-ink mb-2">Discard Scorecard?</h2>
-          <p className="text-ink/65 text-base">This voids the scorecard and releases all players. Every hole already entered on it is deleted, and the round comes off the leaderboard.</p>
+          <p className="text-ink/65 text-base">This will void this scorecard and release all players. Every score already entered will be deleted, and be removed from the leaderboard.</p>
         </div>
         <div className="flex gap-3 w-full max-w-xs">
           <button onClick={() => setCloseConfirm(false)} className="flex-1 py-3 border border-bark/12 text-ink/80 text-base uppercase tracking-wider hover:border-bark/25 transition-colors">

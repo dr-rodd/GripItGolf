@@ -158,9 +158,9 @@ section('Tabs')
   ok(!one.includes('>Strokes<'), 'no Strokes tab when that board is not being run')
 
   const all = render([SF(), ST(), CU()])
-  ok(all.includes('>Stableford<'), 'Stableford tab shown')
+  ok(all.includes('>Stableford Points<'), 'Stableford tab shown')
   ok(all.includes('>Strokes<'), 'Strokes tab shown')
-  ok(all.includes('>Stableford prizes<'),
+  ok(all.includes('>Stableford Points prizes<'),
     'and the prize-table board is told apart from the Stableford it is scored on')
 
   // Tabs follow the list, not a fixed order — the first board leads
@@ -168,7 +168,7 @@ section('Tabs')
     teams: [{ id: 't1', name: 'Reds', color: '#DC2626' }],
     players: players.map(p => ({ ...p, team_id: 't1' })),
   })
-  ok(teamFirst.indexOf('>Team hero<') < teamFirst.indexOf('>Stableford<'),
+  ok(teamFirst.indexOf('>Team hero<') < teamFirst.indexOf('>Stableford Points<'),
     'the primary board leads the tab strip')
 }
 
@@ -276,11 +276,11 @@ section('Title card appears once more than one board is running')
 
   const single = render([SF()])
   ok(!single.includes(CARD), 'a lone board gets no title card, just its rule line')
-  ok(single.includes('Highest wins'), 'the rule is still stated')
+  ok(single.includes('greatest achievement'), 'the rule is still stated')
 
   const multi = render([SF(), ST()])
   ok(multi.includes(CARD), 'a second board brings the title card in')
-  ok(multi.includes('Highest wins'), 'with how the board is scored')
+  ok(multi.includes('greatest achievement'), 'with how the board is scored')
   // The tab strip also says "Stableford", so the card must be identified by
   // its own markup rather than by the word appearing anywhere
   ok(multi.split(CARD).length === 2, 'exactly one title card, for the active board')
@@ -571,8 +571,8 @@ section('The same scoring can be totalled and paid by position at once')
   // An order of merit and a daily prize off the same cards. Under the old
   // model these were one slot, so a trip could only have one of them.
   const html = render([SF(), CU([10, 5, 1])])
-  ok(html.includes('>Stableford<'), 'the order of merit is a tab')
-  ok(html.includes('>Stableford prizes<'), 'and the daily prize is another')
+  ok(html.includes('>Stableford Points<'), 'the order of merit is a tab')
+  ok(html.includes('>Stableford Points prizes<'), 'and the daily prize is another')
   ok(html.includes('>72<'), 'with the active board showing its own totals')
   ok(!html.includes('>11<'), 'not the other board\'s prize money')
 }
@@ -674,7 +674,7 @@ section('A player with no team is on the individual board but no team board')
   // Teams lead, so the team tab is the one showing
   ok(html.includes('Reds'), 'the team with a player in it is on the board')
   ok(html.includes('>Team better ball<'), 'the team tab is present')
-  ok(html.includes('>Stableford<'), 'and so is the individual one')
+  ok(html.includes('>Stableford Points<'), 'and so is the individual one')
 
   // Every player is on the individual board whether or not they have a team.
   // Rendering only shows the active tab, so this is asserted by putting the

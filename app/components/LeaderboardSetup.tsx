@@ -149,11 +149,14 @@ function PointsTable({
           </div>
         ))}
       </div>
-      <p className="t-cap text-ink/65 mt-2 leading-snug">
-        {known
-          ? `One row per finisher, for the ${fieldSize} ${unit} on this trip. Leave it as it stands and it keeps up as more join; change a figure and it stays changed.`
-          : `The ${unit} are not picked yet, so this is a placeholder — leave it and the table sizes itself to them. Change a figure and it stays changed.`}
-      </p>
+      {/* Only when the field is still a guess. Once the players or the teams
+          are known the table explains itself — a row per finisher, in order,
+          with the figure sitting in it. */}
+      {!known && (
+        <p className="t-cap text-ink/65 mt-2 leading-snug">
+          {`The ${unit} are not picked yet, so this is a placeholder — leave it and the table sizes itself to them. Change a figure and it stays changed.`}
+        </p>
+      )}
     </div>
   )
 }
@@ -312,21 +315,21 @@ function Builder({
         <p className="t-h2 text-ink">
           {editing
             ? 'Change this leaderboard'
-            : existing.length === 0 ? 'First, your primary leaderboard' : 'A second leaderboard'}
+            : existing.length === 0 ? 'First, your primary leaderboard' : 'Add another board'}
         </p>
         <p className="t-cap text-ink/65 mt-1 leading-snug">
           {editing
-            ? 'Every card already entered is re-read under the new rules. Nobody re-enters a score.'
+            ? 'Edited leaderboards will re-populate with the already entered scores.'
             : existing.length === 0
-              ? 'What this trip is playing for. Everything else follows from it.'
-              : 'Scored from the same cards, running alongside the first.'}
+              ? 'This is your trip\'s main leaderboard for the trip. You can add secondary leaderboards as well later.'
+              : 'Scored from the same cards, it will run alongside your primary board.'}
         </p>
       </div>
 
-      <Question n={next()} title="Who is being ranked?">
+      <Question n={next()} title="Is this a solo or team leaderboard?">
         {([
-          { key: 'individual' as Audience, label: 'Individuals', hint: 'Every player ranked on their own card.' },
-          { key: 'team' as Audience, label: 'Teams', hint: 'Players grouped, and the teams ranked against each other.' },
+          { key: 'individual' as Audience, label: 'Solo', hint: 'Every player ranked on their own card.' },
+          { key: 'team' as Audience, label: 'Teams', hint: 'Add players to teams, and the teams are ranked against each other' },
         ]).map(a => (
           <Choice
             key={a.key}
@@ -342,19 +345,19 @@ function Builder({
       </Question>
 
       {draft.audience && (
-        <Question n={next()} title="What are they playing?">
+        <Question n={next()} title="Pick the format.">
           <Choice
             on={league}
             label="League"
-            hint="Every round counts towards a running table."
+            hint="Everyone ranked on a running table."
             onClick={() => set({ competition: 'league', scoring: undefined, teamFormat: undefined, combine: undefined })}
           />
           <Choice
             on={draft.competition === 'matchplay'}
             label="Matchplay"
             hint={drawTaken
-              ? 'This trip already has a draw — only one is possible.'
-              : 'A knockout draw, generated at random.'}
+              ? 'Only one matchplay bracket can be created at a time.'
+              : 'A knockout bracket.'}
             taken={drawTaken}
             onClick={() => set({ competition: 'matchplay' })}
           />
@@ -365,7 +368,7 @@ function Builder({
           They are genuinely independent — how a round is scored says nothing
           about how the rounds add up — so none of them hides another. */}
       {draft.audience && league && (
-        <Question n={next()} title="How is a round scored?">
+        <Question n={next()} title="How should the rounds be scored?">
           {SCORINGS.map(s => (
             <Choice
               key={s.key}
@@ -451,7 +454,7 @@ function Builder({
           question — a trip that ignores it plays off the full handicap, which
           is what every trip did before it was asked. */}
       {offersAllowance(draft) && (
-        <Question n={next()} title="Cut everyone's handicap for this board?">
+        <Question n={next()} title="Do you want to apply a handicap reduction.">
           <AllowancePicker
             value={allowanceOf(draft)}
             suggested={suggestedAllowance(draft)}
@@ -466,9 +469,7 @@ function Builder({
 
       {draft.competition === 'matchplay' && (
         <p className="t-body text-ink/80">
-          The draw is generated at random once the players are in. A manual
-          draw can come later.
-          {draft.audience === 'team' && ' Pairings are teams of two, named by their players.'}
+          The draw will be generated at random.
         </p>
       )}
 

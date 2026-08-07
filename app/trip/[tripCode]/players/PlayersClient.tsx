@@ -121,7 +121,7 @@ export default function PlayersClient({
     const name = addName.trim()
     const handicap = parseHandicap(addHandicap)
     if (!name || handicap === null) {
-      setError('Please enter a valid name and handicap')
+      setError('Enter a name and a handicap')
       return
     }
     // Said before anything is written, and said plainly. Somebody whose name
@@ -173,7 +173,7 @@ export default function PlayersClient({
       setAdding(false)
       setError(
         'Added you to the trip, but your round handicaps did not save. ' +
-        'Open trip settings and re-enter your handicap before you play.',
+        'Open Trip setup and re-enter your handicap before you play.',
       )
       return
     }
@@ -225,7 +225,7 @@ export default function PlayersClient({
 
       <section>
         <p className="text-ink/65 text-[13px] tracking-[0.2em] uppercase mb-4">
-          Not on the list? Add yourself
+          Can&apos;t find your name? Add yourself below
         </p>
         <form onSubmit={handleAdd} className="flex flex-col gap-4">
           <input

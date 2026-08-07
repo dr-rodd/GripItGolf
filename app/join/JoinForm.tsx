@@ -65,7 +65,7 @@ export default function JoinForm() {
           Join a Trip
         </h1>
         <p className="text-ink/65 text-sm mb-8">
-          Enter the 6-character code from your organiser.
+          Enter the 6-character code from your lead player.
         </p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">

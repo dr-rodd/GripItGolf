@@ -135,7 +135,7 @@ export default function CreateTripForm() {
   const plannedGolf = golfItems(itinerary)
   const itineraryBlocked =
     plannedGolf.length === 0
-      ? 'Add at least one round of golf — there is nothing to score without it.'
+      ? 'Add at least one round of golf — otherwise what\'s the point?'
       : roundCountError(plannedGolf.length)
 
   const passcodeIssue = !lockSettings
@@ -412,9 +412,8 @@ export default function CreateTripForm() {
             Trip Created!
           </h1>
           <p className="text-ink/65 text-sm mb-10">
-            Share this code with your group to join. Next, choose what
-            you&apos;re playing for in trip settings — leaderboards and teams
-            live there. Finalise the trip when everyone&apos;s ready to play.
+            Share this code with your group to join. Next, choose leaderboard
+            formats and teams in Trip setup.
           </p>
 
           <div className="bg-surface border border-bark/25 rounded-2xl px-4 py-8 mb-4">
@@ -693,8 +692,8 @@ export default function CreateTripForm() {
                       This can only be set now.
                     </p>
                     <p className="text-rust/70 text-[13px] leading-snug mt-1.5">
-                      There is no way to add, change or remove it later — otherwise anyone
-                      with your trip code could lock you out of your own trip. Write it down.
+                      There is no way to add, change or remove your passcode later —
+                      Write it down!
                     </p>
                   </div>
 

@@ -121,7 +121,7 @@ export function pairsBlockedReason(
 
   const over = sizes.filter(s => s.size > PAIR_SIZE)
   if (over.length > 0) {
-    return `${over.map(s => s.name).join(', ')} ${over.length === 1 ? 'has' : 'have'} more than ${PAIR_SIZE} players. A pairing is two.`
+    return `${over.map(s => s.name).join(', ')} ${over.length === 1 ? 'has' : 'have'} more than ${PAIR_SIZE} players.`
   }
   const short = sizes.filter(s => s.size < PAIR_SIZE)
   if (short.length > 0) {

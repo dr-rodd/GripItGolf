@@ -659,8 +659,7 @@ function DecideSheet({
                   This will void all subsequent results.
                 </p>
                 <p className="text-rust/70 text-[13px] leading-snug mt-1.5">
-                  Every result recorded after this one in the same line of the draw is
-                  cleared and must be entered again. It cannot be undone.
+                  All subsequent results will need to be entered again.
                 </p>
               </div>
             </div>

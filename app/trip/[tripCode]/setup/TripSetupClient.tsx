@@ -479,9 +479,9 @@ export default function TripSetupClient({
             <IconSettings size={16} />
           </span>
           <span className="flex-1 min-w-0">
-            <span className="block t-card text-ink">Trip details</span>
+            <span className="block t-card text-ink">Trip Settings</span>
             <span className="block t-cap text-ink/65 mt-0.5 leading-snug">
-              Name, dates, itinerary, who can edit — everything below is the golf
+              The non-golf trip details — Golf related settings are below
             </span>
           </span>
           <span className="flex-shrink-0 text-ink/50">
@@ -499,7 +499,7 @@ export default function TripSetupClient({
             onClick={e => e.stopPropagation()}
           >
             <div className="sticky top-0 bg-cream px-4 pt-4 pb-3 flex items-center justify-between border-b border-bark/12">
-              <h2 className="t-h2 text-ink">Trip details</h2>
+              <h2 className="t-h2 text-ink">Trip Settings</h2>
               <button
                 type="button"
                 onClick={() => setDetailsOpen(false)}
@@ -528,12 +528,6 @@ export default function TripSetupClient({
                 <DateField label="End date" value={endDate}
                   onChange={v => saveDates(startDate, v)} disabled={locked} />
               </div>
-              {locked && (
-                <p className="t-cap text-ink/65">
-                  The trip is live. Unlock it below to change these.
-                </p>
-              )}
-
               <div className="pt-2 border-t border-bark/12">
                 <button
                   type="button"
@@ -563,7 +557,6 @@ export default function TripSetupClient({
                 <label className={LABEL}>Who can edit</label>
                 <p className="t-cap text-ink/65 mb-3 leading-snug">
                   Who can change this trip&apos;s players, teams, format and dates.
-                  Joining and scoring are open to everyone either way.
                 </p>
                 <div className="flex gap-2">
                   {[
@@ -633,7 +626,7 @@ export default function TripSetupClient({
         {viewOnly && (
           <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
             <p className="text-ink/65 text-sm">
-              Only the trip owner can edit this trip. Ask whoever created it to make changes.
+              Only the lead player can edit this trip. Ask them to make changes.
             </p>
           </div>
         )}
@@ -648,8 +641,7 @@ export default function TripSetupClient({
         <section className={SECTION}>
           <p className="t-label text-accent-deep uppercase tracking-[0.18em] mb-1">Leaderboards</p>
           <p className="t-cap text-ink/65 mb-3 leading-snug">
-            Safe to change mid-trip. Every card already entered is re-read
-            under the new rules.
+            Choose your Competition Leaderboards. Add as many formats as you like.
           </p>
           <LeaderboardSetup
             boards={boards}
@@ -661,8 +653,8 @@ export default function TripSetupClient({
           {boards.length > 0 && needsTeams(boards) && teams.length === 0 && (
             <p className="t-cap text-rust-deep mt-3">
               {needsPairings(boards)
-                ? 'A pairs draw needs pairings — pick them below.'
-                : 'A team board needs teams — pick them below.'}
+                ? 'This leaderboard needs pairings! Pick them below.'
+                : 'A team leaderboard needs teams! Pick them below.'}
             </p>
           )}
         </section>
@@ -684,7 +676,7 @@ export default function TripSetupClient({
               {groupNoun.Many}
             </p>
             <p className="t-body text-ink/80 mb-4">
-              Which {groupNoun.many} play for which leaderboard.
+              Pick your teams! You can pick different teams for different boards.
             </p>
 
             <div className="space-y-2 mb-4">

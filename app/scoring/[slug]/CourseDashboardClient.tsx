@@ -279,7 +279,7 @@ export default function CourseDashboardClient({
       .single()
     setStarting(false)
     if (error || !data) {
-      setStartError(error?.message ?? "Failed to start scorecard")
+      setStartError(error?.message ?? "Could not start the scorecard — try again")
       return
     }
     setScoringLiveRound(data as unknown as ActiveLiveRound)
@@ -393,7 +393,7 @@ export default function CourseDashboardClient({
 
       setSettingsVoidSession(false)
     } catch (e: any) {
-      setSettingsError(e?.message ?? "Void failed — please try again")
+      setSettingsError(e?.message ?? "Could not void that card — try again")
     } finally {
       setSettingsWorking(false)
       fetchScorecards()
@@ -744,8 +744,8 @@ export default function CourseDashboardClient({
                                 {isConfirming && (
                                   <p className="text-rust text-sm mt-1 leading-snug">
                                     {s.finalised
-                                      ? "Deletes this card's scores and takes the round off the leaderboard. It cannot be undone."
-                                      : "Deletes the holes already entered on this card. It cannot be undone."}
+                                      ? "Deletes this card's scores and takes the round off the leaderboard. This cannot be undone."
+                                      : "Deletes the holes already entered on this card. This cannot be undone."}
                                   </p>
                                 )}
                               </div>
