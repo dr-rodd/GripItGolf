@@ -7,7 +7,7 @@ import BackButton from '@/app/components/BackButton'
 import TripHeader from '@/app/components/TripHeader'
 import DateField from '@/app/components/DateField'
 import { roundCountError } from '@/lib/tripLimits'
-import { DEFAULT_FORMATS } from '@/lib/formats'
+import { NO_FORMATS } from '@/lib/formats'
 import { normaliseEmail, emailWarning, MAX_EMAIL } from '@/lib/email'
 import { rememberPlayer } from '@/lib/playerCookie'
 import ItineraryBuilder from '@/app/components/ItineraryBuilder'
@@ -224,12 +224,19 @@ export default function CreateTripForm() {
       status: 'upcoming',
       start_date: startDate || null,
       end_date: endDate || null,
-      // A starting point, not the final answer — trip settings is where the
-      // competition, and with it whether there are teams at all, is chosen.
+      // Nothing switched on. Trip Setup is where the competition — and with
+      // it whether there are teams at all — is chosen, and until somebody
+      // chooses, the leaderboard says so.
+      //
+      // This wrote `DEFAULT_FORMATS` and that is where the phantom board came
+      // from: every trip arrived carrying individual-league-Stableford, and
+      // `trips.leaderboards` defaults to an empty array, which the compat
+      // layer reads as "old trip, use the flags". So a trip that had chosen
+      // nothing was served the one thing the defaults happened to name.
       formats: {
-        ...DEFAULT_FORMATS,
-        league: { ...DEFAULT_FORMATS.league },
-        matchplay: { ...DEFAULT_FORMATS.matchplay },
+        ...NO_FORMATS,
+        league: { ...NO_FORMATS.league },
+        matchplay: { ...NO_FORMATS.matchplay },
       },
     }
     // Only sent when a passcode was actually set, so a database that has not

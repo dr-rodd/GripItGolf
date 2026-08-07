@@ -92,6 +92,18 @@ section('The itinerary replaces the rounds picker')
   ok(!/stay_name: item\.kind === 'stay'/.test(src),
     '  …rather than a second copy of it')
 
+  // A new trip plays for nothing until its lead player says otherwise.
+  // Writing `DEFAULT_FORMATS` here is what put a Stableford board on every
+  // trip ever made on this platform: it names a competition, and
+  // `trips.leaderboards` defaults to an empty array, which the compat layer
+  // reads as "old trip, use the flags".
+  ok(src.includes('NO_FORMATS'), 'a new trip is created with nothing switched on')
+  // Comments stripped: the note at the call site explains what the defaults
+  // used to do here and why they went, and a prose mention of them would
+  // match the check that they are gone.
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  ok(!/DEFAULT_FORMATS/.test(code), '  …and not with the defaults, which name one')
+
   // A trip with no golf has nothing to score, so it cannot move on. It is a
   // reason rather than a disabled button now — an empty Tuesday should not
   // grey out the way forward, so the check happens once, at the end.

@@ -86,6 +86,23 @@ export const DEFAULT_FORMATS: TripFormats = {
   matchplay: { ...DEFAULT_MATCHPLAY },
 }
 
+/**
+ * What a brand-new trip plays for: nothing, yet.
+ *
+ * Deliberately not `DEFAULT_FORMATS`, which is what an *unreadable* row means
+ * — a trip from before this column existed, about which nothing is known.
+ * A new trip is the opposite: everything is known about it, and the answer is
+ * that its lead player has not chosen a competition. Trip Setup is where that
+ * happens, and until it does the leaderboard says so rather than showing a
+ * board nobody picked.
+ */
+export const NO_FORMATS: TripFormats = {
+  individual: false,
+  teams: false,
+  league: { ...DEFAULT_LEAGUE, on: false, stableford: false },
+  matchplay: { ...DEFAULT_MATCHPLAY, on: false },
+}
+
 // ─── Parsing ───────────────────────────────────────────────────
 
 const asBool = (v: unknown) => v === true
@@ -113,6 +130,18 @@ function cloneFormats(f: TripFormats): TripFormats {
  *
  * Both older shapes describe individual boards, and neither could express a
  * pairs draw, so they always read back as individuals playing singles.
+ *
+ * **It never invents a competition.** A row that says nothing is switched on
+ * reads back as nothing switched on. That used to substitute the defaults —
+ * individual, league, Stableford — and the effect was that every trip created
+ * on this platform arrived with a Stableford leaderboard nobody had chosen,
+ * because creation writes a formats row and `trips.leaderboards` defaults to
+ * an empty array, which the compat layer reads as "old trip, use the flags".
+ *
+ * A value that cannot be read at all is a different thing and still falls
+ * back: null, a string, a number. That is a trip we know nothing about rather
+ * than a trip that has chosen nothing, and the distinction is the only reason
+ * the fallback still exists.
  */
 export function parseFormats(raw: unknown): TripFormats {
   if (!raw || typeof raw !== 'object') return cloneFormats(DEFAULT_FORMATS)
@@ -185,8 +214,10 @@ export function parseFormats(raw: unknown): TripFormats {
     },
   }
 
-  // A trip with nothing switched on has no leaderboard at all
-  return isEmpty(parsed) ? cloneFormats(DEFAULT_FORMATS) : parsed
+  // A trip with nothing switched on has no leaderboard at all — which is
+  // what this now returns, rather than the sentence being written above a
+  // line that did the opposite.
+  return parsed
 }
 
 /**
@@ -209,7 +240,10 @@ function fromLegacyBoards(
     matchplay: { on: matchplayOn, format: 'singles' },
   }
   if (teamsOn && !anyBoard) parsed.league.stableford = true
-  return isEmpty(parsed) ? cloneFormats(DEFAULT_FORMATS) : parsed
+  // Same rule as the current shape: an old row that said nothing was on was
+  // describing a trip with nothing on, and guessing Stableford for it only
+  // ever put a board on a leaderboard that scored nobody's competition.
+  return parsed
 }
 
 // ─── Questions ─────────────────────────────────────────────────

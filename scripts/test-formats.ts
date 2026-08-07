@@ -14,7 +14,7 @@
 import {
   parseFormats, leaderboardTabs, enabledSummary, isEmpty,
   hasCompetitors, anyLeagueBoard, leagueOn, matchplayOn, isPairsMatchplay,
-  matchplayFormatIsOpen, mainCompetition, DEFAULT_FORMATS,
+  matchplayFormatIsOpen, mainCompetition, DEFAULT_FORMATS, NO_FORMATS,
   type TripFormats,
 } from '../lib/formats'
 
@@ -32,11 +32,13 @@ function eq(got: unknown, want: unknown, label: string) {
 const section = (n: string) => console.log(`\n${n}`)
 
 /**
- * A trip exactly as given, without the empty-trip fallback.
+ * A trip exactly as given.
  *
- * parseFormats refuses to return a trip with nothing switched on, so states
- * the settings screen can legitimately hold mid-edit — nobody competing, a
- * league with no board ticked — have to be built directly.
+ * `parseFormats` used to refuse to return a trip with nothing switched on, so
+ * states the settings screen can legitimately hold mid-edit — nobody
+ * competing, a league with no board ticked — had to be built directly. It no
+ * longer refuses, and this stays because building the shape by hand is still
+ * the clearer way to say what a case is about.
  */
 function raw(patch: {
   individual?: boolean
@@ -281,16 +283,42 @@ section('Generation 3 — the current shape')
   eq(junk.matchplay.format, 'singles', 'and an unknown format falls back to singles')
 }
 
-section('Something is always on')
+section('Nothing switched on stays nothing switched on')
 {
-  eq(parseFormats({}), DEFAULT_FORMATS, 'an empty object falls back to the default')
-  eq(parseFormats(null), DEFAULT_FORMATS, 'so does null')
-  eq(parseFormats('nonsense'), DEFAULT_FORMATS, 'and so does a string')
-  eq(parseFormats({ individual: false, teams: false, league: { on: false }, matchplay: { on: false } }),
-    DEFAULT_FORMATS, 'a trip with everything off falls back too')
-  ok(!isEmpty(parseFormats({})), 'the fallback is never empty')
-  ok(hasCompetitors(DEFAULT_FORMATS), 'and always has somebody competing')
-  ok(leagueOn(DEFAULT_FORMATS), 'playing something')
+  // The rule that changed, and why it is worth a section of its own.
+  //
+  // A row saying nothing is on used to be answered with the defaults —
+  // individual, league, Stableford. The effect reached much further than
+  // reading an old trip: creation writes a formats row and
+  // `trips.leaderboards` defaults to an empty array, which the compat layer
+  // reads as "old trip, use the flags". So every trip made on this platform
+  // arrived with a Stableford leaderboard nobody had chosen, and the only
+  // way to be rid of it was to choose something else.
+  const off = { individual: false, teams: false, league: { on: false }, matchplay: { on: false } }
+  ok(isEmpty(parseFormats(off)), 'a trip with everything off has nothing to play for')
+  ok(!leagueOn(parseFormats(off)), '  …no league')
+  ok(!hasCompetitors(parseFormats(off)), '  …and nobody competing')
+
+  // Same for a row that carries the shape but ticks nothing inside it.
+  ok(isEmpty(parseFormats({ individual: true, league: { on: true } })),
+    'a league with no board ticked is not a competition either')
+
+  // NO_FORMATS is what creation writes, and it has to survive the round trip
+  // — if it came back as anything else the phantom board would be straight
+  // back, and only on real trips rather than in this file.
+  ok(isEmpty(parseFormats(NO_FORMATS)), 'what a new trip is created with reads back as nothing')
+  ok(!leagueOn(NO_FORMATS) && !matchplayOn(NO_FORMATS), '  …and says so directly too')
+
+  // A value that cannot be read at all is a different question: that is a
+  // trip we know nothing about rather than a trip that has chosen nothing,
+  // and it is the only case the fallback still exists for.
+  eq(parseFormats(null), DEFAULT_FORMATS, 'an unreadable row still falls back')
+  eq(parseFormats('nonsense'), DEFAULT_FORMATS, 'whatever shape it is not in')
+  ok(leagueOn(DEFAULT_FORMATS), 'and that fallback does name a competition')
+
+  // An empty object is readable and says nothing, so it is the first case
+  // rather than the second. This is the one that flipped.
+  ok(isEmpty(parseFormats({})), 'but an empty object says nothing, and is taken at its word')
 }
 
 console.log(`\n${'─'.repeat(56)}`)
