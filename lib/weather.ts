@@ -127,7 +127,14 @@ export type ParseResult = {
  * is the thing being avoided.
  */
 export function truncCoord(n: number): number {
-  return Math.trunc(n * 10_000) / 10_000
+  const scaled = n * 10_000
+  // Binary floating point cannot hold most decimals exactly. `-9.8578 *
+  // 10000` is -98577.99999999999, and truncating that gives -9.8577 — a
+  // ten-thousandth of movement in the value this function exists to hold
+  // still. So a scaled value that is an integer bar the representation
+  // noise is snapped to it, and only a genuine fraction is truncated.
+  const noise = Math.abs(scaled - Math.round(scaled)) < 1e-6
+  return (noise ? Math.round(scaled) : Math.trunc(scaled)) / 10_000
 }
 
 /**

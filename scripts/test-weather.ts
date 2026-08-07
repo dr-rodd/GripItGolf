@@ -104,6 +104,15 @@ section('Coordinates never carry a fifth decimal')
   eq(truncCoord(-9.99999), -9.9999, 'and truncated, not rounded — rounding adds a digit back')
   eq(truncCoord(51.6), 51.6, 'a shorter one is left alone')
 
+  // Truncating in floating point is not the one-liner it looks like.
+  // `-9.8578 * 10000` is -98577.99999999999, so a plain Math.trunc moves an
+  // already-valid coordinate by a ten-thousandth — the exact quantity this
+  // is here to hold still. Found by the pin over the shipped migration.
+  eq(truncCoord(-9.8578), -9.8578, 'a value already at four places does not drift')
+  eq(truncCoord(-8.5336), -8.5336, 'in either direction of the decimal')
+  eq(truncCoord(54.2237), 54.2237, 'or either sign')
+  eq(truncCoord(-10.0338), -10.0338, 'or either side of ten degrees')
+
   const url = metUrl(51.60123456, -9.99999)
   ok(!/\d\.\d{5}/.test(url), 'so no five-decimal number can reach the URL')
   ok(url.startsWith('https://api.met.no/weatherapi/locationforecast/2.0/complete?'),
@@ -390,6 +399,52 @@ section('MET is asked again only when it should be')
   eq(backoffOver(ago(BACKOFF_MINUTES + 1), now), true, 'past the backoff, try again')
   eq(backoffOver(ago(BACKOFF_MINUTES - 1), now), false, 'inside it, leave them alone')
   eq(backoffOver(null, now), true, 'and nothing has failed yet')
+}
+
+// ─── The coordinates that shipped ──────────────────────────────
+
+section('Every stored coordinate is one MET will accept')
+{
+  // The numbers live in a migration rather than in a script that writes to
+  // production, because everything else about a platform course is defined
+  // there too — a wrong latitude for Old Head should be fixed by editing a
+  // line and pushing, exactly as a wrong stroke index would be.
+  //
+  // That makes them source, so they get held to the same rules as anything
+  // else in `lib/`.
+  const fs = require('fs') as typeof import('fs')
+  const sql = fs.readFileSync(
+    'supabase/migrations/20260101000026_course_weather.sql', 'utf-8')
+
+  const pairs = [...sql.matchAll(
+    /SET latitude = (-?\d+\.\d+), longitude = (-?\d+\.\d+)/g)]
+  ok(pairs.length >= 20, `every course carries a pair (${pairs.length} statements)`)
+
+  for (const [, la, lo] of pairs) {
+    for (const n of [la, lo]) {
+      const places = n.split('.')[1]?.length ?? 0
+      ok(places <= 4, `${n} has no fifth decimal — MET refuses one`)
+      // And what shipped is already what gets sent, so the value in the
+      // database and the value in the URL are the same number.
+      eq(truncCoord(Number(n)), Number(n), `  …and ${n} survives truncCoord unchanged`)
+    }
+    // Ireland and Britain. A transposed pair or a stray minus lands outside
+    // this, and would otherwise send somebody the South Atlantic's weather.
+    const lat = Number(la), lon = Number(lo)
+    ok(lat >= 49 && lat <= 61, `${lat} is a plausible latitude`)
+    ok(lon >= -11 && lon <= 2, `${lon} is a plausible longitude`)
+  }
+
+  // The database enforces both of those too, so neither depends on this
+  // file being run.
+  ok(/numeric\(7,4\)/.test(sql), 'the column itself cannot hold a fifth decimal')
+  ok(/courses_coordinates_sane/.test(sql), 'and a CHECK holds the box')
+
+  // Replay-safe, which matters given the standing warning about migration
+  // 010's one-time backfill.
+  ok(!/DROP |DELETE FROM/i.test(sql), 'the migration drops and deletes nothing')
+  ok((sql.match(/ADD COLUMN IF NOT EXISTS/g) ?? []).length >= 3,
+    'and every column it adds is conditional')
 }
 
 // ─── Result ────────────────────────────────────────────────────
