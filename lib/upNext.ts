@@ -15,6 +15,13 @@
 // its day has actually arrived; before that the next round leads, because
 // "Thursday" is not a moment and a countdown to it would be invented.
 //
+// **An activity is mentioned, never promoted.** It is the one kind that
+// carries a clock time without being golf, so it could take the card and
+// count down — and it must not. Golf is what the trip is for and stays the
+// headline; a dinner is what is on afterwards. `upNext` therefore skips
+// activities when choosing, and `nextActivity` returns the next one
+// separately, for the caller to draw as a quieter second line.
+//
 // Pure. `now` is always an argument, and null means "the clock is not known
 // yet" — the server has no idea what time it is where the reader is standing.
 
@@ -110,12 +117,23 @@ export function dayArrived(date: string | null, now: Date): boolean {
  *
  *   1. Anything already behind us is out.
  *   2. The first remaining item whose **day has arrived** takes the card —
- *      the drive you are about to do beats Thursday's round.
+ *      the drive you are about to do beats Thursday's round. **Activities
+ *      are not eligible for this**: see below.
  *   3. Otherwise the next **golf** item leads, because it is the only kind
  *      that can carry a countdown.
  *   4. Failing even that — a trip of nothing but future journeys, which the
  *      creation form does not allow but a hand-edited trip could be — the
  *      first remaining item, without a countdown. Better than a blank card.
+ *
+ * Rule 2 skips activities on purpose. A stay or a journey on today's date is
+ * genuinely the next thing you do, and there is nothing else that day to
+ * outrank it. A dinner is not: it sits in the same day as a round, usually
+ * after it, and letting it take the card would mean the morning of a golf
+ * trip opens with a restaurant. `nextActivity` is how it gets said instead.
+ *
+ * Note that this is the *only* thing keeping an activity off the card. It is
+ * not covered by the golf-only countdown rule — an activity can carry a
+ * clock time, which is exactly why it needed excluding by name.
  *
  * With `now` null nothing has arrived yet and nothing is past, so this
  * returns the first golf item: a stable answer for the server to render,
@@ -133,12 +151,44 @@ export function upNext(
   if (remaining.length === 0) return null
 
   const arrived = now
-    ? remaining.find(i => dayArrived(dateOf(i, startDate, roundDates), now))
+    ? remaining.find(i =>
+        i.kind !== 'activity' && dayArrived(dateOf(i, startDate, roundDates), now))
     : undefined
 
   const item = arrived
     ?? remaining.find(i => i.kind === 'golf')
+    // Last resort, and the one place an activity can lead: a trip with no
+    // golf left at all. A card saying "Dinner, 7:30" beats a blank one.
     ?? remaining[0]
+
+  return describeUpNext(item, startDate, roundDates, courseNames)
+}
+
+/**
+ * The next activity still to come, for the quiet line under the card.
+ *
+ * Separate from `upNext` rather than folded into it, because it answers a
+ * different question: `upNext` is "what is the trip doing next", this is
+ * "and what else is booked". Both are read from the same remaining list, so
+ * they cannot disagree about what has already happened.
+ *
+ * Returns null when the next activity **is** the headline — a trip with no
+ * golf left falls through to it, and the same dinner named twice on one card
+ * reads as a bug rather than as emphasis.
+ */
+export function nextActivity(
+  items: readonly ItineraryItem[],
+  startDate: string | null,
+  roundDates: RoundDates,
+  courseNames: Record<string, string>,
+  now: Date | null,
+  headline: UpNext | null,
+): UpNext | null {
+  const ordered = orderedItems(items)
+  const remaining = now ? stillToCome(ordered, startDate, roundDates, now) : ordered
+
+  const item = remaining.find(i => i.kind === 'activity')
+  if (!item || item.id === headline?.item.id) return null
 
   return describeUpNext(item, startDate, roundDates, courseNames)
 }

@@ -14,7 +14,7 @@
 import fs from 'fs'
 import type { ItineraryItem } from '../lib/itinerary'
 import {
-  upNext, describeCountdown, describeGroups, momentOf, orderedItems, dayArrived,
+  upNext, nextActivity, describeCountdown, describeGroups, momentOf, orderedItems, dayArrived,
 } from '../lib/upNext'
 import { nextMatch, describeNextMatch, type DrawMatch } from '../lib/nextMatch'
 import { stayRuns, travelLegs, describeStayRun } from '../lib/stays'
@@ -58,6 +58,8 @@ const stay = (id: string, day: number, pos: number, name: string): ItineraryItem
   ({ id, dayIndex: day, position: pos, kind: 'stay', stayName: name })
 const travel = (id: string, day: number, pos: number, to: string): ItineraryItem =>
   ({ id, dayIndex: day, position: pos, kind: 'travel', travelMode: 'car', fromPlace: 'Dublin', toPlace: to, durationMins: 270 })
+const activity = (id: string, day: number, pos: number, name: string, at: string | null): ItineraryItem =>
+  ({ id, dayIndex: day, position: pos, kind: 'activity', activityName: name, activityTime: at })
 
 const COURSES = { c1: 'Carne' }
 /** Round dates, keyed by the itinerary item that made them. */
@@ -104,6 +106,105 @@ section('Up next picks the next thing that has not happened')
 
   eq(upNext([], START, DATES, COURSES, new Date(2026, 7, 13)), null,
     'a trip with no itinerary has nothing next either')
+}
+
+// ─── Activities are mentioned, never promoted ──────────────
+
+section('An activity never takes the card from golf')
+{
+  // The arrival day: a dinner booked for tonight, and the first round not
+  // until tomorrow morning.
+  //
+  // This is the case the rule exists for, and the fixture has to be this
+  // shape to prove anything. With the dinner sitting *after* the round in
+  // the same day, `remaining.find` reaches the round first whatever the rule
+  // says, and the check passes either way — which is a pin that cannot fail.
+  // Here the activity comes first in the running order and its day has
+  // arrived, so without the exclusion it takes the card outright.
+  const items = [
+    activity('a1', 0, 0, 'Dinner at the Beach House', '19:00'),
+    golf('g1', 1, 0, '09:20', 3),
+    golf('g2', 2, 0, '10:00'),
+  ]
+
+  // An activity carries a clock time — the only non-golf kind that does — so
+  // it is eligible for the "its day has arrived" shortcut a stay and a
+  // journey use, and it must not take it. Left in, the first morning of a
+  // golf trip opens with a restaurant.
+  const morning = upNext(items, START, DATES, COURSES, new Date(2026, 7, 13, 8, 0))
+  eq(morning?.item.id, 'g1', 'tonight\'s dinner does not outrank tomorrow\'s round')
+  ok(!!morning?.startsAt, '  …and the card still counts down to the golf')
+
+  // …and the dinner is still said, underneath.
+  const also = nextActivity(items, START, DATES, COURSES, new Date(2026, 7, 13, 8, 0), morning)
+  eq(also?.item.id, 'a1', 'the activity is mentioned all the same')
+  eq(also?.title, 'Dinner at the Beach House', '  …by name')
+  eq(also?.detail, '7:00 pm', '  …and by the time it starts')
+
+  // The other order, where the activity follows the round in the same day.
+  // Reads the same on the card, and is the ordinary case.
+  const sameDay = [
+    golf('g1', 1, 0, '09:20', 3),
+    activity('a2', 1, 1, 'Dinner', '19:00'),
+  ]
+  const at7 = new Date(2026, 7, 14, 7, 0)
+  eq(upNext(sameDay, START, DATES, COURSES, at7)?.item.id, 'g1',
+    'a dinner after the round does not take the card either')
+  eq(nextActivity(sameDay, START, DATES, COURSES, at7,
+    upNext(sameDay, START, DATES, COURSES, at7))?.item.id, 'a2',
+    '  …and is named underneath it')
+
+  // A stay on an arrived day still takes the card. Only activities were
+  // excluded, and this is what proves the exclusion was by kind rather than
+  // by breaking rule 2 for everybody.
+  const withStay = [travel('t0', 0, 0, 'Carne'), golf('g0', 0, 1, '14:00')]
+  eq(upNext(withStay, START, DATES, COURSES, new Date(2026, 7, 13, 8, 0))?.item.id, 't0',
+    'a journey on its own day still leads')
+
+  // Once the golf is behind you, the activity is what is left — but it is
+  // the *headline* then, so it must not also appear on the line below.
+  const evening = upNext([golf('g1', 1, 0, '09:20'), activity('a1', 1, 1, 'Dinner', '19:00')],
+    START, DATES, COURSES, new Date(2026, 7, 14, 18, 0))
+  eq(evening?.item.id, 'a1', 'with no golf left the activity does lead — better than a blank card')
+  eq(nextActivity([golf('g1', 1, 0, '09:20'), activity('a1', 1, 1, 'Dinner', '19:00')],
+    START, DATES, COURSES, new Date(2026, 7, 14, 18, 0), evening), null,
+    '  …and is not then named twice on the same card')
+
+  // Nothing to say is said as nothing.
+  eq(nextActivity([golf('g1', 1, 0, '09:20')], START, DATES, COURSES,
+    new Date(2026, 7, 14, 7, 0), null), null,
+    'a trip with no activities shows no line')
+
+  // An activity already behind you is not "what else is booked".
+  const past = [golf('g2', 2, 0, '10:00'), activity('a1', 1, 1, 'Dinner', '19:00')]
+  eq(nextActivity(past, START, DATES, COURSES, new Date(2026, 7, 16, 9, 0), null), null,
+    'and neither is one that has already happened')
+
+  // The time is optional on an activity, and the line has to survive that.
+  const untimed = [golf('g1', 1, 0, '09:20'), activity('a2', 1, 1, 'Pub quiz', null)]
+  const q = nextActivity(untimed, START, DATES, COURSES, new Date(2026, 7, 14, 7, 0),
+    upNext(untimed, START, DATES, COURSES, new Date(2026, 7, 14, 7, 0)))
+  eq(q?.title, 'Pub quiz', 'an activity with no time is still mentioned')
+  eq(q?.detail, '', '  …and says nothing about when, rather than "no time"')
+}
+
+section('The hub draws the activity under the card, not inside it')
+{
+  const src = code('app/trip/[tripCode]/StatusBlock.tsx')
+
+  ok(src.includes('nextActivity('), 'the hub asks for the next activity')
+  // Inside the <Link> it would be a tap target that opens the round page —
+  // the same trap the weather line is inside on purpose and this is not.
+  const upNextBlock = src.slice(src.indexOf('{next ? ('), src.indexOf('Standing'))
+  ok(upNextBlock.indexOf('</Link>') < upNextBlock.indexOf('activity &&'),
+    'and draws it after the link closes, not within it')
+
+  // Golf stays the loudest thing in the block: the card's title is `t-card`
+  // and this is `t-cap`, one step down and at 65%.
+  ok(/activity &&[\s\S]{0,200}t-cap text-ink\/65/.test(src),
+    'the activity line is set below the card it hangs off')
+  ok(!/activity &&[\s\S]{0,200}t-card/.test(src),
+    '  …and never at the card\'s own weight')
 }
 
 section('The server renders a stable answer, and the browser corrects it')

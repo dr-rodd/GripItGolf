@@ -6,11 +6,11 @@ import { useState } from 'react'
 import { forgetPlayer } from '@/lib/playerCookie'
 import { type ItineraryItem, describeDay } from '@/lib/itinerary'
 import {
-  upNext, describeCountdown, describeGroups, type RoundDates,
+  upNext, nextActivity, describeCountdown, describeGroups, type RoundDates,
 } from '@/lib/upNext'
 import { useMinute } from '@/app/components/useMinute'
 import CourseWeather from '@/app/components/CourseWeather'
-import { IconArrowRight, IconFlag, IconHome, IconCar, IconPlane, IconTrain } from '@/app/components/icons'
+import { IconArrowRight, IconFlag, IconHome, IconCar, IconPlane, IconTrain, IconFork } from '@/app/components/icons'
 
 /**
  * The top of the trip hub: what this device is, and what happens next.
@@ -42,6 +42,7 @@ import { IconArrowRight, IconFlag, IconHome, IconCar, IconPlane, IconTrain } fro
 function itemIcon(item: ItineraryItem, size: number) {
   if (item.kind === 'golf') return <IconFlag size={size} />
   if (item.kind === 'stay') return <IconHome size={size} />
+  if (item.kind === 'activity') return <IconFork size={size} />
   if (item.travelMode === 'flight') return <IconPlane size={size} />
   if (item.travelMode === 'train') return <IconTrain size={size} />
   return <IconCar size={size} />
@@ -94,6 +95,20 @@ export default function StatusBlock({
     ? roundNumbers[next.item.id] ?? null
     : null
 
+  // What else is booked. Deliberately not part of `next`: golf is what the
+  // trip is for and keeps the card, and this is the line underneath it.
+  const activity = nextActivity(items, startDate, dates, courseNames, now, next)
+  // The day is only worth saying when it is not the one already named above
+  // — "Friday · Friday, 7:30 pm" is the card telling you twice. On the same
+  // day the time alone is the whole answer, and an activity with no time
+  // says nothing rather than "no time".
+  const activityWhen = activity
+    ? (activity.date === next?.date
+        ? activity.detail
+        : [describeDay(activity.date, activity.item.dayIndex), activity.detail]
+            .filter(Boolean).join(' · '))
+    : ''
+
   return (
     <div className="w-full rounded-2xl border border-bark/12 bg-surface px-4 py-4">
 
@@ -128,6 +143,26 @@ export default function StatusBlock({
             <UpNextLines next={next} countdown={countdown} />
           )
         ) : <TripOver />}
+
+        {/* What else is booked.
+            Outside the <Link> above rather than inside it, which is the
+            whole point: the card belongs to the round and tapping it opens
+            the round, so a line about dinner sitting inside it would be a
+            tap target that goes somewhere else entirely.
+            Indented to the card's text column — `pl-11` is the icon's 8
+            plus the gap's 3 — so it reads as hanging off what is above it
+            rather than as a second thing of equal weight. */}
+        {next && activity && (
+          <p className="mt-2.5 pl-11 flex items-center gap-2 t-cap text-ink/65">
+            <span className="flex-shrink-0 text-bark" aria-hidden="true">
+              <IconFork size={14} />
+            </span>
+            <span className="truncate">{activity.title}</span>
+            {activityWhen && (
+              <span className="flex-shrink-0 text-ink/50">{activityWhen}</span>
+            )}
+          </p>
+        )}
       </div>
 
       {/* ── Standing ──
