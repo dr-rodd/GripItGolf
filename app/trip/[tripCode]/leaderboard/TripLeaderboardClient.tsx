@@ -523,12 +523,29 @@ function CourseTiles({
  * Each strip being its own scroller keeps every ancestor of that sticky row
  * unscrolled.
  *
- * Writing scrollLeft fires `scroll` again, so the write is flagged and the
- * echo ignored — without it the strips fight each other and judder.
+ * Writing scrollLeft fires `scroll` again, so the write has to be told apart
+ * from a real one — without that the strips fight each other and judder.
  */
 function useSyncedStrips() {
   const strips = useRef<Set<HTMLDivElement>>(new Set())
-  const syncing = useRef(false)
+  /**
+   * The offset last written to each strip, so its own echo can be told from
+   * a finger on it.
+   *
+   * This replaced a `syncing` boolean held across a frame, and the boolean
+   * was what made the table feel loose. Every event inside that window was
+   * dropped — including the real ones, which during a flick arrive every
+   * frame — so the followers took a step, ignored the next report, took
+   * another, and trailed the row under the thumb by a frame or two the
+   * whole way across.
+   *
+   * A value rather than a window: an event is our own echo when the strip
+   * is already sitting exactly where we put it, and that is true no matter
+   * when it arrives. Nothing real is ever swallowed.
+   *
+   * A WeakMap so a strip that unmounts takes its entry with it.
+   */
+  const applied = useRef(new WeakMap<HTMLDivElement, number>())
 
   // Always returns a cleanup, never sometimes — React 19 treats a returned
   // function as the detach hook, and a callback that returns one only on
@@ -540,23 +557,29 @@ function useSyncedStrips() {
   }, [])
 
   const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    if (syncing.current) return
-    syncing.current = true
     const source = e.currentTarget
     const left = source.scrollLeft
-    // Applied on the next frame rather than inline: a scroll handler runs
-    // very often, and batching the writes into the frame keeps a flick on a
-    // phone smooth. The flag is cleared in the same frame, after the writes,
-    // so the scroll events they raise are the ones it swallows.
-    requestAnimationFrame(() => {
-      for (const el of strips.current) {
-        if (el !== source && el.scrollLeft !== left) el.scrollLeft = left
-      }
-      // Released a frame later, not here: the writes above raise scroll
-      // events of their own and those arrive after this frame, so clearing
-      // the flag now would let the echo back in and the strips would fight.
-      requestAnimationFrame(() => { syncing.current = false })
-    })
+
+    // Our own echo. Skipping it is safe even in the rare case where a real
+    // scroll happens to land on exactly the offset we last wrote: every
+    // strip is already there, so there is nothing to propagate.
+    if (applied.current.get(source) === left) return
+
+    // Written here rather than deferred to the next frame. `scroll` is
+    // already delivered once per frame, so a rAF only bought a frame of lag;
+    // setting twelve `scrollLeft`s is a handful of microseconds and lands
+    // the followers in the same frame as the row being dragged.
+    for (const el of strips.current) {
+      if (el === source || el.scrollLeft === left) continue
+      // Recorded before the write, not read back after it. Reading
+      // `scrollLeft` straight after setting it forces a synchronous layout,
+      // and doing that a dozen times per frame is the one thing here that
+      // would genuinely cost a flick. Safe because every strip holds the
+      // same columns at the same widths, so they clamp identically or not
+      // at all.
+      applied.current.set(el, left)
+      el.scrollLeft = left
+    }
   }, [])
 
   return { register, onScroll }

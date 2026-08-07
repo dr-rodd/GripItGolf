@@ -31,6 +31,7 @@ function eq(got: unknown, want: unknown, label: string) {
 }
 const section = (n: string) => console.log(`\n${n}`)
 const read = (p: string) => fs.readFileSync(p, 'utf-8')
+const css = read('app/globals.css')
 
 // ─── Fixture: 3 players, 2 rounds, every hole scored ───────────
 
@@ -471,6 +472,46 @@ section('A board with columns off the edge says so')
   const sheet = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   const fadeUses = sheet.split('\n').filter(l => l.includes('<Strip') && l.includes('fade'))
   eq(fadeUses.length, 2, 'only the board\'s two strips ask for the fade, not the sheet\'s')
+}
+
+section('The rows move as one table, not one row and eleven followers')
+{
+  const src = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  // Comments stripped: the note inside the hook explains what the old
+  // `syncing` boolean did and why it went, and a prose mention of it would
+  // match the check that it is gone.
+  const hook = src
+    .slice(src.indexOf('function useSyncedStrips'), src.indexOf('function Strip'))
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+
+  // Every row is its own scroller, so only the one under the thumb is
+  // scrolled by the browser. Two things made that visible, and both are
+  // pinned because both are invisible in a screenshot and obvious on a
+  // phone.
+
+  // 1. The bounce. At either end the touched row was the only one allowed
+  //    to overscroll and settle back, so eleven rows held still while one
+  //    sprang — which read as that player coming loose from the table.
+  const strip = css.split('.scroll-strip')[1]?.split('}')[0] ?? ''
+  ok(/overscroll-behavior-x:\s*none/.test(strip),
+    'a strip cannot rubber-band past its own stop')
+
+  // 2. The lag. The followers were written inside a rAF, and a boolean held
+  //    across that frame dropped every scroll event inside it — including
+  //    the real ones, which during a flick arrive every frame. Same-frame
+  //    writes and a value-based echo check instead.
+  ok(!/requestAnimationFrame/.test(hook),
+    'the followers are written in the same frame as the row being dragged')
+  ok(!/syncing/.test(hook),
+    '  …with no window during which a real scroll is dropped')
+  ok(/WeakMap/.test(hook) && /applied/.test(hook),
+    '  …and an echo is told apart by where the strip already is')
+
+  // The echo check has to come before the writes or the handler re-enters
+  // itself on its own output and the strips fight.
+  ok(hook.indexOf('applied.current.get(source)') < hook.indexOf('applied.current.set'),
+    'and the echo is checked before anything is written')
 }
 
 // ─── Live vs finalised ─────────────────────────────────────────

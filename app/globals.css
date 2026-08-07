@@ -187,6 +187,17 @@ body {
 .scroll-strip {
   scrollbar-width: none;
   -ms-overflow-style: none;
+
+  /* No rubber band, and this is the important line.
+     Every row is its own scroller kept in step with the others, so the one
+     under your thumb is the only one the browser scrolls natively — and at
+     either end it was the only one allowed to bounce past the stop and
+     settle back. Twelve rows held still while one sprang, which read as
+     that player's row coming loose from the table.
+     `none` rather than `contain`: contain stops the gesture reaching the
+     page behind, which was never the problem, and leaves the local bounce
+     exactly where it was. */
+  overscroll-behavior-x: none;
 }
 .scroll-strip::-webkit-scrollbar {
   display: none;
@@ -211,14 +222,26 @@ body {
    other row, which is why this is a prop on the strip rather than
    something `.scroll-strip` carries for everyone.
 
+   **Both layers are linear, and the shadow one has to be.** It was a
+   radial gradient — `farthest-side at 100% 50%` — which is the shape you
+   want for a shadow cast by one box. But this is not one box: it is
+   painted per row, and a radial is strongest at each row's own middle and
+   fades towards that row's top and bottom. Down twelve rows that made a
+   string of separate ovals rather than an edge, and every row boundary
+   showed as a pinch. A horizontal linear gradient is flat top to bottom,
+   so the rows join into one continuous band — which is what an edge is.
+
+   Softer with it: 18% of bark was a shadow you looked at rather than a
+   hint that there was more to the right. 10% reads as depth.
+
    `rgba(255,255,255,0)` rather than `transparent`: Safari interpolates
    the keyword through black and the fade comes out dirty. */
 .scroll-fade {
   background:
     linear-gradient(to left, var(--color-surface), rgba(255, 255, 255, 0))
       right center / 28px 100% no-repeat local,
-    radial-gradient(farthest-side at 100% 50%, rgba(74, 55, 40, 0.18), rgba(255, 255, 255, 0))
-      right center / 14px 100% no-repeat scroll;
+    linear-gradient(to left, rgba(74, 55, 40, 0.10), rgba(255, 255, 255, 0))
+      right center / 16px 100% no-repeat scroll;
 }
 
 /* ── Forms ─────────────────────────────────────────────────────

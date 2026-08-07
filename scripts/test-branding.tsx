@@ -115,10 +115,23 @@ section('The old identity is gone')
     const fade = css.split('.scroll-fade')[1]?.split('}')[0] ?? ''
     ok(/linear-gradient[^;]*\blocal\b/.test(fade),
       'the scroll shadow carries its cover, anchored to the content')
-    ok(/radial-gradient[^;]*\bscroll\b/.test(fade),
+    ok(/linear-gradient[^;]*\bscroll\b/.test(fade),
       '  …and its shadow, anchored to the box you can see')
     ok(fade.includes('var(--color-surface)'),
       '  …with the cover in the colour the board rows actually sit on')
+
+    // Linear, not radial, and this is the whole reason it changed. A radial
+    // is the right shape for a shadow cast by one box — but this is painted
+    // per row, so it peaked at each row's own middle and faded to that row's
+    // top and bottom. Twelve rows of that is a string of ovals with a pinch
+    // at every boundary, not an edge.
+    ok(!fade.includes('radial-gradient'),
+      '  …and is flat top to bottom, so the rows join into one band')
+
+    // Subtle enough to be depth rather than a mark on the screen.
+    const shade = Number(fade.match(/rgba\(74,\s*55,\s*40,\s*([\d.]+)\)/)?.[1] ?? 1)
+    ok(shade > 0, 'the shadow is actually painted')
+    ok(shade <= 0.12, `and stays under 12% bark (${shade})`)
   }
 
   // "No pure gray anywhere. Every neutral is derived from #4A3728."
