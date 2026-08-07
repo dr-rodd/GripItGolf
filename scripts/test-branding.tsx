@@ -1379,6 +1379,23 @@ section('The old branding is gone')
   for (const f of ['app/page.tsx', 'app/layout.tsx', 'app/join/JoinForm.tsx']) {
     ok(!read(f).includes('GripItGolf'), `${f.split('/').pop()} does not mention the old name`)
   }
+
+  // The tab icon. The Next.js starter's Vercel triangle sat in every tab from
+  // the day the project was generated — the one piece of somebody else's
+  // branding still shipping.
+  ok(fs.existsSync('app/icon.svg'), 'there is a tab icon')
+  ok(!fs.existsSync('app/favicon.ico'), '  …and the starter triangle is gone')
+
+  const icon = read('app/icon.svg')
+  ok(/<circle/.test(icon), 'it is the dot, which is the half of the mark that reads at 16px')
+  // Tied to the palette rather than merely emerald-ish. An SVG cannot read a
+  // CSS custom property, so this is the one file outside globals.css that has
+  // to carry the hex — and this is what makes the two move together.
+  const accent = css.match(/--color-accent:\s*(#[0-9A-Fa-f]{6})/)?.[1] ?? ''
+  ok(accent !== '' && icon.toUpperCase().includes(accent.toUpperCase()),
+    `and it is the palette's own emerald (${accent})`)
+  ok(!/rect|fill="#F6F4F0"/i.test(icon),
+    'on nothing, so it does not show as a pale tile in dark browser chrome')
 }
 
 // ─── Who can edit ──────────────────────────────────────────────

@@ -915,6 +915,19 @@ section('There is one door to the settings, not two')
   ok(!hub.includes('isLocked'), 'and the padlock went with it')
 }
 
+section('The first section has no rule above it')
+{
+  // A rule separates one section from the next, so the first has nothing
+  // above it to be separated from. Left in place it read as a stray line
+  // under whatever the stack follows — on the hub, the player's own card —
+  // rather than as the start of the list.
+  const src = read('app/components/Section.tsx')
+  ok(/border-t border-bark\/12 first:border-t-0/.test(src),
+    'the rule is dropped on the first of the stack')
+  ok(/border-t border-bark/.test(src),
+    '  …and kept between the rest, which is what it is for')
+}
+
 section('One section is open at a time')
 {
   const stack = code('app/components/Section.tsx')

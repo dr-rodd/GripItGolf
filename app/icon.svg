@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!--
+    The tab icon: the green dot, on its own.
+
+    It replaces the Next.js starter's Vercel triangle, which had been sitting
+    in every tab since the project was generated.
+
+    The mark is a wordmark closed by a dot — "green dot." — and at sixteen
+    pixels the word is unreadable and the dot is not. So the dot is the whole
+    icon, filling most of the canvas rather than sitting small the way it does
+    beside a title.
+
+    Transparent behind it on purpose: emerald carries against a light tab strip
+    and a dark one alike, and a cream tile would show as a pale square in dark
+    browser chrome.
+
+    The hex is written out here, which is the one place outside app/globals.css
+    that has to be — an SVG cannot read a CSS custom property. It is
+    --color-accent. If the emerald ever moves, this moves with it.
+  -->
+  <circle cx="16" cy="16" r="13" fill="#0A9D56"/>
+</svg>

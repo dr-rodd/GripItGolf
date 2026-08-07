@@ -42,7 +42,15 @@ export function Section({
   const panelId = useId()
 
   return (
-    <section className="border-t border-bark/12">
+    /* The rule separates one section from the next, so the first one has
+       nothing above it to be separated from. Left in place it read as a
+       stray line under whatever card the stack follows — on the hub, the
+       player's own — rather than as the start of the list.
+
+       `first:` rather than a prop: the stack renders these as direct
+       children of one flex column, so the DOM already knows which is first
+       and nothing has to be told. */
+    <section className="border-t border-bark/12 first:border-t-0">
       <h2>
         <button
           type="button"
