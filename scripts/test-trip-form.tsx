@@ -346,6 +346,25 @@ section('Handicap inputs bring up a keypad')
       `  …none of them refuses anything better than scratch`)
   }
 
+  // A player row is read far more often than it is edited, and it used to
+  // carry five live controls at all times — name box, handicap box, M, F and
+  // a team dropdown — which was most of a phone screen for four players with
+  // nothing on it saying which were worth touching.
+  const setupSrc = require('fs').readFileSync(files[1], 'utf-8')
+  ok(/setEditingId\(player\.id\)/.test(setupSrc),
+    'a closed player row opens for editing rather than being editable always')
+  ok(/const editing = editingId === player\.id && canEdit/.test(setupSrc),
+    '  …and cannot open for a device that may not change the trip')
+  // Closing writes nothing — every field saves as it is left — so one row at
+  // a time can never cost an edit.
+  ok(/onClick=\{\(\) => setEditingId\(null\)\}/.test(setupSrc),
+    'and closes without a save of its own')
+
+  // The open row is laid out like the add-player form under it: the field
+  // stretches, the buttons finish at the right-hand edge.
+  ok(/rowClassName="flex-1 min-w-0"/.test(setupSrc),
+    'the open handicap field stretches like the one in the add form')
+
   // The sign is a control, so it has to be reachable and it has to save.
   const field = require('fs').readFileSync('app/components/HandicapField.tsx', 'utf-8')
   ok(/aria-pressed=\{plus\}/.test(field), 'the plus button says whether it is on')

@@ -14,7 +14,9 @@ import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import TripHeader from '@/app/components/TripHeader'
 import TabBar from '@/app/components/TabBar'
 import SupportLink from '@/app/components/SupportLink'
-import { IconSettings, IconX, IconFlag, IconChevronRight } from '@/app/components/icons'
+import {
+  IconSettings, IconX, IconFlag, IconChevronRight, IconPencil,
+} from '@/app/components/icons'
 import type { ItineraryItem } from '@/lib/itinerary'
 import {
   type Leaderboard, needsTeams, needsPairings, hasMatchplay, boardTitle,
@@ -198,6 +200,15 @@ export default function TripSetupClient({
   const [newTeams, setNewTeams] = useState<Record<string, string>>({})
 
   // UI state
+  /**
+   * Which player row is open for editing, if any.
+   *
+   * One at a time, like the hub's sections: two rows of open fields on a
+   * phone is most of a screen, and the second one is never the one being
+   * looked at. Closing writes nothing — every field in there saves as it is
+   * left — so switching rows can never lose an edit.
+   */
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [isOwner, setIsOwner] = useState(false)
@@ -745,75 +756,128 @@ export default function TripSetupClient({
             </div>
 
             <div className="space-y-3">
-              {players.map(player => (
+              {players.map(player => {
+                // `canEdit` is the permission; `locked` is that plus a write
+                // in flight. The row opens on the first and its fields go
+                // quiet on the second — using `locked` for both would make
+                // the edit and remove buttons vanish and come back on every
+                // save, which reads as the row flinching.
+                const editing = editingId === player.id && canEdit
+                return (
                 <div key={player.id} className="bg-surface border border-bark/12 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <input
-                      type="text"
-                      defaultValue={player.name}
-                      onBlur={e => {
-                        const v = e.target.value.trim()
-                        if (!v || v === player.name) return
-                        // Refused here rather than inside updatePlayer,
-                        // because this is the only place holding the input
-                        // itself — the box is uncontrolled, so putting the
-                        // stored name back is a DOM write, not a re-render.
-                        if (duplicateName(v, players, player.id)) {
-                          flashError(duplicateNameError(v))
-                          e.target.value = player.name
-                          return
-                        }
-                        updatePlayer(player.id, { name: v })
-                      }}
-                      disabled={locked}
-                      className="flex-1 bg-transparent text-ink text-sm font-medium focus:outline-none disabled:opacity-40"
-                    />
-                    {player.is_lead && (
-                      <span className="text-ink/65 text-[12px] tracking-widest uppercase flex-shrink-0">Lead</span>
-                    )}
-                    {!locked && (
-                      <button
-                        onClick={() => removePlayer(player.id)}
-                        className="w-9 h-9 flex items-center justify-center text-ink/65 hover:text-ink/80 transition-colors flex-shrink-0"
-                        aria-label={`Remove ${player.name}`}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M18 6L6 18M6 6l12 12" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    <HandicapField
-                      defaultValue={player.handicap == null ? '' : formatHandicap(player.handicap)}
-                      onCommit={text => {
-                        const v = parseHandicap(text)
-                        if (v !== null && v !== player.handicap) updatePlayer(player.id, { handicap: v })
-                      }}
-                      disabled={locked}
-                      placeholder="HCP"
-                      rowClassName="flex-shrink-0"
-                      className="w-16 bg-surface border border-bark/12 rounded-lg px-3 py-2.5 text-ink text-sm focus:outline-none focus:border-accent/50 disabled:opacity-40"
-                    />
-                    <div className="flex gap-1 flex-shrink-0">
-                      {(['M', 'F'] as const).map(g => (
-                        <button
-                          key={g}
-                          onClick={() => player.gender !== g && updatePlayer(player.id, { gender: g })}
-                          disabled={locked}
-                          className={`w-11 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 ${
-                            player.gender === g
-                              ? 'bg-accent-deep text-white'
-                              : 'bg-surface border border-bark/12 text-ink/65'
-                          }`}
-                        >
-                          {g}
-                        </button>
-                      ))}
+
+                  {/* ── Closed: the two facts, and the way in ──
+                      A player is read far more often than edited. This row
+                      carried a name box, a handicap box, M, F and a team
+                      dropdown at all times — five controls each, most of a
+                      screen for four players, and nothing on it said which
+                      were worth touching. */}
+                  {!editing ? (
+                    <div className="flex items-center gap-3">
+                      <span className="flex-1 min-w-0 text-ink text-sm font-medium truncate">
+                        {player.name}
+                      </span>
+                      {player.is_lead && (
+                        <span className="text-ink/65 text-[12px] tracking-widest uppercase flex-shrink-0">Lead</span>
+                      )}
+                      <span className="t-num text-ink/80 text-sm flex-shrink-0">
+                        {player.handicap == null ? '—' : formatHandicap(player.handicap)}
+                      </span>
+                      {canEdit && (
+                        <>
+                          <button
+                            onClick={() => setEditingId(player.id)}
+                            disabled={busy}
+                            className="w-9 h-9 -mr-1 flex items-center justify-center text-ink/65 hover:text-ink transition-colors flex-shrink-0 disabled:opacity-40"
+                            aria-label={`Edit ${player.name}`}
+                          >
+                            <IconPencil size={15} />
+                          </button>
+                          <button
+                            onClick={() => removePlayer(player.id)}
+                            disabled={busy}
+                            className="w-9 h-9 -mr-2 flex items-center justify-center text-ink/65 hover:text-ink/80 transition-colors flex-shrink-0 disabled:opacity-40"
+                            aria-label={`Remove ${player.name}`}
+                          >
+                            <IconX size={16} />
+                          </button>
+                        </>
+                      )}
                     </div>
-                    {/* One sheet keeps the dropdown on the same line as
-                        the handicap, where it has always been. */}
-                    {pickedSheets.length === 1 && (
+                  ) : (
+                    /* ── Open: name, handicap, who they play off ──
+                       Laid out like the add-player form directly below, so
+                       the two read as the same task: the field stretches and
+                       the buttons finish at the right-hand edge. */
+                    <div className="flex flex-col gap-2">
+                      <input
+                        type="text"
+                        defaultValue={player.name}
+                        onBlur={e => {
+                          const v = e.target.value.trim()
+                          if (!v || v === player.name) return
+                          // Refused here rather than inside updatePlayer,
+                          // because this is the only place holding the input
+                          // itself — the box is uncontrolled, so putting the
+                          // stored name back is a DOM write, not a re-render.
+                          if (duplicateName(v, players, player.id)) {
+                            flashError(duplicateNameError(v))
+                            e.target.value = player.name
+                            return
+                          }
+                          updatePlayer(player.id, { name: v })
+                        }}
+                        aria-label="Player name"
+                        disabled={locked}
+                        className={INPUT}
+                      />
+                      <div className="flex gap-2">
+                        <HandicapField
+                          defaultValue={player.handicap == null ? '' : formatHandicap(player.handicap)}
+                          onCommit={text => {
+                            const v = parseHandicap(text)
+                            if (v !== null && v !== player.handicap) updatePlayer(player.id, { handicap: v })
+                          }}
+                          placeholder="HCP"
+                          disabled={locked}
+                          rowClassName="flex-1 min-w-0"
+                          className={`${INPUT} flex-1 min-w-0`}
+                        />
+                        <div className="flex gap-1 flex-shrink-0">
+                          {(['M', 'F'] as const).map(g => (
+                            <button
+                              key={g}
+                              onClick={() => player.gender !== g && updatePlayer(player.id, { gender: g })}
+                              disabled={locked}
+                              className={`w-11 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 ${
+                                player.gender === g
+                                  ? 'bg-accent-deep text-white'
+                                  : 'bg-surface border border-bark/12 text-ink/65'
+                              }`}
+                            >
+                              {g}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Every field saves as it is left, so this closes the
+                          row rather than committing it. Named Done because
+                          Cancel is what a reader would expect opposite Save,
+                          and there is nothing here to cancel. */}
+                      <button
+                        onClick={() => setEditingId(null)}
+                        className="self-end px-4 py-2 t-cap uppercase tracking-[0.18em] text-accent-deep hover:text-accent transition-colors"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  )}
+
+                  {/* The team stays out of the edit, open or closed. Filling
+                      a draw is a job done down the whole list at once, not
+                      one player at a time. */}
+                  {pickedSheets.length === 1 && (
+                    <div className="mt-3">
                       <TeamSelect
                         label={null}
                         value={teamFor(memberships, player.id, pickedSheets[0]) ?? ''}
@@ -825,13 +889,13 @@ export default function TripSetupClient({
                         wide={false}
                         onChange={id => movePlayerToTeam(player.id, pickedSheets[0], id)}
                       />
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   {/* Two, and each needs naming — a league team and a
                       pairing are two answers about the same person. */}
                   {pickedSheets.length > 1 && (
-                    <div className="flex flex-col gap-2 mt-2">
+                    <div className="flex flex-col gap-2 mt-3">
                       {pickedSheets.map(id => (
                         <TeamSelect
                           key={id}
@@ -849,7 +913,8 @@ export default function TripSetupClient({
                     </div>
                   )}
                 </div>
-              ))}
+                )
+              })}
 
               {players.length === 0 && (
                 <p className="text-ink/65 text-sm text-center py-2">
