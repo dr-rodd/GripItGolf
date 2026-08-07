@@ -19,7 +19,7 @@
 import {
   truncCoord, metUrl, metUserAgent, parseForecast, pickAt,
   compass, arrowDeg, symbolKey, describeSymbol,
-  describeWind, describeRain, describeAge,
+  describeWind, windFigures, describeRain, describeAge,
   yrUrl, hourlyTable, beyondForecast, isFresh, backoffOver,
   HOURLY_WITHIN_HOURS, FORECAST_DAYS, BACKOFF_MINUTES,
   MET_ATTRIBUTION, type WeatherHour, type SymbolKey,
@@ -332,6 +332,58 @@ section('Wind reads the way it is said')
     'a gust no bigger than the wind is not news')
   eq(describeWind(h({ windFromDeg: null })), '8', 'no direction, just the speed')
   eq(describeWind(h({ windMs: null })), '', 'and no wind at all says nothing')
+}
+
+section('The arrow says the direction, so the figures do not')
+{
+  const h = (over: Partial<WeatherHour>): WeatherHour => ({
+    at: '2026-08-10T09:00:00Z', spanHours: 1, tempC: 14, windMs: 8,
+    windFromDeg: 315, gustMs: null, symbol: null, rainChance: null,
+    rainMm: null, ...over,
+  })
+
+  // "NW" printed beside a glyph pointing north-west is the same fact twice.
+  eq(windFigures(h({})), '8', 'the speed alone')
+  eq(windFigures(h({ gustMs: 14.4 })), '8, gusting 14', 'and the gust when there is one')
+  eq(windFigures(h({ gustMs: 8.1 })), '8', 'under the same rule as the words')
+  eq(windFigures(h({ windMs: null })), '', 'and nothing when there is no wind')
+  for (const point of ['N', 'NW', 'S', 'ENE']) {
+    ok(!windFigures(h({})).includes(point) || point === '',
+      `no compass point in the figures (${point})`)
+  }
+
+  // The words survive, because two callers cannot draw an arrow: the route's
+  // plain-text view, and the label a screen reader is handed.
+  ok(describeWind(h({})).includes('NW'), 'while describeWind keeps the point')
+}
+
+section('Losing the letters does not lose the direction')
+{
+  // The arrow was `aria-hidden`, which was right while "NW" was in the text
+  // beside it and wrong the moment it was not. Without a label the direction
+  // becomes something only a sighted reader can get — a silent regression,
+  // and the reason this is pinned rather than trusted.
+  const fs = require('fs') as typeof import('fs')
+  const comp = fs.readFileSync('app/components/CourseWeather.tsx', 'utf-8')
+
+  eq((comp.match(/role="img"/g) ?? []).length, 2,
+    'both placements label the reading as an image')
+  eq((comp.match(/aria-label=\{/g) ?? []).length, 2, '  …and both carry a label')
+  ok(/aria-label=\{`Wind \$\{wind\}/.test(comp),
+    'the block\'s label is the words describeWind still produces')
+  ok(/wind \$\{describeWind\(hour\)\}/.test(comp),
+    'and so is the hub line\'s')
+
+  // Both draw the arrow, and neither prints a point beside it.
+  eq((comp.match(/rotate\(\$\{arrow\}deg\)/g) ?? []).length, 2,
+    'both rotate the arrow by arrowDeg')
+  eq((comp.match(/windFigures\(/g) ?? []).length, 2,
+    'and both take the figures without the point')
+
+  // The hub line carries the temperature now, not wind alone.
+  const line = comp.slice(comp.indexOf('function Line('))
+  ok(/hour\.tempC/.test(line), 'the hub line shows the temperature')
+  ok(/Icon size=\{17\}/.test(line), '  …at a size worth glancing at')
 }
 
 section('Rain says nothing rather than nought')

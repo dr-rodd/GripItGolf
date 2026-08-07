@@ -362,7 +362,14 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
             phone that is nobody yet gets "Claim your spot" as the loudest
             thing on the screen. */}
 
-        {/* ── The rest, one heading at a time ── */}
+        {/* ── The rest, one heading at a time ──
+            The margin is here rather than inside `SectionStack`, because it
+            is a relationship between the status card and the stack — a fact
+            about this page, not about the component. Without it the first
+            section's own `border-t` butts straight up against the card
+            above, and the rule reads as the card's own bottom edge rather
+            than as the start of something new. */}
+        <div className="mt-6">
         <SectionStack
           initial="itinerary"
           sections={[
@@ -388,6 +395,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
             },
           ]}
         />
+        </div>
 
       </div>
 

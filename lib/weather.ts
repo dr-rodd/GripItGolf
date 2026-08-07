@@ -340,6 +340,24 @@ export function describeSymbol(code: string | null | undefined): string {
 
 // ─── Wording ───────────────────────────────────────────────────
 
+/**
+ * The figures alone — "8", or "8, gusting 14".
+ *
+ * For where an arrow is already saying the direction, which on screen it
+ * always is. Printing "NW" beside a glyph pointing north-west is the same
+ * fact twice.
+ *
+ * `describeWind` keeps the compass point because two callers still need the
+ * words and cannot draw: the route's plain-text view, and the label a screen
+ * reader is given for the arrow.
+ */
+export function windFigures(hour: WeatherHour): string {
+  if (hour.windMs == null) return ''
+  const speed = Math.round(hour.windMs)
+  if (hour.gustMs == null || Math.round(hour.gustMs) <= speed) return String(speed)
+  return `${speed}, gusting ${Math.round(hour.gustMs)}`
+}
+
 /** Wind as it would be said out loud: "NW 8, gusting 14". Units are added by the caller. */
 export function describeWind(hour: WeatherHour): string {
   if (hour.windMs == null) return ''

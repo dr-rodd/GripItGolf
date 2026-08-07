@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import {
-  pickAt, symbolKey, describeSymbol, describeWind, describeRain, describeAge,
+  pickAt, symbolKey, describeSymbol, describeWind, windFigures,
+  describeRain, describeAge,
   arrowDeg, beyondForecast, yrUrl, MET_ATTRIBUTION, MET_LICENCE_URL,
   type WeatherHour,
 } from '@/lib/weather'
@@ -183,6 +184,9 @@ function Block({
 function Slot({ label, hour }: { label: string; hour: WeatherHour | null }) {
   const Icon = hour ? weatherIcon(symbolKey(hour.symbol)) : null
   const arrow = hour ? arrowDeg(hour.windFromDeg) : null
+  // Two readings of one wind: the figures for the screen, beside the arrow,
+  // and the words for whoever cannot see an arrow.
+  const figures = hour ? windFigures(hour) : ''
   const wind = hour ? describeWind(hour) : ''
   const rain = hour ? describeRain(hour.rainChance) : ''
 
@@ -202,8 +206,19 @@ function Slot({ label, hour }: { label: string; hour: WeatherHour | null }) {
             )}
           </div>
 
-          {wind && (
-            <div className="flex items-baseline justify-center gap-1.5 mt-2.5">
+          {/* The arrow says the direction, so the compass point is not
+              printed beside it — "NW" next to a glyph pointing north-west is
+              the same fact twice.
+              **The label is not decoration.** The moment the letters went,
+              the direction became something only a sighted reader could get,
+              so the whole reading is one `img` carrying the words that
+              `describeWind` still produces. */}
+          {figures && (
+            <div
+              className="flex items-baseline justify-center gap-1.5 mt-2.5"
+              role="img"
+              aria-label={`Wind ${wind} metres per second`}
+            >
               {arrow != null && (
                 <span
                   className="text-bark flex-shrink-0 self-center"
@@ -214,7 +229,7 @@ function Slot({ label, hour }: { label: string; hour: WeatherHour | null }) {
                 </span>
               )}
               <span className="font-[family-name:var(--font-display)] font-semibold text-bark text-[19px] leading-none tabular-nums">
-                {wind}
+                {figures}
               </span>
               <span className="t-cap text-ink/50">m/s</span>
             </div>
@@ -260,17 +275,48 @@ function Line({ state, tee, now }: { state: State; tee: Date | null; now: Date }
   const hour = pickAt(state.hours, tee ?? now)
   if (!hour) return null
 
-  const wind = describeWind(hour)
-  if (!wind) return null
+  const figures = windFigures(hour)
+  if (!figures) return null
 
   const rain = describeRain(hour.rainChance)
     || (hour.rainMm != null && hour.rainMm > 0 ? `${hour.rainMm} mm` : '')
   const Icon = weatherIcon(symbolKey(hour.symbol))
+  const arrow = arrowDeg(hour.windFromDeg)
 
   return (
-    <p className="flex items-center gap-1.5 t-cap text-ink/65 mt-1 tabular-nums">
-      <span className="flex-shrink-0 text-bark"><Icon size={14} /></span>
-      <span>{[`${wind} m/s`, rain].filter(Boolean).join(' · ')}</span>
-    </p>
+    <div
+      className="flex items-center gap-2 t-cap text-ink/65 mt-1.5 tabular-nums"
+      role="img"
+      aria-label={
+        describeSymbol(hour.symbol)
+        + (hour.tempC == null ? '' : `, ${Math.round(hour.tempC)} degrees`)
+        + `, wind ${describeWind(hour)} metres per second`
+        + (rain ? `, ${rain}` : '')
+      }
+    >
+      <span className="flex-shrink-0 text-bark" aria-hidden="true">
+        <Icon size={17} />
+      </span>
+
+      {hour.tempC != null && (
+        <span className="text-ink/80" aria-hidden="true">{Math.round(hour.tempC)}°</span>
+      )}
+
+      {/* The arrow carries the direction here as it does on the round page —
+          one reading of the wind, drawn the same way in both places. */}
+      <span className="flex items-center gap-1" aria-hidden="true">
+        {arrow != null && (
+          <span
+            className="flex-shrink-0 text-bark"
+            style={{ transform: `rotate(${arrow}deg)` }}
+          >
+            <IconArrowUp size={13} />
+          </span>
+        )}
+        <span>{figures} m/s</span>
+      </span>
+
+      {rain && <span aria-hidden="true">· {rain}</span>}
+    </div>
   )
 }
