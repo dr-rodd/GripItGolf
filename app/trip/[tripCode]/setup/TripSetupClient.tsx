@@ -25,7 +25,8 @@ import {
 } from '@/lib/teamSets'
 import { setTeam } from '@/lib/teamMembers'
 import { why } from '@/lib/writeFailure'
-import { HANDICAP_INPUT, parseHandicap, formatHandicap } from '@/lib/handicap'
+import { parseHandicap, formatHandicap } from '@/lib/handicap'
+import HandicapField from '@/app/components/HandicapField'
 import { duplicateName, duplicateNameError, isDuplicateNameError } from '@/lib/roster'
 import { syncRoundHandicaps } from '@/lib/roundHandicaps'
 
@@ -783,20 +784,17 @@ export default function TripSetupClient({
                     )}
                   </div>
                   <div className="flex gap-2">
-                    <div className="w-24 flex-shrink-0">
-                      <input
-                        {...HANDICAP_INPUT}
-                        defaultValue={player.handicap == null ? '' : formatHandicap(player.handicap)}
-                        onBlur={e => {
-                          const v = parseHandicap(e.target.value)
-                          if (v !== null && v !== player.handicap) updatePlayer(player.id, { handicap: v })
-                        }}
-                        disabled={locked}
-                        step="0.1"
-                        placeholder="HCP"
-                        className="w-full bg-surface border border-bark/12 rounded-lg px-3 py-2.5 text-ink text-sm focus:outline-none focus:border-accent/50 disabled:opacity-40"
-                      />
-                    </div>
+                    <HandicapField
+                      defaultValue={player.handicap == null ? '' : formatHandicap(player.handicap)}
+                      onCommit={text => {
+                        const v = parseHandicap(text)
+                        if (v !== null && v !== player.handicap) updatePlayer(player.id, { handicap: v })
+                      }}
+                      disabled={locked}
+                      placeholder="HCP"
+                      rowClassName="flex-shrink-0"
+                      className="w-16 bg-surface border border-bark/12 rounded-lg px-3 py-2.5 text-ink text-sm focus:outline-none focus:border-accent/50 disabled:opacity-40"
+                    />
                     <div className="flex gap-1 flex-shrink-0">
                       {(['M', 'F'] as const).map(g => (
                         <button
@@ -870,12 +868,12 @@ export default function TripSetupClient({
                     className={INPUT}
                   />
                   <div className="flex gap-2">
-                    <input
-                      {...HANDICAP_INPUT}
+                    <HandicapField
                       value={newHandicap}
-                      onChange={e => setNewHandicap(e.target.value)}
-                      placeholder="Handicap, or +1"
-                      className={`${INPUT} flex-1`}
+                      onChange={setNewHandicap}
+                      placeholder="Handicap"
+                      rowClassName="flex-1 min-w-0"
+                      className={`${INPUT} flex-1 min-w-0`}
                     />
                     <div className="flex gap-1 flex-shrink-0">
                       {(['M', 'F'] as const).map(g => (

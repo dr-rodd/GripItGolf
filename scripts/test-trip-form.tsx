@@ -333,19 +333,27 @@ section('Handicap inputs bring up a keypad')
   for (const f of files) {
     const src = require('fs').readFileSync(f, 'utf-8')
     const fields = (src.match(/placeholder="(Handicap|HCP)/g) ?? []).length
-    const shared = (src.match(/\{\.\.\.HANDICAP_INPUT\}/g) ?? []).length
+    const shared = (src.match(/<HandicapField/g) ?? []).length
     const name = f.split('/').pop()
     ok(fields > 0, `${name} has a handicap field`)
-    // Every one of them is the shared field. It used to be a decimal keypad,
-    // which is the right keyboard for 14.2 and the wrong one for +1 — there
-    // is no plus on it — and `min="0"` on top of that refused a plus handicap
-    // outright. The shared props take text and `parseHandicap` reads the sign.
+    // Every one of them is the shared field, and the field is the only place
+    // that knows how to reconcile the keypad with the sign. This has been
+    // broken in both directions: a decimal keypad is right for 14.2 and has
+    // no plus on it, and the text keyboard that fixed that made everybody
+    // type two digits on a QWERTY. `min="0"` refused a plus outright.
     ok(shared >= fields, `${name}: every handicap field is the shared one`)
-    ok(!/inputMode="decimal"[\s\S]{0,200}placeholder="Handicap/.test(src),
-      `  …and none of them still asks for a keypad with no plus on it`)
     ok(!/placeholder="Handicap[\s\S]{0,200}min="0"/.test(src),
-      `  …nor refuses anything better than scratch`)
+      `  …none of them refuses anything better than scratch`)
   }
+
+  // The sign is a control, so it has to be reachable and it has to save.
+  const field = require('fs').readFileSync('app/components/HandicapField.tsx', 'utf-8')
+  ok(/aria-pressed=\{plus\}/.test(field), 'the plus button says whether it is on')
+  ok(/aria-label=/.test(field), '  …and is named for a screen reader')
+  // A click blurs the input first, so the blur carries the pre-toggle text.
+  // Without its own commit the toggle would look right and save nothing.
+  ok(/onClick=\{\(\) => set\([\s\S]*?, true\)\}/.test(field),
+    'and commits on its own rather than relying on the blur it causes')
 
   // A plus handicap has to survive being typed
   const setup = require('fs').readFileSync(files[1], 'utf-8')

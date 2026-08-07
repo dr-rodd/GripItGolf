@@ -16,7 +16,8 @@ import Toggle from '@/app/components/Toggle'
 import {
   MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError,
 } from '@/lib/passcode'
-import { HANDICAP_INPUT, parseHandicap } from '@/lib/handicap'
+import { parseHandicap } from '@/lib/handicap'
+import HandicapField from '@/app/components/HandicapField'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -627,12 +628,12 @@ export default function CreateTripForm() {
                   )}
 
                   <div className="flex gap-3">
-                    <input
-                      {...HANDICAP_INPUT}
+                    <HandicapField
                       value={player.handicap}
-                      onChange={e => updatePlayer(i, { handicap: e.target.value })}
-                      placeholder="Handicap, or +1"
-                      className={`${INPUT} flex-1`}
+                      onChange={v => updatePlayer(i, { handicap: v })}
+                      placeholder="Handicap"
+                      rowClassName="flex-1 min-w-0"
+                      className={`${INPUT} flex-1 min-w-0`}
                     />
                     <div className="flex gap-1.5 flex-shrink-0">
                       {(['M', 'F'] as const).map(g => (

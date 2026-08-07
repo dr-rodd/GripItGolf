@@ -86,10 +86,23 @@ export function parseHandicap(raw: string): number | null {
   return plus ? -n : n
 }
 
-/** What the keypad should offer. A plus handicap needs a `+` on it. */
+/**
+ * What the keyboard should offer.
+ *
+ * A decimal keypad, which is the right keyboard for 14.2 — and has no `+` on
+ * it, on either platform. This was `inputMode: 'text'` for exactly that
+ * reason, which fixed the plus handicap by giving every player a full QWERTY
+ * keyboard to type two digits with. The sign is a button now, not a
+ * character: see `app/components/HandicapField.tsx`, which is what these
+ * props are spread onto. **Nothing should spread them onto a bare input** —
+ * the keypad it asks for cannot produce a plus on its own.
+ *
+ * Still `type="text"` rather than `type="number"`: a number input rejects the
+ * leading plus the button writes, and spinner arrows on a handicap are noise.
+ */
 export const HANDICAP_INPUT = {
   type: 'text',
-  inputMode: 'text',
+  inputMode: 'decimal',
   // Digits and one decimal, optionally led by a sign. Loose on purpose: it
   // hints the keyboard rather than validating, and `parseHandicap` is what
   // actually decides.

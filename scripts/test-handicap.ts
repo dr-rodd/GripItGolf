@@ -137,8 +137,34 @@ section('Reading one back off a keypad')
   ok(parseFloat('+1') !== parseHandicap('+1'),
     'parseFloat would have stored a plus one as an ordinary one')
 
-  ok(HANDICAP_INPUT.inputMode === 'text',
-    'the field takes text, because a decimal keypad has no plus on it')
+  // The keypad and the sign have now been broken at both ends. `decimal` is
+  // the right keyboard for 14.2 and has no `+` on it, so a plus handicap
+  // could not be typed; `text` got the sign back by handing everybody a full
+  // QWERTY keyboard to enter two digits with. The sign is a button now.
+  ok(HANDICAP_INPUT.inputMode === 'decimal',
+    'the field asks for a keypad, not a keyboard')
+  ok(HANDICAP_INPUT.type === 'text',
+    '  …still a text input, because a number one rejects the leading plus')
+
+  // Which means these props are no longer enough on their own. Anything
+  // spreading them onto a bare input asks for a keypad that cannot produce
+  // the sign — the exact bug, reintroduced.
+  const fs = require('fs') as typeof import('fs')
+  const field = fs.readFileSync('app/components/HandicapField.tsx', 'utf-8')
+  ok(field.includes('{...HANDICAP_INPUT}'), 'the shared field spreads them')
+  for (const f of [
+    'app/dashboard/create/CreateTripForm.tsx',
+    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
+    'app/trip/[tripCode]/players/PlayersClient.tsx',
+  ]) {
+    const src = fs.readFileSync(f, 'utf-8')
+    ok(!src.includes('HANDICAP_INPUT'),
+      `${f.split('/').pop()} spreads no handicap props of its own`)
+    const fields = (src.match(/placeholder="(Handicap|HCP)/g) ?? []).length
+    const shared = (src.match(/<HandicapField/g) ?? []).length
+    ok(shared >= fields && shared > 0,
+      `  …every handicap field there is the shared one`)
+  }
 }
 
 // ─── Nothing prints one raw ────────────────────────────────────

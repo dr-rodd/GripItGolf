@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { rememberPlayer } from '@/lib/playerCookie'
-import { HANDICAP_INPUT, parseHandicap, formatHandicap } from '@/lib/handicap'
+import { parseHandicap, formatHandicap } from '@/lib/handicap'
+import HandicapField from '@/app/components/HandicapField'
 import { syncRoundHandicaps } from '@/lib/roundHandicaps'
 import { ROUND_TILE } from '@/lib/roundState'
 import {
@@ -230,13 +231,11 @@ export default function PlayersClient({
             required
             className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/60 transition-colors"
           />
-          <input
-            {...HANDICAP_INPUT}
+          <HandicapField
             value={addHandicap}
-            onChange={(e) => setAddHandicap(e.target.value)}
-            placeholder="Handicap (e.g. 14.2, or +1)"
-            required
-            className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/60 transition-colors"
+            onChange={setAddHandicap}
+            placeholder="Handicap (e.g. 14.2)"
+            className="w-full min-w-0 py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/60 transition-colors"
           />
           <div className="flex gap-3">
             {(['M', 'F'] as const).map((g) => (
