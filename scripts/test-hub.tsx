@@ -782,9 +782,15 @@ section('The hub is the sections it should be, and nothing else')
   ok(hub.includes('SectionStack'), 'the collapsible sections are one shared component')
   ok(hub.includes("initial=\"itinerary\""), 'and the itinerary is the one open on arrival')
 
-  for (const title of ['Itinerary', 'Travel & accommodation', 'Players']) {
+  for (const title of ['Your Itinerary', 'Travel & accommodation', 'Players']) {
     ok(hub.includes(`'${title}'`) || hub.includes(`"${title}"`), `there is a ${title} section`)
   }
+
+  // The heading is the player's, not the file's. `initial="itinerary"` keys
+  // off the section's `key`, which is untouched — so this pin is what would
+  // catch a rename that took the key with it and quietly closed the section
+  // that opens on arrival.
+  ok(hub.includes("key: 'itinerary'"), 'and the itinerary key is still what `initial` opens')
 
   // "The plan" was what the itinerary called itself. It is Itinerary now,
   // everywhere a reader can see it.

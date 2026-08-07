@@ -375,7 +375,12 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
           sections={[
             {
               key: 'itinerary',
-              title: 'Itinerary',
+              /* "Your Itinerary", not "Itinerary" — the hub is the one screen
+                 read by a player rather than by the leader, and this is the
+                 plan they are on rather than a plan on file. The setup
+                 editor's heading stays plain: there it is the trip's
+                 itinerary being built, not anybody's own. */
+              title: 'Your Itinerary',
               content: itinerarySection,
             },
             {
