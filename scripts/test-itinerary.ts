@@ -554,10 +554,18 @@ section('Migration 027 and lib/itinerary.ts describe the same table')
   // Both constraints are replaced, not added alongside. Two overlapping
   // CHECKs on one column is how a row comes to be refused for a reason
   // neither of them appears to give.
-  ok(/DROP CONSTRAINT IF EXISTS itinerary_items_kind_check/.test(sql),
-    'the old kind check is dropped before the new one goes on')
+  // The old kind check is found by what it checks, not by what it is called.
+  // 021 wrote it inline on the column, so Postgres named it — conventionally
+  // `itinerary_items_kind_check`, but that is a convention, not a promise,
+  // and a DROP aimed at the wrong name succeeds while doing nothing. The old
+  // constraint would then still be refusing 'activity' with nothing in the
+  // file to explain why.
+  ok(/pg_constraint/.test(sql) && /DROP CONSTRAINT %I/.test(sql),
+    'the old kind check is dropped by what it checks, not by a guessed name')
+  ok(/conname <> 'ck_itinerary_shape'/.test(sql),
+    '  …leaving the shape check alone, which is named explicitly and replaced on its own')
   ok(/DROP CONSTRAINT IF EXISTS ck_itinerary_shape/.test(sql),
-    'and so is the old shape check')
+    'and the old shape check is dropped by that name')
 
   // The shape constraint is a CASE with no ELSE. An unmatched kind returns
   // NULL, and a CHECK passes on NULL — so a branch that was never written

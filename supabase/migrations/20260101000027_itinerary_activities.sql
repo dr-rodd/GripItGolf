@@ -35,8 +35,31 @@ ALTER TABLE itinerary_items
 -- rather than adding a second: two overlapping constraints on the same
 -- column is how a row comes to be refused for a reason neither of them
 -- appears to give.
-ALTER TABLE itinerary_items
-  DROP CONSTRAINT IF EXISTS itinerary_items_kind_check;
+--
+-- Found by what it checks rather than by name. Migration 021 wrote the
+-- kind check inline on the column, so Postgres named it — conventionally
+-- `itinerary_items_kind_check`, but that is a convention and not a
+-- promise, and a `DROP CONSTRAINT IF EXISTS` aimed at the wrong name
+-- succeeds while doing nothing. The old constraint would then still be
+-- refusing 'activity' with nothing in this file to explain why.
+--
+-- `ck_itinerary_shape` also mentions `kind` and is excluded by name: it
+-- was named explicitly in 021, so that one IS a promise, and it is
+-- replaced on its own below.
+DO $$
+DECLARE c record;
+BEGIN
+  FOR c IN
+    SELECT conname
+      FROM pg_constraint
+     WHERE conrelid = 'itinerary_items'::regclass
+       AND contype  = 'c'
+       AND conname <> 'ck_itinerary_shape'
+       AND pg_get_constraintdef(oid) LIKE '%kind%'
+  LOOP
+    EXECUTE format('ALTER TABLE itinerary_items DROP CONSTRAINT %I', c.conname);
+  END LOOP;
+END $$;
 
 ALTER TABLE itinerary_items
   ADD CONSTRAINT itinerary_items_kind_check
