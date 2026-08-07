@@ -1078,6 +1078,44 @@ section('The tab bar is on every screen inside a trip')
     'and .has-tabbar reserves the same 64px')
 }
 
+section('A full-screen overlay covers the tab bar, never ties with it')
+{
+  // The bar is `z-40`. An overlay on the same rung does not sit above it or
+  // below it by any rule worth relying on — document order breaks the tie,
+  // and the bar is rendered last on every screen that has one, so the bar
+  // wins and takes the bottom 64px of the overlay with it.
+  //
+  // The itinerary editor was `z-40`. What lived in that 64px was its
+  // Continue button, so it could be read and not pressed, and the add sheets
+  // went the same way: an overlay with a z-index starts a stacking context,
+  // so their `z-50` was measured against the editor rather than against the
+  // bar. "Add golf", "Add stay" and "Add journey" were all underneath it.
+  const bar = read('app/components/TabBar.tsx')
+  ok(/fixed bottom-0[^"]*z-40/.test(bar), 'the tab bar is on z-40')
+
+  // No full-screen overlay anywhere may sit on that rung — scrims included.
+  // A scrim tied with the bar leaves it bright and tappable behind a modal
+  // that is meant to be blocking the screen.
+  for (const f of [
+    'app/trip/[tripCode]/setup/ItineraryEditor.tsx',
+    'app/components/SettingsModal.tsx',
+  ]) {
+    const src = read(f)
+    const name = f.split('/').pop()
+    ok(!/fixed inset-(?:0|x-0)[^"]*\bz-40\b/.test(src),
+      `${name} puts nothing full-screen on the bar's rung`)
+    ok(/fixed inset-(?:0|x-0)[^"]*\bz-50\b/.test(src),
+      `  …what it does put there is z-50, above the bar`)
+  }
+
+  // The builder's own pinned footer stays below both. It is inside the
+  // editor's stacking context, so its number is relative to that — raising
+  // it would only put it over the editor's own header.
+  const builder = read('app/components/ItineraryBuilder.tsx')
+  ok(/fixed bottom-0[^"]*z-30/.test(builder),
+    'the itinerary builder\'s footer stays on z-30, inside whatever contains it')
+}
+
 // ─── The header's numbers cross the client boundary ────────────
 
 section('Header metrics are readable from a server component')

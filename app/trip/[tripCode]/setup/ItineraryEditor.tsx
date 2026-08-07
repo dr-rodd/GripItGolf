@@ -22,6 +22,22 @@ type Course = { id: string; name: string; location?: string | null }
  * builder already pins a footer of its own to the bottom of the screen, and
  * two competing fixed footers is exactly the glitch that footer was built to
  * avoid in the creation flow.
+ *
+ * **It sits above the tab bar, and the z-index is load-bearing.** This
+ * overlay was `z-40`, the same rung the tab bar is on, and a tie is broken by
+ * document order: the tab bar is rendered after it on the settings screen, so
+ * it won, and covered the bottom 64px of this editor.
+ *
+ * That is precisely where the builder's Continue button sits, so it could be
+ * seen and not pressed. The add sheets went with it — their own `z-50` is
+ * measured inside this overlay's stacking context, not against the tab bar,
+ * so "Add golf", "Add stay" and "Add journey" were all under the bar too.
+ * A positioned element with a z-index of its own starts a stacking context,
+ * and every z-index inside it is relative to *this* element from then on.
+ *
+ * So it is `z-50` — the rung modals are on, above the bar rather than level
+ * with it. Covering the tab bar is right for a full-screen editor: the way
+ * out is the X, not the nav underneath.
  */
 export default function ItineraryEditor({
   tripId, startDate, endDate, courses, initialItems, canEditGolf, players, onClose,
@@ -66,7 +82,7 @@ export default function ItineraryEditor({
   }
 
   return (
-    <div className="fixed inset-0 z-40 bg-cream flex flex-col">
+    <div className="fixed inset-0 z-50 bg-cream flex flex-col">
       <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-bark/12 bg-cream">
         <button
           type="button"
