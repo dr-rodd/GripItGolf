@@ -447,6 +447,55 @@ section('Every stored coordinate is one MET will accept')
     'and every column it adds is conditional')
 }
 
+// ─── The route ─────────────────────────────────────────────────
+
+section('The route cannot become a proxy, or a cache that never hits')
+{
+  // Structural rather than behavioural: the route does I/O, so what is
+  // checkable without a database and a network is the shape of it — and the
+  // shape is where these particular mistakes live.
+  const fs = require('fs') as typeof import('fs')
+  const route = fs.readFileSync('app/api/weather/route.ts', 'utf-8')
+  const code = route.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+
+  // A ?lat=&lon= parameter would make this an open proxy to api.met.no under
+  // our User-Agent — which is how that User-Agent gets blocked for somebody
+  // else's scraping. The caller names a course; the server supplies the point.
+  ok(/searchParams\.get\('course'\)/.test(code), 'it is asked for a course')
+  ok(!/searchParams\.get\('lat'|searchParams\.get\('lon'/.test(code),
+    '  …and never for coordinates')
+  ok(/UUID\.test\(/.test(code), 'and an unparseable id is refused before any query')
+
+  // The tee time in the URL would give the CDN a different key per reader per
+  // minute, and the cache below would never be hit.
+  ok(!/searchParams\.get\('at'|searchParams\.get\('when'/.test(code),
+    'the tee time is not in the URL, so the CDN key is the course alone')
+  ok(/s-maxage=\d+/.test(code), 'which is what makes s-maxage worth having')
+
+  // MET refuses a request with no User-Agent naming the app and a contact.
+  ok(/'User-Agent': metUserAgent\(process\.env\.MET_USER_AGENT\)/.test(code),
+    'MET is told who is asking, from the environment')
+  ok(/AbortSignal\.timeout/.test(code), 'and is never allowed to hold the function open')
+  ok(/cache: 'no-store'/.test(code),
+    'Next holds no second copy — one answer to "is this stale", not two')
+
+  // The terms are about the Expires header, not about a number we picked.
+  ok(/headers\.get\('expires'\)/.test(code), 'the cache expires when MET says')
+  ok(/If-Modified-Since/.test(code), 'and an unchanged forecast costs a 304, not a body')
+
+  // A failing upstream must not be answered with a status that invites the
+  // browser, and every retry layer between, to ask again.
+  ok(!/status: 5\d\d/.test(code), 'nothing here returns a 5xx')
+  ok(/reason: 'unavailable'/.test(code), 'a failure is a 200 the client can render')
+  ok(/reason: 'no-coordinates'/.test(code),
+    'and a course without a location is an ordinary answer, not an error')
+
+  // The stale forecast is the thing served while MET is down, so the failure
+  // note must not overwrite it.
+  ok(/hours: existing\?\.hours \?\? \[\]/.test(code),
+    'recording a failure keeps the forecast it already had')
+}
+
 // ─── Result ────────────────────────────────────────────────────
 
 console.log('\n' + '─'.repeat(56))

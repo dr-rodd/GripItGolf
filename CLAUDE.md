@@ -17,8 +17,17 @@ Big Dog — no coding background. Claude.ai handles design decisions; Claude Cod
 ```
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...# server only. `createAdminClient` throws without
+                             # it, which takes the nightly cleanup and the
+                             # weather route with it. Was undocumented here
+                             # for a long time while both depended on it.
 CRON_SECRET=...
 ADMIN_PASSWORD=...           # server only, no NEXT_PUBLIC_ prefix
+MET_USER_AGENT=...           # server only. Identifies this app to MET Norway
+                             # and carries a contact address; they throttle and
+                             # then refuse requests without one. Falls back to
+                             # the site URL alone, which is weaker — set it.
+                             # Format: GreenDotGolf/1.0 (+https://greendot.live; you@example.com)
 NEXT_PUBLIC_DONATION_URL=... # unset = support link vanishes entirely.
                              # Currently moot: SUPPORT_ENABLED in lib/donation.ts
                              # is false, so the link is off whatever this says.
@@ -74,6 +83,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `lib/courseHandicap.ts` | The WHS course handicap, the only copy. Unrounded is primary — an allowance comes off that, not off the whole number |
 | `lib/scorecardVoid.ts` | Voiding a card. **Erases its scores from `live_scores` and `scores`**, not just the locks. Every void route goes through it |
 | `lib/staleLive.ts` | When a scorecard nobody came back to is closed, and when its rows are deleted. **Closed on the last hole entered, never on when the card opened** — keying off `activated_at` would close a group still out on the course. Run nightly by `/api/cleanup`; `?dryRun=1` reports without writing |
+| `lib/weather.ts` | Reading a MET Norway forecast: parsing, picking the hour a tee time falls in, compass, symbol grouping, the yr.no link, cache freshness. **Pure — `app/api/weather/route.ts` does all the I/O.** Two traps it exists to hold: the arrow points at `wind_from_direction + 180`, and `next_1_hours` stops existing ~3 days out so precipitation falls back to `next_6_hours`. A missing gust or rain chance is null, never 0 |
 | `lib/handicapAllowance.ts` | Playing off a percentage of the course handicap. **Never stored reduced** — applied when a board reads the cards |
 | `lib/leaderboardsCompat.ts` / `lib/formats.ts` / `lib/tripSetupFlow.ts` | Reading old trips' stored settings — don't extend, only read |
 | `lib/roster.ts` | Who is confirmed, the join list's order, and the no-two-same-names rule. **Confirmed is `players.claimed === true`** — the column is nullable, so `!claimed` and `.eq('claimed', false)` are both wrong |
