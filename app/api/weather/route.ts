@@ -312,15 +312,29 @@ function describe(payload: Payload, courseName: string): string {
     out.push(`${h.at}  (${h.spanHours}h)`)
     out.push(`  ${describeSymbol(h.symbol)}${h.tempC == null ? '' : `, ${Math.round(h.tempC)}C`}`)
     out.push(`  wind  ${describeWind(h) || '—'} m/s`)
-    out.push(`  rain  ${describeRain(h.rainChance) || 'not supplied'}`)
+    out.push(`  rain  ${describeRain(h.rainChance) || 'no %'}`
+      + `, ${h.rainMm == null ? 'no mm' : `${h.rainMm} mm`}`)
     out.push('')
   }
 
-  // The question this view was built to answer. MET does not publish a
-  // probability everywhere, and a block that prints a percentage nobody sends
-  // would print a blank on every reading.
-  const withChance = hours.filter(h => h.rainChance != null).length
-  out.push(`rain chance present on ${withChance} of ${hours.length} entries`)
+  // What this view exists to answer. MET does not publish every field
+  // everywhere — the detailed ones come from their Nordic model, and a point
+  // outside it is served by the global one. A block designed around a field
+  // nobody sends would print a blank on every reading, so the counts are
+  // taken before anything is drawn rather than after somebody notices.
+  out.push('present on how many of the ' + hours.length + ' entries:')
+  for (const [label, has] of [
+    ['wind speed',     (h: WeatherHour) => h.windMs != null],
+    ['wind direction', (h: WeatherHour) => h.windFromDeg != null],
+    ['gust',           (h: WeatherHour) => h.gustMs != null],
+    ['temperature',    (h: WeatherHour) => h.tempC != null],
+    ['conditions',     (h: WeatherHour) => h.symbol != null],
+    ['rain chance %',  (h: WeatherHour) => h.rainChance != null],
+    ['rain mm',        (h: WeatherHour) => h.rainMm != null],
+  ] as const) {
+    out.push(`  ${label.padEnd(16)} ${hours.filter(has).length}`)
+  }
+  out.push('')
   out.push(`fetched ${payload.fetchedAt}${payload.stale ? ' (STALE)' : ''}`)
   out.push('', MET_ATTRIBUTION)
   return out.join('\n') + '\n'
