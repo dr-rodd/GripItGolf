@@ -5,9 +5,7 @@ import {
   stayRuns, travelLegs, describeStayRun, describeLeg,
 } from '@/lib/stays'
 import { mapsUrl } from '@/lib/places'
-import {
-  IconHome, IconCar, IconPlane, IconTrain, IconArrowRight, IconMapPin,
-} from '@/app/components/icons'
+import { itineraryIcon, IconMapPin } from '@/app/components/icons'
 
 /**
  * Where the group sleeps, and how it gets about.
@@ -31,7 +29,13 @@ import {
  * nothing to detect and nothing that can fail into a dead link.
  */
 
-const TRAVEL_ICON = { car: IconCar, flight: IconPlane, train: IconTrain } as const
+/**
+ * Both icons come from `itineraryIcon`, which is also what the running order
+ * above draws from. They were two lists: this one picked the car, the plane
+ * or the train off the journey's mode and that one drew every journey as an
+ * arrow, so the same flight was two different icons on one screen.
+ */
+const StayIcon = itineraryIcon('stay')
 
 /** The place, and a tap that opens it in maps. Plain text when it is blank. */
 function Place({ name }: { name: string }) {
@@ -82,7 +86,7 @@ export default function TravelStays({
           {stays.map(run => (
             <div key={`${run.name}-${run.fromDay}`} className="flex flex-col items-center text-center gap-2">
               <span className="w-11 h-11 rounded-xl bg-bark/[0.06] text-bark flex items-center justify-center">
-                <IconHome size={22} />
+                <StayIcon size={22} />
               </span>
               <Place name={run.name} />
               <p className="t-cap text-ink/65">{describeStayRun(run, startDate)}</p>
@@ -97,7 +101,7 @@ export default function TravelStays({
             Getting there
           </p>
           {legs.map(leg => {
-            const Icon = leg.mode ? TRAVEL_ICON[leg.mode] : IconArrowRight
+            const Icon = itineraryIcon('travel', leg.mode)
             const day = describeDay(dateForDay(startDate, leg.dayIndex), leg.dayIndex)
             return (
               <div key={leg.id} className="flex flex-col items-center text-center gap-2">

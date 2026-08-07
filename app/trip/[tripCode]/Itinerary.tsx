@@ -5,7 +5,7 @@ import {
   itemState, tripProgress,
 } from '@/lib/itinerary'
 import Link from 'next/link'
-import { IconFlag, IconHome, IconArrowRight } from '@/app/components/icons'
+import { IconFlag, itineraryIcon } from '@/app/components/icons'
 import { useMinute } from '@/app/components/useMinute'
 
 /**
@@ -23,15 +23,22 @@ import { useMinute } from '@/app/components/useMinute'
  * everything as still to come and the real time arrives on hydration.
  */
 
-const KIND_ICON = { golf: IconFlag, stay: IconHome, travel: IconArrowRight } as const
-
 /**
  * A stay or a journey — how and where, nothing more.
  *
  * No card. Golf is what a trip is for, so it is the only thing that gets a
  * white surface to stand on; a stay or a journey is context around it, read
- * in passing rather than tapped. The icon and the two lines sit directly on
- * the page, at roughly a third the visual weight of a round.
+ * in passing rather than tapped.
+ *
+ * **Centred, between the cards it sits between.** Left-aligned it was a
+ * fourth column of text starting where the golf tiles' text starts, which
+ * made it look like a card that had lost its border. Centred it reads as
+ * what it is — the join between two rounds — and it matches how the same
+ * stay and the same journey are drawn in the section below, which centres
+ * them too.
+ *
+ * The icon is the mode's own now, from `itineraryIcon`. A flight was a plane
+ * in that section and a plain arrow here, on the same screen.
  */
 function SubtleRow({
   item, state, title, detail,
@@ -41,27 +48,25 @@ function SubtleRow({
   title: string
   detail: string
 }) {
-  const Icon = KIND_ICON[item.kind]
+  const Icon = itineraryIcon(item.kind, item.travelMode)
   // "Past" dims the whole row rather than reaching for a lighter text tier —
   // the same technique the golf card uses. Nothing below ink/50 clears the
   // 3:1 floor the style guide checks, so opacity is the only lever left.
   return (
-    <li className={`flex items-center gap-2.5 px-1 py-1 transition-opacity duration-200 ${
+    <li className={`flex items-center justify-center gap-2 px-1 py-1.5 transition-opacity duration-200 ${
       state === 'past' ? 'opacity-50' : ''
     }`}>
-      <span className="flex-shrink-0 text-ink/50">
-        <Icon size={13} />
+      <span className="flex-shrink-0 text-ink/65">
+        <Icon size={15} />
       </span>
-      <span className="flex-1 min-w-0 flex items-baseline gap-1.5">
-        <span className={`t-cap truncate text-ink/65 ${state === 'past' ? 'line-through decoration-ink/25' : ''}`}>
-          {title}
+      <span className={`t-cap truncate text-ink/80 ${state === 'past' ? 'line-through decoration-ink/25' : ''}`}>
+        {title}
+      </span>
+      {detail && (
+        <span className="t-cap flex-shrink-0 text-ink/65">
+          {detail}
         </span>
-        {detail && (
-          <span className="t-cap flex-shrink-0 text-ink/50">
-            {detail}
-          </span>
-        )}
-      </span>
+      )}
     </li>
   )
 }
@@ -134,7 +139,7 @@ export default function Itinerary({
                     )
                   }
 
-                  const Icon = KIND_ICON.golf
+                  const Icon = IconFlag
                   const roundNumber = roundNumbers[item.id]
 
                   const tile = `flex items-center gap-3 rounded-xl border px-3.5 py-3 transition-opacity duration-200 ${

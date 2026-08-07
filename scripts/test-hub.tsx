@@ -529,10 +529,39 @@ section('Journeys carry their mode')
   for (const icon of ['IconCar', 'IconPlane', 'IconTrain']) {
     ok(icons.includes(`export const ${icon}`), `${icon} exists`)
   }
-  const travelSection = code('app/trip/[tripCode]/TravelStays.tsx')
-  ok(travelSection.includes('IconCar') && travelSection.includes('IconPlane')
-     && travelSection.includes('IconTrain'), 'and the section draws all three')
-  ok(travelSection.includes('IconHome'), 'with the existing home icon for a stay')
+
+  // And one place that decides which. This was asked in two files and
+  // answered differently — the Travel & accommodation section read the mode
+  // and picked the car, the plane or the train; the running order above it
+  // drew every journey as a plain arrow. The same flight was two icons on
+  // one screen.
+  const map = code('app/components/icons.tsx')
+  const fn = map.slice(map.indexOf('export function itineraryIcon'))
+  for (const [mode, icon] of [
+    ['car', 'IconCar'], ['flight', 'IconPlane'], ['train', 'IconTrain'],
+  ]) {
+    ok(new RegExp(`'${mode}'\\) return ${icon}`).test(fn), `a ${mode} draws ${icon}`)
+  }
+  ok(/kind === 'stay'\) return IconHome/.test(fn), 'a stay draws the home icon')
+  // A journey with no mode recorded keeps the arrow — guessing a car would
+  // invent a detail the organiser never entered.
+  ok(/return IconArrowRight\s*\n\}/.test(fn), 'and a journey with no mode falls back to the arrow')
+
+  for (const f of [
+    'app/trip/[tripCode]/TravelStays.tsx',
+    'app/trip/[tripCode]/Itinerary.tsx',
+  ]) {
+    const src = code(f)
+    ok(src.includes('itineraryIcon'), `${f.split('/').pop()} asks the shared map`)
+    ok(!/IconCar|IconPlane|IconTrain/.test(src),
+      `  …rather than keeping its own answer`)
+  }
+
+  // Centred, like the section below draws the same stay and the same
+  // journey. Left-aligned they were a fourth column of text starting where
+  // the golf tiles' text starts, which read as a card missing its border.
+  ok(code('app/trip/[tripCode]/Itinerary.tsx').includes('justify-center'),
+    'a stay or a journey is centred between the rounds it sits between')
 }
 
 section('A live score counts only while its card is open')

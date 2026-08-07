@@ -189,6 +189,31 @@ export const IconTrain = (p: IconProps) => (
   </Svg>
 )
 
+/**
+ * The icon for one thing on the itinerary.
+ *
+ * The only answer to that question. It was asked in two places and answered
+ * differently: the Travel & accommodation section picked the car, the plane
+ * or the train off the journey's mode, and the running order above it drew
+ * every journey as a plain arrow — so the same flight was a plane in one
+ * section and an arrow in the other, on the same screen.
+ *
+ * A journey with no mode recorded keeps the arrow. It is the honest icon for
+ * "getting from here to there, somehow", and guessing a car would be a
+ * detail the organiser never entered.
+ */
+export function itineraryIcon(
+  kind: 'golf' | 'stay' | 'travel',
+  travelMode?: 'car' | 'flight' | 'train' | null,
+): (p: IconProps) => React.ReactElement {
+  if (kind === 'golf') return IconFlag
+  if (kind === 'stay') return IconHome
+  if (travelMode === 'car') return IconCar
+  if (travelMode === 'flight') return IconPlane
+  if (travelMode === 'train') return IconTrain
+  return IconArrowRight
+}
+
 /** On the maps link beside a place. */
 export const IconMapPin = (p: IconProps) => (
   <Svg {...p}>
