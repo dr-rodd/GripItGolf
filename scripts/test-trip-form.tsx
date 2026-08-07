@@ -221,12 +221,51 @@ section('The trip setup page uses the same field')
   // set once at creation and hardly touched again, so they were taking the
   // first screenful away from the thing the page is for.
   ok(!html.includes('type="date"'), 'setup does not put date fields on the page itself')
-  ok(html.includes('aria-label="Trip name and dates"'), 'it offers them behind the gear')
+  ok(html.includes('Trip details'), 'it offers them behind a named row')
 
   const src = fs.readFileSync('app/trip/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
   ok(src.includes('<DateField'), 'and still uses the shared date field inside the sheet')
   ok(src.includes("repeat(2, minmax(0, 1fr))"), 'in the same two-column row')
   ok(src.includes('setDetailsOpen'), 'which the gear opens and closes')
+}
+
+// ─── The trip, and the golf ────────────────────────────────────
+//
+// Two kinds of question live on the settings screen, and a bare gear in the
+// corner named neither of them. What the trip *is* — name, dates, running
+// order, who may change it — sits behind the row; how the golf is *played*
+// is everything below it. The row has to say so, or the split is guesswork.
+
+section('The gear says what is behind it')
+{
+  const html = renderToStaticMarkup(
+    React.createElement(TripSetupClient, {
+      trip: {
+        id: 't1', trip_code: 'ABC123', name: 'Test Trip',
+        start_date: '2026-05-01', end_date: '2026-05-04',
+        formats: parseFormats({ individual: { stableford: true } }),
+        team_scoring: { mode: 'better_ball', countingScores: 2, aggregateFinish: 0, aggregateHoles: 18 },
+        setup_status: 'draft', edit_permission: 'everyone',
+      },
+      teams: [], players: [], rounds: [],
+    } as never)
+  )
+
+  ok(html.includes('everything below is the golf'),
+    'the row draws the line between the trip and the golf')
+
+  // Who can edit followed the name and the dates in. It is a fact about the
+  // trip rather than about the golf — it decides who may open any of this —
+  // so it belongs with them, and it is closed until the row is tapped.
+  ok(!html.includes('Who can edit'), 'who can edit is not on the page body')
+  const src = fs.readFileSync('app/trip/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
+  const sheet = src.slice(src.indexOf('{detailsOpen && ('), src.indexOf('{itineraryOpen && ('))
+  ok(sheet.includes('Who can edit'), 'it is inside the details sheet')
+  ok(sheet.includes('savePermission'), 'and still saves from there')
+
+  // The read-only round list is gone. The itinerary behind this same row is
+  // that list and editable, and the hub prints it a third time.
+  ok(!/>Rounds</.test(src), 'settings no longer restates the rounds')
 }
 
 // ─── Settings asks each question exactly once ──────────────────

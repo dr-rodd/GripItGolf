@@ -1354,9 +1354,15 @@ section('The edit-permission toggle says what it did')
   // It changes what OTHER people can do, so from the owner's own phone —
   // which is the phone it is set from — nothing on screen moves, and it reads
   // as a control that does nothing at all.
+  // It lives inside the trip-details sheet now, with the name and the dates:
+  // it is a fact about the trip rather than about the golf. The block runs
+  // from its own heading to the end of the sheet, which is nothing but
+  // closing tags — the itinerary editor is the next thing rendered.
   const setup = read('app/trip/[tripCode]/setup/TripSetupClient.tsx')
-  const section_ = setup.slice(setup.indexOf('{/* ── Edit permission ── */}'))
-  const block = section_.slice(0, section_.indexOf('</section>'))
+  const section_ = setup.slice(setup.indexOf('{/* ── Who can edit ──'))
+  const block = section_.slice(0, section_.indexOf('{itineraryOpen && ('))
+  ok(block.length > 0 && block.length < section_.length,
+    'the control sits inside the details sheet')
 
   ok(/editPermission === 'owner' \?/.test(block),
     'the screen states the effect of whichever setting is on')

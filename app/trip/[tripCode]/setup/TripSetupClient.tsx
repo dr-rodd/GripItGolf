@@ -14,7 +14,7 @@ import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import TripHeader from '@/app/components/TripHeader'
 import TabBar from '@/app/components/TabBar'
 import SupportLink from '@/app/components/SupportLink'
-import { IconSettings, IconX, IconFlag } from '@/app/components/icons'
+import { IconSettings, IconX, IconFlag, IconChevronRight } from '@/app/components/icons'
 import type { ItineraryItem } from '@/lib/itinerary'
 import {
   type Leaderboard, needsTeams, needsPairings, hasMatchplay, boardTitle,
@@ -52,7 +52,15 @@ type Player = {
   is_lead: boolean
 }
 
-type RoundInfo = { id: string; round_number: number; courseName: string }
+/**
+ * A round, as this screen needs it — which is now only its id.
+ *
+ * It carried a number and a course name for the read-only list that used to
+ * sit under the roster. What is left is the handicap snapshot: change a
+ * player's handicap and every existing round's `round_handicaps` row has to
+ * be rewritten, and that takes ids and nothing else.
+ */
+type RoundInfo = { id: string }
 
 type Course = { id: string; name: string; location: string | null }
 
@@ -433,18 +441,35 @@ export default function TripSetupClient({
           the scoring screens do. Tapping the mark is the way back. */}
       <TripHeader backTo={`/trip/${trip.trip_code}`} title="settings" />
 
-      {/* The trip's own details — its name and its dates — sit behind the
-          gear rather than at the top of the page. They are set once at
-          creation and almost never touched again, so they were taking the
-          first screenful away from the thing this page is actually for. */}
-      <div className="max-w-lg mx-auto px-4 pt-4 flex justify-end">
+      {/* The trip's own details sit behind the gear rather than at the top of
+          the page. They are set once and almost never touched again, so they
+          were taking the first screenful away from the thing this page is
+          actually for.
+
+          It says what it holds rather than being a bare gear. Two different
+          kinds of question live on this screen and they were told apart only
+          by which side of a tap they were on: what the trip *is* — its name,
+          its dates, its running order, who is allowed to change it — against
+          how the golf is *played*, which is everything below. A lone icon in
+          the corner names neither of them, so the row names both. */}
+      <div className="max-w-lg mx-auto px-4 pt-4">
         <button
           type="button"
           onClick={() => setDetailsOpen(true)}
-          aria-label="Trip name and dates"
-          className="w-11 h-11 rounded-xl border border-bark/12 bg-surface text-ink/65 hover:text-ink hover:border-bark/25 flex items-center justify-center transition-colors duration-150"
+          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-bark/12 bg-surface hover:border-bark/25 transition-colors duration-150 text-left"
         >
-          <IconSettings size={18} />
+          <span className="flex-shrink-0 w-9 h-9 rounded-lg bg-bark/[0.06] flex items-center justify-center text-bark">
+            <IconSettings size={16} />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block t-card text-ink">Trip details</span>
+            <span className="block t-cap text-ink/65 mt-0.5 leading-snug">
+              Name, dates, itinerary, who can edit — everything below is the golf
+            </span>
+          </span>
+          <span className="flex-shrink-0 text-ink/50">
+            <IconChevronRight size={16} />
+          </span>
         </button>
       </div>
 
@@ -509,6 +534,64 @@ export default function TripSetupClient({
                     </span>
                   </span>
                 </button>
+              </div>
+
+              {/* ── Who can edit ──
+                  In here with the name and the dates rather than down the
+                  page with the leaderboards. It is a fact about the trip, not
+                  about the golf: it decides who may open any of this, which
+                  makes it the same kind of question as what the trip is
+                  called and when it runs. */}
+              <div className="pt-4 border-t border-bark/12">
+                <label className={LABEL}>Who can edit</label>
+                <p className="t-cap text-ink/65 mb-3 leading-snug">
+                  Who can change this trip&apos;s players, teams, format and dates.
+                  Joining and scoring are open to everyone either way.
+                </p>
+                <div className="flex gap-2">
+                  {[
+                    { value: 'everyone', label: 'Any player' },
+                    { value: 'owner', label: 'Owner only' },
+                  ].map(o => {
+                    // Owner is a flag on the device the trip was created on, and
+                    // there is no way to hand it to another one. A device that
+                    // does not hold it choosing "owner only" would lock this
+                    // screen — this control included — the instant it was tapped,
+                    // with nothing anywhere able to undo it.
+                    const wouldLockMeOut = o.value === 'owner' && !isOwner
+                    return (
+                      <button
+                        key={o.value}
+                        onClick={() => savePermission(o.value)}
+                        disabled={locked || wouldLockMeOut}
+                        className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                          editPermission === o.value
+                            ? 'bg-accent-deep text-white'
+                            : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
+                        }`}
+                      >
+                        {o.label}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* What it actually did.
+                    This setting changes what OTHER people can do, so from the
+                    owner's own phone — which is the phone it is usually set from —
+                    nothing on screen moves and it reads as a control that does
+                    nothing at all. So it says so. */}
+                <p className="t-cap text-ink/65 mt-3 leading-snug">
+                  {editPermission === 'owner' ? (
+                    isOwner
+                      ? 'Only the device this trip was created on can change it — this one. Nothing changes for you; it is everybody else who can now read this screen but not touch it.'
+                      : 'Only the device this trip was created on can change it.'
+                  ) : (
+                    isOwner
+                      ? 'Anyone who opens this screen can change the trip. This is the device it was created on, so "Owner only" would leave it to you.'
+                      : 'Anyone who opens this screen can change the trip. "Owner only" is set from the device the trip was created on, which is not this one.'
+                  )}
+                </p>
               </div>
             </div>
           </div>
@@ -837,73 +920,10 @@ export default function TripSetupClient({
             </div>
           </section>
 
-          {/* ── Rounds (read-only summary) ── */}
-          {rounds.length > 0 && (
-            <section className={SECTION}>
-              <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-4">Rounds</p>
-              <div className="space-y-2">
-                {rounds.map(r => (
-                  <div key={r.id} className="flex items-center gap-3 text-sm">
-                    <span className="text-ink/65 w-16 flex-shrink-0">Round {r.round_number}</span>
-                    <span className="text-ink/80">{r.courseName}</span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* ── Edit permission ── */}
-          <section className={SECTION}>
-            <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-1">Who can edit</p>
-            <p className="text-ink/65 text-[13px] mb-4">
-              Who can change this trip&apos;s players, teams, format and dates.
-              Joining and scoring are open to everyone either way.
-            </p>
-            <div className="flex gap-2">
-              {[
-                { value: 'everyone', label: 'Any player' },
-                { value: 'owner', label: 'Owner only' },
-              ].map(o => {
-                // Owner is a flag on the device the trip was created on, and
-                // there is no way to hand it to another one. A device that
-                // does not hold it choosing "owner only" would lock this
-                // screen — this control included — the instant it was tapped,
-                // with nothing anywhere able to undo it.
-                const wouldLockMeOut = o.value === 'owner' && !isOwner
-                return (
-                  <button
-                    key={o.value}
-                    onClick={() => savePermission(o.value)}
-                    disabled={locked || wouldLockMeOut}
-                    className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                      editPermission === o.value
-                        ? 'bg-accent-deep text-white'
-                        : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                    }`}
-                  >
-                    {o.label}
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* What it actually did.
-                This setting changes what OTHER people can do, so from the
-                owner's own phone — which is the phone it is usually set from —
-                nothing on screen moves and it reads as a control that does
-                nothing at all. So it says so. */}
-            <p className="t-cap text-ink/65 mt-3 leading-snug">
-              {editPermission === 'owner' ? (
-                isOwner
-                  ? 'Only the device this trip was created on can change it — this one. Nothing changes for you; it is everybody else who can now read this screen but not touch it.'
-                  : 'Only the device this trip was created on can change it.'
-              ) : (
-                isOwner
-                  ? 'Anyone who opens this screen can change the trip. This is the device it was created on, so "Owner only" would leave it to you.'
-                  : 'Anyone who opens this screen can change the trip. "Owner only" is set from the device the trip was created on, which is not this one.'
-              )}
-            </p>
-          </section>
+        {/* The rounds used to be listed here, read-only, round number beside
+            course name. The itinerary behind the gear is the same list and
+            editable, and the hub prints it a third time — three statements of
+            one fact, the only one of which nobody could act on being this. */}
 
         {/* Anything that would make the trip unplayable — no leaderboard at
             all, a pairs draw with a team of three. Standing information

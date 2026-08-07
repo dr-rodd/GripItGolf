@@ -48,9 +48,12 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         // deliberately does not cover either. All three agree now.
         .eq('is_composite', false)
         .order('created_at'),
+      // Ids only. The number and the course were for the read-only round
+      // list this screen used to print; what is left needs neither. Still
+      // ordered, so the ids arrive in playing order for anything that cares.
       supabase
         .from('rounds')
-        .select('id, round_number, course_id')
+        .select('id')
         .eq('trip_id', trip.id)
         .order('round_number'),
       fetchMemberships(trip.id),
@@ -73,14 +76,6 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
   if (platformCoursesResult.error) console.error('TripSetupPage platform courses query failed:', platformCoursesResult.error)
 
   const rounds = roundsResult.data ?? []
-  const courseIds = rounds.map(r => r.course_id).filter(Boolean)
-  const { data: courses, error: coursesError } = courseIds.length > 0
-    ? await supabase.from('courses').select('id, name').in('id', courseIds)
-    : { data: [], error: null }
-
-  if (coursesError) console.error('TripSetupPage courses query failed:', coursesError)
-
-  const courseMap = Object.fromEntries((courses ?? []).map(c => [c.id, c.name]))
 
   type ItinRow = {
     id: string; day_index: number; position: number; kind: ItemKind
@@ -127,11 +122,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       teams={(teamsResult.data ?? []).map(t => ({ ...t, team_set: t.team_set ?? 'main' }))}
       players={playersResult.data ?? []}
       memberships={memberships}
-      rounds={rounds.map(r => ({
-        id: r.id,
-        round_number: r.round_number,
-        courseName: courseMap[r.course_id] ?? `Round ${r.round_number}`,
-      }))}
+      rounds={rounds.map(r => ({ id: r.id }))}
       itinerary={itinerary}
       courses={platformCoursesResult.data ?? []}
       canEditGolf={canEditGolf}
