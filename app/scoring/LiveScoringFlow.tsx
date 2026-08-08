@@ -129,6 +129,13 @@ interface Props {
   allowance?: number
   /** Every allowance the trip's boards play off, for the player picker. */
   allowances?: number[]
+  /**
+   * Whether each player's tile asks for putts and a fairway.
+   *
+   * The trip's own setting. Off is the scorecard exactly as it was before
+   * stats existed — no extra row, no extra height, nothing to skip past.
+   */
+  trackStats?: boolean
 }
 
 type LiveStep = "activate" | "setup" | "holes" | "summary" | "committed" | "resuming"
@@ -384,6 +391,7 @@ export default function LiveScoringFlow({
   onHoleChange,
   allowance = FULL_ALLOWANCE,
   allowances = [FULL_ALLOWANCE],
+  trackStats = false,
 }: Props) {
   const [liveRound, setLiveRound] = useState<ActiveLiveRound | null>(activeLiveRound)
   const [step, setStep] = useState<LiveStep>(
@@ -1278,6 +1286,7 @@ export default function LiveScoringFlow({
               onSubmit={handleHoleSubmit}
               onBack={handleHoleBack}
               showLeaderboard={showLeaderboard}
+              trackStats={trackStats}
             />
           </div>
           {/* Right panel: live leaderboard */}
@@ -1723,7 +1732,7 @@ export default function LiveScoringFlow({
 
 function HoleCard({
   hole, playerSetups, courseId,
-  existingScores, runningTotals, onSubmit, onBack, showLeaderboard,
+  existingScores, runningTotals, onSubmit, onBack, showLeaderboard, trackStats,
 }: {
   hole: Hole
   playerSetups: PlayerSetup[]; courseId: string
@@ -1732,6 +1741,7 @@ function HoleCard({
   onSubmit: (scores: Record<string, HoleScore>) => void
   onBack: () => void
   showLeaderboard: boolean
+  trackStats: boolean
 }) {
   const [holeScores, setHoleScores] = useState<Record<string, HoleScore>>(() => {
     const init: Record<string, HoleScore> = {}
@@ -1794,8 +1804,18 @@ function HoleCard({
               playingHcp={displayHcp}
               runningTotal={runningTotals[player.id] ?? 0}
               yardage={yardageForTee(hole, tee.name)}
+              trackStats={trackStats}
+              putts={hs.putts}
+              fairway={hs.fairway}
               onChange={v  => set(player.id, { gross: v, isNR: false })}
-              onToggleNR={() => set(player.id, hs.isNR ? { isNR: false, gross: null } : { isNR: true, gross: null })}
+              onPutts={v   => set(player.id, { putts: v })}
+              onFairway={v => set(player.id, { fairway: v })}
+              // A no return clears the stats with the score. The ball was
+              // picked up: there is no putt count to keep, and the tile stops
+              // asking for one.
+              onToggleNR={() => set(player.id, hs.isNR
+                ? { isNR: false, gross: null }
+                : { isNR: true, gross: null, putts: null, fairway: null })}
             />
           )
         })}
@@ -1836,7 +1856,8 @@ function HoleCard({
 function LivePlayerTile({
   hole, effectivePar, effectiveSI, playerName, teamColor,
   score, isNR, playingHcp, yardage, runningTotal,
-  onChange, onToggleNR,
+  trackStats, putts, fairway,
+  onChange, onToggleNR, onPutts, onFairway,
 }: {
   hole: Hole
   effectivePar: number
@@ -1848,8 +1869,13 @@ function LivePlayerTile({
   playingHcp: number
   yardage?: number | null
   runningTotal: number
+  trackStats: boolean
+  putts: number | null
+  fairway: Fairway | null
   onChange: (v: number | null) => void
   onToggleNR: () => void
+  onPutts: (v: number | null) => void
+  onFairway: (v: Fairway | null) => void
 }) {
   const netParGross = effectivePar + shotsReceived(playingHcp, effectiveSI)
   const hasScore    = score !== null
@@ -1880,6 +1906,119 @@ function LivePlayerTile({
     const n = parseInt(v, 10)
     if (!isNaN(n) && n >= 1 && n <= 12) onChange(n)
   }
+
+  // ── The stats row ──
+  //
+  // It appears once there is a score on the hole and never before: asking how
+  // many putts went into a number nobody has typed yet is a control with
+  // nothing to be about, and hiding it until then is what keeps the tile
+  // exactly as tall as it is today while somebody is still deciding. It then
+  // sequences the way the hole did — score, tee shot, putts, next.
+  //
+  // Not shown on a no return: the gross beside one is a computed maximum, not
+  // a hole anybody finished. And it never gates the Next button, which reads
+  // `allHaveGross` and knows nothing about any of this.
+  const showStats = trackStats && hasScore && !isNR
+  // A par 3 has no fairway to find, which is not the same as missing one.
+  const showFairway = effectivePar >= 4
+  // Never more putts than shots — you cannot two-putt a hole-in-one — and
+  // never more than seven, which is two more than anybody admits to.
+  const maxPutts = Math.min(7, score ?? 7)
+
+  // Tinted when chosen, bordered when not. Solid emerald would put three of
+  // these on every tile, and emerald is an accent.
+  const chipClass = (on: boolean) =>
+    "h-12 t-cap px-1 flex items-center justify-center rounded-xl border " +
+    "transition-colors duration-150 touch-manipulation " +
+    (on
+      ? "border-accent bg-accent/[0.12] text-accent-deep font-semibold"
+      : "border-bark/12 text-ink/65 hover:border-bark/25 active:bg-bark/[0.04]")
+
+  const stepClass =
+    "w-11 h-12 rounded-xl border border-bark/12 text-ink/80 text-2xl leading-none " +
+    "flex items-center justify-center touch-manipulation transition-colors duration-150 " +
+    "hover:border-accent hover:text-accent-deep active:scale-95 " +
+    "disabled:opacity-20 disabled:cursor-not-allowed"
+
+  // One row, not two. Two put 129px on every tile that had a score on it,
+  // which on a fourball is most of a screen of extra scrolling on a card
+  // that already scrolls; this is 73px. Measured, not guessed.
+  const statsRow = showStats && (
+    <div className="px-4 pb-3 pt-3 border-t border-bark/[0.08] flex items-center gap-2">
+
+      {showFairway ? (
+        // The middle column is wider because its word is longer. Three equal
+        // columns clipped "Fairway" on a 360px phone, which is a live size.
+        <div
+          className="flex-1 grid gap-1.5 min-w-0"
+          style={{ gridTemplateColumns: "1fr 1.35fr 1fr" }}
+          role="group"
+          aria-label={`Tee shot, ${playerName}`}
+        >
+          {([["left", "Left"], ["fairway", "Fairway"], ["right", "Right"]] as const).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={fairway === v}
+              // Tapped again, it clears. A three-way control with no fourth
+              // button cannot otherwise be un-set, and a mis-tap on a phone
+              // in the rain is the common case rather than the odd one.
+              onClick={() => onFairway(fairway === v ? null : v)}
+              className={chipClass(fairway === v)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        // A par 3 keeps the space rather than closing it, so the putts
+        // control stays in the same place on every hole of the round. It
+        // says nothing: "no fairway on a par 3" is a sentence explaining
+        // something the golfer holding the phone already knows.
+        <span className="flex-1" />
+      )}
+
+      <div className="flex items-center gap-1 flex-shrink-0" role="group" aria-label={`Putts, ${playerName}`}>
+        <button
+          type="button"
+          aria-label="Fewer putts"
+          // Down from nothing lands on 1, up from nothing lands on 2 — the
+          // two commonest answers, one tap each, and neither is pre-filled.
+          // A default of 2 would be indistinguishable from a real 2 and the
+          // putting average would quietly become the average of the default.
+          //
+          // Below zero clears rather than sticking at zero: it is the only
+          // way back out, and zero is a real answer that has to be reachable
+          // for the hole holed from off the green.
+          onClick={() => onPutts(putts == null ? 1 : putts <= 0 ? null : putts - 1)}
+          className={stepClass}
+        >
+          −
+        </button>
+        {/* Numeral over its unit, the same shape as the points badge two rows
+            up. That badge is why this is not a bare number beside a plus and
+            a minus: there is already a −/+ stepper on this tile for the
+            score, and two unlabelled ones would be a mis-entry waiting. */}
+        {/* Not `aria-hidden`: stacked, it already reads as "2 putts", which
+            is the whole value and its unit in the order somebody says them. */}
+        <span className="flex flex-col items-center justify-center w-9" role="status">
+          <span className={`t-data t-num leading-none ${putts == null ? "text-ink/50" : "text-ink"}`}>
+            {putts ?? "—"}
+          </span>
+          <span className="text-[10px] text-ink/50 leading-none mt-0.5">putts</span>
+        </span>
+        <button
+          type="button"
+          aria-label="More putts"
+          disabled={putts != null && putts >= maxPutts}
+          onClick={() => onPutts(putts == null ? 2 : Math.min(maxPutts, putts + 1))}
+          className={stepClass}
+        >
+          +
+        </button>
+      </div>
+    </div>
+  )
 
   return (
     <div className={`bg-surface border rounded-xl transition-colors
@@ -2045,6 +2184,12 @@ function LivePlayerTile({
         </div>
 
       </div>
+
+      {/* Below both layouts, and deliberately not inside either. The two
+          above are a phone column and a desktop row saying the same thing
+          twice; this is a row on both, so writing it once is the whole
+          reason it sits out here. */}
+      {statsRow}
     </div>
   )
 }

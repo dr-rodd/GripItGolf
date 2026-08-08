@@ -14,6 +14,7 @@ import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import TripHeader from '@/app/components/TripHeader'
 import TabBar from '@/app/components/TabBar'
 import SupportLink from '@/app/components/SupportLink'
+import Toggle from '@/app/components/Toggle'
 import {
   IconSettings, IconX, IconFlag, IconChevronRight, IconPencil,
 } from '@/app/components/icons'
@@ -45,6 +46,7 @@ type Trip = {
   end_date: string | null
   leaderboards: Leaderboard[]
   edit_permission: string
+  track_stats: boolean
 }
 
 type Team = { id: string; name: string; color: string; team_set: string }
@@ -188,6 +190,7 @@ export default function TripSetupClient({
   // asked properly by a leaderboard card.
   const [boards, setBoards] = useState<Leaderboard[]>(trip.leaderboards ?? [])
   const [editPermission, setEditPermission] = useState(trip.edit_permission)
+  const [trackStats, setTrackStats] = useState(trip.track_stats === true)
 
   // Collections
   const [teams] = useState<Team[]>(initialTeams)
@@ -286,6 +289,12 @@ export default function TripSetupClient({
     const prev = editPermission
     setEditPermission(next)
     if (!(await saveTrip({ edit_permission: next }))) setEditPermission(prev)
+  }
+
+  async function saveTrackStats(next: boolean) {
+    const prev = trackStats
+    setTrackStats(next)
+    if (!(await saveTrip({ track_stats: next }))) setTrackStats(prev)
   }
 
   // ── Players ──────────────────────────────────────────────────────────────
@@ -497,8 +506,12 @@ export default function TripSetupClient({
           </span>
           <span className="flex-1 min-w-0">
             <span className="block t-card text-ink">Trip Settings</span>
+            {/* "The non-golf trip details" until the drawer gained a setting
+                about the scorecard, at which point the line was quietly
+                untrue. The pointer downwards is the part that earns its keep
+                — it is what stops somebody hunting in here for the boards. */}
             <span className="block t-cap text-ink/65 mt-0.5 leading-snug">
-              The non-golf trip details — Golf related settings are below
+              Name, dates, itinerary and stats — leaderboards are below
             </span>
           </span>
           <span className="flex-shrink-0 text-ink/50">
@@ -618,6 +631,42 @@ export default function TripSetupClient({
                       ? 'Anyone who opens this screen can change the trip. This is the device it was created on, so "Owner only" would leave it to you.'
                       : 'Anyone who opens this screen can change the trip. "Owner only" is set from the device the trip was created on, which is not this one.'
                   )}
+                </p>
+              </div>
+
+              {/* ── Track stats ──
+                  Last in the drawer because it is the newest setting and the
+                  least visited, and because "Who can edit" carries a long
+                  explanation that wants to stay attached to its own control.
+
+                  In the drawer rather than down the page with the
+                  leaderboards: it does not change what the trip is playing
+                  for, and no board reads it. It changes what the scorecard
+                  asks for, which is a fact about how this trip is run. */}
+              <div className="pt-4 border-t border-bark/12">
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <label className={LABEL}>Track stats</label>
+                    <p className="t-cap text-ink/65 leading-snug">
+                      Ask for putts and where the tee shot finished on every hole,
+                      for everyone on the card.
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={trackStats}
+                    onChange={saveTrackStats}
+                    disabled={locked}
+                    label="Track stats"
+                  />
+                </div>
+
+                {/* Two things somebody will otherwise report as broken: that
+                    the rounds already played did not fill in, and that the
+                    scorecard looks unchanged until the next one is started. */}
+                <p className="t-cap text-ink/65 mt-3 leading-snug">
+                  {trackStats
+                    ? 'Two extra taps a hole, and neither one holds up the next hole. Holes already played are not affected — stats start from the next card.'
+                    : 'Off, so the scorecard asks for a score and nothing else.'}
                 </p>
               </div>
             </div>

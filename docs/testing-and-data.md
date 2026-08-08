@@ -26,6 +26,7 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:admin` | Optional email, derived trip status, admin session signing |
 | `test:support` | The donation link, and that it vanishes when unconfigured |
 | `test:live-scores` | Reconciling a part-entered card with what was saved, so a partial one cannot erase a full one |
+| `test:stats` | Putts and fairways: that `scores` and `live_scores` constrain them identically, that every writer and every read-back carries both, and that the control asks for them without ever holding up the next hole |
 | `test:scorecard-void` | Voiding a card erases its scores from both tables, in an order that cannot silently no-op, and no screen does it by hand |
 | `test:scorecard` | Every score shape, the nett/no-return arithmetic, and that a card survives being left and reopened |
 | `test:branding` | The green dot, the wordmark, back controls, contrast, type size, and the footer/tab-bar carrier list |

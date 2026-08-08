@@ -121,6 +121,10 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         // than a blank slate. Its first save writes them down for real.
         leaderboards: boardsForTrip(trip),
         edit_permission: trip.edit_permission ?? 'everyone',
+        // `?? false` rather than trusting the column: a trip read back before
+        // migration 028 ran has no such field, and undefined would put the
+        // toggle in neither position.
+        track_stats: trip.track_stats ?? false,
       }}
       teams={(teamsResult.data ?? []).map(t => ({ ...t, team_set: t.team_set ?? 'main' }))}
       players={playersResult.data ?? []}

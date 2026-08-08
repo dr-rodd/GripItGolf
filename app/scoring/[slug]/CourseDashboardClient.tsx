@@ -101,6 +101,14 @@ interface Props {
    * where it was.
    */
   bottomInset?: string
+  /**
+   * Whether the card asks for putts and a fairway on every hole.
+   *
+   * The trip's own setting, off unless it was switched on. The legacy
+   * /scoring/[slug] route has no trip to ask and leaves this alone, so that
+   * screen keeps the scorecard it has always had.
+   */
+  trackStats?: boolean
 }
 
 type View = "dashboard" | "scoring" | "live-board" | "settings"
@@ -111,6 +119,7 @@ export default function CourseDashboardClient({
   courseName, courseId, players, rounds, holes, tees, roundHandicaps,
   backHref = "/scoring", roundId, stickyTop = 0,
   allowances = [FULL_ALLOWANCE], allowanceStart = 0, bottomInset = "0",
+  trackStats = false,
 }: Props) {
   const [view, setView]                       = useState<View>("dashboard")
   const [scoringLiveRound, setScoringLiveRound] = useState<ActiveLiveRound | null>(null)
@@ -938,6 +947,7 @@ export default function CourseDashboardClient({
           autoResume={isResuming}
           allowance={allowance}
           allowances={allowances}
+          trackStats={trackStats}
           onBack={goBack}
           onLiveRoundChange={r => {
             setScoringLiveRound(r)

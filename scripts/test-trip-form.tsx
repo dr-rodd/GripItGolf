@@ -256,6 +256,12 @@ section('The trip setup page uses the same field')
 // corner named neither of them. What the trip *is* — name, dates, running
 // order, who may change it — sits behind the row; how the golf is *played*
 // is everything below it. The row has to say so, or the split is guesswork.
+//
+// The row used to say "The non-golf trip details", which stopped being true
+// when the drawer gained the stats switch: that one is about what the
+// scorecard asks for. The load-bearing half was never the "non-golf" claim
+// but the **pointer downwards** — it is what stops somebody hunting in the
+// drawer for the leaderboards — so that is what is pinned now.
 
 section('The gear says what is behind it')
 {
@@ -272,8 +278,10 @@ section('The gear says what is behind it')
     } as never)
   )
 
-  ok(html.includes('Golf related settings are below'),
+  ok(/leaderboards are below/i.test(html),
     'the row draws the line between the trip and the golf')
+  ok(!/non-golf/i.test(html),
+    '  …without claiming nothing behind it touches the golf, which it now does')
 
   // Who can edit followed the name and the dates in. It is a fact about the
   // trip rather than about the golf — it decides who may open any of this —
@@ -283,6 +291,14 @@ section('The gear says what is behind it')
   const sheet = src.slice(src.indexOf('{detailsOpen && ('), src.indexOf('{itineraryOpen && ('))
   ok(sheet.includes('Who can edit'), 'it is inside the details sheet')
   ok(sheet.includes('savePermission'), 'and still saves from there')
+
+  // Track stats is in the drawer alongside it, and saves the same way —
+  // optimistically, reverting on a refusal, through the shared `saveTrip`.
+  ok(sheet.includes('Track stats'), 'track stats is in the drawer too')
+  ok(sheet.includes('saveTrackStats'), '  …and saves from there')
+  ok(/track_stats: next/.test(src), '  …writing the column the card reads')
+  ok(/setTrackStats\(prev\)/.test(src), '  …and putting the switch back if the write is refused')
+  ok(!html.includes('Track stats'), 'and it is not on the page body either')
 
   // The read-only round list is gone. The itinerary behind this same row is
   // that list and editable, and the hub prints it a third time.

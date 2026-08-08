@@ -22,7 +22,7 @@ export default async function TripCoursePage({
   // Look up trip
   const { data: trip } = await supabase
     .from('trips')
-    .select('id, name, formats, leaderboards, team_scoring')
+    .select('id, name, formats, leaderboards, team_scoring, track_stats')
     .eq('trip_code', tripCode)
     .single()
   if (!trip) notFound()
@@ -93,6 +93,10 @@ export default async function TripCoursePage({
         roundId={thisRound.id}
         allowances={allowances.steps}
         allowanceStart={allowances.startIndex}
+        // Off unless this trip asked for it. The legacy `/scoring/[slug]`
+        // route passes nothing and so gets the default, which is the
+        // scorecard exactly as it has always been.
+        trackStats={trip.track_stats === true}
         // TripHeader above is sticky too. Without this the scoring shell's own
         // header sticks to the same place and, being the lower z-index, ends
         // up behind it.
