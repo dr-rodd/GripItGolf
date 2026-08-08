@@ -58,6 +58,34 @@ export function resolveCustomPoints(stored: number[], playerCount: number): numb
   return Array.from({ length: n }, (_, i) => clampPoints(stored[i] ?? 0))
 }
 
+/**
+ * The rows the editor shows — and therefore the rows it stores.
+ *
+ * This is `resolveCustomPoints`'s sibling and differs in exactly one way: an
+ * **edited table keeps its own length**. Scoring still pads a short table with
+ * noughts when it reads it, because the board must be scorable whatever the
+ * field turns out to be. The editor must not, because in the editor the length
+ * is a thing somebody is setting.
+ *
+ * Resolving on the way in was what made the two stepper buttons do nothing.
+ * They wrote a longer or shorter table, the next render sized it back to the
+ * field, and the write vanished — the plus silently, the minus by leaving a
+ * row behind on nought. The rule that avoids that whole class of bug is that
+ * this function is **idempotent**: what it shows, fed back to it, is
+ * unchanged. `resolveCustomPoints` is not, and cannot be, because following
+ * the field is the entire point of it.
+ *
+ * An untouched default still follows the field, which is the behaviour worth
+ * keeping: a board is usually made before the teams are picked, and a shape
+ * has no length to defend.
+ */
+export function editableRows(stored: readonly number[], fieldSize: number): number[] {
+  if (stored.length === 0 || isDefaultCustomPoints(stored)) {
+    return defaultCustomPoints(Math.max(1, Math.floor(fieldSize)))
+  }
+  return stored.map(clampPoints)
+}
+
 export function clampPoints(value: unknown): number {
   const n = Number(value)
   if (!Number.isFinite(n)) return 0

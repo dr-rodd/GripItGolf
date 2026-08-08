@@ -11,7 +11,8 @@
 
 import fs from 'fs'
 import {
-  defaultCustomPoints, resolveCustomPoints, isDefaultCustomPoints, clampPoints, customPointsError,
+  defaultCustomPoints, resolveCustomPoints, editableRows,
+  isDefaultCustomPoints, clampPoints, customPointsError,
   awardRound, totalAfterDiscard, discardedIndices, MAX_CUSTOM_POINTS,
   pointsOutOfStep, anyPointsOutOfStep, TEAM_POINTS_MISMATCH, PLAYER_POINTS_MISMATCH,
 } from '../lib/customPoints'
@@ -92,6 +93,75 @@ section('An untouched default follows the field; an edited table does not')
   // any teams at the moment the board is made.
   eq(resolveCustomPoints(defaultCustomPoints(2), 4), [4, 3, 2, 1],
     'a team prize board sized against no teams pays every team once they exist')
+}
+
+section('What the editor shows is what the editor stores')
+{
+  // The editor's rows, which differ from the scored rows in one way only:
+  // an edited table keeps its own length.
+  eq(editableRows([], 5), [5, 4, 3, 2, 1], 'nothing stored still follows the field')
+  eq(editableRows(defaultCustomPoints(2), 6), [6, 5, 4, 3, 2, 1],
+    'and so does an untouched default — a shape has no length to defend')
+  eq(editableRows([10, 5, 3], 8), [10, 5, 3],
+    'an edited table is not padded out to the field here, though scoring pads it')
+  eq(editableRows([10, 5, 3, 2, 1], 3), [10, 5, 3, 2, 1], 'nor trimmed down to it')
+  eq(editableRows([999, -4, 2.6] as number[], 3), [100, 0, 3], 'figures are still clamped')
+  eq(editableRows([], 0), [1], 'a table with no rows cannot be answered, so there is always one')
+
+  // The property the two buttons depend on, and the one `resolveCustomPoints`
+  // cannot have: feeding the rows back in returns them unchanged. Without it
+  // every write is undone by the render that follows it.
+  for (const [stored, field] of [
+    [[], 5], [[10, 5, 3], 8], [[10, 5, 3, 2, 1], 3], [[0, 0], 4], [defaultCustomPoints(3), 7],
+  ] as [number[], number][]) {
+    const once = editableRows(stored, field)
+    eq(editableRows(once, field), once,
+      `showing [${stored}] against ${field} twice shows the same thing`)
+  }
+}
+
+section('The steppers change the table, and the change survives the render')
+{
+  // Exactly what the buttons do, put back through exactly what draws them.
+  // This is the round trip that was broken: the plus appeared to do nothing
+  // and the minus left the bottom place behind on nought, because both
+  // writes were resized back to the field before they were ever seen.
+  const press = (stored: number[], field: number, add: boolean) => {
+    const rows = editableRows(stored, field)
+    const next = add ? [...rows, 0] : rows.slice(0, -1)
+    return editableRows(next, field)
+  }
+
+  eq(press([], 4, true), [4, 3, 2, 1, 0], 'a place added to a default is there afterwards')
+  eq(press([], 4, false), [4, 3, 2], 'and a place removed from one is gone')
+  eq(press([10, 6, 3], 3, true), [10, 6, 3, 0], 'a place added to an edited table is there')
+  eq(press([10, 6, 3], 3, false), [10, 6], 'and the bottom place goes, rather than turning to 0')
+
+  // Three presses are three rows. A stepper that only works once is the same
+  // bug wearing a different hat.
+  let t: number[] = []
+  for (let i = 0; i < 3; i++) t = press(t, 4, true)
+  eq(t, [4, 3, 2, 1, 0, 0, 0], 'pressing plus three times adds three places')
+  for (let i = 0; i < 5; i++) t = press(t, 4, false)
+  eq(t, [4, 3], 'and pressing minus five times takes five away')
+
+  // Removal has to escape the default shape or it would be undone: a default
+  // follows the field, and the field has not moved. It always does — the top
+  // figure of a default is its length, so a shortened default no longer
+  // matches the default of its new length. Checked rather than asserted.
+  let escaped = true
+  for (let n = 2; n <= 24; n++) {
+    if (isDefaultCustomPoints(defaultCustomPoints(n).slice(0, -1))) escaped = false
+  }
+  ok(escaped, 'a shortened default is never itself a default, at any field size')
+
+  // The added place is worth nothing, and a table ending in nought is never a
+  // default either — so a plus cannot be undone by the same route.
+  let addSticks = true
+  for (let n = 1; n <= 24; n++) {
+    if (isDefaultCustomPoints([...defaultCustomPoints(n), 0])) addSticks = false
+  }
+  ok(addSticks, 'and a table with a nought on the end is never a default')
 }
 
 section('Clamping and validation')
@@ -302,6 +372,17 @@ section('The two steppers under the table')
 
   const icons = fs.readFileSync('app/components/icons.tsx', 'utf-8')
   ok(icons.includes('export const IconMinus'), 'the minus is a Tabler icon like every other')
+
+  // Drawing and storing go through the same function, so the rows on screen
+  // and the rows written down cannot disagree about how many places there
+  // are — and neither goes through the resolving one, which would size both
+  // back to the field and make the steppers no-ops again.
+  ok(/const rows = editableRows\(table, fieldSize\)/.test(setup),
+    'the rows on screen are the editable ones')
+  ok(/customPoints: editableRows\(/.test(setup), 'and so are the rows saved')
+  const imports = setup.split('\n').filter(l => l.startsWith('import')).join('\n')
+  ok(!imports.includes('resolveCustomPoints'),
+    'the editor does not reach for the scoring resolver at all')
 }
 
 section('Both screens that change the field say so')

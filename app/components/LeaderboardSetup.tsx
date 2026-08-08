@@ -13,7 +13,7 @@ import {
   clampAllowance, allowanceOf, suggestedAllowance,
 } from '@/lib/handicapAllowance'
 import { nextSheetId } from '@/lib/teamSets'
-import { defaultCustomPoints, resolveCustomPoints, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
+import { defaultCustomPoints, editableRows, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
 import { IconTrophy, IconPlus, IconMinus, IconX, IconCheck, IconSettings } from './icons'
 import { Card, Badge, buttonClass, FIELD, FIELD_LABEL } from './ui'
 
@@ -110,8 +110,15 @@ const STEP =
  * teams. It is often not known yet: teams are picked after the board exists,
  * and players go on joining afterwards. So the table is not frozen at
  * whatever the field happened to be. An untouched default follows the field
- * wherever it ends up (`resolveCustomPoints`); an edited one is kept and
- * padded, because a decision should survive somebody signing up.
+ * wherever it ends up (`editableRows`); an edited one is kept exactly as it
+ * is, length and all, because a decision should survive somebody signing up
+ * — and because on this screen the number of places is itself a decision.
+ *
+ * That last part is the difference between here and scoring. A board reads
+ * its table through `resolveCustomPoints`, which pads a short one with
+ * noughts so the competition is always scorable however many turn up. The
+ * editor must not, or the two buttons below would be writing into something
+ * that resizes itself back a moment later.
  */
 function PointsTable({
   table, fieldSize, known, unit, onChange,
@@ -124,17 +131,22 @@ function PointsTable({
   unit: string
   onChange: (t: number[]) => void
 }) {
-  const rows = resolveCustomPoints(table, Math.max(fieldSize, 1))
+  const rows = editableRows(table, fieldSize)
 
   /**
    * Adding and removing a place by hand.
    *
-   * The table normally sizes itself to the field, which is right nearly all
+   * An untouched table sizes itself to the field, which is right nearly all
    * of the time — but "nearly" is doing work there. A place can be added
    * before the team or the player who will fill it exists, and the sheet is
    * often filled in that order: work out the prize table, then pick the
    * teams. Without this the only way to get a fifth row was to go and make a
    * fifth team first.
+   *
+   * Both write the whole table, and `editableRows` hands it straight back —
+   * so a row added stays added and a row removed stays removed. Neither is
+   * ever a no-op, which is what they both were when the rows were resolved
+   * against the field on the way in.
    *
    * A new place is worth nothing until somebody says otherwise. Guessing a
    * figure for it — one less than the row above, say — would be inventing a
@@ -556,11 +568,12 @@ function Builder({
             // An edit keeps its identity, so the tab it is on and the teams
             // already picked for it stay with it.
             id: initial?.id ?? `lb-${Date.now()}`,
-            // Store the table that was on screen. Reopening a board whose
-            // field has grown shows the resolved rows, and saving without
-            // touching them should not put the short version back.
+            // Store the table that was on screen — the same function that
+            // drew it, so the two cannot disagree about how many places there
+            // are. A board saved without the table being touched still stores
+            // a real one sized to the field, because that is what was shown.
             ...(draft.combine === 'position'
-              ? { customPoints: resolveCustomPoints(draft.customPoints ?? [], fieldSize) }
+              ? { customPoints: editableRows(draft.customPoints ?? [], fieldSize) }
               : {}),
           })}
           className={buttonClass('primary')}
