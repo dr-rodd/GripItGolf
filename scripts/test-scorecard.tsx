@@ -410,9 +410,71 @@ section('A team card keeps the holes in view however big the team')
 
   // A hole played for nothing is a nought, not a blank — a wiped-out hole is
   // exactly the one worth being able to see.
+  // Bounded by where the next hole starts rather than by a character count.
+  // It was the first 600 characters after hole 1, which is a guess about how
+  // much markup a row is — and a guess that went out of date the moment the
+  // card grew a stroke-index column, failing on a nought that was still
+  // being printed. Hole 2's number is the first `>2<` in the card: row 1
+  // holds a par of 4, an index of 1 and a gross of 5, and no 2 at all.
   const wiped = card(1, { pointsForFirstHole: 0 })
-  const firstRow = wiped.slice(wiped.indexOf('>1<'))
-  ok(/>0</.test(firstRow.slice(0, 600)), 'a hole scored for no points prints a nought')
+  const fromFirst = wiped.slice(wiped.indexOf('>1<'))
+  const firstRow  = fromFirst.slice(0, fromFirst.indexOf('>2<'))
+  ok(firstRow.length > 0, 'the first hole row can be found on its own')
+  ok(/>0</.test(firstRow), 'a hole scored for no points prints a nought')
+}
+
+// ─── The stroke index on a card ────────────────────────────────
+
+section('One player gets the stroke index; a team gives up the width instead')
+{
+  const holes = Array.from({ length: 18 }, (_, i) => ({
+    id: `h${i + 1}`, hole_number: i + 1, par: 4, course_id: 'c1',
+    stroke_index: i + 1,
+    // Deliberately the reverse order, so a card reading the wrong one is
+    // obvious rather than coincidentally right. A real ladies card is ranked
+    // on its own, and it is never the men's order.
+    stroke_index_ladies: 19 - (i + 1),
+    par_ladies: 4,
+  }))
+  const round = { id: 'r1', round_number: 1, courses: { id: 'c1', name: 'Carne' } }
+
+  const card = (n: number, gender = 'M') => renderToStaticMarkup(
+    React.createElement(ScorecardSheet, {
+      title: 'Alice Nolan', subtitle: 'Carne', round, holes, resolved: [],
+      players: Array.from({ length: n }, (_, i) => ({
+        id: `p${i + 1}`, name: `Player${i + 1} Surname`, handicap: 10, gender,
+      })),
+      handicapFor: () => 10,
+      onClose: () => {},
+    } as never)
+  )
+
+  const solo = card(1)
+  ok(/>SI</.test(solo), 'a one-player card carries an SI column')
+
+  // The whole reason it is there: where the shots fall is what makes a six
+  // worth two points, and without it the points column is taken on trust.
+  const siCells = (html: string) =>
+    [...html.matchAll(/>(\d+)<\/span>/g)].map(m => m[1])
+  ok(siCells(solo).includes('18'), 'and prints an index of 18 somewhere on it')
+
+  // A team card is three columns of scores before it scrolls, and a fourth
+  // fixed column takes the width they are already short of.
+  for (const n of [2, 3, 6]) {
+    ok(!/>SI</.test(card(n)), `a card for ${n} does not`)
+  }
+
+  // Off the same card the par came from. Taking the par from one set of
+  // numbers and the index from the other puts the shots on the wrong holes,
+  // which is a wrong points column rather than a cosmetic slip.
+  const ladies = card(1, 'F')
+  const firstRow = (html: string) => {
+    const from = html.slice(html.indexOf('>1</span>'))
+    return from.slice(0, from.indexOf('>2</span>'))
+  }
+  ok(/>18</.test(firstRow(ladies)),
+    'a ladies card takes hole 1 off the ladies index — 18 here, not 1')
+  ok(!/>18</.test(firstRow(solo)), 'and a mens card takes the mens')
 }
 
 // ─── Choosing a round ──────────────────────────────────────────

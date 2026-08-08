@@ -9,7 +9,7 @@ import {
 } from '@/lib/leaderboards'
 import {
   type BoardRow, type ResolvedScore, type RowContext,
-  buildRows, scoresForBoard, boardHandicapFor, effectivePar,
+  buildRows, scoresForBoard, boardHandicapFor, effectivePar, effectiveSI,
 } from '@/lib/boardRows'
 import { buildRowContext, sortRounds } from '@/lib/rowContext'
 import { formatHandicap } from '@/lib/handicap'
@@ -257,10 +257,27 @@ export function ScorecardSheet({
   const back  = nine(10, 18)
   const gender = players[0]?.gender ?? 'M'
 
+  /**
+   * The stroke index, on a one-player card only.
+   *
+   * It is the column that answers "why did that six score two points" — where
+   * the shots fall is the whole of a Stableford card, and without it the
+   * points column has to be taken on trust.
+   *
+   * Not on a team card, and this is a width judgement rather than a view
+   * about who needs it. A team card gives every member a column of their own
+   * and they only start scrolling past three; a fourth fixed column takes
+   * roughly a sixth of the row from three players who are already down to a
+   * score shape and a raised points figure each. On one player the score
+   * column is `flex-1` and gives the space up without noticing.
+   */
+  const showSI = players.length === 1
+
   // Fixed either side, scrolling in the middle. The widths are the same in
   // both modes so a one-player card and a six-player card line up.
   const HOLE_W = 'w-10 flex-shrink-0'
   const PAR_W  = 'w-9 flex-shrink-0'
+  const SI_W   = 'w-8 flex-shrink-0'
   const PTS_W  = 'w-12 flex-shrink-0 text-right'
   const CELL   = `${scrolls ? 'w-11' : 'flex-1'} flex-shrink-0 flex items-center justify-center`
   /**
@@ -281,6 +298,10 @@ export function ScorecardSheet({
     <Row className={`py-2 ${total ? SC_BAND_TOTAL : SC_BAND} ${total ? '' : SC_RULE}`}>
       <span className={`${HOLE_W} text-[13px] font-bold tracking-widest uppercase text-ink/80`} style={SC_SF}>{label}</span>
       <span className={`${PAR_W} ${SC_NUM} font-bold text-ink`} style={SC_SF}>{sumPar(hs, gender)}</span>
+      {/* Nine stroke indexes do not add up to anything, so the column holds
+          its width and says nothing rather than printing a figure that would
+          be read as a total. */}
+      {showSI && <span className={SI_W} aria-hidden="true" />}
       <Strip scrolls={scrolls} register={register} onScroll={onScroll}>
         {players.map(p => {
           const gross = sumGross(hs, p.id)
@@ -374,6 +395,7 @@ export function ScorecardSheet({
           <Row className={`flex-shrink-0 py-1.5 ${SC_RULE} ${SC_HEAD}`}>
             <span className={`${HOLE_W} ${SC_HEAD_TIGHT}`} style={SC_SF}>Hole</span>
             <span className={`${PAR_W} ${SC_HEAD_TIGHT}`} style={SC_SF}>Par</span>
+            {showSI && <span className={`${SI_W} ${SC_HEAD_TIGHT}`} style={SC_SF}>SI</span>}
             <Strip scrolls={scrolls} register={register} onScroll={onScroll}>
               {players.map(p => (
                 <span key={p.id} className={`${CELL} ${SC_HEAD_TEXT}`} style={SC_SF}>
@@ -384,8 +406,13 @@ export function ScorecardSheet({
             <span className={`${PTS_W} ${SC_HEAD_TEXT}`} style={SC_SF}>Pts</span>
           </Row>
 
-          {/* Hole rows — the only vertically scrolling part */}
-          <div className="overflow-y-auto flex-1 pb-8">
+          {/* Hole rows — the only vertically scrolling part.
+              No padding under them: the Total band is the end of the card and
+              wants to sit against its edge. The 32px that used to be here
+              showed as a strip of white below the darkest band once you
+              scrolled to the bottom, which reads as the card having failed to
+              finish rather than as breathing room. */}
+          <div className="overflow-y-auto flex-1">
             {courseHoles.length === 0 && (
               <p className={`${SC_MUTED} text-sm text-center py-10`} style={SC_SF}>
                 No hole data for this course.
@@ -409,6 +436,15 @@ export function ScorecardSheet({
                     <span className={`${PAR_W} ${SC_NUM} ${SC_MUTED}`} style={SC_SF}>
                       {effectivePar(hole, gender)}
                     </span>
+                    {/* Off the same tee the par came from. A ladies card is
+                        ranked in its own order, and taking the par from one
+                        set of numbers and the index from the other would put
+                        the shots on the wrong holes. */}
+                    {showSI && (
+                      <span className={`${SI_W} ${SC_NUM} ${SC_MUTED}`} style={SC_SF}>
+                        {effectiveSI(hole, gender)}
+                      </span>
+                    )}
                     <Strip scrolls={scrolls} register={register} onScroll={onScroll}>
                       {players.map(p => {
                         const sc = scoreFor(p.id, hole.hole_number)
@@ -1077,12 +1113,6 @@ export default function TripLeaderboardClient({
       ? 'Set teams in Trip Setup'
       : 'No scores yet.'
 
-  // An individual board added up has a level to be ahead of. A prize table
-  // has none — it pays a place — and neither does a team total, where level
-  // depends on the format and the size of the team.
-  const relativeBoard =
-    activeBoard.audience === 'individual' && activeBoard.combine !== 'position'
-
   // A prize table is worth naming — "10 / 5 / 3 a round" is what an organiser
   // recognises their own competition by, where "points by position" is not.
   const paysByPosition = activeBoard.combine === 'position'
@@ -1128,29 +1158,14 @@ export default function TripLeaderboardClient({
         </div>
       )}
 
-      {/* What the two colours mean. Only worth saying while something is
-          actually in play — otherwise every round is gold and there is no
-          distinction to explain. */}
-      {inPlay && currentRows.length > 0 && (
-        <div className="flex items-center gap-4 mb-2 px-1">
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent" aria-hidden="true" />
-            <span className="text-ink/65 text-[13px] tracking-wider uppercase">
-              {relativeBoard ? 'In play — against level' : 'In play'}
-            </span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            {/* Ink, not emerald. Both swatches were emerald after the gold
-                was swept out, so the legend drew two identical dots and
-                claimed they told two states apart. A finished round is the
-                plain ink the column actually prints it in. */}
-            <span className="w-1.5 h-1.5 rounded-full bg-ink/80" aria-hidden="true" />
-            <span className="text-ink/65 text-[13px] tracking-wider uppercase">
-              Card in — {activeBoard.scoring === 'strokes' ? 'nett total' : 'total'}
-            </span>
-          </span>
-        </div>
-      )}
+      {/* No legend under the rules line.
+          It read "In play — against level · Card in — total", two swatches
+          explaining two colours, and it cost a band across the top of the one
+          screen in the app that is all table. The board says it without help:
+          a live figure is emerald and carries a dot, a finished one is ink,
+          and each round cell already names its own state on a long press. A
+          key is worth its space when the thing it decodes is arbitrary — a
+          colour standing for a state nothing else names. Here it is not. */}
 
       {currentRows.length === 0
         ? <EmptyState message={emptyMessage} />

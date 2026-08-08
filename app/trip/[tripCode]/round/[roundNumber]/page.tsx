@@ -224,12 +224,23 @@ export default async function RoundSummaryPage({
           <section>
             <h2 className="t-h2 text-ink mb-3">Tees</h2>
             {/* One grid for the whole table, not one per row.
-                Each row was its own grid before, so every `auto` column sized
-                itself against that row's own contents — which meant the
-                headings and the figures under them lined up with nothing.
-                One grid, fixed numeric columns, and the columns are columns. */}
+                Each row was its own grid before, so every column sized itself
+                against that row's own contents — which meant the headings and
+                the figures under them lined up with nothing. One grid, and
+                the columns are columns.
+
+                The three numeric columns size to their own content rather
+                than to a figure picked by hand. They were 3rem / 3.5rem /
+                3.5rem, and "Slope" does not fit 3.5rem once the cell's own
+                padding is taken off it — the heading overflowed its column
+                and drifted past the right-hand edge of the card. A hand-set
+                width is a guess about how wide a word renders, and it is
+                wrong the moment the word, the size or the face changes.
+                `auto` is the same decision made by something that can
+                measure. The name column stays `minmax(0,1fr)` so it takes
+                what is left and truncates. */}
             <div className="rounded-xl border border-bark/12 bg-surface overflow-hidden">
-              <div className="grid grid-cols-[minmax(0,1fr)_3rem_3.5rem_3.5rem]">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto]">
 
                 <Cell head>Tee</Cell>
                 <Cell head right>Par</Cell>
@@ -318,7 +329,10 @@ function Cell({
       className={`px-3 py-2.5 text-sm tabular-nums min-w-0 ${
         right ? 'text-right' : ''
       } ${rule ? 'border-b border-bark/[0.08]' : ''} ${
-        head ? 't-cap uppercase tracking-wider text-ink/50' : 'text-ink/80'
+        // Never wrapped. A heading that breaks in two is the other way a
+        // column too narrow for its own label goes wrong, and an auto-sized
+        // column only reads the label's width correctly if it is one line.
+        head ? 't-cap uppercase tracking-wider text-ink/50 whitespace-nowrap' : 'text-ink/80'
       }`}
     >
       {children}
