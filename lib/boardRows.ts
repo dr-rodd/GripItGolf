@@ -70,6 +70,22 @@ export type ResolvedScore = {
    * ahead of level it stands, or plain and reads as its total.
    */
   live: boolean
+  /**
+   * Putts on the hole, and where the tee shot finished.
+   *
+   * Optional because no board reads them and most callers do not select the
+   * columns: absent means the query never asked, null means it asked and
+   * nobody answered. Only lib/holeStats.ts reads them.
+   *
+   * They ride on `ResolvedScore` rather than being fetched separately so
+   * they inherit the three rules that already live in `resolveScores` — a
+   * committed score beats an in-progress one, a score whose hole is not in
+   * the list is dropped, and a live score counts only while its round has a
+   * card open on it. All three are rules a putting average needs just as
+   * much as a leaderboard does.
+   */
+  putts?: number | null
+  fairway?: 'left' | 'fairway' | 'right' | null
 }
 
 /** One line on the board — a player or a team, depending on the board. */

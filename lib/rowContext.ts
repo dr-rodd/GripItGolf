@@ -26,8 +26,20 @@ import type { Membership } from './teamSets'
 import type { TeamScoring } from './teamScoring'
 import { exactCourseHandicap, type TeeRating } from './courseHandicap'
 
+/**
+ * The two stats a card can carry beyond the score.
+ *
+ * Optional on both row types because only the stats fetch selects the
+ * columns — every other caller's query is unchanged and its rows simply have
+ * no such field.
+ */
+type StatColumns = {
+  putts?: number | null
+  fairway_hit?: 'left' | 'fairway' | 'right' | null
+}
+
 /** A committed score, as `scores` stores it. */
-export type ScoreRow = {
+export type ScoreRow = StatColumns & {
   player_id: string
   round_id: string
   hole_id: string
@@ -37,7 +49,7 @@ export type ScoreRow = {
 }
 
 /** An in-progress score, as `live_scores` stores it — keyed by hole *number*. */
-export type LiveScoreRow = {
+export type LiveScoreRow = StatColumns & {
   player_id: string
   round_id: string
   hole_number: number
@@ -88,6 +100,10 @@ export function resolveScores(
       points: s.stableford_points ?? 0,
       noReturn: s.no_return,
       live: false,
+      // A no return has no stats worth carrying: the gross beside one is a
+      // computed maximum, not a hole anybody finished.
+      putts: s.no_return ? null : s.putts ?? null,
+      fairway: s.no_return ? null : s.fairway_hit ?? null,
     })
   }
 
@@ -108,6 +124,8 @@ export function resolveScores(
       points: ls.stableford_points ?? 0,
       noReturn: false,
       live: true,
+      putts: ls.putts ?? null,
+      fairway: ls.fairway_hit ?? null,
     })
   }
 
