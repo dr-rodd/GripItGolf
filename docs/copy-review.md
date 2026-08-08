@@ -746,7 +746,7 @@ settings and is also what a new trip meets first.
 
 **B-33 · Question** · `LeaderboardSetup.tsx:454`
 - Now: Cut everyone's handicap for this board?
-- New: Do you want to apply a handicap reduction.
+- New: Do you want to apply a handicap reduction?
 
 **B-34 · Options** · `LeaderboardSetup.tsx:204,215`
 - Now: Off  /  {85}%  /  Something else

@@ -542,6 +542,24 @@ section('What settings says about a board')
     'question existed is one of those')
 }
 
+section('A question ends in a question mark')
+{
+  const src = readFileSync('app/components/LeaderboardSetup.tsx', 'utf-8')
+  const titles = [...src.matchAll(/<Question n=\{next\(\)\} title="([^"]+)"/g)].map(m => m[1])
+  ok(titles.length >= 6, 'the setup form asks a handful of questions')
+
+  ok(titles.includes('Do you want to apply a handicap reduction?'),
+    'the allowance is asked, not stated — it shipped with a full stop on it')
+
+  // Not every title is a question: "Pick the format." is an instruction and
+  // is punctuated like one. So the rule is narrower than "all of them" — a
+  // title that *opens* like a question has to close like one.
+  const asks = /^(is|are|do|does|how|what|which|who|should|can|would)\b/i
+  for (const t of titles) {
+    if (asks.test(t)) ok(t.endsWith('?'), `"${t}" opens as a question and ends as one`)
+  }
+}
+
 // ─── Result ────────────────────────────────────────────────────
 
 console.log(`\n${'─'.repeat(56)}`)

@@ -370,6 +370,19 @@ section('The two steppers under the table')
   ok(/disabled=\{rows\.length <= 1\}/.test(setup),
     'the last row cannot be taken away — an empty table cannot be answered')
 
+  // A box that has been emptied shows empty. The table underneath never has a
+  // gap in it — the figure is nought, which is what an unanswered place is
+  // worth — but the box does not put that nought back under the cursor, which
+  // is what made a figure impossible to backspace out and retype.
+  ok(/value=\{blank === i \? '' : pts\}/.test(setup),
+    'an emptied box stays empty while it is being typed in')
+  ok(/setBlank\(raw === '' \? i : null\)/.test(setup),
+    '  …and stops being empty the moment something is typed')
+  ok(/onBlur=\{\(\) => setBlank\(null\)\}/.test(setup),
+    'a box walked away from shows the nought it is really worth')
+  ok(/next\[i\] = clampPoints\(raw === '' \? 0 : raw\)/.test(setup),
+    'the stored table never holds a gap, whatever the box shows')
+
   const icons = fs.readFileSync('app/components/icons.tsx', 'utf-8')
   ok(icons.includes('export const IconMinus'), 'the minus is a Tabler icon like every other')
 

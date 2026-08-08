@@ -134,6 +134,23 @@ function PointsTable({
   const rows = editableRows(table, fieldSize)
 
   /**
+   * The row whose box has been emptied, if any.
+   *
+   * A prize table is a list of numbers, so every row always holds one — and
+   * that meant backspacing a figure out put a 0 straight back in, which then
+   * would not delete either. Every edit became select-all-then-type, and the
+   * nought looked broken rather than deliberate.
+   *
+   * So an emptied box is allowed to *look* empty while it is being typed in,
+   * without the table ever holding a gap: the stored figure goes to nought,
+   * which is what an unanswered place is worth, and only the box on screen is
+   * blank. One index rather than a set, because only one box can have the
+   * cursor in it, and it is given up on blur — a box left empty and walked
+   * away from shows the nought it is really worth.
+   */
+  const [blank, setBlank] = useState<number | null>(null)
+
+  /**
    * Adding and removing a place by hand.
    *
    * An untouched table sizes itself to the field, which is right nearly all
@@ -155,8 +172,12 @@ function PointsTable({
    * Removing takes the bottom row, because that is the place being taken
    * away. Never below one: a table with no rows cannot be answered at all.
    */
-  const addRow    = () => onChange([...rows, 0])
-  const removeRow = () => rows.length > 1 && onChange(rows.slice(0, -1))
+  const addRow    = () => { setBlank(null); onChange([...rows, 0]) }
+  const removeRow = () => {
+    if (rows.length <= 1) return
+    setBlank(null)
+    onChange(rows.slice(0, -1))
+  }
 
   return (
     <div>
@@ -164,7 +185,10 @@ function PointsTable({
         <span className={FIELD_LABEL}>What each position is worth</span>
         <button
           type="button"
-          onClick={() => onChange(defaultCustomPoints(Math.max(fieldSize, 1)))}
+          onClick={() => {
+            setBlank(null)
+            onChange(defaultCustomPoints(Math.max(fieldSize, 1)))
+          }}
           className="t-cap uppercase tracking-[0.12em] text-accent-deep"
         >
           Reset
@@ -175,12 +199,16 @@ function PointsTable({
           <div key={i} className="flex items-center gap-3">
             <span className="w-12 flex-shrink-0 t-cap text-ink/65 tabular-nums">{ordinal(i + 1)}</span>
             <input
-              type="number" inputMode="numeric" min={0} max={MAX_CUSTOM_POINTS} value={pts}
+              type="number" inputMode="numeric" min={0} max={MAX_CUSTOM_POINTS}
+              value={blank === i ? '' : pts}
               onChange={e => {
+                const raw = e.target.value
+                setBlank(raw === '' ? i : null)
                 const next = [...rows]
-                next[i] = clampPoints(e.target.value === '' ? 0 : e.target.value)
+                next[i] = clampPoints(raw === '' ? 0 : raw)
                 onChange(next)
               }}
+              onBlur={() => setBlank(null)}
               className={`${FIELD} flex-1 min-w-0 tabular-nums`}
             />
             <span className="w-8 flex-shrink-0 t-cap text-ink/50">{pts === 1 ? 'pt' : 'pts'}</span>
@@ -523,7 +551,7 @@ function Builder({
           question — a trip that ignores it plays off the full handicap, which
           is what every trip did before it was asked. */}
       {offersAllowance(draft) && (
-        <Question n={next()} title="Do you want to apply a handicap reduction.">
+        <Question n={next()} title="Do you want to apply a handicap reduction?">
           <AllowancePicker
             value={allowanceOf(draft)}
             suggested={suggestedAllowance(draft)}
