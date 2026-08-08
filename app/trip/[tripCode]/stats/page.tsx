@@ -32,7 +32,7 @@ export default async function StatsPage({
 
   const { data: trip, error: tripError } = await supabase
     .from('trips')
-    .select('id, name, track_stats')
+    .select('*')
     .eq('trip_code', tripCode)
     .single()
 

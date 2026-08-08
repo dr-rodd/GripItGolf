@@ -620,6 +620,29 @@ section('The lab reads the derivation and does none of its own')
   ok(!/from\('scores'\)|from\('live_scores'\)|from\('holes'\)/.test(page),
     '  …and asks for no round-scoped table by hand')
 
+  // ── The migration is run by hand, so nothing a board needs may name a
+  // column it adds. `scores.putts` and `scores.fairway_hit` arrive with 028;
+  // naming them in the query the leaderboard and the standing line both
+  // depend on would take both screens down on any database where that has
+  // not been applied yet. Only the stats path asks — and on such a database
+  // the trip cannot have stats switched on in the first place.
+  const hub = code('lib/hubStanding.ts')
+  ok(/withStats = false/.test(hub), 'the shared fetch asks for the stats only when told to')
+  ok(/fetchTripContext\(tripId, null, onlyRoundIds, true\)/.test(hub),
+    '  …which the stats path does')
+  const boardFetch = hub.slice(hub.indexOf('async function fetchBoardRows'),
+    hub.indexOf('export async function fetchTripContext'))
+  ok(!/putts|fairway_hit|true\)/.test(boardFetch),
+    '  …and a board does not')
+  for (const f of [
+    'app/trip/[tripCode]/leaderboard/page.tsx',
+    'app/trip/[tripCode]/scoring/[roundNumber]/page.tsx',
+  ]) {
+    const q = code(f).match(/from\('trips'\)[\s\S]{0,80}?\.select\(([^)]*)\)/)?.[1] ?? ''
+    ok(q.length > 0 && !/track_stats/.test(q),
+      `${f.split('/').slice(-2).join('/')} does not name track_stats in its query`)
+  }
+
   // The furniture every trip route carries. test:branding pins these by
   // name too; restated here so a failure names this feature.
   for (const bit of ['<TripHeader', '<TabBar', 'has-tabbar', '<SupportLink']) {

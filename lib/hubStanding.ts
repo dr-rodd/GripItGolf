@@ -22,7 +22,7 @@ import { fetchMemberships } from './teamMembers'
 import {
   usesSimpleStandings, placingFromStandings, placingFromRows, type Placing,
 } from './standing'
-import { buildRowContext } from './rowContext'
+import { buildRowContext, type ScoreRow, type LiveScoreRow } from './rowContext'
 
 export type PlacingResult = {
   placing: Placing | null
@@ -208,6 +208,17 @@ export async function fetchTripContext(
   tripId: string,
   legacyTeamScoring: TeamScoring | null,
   onlyRoundIds?: string[],
+  /**
+   * Whether to ask for the putts and fairway columns.
+   *
+   * Off for a board, which does not read them — and that is not only
+   * tidiness. `scores.putts` and `scores.fairway_hit` arrive with migration
+   * 028, which is run by hand; naming them in the query every board depends
+   * on would make the leaderboard and the standing line fail on any database
+   * where that migration has not been applied yet. Only the stats path asks,
+   * and the stats path is switched off on such a trip anyway.
+   */
+  withStats = false,
 ): Promise<{
   ctx: RowContext | null
   holes: RowHole[]
@@ -215,6 +226,7 @@ export async function fetchTripContext(
   error: string | null
 }> {
   const empty = { ctx: null, holes: [], courseByRound: new Map<string, string>() }
+  const statCols = withStats ? ', putts, fairway_hit' : ''
   const { data: rounds, error: roundsError } = await supabase
     .from('rounds')
     .select('id, round_number, course_id')
@@ -249,10 +261,10 @@ export async function fetchTripContext(
         .select('id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies')
         .in('course_id', someCourses).order('hole_number'),
       supabase.from('scores')
-        .select('player_id, round_id, hole_id, gross_score, stableford_points, no_return, putts, fairway_hit')
+        .select('player_id, round_id, hole_id, gross_score, stableford_points, no_return' + statCols)
         .in('round_id', roundIds),
       supabase.from('live_scores')
-        .select('player_id, round_id, hole_number, gross_score, stableford_points, putts, fairway_hit')
+        .select('player_id, round_id, hole_number, gross_score, stableford_points' + statCols)
         .in('round_id', roundIds),
       supabase.from('round_handicaps')
         .select('round_id, player_id, playing_handicap, tee_id')
@@ -287,8 +299,11 @@ export async function fetchTripContext(
     holes,
     rounds: roundRows.map(r => ({ id: r.id, round_number: r.round_number })),
     courseByRound: new Map(roundRows.map(r => [r.id as string, r.course_id as string])),
-    scores: scoresRes.data ?? [],
-    liveScores: liveScoresRes.data ?? [],
+    // Cast because the column list is now built rather than written out, and
+    // supabase-js types a result by parsing the literal it was given. Same
+    // treatment `holes` and the open rounds already get in this function.
+    scores: (scoresRes.data ?? []) as unknown as ScoreRow[],
+    liveScores: (liveScoresRes.data ?? []) as unknown as LiveScoreRow[],
     roundHandicaps: hcpsRes.data ?? [],
     tees: teesRes.data ?? [],
     activeRoundIds: open.map(r => r.round_id),
@@ -323,7 +338,7 @@ export async function fetchTripStats(
   error: string | null
 }> {
   const { ctx, holes, courseByRound, error } =
-    await fetchTripContext(tripId, null, onlyRoundIds)
+    await fetchTripContext(tripId, null, onlyRoundIds, true)
   if (error || !ctx) {
     return { stats: [], holes: [], players: [], rounds: [], courseByRound: new Map(), error }
   }

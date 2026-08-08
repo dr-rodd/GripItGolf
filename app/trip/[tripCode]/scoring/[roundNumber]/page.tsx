@@ -22,7 +22,7 @@ export default async function TripCoursePage({
   // Look up trip
   const { data: trip } = await supabase
     .from('trips')
-    .select('id, name, formats, leaderboards, team_scoring, track_stats')
+    .select('*')
     .eq('trip_code', tripCode)
     .single()
   if (!trip) notFound()
