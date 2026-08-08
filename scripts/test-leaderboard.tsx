@@ -76,6 +76,8 @@ type RenderOpts = {
   rounds?: unknown[]
   legacyTeamScoring?: TeamScoring | null
   memberships?: unknown[]
+  /** Needed by any test whose field is not the three fixture players. */
+  roundHandicaps?: unknown[]
 }
 
 /**
@@ -109,7 +111,7 @@ function render(boards: Leaderboard[], opts: RenderOpts = {}) {
       holes,
       scores: opts.scores ?? scores,
       liveScores: opts.liveScores ?? [],
-      roundHandicaps,
+      roundHandicaps: opts.roundHandicaps ?? roundHandicaps,
     } as never)
   )
 }
@@ -293,6 +295,46 @@ section('Title card appears once more than one board is running')
     'the discard rule is spelled out on the card')
   ok(!render([SF(0), ST()]).includes('rounds dropped'),
     'and is absent when the board keeps every card')
+}
+
+// ─── The left-hand end of a row ────────────────────────────────
+
+section('The position column takes only the width it needs')
+{
+  const html = render([SF()])
+
+  // "POS" is three wide-tracked letters in a column sized for the digits
+  // underneath it. It overran and collided with the heading beside it, so
+  // the two read as one word — POSNAME. The column is unnamed now: a run of
+  // 1, 2, 3 down the left of a leaderboard does not need telling what it is.
+  ok(!/>Pos</i.test(html), 'the position column carries no heading')
+  ok(html.includes('>Name<'), 'the name still does — it is the one that says something')
+
+  // Three players, so one digit is the deepest place on the board.
+  ok(/w-3\.5 flex-shrink-0[^>]*aria-hidden/.test(html),
+    'a board of three reserves one digit of width, not two')
+
+  // Ten and the column has to hold two. The golden fixtures never get this
+  // deep, so without this the wide branch is never rendered anywhere.
+  const many = Array.from({ length: 11 }, (_, i) => ({
+    id: `q${i + 1}`, name: `Player ${i + 1}`, handicap: 10, gender: 'M', team_id: null,
+  }))
+  const deep = render([SF()], {
+    players: many,
+    roundHandicaps: many.flatMap(p => rounds.map(r => ({
+      round_id: r.id, player_id: p.id, playing_handicap: p.handicap,
+    }))),
+    scores: many.flatMap(p => rounds.flatMap(r => scoresFor(p.id, r.id, 2))),
+  })
+  ok(deep.includes('>11<'), 'eleven players are all on the board')
+  ok(/w-5 flex-shrink-0[^>]*aria-hidden/.test(deep),
+    'and the column widens to two digits for them')
+
+  // The live dot sits at the end of the name and used to finish flush
+  // against the edge the round figures slide under, reading as part of the
+  // next column. The padding is what makes it belong to the row it is on.
+  ok(html.includes('-ml-3 pl-3 pr-2'),
+    'the pinned name column keeps the dot clear of the boundary')
 }
 
 // ─── In play ───────────────────────────────────────────────────

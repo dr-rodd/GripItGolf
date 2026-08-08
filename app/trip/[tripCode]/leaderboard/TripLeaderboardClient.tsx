@@ -761,6 +761,17 @@ function Board({
   const GAP  = scrolls ? 'gap-1.5' : 'gap-2'
 
   /**
+   * The position column, as wide as the deepest place on this board and no
+   * wider.
+   *
+   * It was a flat `w-5` — two digits' worth — on every board, so a field of
+   * eight carried six pixels of nothing between the number and the name for
+   * a tenth place that does not exist. The board knows how many rows it has,
+   * so it can measure this rather than reserve for the worst case.
+   */
+  const POS_W = `${rows.length >= 10 ? 'w-5' : 'w-3.5'} flex-shrink-0`
+
+  /**
    * The two pinned ends, and the fiddly bits of this layout. There are three,
    * and every one of them is about the *background* rather than the position.
    *
@@ -787,11 +798,19 @@ function Board({
    *
    * The net position is unchanged on both axes, so these are also correct on
    * a board that never scrolls, where sticky simply never fires.
+   *
+   * **`pr-2` on the left one** is the only padding here that is not about
+   * the background. The live dot sits at the end of the name, and with the
+   * column ending flush against it the dot touched the edge the round
+   * figures slide under — reading as part of the next column rather than as
+   * part of the row. Eight pixels is enough for it to belong to the name.
+   * Paid for by the tighter position column beside it, so the pinned end is
+   * no wider than it was and no round column moved.
    */
   const pin = (side: 'l' | 'r', padY: string) =>
     `sticky z-10 bg-surface self-stretch flex items-center ${padY} ${
       side === 'l'
-        ? `left-0 -ml-3 pl-3 gap-2 ${scrolls ? 'flex-shrink-0' : 'flex-1 min-w-0'}`
+        ? `left-0 -ml-3 pl-3 pr-2 gap-1.5 ${scrolls ? 'flex-shrink-0' : 'flex-1 min-w-0'}`
         : 'right-0 -mr-3 pr-3 flex-shrink-0'
     }`
 
@@ -842,7 +861,16 @@ function Board({
         >
           <div className={`flex items-center ${GAP} px-3 py-1.5 ${scrolls ? 'w-max min-w-full' : ''}`}>
             <span className={pin('l', '-my-1.5 py-1.5')}>
-              <span className="text-[13px] tracking-widest uppercase text-ink/65 w-5 flex-shrink-0">Pos</span>
+              {/* The position column is not named.
+                  "POS" is three letters at 13px with wide tracking, in a
+                  column sized for the digits underneath it — so it overran
+                  its own width and ran straight into the heading beside it,
+                  which read as one word: POSNAME. A heading is worth its
+                  space when it says something the column does not, and a
+                  column of 1, 2, 3 down the left of a leaderboard does not
+                  need telling. The spacer stays so "Name" still sits over
+                  the names. */}
+              <span className={POS_W} aria-hidden="true" />
               <span className={`text-[13px] tracking-widest uppercase text-ink/65 min-w-0 ${NAME_W}`}>Name</span>
               {shadeL}
             </span>
@@ -887,7 +915,7 @@ function Board({
                 } ${!isLast || isExpanded ? 'border-b border-bark/12' : ''}`}
               >
                 <span className={pin('l', '-my-2 py-2')}>
-                  <span className="t-cap text-ink/65 tabular-nums w-5 flex-shrink-0">{i + 1}</span>
+                  <span className={`t-cap text-ink/65 tabular-nums ${POS_W}`}>{i + 1}</span>
 
                   <span className={`block min-w-0 ${NAME_W}`}>
                     <span className="flex items-center gap-1.5">
