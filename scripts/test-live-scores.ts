@@ -47,11 +47,16 @@ const section = (n: string) => console.log(`\n${n}`)
 
 const HOLES = Array.from({ length: 18 }, (_, i) => i + 1)
 
-const score = (gross: number | null, isNR = false) =>
-  ({ gross, isNR, stableford: gross == null ? null : 2 })
+const score = (gross: number | null, isNR = false, putts: number | null = null) =>
+  ({ gross, isNR, stableford: gross == null ? null : 2, putts, fairway: null })
 
-const saved = (playerId: string, holeNumber: number, gross: number): SavedScore =>
-  ({ player_id: playerId, hole_number: holeNumber, gross_score: gross, stableford_points: 2 })
+const saved = (
+  playerId: string, holeNumber: number, gross: number, putts: number | null = null,
+): SavedScore =>
+  ({
+    player_id: playerId, hole_number: holeNumber, gross_score: gross,
+    stableford_points: 2, putts, fairway_hit: putts == null ? null : 'fairway',
+  })
 
 // ─── What counts as an answer ──────────────────────────────────
 
@@ -138,6 +143,37 @@ section('Merging never invents, loses or reorders anything')
   const snapshot = JSON.stringify(original)
   mergeSaved(original, [saved('p1', 2, 5)], HOLES)
   eq(JSON.stringify(original), snapshot, 'the card handed in is left alone')
+}
+
+section('Putts and fairways travel with the hole they belong to')
+{
+  // The unit is the hole, not the field. A saved row that fills a gap arrives
+  // whole — its stats included — which is the only reason a resume keeps
+  // them. Leave them out of the merge and every stat entered before an
+  // interruption is silently dropped, then written over by the next submit.
+  const filled = mergeSaved({}, [saved('p1', 1, 4, 2)], HOLES)
+  eq(filled[0].p1.putts, 2, 'a restored hole brings its putt count back')
+  eq(filled[0].p1.fairway, 'fairway', '  …and which way the tee shot went')
+
+  // A saved row with no stats restores nulls rather than nothing, so the
+  // shape is the same either way.
+  const bare = mergeSaved({}, [saved('p1', 1, 4)], HOLES)
+  eq(bare[0].p1.putts, null, 'a hole saved before stats existed restores as null')
+  eq(bare[0].p1.fairway, null, '  …on both fields, never as zero')
+
+  // Where memory has an answer it keeps its own stats, even where they are
+  // null and the saved row has some. The card in front of somebody is what
+  // they last said about that hole, and half-taking a saved row would leave a
+  // hole holding one person's gross and another's putts.
+  const remembered: Card = { 0: { p1: score(5) } }
+  const kept = mergeSaved(remembered, [saved('p1', 1, 4, 3)], HOLES)
+  eq(kept[0].p1.gross, 5, 'memory wins the gross, as before')
+  eq(kept[0].p1.putts, null, '  …and wins the putts with it, rather than borrowing')
+
+  // The other direction: memory holds the stats, the saved row is older.
+  const withStats: Card = { 0: { p1: score(4, false, 2) } }
+  const unchanged = mergeSaved(withStats, [saved('p1', 1, 4, 3)], HOLES)
+  eq(unchanged[0].p1.putts, 2, 'a stat typed on this device is not overwritten')
 }
 
 section('Hole numbers are not assumed to be positions')

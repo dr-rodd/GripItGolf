@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
-import { mergeSaved, anyScored } from "@/lib/liveScores"
+import { mergeSaved, anyScored, type Fairway } from "@/lib/liveScores"
 import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
 import { exactCourseHandicap, courseHandicap, type TeeRating } from "@/lib/courseHandicap"
 import { shotsReceived, formatHandicap } from "@/lib/handicap"
@@ -44,10 +44,33 @@ interface RoundHandicap {
   /** The tee the session recorded. Absent on rows written before one was picked. */
   tee_id?: string | null
 }
+/**
+ * One hole for one player.
+ *
+ * Mirrors `HoleScore` in lib/liveScores.ts, which `mergeSaved` works in — the
+ * two are one type in two places and must move together.
+ */
 interface HoleScore {
   gross: number | null
   isNR: boolean
   stableford: number | null
+  /** Null until asked, and null is not zero. Cleared by a no return. */
+  putts: number | null
+  fairway: Fairway | null
+}
+/**
+ * A hole nobody has said anything about yet.
+ *
+ * One constant rather than the six copies of `{ gross: null, isNR: false,
+ * stableford: null }` that used to be dotted through this file — a field
+ * added to `HoleScore` reached the type and not the defaults, so a fresh
+ * hole was a different shape from a scored one.
+ *
+ * Shared safely because nothing mutates a `HoleScore` in place: every write
+ * spreads into a new object. Checked before this was made a constant.
+ */
+const EMPTY_HOLE: HoleScore = {
+  gross: null, isNR: false, stableford: null, putts: null, fairway: null,
 }
 /**
  * A player on this card, and the three handicaps they have.
@@ -500,9 +523,15 @@ export default function LiveScoringFlow({
       // wrote the rest of the round off as no returns. An NR in live play is
       // already stored as its max-gross equivalent, so nothing is lost by not
       // asking for a flag that was never written.
+      //
+      // `fairway_hit` and `putts` are a different case and are asked for: both
+      // have been columns on this table since migration 003. Leaving them out
+      // would open the card with every stat blank and the next hole submitted
+      // would write that blank over what was really entered — the same shape
+      // of loss as above, one column along.
       const { data: existingScores, error: scoresError } = await supabase
         .from("live_scores")
-        .select("player_id, hole_number, gross_score, stableford_points")
+        .select("player_id, hole_number, gross_score, stableford_points, fairway_hit, putts")
         .in("player_id", lockedIds)
         .eq("round_id", rId)
 
@@ -670,14 +699,14 @@ export default function LiveScoringFlow({
   function setDraftHole(idx: number, update: Partial<HoleScore>) {
     setEditDraft(prev => ({
       ...prev,
-      [idx]: { ...(prev[idx] ?? { gross: null, isNR: false, stableford: null }), ...update },
+      [idx]: { ...(prev[idx] ?? EMPTY_HOLE), ...update },
     }))
   }
 
   function enterEditMode(playerId: string) {
     const draft: Record<number, HoleScore> = {}
     for (let i = 0; i < courseHoles.length; i++) {
-      draft[i] = scores[i]?.[playerId] ?? { gross: null, isNR: false, stableford: null }
+      draft[i] = scores[i]?.[playerId] ?? EMPTY_HOLE
     }
     setEditDraft(draft)
     setEditingPlayerId(playerId)
@@ -696,7 +725,7 @@ export default function LiveScoringFlow({
 
     for (let i = 0; i < courseHoles.length; i++) {
       const hole = courseHoles[i]
-      const hs = editDraft[i] ?? { gross: null, isNR: false, stableford: null }
+      const hs = editDraft[i] ?? EMPTY_HOLE
       const p  = effectivePar(hole, setup.player.gender)
       const si = effectiveSI(hole, setup.player.gender)
       const stableford = hs.isNR ? 0 : hs.gross !== null ? calcStableford(hs.gross, p, si, setup.playingHcp) : null
@@ -708,6 +737,15 @@ export default function LiveScoringFlow({
           player_id: playerId, round_id: roundId, hole_number: hole.hole_number,
           gross_score: gross,
           stableford_points: hs.isNR ? 0 : calcStableford(gross, p, si, setup.playingHcp),
+          // Written explicitly rather than left out. Omitting them would in
+          // fact preserve what is stored — PostgREST only SETs the columns it
+          // is given — but that is a rule about the client library standing
+          // between an edit and somebody's putt count. The draft carries the
+          // real values (it is seeded from the card), so saying them is both
+          // honest and what keeps a hole edited to a no return from keeping
+          // the stats it had before.
+          fairway_hit: hs.isNR || p < 4 ? null : (hs.fairway ?? null),
+          putts:       hs.isNR          ? null : (hs.putts   ?? null),
           committed: false,
         })
       } else {
@@ -761,7 +799,7 @@ export default function LiveScoringFlow({
       //    turned holes 4–18 into no returns after a bad resume.
       const { data: savedRows, error: savedErr } = await supabase
         .from("live_scores")
-        .select("player_id, hole_number, gross_score, stableford_points")
+        .select("player_id, hole_number, gross_score, stableford_points, fairway_hit, putts")
         .in("player_id", playerSetups.map(ps => ps.player.id))
         .eq("round_id", roundId)
       if (savedErr) throw savedErr
@@ -798,10 +836,27 @@ export default function LiveScoringFlow({
           const noReturn = hs?.isNR === true || hs?.gross == null
           const p = effectivePar(hole, setup.player.gender)
           const si = effectiveSI(hole, setup.player.gender)
+          const gross = noReturn ? nrGross(p, si, setup.playingHcp) : hs!.gross!
+
+          // Copied across rather than translated: migration 028 gave `scores`
+          // the same two columns under the same names, so the card carries its
+          // stats over the commit unchanged. Null on a no return and on a par
+          // 3, matching what was written live.
+          //
+          // More putts than shots is a mis-tap, not a hole, and it is dropped
+          // here. The database deliberately does not refuse it — a commit that
+          // fails on the eighteenth green is the worse failure — so this is
+          // where the impossible card is caught rather than at the write.
+          const putts = noReturn || hs?.putts == null || hs.putts > gross
+            ? null
+            : hs.putts
+
           scoreRows.push({
             player_id: setup.player.id, hole_id: hole.id, round_id: roundId,
-            gross_score: noReturn ? nrGross(p, si, setup.playingHcp) : hs!.gross!,
+            gross_score: gross,
             no_return: noReturn,
+            fairway_hit: noReturn || p < 4 ? null : (hs?.fairway ?? null),
+            putts,
           })
         }
       }
@@ -1136,6 +1191,21 @@ export default function LiveScoringFlow({
             player_id: player.id, round_id: roundId, hole_number: hole.hole_number,
             gross_score: gross,
             stableford_points: hs.isNR ? 0 : calcStableford(gross, p, si, playingHcp),
+            // A no return clears both: the ball was picked up, so there is no
+            // putt count and no honest answer about the tee shot. Writing them
+            // through would attach stats to a hole that was never finished.
+            //
+            // A par 3 is forced null rather than trusted. The control is not
+            // shown on one, but a course's par can be corrected after a card
+            // was signed, and a stored fairway on a hole with no fairway would
+            // then sit in the denominator for ever.
+            //
+            // Both keys are always present, never conditionally omitted:
+            // PostgREST refuses a bulk upsert whose objects do not all carry
+            // the same keys, so one player having answered and another not
+            // would fail the whole hole for everyone on the card.
+            fairway_hit: hs.isNR || p < 4 ? null : (hs.fairway ?? null),
+            putts:       hs.isNR          ? null : (hs.putts   ?? null),
             committed: false,
           }
         }).filter(Boolean)
@@ -1282,7 +1352,7 @@ export default function LiveScoringFlow({
           {/* Scrollable holes */}
           <div className="max-w-lg mx-auto w-full px-4 pt-4 pb-28 space-y-2">
             {courseHoles.map((hole, idx) => {
-              const hs = editDraft[idx] ?? { gross: null, isNR: false, stableford: null }
+              const hs = editDraft[idx] ?? EMPTY_HOLE
               const ePar = effectivePar(hole, player.gender)
               const eSI  = effectiveSI(hole, player.gender)
               const netParGross = ePar + shotsReceived(playingHcp, eSI)
@@ -1666,7 +1736,7 @@ function HoleCard({
   const [holeScores, setHoleScores] = useState<Record<string, HoleScore>>(() => {
     const init: Record<string, HoleScore> = {}
     for (const { player } of playerSetups) {
-      init[player.id] = existingScores[player.id] ?? { gross: null, isNR: false, stableford: null }
+      init[player.id] = existingScores[player.id] ?? EMPTY_HOLE
     }
     return init
   })
@@ -1705,7 +1775,7 @@ function HoleCard({
       {/* One tile per player */}
       <div className="flex flex-col gap-3">
         {playerSetups.map(({ player, displayHcp, tee }) => {
-          const hs   = holeScores[player.id] ?? { gross: null, isNR: false, stableford: null }
+          const hs   = holeScores[player.id] ?? EMPTY_HOLE
           const ePar = effectivePar(hole, player.gender)
           const eSI  = effectiveSI(hole, player.gender)
           return (

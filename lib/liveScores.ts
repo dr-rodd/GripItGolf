@@ -17,11 +17,26 @@
 //
 // Pure. No I/O — the caller fetches, this decides.
 
+/** Which way a tee shot went. `fairway` is the hit; the other two are misses. */
+export type Fairway = 'left' | 'fairway' | 'right'
+
 /** One hole for one player, as the scoring card holds it. */
 export type HoleScore = {
   gross: number | null
   isNR: boolean
   stableford: number | null
+  /**
+   * Putts on this hole, and which way the tee shot went.
+   *
+   * Both are null until somebody answers, and null is not zero: a hole nobody
+   * was asked about must not read as a hole played with no putts. A trip with
+   * stats switched off leaves them null for every hole of every round, which
+   * is a legitimate steady state rather than missing data.
+   *
+   * Both are cleared by a no return — a ball picked up has no putt count.
+   */
+  putts: number | null
+  fairway: Fairway | null
 }
 
 /** A `live_scores` row, as it comes back from the database. */
@@ -30,6 +45,13 @@ export type SavedScore = {
   hole_number: number
   gross_score: number | null
   stableford_points: number | null
+  /**
+   * Optional because most callers do not ask for them. `live_scores` has
+   * carried both columns since migration 003 and it is safe to select them —
+   * the pinned prohibition is on `no_return`, which genuinely is not there.
+   */
+  fairway_hit?: Fairway | null
+  putts?: number | null
 }
 
 /** The card: hole index → player id → what they scored. */
@@ -68,6 +90,12 @@ export function mergeSaved(
     if (idx === undefined) continue
     if (row.gross_score == null) continue
     // Memory is the more recent answer wherever it has one.
+    //
+    // **The unit is the hole, not the field.** Where memory has a score it
+    // keeps its own putts and fairway too, even if they are null and the
+    // saved row has them — the card in front of somebody is what they last
+    // said about that hole. Where memory is blank the saved row arrives
+    // whole, stats included, which is what makes a resume keep them.
     if (isScored(merged[idx]?.[row.player_id])) continue
     merged[idx] = {
       ...merged[idx],
@@ -75,6 +103,8 @@ export function mergeSaved(
         gross: row.gross_score,
         isNR: false,
         stableford: row.stableford_points,
+        putts: row.putts ?? null,
+        fairway: row.fairway_hit ?? null,
       },
     }
   }

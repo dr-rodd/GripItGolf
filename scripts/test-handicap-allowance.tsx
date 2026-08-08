@@ -389,9 +389,15 @@ section('The scorecard agrees with the board it opened from')
 section('The running total on a card being scored')
 {
   const entryHoles = holes.map(h => ({ par: h.par, stroke_index: h.stroke_index }))
+  // A full `HoleScore`. The stats fields are always null here: this suite is
+  // about the handicap a card is read at, and a running total never looks at
+  // them — but the type is the type, and a fixture that is not one would stop
+  // proving anything about the real thing.
+  const hs = (gross: number | null, isNR: boolean, stableford: number | null) =>
+    ({ gross, isNR, stableford, putts: null, fairway: null })
   const played = (upTo: number, gross: number) =>
     Object.fromEntries(Array.from({ length: upTo }, (_, i) =>
-      [i, { p1: { gross, isNR: false, stableford: 2 } }]))
+      [i, { p1: hs(gross, false, 2) }]))
 
   eq(runningStablefordTotals(played(18, 5), entryHoles, [{ id: 'p1', gender: 'M', displayHcp: 18 }]),
     { p1: 36 }, 'eighteen holes of nett par is 36 points')
@@ -405,17 +411,17 @@ section('The running total on a card being scored')
   // order. Pair them up wrongly and every stroke index is off by one — which
   // is a total that is plausible, wrong, and silent.
   const backNine = Object.fromEntries(Array.from({ length: 9 }, (_, i) =>
-    [i + 9, { p1: { gross: 5, isNR: false, stableford: 2 } }]))
+    [i + 9, { p1: hs(5, false, 2) }]))
   eq(runningStablefordTotals(backNine, entryHoles, [{ id: 'p1', gender: 'M', displayHcp: 9 }]),
     { p1: 9 },
     'holes 10-18 off a handicap of 9 get no shots — nine bogeys, nine points')
 
   eq(runningStablefordTotals(
-    { 0: { p1: { gross: null, isNR: true, stableford: 0 } } },
+    { 0: { p1: hs(null, true, 0) } },
     entryHoles, [{ id: 'p1', gender: 'M', displayHcp: 18 }]),
     { p1: 0 }, 'a no return adds nothing')
   eq(runningStablefordTotals(
-    { 0: { p1: { gross: null, isNR: false, stableford: null } } },
+    { 0: { p1: hs(null, false, null) } },
     entryHoles, [{ id: 'p1', gender: 'M', displayHcp: 18 }]),
     { p1: 0 }, 'and neither does a hole nobody has entered yet')
 
