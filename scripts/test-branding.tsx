@@ -435,9 +435,59 @@ section('The bottom tab bar')
 
   ok(src.includes("'text-accent'"), 'the active tab is emerald')
   ok(src.includes('text-bark/60'), 'and an inactive one is bark at 60%')
-  ok(src.includes('fontWeight: active ? 600 : 400'), 'with the active label heavier')
+  ok(src.includes('fontWeight: lit ? 600 : 400'), 'with the lit label heavier')
 
-  // Every trip screen carries it, so the app is navigable from anywhere
+  // ── Saying that the tap landed ──
+  //
+  // `active` comes from the pathname, and the pathname does not change until
+  // the next page has rendered on the server — which on these screens is a
+  // database round trip away. Lighting the tab on `active` alone meant a tap
+  // looked like nothing for two or three seconds, and the second tap that
+  // gets is the real cost. `useLinkStatus` is true from the touch, so the
+  // destination tab lights immediately and the emerald is a promise rather
+  // than a report.
+  ok(src.includes('useLinkStatus'), 'a tab knows when it is being navigated to')
+  ok(/const lit = active \|\| pending/.test(src),
+    'and lights on that as well as on being the page you are on')
+  ok(src.includes('tab-pressed'), 'the press itself is felt under the finger')
+  ok(src.includes('touch-manipulation'),
+    'and lands at once, rather than after the browser waits for a second tap')
+
+  // The press is driven from a pointer handler, NOT from CSS `:active`.
+  //
+  // `:active` matches the element being activated and its ancestors, never
+  // its descendants — so a rule on the tab's content would never fire for a
+  // press on the link around it. And iOS Safari withholds `:active` from an
+  // element with no touch handler nearby, which is this bar on the phone the
+  // app is built for. The obvious version of this is dead CSS twice over,
+  // and dead CSS with a passing test in front of it is worse than none.
+  // Comments stripped, because the note explaining why `:active` is wrong
+  // here says the word four times.
+  ok(!/:active/.test(stripComments(src)),
+    'and not left to :active, which would never fire here')
+  ok(/onPointerDown/.test(src), 'a pointer press marks the tab held')
+  for (const up of ['onPointerUp', 'onPointerCancel', 'onPointerLeave']) {
+    ok(src.includes(up), `  …and ${up} lets it go again`)
+  }
+
+  // The two states are motion, so they answer to the same switch everything
+  // else does. A press that still moves under reduced motion is the one
+  // exception nobody asked for.
+  ok(/\.tab-pressed \{ transform: scale\(0\.9/.test(css),
+    'the press is a transform, not a second meaning on the colour')
+  ok(/prefers-reduced-motion[\s\S]*\.tab-pending/.test(css),
+    'the pending breath is stilled under reduced motion')
+  ok(/prefers-reduced-motion[\s\S]*\.tab-pressed \{ transform: none/.test(css),
+    '  …and so is the press, which keeps its colour and loses its movement')
+
+  // Every trip screen has it, so the app is navigable from anywhere — but
+  // exactly one file draws it. It was ten, one per page, and a component
+  // rendered by a page unmounts when that page does: tapping a tab tore the
+  // bar off the screen and drew a new one once the next page's queries came
+  // back. The layout outlives the page, so now it does not move.
+  ok(read('app/trip/[tripCode]/layout.tsx').includes('<TabBar'),
+    'the trip layout draws the tab bar')
+
   const carriers = [
     'app/trip/[tripCode]/page.tsx',
     'app/trip/[tripCode]/leaderboard/page.tsx',
@@ -448,7 +498,8 @@ section('The bottom tab bar')
     'app/trip/[tripCode]/stats/page.tsx',
   ]
   for (const f of carriers) {
-    ok(read(f).includes('<TabBar'), `${f.split('/').slice(-2).join('/')} carries the tab bar`)
+    ok(!read(f).includes('<TabBar'),
+      `${f.split('/').slice(-2).join('/')} leaves the bar to the layout`)
     ok(read(f).includes('has-tabbar'), '  …and leaves room for it')
   }
   ok(css.includes('.has-tabbar'), 'and the room is a token, not a magic number per page')
@@ -941,9 +992,40 @@ section('Motion is calm, and can be switched off')
   eq(springs, [], 'no overshoot curves anywhere')
 
   // "Nothing takes longer than ~400ms"
-  const durations = [...css.matchAll(/(\d+)ms/g)].map(m => Number(m[1]))
+  //
+  // Two ceilings, because there are two kinds of motion here and only one of
+  // them is what that rule is about.
+  //
+  // A one-shot is a response: a page arriving, a cell flashing, a control
+  // going down under a thumb. Those are the ones that must not outlast the
+  // gesture, and 400ms is the ceiling.
+  //
+  // A repeating animation is ambient — the live dot's breath, a skeleton's
+  // pulse, the tab bar's wait. It is not answering a touch and it has no
+  // ending to be late for, so it runs slower on purpose. `dot-live` has been
+  // 2s and the skeleton 1.4s since they were written.
+  //
+  // This used to be one ceiling over everything matching `\d+ms`, which
+  // caught neither of those — not because they were allowed, but because
+  // they are written in seconds and a search for `ms` does not find `2s`.
+  // Reading both units is what makes the one-shot ceiling real, and it is
+  // why the exemption has to be said out loud instead of left as a gap.
+  const durationsIn = (s: string) =>
+    [...s.matchAll(/(\d+(?:\.\d+)?)(ms|s)\b/g)]
+      .map(m => (m[2] === 'ms' ? Number(m[1]) : Number(m[1]) * 1000))
+
+  const loops = [...css.matchAll(/animation:[^;]*\binfinite\b[^;]*;/g)].map(m => m[0])
+  const oneShot = loops.reduce((acc, l) => acc.replace(l, ''), css)
+
+  const durations = durationsIn(oneShot)
   ok(durations.length > 0, 'the stylesheet defines durations')
-  ok(durations.every(d => d <= 400), `none of them exceeds 400ms (longest ${Math.max(...durations)}ms)`)
+  ok(durations.every(d => d <= 400),
+    `no motion answering a touch exceeds 400ms (longest ${Math.max(...durations)}ms)`)
+
+  const looping = loops.flatMap(durationsIn)
+  ok(looping.length > 0, 'and some motion repeats rather than answering anything')
+  ok(looping.every(d => d >= 900 && d <= 2000),
+    `each repeat is a slow breath, 900ms to 2s (${looping.join('ms, ')}ms)`)
 
   ok(css.includes('.page-enter'), 'pages fade in')
   ok(/\.page-enter \{ animation: gdFade 200ms ease-out/.test(css), 'over 200ms, ease-out')
@@ -952,7 +1034,17 @@ section('Motion is calm, and can be switched off')
   //  Do not use a jump/bounce."
   ok(css.includes('.score-flash'), 'a changed score flashes')
   ok(css.includes('rgba(10, 157, 86, 0.20)'), 'emerald at 20%')
-  ok(!/gdScoreFlash[\s\S]*?transform/.test(css), 'and does not move — the number is being read')
+  // Scoped to the keyframes themselves. It used to read from `gdScoreFlash`
+  // to the first `transform` anywhere after it, which passed only for as
+  // long as nothing below it in the file used one — so the first transform
+  // added further down the stylesheet failed this, naming the score flash
+  // for something it had no part in.
+  const flash = css.slice(
+    css.indexOf('@keyframes gdScoreFlash'),
+    css.indexOf('.score-flash'),
+  )
+  ok(flash.length > 0, 'the score flash is a keyframe animation')
+  ok(!/transform/.test(flash), 'and does not move — the number is being read')
 
   // Anyone who asked for less motion gets none of it
   ok(css.includes('prefers-reduced-motion'), 'reduced motion is honoured')
@@ -1106,7 +1198,10 @@ section('The tab bar is on every screen inside a trip')
   ]
   for (const f of tabbed) {
     const src = read(f)
-    ok(/<TabBar\s/.test(src), `${f.split('/').slice(-2).join('/')} carries the tab bar`)
+    // The bar comes from the layout above these — see the note in the
+    // navigation section. What each page still owes is the room for it.
+    ok(!/<TabBar\s/.test(src),
+      `${f.split('/').slice(-2).join('/')} leaves the bar to the layout`)
     ok(/has-tabbar/.test(src),
       `  …and leaves room for it, so the last thing on the page is reachable`)
   }
@@ -1160,7 +1255,7 @@ section('The tab bar is on every screen inside a trip')
   // sizes the card against the window, so padding added outside it would make
   // the page taller than the screen and pull the card up off the Next button.
   const scoring = read('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')
-  ok(/<TabBar/.test(scoring), 'score entry carries the bar too')
+  ok(!/<TabBar/.test(scoring), 'score entry leaves the bar to the layout too')
   ok(/bottomInset=\{TABBAR_SPACE\}/.test(scoring),
     '  …and reserves the room for it inside the card, not around it')
 

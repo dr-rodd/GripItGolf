@@ -5,7 +5,6 @@ import { coverage } from '@/lib/holeStats'
 import { currentPlayer } from '@/lib/currentPlayer'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
-import TabBar from '@/app/components/TabBar'
 import TripHeader from '@/app/components/TripHeader'
 import { EmptyState } from '@/app/components/ui'
 import StatsClient from './StatsClient'
@@ -101,7 +100,6 @@ export default async function StatsPage({
       </div>
 
       <SupportLink className="px-4 pb-12" />
-      <TabBar tripCode={tripCode} />
     </div>
   )
 }

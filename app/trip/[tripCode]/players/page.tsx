@@ -2,7 +2,6 @@ import { supabase } from '@/lib/supabase'
 import PlayersClient from './PlayersClient'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
-import TabBar from '@/app/components/TabBar'
 import TripHeader from '@/app/components/TripHeader'
 import { sortForClaiming, confirmedCount } from '@/lib/roster'
 
@@ -104,7 +103,6 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
       </div>
 
       <SupportLink className="px-6 pb-8" />
-      <TabBar tripCode={tripCode} />
     </main>
   )
 }

@@ -129,9 +129,37 @@ Bottom tab bar, `app/components/TabBar.tsx` — Home · Leaderboard · Scoring �
 
 Deliberately **absent from the scoring flow**, where the bottom of the screen is score entry and a nav bar under it is a mis-tap waiting to happen.
 
+**Drawn once, by `app/trip/[tripCode]/layout.tsx`, and never by a page.** It was ten copies, one per page, and a component rendered by a page unmounts when that page does — so tapping a tab tore the bar off the screen and drew a new one once the next page's queries came back. Pages still carry `has-tabbar`, because the page is what scrolls. `test:branding` pins both halves: the layout has the bar, no page does.
+
+**A tab lights on the touch, not on arrival.** `active` comes from the pathname, and the pathname does not change until the destination has rendered on the server — which on these screens is a database round trip away. Lighting on `active` alone meant a tap looked like nothing at all for as long as the query took, and what that earns is a second tap. So a tab is lit when it is `active` **or** `pending` (`useLinkStatus`), and while it is pending it breathes at 900ms. The press itself is a `scale(0.94)` transform rather than a colour, because the colour is already carrying "you are here" and a second meaning on the same property reads as neither.
+
+**That press is driven from a pointer handler, never from CSS `:active`** — `test:branding` pins the absence. `:active` matches the element being activated and its *ancestors*, never its descendants, so a rule on the tab's content cannot fire for a press on the link around it; and iOS Safari withholds `:active` from an element with no touch handler nearby, which is this bar on the phone the app is built for. The obvious version is dead CSS twice over. `onPointerUp`, `onPointerCancel` and `onPointerLeave` all release it, because a press can end without a release — a finger sliding off the tab, or a scroll claiming the gesture, would otherwise leave it held down for good.
+
+### Arriving
+
+**Every trip route has a `loading.tsx`, and that is what makes a tab feel instant.** Without one anywhere under a route, Next holds the page you are looking at — fully painted, fully interactive — until the *next* page has finished rendering on the server. Every trip screen is `force-dynamic` with real queries behind it, so that was two or three seconds in which nothing on screen acknowledged the tap. With the file, the router commits on the touch: the tab moves, the header changes, and a skeleton stands in.
+
+It is also the only thing on these routes that *can* be prefetched. A dynamic route cannot be prefetched whole — the same fact as the landing page's two static destinations above, from the other end — but a loading state has no data in it, so the bar's four links warm theirs and arriving costs nothing.
+
+Five files, and the split is about shape rather than about routes:
+
+| File | Draws |
+|---|---|
+| `trip/[tripCode]/loading.tsx` | The fallback for the hub, teams, players, matchplay, stats and a round summary. Deliberately vague — see below |
+| `…/leaderboard/loading.tsx` | Tab strip, then eight rows. The slowest page in the app and the most predictable |
+| `…/scoring/loading.tsx` | Three round tiles |
+| `…/scoring/[roundNumber]/loading.tsx` | A player strip and a hole. Its own file because a loading state covers the segments below it, and three round tiles is the wrong promise to make about a scorecard |
+| `…/setup/loading.tsx` | Its own only so the header carries the right word |
+
+**A skeleton that promises a specific shape and is wrong about it is worse than one that promises a screen's worth of something.** The eye follows the blocks into place, and blocks that then jump somewhere else read as a fault. So the generic one commits to nothing but a heading and three cards, and only the screens whose shape is genuinely fixed draw it.
+
+None of them takes `backTo` on the header: `loading.tsx` is handed no params, so there is no trip code to build the href from. The back link is an invisible overlay on the header bar, so leaving it out looks identical and costs one tap target for the second the skeleton is up.
+
 ### Motion
 
 `ease-out` everywhere. Micro 120–180ms, larger 250–350ms, nothing over 400ms. **No bounce, no spring, no elastic easing.** Pages fade in over 200ms (`page-enter`). A changed live score flashes its cell emerald and fades (`score-flash`) — it never moves, because it is being read. Every animation is stilled under `prefers-reduced-motion`.
+
+**The 400ms ceiling is about motion answering a touch.** A repeating animation is a different thing — the live dot's breath (2s), a skeleton's pulse (1.4s), a tab bar tab waiting for its page (900ms). It is not responding to a gesture and has no ending to be late for, so it runs slower on purpose and sits between 900ms and 2s. `test:branding` holds the two apart by whether the declaration says `infinite`. It used to hold only the first ceiling, and only over durations written in `ms` — which is why `2s` and `1.4s` were never checked at all. Both are now, in either unit.
 
 ### Scoring symbols
 

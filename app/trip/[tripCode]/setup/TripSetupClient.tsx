@@ -12,7 +12,6 @@ import ItineraryEditor from './ItineraryEditor'
 import DateField from '@/app/components/DateField'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import TripHeader from '@/app/components/TripHeader'
-import TabBar from '@/app/components/TabBar'
 import SupportLink from '@/app/components/SupportLink'
 import Toggle from '@/app/components/Toggle'
 import {
@@ -1097,10 +1096,6 @@ export default function TripSetupClient({
 
       </div>
 
-      {/* Settings is a tab destination, so it carries the bar like every
-          other one. A screen you arrive at by tapping a tab and cannot leave
-          the same way reads as a dead end. */}
-      <TabBar tripCode={trip.trip_code} />
     </main>
   )
 }

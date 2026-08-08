@@ -8,7 +8,6 @@ import { fetchMemberships } from '@/lib/teamMembers'
 import Poller from '@/app/components/Poller'
 import TripLeaderboardClient from './TripLeaderboardClient'
 import SupportLink from '@/app/components/SupportLink'
-import TabBar from '@/app/components/TabBar'
 import TripHeader from '@/app/components/TripHeader'
 
 export const dynamic = 'force-dynamic'
@@ -130,7 +129,6 @@ export default async function TripLeaderboardPage({
 
       {/* Below the board, after everything worth reading */}
       <SupportLink className="px-4 pb-12" />
-      <TabBar tripCode={tripCode} />
     </div>
   )
 }

@@ -4,7 +4,6 @@ import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { allowanceCycle } from '@/lib/handicapAllowance'
 import CourseDashboardClient from '@/app/scoring/[slug]/CourseDashboardClient'
 import TripHeader from '@/app/components/TripHeader'
-import TabBar from '@/app/components/TabBar'
 import { HEADER_H } from '@/app/components/headerMetrics'
 import { TABBAR_SPACE } from '@/app/components/tabbarMetrics'
 
@@ -103,7 +102,6 @@ export default async function TripCoursePage({
         stickyTop={HEADER_H}
         bottomInset={TABBAR_SPACE}
       />
-      <TabBar tripCode={tripCode} />
     </div>
   )
 }

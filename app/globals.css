@@ -155,6 +155,36 @@ body {
 }
 .dot-live { animation: gdPulse 2s ease-in-out infinite; }
 
+/* ── The bottom bar's two states ───────────────────────────────
+   A tab has to answer two questions a phone otherwise leaves open: did
+   that tap land, and is anything happening. Both are interactive
+   elements responding to a touch, which is the one thing the guide lets
+   move.
+
+   The press. It has to be a transform rather than a colour, because the
+   colour is already carrying "you are here" and a second meaning on the
+   same property reads as neither. 0.94 is small enough that a thumb
+   resting on the bar does not make it look broken, and large enough to
+   be felt under a finger that is covering the icon.
+
+   Applied from a pointer handler and not from `:active` — see the note in
+   TabBar.tsx. `:active` reaches ancestors and never descendants, and iOS
+   Safari withholds it from an element with no touch handler nearby, so the
+   obvious version of this would have been dead CSS on the one phone that
+   matters. */
+.tab-pressed { transform: scale(0.94); }
+
+/* The wait. Not a spinner: the tab is already lit emerald by the time
+   this runs, and the breath says the lighting is a promise rather than
+   an arrival. Faster than `dot-live`'s two seconds, which reads as
+   ambient — this one is meant to be read as working. It stops on its
+   own when the page lands and `pending` goes false. */
+@keyframes gdTabPending {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+.tab-pending { animation: gdTabPending 900ms ease-in-out infinite; }
+
 /* Skeletons, preferred over spinners wherever the layout is known. */
 @keyframes gdSkeleton {
   0%, 100% { opacity: 0.5; }
@@ -167,9 +197,13 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .page-enter, .score-flash, .dot-live, .skeleton {
+  .page-enter, .score-flash, .dot-live, .skeleton, .tab-pending {
     animation: none !important;
   }
+  /* The press keeps its meaning without the movement: the tab still goes
+     emerald the moment it is touched, which is the part that answers
+     "did that land". Only the scale goes. */
+  .tab-pressed { transform: none; }
   /* Reordering tiles slide out of each other's way. The transition is an
      inline style from dnd-kit, so it takes an !important to switch off —
      the reorder still happens, it just arrives rather than travels. */

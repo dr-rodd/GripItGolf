@@ -1,7 +1,8 @@
 'use client'
 
-import Link from 'next/link'
+import Link, { useLinkStatus } from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useState } from 'react'
 import {
   IconHome, IconTrophy, IconClipboardList, IconSettings,
 } from './icons'
@@ -20,6 +21,10 @@ import {
  * "Trip Setup" everywhere pointing at it. Two words, but shorter than
  * "Leaderboard" beside it, so it still fits the narrowest phone on one line.
  *
+ * Rendered once, by `app/trip/[tripCode]/layout.tsx`, and never by a page.
+ * That is what keeps it on screen through a navigation instead of unmounting
+ * with the page that drew it — see the note in that file.
+ *
  * Deliberately not rendered on the scoring screens themselves — see the note
  * on `hide` below.
  */
@@ -30,6 +35,76 @@ const ITEMS = [
   { key: 'scoring',     label: 'Scoring',     icon: IconClipboardList, path: (t: string) => `/trip/${t}/scoring` },
   { key: 'settings',    label: 'Trip Setup',  icon: IconSettings,      path: (t: string) => `/trip/${t}/setup` },
 ] as const
+
+/**
+ * What one tab looks like, once it knows whether it is the page you are on
+ * and whether it is the page you are on your way to.
+ *
+ * Its own component because `useLinkStatus` reads the `<Link>` above it —
+ * there is no way to ask "is *that* link mid-navigation" from outside it, so
+ * the hook has to sit in a child of the link rather than in the list.
+ *
+ * `pending` is the whole point of the bar having any motion at all. `active`
+ * comes from the pathname, and the pathname does not change until the new
+ * page has been rendered and handed back — which on these screens is a
+ * database round trip away. Lighting the tab on `active` alone means the tap
+ * appears to do nothing for as long as the server takes, and the second tap
+ * that gets is the real cost. `pending` is true from the touch.
+ */
+function Tab({
+  label, active, Icon,
+}: {
+  label: string
+  active: boolean
+  Icon: (typeof ITEMS)[number]['icon']
+}) {
+  const { pending } = useLinkStatus()
+
+  // Lit while you are there, and while you are on your way there.
+  const lit = active || pending
+
+  /**
+   * Held down, tracked in React rather than left to CSS `:active`.
+   *
+   * Two reasons, and either would be enough. `:active` matches the element
+   * being activated and its *ancestors* — never its descendants — so a rule
+   * on this span would never fire for a press on the link above it. And iOS
+   * Safari does not apply `:active` to an element with no touch handler
+   * anywhere near it, which is exactly this bar on exactly the phone the app
+   * is built for. A pointer handler is true on every browser that has one.
+   */
+  const [pressed, setPressed] = useState(false)
+  const release = () => setPressed(false)
+
+  return (
+    <span
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={release}
+      // Both, because a press can end without a release: a finger that slides
+      // off the tab before lifting, or a scroll that claims the gesture, each
+      // leave the tab held down forever otherwise.
+      onPointerCancel={release}
+      onPointerLeave={release}
+      className={`flex flex-col items-center justify-center gap-1 h-16 transition-[color,transform] duration-150 ease-out ${
+        lit ? 'text-accent' : 'text-bark/60 hover:text-bark/80'
+      } ${pressed ? 'tab-pressed' : ''} ${pending ? 'tab-pending' : ''}`}
+    >
+      <Icon size={20} />
+      {/* The smallest type in the app, and the one place it is
+          justified: four labels across the narrowest phone, and
+          "Leaderboard" is eleven characters of it. 11px rather than
+          the 10 it was — it still fits a 320px screen with room to
+          spare, and the bar is read at arm's length like everything
+          else. Any larger and the longest label wraps. */}
+      <span
+        className="font-[family-name:var(--font-ui)] leading-none whitespace-nowrap"
+        style={{ fontSize: 11, fontWeight: lit ? 600 : 400 }}
+      >
+        {label}
+      </span>
+    </span>
+  )
+}
 
 export default function TabBar({ tripCode }: { tripCode: string }) {
   const pathname = usePathname() ?? ''
@@ -68,23 +143,15 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
               <Link
                 href={item.path(tripCode)}
                 aria-current={active ? 'page' : undefined}
-                className={`flex flex-col items-center justify-center gap-1 h-16 transition-colors duration-150 ${
-                  active ? 'text-accent' : 'text-bark/60 hover:text-bark/80'
-                }`}
+                // Every destination is `force-dynamic`, so what a prefetch
+                // can warm is the loading skeleton and the shared layout
+                // around it — not the page's data. That is enough: the
+                // skeleton is what makes the tap land instantly, and it is
+                // the part that would otherwise be a round trip away.
+                prefetch
+                className="block touch-manipulation"
               >
-                <Icon size={20} />
-                {/* The smallest type in the app, and the one place it is
-                    justified: four labels across the narrowest phone, and
-                    "Leaderboard" is eleven characters of it. 11px rather than
-                    the 10 it was — it still fits a 320px screen with room to
-                    spare, and the bar is read at arm's length like everything
-                    else. Any larger and the longest label wraps. */}
-                <span
-                  className="font-[family-name:var(--font-ui)] leading-none whitespace-nowrap"
-                  style={{ fontSize: 11, fontWeight: active ? 600 : 400 }}
-                >
-                  {item.label}
-                </span>
+                <Tab label={item.label} active={active} Icon={Icon} />
               </Link>
             </li>
           )

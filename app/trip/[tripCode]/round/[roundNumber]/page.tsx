@@ -16,7 +16,6 @@ import { describeDay, describeTime } from '@/lib/itinerary'
 import { ordinal } from '@/lib/playerSummary'
 import type { RowHole } from '@/lib/boardRows'
 import TripHeader from '@/app/components/TripHeader'
-import TabBar from '@/app/components/TabBar'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import { IconMapPin, IconClipboardList, IconTrophy } from '@/app/components/icons'
@@ -303,7 +302,6 @@ export default async function RoundSummaryPage({
       </div>
 
       <SupportLink className="px-6 pb-8" />
-      <TabBar tripCode={tripCode} />
     </main>
   )
 }

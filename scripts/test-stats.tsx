@@ -645,9 +645,17 @@ section('The lab reads the derivation and does none of its own')
 
   // The furniture every trip route carries. test:branding pins these by
   // name too; restated here so a failure names this feature.
-  for (const bit of ['<TripHeader', '<TabBar', 'has-tabbar', '<SupportLink']) {
+  //
+  // `<TabBar` is not in the list any more, and its absence is the check: the
+  // bar is rendered once by app/trip/[tripCode]/layout.tsx so that it stays
+  // on screen through a navigation instead of unmounting with the page. The
+  // room for it is still the page's own business, because the page is what
+  // scrolls.
+  for (const bit of ['<TripHeader', 'has-tabbar', '<SupportLink']) {
     ok(page.includes(bit), `the stats route carries ${bit}`)
   }
+  ok(!page.includes('<TabBar'),
+    'and does not draw its own tab bar over the layout’s')
 
   // A failed query is said out loud rather than rendered as an absence: an
   // empty table and a broken one look identical, and only one of them means

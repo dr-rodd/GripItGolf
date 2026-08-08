@@ -25,7 +25,6 @@ import Itinerary from './Itinerary'
 import { type ItemKind, type ItineraryItem, dayCount } from '@/lib/itinerary'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
-import TabBar from '@/app/components/TabBar'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,7 +66,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
     )
   }
 
-  const [roundsResult, playersResult, itineraryResult] = await Promise.all([
+  const [roundsResult, playersResult, itineraryResult, coursesResult] = await Promise.all([
     // `itinerary_item_id` is the join that makes a countdown possible: the
     // date lives here and the tee time lives on the itinerary item, and this
     // is the only column tying the two together.
@@ -91,11 +90,25 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       .eq('trip_id', trip.id)
       .order('day_index')
       .order('position'),
+    // The trip's courses, in the same breath rather than after.
+    //
+    // This used to be a fourth serial round trip, gated on `courseIds`, which
+    // meant collecting the ids off the rounds and the itinerary and so having
+    // to wait for both. It never needed to: `courses` is scoped by `trip_id`
+    // like everything else, and a trip has a handful of them. Asking for all
+    // of the trip's courses instead of the ones two other queries turned out
+    // to name costs nothing and removes a whole hop from the slowest screen
+    // in the app — the one every tab press comes back to.
+    //
+    // `courseMap` below is only ever read by id, so a course the trip has but
+    // this page does not mention is never looked up.
+    supabase.from('courses').select('id, name').eq('trip_id', trip.id),
   ])
 
   if (roundsResult.error) console.error('TripPage rounds query failed:', roundsResult.error)
   if (itineraryResult.error) console.error('TripPage itinerary query failed:', itineraryResult.error)
   if (playersResult.error) console.error('TripPage players query failed:', playersResult.error)
+  if (coursesResult.error) console.error('TripPage courses query failed:', coursesResult.error)
 
   const rounds  = roundsResult.data ?? []
   const players = playersResult.data ?? []
@@ -132,17 +145,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   )
 
   // Courses for both the rounds list and the itinerary's golf tiles
-  const courseIds = [
-    ...rounds.map(r => r.course_id),
-    ...itinerary.map(i => i.courseId),
-  ].filter(Boolean)
-  const { data: courses, error: coursesError } = courseIds.length > 0
-    ? await supabase.from('courses').select('id, name').in('id', courseIds)
-    : { data: [], error: null }
-
-  if (coursesError) console.error('TripPage courses query failed:', coursesError)
-
-  const courseMap = Object.fromEntries((courses ?? []).map(c => [c.id, c.name]))
+  const courseMap = Object.fromEntries((coursesResult.data ?? []).map(c => [c.id, c.name]))
 
   // Grouped by the day they are played, so a two-round day reads as one day
   // with two courses rather than as two unrelated entries. Only reached by a
@@ -450,8 +453,6 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       <div className="px-6 pb-10 flex justify-center">
         <BackButton href="/" label="All trips" />
       </div>
-
-      <TabBar tripCode={tripCode} />
 
     </main>
   )
