@@ -245,6 +245,70 @@ section('Linking a device changes nothing about who is confirmed')
   ok(status.includes('/players'), '  …and lands on the list, where they can pick a name')
 }
 
+// ─── The cookie is not the only thing that has to change ───
+
+section('Changing who this device is throws away the pages that said otherwise')
+{
+  // This is the bug that made claiming look broken, and neither half of it
+  // was the cookie.
+  //
+  // The hub, the stats page and a round summary are personalised on the
+  // server from this cookie. The router keeps the payloads it has already
+  // fetched, so writing a new cookie and navigating serves back a page
+  // rendered for whoever this device was a moment ago. Two ways it shows:
+  // claim a name and the hub still says "Claim your spot", or tap "Not you?",
+  // claim somebody else, and the old name is still there.
+  //
+  // `router.refresh()` clears that cache. Both paths that change identity
+  // have to call it, and both have to call it BEFORE the push — after, and
+  // the stale page is rendered first and corrected a moment later, which is
+  // the same bug with a flicker in front of it.
+  const client = code('app/trip/[tripCode]/players/PlayersClient.tsx')
+  const status = code('app/trip/[tripCode]/StatusBlock.tsx')
+
+  const link = client.slice(client.indexOf('function linkDevice'), client.indexOf('async function handleClaim'))
+  ok(link.includes('router.refresh()'), 'linking a device clears the router cache')
+  ok(link.indexOf('router.refresh()') < link.indexOf('router.push'),
+    '  …before it navigates, not after')
+  ok(link.indexOf('rememberPlayer') < link.indexOf('router.refresh()'),
+    '  …and only once the new cookie is written')
+
+  ok(status.includes('router.refresh()'), 'Not you? clears it too')
+  ok(status.indexOf('router.refresh()') < status.indexOf('router.push'),
+    '  …before it navigates')
+  ok(status.indexOf('forgetPlayer') < status.indexOf('router.refresh()'),
+    '  …and only once the cookie is gone')
+}
+
+section('Nothing prefetches a page that has a name in it')
+{
+  // The bottom bar is on the join screen too, and its Home tab points at the
+  // hub — the most personalised page in the app. `prefetch` outright would
+  // fetch the whole payload of that dynamic route and cache it as whoever
+  // this device was at the time, which on the join screen is a stranger. The
+  // claim then arrives at a cached "Claim your spot", and it would re-poison
+  // the cache that linkDevice has just cleared.
+  //
+  // The default warms the loading skeleton and the layout and stops there,
+  // and a skeleton has nobody's name in it. That is the whole speed benefit
+  // anyway — see docs/design-system.md on arriving.
+  const bar = code('app/components/TabBar.tsx')
+  ok(!/\bprefetch\b/.test(bar),
+    'the tab bar does not force a full prefetch of a personalised route')
+
+  // The three that read the cookie on the server. If a fourth appears, it is
+  // subject to the same rule and this list should say so.
+  const personalised = [
+    'app/trip/[tripCode]/page.tsx',
+    'app/trip/[tripCode]/stats/page.tsx',
+    'app/trip/[tripCode]/round/[roundNumber]/page.tsx',
+  ]
+  for (const f of personalised) {
+    ok(code(f).includes('currentPlayer'),
+      `${f.split('/').slice(-2).join('/')} is personalised, so it must not be prefetched whole`)
+  }
+}
+
 // ─── The two states look different ─────────────────────────
 
 section('Confirmed and pending are visibly different')

@@ -119,6 +119,13 @@ export default function StatusBlock({
           onClick={() => {
             forgetPlayer(tripCode)
             setDismissed(true)
+            // This hub, as the server rendered it, still has the old name in
+            // it — and the router will hand that same payload back the next
+            // time anything navigates here. `dismissed` only hides it for as
+            // long as this component stays mounted, which is until the next
+            // navigation. Clearing the cache is what makes "Not you?" outlast
+            // the tap; see the note in players/PlayersClient.tsx.
+            router.refresh()
             router.push(`/trip/${tripCode}/players`)
           }}
           className="flex-shrink-0 t-cap uppercase tracking-[0.12em] text-ink/50 hover:text-ink/80 transition-colors duration-150"

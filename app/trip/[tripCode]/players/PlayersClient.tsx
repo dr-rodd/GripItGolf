@@ -73,6 +73,23 @@ export default function PlayersClient({
     // should leave no trace. If cookies are blocked this does nothing and
     // the trip is unaffected; they simply arrive as a stranger each visit.
     rememberPlayer(tripCode, playerId)
+
+    // ── And throw away every page the old cookie rendered ──
+    //
+    // The hub, the stats page and a round summary are all personalised on
+    // the server, from this cookie. The router keeps the payloads it has
+    // already fetched, and those were rendered as whoever this device was a
+    // moment ago — or as nobody. Pushing to the hub without this serves one
+    // of them back: claim a name and the hub still says "Claim your spot",
+    // or say "Not you?", claim somebody else, and the old name is still
+    // there. The cookie was never the thing that was wrong.
+    //
+    // Before the push, not after. `refresh` clears the cache, so a push that
+    // follows it has nothing to reuse and must ask the server, which is the
+    // first request that carries the new cookie. The other way round the
+    // stale page is rendered first and corrected a moment later, which is
+    // the same bug with a flicker in front of it.
+    router.refresh()
     router.push(`/trip/${tripCode}`)
   }
 

@@ -143,12 +143,24 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
               <Link
                 href={item.path(tripCode)}
                 aria-current={active ? 'page' : undefined}
-                // Every destination is `force-dynamic`, so what a prefetch
-                // can warm is the loading skeleton and the shared layout
-                // around it — not the page's data. That is enough: the
-                // skeleton is what makes the tap land instantly, and it is
-                // the part that would otherwise be a round trip away.
-                prefetch
+                // Left on the default, which warms the loading skeleton and
+                // the layout around it and stops there.
+                //
+                // **Not `prefetch` outright, and this is a correctness rule
+                // rather than a tuning one.** That fetches the whole payload
+                // of a dynamic route, and the hub is personalised on the
+                // server from a cookie — so what lands in the cache is the
+                // hub *as this device was when the prefetch went out*. The
+                // bar is on the join screen too, which is the worst possible
+                // moment for it: it warms the hub as a stranger while
+                // somebody is standing on the page about to claim a name,
+                // and the claim then arrives at a cached "Claim your spot".
+                // It would also re-poison the cache that
+                // players/PlayersClient.tsx has just cleared.
+                //
+                // The skeleton is what makes the tap feel instant, and a
+                // skeleton has nobody's name in it. Warming that is the
+                // whole benefit and it costs nothing to be wrong about.
                 className="block touch-manipulation"
               >
                 <Tab label={item.label} active={active} Icon={Icon} />
