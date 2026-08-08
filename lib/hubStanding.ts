@@ -12,7 +12,11 @@
 import { supabase } from './supabase'
 import { type Leaderboard } from './leaderboards'
 import { type TeamScoring } from './teamScoring'
-import { buildRows, type RowHole, type BoardRow } from './boardRows'
+import {
+  buildRows,
+  type RowHole, type RowPlayer, type RowRound, type RowContext, type BoardRow,
+} from './boardRows'
+import { holeStats, type HoleStat } from './holeStats'
 import { standings, type SummaryScore } from './playerSummary'
 import { fetchMemberships } from './teamMembers'
 import {
@@ -183,6 +187,34 @@ async function fetchBoardRows(
   legacyTeamScoring: TeamScoring | null,
   onlyRoundIds?: string[],
 ): Promise<{ rows: BoardRow[]; error: string | null }> {
+  const { ctx, error } = await fetchTripContext(tripId, legacyTeamScoring, onlyRoundIds)
+  if (error || !ctx) return { rows: [], error }
+  return { rows: buildRows(lead, ctx), error: null }
+}
+
+/**
+ * Every card on a trip, assembled — and nothing decided about them.
+ *
+ * The same nine queries `fetchBoardRows` has always run, split out because a
+ * board is no longer the only thing built from them: the stats screens need
+ * the same cards and none of the ranking. The split is where it already was
+ * — fetch on one side of `buildRowContext`, decide on the other.
+ *
+ * `holes` comes back alongside because the difficulty order prints a par and
+ * a stroke index off the card, and `courseByRound` because a course played
+ * twice is one set of eighteen holes with twice the evidence.
+ */
+export async function fetchTripContext(
+  tripId: string,
+  legacyTeamScoring: TeamScoring | null,
+  onlyRoundIds?: string[],
+): Promise<{
+  ctx: RowContext | null
+  holes: RowHole[]
+  courseByRound: Map<string, string>
+  error: string | null
+}> {
+  const empty = { ctx: null, holes: [], courseByRound: new Map<string, string>() }
   const { data: rounds, error: roundsError } = await supabase
     .from('rounds')
     .select('id, round_number, course_id')
@@ -190,15 +222,15 @@ async function fetchBoardRows(
     .order('round_number')
 
   if (roundsError) {
-    console.error('fetchBoardRows rounds query failed:', roundsError)
-    return { rows: [], error: 'Could not read the rounds.' }
+    console.error('fetchTripContext rounds query failed:', roundsError)
+    return { ...empty, error: 'Could not read the rounds.' }
   }
 
   const all = rounds ?? []
   const roundRows = onlyRoundIds
     ? all.filter(r => onlyRoundIds.includes(r.id as string))
     : all
-  if (roundRows.length === 0) return { rows: [], error: null }
+  if (roundRows.length === 0) return { ...empty, error: null }
 
   const roundIds = roundRows.map(r => r.id as string)
   const courseIds = [...new Set(roundRows.map(r => r.course_id as string).filter(Boolean))]
@@ -217,10 +249,10 @@ async function fetchBoardRows(
         .select('id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies')
         .in('course_id', someCourses).order('hole_number'),
       supabase.from('scores')
-        .select('player_id, round_id, hole_id, gross_score, stableford_points, no_return')
+        .select('player_id, round_id, hole_id, gross_score, stableford_points, no_return, putts, fairway_hit')
         .in('round_id', roundIds),
       supabase.from('live_scores')
-        .select('player_id, round_id, hole_number, gross_score, stableford_points')
+        .select('player_id, round_id, hole_number, gross_score, stableford_points, putts, fairway_hit')
         .in('round_id', roundIds),
       supabase.from('round_handicaps')
         .select('round_id, player_id, playing_handicap, tee_id')
@@ -236,8 +268,8 @@ async function fetchBoardRows(
   const failed = [playersRes, teamsRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes]
     .find(r => r.error)
   if (failed?.error) {
-    console.error('fetchBoardRows board query failed:', failed.error)
-    return { rows: [], error: 'Could not work out the standings.' }
+    console.error('fetchTripContext query failed:', failed.error)
+    return { ...empty, error: 'Could not work out the standings.' }
   }
 
   const players = playersRes.data ?? []
@@ -264,5 +296,43 @@ async function fetchBoardRows(
     legacyTeamScoring,
   })
 
-  return { rows: buildRows(lead, ctx), error: null }
+  return {
+    ctx,
+    holes,
+    courseByRound: new Map(roundRows.map(r => [r.id as string, r.course_id as string])),
+    error: null,
+  }
+}
+
+/**
+ * A trip's cards, as statistics.
+ *
+ * The same nine queries and the same assembly as a leaderboard, so a signed
+ * card beats a live one here too and an abandoned card is still not in play.
+ * `legacyTeamScoring` is null because nothing here builds a team row.
+ */
+export async function fetchTripStats(
+  tripId: string,
+  onlyRoundIds?: string[],
+): Promise<{
+  stats: HoleStat[]
+  holes: RowHole[]
+  players: RowPlayer[]
+  rounds: RowRound[]
+  courseByRound: Map<string, string>
+  error: string | null
+}> {
+  const { ctx, holes, courseByRound, error } =
+    await fetchTripContext(tripId, null, onlyRoundIds)
+  if (error || !ctx) {
+    return { stats: [], holes: [], players: [], rounds: [], courseByRound: new Map(), error }
+  }
+  return {
+    stats: holeStats({ players: ctx.players, holes: ctx.holes, resolved: ctx.resolved }),
+    holes,
+    players: ctx.players,
+    rounds: ctx.rounds,
+    courseByRound,
+    error: null,
+  }
 }

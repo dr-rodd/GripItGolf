@@ -377,11 +377,21 @@ section('Fairways count par 4s and 5s, and only the ones answered')
   eq(f.hitRate, 1 / 3, 'so the rate is one in three, not one in five')
   eq(f.missBias, null, 'two misses is not a tendency')
 
-  const lean = fairwayStats(holeStats(ctxOf([
-    sc('b', 'h1', 4, 2, 'right'), sc('b', 'h2', 4, 2, 'right'),
-    sc('b', 'h3', 4, 2, 'right'), sc('b', 'h4', 4, 2, 'left'),
-  ])))
-  eq(lean.missBias, 'right', `${MIN_MISSES} misses leaning one way is`)
+  // Both tests have to pass: enough misses, and enough of them one way.
+  const miss = (fws: Fairway[]) => fairwayStats(holeStats(ctxOf(
+    fws.map((fw, i) => sc('b', `h${(i % 4) + 1}`, 4, 2, fw, { roundId: `r${i}` })))))
+
+  eq(miss(['right', 'right', 'right', 'left']).missBias, 'right',
+    `${MIN_MISSES} misses, three of them one way, is a lean`)
+  eq(miss(['right', 'right', 'left', 'left']).missBias, null,
+    'an even split is not')
+  // The case that shipped as "leaning left" before BIAS_SHARE existed.
+  eq(miss([...Array(7).fill('left'), ...Array(5).fill('right')] as Fairway[]).missBias, null,
+    'and neither is seven to five, which is a coin toss with a name on it')
+  eq(miss([...Array(9).fill('left'), ...Array(3).fill('right')] as Fairway[]).missBias, 'left',
+    '  …while nine to three is')
+  eq(miss(['left', 'left', 'left']).missBias, null,
+    `three misses is under ${MIN_MISSES}, however lopsided`)
   eq(fairwayStats([]).hitRate, null, 'nothing counted has no rate rather than a zero')
 }
 
@@ -578,7 +588,7 @@ section('The derivation is pure, and states each rule once')
   ok(!/shotsReceived|playing_handicap|handicapAllowance/.test(c),
     'no handicap appears anywhere in the gains')
 
-  for (const k of ['MIN_OTHERS', 'MIN_HOLE_SAMPLE', 'MIN_MISSES', 'THIN_UNTIL']) {
+  for (const k of ['MIN_OTHERS', 'MIN_HOLE_SAMPLE', 'MIN_MISSES', 'BIAS_SHARE', 'THIN_UNTIL']) {
     ok(new RegExp(`export const ${k}`).test(src), `${k} is a constant somebody can argue with`)
   }
 
@@ -590,6 +600,44 @@ section('The derivation is pure, and states each rule once')
     return walk(dir)
   }).filter(f => f !== 'lib/holeStats.ts' && /par - 2|par-2/.test(code(f)))
   eq(appsWithRule, [], 'and greens in regulation is written down exactly once')
+}
+
+section('The lab reads the derivation and does none of its own')
+{
+  const client = code('app/trip/[tripCode]/stats/StatsClient.tsx')
+  const page = code('app/trip/[tripCode]/stats/page.tsx')
+
+  ok(/from '@\/lib\/holeStats'/.test(client), 'the screen imports the derivation')
+  // Everything printed comes out of that module, so a figure here and the
+  // same figure on the hub cannot disagree.
+  ok(!/par - 2|gross - .*putts|\/ others/.test(client),
+    '  …and works nothing out for itself')
+  ok(/formatGained|formatRate|formatAverage/.test(client),
+    'and prints through the shared formatters')
+
+  // Nine queries, once, through the one assembly — not a tenth set here.
+  ok(/fetchTripStats/.test(page), 'the page fetches through the shared path')
+  ok(!/from\('scores'\)|from\('live_scores'\)|from\('holes'\)/.test(page),
+    '  …and asks for no round-scoped table by hand')
+
+  // The furniture every trip route carries. test:branding pins these by
+  // name too; restated here so a failure names this feature.
+  for (const bit of ['<TripHeader', '<TabBar', 'has-tabbar', '<SupportLink']) {
+    ok(page.includes(bit), `the stats route carries ${bit}`)
+  }
+
+  // A failed query is said out loud rather than rendered as an absence: an
+  // empty table and a broken one look identical, and only one of them means
+  // nobody has played.
+  ok(/error \?/.test(page), 'a query that failed says so')
+  ok(/cover\.level === 'none'/.test(page),
+    'and nothing entered gets an empty state rather than a table of dashes')
+
+  // Rust is for a loss, and losing shots to the field is one. Nothing else
+  // on these screens may use it.
+  const rustUses = (client.match(/rust/g) ?? []).length
+  ok(rustUses > 0 && /gainTone/.test(client),
+    'rust appears only through the one function that decides a gain is a loss')
 }
 
 // ─── Result ────────────────────────────────────────────────────

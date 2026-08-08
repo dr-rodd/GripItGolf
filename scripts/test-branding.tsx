@@ -445,6 +445,7 @@ section('The bottom tab bar')
     'app/trip/[tripCode]/teams/page.tsx',
     'app/trip/[tripCode]/players/page.tsx',
     'app/trip/[tripCode]/matchplay/page.tsx',
+    'app/trip/[tripCode]/stats/page.tsx',
   ]
   for (const f of carriers) {
     ok(read(f).includes('<TabBar'), `${f.split('/').slice(-2).join('/')} carries the tab bar`)
@@ -468,6 +469,7 @@ section('The footer is sitewide, once inside a trip')
     'app/trip/[tripCode]/teams/page.tsx',
     'app/trip/[tripCode]/players/page.tsx',
     'app/trip/[tripCode]/matchplay/page.tsx',
+    'app/trip/[tripCode]/stats/page.tsx',
     'app/trip/[tripCode]/setup/TripSetupClient.tsx',
   ]
   for (const f of carriers) {
@@ -521,6 +523,7 @@ section('The mark is the header, and the way back')
     'app/trip/[tripCode]/teams/page.tsx',
     'app/trip/[tripCode]/players/page.tsx',
     'app/trip/[tripCode]/matchplay/page.tsx',
+    'app/trip/[tripCode]/stats/page.tsx',
   ]
   for (const f of carriers) {
     ok(read(f).includes('<TripHeader'), `${f.split('/').slice(-2).join('/')} carries the mark`)
@@ -1098,6 +1101,7 @@ section('The tab bar is on every screen inside a trip')
     'app/trip/[tripCode]/teams/page.tsx',
     'app/trip/[tripCode]/players/page.tsx',
     'app/trip/[tripCode]/matchplay/page.tsx',
+    'app/trip/[tripCode]/stats/page.tsx',
     'app/trip/[tripCode]/setup/TripSetupClient.tsx',
   ]
   for (const f of tabbed) {

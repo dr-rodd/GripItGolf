@@ -42,8 +42,18 @@ export const MIN_OTHERS = 3
 /** Cards on a hole before its difficulty is settled rather than provisional. */
 export const MIN_HOLE_SAMPLE = 8
 
-/** Missed fairways before a left/right lean is a tendency rather than noise. */
+/** Missed fairways before a left/right lean can be called at all. */
 export const MIN_MISSES = 4
+
+/**
+ * How much of the misses have to go one way before it is a lean.
+ *
+ * Two thirds. A count threshold alone is not enough: twelve misses split
+ * seven and five cleared `MIN_MISSES` comfortably and printed as "leaning
+ * left", which is a coin toss described as a swing fault. Both tests have to
+ * pass — enough misses, and enough of them one way.
+ */
+export const BIAS_SHARE = 2 / 3
 
 // ─── One hole, everything derived ──────────────────────────────
 
@@ -176,8 +186,9 @@ export type FairwayStats = {
   /**
    * Which way they miss when they miss.
    *
-   * Null on an even split, and null below `MIN_MISSES` — two misses to one
-   * is not a tendency, it is two misses.
+   * Null unless there are at least `MIN_MISSES` of them **and** at least
+   * `BIAS_SHARE` of those went the same way. Two misses to one is not a
+   * tendency, and neither is seven to five.
    */
   missBias: 'left' | 'right' | null
 }
@@ -197,9 +208,11 @@ export function fairwayStats(stats: readonly HoleStat[]): FairwayStats {
     missedLeft,
     missedRight,
     hitRate: asked.length === 0 ? null : hit / asked.length,
-    missBias: misses < MIN_MISSES || missedLeft === missedRight
+    missBias: misses < MIN_MISSES
       ? null
-      : missedLeft > missedRight ? 'left' : 'right',
+      : missedLeft >= misses * BIAS_SHARE ? 'left'
+      : missedRight >= misses * BIAS_SHARE ? 'right'
+      : null,
   }
 }
 
@@ -469,6 +482,34 @@ export type Coverage = {
 
 /** Enough holes to be worth a screen, and enough to be worth believing. */
 export const THIN_UNTIL = 18
+
+// ─── Saying them ───────────────────────────────────────────────
+//
+// Here rather than on a screen because the hub line and the stats lab print
+// the same figures, and two spellings of "level" is how a number comes to
+// look like two different numbers.
+
+/**
+ * A gain, to one decimal and always signed. Level is `E`, as everywhere.
+ *
+ * Rounded before the zero test, so −0.04 prints as `E` rather than as `-0.0`
+ * — which is a real output of an average and reads as a mistake.
+ */
+export function formatGained(n: number): string {
+  const r = Math.round(n * 10) / 10
+  if (r === 0) return 'E'
+  return r > 0 ? `+${r.toFixed(1)}` : r.toFixed(1)
+}
+
+/** A rate as a whole percentage. Null prints as a dash, never as 0%. */
+export function formatRate(rate: number | null): string {
+  return rate == null ? '—' : `${Math.round(rate * 100)}%`
+}
+
+/** An average to one decimal. Null prints as a dash. */
+export function formatAverage(n: number | null): string {
+  return n == null ? '—' : (Math.round(n * 10) / 10).toFixed(1)
+}
 
 export function coverage(stats: readonly HoleStat[]): Coverage {
   const withPutts = stats.filter(s => s.putts != null).length
