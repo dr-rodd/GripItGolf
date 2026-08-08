@@ -14,7 +14,7 @@ import {
 } from '@/lib/handicapAllowance'
 import { nextSheetId } from '@/lib/teamSets'
 import { defaultCustomPoints, resolveCustomPoints, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
-import { IconTrophy, IconPlus, IconX, IconCheck, IconSettings } from './icons'
+import { IconTrophy, IconPlus, IconMinus, IconX, IconCheck, IconSettings } from './icons'
 import { Card, Badge, buttonClass, FIELD, FIELD_LABEL } from './ui'
 
 /**
@@ -98,6 +98,11 @@ function ordinal(n: number): string {
   return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
 }
 
+/** The two steppers under the prize table. Square, and a full tap target. */
+const STEP =
+  'w-11 h-11 flex-shrink-0 grid place-items-center rounded-xl border border-bark/25 '
+  + 'bg-surface transition-colors duration-150'
+
 /**
  * The prize table.
  *
@@ -171,24 +176,28 @@ function PointsTable({
         ))}
       </div>
 
-      {/* Under the rows rather than beside the heading: they act on the
-          bottom of the list, and a control for the end of a list belongs at
-          the end of it. */}
-      <div className="flex items-center gap-2 mt-2">
-        <button
-          type="button"
-          onClick={addRow}
-          className="flex-1 min-h-[44px] rounded-xl border border-bark/25 bg-surface t-label text-ink hover:border-accent transition-colors duration-150"
-        >
-          Add a place
-        </button>
+      {/* Under the rows and at their right-hand end: they act on the bottom
+          of the list, and they line up with the column the figures sit in.
+
+          A glyph each, with the wording moved into `label` — which is the
+          icon's accessible name, not decoration. Losing the words on screen
+          must not lose them from a screen reader, where "button, button" is
+          the whole of what is left. */}
+      <div className="flex items-center justify-end gap-2 mt-2">
         <button
           type="button"
           onClick={removeRow}
           disabled={rows.length <= 1}
-          className="flex-1 min-h-[44px] rounded-xl border border-bark/25 bg-surface t-label text-ink/80 hover:border-bark/40 transition-colors duration-150 disabled:opacity-30 disabled:cursor-not-allowed"
+          className={`${STEP} text-ink/70 hover:border-bark/40 disabled:opacity-30 disabled:cursor-not-allowed`}
         >
-          Remove the last
+          <IconMinus size={18} label="Remove the last place" />
+        </button>
+        <button
+          type="button"
+          onClick={addRow}
+          className={`${STEP} text-ink hover:border-accent`}
+        >
+          <IconPlus size={18} label="Add a place" />
         </button>
       </div>
 

@@ -281,6 +281,29 @@ section('When the table and the field disagree')
 
 // ─── The two moments that cause it ─────────────────────────────
 
+section('The two steppers under the table')
+{
+  const setup = fs.readFileSync('app/components/LeaderboardSetup.tsx', 'utf-8')
+
+  // They are a glyph each. That is the whole point of them being small, and
+  // it is also the one way this goes quietly wrong: an icon with nothing but
+  // a shape is "button, button" to a screen reader. `label` is the icon's
+  // accessible name, so it is not optional here the way it is on an icon
+  // sitting beside its own words.
+  ok(setup.includes('label="Add a place"'), 'the plus says what it adds')
+  ok(setup.includes('label="Remove the last place"'), 'and the minus what it takes')
+
+  // A new place is worth nothing until somebody says otherwise — guessing a
+  // figure would be inventing a decision nobody made.
+  ok(/onChange\(\[\.\.\.rows, 0\]\)/.test(setup), 'a place arrives on nought')
+  ok(/onChange\(rows\.slice\(0, -1\)\)/.test(setup), 'and leaves from the bottom')
+  ok(/disabled=\{rows\.length <= 1\}/.test(setup),
+    'the last row cannot be taken away — an empty table cannot be answered')
+
+  const icons = fs.readFileSync('app/components/icons.tsx', 'utf-8')
+  ok(icons.includes('export const IconMinus'), 'the minus is a Tabler icon like every other')
+}
+
 section('Both screens that change the field say so')
 {
   const read = (f: string) => fs.readFileSync(f, 'utf-8')
