@@ -100,7 +100,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `lib/teamLimits.ts` | Team size rules, pairing wording |
 | `lib/matchplayEntrants.ts` | Player/pairing shape and naming |
 | `lib/itinerarySync.ts` / `lib/itineraryStore.ts` | Itinerary diff-and-write. **`toItemRow` is the only row mapping** — trip creation had a second copy of it, field for field, and a kind gaining a column reached one writer and not the other |
-| `supabase/migrations/` | All schema changes, in order. **Migration 010 has a one-time backfill — never replay it.** |
+| `supabase/migrations/` | All schema changes, in order. **Migration 010 has a one-time backfill — never replay it**: it flips every draft trip to live. `scripts/migrate.ts` now enforces that rather than trusting the reader — a bare run lists and stops, and the whole folder needs `--all` plus `ALLOW_REPLAY=1`. Run one file by name; for a single migration the Supabase SQL editor is easier still |
 | `config/site.ts` | Global platform branding |
 
 ## Stableford scoring (canonical — never restate or vary this elsewhere)

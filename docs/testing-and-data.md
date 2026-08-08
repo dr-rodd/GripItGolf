@@ -62,6 +62,35 @@ Bias to shipping on small things. A screenshot of a border costs more than it fi
 7. `round_handicaps`
 8. `scores`
 
+## Running a migration
+
+**One file at a time, by name.** There is no ledger — nothing records which
+migrations have already been applied — so running the folder means running it
+*again*, and `scripts/migrate.ts` now refuses to do that without `--all` and
+`ALLOW_REPLAY=1`.
+
+```
+npx tsx scripts/migrate.ts migrations/20260101000028_hole_stats.sql
+```
+
+Paths resolve against `supabase/`, so the `migrations/` prefix is required.
+
+**For a single migration the Supabase dashboard's SQL editor is easier** —
+paste the file, press Run — and it is the route to hand to anybody who does
+not already have the repo and a `DATABASE_URL` set up. The script earns its
+keep on a batch, or from a machine already configured.
+
+`DATABASE_URL` comes from Supabase → Settings → Database → Connection string
+→ **Session pooler**. Not "Direct connection": direct is IPv6-only, so on
+ordinary home broadband it does not fail, it hangs.
+
+**Replay-safety is the author's job**, because nothing else is doing it.
+`ADD COLUMN IF NOT EXISTS`, `DROP CONSTRAINT IF EXISTS` before adding one,
+`CREATE OR REPLACE`, `ON CONFLICT DO NOTHING`. The cost of getting it wrong
+is `20260101000010_trip_lifecycle.sql`, whose one-time backfill flips every
+draft trip to live if it is ever run twice — which is why the runner names
+that file when it refuses.
+
 ## Background jobs
 
 Abandoned scorecard cleanup: Vercel cron route. Requires `CRON_SECRET`. Implemented as Supabase SQL migration + Next.js API route.
