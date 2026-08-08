@@ -203,7 +203,19 @@ Replaces the old welcome-back card. Two states.
 
 **Somebody** — greeting (first name, one line, with "Not you?"), then Up next, then the standing line.
 
-**The Points / Level / Rounds / Matches tiles are deleted, not moved.** Stats are their own phase. There is no "Your stats" or "Trip stats" heading, and there must not be one until something is behind it.
+**The Points / Level / Rounds / Matches tiles are deleted, not moved.** What replaced them is a **Stats** section, fourth in the stack, and the rule they left behind is unchanged: no heading with nothing behind it. It is enforced on the gate now rather than by the word being absent from the page — the section renders only when the trip has `track_stats` switched on **and** a card has actually recorded a putt or a fairway. Neither condition on its own is enough, so a trip that switched stats on this morning still has no heading until the first hole comes in.
+
+### Stats
+
+Two answers a hole during scoring — how many putts, and which way the tee shot went — and everything else is derived. `lib/holeStats.ts` is the only copy of every rule; nothing on a screen works any of it out.
+
+- **Greens in regulation is derived, never stored.** `gross − putts <= par − 2`, off the player's own par, so a hole that is a par 5 on one card and a par 4 on another asks the right question of each. A chip-in is correctly not a green in regulation.
+- **Gained on the field is gross**, on the shots played rather than the shots allowed, and **excludes the player from their own field average**. Both halves are averaged over the same subset, so putting plus tee-to-green *is* the gain in gross shots; and the gains over a hole sum to exactly zero, which is what the test suite holds it to.
+- **A hole needs three other cards** before a gain off it counts, **eight** before its difficulty is settled rather than provisional, and a miss bias needs four misses with **two thirds** of them going one way. All four are exported constants.
+- **Stats never gate the Next button.** The row appears under a player's tile only once they have a score, and a hole can always be left without an answer.
+- **The Edit Scorecard screen edits the gross only.** A mis-tapped putt count is fixed by going back to the hole during play.
+
+Switched on per trip in the Trip Settings drawer, off by default. The full breakdown — you, the field, the course — is at `/trip/[code]/stats`, reached from the hub section and from a chip on the leaderboard.
 
 ### Up next
 

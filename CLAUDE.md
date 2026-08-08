@@ -90,6 +90,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `lib/upNext.ts` | What happens next on the trip. **Only golf can be counted down to** — a stay or a journey carries a day and nothing finer. Joins `rounds.scheduled_date` to `itinerary_items.tee_time`, the one place the two meet |
 | `lib/standing.ts` / `lib/hubStanding.ts` | Where a player stands. Two paths: one query for an individual Stableford total, the full `buildRows` context for anything else. `test:hub` holds them against each other |
 | `lib/rowContext.ts` | Raw rows → a `RowContext`, via `buildRowContext`. **The only assembly there is** — the leaderboard and the hub both call it. Fetching is each caller's own; deciding never is |
+| `lib/holeStats.ts` | Putts and fairways → greens in regulation, accuracy, hole difficulty, and gained on the field. **The only copy of every one of those rules** — nothing on a screen derives any of them. Greens in regulation is never a stored column: it needs the player's own par. Gains are **gross and self-excluding**, which is what makes them sum to zero over a hole |
 | `lib/courseCard.ts` | A course's card, two nines with their pars. **One set of numbers, never two** — the ladies card or the men's, decided by who is holding the phone. No yardages: those columns have never held a value |
 | `lib/nextMatch.ts` | The next tie: opponent known, undecided, a bye, or out. In a pairs draw the entrant is the pairing on *that draw's* sheet |
 | `app/components/CourseWeather.tsx` | The weather, in two shapes from one component — the round page's block and the hub's one line — so the two cannot disagree about the same course. Fetched in the browser: the hub does not know which round is next until hydration. **The line variant renders no anchor**, because the up-next block it sits in is already inside a `<Link>` |
@@ -124,6 +125,31 @@ Calculated by the Postgres trigger `trg_scores_stableford` on every insert/updat
 `handicap` here is always the **full** course handicap. A competition allowance (85% for a four-ball, 95% for a singles) belongs to the leaderboard, not to the card: it is applied when a board reads the scores and is never written to `round_handicaps` or `scores`. Store it reduced and a second board on a different allowance can no longer be scored. The percentage comes off the *unrounded* course handicap — 11.63 shows as 12, but 90% of those two are a shot apart.
 
 **`round_handicaps.playing_handicap` starts life as the handicap _index_**, not a course handicap — creation, finalise and every handicap edit write it before any tee exists. Anything holding a tee must compute from the tee instead of trusting that snapshot.
+
+## Stats
+
+Two answers a hole — putts, and which way the tee shot went — recorded per
+player on the scorecard when a trip switches `trips.track_stats` on in the
+Trip Settings drawer. Off by default. Everything else is derived in
+`lib/holeStats.ts`, and that is the only copy: full detail in
+`docs/features.md`.
+
+Four things that are easy to get wrong twice:
+
+- **Greens in regulation is never stored.** It needs `effectivePar` for the
+  player holding the card, so a stored column would be a second answer
+  waiting to drift from the first.
+- **Gained on the field is gross, and excludes the player from their own
+  field average.** Both halves come off the same subset, so putting plus
+  tee-to-green is exactly the gain in gross shots, and the gains over a hole
+  sum to zero. No handicap appears anywhere in that file.
+- **The two columns exist on both score tables under the same names**, so a
+  commit copies a row rather than translating it. `scores.putts` has no
+  upper bound against the gross for the same reason `live_scores.putts` has
+  none — a commit that fails on the eighteenth green is the worse failure, so
+  an impossible card is dropped on the way in instead.
+- **The Edit Scorecard screen edits the gross only.** A mis-tapped putt count
+  is fixed by going back to the hole while the card is open.
 
 ## Two orderings, on purpose and not
 

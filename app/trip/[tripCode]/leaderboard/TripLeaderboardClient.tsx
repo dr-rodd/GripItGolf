@@ -45,6 +45,13 @@ type TeeRatingRow = { id: string; slope: number; course_rating: number; par: num
 interface Props {
   tripCode: string
   /**
+   * Whether the trip records putts and fairways.
+   *
+   * Only decides whether the chip through to the stats appears. A chip that
+   * leads to an empty state is worse than no chip.
+   */
+  showStats?: boolean
+  /**
    * Everything this trip is playing for, each board carrying its own complete
    * rules. Old trips arrive here too — the page reads their flags as boards
    * before this component sees them, so there is one shape to render.
@@ -1033,12 +1040,34 @@ function MatchplayTab({ tripCode }: { tripCode: string }) {
   )
 }
 
+/**
+ * The way through to the stats, on the same terms as the draw.
+ *
+ * A link rather than a state change, for the same reason: none of the stats
+ * code should load with the leaderboard. Shown only for a trip that has
+ * switched stats on — a chip that leads to an empty state is worse than no
+ * chip.
+ */
+function StatsTab({ tripCode }: { tripCode: string }) {
+  return (
+    <Link
+      href={`/trip/${tripCode}/stats`}
+      className="flex-shrink-0 inline-flex items-center px-4 py-2.5 t-label rounded-xl
+        border bg-surface border-bark/12 text-ink/65
+        hover:text-ink/80 hover:border-accent/50 active:opacity-75
+        transition-colors duration-150"
+    >
+      Stats
+    </Link>
+  )
+}
+
 // ─── Main ──────────────────────────────────────────────────────
 
 export default function TripLeaderboardClient({
   tripCode, boards, activeRoundIds, livePlayerIds, legacyTeamScoring, rounds,
   teams, memberships, players, holes, scores, liveScores, roundHandicaps,
-  tees = [],
+  tees = [], showStats = false,
 }: Props) {
   // Matchplay has its own route, so it is a button rather than a tab. Every
   // other board is a table, and its own rules travel with it.
@@ -1104,7 +1133,10 @@ export default function TripLeaderboardClient({
    * draw always counts, even on its own: it is the only way to reach it from
    * here.
    */
-  const strip = (tabs.length > 1 || showMatchplay) && (
+  // `showStats` widens this deliberately: a one-board trip with stats on has
+  // a genuine choice to offer even though it has only one board, and without
+  // this the chip it needs would be inside a strip that never renders.
+  const strip = (tabs.length > 1 || showMatchplay || showStats) && (
     <div className="flex gap-1.5 mb-4 overflow-x-auto -mx-1 px-1 pb-1">
       {tabs.map(t => (
         <button
@@ -1120,6 +1152,7 @@ export default function TripLeaderboardClient({
         </button>
       ))}
       {showMatchplay && <MatchplayTab tripCode={tripCode} />}
+      {showStats && <StatsTab tripCode={tripCode} />}
     </div>
   )
 

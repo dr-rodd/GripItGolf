@@ -906,8 +906,28 @@ section('The hub is the sections it should be, and nothing else')
     ok(!/The plan/.test(read(f)), `"The plan" is gone from ${f.split('/').pop()}`)
   }
 
-  // The stat tiles are deleted, not relocated. Stats are Phase 4.
-  ok(!/Your stats|Trip stats|coming soon/i.test(hub), 'no empty stats headings')
+  // The old Points / Level / Rounds / Matches tiles are still deleted, and
+  // the rule they left behind still holds: no heading may appear with
+  // nothing behind it. What changed is that there is now something to put
+  // behind one, so the rule is enforced on the gate rather than by the word
+  // "stats" being absent from the file.
+  ok(!/Your stats|Trip stats|coming soon/i.test(hub),
+    'no empty or placeholder stats headings')
+  ok(/trip\.track_stats === true/.test(hubCode),
+    'the stats section is gated on the trip having asked for it')
+  ok(/statsCover\.level !== 'none'/.test(hubCode),
+    '  …and on a card having actually recorded something')
+  ok(hub.indexOf("key: 'itinerary'") < hub.indexOf("key: 'stats'"),
+    'and it is added after the three sections that were always there')
+  ok(/initial="itinerary"/.test(hub),
+    '  …so the hub still opens on the itinerary either way')
+
+  // Nothing personal is fetched for a phone the trip does not recognise, and
+  // the stats are inside that same gate rather than beside it.
+  const personal = hubCode.slice(hubCode.indexOf('if (me) {'))
+  ok(personal.indexOf('fetchTripStats') > -1
+    && personal.indexOf('fetchTripStats') < personal.indexOf('placingLine ='),
+    'a stranger pays nothing for stats they will not be shown')
 
   // Phase 1's rules still hold on this page.
   ok(hubCode.includes('currentPlayer'), 'the cookie is read through the shared helper')

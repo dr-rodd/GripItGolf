@@ -22,7 +22,7 @@ export default async function TripLeaderboardPage({
 
   const { data: trip } = await supabase
     .from('trips')
-    .select('id, name, formats, leaderboards, team_scoring')
+    .select('id, name, formats, leaderboards, team_scoring, track_stats')
     .eq('trip_code', tripCode)
     .single()
   if (!trip) notFound()
@@ -125,6 +125,7 @@ export default async function TripLeaderboardPage({
         liveScores={liveScoresRes.data ?? []}
         roundHandicaps={hcpsRes.data ?? []}
         tees={teesRes.data ?? []}
+        showStats={trip.track_stats === true}
       />
 
       {/* Below the board, after everything worth reading */}

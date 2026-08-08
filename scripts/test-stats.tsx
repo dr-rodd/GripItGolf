@@ -640,6 +640,37 @@ section('The lab reads the derivation and does none of its own')
     'rust appears only through the one function that decides a gain is a loss')
 }
 
+section('A heading only where there is something behind it')
+{
+  const hub = code('app/trip/[tripCode]/page.tsx')
+  const panel = code('app/trip/[tripCode]/StatsPanel.tsx')
+  const board = code('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+
+  // Two conditions, and neither on its own is enough.
+  ok(/trip\.track_stats === true/.test(hub), 'the trip has to have asked for stats')
+  ok(/statsCover\.level !== 'none'/.test(hub), '  …and a card has to have recorded one')
+  ok(/'Your stats'|'Trip stats'/.test(hub) === false,
+    'and the two banned headings are still banned')
+
+  // Nothing derived on the way to the screen — the hub and the lab print the
+  // same figure through the same formatters or they will disagree.
+  ok(!/par - 2|\/ others|gross - /.test(panel), 'the hub panel works nothing out')
+  ok(/formatGained|formatRate|formatAverage/.test(panel), '  …and prints through the shared ones')
+
+  // A link, not a button: the hub already has its one emerald action.
+  ok(/<Link/.test(panel) && !/buttonClass|ButtonLink/.test(panel),
+    'the way through is a link rather than a second primary action')
+
+  // The chip is a link to the route, so none of the stats code loads with
+  // the board — the same reason the draw is a link.
+  ok(/function StatsTab/.test(board), 'the leaderboard offers a stats chip')
+  ok(/href=\{`\/trip\/\$\{tripCode\}\/stats`\}/.test(board), '  …as a link to the route')
+  ok(!/holeStats/.test(board), '  …and imports none of the stats code')
+  // Without widening this, a one-board trip never sees the chip at all.
+  ok(/tabs\.length > 1 \|\| showMatchplay \|\| showStats/.test(board),
+    'and the strip renders for a one-board trip that has stats on')
+}
+
 // ─── Result ────────────────────────────────────────────────────
 
 console.log('\n────────────────────────────────────────────────────────')

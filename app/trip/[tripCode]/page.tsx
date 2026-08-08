@@ -9,13 +9,17 @@ import { fetchMemberships } from '@/lib/teamMembers'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { isConfirmed, confirmedCount as countConfirmed } from '@/lib/roster'
 import { ROUND_TILE } from '@/lib/roundState'
-import { fetchPlacing } from '@/lib/hubStanding'
+import { fetchPlacing, fetchTripStats } from '@/lib/hubStanding'
+import {
+  coverage, statsFor, type PlayerStats, type Coverage,
+} from '@/lib/holeStats'
 import { describePlacing } from '@/lib/standing'
 import { nextMatch, describeNextMatch, type DrawMatch } from '@/lib/nextMatch'
 import { SectionStack } from '@/app/components/Section'
 import TripCountdown from './TripCountdown'
 import StatusBlock from './StatusBlock'
 import TravelStays from './TravelStays'
+import StatsPanel from './StatsPanel'
 import TripHeader from '@/app/components/TripHeader'
 import Itinerary from './Itinerary'
 import { type ItemKind, type ItineraryItem, dayCount } from '@/lib/itinerary'
@@ -179,9 +183,11 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   let placingLine = ''
   let nextMatchLine = ''
   let standingError: string | null = null
+  let myStats: PlayerStats | null = null
+  let statsCover: Coverage | null = null
 
   if (me) {
-    const [placingResult, draw] = await Promise.all([
+    const [placingResult, draw, tripStats] = await Promise.all([
       // Gated exactly as the leaderboard page gates it. A trip that has
       // chosen real boards must not be scored on the old trip-wide options,
       // or this screen and that one disagree about who is where.
@@ -200,10 +206,21 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
             .eq('trip_id', trip.id)
             .order('round_number')
         : Promise.resolve({ data: [], error: null }),
+      // Only for a trip that asked for stats, and only alongside the standing
+      // rather than after it — the two are the same nine queries twice, so
+      // stacking them would double the wait rather than the load.
+      trip.track_stats === true
+        ? fetchTripStats(trip.id)
+        : Promise.resolve(null),
     ])
 
     placingLine = describePlacing(placingResult.placing)
     standingError = placingResult.error
+
+    if (tripStats && !tripStats.error) {
+      statsCover = coverage(tripStats.stats)
+      myStats = statsFor(tripStats.stats, me.id)
+    }
 
     if (draw.error) {
       console.error('TripPage matchplay query failed:', draw.error)
@@ -401,6 +418,27 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
                 tripCode={tripCode}
               />,
             },
+            /* Stats, last, and only when there is something behind the
+               heading. Two conditions, and neither on its own is enough: the
+               trip has to have asked for stats, and a card has to have
+               recorded one. A trip that switched them on this morning gets no
+               heading until the first hole comes in.
+
+               That is the rule the deleted Points / Level / Rounds / Matches
+               tiles left behind, kept rather than dropped — see
+               docs/features.md. `initial` still opens the itinerary, so a hub
+               with stats on looks exactly like one without until it is
+               tapped. */
+            ...(statsCover && statsCover.level !== 'none' ? [{
+              key: 'stats',
+              title: 'Stats',
+              meta: `${statsCover.holes} holes`,
+              content: <StatsPanel
+                mine={myStats}
+                tripCode={tripCode}
+                thin={statsCover.level === 'thin'}
+              />,
+            }] : []),
           ]}
         />
         </div>
