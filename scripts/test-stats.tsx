@@ -22,6 +22,7 @@ import {
   fairwayStats, puttingStats, gainedOnField, holeDifficulty,
   playerStats, statsFor, coverage,
   scoringCounts, scrambling, approachStats, parSplits,
+  pointsVsField, roundForm, miscStats,
   MIN_OTHERS, MIN_HOLE_SAMPLE, MIN_MISSES,
   type StatsContext, type Fairway,
 } from '../lib/holeStats'
@@ -647,6 +648,88 @@ section('The putting tails say what the average hides')
   eq(p.onePuttRate, 0.4, 'two of five')
   eq(p.threePuttRate, 0.4, '  …either way')
   eq(p.puttsPerHole, 2, 'while the average sits innocently on two')
+}
+
+section('Points against the field is the net answer, and it still sums to zero')
+{
+  // Five cards on one hole: one four-pointer, four twos. The handicaps are
+  // inside the points already — that is the whole trick.
+  const level = [
+    sc('a', 'h1', 4, null, null, { points: 4 }),
+    sc('b', 'h1', 4, null, null, { points: 2 }),
+    sc('c', 'h1', 4, null, null, { points: 2 }),
+    sc('d', 'h1', 4, null, null, { points: 2 }),
+    sc('e', 'h1', 4, null, null, { points: 2 }),
+  ]
+  const g = pointsVsField(holeStats(ctxOf(level)))
+
+  eq(g.get('a')!.points.toFixed(4), '2.0000', 'four points against a field of twos gains two')
+  eq(g.get('b')!.points.toFixed(4), '-0.5000', '  …and each two gives half of one back')
+  const sum = [...g.values()].reduce((n, x) => n + x.points, 0)
+  ok(Math.abs(sum) < 1e-9, 'the net gains over a hole sum to exactly zero')
+
+  // No putt count anywhere — and every hole still counts, which is the
+  // point of the net figure covering more of the trip than the gross one.
+  ok(g.get('a')!.holes === 1, 'a hole with no putt count is still in the net field')
+
+  const three = pointsVsField(holeStats(ctxOf(level.slice(0, 3))))
+  eq([...three.values()].length, 0, `and ${MIN_OTHERS} others are still required`)
+
+  // No handicap is read anywhere in the file — the points carry it in.
+  ok(!/shotsReceived|playing_handicap|handicapAllowance/.test(code('lib/holeStats.ts')),
+    'the net figure never re-derives a handicap')
+}
+
+section('Round form is the Stableford sign every golfer already reads')
+{
+  const form = roundForm(holeStats(ctxOf([
+    sc('b', 'h1', 4, null, null, { points: 3 }),
+    sc('b', 'h2', 4, null, null, { points: 2 }),
+    sc('b', 'h1', 5, null, null, { points: 1, roundId: 'r2' }),
+    sc('b', 'h2', 5, null, null, { points: 2, roundId: 'r2' }),
+  ])))
+  eq(form.length, 2, 'one line per round')
+  eq(form[0].vsHandicap, 1, 'five points over two holes is one better than handicap')
+  eq(form[1].vsHandicap, -1, '  …and three over two holes is one worse')
+}
+
+section('The miscellany earns its box')
+{
+  // SI bands off the fixture's own card: h1 SI1 and h2 SI5 in the first
+  // third, h3 SI9 in the middle, h4 SI13 and h5 SI17 in the last.
+  const m = miscStats(holeStats(ctxOf([
+    sc('b', 'h1', 5), sc('b', 'h2', 4),   // 1–6: +1, E
+    sc('b', 'h3', 4),                     // 7–12: E
+    sc('b', 'h4', 6), sc('b', 'h5', 3),   // 13–18: +2, E
+  ])))
+  eq(m.siBands.map(b => b.band), ['1–6', '7–12', '13–18'], 'three thirds, in card order')
+  eq(m.siBands[0].averageToPar, 0.5, 'half a shot dropped on the hard third')
+  eq(m.siBands[2].averageToPar, 1, '  …and a full one on the easy third, which is the finding')
+  eq(m.blowUpsPer18, (1 / 5) * 18, 'one double in five holes, said per eighteen')
+
+  // The nines split on the number on the flag — and the tenth is the first
+  // hole of the back nine, which is the boundary a lazy `<= 10` gets wrong.
+  const nines = miscStats(holeStats(ctxOf([
+    sc('b', 'h1', 4),
+    sc('b', 'h2', 5, null, null, { holeNumber: 10 }),
+    sc('b', 'h3', 6, null, null, { holeNumber: 12 }),
+  ])))
+  eq(nines.frontNine?.holes, 1, 'the ninth is the last of the front')
+  eq(nines.frontNine?.averageToPar, 0, '  …which held together')
+  eq(nines.backNine?.holes, 2, 'the tenth opens the back nine')
+  eq(nines.backNine?.averageToPar, 1.5, '  …which did not')
+  eq(miscStats([]).frontNine, null, 'and no holes is no half, not a level one')
+
+  // The streak: broken by a bogey, broken by a gap, never crossing rounds.
+  const run = (rows: ReturnType<typeof sc>[]) => miscStats(holeStats(ctxOf(rows))).longestParRun
+  eq(run([sc('b', 'h1', 4), sc('b', 'h2', 4), sc('b', 'h3', 5), sc('b', 'h4', 4)]), 2,
+    'two pars, a bogey, a par is a run of two')
+  eq(run([sc('b', 'h1', 4), sc('b', 'h2', 4), sc('b', 'h4', 4)]), 2,
+    'a hole with no score breaks the run — it is not evidence of a par')
+  eq(run([
+    sc('b', 'h5', 3), sc('b', 'h6', 5),
+    sc('b', 'h1', 4, null, null, { roundId: 'r2' }),
+  ]), 2, 'and the walk to the next morning\'s first tee resets everything')
 }
 
 section('The whole field, and one player out of it')

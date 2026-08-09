@@ -71,6 +71,15 @@ export type HoleStat = {
   par: number
   strokeIndex: number
   gross: number
+  /**
+   * The hole's Stableford points, as stored beside the score.
+   *
+   * The handicap arrives here and nowhere else: every point was computed at
+   * the competition's own allowances when the score was written, so a net
+   * comparison built on points inherits exactly the handicaps the trip
+   * plays off, without this module ever seeing one.
+   */
+  points: number
   putts: number | null
   fairway: Fairway | null
   /** `gross - putts`. Null when no putt count was recorded. */
@@ -162,6 +171,7 @@ export function holeStats(ctx: StatsContext): HoleStat[] {
       par,
       strokeIndex: effectiveSI(hole, gender),
       gross: s.gross,
+      points: s.points,
       putts,
       fairway: fairwayCounted ? (s.fairway ?? null) : null,
       strokesToGreen: toGreen,
@@ -525,6 +535,165 @@ export function gainedOnField(stats: readonly HoleStat[]): Map<string, Gained> {
   return out
 }
 
+// ─── Gained after handicap: points against the field ───────────
+
+export type PointsGained = {
+  playerId: string
+  /** Stableford points vs the field's average on the same holes. */
+  points: number
+  /** Holes that contributed — every scored hole, no putt count needed. */
+  holes: number
+}
+
+/**
+ * The net side of the gained toggle: who is outscoring the field once the
+ * handicaps have spoken.
+ *
+ * The same self-excluding shape as `gainedOnField`, over Stableford points
+ * instead of shots — so it keeps the property that the gains over a hole
+ * sum to exactly zero, and it needs no putt count, so every scored hole is
+ * in. The handicap arrives baked into each stored point at the trip's own
+ * allowances; no handicap is read here, which is what keeps this file's
+ * "no handicap anywhere" rule true in spirit: the strokes were given where
+ * the competition gives them, not re-derived.
+ */
+export function pointsVsField(stats: readonly HoleStat[]): Map<string, PointsGained> {
+  const byHole = new Map<string, HoleStat[]>()
+  for (const s of stats) {
+    const key = `${s.roundId}:${s.holeId}`
+    const list = byHole.get(key)
+    if (list) list.push(s)
+    else byHole.set(key, [s])
+  }
+
+  const out = new Map<string, PointsGained>()
+  const get = (id: string) => {
+    let g = out.get(id)
+    if (!g) { g = { playerId: id, points: 0, holes: 0 }; out.set(id, g) }
+    return g
+  }
+
+  for (const played of byHole.values()) {
+    if (played.length - 1 < MIN_OTHERS) continue
+    const sum = played.reduce((n, s) => n + s.points, 0)
+    const others = played.length - 1
+    for (const s of played) {
+      const g = get(s.playerId)
+      g.points += s.points - (sum - s.points) / others
+      g.holes += 1
+    }
+  }
+
+  return out
+}
+
+// ─── Form, round by round ──────────────────────────────────────
+
+export type RoundForm = {
+  roundId: string
+  holes: number
+  points: number
+  /**
+   * `points − 2 × holes` — how the round stands against playing to
+   * handicap, which in Stableford is two points a hole. +3 is three points
+   * better than the handicap promised; the sign every golfer already reads
+   * off a Stableford board.
+   */
+  vsHandicap: number
+}
+
+/** In first-seen order — the caller puts rounds in playing order. */
+export function roundForm(stats: readonly HoleStat[]): RoundForm[] {
+  const rounds = new Map<string, RoundForm>()
+  for (const s of stats) {
+    let r = rounds.get(s.roundId)
+    if (!r) { r = { roundId: s.roundId, holes: 0, points: 0, vsHandicap: 0 }; rounds.set(s.roundId, r) }
+    r.holes += 1
+    r.points += s.points
+  }
+  for (const r of rounds.values()) r.vsHandicap = r.points - 2 * r.holes
+  return [...rounds.values()]
+}
+
+// ─── The miscellany ────────────────────────────────────────────
+//
+// Real figures that earned a box but not a headline. Bounce-backs live in
+// `ScoringCounts` and are read alongside these.
+
+export type SiBand = {
+  /** "1–6", "7–12", "13–18" — the card's difficulty thirds. */
+  band: string
+  holes: number
+  averageToPar: number
+}
+
+export type MiscStats = {
+  /**
+   * Scoring by stroke-index third, on the player's own card's index. The
+   * question it answers: do the hard holes hurt you more than they should,
+   * or is it the easy ones you give away.
+   */
+  siBands: SiBand[]
+  frontNine: { holes: number; averageToPar: number } | null
+  backNine: { holes: number; averageToPar: number } | null
+  /** Doubles or worse, per 18 holes. */
+  blowUpsPer18: number | null
+  /**
+   * The longest unbroken run of par-or-better holes within one round.
+   * Consecutive by hole number, and a run never crosses a round — the walk
+   * to the first tee the next morning resets everything, as it does.
+   */
+  longestParRun: number
+}
+
+export function miscStats(stats: readonly HoleStat[]): MiscStats {
+  const avg = (list: readonly HoleStat[]) =>
+    list.reduce((n, s) => n + (s.gross - s.par), 0) / list.length
+  const half = (list: readonly HoleStat[]) =>
+    list.length === 0 ? null : { holes: list.length, averageToPar: avg(list) }
+
+  const bands: [string, (si: number) => boolean][] = [
+    ['1–6', si => si <= 6],
+    ['7–12', si => si >= 7 && si <= 12],
+    ['13–18', si => si >= 13],
+  ]
+
+  // The longest run, per round, in hole order, broken by any gap — a hole
+  // with no score in the middle is not evidence of a par.
+  let longest = 0
+  const byRound = new Map<string, HoleStat[]>()
+  for (const s of stats) {
+    const list = byRound.get(s.roundId)
+    if (list) list.push(s)
+    else byRound.set(s.roundId, [s])
+  }
+  for (const round of byRound.values()) {
+    round.sort((a, b) => a.holeNumber - b.holeNumber)
+    let run = 0
+    let prev: HoleStat | null = null
+    for (const s of round) {
+      const parOrBetter = s.gross - s.par <= 0
+      const consecutive = prev != null && s.holeNumber === prev.holeNumber + 1
+      run = parOrBetter ? (consecutive ? run + 1 : 1) : 0
+      if (run > longest) longest = run
+      prev = s
+    }
+  }
+
+  return {
+    siBands: bands
+      .map(([band, test]) => stats.filter(s => test(s.strokeIndex)))
+      .map((list, i) => ({ band: bands[i][0], holes: list.length, averageToPar: list.length ? avg(list) : 0 }))
+      .filter(b => b.holes > 0),
+    frontNine: half(stats.filter(s => s.holeNumber <= 9)),
+    backNine: half(stats.filter(s => s.holeNumber > 9)),
+    blowUpsPer18: stats.length === 0
+      ? null
+      : (stats.filter(s => s.gross - s.par >= 2).length / stats.length) * 18,
+    longestParRun: longest,
+  }
+}
+
 // ─── How hard the holes actually played ────────────────────────
 
 export type HoleDifficulty = {
@@ -632,6 +801,11 @@ export type PlayerStats = {
   approach: ApproachStats
   /** Only pars actually played appear — no par-3 row on a course without one. */
   splits: ParSplit[]
+  misc: MiscStats
+  /** The net side of the gained toggle: points against the field. */
+  pointsGained: PointsGained
+  /** Rounds in first-seen order; the screen orders by the trip's rounds. */
+  form: RoundForm[]
 }
 
 const NO_GAIN = (playerId: string): Gained =>
@@ -647,6 +821,7 @@ const NO_GAIN = (playerId: string): Gained =>
  */
 export function playerStats(stats: readonly HoleStat[]): PlayerStats[] {
   const gains = gainedOnField(stats)
+  const netGains = pointsVsField(stats)
   const byPlayer = new Map<string, HoleStat[]>()
   for (const s of stats) {
     const list = byPlayer.get(s.playerId)
@@ -665,6 +840,9 @@ export function playerStats(stats: readonly HoleStat[]): PlayerStats[] {
     scrambling: scrambling(mine),
     approach: approachStats(mine),
     splits: parSplits(mine),
+    misc: miscStats(mine),
+    pointsGained: netGains.get(playerId) ?? { playerId, points: 0, holes: 0 },
+    form: roundForm(mine),
   }))
 }
 
