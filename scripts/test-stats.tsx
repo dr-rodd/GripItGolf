@@ -1032,6 +1032,32 @@ section('The lab reads the derivation and does none of its own')
   ok(!/'awards', 'Awards'/.test(client), 'the awards tab is gone')
   ok(/awards\.map/.test(panels) && /Final honours/.test(panels),
     '  …and the honours render at the foot of Everyone')
+
+  // ── The charts ──
+  const charts = code('app/trip/[tripCode]/stats/charts.tsx')
+
+  // Hand-drawn SVG, and dumb: values arrive computed, drawn as given.
+  ok(/<svg/.test(charts), 'the charts are drawn by hand')
+  ok(!/playerStats|gainedOnField|pointsVsField|holeDifficulty/.test(charts),
+    '  …and derive nothing of their own')
+  ok(!/recharts|chart\.js|d3/.test(charts.toLowerCase()),
+    '  …with no charting library behind them')
+
+  // Emerald-for-gain and rust-for-loss is a red/green pair a deutan reader
+  // cannot split — the palette validator measured ΔE 4.8 — so colour never
+  // carries the encoding. Which side of the zero line a bar sits does, and
+  // every readout figure is signed.
+  ok(/zeroY/.test(charts), 'polarity is encoded by which side of zero the bar sits')
+  ok(/formatGained/.test(charts), '  …and every readout figure carries its sign')
+
+  // A tap target is the whole column, never the sliver of a small bar.
+  ok(/fill="transparent"/.test(charts) && /role="button"/.test(charts),
+    'the tap target is wider than the mark, and announces itself')
+
+  // The per-round bars are sliced per round AFTER the course filter, so the
+  // filter-the-holes rule holds for the chart too.
+  ok(/filtered\.filter\(s => s\.roundId === r\.id\)/.test(client),
+    'the round chart slices the filtered holes, keeping the field whole')
 }
 
 section('A heading only where there is something behind it')

@@ -344,11 +344,24 @@ function Rounds({ stats, playerId, rounds, courseFor, courseName }: {
 
 // ─── Everyone: the field as ranked boxes ───────────────────────
 
-/** One ranked category. `better` orders it; null scores sit out. */
+/**
+ * One ranked category. `better` orders it; null scores sit out.
+ *
+ * A row with a `share` draws a thin diverging bar under it — the field's
+ * gained figures at a glance, without a chart panel restating the list it
+ * sits beside. Position either side of the centre line is the encoding;
+ * the emerald/rust only agrees with it, because that pair is exactly the
+ * red/green a colour-blind reader cannot split.
+ */
 function RankedBox({ title, hint, rows, meId, aside }: {
   title: string
   hint?: string
-  rows: { id: string; name: string; note?: string; figure: string; tone?: 'ink' | 'accent' | 'rust' }[]
+  rows: {
+    id: string; name: string; note?: string; figure: string
+    tone?: 'ink' | 'accent' | 'rust'
+    /** −1..1 of the box's largest magnitude. Omit for no bar. */
+    share?: number
+  }[]
   meId: string | null
   aside?: React.ReactNode
 }) {
@@ -358,20 +371,33 @@ function RankedBox({ title, hint, rows, meId, aside }: {
       {rows.map((r, i) => (
         <div
           key={r.id}
-          className={`flex items-baseline gap-2 py-2.5 border-b border-bark/[0.08] last:border-b-0 ${
+          className={`py-2.5 border-b border-bark/[0.08] last:border-b-0 ${
             r.id === meId ? 'bg-accent/[0.06] -mx-4 px-4' : ''
           }`}
         >
-          <span className="t-cap t-num text-ink/50 w-8 flex-shrink-0">{ordinal(i + 1)}</span>
-          <span className="t-body text-ink flex-1 min-w-0 truncate">{r.name}</span>
-          {r.note && <span className="t-cap text-ink/50 flex-shrink-0">{r.note}</span>}
-          <span className={`t-data t-num flex-shrink-0 ${
-            r.tone === 'accent' ? 'text-accent-deep'
-            : r.tone === 'rust' ? 'text-rust-deep'
-            : 'text-ink'
-          }`}>
-            {r.figure}
-          </span>
+          <div className="flex items-baseline gap-2">
+            <span className="t-cap t-num text-ink/50 w-8 flex-shrink-0">{ordinal(i + 1)}</span>
+            <span className="t-body text-ink flex-1 min-w-0 truncate">{r.name}</span>
+            {r.note && <span className="t-cap text-ink/50 flex-shrink-0">{r.note}</span>}
+            <span className={`t-data t-num flex-shrink-0 ${
+              r.tone === 'accent' ? 'text-accent-deep'
+              : r.tone === 'rust' ? 'text-rust-deep'
+              : 'text-ink'
+            }`}>
+              {r.figure}
+            </span>
+          </div>
+          {r.share != null && (
+            <div className="relative h-1 mt-1.5 ml-10" aria-hidden="true">
+              <div className="absolute inset-y-0 left-1/2 w-px bg-bark/25" />
+              <div
+                className={`absolute inset-y-0 rounded-full ${
+                  r.share >= 0 ? 'left-1/2 bg-accent' : 'right-1/2 bg-rust'
+                }`}
+                style={{ width: `${Math.min(50, Math.abs(r.share) * 50)}%` }}
+              />
+            </div>
+          )}
         </div>
       ))}
     </Panel>
@@ -398,19 +424,18 @@ export function EveryonePanels({
       .filter((x): x is { p: PlayerStats; s: T } => x.s != null)
       .sort((a, b) => better(a.s, b.s) || name(a.p.playerId).localeCompare(name(b.p.playerId)))
 
-  const gained = basis === 'gross'
+  const gainedRaw = basis === 'gross'
     ? by(p => (p.gained.holes > 0 ? p.gained.total : null), (a, b) => b - a)
-        .map(({ p, s }) => ({
-          id: p.playerId, name: name(p.playerId),
-          note: `${formatGained(p.gained.toGreen)} tee · ${formatGained(p.gained.putting)} putt`,
-          figure: formatGained(s), tone: gainTone(s),
-        }))
     : by(p => (p.pointsGained.holes > 0 ? p.pointsGained.points : null), (a, b) => b - a)
-        .map(({ p, s }) => ({
-          id: p.playerId, name: name(p.playerId),
-          note: `${p.pointsGained.holes} holes`,
-          figure: formatGained(s), tone: gainTone(s),
-        }))
+  const gainedMax = Math.max(1e-9, ...gainedRaw.map(({ s }) => Math.abs(s)))
+  const gained = gainedRaw.map(({ p, s }) => ({
+    id: p.playerId, name: name(p.playerId),
+    note: basis === 'gross'
+      ? `${formatGained(p.gained.toGreen)} tee · ${formatGained(p.gained.putting)} putt`
+      : `${p.pointsGained.holes} holes`,
+    figure: formatGained(s), tone: gainTone(s),
+    share: s / gainedMax,
+  }))
 
   return (
     <div>
@@ -428,12 +453,16 @@ export function EveryonePanels({
       <RankedBox
         title="Vs handicap"
         hint="Stableford points against two a hole. Ahead of your handicap is ahead of the trip."
-        rows={by(p => (p.form.length > 0 ? p.form.reduce((n, r) => n + r.vsHandicap, 0) : null), (a, b) => b - a)
-          .map(({ p, s }) => ({
+        rows={(() => {
+          const raw = by(p => (p.form.length > 0 ? p.form.reduce((n, r) => n + r.vsHandicap, 0) : null), (a, b) => b - a)
+          const max = Math.max(1e-9, ...raw.map(({ s }) => Math.abs(s)))
+          return raw.map(({ p, s }) => ({
             id: p.playerId, name: name(p.playerId),
             note: `${p.form.length} round${p.form.length === 1 ? '' : 's'}`,
             figure: formatGained(s), tone: gainTone(s),
-          }))}
+            share: s / max,
+          }))
+        })()}
         meId={meId}
       />
 

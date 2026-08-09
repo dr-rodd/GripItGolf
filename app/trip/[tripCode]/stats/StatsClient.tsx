@@ -2,14 +2,15 @@
 
 import { useMemo, useState } from 'react'
 import {
-  playerStats, statsFor, holeDifficulty,
-  formatRate, formatAverage,
+  playerStats, statsFor, holeDifficulty, gainedOnField, pointsVsField,
+  formatGained, formatRate, formatAverage,
   MIN_HOLE_SAMPLE,
   type HoleStat,
 } from '@/lib/holeStats'
 import { tripAwards } from '@/lib/tripAwards'
 import { HEADER_H } from '@/app/components/headerMetrics'
 import { PlayerPanels, EveryonePanels } from './panels'
+import { GainedByRoundChart, DifficultyProfileChart, type GainedBar } from './charts'
 import type { RowHole, RowRound } from '@/lib/boardRows'
 
 /**
@@ -84,6 +85,33 @@ export default function StatsClient({
   )
   const awards = useMemo(() => tripAwards(field), [field])
   const difficulty = useMemo(() => holeDifficulty(stats, holes), [stats, holes])
+
+  // The gained-per-round bars: each round's field computed on that round's
+  // holes alone, through the same lib functions as everything else — sliced
+  // per round *after* the course filter, so the rule holds: the filter
+  // narrows the holes, and the field on those holes is everybody.
+  const roundBars = useMemo<GainedBar[]>(() => {
+    if (who === 'everyone') return []
+    return rounds.flatMap(r => {
+      const rs = filtered.filter(s => s.roundId === r.id)
+      if (basis === 'gross') {
+        const g = gainedOnField(rs).get(who)
+        if (!g || g.holes === 0) return []
+        return [{
+          label: `R${r.round_number}`,
+          value: g.total,
+          detail: `${formatGained(g.toGreen)} tee · ${formatGained(g.putting)} putt`,
+        }]
+      }
+      const g = pointsVsField(rs).get(who)
+      if (!g || g.holes === 0) return []
+      return [{
+        label: `R${r.round_number}`,
+        value: g.points,
+        detail: `${g.holes} holes`,
+      }]
+    })
+  }, [filtered, who, basis, rounds])
 
   const toggleCourse = (id: string) => {
     setExcluded(prev => {
@@ -206,6 +234,14 @@ export default function StatsClient({
             courseName={courseName}
             basis={basis}
             onBasis={setBasis}
+            chart={
+              <GainedByRoundChart
+                bars={roundBars}
+                hint={basis === 'gross'
+                  ? 'Round by round — tap a bar for the split.'
+                  : 'Round by round, after handicap — tap a bar.'}
+              />
+            }
           />
         ) : who === 'everyone' ? (
           <EveryonePanels
@@ -251,6 +287,7 @@ function Course({ rows, title }: {
         Hardest first, off what was actually scored. The card&apos;s own
         stroke index is beside it, so the two can be read against each other.
       </p>
+      <DifficultyProfileChart holes={rows} />
       <div className="overflow-x-auto">
         <table className="w-full t-cap">
           <thead>
