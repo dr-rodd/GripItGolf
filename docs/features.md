@@ -215,9 +215,23 @@ Two answers a hole during scoring — how many putts, and which way the tee shot
 - **Stats never gate the Next button.** The row appears under a player's tile only once they have a score, and a hole can always be left without an answer.
 - **Stats are editable wherever the gross is.** The Edit Scorecard screen asks with the same `StatsRow` the live card does — one implementation, gated identically: a score on the hole, no NR, stats switched on. A no return clears both stats on either screen.
 
-Switched on per trip in the Trip Settings drawer, off by default. The full breakdown — you, the field, the course, and the awards — is at `/trip/[code]/stats`, reached from the hub section and from a chip on the leaderboard.
+Switched on per trip in the Trip Settings drawer, off by default. The full breakdown is at `/trip/[code]/stats`, reached from the hub section and from a chip on the leaderboard.
 
-**The awards are chosen in `lib/tripAwards.ts` and derived nowhere.** Six honours, each with an exported sample floor below which it is simply not given — an empty honours board is a promise, so without a single qualifier the tab itself is absent. Ties share, on the figure as printed rather than the last floating-point bit. The board is live: "as it stands" while the trip runs, "final honours" once the end date passes, read off `tripState()`.
+### The stats hub is an instrument, not a printout
+
+The first choice on the page is **Players or Courses**. Players opens on the device's own player (or Everyone, on a phone the trip does not recognise), with every player selectable — stats are no more private than the leaderboard — and a **course filter** under the chips: every course a toggle, all in by default, the last one standing un-excludable. Courses shows one course at a time: its difficulty profile drawn as the round is walked, then the table ranked hardest-first.
+
+Three rules hold the whole thing together:
+
+- **Every screen is a pure view over one fetched `HoleStat[]`.** All interactivity is client-side filtering — no query is ever re-run by a toggle, which is why it answers instantly.
+- **The filter narrows the holes, never the field.** A player's gain on one course is measured against the whole field's play of that course, whoever is selected. The filter runs before `playerStats`, and no player is ever filtered out of a field.
+- **Colour never carries a chart's meaning.** Emerald-for-gain and rust-for-loss is a red/green pair a deutan reader cannot split (the dataviz validator measured it), so polarity is encoded by which side of the zero line a bar sits on, and every figure is signed. The charts are hand-drawn SVG — no library — and derive nothing; tap a bar to pin its readout.
+
+Strokes gained is elevated to second on a player's page and wears a **Gross/Net toggle**: Net is Stableford points against the field — handicaps already inside every stored point at the trip's own allowances — beside a **vs handicap** line, points against two a hole, which is "did I play to my handicap" in Stableford. Bounce-back is demoted to a Miscellaneous box alongside the stroke-index thirds, front nine vs back, blow-ups and the longest par-or-better run.
+
+**The Everyone view is the one-player layout applied to the field**: a ranked box per category with diverging mini-bars under the gained rows, and the honours board at its foot.
+
+**The awards are chosen in `lib/tripAwards.ts` and derived nowhere.** Six honours, each with an exported sample floor below which it is simply not given — an empty honours board is a promise, so without a single qualifier the section is absent. Ties share, on the figure as printed rather than the last floating-point bit. The board is live: "as it stands" while the trip runs, "final honours" once the end date passes, read off `tripState()`.
 
 ### Up next
 

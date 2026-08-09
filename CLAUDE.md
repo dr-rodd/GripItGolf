@@ -137,6 +137,15 @@ Trip Settings drawer. Off by default. Everything else is derived in
 `lib/holeStats.ts`, and that is the only copy: full detail in
 `docs/features.md`.
 
+The hub at `/trip/[code]/stats` is **pure views over one fetched
+`HoleStat[]`** — every toggle is client-side filtering, and **the filter
+narrows the holes, never the field**: a gain on one course is measured
+against everybody's play of that course, whoever is selected. Net gained is
+Stableford points vs the field — the handicap arrives baked into each
+stored point, never re-derived. Charts are hand-drawn SVG; polarity is
+encoded by side-of-zero, never by the emerald/rust pair alone, which a
+colour-blind reader cannot split.
+
 Four things that are easy to get wrong twice:
 
 - **Greens in regulation is never stored.** It needs `effectivePar` for the
