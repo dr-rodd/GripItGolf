@@ -242,6 +242,20 @@ section('A device nobody has claimed is told what to do')
   const claim = status.slice(status.indexOf('function ClaimSpot'))
   ok(!claim.includes('upNext'), 'with no up-next card')
   ok(!claim.includes('placing'), '  …and no standing')
+
+  // In the hub's own card, not a component from somewhere else. Emphasis
+  // here is position — first thing under the title — and the emerald box it
+  // used to be read as pasted in next to a page of cream cards.
+  ok(claim.includes('bg-surface') && claim.includes('border-bark/12'),
+    '  …drawn as a cream card like everything else on the hub')
+  ok(!claim.includes('border-2 border-accent'), '  …not an outlined emerald block')
+
+  // The descriptor, and specifically that it is *outside* the link. Inside,
+  // it is a second reason to tap and reads as part of the control — which is
+  // why the first version of it was cut.
+  const linkEnd = claim.indexOf('</Link>')
+  ok(linkEnd > 0 && /remembers you/.test(claim.slice(linkEnd)),
+    '  …with what claiming gets you under the card, outside the link')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

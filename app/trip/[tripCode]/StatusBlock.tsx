@@ -10,7 +10,7 @@ import {
 } from '@/lib/upNext'
 import { useMinute } from '@/app/components/useMinute'
 import CourseWeather from '@/app/components/CourseWeather'
-import { IconArrowRight, IconFlag, IconHome, IconCar, IconPlane, IconTrain, IconFork } from '@/app/components/icons'
+import { IconArrowRight, IconFlag, IconHome, IconCar, IconPlane, IconTrain, IconFork, IconUsers } from '@/app/components/icons'
 
 /**
  * The top of the trip hub: what this device is, and what happens next.
@@ -270,23 +270,48 @@ function TripOver() {
 /**
  * The whole block, for a device that is nobody yet.
  *
- * Deliberately the loudest thing on the screen. Someone arriving on a trip
- * code has exactly one thing to do first, and every other feature on the hub
- * is better after they have done it.
+ * Someone arriving on a trip code has exactly one thing to do first, and
+ * every other feature on the hub is better after they have done it. So it
+ * takes the whole block — but it takes it **in the hub's own card**: cream,
+ * a hairline border, the tinted icon square and the arrow, exactly the
+ * shape the status card takes for a phone that has claimed. It stood in a
+ * two-pixel emerald box on a mint wash, and next to a page of cream cards
+ * that read as a different app's component pasted in. Emphasis on this
+ * screen is *position* — first thing under the title, alone above the fold
+ * — not a heavier box.
  *
- * Three lines became one. It explained what claiming would get you — scores,
- * standings, what is on next — and then said "Get started" underneath, which
- * is a paragraph and a second label on a control whose own words already say
- * what it does. What it gets you is on the other side of the tap.
+ * The explanation came back, and this is the third answer rather than a
+ * reversal of the second. It first sat inside the control as a paragraph
+ * plus a redundant "Get started"; it was cut for that; and what was
+ * actually wrong was the second label and the placement, not saying why
+ * claiming is worth a tap. So it sits **under the card and outside the
+ * link** — one sentence of prose, no tap target of its own, in the slot
+ * this page already uses for a note hanging off the thing above it.
+ * `test:recognition` pins it outside the <Link>, which is the part that
+ * would quietly regress: a paragraph dragged back inside becomes a second
+ * reason to tap and reads as part of the button.
  */
 function ClaimSpot({ tripCode }: { tripCode: string }) {
   return (
-    <Link
-      href={`/trip/${tripCode}/players`}
-      className="flex items-center justify-center gap-2.5 w-full rounded-2xl border-2 border-accent bg-accent/[0.07] px-5 py-5 text-center transition-colors duration-150 hover:bg-accent/[0.12]"
-    >
-      <span className="t-h2 text-ink">Claim your spot</span>
-      <IconArrowRight size={18} className="text-accent-deep flex-shrink-0" />
-    </Link>
+    <div>
+      <Link
+        href={`/trip/${tripCode}/players`}
+        className="flex items-center gap-3 w-full rounded-2xl border border-bark/12 bg-surface px-4 py-4 active:opacity-75 transition-opacity duration-150"
+      >
+        <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent/[0.12] text-accent-deep flex items-center justify-center">
+          <IconUsers size={16} />
+        </span>
+        <span className="flex-1 min-w-0 t-card text-ink">Claim your spot</span>
+        <IconArrowRight size={18} className="flex-shrink-0 text-accent-deep" />
+      </Link>
+
+      {/* Why it is worth the tap. Left aligned to the card's own edge, at
+          the size and weight this page gives every other aside, so it reads
+          as a note on the card rather than as a second thing to do. */}
+      <p className="mt-2.5 px-1 t-cap text-ink/65">
+        Pick your name, or add it if it is not there. This phone then
+        remembers you — your scores, your standing, and what is on next.
+      </p>
+    </div>
   )
 }

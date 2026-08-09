@@ -201,6 +201,8 @@ Replaces the old welcome-back card. Two states.
 
 **Nobody yet** — one thing, taking the whole block: **Claim your spot**, routing to the player list. No up-next and no standing: there is no player to personalise them to, and a countdown shown to a stranger counts down to something they may not be on.
 
+It is drawn as **the hub's own card** — cream, hairline border, tinted icon square, arrow — the same shape the claimed state takes, because emphasis on this screen is position rather than a heavier box. It was a two-pixel emerald outline on a mint wash and read as another app's component next to a page of cream cards. **The line explaining what claiming gets you sits under the card and outside the link**: it was cut once for being a paragraph inside a control alongside a redundant "Get started", and what was wrong was the second label and the placement, not the explaining. `test:recognition` pins it outside the `<Link>` — dragged back inside it becomes a second reason to tap.
+
 **Somebody** — greeting (first name, one line, with "Not you?"), then Up next, then the standing line.
 
 **The Points / Level / Rounds / Matches tiles are deleted, not moved.** What replaced them is a **Stats** section, fourth in the stack, and the rule they left behind is unchanged: no heading with nothing behind it. It is enforced on the gate now rather than by the word being absent from the page — the section renders only when the trip has `track_stats` switched on **and** a card has actually recorded a putt or a fairway. Neither condition on its own is enough, so a trip that switched stats on this morning still has no heading until the first hole comes in.
