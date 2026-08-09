@@ -1025,17 +1025,36 @@ section('The lab reads the derivation and does none of its own')
   // **Filter the holes, never the field.** The course filter narrows which
   // holes count; the field on those holes is everybody who played them. The
   // filter must run before playerStats, and never mention a player.
-  ok(/stats\.filter\(s => !excluded\.has\(s\.courseId\)\)/.test(client),
-    'the course filter excludes holes by course')
+  ok(/stats\.filter\(s => s\.courseId === only\)/.test(client),
+    'the course filter narrows the holes to one course')
   ok(/playerStats\(filtered\)/.test(client),
     '  …and the field is computed over what is left')
   ok(!/filter\(s => s\.playerId/.test(client),
     '  …with no player ever filtered out of a field')
 
-  // The last course standing cannot be switched off — a stats page over no
-  // holes at all is not a state anybody means.
-  ok(/playedCourseIds\.length - next\.size > 1/.test(client),
-    'the last course cannot be excluded')
+  // ── The course picker ──
+  //
+  // A row of tick chips became one dropdown: every course was its own
+  // on/off, so "this course only" cost a tap on each of the others and the
+  // control grew a column per course played.
+  ok(!/✓/.test(client), 'no tick chips')
+  ok(/aria-expanded=\{open\}/.test(client) && /role="listbox"/.test(client),
+    'the courses are a dropdown, announced as one')
+  ok(/const \[only, setOnly\] = useState<string \| null>\(null\)/.test(client),
+    '  …opening on every course, which is null rather than a full list')
+
+  // One choice at a time, so the old rule about never switching the last
+  // course off has nothing left to guard: no tap can leave the page with no
+  // holes on it, because no tap ever removes one.
+  ok(!/next\.size > 1/.test(client) && !/excluded/.test(client),
+    '  …and a course is chosen rather than the rest excluded')
+
+  // Picking does not close the list — the figures redraw behind it, so a
+  // course can be tried and swapped without the control folding away. That
+  // is what the chevron is for.
+  ok(/onClick=\{\(\) => onChange\(id\)\}/.test(client)
+    && !/onChange\(id\);?\s*setOpen\(false\)/.test(client),
+    '  …and the list stays open while you compare, closing on the chevron')
 
   // The controls stick under the site header, offset the way every sticky
   // row in the app must be.

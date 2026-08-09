@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import {
   playerStats, statsFor, holeDifficulty, gainedOnField, pointsVsField,
   formatGained, formatRate, formatAverage,
@@ -9,6 +9,7 @@ import {
 } from '@/lib/holeStats'
 import { tripAwards } from '@/lib/tripAwards'
 import { HEADER_H } from '@/app/components/headerMetrics'
+import { IconChevronLeft } from '@/app/components/icons'
 import { PlayerPanels, EveryonePanels, CourseField } from './panels'
 import { GainedByRoundChart, DifficultyProfileChart, type GainedBar } from './charts'
 import type { RowHole, RowRound } from '@/lib/boardRows'
@@ -55,9 +56,16 @@ export default function StatsClient({
   // Somebody this phone knows opens on their own numbers; a stranger opens
   // on the field, because a page about nobody is a page about everybody.
   const [who, setWho] = useState<string>(meId ?? 'everyone')
-  // Excluded rather than included, so a course added to the trip mid-visit
-  // is in by default rather than silently missing.
-  const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set())
+  /**
+   * Which courses the figures are read over: `null` is every one of them.
+   *
+   * It was a set of exclusions behind a row of tick chips — every course a
+   * separate on/off, so "this course only" was a tap on each of the others
+   * and the row grew a column per course. One choice at a time is the
+   * question people actually ask of it, and a course added to the trip
+   * mid-visit is still in by default, because the default is not a list.
+   */
+  const [only, setOnly] = useState<string | null>(null)
   const [basis, setBasis] = useState<'gross' | 'net'>('gross')
 
   const nameOf = useMemo(() => new Map(players.map(p => [p.id, p.name])), [players])
@@ -75,8 +83,8 @@ export default function StatsClient({
 
   // ── Filter the holes, never the field ──
   const filtered = useMemo(
-    () => (excluded.size === 0 ? stats : stats.filter(s => !excluded.has(s.courseId))),
-    [stats, excluded],
+    () => (only === null ? stats : stats.filter(s => s.courseId === only)),
+    [stats, only],
   )
   const field = useMemo(() => playerStats(filtered), [filtered])
   const mine = useMemo(
@@ -113,17 +121,18 @@ export default function StatsClient({
     })
   }, [filtered, who, basis, rounds])
 
-  const toggleCourse = (id: string) => {
-    setExcluded(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      // The last course standing cannot be switched off: a stats page over
-      // no holes at all is not a state anybody means, and "put them all
-      // back" is one tap on each chip that is off.
-      else if (playedCourseIds.length - next.size > 1) next.add(id)
-      return next
-    })
-  }
+  // How much play each course carries, for the picker's right-hand readout.
+  // Rounds rather than holes: `stats` is one row per player per hole, so a
+  // hole count reads as 72 where four played eighteen.
+  const roundsOn = useMemo(() => {
+    const seen = new Map<string, Set<string>>()
+    for (const s of stats) {
+      const set = seen.get(s.courseId) ?? new Set<string>()
+      set.add(s.roundId)
+      seen.set(s.courseId, set)
+    }
+    return new Map([...seen].map(([id, set]) => [id, set.size]))
+  }, [stats])
 
   const chip = (on: boolean) =>
     `flex-shrink-0 inline-flex items-center px-4 py-2.5 t-label rounded-xl border transition-colors duration-150 ${
@@ -177,41 +186,32 @@ export default function StatsClient({
               ))}
             </div>
 
-            {/* Where — only when there is a genuine choice. Tinted is in. */}
+            {/* Where — only when there is a genuine choice. */}
             {playedCourseIds.length > 1 && (
-              <div className="flex gap-1.5 mt-2 overflow-x-auto -mx-1 px-1 pb-1"
-                role="group" aria-label="Courses included">
-                {playedCourseIds.map(id => {
-                  const on = !excluded.has(id)
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => toggleCourse(id)}
-                      className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 t-cap rounded-xl border transition-colors duration-150 ${
-                        on
-                          ? 'border-accent bg-accent/[0.12] text-accent-deep'
-                          : 'border-bark/12 text-ink/50 hover:border-bark/25'
-                      }`}
-                    >
-                      {on ? '✓ ' : ''}{courseName.get(id) ?? 'Course'}
-                    </button>
-                  )
-                })}
+              <div className="mt-2">
+                <CoursePicker
+                  ids={playedCourseIds}
+                  nameOf={courseName}
+                  roundsOn={roundsOn}
+                  value={only}
+                  onChange={setOnly}
+                  allLabel="All courses"
+                />
               </div>
             )}
           </>
         ) : (
-          /* Which course. One at a time here — this view reads one card. */
+          /* Which course. One at a time here — this view reads one card, so
+             the same picker with no all-courses row to offer. */
           playedCourseIds.length > 1 && (
-            <div className="flex gap-1.5 mt-3 overflow-x-auto -mx-1 px-1 pb-1">
-              {playedCourseIds.map(id => (
-                <button key={id} type="button" aria-pressed={shownCourse === id}
-                  onClick={() => setCourseId(id)} className={chip(shownCourse === id)}>
-                  {courseName.get(id) ?? 'Course'}
-                </button>
-              ))}
+            <div className="mt-3">
+              <CoursePicker
+                ids={playedCourseIds}
+                nameOf={courseName}
+                roundsOn={roundsOn}
+                value={shownCourse}
+                onChange={id => id && setCourseId(id)}
+              />
             </div>
           )
         )}
@@ -277,6 +277,140 @@ export default function StatsClient({
           />
         </>
       )}
+    </div>
+  )
+}
+
+// ─── Which courses ─────────────────────────────────────────────
+
+/**
+ * The course selector: one line saying what you are reading, opening into
+ * the list of what else you could.
+ *
+ * **It replaced a row of tick chips, and the row was the problem rather than
+ * the ticks.** Every course was its own on/off switch, so the commonest
+ * question — this course on its own — cost a tap on every *other* course,
+ * and the control grew a column each time the trip added a round somewhere
+ * new. A choice of one is a list, not a set of switches.
+ *
+ * So: `null` is every course, an id is that course alone, and there is no
+ * third state to get into. The old row's rule about never switching the last
+ * course off stops existing rather than being enforced — with one choice at
+ * a time, no tap can leave the page with no holes on it.
+ *
+ * Two shapes from one component. The Players view offers the all-courses
+ * row; the Courses view reads one card at a time and passes no `allLabel`,
+ * so it simply has no such row and `null` can never be chosen.
+ *
+ * The panel does not close when a course is picked, and that is the point of
+ * the chevron: the figures below are already redrawn behind the open list,
+ * so you can try a course, see what it did, and try another without the
+ * control folding away between each. The `<` puts it away when you are done.
+ */
+function CoursePicker({
+  ids, nameOf, roundsOn, value, onChange, allLabel,
+}: {
+  ids: string[]
+  nameOf: Map<string, string>
+  roundsOn: Map<string, number>
+  /** null is every course — only reachable where `allLabel` is given. */
+  value: string | null
+  onChange: (id: string | null) => void
+  allLabel?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const panelId = useId()
+
+  const rounds = (id: string | null) =>
+    id === null
+      ? ids.reduce((n, c) => n + (roundsOn.get(c) ?? 0), 0)
+      : roundsOn.get(id) ?? 0
+
+  const label = (id: string | null) =>
+    id === null ? allLabel ?? '' : nameOf.get(id) ?? 'Course'
+
+  const options: (string | null)[] = allLabel ? [null, ...ids] : ids
+  const count = rounds(value)
+
+  return (
+    <div className="bg-surface border border-bark/12 rounded-xl">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-opacity duration-150 active:opacity-70"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] uppercase tracking-[0.14em] text-ink/50 leading-none">
+            Courses
+          </span>
+          <span className="block t-card text-ink truncate mt-1">{label(value)}</span>
+        </span>
+        <span className="flex-shrink-0 t-cap text-ink/50 tabular-nums">
+          {count} {count === 1 ? 'round' : 'rounds'}
+        </span>
+        {/* A left chevron, turned down while the list is shut. Open, it is
+            the `<` that puts it away — the same control both ways round,
+            rather than a caret that means "more" and a cross that means
+            "done". */}
+        <span
+          className={`flex-shrink-0 text-ink/50 transition-transform duration-300 ease-out ${
+            open ? '' : '-rotate-90'
+          }`}
+        >
+          <IconChevronLeft size={18} />
+        </span>
+      </button>
+
+      {/* `0fr → 1fr` so the height animates without anything being measured,
+          the same way the hub's sections open. Reduced motion switches it
+          off centrally in globals.css. */}
+      <div
+        id={panelId}
+        className="grid transition-[grid-template-rows] duration-300 ease-out"
+        style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
+      >
+        <div className="overflow-hidden">
+          <ul role="listbox" aria-label="Courses" className="border-t border-bark/12">
+            {options.map(id => {
+              const on = id === value
+              const n = rounds(id)
+              return (
+                <li key={id ?? '·all'}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={on}
+                    tabIndex={open ? 0 : -1}
+                    onClick={() => onChange(id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b border-bark/[0.08] last:border-b-0 transition-colors duration-150 ${
+                      on ? 'bg-accent/[0.06]' : 'active:bg-bark/[0.04]'
+                    }`}
+                  >
+                    <span className={`flex-1 min-w-0 truncate t-cap ${
+                      on ? 'text-accent-deep font-semibold' : 'text-ink'
+                    }`}>
+                      {label(id)}
+                    </span>
+                    <span className="flex-shrink-0 t-cap text-ink/50 tabular-nums">
+                      {n} {n === 1 ? 'round' : 'rounds'}
+                    </span>
+                    {/* The green dot, doing what it does on the wordmark:
+                        marking the one that counts. Not a tick — a tick in a
+                        list of taps reads as a box you have to fill in, and
+                        this is a choice of one. */}
+                    <span
+                      className={`w-2 h-2 rounded-full flex-shrink-0 ${on ? 'bg-accent' : 'bg-transparent'}`}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      </div>
     </div>
   )
 }
