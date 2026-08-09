@@ -68,6 +68,10 @@ The supplied stacked file has a cream background baked in, a shade off our own. 
 
 **The mark itself is sized by `LINE_W`, not by the bar's height.** `HEADER_H` is the right height for the bar; the mark inside it wants to be bigger than that alone implies, or the bar reads as mostly whitespace. `LINE_W` (132) sets the line mark's width, and its height follows the artwork's own ratio — every named-page title (`TitleMark`) sizes off that same derived height, so bumping one bumps all of them together.
 
+**A row that pins under the header does not have to be the row you scrolled past.** The stats hub's choosers — Players/Courses, the player chips, the course picker — used to pin as a block, holding roughly a third of a phone screen above every figure on the page. They now scroll away, and a single line pins in their place: the player from the left where the chips sat, the course from the right, meeting in the middle, so the movement says *these are those rows folded up* rather than *here is a new thing*. Tapping it scrolls back; nothing else on it is tappable, because a bar that both scrolls the page and holds a control is a bar where half the taps do the wrong thing.
+
+Two mechanics worth copying. It is **fixed, not sticky** — a sticky element holds its space in the flow whether it is stuck or not, so a sticky version would leave a band of empty cream under the controls for the length of the page. And it is swapped by an **`IntersectionObserver` on the controls** with `rootMargin: -HEADER_H`, not a scroll handler: two firings instead of one per frame of a flick, and the margin is what makes "off screen" mean off the part of the screen that is not already behind the header.
+
 **The board card must not carry `overflow-hidden`.** `position: sticky` measures its offset from the nearest scrollport, and an ancestor with `overflow: hidden` is one — so `top: HEADER_H` counted from the card's own top edge rather than the viewport's, and dropped the column headings 52px down the card onto whoever was leading. The corners round without it; `test:scorecard` pins it.
 
 The mark is the same on every screen; what changes is the word in it.

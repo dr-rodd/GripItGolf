@@ -223,6 +223,8 @@ Switched on per trip in the Trip Settings drawer, off by default. The full break
 
 The first choice on the page is **Players or Courses**. Players opens on the device's own player (or Everyone, on a phone the trip does not recognise), with every player selectable — stats are no more private than the leaderboard — and a **course picker** under the chips. Courses shows one course at a time: its difficulty profile drawn as the round is walked, then the table ranked hardest-first.
 
+**The choosers scroll away.** They used to pin as a block; a single line pins in their place, naming the player and the course — see the sticky-header section of `docs/design-system.md` for the shape of it and why it is fixed rather than sticky.
+
 **The course picker is a dropdown, and was a row of tick chips.** Every course used to be its own on/off switch, which made the commonest question — this course on its own — a tap on each of the *others*, and grew the control a column each time the trip played somewhere new. It is now a choice of one: `null` is every course, an id is that course alone, and there is no third state, so the old rule about never switching the last course off has nothing left to guard. Both views use the same component; the Courses view passes no all-courses label and therefore has no such row. Picking does not close the list — the figures redraw behind it, so a course can be tried and swapped without the control folding away, and the chevron (turned down while shut, a `<` while open) puts it away. The selected row is marked with the green dot rather than a tick: a tick in a list of taps reads as a box to fill in.
 
 Three rules hold the whole thing together:
