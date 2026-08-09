@@ -109,6 +109,12 @@ interface Props {
    * screen keeps the scorecard it has always had.
    */
   trackStats?: boolean
+  /**
+   * The trip this screen belongs to, for the card check on the pick-player
+   * screen — it scopes the re-score of committed cards after a correction.
+   * The legacy /scoring/[slug] route has no trip and leaves it unset.
+   */
+  tripCode?: string
 }
 
 type View = "dashboard" | "scoring" | "live-board" | "settings"
@@ -119,8 +125,18 @@ export default function CourseDashboardClient({
   courseName, courseId, players, rounds, holes, tees, roundHandicaps,
   backHref = "/scoring", roundId, stickyTop = 0,
   allowances = [FULL_ALLOWANCE], allowanceStart = 0, bottomInset = "0",
-  trackStats = false,
+  trackStats = false, tripCode,
 }: Props) {
+  // The course card, held as state rather than read straight off the props:
+  // the card check on the pick-player screen can correct it against a photo
+  // mid-session, and every screen below — the scoring flow, the live board —
+  // has to swap to the corrected numbers without a reload. A server
+  // re-render still wins: fresh props carry the same correction back.
+  const [courseHoles, setCourseHoles] = useState<Hole[]>(holes)
+  const [courseTees, setCourseTees] = useState<Tee[]>(tees)
+  useEffect(() => setCourseHoles(holes), [holes])
+  useEffect(() => setCourseTees(tees), [tees])
+
   const [view, setView]                       = useState<View>("dashboard")
   const [scoringLiveRound, setScoringLiveRound] = useState<ActiveLiveRound | null>(null)
   const [isResuming, setIsResuming]           = useState(false)
@@ -940,9 +956,11 @@ export default function CourseDashboardClient({
         <LiveScoringFlow
           players={nonComposite}
           rounds={courseRoundsForFlow}
-          holes={holes}
-          tees={tees}
+          holes={courseHoles}
+          tees={courseTees}
           roundHandicaps={roundHandicaps}
+          tripCode={tripCode}
+          onCourseDataUpdated={(h, t) => { setCourseHoles(h); setCourseTees(t) }}
           activeLiveRound={scoringLiveRound}
           autoResume={isResuming}
           allowance={allowance}
@@ -964,9 +982,9 @@ export default function CourseDashboardClient({
         <LiveLeaderboardPanel
           liveRound={firstLiveRound}
           players={nonComposite}
-          holes={holes}
+          holes={courseHoles}
           roundHandicaps={roundHandicaps}
-          tees={tees}
+          tees={courseTees}
           allowance={allowance}
           onClose={goBack}
           showBackButton={false}

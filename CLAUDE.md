@@ -28,6 +28,12 @@ MET_USER_AGENT=...           # server only. Identifies this app to MET Norway
                              # then refuse requests without one. Falls back to
                              # the site URL alone, which is weaker — set it.
                              # Format: GreenDotGolf/1.0 (+https://greendot.live; you@example.com)
+ANTHROPIC_API_KEY=...        # server only. The card check — photographing a
+                             # scorecard on the pick-player screen to correct
+                             # pars, indices, slopes and yardages — sends the
+                             # photo to the Claude API with this key. Unset,
+                             # the check answers with a calm "not set up yet"
+                             # and everything else works as before.
 NEXT_PUBLIC_DONATION_URL=... # unset = support link vanishes entirely.
                              # Currently moot: SUPPORT_ENABLED in lib/donation.ts
                              # is false, so the link is off whatever this says.
@@ -99,6 +105,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `app/trip/[tripCode]/**/loading.tsx` | Why a tab feels instant. Without a loading file Next holds the current page, fully painted, until the next one's queries come back — and every trip route is `force-dynamic`, so that was seconds of a screen that gave no sign of having been tapped. It is also the only part of these routes a prefetch can warm. Six of them; `docs/design-system.md` has the split and the rule about not promising a shape |
 | `app/components/TabBar.tsx` | The five tabs, identical on purpose — the leaderboard holds the centre and position is the whole emphasis; the emerald circle around it was tried and retired. **A tab lights on `active` *or* `pending`** — `active` comes from the pathname, which does not change until the destination has rendered on the server, so lighting on it alone means the tap looks like nothing for as long as the query takes |
 | `lib/currentPlayer.ts` | Cookie → the player holding this phone, matched against this trip's roster. **Personalises, never authorises**. Read on the server by the hub, the stats page and a round summary — so **anything that changes the cookie must `router.refresh()` before it navigates**, or the router serves back a page it rendered for whoever this device was a moment ago. That is the whole of the "claiming doesn't stick" bug, and the cookie was never the part that was wrong. For the same reason **no link may force a full `prefetch` of those three routes** |
+| `lib/cardCheck.ts` | Confirming the course record against a photo of the printed scorecard, from the pick-player screen. **Pure** — types, validation (a stroke index column must be a permutation of 1–18; the ladies card is all or nothing; a misread never reaches a diff), the diff, and the whitelist the apply route checks writes against. `app/api/card-check/` does the I/O: extraction via the Claude API, then apply after the person says yes. **The photo is only ever the challenger** — a card with no ladies row never erases a stored one. Applying re-fires the Stableford trigger on the asking trip's committed scores for that course, so corrected pars re-tell the leaderboard; **the most recent photo wins** — each apply overwrites, nothing merges. Courses are shared platform rows, so a correction is a correction for everyone, which is the point |
 | `lib/roundHandicaps.ts` | The `round_handicaps` snapshot, written on a handicap edit and when somebody joins after the rounds exist |
 | `lib/teamLimits.ts` | Team size rules, pairing wording |
 | `lib/matchplayEntrants.ts` | Player/pairing shape and naming |

@@ -12,7 +12,7 @@
     "test:matchplay:db": "tsx scripts/test-matchplay-db.ts",
     "test:bracket-layout": "tsx scripts/test-bracket-layout.ts",
     "test:bracket-render": "tsx scripts/test-bracket-render.tsx",
-    "test": "npm run test:formats && npm run test:leaderboards && npm run test:handicap && npm run test:handicap-allowance && npm run test:setup-flow && npm run test:team-sets && npm run test:matchplay && npm run test:entrants && npm run test:custom-points && npm run test:bracket-layout && npm run test:bracket-render && npm run test:progress && npm run test:itinerary && npm run test:weather && npm run test:trip-form && npm run test:leaderboard && npm run test:recognition && npm run test:admin && npm run test:support && npm run test:live-scores && npm run test:stats && npm run test:scorecard-void && npm run test:scorecard && npm run test:claim && npm run test:hub && npm run test:golden && npm run test:branding",
+    "test": "npm run test:formats && npm run test:leaderboards && npm run test:handicap && npm run test:handicap-allowance && npm run test:setup-flow && npm run test:team-sets && npm run test:matchplay && npm run test:entrants && npm run test:custom-points && npm run test:bracket-layout && npm run test:bracket-render && npm run test:progress && npm run test:itinerary && npm run test:weather && npm run test:trip-form && npm run test:leaderboard && npm run test:recognition && npm run test:admin && npm run test:support && npm run test:live-scores && npm run test:stats && npm run test:scorecard-void && npm run test:scorecard && npm run test:claim && npm run test:hub && npm run test:golden && npm run test:branding && npm run test:card-check",
     "test:progress": "tsx scripts/test-matchplay-progress.ts",
     "test:trip-form": "NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder tsx scripts/test-trip-form.tsx",
     "test:custom-points": "tsx scripts/test-custom-points.ts",
@@ -37,9 +37,11 @@
     "test:scorecard-void": "tsx scripts/test-scorecard-void.ts",
     "test:claim": "NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder tsx scripts/test-claim.tsx",
     "test:hub": "NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder tsx scripts/test-hub.tsx",
-    "test:golden": "NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder tsx scripts/test-golden-leaderboard.tsx"
+    "test:golden": "NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder tsx scripts/test-golden-leaderboard.tsx",
+    "test:card-check": "tsx scripts/test-card-check.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.116.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",

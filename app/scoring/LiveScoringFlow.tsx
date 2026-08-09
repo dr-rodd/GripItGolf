@@ -12,6 +12,7 @@ import { CHROME } from "./scoringHeaderMetrics"
 import type { ActiveLiveRound } from "./ScoringClient"
 import LiveLeaderboardPanel from "./LiveLeaderboardPanel"
 import BackButton from "@/app/components/BackButton"
+import CardCheck from "./CardCheck"
 import ScoreShape, { NoReturnShape } from "@/app/components/ScoreShape"
 import {
   SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL, SC_STICKY,
@@ -136,6 +137,18 @@ interface Props {
    * stats existed — no extra row, no extra height, nothing to skip past.
    */
   trackStats?: boolean
+  /**
+   * The trip this session belongs to, for the card check — it scopes the
+   * re-score of already-committed cards. The legacy /scoring route has no
+   * trip and leaves it unset.
+   */
+  tripCode?: string
+  /**
+   * The course card was corrected against a photo of the real one. The
+   * corrected rows come up so every screen already holding `holes`/`tees`
+   * swaps to the new numbers without a reload.
+   */
+  onCourseDataUpdated?: (holes: Hole[], tees: Tee[]) => void
 }
 
 type LiveStep = "activate" | "setup" | "holes" | "summary" | "committed" | "resuming"
@@ -392,6 +405,8 @@ export default function LiveScoringFlow({
   allowance = FULL_ALLOWANCE,
   allowances = [FULL_ALLOWANCE],
   trackStats = false,
+  tripCode,
+  onCourseDataUpdated,
 }: Props) {
   const [liveRound, setLiveRound] = useState<ActiveLiveRound | null>(activeLiveRound)
   const [step, setStep] = useState<LiveStep>(
@@ -1052,6 +1067,20 @@ export default function LiveScoringFlow({
 
     return (
       <div className="max-w-lg mx-auto w-full px-4 py-6 flex flex-col gap-5">
+        {/* The card check lives on this screen because this is the last
+            moment before the numbers matter: a wrong index caught here is a
+            thirty-second fix, and caught on the 14th green it is last trip's
+            headache all over again. */}
+        {courseId && onCourseDataUpdated && (
+          <CardCheck
+            courseId={courseId}
+            tripCode={tripCode}
+            onApplied={(newHoles, newTees) =>
+              onCourseDataUpdated(newHoles as unknown as Hole[], newTees as unknown as Tee[])
+            }
+          />
+        )}
+
         <div className="flex flex-col gap-3">
           <label className="text-ink/65 text-sm tracking-[0.15em] uppercase">
             Select Players (1–4)

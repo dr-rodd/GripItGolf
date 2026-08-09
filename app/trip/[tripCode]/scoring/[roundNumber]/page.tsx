@@ -90,6 +90,9 @@ export default async function TripCoursePage({
         roundHandicaps={hcpsRes.data ?? []}
         backHref={`/trip/${tripCode}/scoring`}
         roundId={thisRound.id}
+        // For the card check on the pick-player screen: a correction re-scores
+        // this trip's committed cards on this course, and nothing outside it.
+        tripCode={tripCode}
         allowances={allowances.steps}
         allowanceStart={allowances.startIndex}
         // Off unless this trip asked for it. The legacy `/scoring/[slug]`
