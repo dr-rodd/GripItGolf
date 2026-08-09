@@ -8,6 +8,7 @@ import {
   type HoleStat, type PlayerStats,
 } from '@/lib/holeStats'
 import { ordinal } from '@/lib/playerSummary'
+import { tripAwards } from '@/lib/tripAwards'
 import type { RowHole, RowRound } from '@/lib/boardRows'
 
 /**
@@ -21,10 +22,11 @@ import type { RowHole, RowRound } from '@/lib/boardRows'
  * once with `useMemo` and shared by all three.
  */
 
-type Tab = 'you' | 'field' | 'course'
+type Tab = 'you' | 'field' | 'course' | 'awards'
 
 export default function StatsClient({
   stats, holes, players, rounds, courseByRound, courseNames, meId, thin,
+  tripOver = false,
 }: {
   stats: HoleStat[]
   holes: RowHole[]
@@ -36,6 +38,8 @@ export default function StatsClient({
   meId: string | null
   /** Few enough holes that the figures are still moving. */
   thin: boolean
+  /** Past its end date, so the honours read as final rather than as it stands. */
+  tripOver?: boolean
 }) {
   // Somebody this phone knows opens on their own numbers; a stranger opens
   // on the field, because "you" would be a screen about nobody.
@@ -46,11 +50,15 @@ export default function StatsClient({
   const field = useMemo(() => playerStats(stats), [stats])
   const mine = useMemo(() => (meId ? statsFor(stats, meId) : null), [stats, meId])
   const difficulty = useMemo(() => holeDifficulty(stats, holes), [stats, holes])
+  const awards = useMemo(() => tripAwards(field), [field])
 
   const tabs: [Tab, string][] = [
     ...(meId ? [['you', 'You'] as [Tab, string]] : []),
     ['field', 'The field'],
     ['course', 'The course'],
+    // No tab until somebody has qualified for something: an empty honours
+    // board is a promise, and this screen does not make those.
+    ...(awards.length > 0 ? [['awards', 'Awards'] as [Tab, string]] : []),
   ]
 
   return (
@@ -88,6 +96,56 @@ export default function StatsClient({
       {tab === 'course' && (
         <Course rows={difficulty} courseName={courseName} />
       )}
+      {tab === 'awards' && (
+        <Awards awards={awards} nameOf={nameOf} meId={meId} tripOver={tripOver} />
+      )}
+    </div>
+  )
+}
+
+// ─── Awards ────────────────────────────────────────────────────
+
+/**
+ * The honours board.
+ *
+ * Live while the trip runs — "as it stands", moving the way a leaderboard
+ * moves — and a final board once the end date has passed. Awards nobody has
+ * qualified for are simply absent, decided in lib/tripAwards.ts; ties share
+ * the line.
+ */
+function Awards({ awards, nameOf, meId, tripOver }: {
+  awards: ReturnType<typeof tripAwards>
+  nameOf: Map<string, string>
+  meId: string | null
+  tripOver: boolean
+}) {
+  return (
+    <div>
+      <p className="t-cap text-ink/65 mb-4 leading-snug">
+        {tripOver
+          ? 'Final honours.'
+          : 'As it stands — these move while the trip is being played.'}
+      </p>
+      {awards.map(a => {
+        const mineToo = meId != null && a.winnerIds.includes(meId)
+        return (
+          <section
+            key={a.key}
+            className={`bg-surface border rounded-2xl px-4 py-3 mb-3 ${
+              mineToo ? 'border-accent/50' : 'border-bark/12'
+            }`}
+          >
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="t-card text-ink">{a.title}</h2>
+              <span className="t-data t-num text-accent-deep flex-shrink-0">{a.figure}</span>
+            </div>
+            <p className="t-cap text-ink/65 mt-0.5 leading-snug">{a.line}</p>
+            <p className="t-body text-ink mt-2">
+              {a.winnerIds.map(id => nameOf.get(id) ?? 'Unknown').join(' · ')}
+            </p>
+          </section>
+        )
+      })}
     </div>
   )
 }

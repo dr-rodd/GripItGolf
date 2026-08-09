@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { fetchTripStats } from '@/lib/hubStanding'
 import { coverage } from '@/lib/holeStats'
+import { tripState, todayString } from '@/lib/tripStatus'
 import { currentPlayer } from '@/lib/currentPlayer'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
@@ -95,6 +96,11 @@ export default async function StatsPage({
             courseNames={(courses ?? []).map(c => [c.id as string, c.name as string])}
             meId={me?.id ?? null}
             thin={cover.level === 'thin'}
+            // Decided here because the server holds the clock. The honours
+            // read "as it stands" while the trip is open and settle into a
+            // final board once the end date has passed — the same rule the
+            // admin overview reads a trip's state by.
+            tripOver={!tripState(trip, todayString(new Date())).open}
           />
         )}
       </div>

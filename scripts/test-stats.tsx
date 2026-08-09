@@ -25,6 +25,7 @@ import {
   MIN_OTHERS, MIN_HOLE_SAMPLE, MIN_MISSES,
   type StatsContext, type Fairway,
 } from '../lib/holeStats'
+import { tripAwards, MIN_AWARD_FAIRWAYS } from '../lib/tripAwards'
 import { resolveScores } from '../lib/rowContext'
 import type { RowHole, RowPlayer, ResolvedScore } from '../lib/boardRows'
 
@@ -736,6 +737,70 @@ section('The derivation is pure, and states each rule once')
     return walk(dir)
   }).filter(f => f !== 'lib/holeStats.ts' && /par - 2|par-2/.test(code(f)))
   eq(appsWithRule, [], 'and greens in regulation is written down exactly once')
+}
+
+section('The honours go to whoever earned them, and to nobody early')
+{
+  // Enough real holes to clear every floor: two full rounds per player over
+  // the four par 4s, with each player's cards written so the winners are
+  // known by construction.
+  const rowsFor = (pid: string, gross: number, putts: number, fw: Fairway) =>
+    ['r1', 'r2', 'r3', 'r4', 'r5'].flatMap(r =>
+      ['h1', 'h2', 'h3', 'h4'].map(h =>
+        sc(pid, h, gross, putts, fw, { roundId: r })))
+
+  // Ann: fairways and greens all day. Bob: misses greens, saves every one.
+  // Cal: mediocre everywhere, so he wins nothing.
+  const fieldStats = playerStats(holeStats(ctxOf([
+    ...rowsFor('a', 4, 2, 'fairway'),   // FW 100%, GIR 100%, 2 putts
+    ...rowsFor('b', 4, 1, 'left'),      // FW 0%, GIR 0%, scrambles 100%, 1 putt
+    ...rowsFor('c', 5, 2, 'right'),     // bogeys, GIR 100% (3 to green? no —
+                                        // 5−2=3 > 2, GIR 0%), saves none
+  ])))
+  const board = tripAwards(fieldStats)
+  const winner = (key: string) =>
+    board.find(a => a.key === key)?.winnerIds ?? []
+
+  eq(winner('fairways'), ['a'], 'the straightest driver finds the most fairways')
+  eq(winner('greens'), ['a'], '  …and the flag hunter the most greens')
+  eq(winner('putter'), ['b'], 'the hot putter took the fewest per round')
+  eq(winner('scrambler'), ['b'], '  …and saved every green he missed')
+  ok(!board.some(a => a.winnerIds.includes('c')), 'and mediocrity wins nothing')
+
+  // Nobody birdied, so there is no birdie award at all rather than an
+  // award for the least none.
+  ok(!board.some(a => a.key === 'birdies'), 'no birdies means no birdie machine')
+
+  // Ties share the line, and share it on the figure as printed rather than
+  // on the last floating-point bit.
+  const tied = tripAwards(playerStats(holeStats(ctxOf([
+    ...rowsFor('a', 4, 2, 'fairway'),
+    ...rowsFor('b', 4, 2, 'fairway'),
+  ]))))
+  eq(tied.find(a => a.key === 'fairways')?.winnerIds, ['a', 'b'],
+    'two players level both hold the award')
+
+  // Below a floor there is no award, however good the rate looks.
+  const thin = tripAwards(playerStats(holeStats(ctxOf([
+    sc('a', 'h1', 4, 2, 'fairway'),
+  ]))))
+  ok(!thin.some(a => a.key === 'fairways'),
+    `one perfect fairway is not ${MIN_AWARD_FAIRWAYS} of them`)
+  ok(!thin.some(a => a.key === 'greens'), 'nor is one green a hunt')
+
+  // The floors are exported and honoured, not restated inline.
+  const src = read('lib/tripAwards.ts')
+  for (const k of ['MIN_AWARD_FAIRWAYS', 'MIN_AWARD_PUTT_HOLES', 'MIN_AWARD_SCRAMBLES', 'MIN_AWARD_BOUNCES']) {
+    ok(new RegExp(`export const ${k}`).test(src), `${k} is a constant somebody can argue with`)
+  }
+
+  // Chosen here, derived elsewhere: this module may read PlayerStats and
+  // must not restate a single rule of what the figures mean.
+  const c = code('lib/tripAwards.ts')
+  ok(/from '\.\/holeStats'/.test(c), 'the awards read the derivation')
+  ok(!/par - 2|gross -|=== 'fairway'|\/ 18/.test(c),
+    '  …and re-derive nothing of their own')
+  ok(!/supabase|\.from\(|useState/.test(c), 'and the module is pure')
 }
 
 section('The lab reads the derivation and does none of its own')
