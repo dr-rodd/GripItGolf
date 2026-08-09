@@ -4,7 +4,7 @@ import Link, { useLinkStatus } from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
-  IconHome, IconTrophy, IconClipboardList, IconSettings,
+  IconHome, IconTrophy, IconClipboardList, IconSettings, IconChartBar,
 } from './icons'
 
 /**
@@ -16,10 +16,16 @@ import {
  * bottom row of taps lands on nothing.
  *
  * Scoped to a trip: every destination needs the trip code, and there is no
- * app-level navigation to speak of. The last tab goes to Trip Setup, which is
- * what the copy across the app calls that screen — it was "Settings" here and
- * "Trip Setup" everywhere pointing at it. Two words, but shorter than
- * "Leaderboard" beside it, so it still fits the narrowest phone on one line.
+ * app-level navigation to speak of. "Trip Setup" is what the copy across the
+ * app calls that screen — it was "Settings" here and "Trip Setup" everywhere
+ * pointing at it.
+ *
+ * **Five tabs, on trial** — Stats earned a place once the hub became an
+ * instrument, and the bar took the YouTube shape at the same time: the
+ * leaderboard in the middle, emphasised, because on a golf trip the board is
+ * what everybody keeps coming back to. The centre tab draws as a filled
+ * circle and carries no label — five labels do not fit a 320px phone, and
+ * the one that had to go is the one whose button already says what it is.
  *
  * Rendered once, by `app/trip/[tripCode]/layout.tsx`, and never by a page.
  * That is what keeps it on screen through a navigation instead of unmounting
@@ -31,9 +37,10 @@ import {
 
 const ITEMS = [
   { key: 'home',        label: 'Home',        icon: IconHome,          path: (t: string) => `/trip/${t}` },
+  { key: 'settings',    label: 'Trip Setup',  icon: IconSettings,      path: (t: string) => `/trip/${t}/setup` },
   { key: 'leaderboard', label: 'Leaderboard', icon: IconTrophy,        path: (t: string) => `/trip/${t}/leaderboard` },
   { key: 'scoring',     label: 'Scoring',     icon: IconClipboardList, path: (t: string) => `/trip/${t}/scoring` },
-  { key: 'settings',    label: 'Trip Setup',  icon: IconSettings,      path: (t: string) => `/trip/${t}/setup` },
+  { key: 'stats',       label: 'Stats',       icon: IconChartBar,      path: (t: string) => `/trip/${t}/stats` },
 ] as const
 
 /**
@@ -52,11 +59,13 @@ const ITEMS = [
  * that gets is the real cost. `pending` is true from the touch.
  */
 function Tab({
-  label, active, Icon,
+  label, active, Icon, emphasis = false,
 }: {
   label: string
   active: boolean
   Icon: (typeof ITEMS)[number]['icon']
+  /** The centre tab: a filled circle, no label, always visibly itself. */
+  emphasis?: boolean
 }) {
   const { pending } = useLinkStatus()
 
@@ -76,6 +85,34 @@ function Tab({
   const [pressed, setPressed] = useState(false)
   const release = () => setPressed(false)
 
+  if (emphasis) {
+    // The emphasised centre: an emerald circle with the trophy in it,
+    // tinted at rest and solid while you are there or on your way. No
+    // label — the aria-label on the link says it for a screen reader, and
+    // the circle says it for everyone else.
+    return (
+      <span
+        onPointerDown={() => setPressed(true)}
+        onPointerUp={release}
+        onPointerCancel={release}
+        onPointerLeave={release}
+        className={`flex items-center justify-center h-16 transition-transform duration-150 ease-out ${
+          pressed ? 'tab-pressed' : ''
+        } ${pending ? 'tab-pending' : ''}`}
+      >
+        <span
+          className={`flex items-center justify-center w-12 h-12 rounded-full transition-colors duration-150 ${
+            lit
+              ? 'bg-accent-deep text-white'
+              : 'bg-accent/[0.12] text-accent-deep'
+          }`}
+        >
+          <Icon size={24} />
+        </span>
+      </span>
+    )
+  }
+
   return (
     <span
       onPointerDown={() => setPressed(true)}
@@ -91,11 +128,9 @@ function Tab({
     >
       <Icon size={20} />
       {/* The smallest type in the app, and the one place it is
-          justified: four labels across the narrowest phone, and
-          "Leaderboard" is eleven characters of it. 11px rather than
-          the 10 it was — it still fits a 320px screen with room to
-          spare, and the bar is read at arm's length like everything
-          else. Any larger and the longest label wraps. */}
+          justified: four labelled tabs across the narrowest phone —
+          the centre one carries no label, which is what made room
+          for a fifth tab at all. 11px, read at arm's length. */}
       <span
         className="font-[family-name:var(--font-ui)] leading-none whitespace-nowrap"
         style={{ fontSize: 11, fontWeight: lit ? 600 : 400 }}
@@ -122,6 +157,7 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
     if (pathname === base || pathname === `${base}/`) return 'home'
     if (pathname.startsWith(`${base}/leaderboard`)) return 'leaderboard'
     if (pathname.startsWith(`${base}/scoring`)) return 'scoring'
+    if (pathname.startsWith(`${base}/stats`)) return 'stats'
     if (pathname.startsWith(`${base}/setup`) || pathname.startsWith(`${base}/teams`)) return 'settings'
     // Players, matchplay and anything else: no tab claims it rather than a
     // wrong one being lit.
@@ -134,15 +170,18 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label="Trip"
     >
-      <ul className="max-w-lg mx-auto grid grid-cols-4">
+      <ul className="max-w-lg mx-auto grid grid-cols-5">
         {ITEMS.map(item => {
           const active = activeKey === item.key
           const Icon = item.icon
+          const emphasis = item.key === 'leaderboard'
           return (
             <li key={item.key}>
               <Link
                 href={item.path(tripCode)}
                 aria-current={active ? 'page' : undefined}
+                // The centre tab has no visible label, so the link says it.
+                aria-label={emphasis ? item.label : undefined}
                 // Left on the default, which warms the loading skeleton and
                 // the layout around it and stops there.
                 //
@@ -163,7 +202,7 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
                 // whole benefit and it costs nothing to be wrong about.
                 className="block touch-manipulation"
               >
-                <Tab label={item.label} active={active} Icon={Icon} />
+                <Tab label={item.label} active={active} Icon={Icon} emphasis={emphasis} />
               </Link>
             </li>
           )

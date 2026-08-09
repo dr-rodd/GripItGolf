@@ -413,11 +413,24 @@ section('The bottom tab bar')
 {
   const src = read('app/components/TabBar.tsx')
 
+  // Five tabs, on trial: the leaderboard in the middle with the emphasis,
+  // because it is what everybody on a golf trip keeps coming back to.
   eq(
     (src.match(/label: '([^']+)'/g) ?? []).map(s => s.replace(/label: '|'/g, '')),
-    ['Home', 'Leaderboard', 'Scoring', 'Trip Setup'],
-    'four items, in the order the guide sets',
+    ['Home', 'Trip Setup', 'Leaderboard', 'Scoring', 'Stats'],
+    'five items, leaderboard centred',
   )
+  ok(src.includes('grid-cols-5'), 'the grid matches the count')
+
+  // The centre tab is the one drawn as a filled circle and the one with no
+  // visible label — five labels do not fit a 320px phone, and the dropped
+  // one is the tab whose button already says what it is. A screen reader
+  // still hears it, off the link itself.
+  ok(/emphasis = item\.key === 'leaderboard'/.test(src),
+    'the emphasis is the leaderboard’s')
+  ok(/aria-label=\{emphasis \? item\.label : undefined\}/.test(src),
+    '  …and the unlabelled circle still says its name to a screen reader')
+  ok(/rounded-full/.test(src), '  …drawn as a circle')
 
   ok(src.includes('fixed bottom-0'), 'fixed to the bottom of the viewport')
   ok(src.includes('env(safe-area-inset-bottom)'),
@@ -427,10 +440,11 @@ section('The bottom tab bar')
 
   // "Labels must fit on one line — test Leaderboard specifically"
   ok(src.includes('whitespace-nowrap'), 'labels never wrap')
-  // 11px, up from 10 with the rest of the small end. Four labels across a
-  // 320px screen leaves 80px each, and "Leaderboard" is about 62px of that
-  // in Archivo at 11 — it fits, and it is the largest size that does.
-  ok(src.includes('fontSize: 11'), 'at 11px, which still lets Leaderboard fit')
+  // 11px, up from 10 with the rest of the small end. Five columns on a
+  // 320px screen leave 64px each; "Leaderboard" would not fit, and it is
+  // exactly the label the unlabelled centre circle removed. The longest
+  // left is "Trip Setup", about 54px in Archivo at 11 — it fits.
+  ok(src.includes('fontSize: 11'), 'at 11px, which still lets Trip Setup fit')
   ok(src.includes('size={20}'), 'with 20px icons')
 
   ok(src.includes("'text-accent'"), 'the active tab is emerald')
@@ -934,7 +948,7 @@ section('One icon set')
   ok(icons.includes('Tabler'), 'the set is named and credited')
   ok(icons.includes('stroke="currentColor"'), 'icons take their colour from the text')
   ok(icons.includes('fill="none"'), 'and are outline, not solid')
-  for (const n of ['IconHome', 'IconTrophy', 'IconClipboardList', 'IconSettings']) {
+  for (const n of ['IconHome', 'IconTrophy', 'IconClipboardList', 'IconSettings', 'IconChartBar']) {
     ok(icons.includes(`export const ${n}`), `${n} exists for the tab bar`)
   }
 }

@@ -125,7 +125,7 @@ The create wizard keeps a **step**-back on steps 2 and 3, which is a different t
 
 ### Navigation
 
-Bottom tab bar, `app/components/TabBar.tsx` — Home · Leaderboard · Scoring · Settings, scoped to a trip. Fixed to the bottom with `env(safe-area-inset-bottom)`; without that the bottom row of taps lands on the iPhone home indicator. Pages carrying it add `has-tabbar` for clearance. Labels are 10px so **Leaderboard** fits one line.
+Bottom tab bar, `app/components/TabBar.tsx` — Home · Trip Setup · **Leaderboard** · Scoring · Stats, scoped to a trip. Five tabs on trial, the YouTube shape: the leaderboard centred and emphasised — a filled emerald circle, tinted at rest and solid when lit — because it is the screen everybody keeps coming back to. The circle carries no visible label (five labels do not fit a 320px phone, and the dropped one is the tab whose button already says what it is); the link's `aria-label` says it to a screen reader. The other four labels are 11px. Fixed to the bottom with `env(safe-area-inset-bottom)`; without that the bottom row of taps lands on the iPhone home indicator. Pages carrying it add `has-tabbar` for clearance.
 
 Deliberately **absent from the scoring flow**, where the bottom of the screen is score entry and a nav bar under it is a mis-tap waiting to happen.
 
@@ -145,7 +145,8 @@ Five files, and the split is about shape rather than about routes:
 
 | File | Draws |
 |---|---|
-| `trip/[tripCode]/loading.tsx` | The fallback for the hub, teams, players, matchplay, stats and a round summary. Deliberately vague — see below |
+| `trip/[tripCode]/loading.tsx` | The fallback for the hub, teams, players, matchplay and a round summary. Deliberately vague — see below |
+| `…/stats/loading.tsx` | The two-way choice, a chip row, then boxes — the shape that is always true of the instrument. Earned its own file when the bar gained a Stats tab |
 | `…/leaderboard/loading.tsx` | Tab strip, then eight rows. The slowest page in the app and the most predictable |
 | `…/scoring/loading.tsx` | Three round tiles |
 | `…/scoring/[roundNumber]/loading.tsx` | A player strip and a hole. Its own file because a loading state covers the segments below it, and three round tiles is the wrong promise to make about a scorecard |
