@@ -12,7 +12,7 @@ import TripHeader from '@/app/components/TripHeader'
 export default function StatsLoading() {
   return (
     <div className="min-h-dvh bg-cream has-tabbar text-ink">
-      <TripHeader />
+      <TripHeader title="statsHub" />
 
       <div
         className="max-w-lg mx-auto px-4 py-6"

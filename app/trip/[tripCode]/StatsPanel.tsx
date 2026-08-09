@@ -4,12 +4,15 @@ import {
 } from '@/lib/holeStats'
 
 /**
- * The player's own stats, on the hub.
+ * The player's own trip, at a glance, on the hub.
  *
- * Four figures and a way through to the rest. Nothing is worked out here —
- * every number comes off `lib/holeStats.ts` through the same formatters the
- * stats lab uses, so the hub and the lab cannot print the same figure two
- * ways.
+ * A headline — how the trip stands against their handicap, which is the
+ * figure a golfer actually carries around — then four lines, and a way
+ * through to the stats hub. Nothing is worked out here — every number
+ * comes off `lib/holeStats.ts` through the same formatters the stats hub
+ * uses, so the two cannot print the same figure two ways. The vs-handicap
+ * total is a sum of derived per-round figures, which is arithmetic on the
+ * derivation, not a second derivation.
  *
  * The section this sits in only renders when the trip has stats switched on
  * **and** something has been recorded. `docs/features.md` has kept the hub
@@ -31,6 +34,29 @@ export default function StatsPanel({
     <div>
       {mine ? (
         <div className="rounded-2xl border border-bark/12 bg-surface px-4 py-1">
+          {/* The headline. Stableford points against two a hole: level means
+              the trip is being played exactly to handicap, and the sign is
+              the one every golfer already reads off a board. */}
+          {mine.form.length > 0 && (() => {
+            const vs = mine.form.reduce((n, r) => n + r.vsHandicap, 0)
+            const tone = Math.round(vs * 10) === 0 ? 'text-ink'
+              : vs > 0 ? 'text-accent-deep' : 'text-rust-deep'
+            return (
+              <div className="pt-3 pb-2.5 border-b border-bark/[0.08]">
+                <span className="t-cap uppercase tracking-[0.12em] text-ink/50">
+                  Vs your handicap
+                </span>
+                <div className="flex items-baseline gap-2 mt-0.5">
+                  <span className={`font-[family-name:var(--font-display)] text-3xl t-num ${tone}`}>
+                    {formatGained(vs)}
+                  </span>
+                  <span className="t-cap text-ink/65">
+                    over {mine.form.length} round{mine.form.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+              </div>
+            )
+          })()}
           <Figure label="Fairways" value={formatRate(mine.fairways.hitRate)}
             note={`${mine.fairways.hit} of ${mine.fairways.counted}`} />
           <Figure label="Greens" value={formatRate(mine.putting.girRate)}
@@ -72,7 +98,7 @@ export default function StatsPanel({
         href={`/trip/${tripCode}/stats`}
         className="inline-block mt-4 t-label text-accent-deep hover:text-accent transition-colors duration-150"
       >
-        See the full stats →
+        Open the stats hub →
       </Link>
     </div>
   )

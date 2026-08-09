@@ -56,7 +56,7 @@ export default async function StatsPage({
 
   return (
     <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
-      <TripHeader backTo={`/trip/${tripCode}`} />
+      <TripHeader backTo={`/trip/${tripCode}`} title="statsHub" />
 
       <div className="bg-cream border-b border-bark/12">
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">

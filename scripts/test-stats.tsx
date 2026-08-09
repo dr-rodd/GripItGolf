@@ -962,6 +962,13 @@ section('The lab reads the derivation and does none of its own')
   for (const bit of ['<TripHeader', 'has-tabbar', '<SupportLink']) {
     ok(page.includes(bit), `the stats route carries ${bit}`)
   }
+  // The page has a name now, set as artwork like the other three, and the
+  // loading state wears the same one so arriving does not change the header.
+  ok(page.includes('title="statsHub"'), 'the header says stats hub')
+  ok(code('app/trip/[tripCode]/stats/loading.tsx').includes('title="statsHub"'),
+    '  …and the skeleton already says it')
+  ok(code('app/components/TitleMark.tsx').includes('statsHub'),
+    '  …from the one register of title marks')
   ok(!page.includes('<TabBar'),
     'and does not draw its own tab bar over the layout’s')
 
