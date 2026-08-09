@@ -111,6 +111,12 @@ function Tab({
   )
 }
 
+/**
+ * How far below itself the bar paints. Never occupied, never measured —
+ * see the note on the nav's own style.
+ */
+const OVERHANG = 80
+
 export default function TabBar({ tripCode }: { tripCode: string }) {
   const pathname = usePathname() ?? ''
   const base = `/trip/${tripCode}`
@@ -137,7 +143,23 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-bark/12"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      style={{
+        // The bar paints `OVERHANG` further down than it occupies: the
+        // padding grows by it and the margin takes the same amount back,
+        // so its top edge, its height on screen and the room `.has-tabbar`
+        // reserves are all unchanged, and the extra is off the bottom of
+        // the screen where nobody sees it.
+        //
+        // It is there for the one bottom-bar problem CSS cannot forbid.
+        // Safari collapses its own toolbar as you scroll, and repositions
+        // fixed elements a frame or two behind that animation — for those
+        // frames the bar is short of the bottom edge. `overscroll-behavior`
+        // in globals.css stops the rubber-band, but nothing stops this. So
+        // what the gap exposes is more of the bar instead of the page
+        // behind it, and the lag becomes invisible rather than fixed.
+        paddingBottom: `calc(env(safe-area-inset-bottom) + ${OVERHANG}px)`,
+        marginBottom: -OVERHANG,
+      }}
       aria-label="Trip"
     >
       <ul className="max-w-lg mx-auto grid grid-cols-5">

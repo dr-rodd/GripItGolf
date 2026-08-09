@@ -437,6 +437,27 @@ section('The bottom tab bar')
   ok(src.includes('fixed bottom-0'), 'fixed to the bottom of the viewport')
   ok(src.includes('env(safe-area-inset-bottom)'),
     'clearing the iPhone home indicator, or the bottom row of taps lands on nothing')
+
+  // ── The bar staying put at the bottom of a scroll ──
+  //
+  // Two different iOS behaviours, and neither is a positioning bug — the
+  // nav's only ancestors are html and body, so `fixed` is never scoped to
+  // a transformed parent.
+  //
+  // The rubber-band is the one that can be forbidden, and only from the
+  // root element: `overscroll-behavior` propagates to the viewport from
+  // html, and does not from body the way overflow does.
+  const globals = read('app/globals.css')
+  ok(/html\s*\{[\s\S]*?overscroll-behavior-y:\s*none/.test(globals),
+    'the root forbids the rubber-band that carries a fixed bar off the edge')
+
+  // The toolbar-collapse lag cannot be forbidden, so the bar paints past
+  // itself and the lag shows more bar rather than the page behind it. The
+  // margin has to take back exactly what the padding added, or the room
+  // reserved by .has-tabbar stops matching what is on screen.
+  ok(/paddingBottom: `calc\(env\(safe-area-inset-bottom\) \+ \$\{OVERHANG\}px\)`/.test(src)
+    && /marginBottom: -OVERHANG/.test(src),
+    'the overhang is paint only — the margin gives back what the padding took')
   ok(src.includes('bg-surface'), 'on white')
   ok(src.includes('border-t border-bark/12'), 'with a hairline top border')
 

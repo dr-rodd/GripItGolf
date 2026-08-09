@@ -53,6 +53,24 @@
 
 html {
   background-color: var(--color-cream);
+
+  /* The bottom bar's drift, and why it was never a positioning bug.
+
+     Drag past the end of a page on iOS and Safari rubber-bands: it does not
+     scroll the document further, it translates the whole visual viewport —
+     and a `position: fixed` element goes with it. The bar lifts off the
+     bottom edge and cream shows underneath, exactly at the bottom of the
+     scroll and nowhere else.
+
+     Ruled out first, because it looks the same: a transformed ancestor
+     would make `fixed` behave like `absolute` and the bar would scroll away
+     with the page. The nav's only ancestors are html and body, and neither
+     is transformed, so that was never it.
+
+     `overscroll-behavior-y` on the root element is what propagates to the
+     viewport (on body it does not, unlike overflow). It costs pull-to-
+     refresh, which this app has never used for anything. */
+  overscroll-behavior-y: none;
 }
 
 body {
