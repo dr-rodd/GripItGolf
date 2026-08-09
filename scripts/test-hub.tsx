@@ -1077,6 +1077,45 @@ section('One section is open at a time')
   ok(!stack.includes('shadow-[0_0_'), 'and nothing about it glows')
 }
 
+// ─── Where a course name comes from ────────────────────────
+
+section('A platform course belongs to no trip, so it cannot be asked for by one')
+{
+  // The regression this exists to stop happening twice.
+  //
+  // The hub's course lookup was changed from "the ids these rounds and items
+  // name" to "this trip's courses", on the reasoning that `courses` is scoped
+  // by `trip_id` like every other table. It is not. The 26 platform courses
+  // are migration rows with `trip_id IS NULL` — they belong to no trip
+  // because they belong to all of them — so the query matched nothing for a
+  // trip playing them, which is every trip.
+  //
+  // Nothing failed. `courseMap` came back empty, `describeItem` fell back to
+  // the bare kind, and every golf tile on the hub and in Up next read "Golf"
+  // with the course name gone. A page that renders perfectly and says
+  // nothing is the failure mode worth a pin.
+  const hub = read('app/trip/[tripCode]/page.tsx')
+  const coursesQuery = hub.slice(hub.indexOf("from('courses')"))
+    .slice(0, 200)
+  ok(coursesQuery.length > 0, 'the hub asks for courses')
+  ok(coursesQuery.includes('trip_id.is.null'),
+    'and asks for the ones that belong to no trip, which is all 26 of them')
+
+  // A trip's own course is a real thing — a society can add one — so this is
+  // both halves rather than a swap from one wrong answer to another.
+  ok(/trip_id\.eq\.\$\{trip\.id\}/.test(coursesQuery),
+    'along with any this trip added for itself')
+
+  // The other readers, each getting there a different way. Pinned together
+  // so the next person changing one can see what the others do.
+  const round = read('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
+  ok(/from\('courses'\)[\s\S]{0,120}\.eq\('id', round\.course_id\)/.test(round),
+    'the round page asks by id, which needs no scope at all')
+  const setup = read('app/trip/[tripCode]/setup/page.tsx')
+  ok(/from\('courses'\)[\s\S]{0,120}\.is\('trip_id', null\)/.test(setup),
+    'and the picker asks for the platform list explicitly')
+}
+
 // ─── The itinerary, rendered ───────────────────────────────
 
 section('A golf tile is named by its course')

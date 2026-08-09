@@ -90,19 +90,31 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       .eq('trip_id', trip.id)
       .order('day_index')
       .order('position'),
-    // The trip's courses, in the same breath rather than after.
+    // The courses this trip could be playing, in the same breath rather than
+    // after — the trip's own, and the platform's.
     //
-    // This used to be a fourth serial round trip, gated on `courseIds`, which
-    // meant collecting the ids off the rounds and the itinerary and so having
-    // to wait for both. It never needed to: `courses` is scoped by `trip_id`
-    // like everything else, and a trip has a handful of them. Asking for all
-    // of the trip's courses instead of the ones two other queries turned out
-    // to name costs nothing and removes a whole hop from the slowest screen
-    // in the app — the one every tab press comes back to.
+    // This used to be a fourth serial round trip gated on `courseIds`, which
+    // meant collecting the ids off the rounds and the itinerary and waiting
+    // for both. It does not need to be, and asking up front removes a whole
+    // hop from the screen every tab press comes back to.
     //
-    // `courseMap` below is only ever read by id, so a course the trip has but
-    // this page does not mention is never looked up.
-    supabase.from('courses').select('id, name').eq('trip_id', trip.id),
+    // **But `courses` is not scoped by `trip_id` like everything else, and
+    // that is the whole trap here.** The 26 platform courses are migration
+    // rows carrying `trip_id IS NULL` — they belong to no trip because they
+    // belong to all of them. Asked for `.eq('trip_id', trip.id)` alone this
+    // returns nothing at all for a trip playing them, which is every trip:
+    // `courseMap` comes back empty, and every golf tile on the hub and in Up
+    // next falls back to the bare word "Golf" with the course name gone. No
+    // error, no empty state — the page renders perfectly and says nothing.
+    //
+    // Every other reader gets this right by asking a different question:
+    // by id (the round page, the stats page) or `.is('trip_id', null)` for
+    // the picker in Trip Setup. This one has to ask for both halves.
+    //
+    // `courseMap` below is only ever read by id, so the platform courses this
+    // trip does not play are never looked up.
+    supabase.from('courses').select('id, name')
+      .or(`trip_id.eq.${trip.id},trip_id.is.null`),
   ])
 
   if (roundsResult.error) console.error('TripPage rounds query failed:', roundsResult.error)
