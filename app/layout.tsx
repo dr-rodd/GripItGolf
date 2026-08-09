@@ -36,6 +36,13 @@ export const viewport: Viewport = {
   themeColor: "#F6F4F0",
   width: "device-width",
   initialScale: 1,
+  // Without this, iOS reports every safe-area inset as zero — so the tab
+  // bar's `env(safe-area-inset-bottom)` padding, and every `calc()` built
+  // on it, never actually fired. The visible symptom: scroll to the bottom
+  // of a page, Safari's toolbar collapses, and the bar sits in the home
+  // indicator's zone — "off the bottom". Cover is what makes the inset a
+  // real number the bar can clear.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

@@ -20,12 +20,12 @@ import {
  * app calls that screen — it was "Settings" here and "Trip Setup" everywhere
  * pointing at it.
  *
- * **Five tabs, on trial** — Stats earned a place once the hub became an
- * instrument, and the bar took the YouTube shape at the same time: the
- * leaderboard in the middle, emphasised, because on a golf trip the board is
- * what everybody keeps coming back to. The centre tab draws as a filled
- * circle and keeps its label under it — the circle alone was tried and Big
- * Dog wanted the word back, so the circle shrank to make the height for it.
+ * **Five tabs** — Stats earned a place once the hub became an instrument.
+ * The leaderboard holds the centre, which is emphasis enough: the emerald
+ * circle around it was tried and retired in the same day — first the label
+ * had to go, then it came back and dragged the alignment sideways, and Big
+ * Dog called it: more trouble than it was worth. Five identical tabs, the
+ * board in the middle because the middle is where the thumb rests.
  *
  * Rendered once, by `app/trip/[tripCode]/layout.tsx`, and never by a page.
  * That is what keeps it on screen through a navigation instead of unmounting
@@ -59,13 +59,11 @@ const ITEMS = [
  * that gets is the real cost. `pending` is true from the touch.
  */
 function Tab({
-  label, active, Icon, emphasis = false,
+  label, active, Icon,
 }: {
   label: string
   active: boolean
   Icon: (typeof ITEMS)[number]['icon']
-  /** The centre tab: a filled circle, no label, always visibly itself. */
-  emphasis?: boolean
 }) {
   const { pending } = useLinkStatus()
 
@@ -85,45 +83,6 @@ function Tab({
   const [pressed, setPressed] = useState(false)
   const release = () => setPressed(false)
 
-  if (emphasis) {
-    // The emphasised centre: an emerald circle with the trophy in it,
-    // tinted at rest and solid while you are there or on your way — and
-    // its name under it like every other tab, sized to still clear the
-    // bar's height with the circle above it.
-    return (
-      <span
-        onPointerDown={() => setPressed(true)}
-        onPointerUp={release}
-        onPointerCancel={release}
-        onPointerLeave={release}
-        // Bottom-anchored like the plain tabs, so all five labels sit on
-        // one line — the circle is taller than an icon, and centring both
-        // stacks dropped this label 8px below its neighbours.
-        className={`flex flex-col items-center justify-end gap-1 h-16 pb-[9px] transition-transform duration-150 ease-out ${
-          pressed ? 'tab-pressed' : ''
-        } ${pending ? 'tab-pending' : ''}`}
-      >
-        <span
-          className={`flex items-center justify-center w-9 h-9 rounded-full transition-colors duration-150 ${
-            lit
-              ? 'bg-accent-deep text-white'
-              : 'bg-accent/[0.12] text-accent-deep'
-          }`}
-        >
-          <Icon size={20} />
-        </span>
-        <span
-          className={`font-[family-name:var(--font-ui)] leading-none whitespace-nowrap ${
-            lit ? 'text-accent' : 'text-bark/60'
-          }`}
-          style={{ fontSize: 11, fontWeight: lit ? 600 : 400 }}
-        >
-          {label}
-        </span>
-      </span>
-    )
-  }
-
   return (
     <span
       onPointerDown={() => setPressed(true)}
@@ -133,7 +92,7 @@ function Tab({
       // leave the tab held down forever otherwise.
       onPointerCancel={release}
       onPointerLeave={release}
-      className={`flex flex-col items-center justify-end gap-1 h-16 pb-[9px] transition-[color,transform] duration-150 ease-out ${
+      className={`flex flex-col items-center justify-center gap-1 h-16 transition-[color,transform] duration-150 ease-out ${
         lit ? 'text-accent' : 'text-bark/60 hover:text-bark/80'
       } ${pressed ? 'tab-pressed' : ''} ${pending ? 'tab-pending' : ''}`}
     >
@@ -185,7 +144,6 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
         {ITEMS.map(item => {
           const active = activeKey === item.key
           const Icon = item.icon
-          const emphasis = item.key === 'leaderboard'
           return (
             <li key={item.key}>
               <Link
@@ -211,7 +169,7 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
                 // whole benefit and it costs nothing to be wrong about.
                 className="block touch-manipulation"
               >
-                <Tab label={item.label} active={active} Icon={Icon} emphasis={emphasis} />
+                <Tab label={item.label} active={active} Icon={Icon} />
               </Link>
             </li>
           )

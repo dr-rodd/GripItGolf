@@ -413,23 +413,26 @@ section('The bottom tab bar')
 {
   const src = read('app/components/TabBar.tsx')
 
-  // Five tabs, on trial: the leaderboard in the middle with the emphasis,
-  // because it is what everybody on a golf trip keeps coming back to.
+  // Five tabs: the leaderboard holds the centre, which is the emphasis —
+  // the emerald circle around it was tried and retired the same day (the
+  // label had to go, then came back and dragged the alignment sideways).
+  // Five identical tabs; position does the emphasising.
   eq(
     (src.match(/label: '([^']+)'/g) ?? []).map(s => s.replace(/label: '|'/g, '')),
     ['Home', 'Scoring', 'Leaderboard', 'Stats', 'Trip Setup'],
     'five items, leaderboard centred',
   )
   ok(src.includes('grid-cols-5'), 'the grid matches the count')
+  ok(!/emphasis/.test(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')) && !/rounded-full/.test(src),
+    'no tab is dressed differently from the others')
 
-  // The centre tab draws as a filled circle and keeps its label under it —
-  // the unlabelled circle was tried and the word came back by request, so
-  // the circle shrank to make the height for it.
-  ok(/emphasis = item\.key === 'leaderboard'/.test(src),
-    'the emphasis is the leaderboard’s')
-  ok(/rounded-full/.test(src), '  …drawn as a circle')
-  ok(src.slice(src.indexOf('if (emphasis)')).includes('{label}'),
-    '  …with its name under the circle like every other tab')
+  // The bar's env(safe-area-inset-bottom) is only a real number when the
+  // viewport declares viewport-fit=cover — without it iOS reports every
+  // inset as zero, the padding never fired, and the bar sat in the home
+  // indicator's zone once Safari's toolbar collapsed at the bottom of a
+  // scroll. The one line that makes the whole clearance chain true.
+  ok(/viewportFit: "cover"/.test(read('app/layout.tsx')),
+    'the viewport declares cover, so the safe-area insets exist')
 
   ok(src.includes('fixed bottom-0'), 'fixed to the bottom of the viewport')
   ok(src.includes('env(safe-area-inset-bottom)'),
