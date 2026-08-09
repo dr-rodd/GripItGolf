@@ -12,6 +12,9 @@
  */
 
 import fs from 'fs'
+import React from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import Itinerary from '../app/trip/[tripCode]/Itinerary'
 import type { ItineraryItem } from '../lib/itinerary'
 import {
   upNext, nextActivity, describeCountdown, describeGroups, momentOf, orderedItems, dayArrived,
@@ -1072,6 +1075,44 @@ section('One section is open at a time')
   // and nothing on this page may glow.
   ok(stack.includes('duration-300') && stack.includes('ease-out'), 'it opens over 300ms, ease-out')
   ok(!stack.includes('shadow-[0_0_'), 'and nothing about it glows')
+}
+
+// ─── The itinerary, rendered ───────────────────────────────
+
+section('A golf tile is named by its course')
+{
+  // Nothing rendered this. `describeItem` was pinned on its own and the page
+  // that feeds it was pinned on its own, and the wire between them — a
+  // course id looked up in a map built one file away — was covered by
+  // neither. When a golf tile came back reading "Golf" there was no test
+  // that could say whether the fault was the lookup or the data behind it,
+  // and answering that took a hand-built render. This is that render, kept.
+  const golf: ItineraryItem = {
+    id: 'i1', dayIndex: 0, position: 0, kind: 'golf',
+    courseId: 'c1', teeTime: '09:20', teeCount: 2,
+    stayName: null, travelMode: null, fromPlace: null, toPlace: null, durationMins: null,
+    activityName: null, activityTime: null,
+  }
+  const render = (names: Record<string, string>) => renderToStaticMarkup(
+    React.createElement(Itinerary, {
+      items: [golf], startDate: '2026-08-10', courseNames: names,
+      days: 1, tripCode: 'ABC123', roundNumbers: { i1: 1 },
+    } as never)
+  )
+
+  const named = render({ c1: 'Carne' })
+  ok(named.includes('Carne'), 'the course is the title of the tile')
+  ok(named.includes('2 tee times from 9:20 am'), 'and the tee times are the line under it')
+  ok(!/>Golf</.test(named), 'the word "Golf" appears nowhere — the course says it')
+
+  // The fallback, and what it looks like. Worth pinning as the shape of the
+  // failure rather than as a feature: a tile reading "Golf" means the id on
+  // the item found nothing in the map, which is a course that was never set
+  // or one that no longer exists.
+  const unnamed = render({})
+  ok(/>Golf</.test(unnamed), 'an unresolvable course falls back to the bare kind')
+  ok(unnamed.includes('2 tee times from 9:20 am'),
+    'and everything the item does know is still on the tile')
 }
 
 // ─── Result ────────────────────────────────────────────────
