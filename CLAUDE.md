@@ -140,7 +140,10 @@ Trip Settings drawer. Off by default. Everything else is derived in
 The hub at `/trip/[code]/stats` is **pure views over one fetched
 `HoleStat[]`** — every toggle is client-side filtering, and **the filter
 narrows the holes, never the field**: a gain on one course is measured
-against everybody's play of that course, whoever is selected. Net gained is
+against everybody's play of that course, whoever is selected. **The course
+picker is a choice of one** — `null` for every course or a single id, never a
+set — so no tap can leave the page with no holes on it and nothing has to
+guard against it. Net gained is
 Stableford points vs the field — the handicap arrives baked into each
 stored point, never re-derived. Charts are hand-drawn SVG; polarity is
 encoded by side-of-zero, never by the emerald/rust pair alone, which a
