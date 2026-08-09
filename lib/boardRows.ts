@@ -103,6 +103,19 @@ export type BoardRow = {
   playedRounds: string[]
   /** Rounds set aside by this board's discard rule — shown struck through. */
   droppedRounds?: string[]
+  /**
+   * The total with nothing set aside.
+   *
+   * Present only when this board's discard rule actually dropped a round
+   * from this row, so its absence is the reliable "nothing was discarded"
+   * answer and the leaderboard's Discard toggle keys off it.
+   *
+   * `total` stays the competition's total — after the discard — because that
+   * is what decides the trip and what every other reader of a board row
+   * (the hub's standing line, a round podium) is asking for. This is the
+   * second figure, for the one screen that offers to show its working.
+   */
+  totalAll?: number
   /** Rounds with a card still open. */
   liveRounds?: string[]
   /**
@@ -372,6 +385,14 @@ type RoundScore = {
   heroPlayerId?: string | null
 }
 
+type Combined = {
+  perRound: Record<string, number>
+  dropped: string[]
+  total: number
+  /** Undefined unless something was actually dropped — see `BoardRow.totalAll`. */
+  totalAll?: number
+}
+
 /**
  * Turn a row's rounds into its columns and its total.
  *
@@ -383,8 +404,8 @@ function combineRounds(
   lb: Leaderboard,
   rows: { id: string; rounds: RoundScore[] }[],
   fieldSize: number,
-): Map<string, { perRound: Record<string, number>; dropped: string[]; total: number }> {
-  const out = new Map<string, { perRound: Record<string, number>; dropped: string[]; total: number }>()
+): Map<string, Combined> {
+  const out = new Map<string, Combined>
   const byPosition = lb.combine === 'position'
   const table = byPosition ? resolveCustomPoints(lb.customPoints ?? [], fieldSize) : []
 
@@ -418,21 +439,55 @@ function combineRounds(
     const opts = { lowerWins: byPosition ? false : lowerWins(lb) }
     const values = played.map(r => perRound[r.roundId])
     const discard = lb.discardWorst ?? 0
+    const dropped = discardedIndices(values, discard, opts).map(i => played[i].roundId)
 
     out.set(row.id, {
       perRound,
-      dropped: discardedIndices(values, discard, opts).map(i => played[i].roundId),
+      dropped,
       total: totalAfterDiscard(values, discard, opts),
+      // Nothing dropped, nothing to say — and the same function does both
+      // totals rather than a bare `reduce` growing up beside it as a second
+      // answer to what a row adds up to.
+      totalAll: dropped.length > 0 ? totalAfterDiscard(values, 0, opts) : undefined,
     })
   }
   return out
 }
 
-/** Highest total wins, unless the board is nett strokes added up. */
-function sortRows(lb: Leaderboard, rows: BoardRow[]): BoardRow[] {
+/**
+ * Highest total wins, unless the board is nett strokes added up — over
+ * whichever total is being read.
+ *
+ * Split out so the leaderboard's Discard toggle can reorder by the all-in
+ * total without writing the rule down a second time. There are already two
+ * orderings in this codebase and a third would be one too many: this is the
+ * *same* ordering asking a different column.
+ */
+function rowOrder(lb: Leaderboard, totalOf: (r: BoardRow) => number) {
   const ascending = lowerWins(lb) && lb.combine !== 'position'
-  return rows.sort((a, b) =>
-    (ascending ? a.total - b.total : b.total - a.total) || a.name.localeCompare(b.name))
+  return (a: BoardRow, b: BoardRow) =>
+    (ascending ? totalOf(a) - totalOf(b) : totalOf(b) - totalOf(a))
+      || a.name.localeCompare(b.name)
+}
+
+/** The board's own order: by the competition total, after any discard. */
+function sortRows(lb: Leaderboard, rows: BoardRow[]): BoardRow[] {
+  return rows.sort(rowOrder(lb, r => r.total))
+}
+
+/**
+ * The same board, ordered as if nothing had been set aside.
+ *
+ * For the leaderboard's Discard toggle in its off state, where every round
+ * counts. A copy rather than a sort in place: these rows are props by the
+ * time anything calls this, and sorting them where they lie would reorder
+ * the array the board was handed.
+ *
+ * `totalAll` is absent on any row that had nothing dropped, and `total` is
+ * then already the all-in figure — so the fallback is exact, not a guess.
+ */
+export function orderRowsUndiscarded(lb: Leaderboard, rows: readonly BoardRow[]): BoardRow[] {
+  return [...rows].sort(rowOrder(lb, r => r.totalAll ?? r.total))
 }
 
 // ── Individuals ──
@@ -510,6 +565,7 @@ function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
       liveRounds: rounds.filter(r => r.live).map(r => r.roundId),
       relativeByRound: relatives(lb, rounds),
       total: c.total,
+      totalAll: c.totalAll,
       isLive: liveFor([player.id], ctx),
       playerIds: [player.id],
     }
@@ -582,6 +638,7 @@ function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
       droppedRounds: c.dropped,
       liveRounds: rounds.filter(r => r.live).map(r => r.roundId),
       total: c.total,
+      totalAll: c.totalAll,
       isLive: liveFor(memberIds, ctx),
       playerIds: memberIds,
       heroByRound: Object.fromEntries(rounds.map(r => [r.roundId, r.heroPlayerId ?? null])),

@@ -10,6 +10,7 @@ import {
 import {
   type BoardRow, type ResolvedScore, type RowContext,
   buildRows, scoresForBoard, boardHandicapFor, effectivePar, effectiveSI,
+  orderRowsUndiscarded,
 } from '@/lib/boardRows'
 import { buildRowContext, sortRounds } from '@/lib/rowContext'
 import { formatHandicap } from '@/lib/handicap'
@@ -744,14 +745,49 @@ function useBoardScroll(scrolls: boolean) {
 const INLINE_ROUNDS = 4
 
 function Board({
-  rows, rounds, playerById, onOpenCard,
+  board, rows: allRows, rounds, playerById, onOpenCard,
 }: {
+  board: Leaderboard
   rows: BoardRow[]
   rounds: Round[]
   playerById: Map<string, Player>
   onOpenCard: (row: BoardRow, round: Round) => void
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  /**
+   * Whether the board's discard rule is being applied to what you can see.
+   *
+   * **Off by default, and that is a deliberate choice rather than a lazy
+   * one.** A board that drops your worst round is showing a total with a
+   * card missing from it, and the missing card is the first thing anybody
+   * asks about. So the plain arithmetic — every round counting, the columns
+   * adding to the total beside them — is what the board opens on, and the
+   * rule is one tap away.
+   *
+   * Turned on, the dropped round strikes through and the totals fall to the
+   * competition's real figures. **The order changes with them**: a board
+   * ordered by a total it is not showing reads as broken, so it is sorted by
+   * whichever total is on screen. That is `orderRowsUndiscarded` and it is
+   * the board's own comparator asking a different column, not a second
+   * ordering — see the note on it in lib/boardRows.ts.
+   *
+   * State lives here rather than in the page because `Board` is keyed by
+   * the board's id: switch tab and the toggle resets to off, which is right.
+   * A discard rule belongs to one board and so does the answer about it.
+   */
+  const [discarding, setDiscarding] = useState(false)
+
+  // Only worth a control when the rule actually took something away. A board
+  // set to drop the worst of one round drops nothing.
+  const discards = allRows.some(r => (r.droppedRounds?.length ?? 0) > 0)
+  const applied = discards && discarding
+
+  const rows = useMemo(
+    () => (applied ? allRows : orderRowsUndiscarded(board, allRows)),
+    [applied, allRows, board],
+  )
+
   // Under the limit nothing scrolls and the columns are just a row; over it,
   // the same markup scrolls and the ends pin themselves.
   const scrolls = rounds.length > INLINE_ROUNDS
@@ -850,6 +886,42 @@ function Board({
   // whoever is leading. The corners round without it.
   return (
     <div className="bg-surface border border-bark/12 rounded-2xl">
+
+      {/* ── The discard switch ──
+          Above the headings and inside the card, because it changes what
+          every figure below it means and belongs to this table rather than
+          to the page. Absent entirely on a board that dropped nothing, which
+          is most of them. */}
+      {discards && (
+        <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-bark/12">
+          <span className="text-[13px] text-ink/65 leading-snug min-w-0">
+            {/* Says what is on screen, not what the board's rule is — the
+                rules line above already states the rule, and "Worst round
+                dropped · Every round counting" one under the other reads as
+                a contradiction rather than as a rule and a view of it. */}
+            {discarding
+              ? 'Worst round set aside'
+              : 'Showing every round'}
+          </span>
+          <button
+            onClick={() => setDiscarding(v => !v)}
+            aria-pressed={discarding}
+            title={
+              discarding
+                ? 'Showing the competition total — tap to count every round'
+                : 'Tap to drop the worst round, as this board scores it'
+            }
+            className={`flex-shrink-0 px-3 py-1.5 rounded-lg border text-[13px] tracking-wider uppercase transition-colors duration-150 ${
+              discarding
+                ? 'bg-accent-deep text-white border-accent-deep font-bold'
+                : 'bg-surface border-bark/12 text-ink/65 hover:text-ink/80'
+            }`}
+          >
+            Discard
+          </button>
+        </div>
+      )}
+
       {/* ── Column headings ──
           Sticky against the viewport, so outside the scroller below and in a
           thin scroller of their own that follows it. See `useBoardScroll`
@@ -943,7 +1015,9 @@ function Board({
 
                 {showRounds && rounds.map(r => {
                   const played  = row.playedRounds.includes(r.id)
-                  const dropped = row.droppedRounds?.includes(r.id) ?? false
+                  // Only while the switch is on. Off, a set-aside round is
+                  // an ordinary counting round and looks like one.
+                  const dropped = applied && (row.droppedRounds?.includes(r.id) ?? false)
                   const live    = row.liveRounds?.includes(r.id) ?? false
                   const pts     = row.perRound[r.id] ?? 0
                   const rel     = row.relativeByRound?.[r.id]
@@ -980,7 +1054,10 @@ function Board({
                 <span className={pin('r', '-my-2 py-2')}>
                   {shadeR}
                   <span className="block w-14 text-right t-num font-semibold text-xl text-ink">
-                    {formatScore(row.total)}
+                    {/* The total the columns beside it add up to, whichever
+                        way the switch is set. `totalAll` is only there when
+                        something was dropped, so the fallback is exact. */}
+                    {formatScore(applied ? row.total : row.totalAll ?? row.total)}
                   </span>
                 </span>
               </button>
@@ -1233,6 +1310,7 @@ export default function TripLeaderboardClient({
         : (
           <Board
             key={activeBoard.id}
+            board={activeBoard}
             rows={currentRows}
             rounds={sortedRounds}
             playerById={playerById}

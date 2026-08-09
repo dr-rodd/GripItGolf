@@ -16,7 +16,8 @@ import { DEFAULT_TEAM_SCORING, type TeamScoring } from '../lib/teamScoring'
 import type { Leaderboard } from '../lib/leaderboards'
 import { scoreTone, TONE_PILL } from '../lib/leaderboardStyle'
 import { boardsFromFormats, tripBoards, isLegacy } from '../lib/leaderboardsCompat'
-import { teamScoringFor } from '../lib/boardRows'
+import { teamScoringFor, buildRows, orderRowsUndiscarded } from '../lib/boardRows'
+import { buildRowContext } from '../lib/rowContext'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -116,6 +117,35 @@ function render(boards: Leaderboard[], opts: RenderOpts = {}) {
   )
 }
 
+/**
+ * The same fixtures, as rows rather than as HTML.
+ *
+ * The board's Discard switch starts off, and a static render cannot tap it —
+ * so what the *on* state shows is checked here, where it comes from. The
+ * render tests below hold the off state and the switch itself; these hold the
+ * two totals and the two orderings the switch chooses between.
+ */
+function rowsFor(board: Leaderboard, opts: RenderOpts = {}) {
+  const ps = (opts.players ?? players) as typeof players
+  const rs = (opts.rounds ?? rounds) as typeof rounds
+  const ctx = buildRowContext({
+    players: ps,
+    teams: (opts.teams ?? []) as never,
+    memberships: opts.memberships as never ?? membershipsFrom(ps),
+    holes,
+    rounds: rs,
+    courseByRound: new Map(rs.map(r => [r.id, r.courses?.id ?? 'c1'])),
+    scores: (opts.scores ?? scores) as never,
+    liveScores: (opts.liveScores ?? []) as never,
+    roundHandicaps: (opts.roundHandicaps ?? roundHandicaps) as never,
+    tees: [],
+    activeRoundIds: opts.activeRoundIds ?? [],
+    livePlayerIds: opts.livePlayerIds ?? [],
+    legacyTeamScoring: opts.legacyTeamScoring ?? null,
+  })
+  return { board: buildRows(board, ctx), all: orderRowsUndiscarded(board, buildRows(board, ctx)) }
+}
+
 /** Holes 1..n of a round, still sitting in the in-progress table. */
 function liveHoles(playerId: string, roundId: string, upTo: number, pointsPerHole: number) {
   return holes.slice(0, upTo).map(h => ({
@@ -186,20 +216,66 @@ section('Stableford')
   eq((plain.match(/>72</g) ?? []).length, 3, 'all three total 72 with every round counting')
   ok(!plain.includes('line-through'), 'nothing is struck through')
 
+  // A board that drops a round opens with the switch off: every round
+  // counting, the columns adding to the total beside them, nothing struck
+  // through. The rule is a tap away, not hidden — the switch says so.
+  const dropped = render([SF(1)])
+  ok(!dropped.includes('line-through'),
+    'a discarding board still opens with nothing struck through')
+  eq((dropped.match(/>72</g) ?? []).length, 3,
+    '  …and every round counting, so all three still total 72')
+  ok(dropped.includes('>Discard<') && dropped.includes('Showing every round'),
+    '  …with the switch offering the rule, and saying which way it is set')
+
+  ok(!plain.includes('>Discard<'),
+    'a board that drops nothing has no switch to offer')
+
   // Drop the worst: Alice keeps 54, Bob keeps 36, Cara keeps 54 — so Bob
   // falls to last. Dropping the *best* by mistake would put Bob top instead,
   // which is what the ordering assertion below actually catches.
-  const dropped = render([SF(1)])
-  ok(dropped.includes('line-through'), 'the dropped round is struck through')
-  ok(dropped.includes('Set aside'), 'and says why on hover')
-  eq((dropped.match(/>72</g) ?? []).length, 0, 'nobody still totals both rounds')
+  const sf1 = rowsFor(SF(1))
+  eq(sf1.board.map(r => `${r.name} ${r.total}`), ['Alice 54', 'Cara 54', 'Bob 36'],
+    'switched on, Bob finishes last — his 36 is beaten by two 54s')
+  ok(sf1.board[0].name !== 'Bob',
+    '  …and is certainly not top, which is where dropping the best round would put him')
+  eq(sf1.board.map(r => r.totalAll), [72, 72, 72],
+    '  …while the all-in total travels with every row for the switch to show')
+  eq(sf1.board.map(r => r.droppedRounds?.length ?? 0), [1, 1, 1],
+    '  …and each of them has exactly one round set aside')
 
-  const order = (html: string) =>
-    ['Alice', 'Bob', 'Cara'].sort((a, b) => html.indexOf(a) - html.indexOf(b))
-  eq(order(dropped)[2], 'Bob',
-    'Bob finishes last once the worst round is dropped — his 36 is beaten by two 54s')
-  ok(order(dropped)[0] !== 'Bob',
-    'and is certainly not top, which is where dropping the best round would put him')
+  // Switched off, the same rows are ordered by the total on screen. Level on
+  // 72 apiece, so the tie-break — the name — is the whole order.
+  eq(sf1.all.map(r => r.name), ['Alice', 'Bob', 'Cara'],
+    'switched off, the order follows the all-in totals it is showing')
+
+  // Nothing dropped, nothing to say: the fallback in the board is exact
+  // rather than a guess, and this is what makes it so.
+  eq(rowsFor(SF(0)).board.map(r => r.totalAll), [undefined, undefined, undefined],
+    'a board that discards nothing carries no second total')
+}
+
+// ─── The switch itself ─────────────────────────────────────────
+
+section('The Discard switch starts off, and moves the whole board at once')
+{
+  const src = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+
+  ok(src.includes('const [discarding, setDiscarding] = useState(false)'),
+    'the switch is off until it is tapped')
+
+  // The one regression worth pinning in the markup: the strike-through and
+  // the total have to answer to the same flag. Move one and not the other
+  // and the board shows a total its own columns contradict — which is
+  // exactly the state this whole switch exists to avoid.
+  ok(src.includes('applied && (row.droppedRounds'),
+    'a round is only struck through while the switch is on')
+  ok(src.includes('applied ? row.total : row.totalAll ?? row.total'),
+    '  …and the total moves with it, off the same flag')
+
+  // Ordering too: a board sorted by a total it is not showing reads as
+  // broken, and it is the library's comparator that keeps the two together.
+  ok(src.includes('orderRowsUndiscarded(board, allRows)'),
+    '  …and so does the order, from the board\'s own comparator')
 }
 
 // ─── Discard belongs to the board, not to the trip ─────────────
@@ -208,13 +284,22 @@ section('Two boards on one trip can discard differently')
 {
   // This is the whole point of the restructure. Under the old model discard
   // was one number on the trip, so these two boards could not disagree.
+  // The switch is the tell, now that the strike-through only appears once it
+  // is tapped: a board offers it exactly when its own rule took a round away.
   const sfKeeps = render([SF(0), ST(1)])
-  ok(!sfKeeps.includes('line-through'),
+  ok(!sfKeeps.includes('>Discard<'),
     'the Stableford board keeps every card, though the Strokes board beside it drops one')
 
   const stDrops = render([ST(1), SF(0)])
-  ok(stDrops.includes('line-through'),
+  ok(stDrops.includes('>Discard<'),
     'and the Strokes board drops one, though the Stableford board beside it keeps every card')
+
+  // And they disagree about the totals themselves, which is the substance
+  // behind the switch. Strokes: lower wins, so the worst round is the highest.
+  eq(rowsFor(SF(0)).board.map(r => r.totalAll), [undefined, undefined, undefined],
+    'the board keeping every card has no second total')
+  ok(rowsFor(ST(1)).board.every(r => r.totalAll !== undefined),
+    '  …and the one dropping a round has one on every row')
 
   // Same two boards, same scores — only which one is showing has changed
   ok(sfKeeps.includes('Alice') && stDrops.includes('Alice'),
@@ -267,10 +352,18 @@ section('Custom points when players tie')
 
 section('Custom points with the worst round dropped')
 {
-  // 10/5/1, dropping the worst: Alice keeps 10, Bob keeps 5, Cara keeps 10
+  // 10/5/1, dropping the worst: Alice keeps 10, Bob keeps 5, Cara keeps 10.
+  // Off — how the board opens — every award counts: Alice 11, Bob 10, Cara 11.
   const html = render([CU([10, 5, 1], 1)])
-  ok(html.includes('line-through'), 'the weaker round is struck through')
-  ok(html.includes('>10<'), 'and the better one carries the total')
+  ok(!html.includes('line-through'), 'the board opens with every award counting')
+  ok(html.includes('>11<'), '  …so the two winners total eleven, not ten')
+  ok(html.includes('>Discard<'), '  …and the switch is there to drop the weaker round')
+
+  const cu = rowsFor(CU([10, 5, 1], 1))
+  eq(cu.board.map(r => `${r.name} ${r.total}`), ['Alice 10', 'Cara 10', 'Bob 5'],
+    'switched on, the weaker round goes and the better one carries the total')
+  eq(cu.board.map(r => r.totalAll), [11, 11, 10],
+    '  …with the all-in totals kept beside them')
 }
 
 // ─── Title card ────────────────────────────────────────────────
@@ -919,7 +1012,7 @@ section('An old trip is read as the boards its flags described')
   // It renders, which is the thing that actually matters to an existing trip
   const html = render(F({ stableford: true, strokes: true, discardWorst: 1 }))
   ok(html.includes('Alice'), 'an old trip still gets its board')
-  ok(html.includes('line-through'), 'with its discard rule still applied')
+  ok(html.includes('>Discard<'), 'with its discard rule still there to be applied')
 }
 
 section('An old team trip keeps the options the new model does not ask for')

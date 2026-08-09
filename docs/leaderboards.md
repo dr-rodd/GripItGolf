@@ -103,6 +103,22 @@ Both axes allow more than one answer. A trip can rank individuals and teams off 
 
 `discardWorst` (0–2) drops a player's weakest rounds. It applies to Stableford and Strokes; Custom is a prize table by position, so dropping a round there is a separate idea and the question is not asked for it alone.
 
+#### The Discard switch, and why the board opens with it off
+
+A board that drops a round is showing a total with a card missing from it, and the missing card is the first thing anybody asks about. So the leaderboard **opens on the plain arithmetic** — every round counting, the columns adding to the total beside them, nothing struck through — and offers the rule as a switch in the head of the table. Off by default, and only present at all when the rule actually took a round away from somebody.
+
+Three things move together when it is tapped, and they have to:
+
+- **The round cells.** A dropped round strikes through only while the switch is on.
+- **The total.** `BoardRow.total` is always the competition's figure, after the discard, because that is what decides the trip and what the hub's standing line and a round podium are asking for. `BoardRow.totalAll` is the second figure, present *only* where something was dropped — so its absence is the reliable "nothing was discarded" answer, and `totalAll ?? total` is exact rather than a guess.
+- **The order.** A board sorted by a total it is not showing reads as broken. `orderRowsUndiscarded` is the board's *own* comparator asking a different column — not a third ordering. See the note on the two orderings in `CLAUDE.md` before adding a fourth.
+
+The switch's caption says what is on screen ("Showing every round" / "Worst round set aside"), never what the rule is: the rules line above the table already states the rule, and "Worst round dropped" sitting directly above "Every round counting" reads as a contradiction rather than as a rule and a view of it.
+
+**The board's default order is therefore not the competition's order** while the switch is off. That was chosen deliberately over the alternative — always showing the after-discard result and using the switch only to reveal the working. It is worth re-examining once a trip is actually being decided by a discard rule.
+
+A static render cannot tap the switch, so `test:leaderboard` holds the off state and the switch itself in the markup, and holds the on state at the row level through `buildRows` / `orderRowsUndiscarded`. The two discard cases in the golden master were re-recorded for this change; their diff is the whole behaviour change in one place.
+
 ### Reading stored settings — three generations, no migrations
 
 `parseFormats` reads every shape this app has written, so nothing was ever migrated:
