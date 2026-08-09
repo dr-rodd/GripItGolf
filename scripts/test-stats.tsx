@@ -1056,10 +1056,24 @@ section('The lab reads the derivation and does none of its own')
     && !/onChange\(id\);?\s*setOpen\(false\)/.test(client),
     '  …and the list stays open while you compare, closing on the chevron')
 
-  // The controls stick under the site header, offset the way every sticky
-  // row in the app must be.
-  ok(/sticky/.test(client) && /top: HEADER_H/.test(client),
-    'the controls pin under the header, never at top-0')
+  // ── The controls scroll away, and come back as one line ──
+  //
+  // Pinned, three rows of chooser held a third of a phone for the whole
+  // page. They scroll off; what pins is the line they collapse into, and it
+  // pins under the site header rather than at top-0, the way every fixed
+  // row in the app must.
+  ok(/function CondensedBar/.test(client), 'the controls collapse into one line')
+  ok(/top: HEADER_H/.test(client) && !/sticky z-30 bg-cream/.test(client),
+    '  …and it is that line which pins under the header, not the controls')
+  ok(/IntersectionObserver/.test(client) && /rootMargin: `-\$\{HEADER_H\}px/.test(client),
+    '  …swapped on an observer reading the visible top of the screen')
+
+  // The line is the two rows folded up, so it must say what they say — one
+  // source for the wording, not a second copy that can drift.
+  ok(/const whoLabel =/.test(client) && /const whereLabel =/.test(client),
+    '  …naming the player and the course from one place')
+  ok(/who === meId \? 'You'/.test(client),
+    '  …calling this phone\'s player what the chips call them')
 
   // The awards fold into the Everyone view — the tab is gone.
   ok(!/'awards', 'Awards'/.test(client), 'the awards tab is gone')

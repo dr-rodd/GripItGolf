@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   playerStats, statsFor, holeDifficulty, gainedOnField, pointsVsField,
   formatGained, formatRate, formatAverage,
@@ -134,6 +134,42 @@ export default function StatsClient({
     return new Map([...seen].map(([id, set]) => [id, set.size]))
   }, [stats])
 
+  /**
+   * Whether the controls have scrolled up out of the way.
+   *
+   * Watched with an observer on the controls themselves rather than a scroll
+   * handler: a scroll listener fires on every frame of a flick and has to
+   * measure to answer, where this fires twice — once crossing out, once
+   * crossing back. `rootMargin` pulls the viewport's top edge down to the
+   * bottom of the site header, so "off screen" means off the part of the
+   * screen the reader can actually see.
+   */
+  const controls = useRef<HTMLDivElement>(null)
+  const [condensed, setCondensed] = useState(false)
+
+  useEffect(() => {
+    const el = controls.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      ([entry]) => setCondensed(!entry.isIntersecting),
+      { rootMargin: `-${HEADER_H}px 0px 0px 0px`, threshold: 0 },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
+  // What the collapsed line says. Named here rather than in the bar so the
+  // chips above and the line below cannot come to call the same player two
+  // different things.
+  const whoLabel = view === 'courses'
+    ? ''
+    : who === 'everyone'
+      ? 'Everyone'
+      : who === meId ? 'You' : (nameOf.get(who) ?? 'Player').split(' ')[0]
+  const whereLabel = view === 'courses'
+    ? (shownCourse ? courseName.get(shownCourse) ?? 'Course' : '')
+    : only === null ? 'All courses' : courseName.get(only) ?? 'Course'
+
   const chip = (on: boolean) =>
     `flex-shrink-0 inline-flex items-center px-4 py-2.5 t-label rounded-xl border transition-colors duration-150 ${
       on
@@ -143,11 +179,12 @@ export default function StatsClient({
 
   return (
     <div>
-      {/* ── The instrument's controls, pinned under the site header ── */}
-      <div
-        className="sticky z-30 bg-cream -mx-4 px-4 pb-3 border-b border-bark/12 mb-4"
-        style={{ top: HEADER_H }}
-      >
+      {/* ── The instrument's controls ──
+          They scroll away. Pinned, they held a third of a phone screen for
+          the whole page — three rows of chooser above every figure you came
+          to read. What pins instead is the one line they collapse into,
+          below. */}
+      <div ref={controls} className="-mx-4 px-4 pb-3 border-b border-bark/12 mb-4">
         {/* The first choice on the page: who, or where. */}
         <div className="flex gap-2 pt-3">
           {([['players', 'Players'], ['courses', 'Courses']] as const).map(([v, label]) => (
@@ -217,6 +254,21 @@ export default function StatsClient({
         )}
       </div>
 
+      {/* The line the controls become. Fixed rather than sticky, so it costs
+          the layout nothing until it is wanted and nothing shifts when it
+          arrives — a sticky element holds its space in the flow whether it
+          is stuck or not, which would leave a band of empty cream under the
+          controls for the whole page. */}
+      <CondensedBar
+        show={condensed}
+        who={whoLabel}
+        where={whereLabel}
+        onOpen={() => {
+          const top = (controls.current?.offsetTop ?? 0) - HEADER_H
+          window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+        }}
+      />
+
       {thin && (
         <p className="t-cap text-ink/65 mb-4 leading-snug">
           A few holes in. These settle as more cards come in.
@@ -277,6 +329,80 @@ export default function StatsClient({
           />
         </>
       )}
+    </div>
+  )
+}
+
+// ─── The line the controls become ──────────────────────────────
+
+/**
+ * Who and where, on one line, once the choosers have scrolled away.
+ *
+ * The two categories arrive from the two sides — the player from the left,
+ * where the chip row sat, the course from the right — and meet in the
+ * middle. That is the whole animation and it is doing a job rather than
+ * decorating: it says these two words *are* the two rows above, folded up,
+ * rather than a new thing that appeared.
+ *
+ * Tapping it takes you back to them. Nothing else on the line is tappable,
+ * because a bar that scrolls the page and also holds a control is a bar
+ * where half the taps do the wrong thing.
+ *
+ * Fixed rather than sticky, and `-mx-4 px-4` has no meaning here: it spans
+ * the viewport and re-establishes the page's own column inside itself, so
+ * the words line up with the panels below whatever the screen is doing.
+ */
+function CondensedBar({
+  show, who, where, onOpen,
+}: {
+  show: boolean
+  /** Empty on the Courses view, which has no player to name. */
+  who: string
+  where: string
+  onOpen: () => void
+}) {
+  return (
+    <div
+      className={`fixed left-0 right-0 z-30 bg-cream border-b border-bark/12 transition-[opacity,transform] duration-200 ease-out ${
+        show ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'
+      }`}
+      style={{ top: HEADER_H }}
+      aria-hidden={!show}
+    >
+      <button
+        type="button"
+        onClick={onOpen}
+        tabIndex={show ? 0 : -1}
+        className="w-full max-w-lg mx-auto px-4 py-2.5 flex items-center gap-2 text-left transition-opacity duration-150 active:opacity-70"
+      >
+        {who && (
+          <span
+            className={`t-card text-ink truncate transition-transform duration-300 ease-out ${
+              show ? 'translate-x-0' : '-translate-x-4'
+            }`}
+          >
+            {who}
+          </span>
+        )}
+        {who && where && (
+          <span className="flex-shrink-0 w-1 h-1 rounded-full bg-bark/30" aria-hidden="true" />
+        )}
+        {where && (
+          <span
+            className={`t-cap text-ink/65 truncate transition-transform duration-300 ease-out ${
+              show ? 'translate-x-0' : 'translate-x-4'
+            }`}
+          >
+            {where}
+          </span>
+        )}
+        {/* Up, to the choosers. Rotated rather than a second icon, for the
+            same reason the picker's chevron is one icon turned. */}
+        <span className="flex-1" />
+        <span className="flex-shrink-0 text-ink/50 rotate-90" aria-hidden="true">
+          <IconChevronLeft size={16} />
+        </span>
+      </button>
     </div>
   )
 }
