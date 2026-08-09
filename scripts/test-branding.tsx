@@ -1476,11 +1476,27 @@ section('A page can name itself in the header')
 
   // Every mark is a file, exactly like the wordmark — never retyped in a
   // webfont, so replacing one needs no code change
-  for (const name of ['leaderboard', 'settings', 'scoring', 'trip']) {
+  for (const name of ['leaderboard', 'settings', 'scoring', 'trip', 'stats-hub']) {
     ok(src.includes(`/title-${name}.png`), `${name}. is a file`)
     ok(fs.existsSync(`public/title-${name}.png`), `  …and the file is there`)
   }
   ok(src.includes('<img'), 'rendered as an image, not as type')
+
+  // Every registered mark's ratio has to be the file's own, or the header
+  // sizes by height and hands the width to a number that disagrees — the
+  // word stretches or squashes and nothing else on the page shows it. The
+  // stats mark shipped once as a lookalike face at a stand-in ratio, so
+  // this is the check that a swapped file brought its measurement with it.
+  const marks = [...src.matchAll(/src: '\/title-([a-z-]+)\.png',\s*ratio: ([\d.]+)/g)]
+  ok(marks.length >= 5, 'every mark in the register carries a ratio')
+  for (const [, name, ratio] of marks) {
+    const png = fs.readFileSync(`public/title-${name}.png`)
+    // PNG IHDR: width and height are the two big-endian uint32 at byte 16.
+    const w = png.readUInt32BE(16), h = png.readUInt32BE(20)
+    const real = h / w
+    ok(Math.abs(real - Number(ratio)) < 0.005,
+      `title-${name} is declared ${ratio} and measures ${real.toFixed(4)}`)
+  }
 
   // Same place, same height as the mark it stands in for. The header sizes
   // by height and lets each word's own width follow.
