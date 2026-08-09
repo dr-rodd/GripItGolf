@@ -21,6 +21,7 @@ import {
   holeStats, strokesToGreen, isGreenInRegulation, countsForFairway,
   fairwayStats, puttingStats, gainedOnField, holeDifficulty,
   playerStats, statsFor, coverage,
+  scoringCounts, scrambling, approachStats, parSplits,
   MIN_OTHERS, MIN_HOLE_SAMPLE, MIN_MISSES,
   type StatsContext, type Fairway,
 } from '../lib/holeStats'
@@ -509,6 +510,141 @@ section('Hole difficulty is what actually happened, ranked against the card')
   eq(mixed[0].averageToPar, 0.25,
     'a par 5 for three of them and a par 4 for Ann averages a quarter over')
   eq(mixed[0].par, 5, '  …and prints as the par the men\'s card says')
+}
+
+section('Scoring counts read the gross against that player\'s own par')
+{
+  // h1–h4 are par 4s: 2 eagle, 3 birdie, 4 par, 5 bogey, 6 double.
+  const c = scoringCounts(holeStats(ctxOf([
+    sc('b', 'h1', 2), sc('b', 'h2', 3), sc('b', 'h3', 4), sc('b', 'h4', 5),
+    sc('b', 'h5', 5), // par 3, gross 5 — a double
+  ])))
+  eq(c.eaglesOrBetter, 1, 'a two on a par 4 is an eagle')
+  eq(c.birdies, 1, 'a three is a birdie')
+  eq(c.pars, 1, 'a four is a par')
+  eq(c.bogeys, 1, 'a five is a bogey')
+  eq(c.doublesOrWorse, 1, 'and a five on the par 3 is a double')
+
+  // The same gross on the shared hole lands in different columns per card.
+  const mixed = holeStats(ctxOf([sc('a', 'h6', 4, 2), sc('b', 'h6', 4, 2)]))
+  eq(scoringCounts(mixed.filter(s => s.playerId === 'a')).pars, 1,
+    'a four on the sixth is a par on Ann\'s card')
+  eq(scoringCounts(mixed.filter(s => s.playerId === 'b')).birdies, 1,
+    '  …and a birdie on Bob\'s')
+}
+
+section('A bounce-back is the very next hole, and only the very next hole')
+{
+  // Fed out of order on purpose: the database returns rows in whatever
+  // order it returns them, and a bounce-back read off unsorted input would
+  // pair the wrong holes silently. The order matters to the trap — with
+  // h2 *before* h1, an unsorted walk pairs the double with h3, fails the
+  // adjacency test and finds no chance at all, so skipping the sort changes
+  // the answer rather than accidentally agreeing with it.
+  const backed = scoringCounts(holeStats(ctxOf([
+    sc('b', 'h2', 4), sc('b', 'h1', 6), sc('b', 'h3', 4),
+  ])))
+  eq(backed.bounceBackChances, 1, 'a double followed by a scored hole is a chance')
+  eq(backed.bounceBacks, 1, '  …and the par converts it, wherever the rows arrived')
+
+  const bogeyAfter = scoringCounts(holeStats(ctxOf([
+    sc('b', 'h1', 6), sc('b', 'h2', 5),
+  ])))
+  eq(bogeyAfter.bounceBackChances, 1, 'a bogey after a double is still a chance')
+  eq(bogeyAfter.bounceBacks, 0, '  …just not a converted one')
+
+  // A gap is not a next hole. An NR after a blow-up vanishes from the stats
+  // entirely, and promoting whatever came after it would call the tail end
+  // of a meltdown a recovery.
+  const gap = scoringCounts(holeStats(ctxOf([
+    sc('b', 'h1', 6), sc('b', 'h3', 4),
+  ])))
+  eq(gap.bounceBackChances, 0, 'a hole missing in between drops the chance')
+
+  const last = scoringCounts(holeStats(ctxOf([sc('b', 'h6', 8)])))
+  eq(last.bounceBackChances, 0, 'and the last hole scored can never be one')
+
+  // Two rounds do not run into each other: a double ending round one is not
+  // bounced back by a par opening round two.
+  const across = scoringCounts(holeStats(ctxOf([
+    sc('b', 'h6', 8), sc('b', 'h1', 4, null, null, { roundId: 'r2' }),
+  ])))
+  eq(across.bounceBackChances, 0, 'a round\'s last double does not reach into the next round')
+}
+
+section('Scrambling is the missed greens that still made par')
+{
+  const s = scrambling(holeStats(ctxOf([
+    sc('b', 'h1', 4, 1),   // to green in 3, one putt: green missed, par saved
+    sc('b', 'h2', 3, 0),   // chipped in for birdie off a missed green — the best save
+    sc('b', 'h3', 5, 2),   // to green in 3, two putts: missed, bogey — no save
+    sc('b', 'h4', 4, 2),   // green in regulation — never a chance
+    sc('b', 'h5', 4),      // no putt count — invisible, not guessed at
+  ])))
+  eq(s.chances, 3, 'three greens missed with the putts known')
+  eq(s.saves, 2, 'two of them saved')
+  eq(s.rate, 2 / 3, '  …which is the rate')
+  eq(scrambling([]).rate, null, 'and nobody scrambles at nothing')
+}
+
+section('The approach split is what a missed fairway actually costs')
+{
+  const a = approachStats(holeStats(ctxOf([
+    sc('b', 'h1', 4, 2, 'fairway'),  // from the fairway, green hit
+    sc('b', 'h2', 5, 2, 'fairway'),  // from the fairway, green missed
+    sc('b', 'h3', 5, 1, 'left'),     // from a miss, green missed
+    sc('b', 'h4', 4, 2),             // no fairway answer — in neither side
+  ])))
+  eq(a.fromFairway.holes, 2, 'two approaches came off the short grass')
+  eq(a.fromFairway.girRate, 0.5, '  …finding half the greens')
+  eq(a.fromMiss.holes, 1, 'one came out of the rough')
+  eq(a.fromMiss.girRate, 0, '  …finding none')
+  // vsRegulation over the four with putts: leaks 0, 1, 2, 0 → 0.75.
+  // (h3 is gross 5 with one putt — four to the green against a regulation
+  // two, which is the long game bleeding while the putter bails it out.)
+  eq(a.vsRegulation, 0.75, 'the leak is measured to the green, not to the hole')
+
+  // Regulation is the player's own: five shots and two putts on the sixth
+  // is a shot over regulation for Ann and dead on it for Bob.
+  const shared = holeStats(ctxOf([sc('a', 'h6', 5, 2), sc('b', 'h6', 5, 2)]))
+  eq(approachStats(shared.filter(s => s.playerId === 'a')).vsRegulation, 1,
+    'a shot of leak against a par-4 regulation')
+  eq(approachStats(shared.filter(s => s.playerId === 'b')).vsRegulation, 0,
+    '  …and none against a par-5 one')
+}
+
+section('Par splits put every hole in that player\'s own column')
+{
+  const splits = parSplits(holeStats(ctxOf([
+    sc('b', 'h1', 5, 2), sc('b', 'h2', 4, 2),   // two par 4s: +1, E
+    sc('b', 'h5', 3, 2),                        // the par 3, on in one
+    sc('b', 'h6', 6, 2),                        // the par 5: +1
+  ])))
+  eq(splits.map(r => r.par), [3, 4, 5], 'in par order, and only pars played')
+  eq(splits[1].holes, 2, 'two par 4s')
+  eq(splits[1].averageToPar, 0.5, '  …averaging half over')
+  eq(splits[0].girRate, 1, 'the par-3 green was found — the pure iron figure')
+  eq(splits[2].vsRegulation, 1, 'and the par 5 leaked a shot getting there')
+
+  // Ann's sixth is a par 4, so it lands in her par-4 row, not a par-5 one.
+  const ann = parSplits(holeStats(ctxOf([sc('a', 'h6', 5, 2)])))
+  eq(ann.map(r => r.par), [4], 'the shared hole splits by the card being played')
+}
+
+section('The putting tails say what the average hides')
+{
+  const p = puttingStats(holeStats(ctxOf([
+    sc('b', 'h1', 4, 0),   // chipped in
+    sc('b', 'h2', 4, 1),
+    sc('b', 'h3', 4, 2),
+    sc('b', 'h4', 6, 3),
+    sc('b', 'h5', 6, 4),
+  ])))
+  eq(p.onePutts, 2, 'a chip-in and a one-putt are both the good tail')
+  eq(p.threePuttsOrWorse, 2, 'a three and a four are both the bad one')
+  eq(p.onePuttRate, 0.4, 'two of five')
+  eq(p.threePuttRate, 0.4, '  …either way')
+  eq(p.puttsPerHole, 2, 'while the average sits innocently on two')
 }
 
 section('The whole field, and one player out of it')

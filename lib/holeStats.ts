@@ -231,6 +231,16 @@ export type PuttingStats = {
   /** Putts taken on the greens they actually hit. The putting figure. */
   puttsOnGreensHit: number
   puttsPerGreenHit: number | null
+  /**
+   * The distribution's two tails. A one-putt is a hole won on the green; a
+   * three-putt is one given away there. The average hides both — 36 putts a
+   * round can be eighteen twos or a coin toss between ones and threes, and
+   * only one of those putters is in trouble.
+   */
+  onePutts: number
+  threePuttsOrWorse: number
+  onePuttRate: number | null
+  threePuttRate: number | null
 }
 
 export function puttingStats(stats: readonly HoleStat[]): PuttingStats {
@@ -239,6 +249,10 @@ export function puttingStats(stats: readonly HoleStat[]): PuttingStats {
   const known = stats.filter(s => s.gir != null)
   const hit = known.filter(s => s.gir === true)
   const onHit = hit.reduce((n, s) => n + (s.putts ?? 0), 0)
+  // `<= 1` on the ones, deliberately: a chip-in has zero putts and is a hole
+  // that needed at most one, which is what the tail is measuring.
+  const ones = withPutts.filter(s => s.putts! <= 1).length
+  const threes = withPutts.filter(s => s.putts! >= 3).length
 
   return {
     holes: withPutts.length,
@@ -250,7 +264,195 @@ export function puttingStats(stats: readonly HoleStat[]): PuttingStats {
     girRate: known.length === 0 ? null : hit.length / known.length,
     puttsOnGreensHit: onHit,
     puttsPerGreenHit: hit.length === 0 ? null : onHit / hit.length,
+    onePutts: ones,
+    threePuttsOrWorse: threes,
+    onePuttRate: withPutts.length === 0 ? null : ones / withPutts.length,
+    threePuttRate: withPutts.length === 0 ? null : threes / withPutts.length,
   }
+}
+
+// ─── Scoring, off the gross alone ──────────────────────────────
+//
+// These need no putt count and no fairway, so they cover every scored hole
+// on the trip — including holes played before stats were switched on.
+
+export type ScoringCounts = {
+  eaglesOrBetter: number
+  birdies: number
+  pars: number
+  bogeys: number
+  doublesOrWorse: number
+  /**
+   * A double or worse with the very next hole of the same round scored.
+   *
+   * Consecutive by hole number, strictly: a no return after a blow-up drops
+   * the chance rather than promoting whatever came after it, because an NR
+   * following a double reads more like the blow-up continuing than a clean
+   * slate. The eighteenth can never be a chance — there is no next hole.
+   */
+  bounceBackChances: number
+  /** Of those, the next hole was par or better. */
+  bounceBacks: number
+  bounceBackRate: number | null
+}
+
+export function scoringCounts(stats: readonly HoleStat[]): ScoringCounts {
+  const toPar = (s: HoleStat) => s.gross - s.par
+
+  const out = {
+    eaglesOrBetter: stats.filter(s => toPar(s) <= -2).length,
+    birdies: stats.filter(s => toPar(s) === -1).length,
+    pars: stats.filter(s => toPar(s) === 0).length,
+    bogeys: stats.filter(s => toPar(s) === 1).length,
+    doublesOrWorse: stats.filter(s => toPar(s) >= 2).length,
+    bounceBackChances: 0,
+    bounceBacks: 0,
+    bounceBackRate: null as number | null,
+  }
+
+  // Round by round, in the order the holes were played. The input is not
+  // assumed sorted — it comes off a database in whatever order it comes.
+  const byRound = new Map<string, HoleStat[]>()
+  for (const s of stats) {
+    const list = byRound.get(s.roundId)
+    if (list) list.push(s)
+    else byRound.set(s.roundId, [s])
+  }
+  for (const round of byRound.values()) {
+    round.sort((a, b) => a.holeNumber - b.holeNumber)
+    for (let i = 0; i < round.length - 1; i++) {
+      if (toPar(round[i]) < 2) continue
+      if (round[i + 1].holeNumber !== round[i].holeNumber + 1) continue
+      out.bounceBackChances += 1
+      if (toPar(round[i + 1]) <= 0) out.bounceBacks += 1
+    }
+  }
+
+  out.bounceBackRate = out.bounceBackChances === 0
+    ? null
+    : out.bounceBacks / out.bounceBackChances
+  return out
+}
+
+// ─── Scrambling ────────────────────────────────────────────────
+
+export type Scrambling = {
+  /** Greens missed — `gir === false`, so a putt count is already known. */
+  chances: number
+  /** Of those, the hole was still par or better. */
+  saves: number
+  rate: number | null
+}
+
+/**
+ * The short game, in one number: how often a missed green still made par.
+ *
+ * A chip-in birdie on a missed green is a save — the best kind. The
+ * denominator needs `gir` known, which needs a putt count, so a hole with a
+ * gross alone is invisible here rather than guessed at.
+ */
+export function scrambling(stats: readonly HoleStat[]): Scrambling {
+  const missed = stats.filter(s => s.gir === false)
+  const saves = missed.filter(s => s.gross <= s.par).length
+  return {
+    chances: missed.length,
+    saves,
+    rate: missed.length === 0 ? null : saves / missed.length,
+  }
+}
+
+// ─── Approach and tee to green ─────────────────────────────────
+
+/** One side of the fairway split. */
+export type FromWhere = {
+  holes: number
+  greensHit: number
+  girRate: number | null
+}
+
+export type ApproachStats = {
+  /**
+   * Greens found from the fairway vs from a miss.
+   *
+   * Only holes with both a fairway answer and a putt count are in either
+   * side. The gap between the two rates is what a wayward tee shot actually
+   * costs — the closest this data comes to isolating the approach shot.
+   */
+  fromFairway: FromWhere
+  fromMiss: FromWhere
+  /**
+   * `strokesToGreen − (par − 2)`, averaged over holes with a putt count.
+   *
+   * Regulation is par minus two putts, so 0.0 is finding greens on schedule
+   * every time and +0.5 is half a shot of long-game leakage per hole. The
+   * long-game twin of putts per hole.
+   */
+  vsRegulation: number | null
+}
+
+const fromWhere = (holes: readonly HoleStat[]): FromWhere => {
+  const hit = holes.filter(s => s.gir === true).length
+  return {
+    holes: holes.length,
+    greensHit: hit,
+    girRate: holes.length === 0 ? null : hit / holes.length,
+  }
+}
+
+export function approachStats(stats: readonly HoleStat[]): ApproachStats {
+  const answered = stats.filter(s => s.fairway != null && s.gir != null)
+  const withPutts = stats.filter(s => s.strokesToGreen != null)
+  const leak = withPutts.reduce((n, s) => n + (s.strokesToGreen! - (s.par - 2)), 0)
+
+  return {
+    fromFairway: fromWhere(answered.filter(s => s.fairway === 'fairway')),
+    fromMiss: fromWhere(answered.filter(s => s.fairway !== 'fairway')),
+    vsRegulation: withPutts.length === 0 ? null : leak / withPutts.length,
+  }
+}
+
+// ─── The same figures, par by par ──────────────────────────────
+
+export type ParSplit = {
+  par: number
+  holes: number
+  averageToPar: number
+  girRate: number | null
+  averagePutts: number | null
+  vsRegulation: number | null
+}
+
+/**
+ * Where the shots leak, by the kind of hole.
+ *
+ * Split on **the player's own par** — a hole that is a par 5 on the men's
+ * card and a par 4 on the ladies' counts in each player's own column, which
+ * is the same rule as everywhere else in this file.
+ *
+ * The par-3 row's `girRate` doubles as the iron-play figure: no fairway is
+ * involved, so finding a par-3 green is the tee shot and nothing else.
+ */
+export function parSplits(stats: readonly HoleStat[]): ParSplit[] {
+  return [3, 4, 5].map(par => {
+    const mine = stats.filter(s => s.par === par)
+    const known = mine.filter(s => s.gir != null)
+    const withPutts = mine.filter(s => s.putts != null)
+    const putts = withPutts.reduce((n, s) => n + s.putts!, 0)
+    const leak = withPutts.reduce((n, s) => n + (s.strokesToGreen! - (s.par - 2)), 0)
+
+    return {
+      par,
+      holes: mine.length,
+      averageToPar: mine.length === 0
+        ? 0
+        : mine.reduce((n, s) => n + (s.gross - s.par), 0) / mine.length,
+      girRate: known.length === 0
+        ? null
+        : known.filter(s => s.gir === true).length / known.length,
+      averagePutts: withPutts.length === 0 ? null : putts / withPutts.length,
+      vsRegulation: withPutts.length === 0 ? null : leak / withPutts.length,
+    }
+  }).filter(row => row.holes > 0)
 }
 
 // ─── Gained on the field ───────────────────────────────────────
@@ -425,6 +627,11 @@ export type PlayerStats = {
   fairways: FairwayStats
   putting: PuttingStats
   gained: Gained
+  scoring: ScoringCounts
+  scrambling: Scrambling
+  approach: ApproachStats
+  /** Only pars actually played appear — no par-3 row on a course without one. */
+  splits: ParSplit[]
 }
 
 const NO_GAIN = (playerId: string): Gained =>
@@ -454,6 +661,10 @@ export function playerStats(stats: readonly HoleStat[]): PlayerStats[] {
     fairways: fairwayStats(mine),
     putting: puttingStats(mine),
     gained: gains.get(playerId) ?? NO_GAIN(playerId),
+    scoring: scoringCounts(mine),
+    scrambling: scrambling(mine),
+    approach: approachStats(mine),
+    splits: parSplits(mine),
   }))
 }
 
