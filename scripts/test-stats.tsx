@@ -972,27 +972,66 @@ section('The lab reads the derivation and does none of its own')
   ok(/cover\.level === 'none'/.test(page),
     'and nothing entered gets an empty state rather than a table of dashes')
 
+  const panels = code('app/trip/[tripCode]/stats/panels.tsx')
+
   // Rust is for a loss, and losing shots to the field is one. Nothing else
   // on these screens may use it.
-  const rustUses = (client.match(/rust/g) ?? []).length
-  ok(rustUses > 0 && /gainTone/.test(client),
+  ok((panels.match(/rust/g) ?? []).length > 0 && /gainTone/.test(panels),
     'rust appears only through the one function that decides a gain is a loss')
 
-  // The phase-2 panels are on the You tab, reading the derived blocks.
-  for (const bit of ['Scoring', 'Approach', 'Scrambling', 'One-putts', 'By par', 'Bounced back']) {
-    ok(client.includes(bit), `the You tab carries ${bit}`)
+  // The category boxes read the derived blocks and derive nothing.
+  ok(!/par - 2|gross - .*putts|\/ others/.test(panels),
+    'the panels work nothing out for themselves')
+  for (const bit of ['Scoring', 'Approach', 'Scrambling', 'One-putts', 'By par']) {
+    ok(panels.includes(bit), `a player's page carries ${bit}`)
   }
+  // Demoted, by request: bounce-back reads in Miscellaneous, and only there.
+  const misc = panels.slice(panels.indexOf('title="Miscellaneous"'))
+  ok(misc.includes('Bounced back'), 'bounce-back lives in the miscellany')
+  ok(!panels.slice(0, panels.indexOf('title="Miscellaneous"')).includes('Bounced back'),
+    '  …and nowhere above it')
   // The leak never goes through formatGained, whose green would call shots
   // given away a gain.
-  ok(/leak/.test(client) && !/formatGained\(a\.vsRegulation/.test(client),
+  ok(/leak/.test(panels) && !/formatGained\(a\.vsRegulation/.test(panels),
     'the leak to the green is signed like a score, not tinted like a gain')
 
-  // The field table stays five columns, and that was measured rather than
-  // assumed: a scrambling column pushed it into sideways scrolling at 360px,
-  // which hid the Gained column the table is sorted by.
-  const fieldTable = client.slice(client.indexOf('function Field'), client.indexOf('function Course'))
-  ok(!/scrambling/.test(fieldTable),
-    'the field table did not gain a sixth column it cannot afford')
+  // ── The instrument ──
+  //
+  // The first choice is who or where; the field is category boxes in the
+  // one-player idiom, not the cramped five-column table it replaced.
+  ok(/\['players', 'Players'\], \['courses', 'Courses'\]/.test(client),
+    'the first choice on the page is players or courses')
+  ok(/'everyone'/.test(client) && />[\s]*Everyone[\s]*</.test(read('app/trip/[tripCode]/stats/StatsClient.tsx')),
+    'the field is a chip at the head of the player list')
+  ok(/meId \?\? 'everyone'/.test(client),
+    '  …and the device\'s player opens their own numbers')
+  ok(!/function Field/.test(client) && /RankedBox/.test(panels),
+    'the field view is ranked category boxes, not one table')
+
+  // **Filter the holes, never the field.** The course filter narrows which
+  // holes count; the field on those holes is everybody who played them. The
+  // filter must run before playerStats, and never mention a player.
+  ok(/stats\.filter\(s => !excluded\.has\(s\.courseId\)\)/.test(client),
+    'the course filter excludes holes by course')
+  ok(/playerStats\(filtered\)/.test(client),
+    '  …and the field is computed over what is left')
+  ok(!/filter\(s => s\.playerId/.test(client),
+    '  …with no player ever filtered out of a field')
+
+  // The last course standing cannot be switched off — a stats page over no
+  // holes at all is not a state anybody means.
+  ok(/playedCourseIds\.length - next\.size > 1/.test(client),
+    'the last course cannot be excluded')
+
+  // The controls stick under the site header, offset the way every sticky
+  // row in the app must be.
+  ok(/sticky/.test(client) && /top: HEADER_H/.test(client),
+    'the controls pin under the header, never at top-0')
+
+  // The awards fold into the Everyone view — the tab is gone.
+  ok(!/'awards', 'Awards'/.test(client), 'the awards tab is gone')
+  ok(/awards\.map/.test(panels) && /Final honours/.test(panels),
+    '  …and the honours render at the foot of Everyone')
 }
 
 section('A heading only where there is something behind it')
