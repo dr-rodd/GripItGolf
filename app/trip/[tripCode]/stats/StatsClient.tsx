@@ -144,19 +144,60 @@ function You({ mine, stats, meId, rounds, courseByRound, courseName }: {
   courseByRound: [string, string][]
   courseName: Map<string, string>
 }) {
-  const { fairways: f, putting: p, gained: g } = mine
+  const { fairways: f, putting: p, gained: g, scoring: sc, scrambling: scr, approach: a } = mine
   const courseFor = new Map(courseByRound)
 
   const missNote = f.missBias
     ? `${f.missedLeft} left, ${f.missedRight} right — leaning ${f.missBias}`
     : `${f.missedLeft} left, ${f.missedRight} right`
 
+  // Positive leak is shots given away, so it carries its sign the way a
+  // score to par does — never through formatGained, whose green would call
+  // a leak a gain.
+  const leak = (n: number | null) =>
+    n == null ? '—' : `${n >= 0.05 ? '+' : ''}${formatAverage(n)} a hole`
+
   return (
     <div>
+      <Panel title="Scoring" hint="Every scored hole, against your own par.">
+        {sc.eaglesOrBetter > 0 && (
+          <Line label="Eagles or better" value={String(sc.eaglesOrBetter)} tone="accent" />
+        )}
+        <Line label="Birdies" value={String(sc.birdies)}
+          tone={sc.birdies > 0 ? 'accent' : 'ink'} />
+        <Line label="Pars" value={String(sc.pars)} />
+        <Line label="Bogeys" value={String(sc.bogeys)} />
+        <Line label="Doubles or worse" value={String(sc.doublesOrWorse)} />
+        {sc.bounceBackChances > 0 && (
+          <Line
+            label="Bounced back"
+            value={`${sc.bounceBacks} of ${sc.bounceBackChances}`}
+          />
+        )}
+      </Panel>
+
       <Panel title="Off the tee" hint={`${f.counted} par 4s and 5s answered`}>
         <Line label="Fairways hit" value={`${f.hit} of ${f.counted}`} />
         <Line label="Hit rate" value={formatRate(f.hitRate)} />
         <Line label="Misses" value={missNote} />
+      </Panel>
+
+      <Panel
+        title="Approach"
+        hint="Greens found, split by where the tee shot finished — the gap is what a miss costs."
+      >
+        <Line label="From the fairway" value={
+          a.fromFairway.holes === 0 ? '—'
+            : `${a.fromFairway.greensHit} of ${a.fromFairway.holes} · ${formatRate(a.fromFairway.girRate)}`
+        } />
+        <Line label="From a miss" value={
+          a.fromMiss.holes === 0 ? '—'
+            : `${a.fromMiss.greensHit} of ${a.fromMiss.holes} · ${formatRate(a.fromMiss.girRate)}`
+        } />
+        {/* Regulation is par minus two putts, so level here is finding
+            greens on schedule and the figure is long-game leakage alone —
+            putting cannot touch it. */}
+        <Line label="Leak to the green" value={leak(a.vsRegulation)} />
       </Panel>
 
       <Panel title="Greens and putting" hint={`${p.holes} holes with a putt count`}>
@@ -164,6 +205,12 @@ function You({ mine, stats, meId, rounds, courseByRound, courseName }: {
         <Line label="Hit rate" value={formatRate(p.girRate)} />
         <Line label="Putts a round" value={formatAverage(p.puttsPer18)} />
         <Line label="Putts a green hit" value={formatAverage(p.puttsPerGreenHit)} />
+        <Line label="One-putts" value={`${p.onePutts} · ${formatRate(p.onePuttRate)}`} />
+        <Line label="Three-putts or worse" value={`${p.threePuttsOrWorse} · ${formatRate(p.threePuttRate)}`} />
+        <Line label="Scrambling" value={
+          scr.chances === 0 ? '—'
+            : `${scr.saves} of ${scr.chances} · ${formatRate(scr.rate)}`
+        } />
       </Panel>
 
       <Panel
@@ -176,9 +223,51 @@ function You({ mine, stats, meId, rounds, courseByRound, courseName }: {
         <Line label="Holes counted" value={String(g.holes)} />
       </Panel>
 
+      {mine.splits.length > 1 && <Splits splits={mine.splits} />}
+
       <Rounds stats={stats} meId={meId} rounds={rounds}
         courseFor={courseFor} courseName={courseName} />
     </div>
+  )
+}
+
+/**
+ * The same figures, par by par. Only shown once more than one kind of hole
+ * has been played — a table with one row is a sentence wearing a grid.
+ */
+function Splits({ splits }: { splits: PlayerStats['splits'] }) {
+  return (
+    <Panel
+      title="By par"
+      hint="The par-3 greens column is the iron play on its own — no fairway is involved in it."
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full t-cap">
+          <thead>
+            <tr className="text-ink/50 uppercase tracking-[0.12em]">
+              <th className="text-left font-normal py-2">Par</th>
+              <th className="text-right font-normal py-2">Holes</th>
+              <th className="text-right font-normal py-2 whitespace-nowrap">To par</th>
+              <th className="text-right font-normal py-2">GIR</th>
+              <th className="text-right font-normal py-2">Putts</th>
+            </tr>
+          </thead>
+          <tbody>
+            {splits.map(row => (
+              <tr key={row.par} className="border-t border-bark/[0.08]">
+                <td className="py-2.5 t-num text-ink">{row.par}</td>
+                <td className="py-2.5 text-right t-num text-ink">{row.holes}</td>
+                <td className="py-2.5 text-right t-num text-ink">
+                  {row.averageToPar >= 0.05 ? '+' : ''}{formatAverage(row.averageToPar)}
+                </td>
+                <td className="py-2.5 text-right t-num text-ink">{formatRate(row.girRate)}</td>
+                <td className="py-2.5 text-right t-num text-ink">{formatAverage(row.averagePutts)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
   )
 }
 
@@ -260,6 +349,10 @@ function Field({ rows, nameOf, meId }: {
         <table className="w-full t-cap">
           <thead>
             <tr className="text-ink/50 uppercase tracking-[0.12em]">
+              {/* No scrambling column, and it was tried rather than assumed:
+                  a sixth column pushes this table into sideways scrolling at
+                  360px, which hides the Gained column — the one the table is
+                  sorted by. Scrambling reads on the You tab and the awards. */}
               <th className="text-left font-normal py-2">Player</th>
               <th className="text-right font-normal py-2">FW</th>
               <th className="text-right font-normal py-2">GIR</th>

@@ -805,6 +805,22 @@ section('The lab reads the derivation and does none of its own')
   const rustUses = (client.match(/rust/g) ?? []).length
   ok(rustUses > 0 && /gainTone/.test(client),
     'rust appears only through the one function that decides a gain is a loss')
+
+  // The phase-2 panels are on the You tab, reading the derived blocks.
+  for (const bit of ['Scoring', 'Approach', 'Scrambling', 'One-putts', 'By par', 'Bounced back']) {
+    ok(client.includes(bit), `the You tab carries ${bit}`)
+  }
+  // The leak never goes through formatGained, whose green would call shots
+  // given away a gain.
+  ok(/leak/.test(client) && !/formatGained\(a\.vsRegulation/.test(client),
+    'the leak to the green is signed like a score, not tinted like a gain')
+
+  // The field table stays five columns, and that was measured rather than
+  // assumed: a scrambling column pushed it into sideways scrolling at 360px,
+  // which hid the Gained column the table is sorted by.
+  const fieldTable = client.slice(client.indexOf('function Field'), client.indexOf('function Course'))
+  ok(!/scrambling/.test(fieldTable),
+    'the field table did not gain a sixth column it cannot afford')
 }
 
 section('A heading only where there is something behind it')
