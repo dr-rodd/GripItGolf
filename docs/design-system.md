@@ -125,7 +125,7 @@ The create wizard keeps a **step**-back on steps 2 and 3, which is a different t
 
 ### Navigation
 
-Bottom tab bar, `app/components/TabBar.tsx` — Home · Trip Setup · **Leaderboard** · Scoring · Stats, scoped to a trip. Five tabs on trial, the YouTube shape: the leaderboard centred and emphasised — a filled emerald circle, tinted at rest and solid when lit — because it is the screen everybody keeps coming back to. The circle carries no visible label (five labels do not fit a 320px phone, and the dropped one is the tab whose button already says what it is); the link's `aria-label` says it to a screen reader. The other four labels are 11px. Fixed to the bottom with `env(safe-area-inset-bottom)`; without that the bottom row of taps lands on the iPhone home indicator. Pages carrying it add `has-tabbar` for clearance.
+Bottom tab bar, `app/components/TabBar.tsx` — Home · Scoring · **Leaderboard** · Stats · Trip Setup, scoped to a trip. Five tabs on trial, the YouTube shape: the leaderboard centred and emphasised — a filled emerald circle, tinted at rest and solid when lit — because it is the screen everybody keeps coming back to. The circle keeps its label under it (the unlabelled circle was tried; the word came back by request, and the circle shrank to make the height). All five labels are 11px; "Leaderboard" is the tight one at ~62px of a 64px column on a 320px phone, measured rather than assumed. Fixed to the bottom with `env(safe-area-inset-bottom)`; without that the bottom row of taps lands on the iPhone home indicator. Pages carrying it add `has-tabbar` for clearance.
 
 Deliberately **absent from the scoring flow**, where the bottom of the screen is score entry and a nav bar under it is a mis-tap waiting to happen.
 

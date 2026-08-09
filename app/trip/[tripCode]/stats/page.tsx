@@ -4,7 +4,6 @@ import { fetchTripStats } from '@/lib/hubStanding'
 import { coverage } from '@/lib/holeStats'
 import { tripState, todayString } from '@/lib/tripStatus'
 import { currentPlayer } from '@/lib/currentPlayer'
-import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
 import { EmptyState } from '@/app/components/ui'
@@ -58,16 +57,8 @@ export default async function StatsPage({
     <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
       <TripHeader backTo={`/trip/${tripCode}`} title="statsHub" />
 
-      <div className="bg-cream border-b border-bark/12">
-        <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
-          <BackButton href={`/trip/${tripCode}`} />
-          <h1 className="font-[family-name:var(--font-display)] text-xl sm:text-2xl text-ink tracking-wide truncate px-2">
-            Stats
-          </h1>
-          <div className="w-11" />
-        </div>
-      </div>
-
+      {/* No page-title row: the header's "stats hub." artwork is the title,
+          and it already carries the way back. */}
       <div className="max-w-lg mx-auto px-4 py-6">
         {error ? (
           // Said out loud rather than rendered as an absence: an empty table

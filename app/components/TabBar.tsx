@@ -24,8 +24,8 @@ import {
  * instrument, and the bar took the YouTube shape at the same time: the
  * leaderboard in the middle, emphasised, because on a golf trip the board is
  * what everybody keeps coming back to. The centre tab draws as a filled
- * circle and carries no label — five labels do not fit a 320px phone, and
- * the one that had to go is the one whose button already says what it is.
+ * circle and keeps its label under it — the circle alone was tried and Big
+ * Dog wanted the word back, so the circle shrank to make the height for it.
  *
  * Rendered once, by `app/trip/[tripCode]/layout.tsx`, and never by a page.
  * That is what keeps it on screen through a navigation instead of unmounting
@@ -37,10 +37,10 @@ import {
 
 const ITEMS = [
   { key: 'home',        label: 'Home',        icon: IconHome,          path: (t: string) => `/trip/${t}` },
-  { key: 'settings',    label: 'Trip Setup',  icon: IconSettings,      path: (t: string) => `/trip/${t}/setup` },
-  { key: 'leaderboard', label: 'Leaderboard', icon: IconTrophy,        path: (t: string) => `/trip/${t}/leaderboard` },
   { key: 'scoring',     label: 'Scoring',     icon: IconClipboardList, path: (t: string) => `/trip/${t}/scoring` },
+  { key: 'leaderboard', label: 'Leaderboard', icon: IconTrophy,        path: (t: string) => `/trip/${t}/leaderboard` },
   { key: 'stats',       label: 'Stats',       icon: IconChartBar,      path: (t: string) => `/trip/${t}/stats` },
+  { key: 'settings',    label: 'Trip Setup',  icon: IconSettings,      path: (t: string) => `/trip/${t}/setup` },
 ] as const
 
 /**
@@ -87,27 +87,38 @@ function Tab({
 
   if (emphasis) {
     // The emphasised centre: an emerald circle with the trophy in it,
-    // tinted at rest and solid while you are there or on your way. No
-    // label — the aria-label on the link says it for a screen reader, and
-    // the circle says it for everyone else.
+    // tinted at rest and solid while you are there or on your way — and
+    // its name under it like every other tab, sized to still clear the
+    // bar's height with the circle above it.
     return (
       <span
         onPointerDown={() => setPressed(true)}
         onPointerUp={release}
         onPointerCancel={release}
         onPointerLeave={release}
-        className={`flex items-center justify-center h-16 transition-transform duration-150 ease-out ${
+        // Bottom-anchored like the plain tabs, so all five labels sit on
+        // one line — the circle is taller than an icon, and centring both
+        // stacks dropped this label 8px below its neighbours.
+        className={`flex flex-col items-center justify-end gap-1 h-16 pb-[9px] transition-transform duration-150 ease-out ${
           pressed ? 'tab-pressed' : ''
         } ${pending ? 'tab-pending' : ''}`}
       >
         <span
-          className={`flex items-center justify-center w-12 h-12 rounded-full transition-colors duration-150 ${
+          className={`flex items-center justify-center w-9 h-9 rounded-full transition-colors duration-150 ${
             lit
               ? 'bg-accent-deep text-white'
               : 'bg-accent/[0.12] text-accent-deep'
           }`}
         >
-          <Icon size={24} />
+          <Icon size={20} />
+        </span>
+        <span
+          className={`font-[family-name:var(--font-ui)] leading-none whitespace-nowrap ${
+            lit ? 'text-accent' : 'text-bark/60'
+          }`}
+          style={{ fontSize: 11, fontWeight: lit ? 600 : 400 }}
+        >
+          {label}
         </span>
       </span>
     )
@@ -122,15 +133,15 @@ function Tab({
       // leave the tab held down forever otherwise.
       onPointerCancel={release}
       onPointerLeave={release}
-      className={`flex flex-col items-center justify-center gap-1 h-16 transition-[color,transform] duration-150 ease-out ${
+      className={`flex flex-col items-center justify-end gap-1 h-16 pb-[9px] transition-[color,transform] duration-150 ease-out ${
         lit ? 'text-accent' : 'text-bark/60 hover:text-bark/80'
       } ${pressed ? 'tab-pressed' : ''} ${pending ? 'tab-pending' : ''}`}
     >
       <Icon size={20} />
       {/* The smallest type in the app, and the one place it is
-          justified: four labelled tabs across the narrowest phone —
-          the centre one carries no label, which is what made room
-          for a fifth tab at all. 11px, read at arm's length. */}
+          justified: five labels across the narrowest phone. 11px,
+          read at arm's length; "Leaderboard" is the tight one and
+          it is measured, not assumed, to clear its column. */}
       <span
         className="font-[family-name:var(--font-ui)] leading-none whitespace-nowrap"
         style={{ fontSize: 11, fontWeight: lit ? 600 : 400 }}
@@ -180,8 +191,6 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
               <Link
                 href={item.path(tripCode)}
                 aria-current={active ? 'page' : undefined}
-                // The centre tab has no visible label, so the link says it.
-                aria-label={emphasis ? item.label : undefined}
                 // Left on the default, which warms the loading skeleton and
                 // the layout around it and stops there.
                 //

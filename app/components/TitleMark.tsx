@@ -26,7 +26,7 @@ export const TITLE_MARKS = {
   // A stand-in drawn in a close face, not the supplied lettering — Big
   // Dog's artwork replaces the file (same proportions) and nothing here
   // has to change beyond the ratio.
-  statsHub:    { src: '/title-stats-hub.png',   ratio: 0.1620, alt: 'stats hub.' },
+  statsHub:    { src: '/title-stats-hub.png',   ratio: 0.1846, alt: 'stats hub.' },
   // Drawn and kept, but not in use — the trip hub shows the green dot mark.
   trip:        { src: '/title-trip.png',        ratio: 0.5957, alt: 'trip.' },
 } as const

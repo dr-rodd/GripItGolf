@@ -9,7 +9,7 @@ import {
 } from '@/lib/holeStats'
 import { tripAwards } from '@/lib/tripAwards'
 import { HEADER_H } from '@/app/components/headerMetrics'
-import { PlayerPanels, EveryonePanels } from './panels'
+import { PlayerPanels, EveryonePanels, CourseField } from './panels'
 import { GainedByRoundChart, DifficultyProfileChart, type GainedBar } from './charts'
 import type { RowHole, RowRound } from '@/lib/boardRows'
 
@@ -262,10 +262,20 @@ export default function StatsClient({
       )}
 
       {view === 'courses' && shownCourse && (
-        <Course
-          rows={difficulty.filter(r => r.courseId === shownCourse)}
-          title={courseName.get(shownCourse) ?? 'The course'}
-        />
+        <>
+          {/* The per-course breakdown: who owns this course, then how the
+              course fought back. Full-trip stats, untouched by the Players
+              view's course filter — this view has its own selector. */}
+          <CourseField
+            stats={stats.filter(s => s.courseId === shownCourse)}
+            nameOf={nameOf}
+            meId={meId}
+          />
+          <Course
+            rows={difficulty.filter(r => r.courseId === shownCourse)}
+            title={courseName.get(shownCourse) ?? 'The course'}
+          />
+        </>
       )}
     </div>
   )

@@ -965,6 +965,13 @@ section('The lab reads the derivation and does none of its own')
   // The page has a name now, set as artwork like the other three, and the
   // loading state wears the same one so arriving does not change the header.
   ok(page.includes('title="statsHub"'), 'the header says stats hub')
+  // …and only there: the h1 row under it said "Stats" a second time, and
+  // went by request.
+  ok(!page.includes('<h1'), 'no page-title row repeats what the artwork says')
+  // The Courses view is a breakdown, not just the difficulty table: the
+  // field on that course leads, ranked by the one figure fair across every
+  // handicap on the trip.
+  ok(/CourseField/.test(client), 'the courses view carries the field on that course')
   ok(code('app/trip/[tripCode]/stats/loading.tsx').includes('title="statsHub"'),
     '  …and the skeleton already says it')
   ok(code('app/components/TitleMark.tsx').includes('statsHub'),

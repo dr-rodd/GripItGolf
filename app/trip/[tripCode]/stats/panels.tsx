@@ -11,7 +11,7 @@
  */
 
 import {
-  statsFor,
+  statsFor, playerStats,
   formatGained, formatRate, formatAverage,
   type HoleStat, type PlayerStats,
 } from '@/lib/holeStats'
@@ -353,7 +353,7 @@ function Rounds({ stats, playerId, rounds, courseFor, courseName }: {
  * the emerald/rust only agrees with it, because that pair is exactly the
  * red/green a colour-blind reader cannot split.
  */
-function RankedBox({ title, hint, rows, meId, aside }: {
+export function RankedBox({ title, hint, rows, meId, aside }: {
   title: string
   hint?: string
   rows: {
@@ -388,7 +388,11 @@ function RankedBox({ title, hint, rows, meId, aside }: {
             </span>
           </div>
           {r.share != null && (
-            <div className="relative h-1 mt-1.5 ml-10" aria-hidden="true">
+            // The track lives to the right of the names, not under them: its
+            // left edge is the edge of the player column, and the zero line
+            // sits at its centre — well right of the page's own middle — so
+            // a loss can reach left without running beneath anybody's name.
+            <div className="relative h-1 mt-1.5 ml-[45%]" aria-hidden="true">
               <div className="absolute inset-y-0 left-1/2 w-px bg-bark/25" />
               <div
                 className={`absolute inset-y-0 rounded-full ${
@@ -401,6 +405,46 @@ function RankedBox({ title, hint, rows, meId, aside }: {
         </div>
       ))}
     </Panel>
+  )
+}
+
+/**
+ * Who owns a course — the per-course breakdown of the field.
+ *
+ * Stableford points a round rather than gross to par, because the field
+ * spans every handicap on the trip and points are the one figure that
+ * reads fair across it. Per eighteen holes, so a player who came back for
+ * a second round is compared by rate rather than rewarded for volume.
+ */
+export function CourseField({ stats, nameOf, meId }: {
+  /** Already narrowed to the one course. */
+  stats: HoleStat[]
+  nameOf: Map<string, string>
+  meId: string | null
+}) {
+  const field = playerStats(stats)
+  const name = (id: string) => nameOf.get(id) ?? 'Unknown'
+  const raw = field
+    .filter(p => p.holes > 0)
+    .map(p => ({
+      p,
+      per18: (p.form.reduce((n, r) => n + r.points, 0) / p.holes) * 18,
+    }))
+    .sort((a, b) => b.per18 - a.per18 || name(a.p.playerId).localeCompare(name(b.p.playerId)))
+  if (raw.length === 0) return null
+
+  return (
+    <RankedBox
+      title="The field here"
+      hint="Stableford points a round on this course — handicaps included, so it reads fair across the field."
+      rows={raw.map(({ p, per18 }) => ({
+        id: p.playerId,
+        name: name(p.playerId),
+        note: `${p.holes} holes`,
+        figure: formatAverage(per18),
+      }))}
+      meId={meId}
+    />
   )
 }
 
