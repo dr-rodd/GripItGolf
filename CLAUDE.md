@@ -151,8 +151,11 @@ Four things that are easy to get wrong twice:
   upper bound against the gross for the same reason `live_scores.putts` has
   none — a commit that fails on the eighteenth green is the worse failure, so
   an impossible card is dropped on the way in instead.
-- **The Edit Scorecard screen edits the gross only.** A mis-tapped putt count
-  is fixed by going back to the hole while the card is open.
+- **Stats are editable wherever the gross is.** The Edit Scorecard screen
+  renders the same `StatsRow` the live tile does — one implementation, in
+  `LiveScoringFlow.tsx`, gated the same way on both screens. It edited the
+  gross alone for one release; that gap is closed, and a second copy of the
+  control is how it would reopen.
 
 ## Two orderings, on purpose and not
 

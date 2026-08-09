@@ -1392,8 +1392,13 @@ export default function LiveScoringFlow({
                 const n = parseInt(v, 10)
                 if (!isNaN(n) && n >= 1 && n <= 12) setDraftHole(idx, { gross: n, isNR: false })
               }
+              // A no return clears the stats with the score, the same as on
+              // the live tile: the ball was picked up, so there is no putt
+              // count to keep. `saveEditDraft` writes the nulls through.
               const toggleNR = () => setDraftHole(idx,
-                hs.isNR ? { isNR: false, gross: null } : { isNR: true, gross: null }
+                hs.isNR
+                  ? { isNR: false, gross: null }
+                  : { isNR: true, gross: null, putts: null, fairway: null }
               )
 
               return (
@@ -1451,6 +1456,23 @@ export default function LiveScoringFlow({
                       <span className={`text-sm flex-shrink-0 ${color}`}>{label}</span>
                     )}
                   </div>
+
+                  {/* The same row the live card asks with, gated the same
+                      way. This is what makes a mis-tapped putt count
+                      fixable after the hole instead of permanent — the
+                      draft already carried the values; only the controls
+                      were missing. */}
+                  {trackStats && hs.gross !== null && !hs.isNR && (
+                    <StatsRow
+                      effectivePar={ePar}
+                      gross={hs.gross}
+                      putts={hs.putts}
+                      fairway={hs.fairway}
+                      ariaName={`hole ${hole.hole_number}`}
+                      onPutts={v => setDraftHole(idx, { putts: v })}
+                      onFairway={v => setDraftHole(idx, { fairway: v })}
+                    />
+                  )}
                 </div>
               )
             })}
@@ -1919,106 +1941,6 @@ function LivePlayerTile({
   // a hole anybody finished. And it never gates the Next button, which reads
   // `allHaveGross` and knows nothing about any of this.
   const showStats = trackStats && hasScore && !isNR
-  // A par 3 has no fairway to find, which is not the same as missing one.
-  const showFairway = effectivePar >= 4
-  // Never more putts than shots — you cannot two-putt a hole-in-one — and
-  // never more than seven, which is two more than anybody admits to.
-  const maxPutts = Math.min(7, score ?? 7)
-
-  // Tinted when chosen, bordered when not. Solid emerald would put three of
-  // these on every tile, and emerald is an accent.
-  const chipClass = (on: boolean) =>
-    "h-12 t-cap px-1 flex items-center justify-center rounded-xl border " +
-    "transition-colors duration-150 touch-manipulation " +
-    (on
-      ? "border-accent bg-accent/[0.12] text-accent-deep font-semibold"
-      : "border-bark/12 text-ink/65 hover:border-bark/25 active:bg-bark/[0.04]")
-
-  const stepClass =
-    "w-11 h-12 rounded-xl border border-bark/12 text-ink/80 text-2xl leading-none " +
-    "flex items-center justify-center touch-manipulation transition-colors duration-150 " +
-    "hover:border-accent hover:text-accent-deep active:scale-95 " +
-    "disabled:opacity-20 disabled:cursor-not-allowed"
-
-  // One row, not two. Two put 129px on every tile that had a score on it,
-  // which on a fourball is most of a screen of extra scrolling on a card
-  // that already scrolls; this is 73px. Measured, not guessed.
-  const statsRow = showStats && (
-    <div className="px-4 pb-3 pt-3 border-t border-bark/[0.08] flex items-center gap-2">
-
-      {showFairway ? (
-        // The middle column is wider because its word is longer. Three equal
-        // columns clipped "Fairway" on a 360px phone, which is a live size.
-        <div
-          className="flex-1 grid gap-1.5 min-w-0"
-          style={{ gridTemplateColumns: "1fr 1.35fr 1fr" }}
-          role="group"
-          aria-label={`Tee shot, ${playerName}`}
-        >
-          {([["left", "Left"], ["fairway", "Fairway"], ["right", "Right"]] as const).map(([v, label]) => (
-            <button
-              key={v}
-              type="button"
-              aria-pressed={fairway === v}
-              // Tapped again, it clears. A three-way control with no fourth
-              // button cannot otherwise be un-set, and a mis-tap on a phone
-              // in the rain is the common case rather than the odd one.
-              onClick={() => onFairway(fairway === v ? null : v)}
-              className={chipClass(fairway === v)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      ) : (
-        // A par 3 keeps the space rather than closing it, so the putts
-        // control stays in the same place on every hole of the round. It
-        // says nothing: "no fairway on a par 3" is a sentence explaining
-        // something the golfer holding the phone already knows.
-        <span className="flex-1" />
-      )}
-
-      <div className="flex items-center gap-1 flex-shrink-0" role="group" aria-label={`Putts, ${playerName}`}>
-        <button
-          type="button"
-          aria-label="Fewer putts"
-          // Down from nothing lands on 1, up from nothing lands on 2 — the
-          // two commonest answers, one tap each, and neither is pre-filled.
-          // A default of 2 would be indistinguishable from a real 2 and the
-          // putting average would quietly become the average of the default.
-          //
-          // Below zero clears rather than sticking at zero: it is the only
-          // way back out, and zero is a real answer that has to be reachable
-          // for the hole holed from off the green.
-          onClick={() => onPutts(putts == null ? 1 : putts <= 0 ? null : putts - 1)}
-          className={stepClass}
-        >
-          −
-        </button>
-        {/* Numeral over its unit, the same shape as the points badge two rows
-            up. That badge is why this is not a bare number beside a plus and
-            a minus: there is already a −/+ stepper on this tile for the
-            score, and two unlabelled ones would be a mis-entry waiting. */}
-        {/* Not `aria-hidden`: stacked, it already reads as "2 putts", which
-            is the whole value and its unit in the order somebody says them. */}
-        <span className="flex flex-col items-center justify-center w-9" role="status">
-          <span className={`t-data t-num leading-none ${putts == null ? "text-ink/50" : "text-ink"}`}>
-            {putts ?? "—"}
-          </span>
-          <span className="text-[10px] text-ink/50 leading-none mt-0.5">putts</span>
-        </span>
-        <button
-          type="button"
-          aria-label="More putts"
-          disabled={putts != null && putts >= maxPutts}
-          onClick={() => onPutts(putts == null ? 2 : Math.min(maxPutts, putts + 1))}
-          className={stepClass}
-        >
-          +
-        </button>
-      </div>
-    </div>
-  )
 
   return (
     <div className={`bg-surface border rounded-xl transition-colors
@@ -2189,7 +2111,144 @@ function LivePlayerTile({
           above are a phone column and a desktop row saying the same thing
           twice; this is a row on both, so writing it once is the whole
           reason it sits out here. */}
-      {statsRow}
+      {showStats && (
+        <StatsRow
+          effectivePar={effectivePar}
+          gross={score}
+          putts={putts}
+          fairway={fairway}
+          ariaName={playerName}
+          onPutts={onPutts}
+          onFairway={onFairway}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── StatsRow ─────────────────────────────────────────────
+//
+// The fairway chips and the putts counter, as one component — because two
+// screens ask the questions now. The live tile asks as the hole is played;
+// the Edit Scorecard screen asks again afterwards, which is how a mis-tapped
+// putt count stops being permanent. One implementation, so the two cannot
+// drift apart in what they accept.
+//
+// The caller decides *whether* to ask — this row renders whenever it is
+// rendered. Both callers gate the same way: a score on the hole, no NR, and
+// the trip tracking stats at all.
+
+function StatsRow({
+  effectivePar, gross, putts, fairway, ariaName, onPutts, onFairway,
+}: {
+  effectivePar: number
+  gross: number | null
+  putts: number | null
+  fairway: Fairway | null
+  /** Who or what the controls belong to, for a screen reader: a player's
+      name on the live card, the hole on the edit screen. */
+  ariaName: string
+  onPutts: (v: number | null) => void
+  onFairway: (v: Fairway | null) => void
+}) {
+  // A par 3 has no fairway to find, which is not the same as missing one.
+  const showFairway = effectivePar >= 4
+  // Never more putts than shots — you cannot two-putt a hole-in-one — and
+  // never more than seven, which is two more than anybody admits to.
+  const maxPutts = Math.min(7, gross ?? 7)
+
+  // Tinted when chosen, bordered when not. Solid emerald would put three of
+  // these on every tile, and emerald is an accent.
+  const chipClass = (on: boolean) =>
+    "h-12 t-cap px-1 flex items-center justify-center rounded-xl border " +
+    "transition-colors duration-150 touch-manipulation " +
+    (on
+      ? "border-accent bg-accent/[0.12] text-accent-deep font-semibold"
+      : "border-bark/12 text-ink/65 hover:border-bark/25 active:bg-bark/[0.04]")
+
+  const stepClass =
+    "w-11 h-12 rounded-xl border border-bark/12 text-ink/80 text-2xl leading-none " +
+    "flex items-center justify-center touch-manipulation transition-colors duration-150 " +
+    "hover:border-accent hover:text-accent-deep active:scale-95 " +
+    "disabled:opacity-20 disabled:cursor-not-allowed"
+
+  // One row, not two. Two put 129px on every tile that had a score on it,
+  // which on a fourball is most of a screen of extra scrolling on a card
+  // that already scrolls; this is 73px. Measured, not guessed.
+  return (
+    <div className="px-4 pb-3 pt-3 border-t border-bark/[0.08] flex items-center gap-2">
+
+      {showFairway ? (
+        // The middle column is wider because its word is longer. Three equal
+        // columns clipped "Fairway" on a 360px phone, which is a live size.
+        <div
+          className="flex-1 grid gap-1.5 min-w-0"
+          style={{ gridTemplateColumns: "1fr 1.35fr 1fr" }}
+          role="group"
+          aria-label={`Tee shot, ${ariaName}`}
+        >
+          {([["left", "Left"], ["fairway", "Fairway"], ["right", "Right"]] as const).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={fairway === v}
+              // Tapped again, it clears. A three-way control with no fourth
+              // button cannot otherwise be un-set, and a mis-tap on a phone
+              // in the rain is the common case rather than the odd one.
+              onClick={() => onFairway(fairway === v ? null : v)}
+              className={chipClass(fairway === v)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        // A par 3 keeps the space rather than closing it, so the putts
+        // control stays in the same place on every hole of the round. It
+        // says nothing: "no fairway on a par 3" is a sentence explaining
+        // something the golfer holding the phone already knows.
+        <span className="flex-1" />
+      )}
+
+      <div className="flex items-center gap-1 flex-shrink-0" role="group" aria-label={`Putts, ${ariaName}`}>
+        <button
+          type="button"
+          aria-label="Fewer putts"
+          // Down from nothing lands on 1, up from nothing lands on 2 — the
+          // two commonest answers, one tap each, and neither is pre-filled.
+          // A default of 2 would be indistinguishable from a real 2 and the
+          // putting average would quietly become the average of the default.
+          //
+          // Below zero clears rather than sticking at zero: it is the only
+          // way back out, and zero is a real answer that has to be reachable
+          // for the hole holed from off the green.
+          onClick={() => onPutts(putts == null ? 1 : putts <= 0 ? null : putts - 1)}
+          className={stepClass}
+        >
+          −
+        </button>
+        {/* Numeral over its unit, the same shape as the points badge two rows
+            up. That badge is why this is not a bare number beside a plus and
+            a minus: there is already a −/+ stepper on this tile for the
+            score, and two unlabelled ones would be a mis-entry waiting. */}
+        {/* Not `aria-hidden`: stacked, it already reads as "2 putts", which
+            is the whole value and its unit in the order somebody says them. */}
+        <span className="flex flex-col items-center justify-center w-9" role="status">
+          <span className={`t-data t-num leading-none ${putts == null ? "text-ink/50" : "text-ink"}`}>
+            {putts ?? "—"}
+          </span>
+          <span className="text-[10px] text-ink/50 leading-none mt-0.5">putts</span>
+        </span>
+        <button
+          type="button"
+          aria-label="More putts"
+          disabled={putts != null && putts >= maxPutts}
+          onClick={() => onPutts(putts == null ? 2 : Math.min(maxPutts, putts + 1))}
+          className={stepClass}
+        >
+          +
+        </button>
+      </div>
     </div>
   )
 }

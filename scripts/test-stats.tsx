@@ -263,9 +263,10 @@ section('The control asks, and never insists')
 section('The new row is emerald or it is nothing')
 {
   const src = read(FLOW)
-  const from = src.indexOf('const showStats')
-  const tile = src.slice(from, src.indexOf('\n  return (', from))
-  ok(tile.length > 500, 'the stats row is where this expects it')
+  const from = src.indexOf('function StatsRow')
+  ok(from > -1, 'the stats row is where this expects it')
+  const tile = src.slice(from)
+  ok(tile.length > 500, '  …and is a real component, not a stub')
   ok(!/C9A84C/i.test(tile), 'no gold in the stats row')
   ok(!/rust/.test(tile), 'and no rust — a missed fairway is not a loss')
   ok(/border-accent bg-accent\/\[0\.12\] text-accent-deep/.test(tile),
@@ -737,6 +738,29 @@ section('The derivation is pure, and states each rule once')
     return walk(dir)
   }).filter(f => f !== 'lib/holeStats.ts' && /par - 2|par-2/.test(code(f)))
   eq(appsWithRule, [], 'and greens in regulation is written down exactly once')
+}
+
+section('A mis-tapped putt count is no longer permanent')
+{
+  const flow = code(FLOW)
+
+  // One implementation, asked on two screens. Two copies of this control is
+  // exactly the drift the extraction exists to prevent.
+  eq((flow.match(/function StatsRow/g) ?? []).length, 1,
+    'the stats row is written once')
+  ok((flow.match(/<StatsRow/g) ?? []).length >= 2,
+    '  …and rendered on both the live card and the edit screen')
+
+  // The edit screen gates the same way the live tile does: a score on the
+  // hole, no NR, and the trip tracking stats at all.
+  ok(/trackStats && hs\.gross !== null && !hs\.isNR/.test(flow),
+    'the edit screen only asks where the live card would have')
+  ok(/setDraftHole\(idx, \{ putts: v \}\)/.test(flow),
+    '  …and writes into the draft the save already carries')
+
+  // Both NR toggles clear both stats — the live tile's and the edit one's.
+  eq((flow.match(/isNR: true, gross: null, putts: null, fairway: null/g) ?? []).length, 2,
+    'a no return clears the stats on either screen')
 }
 
 section('The honours go to whoever earned them, and to nobody early')

@@ -213,9 +213,11 @@ Two answers a hole during scoring — how many putts, and which way the tee shot
 - **Gained on the field is gross**, on the shots played rather than the shots allowed, and **excludes the player from their own field average**. Both halves are averaged over the same subset, so putting plus tee-to-green *is* the gain in gross shots; and the gains over a hole sum to exactly zero, which is what the test suite holds it to.
 - **A hole needs three other cards** before a gain off it counts, **eight** before its difficulty is settled rather than provisional, and a miss bias needs four misses with **two thirds** of them going one way. All four are exported constants.
 - **Stats never gate the Next button.** The row appears under a player's tile only once they have a score, and a hole can always be left without an answer.
-- **The Edit Scorecard screen edits the gross only.** A mis-tapped putt count is fixed by going back to the hole during play.
+- **Stats are editable wherever the gross is.** The Edit Scorecard screen asks with the same `StatsRow` the live card does — one implementation, gated identically: a score on the hole, no NR, stats switched on. A no return clears both stats on either screen.
 
-Switched on per trip in the Trip Settings drawer, off by default. The full breakdown — you, the field, the course — is at `/trip/[code]/stats`, reached from the hub section and from a chip on the leaderboard.
+Switched on per trip in the Trip Settings drawer, off by default. The full breakdown — you, the field, the course, and the awards — is at `/trip/[code]/stats`, reached from the hub section and from a chip on the leaderboard.
+
+**The awards are chosen in `lib/tripAwards.ts` and derived nowhere.** Six honours, each with an exported sample floor below which it is simply not given — an empty honours board is a promise, so without a single qualifier the tab itself is absent. Ties share, on the figure as printed rather than the last floating-point bit. The board is live: "as it stands" while the trip runs, "final honours" once the end date passes, read off `tripState()`.
 
 ### Up next
 
