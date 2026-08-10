@@ -76,7 +76,7 @@ section('The itinerary replaces the rounds picker')
   // Rounds are no longer chosen by number. A round exists because a golf
   // item was added to a day, so the running order is the thing being built.
   ok(!formHtml.includes('Number of rounds'), 'there is no rounds counter any more')
-  ok(!formHtml.includes('aria-label="Add a round"'), 'nor an add-a-round control')
+  ok(!/Add (a )?round/.test(formHtml), 'nor an add-a-round control')
 
   const labels = formHtml.match(/Step \d of 3 — ([^<]+)/)
   ok(labels !== null, 'the wizard says which step it is on')

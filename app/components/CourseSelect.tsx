@@ -122,12 +122,14 @@ export default function CourseSelect({
               this screen over the dropdown it replaced. */}
           {view.kind === 'browse' && (
             <div className="max-w-lg mx-auto w-full px-4 pb-3">
+              {/* No autofocus: this screen opens as a list to read, and the
+                  keyboard was rising over half of it before a single course
+                  had been seen. It arrives when the search is tapped. */}
               <input
                 type="search"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search by name or town"
-                autoFocus
                 className={FIELD}
                 aria-label="Search courses"
               />
@@ -145,6 +147,23 @@ export default function CourseSelect({
                   ))}
                 </div>
               )}
+
+              {/* The way to a new course — up here in the pinned header, not
+                  at the foot of the screen, because the keyboard owns the
+                  foot of the screen the moment the search is tapped, and the
+                  moment you need this button is the moment a search found
+                  nothing. */}
+              <div className="flex items-center justify-between gap-3 mt-2.5">
+                <p className="t-cap text-ink/65">Golf course not listed?</p>
+                <button
+                  type="button"
+                  onClick={() => setView({ kind: 'add' })}
+                  className={`${buttonClass('secondary', false)} flex-shrink-0`}
+                >
+                  <IconPlus size={16} />
+                  Add a new course
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -190,7 +209,7 @@ export default function CourseSelect({
                 {shown.length === 0 && (
                   <li className="py-10 text-center t-body text-ink/65">
                     No course matches{search.trim() ? ` “${search.trim()}”` : ''} —
-                    add it below and it is there for everyone.
+                    add it above and it is there for everyone.
                   </li>
                 )}
               </ul>
@@ -234,24 +253,6 @@ export default function CourseSelect({
           </div>
         </div>
 
-        {/* ── The way to a new course, pinned where the thumb is ── */}
-        {view.kind === 'browse' && (
-          <div
-            className="flex-shrink-0 border-t border-bark/12 bg-cream/95 backdrop-blur-sm"
-            style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}
-          >
-            <div className="max-w-lg mx-auto w-full px-4 pt-3">
-              <button
-                type="button"
-                onClick={() => setView({ kind: 'add' })}
-                className={buttonClass('secondary')}
-              >
-                <IconPlus size={16} />
-                Add a new course
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </>
   )

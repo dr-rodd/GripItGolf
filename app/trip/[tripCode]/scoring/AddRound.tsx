@@ -87,13 +87,16 @@ export default function AddRound({
 
   return (
     <>
+      {/* Dressed like the round tiles below it — same surface, same corner —
+          because it belongs to the same family: one more thing on this page
+          you can open. The word is there because a bare + was a mystery. */}
       <button
         type="button"
         onClick={openSheet}
-        aria-label="Add a round"
-        className="w-11 h-11 -mr-1 rounded-full bg-cream border border-bark/25 flex items-center justify-center text-accent-deep hover:border-accent transition-colors duration-150"
+        className="flex-shrink-0 flex items-center gap-2 pl-3.5 pr-4 py-2.5 -mr-1 rounded-2xl bg-surface border border-bark/[0.08] hover:border-accent active:opacity-75 transition-colors duration-150"
       >
-        <IconPlus size={18} />
+        <span className="text-accent-deep"><IconPlus size={16} /></span>
+        <span className="t-label text-ink">Add round</span>
       </button>
 
       {open && (
