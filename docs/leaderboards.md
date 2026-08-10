@@ -68,6 +68,8 @@ The live board is swiped to from inside the card, so it has to answer the same q
 
 `lib/boardRows.ts` is the join. `buildRows(board, context)` takes **one** leaderboard and the trip's scores and returns that board's rows; everything it needs comes off the board itself. Two boards on one trip can therefore be scored genuinely differently — Stableford keeping every card beside Strokes dropping the worst. Under the old model discard was one number on the trip and the team format one setting on the trip, so that was not expressible: it was one answer applied twice.
 
+**A casual round never reaches a board.** `rounds.casual` (migration 031) marks a round scored as usual but kept off every leaderboard — a subgroup's extra game. `buildRows` drops those rounds and their scores before any board reads them, which is the only place the rule lives; the leaderboard page also leaves them out of the round columns, and the cheap standing path (`simplePlacing` in `lib/hubStanding.ts`) filters at its query — `test:hub` holds the two paths together on it. A round summary still shows its own result: `fetchRoundRows` clears the flag for its single round, the same way it drops the discard rule, because a round's result is that round's result whether or not the trip counts it.
+
 The leaderboard page renders `Leaderboard[]` and nothing else. Tabs are the league boards in list order; matchplay is a button, never a tab, because a draw is not a table.
 
 **Two shells, not one builder per format.** `individualRows` and `teamRows`, each taking how a round is scored and how the rounds add up; `combineRounds` is the second axis and is shared by both, because totalling rounds or paying positions means the same thing whoever is being ranked.

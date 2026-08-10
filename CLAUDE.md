@@ -94,7 +94,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | File | Purpose |
 |---|---|
 | `lib/leaderboards.ts` | Current leaderboard model |
-| `lib/boardRows.ts` | Scores → leaderboard rows, per board. **`total` is always the competition's total, after any discard**; `totalAll` is the all-in figure and exists only where a round was actually dropped, for the leaderboard's Discard switch |
+| `lib/boardRows.ts` | Scores → leaderboard rows, per board. **`total` is always the competition's total, after any discard**; `totalAll` is the all-in figure and exists only where a round was actually dropped, for the leaderboard's Discard switch. **A casual round (`rounds.casual`) is dropped here, in `buildRows`, and nowhere else** — scored as usual, on no board; a round summary gets its result back by clearing the flag (`fetchRoundRows`) |
 | `lib/handicap.ts` | Shots received on a hole, and how a handicap is written and read. **A plus handicap is negative** and gives shots back from SI 18 down |
 | `lib/courseHandicap.ts` | The WHS course handicap, the only copy. Unrounded is primary — an allowance comes off that, not off the whole number |
 | `lib/scorecardVoid.ts` | Voiding a card. **Erases its scores from `live_scores` and `scores`**, not just the locks. Every void route goes through it |
@@ -122,7 +122,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `lib/roundHandicaps.ts` | The `round_handicaps` snapshot, written on a handicap edit and when somebody joins after the rounds exist |
 | `lib/teamLimits.ts` | Team size rules, pairing wording |
 | `lib/matchplayEntrants.ts` | Player/pairing shape and naming |
-| `lib/itinerarySync.ts` / `lib/itineraryStore.ts` | Itinerary diff-and-write. **`toItemRow` is the only row mapping** — trip creation had a second copy of it, field for field, and a kind gaining a column reached one writer and not the other |
+| `lib/itinerarySync.ts` / `lib/itineraryStore.ts` | Itinerary diff-and-write. **`toItemRow` is the only row mapping** — trip creation had a second copy of it, field for field, and a kind gaining a column reached one writer and not the other. **The golf lock is per round** (`touchesLockedGolf`): a round with scores can't be removed or re-coursed, everything else — adding golf mid-trip included — stays open |
 | `supabase/migrations/` | All schema changes, in order. **Migration 010 has a one-time backfill — never replay it**: it flips every draft trip to live. `scripts/migrate.ts` now enforces that rather than trusting the reader — a bare run lists and stops, and the whole folder needs `--all` plus `ALLOW_REPLAY=1`. Run one file by name; for a single migration the Supabase SQL editor is easier still |
 | `config/site.ts` | Global platform branding |
 

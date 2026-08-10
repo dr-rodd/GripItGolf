@@ -12,7 +12,7 @@
 | `players` | Scoped to `trip_id`. `team_id` (nullable), `name`, `role` (player), `handicap`, `is_lead` (boolean) |
 | `courses` | Scoped to `trip_id`. `name`, `slug`, `location` |
 | `holes` | 18 per course. `hole_number`, `par`, `stroke_index` |
-| `rounds` | Scoped to `trip_id`. Links `round_number` to `course_id`. `status` (upcoming/active/completed) |
+| `rounds` | Scoped to `trip_id`. Links `round_number` to `course_id`. `status` (upcoming/active/completed). `casual` keeps a round off every leaderboard — the rule is read in `lib/boardRows.ts` only; `casual_stats` opts a casual round's cards into the trip stats (migration 031) |
 | `round_handicaps` | Snapshot of `playing_handicap` per player per round — use this for scoring, never `players.handicap` |
 | `scores` | One row per player/hole/round. `gross_score`, auto-calculated `stableford_points` |
 
