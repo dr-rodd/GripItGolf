@@ -102,6 +102,26 @@ export function toItemRow(tripId: string, item: ItineraryItem): ItemRow {
 }
 
 /**
+ * A stored row as the item the builder edits — the read twin of `toItemRow`.
+ *
+ * Two screens load an itinerary now (Trip Setup's editor and the scoring
+ * screen's add-round sheet), and a field-for-field mapping in each is the
+ * same trap the write side already fell into: a kind gaining a column
+ * reaches one reader and not the other. The casual flags are deliberately
+ * not mapped here — they live on the round, not the item, and the caller
+ * that wants them merges them from its own rounds query.
+ */
+export function fromItemRow(r: Omit<ItemRow, 'trip_id' | 'id'> & { id: string }): ItineraryItem {
+  return {
+    id: r.id, dayIndex: r.day_index, position: r.position, kind: r.kind,
+    courseId: r.course_id, teeTime: r.tee_time, teeCount: r.tee_count,
+    stayName: r.stay_name, travelMode: r.travel_mode,
+    fromPlace: r.from_place, toPlace: r.to_place, durationMins: r.duration_mins,
+    activityName: r.activity_name, activityTime: r.activity_time,
+  }
+}
+
+/**
  * Whether saving `after` over `before` would remove a locked golf item or
  * move it to a different course or day.
  *

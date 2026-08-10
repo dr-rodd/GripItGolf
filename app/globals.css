@@ -157,6 +157,15 @@ body {
 /* The default page transition: a plain 200ms fade. */
 .page-enter { animation: gdFade 200ms ease-out; }
 
+/* A bottom sheet arriving. It rises from below the screen — a sheet that
+   simply appears reads as a glitch, one that rises reads as arriving.
+   280ms sits in the guide's 250–350ms band for something this size. */
+@keyframes gdSheetUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.sheet-up { animation: gdSheetUp 280ms ease-out; }
+
 /* A live score changing. The cell flashes emerald and settles — the
    number itself must never jump or bounce, because it is being read. */
 @keyframes gdScoreFlash {
@@ -215,7 +224,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .page-enter, .score-flash, .dot-live, .skeleton, .tab-pending {
+  .page-enter, .score-flash, .dot-live, .skeleton, .tab-pending, .sheet-up {
     animation: none !important;
   }
   /* The press keeps its meaning without the movement: the tab still goes

@@ -3,6 +3,7 @@ import BackButton from '@/app/components/BackButton'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { fetchMemberships } from '@/lib/teamMembers'
 import type { ItemKind, ItineraryItem, TravelMode } from '@/lib/itinerary'
+import { fromItemRow } from '@/lib/itinerarySync'
 import TripSetupClient from './TripSetupClient'
 import PasscodeGate from './PasscodeGate'
 import { isLocked } from '@/lib/passcode'
@@ -96,11 +97,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
   )
   const itinerary: ItineraryItem[] = ((itineraryResult.data ?? []) as unknown as ItinRow[])
     .map(r => ({
-      id: r.id, dayIndex: r.day_index, position: r.position, kind: r.kind,
-      courseId: r.course_id, teeTime: r.tee_time, teeCount: r.tee_count,
-      stayName: r.stay_name, travelMode: r.travel_mode,
-      fromPlace: r.from_place, toPlace: r.to_place, durationMins: r.duration_mins,
-      activityName: r.activity_name, activityTime: r.activity_time,
+      ...fromItemRow(r),
       ...(r.kind === 'golf'
         ? {
             casual: roundByItem.get(r.id)?.casual === true,

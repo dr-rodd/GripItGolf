@@ -600,15 +600,30 @@ section('Migration 027 and lib/itinerary.ts describe the same table')
 
   // Written but never read is the quiet version of this bug: the row saves,
   // the tile is blank on reload, and nothing anywhere reports a failure.
+  //
+  // The hub still maps its rows by hand; the setup page and the scoring
+  // screen go through `fromItemRow` — the read twin of `toItemRow`, one
+  // mapping instead of one per reader — so their pin is on the shared
+  // helper doing the mapping and on each page using it.
+  {
+    const src = fs.readFileSync('app/trip/[tripCode]/page.tsx', 'utf-8')
+    ok(src.includes('activity_name, activity_time'),
+      'the hub selects the new columns')
+    ok(src.includes('activityName: r.activity_name'),
+      '  …and maps them onto the item')
+  }
+  const mapper = fs.readFileSync('lib/itinerarySync.ts', 'utf-8')
+  ok(mapper.includes('activityName: r.activity_name'),
+    'fromItemRow maps the new columns onto the item')
   for (const page of [
-    'app/trip/[tripCode]/page.tsx',
     'app/trip/[tripCode]/setup/page.tsx',
+    'app/trip/[tripCode]/scoring/page.tsx',
   ]) {
     const src = fs.readFileSync(page, 'utf-8')
     ok(src.includes('activity_name, activity_time'),
       `${page.split('/').slice(-2).join('/')} selects the new columns`)
-    ok(src.includes('activityName: r.activity_name'),
-      `  …and maps them onto the item`)
+    ok(src.includes('fromItemRow'),
+      `  …and maps them through the shared mapping`)
   }
 }
 

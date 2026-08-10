@@ -12,16 +12,17 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import {
   type ItineraryItem, type ItemKind, type TravelMode,
-  TRAVEL_MODES, MAX_TEE_TIMES, MAX_ACTIVITY_NAME,
+  TRAVEL_MODES, MAX_ACTIVITY_NAME,
   addItem, addStay, removeItem, moveItem, itemsForDay, dayCount, dateForDay,
   describeDay, describeItem, itemError, nightsAvailable,
 } from '@/lib/itinerary'
 import {
   IconFlag, IconHome, IconArrowRight, IconFork, IconPlus, IconX,
 } from './icons'
-import { FIELD, FIELD_LABEL, buttonClass, Badge } from './ui'
-import CourseSelect from './CourseSelect'
-import Toggle from './Toggle'
+import { FIELD, FIELD_LABEL, Badge } from './ui'
+import {
+  Sheet, Stepper, GolfFields, golfDraftFields, EMPTY_GOLF_DRAFT, type GolfDraft,
+} from './ItineraryForms'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
 
 /**
@@ -151,105 +152,8 @@ const DROP_ANIMATION: DropAnimation = {
   }),
 }
 
-// ─── A stepper ─────────────────────────────────────────────────
-
-/**
- * A number chosen by tapping rather than typed.
- *
- * A number input cannot be cleared without going through an empty string,
- * and an empty string coerced back to the minimum means the field snaps to
- * 1 the moment you delete the digit — so it reads as only ever being 1 or
- * 10. Two buttons and a read-only figure cannot get into that state, and on
- * a phone they are the easier target anyway.
- */
-function Stepper({
-  label, value, min, max, unit, onChange,
-}: {
-  label: string
-  value: number
-  min: number
-  max: number
-  unit: (n: number) => string
-  onChange: (n: number) => void
-}) {
-  const step = (by: number) => onChange(Math.max(min, Math.min(max, value + by)))
-  const btn =
-    'w-14 h-14 flex-shrink-0 rounded-xl border border-bark/25 bg-surface text-ink ' +
-    'flex items-center justify-center text-2xl leading-none ' +
-    'hover:border-bark/40 transition-colors duration-150 ' +
-    'disabled:opacity-30 disabled:cursor-not-allowed'
-
-  return (
-    <div>
-      <label className={FIELD_LABEL}>{label}</label>
-      <div className="flex items-center gap-3">
-        <button
-          type="button" onClick={() => step(-1)} disabled={value <= min}
-          aria-label={`Fewer — ${label}`} className={btn}
-        >
-          −
-        </button>
-        <span
-          className="flex-1 text-center t-h2 text-ink tabular-nums"
-          aria-live="polite"
-        >
-          {value} <span className="t-cap text-ink/65">{unit(value)}</span>
-        </span>
-        <button
-          type="button" onClick={() => step(1)} disabled={value >= max}
-          aria-label={`More — ${label}`} className={btn}
-        >
-          +
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ─── The add sheets ────────────────────────────────────────────
-
-function Sheet({
-  title, onClose, onAdd, addLabel = 'Add', error, children,
-}: {
-  title: string
-  onClose: () => void
-  onAdd: () => void
-  addLabel?: string
-  error: string | null
-  children: React.ReactNode
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
-      <div className="absolute inset-0 bg-ink/40" />
-      <div
-        className="relative bg-cream rounded-t-2xl max-h-[88vh] overflow-y-auto"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="sticky top-0 bg-cream px-4 pt-4 pb-3 flex items-center justify-between border-b border-bark/12">
-          <h2 className="t-h2 text-ink">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="w-11 h-11 -mr-2 flex items-center justify-center text-ink/65 hover:text-ink"
-          >
-            <IconX size={18} />
-          </button>
-        </div>
-
-        <div className="px-4 py-5 space-y-5">{children}</div>
-
-        <div className="px-4">
-          {error && <p className="t-cap text-rust-deep mb-2">{error}</p>}
-          <button type="button" onClick={onAdd} className={buttonClass('primary')}>
-            {addLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
+// The add sheets and the golf form they share with the scoring screen live
+// in ./ItineraryForms — one form, two openings, or the two drift.
 
 // ─── Main ──────────────────────────────────────────────────────
 
@@ -296,11 +200,7 @@ export default function ItineraryBuilder({
   const [dragging, setDragging] = useState<ItineraryItem | null>(null)
 
   // Draft state for whichever sheet is open
-  const [courseId, setCourseId] = useState('')
-  const [teeTime, setTeeTime] = useState('')
-  const [teeCount, setTeeCount] = useState(1)
-  const [counts, setCounts] = useState(true)
-  const [casualStats, setCasualStats] = useState(false)
+  const [golfDraft, setGolfDraft] = useState<GolfDraft>(EMPTY_GOLF_DRAFT)
   const [stayName, setStayName] = useState('')
   const [nights, setNights] = useState(1)
   const [mode, setMode] = useState<TravelMode>('car')
@@ -364,8 +264,7 @@ export default function ItineraryBuilder({
 
   function openSheet(kind: ItemKind) {
     setError(null)
-    setCourseId(''); setTeeTime(''); setTeeCount(1)
-    setCounts(true); setCasualStats(false)
+    setGolfDraft(EMPTY_GOLF_DRAFT)
     setStayName(''); setNights(1)
     setMode('car'); setFromPlace(''); setToPlace(''); setHours(''); setMins('')
     setActivityName(''); setActivityTime('')
@@ -390,11 +289,7 @@ export default function ItineraryBuilder({
 
     const draft: Omit<ItineraryItem, 'position'> =
       sheet === 'golf'
-        ? {
-            id, dayIndex: openDay, kind: 'golf', courseId,
-            teeTime: teeTime || null, teeCount,
-            casual: !counts, casualStats: !counts && casualStats,
-          }
+        ? { id, dayIndex: openDay, kind: 'golf', ...golfDraftFields(golfDraft) }
         : sheet === 'activity'
         ? {
             id, dayIndex: openDay, kind: 'activity',
@@ -561,70 +456,13 @@ export default function ItineraryBuilder({
 
       {sheet === 'golf' && (
         <Sheet title="Add golf" onClose={() => setSheet(null)} onAdd={commit} addLabel="Add golf" error={error}>
-          <div>
-            <label className={FIELD_LABEL}>Course</label>
-            {/* Not a dropdown any more: the directory grew a search box, a
-                filter, and a door for courses it does not hold yet. */}
-            <CourseSelect
-              courses={allCourses}
-              value={courseId}
-              onChange={setCourseId}
-              onCourseAdded={upsertCourse}
-            />
-          </div>
-
-          {/* Full width, and stacked. Side by side, a native time control
-              claims its own intrinsic width and runs into whatever is next
-              to it — the same thing DateField exists to stop. */}
-          <div>
-            <label className={FIELD_LABEL} htmlFor="it-tee">First tee time</label>
-            <input
-              id="it-tee" type="time" value={teeTime}
-              onChange={e => setTeeTime(e.target.value)}
-              className={`${FIELD} block min-w-0 max-w-full`}
-              style={{
-                // Stops iOS sizing the field to the native control's preference
-                WebkitAppearance: 'none',
-                appearance: 'none',
-                minWidth: 0,
-                maxWidth: '100%',
-              }}
-            />
-          </div>
-
-          <Stepper
-            label="Tee times"
-            value={teeCount}
-            min={1}
-            max={MAX_TEE_TIMES}
-            unit={n => (n === 1 ? 'group' : 'groups')}
-            onChange={setTeeCount}
+          <GolfFields
+            draft={golfDraft}
+            onChange={setGolfDraft}
+            courses={allCourses}
+            onCourseAdded={upsertCourse}
+            trackStats={trackStats}
           />
-
-          <p className="t-cap text-ink/65">
-            How many groups are going out?
-          </p>
-
-          {/* A casual round — a subgroup's extra game that should not move
-              the trip standings. Off is the exception, so the switch reads
-              in the positive and starts on. */}
-          <div className="pt-1 border-t border-bark/12">
-            <div className="flex items-center justify-between gap-3 pt-4">
-              <span className="text-ink text-sm">Counts on the leaderboard</span>
-              <Toggle checked={counts} onChange={setCounts} label="Counts on the leaderboard" />
-            </div>
-            {!counts && (
-              <p className="t-cap text-ink/65 mt-2">
-                A casual round — scored as usual, kept off every leaderboard.
-              </p>
-            )}
-            {!counts && trackStats && (
-              <div className="flex items-center justify-between gap-3 mt-4">
-                <span className="text-ink text-sm">Include in trip stats</span>
-                <Toggle checked={casualStats} onChange={setCasualStats} label="Include in trip stats" />
-              </div>
-            )}
-          </div>
         </Sheet>
       )}
 

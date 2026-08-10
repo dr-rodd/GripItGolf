@@ -382,8 +382,12 @@ function AddCourseForm({
     <div className="py-5 space-y-5 pb-10">
       <div>
         <label className={FIELD_LABEL} htmlFor="nc-name">Course name</label>
+        {/* No autofocus. Focusing this on open raised the keyboard over the
+            bottom half of the form, so "add a course" opened as a name field
+            and a wall of glass. The keyboard should arrive when a finger
+            asks for it, not with the form. */}
         <input
-          id="nc-name" type="text" value={name} autoFocus={!prefillName}
+          id="nc-name" type="text" value={name}
           maxLength={MAX_COURSE_NAME}
           onChange={e => setName(e.target.value)}
           placeholder="e.g. Lahinch Golf Club — Old Course"

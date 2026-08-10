@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
 import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundState'
+import { fromItemRow, type ItemRow } from '@/lib/itinerarySync'
+import AddRound from './AddRound'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,20 +18,50 @@ export default async function TripCoursePortalPage({
 
   const { data: trip, error: tripError } = await supabase
     .from('trips')
-    .select('id, name')
+    .select('id, name, start_date, end_date, track_stats')
     .eq('trip_code', tripCode)
     .single()
 
   if (tripError) console.error('TripCoursePortal trip query failed:', tripError)
   if (!trip) notFound()
 
-  const { data: rounds, error: roundsError } = await supabase
-    .from('rounds')
-    .select('id, round_number, status, courses(name, location)')
-    .eq('trip_id', trip.id)
-    .order('round_number')
+  // Alongside the rounds: what the add-round sheet needs — the itinerary
+  // (the diff wants what already exists), the players (each new round
+  // snapshots their handicaps) and the platform course list for its picker.
+  const [roundsRes, itineraryRes, playersRes, coursesRes] = await Promise.all([
+    supabase
+      .from('rounds')
+      .select('id, round_number, status, courses(name, location)')
+      .eq('trip_id', trip.id)
+      .order('round_number'),
+    supabase
+      .from('itinerary_items')
+      .select('id, day_index, position, kind, course_id, tee_time, tee_count, ' +
+              'stay_name, travel_mode, from_place, to_place, duration_mins, ' +
+              'activity_name, activity_time')
+      .eq('trip_id', trip.id)
+      .order('day_index')
+      .order('position'),
+    supabase
+      .from('players')
+      .select('id, handicap')
+      .eq('trip_id', trip.id)
+      .eq('is_composite', false),
+    supabase
+      .from('courses')
+      .select('id, name, location, website, card_verified')
+      .is('trip_id', null)
+      .order('name'),
+  ])
 
-  if (roundsError) console.error('TripCoursePortal rounds query failed:', roundsError)
+  const rounds = roundsRes.data
+  if (roundsRes.error) console.error('TripCoursePortal rounds query failed:', roundsRes.error)
+  if (itineraryRes.error) console.error('TripCoursePortal itinerary query failed:', itineraryRes.error)
+  if (playersRes.error) console.error('TripCoursePortal players query failed:', playersRes.error)
+  if (coursesRes.error) console.error('TripCoursePortal courses query failed:', coursesRes.error)
+
+  const itinerary = ((itineraryRes.data ?? []) as unknown as (Omit<ItemRow, 'trip_id'> & { id: string })[])
+    .map(fromItemRow)
 
   // What has actually happened on each round, rather than what `rounds.status`
   // claims: the status column is set by hand and drifts, and the tile is the
@@ -70,9 +102,22 @@ export default async function TripCoursePortalPage({
       <TripHeader backTo={`/trip/${tripCode}`} title="scoring" />
 
       <div className="max-w-lg mx-auto px-4 py-6">
-        <p className="text-ink/65 text-[13px] tracking-[0.2em] uppercase mb-4">
-          Choose a round
-        </p>
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-ink/65 text-[13px] tracking-[0.2em] uppercase">
+            Choose a round
+          </p>
+          {/* The door for the impromptu game — the same golf form the
+              itinerary uses, in a sheet, without a trip through Trip Setup. */}
+          <AddRound
+            tripId={trip.id}
+            startDate={trip.start_date ?? null}
+            endDate={trip.end_date ?? null}
+            trackStats={trip.track_stats === true}
+            items={itinerary}
+            players={playersRes.data ?? []}
+            courses={coursesRes.data ?? []}
+          />
+        </div>
 
         {(rounds ?? []).length === 0 && (
           <p className="text-ink/65 text-sm py-8 text-center">
