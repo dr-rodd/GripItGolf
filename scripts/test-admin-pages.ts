@@ -109,6 +109,33 @@ section('Admin reads and writes use the service-role client')
   }
 }
 
+// ─── The course editor plays by the directory's rules ──────────
+
+section('The course editor validates with lib/courseDirectory, not its own copies')
+{
+  const p = 'app/admin/courses/[id]/actions.ts'
+  if (existsSync(p)) {
+    const src = read(p)
+    // The comments are allowed to talk about the rules; the code is not
+    // allowed to restate them.
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+    for (const name of ['courseNameError', 'countyError', 'websiteError', 'normalizeWebsite', 'teeDraftError', 'parseTeeDraft']) {
+      ok(code.includes(name), `${name} comes from the shared module`)
+    }
+    ok(code.includes("from '@/lib/courseDirectory'"), 'imported, not restated')
+    ok(!code.includes('TEE_COLUMN_RANGE'),
+      'the ranges are not read directly — teeDraftError already applies them')
+    ok(!/\b(55|155)\b.*slope|slope.*\b(55|155)\b/.test(code),
+      'no literal slope bounds — one copy, in lib/cardCheck.ts')
+    ok(!code.includes('slug'),
+      'a rename never touches the slug — scoring URLs and the directory hold it')
+    ok(!code.includes("from('holes')"),
+      'holes are never written here — the scorecard photo check is the one writer')
+  } else {
+    ok(false, `${p} exists`)
+  }
+}
+
 // ─── The gate itself ───────────────────────────────────────────
 
 section('The gate is the thin thing it claims to be')
