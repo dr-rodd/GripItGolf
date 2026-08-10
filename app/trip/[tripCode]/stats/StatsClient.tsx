@@ -2,16 +2,20 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
-  playerStats, statsFor, holeDifficulty, gainedOnField, pointsVsField,
+  playerStats, statsFor, holeDifficulty, gainedOnField,
+  netGainedOnField, longGameGained,
   formatGained, formatRate, formatAverage,
   MIN_HOLE_SAMPLE,
-  type HoleStat,
+  type HoleStat, type PuttShareMode,
 } from '@/lib/holeStats'
 import { tripAwards } from '@/lib/tripAwards'
 import { HEADER_H } from '@/app/components/headerMetrics'
 import { IconChevronLeft } from '@/app/components/icons'
 import { PlayerPanels, EveryonePanels, CourseField } from './panels'
-import { GainedByRoundChart, DifficultyProfileChart, type GainedBar } from './charts'
+import {
+  GainedByRoundChart, DifficultyProfileChart, PentagonChart, TrendChart,
+  type GainedBar,
+} from './charts'
 import type { RowHole, RowRound } from '@/lib/boardRows'
 
 /**
@@ -34,6 +38,19 @@ import type { RowHole, RowRound } from '@/lib/boardRows'
  */
 
 type View = 'players' | 'courses'
+
+/** The five ways strokes gained splits, in spoke and chip order. */
+const SG_COMPONENTS = [
+  ['total', 'Total'],
+  ['toGreen', 'Tee to green'],
+  ['driving', 'Driving'],
+  ['approach', 'Approach'],
+  ['putting', 'Putting'],
+] as const
+type SgKey = (typeof SG_COMPONENTS)[number][0]
+
+/** Where the putt-share choice lives between visits. Device-local on purpose. */
+const PUTT_SHARE_KEY = 'gd-stats-putt-share'
 
 export default function StatsClient({
   stats, holes, players, rounds, courseByRound, courseNames, meId, thin,
@@ -68,6 +85,21 @@ export default function StatsClient({
   const [only, setOnly] = useState<string | null>(null)
   const [basis, setBasis] = useState<'gross' | 'net'>('gross')
 
+  /**
+   * The advanced setting: how much of the handicap allocation putting
+   * carries. It moves only how the net figure divides between putting and
+   * the long game — never a total, which the lib pins. Device-local, read
+   * after mount so the server render never guesses at a localStorage.
+   */
+  const [shareMode, setShareMode] = useState<PuttShareMode>('fixed')
+  useEffect(() => {
+    if (window.localStorage.getItem(PUTT_SHARE_KEY) === 'by-par') setShareMode('by-par')
+  }, [])
+  const chooseShare = (m: PuttShareMode) => {
+    setShareMode(m)
+    try { window.localStorage.setItem(PUTT_SHARE_KEY, m) } catch { /* private mode */ }
+  }
+
   const nameOf = useMemo(() => new Map(players.map(p => [p.id, p.name])), [players])
   const courseName = useMemo(() => new Map(courseNames), [courseNames])
   const courseFor = useMemo(() => new Map(courseByRound), [courseByRound])
@@ -86,10 +118,10 @@ export default function StatsClient({
     () => (only === null ? stats : stats.filter(s => s.courseId === only)),
     [stats, only],
   )
-  const field = useMemo(() => playerStats(filtered), [filtered])
+  const field = useMemo(() => playerStats(filtered, shareMode), [filtered, shareMode])
   const mine = useMemo(
-    () => (who === 'everyone' ? null : statsFor(filtered, who)),
-    [filtered, who],
+    () => (who === 'everyone' ? null : statsFor(filtered, who, shareMode)),
+    [filtered, who, shareMode],
   )
   const awards = useMemo(() => tripAwards(field), [field])
   const difficulty = useMemo(() => holeDifficulty(stats, holes), [stats, holes])
@@ -111,15 +143,70 @@ export default function StatsClient({
           detail: `${formatGained(g.toGreen)} tee · ${formatGained(g.putting)} putt`,
         }]
       }
-      const g = pointsVsField(rs).get(who)
+      const g = netGainedOnField(rs, shareMode).get(who)
       if (!g || g.holes === 0) return []
       return [{
         label: `R${r.round_number}`,
-        value: g.points,
+        value: g.total,
+        detail: `${formatGained(g.toGreen)} tee · ${formatGained(g.putting)} putt`,
+      }]
+    })
+  }, [filtered, who, basis, rounds, shareMode])
+
+  // ── The hero graph: finalised holes only ──
+  //
+  // An open card moves under the reader, and the pentagon and the trend
+  // should not — they redraw when a round is signed. The panels keep
+  // counting a live card, which is the in-play banter; this is the analysis.
+  const finalised = useMemo(() => filtered.filter(s => !s.live), [filtered])
+  const [heroView, setHeroView] = useState<'pentagon' | 'trend'>('pentagon')
+  const [trendKey, setTrendKey] = useState<SgKey>('total')
+
+  // The five spokes, per 18 holes so a nine-hole evening compares honestly.
+  // Gross on purpose — the original is field-relative gross, and the net
+  // answer lives in the panel below with its own toggle.
+  const hero = useMemo(() => {
+    if (who === 'everyone') return null
+    const g = gainedOnField(finalised).get(who)
+    if (!g || g.holes === 0) return null
+    const l = longGameGained(finalised).get(who)
+    const per18 = (v: number) => (v / g.holes) * 18
+    return {
+      holes: g.holes,
+      axes: [
+        { key: 'total', label: 'Total', value: per18(g.total) },
+        { key: 'toGreen', label: 'Tee to green', value: per18(g.toGreen) },
+        { key: 'driving', label: 'Driving', value: per18(l?.driving ?? 0) },
+        { key: 'approach', label: 'Approach', value: per18(l?.approach ?? g.toGreen) },
+        { key: 'putting', label: 'Putting', value: per18(g.putting) },
+      ],
+    }
+  }, [finalised, who])
+
+  // The trend: one component across the finalised rounds, per 18. The
+  // rule holds here too — each round's field is that round's holes, and
+  // the driving pools learn from the whole trip so one round's chart does
+  // not relearn the course from six cards.
+  const trend = useMemo<GainedBar[]>(() => {
+    if (who === 'everyone') return []
+    return rounds.flatMap(r => {
+      const rs = finalised.filter(s => s.roundId === r.id)
+      if (rs.length === 0) return []
+      const g = gainedOnField(rs).get(who)
+      if (!g || g.holes === 0) return []
+      const l = longGameGained(rs, finalised).get(who)
+      const v = trendKey === 'total' ? g.total
+        : trendKey === 'toGreen' ? g.toGreen
+        : trendKey === 'putting' ? g.putting
+        : trendKey === 'driving' ? (l?.driving ?? 0)
+        : (l?.approach ?? g.toGreen)
+      return [{
+        label: `R${r.round_number}`,
+        value: (v / g.holes) * 18,
         detail: `${g.holes} holes`,
       }]
     })
-  }, [filtered, who, basis, rounds])
+  }, [finalised, rounds, who, trendKey])
 
   // How much play each course carries, for the picker's right-hand readout.
   // Rounds rather than holes: `stats` is one row per player per hole, so a
@@ -275,6 +362,60 @@ export default function StatsClient({
         </p>
       )}
 
+      {/* ── The hero: the shape of one player's game ──
+          First under the choosers, before any table — the draw-you-in
+          moment. Gross, per round, finalised rounds only. */}
+      {view === 'players' && hero && (
+        <div className="bg-surface border border-bark/12 rounded-2xl px-4 pt-3 pb-1 mb-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="t-card text-ink">The shape of your game</h2>
+            <div className="flex gap-1 flex-shrink-0" role="group" aria-label="Chart style">
+              {([['pentagon', 'Shape'], ['trend', 'Trend']] as const).map(([v, label]) => (
+                <button key={v} type="button" aria-pressed={heroView === v}
+                  onClick={() => setHeroView(v)}
+                  className={`px-3 py-1.5 rounded-lg border text-[13px] tracking-wider uppercase transition-colors duration-150 ${
+                    heroView === v
+                      ? 'bg-accent-deep text-white border-accent-deep font-bold'
+                      : 'bg-surface border-bark/12 text-ink/65 hover:text-ink/80'
+                  }`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {heroView === 'pentagon' ? (
+            <PentagonChart
+              axes={hero.axes}
+              hint={`Strokes gained a round, over ${hero.holes} finalised holes — tap a corner.`}
+            />
+          ) : (
+            <>
+              <div className="flex gap-1.5 mt-2 overflow-x-auto -mx-1 px-1 pb-1">
+                {SG_COMPONENTS.map(([key, label]) => (
+                  <button key={key} type="button" aria-pressed={trendKey === key}
+                    onClick={() => setTrendKey(key)}
+                    className={`flex-shrink-0 px-3 py-1.5 t-cap rounded-xl border transition-colors duration-150 ${
+                      trendKey === key
+                        ? 'border-accent bg-accent/[0.12] text-accent-deep'
+                        : 'border-bark/12 text-ink/50 hover:border-bark/25'
+                    }`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {trend.length >= 2 ? (
+                <TrendChart points={trend} hint="Finalised rounds only — tap a point." />
+              ) : (
+                <p className="t-cap text-ink/65 py-3">
+                  One finalised round so far — the line starts at the second.
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {view === 'players' && (
         mine ? (
           <PlayerPanels
@@ -313,6 +454,10 @@ export default function StatsClient({
         )
       )}
 
+      {view === 'players' && (
+        <AdvancedSettings mode={shareMode} onMode={chooseShare} />
+      )}
+
       {view === 'courses' && shownCourse && (
         <>
           {/* The per-course breakdown: who owns this course, then how the
@@ -328,6 +473,77 @@ export default function StatsClient({
             title={courseName.get(shownCourse) ?? 'The course'}
           />
         </>
+      )}
+    </div>
+  )
+}
+
+// ─── Advanced settings ─────────────────────────────────────────
+
+/**
+ * The one advanced setting: how much of the handicap allocation putting
+ * carries in the net split. Both schemes ship because both are defensible —
+ * a fifth matches measured scoring (the gap between handicaps lives mostly
+ * in the long game), by-par reads naturally off the card. It moves only the
+ * split; the lib pins that it can never move a total.
+ *
+ * A quiet disclosure at the foot rather than a gear in the controls: a
+ * setting that most readers never need should not stand where the
+ * instrument's own controls do.
+ */
+function AdvancedSettings({ mode, onMode }: {
+  mode: PuttShareMode
+  onMode: (m: PuttShareMode) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="mt-6 border-t border-bark/12 pt-3">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between gap-3 py-1 text-left"
+      >
+        <span className="text-[13px] tracking-wider uppercase text-ink/50">
+          Advanced settings
+        </span>
+        <span className={`flex-shrink-0 text-ink/50 transition-transform duration-300 ease-out ${
+          open ? '' : '-rotate-90'
+        }`}>
+          <IconChevronLeft size={16} />
+        </span>
+      </button>
+
+      {open && (
+        <div className="pt-2 pb-1">
+          <p className="t-cap text-ink/80">Handicap share given to putting</p>
+          <p className="t-cap text-ink/50 leading-snug mt-0.5">
+            How the net figures divide your handicap between the green and
+            everything before it. Splits only — no total moves.
+          </p>
+          <div className="flex gap-1.5 mt-2" role="group" aria-label="Putting share">
+            {([
+              ['fixed', 'A fifth'],
+              ['by-par', 'By par'],
+            ] as const).map(([m, label]) => (
+              <button key={m} type="button" aria-pressed={mode === m}
+                onClick={() => onMode(m)}
+                className={`px-3.5 py-2 t-cap rounded-xl border transition-colors duration-150 ${
+                  mode === m
+                    ? 'border-accent bg-accent/[0.12] text-accent-deep font-semibold'
+                    : 'border-bark/12 text-ink/65 hover:border-bark/25'
+                }`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="t-cap text-ink/50 leading-snug mt-2">
+            {mode === 'fixed'
+              ? 'A fifth, whatever the par — measured scoring says the gap between handicaps lives mostly in the long game.'
+              : 'Two shots of par — half on a par 4, two fifths on a par 5. Reads naturally, credits putting generously.'}
+          </p>
+        </div>
       )}
     </div>
   )

@@ -114,8 +114,8 @@ export function PlayerPanels({
   /** The gained-per-round chart, mounted by the shell so panels stay pure. */
   chart?: React.ReactNode
 }) {
-  const { fairways: f, putting: p, gained: g, scoring: sc, scrambling: scr, approach: a, misc: m } = mine
-  const vsHandicap = mine.form.reduce((n, r) => n + r.vsHandicap, 0)
+  const { fairways: f, putting: p, gained: g, netGained: n, scoring: sc, scrambling: scr, approach: a, misc: m } = mine
+  const vsHandicap = mine.form.reduce((acc, r) => acc + r.vsHandicap, 0)
 
   const missNote = f.missBias
     ? `${f.missedLeft} left, ${f.missedRight} right — leaning ${f.missBias}`
@@ -142,15 +142,17 @@ export function PlayerPanels({
       </Panel>
 
       {/* Elevated to second, by request: after the basic card, the headline
-          analysis. Gross keeps the putting / tee-to-green split; Net is the
-          points answer, and points carry the handicap in, so it has no split
-          to offer — the strokes were given before the comparison started. */}
+          analysis. Both bases keep the putting / tee-to-green split now: Net
+          is net strokes by apportionment — the handicap shared out over the
+          holes and subtracted before the comparison — so it splits exactly
+          the way gross does, and no longer saturates on a blow-up the way
+          the old points comparison did. */}
       <Panel
         title="Strokes gained"
         aside={<BasisToggle basis={basis} onBasis={onBasis} />}
         hint={basis === 'gross'
           ? "Against everyone else's cards on the same holes, on the shots played."
-          : 'Stableford points against the field on the same holes — handicaps included.'}
+          : 'Net strokes against the field — your handicap shared over the holes and taken off first.'}
       >
         {basis === 'gross' ? (
           <>
@@ -161,10 +163,12 @@ export function PlayerPanels({
           </>
         ) : (
           <>
-            <Line label="Points on the field"
-              value={formatGained(mine.pointsGained.points)}
-              tone={gainTone(mine.pointsGained.points)} />
-            <Line label="Holes counted" value={String(mine.pointsGained.holes)} />
+            <Line label="To the green" value={formatGained(n.toGreen)} tone={gainTone(n.toGreen)} />
+            <Line label="Putting" value={formatGained(n.putting)} tone={gainTone(n.putting)} />
+            <Line label="Total" value={formatGained(n.total)} tone={gainTone(n.total)} />
+            <Line label="Holes counted" value={String(n.holes)} />
+            {/* Points-based on purpose, whatever the toggle: "did I play to
+                my handicap" is a Stableford question by definition. */}
             <Line label="Vs your handicap"
               value={`${formatGained(vsHandicap)}${mine.form.length > 1 ? ` over ${mine.form.length} rounds` : ''}`}
               tone={gainTone(vsHandicap)} />
@@ -177,6 +181,27 @@ export function PlayerPanels({
         <Line label="Fairways hit" value={`${f.hit} of ${f.counted}`} />
         <Line label="Hit rate" value={formatRate(f.hitRate)} />
         <Line label="Misses" value={missNote} />
+        {/* What the misses cost, from this player's own cards, as score to
+            par by where the ball finished. Left and right kept apart on
+            purpose: a small common miss one way and a rare destructive one
+            the other read as two very different numbers, and a combined
+            figure blurs them into one. Signed like a score to par, never
+            through formatGained — a cost is not a gain. */}
+        {mine.cost.hit.averageToPar != null && mine.cost.miss.averageToPar != null && (
+          <>
+            <Line label="Scoring off the fairway" value={toPar(mine.cost.hit.averageToPar)} />
+            <Line label="Scoring off a miss" value={
+              [
+                toPar(mine.cost.miss.averageToPar),
+                mine.cost.missLeft.averageToPar != null && mine.cost.missLeft.holes > 0
+                  ? `${toPar(mine.cost.missLeft.averageToPar)} left` : null,
+                mine.cost.missRight.averageToPar != null && mine.cost.missRight.holes > 0
+                  ? `${toPar(mine.cost.missRight.averageToPar)} right` : null,
+              ].filter(Boolean).join(' · ')
+            } />
+            <Line label="A miss costs" value={`${toPar(mine.cost.costPerMiss!)} a hole`} />
+          </>
+        )}
       </Panel>
 
       <Panel
@@ -470,13 +495,15 @@ export function EveryonePanels({
 
   const gainedRaw = basis === 'gross'
     ? by(p => (p.gained.holes > 0 ? p.gained.total : null), (a, b) => b - a)
-    : by(p => (p.pointsGained.holes > 0 ? p.pointsGained.points : null), (a, b) => b - a)
+    : by(p => (p.netGained.holes > 0 ? p.netGained.total : null), (a, b) => b - a)
   const gainedMax = Math.max(1e-9, ...gainedRaw.map(({ s }) => Math.abs(s)))
   const gained = gainedRaw.map(({ p, s }) => ({
     id: p.playerId, name: name(p.playerId),
+    // Net splits now too — the apportioned figure is strokes, so the tee
+    // and putt halves exist on both sides of the toggle.
     note: basis === 'gross'
       ? `${formatGained(p.gained.toGreen)} tee · ${formatGained(p.gained.putting)} putt`
-      : `${p.pointsGained.holes} holes`,
+      : `${formatGained(p.netGained.toGreen)} tee · ${formatGained(p.netGained.putting)} putt`,
     figure: formatGained(s), tone: gainTone(s),
     share: s / gainedMax,
   }))
@@ -487,7 +514,7 @@ export function EveryonePanels({
         title="Strokes gained"
         hint={basis === 'gross'
           ? 'Shots on the field, everyone against everyone, on the same holes.'
-          : 'Stableford points on the field — handicaps included, so this is the fair fight.'}
+          : 'Net strokes on the field — handicaps shared over the holes and taken off first, so this is the fair fight.'}
         aside={<BasisToggle basis={basis} onBasis={onBasis} />}
         rows={gained}
         meId={meId}

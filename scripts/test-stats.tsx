@@ -22,7 +22,7 @@ import {
   fairwayStats, puttingStats, gainedOnField, holeDifficulty,
   playerStats, statsFor, coverage,
   scoringCounts, scrambling, approachStats, parSplits,
-  pointsVsField, roundForm, miscStats,
+  roundForm, miscStats,
   holeAllocation, puttShare, FIXED_PUTT_SHARE,
   netGainedOnField, netVsPar, longGameGained, fairwayCost,
   MIN_OTHERS, MIN_HOLE_SAMPLE, MIN_MISSES, MIN_SIDE,
@@ -657,35 +657,10 @@ section('The putting tails say what the average hides')
   eq(p.puttsPerHole, 2, 'while the average sits innocently on two')
 }
 
-section('Points against the field is the net answer, and it still sums to zero')
-{
-  // Five cards on one hole: one four-pointer, four twos. The handicaps are
-  // inside the points already — that is the whole trick.
-  const level = [
-    sc('a', 'h1', 4, null, null, { points: 4 }),
-    sc('b', 'h1', 4, null, null, { points: 2 }),
-    sc('c', 'h1', 4, null, null, { points: 2 }),
-    sc('d', 'h1', 4, null, null, { points: 2 }),
-    sc('e', 'h1', 4, null, null, { points: 2 }),
-  ]
-  const g = pointsVsField(holeStats(ctxOf(level)))
-
-  eq(g.get('a')!.points.toFixed(4), '2.0000', 'four points against a field of twos gains two')
-  eq(g.get('b')!.points.toFixed(4), '-0.5000', '  …and each two gives half of one back')
-  const sum = [...g.values()].reduce((n, x) => n + x.points, 0)
-  ok(Math.abs(sum) < 1e-9, 'the net gains over a hole sum to exactly zero')
-
-  // No putt count anywhere — and every hole still counts, which is the
-  // point of the net figure covering more of the trip than the gross one.
-  ok(g.get('a')!.holes === 1, 'a hole with no putt count is still in the net field')
-
-  const three = pointsVsField(holeStats(ctxOf(level.slice(0, 3))))
-  eq([...three.values()].length, 0, `and ${MIN_OTHERS} others are still required`)
-
-  // No handicap is read anywhere in the file — the points carry it in.
-  ok(!/shotsReceived|playing_handicap|handicapAllowance/.test(code('lib/holeStats.ts')),
-    'the net figure never re-derives a handicap')
-}
+// The points-vs-field net figure lived here and is deliberately gone —
+// replaced whole by the apportioned version below, because two net answers
+// on one page is one too many. "Vs your handicap" stays points-based, off
+// `roundForm`, because that question is Stableford by definition.
 
 section('The allocation shares the handicap out, and mirrors for a plus')
 {
@@ -749,6 +724,11 @@ section('Net by apportionment sums to zero, and its halves reconcile')
     'no handicap snapshot, no net figure — never a guess')
   eq([...netGainedOnField(holeStats(ctxOf(level.slice(0, 3), HCP))).values()].length, 0,
     `and ${MIN_OTHERS} others are still required`)
+
+  // The handicap arrives as the round's stored snapshot and is only ever
+  // shared out — never re-derived from an index or an allowance.
+  ok(!/shotsReceived|playing_handicap|handicapAllowance/.test(code('lib/holeStats.ts')),
+    'the net figure never re-derives a handicap')
 }
 
 section('Net vs par is measured against the course, not the field')
@@ -1177,10 +1157,39 @@ section('The lab reads the derivation and does none of its own')
   // filter must run before playerStats, and never mention a player.
   ok(/stats\.filter\(s => s\.courseId === only\)/.test(client),
     'the course filter narrows the holes to one course')
-  ok(/playerStats\(filtered\)/.test(client),
+  ok(/playerStats\(filtered, shareMode\)/.test(client),
     '  …and the field is computed over what is left')
   ok(!/filter\(s => s\.playerId/.test(client),
     '  …with no player ever filtered out of a field')
+
+  // ── The hero graph ──
+  //
+  // The pentagon and the trend read finalised holes only — an open card
+  // moves under the reader and these charts must not. The panels keep
+  // counting a live card; that is the in-play banter, this is the analysis.
+  ok(/filtered\.filter\(s => !s\.live\)/.test(client),
+    'the hero charts read finalised holes only')
+  ok(/PentagonChart/.test(client) && /TrendChart/.test(client),
+    '  …as a pentagon with a trend toggle')
+  ok(/\(v \/ g\.holes\) \* 18/.test(client),
+    '  …per 18 holes, so a nine-hole evening compares honestly')
+  ok(/longGameGained\(rs, finalised\)/.test(client),
+    '  …with a round\'s driving pools learned from the whole trip')
+
+  // ── The net figure is the apportioned one, whole ──
+  //
+  // Replaced, not duplicated: two net answers on one page is one too many.
+  ok(!/pointsGained/.test(panels) && !/pointsVsField/.test(client),
+    'the points-vs-field figure is gone from every surface')
+  ok(/netGained/.test(panels), '  …replaced by net strokes by apportionment')
+  ok(/Vs your handicap/.test(panels),
+    '  …while "vs your handicap" stays, points-based by definition')
+
+  // ── Advanced settings ──
+  ok(/localStorage\.setItem\(PUTT_SHARE_KEY/.test(client),
+    'the putt-share choice survives the visit')
+  ok(/'fixed'/.test(client) && /'by-par'/.test(client),
+    '  …with both schemes offered and a fifth the default')
 
   // ── The course picker ──
   //

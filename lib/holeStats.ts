@@ -553,58 +553,6 @@ export function gainedOnField(stats: readonly HoleStat[]): Map<string, Gained> {
   return out
 }
 
-// ─── Gained after handicap: points against the field ───────────
-
-export type PointsGained = {
-  playerId: string
-  /** Stableford points vs the field's average on the same holes. */
-  points: number
-  /** Holes that contributed — every scored hole, no putt count needed. */
-  holes: number
-}
-
-/**
- * The net side of the gained toggle: who is outscoring the field once the
- * handicaps have spoken.
- *
- * The same self-excluding shape as `gainedOnField`, over Stableford points
- * instead of shots — so it keeps the property that the gains over a hole
- * sum to exactly zero, and it needs no putt count, so every scored hole is
- * in. The handicap arrives baked into each stored point at the trip's own
- * allowances; no handicap is read here, which is what keeps this file's
- * "no handicap anywhere" rule true in spirit: the strokes were given where
- * the competition gives them, not re-derived.
- */
-export function pointsVsField(stats: readonly HoleStat[]): Map<string, PointsGained> {
-  const byHole = new Map<string, HoleStat[]>()
-  for (const s of stats) {
-    const key = `${s.roundId}:${s.holeId}`
-    const list = byHole.get(key)
-    if (list) list.push(s)
-    else byHole.set(key, [s])
-  }
-
-  const out = new Map<string, PointsGained>()
-  const get = (id: string) => {
-    let g = out.get(id)
-    if (!g) { g = { playerId: id, points: 0, holes: 0 }; out.set(id, g) }
-    return g
-  }
-
-  for (const played of byHole.values()) {
-    if (played.length - 1 < MIN_OTHERS) continue
-    const sum = played.reduce((n, s) => n + s.points, 0)
-    const others = played.length - 1
-    for (const s of played) {
-      const g = get(s.playerId)
-      g.points += s.points - (sum - s.points) / others
-      g.holes += 1
-    }
-  }
-
-  return out
-}
-
 // ─── Sharing the handicap out over the holes ───────────────────
 //
 // The apportioned-net model: turn the course handicap itself into a per-hole
@@ -1131,8 +1079,6 @@ export type PlayerStats = {
   /** Only pars actually played appear — no par-3 row on a course without one. */
   splits: ParSplit[]
   misc: MiscStats
-  /** The net side of the gained toggle: points against the field. */
-  pointsGained: PointsGained
   /** Net gained on the field, by handicap apportionment. */
   netGained: NetGained
   /** The same net figures against the course rather than the field. */
@@ -1160,7 +1106,6 @@ export function playerStats(
   stats: readonly HoleStat[], puttShareMode: PuttShareMode = 'fixed',
 ): PlayerStats[] {
   const gains = gainedOnField(stats)
-  const netGains = pointsVsField(stats)
   const apportioned = netGainedOnField(stats, puttShareMode)
   const vsPar = netVsPar(stats, puttShareMode)
   const long = longGameGained(stats)
@@ -1183,7 +1128,6 @@ export function playerStats(
     approach: approachStats(mine),
     splits: parSplits(mine),
     misc: miscStats(mine),
-    pointsGained: netGains.get(playerId) ?? { playerId, points: 0, holes: 0 },
     netGained: apportioned.get(playerId)
       ?? { playerId, putting: 0, toGreen: 0, total: 0, holes: 0 },
     netVsPar: vsPar.get(playerId)
