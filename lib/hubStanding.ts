@@ -374,7 +374,13 @@ export async function fetchTripStats(
   const resolved = ctx.resolved.filter(s => !excluded.has(s.roundId))
 
   return {
-    stats: holeStats({ players: ctx.players, holes: ctx.holes, resolved }),
+    stats: holeStats({
+      // `resolved` is the casual-filtered list, not `ctx.resolved` — a
+      // casual round that opted out of stats stays out of the net figures
+      // exactly as it stays out of everything else.
+      players: ctx.players, holes: ctx.holes, resolved,
+      hcpFor: ctx.hcpFor,
+    }),
     holes,
     players: ctx.players,
     rounds,

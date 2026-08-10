@@ -23,7 +23,9 @@ import {
   playerStats, statsFor, coverage,
   scoringCounts, scrambling, approachStats, parSplits,
   pointsVsField, roundForm, miscStats,
-  MIN_OTHERS, MIN_HOLE_SAMPLE, MIN_MISSES,
+  holeAllocation, puttShare, FIXED_PUTT_SHARE,
+  netGainedOnField, netVsPar, longGameGained, fairwayCost,
+  MIN_OTHERS, MIN_HOLE_SAMPLE, MIN_MISSES, MIN_SIDE,
   type StatsContext, type Fairway,
 } from '../lib/holeStats'
 import { tripAwards, MIN_AWARD_FAIRWAYS } from '../lib/tripAwards'
@@ -307,8 +309,13 @@ const sc = (
   gross, points: 2, noReturn: false, live: false, putts, fairway, ...extra,
 })
 
-const ctxOf = (resolved: ResolvedScore[]): StatsContext =>
-  ({ players: PLAYERS, holes: HOLES, resolved })
+const ctxOf = (resolved: ResolvedScore[], hcpFor?: ReadonlyMap<string, number>): StatsContext =>
+  ({ players: PLAYERS, holes: HOLES, resolved, hcpFor })
+
+/** The roster's handicaps as every round's snapshot, for the net figures. */
+const HCP: ReadonlyMap<string, number> = new Map(
+  ['r1', 'r2', 'r3'].flatMap(r => PLAYERS.map(p => [`${r}:${p.id}`, p.handicap!] as [string, number])),
+)
 
 section('Greens in regulation is two putts short of par, and nothing else')
 {
@@ -678,6 +685,149 @@ section('Points against the field is the net answer, and it still sums to zero')
   // No handicap is read anywhere in the file — the points carry it in.
   ok(!/shotsReceived|playing_handicap|handicapAllowance/.test(code('lib/holeStats.ts')),
     'the net figure never re-derives a handicap')
+}
+
+section('The allocation shares the handicap out, and mirrors for a plus')
+{
+  const sum = (ch: number) =>
+    Array.from({ length: 18 }, (_, i) => holeAllocation(ch, i + 1)).reduce((n, x) => n + x, 0)
+  ok(Math.abs(sum(9) - 9) < 1e-9, 'eighteen shares of a 9 sum to exactly 9')
+  ok(Math.abs(sum(17) - 17) < 1e-9, '  …and of a 17 to exactly 17 — the tilt pairs cancel')
+  ok(Math.abs(sum(-4) + 4) < 1e-9, '  …and a plus 4 gives exactly 4 back')
+
+  eq(holeAllocation(9, 1).toFixed(2), '0.65', 'a 9-handicap carries 0.65 on stroke index 1')
+  eq(holeAllocation(9, 18).toFixed(2), '0.35', '  …and 0.35 on stroke index 18')
+  ok(holeAllocation(9, 1) > holeAllocation(9, 9)
+    && holeAllocation(9, 9) > holeAllocation(9, 18),
+    '  …falling in a straight line between them')
+
+  // The plus mirror: the give-back lands on the easy holes first, which is
+  // NOT what a bare sign flip does. Same trap as shotsReceived, same file
+  // discipline for it.
+  eq(holeAllocation(-9, 18).toFixed(2), '-0.65', 'a plus 9 gives most back on stroke index 18')
+  eq(holeAllocation(-9, 1).toFixed(2), '-0.35', '  …and least on stroke index 1')
+  ok(Math.abs(holeAllocation(-7, 5) + holeAllocation(7, 14)) < 1e-9,
+    'the mirror is through 19 − i, exactly')
+
+  eq(puttShare('fixed', 4), FIXED_PUTT_SHARE, 'the fixed share ignores the par')
+  eq(puttShare('by-par', 4), 0.5, 'by-par gives putting half of a par 4')
+  eq(puttShare('by-par', 5), 0.4, '  …and two fifths of a par 5')
+}
+
+section('Net by apportionment sums to zero, and its halves reconcile')
+{
+  // Five level cards on stroke index 1: same gross, same putts, five
+  // different handicaps. On level play the net gain is pure allocation —
+  // Dee (20) gains most, Eli (4) loses most.
+  const level = ['a', 'b', 'c', 'd', 'e'].map(p => sc(p, 'h1', 4, 2))
+  const g = netGainedOnField(holeStats(ctxOf(level, HCP)))
+
+  // Dee by hand: on SI 1 an allocation is CH·13/180, so hers is 13/9 and a
+  // net score 4 − 13/9 = 23/9. The five allocations sum to 54·13/180 = 3.9,
+  // so net scores sum to 16.1, and the self-excluding gain is
+  // (16.1 − x)/4 − x → 299/360 for Dee.
+  eq(g.get('d')!.total.toFixed(4), (299 / 360).toFixed(4), 'Dee gains 299/360 on level play')
+  ok(g.get('e')!.total < 0, '  …and the low handicap loses on level play, as they must')
+
+  for (const col of ['putting', 'toGreen', 'total'] as const) {
+    const sum = [...g.values()].reduce((n, x) => n + x[col], 0)
+    ok(Math.abs(sum) < 1e-9, `the ${col} column sums to exactly zero`)
+  }
+  for (const x of g.values()) {
+    ok(Math.abs(x.putting + x.toGreen - x.total) < 1e-9,
+      `${x.playerId}: putting + toGreen is exactly the total`)
+  }
+
+  // The share moves the split, never the total.
+  const byPar = netGainedOnField(holeStats(ctxOf(level, HCP)), 'by-par')
+  ok(Math.abs(byPar.get('d')!.total - g.get('d')!.total) < 1e-9,
+    'the putt share cannot move the total')
+  ok(Math.abs(byPar.get('d')!.putting - g.get('d')!.putting) > 0.01,
+    '  …only how it divides between the halves')
+
+  eq([...netGainedOnField(holeStats(ctxOf(level))).values()].length, 0,
+    'no handicap snapshot, no net figure — never a guess')
+  eq([...netGainedOnField(holeStats(ctxOf(level.slice(0, 3), HCP))).values()].length, 0,
+    `and ${MIN_OTHERS} others are still required`)
+}
+
+section('Net vs par is measured against the course, not the field')
+{
+  // Dee alone: par 4 + allocation 13/9 expected, made a 6 with two putts.
+  const g = netVsPar(holeStats(ctxOf([sc('d', 'h1', 6, 2)], HCP)))
+  const d = g.get('d')!
+  eq(d.total.toFixed(4), (-5 / 9).toFixed(4), 'expected 4 + 13/9, made 6 — down 5/9')
+  ok(Math.abs(d.putting + d.toGreen - d.total) < 1e-9, 'and the halves still reconcile')
+  ok(d.putting > 0, 'two putts beats the putting expectation')
+  ok(d.toGreen < 0, '  …and four to the green is where the hole was lost')
+}
+
+section('Driving is a bet on the penalty, and approach is the rest')
+{
+  // Three rounds on the same hole: a, b, c hit the fairway and reach in
+  // two; d, e miss and take three. Pools per course hole across rounds —
+  // nine hits averaging 2, six misses averaging 3, penalty exactly 1.
+  const cards = ['r1', 'r2', 'r3'].flatMap(roundId => [
+    ...['a', 'b', 'c'].map(p => sc(p, 'h1', 4, 2, 'fairway', { roundId })),
+    ...['d', 'e'].map(p => sc(p, 'h1', 5, 2, 'left', { roundId })),
+  ])
+  const g = longGameGained(holeStats(ctxOf(cards, HCP)))
+
+  // A hitter's card: field hit rate without them is 8/14, so the bet pays
+  // (1 − 8/14) × 1 = 3/7 a round. A misser's: (0 − 9/14) × 1 = −9/14.
+  eq(g.get('a')!.driving.toFixed(4), (9 / 7).toFixed(4), 'three fairways at 3/7 each')
+  eq(g.get('d')!.driving.toFixed(4), (-27 / 14).toFixed(4), 'three misses at −9/14 each')
+
+  const driveSum = [...g.values()].reduce((n, x) => n + x.driving, 0)
+  ok(Math.abs(driveSum) < 1e-9, 'driving sums to zero over the field')
+  for (const x of g.values()) {
+    ok(Math.abs(x.driving + x.approach - x.toGreen) < 1e-9,
+      `${x.playerId}: driving + approach is exactly tee-to-green`)
+  }
+
+  // One round alone cannot feed its own pools — two misses less your own
+  // card is under MIN_SIDE — but handed the trip as the pool source, a
+  // round's slice pays exactly a third of the trip's driving.
+  const oneRound = cards.filter(c => c.roundId === 'r1')
+  const thin = longGameGained(holeStats(ctxOf(oneRound, HCP)))
+  eq(thin.get('a')!.driving, 0, `a lone round is under MIN_SIDE (${MIN_SIDE}) and pays nothing`)
+  ok(Math.abs(thin.get('a')!.approach - thin.get('a')!.toGreen) < 1e-9,
+    '  …so its whole long game reads as approach rather than a guess')
+
+  const sliced = longGameGained(
+    holeStats(ctxOf(oneRound, HCP)),
+    holeStats(ctxOf(cards, HCP)),
+  )
+  eq(sliced.get('a')!.driving.toFixed(4), (3 / 7).toFixed(4),
+    'the same slice with the trip as pool source pays one round of the bet')
+
+  // A par 3 has no drive: its whole to-green is approach, because the tee
+  // shot on a par 3 IS the approach.
+  const par3 = longGameGained(holeStats(ctxOf(
+    ['a', 'b', 'c', 'd', 'e'].map(p => sc(p, 'h5', 3, 2)), HCP,
+  )))
+  eq(par3.get('a')!.drivingHoles, 0, 'a par 3 pays no driving')
+  ok(Math.abs(par3.get('a')!.approach - par3.get('a')!.toGreen) < 1e-9,
+    '  …and its to-green lands whole in approach')
+}
+
+section('The cost of a miss keeps left and right apart')
+{
+  const c = fairwayCost(holeStats(ctxOf([
+    sc('b', 'h1', 4, null, 'fairway'),
+    sc('b', 'h2', 6, null, 'left'),
+    sc('b', 'h3', 6, null, 'left'),
+    sc('b', 'h4', 5, null, 'right'),
+    sc('b', 'h5', 3),            // par 3 — no fairway question
+    sc('b', 'h6', 5),            // unanswered — out of every denominator
+  ])))
+
+  eq(c.hit.averageToPar, 0, 'level par off the fairway')
+  eq(c.missLeft.averageToPar, 2, 'the left miss costs two')
+  eq(c.missRight.averageToPar, 1, '  …the right miss one — kept apart on purpose')
+  eq(c.miss.holes, 3, 'three misses in all')
+  eq(c.costPerMiss?.toFixed(4), (5 / 3).toFixed(4), 'a miss costs five thirds against a hit')
+  eq(c.hit.holes + c.miss.holes, 4, 'the par 3 and the unanswered hole are in no column')
 }
 
 section('Round form is the Stableford sign every golfer already reads')

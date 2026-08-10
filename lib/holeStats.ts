@@ -80,6 +80,15 @@ export type HoleStat = {
    * plays off, without this module ever seeing one.
    */
   points: number
+  /**
+   * The playing handicap this round's card was scored off — the same
+   * `round_handicaps` snapshot the Stableford trigger read, so the
+   * apportioned-net figures below and the points on the card agree about
+   * what the handicap was. Null when the caller had no snapshot to offer.
+   */
+  handicap: number | null
+  /** Still on an open card. The charts read finalised holes only. */
+  live: boolean
   putts: number | null
   fairway: Fairway | null
   /** `gross - putts`. Null when no putt count was recorded. */
@@ -96,6 +105,13 @@ export type StatsContext = {
   players: readonly RowPlayer[]
   holes: readonly RowHole[]
   resolved: readonly ResolvedScore[]
+  /**
+   * Playing handicap keyed `${roundId}:${playerId}` — `RowContext.hcpFor`,
+   * passed straight through. Optional because the write-path tests build a
+   * bare context; without it every `handicap` is null and the net figures
+   * simply have nothing to say.
+   */
+  hcpFor?: ReadonlyMap<string, number>
 }
 
 /** Shots to reach the green. Null when there is no putt count to subtract. */
@@ -172,6 +188,8 @@ export function holeStats(ctx: StatsContext): HoleStat[] {
       strokeIndex: effectiveSI(hole, gender),
       gross: s.gross,
       points: s.points,
+      handicap: ctx.hcpFor?.get(`${s.roundId}:${s.playerId}`) ?? null,
+      live: s.live,
       putts,
       fairway: fairwayCounted ? (s.fairway ?? null) : null,
       strokesToGreen: toGreen,
@@ -483,7 +501,7 @@ export type Gained = {
  * How each player did against everyone else, hole by hole.
  *
  * **Gross, on the shots played rather than the shots allowed.** No handicap
- * appears anywhere in this file. A net version would need the hole's strokes
+ * appears anywhere in this function. A net version would need the hole's strokes
  * to come off the long game only — shots are given for reaching the green,
  * not for putting — and that is a different statistic, not this one written
  * more carefully.
@@ -585,6 +603,317 @@ export function pointsVsField(stats: readonly HoleStat[]): Map<string, PointsGai
   }
 
   return out
+}
+
+// ─── Sharing the handicap out over the holes ───────────────────
+//
+// The apportioned-net model: turn the course handicap itself into a per-hole
+// expectation and run the same field arithmetic on net strokes. Unlike the
+// points comparison it does not saturate on a blow-up hole, and it can be
+// split into putting and long game.
+
+/**
+ * How steeply the allocation tilts across the stroke index, per unit of
+ * handicap. Calibrated so a 9-handicap runs 0.65 on SI 1 down to 0.35 on
+ * SI 18 — the gap to scratch is wider on the hard holes than the easy ones.
+ */
+export const ALLOCATION_TILT = 0.15 / 9
+
+/**
+ * One hole's share of a course handicap.
+ *
+ * `CH/18` plus a straight-line tilt through zero at SI 9.5 — and because the
+ * tilt is symmetric about the middle, pairing hole 1 with 18, 2 with 17,
+ * cancels every pair, so the eighteen shares sum to exactly the handicap.
+ *
+ * **A plus handicap mirrors through SI 19 − i, never just a sign flip.** The
+ * give-back lands on the easiest holes first, so the allocation must be most
+ * negative at SI 18. Running the positive formula with a negative number
+ * puts the biggest give-back on SI 1 — the wrong end. This is the same
+ * mirror `shotsReceived` in lib/handicap.ts needs, the one that was written
+ * out wrong five separate times before it was centralised; hence one copy,
+ * here, beside the same warning.
+ */
+export function holeAllocation(courseHandicap: number, strokeIndex: number): number {
+  if (courseHandicap < 0) return -holeAllocation(-courseHandicap, 19 - strokeIndex)
+  return courseHandicap / 18
+    + ALLOCATION_TILT * courseHandicap * (9.5 - strokeIndex) / 8.5
+}
+
+/**
+ * How much of a hole's allocation belongs to putting.
+ *
+ * `fixed` — the default — gives putting a flat fifth: measured scoring says
+ * the gap between handicaps lives mostly in the long game. `by-par` gives it
+ * `2/par`, the regulation share of the hole's shots — half on a par 4 —
+ * which reads naturally but over-credits putting. Both ship; the stats
+ * page's advanced settings choose, and this is the one copy of each.
+ */
+export type PuttShareMode = 'fixed' | 'by-par'
+export const FIXED_PUTT_SHARE = 0.2
+
+export function puttShare(mode: PuttShareMode, par: number): number {
+  return mode === 'by-par' ? 2 / par : FIXED_PUTT_SHARE
+}
+
+export type NetGained = {
+  playerId: string
+  /** Net putts vs the field's net putts on the same holes. Positive is better. */
+  putting: number
+  toGreen: number
+  /** The two added — the gain in net strokes. */
+  total: number
+  holes: number
+}
+
+/**
+ * Net gained on the field: subtract each player's per-hole allocation from
+ * what they took, then run exactly the self-excluding machinery of
+ * `gainedOnField` on what is left. The sums-to-zero identity survives
+ * untouched — it is pure algebra and never cared what the numbers were.
+ *
+ * The allocation is split between the two halves by `puttShare`, off the
+ * player's own par, so `putting + toGreen` is exactly `total` — the same
+ * same-subset rule that makes the gross version reconcile.
+ */
+export function netGainedOnField(
+  stats: readonly HoleStat[], mode: PuttShareMode = 'fixed',
+): Map<string, NetGained> {
+  const byHole = new Map<string, HoleStat[]>()
+  for (const s of stats) {
+    if (s.putts == null || s.strokesToGreen == null || s.handicap == null) continue
+    const key = `${s.roundId}:${s.holeId}`
+    const list = byHole.get(key)
+    if (list) list.push(s)
+    else byHole.set(key, [s])
+  }
+
+  const out = new Map<string, NetGained>()
+  const get = (id: string) => {
+    let g = out.get(id)
+    if (!g) { g = { playerId: id, putting: 0, toGreen: 0, total: 0, holes: 0 }; out.set(id, g) }
+    return g
+  }
+
+  for (const played of byHole.values()) {
+    if (played.length - 1 < MIN_OTHERS) continue
+
+    const share = (s: HoleStat) => puttShare(mode, s.par)
+    const netPutts = (s: HoleStat) =>
+      s.putts! - holeAllocation(s.handicap!, s.strokeIndex) * share(s)
+    const netToGreen = (s: HoleStat) =>
+      s.strokesToGreen! - holeAllocation(s.handicap!, s.strokeIndex) * (1 - share(s))
+
+    const sumPutts = played.reduce((n, s) => n + netPutts(s), 0)
+    const sumToGreen = played.reduce((n, s) => n + netToGreen(s), 0)
+    const others = played.length - 1
+
+    for (const s of played) {
+      const g = get(s.playerId)
+      g.putting += (sumPutts - netPutts(s)) / others - netPutts(s)
+      g.toGreen += (sumToGreen - netToGreen(s)) / others - netToGreen(s)
+      g.holes += 1
+    }
+  }
+
+  for (const g of out.values()) g.total = g.putting + g.toGreen
+  return out
+}
+
+export type NetVsPar = {
+  playerId: string
+  putting: number
+  toGreen: number
+  /** `(par + allocation) − gross`, summed. Positive is beating expectation. */
+  total: number
+  holes: number
+}
+
+/**
+ * The same net figures against the course instead of the field: a hole's
+ * expected score is `par + allocation`, split `2 + a·share` putts and
+ * `(par − 2) + a·(1 − share)` to the green. Vs-par does not sum to zero
+ * across the field — it is measured against the course, not against each
+ * other — which is exactly why both framings are worth having.
+ */
+export function netVsPar(
+  stats: readonly HoleStat[], mode: PuttShareMode = 'fixed',
+): Map<string, NetVsPar> {
+  const out = new Map<string, NetVsPar>()
+  for (const s of stats) {
+    if (s.putts == null || s.strokesToGreen == null || s.handicap == null) continue
+    let g = out.get(s.playerId)
+    if (!g) { g = { playerId: s.playerId, putting: 0, toGreen: 0, total: 0, holes: 0 }; out.set(s.playerId, g) }
+    const a = holeAllocation(s.handicap, s.strokeIndex)
+    const share = puttShare(mode, s.par)
+    g.putting += (2 + a * share) - s.putts
+    g.toGreen += (s.par - 2 + a * (1 - share)) - s.strokesToGreen
+    g.holes += 1
+  }
+  for (const g of out.values()) g.total = g.putting + g.toGreen
+  return out
+}
+
+// ─── Splitting the long game: driving and approach ─────────────
+
+/**
+ * Cards on one side of a hole's fairway split before that hole's own penalty
+ * stands alone. Below it, the pool widens to every hole of the same par on
+ * the course; below it there too, the hole pays no driving credit at all
+ * rather than a made-up one.
+ */
+export const MIN_SIDE = 4
+
+export type LongGameGained = {
+  playerId: string
+  /** `(hit − field hit rate) × the pool's penalty for missing`, summed. */
+  driving: number
+  /** The rest of the long game: `toGreen − driving`. Exact by construction. */
+  approach: number
+  /** The same tee-to-green gain `gainedOnField` reports. */
+  toGreen: number
+  /** Holes contributing to `toGreen`. */
+  holes: number
+  /** Of those, holes that could pay a driving credit. */
+  drivingHoles: number
+}
+
+type FairwayPool = { toGreenHit: number[]; toGreenMiss: number[]; hits: number; cards: number }
+
+/**
+ * Tee-to-green gained, split into driving accuracy and approach.
+ *
+ * The algebra: add and subtract the field's average from where the drive
+ * finished, and tee-to-green gained falls into two brackets — the value of
+ * where the ball landed (driving), and everything after it (approach). The
+ * driving bracket simplifies to a bet on the hole's own penalty:
+ * `(hit − field hit rate) × (avg to-green from a miss − from the fairway)`.
+ * Hitting a fairway everybody hits earns almost nothing; hitting one nobody
+ * hits earns nearly the whole penalty. Approach is defined as the remainder,
+ * which is what makes `driving + approach = toGreen` exact rather than
+ * approximate — and a par 3's whole to-green is approach, which matches the
+ * golf: the tee shot on a par 3 *is* the approach.
+ *
+ * `poolSource` is who the penalties and hit rates are learned from —
+ * normally the same rows, but a per-round slice hands the full trip in so
+ * one round's chart does not relearn the course from six cards. Pools are
+ * per course hole across rounds; a course played twice is one set of
+ * eighteen holes with twice the evidence.
+ */
+export function longGameGained(
+  stats: readonly HoleStat[],
+  poolSource: readonly HoleStat[] = stats,
+): Map<string, LongGameGained> {
+  // The pools: per course hole, and per par as the wider fallback.
+  const pools = new Map<string, FairwayPool>()
+  const pool = (key: string) => {
+    let p = pools.get(key)
+    if (!p) { p = { toGreenHit: [], toGreenMiss: [], hits: 0, cards: 0 }; pools.set(key, p) }
+    return p
+  }
+  for (const s of poolSource) {
+    if (!s.fairwayCounted || s.fairway == null || s.strokesToGreen == null) continue
+    for (const key of [`${s.courseId}:h${s.holeNumber}`, `${s.courseId}:p${s.par}`]) {
+      const p = pool(key)
+      p.cards += 1
+      if (s.fairway === 'fairway') { p.hits += 1; p.toGreenHit.push(s.strokesToGreen) }
+      else p.toGreenMiss.push(s.strokesToGreen)
+    }
+  }
+
+  const avg = (xs: number[]) => xs.reduce((n, x) => n + x, 0) / xs.length
+
+  // The tee-to-green half is the one `gainedOnField` already reports — the
+  // same figure, never a second derivation of it.
+  const gained = gainedOnField(stats)
+
+  const out = new Map<string, LongGameGained>()
+  for (const [playerId, g] of gained) {
+    out.set(playerId, {
+      playerId, driving: 0, approach: 0,
+      toGreen: g.toGreen, holes: g.holes, drivingHoles: 0,
+    })
+  }
+
+  for (const s of stats) {
+    if (!s.fairwayCounted || s.fairway == null || s.strokesToGreen == null) continue
+    const mine = out.get(s.playerId)
+    if (!mine) continue
+
+    // The hole's own pool if both sides carry enough cards without this one;
+    // the par pool behind it; nothing behind that.
+    const chosen = [`${s.courseId}:h${s.holeNumber}`, `${s.courseId}:p${s.par}`]
+      .map(k => pools.get(k))
+      .find(p => {
+        if (!p) return false
+        const hit = s.fairway === 'fairway' ? 1 : 0
+        return p.toGreenHit.length - hit >= MIN_SIDE
+          && p.toGreenMiss.length - (1 - hit) >= MIN_SIDE
+      })
+    if (!chosen) continue
+
+    // Self-excluded, both halves — a penalty partly made of your own card is
+    // partly a comparison with yourself. Removing one element with your
+    // value is numerically the same as removing your own card.
+    const hit = s.fairway === 'fairway' ? 1 : 0
+    const hitAvg = hit
+      ? avg(chosen.toGreenHit.filter((_, i) => i !== chosen.toGreenHit.indexOf(s.strokesToGreen!)))
+      : avg(chosen.toGreenHit)
+    const missAvg = hit
+      ? avg(chosen.toGreenMiss)
+      : avg(chosen.toGreenMiss.filter((_, i) => i !== chosen.toGreenMiss.indexOf(s.strokesToGreen!)))
+    const penalty = missAvg - hitAvg
+    const fieldHitRate = (chosen.hits - hit) / (chosen.cards - 1)
+
+    mine.driving += (hit - fieldHitRate) * penalty
+    mine.drivingHoles += 1
+  }
+
+  for (const g of out.values()) g.approach = g.toGreen - g.driving
+  return out
+}
+
+// ─── What missing the fairway costs ────────────────────────────
+
+export type FairwaySide = { holes: number; averageToPar: number | null }
+
+export type FairwayCost = {
+  hit: FairwaySide
+  missLeft: FairwaySide
+  missRight: FairwaySide
+  miss: FairwaySide
+  /** Miss average minus hit average. Positive is the price of a miss. */
+  costPerMiss: number | null
+}
+
+/**
+ * The player's own scoring, split by where the tee shot went — the
+ * plain-English companion to the driving figure. Left and right are kept
+ * apart on purpose: a small, common miss right and a rare, destructive miss
+ * left read as two very different numbers, where a combined figure blurs
+ * them into one mild-looking penalty.
+ */
+export function fairwayCost(stats: readonly HoleStat[]): FairwayCost {
+  const asked = stats.filter(s => s.fairwayCounted && s.fairway != null)
+  const side = (list: readonly HoleStat[]): FairwaySide => ({
+    holes: list.length,
+    averageToPar: list.length === 0
+      ? null
+      : list.reduce((n, s) => n + (s.gross - s.par), 0) / list.length,
+  })
+
+  const hit = side(asked.filter(s => s.fairway === 'fairway'))
+  const miss = side(asked.filter(s => s.fairway !== 'fairway'))
+
+  return {
+    hit,
+    missLeft: side(asked.filter(s => s.fairway === 'left')),
+    missRight: side(asked.filter(s => s.fairway === 'right')),
+    miss,
+    costPerMiss: hit.averageToPar == null || miss.averageToPar == null
+      ? null
+      : miss.averageToPar - hit.averageToPar,
+  }
 }
 
 // ─── Form, round by round ──────────────────────────────────────
@@ -804,6 +1133,14 @@ export type PlayerStats = {
   misc: MiscStats
   /** The net side of the gained toggle: points against the field. */
   pointsGained: PointsGained
+  /** Net gained on the field, by handicap apportionment. */
+  netGained: NetGained
+  /** The same net figures against the course rather than the field. */
+  netVsPar: NetVsPar
+  /** Tee-to-green split into driving accuracy and approach. */
+  longGame: LongGameGained
+  /** Scoring by where the tee shot went, left and right kept apart. */
+  cost: FairwayCost
   /** Rounds in first-seen order; the screen orders by the trip's rounds. */
   form: RoundForm[]
 }
@@ -819,9 +1156,14 @@ const NO_GAIN = (playerId: string): Gained =>
  * theirs and everyone else's, and computing it per player would rebuild the
  * same field average once for each of them.
  */
-export function playerStats(stats: readonly HoleStat[]): PlayerStats[] {
+export function playerStats(
+  stats: readonly HoleStat[], puttShareMode: PuttShareMode = 'fixed',
+): PlayerStats[] {
   const gains = gainedOnField(stats)
   const netGains = pointsVsField(stats)
+  const apportioned = netGainedOnField(stats, puttShareMode)
+  const vsPar = netVsPar(stats, puttShareMode)
+  const long = longGameGained(stats)
   const byPlayer = new Map<string, HoleStat[]>()
   for (const s of stats) {
     const list = byPlayer.get(s.playerId)
@@ -842,6 +1184,13 @@ export function playerStats(stats: readonly HoleStat[]): PlayerStats[] {
     splits: parSplits(mine),
     misc: miscStats(mine),
     pointsGained: netGains.get(playerId) ?? { playerId, points: 0, holes: 0 },
+    netGained: apportioned.get(playerId)
+      ?? { playerId, putting: 0, toGreen: 0, total: 0, holes: 0 },
+    netVsPar: vsPar.get(playerId)
+      ?? { playerId, putting: 0, toGreen: 0, total: 0, holes: 0 },
+    longGame: long.get(playerId)
+      ?? { playerId, driving: 0, approach: 0, toGreen: 0, holes: 0, drivingHoles: 0 },
+    cost: fairwayCost(mine),
     form: roundForm(mine),
   }))
 }
@@ -849,8 +1198,9 @@ export function playerStats(stats: readonly HoleStat[]): PlayerStats[] {
 /** One player's line, or null if they have no tracked hole. */
 export function statsFor(
   stats: readonly HoleStat[], playerId: string,
+  puttShareMode: PuttShareMode = 'fixed',
 ): PlayerStats | null {
-  return playerStats(stats).find(p => p.playerId === playerId) ?? null
+  return playerStats(stats, puttShareMode).find(p => p.playerId === playerId) ?? null
 }
 
 // ─── Is there anything to show ─────────────────────────────────
