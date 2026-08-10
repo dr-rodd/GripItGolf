@@ -5,6 +5,7 @@ import { Badge } from '@/app/components/ui'
 import { requireAdmin } from '../adminGate'
 import AdminLogin from '../AdminLogin'
 import AdminShell from '../AdminShell'
+import DeleteTrip from './DeleteTrip'
 
 export const dynamic = 'force-dynamic'
 
@@ -125,6 +126,7 @@ export default async function AdminTripsPage({
                       {h}
                     </th>
                   ))}
+                  <th className="px-4 py-3" aria-label="Actions" />
                 </tr>
               </thead>
               <tbody>
@@ -160,6 +162,9 @@ export default async function AdminTripsPage({
                         <Badge tone={state.open ? 'win' : 'neutral'} live={state.key === 'active'}>
                           {state.label}
                         </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <DeleteTrip tripId={t.id} tripCode={t.trip_code} tripName={t.name} />
                       </td>
                     </tr>
                   )
@@ -197,6 +202,10 @@ export default async function AdminTripsPage({
                     <Field label="Created" value={formatDateTime(t.created_at)} />
                     <Field label="Email" value={t.lead_email} />
                     <Field label="Players" value={String(playerCount.get(t.id) ?? 0)} />
+                  </div>
+
+                  <div className="mt-3">
+                    <DeleteTrip tripId={t.id} tripCode={t.trip_code} tripName={t.name} />
                   </div>
                 </div>
               )

@@ -136,6 +136,48 @@ section('The course editor validates with lib/courseDirectory, not its own copie
   }
 }
 
+// ─── Trip delete clears the restricts in order ─────────────────
+
+section('deleteTrip clears every RESTRICT before the cascade')
+{
+  // The schema guards the live tables with ON DELETE RESTRICT, so the order
+  // is not style — a step out of place and the delete stops halfway with the
+  // trip half-gone. Structural, like the void checks: the failure needs a
+  // database to demonstrate, but the order is visible in the source.
+  const src = read('lib/tripDelete.ts')
+  const fn = src.slice(src.indexOf('export async function deleteTrip'))
+
+  const reads = fn.indexOf(".from('rounds').select")
+  const composite = fn.indexOf("from('composite_holes')")
+  const teeTimes = fn.indexOf("from('tee_times')")
+  const liveRounds = fn.indexOf("from('live_rounds')")
+  const rounds = fn.indexOf("\n  const rounds = await db")
+  const tees = fn.indexOf("from('tees')")
+  const trip = fn.indexOf("from('trips')")
+
+  ok([reads, composite, teeTimes, liveRounds, rounds, tees, trip].every(i => i >= 0),
+    'all seven steps are present')
+  ok(reads < composite,
+    'the rounds and courses are read before anything is deleted')
+  ok(composite < liveRounds && teeTimes < liveRounds,
+    'composite scorecards and tee times go before the scoring sessions')
+  ok(liveRounds < rounds,
+    'the scoring sessions go before the rounds — live_rounds.round_id is RESTRICT')
+  ok(rounds < tees,
+    'the rounds go before the tees — rounds.tee_id is RESTRICT')
+  ok(tees < trip,
+    'the tees go before the trip — tees.course_id holds any trip-scoped course')
+  ok(fn.lastIndexOf("from('trips')") === trip && fn.slice(trip).includes('.delete()'),
+    'the trip itself is the last delete, so a failure part-way leaves it listed')
+
+  // Scoped, always: by this trip's id or its rounds' ids, never a bare table.
+  const deletes = [...fn.matchAll(/\.delete\(\)/g)].map(m =>
+    fn.slice(m.index, m.index + 120),
+  )
+  ok(deletes.length >= 6 && deletes.every(d => /\.(eq|in)\(/.test(d)),
+    'every delete is scoped by an .eq or .in — no bare table deletes')
+}
+
 // ─── The gate itself ───────────────────────────────────────────
 
 section('The gate is the thin thing it claims to be')
