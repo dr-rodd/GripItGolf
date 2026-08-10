@@ -109,6 +109,31 @@ section('A snapshot is not a score')
     'and the reason why is written down at the top of the file')
 }
 
+// ─── Which client does the deleting ────────────────────────────
+
+section('Every function writes with the client it was handed')
+{
+  // The admin live-cards actions void with the service-role client; the
+  // scoring screens keep the anon default. A function that reaches for the
+  // singleton directly would void with the wrong credentials for one of them
+  // — silently, once row-level security lands.
+  for (const name of ['playersOnScorecard', 'eraseScores', 'voidScorecard', 'removePlayerFromScorecard']) {
+    const fn = body(store, name)
+    ok(fn.includes('db: SupabaseClient = supabase'),
+      `${name} takes the client, defaulting to the scoring screens' anon one`)
+    ok(!fn.replace('db: SupabaseClient = supabase', '').includes('supabase'),
+      `${name} then uses only the one it was given`)
+  }
+
+  const void_ = body(store, 'voidScorecard')
+  ok(void_.includes('playersOnScorecard(liveRoundId, db)'),
+    'voidScorecard reads the locks with the same client it deletes with')
+  ok(void_.includes('eraseScores(roundId, playerIds, db)'),
+    'and erases with it too')
+  ok(body(store, 'removePlayerFromScorecard').includes('eraseScores(roundId, [playerId], db)'),
+    'as does taking one player off')
+}
+
 // ─── Every route in ────────────────────────────────────────────
 
 section('Nothing voids a card any other way')

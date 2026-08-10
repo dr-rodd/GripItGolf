@@ -24,7 +24,13 @@
 // not touch the other's scores.
 //
 // I/O. The caller reports the failure — see lib/writeFailure.ts.
+//
+// Every function takes the client to write with, defaulting to the anon
+// singleton the scoring screens run on. The admin live-cards actions pass the
+// service-role client instead — same void, different credentials, and the day
+// row-level security lands the admin path keeps working.
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { failed, type WriteFailure } from './writeFailure'
 
@@ -38,8 +44,9 @@ import { failed, type WriteFailure } from './writeFailure'
  */
 export async function playersOnScorecard(
   liveRoundId: string,
+  db: SupabaseClient = supabase,
 ): Promise<{ playerIds: string[]; failure: WriteFailure | null }> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('live_player_locks')
     .select('player_id')
     .eq('live_round_id', liveRoundId)
@@ -59,10 +66,11 @@ export async function playersOnScorecard(
 export async function eraseScores(
   roundId: string,
   playerIds: readonly string[],
+  db: SupabaseClient = supabase,
 ): Promise<WriteFailure | null> {
   if (playerIds.length === 0) return null
 
-  const live = await supabase
+  const live = await db
     .from('live_scores')
     .delete()
     .eq('round_id', roundId)
@@ -70,7 +78,7 @@ export async function eraseScores(
   const liveFailure = failed('deleting the in-progress scores', live.error)
   if (liveFailure) return liveFailure
 
-  const committed = await supabase
+  const committed = await db
     .from('scores')
     .delete()
     .eq('round_id', roundId)
@@ -88,21 +96,22 @@ export async function eraseScores(
 export async function voidScorecard(
   liveRoundId: string,
   roundId: string,
+  db: SupabaseClient = supabase,
 ): Promise<WriteFailure | null> {
-  const { playerIds, failure } = await playersOnScorecard(liveRoundId)
+  const { playerIds, failure } = await playersOnScorecard(liveRoundId, db)
   if (failure) return failure
 
-  const erased = await eraseScores(roundId, playerIds)
+  const erased = await eraseScores(roundId, playerIds, db)
   if (erased) return erased
 
-  const locks = await supabase
+  const locks = await db
     .from('live_player_locks')
     .delete()
     .eq('live_round_id', liveRoundId)
   const lockFailure = failed('releasing the players', locks.error)
   if (lockFailure) return lockFailure
 
-  const closed = await supabase
+  const closed = await db
     .from('live_rounds')
     .update({ status: 'closed', closed_at: new Date().toISOString() })
     .eq('id', liveRoundId)
@@ -121,11 +130,12 @@ export async function removePlayerFromScorecard(
   liveRoundId: string,
   roundId: string,
   playerId: string,
+  db: SupabaseClient = supabase,
 ): Promise<WriteFailure | null> {
-  const erased = await eraseScores(roundId, [playerId])
+  const erased = await eraseScores(roundId, [playerId], db)
   if (erased) return erased
 
-  const locks = await supabase
+  const locks = await db
     .from('live_player_locks')
     .delete()
     .eq('live_round_id', liveRoundId)
