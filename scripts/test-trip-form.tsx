@@ -13,7 +13,10 @@ import fs from 'fs'
 import DateField from '../app/components/DateField'
 import CreateTripForm from '../app/dashboard/create/CreateTripForm'
 import TripSetupClient from '../app/trip/[tripCode]/setup/TripSetupClient'
-import { MIN_ROUNDS, MAX_ROUNDS, roundCountError, isRoundCountValid } from '../lib/tripLimits'
+import {
+  MIN_ROUNDS, MAX_ROUNDS, roundCountError, isRoundCountValid,
+  MAX_TRIP_DESCRIPTION, normalizeDescription,
+} from '../lib/tripLimits'
 import Toggle from '../app/components/Toggle'
 import { parseFormats } from '../lib/formats'
 import {
@@ -491,6 +494,43 @@ async function main() {
   }
 
   // ─── Trip code display ─────────────────────────────────────────
+
+  section('The trip description is normalised, never trusted raw')
+  {
+    eq(normalizeDescription('  Five rounds. Loser buys dinner.  '),
+      'Five rounds. Loser buys dinner.', 'trimmed at both ends')
+    eq(normalizeDescription(''), null, 'blank is null')
+    eq(normalizeDescription('   \n  '), null, 'whitespace alone is null')
+    eq(normalizeDescription(null), null, 'null stays null')
+    eq(normalizeDescription(undefined), null, 'undefined is null')
+    eq(normalizeDescription('a\r\nb'), 'a\nb', 'Windows newlines fold to plain ones')
+    eq(normalizeDescription('a\n\n\n\nb'), 'a\n\nb', 'runs of blank lines fold to one paragraph break')
+    const long = normalizeDescription('x'.repeat(MAX_TRIP_DESCRIPTION + 100))
+    eq(long!.length, MAX_TRIP_DESCRIPTION, 'a paste is capped at the same limit the box types to')
+
+    // Both forms write through the same normaliser — the cap and the
+    // fold are one rule, not a per-screen convention.
+    const createSrc = require('fs').readFileSync('app/dashboard/create/CreateTripForm.tsx', 'utf-8')
+    ok(createSrc.includes('normalizeDescription(description)'),
+      'creation writes the normalised description')
+    ok(createSrc.includes('MAX_TRIP_DESCRIPTION'),
+      'and the box caps typing at the shared limit')
+    const setupSrc = require('fs').readFileSync('app/trip/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
+    ok(setupSrc.includes('normalizeDescription(description)'),
+      'trip settings writes the normalised description')
+    ok(setupSrc.includes('MAX_TRIP_DESCRIPTION'),
+      'with the same cap on the box')
+
+    // The hub shows it clamped: three lines, the browser’s own ellipsis,
+    // and the paragraph as the tap that opens the rest.
+    const hubSrc = require('fs').readFileSync('app/trip/[tripCode]/TripDescription.tsx', 'utf-8')
+    ok(hubSrc.includes('line-clamp-3'), 'the hub clamps to three lines')
+    ok(hubSrc.includes('aria-expanded'), 'the toggle says which state it is in')
+    const hubPage = require('fs').readFileSync('app/trip/[tripCode]/page.tsx', 'utf-8')
+    ok(hubPage.includes('<TripDescription'), 'the hub renders the description')
+    ok(hubPage.indexOf('<TripDescription') > hubPage.indexOf('<TripCountdown'),
+      'under the countdown, where it belongs')
+  }
 
   section('The generated trip code fits its box')
   {

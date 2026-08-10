@@ -28,3 +28,27 @@ export function roundCountError(rounds: number): string | null {
 export function isRoundCountValid(rounds: number): boolean {
   return roundCountError(rounds) === null
 }
+
+// ── The trip description ──────────────────────────────────────
+
+/**
+ * Long enough for a paragraph about the stakes and the itinerary, short
+ * enough that the hub is still a hub. The form caps typing at this, and
+ * `normalizeDescription` holds the same line against anything pasted.
+ */
+export const MAX_TRIP_DESCRIPTION = 500
+
+/**
+ * A typed description as the row stores it: trimmed, capped, runs of blank
+ * lines folded to one paragraph break, and null when there is nothing —
+ * blank and absent mean the same thing everywhere it is read.
+ */
+export function normalizeDescription(input: string | null | undefined): string | null {
+  const text = String(input ?? '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, MAX_TRIP_DESCRIPTION)
+    .trim()
+  return text || null
+}

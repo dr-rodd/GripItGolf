@@ -35,6 +35,7 @@ import {
 import HandicapField from '@/app/components/HandicapField'
 import { duplicateName, duplicateNameError, isDuplicateNameError } from '@/lib/roster'
 import { syncRoundHandicaps } from '@/lib/roundHandicaps'
+import { normalizeDescription, MAX_TRIP_DESCRIPTION } from '@/lib/tripLimits'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,7 @@ type Trip = {
   id: string
   trip_code: string
   name: string
+  description?: string | null
   start_date: string | null
   end_date: string | null
   leaderboards: Leaderboard[]
@@ -180,6 +182,7 @@ export default function TripSetupClient({
 }) {
   // Trip fields
   const [name, setName] = useState(trip.name)
+  const [description, setDescription] = useState(trip.description ?? '')
   const [startDate, setStartDate] = useState(trip.start_date ?? '')
   const [endDate, setEndDate] = useState(trip.end_date ?? '')
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -267,6 +270,15 @@ export default function TripSetupClient({
     const trimmed = name.trim()
     if (!trimmed || trimmed === trip.name) return
     if (!(await saveTrip({ name: trimmed }))) setName(trip.name)
+  }
+
+  async function saveDescription() {
+    // Blank is a real answer here — clearing the box removes the
+    // description from the hub — so unlike the name, empty saves as null.
+    const next = normalizeDescription(description)
+    if (next === normalizeDescription(trip.description)) return
+    if (await saveTrip({ description: next })) setDescription(next ?? '')
+    else setDescription(trip.description ?? '')
   }
 
   async function saveDates(nextStart: string, nextEnd: string) {
@@ -557,6 +569,23 @@ export default function TripSetupClient({
                   onChange={v => saveDates(v, endDate)} disabled={locked} />
                 <DateField label="End date" value={endDate}
                   onChange={v => saveDates(startDate, v)} disabled={locked} />
+              </div>
+              <div>
+                <label className={LABEL}>About the trip</label>
+                <textarea
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  onBlur={saveDescription}
+                  maxLength={MAX_TRIP_DESCRIPTION}
+                  rows={3}
+                  disabled={locked}
+                  placeholder="The stakes, the plan, the rules of engagement…"
+                  className={`${INPUT} resize-none leading-snug`}
+                />
+                <p className="t-cap text-ink/65 mt-1.5 leading-snug">
+                  Shows on the trip hub, under the countdown. Clear it to
+                  take it off.
+                </p>
               </div>
               <div className="pt-2 border-t border-bark/12">
                 <button

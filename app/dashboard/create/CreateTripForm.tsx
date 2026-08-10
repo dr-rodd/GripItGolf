@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import BackButton from '@/app/components/BackButton'
 import TripHeader from '@/app/components/TripHeader'
 import DateField from '@/app/components/DateField'
-import { roundCountError } from '@/lib/tripLimits'
+import { roundCountError, normalizeDescription, MAX_TRIP_DESCRIPTION } from '@/lib/tripLimits'
 import { NO_FORMATS } from '@/lib/formats'
 import { normaliseEmail, emailWarning, MAX_EMAIL } from '@/lib/email'
 import { rememberPlayer } from '@/lib/playerCookie'
@@ -100,6 +100,7 @@ export default function CreateTripForm() {
 
   // Step 1
   const [tripName, setTripName] = useState('')
+  const [description, setDescription] = useState('')
   const [leadEmail, setLeadEmail] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -249,6 +250,12 @@ export default function CreateTripForm() {
     // worth failing a trip over.
     const email = normaliseEmail(leadEmail)
     if (email) tripRow.lead_email = email
+
+    // Only sent when something was written, for the same reason as the
+    // passcode: a database that has not had the column added yet can still
+    // create ordinary trips.
+    const desc = normalizeDescription(description)
+    if (desc) tripRow.description = desc
 
     const { data: trip, error: tripErr } = await supabase
       .from('trips')
@@ -532,6 +539,27 @@ export default function CreateTripForm() {
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
               <DateField label="Start date" value={startDate} onChange={setStartDate} />
               <DateField label="End date"   value={endDate}   onChange={setEndDate} />
+            </div>
+
+            {/* A few lines about the trip, shown on the hub under the
+                countdown. Optional like the email: nothing below depends on
+                it, and it can be written or rewritten later in Trip
+                Settings. */}
+            <div>
+              <label className={LABEL} htmlFor="trip-description">About the trip (optional)</label>
+              <textarea
+                id="trip-description"
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                maxLength={MAX_TRIP_DESCRIPTION}
+                rows={3}
+                placeholder="The stakes, the plan, the rules of engagement…"
+                className={`${INPUT} resize-none leading-snug`}
+              />
+              <p className="text-ink/65 text-[13px] mt-2 leading-snug">
+                Shows on the trip hub, under the countdown. It can be changed
+                any time in Trip Settings.
+              </p>
             </div>
 
             {/* Optional, and it stays optional: nothing below depends on it,

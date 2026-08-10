@@ -17,6 +17,7 @@ import { describePlacing } from '@/lib/standing'
 import { nextMatch, describeNextMatch, type DrawMatch } from '@/lib/nextMatch'
 import { SectionStack } from '@/app/components/Section'
 import TripCountdown from './TripCountdown'
+import TripDescription from './TripDescription'
 import StatusBlock from './StatusBlock'
 import TravelStays from './TravelStays'
 import StatsPanel from './StatsPanel'
@@ -358,6 +359,11 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
               the name, the dates and the countdown are three lines of one
               heading, all answering what this trip is and when. */}
           <TripCountdown target={trip.start_date ?? null} />
+
+          {/* What the lead player wrote about it — the heading's fourth
+              line, on the cream. Three lines then an ellipsis; the
+              paragraph itself is the tap that opens the rest. */}
+          <TripDescription text={trip.description} />
         </div>
 
         {/* What the trip plays for used to print here, under the dates —
