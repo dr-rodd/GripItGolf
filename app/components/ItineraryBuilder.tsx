@@ -21,6 +21,7 @@ import {
 } from './icons'
 import { FIELD, FIELD_LABEL, buttonClass, Badge } from './ui'
 import CourseSelect from './CourseSelect'
+import Toggle from './Toggle'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
 
 /**
@@ -254,7 +255,7 @@ function Sheet({
 
 export default function ItineraryBuilder({
   startDate, endDate, courses, items, onChange, onContinue, blockedReason = null,
-  lockedGolfIds, continueLabel = 'Proceed to Add Players',
+  lockedGolfIds, trackStats = false, continueLabel = 'Proceed to Add Players',
 }: {
   startDate: string | null
   endDate: string | null
@@ -280,6 +281,12 @@ export default function ItineraryBuilder({
    * and new golf can be added at any point, mid-trip included.
    */
   lockedGolfIds?: readonly string[]
+  /**
+   * Whether this trip records putts and fairways. Decides only whether a
+   * casual round is asked about feeding the trip stats — a trip without
+   * stats has nothing to ask.
+   */
+  trackStats?: boolean
 }) {
   const days = dayCount(startDate, endDate)
   const locked = useMemo(() => new Set(lockedGolfIds ?? []), [lockedGolfIds])
@@ -292,6 +299,8 @@ export default function ItineraryBuilder({
   const [courseId, setCourseId] = useState('')
   const [teeTime, setTeeTime] = useState('')
   const [teeCount, setTeeCount] = useState(1)
+  const [counts, setCounts] = useState(true)
+  const [casualStats, setCasualStats] = useState(false)
   const [stayName, setStayName] = useState('')
   const [nights, setNights] = useState(1)
   const [mode, setMode] = useState<TravelMode>('car')
@@ -356,6 +365,7 @@ export default function ItineraryBuilder({
   function openSheet(kind: ItemKind) {
     setError(null)
     setCourseId(''); setTeeTime(''); setTeeCount(1)
+    setCounts(true); setCasualStats(false)
     setStayName(''); setNights(1)
     setMode('car'); setFromPlace(''); setToPlace(''); setHours(''); setMins('')
     setActivityName(''); setActivityTime('')
@@ -380,7 +390,11 @@ export default function ItineraryBuilder({
 
     const draft: Omit<ItineraryItem, 'position'> =
       sheet === 'golf'
-        ? { id, dayIndex: openDay, kind: 'golf', courseId, teeTime: teeTime || null, teeCount }
+        ? {
+            id, dayIndex: openDay, kind: 'golf', courseId,
+            teeTime: teeTime || null, teeCount,
+            casual: !counts, casualStats: !counts && casualStats,
+          }
         : sheet === 'activity'
         ? {
             id, dayIndex: openDay, kind: 'activity',
@@ -590,6 +604,27 @@ export default function ItineraryBuilder({
           <p className="t-cap text-ink/65">
             How many groups are going out?
           </p>
+
+          {/* A casual round — a subgroup's extra game that should not move
+              the trip standings. Off is the exception, so the switch reads
+              in the positive and starts on. */}
+          <div className="pt-1 border-t border-bark/12">
+            <div className="flex items-center justify-between gap-3 pt-4">
+              <span className="text-ink text-sm">Counts on the leaderboard</span>
+              <Toggle checked={counts} onChange={setCounts} label="Counts on the leaderboard" />
+            </div>
+            {!counts && (
+              <p className="t-cap text-ink/65 mt-2">
+                A casual round — scored as usual, kept off every leaderboard.
+              </p>
+            )}
+            {!counts && trackStats && (
+              <div className="flex items-center justify-between gap-3 mt-4">
+                <span className="text-ink text-sm">Include in trip stats</span>
+                <Toggle checked={casualStats} onChange={setCasualStats} label="Include in trip stats" />
+              </div>
+            )}
+          </div>
         </Sheet>
       )}
 

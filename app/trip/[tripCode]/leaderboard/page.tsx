@@ -26,10 +26,12 @@ export default async function TripLeaderboardPage({
     .single()
   if (!trip) notFound()
 
-  // Rounds first so we can scope holes, scores and handicaps by round/course
+  // Rounds first so we can scope holes, scores and handicaps by round/course.
+  // `*` so the casual flag rides along without being named — migration 031 is
+  // run by hand, and this page must keep working on a database without it.
   const { data: rounds } = await supabase
     .from('rounds')
-    .select('id, round_number, status, courses(id, name)')
+    .select('*, courses(id, name)')
     .eq('trip_id', trip.id)
     .order('round_number')
 

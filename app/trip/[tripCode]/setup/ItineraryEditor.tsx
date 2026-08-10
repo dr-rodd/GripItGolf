@@ -41,7 +41,7 @@ type Course = DirectoryCourse
  * out is the X, not the nav underneath.
  */
 export default function ItineraryEditor({
-  tripId, startDate, endDate, courses, initialItems, lockedGolfItemIds, players, onClose,
+  tripId, startDate, endDate, courses, initialItems, lockedGolfItemIds, trackStats, players, onClose,
 }: {
   tripId: string
   startDate: string | null
@@ -55,6 +55,8 @@ export default function ItineraryEditor({
    * trip: an impromptu round is the point of being able to.
    */
   lockedGolfItemIds: string[]
+  /** Whether the trip records stats — decides if a casual round asks about them. */
+  trackStats: boolean
   players: { id: string; handicap: number | null }[]
   onClose: () => void
 }) {
@@ -120,6 +122,7 @@ export default function ItineraryEditor({
           onChange={setItems}
           onContinue={save}
           lockedGolfIds={lockedGolfItemIds}
+          trackStats={trackStats}
           continueLabel={saving ? 'Saving…' : 'Done'}
         />
       </div>

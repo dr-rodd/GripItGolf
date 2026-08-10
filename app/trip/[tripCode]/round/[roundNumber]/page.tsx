@@ -20,6 +20,7 @@ import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import { IconMapPin, IconClipboardList, IconTrophy } from '@/app/components/icons'
 import RoundCard from './RoundCard'
+import CasualToggle from './CasualToggle'
 import CourseWeather from '@/app/components/CourseWeather'
 
 export const dynamic = 'force-dynamic'
@@ -43,16 +44,19 @@ export default async function RoundSummaryPage({
 
   const { data: trip, error: tripError } = await supabase
     .from('trips')
-    .select('id, name, start_date, formats, leaderboards, team_scoring')
+    .select('id, name, start_date, formats, leaderboards, team_scoring, track_stats')
     .eq('trip_code', tripCode)
     .single()
 
   if (tripError) console.error('RoundSummary trip query failed:', tripError)
   if (!trip) notFound()
 
+  // `*` rather than a column list: the casual flags arrive with migration
+  // 031, which is run by hand, and naming them would break this page on a
+  // database that has not run it yet. Undefined reads as counting.
   const { data: round, error: roundError } = await supabase
     .from('rounds')
-    .select('id, round_number, scheduled_date, course_id, itinerary_item_id')
+    .select('*')
     .eq('trip_id', trip.id)
     .eq('round_number', roundNum)
     .single()
@@ -163,7 +167,7 @@ export default async function RoundSummaryPage({
         {/* ── The course, the day ── */}
         <header className="text-center">
           <p className="t-cap uppercase tracking-[0.18em] text-ink/50">
-            Round {round.round_number}
+            Round {round.round_number}{round.casual === true ? ' · casual' : ''}
           </p>
           <h1 className="t-h1 text-ink text-balance mt-1.5" style={{ fontSize: 'clamp(24px, 7vw, 30px)' }}>
             {course?.name ?? 'Course'}
@@ -290,6 +294,18 @@ export default async function RoundSummaryPage({
             </Link>
           </section>
         )}
+
+        {/* ── Whether it counts ──
+            On the round's own page because this is where the decision gets
+            made after the fact — a subgroup's extra game that should not
+            move the trip standings. The same question the golf sheet asks
+            when a round is added. */}
+        <CasualToggle
+          roundId={round.id}
+          casual={round.casual === true}
+          casualStats={round.casual_stats === true}
+          trackStats={trip.track_stats === true}
+        />
 
         {/* ── Into the card ── */}
         <Link

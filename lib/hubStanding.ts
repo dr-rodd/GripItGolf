@@ -85,9 +85,13 @@ async function simplePlacing(
   lead: Leaderboard,
   playerId: string,
 ): Promise<PlacingResult> {
+  // `*` rather than `id` alone: the cheap path has to leave casual rounds
+  // out, exactly as `buildRows` does on the full path — `test:hub` holds the
+  // two against each other. Not named in the column list because migration
+  // 031 is run by hand, and this query serves most trips' hubs.
   const { data: rounds, error: roundsError } = await supabase
     .from('rounds')
-    .select('id')
+    .select('*')
     .eq('trip_id', tripId)
 
   if (roundsError) {
@@ -98,7 +102,9 @@ async function simplePlacing(
   // No rounds, no scores, no position. An ordinary answer for a trip that has
   // not started, not an error — and asking `.in('round_id', [])` for it would
   // be a wasted round trip.
-  const roundIds = (rounds ?? []).map(r => r.id as string)
+  const roundIds = (rounds ?? [])
+    .filter(r => r.casual !== true)
+    .map(r => r.id as string)
   if (roundIds.length === 0) return NONE
 
   const { data, error } = await supabase
@@ -169,9 +175,14 @@ export async function fetchRoundRows(
 ): Promise<{ rows: BoardRow[]; error: string | null }> {
   // A knockout is not a table, so it has no podium.
   if (!lead || lead.competition === 'matchplay') return { rows: [], error: null }
-  return fetchBoardRows(
-    tripId, { ...lead, discardWorst: 0 }, legacyTeamScoring, [roundId],
-  )
+  const { ctx, error } = await fetchTripContext(tripId, legacyTeamScoring, [roundId])
+  if (error || !ctx) return { rows: [], error }
+  // The casual flag is cleared for the same reason the discard rule is
+  // dropped: a round's result is that round's result, whether or not the
+  // trip is counting it. `buildRows` would otherwise return an empty board
+  // for a casual round, and its page would read as never played.
+  const own = { ...ctx, rounds: ctx.rounds.map(r => ({ ...r, casual: false })) }
+  return { rows: buildRows({ ...lead, discardWorst: 0 }, own), error: null }
 }
 
 /**
@@ -227,9 +238,11 @@ export async function fetchTripContext(
 }> {
   const empty = { ctx: null, holes: [], courseByRound: new Map<string, string>() }
   const statCols = withStats ? ', putts, fairway_hit' : ''
+  // `*` so the casual flags ride along without being named — migration 031
+  // is run by hand, and this query is under every board and standing line.
   const { data: rounds, error: roundsError } = await supabase
     .from('rounds')
-    .select('id, round_number, course_id')
+    .select('*')
     .eq('trip_id', tripId)
     .order('round_number')
 
@@ -297,7 +310,12 @@ export async function fetchTripContext(
     teams: teamsRes.data ?? [],
     memberships,
     holes,
-    rounds: roundRows.map(r => ({ id: r.id, round_number: r.round_number })),
+    rounds: roundRows.map(r => ({
+      id: r.id,
+      round_number: r.round_number,
+      casual: r.casual === true,
+      casual_stats: r.casual_stats === true,
+    })),
     courseByRound: new Map(roundRows.map(r => [r.id as string, r.course_id as string])),
     // Cast because the column list is now built rather than written out, and
     // supabase-js types a result by parsing the literal it was given. Same
@@ -342,12 +360,25 @@ export async function fetchTripStats(
   if (error || !ctx) {
     return { stats: [], holes: [], players: [], rounds: [], courseByRound: new Map(), error }
   }
+
+  // A casual round feeds the stats only if it opted in — `casual_stats`,
+  // asked when the round was marked casual on a trip already tracking
+  // stats, and flippable later on the round's page. The round goes whole:
+  // out of the cards, out of the round list, and out of `courseByRound` so
+  // an excluded round's course cannot become a picker chip with no holes
+  // behind it.
+  const excluded = new Set(
+    ctx.rounds.filter(r => r.casual && !r.casual_stats).map(r => r.id)
+  )
+  const rounds = ctx.rounds.filter(r => !excluded.has(r.id))
+  const resolved = ctx.resolved.filter(s => !excluded.has(s.roundId))
+
   return {
-    stats: holeStats({ players: ctx.players, holes: ctx.holes, resolved: ctx.resolved }),
+    stats: holeStats({ players: ctx.players, holes: ctx.holes, resolved }),
     holes,
     players: ctx.players,
-    rounds: ctx.rounds,
-    courseByRound,
+    rounds,
+    courseByRound: new Map([...courseByRound].filter(([roundId]) => !excluded.has(roundId))),
     error: null,
   }
 }

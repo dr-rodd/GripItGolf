@@ -49,11 +49,14 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         .eq('is_composite', false)
         .order('created_at'),
       // The item id rides along so a round with scores can lock its own
-      // golf tile in the itinerary editor — and only its own. Still
-      // ordered, so the ids arrive in playing order for anything that cares.
+      // golf tile in the itinerary editor — and only its own; the casual
+      // flags ride back onto the golf items the same way. `*` rather than a
+      // column list so a database that has not run migration 031 yet still
+      // loads this page — the flags simply come back undefined, which reads
+      // as counting. Still ordered, so the ids arrive in playing order.
       supabase
         .from('rounds')
-        .select('id, itinerary_item_id')
+        .select('*')
         .eq('trip_id', trip.id)
         .order('round_number'),
       fetchMemberships(trip.id),
@@ -85,6 +88,12 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
     from_place: string | null; to_place: string | null; duration_mins: number | null
     activity_name: string | null; activity_time: string | null
   }
+  // Whether each golf item's round counts. The flags live on the round —
+  // `itinerary_items` has no such columns — so they are read back through
+  // the same link the round was created through.
+  const roundByItem = new Map(
+    rounds.filter(r => r.itinerary_item_id).map(r => [r.itinerary_item_id as string, r])
+  )
   const itinerary: ItineraryItem[] = ((itineraryResult.data ?? []) as unknown as ItinRow[])
     .map(r => ({
       id: r.id, dayIndex: r.day_index, position: r.position, kind: r.kind,
@@ -92,6 +101,12 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       stayName: r.stay_name, travelMode: r.travel_mode,
       fromPlace: r.from_place, toPlace: r.to_place, durationMins: r.duration_mins,
       activityName: r.activity_name, activityTime: r.activity_time,
+      ...(r.kind === 'golf'
+        ? {
+            casual: roundByItem.get(r.id)?.casual === true,
+            casualStats: roundByItem.get(r.id)?.casual_stats === true,
+          }
+        : {}),
     }))
 
   // A round locks its own golf item once it has a score or a card open on

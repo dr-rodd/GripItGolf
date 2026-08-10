@@ -353,6 +353,10 @@ export default function CreateTripForm() {
             status: 'upcoming',
             itinerary_item_id: savedBySlot.get(`${g.dayIndex}:${g.position}`) ?? null,
             ...(date ? { scheduled_date: date } : {}),
+            // Only named when set — same treatment as lib/itineraryStore.ts,
+            // so creation still works before migration 031 has run.
+            ...(g.casual ? { casual: true } : {}),
+            ...(g.casual && g.casualStats ? { casual_stats: true } : {}),
           }
         })
       )

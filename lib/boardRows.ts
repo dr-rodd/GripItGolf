@@ -52,7 +52,26 @@ export type RowHole = {
   stroke_index_ladies?: number | null
 }
 
-export type RowRound = { id: string; round_number: number }
+export type RowRound = {
+  id: string
+  round_number: number
+  /**
+   * A casual round: scored as usual, kept off every board.
+   *
+   * `buildRows` drops these and their scores before any board reads them —
+   * the one place that rule lives. A round summary still shows its own
+   * result: `fetchRoundRows` clears the flag for its single round, the same
+   * way it drops the discard rule, because a round's result is that round's
+   * result whether or not the trip is counting it.
+   *
+   * Optional so every existing caller's rows still fit; absent means the
+   * query never asked, which reads as counting — what every round did
+   * before the flag existed.
+   */
+  casual?: boolean
+  /** Whether a casual round's cards still feed the stats. Boards never read it. */
+  casual_stats?: boolean
+}
 
 /** A score resolved from either the committed or the in-progress table. */
 export type ResolvedScore = {
@@ -351,7 +370,28 @@ export function teamScoringFor(lb: Leaderboard, legacy: TeamScoring | null): Tea
  */
 export function buildRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   if (lb.competition === 'matchplay') return []
-  return lb.audience === 'team' ? teamRows(lb, ctx) : individualRows(lb, ctx)
+  const counted = withoutCasualRounds(ctx)
+  return lb.audience === 'team' ? teamRows(lb, counted) : individualRows(lb, counted)
+}
+
+/**
+ * The context with casual rounds — and their scores — taken out.
+ *
+ * This is the only place a round stops counting. Every board on every trip
+ * comes through `buildRows`, so filtering here is what makes the leaderboard
+ * page, the hub's standing line and a podium agree without each remembering
+ * the rule. The scores stay in the database untouched; a casual round's own
+ * page still reads them, because `fetchRoundRows` clears the flag first.
+ */
+function withoutCasualRounds(ctx: RowContext): RowContext {
+  if (!ctx.rounds.some(r => r.casual)) return ctx
+  const rounds = ctx.rounds.filter(r => !r.casual)
+  const counted = new Set(rounds.map(r => r.id))
+  return {
+    ...ctx,
+    rounds,
+    resolved: ctx.resolved.filter(s => counted.has(s.roundId)),
+  }
 }
 
 /**

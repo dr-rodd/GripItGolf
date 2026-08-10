@@ -429,6 +429,88 @@ section('Both standing paths give the same position on the same board')
   eq(describePlacing(null), '', 'with nothing to read when there is no place')
 }
 
+section('A casual round is scored as usual and moves no board')
+{
+  // A subgroup's extra game: Brian's 54-point day at the casual course must
+  // not touch the trip standings, and the numbers are chosen so that getting
+  // this wrong flips the leader — counted, Brian's 18 + 54 beats Alan's 36;
+  // filtered, Alan's 36 beats Brian's 18.
+
+  const PAR = 4
+  const holes: RowHole[] = Array.from({ length: 18 }, (_, i) => ({
+    id: `h${i + 1}`, hole_number: i + 1, par: PAR, stroke_index: i + 1, course_id: 'c1',
+  }))
+  const rounds = [
+    { id: 'r1', round_number: 1 },
+    { id: 'r2', round_number: 2, casual: true },
+  ]
+  const players = [
+    { id: 'a', name: 'Alan',  handicap: 0, gender: 'M' },
+    { id: 'b', name: 'Brian', handicap: 0, gender: 'M' },
+  ]
+
+  // Alan pars the counting round and skips the casual one — not everybody
+  // goes. Brian bogeys the counting round and birdies every casual hole.
+  const scoreRows = players.flatMap(p =>
+    rounds
+      .filter(r => !(p.id === 'a' && r.id === 'r2'))
+      .flatMap(r =>
+        holes.map(h => {
+          const gross =
+            p.id === 'a' ? PAR : r.id === 'r2' ? PAR - 1 : PAR + 1
+          return {
+            player_id: p.id, round_id: r.id, hole_id: h.id,
+            gross_score: gross,
+            stableford_points: Math.max(0, PAR + 2 - gross),
+            no_return: false,
+          }
+        })))
+
+  const hcpRows = players.flatMap(p =>
+    rounds.map(r => ({ round_id: r.id, player_id: p.id, playing_handicap: 0 })))
+
+  const ctx: RowContext = {
+    players, teams: [], memberships: [], holes,
+    rounds: sortRounds(rounds),
+    resolved: resolveScores(scoreRows, [], holes, new Map([['r1', 'c1'], ['r2', 'c1']])),
+    hcpFor: handicapMap(hcpRows),
+    liveRoundIds: new Set(), livePlayerIds: new Set(),
+    legacyTeamScoring: null,
+  }
+
+  const lb: Leaderboard = {
+    id: 'b', audience: 'individual', competition: 'league',
+    scoring: 'stableford', combine: 'total', discardWorst: 0,
+  }
+
+  const rows = buildRows(lb, ctx)
+  eq(rows[0]?.id, 'a', 'the casual round decides nothing — 54 points there move nobody')
+  const brian = rows.find(r => r.id === 'b')
+  eq(brian?.total, 18, 'a casual card adds nothing to the total')
+  eq(brian?.playedRounds, ['r1'], 'and the round is not one the row took part in')
+  eq(brian?.perRound['r2'], undefined, 'so the board has no column for it')
+
+  // The cheap path leaves casual rounds out at the query, so it is handed
+  // only the counting cards — and the two paths still agree.
+  const cheapScores: SummaryScore[] = scoreRows
+    .filter(s => s.round_id !== 'r2')
+    .map(s => ({ playerId: s.player_id, roundId: s.round_id, points: s.stableford_points }))
+  for (const p of players) {
+    eq(
+      placingFromRows([p.id], rows),
+      placingFromStandings(p.id, standings(cheapScores, 0)),
+      `${p.name} sits in the same place on either path`,
+    )
+  }
+
+  // The round's own page still gets its result: fetchRoundRows clears the
+  // flag — the same way it drops the discard rule — and the same cards then
+  // decide that day on their own terms.
+  const own = { ...ctx, rounds: ctx.rounds.map(r => ({ ...r, casual: false })) }
+  const ownRows = buildRows(lb, own)
+  eq(ownRows[0]?.id, 'b', 'cleared, the way a round summary reads it, the day is Brian\'s')
+}
+
 section('The hub gates the old team setting the way the leaderboard does')
 {
   // A trip that has chosen real boards must not be scored on the trip-wide

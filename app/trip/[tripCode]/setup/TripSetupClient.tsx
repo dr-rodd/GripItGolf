@@ -711,6 +711,7 @@ export default function TripSetupClient({
           courses={courses}
           initialItems={itinerary}
           lockedGolfItemIds={lockedGolfItemIds}
+          trackStats={trackStats}
           players={players}
           onClose={() => setItineraryOpen(false)}
         />

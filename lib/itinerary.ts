@@ -24,6 +24,16 @@ export type ItineraryItem = {
   /** "13:00" — local clock time; a trip does not cross zones. */
   teeTime?: string | null
   teeCount?: number | null
+  /**
+   * A casual round: scored as usual, kept off every leaderboard.
+   *
+   * Not a column on `itinerary_items` — it lives on the round itself
+   * (`rounds.casual`, migration 031), and rides on the item so the builder
+   * can ask the question where the round is made. `casualStats` is the
+   * opt-in for a casual round's cards to still feed the trip stats.
+   */
+  casual?: boolean
+  casualStats?: boolean
 
   /** stay */
   stayName?: string | null
@@ -256,9 +266,12 @@ export function describeItem(
     const count = item.teeCount ?? 1
     const time = describeTime(item.teeTime)
     const groups = count > 1 ? `${count} tee times` : 'tee time'
+    const when = time ? `${groups} from ${time}` : groups
     return {
       title: courseName ?? 'Golf',
-      detail: time ? `${groups} from ${time}` : groups,
+      // Named on the tile, because a round the leaderboard will not show
+      // is worth knowing about before anyone asks where its column went.
+      detail: item.casual ? `${when} · casual` : when,
     }
   }
 

@@ -26,7 +26,11 @@ import {
 // ─── Types ─────────────────────────────────────────────────────
 
 type Course = { id: string; name: string }
-type Round  = { id: string; round_number: number; status?: string; courses: Course | null }
+type Round  = {
+  id: string; round_number: number; status?: string; courses: Course | null
+  /** A casual round — scored as usual, kept off every board and column. */
+  casual?: boolean
+}
 type Team   = { id: string; name: string; color: string; team_set?: string | null }
 type Player = { id: string; name: string; handicap: number | null; gender: string }
 type Hole   = {
@@ -1179,7 +1183,13 @@ export default function TripLeaderboardClient({
   const resolved = rowContext.resolved
   // The same order the board columns them in, on the fuller row this screen
   // carries — a board needs an id and a number, this also needs the course.
-  const sortedRounds = useMemo(() => sortRounds(rounds), [rounds])
+  // Casual rounds are left out here for the same reason `buildRows` leaves
+  // them out of every total: a round the board is not counting gets no
+  // column, rather than a column of blanks under every name.
+  const sortedRounds = useMemo(
+    () => sortRounds(rounds.filter(r => r.casual !== true)),
+    [rounds],
+  )
 
   // A round counts as in play when a scorecard is actually open on it, not
   // merely because someone once entered a score into it.

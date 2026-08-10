@@ -89,16 +89,31 @@ export async function saveItinerary({
     if (!result.ok) return result
   }
 
+  // Casual is a fact about the round, not about the golf item — flipping it
+  // is not "touching golf" and is allowed on a locked round too: deciding a
+  // played round should not count is exactly when the question comes up.
+  const casualChanged = (a: ItineraryItem, b: ItineraryItem) =>
+    (a.casual ?? false) !== (b.casual ?? false)
+    || (a.casualStats ?? false) !== (b.casualStats ?? false)
+
   const changed = afterGolf.filter(a => {
     const was = beforeGolf.find(b => b.id === a.id)
-    return was && (was.courseId !== a.courseId || was.dayIndex !== a.dayIndex)
+    return was && (
+      was.courseId !== a.courseId || was.dayIndex !== a.dayIndex || casualChanged(was, a)
+    )
   })
   for (const item of changed) {
+    const was = beforeGolf.find(b => b.id === item.id)
     const { error } = await supabase
       .from('rounds')
       .update({
         course_id: item.courseId,
         scheduled_date: dateForDay(startDate, item.dayIndex),
+        // Named in the write only when it actually moved, so a database that
+        // has not run migration 031 yet keeps saving itineraries untouched.
+        ...(was && casualChanged(was, item)
+          ? { casual: item.casual ?? false, casual_stats: item.casualStats ?? false }
+          : {}),
       })
       .eq('itinerary_item_id', item.id)
     if (error) return { ok: false, error: 'Could not update a round — try again.' }
@@ -176,6 +191,10 @@ async function addRounds(
         status: 'upcoming',
         itinerary_item_id: item.id,
         ...(scheduled ? { scheduled_date: scheduled } : {}),
+        // Only named when set, so an all-counting itinerary still saves on a
+        // database that has not run migration 031 yet.
+        ...(item.casual ? { casual: true } : {}),
+        ...(item.casual && item.casualStats ? { casual_stats: true } : {}),
       }
     }))
     .select('id')
