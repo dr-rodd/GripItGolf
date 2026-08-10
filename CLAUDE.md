@@ -163,11 +163,19 @@ narrows the holes, never the field**: a gain on one course is measured
 against everybody's play of that course, whoever is selected. **The course
 picker is a choice of one** — `null` for every course or a single id, never a
 set — so no tap can leave the page with no holes on it and nothing has to
-guard against it. Net gained is
-Stableford points vs the field — the handicap arrives baked into each
-stored point, never re-derived. Charts are hand-drawn SVG; polarity is
-encoded by side-of-zero, never by the emerald/rust pair alone, which a
-colour-blind reader cannot split.
+guard against it. **Net gained is strokes by apportionment**: the round's
+playing-handicap snapshot shared over the holes by `holeAllocation` — CH/18
+with a straight-line tilt across the stroke index, and **a plus handicap
+mirrors through SI 19 − i, never a bare sign flip** (the same trap as
+`shotsReceived`, held in the same one-copy discipline). The share of each
+hole's allocation given to putting is the advanced setting — fixed fifth by
+default, 2/par selectable — and it can only ever move the split, never a
+total. Tee-to-green further splits into **driving accuracy** (a bet on the
+pooled penalty for missing the fairway) and **approach** (the remainder, so
+the halves add exactly). The hero pentagon and trend read **finalised holes
+only**; the panels keep counting an open card. Charts are hand-drawn SVG;
+polarity is encoded by side-of-zero, never by the emerald/rust pair alone,
+which a colour-blind reader cannot split.
 
 Four things that are easy to get wrong twice:
 
