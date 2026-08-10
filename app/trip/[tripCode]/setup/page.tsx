@@ -71,7 +71,9 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         .order('position'),
       // The picker inside the itinerary editor offers the same list trip
       // creation does — platform courses only, never another trip's own.
-      supabase.from('courses').select('id, name, location, website, card_verified').is('trip_id', null).order('name'),
+      // `*` so `county` (migration 032, run by hand) rides along without
+      // being named — absent, the picker falls back to parsing the location.
+      supabase.from('courses').select('*').is('trip_id', null).order('name'),
     ])
 
   if (teamsResult.error) console.error('TripSetupPage teams query failed:', teamsResult.error)

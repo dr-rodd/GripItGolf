@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from 'react'
 import {
-  filterCourses, regionList, courseNameError, websiteError,
+  filterCourses, countyList, countyOf, courseNameError, countyError, websiteError,
   emptyTeeDraft, teeDraftBlank, teeDraftError, parseTeeDraft,
-  MAX_COURSE_NAME, MAX_LOCATION, MAX_WEBSITE,
+  MAX_COURSE_NAME, MAX_LOCATION, MAX_COUNTY, MAX_WEBSITE, IRISH_COUNTIES,
   type DirectoryCourse, type TeeDraft,
 } from '@/lib/courseDirectory'
 import type { SuggestedTee } from '@/lib/courseLookup'
@@ -54,19 +54,19 @@ export default function CourseSelect({
 }) {
   const [view, setView] = useState<View>({ kind: 'closed' })
   const [search, setSearch] = useState('')
-  const [region, setRegion] = useState<string | null>(null)
+  const [county, setCounty] = useState<string | null>(null)
 
-  const regions = useMemo(() => regionList(courses), [courses])
+  const counties = useMemo(() => countyList(courses), [courses])
   const shown = useMemo(
-    () => filterCourses(courses, search, region),
-    [courses, search, region],
+    () => filterCourses(courses, search, county),
+    [courses, search, county],
   )
   const chosen = courses.find(c => c.id === value) ?? null
 
   function close() {
     setView({ kind: 'closed' })
     setSearch('')
-    setRegion(null)
+    setCounty(null)
   }
 
   const chip = (on: boolean) =>
@@ -131,16 +131,16 @@ export default function CourseSelect({
                 className={FIELD}
                 aria-label="Search courses"
               />
-              {regions.length > 1 && (
+              {counties.length > 1 && (
                 <div className="flex gap-1.5 mt-2.5 overflow-x-auto -mx-1 px-1 pb-1">
-                  <button type="button" aria-pressed={region === null}
-                    onClick={() => setRegion(null)} className={chip(region === null)}>
+                  <button type="button" aria-pressed={county === null}
+                    onClick={() => setCounty(null)} className={chip(county === null)}>
                     All
                   </button>
-                  {regions.map(r => (
-                    <button key={r} type="button" aria-pressed={region === r}
-                      onClick={() => setRegion(region === r ? null : r)} className={chip(region === r)}>
-                      {r}
+                  {counties.map(c => (
+                    <button key={c} type="button" aria-pressed={county === c}
+                      onClick={() => setCounty(county === c ? null : c)} className={chip(county === c)}>
+                      {c}
                     </button>
                   ))}
                 </div>
@@ -273,6 +273,7 @@ function AddCourseForm({
   onCreated: (course: DirectoryCourse) => void
 }) {
   const [name, setName] = useState(prefillName)
+  const [county, setCounty] = useState('')
   const [location, setLocation] = useState('')
   const [website, setWebsite] = useState('')
   const [tees, setTees] = useState<TeeDraft[]>([emptyTeeDraft()])
@@ -312,7 +313,13 @@ function AddCourseForm({
         })
         return
       }
-      if (body.location) setLocation(prev => prev.trim() ? prev : body.location!)
+      if (body.location) {
+        setLocation(prev => prev.trim() ? prev : body.location!)
+        // The county the location implies, into an empty county field only —
+        // a suggestion the person confirms, like everything the lookup says.
+        const implied = countyOf({ county: null, location: body.location })
+        if (implied) setCounty(prev => prev.trim() ? prev : implied)
+      }
       const suggested = (body.tees ?? []).map(t => ({
         name: t.name,
         gender: t.gender,
@@ -344,6 +351,8 @@ function AddCourseForm({
     setError(null)
     const nameProblem = courseNameError(name, existing.map(c => c.name))
     if (nameProblem) { setError(nameProblem); return }
+    const countyProblem = countyError(county)
+    if (countyProblem) { setError(countyProblem); return }
     const websiteProblem = websiteError(website)
     if (websiteProblem) { setError(websiteProblem); return }
     const filled = tees.filter(t => !teeDraftBlank(t))
@@ -359,6 +368,7 @@ function AddCourseForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
+          county: county.trim(),
           location: location.trim(),
           website: website.trim(),
           tees: filled.map(parseTeeDraft),
@@ -396,6 +406,30 @@ function AddCourseForm({
       </div>
 
       <div>
+        <label className={FIELD_LABEL} htmlFor="nc-county">County</label>
+        {/* The filter. The chips on the course list are counties and this
+            is where a course gets its one — required, because a course with
+            no county can only ever be found by search. Free text with the
+            thirty-two as suggestions: the platform has no rule that a
+            course is in Ireland. */}
+        <input
+          id="nc-county" type="text" value={county}
+          maxLength={MAX_COUNTY}
+          onChange={e => setCounty(e.target.value)}
+          placeholder="e.g. Donegal"
+          list="nc-county-list"
+          className={FIELD}
+        />
+        <datalist id="nc-county-list">
+          {IRISH_COUNTIES.map(c => <option key={c} value={c} />)}
+        </datalist>
+        <p className="t-cap text-ink/65 mt-2 leading-snug">
+          The course files under its county on the list — it is how the next
+          group finds it.
+        </p>
+      </div>
+
+      <div>
         <label className={FIELD_LABEL} htmlFor="nc-location">Where it is</label>
         <input
           id="nc-location" type="text" value={location}
@@ -405,8 +439,7 @@ function AddCourseForm({
           className={FIELD}
         />
         <p className="t-cap text-ink/65 mt-2 leading-snug">
-          Optional, but it is what the filter chips are made of — a county
-          here helps the next group find the course.
+          Optional — shown under the course&apos;s name on the list.
         </p>
       </div>
 

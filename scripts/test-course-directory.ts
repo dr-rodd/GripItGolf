@@ -5,17 +5,19 @@
  * new course must look like before it is allowed in. The bugs that matter:
  *
  *   1. Filtering. A search must find a course by name or by town, and the
- *      region chips must come from the stored locations, not a hand list.
- *   2. Admission. A duplicate name, a nonsense website, a slope of 300 —
- *      all refused in words, and the server-side check refuses the same
- *      things the form does.
+ *      county chips must come from the courses themselves — the stored
+ *      county, or the location parsed as a fallback — not a hand list.
+ *   2. Admission. A duplicate name, a missing county, a nonsense website, a
+ *      slope of 300 — all refused in words, and the server-side check
+ *      refuses the same things the form does.
  *   3. The tee ranges are the card check's own — the two must not drift.
  */
 
 import {
-  regionOf, regionList, filterCourses, slugify,
-  courseNameError, normalizeWebsite, websiteError,
+  countyOf, countyList, filterCourses, slugify,
+  courseNameError, countyError, normalizeWebsite, websiteError,
   emptyTeeDraft, teeDraftBlank, teeDraftError, parseTeeDraft, validNewTee,
+  IRISH_COUNTIES,
   type DirectoryCourse, type TeeDraft,
 } from '../lib/courseDirectory'
 import { TEE_COLUMN_RANGE } from '../lib/cardCheck'
@@ -36,47 +38,73 @@ const section = (n: string) => console.log(`\n${n}`)
 // ─── Fixtures — real shapes off the seed data ──────────────────
 
 const COURSES: DirectoryCourse[] = [
-  { id: '1', name: 'Ballybunion Golf Club -- Old Course', location: 'Ballybunion, Kerry, Ireland' },
-  { id: '2', name: 'Donegal Golf Club', location: 'Murvagh, Laghey, Donegal, Ireland' },
-  { id: '3', name: 'County Sligo Golf Club -- Colt Championship', location: 'Rosses Point, Sligo, Ireland' },
+  { id: '1', name: 'Ballybunion Golf Club -- Old Course', county: 'Kerry', location: 'Ballybunion, Kerry, Ireland' },
+  { id: '2', name: 'Donegal Golf Club', county: 'Donegal', location: 'Murvagh, Laghey, Donegal, Ireland' },
+  { id: '3', name: 'County Sligo Golf Club -- Colt Championship', county: 'Sligo', location: 'Rosses Point, Sligo, Ireland' },
+  // No county column — a course from before migration 032. The location
+  // parse is the fallback, so it still files under Donegal.
   { id: '4', name: 'Narin & Portnoo Links', location: 'Portnoo, Donegal, Ireland' },
-  { id: '5', name: 'Royal County Down -- Championship', location: 'Newcastle, County Down, Northern Ireland' },
+  { id: '5', name: 'Royal County Down -- Championship', county: 'Down', location: 'Newcastle, Down, Northern Ireland' },
   { id: '6', name: 'Somewhere New', location: null },
 ]
 
-// ─── Regions ───────────────────────────────────────────────────
+// ─── Counties ──────────────────────────────────────────────────
 
-section('regionOf')
+section('countyOf')
 {
-  eq(regionOf('Ballybunion, Kerry, Ireland'), 'Kerry', 'county is the second-to-last segment')
-  eq(regionOf('Murvagh, Laghey, Donegal, Ireland'), 'Donegal', 'four segments still land on the county')
-  eq(regionOf('Newcastle, County Down, Northern Ireland'), 'County Down', 'Northern Ireland is the country, not the county')
-  eq(regionOf('Lahinch'), 'Lahinch', 'one segment is its own region')
-  eq(regionOf(''), null, 'blank location has no region')
-  eq(regionOf(null), null, 'null location has no region')
-  eq(regionOf(' , , '), null, 'commas alone have no region')
+  eq(countyOf({ county: 'Kerry', location: 'Somewhere else entirely' }), 'Kerry',
+    'the stored county wins over the location')
+  eq(countyOf({ county: null, location: 'Ballybunion, Kerry, Ireland' }), 'Kerry',
+    'no county — the second-to-last location segment is the fallback')
+  eq(countyOf({ county: null, location: 'Murvagh, Laghey, Donegal, Ireland' }), 'Donegal',
+    'four segments still land on the county')
+  eq(countyOf({ county: null, location: 'Lahinch' }), 'Lahinch',
+    'one segment is its own region')
+  eq(countyOf({ county: null, location: '' }), null, 'blank location has no county')
+  eq(countyOf({ county: null, location: null }), null, 'null location has no county')
+  eq(countyOf({ county: null, location: ' , , ' }), null, 'commas alone have no county')
+
+  // One chip per county, however a course arrived.
+  eq(countyOf({ county: 'Co. Donegal', location: null }), 'Donegal', 'the Co. prefix folds away')
+  eq(countyOf({ county: 'County Down', location: null }), 'Down', 'so does County')
+  eq(countyOf({ county: 'Londonderry', location: null }), 'Derry', 'Derry, not Londonderry')
+  eq(countyOf({ county: null, location: 'Portstewart, Londonderry, Northern Ireland' }), 'Derry',
+    '  …however it arrives')
 }
 
-section('regionList')
+section('countyList')
 {
-  eq(regionList(COURSES), ['County Down', 'Donegal', 'Kerry', 'Sligo'],
-    'every region with a course, alphabetical, no duplicates')
-  eq(regionList([]), [], 'no courses, no chips')
+  eq(countyList(COURSES), ['Donegal', 'Down', 'Kerry', 'Sligo'],
+    'every county with a course, alphabetical, no duplicates')
+  eq(countyList([]), [], 'no courses, no chips')
+  const suggestions: readonly string[] = IRISH_COUNTIES
+  ok(suggestions.includes('Derry'), 'the suggestions say Derry')
+  ok(!suggestions.includes('Londonderry'), '  …and never Londonderry')
+  eq(IRISH_COUNTIES.length, 32, 'all thirty-two counties')
 }
 
 // ─── Filtering ─────────────────────────────────────────────────
 
 section('filterCourses')
 {
-  eq(filterCourses(COURSES, '', null).length, 6, 'no search, no region — everything')
+  eq(filterCourses(COURSES, '', null).length, 6, 'no search, no county — everything')
   eq(filterCourses(COURSES, 'sligo', null).map(c => c.id), ['3'], 'search matches the name')
   eq(filterCourses(COURSES, 'murvagh', null).map(c => c.id), ['2'], 'search matches the town')
   eq(filterCourses(COURSES, 'SLIGO', null).map(c => c.id), ['3'], 'search is case-blind')
-  eq(filterCourses(COURSES, '', 'Donegal').map(c => c.id), ['2', '4'], 'region chip narrows to the county')
-  eq(filterCourses(COURSES, 'portnoo', 'Donegal').map(c => c.id), ['4'], 'search and region compose')
-  eq(filterCourses(COURSES, 'portnoo', 'Kerry').length, 0, 'a wrong region beats a right search')
+  eq(filterCourses(COURSES, '', 'Donegal').map(c => c.id), ['2', '4'],
+    'the county chip narrows to the county, stored or parsed')
+  eq(filterCourses(COURSES, 'portnoo', 'Donegal').map(c => c.id), ['4'], 'search and county compose')
+  eq(filterCourses(COURSES, 'portnoo', 'Kerry').length, 0, 'a wrong county beats a right search')
   eq(filterCourses(COURSES, '', 'Kerry').map(c => c.id), ['1'], 'a course with no location sits under no chip')
   eq(filterCourses(COURSES, '  ', null).length, 6, 'whitespace search is no search')
+}
+
+section('countyError')
+{
+  eq(countyError('Donegal'), null, 'a county passes')
+  ok(countyError('') !== null, 'blank is refused — every course files somewhere')
+  ok(countyError('   ') !== null, 'whitespace is refused')
+  ok(countyError('x'.repeat(41)) !== null, 'and so is an essay')
 }
 
 // ─── Slugs ─────────────────────────────────────────────────────

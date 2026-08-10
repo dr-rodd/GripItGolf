@@ -85,7 +85,9 @@ export default function CreateTripForm() {
     let live = true
     supabase
       .from('courses')
-      .select('id, name, location, website, card_verified')
+      // `*` so `county` (migration 032, run by hand) rides along without
+      // being named — absent, the picker falls back to parsing the location.
+      .select('*')
       .is('trip_id', null)
       .order('name')
       .then(({ data }) => {

@@ -47,9 +47,11 @@ export default async function TripCoursePortalPage({
       .select('id, handicap')
       .eq('trip_id', trip.id)
       .eq('is_composite', false),
+    // `*` so `county` (migration 032, run by hand) rides along without
+    // being named — absent, the picker falls back to parsing the location.
     supabase
       .from('courses')
-      .select('id, name, location, website, card_verified')
+      .select('*')
       .is('trip_id', null)
       .order('name'),
   ])

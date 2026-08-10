@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import {
-  courseNameError, websiteError, normalizeWebsite, slugify, validNewTee,
-  MAX_LOCATION,
+  courseNameError, countyError, countyOf, websiteError, normalizeWebsite,
+  slugify, validNewTee,
+  MAX_LOCATION, MAX_COUNTY,
   type NewTee,
 } from '@/lib/courseDirectory'
 
@@ -38,15 +39,27 @@ export async function POST(req: NextRequest) {
 async function handle(req: NextRequest) {
   const body = await req.json().catch(() => null) as {
     name?: string
+    county?: string
     location?: string
     website?: string
     tees?: unknown[]
   } | null
 
   const name = String(body?.name ?? '').trim()
+  const countyInput = String(body?.county ?? '').trim().slice(0, MAX_COUNTY)
   const location = String(body?.location ?? '').trim().slice(0, MAX_LOCATION)
   const websiteInput = String(body?.website ?? '')
   const teesRaw = Array.isArray(body?.tees) ? body!.tees! : []
+
+  // Every course files under a county — it is the picker's only filter, and
+  // a course without one can only ever be found by search. Stored
+  // canonicalised (prefixes off, Derry not Londonderry), the same folding
+  // the picker applies on read.
+  const countyProblem = countyError(countyInput)
+  if (countyProblem) {
+    return NextResponse.json({ ok: false, message: countyProblem }, { status: 400 })
+  }
+  const county = countyOf({ county: countyInput, location: null })
 
   const websiteProblem = websiteError(websiteInput)
   if (websiteProblem) {
@@ -102,6 +115,7 @@ async function handle(req: NextRequest) {
       trip_id: null,
       name,
       slug,
+      county,
       location: location || null,
       website,
       card_verified: false,
@@ -109,7 +123,7 @@ async function handle(req: NextRequest) {
       // ladies card render from the men's numbers.
       ladies_data_verified: false,
     })
-    .select('id, name, location, website, card_verified')
+    .select('id, name, county, location, website, card_verified')
     .single()
   if (courseError || !course) {
     console.error('add-course insert failed:', courseError)

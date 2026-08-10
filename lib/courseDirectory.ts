@@ -17,6 +17,8 @@ export type DirectoryCourse = {
   id: string
   name: string
   location?: string | null
+  /** The county it files under — the picker's only filter (migration 032). */
+  county?: string | null
   website?: string | null
   /** False until a scorecard photo has confirmed the record. */
   card_verified?: boolean | null
@@ -24,7 +26,24 @@ export type DirectoryCourse = {
 
 export const MAX_COURSE_NAME = 80
 export const MAX_LOCATION = 120
+export const MAX_COUNTY = 40
 export const MAX_WEBSITE = 200
+
+/**
+ * The thirty-two counties, for the form's suggestions. Derry, not
+ * Londonderry — settled once, here, and `countyOf` folds the other
+ * spelling onto it however a course arrives.
+ *
+ * Suggestions rather than the whole answer: the field stays free text,
+ * because the platform has no rule that a course is in Ireland.
+ */
+export const IRISH_COUNTIES = [
+  'Antrim', 'Armagh', 'Carlow', 'Cavan', 'Clare', 'Cork', 'Derry',
+  'Donegal', 'Down', 'Dublin', 'Fermanagh', 'Galway', 'Kerry', 'Kildare',
+  'Kilkenny', 'Laois', 'Leitrim', 'Limerick', 'Longford', 'Louth', 'Mayo',
+  'Meath', 'Monaghan', 'Offaly', 'Roscommon', 'Sligo', 'Tipperary',
+  'Tyrone', 'Waterford', 'Westmeath', 'Wexford', 'Wicklow',
+] as const
 
 // ─── Searching and filtering ───────────────────────────────────
 
@@ -35,14 +54,15 @@ const fold = (s: string) =>
     .replace(/[̀-ͯ]/g, '')
 
 /**
- * The region a course files under — the county, in practice.
+ * The county parsed out of a location, for a course with no county of its
+ * own — everything added before migration 032 gave the county a column.
  *
  * Locations are stored as "Town, County, Country" (sometimes with an extra
  * town in between), so the segment before the last one is the county. A
  * one-segment location is its own region rather than nothing, and a blank
  * location is null — those courses appear under All and under no chip.
  */
-export function regionOf(location: string | null | undefined): string | null {
+function countyFromLocation(location: string | null | undefined): string | null {
   const parts = String(location ?? '')
     .split(',')
     .map(p => p.trim())
@@ -52,33 +72,63 @@ export function regionOf(location: string | null | undefined): string | null {
   return parts[parts.length - 2]
 }
 
-/** The filter chips: every region that has a course, alphabetical. */
-export function regionList(courses: readonly DirectoryCourse[]): string[] {
+/**
+ * The county a course files under — the picker's only filter.
+ *
+ * The stored column wins; the location parse is the fallback for rows from
+ * before the column existed. Either way the answer is canonicalised: the
+ * 'Co. ' and 'County ' prefixes come off, and Londonderry reads as Derry —
+ * one chip per county, however a course arrived. Migration 032 makes the
+ * same corrections to what is stored.
+ */
+export function countyOf(
+  course: Pick<DirectoryCourse, 'county' | 'location'>,
+): string | null {
+  const raw = course.county?.trim() || countyFromLocation(course.location)
+  if (!raw) return null
+  const cleaned = raw.replace(/^Co\.?\s+/i, '').replace(/^County\s+/i, '')
+  return /^londonderry$/i.test(cleaned) ? 'Derry' : cleaned || null
+}
+
+/** The filter chips: every county that has a course, alphabetical. */
+export function countyList(courses: readonly DirectoryCourse[]): string[] {
   const seen = new Set<string>()
   for (const c of courses) {
-    const r = regionOf(c.location)
-    if (r) seen.add(r)
+    const county = countyOf(c)
+    if (county) seen.add(county)
   }
   return [...seen].sort((a, b) => a.localeCompare(b))
 }
 
 /**
- * The list the picker shows: narrowed by the search box and the region
- * chip, in that order. Search matches name or location, case- and
+ * The list the picker shows: narrowed by the search box and the county
+ * chip, in that order. Search matches name, location or county, case- and
  * accent-blind, so "sligo" finds "County Sligo Golf Club" and "murvagh"
- * finds Donegal. An empty search and no region is the whole directory.
+ * finds Donegal. An empty search and no county is the whole directory.
  */
 export function filterCourses(
   courses: readonly DirectoryCourse[],
   search: string,
-  region: string | null,
+  county: string | null,
 ): DirectoryCourse[] {
   const q = fold(search.trim())
   return courses.filter(c => {
-    if (region !== null && regionOf(c.location) !== region) return false
+    if (county !== null && countyOf(c) !== county) return false
     if (!q) return true
-    return fold(c.name).includes(q) || fold(c.location ?? '').includes(q)
+    return fold(c.name).includes(q)
+      || fold(c.location ?? '').includes(q)
+      || fold(countyOf(c) ?? '').includes(q)
   })
+}
+
+/** Why the county field cannot be saved, or null. Every course files somewhere. */
+export function countyError(input: string): string | null {
+  const trimmed = input.trim()
+  if (!trimmed) return 'Give the county — it is how the course is found.'
+  if (trimmed.length > MAX_COUNTY) {
+    return `That county is too long — ${MAX_COUNTY} characters at most.`
+  }
+  return null
 }
 
 // ─── Adding a course ───────────────────────────────────────────
