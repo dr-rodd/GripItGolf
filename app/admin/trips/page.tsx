@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { tripState, todayString } from '@/lib/tripStatus'
 import { Badge } from '@/app/components/ui'
@@ -39,9 +40,14 @@ function formatDateTime(iso: string): string {
   return d.toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export default async function AdminTripsPage() {
+export default async function AdminTripsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>
+}) {
   if (!(await requireAdmin())) return <AdminLogin />
 
+  const { q = '' } = await searchParams
   const db = createAdminClient()
 
   const { data, error } = await db
@@ -50,7 +56,17 @@ export default async function AdminTripsPage() {
     .order('created_at', { ascending: false })
 
   if (error) console.error('AdminTripsPage trips query failed:', error)
-  const trips = (data ?? []) as TripRow[]
+  const allTrips = (data ?? []) as TripRow[]
+
+  // Search narrows by name, code or lead email, case-blind. In memory: the
+  // whole table is already here for the header counts, and it is small.
+  const needle = q.trim().toLowerCase()
+  const trips = needle
+    ? allTrips.filter(t =>
+        t.name.toLowerCase().includes(needle)
+        || (t.trip_code ?? '').toLowerCase().includes(needle)
+        || (t.lead_email ?? '').toLowerCase().includes(needle))
+    : allTrips
 
   // One query for the counts rather than one per trip. Composite players are
   // synthetic scorecards, not people, so they are not part of a headcount.
@@ -70,19 +86,31 @@ export default async function AdminTripsPage() {
   }
 
   const today = todayString(new Date())
-  const withEmail = trips.filter(t => t.lead_email).length
+  const withEmail = allTrips.filter(t => t.lead_email).length
 
   return (
-    <AdminShell active="trips" subtitle={`${trips.length} trips · ${withEmail} with an email`}>
+    <AdminShell active="trips" subtitle={`${allTrips.length} trips · ${withEmail} with an email`}>
       {error && (
         <p className="text-rust-deep text-sm mb-4">
           Could not load trips — refresh to try again.
         </p>
       )}
 
+      <form method="GET" className="mb-4">
+        <input
+          type="search"
+          name="q"
+          defaultValue={q}
+          placeholder="Search by name, code or email"
+          className="w-full sm:max-w-sm bg-surface border border-bark/25 rounded-xl px-4 py-3 text-ink placeholder:text-ink/65 focus:outline-none focus:border-accent transition-colors"
+        />
+      </form>
+
       {trips.length === 0 ? (
         <div className="border border-bark/12 rounded-xl py-16 text-center">
-          <p className="text-ink/65 text-sm">No trips yet.</p>
+          <p className="text-ink/65 text-sm">
+            {needle ? `Nothing matches “${q.trim()}”.` : 'No trips yet.'}
+          </p>
         </div>
       ) : (
         <>
@@ -105,7 +133,16 @@ export default async function AdminTripsPage() {
                   return (
                     <tr key={t.id} className="border-b border-bark/12 last:border-0">
                       <td className="px-4 py-3 font-[family-name:var(--font-display)] text-base">
-                        {t.name}
+                        {t.trip_code ? (
+                          <Link
+                            href={`/trip/${t.trip_code}`}
+                            className="hover:text-accent-deep transition-colors"
+                          >
+                            {t.name}
+                          </Link>
+                        ) : (
+                          t.name
+                        )}
                       </td>
                       <td className="px-4 py-3 tabular-nums text-accent">
                         {t.trip_code ?? '—'}
@@ -139,7 +176,13 @@ export default async function AdminTripsPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-[family-name:var(--font-display)] text-base leading-tight truncate">
-                        {t.name}
+                        {t.trip_code ? (
+                          <Link href={`/trip/${t.trip_code}`} className="hover:text-accent-deep transition-colors">
+                            {t.name}
+                          </Link>
+                        ) : (
+                          t.name
+                        )}
                       </p>
                       <p className="text-accent text-[13px] tabular-nums mt-0.5">
                         {t.trip_code ?? 'no code'}
