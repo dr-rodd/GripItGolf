@@ -2,7 +2,38 @@
 
 ## Admin overview
 
-`/admin/trips` lists every trip on the platform, newest first: name, code, created date, lead email, player count and status. View only, linked from nowhere, `noindex`. You reach it by typing the URL.
+`/admin` is the owner's back office: three sections under one shell
+(`app/admin/AdminShell.tsx`), linked from nowhere, `noindex`, reached by
+typing the URL. Every page gates itself with `requireAdmin()`
+(`app/admin/adminGate.ts` — the only reader of the cookie) and every server
+action re-verifies before mutating; `scripts/test-admin-pages.ts` checks both
+structurally. All reads and writes use the service-role client, so the area
+keeps working when row-level security lands.
+
+- **Trips** (`/admin/trips`) — every trip, newest first: name (linking to its
+  hub), code, created date, lead email, player count, status. Searchable by
+  name, code or email. Each row carries a Delete behind a retype-the-code
+  confirmation — `lib/tripDelete.ts` clears the schema's `ON DELETE RESTRICT`
+  guards in order (composite scorecards, tee times, scoring sessions, rounds,
+  any trip course's tees) before the trips cascade takes the rest.
+- **Live cards** (`/admin/live`) — every scoring session with trip, round,
+  course, players, holes entered and last activity. Stale cards are flagged
+  with the nightly job's own verdict (`lib/adminLive.ts` wraps
+  `lib/staleLive.ts`, so page and job cannot disagree). Two levers: **Close**
+  keeps the scores — exactly the nightly close, status and nothing else — and
+  **Void** erases them through `lib/scorecardVoid.ts` behind a two-step
+  confirmation. Closed cards stay listed for 48 hours, the same window in
+  which their rows remain rescuable.
+- **Courses** (`/admin/courses`) — the platform course list, searchable with
+  the picker's own folding. Each course opens an editor: name, county and
+  website under `lib/courseDirectory.ts`'s rules (the slug is never
+  regenerated on a rename), tees editable and addable within the card check's
+  ranges, and `card_verified` flippable by hand. The card itself — pars and
+  stroke indexes — is shown read-only: the scorecard photo check stays the
+  only writer of holes.
+
+The nightly `/api/cleanup` is unchanged and still the automatic path; the
+live cards page is the manual one, for the glitch that cannot wait for 03:00.
 
 **The lock is server-side, unlike `lib/passcode.ts`.** That distinction matters and should not be collapsed:
 
@@ -21,7 +52,7 @@ Still a shared password: no per-user accounts, no audit trail, no way to revoke 
 
 `trips.lead_email` (migration 020) is nullable and optional, asked once on the creation form. **It must never block trip creation** — blank, half-typed and malformed all normalise to `null` and the trip is created regardless. `lib/email.ts` is a reader, not a validator: it either recognises an address or returns null. The column carries a shape check as a guard against hand-written rows, not as validation.
 
-Never shown to other players. Only surfaced on `/admin/trips`.
+Never shown to other players. Only surfaced on `/admin/trips`, and searched there.
 
 ## Returning players
 

@@ -87,7 +87,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `/trip/[tripCode]/leaderboard` | Leaderboard tabs |
 | `/dashboard` | Lead player's trip list (future — post auth) |
 | `/dashboard/create` | Trip creation wizard |
-| `/admin/trips` | Owner-only, unlinked, password-gated |
+| `/admin` | Owner-only, unlinked, password-gated. Three sections: trips (search, delete), live cards (close/void a hung scorecard), courses (edit names, counties, tees; card read-only) — `docs/features.md` |
 
 ## Key files
 

@@ -24,6 +24,8 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:leaderboard` | Every board, live vs finalised, score ownership, per-board rules, two team boards on two sheets, the per-player live dot, the over/under colour rule, and old trips read through the shim |
 | `test:recognition` | The per-trip cookie, the personal summary, the greeting |
 | `test:admin` | Optional email, derived trip status, admin session signing |
+| `test:admin-pages` | Structural: every admin page gates before fetching, every action re-verifies, service-role client only, course editor imports the shared validation, trip delete clears the RESTRICTs in order, the Donegal settings page stays deleted |
+| `test:admin-live` | The live cards summary agrees with the nightly job card for card, counts holes per card not per round, and orders the hung one first |
 | `test:support` | The donation link, and that it vanishes when unconfigured |
 | `test:live-scores` | Reconciling a part-entered card with what was saved, so a partial one cannot erase a full one |
 | `test:stats` | Putts and fairways: that `scores` and `live_scores` constrain them identically, that every writer and every read-back carries both, and that the control asks for them without ever holding up the next hole |
