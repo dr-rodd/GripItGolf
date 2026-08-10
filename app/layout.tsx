@@ -30,6 +30,16 @@ export const metadata: Metadata = {
   title: "green dot.",
   description:
     "Your handicap is the best 8 of your last 20. Live scoring, leaderboards and matchplay for your golf trip.",
+  // The install layer's Apple half — the manifest (app/manifest.ts) covers
+  // everyone else. `title` is the label under the home-screen icon.
+  // statusBarStyle stays "default": dark text, readable over the cream
+  // background. "black-translucent" turns the text white — invisible on
+  // #F6F4F0.
+  appleWebApp: {
+    capable: true,
+    title: "green dot.",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {

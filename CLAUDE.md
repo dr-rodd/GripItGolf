@@ -52,6 +52,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `docs/features.md` | Admin overview, lead player email, returning-player cookie, support link, itinerary, trip lifecycle |
 | `docs/testing-and-data.md` | The test suites, how much checking a change is worth, insertion order, background jobs |
 | `docs/gotchas-and-debt.md` | Past incidents, refactor discipline, security debt, multi-year architecture note |
+| `docs/ios-app.md` | The home-screen install layer (manifest, generated icons, standalone quirks), how players install, and the deferred App Store route |
 
 ## Platform concept
 
@@ -60,6 +61,10 @@ Don't read these up front. Open the matching file when the task actually touches
 - Other players join by entering the trip code at `/join`
 - All trip data is scoped by `trip_id` — no data leaks between trips
 - No auth gate yet — trip code is the only access control
+- **Installable as a home-screen app** — manifest + icons generated at build
+  from `lib/iconTile.tsx`, no service worker, App Store deliberately
+  deferred: `docs/ios-app.md`. The installed app has its own cookie jar, so
+  a player claims their name once more on first launch
 - **Anyone can add a course** from the course picker. Courses are shared
   platform rows (`trip_id IS NULL`), so an addition is for everyone. A new
   course has no holes and `card_verified = false` until a scorecard photo is
