@@ -102,24 +102,32 @@ export function toItemRow(tripId: string, item: ItineraryItem): ItemRow {
 }
 
 /**
- * Whether saving `after` over `before` would touch golf at all — a new golf
- * item, a removed one, or an existing one moved to a different course or day.
+ * Whether saving `after` over `before` would remove a locked golf item or
+ * move it to a different course or day.
  *
- * The editor already refuses to produce a draft like this once golf is
- * locked; this is the check the write path itself makes before it acts, so
- * a save cannot slip through on a stale screen no matter what the UI showed.
+ * A golf item is locked because its round has real data under it — scores,
+ * or a card open right now — and deleting or re-coursing it would orphan
+ * them. That is a fact about *that round*, not about the trip: adding a new
+ * round mid-trip is always fine, and so is editing one nobody has played.
+ *
+ * The editor already refuses to produce a draft like this for a locked
+ * item; this is the check the write path itself makes before it acts, so a
+ * save cannot slip through on a stale screen no matter what the UI showed.
  */
-export function touchesGolf(
+export function touchesLockedGolf(
   before: readonly ItineraryItem[],
   after: readonly ItineraryItem[],
+  lockedIds: ReadonlySet<string>,
 ): boolean {
   const diff = diffItems(before, after)
   const beforeById = new Map(before.map(i => [i.id, i]))
 
-  if (diff.toInsert.some(i => i.kind === 'golf')) return true
-  if (diff.toDelete.some(id => beforeById.get(id)?.kind === 'golf')) return true
+  if (diff.toDelete.some(id => lockedIds.has(id) && beforeById.get(id)?.kind === 'golf')) {
+    return true
+  }
 
   return diff.toUpdate.some(item => {
+    if (!lockedIds.has(item.id)) return false
     const was = beforeById.get(item.id)
     return was?.kind === 'golf'
       && (was.courseId !== item.courseId || was.dayIndex !== item.dayIndex)

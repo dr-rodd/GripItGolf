@@ -159,7 +159,7 @@ export default function TripSetupClient({
   rounds,
   itinerary,
   courses,
-  canEditGolf,
+  lockedGolfItemIds,
 }: {
   trip: Trip
   teams: Team[]
@@ -173,12 +173,12 @@ export default function TripSetupClient({
   /** The platform course list, for the golf sheet inside the editor. */
   courses: Course[]
   /**
-   * Whether golf can be edited at all. False once any round on the trip has
-   * a score or a live session recorded — a course change would orphan real
-   * data, so the editor locks golf rather than risk it. Stays and journeys
-   * are unaffected either way.
+   * Golf items whose round already has a score or a live session recorded.
+   * The editor locks exactly those — a course change would orphan real data
+   * — and leaves everything else open, adding new golf included. Stays and
+   * journeys are unaffected either way.
    */
-  canEditGolf: boolean
+  lockedGolfItemIds: string[]
 }) {
   // Trip fields
   const [name, setName] = useState(trip.name)
@@ -710,7 +710,7 @@ export default function TripSetupClient({
           endDate={endDate || null}
           courses={courses}
           initialItems={itinerary}
-          canEditGolf={canEditGolf}
+          lockedGolfItemIds={lockedGolfItemIds}
           players={players}
           onClose={() => setItineraryOpen(false)}
         />

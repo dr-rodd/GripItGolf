@@ -254,7 +254,7 @@ function Sheet({
 
 export default function ItineraryBuilder({
   startDate, endDate, courses, items, onChange, onContinue, blockedReason = null,
-  lockGolf = false, continueLabel = 'Proceed to Add Players',
+  lockedGolfIds, continueLabel = 'Proceed to Add Players',
 }: {
   startDate: string | null
   endDate: string | null
@@ -272,17 +272,17 @@ export default function ItineraryBuilder({
    */
   continueLabel?: string
   /**
-   * Golf cannot be added, moved or removed — only stays and journeys can.
+   * Golf items whose round already has a score or a card open on it.
    *
-   * Used when the trip already has scores recorded somewhere: a course
-   * change would orphan real data, so editing golf at all is what has to be
-   * refused rather than any single edit. The golf tiles still show, so the
-   * running order still reads as a whole — they simply carry no remove
-   * button and cannot be dragged.
+   * Those tiles cannot be moved or removed — a course change would orphan
+   * real data — so they carry no remove button and refuse a drag. The lock
+   * is per round, not per trip: golf nobody has played is still editable,
+   * and new golf can be added at any point, mid-trip included.
    */
-  lockGolf?: boolean
+  lockedGolfIds?: readonly string[]
 }) {
   const days = dayCount(startDate, endDate)
+  const locked = useMemo(() => new Set(lockedGolfIds ?? []), [lockedGolfIds])
   const [openDay, setOpenDay] = useState(0)
   const [sheet, setSheet] = useState<ItemKind | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -422,12 +422,12 @@ export default function ItineraryBuilder({
           forward under them, and the home indicator below that. */}
       <div className="pb-48">
 
-        {lockGolf && (
+        {locked.size > 0 && (
           <div className="flex items-start gap-3 px-4 py-3 mb-4 bg-accent/10 border border-accent/40 rounded-xl">
             <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0" />
             <p className="text-accent text-[13px] leading-snug">
-              Scores already exist on this trip, so rounds are locked. Everything else —
-              stays, journeys and activities — can still be added, moved or removed.
+              Rounds with scores are locked and stay where they are. New golf,
+              stays, journeys and activities can still be added.
             </p>
           </div>
         )}
@@ -476,7 +476,7 @@ export default function ItineraryBuilder({
                 item={item}
                 courseName={courseName(item.courseId)}
                 onRemove={() => onChange(removeItem(items, item.id))}
-                locked={lockGolf && item.kind === 'golf'}
+                locked={locked.has(item.id) && item.kind === 'golf'}
               />
             ))}
           </div>
@@ -505,14 +505,12 @@ export default function ItineraryBuilder({
           <div className="grid grid-cols-4 gap-2">
             {KINDS.map(kind => {
               const Icon = KIND_ICON[kind]
-              const disabled = lockGolf && kind === 'golf'
               return (
                 <button
                   key={kind}
                   type="button"
-                  disabled={disabled}
                   onClick={() => openSheet(kind)}
-                  className="flex flex-col items-center justify-center gap-1.5 min-h-[64px] rounded-xl border border-bark/25 bg-surface text-ink hover:border-accent transition-colors duration-150 disabled:opacity-30 disabled:hover:border-bark/25 disabled:cursor-not-allowed"
+                  className="flex flex-col items-center justify-center gap-1.5 min-h-[64px] rounded-xl border border-bark/25 bg-surface text-ink hover:border-accent transition-colors duration-150"
                 >
                   <span className="flex items-center gap-1 text-accent">
                     <IconPlus size={14} /><Icon size={18} />

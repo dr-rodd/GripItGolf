@@ -48,12 +48,12 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         // deliberately does not cover either. All three agree now.
         .eq('is_composite', false)
         .order('created_at'),
-      // Ids only. The number and the course were for the read-only round
-      // list this screen used to print; what is left needs neither. Still
+      // The item id rides along so a round with scores can lock its own
+      // golf tile in the itinerary editor — and only its own. Still
       // ordered, so the ids arrive in playing order for anything that cares.
       supabase
         .from('rounds')
-        .select('id')
+        .select('id, itinerary_item_id')
         .eq('trip_id', trip.id)
         .order('round_number'),
       fetchMemberships(trip.id),
@@ -94,19 +94,28 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       activityName: r.activity_name, activityTime: r.activity_time,
     }))
 
-  // Golf can only be edited while nothing has been scored yet — a course
-  // change would orphan real data. The check is against the scores
-  // themselves, which is now the only thing that locks anything on this
-  // screen: a trip has no draft and no live, and everything else here stays
-  // editable for as long as the trip does.
+  // A round locks its own golf item once it has a score or a card open on
+  // it — a course change would orphan real data. Per round, not per trip:
+  // rounds nobody has played stay editable, and new golf can be added at
+  // any point, which is how an impromptu game mid-trip gets its round. The
+  // check is against the scores themselves — a trip has no draft and no
+  // live, and everything else on this screen stays editable for as long as
+  // the trip does.
   const roundIds = rounds.map(r => r.id)
-  const [scoresRes, liveRoundsRes] = roundIds.length > 0
+  const [scoredRes, liveRes] = roundIds.length > 0
     ? await Promise.all([
-        supabase.from('scores').select('id', { count: 'exact', head: true }).in('round_id', roundIds),
-        supabase.from('live_rounds').select('id', { count: 'exact', head: true }).in('round_id', roundIds),
+        supabase.from('scores').select('round_id').in('round_id', roundIds),
+        supabase.from('live_rounds').select('round_id').in('round_id', roundIds),
       ])
-    : [{ count: 0, error: null }, { count: 0, error: null }]
-  const canEditGolf = (scoresRes.count ?? 0) === 0 && (liveRoundsRes.count ?? 0) === 0
+    : [{ data: [], error: null }, { data: [], error: null }]
+  if (scoredRes.error) console.error('TripSetupPage scores query failed:', scoredRes.error)
+  if (liveRes.error) console.error('TripSetupPage live rounds query failed:', liveRes.error)
+  const lockedRoundIds = new Set(
+    [...(scoredRes.data ?? []), ...(liveRes.data ?? [])].map(r => r.round_id as string)
+  )
+  const lockedGolfItemIds = rounds
+    .filter(r => lockedRoundIds.has(r.id) && r.itinerary_item_id)
+    .map(r => r.itinerary_item_id as string)
 
   const settings = (
     <TripSetupClient
@@ -132,7 +141,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       rounds={rounds.map(r => ({ id: r.id }))}
       itinerary={itinerary}
       courses={platformCoursesResult.data ?? []}
-      canEditGolf={canEditGolf}
+      lockedGolfItemIds={lockedGolfItemIds}
     />
   )
 

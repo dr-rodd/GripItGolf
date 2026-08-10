@@ -20,7 +20,7 @@ import {
   addStay, nightsAvailable,
   MAX_TEE_TIMES, MAX_NIGHTS, MAX_ACTIVITY_NAME,
 } from '../lib/itinerary'
-import { isTempId, diffItems, toItemRow, touchesGolf } from '../lib/itinerarySync'
+import { isTempId, diffItems, toItemRow, touchesLockedGolf } from '../lib/itinerarySync'
 import fs from 'fs'
 
 let passed = 0, failed = 0
@@ -412,24 +412,35 @@ section('A row is only ever one kind of thing')
   eq(toItemRow('trip-1', golf).id, 'g1', 'unchanged')
 }
 
-section('Whether a save would touch golf at all')
+section('Whether a save would touch a locked round')
 {
   const golf: ItineraryItem = { id: 'g1', dayIndex: 0, position: 0, kind: 'golf', courseId: 'c1', teeCount: 1 }
   const stay: ItineraryItem = { id: 's1', dayIndex: 1, position: 0, kind: 'stay', stayName: 'Inn' }
   const before = [golf, stay]
+  const locked = new Set(['g1'])
 
-  ok(!touchesGolf(before, before), 'nothing changed touches nothing')
-  ok(!touchesGolf(before, [golf, { ...stay, stayName: 'A different inn' }]),
+  ok(!touchesLockedGolf(before, before, locked), 'nothing changed touches nothing')
+  ok(!touchesLockedGolf(before, [golf, { ...stay, stayName: 'A different inn' }], locked),
     'a stay changing on its own does not')
 
-  ok(touchesGolf(before, [{ ...golf, courseId: 'c2' }, stay]), 'a different course does')
-  ok(touchesGolf(before, [{ ...golf, dayIndex: 1 }, stay]), 'moving golf to another day does')
-  ok(!touchesGolf(before, [{ ...golf, teeTime: '09:00' }, stay]),
+  ok(touchesLockedGolf(before, [{ ...golf, courseId: 'c2' }, stay], locked),
+    'a different course on a locked round does')
+  ok(touchesLockedGolf(before, [{ ...golf, dayIndex: 1 }, stay], locked),
+    'moving a locked round to another day does')
+  ok(!touchesLockedGolf(before, [{ ...golf, teeTime: '09:00' }, stay], locked),
     'but a tee time on its own does not — no round column holds it')
 
+  // The lock is per round, not per trip. A round nobody has played is still
+  // fully editable however many others have scores against them.
+  ok(!touchesLockedGolf(before, [{ ...golf, courseId: 'c2' }, stay], new Set<string>()),
+    'an unlocked round can change course')
+  ok(!touchesLockedGolf(before, [stay], new Set<string>()),
+    'and be removed')
+
   const newGolf: ItineraryItem = { id: 'tmp-1', dayIndex: 1, position: 1, kind: 'golf', courseId: 'c3', teeCount: 1 }
-  ok(touchesGolf(before, [...before, newGolf]), 'adding a round does')
-  ok(touchesGolf(before, [stay]), 'and removing one does')
+  ok(!touchesLockedGolf(before, [...before, newGolf], locked),
+    'adding a round is always allowed — an impromptu game mid-trip is the point')
+  ok(touchesLockedGolf(before, [stay], locked), 'removing a locked round is not')
 
   // The point of the golf lock: a trip with scores can still have its dinner
   // booked. If adding an activity counted as touching golf, the editor would
@@ -439,8 +450,8 @@ section('Whether a save would touch golf at all')
     id: 'tmp-9', dayIndex: 0, position: 2, kind: 'activity',
     activityName: 'Dinner', activityTime: '19:00',
   }
-  ok(!touchesGolf(before, [...before, dinner]), 'adding an activity does not')
-  ok(!touchesGolf([...before, dinner], before), 'nor does removing one')
+  ok(!touchesLockedGolf(before, [...before, dinner], locked), 'adding an activity does not')
+  ok(!touchesLockedGolf([...before, dinner], before, locked), 'nor does removing one')
 }
 
 // ─── Activities ────────────────────────────────────────────────

@@ -5,14 +5,15 @@
 // like. This is the only place that talks to Supabase about it.
 //
 // Golf items are the source of truth for `rounds` (see migration 021), so
-// editing one after the trip has scores would edit a round with real data
-// under it. The caller keeps golf locked in the editor once that is true —
-// `saveItinerary` refuses anyway, so a stale screen cannot slip a change
-// through underneath that guard.
+// editing one whose round has scores would edit real data out from under
+// it. The lock is per round, not per trip: the caller locks exactly those
+// items in the editor, and `saveItinerary` refuses anyway, so a stale
+// screen cannot slip a change through underneath that guard. Adding a
+// round mid-trip is always allowed — an impromptu game is still golf.
 
 import { supabase } from '@/lib/supabase'
 import { golfItems, dateForDay, type ItineraryItem } from './itinerary'
-import { diffItems, toItemRow, touchesGolf, isTempId } from './itinerarySync'
+import { diffItems, toItemRow, touchesLockedGolf, isTempId } from './itinerarySync'
 
 export type SaveResult = { ok: true } | { ok: false; error: string }
 
@@ -29,17 +30,22 @@ const FAIL = 'Could not save the itinerary — try again.'
  * sequence of separate UPDATEs would not have been safe here.
  */
 export async function saveItinerary({
-  tripId, startDate, before, after, canEditGolf, players,
+  tripId, startDate, before, after, lockedGolfItemIds, players,
 }: {
   tripId: string
   startDate: string | null
   before: ItineraryItem[]
   after: ItineraryItem[]
-  canEditGolf: boolean
+  /**
+   * Golf items whose round already has a score or a card open on it.
+   * These cannot be removed or moved to another course or day — the data
+   * under them is real. Everything else, including adding golf, is open.
+   */
+  lockedGolfItemIds: readonly string[]
   players: { id: string; handicap: number | null }[]
 }): Promise<SaveResult> {
-  if (!canEditGolf && touchesGolf(before, after)) {
-    return { ok: false, error: 'Rounds cannot be changed — this trip already has scores.' }
+  if (touchesLockedGolf(before, after, new Set(lockedGolfItemIds))) {
+    return { ok: false, error: 'A round with scores recorded cannot be changed or removed.' }
   }
 
   const diff = diffItems(before, after)
@@ -65,8 +71,6 @@ export async function saveItinerary({
     if (error || !data) return { ok: false, error: FAIL }
     inserted = data
   }
-
-  if (!canEditGolf) return { ok: true }
 
   // Golf items now carry real ids — the ones that were already real, plus
   // the just-inserted ones matched back by the slot they landed in.
@@ -112,10 +116,10 @@ export async function saveItinerary({
 /**
  * Delete the rounds these golf items made — but never one with real data.
  *
- * `canEditGolf` should already guarantee the trip has no scores anywhere,
- * but that was true when the editor opened, not necessarily now: this is the
- * check that runs at the moment of the write, against whoever might have
- * started a card on another device in between.
+ * The locked-item guard should already have refused any of these that had
+ * scores, but the lock was computed when the editor opened, not necessarily
+ * now: this is the check that runs at the moment of the write, against
+ * whoever might have started a card on another device in between.
  */
 async function removeRounds(tripId: string, itemIds: string[]): Promise<SaveResult> {
   const { data: rounds, error: findError } = await supabase

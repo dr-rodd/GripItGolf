@@ -41,7 +41,7 @@ type Course = DirectoryCourse
  * out is the X, not the nav underneath.
  */
 export default function ItineraryEditor({
-  tripId, startDate, endDate, courses, initialItems, canEditGolf, players, onClose,
+  tripId, startDate, endDate, courses, initialItems, lockedGolfItemIds, players, onClose,
 }: {
   tripId: string
   startDate: string | null
@@ -49,11 +49,12 @@ export default function ItineraryEditor({
   courses: Course[]
   initialItems: ItineraryItem[]
   /**
-   * Whether golf can be touched at all. False once the trip has scores
-   * anywhere — a course change would orphan them, so editing golf itself is
-   * what has to be refused rather than any single edit.
+   * Golf items whose round already has a score or a card open on it. Those
+   * cannot be removed or moved — the data under them is real. Adding new
+   * golf, and editing rounds nobody has played, stays open for the whole
+   * trip: an impromptu round is the point of being able to.
    */
-  canEditGolf: boolean
+  lockedGolfItemIds: string[]
   players: { id: string; handicap: number | null }[]
   onClose: () => void
 }) {
@@ -69,7 +70,7 @@ export default function ItineraryEditor({
     setSaving(true)
     setError('')
     const result = await saveItinerary({
-      tripId, startDate, before, after: items, canEditGolf, players,
+      tripId, startDate, before, after: items, lockedGolfItemIds, players,
     })
     setSaving(false)
     if (!result.ok) {
@@ -118,7 +119,7 @@ export default function ItineraryEditor({
           items={items}
           onChange={setItems}
           onContinue={save}
-          lockGolf={!canEditGolf}
+          lockedGolfIds={lockedGolfItemIds}
           continueLabel={saving ? 'Saving…' : 'Done'}
         />
       </div>

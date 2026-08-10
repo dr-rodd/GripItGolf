@@ -1689,12 +1689,13 @@ section('Nothing has to be finalised before it can be played')
   ok(!/setup_status/.test(status), 'a trip is placed by its dates alone')
   ok(!/'draft'/.test(status), 'with no state that outranks them')
 
-  // The one thing that does still lock: golf structure, once scores exist.
-  // A course change would orphan real data, which no flag was ever needed to
-  // know.
+  // The one thing that does still lock: a round's golf item, once that
+  // round has scores. A course change would orphan real data, which no flag
+  // was ever needed to know. Per round, not per trip — the rest of the golf
+  // stays editable and new rounds can be added mid-trip.
   const page = stripComments(read('app/trip/[tripCode]/setup/page.tsx'))
-  ok(/canEditGolf = \(scoresRes\.count \?\? 0\) === 0/.test(page),
-    'rounds and courses still lock once anything has been scored')
+  ok(/lockedRoundIds\.has\(r\.id\) && r\.itinerary_item_id/.test(page),
+    'a round with scores locks its own golf item, and only its own')
 }
 
 // ─── The hole you are on ───────────────────────────────────────
