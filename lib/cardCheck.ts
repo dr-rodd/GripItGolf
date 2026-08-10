@@ -493,7 +493,12 @@ const HOLE_COLUMN_RANGE: Record<string, [number, number]> = {
   ...Object.fromEntries(YARDAGE_TEES.map(t => [`yardage_${t}`, [60, 700]])),
 }
 
-const TEE_COLUMN_RANGE: Record<string, [number, number]> = {
+/**
+ * What a tee's numbers are allowed to be. Exported because the add-course
+ * form asks for the same three figures — one set of ranges, or the form
+ * would accept a slope the card check refuses.
+ */
+export const TEE_COLUMN_RANGE: Record<'par' | 'course_rating' | 'slope', [number, number]> = {
   par: [60, 80],
   course_rating: [55, 85],
   slope: [55, 155],
@@ -511,6 +516,150 @@ const withinRanges = (
     if (integersOnly && column !== 'course_rating' && !Number.isInteger(value)) return false
     return value >= range[0] && value <= range[1]
   })
+
+// ─── A course with no card at all ─────────────────────────────
+//
+// A user-added course arrives with no holes: pars and stroke indices only
+// ever come from a scorecard, and until one is photographed there is
+// nothing to score against. The first trusted photo does not diff — it
+// *becomes* the card. Same validation gate as a diff, then the extraction
+// turns into insertable rows here, and the apply route re-checks them off
+// the wire before writing.
+
+/** A `holes` row ready for insert — everything but `course_id`. */
+export type NewHoleRow = {
+  hole_number: number
+  par: number
+  stroke_index: number
+  par_ladies: number | null
+  stroke_index_ladies: number | null
+} & Partial<Record<`yardage_${(typeof YARDAGE_TEES)[number]}`, number>>
+
+/** A `tees` row ready for insert — everything but `course_id`. */
+export type NewTeeRow = {
+  name: string
+  gender: 'M' | 'F'
+  par: number
+  course_rating: number
+  slope: number
+}
+
+export type NewCard = {
+  holes: NewHoleRow[]
+  tees: NewTeeRow[]
+  /** Tees the photo showed but printed no rating for — reported, never written. */
+  skippedTees: string[]
+}
+
+/**
+ * A validated extraction as the rows a card-less course needs.
+ *
+ * Holes carry everything the photo read. Tees are stricter: the table
+ * requires par, course rating and slope, so a tee whose ratings the card
+ * does not print is reported in `skippedTees` rather than written half
+ * empty — the add-course form or a later photo can supply it. A missing
+ * printed tee par falls back to that gender's hole total, the same rule
+ * `diffCard` applies.
+ */
+export function newCourseRows(card: ExtractedCard): NewCard {
+  const hasLadiesPar = card.holes.every(h => h.parLadies != null)
+  const hasLadiesSI = card.holes.every(h => h.strokeIndexLadies != null)
+
+  const holes: NewHoleRow[] = card.holes.map(h => {
+    const row: NewHoleRow = {
+      hole_number: h.number,
+      par: h.par,
+      stroke_index: h.strokeIndex,
+      par_ladies: hasLadiesPar ? h.parLadies : null,
+      stroke_index_ladies: hasLadiesSI ? h.strokeIndexLadies : null,
+    }
+    for (const tee of YARDAGE_TEES) {
+      const yards = h.yardages[tee]
+      if (yards != null) row[`yardage_${tee}`] = yards
+    }
+    return row
+  })
+
+  const menTotal = card.holes.reduce((s, h) => s + h.par, 0)
+  const ladiesTotal = hasLadiesPar
+    ? card.holes.reduce((s, h) => s + h.parLadies!, 0)
+    : null
+
+  const tees: NewTeeRow[] = []
+  const skippedTees: string[] = []
+  const seen = new Set<string>()
+  for (const t of card.tees) {
+    const key = `${t.name.toLowerCase()}:${t.gender}`
+    if (!t.name || seen.has(key)) continue
+    seen.add(key)
+    const par = t.par ?? (t.gender === 'F' ? ladiesTotal ?? menTotal : menTotal)
+    if (t.courseRating == null || t.slope == null) {
+      skippedTees.push(`${t.name} (${t.gender === 'F' ? 'ladies' : 'men'})`)
+      continue
+    }
+    tees.push({
+      name: t.name,
+      gender: t.gender,
+      par,
+      course_rating: t.courseRating,
+      slope: t.slope,
+    })
+  }
+
+  return { holes, tees, skippedTees }
+}
+
+/**
+ * Every reason a set of new-card hole rows off the wire cannot be written.
+ * Empty means writable. The apply route runs this — the client already saw
+ * a validated card, but what arrives is what was sent, not what was shown.
+ */
+export function validateNewHoleRows(rows: unknown[]): string[] {
+  if (rows.length !== 18) return [`A card is 18 holes — got ${rows.length}.`]
+  const holes = rows as NewHoleRow[]
+  for (let i = 0; i < 18; i++) {
+    const h = holes[i]
+    if (typeof h !== 'object' || h === null || h.hole_number !== i + 1) {
+      return ['The hole numbers do not run 1 to 18.']
+    }
+    const extras = Object.keys(h).filter(k =>
+      !['hole_number', 'par', 'stroke_index', 'par_ladies', 'stroke_index_ladies'].includes(k) &&
+      !(YARDAGE_TEES as readonly string[]).includes(k.replace(/^yardage_/, '')),
+    )
+    if (extras.length > 0) return ['The card carries a column this check does not write.']
+  }
+  const problems: string[] = []
+  const badPar = holes.filter(h => !Number.isInteger(h.par) || h.par < 3 || h.par > 6)
+  if (badPar.length > 0) problems.push('A par is outside 3 to 6.')
+  if (!isPermutation(holes.map(h => h.stroke_index))) {
+    problems.push('The stroke indices do not make a full set of 1 to 18.')
+  }
+  const ladiesPars = holes.filter(h => h.par_ladies != null)
+  if (ladiesPars.length > 0 && ladiesPars.length < 18) {
+    problems.push('The ladies par is only on some holes — it is all or nothing.')
+  }
+  if (ladiesPars.length === 18 &&
+      holes.some(h => !Number.isInteger(h.par_ladies) || h.par_ladies! < 3 || h.par_ladies! > 6)) {
+    problems.push('A ladies par is outside 3 to 6.')
+  }
+  const ladiesSIs = holes.filter(h => h.stroke_index_ladies != null)
+  if (ladiesSIs.length > 0 && ladiesSIs.length < 18) {
+    problems.push('The ladies stroke index is only on some holes — it is all or nothing.')
+  }
+  if (ladiesSIs.length === 18 && !isPermutation(holes.map(h => h.stroke_index_ladies!))) {
+    problems.push('The ladies stroke indices do not make a full set of 1 to 18.')
+  }
+  for (const h of holes) {
+    for (const tee of YARDAGE_TEES) {
+      const yards = h[`yardage_${tee}`]
+      if (yards === undefined) continue
+      if (!Number.isInteger(yards) || yards! < 60 || yards! > 700) {
+        problems.push(`The ${tee} yardage on hole ${h.hole_number} cannot be right.`)
+      }
+    }
+  }
+  return problems
+}
 
 /** Whether an update payload off the wire is shaped and ranged like one this module built. */
 export function validHoleUpdate(u: unknown): u is HoleUpdate {

@@ -67,7 +67,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         .order('position'),
       // The picker inside the itinerary editor offers the same list trip
       // creation does — platform courses only, never another trip's own.
-      supabase.from('courses').select('id, name, location').is('trip_id', null).order('name'),
+      supabase.from('courses').select('id, name, location, website, card_verified').is('trip_id', null).order('name'),
     ])
 
   if (teamsResult.error) console.error('TripSetupPage teams query failed:', teamsResult.error)

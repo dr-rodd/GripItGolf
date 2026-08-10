@@ -20,10 +20,11 @@ import {
 import { parseHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
 import HandicapField from '@/app/components/HandicapField'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
+import type { DirectoryCourse } from '@/lib/courseDirectory'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
-type Course = { id: string; name: string }
+type Course = DirectoryCourse
 type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F' }
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -84,7 +85,7 @@ export default function CreateTripForm() {
     let live = true
     supabase
       .from('courses')
-      .select('id, name')
+      .select('id, name, location, website, card_verified')
       .is('trip_id', null)
       .order('name')
       .then(({ data }) => {
@@ -574,10 +575,13 @@ export default function CreateTripForm() {
         {step === 2 && (
           <div>
             {/* Only once we know: an empty list mid-fetch is not a problem
-                worth reporting. */}
+                worth reporting. An empty list *after* the fetch means the
+                query failed — the directory always has courses — and the
+                picker still works: its add form does not need the list. */}
             {coursesLoaded && courses.length === 0 && (
               <div className="p-4 bg-surface border border-bark/12 rounded-xl text-ink/65 text-sm text-center mb-4">
-                Adding new courses is coming soon.
+                The course list could not be loaded — a course can still be
+                added by name from the picker.
               </div>
             )}
             <ItineraryBuilder

@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   DndContext, DragEndEvent, DragStartEvent, DragOverlay,
   type DropAnimation, defaultDropAnimationSideEffects,
@@ -17,9 +17,11 @@ import {
   describeDay, describeItem, itemError, nightsAvailable,
 } from '@/lib/itinerary'
 import {
-  IconFlag, IconHome, IconArrowRight, IconFork, IconPlus, IconX, IconChevronDown,
+  IconFlag, IconHome, IconArrowRight, IconFork, IconPlus, IconX,
 } from './icons'
 import { FIELD, FIELD_LABEL, buttonClass, Badge } from './ui'
+import CourseSelect from './CourseSelect'
+import type { DirectoryCourse } from '@/lib/courseDirectory'
 
 /**
  * Building a trip's running order, a day at a time.
@@ -34,7 +36,7 @@ import { FIELD, FIELD_LABEL, buttonClass, Badge } from './ui'
  * (lib/itinerary.ts) is pure so the ordering can be tested without one.
  */
 
-type Course = { id: string; name: string; location?: string | null }
+type Course = DirectoryCourse
 
 const KIND_ICON = {
   golf: IconFlag,
@@ -306,8 +308,26 @@ export default function ItineraryBuilder({
     useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
   )
 
+  /**
+   * Courses added from the picker mid-build. They live here rather than in
+   * the caller's list because the caller fetched its list once, before this
+   * screen existed — and a course you just added has to be pickable *now*,
+   * not after a refetch. Upserted by id: adding fires once on creation and
+   * again if the scorecard confirms it, with the verified flag flipped.
+   */
+  const [addedCourses, setAddedCourses] = useState<Course[]>([])
+  const allCourses = useMemo(() => {
+    const known = new Set(courses.map(c => c.id))
+    return [...courses, ...addedCourses.filter(c => !known.has(c.id))]
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [courses, addedCourses])
+  const upsertCourse = (course: Course) =>
+    setAddedCourses(prev => prev.some(c => c.id === course.id)
+      ? prev.map(c => (c.id === course.id ? course : c))
+      : [...prev, course])
+
   const courseName = (id?: string | null) =>
-    courses.find(c => c.id === id)?.name ?? null
+    allCourses.find(c => c.id === id)?.name ?? null
 
   /**
    * A key for a tile that has not been saved yet.
@@ -530,25 +550,15 @@ export default function ItineraryBuilder({
       {sheet === 'golf' && (
         <Sheet title="Add golf" onClose={() => setSheet(null)} onAdd={commit} addLabel="Add golf" error={error}>
           <div>
-            <label className={FIELD_LABEL} htmlFor="it-course">Course</label>
-            <div className="relative">
-              <select
-                id="it-course"
-                value={courseId}
-                onChange={e => setCourseId(e.target.value)}
-                className={`${FIELD} appearance-none pr-10`}
-              >
-                <option value="">Choose a course</option>
-                {courses.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}{c.location ? ` — ${c.location}` : ''}
-                  </option>
-                ))}
-              </select>
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink/65">
-                <IconChevronDown size={16} />
-              </span>
-            </div>
+            <label className={FIELD_LABEL}>Course</label>
+            {/* Not a dropdown any more: the directory grew a search box, a
+                filter, and a door for courses it does not hold yet. */}
+            <CourseSelect
+              courses={allCourses}
+              value={courseId}
+              onChange={setCourseId}
+              onCourseAdded={upsertCourse}
+            />
           </div>
 
           {/* Full width, and stacked. Side by side, a native time control

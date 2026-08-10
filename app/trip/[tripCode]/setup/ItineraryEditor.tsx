@@ -7,8 +7,9 @@ import { saveItinerary } from '@/lib/itineraryStore'
 import ItineraryBuilder from '@/app/components/ItineraryBuilder'
 import { IconX } from '@/app/components/icons'
 import { buttonClass } from '@/app/components/ui'
+import type { DirectoryCourse } from '@/lib/courseDirectory'
 
-type Course = { id: string; name: string; location?: string | null }
+type Course = DirectoryCourse
 
 /**
  * Editing the running order after the trip already exists.

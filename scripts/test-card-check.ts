@@ -17,6 +17,7 @@
 import {
   normalizeCard, validateCard, diffCard, diffIsEmpty,
   holeUpdates, teeUpdates, validHoleUpdate, validTeeUpdate,
+  newCourseRows, validateNewHoleRows,
   EXTRACTION_PROMPT, YARDAGE_TEES,
   type ExtractedCard, type ExtractedHole, type StoredHole, type StoredTee,
 } from '../lib/cardCheck'
@@ -266,6 +267,56 @@ section('the apply guard refuses what the routes must never write')
   ok(!validTeeUpdate({ teeId: 't-blue', fields: { slope: 300 } }), 'a slope of 300 is refused')
   ok(validTeeUpdate({ teeId: 't-blue', fields: { course_rating: 71.4 } }), 'a fractional course rating is allowed — CR is decimal')
   ok(!validTeeUpdate({ teeId: '', fields: { slope: 125 } }), 'a blank tee id is refused')
+}
+
+// ─── A course with no card at all ──────────────────────────────
+
+section('newCourseRows — the first photo becomes the card')
+{
+  const holes = goodHoles().map((h, i) => ({
+    ...h,
+    yardages: (i === 0 ? { blue: 412 } : {}) as Record<string, number>,
+  }))
+  const { holes: rows, tees, skippedTees } = newCourseRows(goodCard({
+    holes,
+    tees: [
+      { name: 'Blue', gender: 'M', par: null, courseRating: 71.4, slope: 125 },
+      { name: 'Red', gender: 'F', par: 74, courseRating: 72.8, slope: 128 },
+      { name: 'White', gender: 'M', par: 72, courseRating: null, slope: 120 },
+      { name: 'Blue', gender: 'M', par: 70, courseRating: 70.0, slope: 118 },
+    ],
+  }))
+  eq(rows.length, 18, 'eighteen hole rows')
+  eq(rows[0].hole_number, 1, 'numbered from one')
+  eq(rows[0].par, PARS[0], 'pars carried over')
+  eq(rows[0].stroke_index, SIS[0], 'indices carried over')
+  eq(rows[0].yardage_blue, 412, 'a read yardage lands on its column')
+  ok(!('yardage_blue' in rows[1]), 'an unread yardage stays absent, not zero')
+  eq(rows[0].par_ladies, null, 'no ladies card, null ladies columns')
+
+  eq(tees.length, 2, 'only fully-rated tees become rows, first reading wins')
+  eq(tees[0], { name: 'Blue', gender: 'M', par: 72, course_rating: 71.4, slope: 125 },
+    'a tee with no printed par gets the hole total')
+  eq(tees[1].par, 74, 'a printed tee par is kept')
+  eq(skippedTees, ["White (men)"], 'a tee without ratings is reported, never written')
+
+  ok(validateNewHoleRows(rows as unknown[]).length === 0, 'what this module builds, its own guard accepts')
+}
+
+section('validateNewHoleRows — the create guard refuses a bad card off the wire')
+{
+  const good = newCourseRows(goodCard()).holes as unknown[]
+  ok(validateNewHoleRows(good.slice(0, 17)).length > 0, 'seventeen holes are refused')
+  const renumbered = (newCourseRows(goodCard()).holes).map(h => ({ ...h, hole_number: h.hole_number === 18 ? 1 : h.hole_number }))
+  ok(validateNewHoleRows(renumbered as unknown[]).length > 0, 'numbers off 1..18 are refused')
+  const badSi = (newCourseRows(goodCard()).holes).map(h => ({ ...h, stroke_index: 1 }))
+  ok(validateNewHoleRows(badSi as unknown[]).length > 0, 'a broken SI permutation is refused')
+  const smuggled = (newCourseRows(goodCard()).holes).map(h => ({ ...h, course_id: 'x' }))
+  ok(validateNewHoleRows(smuggled as unknown[]).length > 0, 'a smuggled extra column is refused')
+  const halfLadies = (newCourseRows(goodCard()).holes).map((h, i) => ({ ...h, par_ladies: i < 9 ? 4 : null }))
+  ok(validateNewHoleRows(halfLadies as unknown[]).length > 0, 'a half ladies card is refused')
+  const badYards = (newCourseRows(goodCard()).holes).map((h, i) => (i === 0 ? { ...h, yardage_blue: 9999 } : h))
+  ok(validateNewHoleRows(badYards as unknown[]).length > 0, 'an impossible yardage is refused')
 }
 
 // ─── The prompt holds its traps ────────────────────────────────

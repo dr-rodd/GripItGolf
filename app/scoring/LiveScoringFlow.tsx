@@ -482,8 +482,13 @@ export default function LiveScoringFlow({
       }
     })
 
+  // A user-added course has no holes until its first scorecard photo is
+  // confirmed — and scoring writes rows keyed by hole id, so without a card
+  // there is nothing to score against. The card check on this screen is the
+  // way in, not a nicety.
   const canStart = selectedPlayerIds.length >= 1 &&
-    selectedPlayerIds.every(id => !!playerTeeIds[id])
+    selectedPlayerIds.every(id => !!playerTeeIds[id]) &&
+    courseHoles.length > 0
 
   // Fetch players locked in other scorecards for this round (active OR finalised)
   // so they are hidden from the player picker. Finalised players must not be
@@ -1079,6 +1084,16 @@ export default function LiveScoringFlow({
               onCourseDataUpdated(newHoles as unknown as Hole[], newTees as unknown as Tee[])
             }
           />
+        )}
+
+        {/* A course added to the platform arrives without a card — pars and
+            indices only ever come from a scorecard. Until one is
+            photographed and confirmed above, there is nothing to score. */}
+        {courseHoles.length === 0 && (
+          <p className="text-rust-deep text-sm leading-snug">
+            This course has no scorecard recorded yet. Photograph the printed
+            card above to set it up — scoring opens the moment it is saved.
+          </p>
         )}
 
         <div className="flex flex-col gap-3">

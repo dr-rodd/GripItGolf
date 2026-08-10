@@ -12,7 +12,7 @@
 // photo always wins.
 
 import React, { useRef, useState } from "react"
-import type { CardDiff, HoleChange } from "@/lib/cardCheck"
+import type { CardDiff, HoleChange, NewCard } from "@/lib/cardCheck"
 
 // The client-side halves of the two route calls. The shapes mirror the
 // routes' JSON exactly; lib/cardCheck.ts owns the real types.
@@ -25,6 +25,9 @@ type CheckResponse = {
   courseName?: string
   readCourseName?: string | null
   diff?: CardDiff
+  /** 'create' when the course had no card and the photo is offered as one. */
+  mode?: string
+  newCard?: NewCard
 }
 
 type ApplyResponse = {
@@ -40,8 +43,9 @@ type Step =
   | { kind: "reading" }
   | { kind: "match" }
   | { kind: "diff"; diff: CardDiff; readCourseName: string | null }
+  | { kind: "new-card"; newCard: NewCard; readCourseName: string | null }
   | { kind: "applying" }
-  | { kind: "done"; changed: number; rescored: number; reloadNeeded: boolean }
+  | { kind: "done"; changed: number; rescored: number; reloadNeeded: boolean; created?: boolean }
   | { kind: "error"; message: string; problems: string[] }
 
 /**
@@ -110,6 +114,11 @@ export default function CardCheck({
         })
         return
       }
+      if (body.mode === "create" && body.newCard) {
+        // No card recorded: the photo is offered back whole, for a yes.
+        setStep({ kind: "new-card", newCard: body.newCard, readCourseName: body.readCourseName ?? null })
+        return
+      }
       const diff = body.diff!
       if (diff.holeChanges.length === 0 && diff.teeChanges.length === 0) {
         setStep({ kind: "match" })
@@ -163,6 +172,33 @@ export default function CardCheck({
       })
     } catch {
       setStep({ kind: "error", message: "Could not update the card — try again.", problems: [] })
+    }
+  }
+
+  async function applyNewCard(newCard: NewCard) {
+    setStep({ kind: "applying" })
+    try {
+      const res = await fetch("/api/card-check/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          courseId,
+          tripCode: tripCode ?? "",
+          mode: "create",
+          newHoles: newCard.holes,
+          newTees: newCard.tees,
+        }),
+      })
+      const body = (await res.json().catch(() => null)) as ApplyResponse | null
+      if (!body?.ok) {
+        setStep({ kind: "error", message: body?.message ?? "Could not save the card — try again.", problems: [] })
+        return
+      }
+      const reloadNeeded = !Array.isArray(body.holes) || !Array.isArray(body.tees)
+      if (!reloadNeeded) onApplied(body.holes!, body.tees!)
+      setStep({ kind: "done", changed: newCard.holes.length, rescored: 0, reloadNeeded, created: true })
+    } catch {
+      setStep({ kind: "error", message: "Could not save the card — try again.", problems: [] })
     }
   }
 
@@ -262,12 +298,61 @@ export default function CardCheck({
       <div className="border border-accent/30 bg-accent/[0.07] rounded-xl px-4 py-3">
         {fileInput}
         <p className="text-accent-deep text-sm">
-          ✓ Card updated to match the photo
-          {step.rescored > 0 ? ` — ${step.rescored} saved scores re-scored.` : "."}
+          {step.created
+            ? "✓ Card saved — this course is set up and verified."
+            : `✓ Card updated to match the photo${step.rescored > 0 ? ` — ${step.rescored} saved scores re-scored.` : "."}`}
         </p>
         {step.reloadNeeded && (
           <p className="text-ink/65 text-sm mt-1">Reload the page to see the corrected card.</p>
         )}
+      </div>
+    )
+  }
+
+  // ── A course with no card: the photo becomes one, on a yes ──
+  if (step.kind === "new-card") {
+    const { newCard } = step
+    const parTotal = newCard.holes.reduce((s, h) => s + h.par, 0)
+    const ladiesTotal = newCard.holes.every(h => h.par_ladies != null)
+      ? newCard.holes.reduce((s, h) => s + (h.par_ladies ?? 0), 0)
+      : null
+    const genderWord = (g: string) => (g === "F" ? "ladies" : "men's")
+    return (
+      <div className="border border-accent/40 bg-accent/[0.05] rounded-xl px-4 py-4 space-y-3">
+        {fileInput}
+        <p className="text-ink text-sm font-semibold">
+          No card is recorded for this course yet. The photo reads
+          {step.readCourseName ? ` (${step.readCourseName})` : ""}:
+        </p>
+        <ul className="text-ink/80 text-sm space-y-1 tabular-nums">
+          <li>18 holes, par {parTotal}{ladiesTotal != null ? ` — ladies par ${ladiesTotal}` : ""}</li>
+          {newCard.tees.map((t, i) => (
+            <li key={i}>
+              {t.name} tee ({genderWord(t.gender)}) — par {t.par}, CR {t.course_rating}, slope {t.slope}
+            </li>
+          ))}
+        </ul>
+        {newCard.skippedTees.length > 0 && (
+          <p className="text-ink/50 text-sm">
+            On the card without printed ratings, so not recorded: {newCard.skippedTees.join(", ")}.
+          </p>
+        )}
+        <div className="flex gap-2 pt-1">
+          <button
+            type="button"
+            onClick={() => applyNewCard(newCard)}
+            className="flex-1 py-2.5 bg-accent-deep text-ink text-sm tracking-[0.15em] uppercase hover:bg-accent transition-colors rounded-xl"
+          >
+            Save this card
+          </button>
+          <button
+            type="button"
+            onClick={() => setStep({ kind: "idle" })}
+            className="px-4 py-2.5 text-ink/65 text-sm tracking-[0.15em] uppercase border border-bark/12 hover:border-bark/25 transition-colors rounded-xl"
+          >
+            Not now
+          </button>
+        </div>
       </div>
     )
   }

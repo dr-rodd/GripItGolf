@@ -9,6 +9,7 @@ import {
 } from '@/lib/teamLimits'
 import MatchplayPanel from './MatchplayPanel'
 import ItineraryEditor from './ItineraryEditor'
+import type { DirectoryCourse } from '@/lib/courseDirectory'
 import DateField from '@/app/components/DateField'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import TripHeader from '@/app/components/TripHeader'
@@ -69,7 +70,7 @@ type Player = {
  */
 type RoundInfo = { id: string }
 
-type Course = { id: string; name: string; location: string | null }
+type Course = DirectoryCourse
 
 // ── Constants ─────────────────────────────────────────────────────────────
 

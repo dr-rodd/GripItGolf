@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase-admin'
 import {
   CARD_SCHEMA, EXTRACTION_PROMPT, HOLE_COLUMNS,
-  normalizeCard, validateCard, diffCard,
+  normalizeCard, validateCard, diffCard, diffIsEmpty, newCourseRows,
   type StoredHole, type StoredTee,
 } from '@/lib/cardCheck'
 
@@ -15,8 +15,14 @@ import {
 // Writing happens in ./apply, and only after the person has seen the
 // difference and said yes.
 //
-// The photo goes to the Claude API and nowhere else. Nothing is stored:
-// a check that finds no differences leaves no trace at all.
+// The photo goes to the Claude API and nowhere else. A check that finds no
+// differences writes nothing to the card — but it does mark the course
+// `card_verified`, because a photo that matches the record exactly is the
+// strongest confirmation there is.
+//
+// A course with no holes at all — a user-added course, waiting on its first
+// card — cannot be diffed. There the trusted extraction is offered back as
+// a whole new card, and ./apply writes it after the person says yes.
 
 export const dynamic = 'force-dynamic'
 // Reading a dense scorecard takes real thought. Vercel's default window is
@@ -79,7 +85,7 @@ async function handle(req: NextRequest) {
 
   const { data: course, error: courseError } = await supabaseAdmin
     .from('courses')
-    .select('id, name')
+    .select('id, name, card_verified')
     .eq('id', courseId)
     .maybeSingle()
   if (courseError) {
@@ -101,13 +107,6 @@ async function handle(req: NextRequest) {
 
   const storedHoles = (holesRes.data ?? []) as unknown as StoredHole[]
   const storedTees = (teesRes.data ?? []) as unknown as StoredTee[]
-
-  if (storedHoles.length === 0) {
-    return NextResponse.json({
-      ok: false, reason: 'no-card',
-      message: 'This course has no card recorded yet, so there is nothing to check it against.',
-    })
-  }
 
   // ── Ask Claude to read the photo ──
   const client = new Anthropic({ apiKey })
@@ -163,7 +162,29 @@ async function handle(req: NextRequest) {
     })
   }
 
+  // ── No card yet: the photo becomes the record, once confirmed ──
+  if (storedHoles.length === 0) {
+    return NextResponse.json({
+      ok: true,
+      mode: 'create',
+      courseName: course.name,
+      readCourseName: card.courseName,
+      newCard: newCourseRows(card),
+    })
+  }
+
   const diff = diffCard(card, storedHoles, storedTees)
+
+  // A photo that agrees with the record on every figure is the confirmation
+  // this flag exists for. Best-effort: a failed write here costs the badge,
+  // not the check.
+  if (diffIsEmpty(diff) && course.card_verified === false) {
+    const { error: verifyError } = await supabaseAdmin
+      .from('courses')
+      .update({ card_verified: true })
+      .eq('id', courseId)
+    if (verifyError) console.error('card-check verify flag failed:', verifyError)
+  }
 
   return NextResponse.json({
     ok: true,
