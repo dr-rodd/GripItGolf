@@ -21,7 +21,7 @@ export default function AdminLogin() {
       <h1 className="font-[family-name:var(--font-display)] text-ink text-2xl mb-2">
         Admin
       </h1>
-      <p className="text-ink/65 text-sm mb-10">Trip overview</p>
+      <p className="text-ink/65 text-sm mb-10">Platform overview</p>
 
       <form action={formAction} className="w-full max-w-xs flex flex-col gap-4">
         <input

@@ -7,7 +7,7 @@ import {
 } from '@/lib/adminAuth'
 
 /**
- * Log in to the admin overview.
+ * Log in to the admin area.
  *
  * Runs on the server, so the password never reaches the browser and a wrong
  * guess learns nothing beyond "no". Returns a message rather than throwing —
