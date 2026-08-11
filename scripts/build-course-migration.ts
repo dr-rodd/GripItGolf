@@ -1,7 +1,7 @@
 /**
  * Turn researched course files into migrations.
  *
- *   npm run courses:migration -- --list      # what is already on the platform
+ *   npm run courses:migration -- --list      # survey: what is staged, what has shipped
  *   npm run courses:migration -- --dry-run   # says what it would write
  *   npm run courses:migration                # writes them
  *
@@ -83,25 +83,17 @@ const platform = migrationFiles.flatMap(f => platformCoursesInSql(sqlOf.get(f)!)
 const storedHoles = new Map(
   migrationFiles.flatMap(f => platformHolesInSql(sqlOf.get(f)!)).map(x => [x.slug, x.holes]))
 
-if (listOnly) {
-  say(`${platform.length} platform courses:`)
-  for (const c of [...platform].sort((a, b) => a.slug.localeCompare(b.slug))) {
-    say(`  ${c.slug.padEnd(34)} ${c.name}${storedHoles.has(c.slug) ? '' : '  (no card)'}`)
-  }
-  say()
-  say('Do not research these again. Better tee ratings go in data/course-tees/.')
-  process.exit(0)
-}
-
 // ─── Read ──────────────────────────────────────────────────────
 
-if (!existsSync(DATA_DIR)) {
+if (!existsSync(DATA_DIR) && !listOnly) {
   bail(`No ${DATA_DIR}. Course files live there, one per course — see docs/course-import.md.`)
 }
 
 const problems: ImportProblem[] = []
 
-const files = readdirSync(DATA_DIR).filter(f => f.endsWith('.json')).sort()
+const files = existsSync(DATA_DIR)
+  ? readdirSync(DATA_DIR).filter(f => f.endsWith('.json')).sort()
+  : []
 const loaded: { file: string; course: CourseImport }[] = []
 
 for (const file of files) {
@@ -131,7 +123,7 @@ for (const file of teeFiles) {
   if (fatalsOf(found).length === 0) refreshes.push({ file, refresh: read.value as CourseTeeRefresh })
 }
 
-if (files.length === 0 && teeFiles.length === 0) {
+if (files.length === 0 && teeFiles.length === 0 && !listOnly) {
   say('Nothing in data/courses/ or data/course-tees/ — nothing to write.')
   say('Research lands there as one <slug>.json per course; docs/course-import.md has the contract.')
   process.exit(0)
@@ -140,6 +132,54 @@ if (files.length === 0 && teeFiles.length === 0) {
 problems.push(...validateImportSet(loaded, existing))
 problems.push(...validateTeeRefreshSet(
   refreshes, platform, storedHoles, loaded.map(l => l.course.slug)))
+
+// ─── The survey (--list) ───────────────────────────────────────
+//
+// The first move, before any research: what is staged, whether each file is
+// ready, and everything already on the platform. It writes nothing and — unlike
+// the gate below — **never exits non-zero on a broken file**, because the point
+// is to see the state, including what is still wrong. A survey, not a check.
+
+if (listOnly) {
+  say(`${files.length} staged in data/courses/, ${teeFiles.length} in data/course-tees/, ` +
+    `${platform.length} already on the platform.`)
+
+  if (files.length > 0 || teeFiles.length > 0) {
+    say()
+    say('Staged:')
+    for (const file of [...files, ...teeFiles]) {
+      const here = problems.filter(p => p.file === file)
+      const blocked = fatalsOf(here).length
+      const warns = here.length - blocked
+      const course = loaded.find(l => l.file === file)?.course
+      const refresh = refreshes.find(r => r.file === file)?.refresh
+      const tail = warns > 0 ? `, ${warns} warning${warns === 1 ? '' : 's'}` : ''
+      if (blocked > 0) {
+        say(`  ✗ ${file} — ${blocked} problem${blocked === 1 ? '' : 's'}; ` +
+          'run `npm run test:course-import` to read them')
+      } else if (course) {
+        const card = course.holes.length === 0
+          ? 'no card'
+          : course.holes.every(h => h.par_ladies != null) ? 'ladies card' : 'no ladies card'
+        say(`  ✓ ${course.slug} — ${course.name} (holes ${course.holesConfidence}, ${card}${tail})`)
+      } else if (refresh) {
+        say(`  ✓ ${refresh.slug} — tee refresh, ${refresh.tees.length} tees ` +
+          `(${refresh.teesConfidence}${tail})`)
+      }
+    }
+  }
+
+  say()
+  say('Already on the platform (parsed from supabase/migrations/, not a list kept here):')
+  for (const c of [...platform].sort((a, b) => a.slug.localeCompare(b.slug))) {
+    say(`  · ${c.slug.padEnd(34)} ${c.name}${storedHoles.has(c.slug) ? '' : '  (no card)'}`)
+  }
+
+  say()
+  say('Do not research these again. Better tee ratings go in data/course-tees/.')
+  say('This wrote nothing. --dry-run shows the migration a run would generate.')
+  process.exit(0)
+}
 
 // ─── Report ────────────────────────────────────────────────────
 

@@ -37,9 +37,13 @@ Castlerock's Bann beside its Mussenden, and so on.
 npm run courses:migration -- --list
 ```
 
-That prints every platform course with its slug, and flags any that have no card yet. Do
-not research a course that is on it. If you find better tee ratings for one, that is a
-`data/course-tees/` file, not a second course.
+That is a **survey, not a check**: it prints what is staged in both directories and whether
+each file is ready, then every platform course with its slug, flagging any that have no
+card yet. It writes nothing and — unlike the gate — never fails on a broken file, because
+the point is to see the state including what is still wrong.
+
+Do not research a course that is already on the list. If you find better tee ratings for
+one, that is a `data/course-tees/` file, not a second course.
 
 **Duplicates are the main thing that can go wrong at this scale**, and the reason is worth
 knowing: two rows for one club cannot be merged afterwards. `tees` is `ON DELETE RESTRICT`
@@ -205,17 +209,43 @@ catch afterwards.
 - **Work in batches of about ten and run `npm test` after each.** Fix a failing batch
   before starting the next.
 
-### Two things not to worry about
+### Four things that look like mistakes and are not
 
-**Men's and ladies' stroke index diverging wildly is normal.** A ladies card is rated for
-a different player off different tees; a hole that is a driver-wedge for a man can be the
-hardest on the course for a shorter hitter. Calibrated across the 28 shipped courses:
-Enniscrone and Rosapenna Sandy Hills each have four holes where the two differ by more
+The rules above are shapes the data can take that no test catches. These are the
+opposite: shapes in **good** data that look wrong. The gate cannot tell them from errors —
+a permutation is still a permutation, a total still adds up — so the only thing that
+protects them is not "fixing" them. Correcting one replaces a right number with a wrong
+one, by hand, which is the exact failure this pipeline exists to prevent.
+
+**A stroke index that runs odd on one nine and even on the other is the card, not an
+artefact.** It is the standard UK and Ireland allocation: the eighteen indices are laid out
+so odd numbers fall on one nine and even on the other, which keeps SI 1 and SI 2 off the
+same nine and spreads a handicap's shots evenly across the two halves. It reads as
+manufactured. Checked across every shipped card, **26 of 28 courses do exactly this** —
+only Carne and County Sligo are mixed — and both batch-C courses do it too (The Heath even
+out / odd in, Castlerock odd out / even in). **When one source shows this tidy split and
+another shows a scrambled order, the tidy one is almost always the club's own card.** Do
+not tug it toward the messier source to make it look more random: an aggregator's ordering
+for The Heath disagreed with the club card on four holes, and the club card was right.
+
+**Men's and ladies' stroke index diverging wildly is normal, and so is their agreeing
+exactly.** A ladies card is rated for a different player off different tees; a hole that is
+a driver-wedge for a man can be the hardest on the course for a shorter hitter. Across the
+28: Enniscrone and Rosapenna Sandy Hills each have four holes where the two differ by more
 than eight with no par change, and Adare Manor, Ballybunion Old, Royal County Down and
-Royal Portrush all have at least one. Six courses are identical on all eighteen; County
-Sligo agrees on only six. **Do not "correct" a card to make the two columns look alike**,
-and do not flag it — only a *par* change is evidence of anything, and the gate already
-checks the case where that matters.
+Royal Portrush all have at least one. Six courses are identical on all eighteen, because
+some clubs print one stroke-index column for both. County Sligo agrees on only six holes.
+None of that is something to reconcile — only a *par* change is evidence of anything, and
+the gate already checks the case where that matters.
+
+**A rated ladies tee is not a ladies card.** The R&A may rate a ladies tee — Castlerock's
+is par 75 — while the club publishes no hole-by-hole ladies card at all. A rated total is
+not eighteen numbers. **Do not reconstruct eighteen ladies pars and indices to make that 75
+add up**: that is inventing a stroke index, the one number this document says never to
+guess, and it would look like diligence right up until somebody played off it. Leave
+`par_ladies` and `stroke_index_ladies` null on all eighteen — the rule is already both
+genders or ladies not at all — let `ladies_data_verified` fall to false on its own, and the
+men's numbers carry everyone.
 
 **A tee par that disagrees with the holes is not yours to reconcile by choosing.** The
 holes win, always. The gate will tell you which tee and by how much.
@@ -332,8 +362,9 @@ only way to correct one, because the new-course gate refuses a slug that has shi
 ## Generating the migration
 
 ```
-npm run courses:migration -- --dry-run    # what it would write, writes nothing
-npm run courses:migration                 # writes supabase/migrations/*_platform_courses_*.sql
+npm run courses:migration -- --list      # the survey: what is staged, what has shipped
+npm run courses:migration -- --dry-run   # what it would write, writes nothing
+npm run courses:migration                # writes supabase/migrations/*_*.sql
 ```
 
 One fatal problem anywhere and it writes nothing at all. Warnings print and it proceeds.
