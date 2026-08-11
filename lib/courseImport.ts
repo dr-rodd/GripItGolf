@@ -353,7 +353,11 @@ export function validateCourseImport(file: string, parsed: unknown): ImportProbl
       F('There is no men\'s tee — a course needs at least one.')
     }
     if (!tees.some(t => isObject(t) && t.gender === 'F')) {
-      W('There is no ladies tee. A woman on this course has nothing to play off.')
+      // Not fatal: a club that publishes no ladies card is a real course, and
+      // refusing it would drop it entirely. `teesForPlayer` carries a woman
+      // onto the men's tees, and `effectivePar` onto the men's pars — which
+      // is what happens on the day anyway. Worth saying out loud all the same.
+      W('There is no ladies tee — a woman here plays off the men\'s.')
     }
   }
 

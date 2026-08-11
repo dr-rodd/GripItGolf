@@ -1,0 +1,48 @@
+{
+  "name": "Castlerock Golf Club -- Mussenden",
+  "slug": "castlerock-mussenden",
+  "county": "Derry",
+  "location": "Castlerock, Derry, Northern Ireland",
+  "website": "https://www.castlerockgc.co.uk/",
+  "latitude": 55.1638,
+  "longitude": -6.7741,
+  "holesConfidence": "MEDIUM",
+  "teesConfidence": "MEDIUM",
+  "note": "Ladies scorecard (per-hole par and stroke index) not published; the R&A rates a par-75 ladies tee, but with no hole-by-hole ladies card the men's numbers are used for everyone.",
+  "sources": {
+    "holes": [
+      "https://www.golfpass.com/travel-advisor/courses/18824-castlerock-golf-club-mussenden",
+      "https://www.golfify.io/courses/castlerock-golf-club-mussenden"
+    ],
+    "tees": [
+      "https://ncrdb.usga.org/courseTeeInfo?CourseID=22949",
+      "https://www.golfify.io/courses/castlerock-golf-club-mussenden"
+    ],
+    "coordinates": "https://www.google.com/maps/place/55.1638,-6.7741"
+  },
+  "holes": [
+    { "hole_number":  1, "par": 4, "stroke_index":  9, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number":  2, "par": 4, "stroke_index":  5, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number":  3, "par": 5, "stroke_index": 13, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number":  4, "par": 3, "stroke_index": 11, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number":  5, "par": 5, "stroke_index": 15, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number":  6, "par": 4, "stroke_index":  7, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number":  7, "par": 4, "stroke_index":  1, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number":  8, "par": 4, "stroke_index":  3, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number":  9, "par": 3, "stroke_index": 17, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number": 10, "par": 4, "stroke_index":  4, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number": 11, "par": 5, "stroke_index": 16, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number": 12, "par": 4, "stroke_index":  2, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number": 13, "par": 4, "stroke_index": 14, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number": 14, "par": 3, "stroke_index":  8, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number": 15, "par": 5, "stroke_index":  6, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number": 16, "par": 3, "stroke_index": 18, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number": 17, "par": 5, "stroke_index": 12, "par_ladies": null, "stroke_index_ladies": null },
+    { "hole_number": 18, "par": 4, "stroke_index": 10, "par_ladies": null, "stroke_index_ladies": null }
+  ],
+  "tees": [
+    { "name": "Blue",  "gender": "M", "par": 73, "course_rating": 73.4, "slope": 131 },
+    { "name": "White", "gender": "M", "par": 73, "course_rating": 72.0, "slope": 128 },
+    { "name": "Red",   "gender": "M", "par": 73, "course_rating": 68.9, "slope": 117 }
+  ]
+}
