@@ -23,7 +23,7 @@ import {
   validateCourseImport, validateImportSet, platformCoursesInSql, teeParProblems,
   migrationSql, fatalsOf, CONFIDENCE, HOLE_CONFIDENCE_FLOOR, DB_HOLE_PAR, COORD_BOX,
   GENERATED_MARKER, TEE_REFRESH_MARKER, isGeneratedSql, NO_CARD,
-  platformHolesInSql, validateTeeRefresh, validateTeeRefreshSet, teeRefreshSql,
+  platformHolesInSql, validateTeeRefresh, validateTeeRefreshSet, teeRefreshSql, assignBatches,
   type CourseImport,
 } from '../lib/courseImport'
 import { validateNewHoleRows, type NewHoleRow } from '../lib/cardCheck'
@@ -609,6 +609,53 @@ section('Every generated file says how to check it landed')
     ok(block.split('\n').filter(l => l.trim()).every(l => l.trim().startsWith('--')),
       '  …and every line of it is a comment')
   }
+}
+
+section('Which file each course lands in')
+{
+  const many = (n: number, prefix = 'c') =>
+    Array.from({ length: n }, (_, i) => `${prefix}${String(i).padStart(3, '0')}`)
+
+  // A hundred courses from nothing: four full files and one of the remainder.
+  const fresh = assignBatches(many(100), new Map(), 25)
+  eq(fresh.map(b => b.slugs.length), [25, 25, 25, 25], 'a hundred courses make four files of 25')
+  ok(fresh.every(b => b.file === null), 'and every one of them is a new file')
+  eq(fresh.flatMap(b => b.slugs).length, 100, 'nobody is dropped')
+  eq(new Set(fresh.flatMap(b => b.slugs)).size, 100, 'and nobody is in two files')
+
+  const odd = assignBatches(many(30), new Map(), 25)
+  eq(odd.map(b => b.slugs.length), [25, 5], 'a remainder gets its own file rather than being lost')
+
+  // The property that would go wrong silently. `aaa` sorts before everything,
+  // so a positional batcher would shift all 100 courses down one slot and
+  // rewrite every file — leaving nobody able to say which had been pasted.
+  const homes = new Map<string, string>()
+  fresh.forEach((b, i) => b.slugs.forEach(s => homes.set(s, `file-${i}.sql`)))
+  const after = assignBatches(['aaa', ...many(100)], homes, 25)
+
+  eq(after.slice(0, 4).map(b => b.file), ['file-0.sql', 'file-1.sql', 'file-2.sql', 'file-3.sql'],
+    'the four existing files keep their names')
+  eq(after.slice(0, 4).map(b => b.slugs.length), [25, 25, 25, 25],
+    '  …and every course stays exactly where it was')
+  eq(after[4], { file: null, slugs: ['aaa'] },
+    'the new course goes into a new file on its own, touching nothing else')
+
+  // Determinism, so a re-run is a no-op rather than a diff.
+  eq(assignBatches(['aaa', ...many(100)], homes, 25), after, 'the same input gives the same answer')
+
+  // A course removed from data/courses leaves its file smaller and renumbers
+  // nothing — the caller warns, because an applied migration cannot be unwritten.
+  const gone = assignBatches(many(100).filter(s => s !== 'c000'), homes, 25)
+  eq(gone[0].slugs.length, 24, 'a removed course leaves its file one shorter')
+  eq(gone.map(b => b.file), ['file-0.sql', 'file-1.sql', 'file-2.sql', 'file-3.sql'],
+    '  …and the others are untouched')
+
+  // An existing file is never topped up: it may already have been pasted, and
+  // a file that quietly grows a course is a file nobody can reason about.
+  const short = new Map([['x', 'file-0.sql']])
+  const topped = assignBatches(['x', 'y'], short, 25)
+  eq(topped, [{ file: 'file-0.sql', slugs: ['x'] }, { file: null, slugs: ['y'] }],
+    'a file with room does not gain a new course')
 }
 
 // ─── The real files ────────────────────────────────────────────

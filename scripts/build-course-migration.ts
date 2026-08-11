@@ -26,7 +26,7 @@ import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   validateCourseImport, validateImportSet, validateTeeRefresh, validateTeeRefreshSet,
-  platformCoursesInSql, platformHolesInSql, migrationSql, teeRefreshSql,
+  platformCoursesInSql, platformHolesInSql, migrationSql, teeRefreshSql, assignBatches,
   fatalsOf, isGeneratedSql,
   type CourseImport, type CourseTeeRefresh, type ImportProblem,
 } from '../lib/courseImport'
@@ -183,11 +183,31 @@ if (listOnly) {
 
 // ─── Report ────────────────────────────────────────────────────
 
-for (const w of problems.filter(p => !p.fatal)) say(`  warn  ${w.file}: ${w.message}`)
+// Grouped by message rather than one line per file. At two courses the
+// difference is nothing; at a hundred there are dozens of legitimate warnings
+// ("no ladies tee" on every men's-only club), and a fatal that scrolls past
+// half of them is a fatal nobody acts on.
+const warnings = problems.filter(p => !p.fatal)
+if (warnings.length > 0) {
+  const byMessage = new Map<string, string[]>()
+  for (const w of warnings) {
+    byMessage.set(w.message, [...(byMessage.get(w.message) ?? []), w.file])
+  }
+  say(`${warnings.length} warning${warnings.length === 1 ? '' : 's'}, ` +
+    `${byMessage.size} kind${byMessage.size === 1 ? '' : 's'}:`)
+  for (const [message, where] of [...byMessage].sort((a, b) => b[1].length - a[1].length)) {
+    say(`  ${String(where.length).padStart(3)} × ${message}`)
+    // Naming every file stops being useful somewhere around a screenful.
+    const shown = where.slice(0, 6).join(', ')
+    say(`      ${shown}${where.length > 6 ? `, and ${where.length - 6} more` : ''}`)
+  }
+  say()
+}
 
+// Last, immediately above the line that says nothing was written — which is
+// where the eye lands after a long run.
 const fatals = fatalsOf(problems)
 if (fatals.length > 0) {
-  say()
   for (const f of fatals) console.error(`  REFUSED  ${f.file}: ${f.message}`)
   say()
   bail(`${fatals.length} problem${fatals.length === 1 ? '' : 's'} — nothing written. ` +
@@ -230,34 +250,26 @@ const handWrittenCourseFiles = migrationFiles.filter(f =>
   /_platform_courses_[a-z]\.sql$/.test(f) && !mineCourses.includes(f)).length
 
 type Plan = { name: string; number: string; letter: string; reused: boolean; courses: CourseImport[] }
-const plan: Plan[] = []
 
-// Existing files keep their courses, in their existing order.
-mineCourses.forEach((name, i) => {
-  const mine = loaded.filter(l => homeOf.get(l.course.slug) === name).map(l => l.course)
-  const was = platformCoursesInSql(sqlOf.get(name)!).length
-  if (mine.length < was) {
-    say(`  note  ${name} had ${was} courses and now has ${mine.length}. A migration that has ` +
-      'been applied cannot be unwritten — remove the course from the database by hand if ' +
-      'that is what you meant.')
+// The assignment is `assignBatches` — pure, and pinned by test:course-import.
+// What stays here is only what needs the directory: the number and the letter.
+const byFile = new Map(loaded.map(l => [l.course.slug, l.course]))
+const assigned = assignBatches(loaded.map(l => l.course.slug), homeOf, COURSES_PER_MIGRATION)
+
+const plan: Plan[] = assigned.map((batch, i) => {
+  const courses = batch.slugs.map(s => byFile.get(s)!)
+  if (batch.file) {
+    const was = platformCoursesInSql(sqlOf.get(batch.file)!).length
+    if (courses.length < was) {
+      say(`  note  ${batch.file} had ${was} courses and now has ${courses.length}. A migration ` +
+        'that has been applied cannot be unwritten — remove the course from the database by ' +
+        'hand if that is what you meant.')
+    }
   }
-  plan.push({
-    name, number: numberOf(name),
-    letter: letterFor(handWrittenCourseFiles + i), reused: true, courses: mine,
-  })
+  const letter = letterFor(handWrittenCourseFiles + i)
+  const name = batch.file ?? `${nextNumber()}_platform_courses_${letter}.sql`
+  return { name, number: numberOf(name), letter, reused: Boolean(batch.file), courses }
 })
-
-// Everything not already placed goes into new files.
-const unplaced = loaded.filter(l => !homeOf.has(l.course.slug)).map(l => l.course)
-for (let i = 0; i < unplaced.length; i += COURSES_PER_MIGRATION) {
-  const letter = letterFor(handWrittenCourseFiles + plan.length)
-  plan.push({
-    name: `${nextNumber()}_platform_courses_${letter}.sql`,
-    number: '', letter, reused: false,
-    courses: unplaced.slice(i, i + COURSES_PER_MIGRATION),
-  })
-}
-for (const p of plan) if (!p.number) p.number = numberOf(p.name)
 
 // Tee refreshes: their own files, their own letters, same reuse rule.
 type TeePlan = { name: string; letter: string; reused: boolean; batch: CourseTeeRefresh[] }

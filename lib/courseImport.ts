@@ -715,6 +715,56 @@ export function validateTeeRefreshSet(
   return problems
 }
 
+// ─── Which file each course lands in ───────────────────────────
+
+/** One generated migration's worth: `file` is null when it does not exist yet. */
+export type Batch = { file: string | null; slugs: string[] }
+
+/**
+ * Which generated migration each course belongs to.
+ *
+ * **A course stays in the file it first landed in.** That is the whole point,
+ * and it is not cosmetic: the alternative — re-batching by position every run —
+ * means one course added early in the alphabet shifts every later course into a
+ * different file, so every file changes, every file has to be pasted again, and
+ * "which have I applied?" stops having an answer. `ON CONFLICT DO NOTHING`
+ * saves you from importing twice, but nothing saves you from not knowing.
+ *
+ * So: courses already placed keep their home, in the order that home holds
+ * them. Everything else fills new files, `perFile` at a time. Existing files
+ * are never topped up either, because a file that has already been pasted
+ * should not quietly grow a course.
+ *
+ * `homeOf` maps slug → filename, read back out of the generated migrations by
+ * the caller. A file that ends up with no courses still comes back, empty: it
+ * has been applied and cannot be unwritten, and the caller says so out loud.
+ *
+ * Pure, and separated from the numbering on purpose — working out the next
+ * migration number needs the directory, but deciding what goes together does
+ * not, and this is the half that is worth pinning.
+ */
+export function assignBatches(
+  slugs: readonly string[],
+  homeOf: ReadonlyMap<string, string>,
+  perFile: number,
+): Batch[] {
+  const batches: Batch[] = []
+
+  // Existing homes first, in the order the caller listed those files.
+  const homes: string[] = []
+  for (const file of homeOf.values()) if (!homes.includes(file)) homes.push(file)
+  for (const file of homes) {
+    batches.push({ file, slugs: slugs.filter(s => homeOf.get(s) === file) })
+  }
+
+  const unplaced = slugs.filter(s => !homeOf.has(s))
+  for (let i = 0; i < unplaced.length; i += Math.max(1, perFile)) {
+    batches.push({ file: null, slugs: unplaced.slice(i, i + Math.max(1, perFile)) })
+  }
+
+  return batches
+}
+
 // ─── Reading what has already shipped ──────────────────────────
 
 /**
