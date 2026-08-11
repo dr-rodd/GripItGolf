@@ -42,6 +42,33 @@ each file is ready, then every platform course with its slug, flagging any that 
 card yet. It writes nothing and — unlike the gate — never fails on a broken file, because
 the point is to see the state including what is still wrong.
 
+### How this run is being done
+
+**One handover of the whole hundred, as a patch.** Research everything, then export a
+single `.patch` for Claude Code to validate and turn into migrations. That is the shape
+that has been chosen, and it has one consequence worth taking seriously:
+
+**There is no wave to catch a systematic mistake.** If the method is wrong — the tee par
+taken from the wrong column, the ladies card reconstructed, the stroke index pulled from an
+aggregator instead of the club — it will be wrong on all hundred before anybody sees a
+course in the app, and the whole run has to be done again.
+
+So do not save the checking until the end:
+
+- **Run `npm test` after the first two or three files.** A method error found on file 3
+  costs an hour. Found on file 100 it costs the run.
+- **Run it again every ten**, and fix a failing batch before starting the next.
+- The gate is fast — under a second at a hundred courses — so there is no reason to skip it.
+
+The pipeline has been rehearsed at this volume: a hundred courses validate and generate in
+well under a second, batching into four migration files of twenty-five plus one for the tee
+refreshes. It will not fall over. The only thing that can waste the effort is the data.
+
+**The ~25 courses already on the platform are not part of the hundred.** Do not re-add
+them — a repeated slug is refused, and a name that merely *reads* the same is refused too.
+If their tee ratings can be improved, that is a `data/course-tees/` file. Everything else
+about them stays as it is.
+
 Do not research a course that is already on the list. If you find better tee ratings for
 one, that is a `data/course-tees/` file, not a second course.
 

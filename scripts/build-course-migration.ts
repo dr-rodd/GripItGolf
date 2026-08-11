@@ -292,11 +292,13 @@ if (refreshes.length > 0) {
 say()
 const writes: { name: string; sql: string; reused: boolean; what: string }[] = [
   ...plan.filter(p => p.courses.length > 0).map(p => ({
-    name: p.name, reused: p.reused, what: `${p.courses.length} courses`,
+    name: p.name, reused: p.reused,
+    what: `${p.courses.length} course${p.courses.length === 1 ? '' : 's'}`,
     sql: migrationSql(p.courses, { number: p.number, letter: p.letter }),
   })),
   ...teePlan.map(t => ({
-    name: t.name, reused: t.reused, what: `${t.batch.length} tee refreshes`,
+    name: t.name, reused: t.reused,
+    what: `${t.batch.length} tee refresh${t.batch.length === 1 ? '' : 'es'}`,
     sql: teeRefreshSql(t.batch, { letter: t.letter }),
   })),
 ]
