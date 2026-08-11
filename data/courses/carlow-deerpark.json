@@ -1,0 +1,37 @@
+{
+  "name": "Carlow Golf Club -- Deerpark", "slug": "carlow-deerpark", "county": "Carlow",
+  "location": "Carlow, Carlow, Ireland", "website": "https://www.carlowgolfclub.ie/",
+  "latitude": 52.8532, "longitude": -6.894,
+  "holesConfidence": "HIGH", "teesConfidence": "HIGH",
+  "note": "Men's par and SI corroborated by the club's official Golf Ireland WHS card, GolfPass and Hole19; tees from the club's WHS tables. Ladies omitted (no published ladies SI); the rated ladies Red tee (par 75) is left out.",
+  "sources": {
+    "holes": ["https://www.golfpass.com/travel-advisor/courses/19183-carlow-golf-club-deerpark-course", "https://www.hole19golf.com/courses/carlow-golf-club-deerpark"],
+    "tees": ["https://www.carlowgolfclub.ie/uploads/1/5/4/5/154571604/whs_deerpark_white.pdf"],
+    "coordinates": "https://www.google.com/maps/place/52.8532,-6.8940"
+  },
+  "holes": [
+    {"hole_number":1,"par":4,"stroke_index":4,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":2,"par":4,"stroke_index":15,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":3,"par":3,"stroke_index":18,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":4,"par":4,"stroke_index":9,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":5,"par":5,"stroke_index":14,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":6,"par":3,"stroke_index":12,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":7,"par":4,"stroke_index":1,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":8,"par":4,"stroke_index":7,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":9,"par":4,"stroke_index":6,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":10,"par":4,"stroke_index":11,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":11,"par":4,"stroke_index":5,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":12,"par":4,"stroke_index":8,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":13,"par":3,"stroke_index":16,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":14,"par":4,"stroke_index":3,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":15,"par":4,"stroke_index":10,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":16,"par":4,"stroke_index":2,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":17,"par":3,"stroke_index":17,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":18,"par":5,"stroke_index":13,"par_ladies":null,"stroke_index_ladies":null}
+  ],
+  "tees": [
+    {"name":"Blue","gender":"M","par":70,"course_rating":72.4,"slope":127},
+    {"name":"White","gender":"M","par":70,"course_rating":71.2,"slope":124},
+    {"name":"Green","gender":"M","par":70,"course_rating":65.0,"slope":114}
+  ]
+}

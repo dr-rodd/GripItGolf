@@ -1,0 +1,37 @@
+{
+  "name": "Dromoland Castle Golf Club", "slug": "dromoland-castle", "county": "Clare",
+  "location": "Newmarket-on-Fergus, Clare, Ireland", "website": "https://www.dromoland.ie/",
+  "latitude": 52.7811, "longitude": -8.9047,
+  "holesConfidence": "MEDIUM", "teesConfidence": "MEDIUM",
+  "note": "Men's card agreed by the official scorecard PDF and the Clare Golf Course Guide. Ladies SI single-sourced, so ladies are omitted. Black/Red tees dropped (no slope on the card).",
+  "sources": {
+    "holes": ["http://www.dromoland.ie/wp-content/uploads/pdf/Dromoland-Golf-Course-Map-Scorecard.pdf", "https://www.claregolfcourseguide.com/dromoland.html"],
+    "tees": ["http://www.dromoland.ie/wp-content/uploads/pdf/Dromoland-Golf-Course-Map-Scorecard.pdf"],
+    "coordinates": "https://www.google.com/maps/place/52.7811,-8.9047"
+  },
+  "holes": [
+    {"hole_number":1,"par":4,"stroke_index":8,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":2,"par":4,"stroke_index":4,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":3,"par":3,"stroke_index":10,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":4,"par":5,"stroke_index":18,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":5,"par":4,"stroke_index":12,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":6,"par":5,"stroke_index":2,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":7,"par":3,"stroke_index":14,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":8,"par":4,"stroke_index":6,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":9,"par":4,"stroke_index":16,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":10,"par":4,"stroke_index":13,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":11,"par":5,"stroke_index":5,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":12,"par":4,"stroke_index":11,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":13,"par":3,"stroke_index":15,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":14,"par":4,"stroke_index":3,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":15,"par":4,"stroke_index":17,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":16,"par":4,"stroke_index":1,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":17,"par":3,"stroke_index":9,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":18,"par":5,"stroke_index":7,"par_ladies":null,"stroke_index_ladies":null}
+  ],
+  "tees": [
+    {"name":"Blue","gender":"M","par":72,"course_rating":73.0,"slope":129},
+    {"name":"White","gender":"M","par":72,"course_rating":70.5,"slope":125},
+    {"name":"Yellow","gender":"M","par":72,"course_rating":69.4,"slope":124}
+  ]
+}

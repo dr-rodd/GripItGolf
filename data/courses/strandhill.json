@@ -1,0 +1,37 @@
+{
+  "name": "Strandhill Golf Club", "slug": "strandhill", "county": "Sligo",
+  "location": "Strandhill, Sligo, Ireland", "website": "https://www.strandhillgolfclub.com/",
+  "latitude": 54.2656, "longitude": -8.6067,
+  "holesConfidence": "MEDIUM", "teesConfidence": "MEDIUM",
+  "note": "Men's par matches the official card and gogolfing; SI from the club card (gogolfing agrees 16/18). Ladies card from the official card; ladies play the 16th and 18th as par 5s.",
+  "sources": {
+    "holes": ["https://strandhillgolfclub.com/wp-content/uploads/2026/03/Strandhill-Golf-Club-Scorecard-2024-back_A5_compressed.pdf", "https://www.gogolfing.ie/golf-course.php?id_club=348"],
+    "tees": ["https://strandhillgolfclub.com/wp-content/uploads/2026/03/Strandhill-Golf-Club-Scorecard-2024-back_A5_compressed.pdf", "https://www.gogolfing.ie/golf-course.php?id_club=348"],
+    "coordinates": "https://www.google.com/maps/place/54.2656,-8.6067"
+  },
+  "holes": [
+    {"hole_number":1,"par":5,"stroke_index":10,"par_ladies":5,"stroke_index_ladies":8},
+    {"hole_number":2,"par":3,"stroke_index":12,"par_ladies":3,"stroke_index_ladies":18},
+    {"hole_number":3,"par":4,"stroke_index":8,"par_ladies":4,"stroke_index_ladies":12},
+    {"hole_number":4,"par":4,"stroke_index":6,"par_ladies":4,"stroke_index_ladies":2},
+    {"hole_number":5,"par":5,"stroke_index":16,"par_ladies":5,"stroke_index_ladies":10},
+    {"hole_number":6,"par":4,"stroke_index":2,"par_ladies":4,"stroke_index_ladies":4},
+    {"hole_number":7,"par":4,"stroke_index":4,"par_ladies":4,"stroke_index_ladies":6},
+    {"hole_number":8,"par":4,"stroke_index":14,"par_ladies":4,"stroke_index_ladies":14},
+    {"hole_number":9,"par":3,"stroke_index":18,"par_ladies":3,"stroke_index_ladies":16},
+    {"hole_number":10,"par":4,"stroke_index":11,"par_ladies":4,"stroke_index_ladies":7},
+    {"hole_number":11,"par":4,"stroke_index":15,"par_ladies":4,"stroke_index_ladies":11},
+    {"hole_number":12,"par":4,"stroke_index":7,"par_ladies":4,"stroke_index_ladies":1},
+    {"hole_number":13,"par":4,"stroke_index":9,"par_ladies":4,"stroke_index_ladies":5},
+    {"hole_number":14,"par":3,"stroke_index":17,"par_ladies":3,"stroke_index_ladies":17},
+    {"hole_number":15,"par":4,"stroke_index":3,"par_ladies":4,"stroke_index_ladies":3},
+    {"hole_number":16,"par":4,"stroke_index":5,"par_ladies":5,"stroke_index_ladies":15},
+    {"hole_number":17,"par":3,"stroke_index":13,"par_ladies":3,"stroke_index_ladies":13},
+    {"hole_number":18,"par":4,"stroke_index":1,"par_ladies":5,"stroke_index_ladies":9}
+  ],
+  "tees": [
+    {"name":"White","gender":"M","par":70,"course_rating":70.7,"slope":125},
+    {"name":"Green","gender":"M","par":70,"course_rating":68.7,"slope":119},
+    {"name":"Red","gender":"F","par":72,"course_rating":71.7,"slope":126}
+  ]
+}

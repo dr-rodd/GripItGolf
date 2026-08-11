@@ -1,0 +1,38 @@
+{
+  "name": "Clandeboye Golf Club -- Dufferin", "slug": "clandeboye-dufferin", "county": "Down",
+  "location": "Conlig, Down, Northern Ireland", "website": "https://www.cgc-ni.com/",
+  "latitude": 54.6262, "longitude": -5.6844,
+  "holesConfidence": "MEDIUM", "teesConfidence": "MEDIUM",
+  "note": "Dufferin championship course. Men's card agreed by GolfPass and offcourse; the club's own card was robots-blocked. Ladies omitted (uncorroborated). Official domain cgc-ni.com.",
+  "sources": {
+    "holes": ["https://www.golfpass.com/travel-advisor/courses/18916-clandeboye-golf-club-dufferin", "https://offcourse.co/courses/scorecard/clandeboye-golf-club/"],
+    "tees": ["https://www.golfpass.com/travel-advisor/courses/18916-clandeboye-golf-club-dufferin", "https://www.golfnow.co.uk/courses/-518-clandeboye-golf-club-dufferin-course-details"],
+    "coordinates": "https://www.google.com/maps/place/54.6262,-5.6844"
+  },
+  "holes": [
+    {"hole_number":1,"par":4,"stroke_index":9,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":2,"par":3,"stroke_index":5,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":3,"par":4,"stroke_index":13,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":4,"par":4,"stroke_index":1,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":5,"par":3,"stroke_index":15,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":6,"par":5,"stroke_index":17,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":7,"par":4,"stroke_index":7,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":8,"par":4,"stroke_index":3,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":9,"par":4,"stroke_index":11,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":10,"par":4,"stroke_index":4,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":11,"par":3,"stroke_index":14,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":12,"par":5,"stroke_index":6,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":13,"par":4,"stroke_index":12,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":14,"par":3,"stroke_index":8,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":15,"par":5,"stroke_index":16,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":16,"par":4,"stroke_index":2,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":17,"par":4,"stroke_index":18,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":18,"par":4,"stroke_index":10,"par_ladies":null,"stroke_index_ladies":null}
+  ],
+  "tees": [
+    {"name":"Blue","gender":"M","par":71,"course_rating":72.1,"slope":121},
+    {"name":"White","gender":"M","par":71,"course_rating":71.0,"slope":120},
+    {"name":"Green","gender":"M","par":71,"course_rating":69.7,"slope":119},
+    {"name":"Yellow","gender":"M","par":71,"course_rating":67.5,"slope":114}
+  ]
+}

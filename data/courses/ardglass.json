@@ -1,0 +1,42 @@
+{
+  "name": "Ardglass Golf Club",
+  "slug": "ardglass",
+  "county": "Down",
+  "location": "Ardglass, Down, Northern Ireland",
+  "website": "https://www.ardglassgolfclub.com/",
+  "latitude": 54.2571,
+  "longitude": -5.6059,
+  "holesConfidence": "HIGH",
+  "teesConfidence": "LOW",
+  "note": "Men's par and SI corroborated (club hole pages, GolfPass, 18Birdies); an outdated par-70 figure and a corrupted aggregator par column were discarded. Ladies SI from the club's own Red-tee pages. Tee ratings single-sourced (golfsherpa), hence LOW.",
+  "sources": {
+    "holes": ["https://ardglassgolfclub.com/course-tour/", "https://www.golfpass.com/travel-advisor/courses/18839-ardglass-golf-club", "https://18birdies.com/golf-courses/club/7b24be60-86ac-11e4-8c28-020000005b00/ardglass"],
+    "tees": ["https://golfsherpa.co.uk/courses/northern-ireland/ardglass-golf-club"],
+    "coordinates": "https://www.google.com/maps/place/54.2571,-5.6059"
+  },
+  "holes": [
+    {"hole_number":1,"par":4,"stroke_index":10,"par_ladies":4,"stroke_index_ladies":10},
+    {"hole_number":2,"par":3,"stroke_index":14,"par_ladies":3,"stroke_index_ladies":14},
+    {"hole_number":3,"par":4,"stroke_index":16,"par_ladies":4,"stroke_index_ladies":4},
+    {"hole_number":4,"par":4,"stroke_index":6,"par_ladies":4,"stroke_index_ladies":6},
+    {"hole_number":5,"par":3,"stroke_index":18,"par_ladies":3,"stroke_index_ladies":16},
+    {"hole_number":6,"par":4,"stroke_index":4,"par_ladies":4,"stroke_index_ladies":8},
+    {"hole_number":7,"par":3,"stroke_index":12,"par_ladies":3,"stroke_index_ladies":18},
+    {"hole_number":8,"par":4,"stroke_index":2,"par_ladies":4,"stroke_index_ladies":2},
+    {"hole_number":9,"par":5,"stroke_index":8,"par_ladies":5,"stroke_index_ladies":12},
+    {"hole_number":10,"par":4,"stroke_index":13,"par_ladies":4,"stroke_index_ladies":17},
+    {"hole_number":11,"par":5,"stroke_index":3,"par_ladies":5,"stroke_index_ladies":3},
+    {"hole_number":12,"par":3,"stroke_index":7,"par_ladies":3,"stroke_index_ladies":15},
+    {"hole_number":13,"par":4,"stroke_index":1,"par_ladies":4,"stroke_index_ladies":7},
+    {"hole_number":14,"par":4,"stroke_index":11,"par_ladies":4,"stroke_index_ladies":1},
+    {"hole_number":15,"par":5,"stroke_index":15,"par_ladies":5,"stroke_index_ladies":9},
+    {"hole_number":16,"par":5,"stroke_index":5,"par_ladies":5,"stroke_index_ladies":5},
+    {"hole_number":17,"par":3,"stroke_index":9,"par_ladies":3,"stroke_index_ladies":13},
+    {"hole_number":18,"par":4,"stroke_index":17,"par_ladies":4,"stroke_index_ladies":11}
+  ],
+  "tees": [
+    {"name":"White","gender":"M","par":71,"course_rating":70.6,"slope":118},
+    {"name":"Green","gender":"M","par":71,"course_rating":68.6,"slope":114},
+    {"name":"Red","gender":"F","par":71,"course_rating":71.1,"slope":118}
+  ]
+}

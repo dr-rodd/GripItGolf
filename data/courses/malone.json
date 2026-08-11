@@ -1,0 +1,44 @@
+{
+  "name": "Malone Golf Club",
+  "slug": "malone",
+  "county": "Antrim",
+  "location": "Dunmurry, Antrim, Northern Ireland",
+  "website": "https://www.malonegolfclub.co.uk/",
+  "latitude": 54.5382,
+  "longitude": -5.972,
+  "holesConfidence": "MEDIUM",
+  "teesConfidence": "MEDIUM",
+  "note": "Championship course (Drumbridge/Ballydrain), from the club's official scorecard; aggregators disagree on routing and were discarded. Ladies play the 7th and 14th as par 5s.",
+  "sources": {
+    "holes": ["https://malonegolfclub.co.uk/wp-content/uploads/2022/07/MALONE-GC-SCORE-CARD-V3C.pdf", "https://www.golfshake.com/course/view/15425/Malone_Golf_Club.html"],
+    "tees": ["https://malonegolfclub.co.uk/wp-content/uploads/2022/07/MALONE-GC-SCORE-CARD-V3C.pdf"],
+    "coordinates": "https://www.google.com/maps/place/54.5382,-5.9720"
+  },
+  "holes": [
+    {"hole_number":1,"par":4,"stroke_index":5,"par_ladies":4,"stroke_index_ladies":5},
+    {"hole_number":2,"par":5,"stroke_index":11,"par_ladies":5,"stroke_index_ladies":11},
+    {"hole_number":3,"par":5,"stroke_index":9,"par_ladies":5,"stroke_index_ladies":9},
+    {"hole_number":4,"par":3,"stroke_index":17,"par_ladies":3,"stroke_index_ladies":15},
+    {"hole_number":5,"par":4,"stroke_index":3,"par_ladies":4,"stroke_index_ladies":1},
+    {"hole_number":6,"par":3,"stroke_index":15,"par_ladies":3,"stroke_index_ladies":17},
+    {"hole_number":7,"par":4,"stroke_index":1,"par_ladies":5,"stroke_index_ladies":13},
+    {"hole_number":8,"par":4,"stroke_index":13,"par_ladies":4,"stroke_index_ladies":3},
+    {"hole_number":9,"par":4,"stroke_index":7,"par_ladies":4,"stroke_index_ladies":7},
+    {"hole_number":10,"par":4,"stroke_index":10,"par_ladies":4,"stroke_index_ladies":4},
+    {"hole_number":11,"par":4,"stroke_index":8,"par_ladies":4,"stroke_index_ladies":6},
+    {"hole_number":12,"par":3,"stroke_index":12,"par_ladies":3,"stroke_index_ladies":18},
+    {"hole_number":13,"par":4,"stroke_index":4,"par_ladies":4,"stroke_index_ladies":2},
+    {"hole_number":14,"par":4,"stroke_index":2,"par_ladies":5,"stroke_index_ladies":14},
+    {"hole_number":15,"par":3,"stroke_index":16,"par_ladies":3,"stroke_index_ladies":12},
+    {"hole_number":16,"par":4,"stroke_index":18,"par_ladies":4,"stroke_index_ladies":10},
+    {"hole_number":17,"par":5,"stroke_index":14,"par_ladies":5,"stroke_index_ladies":16},
+    {"hole_number":18,"par":4,"stroke_index":6,"par_ladies":4,"stroke_index_ladies":8}
+  ],
+  "tees": [
+    {"name":"Blue","gender":"M","par":71,"course_rating":72.2,"slope":128},
+    {"name":"White","gender":"M","par":71,"course_rating":71.0,"slope":124},
+    {"name":"Green","gender":"M","par":71,"course_rating":69.2,"slope":118},
+    {"name":"Green","gender":"F","par":73,"course_rating":75.5,"slope":132},
+    {"name":"Red","gender":"F","par":73,"course_rating":72.5,"slope":120}
+  ]
+}

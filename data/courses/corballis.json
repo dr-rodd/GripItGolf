@@ -1,0 +1,37 @@
+{
+  "name": "Corballis Links", "slug": "corballis", "county": "Dublin",
+  "location": "Donabate, Dublin, Ireland", "website": "https://www.corballislinks.com/",
+  "latitude": 53.4723, "longitude": -6.1255,
+  "holesConfidence": "MEDIUM", "teesConfidence": "MEDIUM",
+  "note": "Par-66 public links. Men's par and SI agreed by three aggregators; the club site confirms par 66. Tees single-sourced (golfsherpa).",
+  "sources": {
+    "holes": ["https://www.thesocialgolfer.com/golf-courses/ireland/co-dublin/corballis-links-golf-club/scorecard/corballis-links-golf-club-white-tee-scorecard", "https://offcourse.co/courses/scorecard/corballis-golf-links"],
+    "tees": ["https://golfsherpa.co.uk/courses/northern-ireland/corballis-links-golf-club"],
+    "coordinates": "https://www.google.com/maps/place/53.4723,-6.1255"
+  },
+  "holes": [
+    {"hole_number":1,"par":3,"stroke_index":13,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":2,"par":4,"stroke_index":17,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":3,"par":4,"stroke_index":1,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":4,"par":3,"stroke_index":15,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":5,"par":4,"stroke_index":7,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":6,"par":3,"stroke_index":9,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":7,"par":4,"stroke_index":11,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":8,"par":4,"stroke_index":3,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":9,"par":3,"stroke_index":5,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":10,"par":3,"stroke_index":18,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":11,"par":4,"stroke_index":14,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":12,"par":5,"stroke_index":16,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":13,"par":3,"stroke_index":8,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":14,"par":4,"stroke_index":4,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":15,"par":4,"stroke_index":12,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":16,"par":4,"stroke_index":2,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":17,"par":3,"stroke_index":10,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":18,"par":4,"stroke_index":6,"par_ladies":null,"stroke_index_ladies":null}
+  ],
+  "tees": [
+    {"name":"Blue","gender":"M","par":66,"course_rating":65.7,"slope":114},
+    {"name":"Red","gender":"M","par":66,"course_rating":63.3,"slope":104},
+    {"name":"Red","gender":"F","par":66,"course_rating":66.0,"slope":109}
+  ]
+}

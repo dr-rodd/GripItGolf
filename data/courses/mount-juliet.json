@@ -1,0 +1,43 @@
+{
+  "name": "Mount Juliet Estate",
+  "slug": "mount-juliet",
+  "county": "Kilkenny",
+  "location": "Thomastown, Kilkenny, Ireland",
+  "website": "https://www.mountjuliet.ie/",
+  "latitude": 52.5259,
+  "longitude": -7.1887,
+  "holesConfidence": "MEDIUM",
+  "teesConfidence": "MEDIUM",
+  "note": "Men's card corroborated by GolfPass, 18Birdies and golftraxx; ladies card by GolfPass and golftraxx. No official scorecard online (Ireland uses CONGU), hence MEDIUM.",
+  "sources": {
+    "holes": ["https://www.golfpass.com/travel-advisor/courses/20810-mount-juliet-golf-club", "https://18birdies.com/golf-courses/club/7b9ef770-86ac-11e4-8c28-020000005b00/mount-juliet-golf-course", "https://golftraxx.com/scorecard?course_name=Mount+Juliet+Estate+Golf+Course&zipcode=KILKENNY&static=true"],
+    "tees": ["https://www.golfpass.com/travel-advisor/courses/20810-mount-juliet-golf-club", "https://18birdies.com/golf-courses/club/7b9ef770-86ac-11e4-8c28-020000005b00/mount-juliet-golf-course"],
+    "coordinates": "https://www.google.com/maps/place/52.5259,-7.1887"
+  },
+  "holes": [
+    {"hole_number":1,"par":4,"stroke_index":16,"par_ladies":4,"stroke_index_ladies":14},
+    {"hole_number":2,"par":4,"stroke_index":4,"par_ladies":4,"stroke_index_ladies":2},
+    {"hole_number":3,"par":3,"stroke_index":14,"par_ladies":3,"stroke_index_ladies":18},
+    {"hole_number":4,"par":4,"stroke_index":2,"par_ladies":4,"stroke_index_ladies":10},
+    {"hole_number":5,"par":5,"stroke_index":18,"par_ladies":5,"stroke_index_ladies":12},
+    {"hole_number":6,"par":3,"stroke_index":6,"par_ladies":3,"stroke_index_ladies":16},
+    {"hole_number":7,"par":4,"stroke_index":12,"par_ladies":4,"stroke_index_ladies":8},
+    {"hole_number":8,"par":5,"stroke_index":10,"par_ladies":5,"stroke_index_ladies":6},
+    {"hole_number":9,"par":4,"stroke_index":8,"par_ladies":4,"stroke_index_ladies":4},
+    {"hole_number":10,"par":5,"stroke_index":7,"par_ladies":5,"stroke_index_ladies":3},
+    {"hole_number":11,"par":3,"stroke_index":17,"par_ladies":3,"stroke_index_ladies":17},
+    {"hole_number":12,"par":4,"stroke_index":9,"par_ladies":4,"stroke_index_ladies":7},
+    {"hole_number":13,"par":4,"stroke_index":1,"par_ladies":4,"stroke_index_ladies":1},
+    {"hole_number":14,"par":3,"stroke_index":11,"par_ladies":3,"stroke_index_ladies":11},
+    {"hole_number":15,"par":4,"stroke_index":15,"par_ladies":4,"stroke_index_ladies":13},
+    {"hole_number":16,"par":4,"stroke_index":5,"par_ladies":4,"stroke_index_ladies":9},
+    {"hole_number":17,"par":5,"stroke_index":13,"par_ladies":5,"stroke_index_ladies":5},
+    {"hole_number":18,"par":4,"stroke_index":3,"par_ladies":4,"stroke_index_ladies":15}
+  ],
+  "tees": [
+    {"name":"Blue","gender":"M","par":72,"course_rating":76.1,"slope":143},
+    {"name":"White","gender":"M","par":72,"course_rating":74.6,"slope":140},
+    {"name":"Green","gender":"M","par":72,"course_rating":72.4,"slope":134},
+    {"name":"Red","gender":"F","par":72,"course_rating":72.6,"slope":129}
+  ]
+}
