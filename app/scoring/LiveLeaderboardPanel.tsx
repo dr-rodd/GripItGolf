@@ -7,6 +7,7 @@ import ScoreShape from "@/app/components/ScoreShape"
 import { scoreTone, TONE_PILL } from "@/lib/leaderboardStyle"
 import { shotsReceived } from "@/lib/boardRows"
 import { type Countback, countbackOf, compareCountback } from "@/lib/tiebreak"
+import { quotaPoints, quotaTarget } from "@/lib/quota"
 import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
 import { exactCourseHandicap } from "@/lib/courseHandicap"
 import { formatHandicap } from "@/lib/handicap"
@@ -112,19 +113,29 @@ interface PlayerRow {
   grossRelative: number          // totalGross − sum(par for holes played)
   totalNett: number              // nett strokes, capped per hole at par+2
   nettRelative: number           // totalNett − sum(par for holes played)
+  totalQuota: number             // quota points earned so far, off the gross
+  quotaRelative: number          // totalQuota − (36 − course handicap)
   perHoleStableford: { hole_number: number; pts: number }[]
   /** The closing stretches, for the countback. See lib/tiebreak.ts. */
   countback: Countback
+  /** The same stretches in quota points, for the Quota tab's own tie. */
+  quotaCountback: Countback
 }
 
 // ─── Sort ─────────────────────────────────────────────────
 
-type Mode = "stableford" | "strokes"
+type Mode = "stableford" | "strokes" | "quota"
 type StrokesView = "gross" | "nett"
+type QuotaView = "pts" | "quota"
 
 function compareRows(a: PlayerRow, b: PlayerRow, mode: Mode, sv: StrokesView): number {
-  if (mode === "stableford") {
-    const diff = b.stablefordRelative - a.stablefordRelative
+  if (mode === "stableford" || mode === "quota") {
+    // Quota sorts the way Stableford does — higher above the level first —
+    // reading its own relative and its own closing stretches.
+    const rel = mode === "stableford"
+      ? (r: PlayerRow) => r.stablefordRelative
+      : (r: PlayerRow) => r.quotaRelative
+    const diff = rel(b) - rel(a)
     if (diff !== 0) return diff
     // Both finalised: the cards decide it, on the back 9, then 6, 3 and 2.
     //
@@ -139,7 +150,9 @@ function compareRows(a: PlayerRow, b: PlayerRow, mode: Mode, sv: StrokesView): n
     // eighteenth green means by "who won". What the board does with that
     // afterwards is the board's business.
     if (a.isFinalised && b.isFinalised) {
-      return compareCountback(a.countback, b.countback)
+      return mode === "stableford"
+        ? compareCountback(a.countback, b.countback)
+        : compareCountback(a.quotaCountback, b.quotaCountback)
     }
     // At least one active: more holes played = higher rank
     return b.holesCompleted - a.holesCompleted
@@ -283,6 +296,13 @@ interface Props {
    * between them is two different rounds.
    */
   allowance?: number
+  /**
+   * Whether one of this trip's boards scores Quota, which is the only time
+   * the Quota tab appears here — a mode nobody is playing is a tab that
+   * teaches the wrong game. The legacy screens pass nothing and keep the two
+   * tabs they have always had.
+   */
+  offerQuota?: boolean
   onClose?: () => void
   showBackButton?: boolean
 }
@@ -291,12 +311,13 @@ interface Props {
 
 export default function LiveLeaderboardPanel({
   liveRound, players, holes, roundHandicaps, tees = [],
-  allowance = FULL_ALLOWANCE, onClose, showBackButton = false,
+  allowance = FULL_ALLOWANCE, offerQuota = false, onClose, showBackButton = false,
 }: Props) {
   const [liveScores, setLiveScores]     = useState<LiveScoreRow[]>([])
   const [validPlayerIds, setValidPlayerIds] = useState<Set<string>>(new Set())
   const [mode, setMode]                 = useState<Mode>("stableford")
   const [strokesView, setStrokesView]   = useState<StrokesView>("nett")
+  const [quotaView, setQuotaView]       = useState<QuotaView>("pts")
   const [lastFetch, setLastFetch]       = useState<Date | null>(null)
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null)
   const [finalisedPlayerIds, setFinalisedPlayerIds] = useState<Set<string>>(new Set())
@@ -399,8 +420,17 @@ export default function LiveLeaderboardPanel({
         return pointsFor(ls.gross_score, ls.stableford_points, hole, player.gender, hcp, allowance) ?? 0
       }
 
+      // Quota points come off the gross against par alone — the handicap has
+      // already spoken, once, in the target below. lib/quota.ts is the only
+      // copy of the table.
+      const quotaOn = (ls: LiveScoreRow) => {
+        const hole = courseHoles.find(h => h.hole_number === ls.hole_number)
+        return hole ? quotaPoints(ls.gross_score, effectivePar(hole, player.gender)) : 0
+      }
+
       const totalStableford = playerScores.reduce((s, ls) => s + pointsOn(ls), 0)
       const totalGross      = playerScores.reduce((s, ls) => s + (ls.gross_score ?? 0), 0)
+      const totalQuota      = playerScores.reduce((s, ls) => s + quotaOn(ls), 0)
 
       let totalParPlayed = 0
       for (const ls of playerScores) {
@@ -427,8 +457,11 @@ export default function LiveLeaderboardPanel({
         grossRelative: totalGross - totalParPlayed,
         totalNett,
         nettRelative: holesCompleted * 2 - totalStableford,
+        totalQuota,
+        quotaRelative: totalQuota - quotaTarget(hcp),
         perHoleStableford: perHole,
         countback: countbackOf(perHole, h => h.hole_number, h => h.pts),
+        quotaCountback: countbackOf(playerScores, ls => ls.hole_number, quotaOn),
       }]
     })
 
@@ -466,7 +499,12 @@ export default function LiveLeaderboardPanel({
       {/* Mode toggle — the same tab pills the trip leaderboard uses, so the
           two boards read as one system rather than two eras of the app. */}
       <div className="flex gap-1.5">
-        {(["stableford", "strokes"] as Mode[]).map(m => (
+        {/* Quota only when a board is actually playing it — a mode nobody is
+            scored on would teach the wrong game. */}
+        {(offerQuota
+          ? (["stableford", "strokes", "quota"] as Mode[])
+          : (["stableford", "strokes"] as Mode[])
+        ).map(m => (
           <button
             key={m}
             onClick={() => setMode(m)}
@@ -476,7 +514,7 @@ export default function LiveLeaderboardPanel({
                 : "bg-surface border-bark/12 text-ink/65 hover:text-ink/80"
             }`}
           >
-            {m === "stableford" ? "Stableford" : "Strokes"}
+            {m === "stableford" ? "Stableford" : m === "strokes" ? "Strokes" : "Quota"}
           </button>
         ))}
       </div>
@@ -492,21 +530,34 @@ export default function LiveLeaderboardPanel({
 
           The height is not reduced as far as the type: `py-1.5` keeps each
           half around 26px tall, over the 24px minimum a target has to clear.
-          It is a thumb on a golf course, not a mouse. */}
-      {mode === "strokes" && (
+          It is a thumb on a golf course, not a mouse.
+
+          Quota wears the same pill in the same place: pts is the points
+          accumulated so far, quota is the distance to breaking even —
+          negative while points are still owed. One control, two boards, so
+          the two modes cannot drift apart visually. */}
+      {mode !== "stableford" && (
         <div className="flex justify-end -mt-1">
           <div className="inline-flex gap-0.5 p-0.5 rounded-lg bg-bark/[0.06]">
-            {(["nett", "gross"] as StrokesView[]).map(sv => (
-              <button
-                key={sv}
-                onClick={() => setStrokesView(sv)}
-                className={`px-2.5 py-1.5 rounded-md text-[13px] uppercase tracking-[0.10em] transition-colors duration-150 ${
-                  strokesView === sv ? "bg-surface text-ink font-semibold" : "text-ink/65 hover:text-ink/80"
-                }`}
-              >
-                {sv}
-              </button>
-            ))}
+            {(mode === "strokes"
+              ? (["nett", "gross"] as const)
+              : (["pts", "quota"] as const)
+            ).map(sv => {
+              const on = mode === "strokes" ? strokesView === sv : quotaView === sv
+              return (
+                <button
+                  key={sv}
+                  onClick={() => mode === "strokes"
+                    ? setStrokesView(sv as StrokesView)
+                    : setQuotaView(sv as QuotaView)}
+                  className={`px-2.5 py-1.5 rounded-md text-[13px] uppercase tracking-[0.10em] transition-colors duration-150 ${
+                    on ? "bg-surface text-ink font-semibold" : "text-ink/65 hover:text-ink/80"
+                  }`}
+                >
+                  {sv}
+                </button>
+              )
+            })}
           </div>
         </div>
       )}
@@ -535,7 +586,8 @@ export default function LiveLeaderboardPanel({
             const { player, holesCompleted, isFinalised,
                     totalStableford, stablefordRelative,
                     totalGross, grossRelative,
-                    totalNett, nettRelative } = row
+                    totalNett, nettRelative,
+                    totalQuota, quotaRelative } = row
 
             const isExpanded = expandedPlayerId === player.id
             const isLast = idx === sortedRows.length - 1
@@ -548,16 +600,27 @@ export default function LiveLeaderboardPanel({
             // than level itself carries. Stableford counts up and strokes
             // count down, so the direction is passed in rather than assumed.
             const lowerIsBetter = mode === "strokes"
-            const relativeValue = mode === "stableford"
-              ? stablefordRelative
+            const relativeValue = mode === "stableford" ? stablefordRelative
+              : mode === "quota" ? quotaRelative
               : strokesView === "gross" ? grossRelative : nettRelative
             let scoreDisplay = fmtRelative(relativeValue)
+            // Quota's pts view: the points accumulated so far, a plain count.
+            // The pill's colour still reads off the distance to quota, so the
+            // two views of one card never grade it differently.
+            if (mode === "quota" && quotaView === "pts") {
+              scoreDisplay = `${totalQuota}`
+            }
             const scorePillClass = TONE_PILL[scoreTone(relativeValue, lowerIsBetter)]
 
             // ── Col 3 override for finalised: show absolute total ─
+            // Quota is the exception on purpose: a signed card reads as its
+            // distance from the player's own number — higher is better —
+            // because "38 points" says nothing without knowing the quota.
             if (isFinalised) {
               if (mode === "stableford") {
                 scoreDisplay = `${totalStableford}`
+              } else if (mode === "quota") {
+                scoreDisplay = fmtRelative(quotaRelative)
               } else if (strokesView === "gross") {
                 scoreDisplay = `${totalGross}`
               } else {

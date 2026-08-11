@@ -30,7 +30,8 @@ export default async function TripCoursePage({
   // a four-ball at 85% and a singles board at 95% off the one scorecard, so
   // the number beside a player's name is not one number — see
   // lib/handicapAllowance.ts.
-  const allowances = allowanceCycle(boardsForTrip(trip as never))
+  const boards = boardsForTrip(trip as never)
+  const allowances = allowanceCycle(boards)
 
   // All rounds for this trip (needed for CourseDashboardClient + round_handicaps scope)
   const { data: allRounds } = await supabase
@@ -95,6 +96,9 @@ export default async function TripCoursePage({
         tripCode={tripCode}
         allowances={allowances.steps}
         allowanceStart={allowances.startIndex}
+        // The live panel only offers its Quota tab when one of this trip's
+        // boards is actually scoring it.
+        offerQuota={boards.some(b => b.competition === 'league' && b.scoring === 'quota')}
         // Off unless this trip asked for it. The legacy `/scoring/[slug]`
         // route passes nothing and so gets the default, which is the
         // scorecard exactly as it has always been.

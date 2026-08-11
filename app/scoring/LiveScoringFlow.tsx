@@ -128,6 +128,11 @@ interface Props {
    * about a score — and nothing this component writes moves when it does.
    */
   allowance?: number
+  /**
+   * Whether the trip runs a Quota board — the live panel beside the card
+   * only offers the Quota tab when someone is actually being scored on it.
+   */
+  offerQuota?: boolean
   /** Every allowance the trip's boards play off, for the player picker. */
   allowances?: number[]
   /**
@@ -403,6 +408,7 @@ export default function LiveScoringFlow({
   autoResume = false,
   onHoleChange,
   allowance = FULL_ALLOWANCE,
+  offerQuota = false,
   allowances = [FULL_ALLOWANCE],
   trackStats = false,
   tripCode,
@@ -954,6 +960,7 @@ export default function LiveScoringFlow({
         roundHandicaps={roundHandicaps}
         tees={tees}
         allowance={allowance}
+        offerQuota={offerQuota}
         onClose={() => onLeaderboardChange(false)}
       />
     )
@@ -1355,6 +1362,7 @@ export default function LiveScoringFlow({
                 // card does. Swiping between two different handicaps would
                 // read as two different rounds.
                 allowance={allowance}
+                offerQuota={offerQuota}
               />
             )}
           </div>

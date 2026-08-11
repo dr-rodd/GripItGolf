@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import {
   type Leaderboard, type Audience,
-  SCORINGS, TEAM_FORMATS, COMBINES, MAX_DISCARD,
+  scoringsFor, TEAM_FORMATS, COMBINES, MAX_DISCARD,
   unanswered, isComplete, offersDiscard, offersTieBreak, offersAllowance,
   slotKey, isFormatFree,
   freeScorings, freeTeamFormats,
@@ -479,7 +479,10 @@ function Builder({
           about how the rounds add up — so none of them hides another. */}
       {draft.audience && league && (
         <Question n={next()} title="How should the rounds be scored?">
-          {SCORINGS.map(s => (
+          {/* Per audience, not the whole list: quota is individual-only, and
+              rendering it greyed for a team board would read as "already
+              running" when it was never on offer. */}
+          {scoringsFor(draft.audience).map(s => (
             <Choice
               key={s.key}
               on={draft.scoring === s.key}

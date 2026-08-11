@@ -93,6 +93,13 @@ interface Props {
   /** Which of them the card opens on — the primary board's. */
   allowanceStart?: number
   /**
+   * Whether the trip runs a Quota board. The live leaderboard offers its
+   * Quota tab only when it does — a scoring mode nobody is playing would
+   * just teach the wrong game. The legacy /scoring/[slug] route knows
+   * nothing about a trip's boards and leaves this off.
+   */
+  offerQuota?: boolean
+  /**
    * Room to leave at the bottom for anything fixed over this screen.
    *
    * The trip route puts the tab bar there. The legacy /scoring/[slug] route
@@ -124,8 +131,8 @@ type View = "dashboard" | "scoring" | "live-board" | "settings"
 export default function CourseDashboardClient({
   courseName, courseId, players, rounds, holes, tees, roundHandicaps,
   backHref = "/scoring", roundId, stickyTop = 0,
-  allowances = [FULL_ALLOWANCE], allowanceStart = 0, bottomInset = "0",
-  trackStats = false, tripCode,
+  allowances = [FULL_ALLOWANCE], allowanceStart = 0, offerQuota = false,
+  bottomInset = "0", trackStats = false, tripCode,
 }: Props) {
   // The course card, held as state rather than read straight off the props:
   // the card check on the pick-player screen can correct it against a photo
@@ -965,6 +972,7 @@ export default function CourseDashboardClient({
           autoResume={isResuming}
           allowance={allowance}
           allowances={allowances}
+          offerQuota={offerQuota}
           trackStats={trackStats}
           onBack={goBack}
           onLiveRoundChange={r => {
@@ -986,6 +994,7 @@ export default function CourseDashboardClient({
           roundHandicaps={roundHandicaps}
           tees={courseTees}
           allowance={allowance}
+          offerQuota={offerQuota}
           onClose={goBack}
           showBackButton={false}
         />

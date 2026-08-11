@@ -16,6 +16,7 @@
 import type { Leaderboard } from './leaderboards'
 import { FULL_ALLOWANCE, allowanceOf, allowedHandicap } from './handicapAllowance'
 import { shotsReceived } from './handicap'
+import { quotaPoints, quotaTarget } from './quota'
 import { setOf, teamsOnSheet, membersOf, type Membership } from './teamSets'
 import {
   type TeamScoring, type TeamScoreInput, type ScoringBasis,
@@ -144,8 +145,10 @@ export type BoardRow = {
   liveRounds?: string[]
   /**
    * How far ahead of level a round stands while it is in play. Against two
-   * points a hole on Stableford, against par on Strokes. Absent where the
-   * question has no meaning — a prize table has no level to be ahead of.
+   * points a hole on Stableford, against par on Strokes, against the
+   * player's own quota on Quota — where it is simply the score, negative
+   * while points are still owed. Absent where the question has no meaning —
+   * a prize table has no level to be ahead of.
    */
   relativeByRound?: Record<string, number>
   total: number
@@ -342,7 +345,8 @@ function boardPoints(
  */
 export function scoresForBoard(lb: Leaderboard, ctx: RowContext): ResolvedScore[] {
   const allowance = allowanceOf(lb)
-  if (allowance === FULL_ALLOWANCE) return ctx.resolved
+  const quota = lb.scoring === 'quota'
+  if (allowance === FULL_ALLOWANCE && !quota) return ctx.resolved
 
   const holeById = new Map(ctx.holes.map(h => [h.id, h]))
   const playerById = new Map(ctx.players.map(p => [p.id, p]))
@@ -350,6 +354,18 @@ export function scoresForBoard(lb: Leaderboard, ctx: RowContext): ResolvedScore[
   return ctx.resolved.map(s => {
     const player = playerById.get(s.playerId)
     const gender = player?.gender ?? 'M'
+    // A quota board's per-hole points come off the gross against par and
+    // nothing else — the handicap has already spoken, once, in the target.
+    // Restated even at the full allowance: the stored points are Stableford's.
+    if (quota) {
+      const hole = holeById.get(s.holeId)
+      return {
+        ...s,
+        points: hole
+          ? quotaPoints(s.noReturn ? null : s.gross, effectivePar(hole, gender))
+          : 0,
+      }
+    }
     const hcp = boardHandicap(ctx, s.roundId, s.playerId, player?.handicap, allowance)
     return { ...s, points: boardPoints(s, holeById.get(s.holeId), gender, hcp, allowance) }
   })
@@ -683,6 +699,7 @@ export function orderRowsUndiscarded(lb: Leaderboard, rows: readonly BoardRow[])
 function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const holeById = new Map(ctx.holes.map(h => [h.id, h]))
   const strokes = lb.scoring === 'strokes'
+  const quota = lb.scoring === 'quota'
   const allowance = allowanceOf(lb)
 
   // The cards are only read for their closing stretches on a board that
@@ -698,6 +715,37 @@ function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
         s.playerId === p.id && s.roundId === r.id && (!strokes || s.gross != null))
       holesPlayed += mine.length
       const ph = boardHandicap(ctx, r.id, p.id, p.handicap, allowance)
+
+      if (quota) {
+        // Points off the gross alone; the handicap enters exactly once, in
+        // the target — reduced by the board's allowance like any handicap,
+        // so a full-quota and an 85%-quota board read the same cards. A
+        // no-return hole earns nothing, as it does on Stableford. Per hole
+        // first, like the other scorings: a countback is these same figures
+        // cut at the tenth — the target subtracts out of both cards level.
+        const perHole = mine.map(s => {
+          const hole = holeById.get(s.holeId)
+          return {
+            n: s.holeNumber,
+            v: hole
+              ? quotaPoints(s.noReturn ? null : s.gross, effectivePar(hole, p.gender))
+              : 0,
+          }
+        })
+        const pts = perHole.reduce((sum, h) => sum + h.v, 0)
+        const score = pts - quotaTarget(ph)
+        return {
+          roundId: r.id,
+          score,
+          // Already a signed distance from the player's own number, so the
+          // against-level figure is the score itself — negative while
+          // points are still owed
+          relative: score,
+          live: mine.some(s => s.live),
+          played: mine.length > 0,
+          countback: reads ? countbackOf(perHole, h => h.n, h => h.v) : undefined,
+        }
+      }
 
       if (!strokes) {
         // Per hole first, then totalled — a countback is the same figures cut

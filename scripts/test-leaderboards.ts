@@ -16,7 +16,7 @@
 
 import {
   type Leaderboard,
-  SCORINGS, TEAM_FORMATS, COMBINES, MAX_DISCARD,
+  SCORINGS, scoringsFor, TEAM_FORMATS, COMBINES, MAX_DISCARD,
   slotKey, isSlotFree, formatKey, isFormatFree, hasMatchplay,
   freeScorings, freeTeamFormats, everyBoard,
   unanswered, isComplete, offersDiscard, needsTeams, needsPairings,
@@ -93,11 +93,12 @@ section('Every combination of the three answers is a real board')
 {
   const grid = everyBoard()
 
-  // 2 scorings × 2 combines for individuals; the same again per team format
+  // Every scoring × combine for individuals; the same again per team format
+  // — off each audience's own scoring list, because quota is individual-only
   eq(grid.filter(b => b.audience === 'individual').length,
-    SCORINGS.length * COMBINES.length, 'every individual cell exists')
+    scoringsFor('individual').length * COMBINES.length, 'every individual cell exists')
   eq(grid.filter(b => b.audience === 'team').length,
-    SCORINGS.length * TEAM_FORMATS.length * COMBINES.length, 'and every team cell')
+    scoringsFor('team').length * TEAM_FORMATS.length * COMBINES.length, 'and every team cell')
 
   // The grid is the shape of every competition. A prize table is a value the
   // organiser fills in, not part of which competition this is — so a cell is
@@ -157,10 +158,11 @@ section('One draw, and one of each league')
 
 section('The cascade offers what is left')
 {
-  eq(freeScorings([], 'individual'), ['stableford', 'strokes'], 'a new trip can pick either scoring')
+  eq(freeScorings([], 'individual'), ['stableford', 'strokes', 'quota'],
+    'a new trip can pick any scoring')
   ok(freeScorings([sf], 'individual').includes('stableford'),
     'a scoring stays on offer while any way of adding it up is still free')
-  eq(freeScorings([sf, prize], 'individual'), ['strokes'],
+  eq(freeScorings([sf, prize], 'individual'), ['strokes', 'quota'],
     'and drops out only once every board using it is running')
 
   eq(freeTeamFormats([]).length, TEAM_FORMATS.length, 'every team format is available at first')
@@ -280,6 +282,40 @@ section('Stored boards read back, and nonsense does not')
   eq(ordered[0].audience, 'team', 'the stored order is kept, because the first one leads')
 
   eq(COMBINES.length, 2, 'rounds are put together one of two ways')
+}
+
+// ─── Quota ─────────────────────────────────────────────────────
+
+section('Quota is a third scoring, and an individual one')
+{
+  const quota: Leaderboard = {
+    id: 'q', audience: 'individual', competition: 'league',
+    scoring: 'quota', combine: 'total', discardWorst: 0,
+  }
+  eq(boardTitle(quota), 'Quota', 'named by its scoring')
+  eq(boardTitle({ ...quota, combine: 'position' }), 'Quota prizes',
+    'and told apart when paid by position')
+  ok(boardRules(quota).includes('36 minus course handicap'),
+    'the rules line says what the number is')
+
+  ok(slotKey(quota) !== slotKey(sf) && slotKey(quota) !== slotKey(strokes),
+    'a third scoring is a third competition')
+  ok(isSlotFree([sf, strokes], quota), 'free alongside both the others')
+
+  // Individual-only, and every part of the model gives the same answer —
+  // the form's list, the grid, the cascade, and what reads back from storage
+  eq(scoringsFor('team').some(s => s.key === 'quota'), false,
+    'the form never shows a team board quota')
+  ok(scoringsFor('individual').some(s => s.key === 'quota'), 'but a solo board sees it')
+  ok(!everyBoard().some(b => b.audience === 'team' && b.scoring === 'quota'),
+    'the grid has no team quota cell')
+  ok(freeScorings([], 'individual').includes('quota'), 'the cascade offers it to individuals')
+  ok(!freeScorings([], 'team').includes('quota'), 'and never to teams')
+
+  eq(parseLeaderboards([quota])[0]?.scoring, 'quota', 'a stored quota board reads back')
+  eq(parseLeaderboards([
+    { audience: 'team', competition: 'league', scoring: 'quota', teamFormat: 'hero', combine: 'total' },
+  ]), [], 'a stored team quota board is dropped rather than guessed at')
 }
 
 section('The first shape of this model still reads back')

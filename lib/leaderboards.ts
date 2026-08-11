@@ -33,7 +33,7 @@ export type Audience = 'individual' | 'team'
 export type Competition = 'league' | 'matchplay'
 
 /** How a round is scored. */
-export type Scoring = 'stableford' | 'strokes'
+export type Scoring = 'stableford' | 'strokes' | 'quota'
 
 /**
  * How a team's members combine into one score for a round.
@@ -114,7 +114,21 @@ export const SCORINGS: { key: Scoring; label: string; hint: string }[] = [
     hint: 'Stableford points. Man\'s greatest achievement.' },
   { key: 'strokes', label: 'Strokes',
     hint: 'Simple as.' },
+  { key: 'quota', label: 'Quota',
+    hint: 'Quota points against your own number — 36 minus course handicap.' },
 ]
+
+/**
+ * The scorings offered to this audience.
+ *
+ * Quota is individual-only: the quota is personal — 36 minus *your* course
+ * handicap — and no team format says whose number a composite card would be
+ * chasing. `everyBoard` skips the same cells and `parseLeaderboards` drops a
+ * stored team quota board, so the three can never disagree about what exists.
+ */
+export function scoringsFor(audience: Audience): { key: Scoring; label: string; hint: string }[] {
+  return SCORINGS.filter(s => s.key !== 'quota' || audience === 'individual')
+}
 
 export const TEAM_FORMATS: { key: TeamFormat; label: string; hint: string }[] = [
   { key: 'better_ball', label: 'Better ball',
@@ -219,7 +233,7 @@ export function hasMatchplay(boards: readonly Leaderboard[]): boolean {
 export function everyBoard(): Leaderboard[] {
   const out: Leaderboard[] = []
   for (const audience of ['individual', 'team'] as Audience[]) {
-    for (const scoring of SCORINGS.map(s => s.key)) {
+    for (const scoring of scoringsFor(audience).map(s => s.key)) {
       for (const teamFormat of audience === 'team' ? TEAM_FORMATS.map(f => f.key) : [undefined]) {
         for (const combine of COMBINES.map(c => c.key)) {
           out.push({
@@ -445,10 +459,14 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
       // board with none is genuinely unreadable — there is nothing to infer
       // from — so it is dropped.
       const scoring = r.scoring === 'strokes' ? 'strokes'
+        : r.scoring === 'quota' ? 'quota'
         : r.scoring === 'stableford' || r.scoring === 'custom' ? 'stableford'
         : audience === 'team' && r.scoring === undefined ? 'stableford'
         : null
       if (!scoring) continue
+      // Quota is individual-only — see `scoringsFor`. A stored team quota
+      // board has no maths behind it, so it is dropped rather than guessed at.
+      if (scoring === 'quota' && audience === 'team') continue
 
       lb.scoring = scoring
       lb.combine = paidByPosition ? 'position' : 'total'

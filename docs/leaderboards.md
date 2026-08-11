@@ -11,7 +11,7 @@ A league board is three answers, and they do not constrain one another:
 | Question | Answers |
 |---|---|
 | Who is ranked | individuals · teams |
-| How a round is scored | Stableford · Strokes |
+| How a round is scored | Stableford · Strokes · Quota *(individuals only)* |
 | *(teams only)* how the players combine | better ball · hero · cut the dead weight |
 | How the rounds add up | total them · pay by finishing position |
 
@@ -20,6 +20,8 @@ Discard (0–2 worst rounds) and **how ties are broken** are asked of **every** 
 **Every combination is a board that exists and is implemented.** `everyBoard()` is that grid, and the form offers cells from it and nothing else, so settings can never ask for maths that has not been written. This is the whole design: the renderer's capability is the fixed thing and the form is a selector over it, rather than each new option needing new scoring code.
 
 **"Custom points" used to sit beside Stableford and Strokes as a third way of scoring a round.** It never was one — it is Stableford, paid out by position — and having it in the wrong slot is what forced discard to be switched off for it, made the prize table hang off two unrelated fields, and made teams ask the same question again under the name `aggregation`. Splitting scoring from combining is what opened up nett-strokes team formats and strokes paid by position, neither of which was expressible before.
+
+**Quota** (`lib/quota.ts`, the only copy of its rules): every player chases their own number — 36 minus course handicap — with points earned off the **gross** against par: bogey 1, par 2, birdie 4, eagle 6, an albatross continuing the step to 8, double bogey or worse (or no score) nothing. The round's result is points minus quota, **signed** — positive beat it, negative fell short, higher is better. The handicap enters exactly once, in the target: a board allowance reduces the course handicap before the subtraction (`allowedHandicap`, same as everywhere), never the per-hole points. A plus handicap is negative and pushes the target above 36. **Individual-only** — the quota is personal, and no team format says whose number a composite card would chase; `scoringsFor`, `everyBoard` and `parseLeaderboards` all enforce it, so a team quota board cannot be made, offered or read back. The stored `scores.points` are Stableford's, so `scoresForBoard` restates a quota board's per-hole points even at the full allowance — that is why the early-return there checks the scoring too. The live panel in scoring offers a Quota tab only when a trip board actually plays it (`offerQuota`, threaded from the trip route), with a pts/quota sub-toggle in the same pill nett/gross uses: pts is the points accumulated, quota the signed distance to breaking even, and a finalised card always reads as its distance — higher is better — because "38 points" says nothing without knowing the quota.
 
 **Team formats** (`lib/teamScoring.ts`): `better_ball` (best score on each hole), `hero` (best single card carries it), `cut_dead_weight` (everyone counts except the worst card of the day — that player is back in next round; ties broken by id so the same total is produced every time). Each works on either scoring: `teamRoundPoints` takes a `basis`, and `beats()` is the one place the direction lives — lowest wins on strokes, highest on Stableford.
 
