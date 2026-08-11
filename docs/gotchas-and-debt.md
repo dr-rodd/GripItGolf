@@ -168,3 +168,19 @@ Reviewing a researched course I noticed that its men's and ladies' stroke index 
 A ladies card is rated for a different player off different tees; a hole that is a driver-wedge for a man can be the hardest on the course for a shorter hitter. Big divergence is the game, not a smell. **Only a par change is evidence of anything**, and `teeParProblems` already catches the case where that matters.
 
 The general lesson is the one `docs/course-import.md` already names: eighteen pars summing correctly with a clean 1–18 index is a valid card whether or not it is *this* course's card. No statistical check distinguishes plausible-wrong from right. Corroboration between two independent sources, and a scorecard photo, are the only things that do.
+
+## The course picker still cannot tell a researched course from a cardless one
+
+`cardState` in `lib/courseCard.ts` gives a course three states, and `/admin/courses` shows all three. **The picker shows two.** `CourseSelect.tsx` badges `Awaiting scorecard` on `card_verified === false` and nothing else, so a course with eighteen researched holes and a course with no card at all look identical to whoever is building a trip — and only one of them can be scored.
+
+The reason it was not fixed with the admin side is that the picker has no hole data at all. `DirectoryCourse` (`lib/courseDirectory.ts`) carries id, name, location, county, website and `card_verified`, and all three callers feed it a plain `courses` select with no join:
+
+- `app/trip/[tripCode]/setup/page.tsx`
+- `app/trip/[tripCode]/scoring/page.tsx`
+- `app/dashboard/create/CreateTripForm.tsx`
+
+So closing it means adding a hole count to `DirectoryCourse` and to those three fetches. The tidy way is PostgREST's nested aggregate — `.select('*, holes(count)')` — which is one query and no schema change, but it is syntax this repo does not use anywhere yet and there is no database in the container to try it against. It was left rather than shipped blind into three trip-facing screens.
+
+**Until it is done, a cardless course is a trap in the picker.** It appears under its county, carries its weather, and is chosen exactly like any other course; the round page then has no card to print and the scoring flow has nothing to score. The admin list is the only place that says so, and only somebody with the password sees it.
+
+Same shape as the row cap in `app/admin/courses/page.tsx` that was fixed alongside it: a query written when the numbers were small, and correct only while they stay small.
