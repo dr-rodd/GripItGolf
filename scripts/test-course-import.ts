@@ -25,6 +25,7 @@ import {
   GENERATED_MARKER, isGeneratedSql, type CourseImport,
 } from '../lib/courseImport'
 import { validateNewHoleRows, type NewHoleRow } from '../lib/cardCheck'
+import { courseNameKey } from '../lib/courseDirectory'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -289,6 +290,59 @@ const shipped = migrationFiles
   ok(shipped.some(c => c.slug === 'waterville'), 'and waterville, from migration 005')
   ok(shipped.some(c => c.name === 'Narin & Portnoo Links'), 'names come back whole')
   eq(new Set(shipped.map(c => c.slug)).size, shipped.length, 'no platform slug has shipped twice')
+}
+
+section('Near-duplicate names — the same club written two ways')
+{
+  eq(courseNameKey('Portstewart Golf Club -- The Strand Course'),
+    courseNameKey('Portstewart Golf Club — Strand Course'),
+    'an em dash and a dropped "The" do not make a second club')
+  eq(courseNameKey('Laytown & Bettystown Golf Club'),
+    courseNameKey('Laytown and Bettystown'),
+    'and neither does an ampersand written out')
+
+  // The neighbours that must stay apart — two courses on one property is the
+  // common case in this dataset, not the exception.
+  const distinct = [
+    'Ballyliffin Golf Club -- Old Links', 'Ballyliffin Golf Club -- Glashedy Links',
+    'Rosapenna Golf Resort -- Sandy Hills Links', 'Rosapenna Golf Resort -- St Patricks Links',
+    'Royal Portrush Golf Club -- Dunluce Links', 'Royal Portrush Golf Club -- Valley Links',
+    'Castlerock Golf Club -- Mussenden', 'Castlerock Golf Club -- Bann',
+  ]
+  eq(new Set(distinct.map(courseNameKey)).size, distinct.length,
+    'two courses on one property stay apart')
+
+  eq(courseNameKey('The Golf Club'), 'the golf club',
+    'a name that is nothing but noise keeps its words rather than folding to blank')
+
+  // The claim that matters, against what has actually shipped.
+  const keys = shipped.map(c => courseNameKey(c.name))
+  eq(new Set(keys).size, shipped.length,
+    `no two shipped names collide under the key (${shipped.length} names)`)
+
+  const asFile = (name: string, slug: string) => ({ file: `${slug}.json`, course: { ...clone(), slug, name } })
+  ok(fatalsOf(validateImportSet([asFile('Portstewart Golf Club — Strand Course', 'portstewart-strand-course')], shipped))
+    .some(p => /one club/.test(p.message)),
+    'a file that reads as a shipped course is refused, under a slug that would not have clashed')
+  eq(fatalsOf(validateImportSet([asFile('Ardglass Golf Club', 'ardglass')], shipped)).length, 0,
+    'and a genuinely new course is not')
+
+  // "Old Tom Morris Links" keys to exactly "old tom morris" — Links is noise —
+  // so it is caught by the exact rule, not this one.
+  ok(fatalsOf(validateImportSet([asFile('Old Tom Morris Links', 'otm-links')], shipped)).length > 0,
+    'a trailing "Links" does not make a second Old Tom Morris')
+
+  // Containment: warned about, never refused. This is the real case — the
+  // platform row was renamed to the resort form by migration 032, which is an
+  // UPDATE the migration parser does not read, so `shipped` still holds the
+  // short name it was inserted under.
+  const contained = validateImportSet(
+    [asFile('Rosapenna Golf Resort -- Old Tom Morris', 'rosapenna-otm')], shipped)
+  eq(fatalsOf(contained).length, 0, 'a shorter shipped name inside a longer new one is not fatal')
+  ok(contained.some(p => !p.fatal && /two courses and not one/.test(p.message)),
+    '  …but it is warned about')
+  eq(validateImportSet([asFile('Fota Island Resort', 'fota-island')], shipped).filter(p => !p.fatal).length, 0,
+    'and one shared word does not warn — "Island" alone is under the floor')
 }
 
 // ─── The generator ─────────────────────────────────────────────

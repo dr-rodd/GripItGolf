@@ -36,7 +36,7 @@ import {
 } from './cardCheck'
 import {
   courseNameError, countyError, countyOf, websiteError, normalizeWebsite,
-  slugify, validNewTee, IRISH_COUNTIES, MAX_LOCATION,
+  slugify, validNewTee, courseNameKey, IRISH_COUNTIES, MAX_LOCATION,
 } from './courseDirectory'
 import { truncCoord } from './weather'
 
@@ -383,6 +383,13 @@ export function validateImportSet(
   const takenSlugs = new Map<string, string>()
   for (const e of existing) takenSlugs.set(e.slug, 'already on the platform')
 
+  // Names reduced to what identifies them, so punctuation and "The" cannot
+  // smuggle a second row for a course that is already here. `courseNameError`
+  // below still runs — it holds the blank and over-long rules, and its
+  // fold-exact duplicate check is the one the add-course form shares.
+  const takenKeys = new Map<string, string>()
+  for (const e of existing) takenKeys.set(courseNameKey(e.name), `already on the platform as "${e.name}"`)
+
   const coords = new Map<string, string>()
 
   for (const { file, course } of courses) {
@@ -402,6 +409,32 @@ export function validateImportSet(
     const siblings = courses.filter(o => o.file !== file).map(o => o.course.name)
     const nameErr = courseNameError(course.name, [...existing.map(e => e.name), ...siblings])
     if (nameErr) problems.push(fatal(file, nameErr))
+
+    const key = courseNameKey(course.name)
+    const clash = takenKeys.get(key)
+    if (clash) {
+      problems.push(fatal(file,
+        `"${course.name}" reads as the same course as ${clash} — punctuation and ` +
+        'the words The, Golf, Club, Links and Course aside, they are one club. Two rows ' +
+        'for one club cannot be merged afterwards, and the second collects its own scores.'))
+    } else {
+      // A containment warning, not a second fatal: "Old Tom Morris" is a strict
+      // subset of "Rosapenna Golf Resort -- Old Tom Morris Links" and really is
+      // the same course, but plenty of genuinely different courses share a word.
+      // The two-token floor keeps "Island" (The Island Golf Club) quiet against
+      // "Fota Island". Silent on everything shipped today.
+      const mine = new Set(key.split(' '))
+      for (const [other, where] of takenKeys) {
+        const theirs = new Set(other.split(' '))
+        const [small, big] = mine.size < theirs.size ? [mine, theirs] : [theirs, mine]
+        if (small.size >= 2 && small.size < big.size && [...small].every(w => big.has(w))) {
+          problems.push(warn(file,
+            `"${course.name}" and ${where} share every identifying word of the shorter ` +
+            'name. Check they are two courses and not one written two ways.'))
+        }
+      }
+      takenKeys.set(key, `"${course.name}" in ${file}`)
+    }
 
     const here = `${course.latitude},${course.longitude}`
     const other = coords.get(here)

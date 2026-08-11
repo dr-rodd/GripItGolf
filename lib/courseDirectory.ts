@@ -54,6 +54,42 @@ const fold = (s: string) =>
     .replace(/[̀-ͯ]/g, '')
 
 /**
+ * Words that carry no identity in a club's name. Dropping them is what makes
+ * "Portstewart Golf Club -- The Strand Course" and "Portstewart Golf Club —
+ * Strand Course" the same course.
+ */
+export const NAME_NOISE: readonly string[] =
+  ['and', 'club', 'clubs', 'course', 'courses', 'gc', 'golf', 'links', 'the']
+
+/**
+ * A name reduced to what actually identifies the course.
+ *
+ * `fold` alone lowercases and strips accents — it does not touch punctuation.
+ * So an em dash against two hyphens, or a dropped "The", reads as a different
+ * club, and the platform ends up with two rows for one course. There is no
+ * way back from that once anybody has played: `tees` is `ON DELETE RESTRICT`
+ * from `round_handicaps`, and the second row collects its own scores.
+ *
+ * **Deliberately not wired into `courseNameError`.** The add-course form's
+ * false positive costs a person the name they typed; the bulk gate's costs
+ * somebody a one-line edit to a JSON file. The two do not deserve the same
+ * strictness, so the form keeps the fold-exact rule and the gate gets this.
+ *
+ * Word order is kept. "Royal Portrush Valley" against "Valley Royal Portrush"
+ * is not a real failure mode, and sorting the tokens would eventually pair
+ * two names that are genuinely different courses.
+ *
+ * A name that is nothing but noise ("The Golf Club") keeps its words rather
+ * than folding to the empty string, which would collide with every other
+ * such name.
+ */
+export function courseNameKey(name: string): string {
+  const words = fold(name).split(/[^a-z0-9]+/).filter(Boolean)
+  const kept = words.filter(w => !NAME_NOISE.includes(w))
+  return (kept.length > 0 ? kept : words).join(' ')
+}
+
+/**
  * The county parsed out of a location, for a course with no county of its
  * own — everything added before migration 032 gave the county a column.
  *
