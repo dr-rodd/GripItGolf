@@ -106,3 +106,47 @@ function nine(holes: CardHole[]): CardNine {
 export function hasCard(holes: readonly RowHole[]): boolean {
   return holes.length > 0
 }
+
+/**
+ * What a course's card is, in the three states it can actually be in.
+ *
+ * `card_verified` on its own answers a question nobody is asking. What matters
+ * first is whether the course can be **played** — that is `hasCard`, which is
+ * holes — and only then whether a photograph has confirmed the numbers:
+ *
+ *   · `confirmed`  — eighteen holes, and a scorecard photo agreed with them
+ *   · `researched` — eighteen holes, from a bulk import or an older seed. It
+ *                    plays perfectly well; nobody has photographed the card
+ *   · `none`       — no holes at all. **This one cannot be scored**, and it is
+ *                    the only state where "scoring is gated" is a true sentence
+ *
+ * A course with no holes is not "unverified", it is unplayable, and showing
+ * those two the same way is how somebody picks a course for a trip and finds
+ * out on the first tee.
+ *
+ * **The hole count is checked before the flag, and that order is the point.**
+ * Admin can set `card_verified` by hand, and a photograph cannot have confirmed
+ * a card that does not exist — so `none` wins.
+ */
+export type CardState = 'confirmed' | 'researched' | 'none'
+
+export function cardState(
+  holeCount: number,
+  cardVerified: boolean | null | undefined,
+): CardState {
+  if (holeCount <= 0) return 'none'
+  return cardVerified ? 'confirmed' : 'researched'
+}
+
+/** What each state is called on screen, and the `Badge` tone that carries it. */
+export const CARD_STATE_LABEL: Record<CardState, string> = {
+  confirmed: 'Verified',
+  researched: 'Awaiting photo',
+  none: 'No scorecard',
+}
+
+export const CARD_STATE_TONE: Record<CardState, 'win' | 'neutral' | 'loss'> = {
+  confirmed: 'win',
+  researched: 'neutral',
+  none: 'loss',
+}

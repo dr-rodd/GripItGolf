@@ -2,8 +2,11 @@
 
 import { useActionState, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { FIELD, FIELD_LABEL, buttonClass } from '@/app/components/ui'
+import { FIELD, FIELD_LABEL, buttonClass, Badge } from '@/app/components/ui'
 import { IRISH_COUNTIES, emptyTeeDraft } from '@/lib/courseDirectory'
+import {
+  cardState, CARD_STATE_LABEL, CARD_STATE_TONE, type CardState,
+} from '@/lib/courseCard'
 import {
   addTee, saveTee, setCardVerified, updateCourseIdentity, type ActionResult,
 } from './actions'
@@ -29,7 +32,7 @@ type Tee = {
 }
 
 export default function CourseEditor({
-  course, tees,
+  course, tees, holeCount,
 }: {
   course: {
     id: string
@@ -39,12 +42,17 @@ export default function CourseEditor({
     card_verified: boolean
   }
   tees: Tee[]
+  /** How many holes the course has — what decides whether it can be played at all. */
+  holeCount: number
 }) {
   return (
     <div className="flex flex-col gap-6">
       <IdentityForm course={course} />
       <TeesSection courseId={course.id} tees={tees} />
-      <VerifiedToggle courseId={course.id} verified={course.card_verified} />
+      <VerifiedToggle
+        courseId={course.id}
+        state={cardState(holeCount, course.card_verified)}
+      />
     </div>
   )
 }
@@ -203,10 +211,26 @@ function TeesSection({ courseId, tees }: { courseId: string; tees: Tee[] }) {
 
 // ─── Verified ──────────────────────────────────────────────────
 
-function VerifiedToggle({ courseId, verified }: { courseId: string; verified: boolean }) {
+/**
+ * What the card is, and the one control that can change it.
+ *
+ * Three states, not two. The copy used to say "scoring stays gated until the
+ * card is confirmed" of every unverified course, which is **false** for a
+ * researched one: scoring is gated by `hasCard` — holes — and never by
+ * `card_verified`. A course with eighteen researched holes plays perfectly
+ * well. Only the cardless state is actually gated, and now only it says so.
+ */
+function VerifiedToggle({ courseId, state }: { courseId: string; state: CardState }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+
+  const verified = state === 'confirmed'
+  // A card that does not exist cannot have been photographed, so there is
+  // nothing here to flip. Marking it verified would hang an emerald badge on a
+  // course nobody can score. `setCardVerified` refuses it server-side as well,
+  // because a button that is not rendered is not a rule.
+  const cardless = state === 'none'
 
   const flip = () => {
     setError(null)
@@ -217,27 +241,32 @@ function VerifiedToggle({ courseId, verified }: { courseId: string; verified: bo
     })
   }
 
+  const said =
+    state === 'confirmed'
+      ? 'A scorecard photo agreed with these numbers.'
+      : state === 'researched'
+        ? 'The course plays now — it has its eighteen holes. Nobody has photographed the '
+          + 'card, so the numbers are as researched.'
+        : 'No holes recorded, so this course cannot be scored. The first trusted scorecard '
+          + 'photo creates the card and opens it.'
+
   return (
     <section className="bg-surface border border-bark/12 rounded-2xl px-4 py-4">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="font-[family-name:var(--font-display)] text-base">
-            Card {verified ? 'verified' : 'not verified'}
-          </h2>
-          <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-            {verified
-              ? 'Confirmed against a scorecard photo. Scoring is open on this course.'
-              : 'Scoring stays gated until the card is confirmed — normally by a scorecard photo.'}
-          </p>
+          <Badge tone={CARD_STATE_TONE[state]}>{CARD_STATE_LABEL[state]}</Badge>
+          <p className="text-ink/65 text-[13px] mt-1.5 leading-snug">{said}</p>
         </div>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={flip}
-          className={buttonClass(verified ? 'danger' : 'secondary', false)}
-        >
-          {pending ? 'Saving…' : verified ? 'Mark unverified' : 'Mark verified'}
-        </button>
+        {!cardless && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={flip}
+            className={buttonClass(verified ? 'danger' : 'secondary', false)}
+          >
+            {pending ? 'Saving…' : verified ? 'Mark unverified' : 'Mark verified'}
+          </button>
+        )}
       </div>
       {error && <p className="text-rust-deep text-[13px] mt-2 leading-snug">{error}</p>}
     </section>

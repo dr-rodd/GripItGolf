@@ -86,6 +86,7 @@ export default async function AdminCoursePage({
             id: string; name: string; gender: string
             par: number | null; course_rating: number | null; slope: number | null
           }[]}
+          holeCount={holes.length}
         />
       </div>
 

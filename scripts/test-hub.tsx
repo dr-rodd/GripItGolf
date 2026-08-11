@@ -26,7 +26,9 @@ import {
   usesSimpleStandings, placingFromStandings, placingFromRows, describePlacing,
   podium,
 } from '../lib/standing'
-import { courseCard, hasCard, hasLadiesCard } from '../lib/courseCard'
+import {
+  courseCard, hasCard, hasLadiesCard, cardState, CARD_STATE_LABEL, CARD_STATE_TONE,
+} from '../lib/courseCard'
 import { standings, type SummaryScore } from '../lib/playerSummary'
 import { buildRows, type RowContext, type RowHole, type BoardRow } from '../lib/boardRows'
 import { resolveScores, handicapMap, sortRounds, buildRowContext } from '../lib/rowContext'
@@ -884,6 +886,21 @@ section('The card is one set of numbers, never two')
   eq(mens.back.holes[0].number, 10, 'and the back nine at ten')
 
   ok(!hasCard([]), 'a course with no holes recorded has no card')
+
+  // Three states, not the two `card_verified` suggests. The one that matters
+  // is `none`: a course with no holes cannot be scored, where a researched
+  // course with eighteen plays perfectly well, and showing those the same way
+  // is how somebody picks a course nobody can play.
+  eq(cardState(18, true), 'confirmed', 'eighteen holes and a photo is confirmed')
+  eq(cardState(18, false), 'researched', 'eighteen holes and no photo is researched')
+  eq(cardState(18, null), 'researched', 'a null flag is researched, not unknown')
+  eq(cardState(0, false), 'none', 'no holes is none')
+  // The one that would be wrong quietly: admin can set the flag by hand, and a
+  // photograph cannot have confirmed a card that does not exist.
+  eq(cardState(0, true), 'none', 'no holes beats a verified flag, whoever set it')
+  eq(CARD_STATE_TONE.none, 'loss', 'and it is the one state shown in rust, not grey')
+  ok(CARD_STATE_LABEL.none !== CARD_STATE_LABEL.researched,
+    'the two unverified states never read the same')
 
   // Yardages exist as columns and have never held a value. No empty column.
   // Comments stripped: explaining why there is no yardage row is fine, and

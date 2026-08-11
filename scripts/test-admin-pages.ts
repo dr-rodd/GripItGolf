@@ -129,8 +129,18 @@ section('The course editor validates with lib/courseDirectory, not its own copie
       'no literal slope bounds — one copy, in lib/cardCheck.ts')
     ok(!code.includes('slug'),
       'a rename never touches the slug — scoring URLs and the directory hold it')
-    ok(!code.includes("from('holes')"),
-      'holes are never written here — the scorecard photo check is the one writer')
+    // Holes are never *written* from admin — pars and stroke indices come
+    // from a scorecard photo and nowhere else. Reading them is a different
+    // thing and a necessary one: `setCardVerified` has to know whether there
+    // is a card before it will claim one was photographed. So the check names
+    // the writes rather than banning the table, and is stricter about them.
+    for (const write of ['insert', 'update', 'upsert', 'delete']) {
+      ok(!new RegExp(`from\\('holes'\\)[\\s\\S]{0,200}?\\.${write}\\(`).test(code),
+        `holes are never ${write}d here — the scorecard photo check is the one writer`)
+    }
+    for (const m of code.matchAll(/from\('holes'\)([\s\S]{0,120})/g)) {
+      ok(/^\s*\.select\(/.test(m[1]), 'every read of holes here is a select and nothing else')
+    }
   } else {
     ok(false, `${p} exists`)
   }

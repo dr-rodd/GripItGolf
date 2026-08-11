@@ -164,6 +164,26 @@ export async function setCardVerified(
   if (!(await requireAdmin())) return SIGNED_OUT
 
   const db = createAdminClient()
+
+  // A card that does not exist cannot have been photographed. Marking a
+  // hole-less course verified would hang an emerald "Verified" badge on a
+  // course nobody can score — `hasCard` gates scoring on holes, never on this
+  // flag. The editor does not render the button in that state; this is the
+  // rule, because a button that is not rendered is not one.
+  if (verified) {
+    const { count } = await db
+      .from('holes')
+      .select('id', { count: 'exact', head: true })
+      .eq('course_id', courseId)
+    if ((count ?? 0) === 0) {
+      return {
+        error: 'This course has no holes, so there is no card to verify. ' +
+          'A scorecard photo creates one.',
+        saved: false,
+      }
+    }
+  }
+
   const { error } = await db
     .from('courses')
     .update({ card_verified: verified })
