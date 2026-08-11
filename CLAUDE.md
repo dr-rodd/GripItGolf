@@ -54,6 +54,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `docs/gotchas-and-debt.md` | Past incidents, refactor discipline, security debt, multi-year architecture note |
 | `docs/ios-app.md` | The home-screen install layer (manifest, generated icons, standalone quirks), how players install, and the deferred App Store route |
 | `docs/course-import.md` | Adding platform courses in bulk — the `data/courses/*.json` contract, what the gate refuses and why, the generator, and the research brief a Cowork session follows |
+| `docs/randa-reconnaissance.md` | Where tee ratings come from and what they do not carry. `randa.org`'s lookup 404s; `ncrdb.usga.org` is live and holds **tee sets only**, never a stroke index — which is why the brief sources tees and holes separately |
 
 ## Platform concept
 
@@ -104,7 +105,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `lib/leaderboards.ts` | Current leaderboard model |
 | `lib/boardRows.ts` | Scores → leaderboard rows, per board. **`total` is always the competition's total, after any discard**; `totalAll` is the all-in figure and exists only where a round was actually dropped, for the leaderboard's Discard switch. **A casual round (`rounds.casual`) is dropped here, in `buildRows`, and nowhere else** — scored as usual, on no board; a round summary gets its result back by clearing the flag (`fetchRoundRows`) |
 | `lib/handicap.ts` | Shots received on a hole, and how a handicap is written and read. **A plus handicap is negative** and gives shots back from SI 18 down |
-| `lib/courseHandicap.ts` | The WHS course handicap, the only copy. Unrounded is primary — an allowance comes off that, not off the whole number |
+| `lib/courseHandicap.ts` | The WHS course handicap, the only copy. Unrounded is primary — an allowance comes off that, not off the whole number. Also **which tees a player may be given**: `teesForPlayer` returns their own gender's, or **every tee on the course when that gender has none** — a club with no published ladies card is a real course, and filtering strictly left a woman with nothing selectable, which disabled `canStart` for **everybody on her card**. Four screens read it; a fifth copy of `t.gender === player.gender` is how that reopens, and `test:handicap-allowance` greps for one |
 | `lib/scorecardVoid.ts` | Voiding a card. **Erases its scores from `live_scores` and `scores`**, not just the locks. Every void route goes through it |
 | `lib/staleLive.ts` | When a scorecard nobody came back to is closed, and when its rows are deleted. **Closed on the last hole entered, never on when the card opened** — keying off `activated_at` would close a group still out on the course. Run nightly by `/api/cleanup`; `?dryRun=1` reports without writing |
 | `lib/weather.ts` | Reading a MET Norway forecast: parsing, picking the hour a tee time falls in, compass, symbol grouping, the yr.no link, cache freshness. **Pure — `app/api/weather/route.ts` does all the I/O.** Two traps it exists to hold: the arrow points at `wind_from_direction + 180`, and `next_1_hours` stops existing ~3 days out so precipitation falls back to `next_6_hours`. A missing gust or rain chance is null, never 0 |

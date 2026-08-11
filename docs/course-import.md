@@ -20,7 +20,7 @@ data/courses/<slug>.json  →  npm test  →  npm run courses:migration  →  Su
 
 ## Where the research happens
 
-Claude Code's remote container **cannot reach randa.org or any club website** — the
+Claude Code's remote container **cannot reach ncrdb.usga.org or any club website** — the
 environment's network policy blocks outbound HTTPS, so `WebFetch` returns `EGRESS_BLOCKED`.
 The sourcing half runs in **Cowork on the Mac**, which has an ordinary network and can also
 read a folder of scorecard PDFs or photos.
@@ -50,7 +50,7 @@ it is here to show the shape, not to be imported.
   "note": "Ladies play the 4th, 7th and 13th as par 5s.",
   "sources": {
     "holes": ["https://example.com/course/scorecard/"],
-    "tees": ["https://www.randa.org/course-rating-lookup"],
+    "tees": ["https://ncrdb.usga.org/courseTeeInfo?CourseID=12345"],
     "coordinates": "https://www.google.com/maps/place/54.2603,-5.6072"
   },
   "holes": [
@@ -143,8 +143,12 @@ catch afterwards.
   tee par = Σ ladies' par (or the men's total when there is no ladies card). If a published
   tee par disagrees with the scorecard, **the holes win** — the playing-handicap formula
   reads `tees.par`, so a mismatch scores every round off the wrong number.
-- **Tees from randa.org, holes from the club's own scorecard**, and record the two source
-  URLs **separately**. They are rarely the same page and often not the same site.
+- **Tees from `ncrdb.usga.org`, holes from the club's own scorecard**, and record the two
+  source URLs **separately**. They are not the same page and usually not the same site.
+- **Where a rating disagrees, the USGA database wins.** The NBC properties — GolfPass,
+  GolfAdvisor, GolfNow — share one backend, and their figures sometimes differ from the
+  official ones. NCRDB carries the *rated* number, which is the one the playing-handicap
+  formula should be reading.
 - **Holes must be `HIGH` or `MEDIUM`.** A single aggregator with no club corroboration is
   `LOW` — omit the course. Tees may be lower; say so honestly rather than rounding up.
 - **Coordinates are the course, not the town.** Migration 026 explains why: Old Head is
@@ -153,14 +157,21 @@ catch afterwards.
 - **Work in batches of about ten and run `npm test` after each.** Fix a failing batch
   before starting the next.
 
-### The first job, before any of this
+### Where the tees actually come from — settled
 
-**Open randa.org's course search and report what it actually exposes per club.** The R&A's
-rating lookup is understood to be an extract of the USGA CRS database, which carries tee
-sets — name, par, course rating, slope, yardage — but *not* hole-by-hole par and stroke
-index, because stroke index is set by the club and printed on its own card. If that turns
-out to be wrong and randa.org does carry the index, say so: the split above collapses and
-holes go to `HIGH` too.
+This used to say "open randa.org's search and report back". That has been done, and the
+answer is in **`docs/randa-reconnaissance.md`**. In short:
+
+- `randa.org/course-rating-lookup` **404s**. The R&A no longer hosts a public per-club
+  search; the live resource is the **USGA National Course Rating Database** at
+  `ncrdb.usga.org`, which is the CRS extract the brief always meant.
+- It exposes **tee sets only** — name, gender, par, Course Rating, Bogey Rating, Slope,
+  the nine-by-nine splits and the length. **No per-hole data of any kind**, so no stroke
+  index. The tees/holes split above is confirmed rather than optional, and holes can never
+  be promoted to `HIGH` on a rating database alone.
+- The NCRDB search form is JavaScript and cannot be fetched, but a course page is, once
+  you have its id: `https://ncrdb.usga.org/courseTeeInfo?CourseID=<n>`. Find the id with an
+  ordinary web search, or by driving the search in a real browser.
 
 ---
 
