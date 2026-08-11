@@ -32,6 +32,7 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:scorecard-void` | Voiding a card erases its scores from both tables, in an order that cannot silently no-op, and no screen does it by hand |
 | `test:scorecard` | Every score shape, the nett/no-return arithmetic, and that a card survives being left and reopened |
 | `test:branding` | The green dot, the wordmark, back controls, contrast, type size, and the footer/tab-bar carrier list |
+| `test:course-import` | The bulk-import contract: every file in `data/courses/`, the rules Postgres has that the application does not (chiefly par 3–5 against the card check's 3–6), slug and name collisions against what has already shipped, and that the generated SQL loses or transposes no number |
 
 Order above follows `npm test`'s own chain in `package.json`, which is worth keeping in step: it is the fastest way to tell whether a new suite was wired in or just left as a standalone script.
 
@@ -92,6 +93,23 @@ ordinary home broadband it does not fail, it hangs.
 is `20260101000010_trip_lifecycle.sql`, whose one-time backfill flips every
 draft trip to live if it is ever run twice — which is why the runner names
 that file when it refuses.
+
+### Bulk course import
+
+Platform courses are no longer hand-written into a migration one at a time.
+Research lands as `data/courses/<slug>.json`, `npm test` gates it, and
+`npm run courses:migration` writes `*_platform_courses_*.sql` — twelve courses
+to a file, each file complete per course and wrapped in its own transaction.
+Apply them **in numeric order**, one paste each. Full detail, including the
+research brief, in `docs/course-import.md`.
+
+Two things about those files that differ from the hand-written seeds, both
+deliberate and both commented in the output: **nothing is deleted** (migration
+008 cleared its tees first, which `round_handicaps.tee_id`'s `ON DELETE
+RESTRICT` now makes unsafe once a tee has been played off), and the numbering
+is **idempotent** — a generated file carries a marker on its second line, so
+re-running rewrites the same filenames instead of adding a duplicate batch
+beside them.
 
 ## Background jobs
 

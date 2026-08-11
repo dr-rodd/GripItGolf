@@ -120,3 +120,15 @@ A row is deleted only when **no card can reach it**: no active card to resume it
 `GET /api/cleanup?dryRun=1` reports exactly what both steps would do and writes nothing. Worth running first, and worth running again after.
 
 **Still open:** `live_scores` has no `live_round_id`, so a resume and a commit both read every row for a player and round whichever card wrote it. Between a card being closed and its rows aging out, a new card on the same round for the same player would merge them in. The window is 36 hours and the flow makes it hard to reach — but the real fix is the missing column, and that is a schema job inside the scoring entry flow.
+
+## A par 6 passes the app and fails the database
+
+`holes.par` has been CHECKed `between 3 and 5` since migration 000. Every application-layer validator allows **3 to 6** — `validateCard`, `validateNewHoleRows` and `HOLE_COLUMN_RANGE` in `lib/cardCheck.ts`, and the extraction prompt itself. So the two disagree, and the permissive one is the one a person meets first.
+
+It is not theoretical: par-6 holes exist on real courses. Today, a photograph of one passes `validateCard`, so the card is offered as trustworthy; passes `validateNewHoleRows`, so the apply route accepts it; and is then rejected by Postgres, so `handleCreate` fails on the insert *after* telling the person their card looked fine.
+
+**The bulk import routes around it rather than fixing it.** `DB_HOLE_PAR` in `lib/courseImport.ts` is the only place in the codebase that knows the database is stricter than the application, and it refuses a par 6 before a migration can be written. That keeps a generated migration safe. It does nothing for the photo path.
+
+**The fix is written and not applied:** `supabase/migrations/20260101000033_hole_par_six.sql` widens the CHECK to 3–6 so the database agrees with the four places that already say so, and adds the matching CHECK on `par_ladies`, which has never had one at all. It finds the old constraint by its definition rather than its name, because migration 000 declared it inline and Postgres named it — dropping a guessed name would be a silent no-op that leaves the old rule in force behind the new one.
+
+Once it is applied, `DB_HOLE_PAR` becomes `[3, 6]` and the special case in `lib/courseImport.ts` can go with it.

@@ -53,6 +53,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `docs/testing-and-data.md` | The test suites, how much checking a change is worth, insertion order, background jobs |
 | `docs/gotchas-and-debt.md` | Past incidents, refactor discipline, security debt, multi-year architecture note |
 | `docs/ios-app.md` | The home-screen install layer (manifest, generated icons, standalone quirks), how players install, and the deferred App Store route |
+| `docs/course-import.md` | Adding platform courses in bulk — the `data/courses/*.json` contract, what the gate refuses and why, the generator, and the research brief a Cowork session follows |
 
 ## Platform concept
 
@@ -70,6 +71,13 @@ Don't read these up front. Open the matching file when the task actually touches
   course has no holes and `card_verified = false` until a scorecard photo is
   confirmed — the card check creates the 18 holes from the first trusted
   photo (`mode: 'create'`) and flips the flag; scoring is gated until then
+- **Courses can also arrive in bulk**, from researched data rather than a
+  photo: `data/courses/*.json` → `npm test` → `npm run courses:migration` →
+  a migration somebody applies by hand. `docs/course-import.md`. A bulk
+  course has its holes (so it plays) and `card_verified = false` (so the
+  badge stays honest); the first scorecard photo then takes the **diff**
+  path and corrects whatever the research got wrong. The research half runs
+  in Cowork — Claude Code's container cannot reach club websites
 
 ## Routing
 
@@ -108,6 +116,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `lib/rowContext.ts` | Raw rows → a `RowContext`, via `buildRowContext`. **The only assembly there is** — the leaderboard and the hub both call it. Fetching is each caller's own; deciding never is |
 | `lib/holeStats.ts` | Putts and fairways → greens in regulation, accuracy, hole difficulty, and gained on the field. **The only copy of every one of those rules** — nothing on a screen derives any of them. Greens in regulation is never a stored column: it needs the player's own par. Gains are **gross and self-excluding**, which is what makes them sum to zero over a hole |
 | `lib/courseDirectory.ts` | The course picker's rules and the add-course gate: search, the county chips (the **only** filter — `courses.county`, migration 032, asked for by the form; parsing `location` survives only as the fallback for older rows), slugs, and validation for a new course's name, county, website and tees. `countyOf` canonicalises — prefixes off, **Derry not Londonderry**. **Tee ranges are `TEE_COLUMN_RANGE` from `lib/cardCheck.ts`** — one copy, or the form would accept what the check refuses. `app/api/courses` writes; this only decides |
+| `lib/courseImport.ts` | The bulk-course contract: what a `data/courses/*.json` file must be before it can become a migration. **Reuses `validateNewHoleRows`, `validNewTee`, `countyOf`, `normalizeWebsite` and `truncCoord` rather than restating any of them** — a research file's holes *are* `NewHoleRow[]`, DB column names and all, so there is no adapter to drift. It adds only what the app layer cannot know, chiefly that **`holes.par` is CHECKed 3 to 5 in Postgres while every app validator allows 3 to 6**, so a par-6 hole passes the card check and then kills the migration. The tee-par cross-check is `diffCard` with the tee pars nulled, not a second sum. A repeated slug is fatal, not a skipped row: `ON CONFLICT DO NOTHING` drops the course and the holes insert then joins onto the *existing* one. Pure — `scripts/build-course-migration.ts` reads and writes |
 | `lib/courseLookup.ts` | Reading ratings off a club website for the add-course form: HTML→text, which same-origin links to follow, the Sonnet prompt/schema, and clamping what comes back to the card-check ranges (a bad figure costs the field, never the lookup). **Everything it returns is a suggestion the person confirms.** Pure — `app/api/course-lookup/` fetches and asks |
 | `app/components/CourseSelect.tsx` | The course picker: search + county chips pinned over a scrolling list, and the add-course form (name, county — required, with the thirty-two as suggestions — website lookup, tees, then a scorecard ask via `CardCheck`). No autofocus on the form: the keyboard arrives when a finger asks, not with the sheet. Replaces the old native select in the golf sheet. A course added mid-build lives in `ItineraryBuilder`'s own `addedCourses` state — callers' fetched lists are never mutated |
 | `lib/courseCard.ts` | A course's card, two nines with their pars. **One set of numbers, never two** — the ladies card or the men's, decided by who is holding the phone. No yardages: those columns have never held a value |
