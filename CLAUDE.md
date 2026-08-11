@@ -77,7 +77,12 @@ Don't read these up front. Open the matching file when the task actually touches
   a migration somebody applies by hand. `docs/course-import.md`. A bulk
   course has its holes (so it plays) and `card_verified = false` (so the
   badge stays honest); the first scorecard photo then takes the **diff**
-  path and corrects whatever the research got wrong. The research half runs
+  path and corrects whatever the research got wrong. A course whose club
+  publishes **no card at all** can still land — `holes: []` with
+  `holesConfidence: NONE` — searchable and weathered, scoring gated, until a
+  photo creates the eighteen. **`data/course-tees/*.json` is the other
+  door**: better ratings for a course already here, upserted, with `par`
+  derived from the stored holes rather than the file. The research half runs
   in Cowork — Claude Code's container cannot reach club websites
 
 ## Routing

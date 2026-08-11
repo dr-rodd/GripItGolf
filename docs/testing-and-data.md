@@ -32,7 +32,7 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:scorecard-void` | Voiding a card erases its scores from both tables, in an order that cannot silently no-op, and no screen does it by hand |
 | `test:scorecard` | Every score shape, the nett/no-return arithmetic, and that a card survives being left and reopened |
 | `test:branding` | The green dot, the wordmark, back controls, contrast, type size, and the footer/tab-bar carrier list |
-| `test:course-import` | The bulk-import contract: every file in `data/courses/`, the rules Postgres has that the application does not (chiefly par 3–5 against the card check's 3–6), slug and name collisions against what has already shipped, and that the generated SQL loses or transposes no number |
+| `test:course-import` | The bulk-import contract: every file in `data/courses/` and `data/course-tees/`, the rules Postgres has that the application does not (chiefly par 3–5 against the card check's 3–6), slug and near-name collisions against what has shipped, the two `[].every(…)` traps a cardless course walks into, and that the generated SQL loses or transposes no number |
 
 Order above follows `npm test`'s own chain in `package.json`, which is worth keeping in step: it is the fastest way to tell whether a new suite was wired in or just left as a standalone script.
 
@@ -97,11 +97,17 @@ that file when it refuses.
 ### Bulk course import
 
 Platform courses are no longer hand-written into a migration one at a time.
-Research lands as `data/courses/<slug>.json`, `npm test` gates it, and
-`npm run courses:migration` writes `*_platform_courses_*.sql` — twelve courses
-to a file, each file complete per course and wrapped in its own transaction.
-Apply them **in numeric order**, one paste each. Full detail, including the
-research brief, in `docs/course-import.md`.
+Research lands as `data/courses/<slug>.json` (a new course) or
+`data/course-tees/<slug>.json` (better ratings for one already here),
+`npm test` gates both, and `npm run courses:migration` writes
+`*_platform_courses_*.sql` and `*_course_tees_*.sql` — twenty-five to a file,
+each complete per course and wrapped in its own transaction. Apply them **in
+numeric order**, one paste each; the run prints `wrote`, `rewrote` or
+`unchanged` per file and only the first two need pasting. Full detail,
+including the research brief, in `docs/course-import.md`.
+
+`npm run courses:migration -- --list` prints every platform course, which is
+the cheapest way to avoid researching one twice.
 
 Two things about those files that differ from the hand-written seeds, both
 deliberate and both commented in the output: **nothing is deleted** (migration
@@ -109,7 +115,10 @@ deliberate and both commented in the output: **nothing is deleted** (migration
 RESTRICT` now makes unsafe once a tee has been played off), and the numbering
 is **idempotent** — a generated file carries a marker on its second line, so
 re-running rewrites the same filenames instead of adding a duplicate batch
-beside them.
+beside them, and a course stays in the file it first landed in. One caveat
+worth knowing: editing a course *already applied* rewrites its file, but
+re-pasting changes nothing, because the inserts are `ON CONFLICT DO NOTHING`.
+Correcting a live course is the scorecard-photo path or a tee refresh.
 
 ## Background jobs
 
