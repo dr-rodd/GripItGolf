@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { mergeSaved, anyScored, type Fairway } from "@/lib/liveScores"
 import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
-import { exactCourseHandicap, courseHandicap, type TeeRating } from "@/lib/courseHandicap"
+import { exactCourseHandicap, courseHandicap, teesForPlayer, type TeeRating } from "@/lib/courseHandicap"
 import { shotsReceived, formatHandicap } from "@/lib/handicap"
 import { voidScorecard as voidScorecardData } from "@/lib/scorecardVoid"
 import { why } from "@/lib/writeFailure"
@@ -589,8 +589,7 @@ export default function LiveScoringFlow({
         if (!player) continue
         const recordedId = (freshHcps ?? []).find(h => h.player_id === pid)?.tee_id
         const tee = courseTees.find(t => t.id === recordedId)
-          ?? courseTees.find(t => t.gender === player.gender)
-          ?? courseTees[0]
+          ?? teesForPlayer(courseTees, player.gender)[0]
         if (tee) teeMap[pid] = tee.id
       }
 
@@ -1049,16 +1048,18 @@ export default function LiveScoringFlow({
     function togglePlayer(pid: string) {
       const isSelected = selectedPlayerIds.includes(pid)
       if (isSelected) {
-        if (selectedPlayerIds.length > 1) {
-          setSelectedPlayerIds(prev => prev.filter(id => id !== pid))
-          setPlayerTeeIds(prev => { const n = { ...prev }; delete n[pid]; return n })
-        }
+        // Deselecting the last player is allowed. Refusing it meant a player
+        // who could not be given a tee — a course with none at all — was
+        // stuck on a screen with a disabled Start button and no way back
+        // except reloading the page.
+        setSelectedPlayerIds(prev => prev.filter(id => id !== pid))
+        setPlayerTeeIds(prev => { const n = { ...prev }; delete n[pid]; return n })
       } else if (selectedPlayerIds.length < 4) {
         setSelectedPlayerIds(prev => [...prev, pid])
         // Auto-select tee when there is exactly one option for this player's gender
         const player = players.find(p => p.id === pid)
         if (player) {
-          const genderTees = courseTees.filter(t => t.gender === player.gender)
+          const genderTees = teesForPlayer(courseTees, player.gender)
           if (genderTees.length === 1) {
             setPlayerTeeIds(prev => ({ ...prev, [pid]: genderTees[0].id }))
           }
@@ -1103,7 +1104,7 @@ export default function LiveScoringFlow({
 
           {players.filter(p => !lockedPlayerIds.includes(p.id)).map(player => {
             const isSelected = selectedPlayerIds.includes(player.id)
-            const playerCourseTees = courseTees.filter(t => t.gender === player.gender)
+            const playerCourseTees = teesForPlayer(courseTees, player.gender)
             const selectedTeeId = playerTeeIds[player.id] ?? ""
             const selectedTee = tees.find(t => t.id === selectedTeeId)
             // The same figure the card will use, off the same tee, through
@@ -1179,8 +1180,16 @@ export default function LiveScoringFlow({
                           ))}
                       </p>
                     )}
-                    {!selectedTeeId && playerCourseTees.length > 0 && (
-                      <p className="text-rust-deep/60 text-sm">Select a tee to continue</p>
+                    {/* Said whether or not there is anything to pick. With no
+                        tees at all the Start button is disabled either way, so
+                        suppressing the reason left a dead control and no
+                        explanation for it. */}
+                    {!selectedTeeId && (
+                      <p className="text-rust-deep/60 text-sm">
+                        {playerCourseTees.length > 0
+                          ? "Select a tee to continue"
+                          : "This course has no tees yet — add one in Trip Setup to start the round"}
+                      </p>
                     )}
                   </div>
                 )}

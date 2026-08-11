@@ -30,7 +30,7 @@ import {
   buildRows, scoresForBoard, shotsReceived,
   type RowContext, type ResolvedScore,
 } from '../lib/boardRows'
-import { exactCourseHandicap, courseHandicap } from '../lib/courseHandicap'
+import { exactCourseHandicap, courseHandicap, teesForPlayer } from '../lib/courseHandicap'
 import { runningStablefordTotals, resolveCourseHandicap } from '../app/scoring/LiveScoringFlow'
 import { readFileSync } from 'fs'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -563,6 +563,57 @@ section('A question ends in a question mark')
   const asks = /^(is|are|do|does|how|what|which|who|should|can|would)\b/i
   for (const t of titles) {
     if (asks.test(t)) ok(t.endsWith('?'), `"${t}" opens as a question and ends as one`)
+  }
+}
+
+// ─── Which tees a player can be given ──────────────────────────
+//
+// A course can arrive with only men's tees — a club that publishes no ladies
+// card, or a bulk import whose ratings carried no ladies set. Filtered
+// strictly, a woman on such a course had nothing selectable, and `canStart`
+// is an `.every` over the selected players, so she disabled the round for
+// everybody on her card.
+
+section('teesForPlayer — nobody is left with nothing to play off')
+{
+  const tee = (name: string, gender: string) => ({ id: name, name, gender, par: 72, course_rating: 71, slope: 125 })
+  const mixed = [tee('Blue', 'M'), tee('White', 'M'), tee('Red', 'F')]
+  const mensOnly = [tee('Blue', 'M'), tee('White', 'M'), tee('Red', 'M')]
+
+  eq(teesForPlayer(mixed, 'F').map(t => t.name), ['Red'],
+    'a woman on a course with a ladies tee gets only the ladies tee')
+  eq(teesForPlayer(mixed, 'M').map(t => t.name), ['Blue', 'White'],
+    'and a man gets only the men\'s')
+
+  eq(teesForPlayer(mensOnly, 'F').map(t => t.name), ['Blue', 'White', 'Red'],
+    'a woman on a men\'s-only course gets every tee rather than none')
+  eq(teesForPlayer(mensOnly, 'M').map(t => t.name), ['Blue', 'White', 'Red'],
+    '  …and the men on that course are unaffected')
+
+  eq(teesForPlayer([], 'F'), [], 'a course with no tees at all still has none')
+  ok(teesForPlayer(mixed, 'F') !== mixed, 'the caller\'s array is never handed back to be mutated')
+
+  // The auto-select fires on "exactly one option", so order and length have
+  // to mean what they say.
+  eq(teesForPlayer([tee('Red', 'F'), tee('Blue', 'M')], 'F').length, 1,
+    'one matching tee is still exactly one option')
+}
+
+section('No scoring surface filters tees by gender on its own')
+{
+  // Structural, in test:admin-pages' style. A fifth copy of
+  // `t.gender === player.gender` is exactly how this reopens, and it would
+  // reopen silently — the failure is a disabled button, not an error.
+  for (const path of [
+    'app/scoring/LiveScoringFlow.tsx',
+    'app/score-entry/ScoreEntryForm.tsx',
+  ]) {
+    const src = readFileSync(path, 'utf-8')
+    ok(src.includes('teesForPlayer'), `${path} goes through teesForPlayer`)
+    ok(!/\.filter\(\s*t\s*=>\s*t\.gender\s*===/.test(src),
+      `${path} does not filter tees by gender itself`)
+    ok(!/courseTees\.find\(\s*t\s*=>\s*t\.gender\s*===/.test(src),
+      `${path} does not pick a tee by gender itself either`)
   }
 }
 

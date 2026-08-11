@@ -132,3 +132,15 @@ It is not theoretical: par-6 holes exist on real courses. Today, a photograph of
 **The fix is written and not applied:** `supabase/migrations/20260101000033_hole_par_six.sql` widens the CHECK to 3–6 so the database agrees with the four places that already say so, and adds the matching CHECK on `par_ladies`, which has never had one at all. It finds the old constraint by its definition rather than its name, because migration 000 declared it inline and Postgres named it — dropping a guessed name would be a silent no-op that leaves the old rule in force behind the new one.
 
 Once it is applied, `DB_HOLE_PAR` becomes `[3, 6]` and the special case in `lib/courseImport.ts` can go with it.
+
+## A course with no ladies tee stopped the whole fourball
+
+`tees` rows carry a gender, and every scoring surface filtered on it — `courseTees.filter(t => t.gender === player.gender)` — with no fallback. A course whose tees are all `M` therefore gave a woman an empty list.
+
+That was never only her problem. `canStart` in `LiveScoringFlow.tsx` is an `.every` over the selected players, so one player with no assignable tee **disabled Start for everybody on the card**, including the three men who had already picked theirs. Worse, the "Select a tee to continue" hint was guarded on `playerCourseTees.length > 0`, so the one case that needed an explanation was the one case that got none: a dead grey button and no stated reason. And `togglePlayer` refused to deselect the last selected player, so a woman scoring alone could not even back out — only a page reload escaped.
+
+The maths was never involved. `effectivePar` and `effectiveSI` in `lib/boardRows.ts` already fall back to the men's par and stroke index per hole when `par_ladies` is null, which is correct and unchanged. This was purely the tee gate.
+
+**It was reachable two ways.** The add-course form imposes no gender requirement, so anyone could create a men's-only course from the picker; and the bulk import warns about a missing ladies tee rather than refusing it, because refusing would mean dropping real courses whose clubs publish no ladies card. Castlerock Mussenden is exactly that case — the R&A rates a par-75 ladies tee, but with no hole-by-hole ladies card it cannot be represented, since `tees.par` has to equal the hole total or the playing-handicap formula reads the wrong number.
+
+**The fix was already written, in one place, and not shared.** The resume path had always ended `?? courseTees[0]`. That rule now lives once, as `teesForPlayer` in `lib/courseHandicap.ts`, and the setup auto-select, the tee picker, the resume and manual score entry all go through it. A fifth copy of the gender filter is how this reopens, so `test:handicap-allowance` carries a structural check that no scoring surface filters tees by gender on its own.

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import { supabase } from "@/lib/supabase"
 import BackButton from "@/app/components/BackButton"
-import { courseHandicap } from "@/lib/courseHandicap"
+import { courseHandicap, teesForPlayer } from "@/lib/courseHandicap"
 import { shotsReceived, formatHandicap } from "@/lib/handicap"
 
 // ─── Types ────────────────────────────────────────────────
@@ -559,7 +559,7 @@ export default function ScoreEntryForm({ players, courses }: { players: Player[]
   const selectedTee = tees.find(t => t.id === teeId)
 
   const playerGender = player?.gender ?? null
-  const filteredTees = playerGender ? tees.filter(t => t.gender === playerGender) : tees
+  const filteredTees = playerGender ? teesForPlayer(tees, playerGender) : tees
 
   const playingHcp = selectedTee && player
     ? courseHandicap(player.handicap, selectedTee)

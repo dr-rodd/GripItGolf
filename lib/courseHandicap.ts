@@ -41,3 +41,32 @@ export function exactCourseHandicap(handicapIndex: number, tee: TeeRating): numb
 export function courseHandicap(handicapIndex: number, tee: TeeRating): number {
   return Math.round(exactCourseHandicap(handicapIndex, tee))
 }
+
+/**
+ * The tees this player can be given — their own gender's, or every tee on the
+ * course when that gender has none.
+ *
+ * A course can legitimately arrive with only men's tees: a club that does not
+ * publish a ladies card, or a bulk import whose ratings carried no ladies set.
+ * Filtered strictly, a woman on such a course has nothing selectable — and
+ * that does not merely stop her. `canStart` in `LiveScoringFlow` is an
+ * `.every` over the selected players, so one player with no assignable tee
+ * disables the round for everybody on the card, with the explanatory hint
+ * suppressed and no way to back out of a solo selection.
+ *
+ * The resume path has always fallen back this way (`?? courseTees[0]`). This
+ * is that rule, once, somewhere all four screens can reach it — the setup
+ * auto-select, the tee picker, the resume, and manual score entry. A fifth
+ * copy of `t.gender === player.gender` is how this reopens, which is what the
+ * structural check in `test:handicap-allowance` is watching for.
+ *
+ * Order is preserved, so a caller's "exactly one option" test still means
+ * what it says.
+ */
+export function teesForPlayer<T extends { gender: string }>(
+  courseTees: readonly T[],
+  gender: string,
+): T[] {
+  const mine = courseTees.filter(t => t.gender === gender)
+  return mine.length > 0 ? mine : [...courseTees]
+}
