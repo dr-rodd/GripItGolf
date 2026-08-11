@@ -50,6 +50,25 @@ export const CONFIDENCE = ['HIGH', 'MEDIUM', 'LOW', 'EST'] as const
 export type Confidence = (typeof CONFIDENCE)[number]
 
 /**
+ * What `holesConfidence` says when the club publishes no findable card.
+ *
+ * Not a level of confidence — the absence of anything to be confident about,
+ * which is why it is kept out of `CONFIDENCE` rather than added to it. In the
+ * array it would immediately be accepted for `teesConfidence`, where it means
+ * nothing, and it would print in the confidence key at the top of every
+ * generated migration.
+ */
+export const NO_CARD = 'NONE' as const
+export type HolesConfidence = Confidence | typeof NO_CARD
+
+/**
+ * A cardless course's tees cannot be checked against holes, so the usual
+ * corrective is gone and the source has to be better. NCRDB rates courses
+ * whose clubs publish no card, which is exactly what earns HIGH.
+ */
+export const NO_CARD_TEE_FLOOR: readonly Confidence[] = ['HIGH', 'MEDIUM']
+
+/**
  * Holes below this are refused outright.
  *
  * A wrong slope costs a fraction of a shot and a scorecard photo corrects it.
@@ -101,7 +120,8 @@ export type CourseImport = {
   website: string
   latitude: number
   longitude: number
-  holesConfidence: Confidence
+  /** `NONE` when the club publishes no card — see `NO_CARD`. */
+  holesConfidence: HolesConfidence
   teesConfidence: Confidence
   /** One line, or null. Becomes a `-- Note:` comment in the migration. */
   note: string | null
@@ -110,6 +130,7 @@ export type CourseImport = {
     tees: string[]
     coordinates?: string
   }
+  /** Exactly 18, or empty when `holesConfidence` is `NONE`. Never in between. */
   holes: NewHoleRow[]
   tees: NewTeeRow[]
 }
@@ -133,6 +154,19 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
 const isConfidence = (v: unknown): v is Confidence =>
   typeof v === 'string' && (CONFIDENCE as readonly string[]).includes(v)
 
+/**
+ * Whether this course carries a ladies card at all.
+ *
+ * `holes.every(…)` alone is `true` for an empty array, so a course with no
+ * card would be written `ladies_data_verified = true` — the one flag that
+ * says the ladies numbers can be trusted, set on a course that has no
+ * numbers at all. `app/api/courses/route.ts` writes false for exactly this
+ * case; this is the same answer reached the same way, and it is the only
+ * copy, because three separate `.every` calls is how the three disagree.
+ */
+const hasLadiesCard = (c: Pick<CourseImport, 'holes'>) =>
+  c.holes.length > 0 && c.holes.every(h => h.par_ladies != null)
+
 // ─── The tee par against the holes ─────────────────────────────
 
 /**
@@ -151,7 +185,16 @@ const isConfidence = (v: unknown): v is Confidence =>
  * exactly what makes `diffCard` fall back to the gender's hole total. So the
  * only thing it can report is the disagreement being looked for.
  */
-export function teeParProblems(course: CourseImport): string[] {
+export function teeParProblems(
+  course: Pick<CourseImport, 'name' | 'holes' | 'tees'>,
+): string[] {
+  // `[].every(…)` is `true`, so an empty card makes `diffCard` believe in a
+  // complete ladies card totalling **zero** and every tee fails against par 0.
+  // Load-bearing rather than belt-and-braces: this function is exported, and
+  // the tee-refresh path calls it with stored holes that may legitimately be
+  // absent.
+  if (course.holes.length === 0) return []
+
   const card: ExtractedCard = {
     courseName: course.name,
     holes: course.holes.map(h => ({
@@ -260,16 +303,45 @@ export function validateCourseImport(file: string, parsed: unknown): ImportProbl
   }
 
   // ── Provenance ──
-  if (!isConfidence(c.holesConfidence)) {
-    F(`\`holesConfidence\` must be one of ${CONFIDENCE.join(', ')}.`)
-  } else if (!HOLE_CONFIDENCE_FLOOR.includes(c.holesConfidence)) {
+  //
+  // A card that went missing in an edit looks exactly like a club that
+  // publishes none, so emptiness has to be **declared**, never inferred. The
+  // rule is an if-and-only-if and is checked in both directions, each message
+  // naming the other side.
+  const cardless = c.holesConfidence === NO_CARD
+  const noHoles = Array.isArray(c.holes) && c.holes.length === 0
+
+  if (!isConfidence(c.holesConfidence) && !cardless) {
+    F(`\`holesConfidence\` must be one of ${CONFIDENCE.join(', ')}, or ${NO_CARD} when the ` +
+      'club publishes no card.')
+  } else if (isConfidence(c.holesConfidence) && !HOLE_CONFIDENCE_FLOOR.includes(c.holesConfidence)) {
     F(`The holes are ${c.holesConfidence} confidence. A wrong stroke index mis-hands ` +
       'shots on every round of this course, forever — omit the course rather than guess.')
   }
-  if (!isConfidence(c.teesConfidence)) {
-    F(`\`teesConfidence\` must be one of ${CONFIDENCE.join(', ')}.`)
+  if (cardless && Array.isArray(c.holes) && c.holes.length > 0) {
+    F(`\`holesConfidence\` is ${NO_CARD} but the file carries ${c.holes.length} holes. ` +
+      `${NO_CARD} means there is no card — delete one or the other.`)
   }
-  if (c.note !== null && typeof c.note !== 'string') {
+  if (noHoles && !cardless) {
+    F('There are no holes, but `holesConfidence` says ' +
+      `${String(c.holesConfidence)}. A card that went missing in an edit looks exactly ` +
+      `like this — set \`holesConfidence\` to ${NO_CARD} if the club really publishes none.`)
+  }
+
+  if (!isConfidence(c.teesConfidence)) {
+    F(`\`teesConfidence\` must be one of ${CONFIDENCE.join(', ')}. ` +
+      `${NO_CARD} belongs to the holes, never the tees.`)
+  } else if (cardless && !NO_CARD_TEE_FLOOR.includes(c.teesConfidence)) {
+    F(`The tees are ${c.teesConfidence} confidence and there is no card to check them ` +
+      'against. With no holes the usual corrective is gone, so the source has to be better.')
+  }
+
+  if (cardless) {
+    if (typeof c.note !== 'string' || c.note.trim().length === 0) {
+      F('Say what was looked at and what was not there — with no card, the note is the ' +
+        'only record of why this course has none.')
+    }
+  } else if (c.note !== null && typeof c.note !== 'string') {
     F('`note` must be a line of text, or null.')
   }
 
@@ -280,7 +352,14 @@ export function validateCourseImport(file: string, parsed: unknown): ImportProbl
     const urls = (v: unknown): string[] => Array.isArray(v) ? v.filter(u => typeof u === 'string') : []
     const holeSources = urls(sources.holes)
     const teeSources = urls(sources.tees)
-    if (holeSources.length === 0) F('`sources.holes` needs at least one address.')
+    if (cardless) {
+      if (holeSources.length > 0) {
+        F('There is no card, so there is nothing for `sources.holes` to point at. ' +
+          'A source for holes that do not exist usually means one was found after all.')
+      }
+    } else if (holeSources.length === 0) {
+      F('`sources.holes` needs at least one address.')
+    }
     if (Array.isArray(c.tees) && c.tees.length > 0 && teeSources.length === 0) {
       F('`sources.tees` needs at least one address — the tees rarely come from the same page as the card.')
     }
@@ -294,6 +373,11 @@ export function validateCourseImport(file: string, parsed: unknown): ImportProbl
   // ── The card ──
   if (!Array.isArray(c.holes)) {
     F('`holes` is missing.')
+  } else if (noHoles) {
+    // Nothing below applies. `validateNewHoleRows` is **skipped, never
+    // relaxed** — it is also the apply route's server-side guard in
+    // `handleCreate`, where a zero-hole payload must stay fatal, because it
+    // is what stops an empty card being written over a real one.
   } else {
     // The card check's own gate: 18 rows numbered 1–18, a strict column
     // whitelist, par 3–6, stroke index a permutation of 1–18, the ladies
@@ -361,9 +445,28 @@ export function validateCourseImport(file: string, parsed: unknown): ImportProbl
     }
   }
 
-  // The cross-check, only once both halves are sound enough to compare.
-  if (fatalsOf(problems).length === 0) {
+  // The cross-check, only once both halves are sound enough to compare — and
+  // only when there is a card to compare against.
+  if (fatalsOf(problems).length === 0 && !noHoles) {
     for (const m of teeParProblems(c as CourseImport)) F(m)
+  }
+
+  // With no holes the cross-check is gone, so these two stand in for it. One
+  // par per gender is a real structural check: verified across all 82 tee rows
+  // that have shipped, not one course carries two different pars for a gender.
+  if (noHoles && Array.isArray(c.tees) && c.tees.length > 0) {
+    for (const gender of ['M', 'F'] as const) {
+      const pars = new Set((c.tees as NewTeeRow[])
+        .filter(t => isObject(t) && t.gender === gender)
+        .map(t => t.par))
+      if (pars.size > 1) {
+        F(`The ${gender === 'F' ? 'ladies' : 'men\'s'} tees give ${[...pars].join(' and ')} ` +
+          'as the par of the same course. With no card to check them against, that ' +
+          'disagreement is the only sign of a wrong figure there is.')
+      }
+    }
+    W('No card, so a tee par cannot be checked against the holes. The first scorecard ' +
+      'photo overwrites these.')
   }
 
   return problems
@@ -531,7 +634,7 @@ const holesBlock = (c: CourseImport): string => {
   })
 
   const menPar = c.holes.reduce((s, h) => s + h.par, 0)
-  const hasLadies = c.holes.every(h => h.par_ladies != null)
+  const hasLadies = hasLadiesCard(c)
   const ladiesPar = hasLadies ? c.holes.reduce((s, h) => s + h.par_ladies!, 0) : null
   const parLine = ladiesPar === null
     ? `par ${menPar} men`
@@ -551,6 +654,16 @@ const holesBlock = (c: CourseImport): string => {
   ].join('\n')
 }
 
+/** What stands in for a holes block on a course whose club publishes no card. */
+const cardlessBlock = (c: CourseImport): string => [
+  `-- ── ${c.name} (no scorecard) ──`,
+  `-- HOLES ${NO_CARD}: ${c.note ?? 'no per-hole card published'}`,
+  '-- The eighteen holes arrive with the first scorecard photo, through the',
+  '-- mode: \'create\' path in app/api/card-check/apply. Scoring is gated until',
+  '-- then — hasCard is holes.length > 0 — and the picker badges it',
+  '-- "Awaiting scorecard" off card_verified = false.',
+].join('\n')
+
 /**
  * One batch as a whole migration file. Deterministic — the same courses in
  * the same order produce the same bytes, so re-running the generator after
@@ -565,7 +678,10 @@ export function migrationSql(
   out.push('-- ============================================================')
   out.push(GENERATED_MARKER)
   out.push('--')
-  out.push(`-- Platform courses batch ${opts.letter.toUpperCase()}: ${batch.length} course${batch.length === 1 ? '' : 's'}.`)
+  const cardless = batch.filter(c => c.holes.length === 0).length
+  out.push(`-- Platform courses batch ${opts.letter.toUpperCase()}: ${batch.length} ` +
+    `course${batch.length === 1 ? '' : 's'}` +
+    (cardless > 0 ? `, ${cardless} of them with no card yet.` : '.'))
   out.push('--')
   out.push('-- Confidence is noted per course, in migration 008\'s words:')
   out.push(CONFIDENCE_KEY)
@@ -575,10 +691,13 @@ export function migrationSql(
   out.push('-- ratings may be lower: a wrong slope is a fraction of a shot, and a')
   out.push('-- scorecard photo corrects it.')
   out.push('--')
-  out.push('-- card_verified stays false on every row. The holes make the course')
-  out.push('-- playable (`hasCard` is holes.length > 0); the badge says, honestly, that')
-  out.push('-- no photograph has confirmed it yet. A later photo takes the diff path,')
-  out.push('-- because handleCreate refuses a course that already has holes.')
+  out.push('-- card_verified stays false on every row. Where there are holes they make')
+  out.push('-- the course playable (`hasCard` is holes.length > 0) and the badge says,')
+  out.push('-- honestly, that no photograph has confirmed them — a later photo takes the')
+  out.push('-- diff path, because handleCreate refuses a course that already has holes.')
+  out.push('-- Where there are none, the course is searchable and carries its weather,')
+  out.push('-- scoring is gated, and the first photo takes handleCreate\'s create path')
+  out.push('-- and writes the card.')
   out.push('--')
   out.push('-- Replay-safe: every insert is ON CONFLICT DO NOTHING and nothing here')
   out.push('-- deletes. Migration 008 cleared its tees first; that is no longer safe,')
@@ -601,10 +720,15 @@ export function migrationSql(
     website: q(c.website),
     lat: String(c.latitude),
     lon: String(c.longitude),
-    ladiesVerified: c.holes.every(h => h.par_ladies != null) ? 'true' : 'false',
-    ladiesNote: c.holes.every(h => h.par_ladies != null)
-      ? 'NULL'
-      : q('Ladies card not published — the men\'s numbers are used for everyone'),
+    ladiesVerified: hasLadiesCard(c) ? 'true' : 'false',
+    // Three-way, because the two-way version told a cardless course that its
+    // ladies card was missing — when there are no men's numbers either.
+    ladiesNote:
+      c.holes.length === 0
+        ? q('No scorecard published — the card arrives with the first scorecard photo')
+        : hasLadiesCard(c)
+          ? 'NULL'
+          : q('Ladies card not published — the men\'s numbers are used for everyone'),
   }))
   const w = {
     name: widest(cells.map(x => x.name)),
@@ -635,8 +759,12 @@ export function migrationSql(
   out.push('')
 
   // ── Holes ──
+  //
+  // A cardless course gets no INSERT, but it must not vanish silently — the
+  // comment block is the only record of why it has no card, so it is emitted
+  // in the block's place.
   for (const c of batch) {
-    out.push(holesBlock(c))
+    out.push(c.holes.length > 0 ? holesBlock(c) : cardlessBlock(c))
     out.push('')
   }
 

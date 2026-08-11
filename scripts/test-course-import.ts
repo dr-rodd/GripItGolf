@@ -22,7 +22,7 @@ import { join } from 'node:path'
 import {
   validateCourseImport, validateImportSet, platformCoursesInSql, teeParProblems,
   migrationSql, fatalsOf, CONFIDENCE, HOLE_CONFIDENCE_FLOOR, DB_HOLE_PAR, COORD_BOX,
-  GENERATED_MARKER, isGeneratedSql, type CourseImport,
+  GENERATED_MARKER, isGeneratedSql, NO_CARD, type CourseImport,
 } from '../lib/courseImport'
 import { validateNewHoleRows, type NewHoleRow } from '../lib/cardCheck'
 import { courseNameKey } from '../lib/courseDirectory'
@@ -240,6 +240,62 @@ section('The card itself — the card check\'s own gate, reached through this on
   allMensOnly.tees = allMensOnly.tees.filter(t => t.gender !== 'F')
   eq(fatalText(validateCourseImport('example-golf-links.json', allMensOnly)), [],
     'a men\'s-only card is a complete course')
+}
+
+section('A course whose club publishes no card')
+{
+  const FILE = 'example-golf-links.json'
+  const CARDLESS: CourseImport = {
+    ...clone(), holes: [], holesConfidence: NO_CARD,
+    note: 'No per-hole card published; the club\'s site has no scorecard and the PDF is not online.',
+    sources: { ...clone().sources, holes: [] },
+  }
+
+  eq(fatalText(validateCourseImport(FILE, CARDLESS)), [],
+    'no holes is a complete course, when the file says so')
+  ok(validateCourseImport(FILE, CARDLESS).some(p => !p.fatal && /cannot be checked/.test(p.message)),
+    '  …and is warned about — the tee par has nothing to be checked against')
+
+  // The biconditional, both ways. A card that vanished in an edit looks
+  // exactly like a club that publishes none, so emptiness must be declared.
+  ok(saysAny(fatalText(validateCourseImport(FILE, { ...CARDLESS, holesConfidence: 'MEDIUM' })),
+    /went missing in an edit/),
+    'holes that vanished in an edit are refused')
+  ok(saysAny(fatalText(validateCourseImport(FILE, { ...clone(), holesConfidence: NO_CARD })),
+    /delete one or the other/),
+    'and NONE with eighteen holes is refused the other way')
+
+  ok(fatalText(validateCourseImport(FILE,
+    { ...CARDLESS, sources: { ...CARDLESS.sources, holes: ['https://example.com/'] } })).length > 0,
+    'a source for holes that do not exist is refused')
+  ok(fatalText(validateCourseImport(FILE, { ...CARDLESS, note: null })).length > 0,
+    'the note is required — it is the only record of why there is no card')
+  ok(saysAny(fatalText(validateCourseImport(FILE, { ...CARDLESS, teesConfidence: NO_CARD as never })),
+    /belongs to the holes/),
+    'NONE is not a tee confidence — the two vocabularies stay apart')
+  ok(fatalText(validateCourseImport(FILE, { ...CARDLESS, teesConfidence: 'EST' })).length > 0,
+    'and estimated tees are refused when there is no card to correct them')
+
+  // The one that would have failed silently and plausibly.
+  eq(teeParProblems(CARDLESS), [],
+    'the tee/hole cross-check is skipped, not run against a total of zero')
+
+  const twoPars = { ...CARDLESS, tees: [
+    { name: 'Blue', gender: 'M' as const, par: 70, course_rating: 71.5, slope: 128 },
+    { name: 'White', gender: 'M' as const, par: 69, course_rating: 70.1, slope: 124 },
+  ] }
+  ok(saysAny(fatalText(validateCourseImport(FILE, twoPars)), /as the par of the same course/),
+    'two different men\'s pars on one cardless course is refused — the only structural check left')
+
+  const sql = migrationSql([CARDLESS], { number: '999', letter: 'z' })
+  ok(/now\(\), false, false,/.test(sql),
+    'ladies_data_verified is FALSE with no holes — [].every(…) is true and would have said otherwise')
+  ok(sql.includes('No scorecard published'),
+    '  …with a note saying there is no card, not that the ladies card is missing')
+  ok(!sql.includes('INSERT INTO holes'), 'no holes block is emitted')
+  ok(sql.includes(`HOLES ${NO_CARD}`), '  …but the reason survives into the migration')
+  ok(sql.includes('INSERT INTO tees'), 'the tees still land — they are the half that was found')
+  ok(sql.includes('with no card yet'), 'and the header counts them')
 }
 
 // ─── Across the set ────────────────────────────────────────────
