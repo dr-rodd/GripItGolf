@@ -551,6 +551,170 @@ export function validateImportSet(
   return problems
 }
 
+// ─── Correcting the tees on a course that has shipped ──────────
+
+/**
+ * One `data/course-tees/<slug>.json` — new ratings for a course already on
+ * the platform.
+ *
+ * The mirror image of `CourseImport`: there a slug that already exists is
+ * fatal, here a slug that does not is. **Neither directory infers intent from
+ * the data**, because an accidental duplicate and a deliberate correction are
+ * indistinguishable in it, and guessing wrong is silent in both directions.
+ *
+ * There are no holes here at all, and `holes` is a refused key — otherwise a
+ * course file dropped in the wrong directory would import as a tee refresh
+ * and its card would go missing without a word.
+ */
+export type CourseTeeRefresh = {
+  slug: string
+  /** The shipped course's name, checked against it — the guard that catches
+   *  Adare's ratings landing in Ballybunion's file. */
+  name: string
+  teesConfidence: Confidence
+  note: string | null
+  sources: { tees: string[] }
+  tees: NewTeeRow[]
+}
+
+const REFRESH_KEYS = ['slug', 'name', 'teesConfidence', 'note', 'sources', 'tees']
+
+/**
+ * Every reason a set of tee rows cannot be written — `validNewTee` per row,
+ * plus the uniqueness `uq_tees_course_name_gender` enforces.
+ *
+ * Shared by the new-course gate and the refresh gate so the rules have one
+ * copy. Only the "needs a men's tee" rule differs, and that one belongs to
+ * creating a course rather than correcting one: a refresh may legitimately
+ * carry nothing but the ladies tees, which is the commonest correction there
+ * is.
+ */
+function teeRowProblems(tees: readonly unknown[]): string[] {
+  const problems: string[] = []
+  tees.forEach((t, i) => {
+    if (!validNewTee(t)) {
+      const named = isObject(t) && typeof t.name === 'string' ? `"${t.name}"` : `#${i + 1}`
+      problems.push(`Tee ${named} is not writable — a name, M or F, and par, course rating and slope all in range.`)
+    }
+  })
+  const seen = new Set<string>()
+  for (const t of tees) {
+    if (!isObject(t) || typeof t.name !== 'string') continue
+    const key = `${t.name.trim().toLowerCase()}:${t.gender}`
+    if (seen.has(key)) {
+      problems.push(`The ${t.name} tee appears twice for the same gender — uq_tees_course_name_gender would refuse it, and DO UPDATE cannot touch a row twice in one statement.`)
+    }
+    seen.add(key)
+  }
+  return problems
+}
+
+/** Every reason this parsed refresh file is malformed, on its own terms. */
+export function validateTeeRefresh(file: string, parsed: unknown): ImportProblem[] {
+  const problems: ImportProblem[] = []
+  const F = (m: string) => problems.push(fatal(file, m))
+
+  if (!isObject(parsed)) return [fatal(file, 'The file is not a JSON object.')]
+  const r = parsed as Partial<CourseTeeRefresh>
+
+  const extra = Object.keys(parsed).filter(k => !REFRESH_KEYS.includes(k))
+  if (extra.length > 0) {
+    F(`A tee refresh carries only ${REFRESH_KEYS.join(', ')} — this one also has ` +
+      `${extra.join(', ')}. A course file belongs in data/courses/, and dropping one here ` +
+      'would import its ratings and silently lose its card.')
+  }
+
+  if (typeof r.slug !== 'string' || r.slug.length === 0) F('`slug` is missing.')
+  else {
+    if (slugify(r.slug) !== r.slug) F(`The slug "${r.slug}" is not in slug form.`)
+    if (file !== `${r.slug}.json`) {
+      F(`The file is named ${file} but the slug is "${r.slug}" — they must match.`)
+    }
+  }
+
+  if (typeof r.name !== 'string') F('`name` is missing — it is what proves this is the right course.')
+  else {
+    const err = courseNameError(r.name, [])
+    if (err) F(err)
+  }
+
+  if (!isConfidence(r.teesConfidence)) {
+    F(`\`teesConfidence\` must be one of ${CONFIDENCE.join(', ')}.`)
+  }
+  if (r.note !== null && typeof r.note !== 'string') {
+    F('`note` must be a line of text, or null.')
+  }
+
+  const teeSources = isObject(r.sources) && Array.isArray(r.sources.tees)
+    ? r.sources.tees.filter(u => typeof u === 'string') : []
+  if (teeSources.length === 0) F('`sources.tees` needs at least one address.')
+  for (const u of teeSources) {
+    if (!normalizeWebsite(u)) F(`"${u}" is not a web address — a source is a link, not a description.`)
+  }
+
+  if (!Array.isArray(r.tees)) F('`tees` is missing.')
+  else if (r.tees.length === 0) F('There are no tees here — a refresh with nothing to write is a no-op.')
+  else for (const m of teeRowProblems(r.tees)) F(m)
+
+  return problems
+}
+
+/**
+ * The problems a refresh only has against what has shipped.
+ *
+ * `platform` is **every** platform course, generated migrations included — a
+ * course this pipeline created is still on the platform and may still need
+ * correcting. That is the opposite of the `existing` list the new-course
+ * collision check uses, and mixing the two up would refuse every refresh of a
+ * bulk-imported course.
+ */
+export function validateTeeRefreshSet(
+  refreshes: readonly { file: string; refresh: CourseTeeRefresh }[],
+  platform: readonly { name: string; slug: string }[],
+  storedHoles: ReadonlyMap<string, readonly NewHoleRow[]>,
+  arriving: readonly string[],
+): ImportProblem[] {
+  const problems: ImportProblem[] = []
+  const bySlug = new Map(platform.map(p => [p.slug, p]))
+
+  // No slug-uniqueness check across refresh files: the filename must be
+  // `<slug>.json` and a directory cannot hold that name twice.
+  for (const { file, refresh } of refreshes) {
+    const shipped = bySlug.get(refresh.slug)
+    if (!shipped) {
+      problems.push(fatal(file,
+        `"${refresh.slug}" is not a platform course. A refresh corrects a course that has ` +
+        'shipped; a new course goes in data/courses/.'))
+      continue
+    }
+    if (arriving.includes(refresh.slug)) {
+      problems.push(fatal(file,
+        `"${refresh.slug}" is being created in this same run. Put its tees in its ` +
+        'data/courses/ file rather than correcting a course that does not exist yet.'))
+      continue
+    }
+    if (courseNameKey(refresh.name) !== courseNameKey(shipped.name)) {
+      problems.push(fatal(file,
+        `This file says "${refresh.name}" but ${refresh.slug} is "${shipped.name}". ` +
+        'One of the two is the wrong course, and these ratings would land on it.'))
+      continue
+    }
+
+    const holes = storedHoles.get(refresh.slug)
+    if (!holes || holes.length === 0) {
+      problems.push(warn(file,
+        `${refresh.slug} has no stored card, so a tee par cannot be checked against it. ` +
+        'The first scorecard photo settles it.'))
+      continue
+    }
+    for (const m of teeParProblems({ name: refresh.name, holes: holes as NewHoleRow[], tees: refresh.tees })) {
+      problems.push(fatal(file, m))
+    }
+  }
+
+  return problems
+}
+
 // ─── Reading what has already shipped ──────────────────────────
 
 /**
@@ -569,6 +733,43 @@ export function validateImportSet(
  *
  * Pure — the caller reads the files.
  */
+/**
+ * Every platform course's holes, as the migrations wrote them.
+ *
+ * Same reasoning as `platformCoursesInSql`, and the same reason `test:weather`
+ * reads migration 026: the migrations are the source, and a checked-in copy
+ * would go stale. Generated and hand-written hole blocks are the same shape by
+ * construction — the generator was written to match 004 — so one parse reads
+ * both, and `test:course-import` holds that claim against both.
+ *
+ * Keyed on `AS v(n, p, s, pl, sl)`, which is what keeps the tees block out:
+ * that one is `AS spec(slug, tee_name, …)` and joins on `spec.slug` rather
+ * than a quoted literal.
+ *
+ * **This is what shipped, not necessarily what is stored.** A scorecard photo
+ * corrects `holes` through `app/api/card-check/apply` and no migration records
+ * it, which is why `teeRefreshSql` derives par in SQL rather than trusting
+ * what this returns.
+ *
+ * Pure — the caller reads the files.
+ */
+export function platformHolesInSql(sql: string): { slug: string; holes: NewHoleRow[] }[] {
+  const out: { slug: string; holes: NewHoleRow[] }[] = []
+  const block = /FROM \(VALUES([\s\S]*?)\)\s*AS v\(n, p, s, pl, sl\)\s*JOIN courses c ON c\.slug = '([a-z0-9-]+)' AND c\.trip_id IS NULL/g
+  const row = /\(\s*(\d+)(?:::int)?,\s*(\d+)(?:::int)?,\s*(\d+)(?:::int)?,\s*(\d+|NULL)(?:::int)?,\s*(\d+|NULL)(?:::int)?\s*\)/g
+  for (const m of sql.matchAll(block)) {
+    const holes = [...m[1].matchAll(row)].map(r => ({
+      hole_number: Number(r[1]),
+      par: Number(r[2]),
+      stroke_index: Number(r[3]),
+      par_ladies: r[4] === 'NULL' ? null : Number(r[4]),
+      stroke_index_ladies: r[5] === 'NULL' ? null : Number(r[5]),
+    }))
+    if (holes.length === 18) out.push({ slug: m[2], holes })
+  }
+  return out
+}
+
 export function platformCoursesInSql(sql: string): { name: string; slug: string }[] {
   const rows: { name: string; slug: string }[] = []
   const re = /^\s*\(NULL,\s*'((?:[^']|'')*)',\s*'([a-z0-9-]+)'/gm
@@ -593,9 +794,15 @@ const CONFIDENCE_KEY = `--   HIGH   = confirmed from 3+ independent sources
 --   LOW    = single source or conflicting; treat as provisional
 --   EST    = estimated; verify against Golf Ireland before use`
 
-/** The line that says a migration is this pipeline's own output. */
+const GENERATED_PREFIX = '-- GENERATED by scripts/build-course-migration.ts'
+
+/** The line that says a migration is this pipeline's own course output. */
 export const GENERATED_MARKER =
-  '-- GENERATED by scripts/build-course-migration.ts from data/courses/*.json — do not hand-edit.'
+  `${GENERATED_PREFIX} from data/courses/*.json — do not hand-edit.`
+
+/** …and its tee-refresh output, which is a different file for a different job. */
+export const TEE_REFRESH_MARKER =
+  `${GENERATED_PREFIX} from data/course-tees/*.json — do not hand-edit.`
 
 /**
  * Whether a migration is one this pipeline wrote.
@@ -608,7 +815,7 @@ export const GENERATED_MARKER =
  * as shipped.
  */
 export const isGeneratedSql = (sql: string): boolean =>
-  sql.split('\n', 2)[1] === GENERATED_MARKER
+  (sql.split('\n', 2)[1] ?? '').startsWith(GENERATED_PREFIX)
 
 const holesBlock = (c: CourseImport): string => {
   const cell = (n: number | null) => n === null ? 'NULL' : String(n)
@@ -663,6 +870,114 @@ const cardlessBlock = (c: CourseImport): string => [
   '-- then — hasCard is holes.length > 0 — and the picker badges it',
   '-- "Awaiting scorecard" off card_verified = false.',
 ].join('\n')
+
+/**
+ * One batch of tee refreshes as a whole migration file.
+ *
+ * Upsert, never delete. `round_handicaps.tee_id` is `ON DELETE RESTRICT`, so a
+ * tee anybody has played off cannot be removed at all — but more than that,
+ * `DO UPDATE` keeps `tees.id`, so every `round_handicaps` row and every stored
+ * scorecard goes on pointing at the same row with corrected numbers. A delete
+ * and re-insert could not give that at any price.
+ *
+ * **`par` follows the stored holes, never the researched figure.** The file's
+ * par is only the last resort, for a course with no card yet. Trusting it
+ * instead would let a refresh silently revert a correction a scorecard photo
+ * had already made — the migrations record what shipped, not what a photo has
+ * since fixed. Same fallback order as `diffCard`: the ladies total for a
+ * ladies tee, the men's when that gender has no card, the file's own figure
+ * when there is no card at all. Migration 015 already writes it this way.
+ *
+ * A stored tee this file does not name is left completely alone. That is also
+ * the limitation: a wrong tee cannot be *removed* through this pipeline.
+ */
+export function teeRefreshSql(
+  batch: readonly CourseTeeRefresh[],
+  opts: { letter: string },
+): string {
+  const out: string[] = []
+
+  out.push('-- ============================================================')
+  out.push(TEE_REFRESH_MARKER)
+  out.push('--')
+  out.push(`-- Tee corrections batch ${opts.letter.toUpperCase()}: ` +
+    `${batch.length} course${batch.length === 1 ? '' : 's'}.`)
+  out.push('--')
+  out.push('-- New ratings for courses already on the platform. Confidence is noted per')
+  out.push("-- course, in migration 008's words:")
+  out.push(CONFIDENCE_KEY)
+  out.push('--')
+  out.push('-- Nothing is deleted. round_handicaps.tee_id is ON DELETE RESTRICT, so a tee')
+  out.push('-- somebody has played off cannot be removed — and DO UPDATE is better than')
+  out.push('-- that anyway: it keeps tees.id, so every round_handicaps row and every')
+  out.push('-- stored scorecard goes on pointing at the same row with corrected numbers.')
+  out.push('--')
+  out.push('-- **A stored tee this file does not name is left exactly as it is.** Removing')
+  out.push('-- a wrong tee is a hand job in the SQL editor, and will be refused outright')
+  out.push('-- if anybody has played off it.')
+  out.push('--')
+  out.push('-- par is NOT taken from the file. It is derived from the stored holes, so a')
+  out.push('-- correction a scorecard photo has already made is never reverted. The')
+  out.push("-- fallback is diffCard's own: the ladies total for a ladies tee, the men's")
+  out.push('-- when that gender has no card, the researched figure only when the course')
+  out.push('-- has no card at all.')
+  out.push('--')
+  out.push('-- Replay-safe: a second run writes the same values again.')
+  out.push('-- ============================================================')
+  out.push('')
+  out.push('BEGIN;')
+  out.push('')
+
+  const cells = batch.flatMap(r => r.tees.map(t => ({
+    slug: q(r.slug), name: q(t.name), gender: q(t.gender),
+    par: String(t.par), cr: t.course_rating.toFixed(1), slope: String(t.slope),
+  })))
+  const w = {
+    slug: widest(cells.map(x => x.slug)),
+    name: widest(cells.map(x => x.name)),
+    par: widest(cells.map(x => x.par)),
+    cr: widest(cells.map(x => x.cr)),
+  }
+
+  out.push('INSERT INTO tees (course_id, name, gender, par, course_rating, slope)')
+  out.push('SELECT c.id, spec.tee_name, spec.gender, spec.par::integer,')
+  out.push('       spec.course_rating::numeric, spec.slope::integer')
+  out.push('FROM (VALUES')
+
+  const blocks: string[] = []
+  let n = 0
+  for (const r of batch) {
+    const rows = r.tees.map(() => {
+      const x = cells[n++]
+      return `  (${pad(x.slug + ',', w.slug + 1)} ${pad(x.name + ',', w.name + 1)} ${x.gender}, ` +
+        `${padNum(x.par, w.par)}, ${padNum(x.cr, w.cr)}, ${x.slope})`
+    })
+    blocks.push([
+      `  -- ── ${r.name} ──`,
+      `  -- TEES ${r.teesConfidence}: ${r.sources.tees.join(', ')}`,
+      ...(r.note ? [`  -- Note: ${r.note}`] : []),
+      rows.join(',\n'),
+    ].join('\n'))
+  }
+  out.push(blocks.join(',\n\n'))
+
+  out.push(') AS spec(slug, tee_name, gender, par, course_rating, slope)')
+  out.push('JOIN courses c ON c.slug = spec.slug AND c.trip_id IS NULL')
+  out.push('ON CONFLICT ON CONSTRAINT uq_tees_course_name_gender DO UPDATE SET')
+  out.push('  course_rating = EXCLUDED.course_rating,')
+  out.push('  slope         = EXCLUDED.slope,')
+  out.push('  par           = COALESCE(')
+  out.push("    CASE WHEN tees.gender = 'F' THEN (")
+  out.push('      SELECT sum(h.par_ladies) FROM holes h WHERE h.course_id = tees.course_id')
+  out.push('    ) END,')
+  out.push('    (SELECT sum(h.par) FROM holes h WHERE h.course_id = tees.course_id),')
+  out.push('    EXCLUDED.par);')
+  out.push('')
+  out.push('COMMIT;')
+  out.push('')
+
+  return out.join('\n')
+}
 
 /**
  * One batch as a whole migration file. Deterministic — the same courses in

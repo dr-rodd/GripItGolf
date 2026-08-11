@@ -14,10 +14,13 @@
 -- ratings may be lower: a wrong slope is a fraction of a shot, and a
 -- scorecard photo corrects it.
 --
--- card_verified stays false on every row. The holes make the course
--- playable (`hasCard` is holes.length > 0); the badge says, honestly, that
--- no photograph has confirmed it yet. A later photo takes the diff path,
--- because handleCreate refuses a course that already has holes.
+-- card_verified stays false on every row. Where there are holes they make
+-- the course playable (`hasCard` is holes.length > 0) and the badge says,
+-- honestly, that no photograph has confirmed them — a later photo takes the
+-- diff path, because handleCreate refuses a course that already has holes.
+-- Where there are none, the course is searchable and carries its weather,
+-- scoring is gated, and the first photo takes handleCreate's create path
+-- and writes the card.
 --
 -- Replay-safe: every insert is ON CONFLICT DO NOTHING and nothing here
 -- deletes. Migration 008 cleared its tees first; that is no longer safe,

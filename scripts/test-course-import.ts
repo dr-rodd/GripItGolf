@@ -22,7 +22,9 @@ import { join } from 'node:path'
 import {
   validateCourseImport, validateImportSet, platformCoursesInSql, teeParProblems,
   migrationSql, fatalsOf, CONFIDENCE, HOLE_CONFIDENCE_FLOOR, DB_HOLE_PAR, COORD_BOX,
-  GENERATED_MARKER, isGeneratedSql, NO_CARD, type CourseImport,
+  GENERATED_MARKER, TEE_REFRESH_MARKER, isGeneratedSql, NO_CARD,
+  platformHolesInSql, validateTeeRefresh, validateTeeRefreshSet, teeRefreshSql,
+  type CourseImport,
 } from '../lib/courseImport'
 import { validateNewHoleRows, type NewHoleRow } from '../lib/cardCheck'
 import { courseNameKey } from '../lib/courseDirectory'
@@ -337,6 +339,9 @@ const migrationSqlOf = new Map(migrationFiles.map(f => [f, readFileSync(join(MIG
 const shipped = migrationFiles
   .filter(f => !isGeneratedSql(migrationSqlOf.get(f)!))
   .flatMap(f => platformCoursesInSql(migrationSqlOf.get(f)!))
+const storedHoles = new Map(migrationFiles
+  .flatMap(f => platformHolesInSql(migrationSqlOf.get(f)!))
+  .map(x => [x.slug, x.holes]))
 {
   // A floor, not an exact count — courses will be added. If the parse ever
   // silently stops matching, this fails by name instead of the import
@@ -399,6 +404,127 @@ section('Near-duplicate names — the same club written two ways')
     '  …but it is warned about')
   eq(validateImportSet([asFile('Fota Island Resort', 'fota-island')], shipped).filter(p => !p.fatal).length, 0,
     'and one shared word does not warn — "Island" alone is under the floor')
+}
+
+section('The holes already in the migrations')
+{
+  ok(storedHoles.size >= 28,
+    `every platform course's card parses (found ${storedHoles.size} of ${shipped.length} shipped)`)
+  eq(shipped.filter(c => !storedHoles.has(c.slug)).map(c => c.slug), [],
+    'no shipped course is missing its holes — one the parse cannot find is one a tee refresh cannot check')
+  ok([...storedHoles.values()].every(h => h.length === 18), 'each is eighteen rows')
+  ok([...storedHoles.values()].every(h => new Set(h.map(x => x.stroke_index)).size === 18),
+    '  …with a full stroke index')
+
+  // Named totals, so a silent parse drift fails by name rather than quietly
+  // permitting a wrong tee par through the refresh gate.
+  eq(storedHoles.get('adare-manor')!.reduce((s, h) => s + h.par, 0), 72,
+    'Adare Manor\'s men\'s holes add up to 72')
+  eq(storedHoles.get('castlerock-mussenden')!.every(h => h.par_ladies != null), false,
+    'a men\'s-only card comes back with null ladies pars, not zeroes')
+
+  // The generated shape and the hand-written shape really are one shape.
+  eq(platformHolesInSql(migrationSql([GOOD], { number: '999', letter: 'z' })),
+    [{ slug: 'example-golf-links', holes: GOOD.holes }],
+    'and the generator\'s own output is read by the same parser that reads 004')
+}
+
+section('Every shipped tee par against its stored holes')
+{
+  // Not a pass/fail of the data — a record of it. Migration 035 corrects
+  // these, so the expected list shrinking is a deliberate edit here rather
+  // than a silent drop.
+  const teeRow = /\(\s*'([a-z0-9-]+)',\s*'([^']+)',\s*'([MF])',\s*(\d+),\s*[\d.]+,\s*\d+\)/g
+  const off: string[] = []
+  for (const f of migrationFiles) {
+    for (const m of migrationSqlOf.get(f)!.matchAll(teeRow)) {
+      const holes = storedHoles.get(m[1])
+      if (!holes) continue
+      const ladies = holes.every(h => h.par_ladies != null)
+        ? holes.reduce((s, h) => s + h.par_ladies!, 0) : null
+      const want = m[3] === 'F' ? (ladies ?? holes.reduce((s, h) => s + h.par, 0))
+        : holes.reduce((s, h) => s + h.par, 0)
+      if (Number(m[4]) !== want) off.push(`${m[1]} ${m[2]} ${m[3]} ${m[4]} vs ${want}`)
+    }
+  }
+  eq(off.length, 15,
+    'fifteen shipped tee rows still disagree with their own holes — migration 035 is what corrects them')
+  ok(off.some(o => o.startsWith('county-louth Red F 72 vs 75')),
+    '  …including County Louth\'s ladies tee, three shots out')
+}
+
+// ─── Correcting a course that has shipped ──────────────────────
+
+const REFRESH = {
+  slug: 'adare-manor',
+  name: 'Adare Manor Golf Course',
+  teesConfidence: 'HIGH' as const,
+  note: null,
+  sources: { tees: ['https://ncrdb.usga.org/courseTeeInfo?CourseID=1'] },
+  tees: [{ name: 'Black', gender: 'M' as const, par: 72, course_rating: 74.9, slope: 141 }],
+}
+
+section('A tee refresh file, on its own terms')
+{
+  eq(fatalsOf(validateTeeRefresh('adare-manor.json', REFRESH)).map(p => p.message), [],
+    'a well-formed refresh has no fatal problems')
+  ok(fatalsOf(validateTeeRefresh('wrong.json', REFRESH)).length > 0,
+    'the filename must be the slug')
+  ok(fatalsOf(validateTeeRefresh('adare-manor.json', { ...REFRESH, holes: GOOD.holes }))
+    .some(p => /silently lose its card/.test(p.message)),
+    'a course file dropped in this directory is refused, and told why')
+  ok(fatalsOf(validateTeeRefresh('adare-manor.json', { ...REFRESH, tees: [] })).length > 0,
+    'a refresh with no tees is refused — there is nothing to write')
+  eq(fatalsOf(validateTeeRefresh('adare-manor.json',
+    { ...REFRESH, tees: [{ name: 'Red', gender: 'F' as const, par: 72, course_rating: 70.5, slope: 117 }] }))
+    .map(p => p.message), [],
+    'a ladies-only refresh is fine — correcting one gender is the commonest case')
+}
+
+section('A refresh against what has shipped')
+{
+  const holes = new Map([['adare-manor', storedHoles.get('adare-manor')!]])
+  const one = (r: unknown, arriving: string[] = []) =>
+    fatalsOf(validateTeeRefreshSet(
+      [{ file: 'adare-manor.json', refresh: r as never }], shipped, holes, arriving))
+      .map(p => p.message)
+
+  eq(one(REFRESH), [], 'a refresh of a shipped course is allowed')
+  ok(saysAny(one({ ...REFRESH, slug: 'brand-new' }), /not a platform course/),
+    'a slug that has never shipped is refused — the mirror image of the new-course rule')
+  ok(one(REFRESH, ['adare-manor']).length > 0,
+    'a course being created in this same run cannot also be refreshed')
+  ok(saysAny(one({ ...REFRESH, name: 'Ballybunion Golf Club -- Old Course' }), /wrong course/),
+    'a name that is a different club is refused — these ratings would land on it')
+  eq(one({ ...REFRESH, name: 'Adare Manor' }), [],
+    '  …but "Adare Manor" against "Adare Manor Golf Course" is the same club')
+  ok(saysAny(one({ ...REFRESH, tees: [{ ...REFRESH.tees[0], par: 71 }] }), /add up to 72/),
+    'a tee par that disagrees with the STORED holes is named, with both numbers')
+
+  const noCard = validateTeeRefreshSet(
+    [{ file: 'adare-manor.json', refresh: REFRESH as never }], shipped, new Map(), [])
+  eq(fatalsOf(noCard).length, 0, 'a course with no stored card is not refused')
+  ok(noCard.some(p => !p.fatal && /no stored card/.test(p.message)),
+    '  …it is warned about — a cardless course has none by design')
+}
+
+section('The tee-refresh migration')
+{
+  const sql = teeRefreshSql([REFRESH], { letter: 'a' })
+  ok(sql.includes('ON CONFLICT ON CONSTRAINT uq_tees_course_name_gender'),
+    'the conflict target is the unique constraint')
+  ok(/DO UPDATE SET/.test(sql), '  …and it updates, which is the whole point')
+  ok(!/DO NOTHING/.test(sql), 'a refresh that skipped on conflict would be a no-op')
+  ok(!/DELETE FROM/i.test(sql), 'nothing is deleted — round_handicaps.tee_id is ON DELETE RESTRICT')
+  ok(/sum\(h\.par_ladies\)[\s\S]*sum\(h\.par\)[\s\S]*EXCLUDED\.par/.test(sql),
+    'par follows the stored holes — ladies, then men, then the file — diffCard\'s own order')
+  ok(/BEGIN;/.test(sql) && /COMMIT;/.test(sql), 'the file is one explicit transaction')
+  ok(sql.split('\n')[1] === TEE_REFRESH_MARKER && isGeneratedSql(sql),
+    'it is recognised as this pipeline\'s own output')
+  eq(platformCoursesInSql(sql), [],
+    'and it inserts no courses, so the new-course collision check never sees it')
+  eq(platformHolesInSql(sql), [], 'nor any holes')
+  eq(sql, teeRefreshSql([REFRESH], { letter: 'a' }), 'the same input gives the same bytes')
 }
 
 // ─── The generator ─────────────────────────────────────────────
