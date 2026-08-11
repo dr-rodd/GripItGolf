@@ -12,6 +12,7 @@ import {
   buildRows, scoresForBoard, boardHandicapFor, effectivePar, effectiveSI,
   orderRowsUndiscarded,
 } from '@/lib/boardRows'
+import { type Segment } from '@/lib/tiebreak'
 import { buildRowContext, sortRounds } from '@/lib/rowContext'
 import { formatHandicap } from '@/lib/handicap'
 import { type Membership } from '@/lib/teamSets'
@@ -113,6 +114,42 @@ function LiveDot() {
       className="w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0 dot-live"
       title="Card still open"
     />
+  )
+}
+
+/**
+ * The stretch a countback was settled on, riding on the figure it decided.
+ *
+ * White on the green dot, superscript, the size of a footnote mark — because
+ * that is what it is. It goes on the number rather than beside the name so it
+ * reads as a claim about *this* figure: on a prize board, the round column
+ * that paid out differently to two players level; on any board, the total
+ * whose order it settled.
+ *
+ * It only ever appears where a card actually did the deciding. A tie that
+ * stood wears nothing, which is what makes the badge worth reading.
+ */
+// accent-deep, not accent: white type this small needs the 6.6:1 pair, and
+// the brighter emerald is 3.5:1 behind words. docs/design-system.md.
+//
+// 11px is under the 13px floor the type scale holds everything else to, and
+// `test:branding` names it as an exception rather than letting it through
+// quietly. A superscript is a mark on a figure, not writing to be read — at
+// 13px the circle is nearly as tall as the total it sits against and starts
+// competing with it. What it means is on the long press, in words, at
+// whatever size the phone is set to.
+//
+// Concatenated rather than written across lines inside the `className`: a
+// multi-line string keeps its newlines all the way into the class attribute.
+const TIE_BADGE =
+  'ml-0.5 inline-grid place-items-center align-super w-4 h-4 rounded-full '
+  + 'bg-accent-deep text-white text-[11px] font-bold leading-none tabular-nums'
+
+function TieBadge({ segment }: { segment: Segment }) {
+  return (
+    <sup title={`Tie broken on the back ${segment}`} className={TIE_BADGE}>
+      {segment}
+    </sup>
   )
 }
 
@@ -998,7 +1035,10 @@ function Board({
                 } ${!isLast || isExpanded ? 'border-b border-bark/12' : ''}`}
               >
                 <span className={pin('l', '-my-2 py-2')}>
-                  <span className={`t-cap text-ink/65 tabular-nums ${POS_W}`}>{i + 1}</span>
+                  {/* The place, not the row's index. Two level share one —
+                      both are 1st and the next row is 3rd — which is what a
+                      board that leaves ties standing is saying. */}
+                  <span className={`t-cap text-ink/65 tabular-nums ${POS_W}`}>{row.place}</span>
 
                   <span className={`block min-w-0 ${NAME_W}`}>
                     <span className="flex items-center gap-1.5">
@@ -1047,6 +1087,12 @@ function Board({
                       }`}
                     >
                       {!played ? '—' : showRelative ? formatRelative(rel) : formatScore(pts)}
+                      {/* Only on a figure that is standing still and counting.
+                          A round in play is showing how far ahead of level it
+                          is, and a dropped one is not being paid at all. */}
+                      {played && !dropped && !showRelative && row.tieBadgeByRound?.[r.id] && (
+                        <TieBadge segment={row.tieBadgeByRound[r.id]} />
+                      )}
                     </span>
                   )
                 })}
@@ -1062,6 +1108,10 @@ function Board({
                         way the switch is set. `totalAll` is only there when
                         something was dropped, so the fallback is exact. */}
                     {formatScore(applied ? row.total : row.totalAll ?? row.total)}
+                    {/* Stamped by whichever ordering is on screen, so the
+                        switch cannot leave a badge explaining a position the
+                        board is no longer showing. */}
+                    {row.tieBadge && <TieBadge segment={row.tieBadge} />}
                   </span>
                 </span>
               </button>

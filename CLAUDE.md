@@ -108,7 +108,8 @@ Don't read these up front. Open the matching file when the task actually touches
 | File | Purpose |
 |---|---|
 | `lib/leaderboards.ts` | Current leaderboard model |
-| `lib/boardRows.ts` | Scores → leaderboard rows, per board. **`total` is always the competition's total, after any discard**; `totalAll` is the all-in figure and exists only where a round was actually dropped, for the leaderboard's Discard switch. **A casual round (`rounds.casual`) is dropped here, in `buildRows`, and nowhere else** — scored as usual, on no board; a round summary gets its result back by clearing the flag (`fetchRoundRows`) |
+| `lib/tiebreak.ts` | **Two players level, and what happens next — the only copy.** The three settings, the countback (back 9/6/3/2), and `placeRound`, which reads a prize table against a round's finishers. The board, the in-play panel inside the scoring card and the round summary all come through here; each used to answer it for itself |
+| `lib/boardRows.ts` | Scores → leaderboard rows, per board. **`total` is always the competition's total, after any discard**; `totalAll` is the all-in figure and exists only where a round was actually dropped, for the leaderboard's Discard switch. **A casual round (`rounds.casual`) is dropped here, in `buildRows`, and nowhere else** — scored as usual, on no board; a round summary gets its result back by clearing the flag (`fetchRoundRows`). **`place` is golf's, not the row's index** — two level share one, and it is stamped after sorting so it always matches the ordering on screen |
 | `lib/handicap.ts` | Shots received on a hole, and how a handicap is written and read. **A plus handicap is negative** and gives shots back from SI 18 down |
 | `lib/courseHandicap.ts` | The WHS course handicap, the only copy. Unrounded is primary — an allowance comes off that, not off the whole number. Also **which tees a player may be given**: `teesForPlayer` returns their own gender's, or **every tee on the course when that gender has none** — a club with no published ladies card is a real course, and filtering strictly left a woman with nothing selectable, which disabled `canStart` for **everybody on her card**. Four screens read it; a fifth copy of `t.gender === player.gender` is how that reopens, and `test:handicap-allowance` greps for one |
 | `lib/scorecardVoid.ts` | Voiding a card. **Erases its scores from `live_scores` and `scores`**, not just the locks. Every void route goes through it |
@@ -212,13 +213,21 @@ Four things that are easy to get wrong twice:
   gross alone for one release; that gap is closed, and a second copy of the
   control is how it would reopen.
 
-## Two orderings, on purpose and not
+## Two orderings, on purpose
 
-`lib/boardRows.ts` `sortRows` is the leaderboard's order: by total, ties broken alphabetically by name. **`orderRowsUndiscarded` is not a second one** — it is the same comparator, `rowOrder`, reading `totalAll` instead of `total` for the leaderboard's Discard switch. Add an ordering by extending `rowOrder`, never beside it. `lib/playerSummary.ts` `standings` is the hub's cheap path for an individual Stableford total, and `test:hub` holds the two against each other.
+`lib/boardRows.ts` `sortRows` is the leaderboard's order: by total, then the tie rule, then alphabetically by name. **`orderRowsUndiscarded` is not a second one** — it is the same comparator, `rowOrder`, reading `totalAll` instead of `total` for the leaderboard's Discard switch. Add an ordering by extending `rowOrder`, never beside it. `lib/playerSummary.ts` `standings` is the hub's cheap path for an individual Stableford total, and `test:hub` holds the two against each other.
 
-**`app/scoring/LiveLeaderboardPanel.tsx` `compareRows` is a third, and it disagrees.** It breaks a Stableford tie by **countback** — back 9, then back 6, then back 3, then back 2, then holes played — where `sortRows` breaks it by name. So two players level can be ordered one way on the in-play panel inside the scoring card and the other way on the trip leaderboard.
+**There was a third**, `compareRows` in `app/scoring/LiveLeaderboardPanel.tsx`, and it disagreed: it broke a Stableford tie by countback where `sortRows` broke it by name, so two players level could be ordered one way on the in-play panel inside the scoring card and the other way on the trip leaderboard. That is settled — the countback is `lib/tiebreak.ts` now and both read it. The panel still does not ask what the trip's board is set to, deliberately: it is the card in your hand mid-round, and countback is what a group on the eighteenth green means by who won.
 
-That panel is reachable from platform trips: `CourseDashboardClient` renders it, and that is what `/trip/[tripCode]/scoring/[roundNumber]` shows. Countback is arguably the more correct answer in golf, so this is a decision to make rather than a bug to patch — and it sits inside the scoring entry flow, which is why the extraction left it alone. Left documented rather than reconciled.
+## Breaking ties
+
+`lib/tiebreak.ts` is the only copy of the rule, and of the countback. Every league board answers it (`tieBreak`): **Tiebreak** splits level players on the cards — back 9, then 6, then 3, then 2 — **Everybody Wins** pays each of them the better prize, **Even Split** pools those prizes and shares them. A tie the cards cannot split is shared, whichever way the board is set.
+
+**Absent means Even Split** — what every board did before the question existed, so no trip already stored is re-scored. A board being *made* defaults to Tiebreak. Two different defaults for two different questions.
+
+**Rounds added up have no back nine**, so `overallTie` is a second answer under Tiebreak: leave the trip total level (the default), or break it on the last round both played and neither dropped. **A board counting a single round is always broken**, because there the total is that card — which is how a round summary gets it. `countbackByRound` is carried on a row only when the overall tie is broken that way, so `orderRowsUndiscarded` cannot break one the board was told to leave.
+
+Reading a prize table against a round's finishers is `placeRound`, in that same file, because what two level players are *worth* is the tie rule. `lib/customPoints.ts` owns the table itself and nothing about ties. `BoardRow.place` is golf's — two level are both 1st and the next is 3rd. Full detail, including the 9/6/3/2 badge: `docs/leaderboards.md`.
 
 ## Data insertion order
 

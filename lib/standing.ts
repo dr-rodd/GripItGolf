@@ -24,6 +24,7 @@
 import type { Leaderboard } from './leaderboards'
 import type { BoardRow } from './boardRows'
 import { type Standing, standingFor, ordinal } from './playerSummary'
+import { tieBreakOf } from './tiebreak'
 
 /**
  * Whether the cheap path can answer for this board.
@@ -36,6 +37,18 @@ import { type Standing, standingFor, ordinal } from './playerSummary'
  *   stableford    strokes is lowest-wins; the cheap path sorts highest-first
  *   not position  a prize table pays by finishing place, which is a different
  *                 number entirely from the points that earned it
+ *   not countback the cheap path reads a round's total and never its holes,
+ *                 so it cannot see a back nine
+ *
+ * That last one costs the cheap path most new trips, since a board made now
+ * defaults to Tiebreak — and it is still the right trade. The hub saying
+ * you are first while the board has you second, on a tie the card settled,
+ * is the exact disagreement `test:hub` exists to catch.
+ *
+ * It is stricter than it strictly has to be: a countback board told to leave
+ * the trip total level, over more than one round, breaks nothing the cheap
+ * path would get wrong. Narrowing to that would mean knowing the round count
+ * here, which this function is not given and the caller has not yet fetched.
  */
 export function usesSimpleStandings(lb: Leaderboard | null | undefined): boolean {
   if (!lb) return false
@@ -43,6 +56,7 @@ export function usesSimpleStandings(lb: Leaderboard | null | undefined): boolean
     && lb.audience === 'individual'
     && lb.scoring === 'stableford'
     && lb.combine !== 'position'
+    && tieBreakOf(lb) !== 'countback'
 }
 
 /** A place on a board, and how big the field is. */

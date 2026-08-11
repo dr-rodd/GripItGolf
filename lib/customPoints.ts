@@ -5,6 +5,11 @@
 // scored on its own, positions are awarded from the table, and the season
 // board is the sum across rounds.
 //
+// **This file owns the table: what it holds, how it follows the field, and
+// when it has fallen out of step.** Reading it against a round's finishers is
+// `placeRound` in lib/tiebreak.ts, because what happens to two players level
+// on the same score is the tie rule and there is one of those.
+//
 // Pure and deterministic. See scripts/test-custom-points.ts.
 
 import { MAX_CUSTOM_POINTS } from './formats'
@@ -170,54 +175,17 @@ export function customPointsError(points: number[]): string | null {
 }
 
 // ─── Awarding ──────────────────────────────────────────────────
-
-export type RoundStanding = {
-  playerId: string
-  /** Whatever decides the round — Stableford points, or nett strokes. */
-  score: number
-  /** True when the round is won by the lowest score, as in strokeplay. */
-  lowerWins?: boolean
-}
-
-/**
- * Points each player takes from one round.
- *
- * Players level on score share the places they occupy between them: two tied
- * for first with a 10/6 table take eight each. Splitting is what a society
- * would do with an actual prize pot, and it keeps the total awarded the same
- * however the round finishes.
- *
- * Anyone with no score that round is simply absent from the result.
- */
-export function awardRound(
-  standings: RoundStanding[],
-  table: number[],
-  opts: { lowerWins?: boolean } = {},
-): Map<string, number> {
-  const out = new Map<string, number>()
-  if (standings.length === 0) return out
-
-  const lowerWins = opts.lowerWins ?? false
-  const sorted = [...standings].sort((a, b) =>
-    lowerWins ? a.score - b.score : b.score - a.score
-  )
-
-  let i = 0
-  while (i < sorted.length) {
-    // Everyone level with the player at i
-    let j = i
-    while (j + 1 < sorted.length && sorted[j + 1].score === sorted[i].score) j++
-
-    const places = j - i + 1
-    let pot = 0
-    for (let k = i; k <= j; k++) pot += table[k] ?? 0
-    const share = pot / places
-
-    for (let k = i; k <= j; k++) out.set(sorted[k].playerId, share)
-    i = j + 1
-  }
-  return out
-}
+//
+// Applying the table to a round is `placeRound` in lib/tiebreak.ts, not a
+// function here. It used to be — `awardRound` — and it knew one answer about
+// players finishing level: pool the places they occupy and share them out.
+//
+// Once a board could be told to break that tie on countback instead, or to pay
+// every level player the better prize, the awarding *is* the tie rule. Two
+// functions would have been the table read twice under two sets of
+// assumptions, and the leaderboard's badge — which says the back nine decided
+// this — would have been derived somewhere other than where the decision was
+// actually taken.
 
 // ─── Dropping the worst rounds ─────────────────────────────────
 

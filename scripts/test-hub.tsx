@@ -288,6 +288,16 @@ section('The cheap standing path is taken only where it is right')
   ok(!usesSimpleStandings({ id: 'm', audience: 'individual', competition: 'matchplay' }),
     'and a draw has no table at all')
   ok(!usesSimpleStandings(null), 'a trip playing for nothing has no standing')
+
+  // The cheap path reads a round's total and never its holes, so it cannot
+  // see a back nine. A board that breaks ties on one has to go the long way
+  // round or the hub will put a player somewhere the board does not.
+  ok(!usesSimpleStandings(board({ tieBreak: 'countback' })),
+    'nor does a board that breaks ties on countback — it never reads a hole')
+  ok(usesSimpleStandings(board({ tieBreak: 'even_split' })),
+    'the other two settings leave the tie standing, which the cheap path already does')
+  ok(usesSimpleStandings(board({ tieBreak: 'everybody_wins' })),
+    'both of them')
 }
 
 section('A score is scoped through its round, because that is the only way it can be')
@@ -807,8 +817,8 @@ section('A live score counts only while its card is open')
 
 section('A podium reads places off the shared order, and never sorts')
 {
-  const row = (id: string, name: string, total: number): BoardRow => ({
-    id, name, subLabel: '', perRound: {}, playedRounds: [], total,
+  const row = (id: string, name: string, total: number, place = 1): BoardRow => ({
+    id, name, subLabel: '', perRound: {}, playedRounds: [], total, place,
     isLive: false, playerIds: [id],
   })
 

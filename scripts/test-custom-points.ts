@@ -1,10 +1,14 @@
 /**
  * Custom points and discard tests. Run with: npm run test:custom-points
  *
- * The awarding rule has to hold up when players tie, when someone misses a
- * round, and when the table is shorter than the field. Dropping worst rounds
- * has to behave in both directions — worst is the lowest Stableford but the
- * highest nett strokes.
+ * The table has to follow the field without undoing anybody's edits, and say
+ * so when it has fallen out of step. Dropping worst rounds has to behave in
+ * both directions — worst is the lowest Stableford but the highest nett
+ * strokes.
+ *
+ * Reading the table against a round's finishers is `placeRound`, and it lives
+ * in lib/tiebreak.ts because what two level players are worth is the tie rule.
+ * Its tests are in scripts/test-tiebreak.ts.
  *
  * The format model itself is tested in scripts/test-formats.ts.
  */
@@ -13,7 +17,7 @@ import fs from 'fs'
 import {
   defaultCustomPoints, resolveCustomPoints, editableRows,
   isDefaultCustomPoints, clampPoints, customPointsError,
-  awardRound, totalAfterDiscard, discardedIndices, MAX_CUSTOM_POINTS,
+  totalAfterDiscard, discardedIndices, MAX_CUSTOM_POINTS,
   pointsOutOfStep, anyPointsOutOfStep, TEAM_POINTS_MISMATCH, PLAYER_POINTS_MISMATCH,
 } from '../lib/customPoints'
 
@@ -30,8 +34,6 @@ function eq(got: unknown, want: unknown, label: string) {
   else { failed++; failures.push(label); console.log(`  FAIL  ${label}\n        got  ${g}\n        want ${w}`) }
 }
 const section = (n: string) => console.log(`\n${n}`)
-const award = (m: Map<string, number>) =>
-  Object.fromEntries([...m.entries()].sort(([a], [b]) => a.localeCompare(b)))
 
 // ─── The default table ─────────────────────────────────────────
 
@@ -178,77 +180,6 @@ section('Clamping and validation')
   ok(customPointsError([10, -1]) !== null, 'a negative is rejected')
   ok(customPointsError([101]) !== null, 'over the cap is rejected')
   ok(customPointsError([101])!.includes(String(MAX_CUSTOM_POINTS)), 'and names the cap')
-}
-
-// ─── Awarding a round ──────────────────────────────────────────
-
-section('Awarding points for a round')
-{
-  const table = [10, 5, 3, 1]
-
-  // Stableford: the highest score wins
-  eq(award(awardRound([
-    { playerId: 'a', score: 38 },
-    { playerId: 'b', score: 35 },
-    { playerId: 'c', score: 41 },
-  ], table)), { a: 5, b: 3, c: 10 }, 'highest Stableford takes the winner\'s points')
-
-  // Strokeplay: the lowest score wins
-  eq(award(awardRound([
-    { playerId: 'a', score: 74 },
-    { playerId: 'b', score: 71 },
-    { playerId: 'c', score: 78 },
-  ], table, { lowerWins: true })), { a: 5, b: 10, c: 3 },
-    'lowest nett takes the winner\'s points when low wins')
-
-  eq(award(awardRound([], table)), {}, 'nobody played, nobody scores')
-
-  // A field larger than the table — the tail simply earns nothing
-  eq(award(awardRound([
-    { playerId: 'a', score: 40 },
-    { playerId: 'b', score: 38 },
-    { playerId: 'c', score: 36 },
-    { playerId: 'd', score: 34 },
-    { playerId: 'e', score: 32 },
-  ], [10, 5])), { a: 10, b: 5, c: 0, d: 0, e: 0 },
-    'positions past the end of the table are worth nothing')
-}
-
-section('Ties share the places they occupy')
-{
-  const table = [10, 6, 3, 1]
-
-  // Two tied for first take first and second between them
-  eq(award(awardRound([
-    { playerId: 'a', score: 40 },
-    { playerId: 'b', score: 40 },
-    { playerId: 'c', score: 30 },
-  ], table)), { a: 8, b: 8, c: 3 },
-    'two tied for first split first and second: 8 each')
-
-  // Three-way tie for second takes 2nd, 3rd and 4th
-  eq(award(awardRound([
-    { playerId: 'w', score: 44 },
-    { playerId: 'x', score: 40 },
-    { playerId: 'y', score: 40 },
-    { playerId: 'z', score: 40 },
-  ], table)), { w: 10, x: (6 + 3 + 1) / 3, y: (6 + 3 + 1) / 3, z: (6 + 3 + 1) / 3 },
-    'three tied for second share second, third and fourth')
-
-  // The pot is conserved however the round finishes
-  const field = [
-    { playerId: 'a', score: 40 }, { playerId: 'b', score: 40 },
-    { playerId: 'c', score: 40 }, { playerId: 'd', score: 40 },
-  ]
-  const total = [...awardRound(field, table).values()].reduce((s, v) => s + v, 0)
-  eq(total, 20, 'a four-way tie still awards the whole table')
-
-  const clear = [
-    { playerId: 'a', score: 44 }, { playerId: 'b', score: 40 },
-    { playerId: 'c', score: 36 }, { playerId: 'd', score: 30 },
-  ]
-  eq([...awardRound(clear, table).values()].reduce((s, v) => s + v, 0), 20,
-    'and so does a round with no ties at all')
 }
 
 // ─── Dropping worst rounds ─────────────────────────────────────

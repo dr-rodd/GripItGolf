@@ -4,7 +4,8 @@ import { useState } from 'react'
 import {
   type Leaderboard, type Audience,
   SCORINGS, TEAM_FORMATS, COMBINES, MAX_DISCARD,
-  unanswered, isComplete, offersDiscard, offersAllowance, slotKey, isFormatFree,
+  unanswered, isComplete, offersDiscard, offersTieBreak, offersAllowance,
+  slotKey, isFormatFree,
   freeScorings, freeTeamFormats,
   hasMatchplay, boardTitle, boardRules,
 } from '@/lib/leaderboards'
@@ -12,6 +13,7 @@ import {
   FULL_ALLOWANCE, MIN_ALLOWANCE, ALLOWANCE_PRESETS,
   clampAllowance, allowanceOf, suggestedAllowance,
 } from '@/lib/handicapAllowance'
+import { TIE_BREAKS, OVERALL_TIES, DEFAULT_TIE_BREAK, tieBreakOf, overallTieOf } from '@/lib/tiebreak'
 import { nextSheetId } from '@/lib/teamSets'
 import { defaultCustomPoints, editableRows, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
 import { IconTrophy, IconPlus, IconMinus, IconX, IconCheck, IconSettings } from './icons'
@@ -42,6 +44,17 @@ import { Card, Badge, buttonClass, FIELD, FIELD_LABEL } from './ui'
  * made on a sheet of its own and apportioned on the team screen, where the
  * teams themselves are picked — see lib/teamSets.ts.
  */
+
+/**
+ * What a board being made starts out as.
+ *
+ * Only the tie rule, and only because its two defaults differ: a board read
+ * back off a trip with no answer stored is an even split — that is what every
+ * board did before the question existed and re-scoring played trips is not on
+ * — while a board somebody is making now defaults to countback, which is what
+ * golf does. See lib/tiebreak.ts.
+ */
+const FRESH: Partial<Leaderboard> = { tieBreak: DEFAULT_TIE_BREAK }
 
 const CHOICE =
   'w-full text-left px-4 py-3.5 rounded-xl border transition-colors duration-150 ' +
@@ -369,7 +382,7 @@ function Builder({
   onSave: (lb: Leaderboard) => void
   onCancel: (() => void) | null
 }) {
-  const [draft, setDraft] = useState<Partial<Leaderboard>>(initial ?? {})
+  const [draft, setDraft] = useState<Partial<Leaderboard>>(initial ?? FRESH)
   const set = (patch: Partial<Leaderboard>) => setDraft(d => ({ ...d, ...patch }))
 
   // A prize table is one row per finisher, and on a team board the finishers
@@ -436,7 +449,7 @@ function Builder({
             // Who is ranked is the question everything else hangs off, so
             // changing it starts the cascade again. The sheet is not carried
             // across either — teams are apportioned on the team screen.
-            onClick={() => setDraft({ audience: a.key })}
+            onClick={() => setDraft({ ...FRESH, audience: a.key })}
           />
         ))}
       </Question>
@@ -544,6 +557,52 @@ function Builder({
             ))}
           </div>
           <p className="t-cap text-ink/65">A bad day stops defining the week.</p>
+        </Question>
+      )}
+
+      {/* Asked of every league board, prizes or no prizes. Two players level
+          happens either way — with a prize table it decides what they are
+          paid, without one it decides who is on top. */}
+      {offersTieBreak(draft) && (
+        <Question n={next()} title="How are ties broken?">
+          {TIE_BREAKS.map(t => (
+            <Choice
+              key={t.key}
+              on={tieBreakOf(draft) === t.key}
+              label={t.label}
+              // "Everybody Wins" and "Even Split" are the same act on a board
+              // that pays nothing, so it says so rather than offering two
+              // buttons that look like a choice and are not.
+              hint={draft.combine !== 'position' && t.key !== 'countback'
+                ? 'Level players stay level and share the place.'
+                : t.hint}
+              onClick={() => set({
+                tieBreak: t.key,
+                // The overall answer belongs to countback. Carrying it across
+                // would leave a board storing an answer to a question it is
+                // no longer being asked.
+                overallTie: t.key === 'countback' ? overallTieOf(draft) : undefined,
+              })}
+            />
+          ))}
+
+          {tieBreakOf(draft) === 'countback' && (
+            <div className="pl-3 border-l-2 border-accent/25 flex flex-col gap-2 mt-1">
+              <p className="t-cap text-ink/65 leading-snug">
+                Each round is settled on its own back 9. And the trip total,
+                once the rounds are added up?
+              </p>
+              {OVERALL_TIES.map(o => (
+                <Choice
+                  key={o.key}
+                  on={overallTieOf(draft) === o.key}
+                  label={o.label}
+                  hint={o.hint}
+                  onClick={() => set({ overallTie: o.key })}
+                />
+              ))}
+            </div>
+          )}
         </Question>
       )}
 

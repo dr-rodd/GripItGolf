@@ -6,6 +6,7 @@ import BackButton from "@/app/components/BackButton"
 import ScoreShape from "@/app/components/ScoreShape"
 import { scoreTone, TONE_PILL } from "@/lib/leaderboardStyle"
 import { shotsReceived } from "@/lib/boardRows"
+import { type Countback, countbackOf, compareCountback } from "@/lib/tiebreak"
 import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
 import { exactCourseHandicap } from "@/lib/courseHandicap"
 import { formatHandicap } from "@/lib/handicap"
@@ -112,6 +113,8 @@ interface PlayerRow {
   totalNett: number              // nett strokes, capped per hole at par+2
   nettRelative: number           // totalNett − sum(par for holes played)
   perHoleStableford: { hole_number: number; pts: number }[]
+  /** The closing stretches, for the countback. See lib/tiebreak.ts. */
+  countback: Countback
 }
 
 // ─── Sort ─────────────────────────────────────────────────
@@ -123,14 +126,20 @@ function compareRows(a: PlayerRow, b: PlayerRow, mode: Mode, sv: StrokesView): n
   if (mode === "stableford") {
     const diff = b.stablefordRelative - a.stablefordRelative
     if (diff !== 0) return diff
-    // Both finalised: break by back 9, back 6, back 3, back 2
+    // Both finalised: the cards decide it, on the back 9, then 6, 3 and 2.
+    //
+    // This panel wrote that rule out itself for a long time, and the trip
+    // leaderboard broke the same tie alphabetically — so two players level
+    // could be ordered one way here, inside the scoring card, and the other
+    // way on the board. `lib/tiebreak.ts` is the rule now, and a trip's
+    // leaderboard reads it too when it is set to Tiebreak.
+    //
+    // This panel is not asked which setting the trip runs: it is the card in
+    // your hand mid-round, and countback is what the group standing on the
+    // eighteenth green means by "who won". What the board does with that
+    // afterwards is the board's business.
     if (a.isFinalised && b.isFinalised) {
-      for (const from of [10, 13, 16, 17]) {
-        const aBack = a.perHoleStableford.filter(s => s.hole_number >= from).reduce((sum, s) => sum + s.pts, 0)
-        const bBack = b.perHoleStableford.filter(s => s.hole_number >= from).reduce((sum, s) => sum + s.pts, 0)
-        if (bBack !== aBack) return bBack - aBack
-      }
-      return 0 // true tie
+      return compareCountback(a.countback, b.countback)
     }
     // At least one active: more holes played = higher rank
     return b.holesCompleted - a.holesCompleted
@@ -403,6 +412,10 @@ export default function LiveLeaderboardPanel({
       const playerCoursePar = courseHoles.reduce((s, h) => s + effectivePar(h, player.gender), 0)
       const totalNett = playerCoursePar + 36 - totalStableford
       const holesCompleted = playerScores.length
+      const perHole = playerScores.map(ls => ({
+        hole_number: ls.hole_number,
+        pts: pointsOn(ls),
+      }))
 
       return [{
         player,
@@ -414,10 +427,8 @@ export default function LiveLeaderboardPanel({
         grossRelative: totalGross - totalParPlayed,
         totalNett,
         nettRelative: holesCompleted * 2 - totalStableford,
-        perHoleStableford: playerScores.map(ls => ({
-          hole_number: ls.hole_number,
-          pts: pointsOn(ls),
-        })),
+        perHoleStableford: perHole,
+        countback: countbackOf(perHole, h => h.hole_number, h => h.pts),
       }]
     })
 

@@ -15,7 +15,8 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:team-sets` | Team sheets in isolation — naming, membership, the finalise gate per sheet |
 | `test:matchplay` | Bracket generation and seeding |
 | `test:entrants` | Player/pairing naming, and the real column-mapping functions |
-| `test:custom-points` | The prize table and discard rules |
+| `test:custom-points` | The prize table itself — how it follows the field, when it is out of step — and the discard rules |
+| `test:tiebreak` | Two players level: the three settings, the countback and which stretch split them, the prize table read against a round's finishers, the badge, the one-round exception, and that only one countback exists in the codebase |
 | `test:bracket-layout` | Column geometry and connectors |
 | `test:bracket-render` | The bracket component at every size, singles and pairs |
 | `test:progress` | Recording and correcting winners, and the cascade |

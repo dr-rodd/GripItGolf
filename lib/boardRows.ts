@@ -22,8 +22,13 @@ import {
   DEFAULT_TEAM_SCORING, teamRoundPoints,
 } from './teamScoring'
 import {
-  resolveCustomPoints, awardRound, totalAfterDiscard, discardedIndices,
+  resolveCustomPoints, totalAfterDiscard, discardedIndices,
 } from './customPoints'
+import {
+  type Countback, type Segment, type Placeable, type Placing,
+  SEGMENTS, segmentFrom, countbackOf, splitBy, compareCountback, earlierSegment,
+  placeRound, tieBreakOf, overallTieOf,
+} from './tiebreak'
 
 // ─── What a board is built from ────────────────────────────────
 
@@ -149,6 +154,37 @@ export type BoardRow = {
   playerIds: string[]
   /** Hero mode: who carried the team, per round. */
   heroByRound?: Record<string, string | null>
+
+  /**
+   * The place this row finished, counting from 1 — shared where a tie stands.
+   *
+   * Stamped by whichever of the two orderings the board is showing, so it is
+   * always the position beside the total on screen rather than the index of
+   * the row in an array. Two level on a board that leaves ties standing are
+   * both 1st and the next row is 3rd.
+   */
+  place: number
+
+  /**
+   * The closing stretch that split this row from the one level with it, on
+   * the total — 9, 6, 3 or 2. See lib/tiebreak.ts.
+   *
+   * Absent unless a countback actually decided it, which is what makes it
+   * safe to render as a claim that the card settled this.
+   */
+  tieBadge?: Segment
+  /** The same, per round, where a countback decided what that round paid. */
+  tieBadgeByRound?: Record<string, Segment>
+  /**
+   * What this row scored over each closing stretch, per round.
+   *
+   * Present only on a board that breaks its **overall** tie on countback, and
+   * that is the whole of what it is for: `orderRowsUndiscarded` reorders rows
+   * it is handed as props, with no context to consult, so the cards have to
+   * travel with them. A board that leaves the total level carries none, which
+   * is why both orderings agree without being told the setting twice.
+   */
+  countbackByRound?: Record<string, Countback>
 }
 
 export type RowContext = {
@@ -423,6 +459,11 @@ type RoundScore = {
   live: boolean
   played: boolean
   heroPlayerId?: string | null
+  /**
+   * What this round was worth over each closing stretch, in whatever the
+   * board is scored on. Only built when the board breaks ties on countback.
+   */
+  countback?: Countback
 }
 
 type Combined = {
@@ -431,6 +472,23 @@ type Combined = {
   total: number
   /** Undefined unless something was actually dropped — see `BoardRow.totalAll`. */
   totalAll?: number
+  /** Rounds whose prize was settled by a countback, and on which stretch. */
+  badges?: Record<string, Segment>
+}
+
+/**
+ * Whether this board breaks a tie on the **whole trip** by countback.
+ *
+ * Rounds added up have no back nine, so a board is normally left level there
+ * even when every round of it is split — that is what `overallTie` is. The
+ * exception is a board counting a single round, where the total is that one
+ * card and refusing to read it would be refusing to read the card in front of
+ * you. A round summary is exactly that board, which is why a round's own
+ * result is always broken the way the trip says rounds are broken.
+ */
+function breaksOverallTie(lb: Leaderboard, roundCount: number): boolean {
+  if (tieBreakOf(lb) !== 'countback') return false
+  return overallTieOf(lb) === 'last_round' || roundCount <= 1
 }
 
 /**
@@ -452,27 +510,36 @@ function combineRounds(
   // Paid by position: each round is placed on its own result, and what shows
   // in the round column is what that position was worth — not the score that
   // earned it, which would leave the total not adding up beside its columns.
-  const awarded = new Map<string, Map<string, number>>()
+  //
+  // Placing and paying are one act, because what two level players are worth
+  // is the board's tie rule: split them on countback and they take different
+  // prizes, leave them level and they share or both take the better one. See
+  // lib/tiebreak.ts.
+  const awarded = new Map<string, Map<string, Placing>>()
   if (byPosition) {
     const roundIds = new Set(rows.flatMap(r => r.rounds.filter(x => x.played).map(x => x.roundId)))
     for (const roundId of roundIds) {
-      const standings = rows
+      const entrants = rows
         .map(r => {
           const rs = r.rounds.find(x => x.roundId === roundId && x.played)
-          return rs ? { playerId: r.id, score: rs.score } : null
+          return rs ? { id: r.id, score: rs.score, countback: rs.countback } : null
         })
-        .filter(Boolean) as { playerId: string; score: number }[]
-      awarded.set(roundId, awardRound(standings, table, { lowerWins: lowerWins(lb) }))
+        .filter(Boolean) as Placeable[]
+      awarded.set(roundId, placeRound(entrants, table, {
+        mode: tieBreakOf(lb),
+        lowerWins: lowerWins(lb),
+      }))
     }
   }
 
   for (const row of rows) {
     const played = row.rounds.filter(r => r.played)
     const perRound: Record<string, number> = {}
+    const badges: Record<string, Segment> = {}
     for (const r of row.rounds) {
-      perRound[r.roundId] = byPosition
-        ? awarded.get(r.roundId)?.get(row.id) ?? 0
-        : r.score
+      const placing = byPosition ? awarded.get(r.roundId)?.get(row.id) : undefined
+      perRound[r.roundId] = byPosition ? placing?.points ?? 0 : r.score
+      if (placing?.splitBy) badges[r.roundId] = placing.splitBy
     }
 
     // Prize points are always higher-is-better, whatever earned them
@@ -489,30 +556,110 @@ function combineRounds(
       // totals rather than a bare `reduce` growing up beside it as a second
       // answer to what a row adds up to.
       totalAll: dropped.length > 0 ? totalAfterDiscard(values, 0, opts) : undefined,
+      badges: Object.keys(badges).length > 0 ? badges : undefined,
     })
   }
   return out
 }
 
 /**
+ * A row before it knows where it finished.
+ *
+ * The place is not something a row can be built with — it depends on what the
+ * row beside it did, and on which of the two totals the board is showing. So
+ * it is stamped by `placed`, once the order exists, and this is the shape
+ * everything upstream of that works in.
+ */
+type UnplacedRow = Omit<BoardRow, 'place'>
+
+/**
  * Highest total wins, unless the board is nett strokes added up — over
- * whichever total is being read.
+ * whichever total is being read. Then the cards, then the name.
  *
  * Split out so the leaderboard's Discard toggle can reorder by the all-in
  * total without writing the rule down a second time. There are already two
  * orderings in this codebase and a third would be one too many: this is the
  * *same* ordering asking a different column.
  */
-function rowOrder(lb: Leaderboard, totalOf: (r: BoardRow) => number) {
+function rowOrder(lb: Leaderboard, totalOf: (r: UnplacedRow) => number) {
   const ascending = lowerWins(lb) && lb.combine !== 'position'
-  return (a: BoardRow, b: BoardRow) =>
+  return (a: UnplacedRow, b: UnplacedRow) =>
     (ascending ? totalOf(a) - totalOf(b) : totalOf(b) - totalOf(a))
+      // The cards, where the board reads them. `countbackByRound` is only
+      // carried by a board that breaks its overall tie that way, so this is a
+      // no-op on every other board without having to ask which it is.
+      || compareCountback(...facing(lb, a, b))
       || a.name.localeCompare(b.name)
 }
 
+/**
+ * The two cards a countback between these rows would read, and which way.
+ *
+ * **The last round both of them played and neither dropped.** A round the
+ * board is not counting cannot decide the board — a discarded round is not
+ * part of the total it is being asked to break — and a round only one of them
+ * played is not a comparison, it is a card against nothing.
+ *
+ * The direction is the *scoring's*, not the total's: countback reads cards,
+ * so the better back nine is the lower one on a strokes board even where the
+ * board itself is paid in prize points and sorted high to low.
+ */
+function facing(
+  lb: Leaderboard, a: UnplacedRow, b: UnplacedRow,
+): [Countback | undefined, Countback | undefined, boolean] {
+  const lower = lb.scoring === 'strokes'
+  if (!a.countbackByRound || !b.countbackByRound) return [undefined, undefined, lower]
+  const shared = a.playedRounds.filter(id =>
+    b.playedRounds.includes(id)
+    && !a.droppedRounds?.includes(id)
+    && !b.droppedRounds?.includes(id))
+  // `playedRounds` is built in round order, so the last shared one is the
+  // most recent — which is the round a society goes back to.
+  const last = shared[shared.length - 1]
+  if (!last) return [undefined, undefined, lower]
+  return [a.countbackByRound[last], b.countbackByRound[last], lower]
+}
+
 /** The board's own order: by the competition total, after any discard. */
-function sortRows(lb: Leaderboard, rows: BoardRow[]): BoardRow[] {
-  return rows.sort(rowOrder(lb, r => r.total))
+function sortRows(lb: Leaderboard, rows: UnplacedRow[]): BoardRow[] {
+  return placed(lb, rows.sort(rowOrder(lb, r => r.total)), r => r.total)
+}
+
+/**
+ * The places, and the badges that explain them.
+ *
+ * Run over rows already in finishing order. Two rows level on the total share
+ * a place unless the cards split them, and where the cards did the splitting
+ * both sides of the break say so — being put second on countback is as much
+ * the card's doing as being put first.
+ *
+ * Rows are rebuilt rather than stamped in place: these are props by the time
+ * the Discard switch reorders them, and writing a place onto the object would
+ * change the row the board is still holding.
+ */
+function placed(
+  lb: Leaderboard, rows: UnplacedRow[], totalOf: (r: UnplacedRow) => number,
+): BoardRow[] {
+  const out: BoardRow[] = rows.map(r => ({ ...r, place: 1 }))
+  for (let i = 1; i < out.length; i++) {
+    const prev = out[i - 1], row = out[i]
+    // A prize share is a division, so two rows that finished level can land a
+    // whisker apart in binary. Level is level.
+    if (Math.abs(totalOf(prev) - totalOf(row)) > 1e-9) { row.place = i + 1; continue }
+    const split = splitBy(...facing(lb, prev, row))
+    if (!split) {
+      // Level, and the cards had nothing to say about it
+      row.place = prev.place
+      continue
+    }
+    row.place = i + 1
+    // The stretch that placed a row is the first one to split it from anybody
+    // — so a row split from the one above on the back 9 and from the one
+    // below on the back 3 wears the 9.
+    prev.tieBadge = earlierSegment(prev.tieBadge, split.segment)
+    row.tieBadge = split.segment
+  }
+  return out
 }
 
 /**
@@ -527,7 +674,8 @@ function sortRows(lb: Leaderboard, rows: BoardRow[]): BoardRow[] {
  * then already the all-in figure — so the fallback is exact, not a guess.
  */
 export function orderRowsUndiscarded(lb: Leaderboard, rows: readonly BoardRow[]): BoardRow[] {
-  return [...rows].sort(rowOrder(lb, r => r.totalAll ?? r.total))
+  const totalOf = (r: UnplacedRow) => r.totalAll ?? r.total
+  return placed(lb, [...rows].sort(rowOrder(lb, totalOf)), totalOf)
 }
 
 // ── Individuals ──
@@ -536,6 +684,11 @@ function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const holeById = new Map(ctx.holes.map(h => [h.id, h]))
   const strokes = lb.scoring === 'strokes'
   const allowance = allowanceOf(lb)
+
+  // The cards are only read for their closing stretches on a board that
+  // breaks ties that way. Everywhere else this is four sums a round nobody
+  // would ever look at.
+  const reads = tieBreakOf(lb) === 'countback'
 
   const perPlayer = ctx.players.map(p => {
     let holesPlayed = 0, gross = 0
@@ -547,8 +700,14 @@ function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
       const ph = boardHandicap(ctx, r.id, p.id, p.handicap, allowance)
 
       if (!strokes) {
-        const score = mine.reduce(
-          (sum, s) => sum + boardPoints(s, holeById.get(s.holeId), p.gender, ph, allowance), 0)
+        // Per hole first, then totalled — a countback is the same figures cut
+        // at the tenth, so working them out twice is how the two would end up
+        // disagreeing about a card the board is already showing.
+        const perHole = mine.map(s => ({
+          n: s.holeNumber,
+          v: boardPoints(s, holeById.get(s.holeId), p.gender, ph, allowance),
+        }))
+        const score = perHole.reduce((sum, h) => sum + h.v, 0)
         return {
           roundId: r.id,
           score,
@@ -557,28 +716,34 @@ function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
           relative: score - mine.length * 2,
           live: mine.some(s => s.live),
           played: mine.length > 0,
+          countback: reads ? countbackOf(perHole, h => h.n, h => h.v) : undefined,
         }
       }
 
-      const g = mine.reduce((sum, s) => sum + (s.gross ?? 0), 0)
-      const shots = mine.reduce((sum, s) => {
+      // Nett per hole, for the same reason
+      const perHole = mine.map(s => {
         const hole = holeById.get(s.holeId)
-        return hole ? sum + shotsReceived(ph, effectiveSI(hole, p.gender)) : sum
-      }, 0)
+        return {
+          n: s.holeNumber,
+          v: (s.gross ?? 0)
+            - (hole ? shotsReceived(ph, effectiveSI(hole, p.gender)) : 0),
+          par: hole ? effectivePar(hole, p.gender) : 0,
+        }
+      })
+      const g = mine.reduce((sum, s) => sum + (s.gross ?? 0), 0)
+      const nett = perHole.reduce((sum, h) => sum + h.v, 0)
       // Par of the holes actually played, so a card nine holes in reads
       // against nine holes of par rather than eighteen
-      const parPlayed = mine.reduce((sum, s) => {
-        const hole = holeById.get(s.holeId)
-        return hole ? sum + effectivePar(hole, p.gender) : sum
-      }, 0)
+      const parPlayed = perHole.reduce((sum, h) => sum + h.par, 0)
       gross += g
 
       return {
         roundId: r.id,
-        score: g - shots,
-        relative: g - shots - parPlayed,
+        score: nett,
+        relative: nett - parPlayed,
         live: mine.some(s => s.live),
         played: mine.length > 0,
+        countback: reads ? countbackOf(perHole, h => h.n, h => h.v) : undefined,
       }
     })
 
@@ -595,7 +760,7 @@ function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
     // a lot of type saying something the round columns already show, on the
     // one board that is meant to be read at a glance. What is worth knowing
     // about a round is in that round's own column.
-    const row: BoardRow = {
+    const row: UnplacedRow = {
       id: player.id,
       name: player.name,
       subLabel: '',
@@ -608,11 +773,31 @@ function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
       totalAll: c.totalAll,
       isLive: liveFor([player.id], ctx),
       playerIds: [player.id],
+      tieBadgeByRound: c.badges,
+      countbackByRound: cardsForOrdering(lb, ctx, rounds),
     }
     return row
   })
 
   return sortRows(lb, rows)
+}
+
+/**
+ * The cards a row carries so the board can be reordered without its context.
+ *
+ * Nothing at all unless this board breaks the **overall** tie on countback —
+ * see `breaksOverallTie`. A board that leaves the total level has no use for
+ * them, and carrying them anyway would mean `orderRowsUndiscarded`, which is
+ * handed rows and nothing else, silently breaking a tie the board had been
+ * told to leave alone.
+ */
+function cardsForOrdering(
+  lb: Leaderboard, ctx: RowContext, rounds: readonly RoundScore[],
+): Record<string, Countback> | undefined {
+  if (!breaksOverallTie(lb, ctx.rounds.length)) return undefined
+  const out: Record<string, Countback> = {}
+  for (const r of rounds) if (r.played && r.countback) out[r.roundId] = r.countback
+  return out
 }
 
 /**
@@ -642,13 +827,29 @@ function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const sheet = setOf(lb)
   const teams = teamsOnSheet(ctx.teams, sheet) as RowTeam[]
 
+  // A team's back nine is its team score over those holes, worked out under
+  // the same format — the composite card, the hero's card, everyone but the
+  // worst — rather than a sum of the members' own back nines. The format is
+  // what makes a team score a team score, and dropping it for the countback
+  // would answer a different question in the one place it matters most.
+  const reads = tieBreakOf(lb) === 'countback'
+  const bySegment = reads
+    ? SEGMENTS.map(seg =>
+      [seg, inputs.filter(s => s.holeNumber >= segmentFrom(seg))] as const)
+    : []
+
   const perTeam = teams.map(team => {
     const memberIds = membersOf(ctx.memberships, team.id)
     const rounds: RoundScore[] = ctx.rounds.map(r => {
       const res = teamRoundPoints(memberIds, r.id, inputs, scoring, basis)
+      const countback = reads
+        ? Object.fromEntries(bySegment.map(([seg, sub]) =>
+          [seg, teamRoundPoints(memberIds, r.id, sub, scoring, basis).score])) as Countback
+        : undefined
       return {
         roundId: r.id,
         score: res.score,
+        countback,
         // No level here: what counts as level depends on the format and the
         // team's size, so a signed number would mislead. Green still says
         // the total can move.
@@ -668,7 +869,7 @@ function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const rows = perTeam.map(({ team, memberIds, rounds }) => {
     const c = combined.get(team.id)!
     const members = ctx.players.filter(p => memberIds.includes(p.id))
-    const row: BoardRow = {
+    const row: UnplacedRow = {
       id: team.id,
       name: team.name,
       color: team.color,
@@ -682,6 +883,8 @@ function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
       isLive: liveFor(memberIds, ctx),
       playerIds: memberIds,
       heroByRound: Object.fromEntries(rounds.map(r => [r.roundId, r.heroPlayerId ?? null])),
+      tieBadgeByRound: c.badges,
+      countbackByRound: cardsForOrdering(lb, ctx, rounds),
     }
     return row
   })

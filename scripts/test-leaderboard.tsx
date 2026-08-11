@@ -350,6 +350,66 @@ section('Custom points when players tie')
     'nobody takes the winner\'s ten outright — a tie is not a win')
 }
 
+section('A countback pays the two it split, and the board says which stretch')
+{
+  // Alice's points are all on the front nine, Bob's all on the back. Both 36,
+  // and the back 9 is the whole difference. Cara is well behind either way.
+  const half = (playerId: string, front: number, back: number) =>
+    holes.map(h => ({
+      player_id: playerId, hole_id: h.id, round_id: 'r1',
+      gross_score: 6 - (h.hole_number <= 9 ? front : back), no_return: false,
+      stableford_points: h.hole_number <= 9 ? front : back,
+    }))
+  const level = [...half('p1', 3, 1), ...half('p2', 1, 3), ...half('p3', 1, 1)]
+  const one = { rounds: [rounds[0]], scores: level }
+
+  const cb: Leaderboard = { ...CU([10, 5, 3]), tieBreak: 'countback' }
+  const html = render([cb], one)
+
+  ok(html.includes('>10<') && html.includes('>5<'),
+    'the cards were split, so one takes the ten and the other the five')
+  ok(!html.includes('>7.5<'), 'nothing was pooled')
+
+  // The badge: a superscript 9 on the figure the back nine decided — which
+  // is the round column, on each of the two, and never on Cara.
+  //
+  // **Not on the total.** Splitting the round left them on ten and five, so
+  // by the time the totals are added up there is no tie there to explain. A
+  // badge on the total would be claiming the back nine settled an order that
+  // was never level. It earns its place on a board where the totals really do
+  // come out equal — see test:tiebreak.
+  eq((html.match(/rounded-full bg-accent-deep[^>]*>9</g) ?? []).length, 2,
+    'each of the two carries it on the round that paid them')
+  ok(html.includes('title="Tie broken on the back 9"'),
+    'and it says what it means in words on a long press')
+
+  // Left alone, the same round pools the two prizes and claims nothing
+  const even = render([CU([10, 5, 3])], one)
+  ok(even.includes('>7.5<'), 'an even split pools ten and five into seven and a half')
+  ok(!/rounded-full bg-accent-deep/.test(even), 'and no badge, because no card decided it')
+
+  // The same two cards on a board that pays nothing. Both still add to 36, so
+  // this is where the total itself is the figure the countback decided — and
+  // where the badge lands on it.
+  const seats = (h: string) =>
+    [...h.matchAll(/tabular-nums w-3\.5 flex-shrink-0">(\d+)</g)].map(m => m[1])
+
+  const board: Leaderboard = { ...SF(), tieBreak: 'countback' }
+  const totals = render([board], one)
+  // On the total, and only there. A round column on a board that adds rounds
+  // up is showing what that round scored — 36, for both of them — and nothing
+  // about it was decided by a countback. What the back nine settled is the
+  // order, and the order is the total.
+  eq((totals.match(/rounded-full bg-accent-deep[^>]*>9</g) ?? []).length, 2,
+    'the total carries it, for each of the two')
+  eq(seats(totals).slice(0, 2), ['1', '2'],
+    'and they hold separate places rather than sharing first')
+
+  const level36 = render([SF()], one)
+  ok(!/rounded-full bg-accent-deep/.test(level36), 'an old board claims nothing')
+  eq(seats(level36).slice(0, 2), ['1', '1'], 'and leaves them both first')
+}
+
 section('Custom points with the worst round dropped')
 {
   // 10/5/1, dropping the worst: Alice keeps 10, Bob keeps 5, Cara keeps 10.
@@ -412,14 +472,37 @@ section('The position column takes only the width it needs')
   const many = Array.from({ length: 11 }, (_, i) => ({
     id: `q${i + 1}`, name: `Player ${i + 1}`, handicap: 10, gender: 'M', team_id: null,
   }))
+  const deepHandicaps = many.flatMap(p => rounds.map(r => ({
+    round_id: r.id, player_id: p.id, playing_handicap: p.handicap,
+  })))
+  // Eleven separate totals, or they would share places rather than count down
+  // to an eleventh — which is the thing this is measuring the column for.
   const deep = render([SF()], {
     players: many,
-    roundHandicaps: many.flatMap(p => rounds.map(r => ({
-      round_id: r.id, player_id: p.id, playing_handicap: p.handicap,
-    }))),
+    roundHandicaps: deepHandicaps,
+    scores: many.flatMap((p, i) => rounds.flatMap(r =>
+      holes.map(h => ({
+        player_id: p.id, hole_id: h.id, round_id: r.id,
+        gross_score: 4, no_return: false,
+        stableford_points: h.hole_number <= i ? 3 : 2,
+      })))),
+  })
+  /** The position column's own cells, in board order. */
+  const places = (html: string) =>
+    [...html.matchAll(/tabular-nums w-5 flex-shrink-0">(\d+)</g)].map(m => m[1])
+
+  eq(places(deep), ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'],
+    'eleven players are all on the board')
+
+  // The same eleven, level with each other. A place is a place, not a row
+  // number: everybody on the same total is first, and nobody is eleventh.
+  const level = render([SF()], {
+    players: many,
+    roundHandicaps: deepHandicaps,
     scores: many.flatMap(p => rounds.flatMap(r => scoresFor(p.id, r.id, 2))),
   })
-  ok(deep.includes('>11<'), 'eleven players are all on the board')
+  eq(places(level), Array(11).fill('1'),
+    'eleven players level are eleven firsts, not a countdown')
   ok(/w-5 flex-shrink-0[^>]*aria-hidden/.test(deep),
     'and the column widens to two digits for them')
 

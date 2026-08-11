@@ -27,6 +27,7 @@
 import {
   FULL_ALLOWANCE, allowanceOf, clampAllowance, describeAllowance,
 } from './handicapAllowance'
+import { type TieBreak, type OverallTie, TIE_BREAKS, describeTieBreak } from './tiebreak'
 
 export type Audience = 'individual' | 'team'
 export type Competition = 'league' | 'matchplay'
@@ -81,6 +82,25 @@ export type Leaderboard = {
 
   /** `combine: 'position'` only — what each finishing place pays. */
   customPoints?: number[]
+
+  /**
+   * What this board does when two entrants finish level.
+   *
+   * Absent means `even_split`, which is what every board did before the
+   * question existed. See lib/tiebreak.ts — the rule, and why the default for
+   * a board being read back is not the default for one being made.
+   */
+  tieBreak?: TieBreak
+
+  /**
+   * And when they finish level on the whole trip.
+   *
+   * `tieBreak: 'countback'` only. Absent means the overall total is left
+   * level: several rounds added up have no back nine to be better over. A
+   * board counting a single round is the exception and is broken either way,
+   * because there the total is that one card.
+   */
+  overallTie?: OverallTie
 }
 
 export const MAX_DISCARD = 2
@@ -296,6 +316,19 @@ export function offersDiscard(draft: Partial<Leaderboard>): boolean {
 }
 
 /**
+ * Whether to ask how ties are broken.
+ *
+ * Every league board. Two players level is a thing that happens whether the
+ * round was worth points or worth a place — on a board that pays nothing the
+ * answer only decides who is on top, which is the whole of what that board is
+ * for. A draw is not asked: a match that finishes level is halved, and that is
+ * the format's own rule rather than a setting.
+ */
+export function offersTieBreak(draft: Partial<Leaderboard>): boolean {
+  return draft.competition === 'league' && !!draft.scoring
+}
+
+/**
  * Whether to ask about the handicap allowance yet.
  *
  * Last question of the cascade, and only once the board knows what it is: the
@@ -355,6 +388,9 @@ export function boardRules(lb: Leaderboard): string {
   if (lb.discardWorst) {
     parts.push(`Worst ${lb.discardWorst === 1 ? 'round' : `${lb.discardWorst} rounds`} dropped.`)
   }
+  // Empty on a board that leaves ties standing and pays nothing for them,
+  // which is every board that predates the question — see lib/tiebreak.ts.
+  parts.push(describeTieBreak(lb))
   // Only when it is one — "Full course handicap" on every board that never
   // asked for a reduction is a sentence saying nothing.
   const allowance = allowanceOf(lb)
@@ -423,6 +459,19 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
       const allowance = clampAllowance(r.handicapAllowance)
       if (allowance !== FULL_ALLOWANCE) lb.handicapAllowance = allowance
       if (lb.combine === 'position') lb.customPoints = points(r.customPoints)
+
+      // Kept off the object when it is the no-op, the same way an allowance
+      // of 100 is. Absent reads as `even_split` — what every board did before
+      // the question was asked — so a trip that predates it is byte-for-byte
+      // the object it has always been, and is scored the way it always was.
+      const tieBreak = TIE_BREAKS.find(t => t.key === r.tieBreak)?.key
+      if (tieBreak && tieBreak !== 'even_split') lb.tieBreak = tieBreak
+      // Only countback has an overall question, and only one of its answers
+      // is worth storing. A board told to leave the total level is the board
+      // that never answered.
+      if (lb.tieBreak === 'countback' && r.overallTie === 'last_round') {
+        lb.overallTie = 'last_round'
+      }
 
       if (audience === 'team') {
         const teamFormat = ALL_TEAM_FORMATS.find(f => f.key === r.teamFormat)?.key

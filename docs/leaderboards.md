@@ -15,7 +15,7 @@ A league board is three answers, and they do not constrain one another:
 | *(teams only)* how the players combine | better ball · hero · cut the dead weight |
 | How the rounds add up | total them · pay by finishing position |
 
-Discard (0–2 worst rounds) is asked of **every** league board. A draw asks nothing — it is generated at random.
+Discard (0–2 worst rounds) and **how ties are broken** are asked of **every** league board. A draw asks nothing — it is generated at random.
 
 **Every combination is a board that exists and is implemented.** `everyBoard()` is that grid, and the form offers cells from it and nothing else, so settings can never ask for maths that has not been written. This is the whole design: the renderer's capability is the fixed thing and the form is a selector over it, rather than each new option needing new scoring code.
 
@@ -146,7 +146,51 @@ A prize table paid by finishing position each round — 10 for the winner, 5 for
 - **An untouched default follows the field; an edited table is padded with zeroes.** `resolveCustomPoints` tells them apart with `isDefaultCustomPoints`, and both the form and `boardRows` go through it. A default is a *shape* — a point per player, dropping one — not a set of numbers, so it has to keep up; a decision is a decision and must survive somebody signing up. Padding everything is what left a trip of six paying first and second only: the board was made while the field was two, `[2, 1]` went into storage, and every later arrival was padded in on nought. **A team prize board makes this certain rather than merely likely** — teams are picked after the board exists, so the field is always empty at the moment the table is generated
 - The field is the players, or on a team board the **teams**. Two is the floor in the form, because a table with no rows cannot be answered — but that floor is a guess, and the note under the table says so when nobody has joined yet
 - Positions are decided on that round's Stableford result
-- **Players level on the day share the places they occupy** — two tied for first with a 10/6 table take eight each. The total awarded is the same however a round finishes
+- **What happens to players level on the day is the board's tie rule, below.** Reading the table against a round's finishers is `placeRound` in `lib/tiebreak.ts`, not a second function here — because what two level players are *worth* is exactly the thing the tie rule decides
+
+## Breaking ties
+
+`lib/tiebreak.ts` is the only copy. Three answers, asked of every league board and stored as `tieBreak`:
+
+| Setting | On the board | What it pays two level players |
+|---|---|---|
+| **Tiebreak** | the cards split them | different prizes — the better back 9 takes the better place |
+| **Everybody Wins** | they share the place | each takes the **best** of the prizes their places cover |
+| **Even Split** | they share the place | those prizes pooled and shared |
+
+**Countback is back 9, then back 6, then back 3, then back 2** — holes 10, 13, 16 and 17 up. `SEGMENTS`/`segmentFrom` are that list, once. Beyond the back 2 the card has nothing left to say and the tie stands, and a tie that stands is *shared*, exactly as Even Split shares it. On strokes the better back nine is the **lower** one; the direction comes from the scoring, never from the total, so a strokes board paid in prize points still reads its cards the right way round.
+
+**Absent means Even Split**, which is what every board did before the question existed — so no trip already on the platform is re-scored. A board being *made* defaults to **Tiebreak** (`DEFAULT_TIE_BREAK`, seeded by the form). Two different defaults for two different questions, deliberately. An Even Split is never stored, the same way an allowance of 100 is not.
+
+### Rounds added up have no back nine
+
+A trip total is several cards; there is no ninth hole of it. So `overallTie` is a second answer, asked only under Tiebreak:
+
+- **`level`** (default) — each round is still split on its own back 9, and the trip total is left level.
+- **`last_round`** — the total is broken on **the last round both entrants played and neither dropped**. A discarded round is not part of the total, so it cannot decide it.
+
+**A board counting a single round is the exception and is always broken**, because there the total *is* that card. A round summary is exactly that board, which is how a round's own result gets the tie rule the trip asked for.
+
+`countbackByRound` rides on a `BoardRow` **only** when the board breaks its overall tie that way. That is what lets `orderRowsUndiscarded` — handed rows and no context — reorder for the Discard switch without silently breaking a tie the board was told to leave alone.
+
+### The badge
+
+A superscript **9 / 6 / 3 / 2**, white on the green dot, on the figure the countback decided. **Both sides of a break wear it** — being put second on countback is as much the card's doing as being put first.
+
+Which figure that is follows from what was level, and the two cases barely overlap:
+
+- **A prize board** badges the **round column**. The countback resolved there, and it paid the two of them differently — ten and five rather than seven and a half each. Their totals then differ, so by the time the board is added up there is no tie left on the total to explain.
+- **A board that adds rounds up** badges the **total**. Its round columns show what each round scored, and nothing about those was decided by a card — 36 is 36 for both. What the back nine settled is the order, and the order is the total.
+
+It appears only where a card actually decided something. A tie that stood, a countback against a card the board could not read, or a round still in play carries nothing, which is what makes it worth reading. It is 11px — under the 13px type floor — and `test:branding` names it as an exception rather than letting it through quietly; what it means is in words on a long press.
+
+### Places
+
+`BoardRow.place` is golf's, not the array index: two level are both 1st and the next row is 3rd. It is stamped by `placed()` after sorting, so it always matches the ordering on screen — the Discard switch reorders and re-places together.
+
+### One countback
+
+`compareRows` in `app/scoring/LiveLeaderboardPanel.tsx` used to carry its own, and the trip leaderboard broke the same tie alphabetically — so two players level could be ordered one way inside the scoring card and the other way on the board. Both now read `lib/tiebreak.ts`. The in-play panel is still **not** asked which setting the trip runs: it is the card in your hand mid-round, and countback is what a group on the eighteenth green means by who won.
 
 ### Matchplay: singles and pairs
 
