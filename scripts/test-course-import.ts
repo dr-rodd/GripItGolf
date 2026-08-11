@@ -587,6 +587,30 @@ section('The generator')
     'and the course is marked as having no ladies card, with the note the seeds use')
 }
 
+section('Every generated file says how to check it landed')
+{
+  // Writing a migration changes nothing until somebody pastes it, and the repo
+  // has no way of knowing whether that happened. Each file carries the query
+  // that answers it for itself.
+  const courseSql = migrationSql([GOOD], { number: '999', letter: 'z' })
+  const teeSql = teeRefreshSql([REFRESH], { letter: 'a' })
+
+  for (const [what, sql, slug] of [
+    ['a course migration', courseSql, GOOD.slug],
+    ['a tee refresh', teeSql, REFRESH.slug],
+  ] as const) {
+    ok(sql.includes('Did it land?'), `${what} ends with a verify block`)
+    ok(sql.includes(`'${slug}'`) && /--\s+and c\.slug in \(/.test(sql),
+      `  …naming its own courses, so it is right without anyone maintaining it`)
+    ok(sql.indexOf('Did it land?') > sql.indexOf('COMMIT;'),
+      '  …after the COMMIT, not inside the transaction')
+    // Commented out, or pasting the file would run a SELECT as live SQL.
+    const block = sql.slice(sql.indexOf('-- ── Did it land?'))
+    ok(block.split('\n').filter(l => l.trim()).every(l => l.trim().startsWith('--')),
+      '  …and every line of it is a comment')
+  }
+}
+
 // ─── The real files ────────────────────────────────────────────
 
 section('Every file in data/courses/')

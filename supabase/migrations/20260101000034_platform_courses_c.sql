@@ -117,3 +117,15 @@ JOIN courses c ON c.slug = spec.slug AND c.trip_id IS NULL
 ON CONFLICT ON CONSTRAINT uq_tees_course_name_gender DO NOTHING;
 
 COMMIT;
+
+-- ── Did it land? ──────────────────────────────────────────
+-- Run this after the COMMIT above. Every course below should come back with
+-- its holes and tees. /admin/courses says the same thing with badges.
+--
+-- select c.slug, c.name, c.county, c.card_verified,
+--        (select count(*) from holes h where h.course_id = c.id) as holes,
+--        (select count(*) from tees  t where t.course_id = c.id) as tees
+-- from courses c
+-- where c.trip_id is null
+--   and c.slug in ('castlerock-mussenden', 'the-heath')
+-- order by c.name;

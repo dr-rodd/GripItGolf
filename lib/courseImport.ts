@@ -789,6 +789,32 @@ const padNum = (s: string, width: number) => ' '.repeat(Math.max(0, width - s.le
 const widest = (values: readonly string[]) => values.reduce((w, v) => Math.max(w, v.length), 0)
 
 /** Migration 008's rule, restated in the file it generates rather than in code. */
+/**
+ * A commented-out SELECT naming this file's own courses.
+ *
+ * Writing a migration changes nothing until somebody pastes it, and nothing in
+ * the repo can tell you whether that has happened — there is no ledger, and a
+ * push deploys the app rather than the data. So each file carries the query
+ * that answers it for itself: run this straight after and the rows are either
+ * there or they are not.
+ *
+ * Derived from the batch, so it is right for every future file without anybody
+ * keeping it up to date.
+ */
+const verifyBlock = (slugs: readonly string[]): string[] => [
+  '-- ── Did it land? ──────────────────────────────────────────',
+  '-- Run this after the COMMIT above. Every course below should come back with',
+  '-- its holes and tees. /admin/courses says the same thing with badges.',
+  '--',
+  '-- select c.slug, c.name, c.county, c.card_verified,',
+  '--        (select count(*) from holes h where h.course_id = c.id) as holes,',
+  '--        (select count(*) from tees  t where t.course_id = c.id) as tees',
+  '-- from courses c',
+  '-- where c.trip_id is null',
+  `--   and c.slug in (${slugs.map(q).join(', ')})`,
+  '-- order by c.name;',
+]
+
 const CONFIDENCE_KEY = `--   HIGH   = confirmed from 3+ independent sources
 --   MEDIUM = confirmed from 1-2 sources, internally consistent
 --   LOW    = single source or conflicting; treat as provisional
@@ -975,6 +1001,8 @@ export function teeRefreshSql(
   out.push('')
   out.push('COMMIT;')
   out.push('')
+  out.push(...verifyBlock(batch.map(r => r.slug)))
+  out.push('')
 
   return out.join('\n')
 }
@@ -1133,6 +1161,8 @@ export function migrationSql(
   }
 
   out.push('COMMIT;')
+  out.push('')
+  out.push(...verifyBlock(batch.map(c => c.slug)))
   out.push('')
 
   return out.join('\n')

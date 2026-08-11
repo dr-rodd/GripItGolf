@@ -308,7 +308,17 @@ say()
 if (dryRun) {
   say('Nothing written — that was a dry run.')
 } else {
-  say('Apply anything new or rewritten in the Supabase SQL editor, in numeric order,')
-  say('one file at a time. Each file is a single transaction, so a failure leaves')
-  say('nothing behind.')
+  // Said plainly, because this is the step the whole thing fails at. Writing
+  // the file changes nothing, pushing it changes nothing, and there is no
+  // ledger to notice — a course sits in the repo looking finished until
+  // somebody pastes it.
+  say('NOTHING IS IN THE DATABASE YET. Writing these files changed no data, and')
+  say('pushing them will not either — a deploy ships the app, not the courses.')
+  say()
+  say('Paste each file above marked `wrote` or `rewrote` into the Supabase SQL')
+  say('editor, in numeric order, one at a time. Each is a single transaction, so')
+  say('a failure leaves nothing behind, and each ends with a commented-out SELECT')
+  say('you can run straight after to see its rows.')
+  say()
+  say('Then check /admin/courses — every course, with its card state.')
 }

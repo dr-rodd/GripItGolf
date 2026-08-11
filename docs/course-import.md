@@ -404,11 +404,22 @@ second run would emit new numbers alongside the old and import every course twic
 
 ## Applying it
 
+**This is the step the whole thing fails at.** Generating a migration changes no data.
+Committing it changes no data. *Pushing* it changes no data — a deploy ships the app, not
+the courses. There is no ledger, so nothing anywhere will tell you a file is still waiting.
+A course sits in the repo looking finished until somebody pastes it.
+
 Paste each file into the Supabase SQL editor, **in numeric order**, one file at a time.
 `docs/testing-and-data.md` prefers the editor over `scripts/migrate.ts` for a single
 migration, and each generated file is one transaction, so a failure leaves nothing behind.
 
-Then, in the app: the courses appear in the picker under the right county chip, badged
+**Then check.** Every generated file ends with a commented-out `SELECT` naming its own
+courses — uncomment it and run it, and its rows are either there or they are not. Or open
+**`/admin/courses`**, which lists every platform course with its card state and counts them
+in the subtitle: `Verified` for a photographed card, `Awaiting photo` for a researched one,
+`No scorecard` for a course with no holes that cannot yet be scored.
+
+In the app itself the courses then appear in the picker under the right county chip, badged
 **Awaiting scorecard**, with their tees on the round page.
 
 ## After it lands
