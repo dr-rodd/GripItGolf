@@ -67,7 +67,7 @@ ON CONFLICT DO NOTHING;
 
 -- ── The Heath Golf Club (par 71 men / 72 ladies) ──
 -- HOLES MEDIUM: https://www.theheathgc.ie/course-details, https://www.hole19golf.com/courses/the-heath-golf-club, https://golftraxx.com/scorecard?course_name=The+Heath+Golf+Club&fulladdress=The+Heath+Portlaoise+IR&zipcode=LAOIS&static=true
--- Note: Ladies play the 13th as a par 5. Spot-check holes 5 and 6 against the club's printed card: men's and ladies' stroke index differ by 4 or less on 15 of 18 holes, and hole 13's larger gap is explained by the par change, but 5 (18 to 6) and 6 (6 to 16) are adjacent and would both fall into line if those two ladies values were swapped. A valid permutation either way, so no check can settle it.
+-- Note: Ladies play the 13th as a par 5.
 INSERT INTO holes (course_id, hole_number, par, stroke_index, par_ladies, stroke_index_ladies)
 SELECT c.id, v.n, v.p, v.s, v.pl, v.sl
 FROM (VALUES

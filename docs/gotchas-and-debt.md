@@ -144,3 +144,27 @@ The maths was never involved. `effectivePar` and `effectiveSI` in `lib/boardRows
 **It was reachable two ways.** The add-course form imposes no gender requirement, so anyone could create a men's-only course from the picker; and the bulk import warns about a missing ladies tee rather than refusing it, because refusing would mean dropping real courses whose clubs publish no ladies card. Castlerock Mussenden is exactly that case — the R&A rates a par-75 ladies tee, but with no hole-by-hole ladies card it cannot be represented, since `tees.par` has to equal the hole total or the playing-handicap formula reads the wrong number.
 
 **The fix was already written, in one place, and not shared.** The resume path had always ended `?? courseTees[0]`. That rule now lives once, as `teesForPlayer` in `lib/courseHandicap.ts`, and the setup auto-select, the tee picker, the resume and manual score entry all go through it. A fifth copy of the gender filter is how this reopens, so `test:handicap-allowance` carries a structural check that no scoring surface filters tees by gender on its own.
+
+## `tees.par` was a second copy of a number the card already answered
+
+`PH = HI × Slope/113 + (CR − Par)` reads `tees.par`. That column was researched and stored independently of `holes`, so the two could disagree — and on the shipped platform courses they did, on **15 rows across 12 courses**. County Louth's ladies tee said par 72 against a 75-par ladies card, handing every woman there **three shots too many**. Thirteen of the fifteen were ladies tees, which is its own unfairness: the people worst served by the data were the ones least likely to have a second card to check it against.
+
+Nobody noticed because nothing on any screen shows the two numbers together. The leaderboard shows points, the card shows pars, and the tee's par is only ever consumed by a formula.
+
+Fixed by `supabase/migrations/20260101000035_tee_par_follows_holes.sql`, which makes `tees.par` derive from the stored holes for every platform course — the ladies total for a ladies tee, the men's when that gender has no card, the stored figure when there is no card at all. That is `diffCard`'s fallback, in the same order, and it is now the rule in three places that agree: `diffCard`, `teeParProblems` in the import gate, and this migration.
+
+**The import gate has refused this since it existed** — `teeParProblems` builds a card from a research file and asks `diffCard` whether any tee disagrees with it. So no course added through `data/courses/` can carry the fault. It was the hand-written seeds (`_008` and its predecessors) that had no such check, and the generated tee-refresh path derives `par` in SQL rather than trusting a researched figure for the same reason.
+
+**Finalised rounds did not move.** `round_handicaps.playing_handicap` is a snapshot and the Stableford trigger had already written its points from it. Only future and in-play rounds change.
+
+## Men's and ladies' stroke index diverge a lot, and that is normal — do not build a check for it
+
+Reviewing a researched course I noticed that its men's and ladies' stroke index agreed closely on most holes and wildly on two adjacent ones, and proposed flagging that pattern as a probable transposition. **Calibrating against the 28 shipped courses killed the idea, and the specific accusation with it.**
+
+- A rule of "Δ > 8 with no par change" flags **27 holes across the hand-curated set** — Adare Manor, Ballybunion Old, Royal County Down, Royal Portrush Dunluce, Lahinch, Rosapenna Sandy Hills (4 holes), Enniscrone (4), Donegal (3). These are the carefully-sourced courses.
+- Within-course tightness varies enormously and means nothing on its own. Six courses are perfectly identical across all 18 holes (Portmarnock, Portsalon, The Island, Doonbeg, Narin & Portnoo, Royal Portrush Valley); County Sligo agrees on only 6 of 18. The median is 14.
+- The Heath, the course I flagged, sits at **exactly that median of 14**, with a profile indistinguishable from Ballybunion Old.
+
+A ladies card is rated for a different player off different tees; a hole that is a driver-wedge for a man can be the hardest on the course for a shorter hitter. Big divergence is the game, not a smell. **Only a par change is evidence of anything**, and `teeParProblems` already catches the case where that matters.
+
+The general lesson is the one `docs/course-import.md` already names: eighteen pars summing correctly with a clean 1–18 index is a valid card whether or not it is *this* course's card. No statistical check distinguishes plausible-wrong from right. Corroboration between two independent sources, and a scorecard photo, are the only things that do.

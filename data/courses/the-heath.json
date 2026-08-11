@@ -8,7 +8,7 @@
   "longitude": -7.213,
   "holesConfidence": "MEDIUM",
   "teesConfidence": "MEDIUM",
-  "note": "Ladies play the 13th as a par 5. Spot-check holes 5 and 6 against the club's printed card: men's and ladies' stroke index differ by 4 or less on 15 of 18 holes, and hole 13's larger gap is explained by the par change, but 5 (18 to 6) and 6 (6 to 16) are adjacent and would both fall into line if those two ladies values were swapped. A valid permutation either way, so no check can settle it.",
+  "note": "Ladies play the 13th as a par 5.",
   "sources": {
     "holes": [
       "https://www.theheathgc.ie/course-details",
