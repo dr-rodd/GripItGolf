@@ -186,20 +186,22 @@ section('Nothing on the write path drops the two columns')
   ] as const) {
     const at = flow.indexOf(marker)
     ok(at > -1, `${label} is where this expects it`)
-    const window = flow.slice(Math.max(0, at - 600), at + 700)
-    ok(/fairway_hit:\s*(hs\.isNR|noReturn)/.test(window),
+    const window = flow.slice(Math.max(0, at - 700), at + 700)
+    ok(/fairway_hit:\s*p < 4 \? null/.test(window),
       `${label} writes a fairway that came off the card`)
     ok(puttsRule.test(window), `  …and ${label} writes a putt count that did too`)
   }
   // …and the commit's row actually carries the value it just worked out.
-  const rows = flow.slice(flow.indexOf('scoreRows.push'), flow.indexOf('scoreRows.push') + 400)
+  const rows = flow.slice(flow.indexOf('scoreRows.push'), flow.indexOf('scoreRows.push') + 500)
   ok(/^\s*putts,\s*$/m.test(rows), 'the committed row carries that putt count and not a literal')
 
-  // A picked-up ball has no putt count, and a par 3 has no fairway to find.
-  ok((flow.match(/isNR \|\| p < 4 \? null/g) ?? []).length >= 2,
-    'a no return and a par 3 both clear the fairway, in both live writers')
-  ok(/noReturn \|\| p < 4 \? null/.test(flow),
-    '  …and the commit does the same')
+  // A picked-up ball has no putt count — but its fairway stands: the tee
+  // shot happened, and two lost balls right is a miss that should count.
+  // Only a par 3 clears the fairway now, in every writer.
+  ok((flow.match(/fairway_hit:\s*p < 4 \? null/g) ?? []).length >= 3,
+    'only a par 3 clears the fairway — a no return keeps its tee shot, every writer')
+  ok(!/fairway_hit:\s*(hs\.isNR|noReturn)/.test(flow),
+    '  …and no writer quietly drops it on a no return')
   ok(/hs\.putts > gross/.test(flow),
     'more putts than shots is dropped on the way in rather than trusted')
 }
@@ -210,8 +212,12 @@ section('The control asks, and never insists')
 {
   const flow = code(FLOW)
 
-  ok(/const showStats = trackStats && hasScore && !isNR/.test(flow),
-    'the row appears only once the hole has a score, and never on a no return')
+  ok(/const showStats = trackStats && \(hasScore \|\| isNR\)/.test(flow),
+    'the row appears once the hole has a score — a no return included')
+  // On an NR the putts half of the row is gone: a hole never finished has
+  // no putt count, and the fairway question is the one that still stands.
+  ok(/nr \? null : \(/.test(flow) && (flow.match(/nr=\{(hs\.)?isNR\}/g) ?? []).length >= 2,
+    '  …with the putts half gone on a no return, on both screens')
   ok(/const showFairway = effectivePar >= 4/.test(flow),
     'and the fairway question is not asked on a par 3')
   // effectivePar, not hole.par: a hole that is a ladies par 4 and a men's
@@ -352,8 +358,36 @@ section('The par is the one that player is playing')
 
 section('A hole that says nothing is dropped rather than guessed at')
 {
-  eq(holeStats(ctxOf([sc('b', 'h1', 7, 2, 'left', { noReturn: true })])).length, 0,
-    'a no return is out — its gross is a computed maximum, not a hole played')
+  // A no return keeps its tee shot and nothing else: the fairway answer
+  // stands, the putt count is forced out whatever was stored, and the row
+  // carries an assumed two putts behind strokesToGreen for the driving
+  // pools. Its gross is still a computed maximum, so gir stays unknown.
+  const [nr] = holeStats(ctxOf([sc('b', 'h1', 7, 2, 'left', { noReturn: true })]))
+  eq(nr.noReturn, true, 'a no return survives as a row, flagged')
+  eq(nr.fairway, 'left', '  …keeping the miss — losing two balls right should count')
+  eq(nr.putts, null, '  …with the recorded putt count forced out')
+  eq(nr.strokesToGreen, 5, '  …an assumed two putts behind the committed maximum')
+  eq(nr.gir, null, '  …and no green verdict for a hole never finished')
+
+  // And it stays out of everything scored: not a double, not an average,
+  // not a difficulty card, not a leak — but its fairway counts, and its
+  // stored zero points count against the handicap the way the board counts
+  // them.
+  const withNr = holeStats(ctxOf([
+    sc('b', 'h1', 4, 2, 'fairway'),
+    sc('b', 'h2', 8, 3, 'left', { noReturn: true, points: 0 }),
+  ]))
+  eq(scoringCounts(withNr).doublesOrWorse, 0, 'an NR is not a double')
+  eq(miscStats(withNr).blowUpsPer18, 0, '  …nor a blow-up')
+  eq(parSplits(withNr).find(r => r.par === 4)!.holes, 1, '  …nor in a par split')
+  eq(holeDifficulty(withNr, HOLES).find(h => h.holeNumber === 2)?.cards ?? 0, 0,
+    '  …nor a card on the difficulty table')
+  eq(fairwayStats(withNr).missedLeft, 1, 'but its missed fairway counts')
+  eq(fairwayCost(withNr).missLeft.holes, 1, '  …and prices the miss off the committed maximum')
+  // Two points on the first hole, a stored zero on the NR, two holes at two
+  // points each expected: 2 + 0 − 4.
+  eq(roundForm(withNr)[0].vsHandicap, -2,
+    '  …and its zero points count against the handicap, as the board counts them')
   eq(holeStats(ctxOf([sc('b', 'h1', null, 2)])).length, 0, 'and so is a hole with no score')
   eq(holeStats(ctxOf([sc('zz', 'h1', 4, 2)])).length, 0,
     'a player not on the roster is out, which is what keeps composites out')
@@ -1001,15 +1035,18 @@ section('A mis-tapped putt count is no longer permanent')
     '  …and rendered on both the live card and the edit screen')
 
   // The edit screen gates the same way the live tile does: a score on the
-  // hole, no NR, and the trip tracking stats at all.
-  ok(/trackStats && hs\.gross !== null && !hs\.isNR/.test(flow),
+  // hole — a no return included — and the trip tracking stats at all.
+  ok(/trackStats && \(hs\.gross !== null \|\| hs\.isNR\)/.test(flow),
     'the edit screen only asks where the live card would have')
   ok(/setDraftHole\(idx, \{ putts: v \}\)/.test(flow),
     '  …and writes into the draft the save already carries')
 
-  // Both NR toggles clear both stats — the live tile's and the edit one's.
-  eq((flow.match(/isNR: true, gross: null, putts: null, fairway: null/g) ?? []).length, 2,
-    'a no return clears the stats on either screen')
+  // Both NR toggles clear the putt count and keep the fairway — the live
+  // tile's and the edit one's. A cleared fairway here is the regression.
+  eq((flow.match(/isNR: true, gross: null, putts: null \}/g) ?? []).length, 2,
+    'a no return clears the putts and only the putts, on either screen')
+  ok(!/isNR: true, gross: null, putts: null, fairway: null/.test(flow),
+    '  …and neither toggle takes the fairway with it')
 }
 
 section('The honours go to whoever earned them, and to nobody early')

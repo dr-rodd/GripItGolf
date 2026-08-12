@@ -97,6 +97,17 @@ export type HoleStat = {
   gir: boolean | null
   /** Whether the fairway question applies at all — par 4 and 5 only. */
   fairwayCounted: boolean
+  /**
+   * A no return, kept rather than dropped — because the tee shot happened.
+   * Two lost balls right and a pick-up is exactly the miss worth counting,
+   * so the fairway answer survives and feeds the fairway figures and the
+   * driving pools (with an assumed two putts behind `strokesToGreen`, since
+   * the gross beside an NR is the committed maximum). Everything scored —
+   * birdie counts, averages to par, difficulty, putting — still excludes
+   * these: a hole never finished is not a scored hole. The one exception is
+   * points: an NR is a real zero on the card, so `roundForm` counts it.
+   */
+  noReturn: boolean
 }
 
 /** What the derivation needs: the same rows a board is built from. */
@@ -144,9 +155,11 @@ export function countsForFairway(par: number): boolean {
  *
  * The rules, each of them a reason to drop a row rather than guess at it:
  *
- *  · a no return is out. The gross stored beside one is a computed maximum,
- *    not a hole anybody finished, and averaging it in would say somebody
- *    played badly when they picked up.
+ *  · a no return keeps only its tee shot. The gross stored beside one is a
+ *    computed maximum, not a hole anybody finished, so it is out of every
+ *    average — but the fairway answer stands, because losing two balls
+ *    right is a miss that should count, and the row carries an assumed two
+ *    putts so the driving pools can price it.
  *  · a hole whose player is not on the roster is out. Composite players get
  *    synthetic `scores` rows, and a synthetic card has no putting.
  *  · a hole not in the list is out — the same rule `resolveScores` applies.
@@ -162,7 +175,7 @@ export function holeStats(ctx: StatsContext): HoleStat[] {
   const out: HoleStat[] = []
 
   for (const s of ctx.resolved) {
-    if (s.noReturn || s.gross == null) continue
+    if (s.gross == null) continue
     const gender = genderOf.get(s.playerId)
     if (gender == null) continue
     const hole = holeById.get(s.holeId)
@@ -171,12 +184,15 @@ export function holeStats(ctx: StatsContext): HoleStat[] {
     const par = effectivePar(hole, gender)
     const fairwayCounted = countsForFairway(par)
 
-    const raw = s.putts
+    // A no return: the putt count is forced out whatever was stored, the
+    // fairway stands, and strokesToGreen carries the assumed two putts off
+    // the committed maximum so the driving pools can price the miss.
+    const raw = s.noReturn ? null : s.putts
     const putts = raw == null || !Number.isInteger(raw) || raw < 0 || raw > s.gross
       ? null
       : raw
 
-    const toGreen = strokesToGreen(s.gross, putts)
+    const toGreen = s.noReturn ? s.gross - 2 : strokesToGreen(s.gross, putts)
 
     out.push({
       playerId: s.playerId,
@@ -193,8 +209,9 @@ export function holeStats(ctx: StatsContext): HoleStat[] {
       putts,
       fairway: fairwayCounted ? (s.fairway ?? null) : null,
       strokesToGreen: toGreen,
-      gir: toGreen == null ? null : toGreen <= par - 2,
+      gir: s.noReturn || toGreen == null ? null : toGreen <= par - 2,
       fairwayCounted,
+      noReturn: s.noReturn,
     })
   }
 
@@ -387,7 +404,12 @@ export type ScoringCounts = {
   bounceBackRate: number | null
 }
 
-export function scoringCounts(stats: readonly HoleStat[]): ScoringCounts {
+export function scoringCounts(all: readonly HoleStat[]): ScoringCounts {
+  // A no return is not a scored hole: its gross is a computed maximum, and
+  // counting it as a double would say somebody played badly when they
+  // picked up. Filtering here also keeps the bounce-back chain honest — an
+  // NR between two holes breaks the consecutive numbers, exactly as before.
+  const stats = all.filter(s => !s.noReturn)
   const toPar = (s: HoleStat) => s.gross - s.par
 
   const out = {
@@ -492,7 +514,9 @@ const fromWhere = (holes: readonly HoleStat[]): FromWhere => {
 
 export function approachStats(stats: readonly HoleStat[]): ApproachStats {
   const answered = stats.filter(s => s.fairway != null && s.gir != null)
-  const withPutts = stats.filter(s => s.strokesToGreen != null)
+  // `!noReturn`, because an NR carries an assumed strokesToGreen for the
+  // driving pools — a computed maximum has no business in a leak average.
+  const withPutts = stats.filter(s => s.strokesToGreen != null && !s.noReturn)
   const leak = withPutts.reduce((n, s) => n + (s.strokesToGreen! - (s.par - 2)), 0)
 
   return {
@@ -525,7 +549,7 @@ export type ParSplit = {
  */
 export function parSplits(stats: readonly HoleStat[]): ParSplit[] {
   return [3, 4, 5].map(par => {
-    const mine = stats.filter(s => s.par === par)
+    const mine = stats.filter(s => s.par === par && !s.noReturn)
     const known = mine.filter(s => s.gir != null)
     const withPutts = mine.filter(s => s.putts != null)
     const putts = withPutts.reduce((n, s) => n + s.putts!, 0)
@@ -848,6 +872,11 @@ export function longGameGained(
 
   for (const s of stats) {
     if (!s.fairwayCounted || s.fairway == null || s.strokesToGreen == null) continue
+    // An NR feeds the pools above — its miss makes the penalty honest — but
+    // pays no bet of its own: its toGreen is assumed, and the hole is not in
+    // `gainedOnField`'s toGreen, so a bet here would break the exactness of
+    // driving + approach = tee-to-green.
+    if (s.noReturn) continue
     const mine = out.get(s.playerId)
     if (!mine) continue
 
@@ -986,7 +1015,9 @@ export type MiscStats = {
   longestParRun: number
 }
 
-export function miscStats(stats: readonly HoleStat[]): MiscStats {
+export function miscStats(all: readonly HoleStat[]): MiscStats {
+  // Finished holes only — a computed maximum is not an average's business.
+  const stats = all.filter(s => !s.noReturn)
   const avg = (list: readonly HoleStat[]) =>
     list.reduce((n, s) => n + (s.gross - s.par), 0) / list.length
   const half = (list: readonly HoleStat[]) =>
@@ -1072,9 +1103,11 @@ export type HoleDifficulty = {
  * rather than present four cards as a verdict.
  */
 export function holeDifficulty(
-  stats: readonly HoleStat[],
+  all: readonly HoleStat[],
   holes: readonly RowHole[],
 ): HoleDifficulty[] {
+  // Finished holes only, as everywhere an average of the gross lives.
+  const stats = all.filter(s => !s.noReturn)
   const byHole = new Map<string, HoleStat[]>()
   for (const s of stats) {
     const key = `${s.courseId}:${s.holeNumber}`
@@ -1200,7 +1233,7 @@ export function playerStats(
     approach: approachStats(mine),
     splits: parSplits(mine),
     misc: miscStats(mine),
-    toParTotal: mine.reduce((n, s) => n + (s.gross - s.par), 0),
+    toParTotal: mine.reduce((n, s) => n + (s.noReturn ? 0 : s.gross - s.par), 0),
     like: like.get(playerId) ?? {
       playerId,
       greensHit: { mine: null, field: null, holes: 0 },

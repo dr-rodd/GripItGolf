@@ -783,8 +783,10 @@ export default function LiveScoringFlow({
           // real values (it is seeded from the card), so saying them is both
           // honest and what keeps a hole edited to a no return from keeping
           // the stats it had before.
-          fairway_hit: hs.isNR || p < 4 ? null : (hs.fairway ?? null),
-          putts:       hs.isNR          ? null : (hs.putts   ?? null),
+          // The fairway is kept on a no return — the tee shot happened and
+          // its miss should count — while the putt count goes with the hole.
+          fairway_hit: p < 4 ? null : (hs.fairway ?? null),
+          putts:       hs.isNR ? null : (hs.putts ?? null),
           committed: false,
         })
       } else {
@@ -894,7 +896,9 @@ export default function LiveScoringFlow({
             player_id: setup.player.id, hole_id: hole.id, round_id: roundId,
             gross_score: gross,
             no_return: noReturn,
-            fairway_hit: noReturn || p < 4 ? null : (hs?.fairway ?? null),
+            // A recorded fairway survives an explicit no return; a hole
+            // that is simply absent has nothing recorded and stays null.
+            fairway_hit: p < 4 ? null : (hs?.fairway ?? null),
             putts,
           })
         }
@@ -1265,9 +1269,10 @@ export default function LiveScoringFlow({
             player_id: player.id, round_id: roundId, hole_number: hole.hole_number,
             gross_score: gross,
             stableford_points: hs.isNR ? 0 : calcStableford(gross, p, si, playingHcp),
-            // A no return clears both: the ball was picked up, so there is no
-            // putt count and no honest answer about the tee shot. Writing them
-            // through would attach stats to a hole that was never finished.
+            // A no return clears the putt count — the ball was picked up, so
+            // there is none — but the fairway answer stands: the tee shot
+            // happened, and losing two balls right is exactly the miss that
+            // should count against the driving figures.
             //
             // A par 3 is forced null rather than trusted. The control is not
             // shown on one, but a course's par can be corrected after a card
@@ -1278,8 +1283,8 @@ export default function LiveScoringFlow({
             // PostgREST refuses a bulk upsert whose objects do not all carry
             // the same keys, so one player having answered and another not
             // would fail the whole hole for everyone on the card.
-            fairway_hit: hs.isNR || p < 4 ? null : (hs.fairway ?? null),
-            putts:       hs.isNR          ? null : (hs.putts   ?? null),
+            fairway_hit: p < 4 ? null : (hs.fairway ?? null),
+            putts:       hs.isNR ? null : (hs.putts ?? null),
             committed: false,
           }
         }).filter(Boolean)
@@ -1465,7 +1470,11 @@ export default function LiveScoringFlow({
               const toggleNR = () => setDraftHole(idx,
                 hs.isNR
                   ? { isNR: false, gross: null }
-                  : { isNR: true, gross: null, putts: null, fairway: null }
+                  // The fairway survives the NR on purpose: the tee shot
+                  // happened, and two lost balls right is exactly the miss
+                  // worth counting. Only the putt count goes — a hole never
+                  // finished has none.
+                  : { isNR: true, gross: null, putts: null }
               )
 
               return (
@@ -1529,7 +1538,7 @@ export default function LiveScoringFlow({
                       fixable after the hole instead of permanent — the
                       draft already carried the values; only the controls
                       were missing. */}
-                  {trackStats && hs.gross !== null && !hs.isNR && (
+                  {trackStats && (hs.gross !== null || hs.isNR) && (
                     <StatsRow
                       effectivePar={ePar}
                       gross={hs.gross}
@@ -1538,6 +1547,7 @@ export default function LiveScoringFlow({
                       ariaName={`hole ${hole.hole_number}`}
                       onPutts={v => setDraftHole(idx, { putts: v })}
                       onFairway={v => setDraftHole(idx, { fairway: v })}
+                      nr={hs.isNR}
                     />
                   )}
                 </div>
@@ -1899,12 +1909,13 @@ function HoleCard({
               onChange={v  => set(player.id, { gross: v, isNR: false })}
               onPutts={v   => set(player.id, { putts: v })}
               onFairway={v => set(player.id, { fairway: v })}
-              // A no return clears the stats with the score. The ball was
-              // picked up: there is no putt count to keep, and the tile stops
-              // asking for one.
+              // A no return clears the putt count with the score — the ball
+              // was picked up, so there is none to keep — but the fairway
+              // answer stands: the tee shot happened, and two lost balls
+              // right is exactly the miss worth counting.
               onToggleNR={() => set(player.id, hs.isNR
                 ? { isNR: false, gross: null }
-                : { isNR: true, gross: null, putts: null, fairway: null })}
+                : { isNR: true, gross: null, putts: null })}
             />
           )
         })}
@@ -2004,10 +2015,11 @@ function LivePlayerTile({
   // exactly as tall as it is today while somebody is still deciding. It then
   // sequences the way the hole did — score, tee shot, putts, next.
   //
-  // Not shown on a no return: the gross beside one is a computed maximum, not
-  // a hole anybody finished. And it never gates the Next button, which reads
-  // `allHaveGross` and knows nothing about any of this.
-  const showStats = trackStats && hasScore && !isNR
+  // Shown on a no return too, with the putts half gone: the tee shot
+  // happened — two lost balls right is exactly the miss worth recording —
+  // but a hole never finished has no putt count. It never gates the Next
+  // button, which reads `allHaveGross` and knows nothing about any of this.
+  const showStats = trackStats && (hasScore || isNR)
 
   return (
     <div className={`bg-surface border rounded-xl transition-colors
@@ -2187,6 +2199,7 @@ function LivePlayerTile({
           ariaName={playerName}
           onPutts={onPutts}
           onFairway={onFairway}
+          nr={isNR}
         />
       )}
     </div>
@@ -2206,7 +2219,7 @@ function LivePlayerTile({
 // the trip tracking stats at all.
 
 function StatsRow({
-  effectivePar, gross, putts, fairway, ariaName, onPutts, onFairway,
+  effectivePar, gross, putts, fairway, ariaName, onPutts, onFairway, nr = false,
 }: {
   effectivePar: number
   gross: number | null
@@ -2217,6 +2230,13 @@ function StatsRow({
   ariaName: string
   onPutts: (v: number | null) => void
   onFairway: (v: Fairway | null) => void
+  /**
+   * A no return. The fairway question still stands — the tee shot happened,
+   * and two lost balls right is exactly the miss worth recording — but the
+   * putts control goes: a hole that was never finished has no putt count,
+   * and the stats treat it as an assumed two that putting never counts.
+   */
+  nr?: boolean
 }) {
   // A par 3 has no fairway to find, which is not the same as missing one.
   const showFairway = effectivePar >= 4
@@ -2277,6 +2297,7 @@ function StatsRow({
         <span className="flex-1" />
       )}
 
+      {nr ? null : (
       <div className="flex items-center gap-1 flex-shrink-0" role="group" aria-label={`Putts, ${ariaName}`}>
         <button
           type="button"
@@ -2316,6 +2337,7 @@ function StatsRow({
           +
         </button>
       </div>
+      )}
     </div>
   )
 }
