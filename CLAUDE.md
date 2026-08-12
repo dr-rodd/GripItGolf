@@ -71,7 +71,13 @@ Don't read these up front. Open the matching file when the task actually touches
   platform rows (`trip_id IS NULL`), so an addition is for everyone. A new
   course has no holes and `card_verified = false` until a scorecard photo is
   confirmed — the card check creates the 18 holes from the first trusted
-  photo (`mode: 'create'`) and flips the flag; scoring is gated until then
+  photo (`mode: 'create'`) and flips the flag; scoring is gated until then.
+  **`courses`, `holes` and `tees` are read-only to the browser** — migration
+  040 gives them RLS with a read policy and no write policy, so every change
+  goes through the server on the service role. A client-side write to any of
+  the three now fails with an RLS error rather than succeeding quietly, which
+  is the point: they are shared platform rows and a bad one is bad for
+  everyone. `docs/gotchas-and-debt.md` has what is still open and why
 - **Courses can also arrive in bulk**, from researched data rather than a
   photo: `data/courses/*.json` → `npm test` → `npm run courses:migration` →
   a migration somebody applies by hand. `docs/course-import.md`. A bulk

@@ -23,12 +23,18 @@ Required procedure when changing a function signature:
 
 Sequential multi-query page navigations should be replaced with inline bottom-sheet modals that reuse already-fetched data. Instant UX, zero additional queries. Applied this to individual scorecards in Donegal Masters pre-trip and it was the single biggest UX improvement of the app.
 
-## Security debt carried from Donegal Masters
+## Row-level security — half done, on purpose
 
-`NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY` was exposed client-side in Donegal Masters. This is acceptable for a closed 12-person family tournament but is NOT acceptable for GripItGolf, which will be public and paid. Before any GripItGolf public launch:
-- Move service role key server-side only
-- Enable RLS on every tournament-instance table
-- Duplicate all trip filters at the RLS layer (client filters alone are insufficient once the service role key is gone, since anon users query via anon key)
+Inherited from Donegal Masters, where `NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY` was exposed client-side. That much is fixed: the key is `SUPABASE_SERVICE_ROLE_KEY` now, server-only, reached through `lib/supabase-admin.ts` and nothing else. What came with it was subtler and lasted longer — **no RLS on any table**, which meant the anon key that necessarily ships in the browser bundle was unrestricted INSERT, UPDATE and DELETE on the whole schema. Supabase's advisor is what finally said it out loud: *"anyone with your project URL can read, edit, and delete all data in this table."*
+
+**Done — migration 040.** `courses`, `holes`, `tees` have RLS with a read policy and **no write policy**; `hole_tee_yardages` has RLS and no policy at all, like `weather_cache` before it. These four were separable because the browser reads them and never writes them: every write comes from `app/api/courses`, `app/api/card-check/**`, `app/admin/**` or `lib/tripDelete.ts`, all through `createAdminClient()`, and the service role bypasses RLS. So the app did not change by a line. It was also the worst of the exposure — courses are shared platform rows, so anyone could have rewritten the pars of all 88 courses for every trip at once, and the Stableford trigger would have re-scored every committed card against them.
+
+**Still open, and why.** Every trip table: `trips`, `players`, `teams`, `team_members`, `rounds`, `round_handicaps`, `scores`, `live_scores`, `live_rounds`, `live_player_locks`, `composite_holes`, `itinerary_items`, `matchplay_matches`, `tee_times`. The browser writes to most of them directly. There is no auth — the trip code is the only access control and **the database has never been told what a trip code is** — so a policy has nothing to key on. Enabling RLS there without a policy that can authorise a caller stops the app dead; enabling it with a permissive one protects nothing. Two designs, and the thing that decides between them is realtime:
+
+- **Trip code in a request header**, read in policies via `current_setting('request.headers')`. Cheap, and enforces exactly the access model already documented — no more, no less. But **Supabase Realtime does not evaluate PostgREST request headers**, so every such policy denies on the realtime channel: the live leaderboard's `postgres_changes` subscription on `live_scores` goes dark and falls back to its 15-second poll.
+- **Supabase anonymous sign-in.** Each device silently gets a real identity with no login screen, policies key on it, realtime keeps working. Bigger, touches scoring, and is the foundation a paid product needs anyway.
+
+**The trap, named once.** Enabling RLS with `USING (true)` write policies turns the advisor green and changes nothing about who can delete your data. If the remaining warnings are ever "fixed" quickly, that is what happened. Nothing outside the service role has any business writing to `courses`, `holes` or `tees`, so a write policy on those three is always wrong.
 
 ## Multi-year architecture (inherited from Donegal Masters 2026 archive work)
 
