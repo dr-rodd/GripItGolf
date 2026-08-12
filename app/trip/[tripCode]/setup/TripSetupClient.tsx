@@ -70,7 +70,12 @@ type Player = {
  * player's handicap and every existing round's `round_handicaps` row has to
  * be rewritten, and that takes ids and nothing else.
  */
-type RoundInfo = { id: string }
+type RoundInfo = {
+  id: string
+  /** For naming it in the matchplay board's round links. */
+  roundNumber?: number
+  courseName?: string | null
+}
 
 type Course = DirectoryCourse
 
@@ -743,6 +748,7 @@ export default function TripSetupClient({
             boards={boards}
             playerCount={players.length}
             teamCount={teams.length}
+            rounds={rounds}
             readOnly={!canArrange}
             onChange={saveBoards}
           />

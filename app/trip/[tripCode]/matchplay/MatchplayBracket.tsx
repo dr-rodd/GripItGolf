@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   tileTop, tileCenter, columnX, columnHeight,
-  connectorPath, roundHeaderLabel, clampPosition, easeOut,
+  connectorPath, roundHeaderLabel, clampPosition, easeOut, centringShift,
 } from '@/lib/bracketLayout'
 import { isDecidable, pressOutcome } from '@/lib/matchplayProgress'
+import { type MatchReading, pendingResults } from '@/lib/matchResults'
+import { decisionLabel } from '@/lib/matchDecision'
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -58,10 +60,16 @@ const SWIPE_MS = 340
 // ─── Component ─────────────────────────────────────────────────
 
 export default function MatchplayBracket({
-  matches: initialMatches, entrants,
+  matches: initialMatches, entrants, readings = [],
 }: {
   matches: BracketMatchRow[]
   entrants: BracketEntrantRow[]
+  /**
+   * What the cards say, for every match whose bracket round is linked to a
+   * round of golf. Empty for a draw decided by hand — which is every draw
+   * that has not been linked, and every draw made before linking existed.
+   */
+  readings?: MatchReading[]
 }) {
   // Held locally so a recorded result shows immediately, then reverted if the
   // write fails — the bracket must never show something the database rejected.
@@ -69,6 +77,50 @@ export default function MatchplayBracket({
   useEffect(() => { setMatches(initialMatches) }, [initialMatches])
 
   const [sheet, setSheet] = useState<{ match: BracketMatchRow; correcting: boolean } | null>(null)
+
+  const readingFor = useMemo(
+    () => new Map(readings.map(r => [r.matchId, r])),
+    [readings]
+  )
+
+  /**
+   * Results the cards have settled, written the first time anyone opens the
+   * bracket after the cards were signed.
+   *
+   * **Here rather than in the page's own render.** Looking at a draw must not
+   * change it — a server component that wrote on every view would rewrite the
+   * bracket for anybody who merely glanced at it, including a search engine.
+   * So the write is a deliberate act by the browser, once, on arrival.
+   *
+   * Only ever fills an empty match: `pendingResults` drops anything already
+   * carrying a winner, so a correction typed in by hand is never overwritten
+   * by the cards, and reopening the page is a no-op rather than a second
+   * write. That is also why this can run without asking — there is nothing it
+   * can undo.
+   *
+   * A failure is deliberately silent. The bracket is still perfectly usable
+   * by hand, and an error banner over a draw nobody asked to have decided for
+   * them would be worse than the next visit quietly trying again.
+   */
+  const applied = useRef(false)
+  useEffect(() => {
+    if (applied.current || readings.length === 0) return
+    const pending = pendingResults(matches as never, readingFor)
+    if (pending.length === 0) return
+    applied.current = true
+    let live = true
+    void (async () => {
+      try {
+        const { persistSettled } = await import('@/lib/matchplayStore')
+        const saved = await persistSettled(matches as never, pending)
+        if (live) setMatches(saved as never)
+      } catch {
+        // Left to the next visit — see above
+        applied.current = false
+      }
+    })()
+    return () => { live = false }
+  }, [matches, readingFor, readings.length])
 
   const playerById = useMemo(
     () => new Map(entrants.map(e => [e.id, e])),
@@ -154,6 +206,12 @@ export default function MatchplayBracket({
 
   const leftIndex = Math.round(position)
   const header = roundHeaderLabel(roundNames, leftIndex)
+  // Every match in a bracket round shares one link, so the first that has a
+  // reading names the method for the whole column.
+  const leftMethod = rounds[leftIndex]
+    ?.map(m => readingFor.get(m.id)?.link.decidedBy)
+    .find(Boolean)
+  const methodLabel = leftMethod ? decisionLabel(leftMethod) : null
 
   // Columns worth rendering: the visible pair plus one either side, so a
   // swipe has something to bring in. Anything further out is clipped away.
@@ -171,6 +229,13 @@ export default function MatchplayBracket({
   const atStart = position <= 0.001
   const atEnd   = position >= rounds.length - 1.001
 
+  // The Final has nothing to its right, so the view slides across to sit it in
+  // the middle rather than leaving it against the left edge. Added to every x
+  // on screen — tiles and connectors alike — so they cannot drift apart.
+  const shift = centringShift({
+    position, roundCount: rounds.length, width, tileWidth: TILE_W,
+  })
+
   // ── Connectors ──────────────────────────────────────────────
   // Recomputed from `position` every frame, exactly like the tiles.
 
@@ -179,8 +244,8 @@ export default function MatchplayBracket({
     const nextRound = rounds[roundIndex + 1]
     if (!nextRound) continue
     const slot = roundIndex - position
-    const feederX = columnX(slot, stride) + TILE_W
-    const targetX = columnX(slot + 1, stride)
+    const feederX = columnX(slot, stride) + shift + TILE_W
+    const targetX = columnX(slot + 1, stride) + shift
     // Only draw for the pair on screen; further out it is clipped anyway
     if (slot < -1.2 || slot > 1.2) continue
 
@@ -218,9 +283,18 @@ export default function MatchplayBracket({
           </svg>
         </button>
 
-        <p className="font-[family-name:var(--font-display)] text-ink text-base sm:text-lg text-center leading-tight min-w-0 truncate">
-          {header}
-        </p>
+        <div className="min-w-0 text-center">
+          <p className="font-[family-name:var(--font-display)] text-ink text-base sm:text-lg leading-tight truncate">
+            {header}
+          </p>
+          {/* Says the link is doing something, on the one screen where it is
+              not otherwise visible that the winners are coming off cards. */}
+          {leftMethod && (
+            <p className="text-ink/65 text-[13px] leading-tight truncate mt-0.5">
+              {methodLabel}
+            </p>
+          )}
+        </div>
 
         <button
           onClick={() => animateTo(leftIndex + 1)}
@@ -268,11 +342,12 @@ export default function MatchplayBracket({
 
         {visible.map(roundIndex => {
           const slot = roundIndex - position
-          const x = columnX(slot, stride)
+          const x = columnX(slot, stride) + shift
           return rounds[roundIndex].map((match, j) => (
             <MatchTile
               key={match.id}
               match={match}
+              reading={readingFor.get(match.id) ?? null}
               playerById={playerById}
               x={x}
               y={tileTop(j, slot, PITCH)}
@@ -338,10 +413,50 @@ export default function MatchplayBracket({
 const LONG_PRESS_MS = 500
 const MOVE_TOLERANCE = 10   // px of travel before a press counts as a swipe
 
+/**
+ * The line under a tile, where the cards have something to say.
+ *
+ * It lives in the gap between the tile and the one below it — PITCH is 98 and
+ * a tile is 76, so there are 22 pixels there that were doing nothing. Which
+ * is the whole reason it is a caption rather than a third row inside the
+ * tile: the tile is two 37px rows and a rule, and it is that size because two
+ * names and two figures is what fits on a phone.
+ *
+ * Says one thing at a time, in this order of importance:
+ *
+ *   · the cards and the bracket disagree — somebody edited a card after the
+ *     match was recorded, and nothing here will resolve that quietly
+ *   · all square with the round over — the cards did not produce a winner and
+ *     a knockout needs one, so it is waiting on a person
+ *   · a match in play — how it stands right now
+ *
+ * A finished match says nothing: the margin is already on the winner's row
+ * inside the tile, and repeating it under would be the same fact twice.
+ */
+function TileNote({ reading, decided }: { reading: MatchReading | null; decided: boolean }) {
+  if (!reading) return null
+  const { state } = reading
+
+  const note = reading.disagrees ? { text: 'Cards disagree', tone: 'text-rust-deep' }
+    : state.settled && state.halved && !decided ? { text: 'All square', tone: 'text-ink/80' }
+    : !decided && !state.settled && state.holesPlayed > 0
+      ? { text: state.progress, tone: 'text-accent-deep' }
+      : null
+  if (!note) return null
+
+  return (
+    <p className={`text-[13px] leading-none truncate text-center mt-1 ${note.tone}`}>
+      {note.text}
+    </p>
+  )
+}
+
 function MatchTile({
-  match, playerById, x, y, faded, onOpen,
+  match, reading, playerById, x, y, faded, onOpen,
 }: {
   match: BracketMatchRow
+  /** What the cards say, where this bracket round is linked to a round. */
+  reading: MatchReading | null
   playerById: Map<string, BracketEntrantRow>
   x: number
   y: number
@@ -440,13 +555,15 @@ function MatchTile({
         left: x,
         top: y,
         width: TILE_W,
-        height: TILE_H,
+        // Not `height: TILE_H` — the note below the tile lives inside this
+        // wrapper and a fixed height would put it outside the tap target it
+        // belongs to. The box below still holds the tile's own height.
         opacity: faded ? 0.25 : 1,
         touchAction: 'none',
       }}
     >
       <div
-        className={`relative w-full h-full rounded-lg border overflow-hidden ${
+        className={`relative w-full rounded-lg border overflow-hidden ${
           isChampion
             ? 'border-accent bg-accent'
             : decided
@@ -454,6 +571,7 @@ function MatchTile({
               : 'border-bark/12 bg-surface'
         }`}
         style={{
+          height: TILE_H,
           transform: `scale(${scale})`,
           transition: feedback === 'holding'
             ? 'transform 160ms ease-out'
@@ -497,6 +615,8 @@ function MatchTile({
           />
         )}
       </div>
+
+      <TileNote reading={reading} decided={decided} />
 
       <style>{`
         @keyframes holdFill {

@@ -17,7 +17,8 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:entrants` | Player/pairing naming, and the real column-mapping functions |
 | `test:custom-points` | The prize table itself — how it follows the field, when it is out of step — and the discard rules |
 | `test:tiebreak` | Two players level: the three settings, the countback and which stretch split them, the prize table read against a round's finishers, the badge, the one-round exception, and that only one countback exists in the codebase |
-| `test:bracket-layout` | Column geometry and connectors |
+| `test:match-decision` | Deciding a knockout from the cards — the eight methods, the two shapes they fall into, the matchplay handicap difference, quota on both scales, a pairing as one card, and that auto-apply only fills an empty match |
+| `test:bracket-layout` | Column geometry and connectors, including the slide that centres the Final |
 | `test:bracket-render` | The bracket component at every size, singles and pairs |
 | `test:progress` | Recording and correcting winners, and the cascade |
 | `test:itinerary` | The running order — golf, stay, travel and activity items, the rounds they generate, diffing an edit back into writes, and migration 027 agreeing with the model |

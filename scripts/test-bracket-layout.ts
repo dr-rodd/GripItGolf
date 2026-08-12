@@ -10,7 +10,7 @@
 
 import {
   columnGeometry, tileTop, tileCenter, columnX, columnHeight,
-  connectorPath, roundHeaderLabel, clampPosition, easeOut,
+  connectorPath, roundHeaderLabel, clampPosition, easeOut, centringShift,
 } from '../lib/bracketLayout'
 import { bracketShape, generateBracket } from '../lib/matchplay'
 
@@ -204,6 +204,27 @@ section('Horizontal placement')
   eq(columnX(1, 180), 180, 'the right column sits one stride over')
   eq(columnX(-1, 180), -180, 'the outgoing column is one stride off-screen')
   near(columnX(0.5, 180), 90, 'mid-swipe a column sits proportionally between')
+}
+
+section('The last round is centred, not left against the edge')
+{
+  // A phone: 360 wide, a 158 tile. Centred means 101 from the left.
+  const at = (position: number, roundCount: number) =>
+    centringShift({ position, roundCount, width: 360, tileWidth: 158 })
+
+  eq(at(0, 4), 0, 'the first round is pinned left, with its pair beside it')
+  eq(at(1, 4), 0, 'and so is every round that still has one on its right')
+  eq(at(3, 4), 101, 'the Final slides across until it is centred')
+  near(at(2.5, 4), 50.5, 'half a swipe in, it is half way across')
+  eq(at(2, 4), 0, 'the slide starts exactly where the Final starts arriving')
+
+  // Two players: a Final and nothing else. There was never a pair to pin.
+  eq(at(0, 1), 101, 'a one-round bracket is centred outright')
+
+  eq(at(0, 0), 0, 'an empty bracket asks for nothing')
+  // A tile wider than the screen would otherwise shift it off to the left
+  eq(centringShift({ position: 1, roundCount: 1, width: 100, tileWidth: 158 }), 0,
+    'and a viewport narrower than a tile is left alone')
 }
 
 // ─── Round header ──────────────────────────────────────────────

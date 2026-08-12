@@ -83,6 +83,11 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
   if (platformCoursesResult.error) console.error('TripSetupPage platform courses query failed:', platformCoursesResult.error)
 
   const rounds = roundsResult.data ?? []
+  // Platform courses are the only list this page fetches, and every round on
+  // a trip is played on one of them.
+  const courseNameById = new Map(
+    (platformCoursesResult.data ?? []).map(c => [c.id as string, c.name as string]),
+  )
 
   type ItinRow = {
     id: string; day_index: number; position: number; kind: ItemKind
@@ -152,7 +157,14 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       teams={(teamsResult.data ?? []).map(t => ({ ...t, team_set: t.team_set ?? 'main' }))}
       players={playersResult.data ?? []}
       memberships={memberships}
-      rounds={rounds.map(r => ({ id: r.id }))}
+      // Named as well as identified: the matchplay board can link a bracket
+      // round to one of these, and "Round 2 — Ballyliffin" is what an
+      // organiser recognises where a uuid is not.
+      rounds={rounds.map(r => ({
+        id: r.id,
+        roundNumber: r.round_number as number,
+        courseName: courseNameById.get(r.course_id as string) ?? null,
+      }))}
       itinerary={itinerary}
       courses={platformCoursesResult.data ?? []}
       lockedGolfItemIds={lockedGolfItemIds}

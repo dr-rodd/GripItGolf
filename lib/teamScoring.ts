@@ -120,6 +120,25 @@ export function beats(a: number, b: number, basis: ScoringBasis): boolean {
 }
 
 /**
+ * The best `count` figures on one hole — better ball, for a single hole.
+ *
+ * Exported because a four-ball knockout match asks the same question a team
+ * board does: what did this side score on this hole? A pairing is a team of
+ * two and its card is the better of them, so `lib/matchDecision.ts` reads it
+ * from here rather than sorting a second time under its own assumptions.
+ *
+ * A copy asked for one figure and the other for two would be the same rule
+ * with two answers about which way round strokes sort.
+ */
+export function bestOnHole(
+  values: readonly number[], basis: ScoringBasis, count: number,
+): number[] {
+  return [...values]
+    .sort((a, b) => basis === 'strokes' ? a - b : b - a)
+    .slice(0, Math.max(0, count))
+}
+
+/**
  * The single worst card of a round.
  *
  * Ties are broken by id so the same player is cut every time the same round
@@ -203,12 +222,9 @@ export function teamRoundPoints(
 
     let total = 0
     for (let hole = 1; hole <= 18; hole++) {
-      const holeScores = mine
-        .filter(s => s.holeNumber === hole)
-        .map(value)
-        .sort((a, b) => basis === 'strokes' ? a - b : b - a)
+      const holeScores = mine.filter(s => s.holeNumber === hole).map(value)
       const counting = hole >= finishFrom ? holeScores.length : scoring.countingScores
-      total += holeScores.slice(0, counting).reduce((sum, p) => sum + p, 0)
+      total += bestOnHole(holeScores, basis, counting).reduce((sum, p) => sum + p, 0)
     }
     return { roundId, score: total, heroPlayerId: null, played: true }
   }

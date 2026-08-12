@@ -28,6 +28,7 @@ import {
   FULL_ALLOWANCE, allowanceOf, clampAllowance, describeAllowance,
 } from './handicapAllowance'
 import { type TieBreak, type OverallTie, TIE_BREAKS, describeTieBreak } from './tiebreak'
+import { type RoundLink, parseRoundLinks, decisionLabel } from './matchDecision'
 
 export type Audience = 'individual' | 'team'
 export type Competition = 'league' | 'matchplay'
@@ -91,6 +92,15 @@ export type Leaderboard = {
    * a board being read back is not the default for one being made.
    */
   tieBreak?: TieBreak
+
+  /**
+   * Matchplay only — which round of golf each bracket round is played over,
+   * and how a match on it is decided.
+   *
+   * Absent means every match is tapped in by hand, which is what a draw was
+   * before it could be linked to anything. See lib/matchDecision.ts.
+   */
+  roundLinks?: RoundLink[]
 
   /**
    * And when they finish level on the whole trip.
@@ -388,9 +398,10 @@ export function boardTitle(lb: Leaderboard): string {
 /** The line under the title saying how it is being scored. */
 export function boardRules(lb: Leaderboard): string {
   if (lb.competition === 'matchplay') {
-    return lb.audience === 'team'
+    const base = lb.audience === 'team'
       ? 'Knockout between pairings, drawn at random'
       : 'Knockout between players, drawn at random'
+    return describeRoundLinks(lb.roundLinks ?? [], base)
   }
 
   const parts: string[] = []
@@ -410,6 +421,24 @@ export function boardRules(lb: Leaderboard): string {
   const allowance = allowanceOf(lb)
   if (allowance !== FULL_ALLOWANCE) parts.push(`Played off ${describeAllowance(allowance)}.`)
   return parts.filter(Boolean).join(' ')
+}
+
+/**
+ * What a linked draw says under its title.
+ *
+ * Named only where every linked round agrees, because that is the case worth
+ * a sentence — "decided on Stableford matchplay" is a rule somebody can hold
+ * in their head. A draw running a different method each day cannot be
+ * summarised in a line, so it says how many rounds are linked and leaves the
+ * detail to the rounds themselves.
+ */
+export function describeRoundLinks(links: readonly RoundLink[], base: string): string {
+  if (links.length === 0) return base
+  const methods = new Set(links.map(l => l.decidedBy))
+  if (methods.size === 1) {
+    return `${base} · decided on ${decisionLabel(links[0].decidedBy).toLowerCase()}`
+  }
+  return `${base} · ${links.length} rounds linked`
 }
 
 /** The board that leads. The first one made is the one the trip is about. */
@@ -447,6 +476,13 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
       id: typeof r.id === 'string' && r.id ? r.id : `lb-${out.length}`,
       audience,
       competition,
+    }
+
+    // Which golf a knockout is played over. Read for a draw and nothing else
+    // — a league board has rounds already, in every column of its table.
+    if (competition === 'matchplay') {
+      const links = parseRoundLinks(r.roundLinks)
+      if (links.length > 0) lb.roundLinks = links
     }
 
     if (competition === 'league') {

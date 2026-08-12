@@ -12,7 +12,7 @@
     "test:matchplay:db": "tsx scripts/test-matchplay-db.ts",
     "test:bracket-layout": "tsx scripts/test-bracket-layout.ts",
     "test:bracket-render": "tsx scripts/test-bracket-render.tsx",
-    "test": "npm run test:formats && npm run test:leaderboards && npm run test:quota && npm run test:handicap && npm run test:handicap-allowance && npm run test:setup-flow && npm run test:team-sets && npm run test:matchplay && npm run test:entrants && npm run test:custom-points && npm run test:tiebreak && npm run test:bracket-layout && npm run test:bracket-render && npm run test:progress && npm run test:itinerary && npm run test:weather && npm run test:trip-form && npm run test:leaderboard && npm run test:recognition && npm run test:admin && npm run test:admin-pages && npm run test:admin-live && npm run test:support && npm run test:live-scores && npm run test:stats && npm run test:scorecard-void && npm run test:scorecard && npm run test:claim && npm run test:hub && npm run test:golden && npm run test:branding && npm run test:card-check && npm run test:course-directory && npm run test:course-lookup && npm run test:course-import",
+    "test": "npm run test:formats && npm run test:leaderboards && npm run test:quota && npm run test:handicap && npm run test:handicap-allowance && npm run test:setup-flow && npm run test:team-sets && npm run test:matchplay && npm run test:entrants && npm run test:custom-points && npm run test:tiebreak && npm run test:match-decision && npm run test:bracket-layout && npm run test:bracket-render && npm run test:progress && npm run test:itinerary && npm run test:weather && npm run test:trip-form && npm run test:leaderboard && npm run test:recognition && npm run test:admin && npm run test:admin-pages && npm run test:admin-live && npm run test:support && npm run test:live-scores && npm run test:stats && npm run test:scorecard-void && npm run test:scorecard && npm run test:claim && npm run test:hub && npm run test:golden && npm run test:branding && npm run test:card-check && npm run test:course-directory && npm run test:course-lookup && npm run test:course-import",
     "test:progress": "tsx scripts/test-matchplay-progress.ts",
     "test:trip-form": "NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder tsx scripts/test-trip-form.tsx",
     "test:custom-points": "tsx scripts/test-custom-points.ts",
@@ -46,7 +46,8 @@
     "test:course-lookup": "tsx scripts/test-course-lookup.ts",
     "test:course-import": "tsx scripts/test-course-import.ts",
     "courses:migration": "tsx scripts/build-course-migration.ts",
-    "test:tiebreak": "tsx scripts/test-tiebreak.ts"
+    "test:tiebreak": "tsx scripts/test-tiebreak.ts",
+    "test:match-decision": "tsx scripts/test-match-decision.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",

@@ -16,6 +16,8 @@ import MatchplayBracket, {
 import { playerEntrant, pairEntrant } from '../lib/matchplayEntrants'
 import { generateBracket, bracketToRows, bracketShape } from '../lib/matchplay'
 import { isDecidable } from '../lib/matchplayProgress'
+import type { MatchReading } from '../lib/matchResults'
+import type { MatchDecision, MatchState } from '../lib/matchDecision'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -73,6 +75,32 @@ function renderPairs(pairCount: number) {
   const { entrants, matches } = buildPairs(pairCount)
   return renderToStaticMarkup(
     React.createElement(MatchplayBracket, { matches, entrants })
+  )
+}
+
+/** A reading, as the page hands one down for a linked bracket round. */
+function reading(
+  matchId: string,
+  state: Partial<MatchState>,
+  decidedBy: MatchDecision = 'stableford_match',
+  disagrees = false,
+): MatchReading {
+  return {
+    matchId,
+    link: { bracketRound: 1, roundId: 'r1', decidedBy },
+    state: {
+      leaderId: null, margin: 0, holesPlayed: 0,
+      settled: false, halved: false, result: null, progress: 'Not started',
+      ...state,
+    },
+    disagrees,
+  }
+}
+
+function renderLinked(count: number, readings: MatchReading[]) {
+  const { players, matches } = build(count)
+  return renderToStaticMarkup(
+    React.createElement(MatchplayBracket, { matches, entrants: players, readings })
   )
 }
 
@@ -322,7 +350,11 @@ section('Structure')
   // At first paint the visible pair is rounds 1 and 2, plus one lookahead
   // column that is rendered faded and clipped.
   const html = render(16)
-  const tiles = (html.match(/relative w-full h-full rounded-lg border/g) ?? []).length
+  // The tile's height is an inline style rather than a class: the wrapper it
+  // sits in also holds the note under it, where the cards say how a linked
+  // match stands, so the wrapper can no longer be a fixed height for the
+  // tile to fill.
+  const tiles = (html.match(/relative w-full rounded-lg border/g) ?? []).length
   ok(tiles >= 8 + 4, '16 players: at least the first two rounds are laid out')
 
   // Connectors are drawn as SVG paths
@@ -351,6 +383,63 @@ section('Navigation')
   eq(dots, shape.totalRounds, '32 players: one position dot per round')
   eq((render(6).match(/aria-label="Go to /g) ?? []).length, 3,
     '6 players: three position dots')
+}
+
+// ─── A linked bracket round ────────────────────────────────────
+
+section('A linked round says what the cards make of it')
+{
+  const { matches } = build(8)
+  const first = matches.filter(m => m.round_number === 1)
+
+  const live = renderLinked(8, [
+    reading(first[0].id, { leaderId: 'p1', margin: 2, holesPlayed: 14, progress: '2 up thru 14' }),
+  ])
+  ok(live.includes('2 up thru 14'), 'a match being played reads as it stands')
+  // The method names itself under the round heading, so it is visible at all
+  // that the winners are coming off cards
+  ok(live.includes('Stableford matchplay'), 'and the round says how it is being decided')
+
+  const square = renderLinked(8, [
+    reading(first[0].id, {
+      holesPlayed: 18, settled: true, halved: true, result: 'Halved',
+    }),
+  ])
+  ok(square.includes('All square'), 'a halved match says so')
+  ok(!square.includes('Halved'),
+    'and asks for a person rather than printing a result nobody played')
+
+  const clash = renderLinked(8, [
+    reading(first[0].id, {
+      leaderId: 'p8', margin: 3, holesPlayed: 16, settled: true, result: '3&2',
+    }, 'stableford_match', true),
+  ])
+  ok(clash.includes('Cards disagree'),
+    'a bracket that no longer matches its cards says so rather than being rewritten')
+
+  const plain = render(8)
+  ok(!plain.includes('All square') && !plain.includes('Cards disagree'),
+    'an unlinked draw is exactly the draw it always was')
+  ok(!plain.includes('Stableford matchplay'), 'and names no method')
+}
+
+section('Every method can be named under a round heading')
+{
+  const { matches } = build(8)
+  const first = matches.filter(m => m.round_number === 1)
+  const methods: MatchDecision[] = [
+    'stableford_match', 'stableford_total',
+    'strokes_match_gross', 'strokes_match_nett',
+    'strokes_total_gross', 'strokes_total_nett',
+    'quota_liverpool', 'quota_chicago',
+  ]
+  for (const method of methods) {
+    const html = renderLinked(8, [
+      reading(first[0].id, { holesPlayed: 4, progress: 'Level thru 4' }, method),
+    ])
+    ok(html.includes('Level thru 4') && !html.includes('undefined'),
+      `${method} renders with its note intact`)
+  }
 }
 
 console.log(`\n${'─'.repeat(56)}`)

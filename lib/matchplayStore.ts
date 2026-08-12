@@ -292,6 +292,55 @@ export async function createBracket(
  * The decision of what to change is made by the pure function in
  * matchplayProgress.ts — the code that is unit-tested is the code that runs.
  */
+/**
+ * Fill in every match the cards have settled, in one write.
+ *
+ * The linked half of the draw: a bracket round is played over a round of golf
+ * and the winners follow from the scorecards, so nobody taps a name in. See
+ * lib/matchResults.ts for what counts as settled, and lib/matchDecision.ts
+ * for the eight ways a match can be decided.
+ *
+ * **Only empty matches are filled.** `pendingResults` has already dropped any
+ * match carrying a winner, and `recordWinner` is applied one at a time on top
+ * of the running result so a first-round win seats a player in the round above
+ * before that match is itself considered. Applying them independently against
+ * the original bracket would write a semi-final whose players had not arrived.
+ *
+ * Returns the bracket unchanged when there is nothing to do, without touching
+ * the database — which is the common case every time the page is opened.
+ */
+export async function persistSettled(
+  allMatches: StoredMatch[],
+  pending: readonly { matchId: string; winnerId: string; result: string | null }[],
+): Promise<StoredMatch[]> {
+  if (pending.length === 0) return allMatches
+
+  let matches = allMatches
+  const changed = new Map<string, StoredMatch>()
+
+  for (const p of pending) {
+    const target = matches.find(m => m.id === p.matchId)
+    // A match seated by an earlier result in this same pass may since have
+    // gained a winner; and a pending result for a match that has gone is not
+    // an error, it is a bracket that was redrawn under us.
+    if (!target || target.winner_player_id) continue
+    const step = recordWinner(matches, p.matchId, p.winnerId, { result: p.result })
+    matches = step.matches
+    for (const row of step.changed) changed.set(row.id, row)
+  }
+
+  if (changed.size === 0) return matches
+
+  const { error } = await supabase
+    .from('matchplay_matches')
+    .upsert([...changed.values()].map(toRow), { onConflict: 'id' })
+
+  if (error) {
+    throw new MatchplayError('Could not save the results from the cards. Please try again.')
+  }
+  return matches
+}
+
 export async function persistWinner(
   allMatches: StoredMatch[],
   matchId: string,

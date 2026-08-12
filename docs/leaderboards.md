@@ -207,6 +207,44 @@ A draw is between **players** (singles) or **pairings** (pairs). A pairing IS a 
 
 The bracket page reads `entrant_type` from the **rows**, not from current settings: a draw made before the format was switched is still a real draw, and reading it against the wrong entrant kind renders a column of blanks.
 
+### Deciding a knockout from the cards
+
+A bracket round can be **linked to a round of golf** and told how a match on it is settled. Once the cards are in, the winners follow from them and nobody taps a name. `lib/matchDecision.ts` is the arithmetic (pure, no app types); `lib/matchResults.ts` is the half that turns a `RowContext` into what it asks for. Stored as `roundLinks` on the matchplay board in `trips.leaderboards` — **no migration**, and a draw with no links is exactly the draw it always was.
+
+**A link is stored against the bracket round's *number*, not its name.** A field growing from seven to nine turns a Quarter-Final into a Round of 16 and adds a round below it — every name shifts, the numbers do not.
+
+Eight methods, in two shapes that behave differently:
+
+| | Method | Settled |
+|---|---|---|
+| **hole by hole** | Stableford matchplay · Strokes matchplay gross · Strokes matchplay nett | when somebody is more holes up than there are holes left — or the holes run out |
+| **the whole card** | Total Stableford · Total strokes gross · Total strokes nett · Total quota Liverpool · Total quota Chicago | only when both cards are complete: the eighteenth can turn over any lead |
+
+That difference is why **"3&2" is a real result** and a total has none like it — the last two holes were never played. `marginLabel` only uses the ampersand form when the match ended early; one that went the distance is simply "2 up".
+
+**Handicaps follow each method's own convention.** A *matchplay* nett is a **difference**: the lowest course handicap in the match plays off scratch and everyone else receives the difference on the stroke index — worked out across all four players in a four-ball, not per side. A *total* nett is each player off their own full course handicap, exactly as a strokeplay board reads them. No allowance is applied anywhere: a knockout has none, and `lib/handicapAllowance.ts` says why.
+
+**A pairing reads as one card.** Every method builds a per-hole card per side first — for singles that is simply the player's own — so nothing downstream asks how many people are on a side. Better ball is the rule, and `bestOnHole` comes from `lib/teamScoring.ts` so a four-ball and a team board cannot disagree about which way strokes sort.
+
+**Quota is the one exception**, and deliberately: a quota is a target for a whole round (36 − course handicap), so no share of it belongs to the ninth hole and there is nothing to take the better of there. A pairing's quota is the **better of its two members' own cards**. The two scales:
+
+- **Liverpool** — bogey 1, par 2, birdie 3, eagle 4 (gross Stableford)
+- **Chicago** — bogey 1, par 2, birdie 4, eagle 8, doubling from par up
+
+Both are spelled out under the control in setup, because the scale *is* the difference between the two options and nobody carries it in their head.
+
+**A halved match is left halved.** A knockout needs somebody to go through and the cards did not say who, so the tile reads All Square and whoever was there records it. Inventing a winner from a seeding would be putting a name on a result nobody played.
+
+**When the writing happens.** The auto-apply pass runs **in the browser, once, when the bracket is opened** — not during the page's render. Looking at a draw must not change it. And it **only ever fills an empty match**: `pendingResults` drops anything already carrying a winner, so a correction typed in by hand sticks, and reopening the page is a no-op rather than a second write. A card edited after a match was recorded shows as **Cards disagree** on the tile and is never silently resolved.
+
+The line under a tile lives in the 22px between it and the tile below (PITCH 98 less TILE_H 76) — which is why it is a caption rather than a third row: a tile is two 37px rows because two names and two figures is what fits on a phone.
+
+#### The last round is centred
+
+Every position of the bracket shows two columns pinned to the two edges of the screen, which is what makes the pair read as one draw. The last position has nothing on its right, so the same rule left the Final alone against the left edge with half a screen of nothing beside it — reading as a column that had failed to load rather than the end of the draw.
+
+`centringShift` slides the whole view right as the last round arrives, until the final tile is centred. It is a **continuous function of `position`**, like every other coordinate in `lib/bracketLayout.ts`: the slide happens over the same swipe that brings the Final in, so there is no second animation to keep in step and the connectors stay welded to the tiles because they are offset by the identical number. A two-player bracket — a Final and nothing else — is centred outright, since there was never a pair to pin.
+
 ### Leaderboard
 
 Each active board is a tab, teams first when teams are on. With more than one running, a title card above the board names it and states how it is being scored.

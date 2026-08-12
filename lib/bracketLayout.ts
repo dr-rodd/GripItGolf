@@ -57,6 +57,39 @@ export function columnX(slot: number, stride: number): number {
 }
 
 /**
+ * How far right to nudge the whole view, so the last round centres.
+ *
+ * Every position but the last shows two columns, pinned to the two edges of
+ * the screen — which is what makes the pair read as one bracket. The last
+ * position has nothing on its right, so the same rule left the Final alone
+ * against the left edge with half a screen of nothing beside it, looking like
+ * a column that had failed to load rather than the end of the draw.
+ *
+ * So the view slides right as the last round arrives, until the final tile is
+ * centred. It is a **continuous** function of `position`, like everything else
+ * here: the slide happens over the same swipe that brings the Final in, so
+ * there is no second animation to keep in step with the first, and the
+ * connectors stay welded to the tiles throughout because they are offset by
+ * the identical number.
+ *
+ * A bracket of one round — two players, a final and nothing else — is centred
+ * outright, since there was never a pair to pin.
+ */
+export function centringShift(o: {
+  position: number
+  roundCount: number
+  /** The viewport the bracket is drawn in. */
+  width: number
+  tileWidth: number
+}): number {
+  if (o.roundCount <= 0) return 0
+  const centred = Math.max(0, (o.width - o.tileWidth) / 2)
+  // 1 at the last round, 0 at the one before it, proportional between
+  const t = Math.min(1, Math.max(0, o.position - (o.roundCount - 2)))
+  return centred * t
+}
+
+/**
  * Total height a column needs. Columns to the right are spaced twice as far
  * apart but hold half as many tiles, so every column in a bracket spans very
  * nearly the same height — which keeps the view from jumping as you swipe.

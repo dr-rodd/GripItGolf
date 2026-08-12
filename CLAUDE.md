@@ -138,6 +138,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `app/components/CourseSelect.tsx` | The course picker: search + county chips pinned over a scrolling list, and the add-course form (name, county — required, with the thirty-two as suggestions — website lookup, tees, then a scorecard ask via `CardCheck`). No autofocus on the form: the keyboard arrives when a finger asks, not with the sheet. Replaces the old native select in the golf sheet. A course added mid-build lives in `ItineraryBuilder`'s own `addedCourses` state — callers' fetched lists are never mutated |
 | `lib/courseCard.ts` | A course's card, two nines with their pars. **One set of numbers, never two** — the ladies card or the men's, decided by who is holding the phone. No yardages: those columns have never held a value |
 | `lib/nextMatch.ts` | The next tie: opponent known, undecided, a bye, or out. In a pairs draw the entrant is the pairing on *that draw's* sheet |
+| `lib/matchDecision.ts` | **Deciding a knockout match from the cards — the only copy.** The eight methods, the per-hole card that makes a pairing read like a player, when a match is over, and "3&2". A **matchplay** nett is the *difference* off the lowest handicap in the match; a **total** nett is each player off their own. Better ball comes from `lib/teamScoring.ts` (`bestOnHole`), not restated. Pure — `lib/matchResults.ts` is the half that turns a `RowContext` into what it asks for |
 | `app/components/CourseWeather.tsx` | The weather, in two shapes from one component — the round page's block and the hub's one line — so the two cannot disagree about the same course. Fetched in the browser: the hub does not know which round is next until hydration. **The line variant renders no anchor**, because the up-next block it sits in is already inside a `<Link>` |
 | `app/components/Section.tsx` | The collapsible hub sections. One open at a time — the stack owns that, not the section |
 | `app/trip/[tripCode]/layout.tsx` | The bottom bar, drawn **once for the whole trip subtree and never by a page**. A page that renders its own tears the bar off the screen on every navigation, because a component rendered by a page unmounts with it. Pages still carry `has-tabbar` — the page is what scrolls |
@@ -238,6 +239,20 @@ Four things that are easy to get wrong twice:
 **Rounds added up have no back nine**, so `overallTie` is a second answer under Tiebreak: leave the trip total level (the default), or break it on the last round both played and neither dropped. **A board counting a single round is always broken**, because there the total is that card — which is how a round summary gets it. `countbackByRound` is carried on a row only when the overall tie is broken that way, so `orderRowsUndiscarded` cannot break one the board was told to leave.
 
 Reading a prize table against a round's finishers is `placeRound`, in that same file, because what two level players are *worth* is the tie rule. `lib/customPoints.ts` owns the table itself and nothing about ties. `BoardRow.place` is golf's — two level are both 1st and the next is 3rd. Full detail, including the 9/6/3/2 badge: `docs/leaderboards.md`.
+
+## Deciding a knockout from the cards
+
+A bracket round can be linked to a round of golf (`roundLinks` on the matchplay board, in `trips.leaderboards` — no migration) and told how a match is settled: Stableford matchplay, total Stableford, strokes matchplay or total in gross or nett, or total quota on either the **Liverpool** scale (bogey 1, par 2, birdie 3, eagle 4) or **Chicago** (1, 2, 4, 8). Quota is 36 − course handicap on both.
+
+**The link is stored by bracket round *number*, never its name** — a field growing from seven to nine turns a Quarter-Final into a Round of 16 and shifts every name.
+
+Three rules that are the whole design:
+
+- **A halved match is left halved.** A knockout needs somebody through and the cards did not say who; the tile reads All Square and a person records it. Inventing one from a seeding would put a name on a result nobody played.
+- **Auto-apply only ever fills an empty match**, and runs **in the browser when the bracket is opened**, never in the page's render — looking at a draw must not change it. So a correction typed in by hand sticks, and reopening is a no-op. A card edited afterwards shows as **Cards disagree**, never a silent rewrite.
+- **A hole-by-hole method settles early; a total cannot.** Three up with two to play is over. A total is not settled until both cards are complete, because the eighteenth turns over any lead.
+
+Full detail — the handicap conventions, the pairs reading, the quota scales: `docs/leaderboards.md`.
 
 ## Data insertion order
 

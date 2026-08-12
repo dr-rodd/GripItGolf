@@ -6,6 +6,9 @@ import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { MAIN_SET, setOf, teamsOnSheet, membersOf } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { playerEntrant, pairEntrant, type Entrant } from '@/lib/matchplayEntrants'
+import { parseTeamScoring } from '@/lib/teamScoring'
+import { buildRowContext } from '@/lib/rowContext'
+import { readBracket, type MatchReading } from '@/lib/matchResults'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
@@ -115,6 +118,16 @@ export default async function MatchplayPage({
           winner_player_id: m.winner_team_id ?? null }
       : m)
 
+  // ── The cards, where a bracket round has been linked to one ──
+  //
+  // Only the linked rounds are fetched. A draw decided by hand — every draw
+  // before this existed — asks for none of this, and the page is the two
+  // queries it always was.
+  const links = draw?.roundLinks ?? []
+  const readings = links.length > 0
+    ? await readLinkedRounds(trip, links, matches, entrants, memberships)
+    : []
+
   return (
     <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
       <TripHeader backTo={`/trip/${tripCode}`} />
@@ -149,6 +162,7 @@ export default async function MatchplayPage({
           <MatchplayBracket
             matches={matches as unknown as BracketMatchRow[]}
             entrants={entrants as BracketEntrantRow[]}
+            readings={readings}
           />
         )}
       </div>
@@ -158,6 +172,98 @@ export default async function MatchplayPage({
       <SupportLink className="px-4 pb-12" />
     </div>
   )
+}
+
+
+/**
+ * The linked rounds' cards, read into a result per match.
+ *
+ * Scoped to the rounds actually linked rather than the whole trip: a knockout
+ * played over one afternoon should not pull down every scorecard of the week
+ * to find out who won a quarter-final.
+ *
+ * The assembly is `buildRowContext`, the same one the leaderboard goes
+ * through — so the handicap a match is played off and the handicap the boards
+ * read are the same number by construction, not by two pieces of code
+ * agreeing. See lib/matchResults.ts.
+ */
+async function readLinkedRounds(
+  trip: { id: string; team_scoring?: unknown },
+  links: readonly { roundId: string }[],
+  matches: readonly Record<string, unknown>[],
+  entrants: readonly { id: string }[],
+  memberships: readonly { team_id: string; player_id: string }[],
+): Promise<MatchReading[]> {
+  const roundIds = [...new Set(links.map(l => l.roundId))]
+  const nilId = '00000000-0000-0000-0000-000000000000'
+
+  const { data: rounds } = await supabase
+    .from('rounds')
+    .select('id, round_number, course_id')
+    .in('id', roundIds.length > 0 ? roundIds : [nilId])
+
+  const courseIds = [...new Set((rounds ?? []).map(r => r.course_id).filter(Boolean))] as string[]
+
+  const [playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes] =
+    await Promise.all([
+      supabase.from('players')
+        .select('id, name, handicap, gender')
+        .eq('trip_id', trip.id).eq('is_composite', false),
+      supabase.from('holes')
+        .select('id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies')
+        .in('course_id', courseIds.length > 0 ? courseIds : [nilId]),
+      supabase.from('scores')
+        .select('player_id, hole_id, gross_score, stableford_points, no_return, round_id')
+        .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
+      supabase.from('live_scores')
+        .select('player_id, round_id, hole_number, gross_score, stableford_points')
+        .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
+      supabase.from('round_handicaps')
+        .select('round_id, player_id, playing_handicap, tee_id')
+        .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
+      supabase.from('tees')
+        .select('id, slope, course_rating, par')
+        .in('course_id', courseIds.length > 0 ? courseIds : [nilId]),
+      supabase.from('live_rounds')
+        .select('round_id')
+        .eq('status', 'active')
+        .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
+    ])
+
+  const ctx = buildRowContext({
+    players: (playersRes.data ?? []) as never,
+    teams: [] as never,
+    memberships: memberships as never,
+    holes: (holesRes.data ?? []) as never,
+    rounds: (rounds ?? []) as never,
+    courseByRound: new Map((rounds ?? []).map(r => [r.id as string, r.course_id as string])),
+    scores: (scoresRes.data ?? []) as never,
+    liveScores: (liveScoresRes.data ?? []) as never,
+    roundHandicaps: (hcpsRes.data ?? []) as never,
+    tees: (teesRes.data ?? []) as never,
+    activeRoundIds: (openRes.data ?? []).map(r => r.round_id as string),
+    livePlayerIds: [],
+    // A knockout is never scored on the old single team setting — it reads
+    // cards hole by hole, not a team format. Passing the trip's would be
+    // handing `buildRowContext` an answer nothing here asks it.
+    legacyTeamScoring: parseTeamScoring(undefined),
+  })
+
+  // A singles draw seats players, so a side is its own only member. A pairs
+  // draw seats teams, and the pairing's two players come off the memberships.
+  const entrantIds = new Set(entrants.map(e => e.id))
+  const playersOf = (sideId: string): string[] => {
+    const members = memberships.filter(m => m.team_id === sideId).map(m => m.player_id)
+    if (members.length > 0) return members
+    return entrantIds.has(sideId) ? [sideId] : []
+  }
+
+  return [...readBracket({
+    matches: matches as never,
+    links: links as never,
+    ctx,
+    playersOf,
+  }).values()]
 }
 
 function EmptyState({

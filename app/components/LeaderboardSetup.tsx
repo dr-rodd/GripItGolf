@@ -14,6 +14,11 @@ import {
   clampAllowance, allowanceOf, suggestedAllowance,
 } from '@/lib/handicapAllowance'
 import { TIE_BREAKS, OVERALL_TIES, DEFAULT_TIE_BREAK, tieBreakOf, overallTieOf } from '@/lib/tiebreak'
+import {
+  type RoundLink, type MatchDecision,
+  MATCH_DECISIONS, DEFAULT_MATCH_DECISION, linkFor,
+} from '@/lib/matchDecision'
+import { previewBracket } from '@/lib/matchplay'
 import { nextSheetId } from '@/lib/teamSets'
 import { defaultCustomPoints, editableRows, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
 import { IconTrophy, IconPlus, IconMinus, IconX, IconCheck, IconSettings } from './icons'
@@ -55,6 +60,17 @@ import { Card, Badge, buttonClass, FIELD, FIELD_LABEL } from './ui'
  * golf does. See lib/tiebreak.ts.
  */
 const FRESH: Partial<Leaderboard> = { tieBreak: DEFAULT_TIE_BREAK }
+
+/** A round of golf on this trip, as the matchplay link picker needs it. */
+export type LinkableRound = {
+  id: string
+  roundNumber?: number
+  courseName?: string | null
+}
+
+const roundLabel = (r: LinkableRound) =>
+  [r.roundNumber ? `Round ${r.roundNumber}` : 'Round', r.courseName]
+    .filter(Boolean).join(' — ')
 
 const CHOICE =
   'w-full text-left px-4 py-3.5 rounded-xl border transition-colors duration-150 ' +
@@ -368,10 +384,133 @@ function AllowancePicker({
   )
 }
 
+/**
+ * Linking each bracket round to a round of golf.
+ *
+ * A knockout is played somewhere. Say which round of the trip each bracket
+ * round is contested over and how a match on it is settled, and the winners
+ * follow from the scorecards — see lib/matchDecision.ts. Leave a bracket
+ * round unlinked and it is tapped in by hand, which is what every draw did
+ * before this existed, so an existing trip is untouched by the question.
+ *
+ * The rounds are named off the field, through `previewBracket` — the same
+ * function the Create Matchplay button previews with, so the names here are
+ * the names that will be drawn. A field too small to draw at all shows the
+ * reason rather than an empty panel: teams and players both arrive after a
+ * board is made, and a blank space would read as a broken screen.
+ *
+ * **A link is stored against the bracket round's number, not its name.** A
+ * field growing from seven to nine turns a Quarter-Final into a Round of 16
+ * and adds a round below it — the names all shift, the numbers do not.
+ */
+function RoundLinks({
+  links, rounds, entrantCount, onChange,
+}: {
+  links: RoundLink[]
+  rounds: LinkableRound[]
+  /** Players in a singles draw, pairings in a pairs one. */
+  entrantCount: number
+  onChange: (links: RoundLink[]) => void
+}) {
+  const shape = previewBracket(entrantCount)
+
+  const setLink = (bracketRound: number, patch: Partial<RoundLink>) => {
+    const current = linkFor(links, bracketRound)
+    const next = links.filter(l => l.bracketRound !== bracketRound)
+    const roundId = patch.roundId ?? current?.roundId
+    // No round, no link. Clearing the round is how a bracket round goes back
+    // to being decided by hand, so it is a removal rather than a half-filled
+    // entry the scoring side would have to guard against.
+    if (roundId) {
+      next.push({
+        bracketRound,
+        roundId,
+        decidedBy: patch.decidedBy ?? current?.decidedBy ?? DEFAULT_MATCH_DECISION,
+      })
+    }
+    onChange(next.sort((a, b) => a.bracketRound - b.bracketRound))
+  }
+
+  return (
+    <div className="border-t border-bark/12 pt-4 mt-1">
+      <p className="t-label text-ink/80 mb-1">Decide matches from the cards?</p>
+      <p className="t-cap text-ink/65 mb-3 leading-snug">
+        Link a bracket round to a round of golf and the winners come off the
+        scorecards. Leave one unlinked to tap the results in yourself.
+      </p>
+
+      {!shape ? (
+        <p className="t-cap text-ink/65 leading-snug">
+          The rounds of the draw are named once the field is known — add
+          players, or pick the pairings, and come back to this.
+        </p>
+      ) : rounds.length === 0 ? (
+        <p className="t-cap text-ink/65 leading-snug">
+          This trip has no golf in its itinerary yet. Add a round and it can be
+          linked here.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {shape.roundNames.map((name, i) => {
+            const bracketRound = i + 1
+            const link = linkFor(links, bracketRound)
+            return (
+              <div
+                key={bracketRound}
+                className={`rounded-xl border px-3 py-3 ${
+                  link ? 'border-accent/40 bg-accent/[0.05]' : 'border-bark/25 bg-surface'
+                }`}
+              >
+                <p className="t-card text-ink mb-2">{name}</p>
+
+                <label className={FIELD_LABEL}>Played over</label>
+                <select
+                  value={link?.roundId ?? ''}
+                  onChange={e => setLink(bracketRound, { roundId: e.target.value })}
+                  className={FIELD}
+                >
+                  <option value="">Decided by hand</option>
+                  {rounds.map(r => (
+                    <option key={r.id} value={r.id}>{roundLabel(r)}</option>
+                  ))}
+                </select>
+
+                {link && (
+                  <>
+                    <label className={`${FIELD_LABEL} mt-3`}>Decided by</label>
+                    <select
+                      value={link.decidedBy}
+                      onChange={e => setLink(bracketRound, {
+                        decidedBy: e.target.value as MatchDecision,
+                      })}
+                      className={FIELD}
+                    >
+                      {MATCH_DECISIONS.map(m => (
+                        <option key={m.key} value={m.key}>{m.label}</option>
+                      ))}
+                    </select>
+                    {/* The scale a quota runs on is the whole difference
+                        between the two of them, and nobody carries it in
+                        their head — so it is under the control, not in a
+                        help page. */}
+                    <p className="t-cap text-ink/65 mt-2 leading-snug">
+                      {MATCH_DECISIONS.find(m => m.key === link.decidedBy)?.hint}
+                    </p>
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── The cascade ───────────────────────────────────────────────
 
 function Builder({
-  existing, initial, playerCount, teamCount, onSave, onCancel,
+  existing, initial, playerCount, teamCount, rounds, onSave, onCancel,
 }: {
   /** What the trip already runs, NOT counting the board being edited. */
   existing: Leaderboard[]
@@ -379,6 +518,8 @@ function Builder({
   initial: Leaderboard | null
   playerCount: number
   teamCount: number
+  /** The trip's golf, for linking a bracket round to one of them. */
+  rounds: LinkableRound[]
   onSave: (lb: Leaderboard) => void
   onCancel: (() => void) | null
 }) {
@@ -627,9 +768,17 @@ function Builder({
       )}
 
       {draft.competition === 'matchplay' && (
-        <p className="t-body text-ink/80">
-          The draw will be generated at random.
-        </p>
+        <>
+          <p className="t-body text-ink/80">
+            The draw will be generated at random.
+          </p>
+          <RoundLinks
+            links={draft.roundLinks ?? []}
+            rounds={rounds}
+            entrantCount={field}
+            onChange={roundLinks => set({ roundLinks })}
+          />
+        </>
       )}
 
       {/* What is still outstanding, so the form has an end */}
@@ -680,13 +829,18 @@ function Builder({
 // ─── Main ──────────────────────────────────────────────────────
 
 export default function LeaderboardSetup({
-  boards, playerCount, teamCount, readOnly = false, onChange,
+  boards, playerCount, teamCount, rounds = [], readOnly = false, onChange,
 }: {
   boards: Leaderboard[]
   /** The field an individual prize table pays out to. */
   playerCount: number
   /** The field a team prize table pays out to. */
   teamCount: number
+  /**
+   * The trip's golf. Only the matchplay board reads it, to link a bracket
+   * round to a round of it — defaulted so every other caller is unaffected.
+   */
+  rounds?: LinkableRound[]
   /** Shown but not changeable — somebody who is not the trip's owner. */
   readOnly?: boolean
   onChange: (boards: Leaderboard[]) => void
@@ -740,6 +894,7 @@ export default function LeaderboardSetup({
             initial={lb}
             playerCount={playerCount}
             teamCount={teamCount}
+            rounds={rounds}
             onSave={save}
             onCancel={() => setEditingId(null)}
           />
@@ -786,6 +941,7 @@ export default function LeaderboardSetup({
           initial={null}
           playerCount={playerCount}
           teamCount={teamCount}
+          rounds={rounds}
           onSave={save}
           onCancel={done ? () => setAdding(false) : null}
         />
