@@ -193,6 +193,46 @@ section('An activity never takes the card from golf')
   eq(q?.detail, '', '  …and says nothing about when, rather than "no time"')
 }
 
+section('The line looks no further out than the headline\'s own day')
+{
+  // Tomorrow's golf, and a dinner two days past it. The line answers "what
+  // else is booked around what is next", and Saturday's dinner under
+  // Thursday's golf is not that — it is the future, and it gets its mention
+  // when its day is the one being described. Without the gate the card
+  // carried whatever the trip's first booking happened to be, days ahead of
+  // anything else on it.
+  const items = [
+    golf('g1', 1, 0, '09:20'),
+    golf('g2', 2, 0, '10:00'),
+    activity('a3', 3, 0, 'Farewell dinner', '19:30'),
+  ]
+  const dayOne = new Date(2026, 7, 14, 7, 0)
+  const head = upNext(items, START, DATES, COURSES, dayOne)
+  eq(head?.item.id, 'g1', 'the next round is the headline')
+  eq(nextActivity(items, START, DATES, COURSES, dayOne, head), null,
+    'a dinner two days beyond it stays off the card')
+
+  // Tonight's dinner under tomorrow's golf is the case the line exists for,
+  // and it is on the near side of the gate: on or before the headline's day.
+  const withTonight = [
+    activity('a0', 0, 0, 'Welcome dinner', '20:00'),
+    golf('g1', 1, 0, '09:20'),
+  ]
+  const arrival = new Date(2026, 7, 13, 9, 0)
+  eq(nextActivity(withTonight, START, DATES, COURSES, arrival,
+    upNext(withTonight, START, DATES, COURSES, arrival))?.item.id, 'a0',
+    'tonight\'s dinner under tomorrow\'s golf still shows')
+
+  // And when the far day arrives with the golf all behind, the dinner is the
+  // headline itself — not the line, which then rightly stays empty rather
+  // than naming the same booking twice.
+  const dayThree = new Date(2026, 7, 16, 9, 0)
+  const lastDay = upNext(items, START, DATES, COURSES, dayThree)
+  eq(lastDay?.item.id, 'a3', 'the farewell dinner takes the card once its day comes')
+  eq(nextActivity(items, START, DATES, COURSES, dayThree, lastDay), null,
+    '  …and is not also the line beneath itself')
+}
+
 section('The hub draws the activity under the card, not inside it')
 {
   const src = code('app/trip/[tripCode]/StatusBlock.tsx')
@@ -1003,6 +1043,61 @@ section('Only golf opens a page')
   const status = code('app/trip/[tripCode]/StatusBlock.tsx')
   ok(/next\?\.item\.kind === 'golf'/.test(status),
     'up next links through only when the next thing is golf')
+}
+
+section('The itinerary reads at the size a plan deserves')
+{
+  const itin = code('app/trip/[tripCode]/Itinerary.tsx')
+
+  // The course name is what the card is for, so it is the one thing that
+  // must never be cut off. These are the longest names on the platform —
+  // "Ballyliffin Golf Club -- Glashedy Links" — and the page scrolls, so
+  // wrapping costs a line where an ellipsis costs the answer.
+  const golfTitle = itin.slice(itin.indexOf('block t-card font-medium'))
+    .slice(0, 120)
+  ok(!golfTitle.includes('truncate'), 'a course name wraps rather than truncating')
+
+  // A day is the unit the list is read in — "what's Friday?" — so it heads
+  // its items at label weight in full ink, not as a caption.
+  ok(/t-label uppercase[^"]*text-ink mb-2/.test(itin),
+    'a day heading is a heading, not a caption')
+
+  // An activity is a plan with a name and a time, and it reads at the golf
+  // tiles' weight — while a stay or a journey stays the quiet centred join
+  // it has always been. Golf still holds the only white card and the only
+  // tap, which is the rule holding the list together.
+  ok(/kind === 'activity'[\s\S]{0,200}ActivityRow/.test(itin),
+    'an activity gets a row of its own')
+  const activityRow = itin.slice(itin.indexOf('function ActivityRow'),
+    itin.indexOf('export default function Itinerary'))
+  ok(activityRow.includes('t-card text-ink'), '  …named at card weight')
+  ok(!activityRow.includes('<Link') && !/border/.test(activityRow),
+    '  …with no card and no tap — those stay golf\'s alone')
+
+  // The one thing the cards can do that nothing on them says: open. Said
+  // once, over the list, and only when something actually opens — a trip
+  // whose items never became rounds would be promising a page that is not
+  // there.
+  ok(itin.includes('Tap a course card for current weather and course details.'),
+    'the list says the cards open')
+  ok(/anyCourseCard \?/.test(itin) && /roundNumbers\[i\.id\] != null/.test(itin),
+    '  …and only when one of them actually does')
+}
+
+section('Up next is set as the headline of the hub')
+{
+  const status = code('app/trip/[tripCode]/StatusBlock.tsx')
+
+  // The card whose job is to say where you are going was naming it at tile
+  // weight with an ellipsis. Section-heading size now, wrapping — the page
+  // scrolls to make the room, the card does not shrink its answer.
+  ok(/t-h2 text-ink[^"]*mt-0\.5[^"]*"[^"]*>\{next\.title\}/.test(status)
+    || /className="t-h2 text-ink[^"]*">\{next\.title\}/.test(status),
+    'the next thing is named at heading size')
+  ok(!/t-card text-ink truncate[^"]*"[^"]*>\{next\.title\}/.test(status),
+    '  …not at tile weight with an ellipsis')
+  ok(/t-card text-accent-deep[\s\S]{0,40}in \{countdown\}/.test(status),
+    'and the countdown is a line worth the emerald it is set in')
 }
 
 // ─── The page itself ───────────────────────────────────────

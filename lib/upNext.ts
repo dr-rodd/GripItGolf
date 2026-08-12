@@ -175,6 +175,13 @@ export function upNext(
  * Returns null when the next activity **is** the headline — a trip with no
  * golf left falls through to it, and the same dinner named twice on one card
  * reads as a bug rather than as emphasis.
+ *
+ * **And never one from beyond the headline's own day.** The line answers
+ * "and what else is booked around what is next", so tonight's dinner under
+ * tomorrow's golf is context and Saturday's dinner under Thursday's golf is
+ * the future — it gets its mention when its day is the one being described.
+ * Without this the card carried whatever the trip's first booking happened
+ * to be, days ahead of anything else on it.
  */
 export function nextActivity(
   items: readonly ItineraryItem[],
@@ -189,6 +196,9 @@ export function nextActivity(
 
   const item = remaining.find(i => i.kind === 'activity')
   if (!item || item.id === headline?.item.id) return null
+
+  const date = dateOf(item, startDate, roundDates)
+  if (headline?.date && date && date > headline.date) return null
 
   return describeUpNext(item, startDate, roundDates, courseNames)
 }

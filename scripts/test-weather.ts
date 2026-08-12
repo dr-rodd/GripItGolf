@@ -380,10 +380,16 @@ section('Losing the letters does not lose the direction')
   eq((comp.match(/windFigures\(/g) ?? []).length, 2,
     'and both take the figures without the point')
 
-  // The hub line carries the temperature now, not wind alone.
+  // The hub line carries the temperature now, not wind alone — and at
+  // reading size, not caption size. It started at 14, went to 17, and is 21
+  // now the line is the feature it was always meant to be: the one thing on
+  // the card that changes between glances at it deserves better than being
+  // the smallest thing there.
   const line = comp.slice(comp.indexOf('function Line('))
   ok(/hour\.tempC/.test(line), 'the hub line shows the temperature')
-  ok(/Icon size=\{17\}/.test(line), '  …at a size worth glancing at')
+  ok(/Icon size=\{21\}/.test(line), '  …at a size worth glancing at')
+  ok(/t-card text-ink/.test(line) && /t-card text-bark/.test(line),
+    '  …with the temperature and the figures at card weight, in ink and bark')
 }
 
 section('Rain says nothing rather than nought')

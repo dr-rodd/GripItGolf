@@ -284,8 +284,15 @@ function Line({ state, tee, now }: { state: State; tee: Date | null; now: Date }
   const arrow = arrowDeg(hour.windFromDeg)
 
   return (
+    // Set at reading size, not caption size. This is the one feature on the
+    // card that changes between glances at it, and it was the smallest thing
+    // there — 13px figures under a 17px icon. The figures are the display
+    // face now, the way the round page's block already sets its wind, so the
+    // two shapes of one reading agree about what matters in it. Bark and
+    // ink only, still: a forecast is not an action, and the countdown above
+    // keeps the accent to itself.
     <div
-      className="flex items-center gap-2 t-cap text-ink/65 mt-1.5 tabular-nums"
+      className="flex items-center gap-2.5 mt-2.5 tabular-nums"
       role="img"
       aria-label={
         describeSymbol(hour.symbol)
@@ -295,28 +302,29 @@ function Line({ state, tee, now }: { state: State; tee: Date | null; now: Date }
       }
     >
       <span className="flex-shrink-0 text-bark" aria-hidden="true">
-        <Icon size={17} />
+        <Icon size={21} />
       </span>
 
       {hour.tempC != null && (
-        <span className="text-ink/80" aria-hidden="true">{Math.round(hour.tempC)}°</span>
+        <span className="t-card text-ink" aria-hidden="true">{Math.round(hour.tempC)}°</span>
       )}
 
       {/* The arrow carries the direction here as it does on the round page —
           one reading of the wind, drawn the same way in both places. */}
-      <span className="flex items-center gap-1" aria-hidden="true">
+      <span className="flex items-baseline gap-1" aria-hidden="true">
         {arrow != null && (
           <span
-            className="flex-shrink-0 text-bark"
+            className="flex-shrink-0 text-bark self-center"
             style={{ transform: `rotate(${arrow}deg)` }}
           >
-            <IconArrowUp size={13} />
+            <IconArrowUp size={15} />
           </span>
         )}
-        <span>{figures} m/s</span>
+        <span className="t-card text-bark">{figures}</span>
+        <span className="t-cap text-ink/50">m/s</span>
       </span>
 
-      {rain && <span aria-hidden="true">· {rain}</span>}
+      {rain && <span className="t-cap text-ink/65" aria-hidden="true">· {rain}</span>}
     </div>
   )
 }

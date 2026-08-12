@@ -206,25 +206,31 @@ function UpNextLines({
 
   return (
     <div className="flex items-start gap-3">
-      <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent/[0.12] text-accent-deep flex items-center justify-center">
-        {itemIcon(next.item, 16)}
+      <span className="flex-shrink-0 w-10 h-10 rounded-xl bg-accent/[0.12] text-accent-deep flex items-center justify-center">
+        {itemIcon(next.item, 18)}
       </span>
 
       <div className="flex-1 min-w-0">
         <p className="t-cap uppercase tracking-[0.12em] text-ink/50">Up next</p>
-        <p className="t-card text-ink truncate mt-0.5">{next.title}</p>
+        {/* The headline of the whole hub, set like one. It was `t-card` with
+            a truncate — the same weight as a tile in a list, and a course
+            name cut off with an ellipsis on the card whose job is to say
+            where you are going. It wraps now, at section-heading size, and
+            the page scrolls to make the room rather than the card shrinking
+            its own answer. */}
+        <p className="t-h2 text-ink text-balance mt-0.5">{next.title}</p>
 
         {/* The date, then how many groups go off and when the first one does.
             Never a personal tee time — nothing on the platform records who
             is in which group, so anything narrower would be invented. */}
-        <p className="t-cap text-ink/65 mt-0.5">
+        <p className="t-cap text-ink/80 mt-1">
           {[day, groups || next.detail].filter(Boolean).join(' · ')}
         </p>
 
         {/* Golf only. A stay or a journey carries a day and nothing finer,
             so there is no moment to count down to. */}
         {countdown && (
-          <p className="t-cap text-accent-deep mt-1 tabular-nums">in {countdown}</p>
+          <p className="t-card text-accent-deep mt-1.5 tabular-nums">in {countdown}</p>
         )}
 
         {/* What it will be doing when they get there.
