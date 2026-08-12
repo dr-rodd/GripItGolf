@@ -77,7 +77,7 @@ const CANDIDATES: Candidate[] = [
   },
   {
     key: 'greens',
-    title: 'Flag hunter',
+    title: 'Pin hunter',
     line: 'The most greens found in regulation.',
     score: p => p.putting.holes >= MIN_AWARD_PUTT_HOLES ? p.putting.girRate : null,
     format: best => pct(best),

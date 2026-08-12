@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import {
   playerStats, statsFor, holeDifficulty, gainedOnField,
   netGainedOnField, longGameGained,
@@ -11,7 +12,7 @@ import {
 import { tripAwards } from '@/lib/tripAwards'
 import { HEADER_H } from '@/app/components/headerMetrics'
 import { IconChevronLeft } from '@/app/components/icons'
-import { PlayerPanels, EveryonePanels, CourseField } from './panels'
+import { PlayerPanels, EveryonePanels } from './panels'
 import {
   GainedByRoundChart, DifficultyProfileChart, PentagonChart,
   type GainedBar,
@@ -54,8 +55,10 @@ const PUTT_SHARE_KEY = 'gd-stats-putt-share'
 
 export default function StatsClient({
   stats, holes, players, rounds, courseByRound, courseNames, meId, thin,
+  tripCode,
   tripOver = false,
 }: {
+  tripCode: string
   stats: HoleStat[]
   holes: RowHole[]
   players: { id: string; name: string }[]
@@ -74,15 +77,18 @@ export default function StatsClient({
   // on the field, because a page about nobody is a page about everybody.
   const [who, setWho] = useState<string>(meId ?? 'everyone')
   /**
-   * Which courses the figures are read over: `null` is every one of them.
+   * Which courses the figures are read over — additive, by request.
    *
-   * It was a set of exclusions behind a row of tick chips — every course a
-   * separate on/off, so "this course only" was a tap on each of the others
-   * and the row grew a column per course. One choice at a time is the
-   * question people actually ask of it, and a course added to the trip
-   * mid-visit is still in by default, because the default is not a list.
+   * This control has now been round the houses: a row of tick chips, then a
+   * choose-one dropdown, and now a choose-many dropdown, because the real
+   * question turned out to be "everything except the course where the
+   * putting went wrong" — which a choice of one cannot say. Exclusions
+   * rather than inclusions, so a course added to the trip mid-visit is in
+   * by default; empty means every course. The last course standing cannot
+   * be switched off — a stats page over no holes is not a state anybody
+   * means.
    */
-  const [only, setOnly] = useState<string | null>(null)
+  const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set())
   const [basis, setBasis] = useState<'gross' | 'net'>('gross')
 
   /**
@@ -115,9 +121,18 @@ export default function StatsClient({
 
   // ── Filter the holes, never the field ──
   const filtered = useMemo(
-    () => (only === null ? stats : stats.filter(s => s.courseId === only)),
-    [stats, only],
+    () => (excluded.size === 0 ? stats : stats.filter(s => !excluded.has(s.courseId))),
+    [stats, excluded],
   )
+
+  const toggleCourse = (id: string) => {
+    setExcluded(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else if (playedCourseIds.length - next.size > 1) next.add(id)
+      return next
+    })
+  }
   const field = useMemo(() => playerStats(filtered, shareMode), [filtered, shareMode])
   const mine = useMemo(
     () => (who === 'everyone' ? null : statsFor(filtered, who, shareMode)),
@@ -226,9 +241,12 @@ export default function StatsClient({
     : who === 'everyone'
       ? 'Everyone'
       : who === meId ? 'You' : (nameOf.get(who) ?? 'Player').split(' ')[0]
+  const includedIds = playedCourseIds.filter(id => !excluded.has(id))
   const whereLabel = view === 'courses'
     ? (shownCourse ? courseName.get(shownCourse) ?? 'Course' : '')
-    : only === null ? 'All courses' : courseName.get(only) ?? 'Course'
+    : excluded.size === 0 ? 'All courses'
+    : includedIds.length === 1 ? courseName.get(includedIds[0]) ?? 'Course'
+    : `${includedIds.length} of ${playedCourseIds.length} courses`
 
   const chip = (on: boolean) =>
     `flex-shrink-0 inline-flex items-center px-4 py-2.5 t-label rounded-xl border transition-colors duration-150 ${
@@ -283,31 +301,35 @@ export default function StatsClient({
               ))}
             </div>
 
-            {/* Where — only when there is a genuine choice. */}
+            {/* Where — only when there is a genuine choice. Additive: any
+                set of courses, so "everything except the bad putting round"
+                is one tap. */}
             {playedCourseIds.length > 1 && (
               <div className="mt-2">
                 <CoursePicker
                   ids={playedCourseIds}
                   nameOf={courseName}
                   roundsOn={roundsOn}
-                  value={only}
-                  onChange={setOnly}
-                  allLabel="All courses"
+                  selected={new Set(includedIds)}
+                  label={whereLabel}
+                  onPick={toggleCourse}
+                  onAll={() => setExcluded(new Set())}
                 />
               </div>
             )}
           </>
         ) : (
           /* Which course. One at a time here — this view reads one card, so
-             the same picker with no all-courses row to offer. */
+             the same picker with a single selection and no all-courses row. */
           playedCourseIds.length > 1 && (
             <div className="mt-3">
               <CoursePicker
                 ids={playedCourseIds}
                 nameOf={courseName}
                 roundsOn={roundsOn}
-                value={shownCourse}
-                onChange={id => id && setCourseId(id)}
+                selected={new Set(shownCourse ? [shownCourse] : [])}
+                label={shownCourse ? courseName.get(shownCourse) ?? 'Course' : ''}
+                onPick={id => setCourseId(id)}
               />
             </div>
           )
@@ -427,21 +449,22 @@ export default function StatsClient({
         <AdvancedSettings mode={shareMode} onMode={chooseShare} />
       )}
 
+      {/* The manual, for anyone who wants the equations — which is why the
+          panels themselves carry no explainers. */}
+      <Link
+        href={`/trip/${tripCode}/stats/guide`}
+        className="block text-center mt-6 t-cap uppercase tracking-[0.18em] text-accent-deep hover:text-accent transition-colors"
+      >
+        How the numbers work
+      </Link>
+
+      {/* The course alone. The who-owns-this-course ranking that used to
+          lead was another leaderboard, and the leaderboard has a tab. */}
       {view === 'courses' && shownCourse && (
-        <>
-          {/* The per-course breakdown: who owns this course, then how the
-              course fought back. Full-trip stats, untouched by the Players
-              view's course filter — this view has its own selector. */}
-          <CourseField
-            stats={stats.filter(s => s.courseId === shownCourse)}
-            nameOf={nameOf}
-            meId={meId}
-          />
-          <Course
-            rows={difficulty.filter(r => r.courseId === shownCourse)}
-            title={courseName.get(shownCourse) ?? 'The course'}
-          />
-        </>
+        <Course
+          rows={difficulty.filter(r => r.courseId === shownCourse)}
+          title={courseName.get(shownCourse) ?? 'The course'}
+        />
       )}
     </div>
   )
@@ -598,50 +621,43 @@ function CondensedBar({
  * The course selector: one line saying what you are reading, opening into
  * the list of what else you could.
  *
- * **It replaced a row of tick chips, and the row was the problem rather than
- * the ticks.** Every course was its own on/off switch, so the commonest
- * question — this course on its own — cost a tap on every *other* course,
- * and the control grew a column each time the trip added a round somewhere
- * new. A choice of one is a list, not a set of switches.
+ * It replaced a row of tick chips that grew a column each time the trip
+ * played somewhere new; the dropdown holds any number of courses in the
+ * same footprint.
  *
- * So: `null` is every course, an id is that course alone, and there is no
- * third state to get into. The old row's rule about never switching the last
- * course off stops existing rather than being enforced — with one choice at
- * a time, no tap can leave the page with no holes on it.
- *
- * Two shapes from one component. The Players view offers the all-courses
- * row; the Courses view reads one card at a time and passes no `allLabel`,
- * so it simply has no such row and `null` can never be chosen.
+ * **Additive, by request.** Tapping a course toggles it in or out, so any
+ * set can be read — including "everything except the course where the
+ * putting went wrong", which a choice of one cannot say. The All courses
+ * row (where offered) puts everything back with one tap; the last course
+ * standing cannot be switched off, because a stats page over no holes is
+ * not a state anybody means. The Courses view passes no `onAll` and drives
+ * it as a choice of one, since that view reads one card at a time.
  *
  * The panel does not close when a course is picked, and that is the point of
  * the chevron: the figures below are already redrawn behind the open list,
- * so you can try a course, see what it did, and try another without the
- * control folding away between each. The `<` puts it away when you are done.
+ * so you can build the set and watch the numbers move without the control
+ * folding away between taps. The `<` puts it away when you are done.
  */
 function CoursePicker({
-  ids, nameOf, roundsOn, value, onChange, allLabel,
+  ids, nameOf, roundsOn, selected, label: headline, onPick, onAll,
 }: {
   ids: string[]
   nameOf: Map<string, string>
   roundsOn: Map<string, number>
-  /** null is every course — only reachable where `allLabel` is given. */
-  value: string | null
-  onChange: (id: string | null) => void
-  allLabel?: string
+  /** The courses currently in — the dots down the list. */
+  selected: ReadonlySet<string>
+  /** What the closed line says. The caller owns the wording. */
+  label: string
+  onPick: (id: string) => void
+  /** Everything back in, one tap. Absent, there is no All courses row. */
+  onAll?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const panelId = useId()
 
-  const rounds = (id: string | null) =>
-    id === null
-      ? ids.reduce((n, c) => n + (roundsOn.get(c) ?? 0), 0)
-      : roundsOn.get(id) ?? 0
-
-  const label = (id: string | null) =>
-    id === null ? allLabel ?? '' : nameOf.get(id) ?? 'Course'
-
-  const options: (string | null)[] = allLabel ? [null, ...ids] : ids
-  const count = rounds(value)
+  const rounds = (id: string) => roundsOn.get(id) ?? 0
+  const allOn = selected.size === ids.length
+  const count = ids.filter(id => selected.has(id)).reduce((n, c) => n + rounds(c), 0)
 
   return (
     <div className="bg-surface border border-bark/12 rounded-xl">
@@ -656,7 +672,7 @@ function CoursePicker({
           <span className="block text-[13px] uppercase tracking-[0.14em] text-ink/50 leading-none">
             Courses
           </span>
-          <span className="block t-card text-ink truncate mt-1">{label(value)}</span>
+          <span className="block t-card text-ink truncate mt-1">{headline}</span>
         </span>
         <span className="flex-shrink-0 t-cap text-ink/50 tabular-nums">
           {count} {count === 1 ? 'round' : 'rounds'}
@@ -683,18 +699,47 @@ function CoursePicker({
         style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
       >
         <div className="overflow-hidden">
-          <ul role="listbox" aria-label="Courses" className="border-t border-bark/12">
-            {options.map(id => {
-              const on = id === value
+          <ul
+            role="listbox"
+            aria-label="Courses"
+            aria-multiselectable={onAll ? true : undefined}
+            className="border-t border-bark/12"
+          >
+            {onAll && (
+              <li>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={allOn}
+                  tabIndex={open ? 0 : -1}
+                  onClick={onAll}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b border-bark/[0.08] transition-colors duration-150 ${
+                    allOn ? 'bg-accent/[0.06]' : 'active:bg-bark/[0.04]'
+                  }`}
+                >
+                  <span className={`flex-1 min-w-0 truncate t-cap ${
+                    allOn ? 'text-accent-deep font-semibold' : 'text-ink'
+                  }`}>
+                    All courses
+                  </span>
+                  <span
+                    className={`w-2 h-2 rounded-full flex-shrink-0 ${allOn ? 'bg-accent' : 'bg-transparent'}`}
+                    aria-hidden="true"
+                  />
+                </button>
+              </li>
+            )}
+            {ids.map(id => {
+              const on = selected.has(id)
               const n = rounds(id)
               return (
-                <li key={id ?? '·all'}>
+                <li key={id}>
                   <button
                     type="button"
                     role="option"
                     aria-selected={on}
                     tabIndex={open ? 0 : -1}
-                    onClick={() => onChange(id)}
+                    onClick={() => onPick(id)}
                     className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b border-bark/[0.08] last:border-b-0 transition-colors duration-150 ${
                       on ? 'bg-accent/[0.06]' : 'active:bg-bark/[0.04]'
                     }`}
@@ -702,15 +747,12 @@ function CoursePicker({
                     <span className={`flex-1 min-w-0 truncate t-cap ${
                       on ? 'text-accent-deep font-semibold' : 'text-ink'
                     }`}>
-                      {label(id)}
+                      {nameOf.get(id) ?? 'Course'}
                     </span>
                     <span className="flex-shrink-0 t-cap text-ink/50 tabular-nums">
                       {n} {n === 1 ? 'round' : 'rounds'}
                     </span>
-                    {/* The green dot, doing what it does on the wordmark:
-                        marking the one that counts. Not a tick — a tick in a
-                        list of taps reads as a box you have to fill in, and
-                        this is a choice of one. */}
+                    {/* The green dot marks each course that is in. */}
                     <span
                       className={`w-2 h-2 rounded-full flex-shrink-0 ${on ? 'bg-accent' : 'bg-transparent'}`}
                       aria-hidden="true"
@@ -738,10 +780,6 @@ function Course({ rows, title }: {
   return (
     <section className="bg-surface border border-bark/12 rounded-2xl px-4 py-3 mb-3">
       <h2 className="t-card text-ink">{title}</h2>
-      <p className="t-cap text-ink/65 mt-0.5 mb-2 leading-snug">
-        Hardest first, off what was actually scored. The card&apos;s own
-        stroke index is beside it, so the two can be read against each other.
-      </p>
       <DifficultyProfileChart holes={rows} />
       <div className="overflow-x-auto">
         <table className="w-full t-cap">
@@ -783,10 +821,6 @@ function Course({ rows, title }: {
           </tbody>
         </table>
       </div>
-      <p className="t-cap text-ink/65 mt-3 leading-snug">
-        A hole under {MIN_HOLE_SAMPLE} cards is dimmed — its place in the
-        order is still moving.
-      </p>
     </section>
   )
 }

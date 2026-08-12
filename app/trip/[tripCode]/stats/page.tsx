@@ -86,6 +86,7 @@ export default async function StatsPage({
           />
         ) : (
           <StatsClient
+            tripCode={tripCode}
             stats={stats}
             holes={holes}
             players={players.map(p => ({ id: p.id, name: p.name }))}

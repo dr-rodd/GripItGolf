@@ -347,19 +347,19 @@ export function DifficultyProfileChart({ holes }: { holes: ProfileBar[] }) {
   const current = pinned != null ? ordered[pinned] : null
 
   return (
-    <div className="mb-2">
-      <p className="t-cap text-ink/65 leading-snug mb-1" aria-live="polite">
-        {current
-          ? <>
-              <span className="text-ink">Hole {current.holeNumber}</span>
-              <span className="text-ink/50"> · par {current.par} · SI {current.strokeIndex} · </span>
-              <span className="t-num text-ink">
-                {current.averageToPar >= 0 ? '+' : ''}{(Math.round(current.averageToPar * 10) / 10).toFixed(1)}
-              </span>
-              <span className="text-ink/50"> over {current.cards} card{current.cards === 1 ? '' : 's'}</span>
-            </>
-          : 'The round as it is walked — tap a hole.'}
-      </p>
+    <div className="mb-2 pt-2">
+      {/* The readout appears only when a bar is pinned — no standing
+          explainer, by request. The chart is the round as it is walked. */}
+      {current && (
+        <p className="t-cap text-ink/65 leading-snug mb-1" aria-live="polite">
+          <span className="text-ink">Hole {current.holeNumber}</span>
+          <span className="text-ink/50"> · par {current.par} · SI {current.strokeIndex} · </span>
+          <span className="t-num text-ink">
+            {current.averageToPar >= 0 ? '+' : ''}{(Math.round(current.averageToPar * 10) / 10).toFixed(1)}
+          </span>
+          <span className="text-ink/50"> over {current.cards} card{current.cards === 1 ? '' : 's'}</span>
+        </p>
+      )}
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="w-full h-auto"

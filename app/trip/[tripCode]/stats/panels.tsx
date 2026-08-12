@@ -150,12 +150,11 @@ export function PlayerPanels({
           summing to nothing. "Against the course" is the other yardstick:
           it can be negative for everybody on a hard day, which is exactly
           the day the field figures stay calm about. */}
+      {/* No explainer, by request — the guide page at the foot carries the
+          equations for anyone who wants them. */}
       <Panel
         title="Strokes gained"
         aside={<BasisToggle basis={basis} onBasis={onBasis} />}
-        hint={basis === 'gross'
-          ? "Against everyone else's cards on the same holes, on the shots played. The field trades to zero between you — the course is what takes strokes off everybody."
-          : 'Net strokes against the field — your handicap shared over the holes and taken off first.'}
       >
         {basis === 'gross' ? (
           <>
@@ -224,7 +223,10 @@ export function PlayerPanels({
           a.fromMiss.holes === 0 ? '—'
             : `${a.fromMiss.greensHit} of ${a.fromMiss.holes} · ${formatRate(a.fromMiss.girRate)}`
         } />
-        <Line label="Leak to the green" value={leak(a.vsRegulation)} />
+        {/* Renamed from "Leak to the green", which read as jargon: this is
+            the extra shots taken to reach the green against the card's own
+            schedule of par minus two putts. */}
+        <Line label="Extra shots to the green" value={leak(a.vsRegulation)} />
       </Panel>
 
       <Panel title="Greens and putting" hint={`${p.holes} holes with a putt count`}>
@@ -346,13 +348,11 @@ function Rounds({ stats, playerId, rounds, courseFor, courseName }: {
               <th className="text-right font-normal py-2">FW</th>
               <th className="text-right font-normal py-2">GIR</th>
               <th className="text-right font-normal py-2">Putts</th>
-              <th className="text-right font-normal py-2 whitespace-nowrap">Vs HC</th>
             </tr>
           </thead>
           <tbody>
             {played.map(({ round, mine }) => {
               const line = statsFor(mine, playerId)!
-              const vs = line.form[0]?.vsHandicap ?? 0
               const course = courseName.get(courseFor.get(round.id) ?? '')
               return (
                 <tr key={round.id} className="border-t border-bark/[0.08]">
@@ -368,13 +368,6 @@ function Rounds({ stats, playerId, rounds, courseFor, courseName }: {
                   </td>
                   <td className="py-2.5 text-right t-num text-ink">
                     {line.putting.putts || '—'}
-                  </td>
-                  <td className={`py-2.5 text-right t-num ${
-                    gainTone(vs) === 'accent' ? 'text-accent-deep'
-                    : gainTone(vs) === 'rust' ? 'text-rust-deep'
-                    : 'text-ink'
-                  }`}>
-                    {formatGained(vs)}
                   </td>
                 </tr>
               )
@@ -456,46 +449,6 @@ export function RankedBox({ title, hint, rows, meId, aside }: {
   )
 }
 
-/**
- * Who owns a course — the per-course breakdown of the field.
- *
- * Stableford points a round rather than gross to par, because the field
- * spans every handicap on the trip and points are the one figure that
- * reads fair across it. Per eighteen holes, so a player who came back for
- * a second round is compared by rate rather than rewarded for volume.
- */
-export function CourseField({ stats, nameOf, meId }: {
-  /** Already narrowed to the one course. */
-  stats: HoleStat[]
-  nameOf: Map<string, string>
-  meId: string | null
-}) {
-  const field = playerStats(stats)
-  const name = (id: string) => nameOf.get(id) ?? 'Unknown'
-  const raw = field
-    .filter(p => p.holes > 0)
-    .map(p => ({
-      p,
-      per18: (p.form.reduce((n, r) => n + r.points, 0) / p.holes) * 18,
-    }))
-    .sort((a, b) => b.per18 - a.per18 || name(a.p.playerId).localeCompare(name(b.p.playerId)))
-  if (raw.length === 0) return null
-
-  return (
-    <RankedBox
-      title="The field here"
-      hint="Stableford points a round on this course — handicaps included, so it reads fair across the field."
-      rows={raw.map(({ p, per18 }) => ({
-        id: p.playerId,
-        name: name(p.playerId),
-        note: `${p.holes} holes`,
-        figure: formatAverage(per18),
-      }))}
-      meId={meId}
-    />
-  )
-}
-
 export function EveryonePanels({
   field, nameOf, meId, basis, onBasis, awards, tripOver, chart,
 }: {
@@ -533,26 +486,29 @@ export function EveryonePanels({
 
   return (
     <div>
+      {/* One heading over the two strokes-gained readings — the field and
+          the handicap are the two yardsticks, side by side, each a card. */}
+      <h2 className="t-h2 text-ink mb-3">Strokes gained</h2>
+
       <RankedBox
-        title="Strokes gained"
-        hint={basis === 'gross'
-          ? 'Shots on the field, everyone against everyone, on the same holes.'
-          : 'Net strokes on the field — handicaps shared over the holes and taken off first, so this is the fair fight.'}
+        title="Vs the field"
         aside={<BasisToggle basis={basis} onBasis={onBasis} />}
         rows={gained}
         meId={meId}
       />
       {chart}
 
+      {/* Vs handicap in strokes, not points — netVsPar: expected score is
+          par plus your allocation, and this is how far each player beat
+          that, split the same way the field card splits. */}
       <RankedBox
         title="Vs handicap"
-        hint="Stableford points against two a hole. Ahead of your handicap is ahead of the trip."
         rows={(() => {
-          const raw = by(p => (p.form.length > 0 ? p.form.reduce((n, r) => n + r.vsHandicap, 0) : null), (a, b) => b - a)
+          const raw = by(p => (p.netVsPar.holes > 0 ? p.netVsPar.total : null), (a, b) => b - a)
           const max = Math.max(1e-9, ...raw.map(({ s }) => Math.abs(s)))
           return raw.map(({ p, s }) => ({
             id: p.playerId, name: name(p.playerId),
-            note: `${p.form.length} round${p.form.length === 1 ? '' : 's'}`,
+            note: `${formatGained(p.netVsPar.toGreen)} tee · ${formatGained(p.netVsPar.putting)} putt`,
             figure: formatGained(s), tone: gainTone(s),
             share: s / max,
           }))

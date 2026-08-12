@@ -1171,10 +1171,11 @@ section('The lab reads the derivation and does none of its own')
   // …and only there: the h1 row under it said "Stats" a second time, and
   // went by request.
   ok(!page.includes('<h1'), 'no page-title row repeats what the artwork says')
-  // The Courses view is a breakdown, not just the difficulty table: the
-  // field on that course leads, ranked by the one figure fair across every
-  // handicap on the trip.
-  ok(/CourseField/.test(client), 'the courses view carries the field on that course')
+  // The Courses view is the course alone. The who-owns-this-course ranking
+  // that used to lead was another leaderboard, and the leaderboard has a
+  // tab — deleted whole, by request, not hidden.
+  ok(!/CourseField/.test(client) && !/CourseField/.test(code('app/trip/[tripCode]/stats/panels.tsx')),
+    'the courses view is the course, not another leaderboard')
   ok(code('app/trip/[tripCode]/stats/loading.tsx').includes('title="statsHub"'),
     '  …and the skeleton already says it')
   ok(code('app/components/TitleMark.tsx').includes('statsHub'),
@@ -1228,8 +1229,8 @@ section('The lab reads the derivation and does none of its own')
   // **Filter the holes, never the field.** The course filter narrows which
   // holes count; the field on those holes is everybody who played them. The
   // filter must run before playerStats, and never mention a player.
-  ok(/stats\.filter\(s => s\.courseId === only\)/.test(client),
-    'the course filter narrows the holes to one course')
+  ok(/stats\.filter\(s => !excluded\.has\(s\.courseId\)\)/.test(client),
+    'the course filter narrows the holes to the chosen courses')
   ok(/playerStats\(filtered, shareMode\)/.test(client),
     '  …and the field is computed over what is left')
   ok(!/filter\(s => s\.playerId/.test(client),
@@ -1280,27 +1281,51 @@ section('The lab reads the derivation and does none of its own')
 
   // ── The course picker ──
   //
-  // A row of tick chips became one dropdown: every course was its own
-  // on/off, so "this course only" cost a tap on each of the others and the
-  // control grew a column per course played.
+  // A dropdown, additive by request: tapping a course toggles it in or
+  // out, so "everything except the bad putting round" is one tap — which a
+  // choice of one could not say.
   ok(!/✓/.test(client), 'no tick chips')
   ok(/aria-expanded=\{open\}/.test(client) && /role="listbox"/.test(client),
     'the courses are a dropdown, announced as one')
-  ok(/const \[only, setOnly\] = useState<string \| null>\(null\)/.test(client),
-    '  …opening on every course, which is null rather than a full list')
+  ok(/const \[excluded, setExcluded\] = useState<ReadonlySet<string>>\(new Set\(\)\)/.test(client),
+    '  …opening on every course — exclusions, so a mid-trip course is in by default')
+  ok(/aria-multiselectable/.test(client) && /onClick=\{\(\) => onPick\(id\)\}/.test(client),
+    '  …and additive: a tap toggles one course, the rest stand')
 
-  // One choice at a time, so the old rule about never switching the last
-  // course off has nothing left to guard: no tap can leave the page with no
-  // holes on it, because no tap ever removes one.
-  ok(!/next\.size > 1/.test(client) && !/excluded/.test(client),
-    '  …and a course is chosen rather than the rest excluded')
+  // The last course standing cannot be switched off — a stats page over no
+  // holes at all is not a state anybody means.
+  ok(/playedCourseIds\.length - next\.size > 1/.test(client),
+    'the last course cannot be excluded')
 
-  // Picking does not close the list — the figures redraw behind it, so a
-  // course can be tried and swapped without the control folding away. That
-  // is what the chevron is for.
-  ok(/onClick=\{\(\) => onChange\(id\)\}/.test(client)
-    && !/onChange\(id\);?\s*setOpen\(false\)/.test(client),
+  // Picking does not close the list — the figures redraw behind it, so the
+  // set can be built while the numbers move. That is what the chevron is
+  // for.
+  ok(!/onPick\(id\);?\s*setOpen\(false\)/.test(client),
     '  …and the list stays open while you compare, closing on the chevron')
+
+  // ── The words on the page ──
+  const awards = code('lib/tripAwards.ts')
+  ok(/Pin hunter/.test(awards) && !/Flag hunter/.test(awards),
+    'the greens award is the Pin hunter')
+  ok(/Extra shots to the green/.test(code('app/trip/[tripCode]/stats/panels.tsx'))
+    && !/Leak to the green/.test(code('app/trip/[tripCode]/stats/panels.tsx')),
+    'the leak line says what it is — extra shots to the green')
+
+  // ── The Everyone view's two yardsticks ──
+  const panelsSrc = code('app/trip/[tripCode]/stats/panels.tsx')
+  ok(/title="Vs the field"/.test(panelsSrc), 'the field card is named Vs the field')
+  ok(/p\.netVsPar\.total/.test(panelsSrc) && /netVsPar\.toGreen/.test(panelsSrc),
+    '  …and Vs handicap is net strokes, split tee and putt like the field card')
+
+  // ── The manual ──
+  //
+  // The panels carry no explainers; the guide at the foot carries the
+  // equations instead, so losing the hints never lost the maths.
+  ok(/stats\/guide/.test(client), 'the guide is linked from the foot of the page')
+  const guide = code('app/trip/[tripCode]/stats/guide/page.tsx')
+  ok(/to green = score − putts/.test(guide) && /penalty/.test(guide)
+    && /share of hole/.test(guide),
+    '  …and the guide carries the equations the panels no longer explain')
 
   // ── The controls scroll away, and come back as one line ──
   //
