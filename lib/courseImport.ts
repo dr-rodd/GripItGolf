@@ -50,16 +50,37 @@ export const CONFIDENCE = ['HIGH', 'MEDIUM', 'LOW', 'EST'] as const
 export type Confidence = (typeof CONFIDENCE)[number]
 
 /**
- * What `holesConfidence` says when the club publishes no findable card.
+ * What a confidence says when there is nothing there to be confident about —
+ * `holesConfidence` when the club publishes no findable card, `teesConfidence`
+ * when it publishes no rating and slope for any tee.
  *
- * Not a level of confidence — the absence of anything to be confident about,
- * which is why it is kept out of `CONFIDENCE` rather than added to it. In the
- * array it would immediately be accepted for `teesConfidence`, where it means
- * nothing, and it would print in the confidence key at the top of every
- * generated migration.
+ * Not a level of confidence, which is why it is kept out of `CONFIDENCE`
+ * rather than added to it: in that array it would be accepted as an ordinary
+ * grade for a card that does exist, and it would print in the confidence key
+ * at the top of every generated migration.
+ *
+ * **It means the absence is declared, not that the field was skipped.** Both
+ * halves are biconditionals, checked in both directions — `holes: []` if and
+ * only if `holesConfidence` is this, and the same for the tees — because a
+ * list that vanished in an edit looks exactly like a club that publishes none.
  */
 export const NO_CARD = 'NONE' as const
 export type HolesConfidence = Confidence | typeof NO_CARD
+
+/**
+ * `teesConfidence` allows the same absence, and for a reason particular to
+ * where these courses are: **Irish cards print SSS, not slope.** A club can
+ * publish a perfect scorecard and no rating anybody can write a tee from, and
+ * `validNewTee` needs par, course rating and slope together or it has no row.
+ *
+ * Refusing those courses cost more than it saved — the gate was stricter than
+ * the app it feeds, which takes `tees: []` from the add-course form without
+ * complaint and even ships a course whose tee insert failed. Nothing can be
+ * mis-scored either: `canStart` needs a tee for every player, so no tees gates
+ * a round exactly as no holes does. The ratings arrive later through
+ * `data/course-tees/`, which is built for precisely this.
+ */
+export type TeesConfidence = Confidence | typeof NO_CARD
 
 /**
  * A cardless course's tees cannot be checked against holes, so the usual
@@ -122,7 +143,8 @@ export type CourseImport = {
   longitude: number
   /** `NONE` when the club publishes no card — see `NO_CARD`. */
   holesConfidence: HolesConfidence
-  teesConfidence: Confidence
+  /** `NONE` when no tee has a published rating and slope — see `TeesConfidence`. */
+  teesConfidence: TeesConfidence
   /** One line, or null. Becomes a `-- Note:` comment in the migration. */
   note: string | null
   sources: {
@@ -328,18 +350,38 @@ export function validateCourseImport(file: string, parsed: unknown): ImportProbl
       `like this — set \`holesConfidence\` to ${NO_CARD} if the club really publishes none.`)
   }
 
-  if (!isConfidence(c.teesConfidence)) {
-    F(`\`teesConfidence\` must be one of ${CONFIDENCE.join(', ')}. ` +
-      `${NO_CARD} belongs to the holes, never the tees.`)
-  } else if (cardless && !NO_CARD_TEE_FLOOR.includes(c.teesConfidence)) {
+  // The same biconditional again, for the ratings. A club that prints SSS and
+  // no slope has nothing `validNewTee` can write, and that is a real course
+  // rather than a broken file — but a tee list dropped in an edit looks
+  // identical, so the emptiness is declared here too and checked both ways.
+  const unrated = c.teesConfidence === NO_CARD
+  const noTees = Array.isArray(c.tees) && c.tees.length === 0
+
+  if (!isConfidence(c.teesConfidence) && !unrated) {
+    F(`\`teesConfidence\` must be one of ${CONFIDENCE.join(', ')}, or ${NO_CARD} when no ` +
+      'tee has a published course rating and slope.')
+  }
+  if (unrated && Array.isArray(c.tees) && c.tees.length > 0) {
+    F(`\`teesConfidence\` is ${NO_CARD} but the file carries ${c.tees.length} tees. ` +
+      `${NO_CARD} means there are no ratings — delete one or the other.`)
+  }
+  if (noTees && !unrated) {
+    F('There are no tees, but `teesConfidence` says ' +
+      `${String(c.teesConfidence)}. Tees that went missing in an edit look exactly like ` +
+      `this — set \`teesConfidence\` to ${NO_CARD} if the club really publishes no rating ` +
+      'and slope.')
+  }
+  if (isConfidence(c.teesConfidence) && cardless && !NO_CARD_TEE_FLOOR.includes(c.teesConfidence)) {
     F(`The tees are ${c.teesConfidence} confidence and there is no card to check them ` +
       'against. With no holes the usual corrective is gone, so the source has to be better.')
   }
 
-  if (cardless) {
+  if (cardless || unrated) {
     if (typeof c.note !== 'string' || c.note.trim().length === 0) {
-      F('Say what was looked at and what was not there — with no card, the note is the ' +
-        'only record of why this course has none.')
+      const missing = cardless && unrated ? 'card and no ratings'
+        : cardless ? 'card' : 'ratings'
+      F(`Say what was looked at and what was not there — with no ${missing}, the note is ` +
+        'the only record of why this course has none.')
     }
   } else if (c.note !== null && typeof c.note !== 'string') {
     F('`note` must be a line of text, or null.')
@@ -433,10 +475,20 @@ export function validateCourseImport(file: string, parsed: unknown): ImportProbl
       }
       seen.add(key)
     }
-    if (!tees.some(t => isObject(t) && t.gender === 'M')) {
-      F('There is no men\'s tee — a course needs at least one.')
+    if (tees.length === 0) {
+      // Not fatal, and this is the rule that used to refuse every course whose
+      // club prints SSS instead of slope. Nobody can be given a tee, so
+      // `canStart` never lets a round begin — the same gate a cardless course
+      // sits behind, reached by the other half of the file.
+      W('No tees, so no player can be given one and a round cannot be started here. ' +
+        'The ratings arrive in a data/course-tees/ file, or by hand from /admin/courses.')
+    } else if (!tees.some(t => isObject(t) && t.gender === 'M')) {
+      // The mirror of the ladies case below, and it works for the same reason:
+      // `teesForPlayer` hands over every tee on the course when that gender has
+      // none of its own.
+      W('There is no men\'s tee — a man here plays off the ladies\'.')
     }
-    if (!tees.some(t => isObject(t) && t.gender === 'F')) {
+    if (tees.length > 0 && !tees.some(t => isObject(t) && t.gender === 'F')) {
       // Not fatal: a club that publishes no ladies card is a real course, and
       // refusing it would drop it entirely. `teesForPlayer` carries a woman
       // onto the men's tees, and `effectivePar` onto the men's pars — which
@@ -954,8 +1006,9 @@ const cardlessBlock = (c: CourseImport): string => [
   `-- HOLES ${NO_CARD}: ${c.note ?? 'no per-hole card published'}`,
   '-- The eighteen holes arrive with the first scorecard photo, through the',
   '-- mode: \'create\' path in app/api/card-check/apply. Scoring is gated until',
-  '-- then — hasCard is holes.length > 0 — and the picker badges it',
-  '-- "Awaiting scorecard" off card_verified = false.',
+  '-- then — hasCard is holes.length > 0 — and admin badges it "No scorecard",',
+  '-- which is cardState\'s `none`: the state where a photo is exactly the',
+  '-- answer, because it is what creates the eighteen.',
 ].join('\n')
 
 /**
@@ -1102,6 +1155,13 @@ export function migrationSql(
   out.push('-- Where there are none, the course is searchable and carries its weather,')
   out.push('-- scoring is gated, and the first photo takes handleCreate\'s create path')
   out.push('-- and writes the card.')
+  out.push('--')
+  out.push('-- A course here may also have no tees. Irish clubs print SSS, not a slope,')
+  out.push('-- and without a rating and a slope together there is no tee row to write.')
+  out.push('-- It is the same gate from the other side — canStart needs a tee for every')
+  out.push('-- player — so the course is findable and cannot be started, and admin badges')
+  out.push('-- it "Awaiting ratings" rather than "Awaiting photo", because a photograph')
+  out.push('-- is not what it is short of. Those arrive later through data/course-tees/.')
   out.push('--')
   out.push('-- Replay-safe: every insert is ON CONFLICT DO NOTHING and nothing here')
   out.push('-- deletes. Migration 008 cleared its tees first; that is no longer safe,')

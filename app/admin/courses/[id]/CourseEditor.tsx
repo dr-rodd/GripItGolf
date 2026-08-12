@@ -51,7 +51,7 @@ export default function CourseEditor({
       <TeesSection courseId={course.id} tees={tees} />
       <VerifiedToggle
         courseId={course.id}
-        state={cardState(holeCount, course.card_verified)}
+        state={cardState(holeCount, course.card_verified, tees.length)}
       />
     </div>
   )

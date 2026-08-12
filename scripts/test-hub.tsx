@@ -897,20 +897,33 @@ section('The card is one set of numbers, never two')
 
   ok(!hasCard([]), 'a course with no holes recorded has no card')
 
-  // Three states, not the two `card_verified` suggests. The one that matters
-  // is `none`: a course with no holes cannot be scored, where a researched
-  // course with eighteen plays perfectly well, and showing those the same way
-  // is how somebody picks a course nobody can play.
-  eq(cardState(18, true), 'confirmed', 'eighteen holes and a photo is confirmed')
-  eq(cardState(18, false), 'researched', 'eighteen holes and no photo is researched')
-  eq(cardState(18, null), 'researched', 'a null flag is researched, not unknown')
-  eq(cardState(0, false), 'none', 'no holes is none')
+  // Four states, not the two `card_verified` suggests, and the badge names the
+  // blocker rather than the paperwork: a course with no holes — or no tees —
+  // cannot be scored, where a researched course with eighteen and a tee to play
+  // off plays perfectly well. Showing those the same way is how somebody picks
+  // a course nobody can play.
+  eq(cardState(18, true, 3), 'confirmed', 'eighteen holes, tees and a photo is confirmed')
+  eq(cardState(18, false, 3), 'researched', 'eighteen holes and no photo is researched')
+  eq(cardState(18, null, 3), 'researched', 'a null flag is researched, not unknown')
+  eq(cardState(0, false, 3), 'none', 'no holes is none')
   // The one that would be wrong quietly: admin can set the flag by hand, and a
   // photograph cannot have confirmed a card that does not exist.
-  eq(cardState(0, true), 'none', 'no holes beats a verified flag, whoever set it')
-  eq(CARD_STATE_TONE.none, 'loss', 'and it is the one state shown in rust, not grey')
-  ok(CARD_STATE_LABEL.none !== CARD_STATE_LABEL.researched,
-    'the two unverified states never read the same')
+  eq(cardState(0, true, 3), 'none', 'no holes beats a verified flag, whoever set it')
+
+  // Irish cards print SSS, not slope, so a club can publish a perfect card and
+  // nothing a tee can be written from. `canStart` needs a tee for every player,
+  // so this is as unplayable as no card — and a photo will not fix it, which is
+  // the whole reason it cannot be allowed to read "Awaiting photo".
+  eq(cardState(18, false, 0), 'unrated', 'a card with no tees is unrated, not researched')
+  eq(cardState(18, true, 0), 'unrated',
+    'and a photographed card with no tees is still unrated — the blocker outranks the flag')
+  eq(cardState(0, false, 0), 'none',
+    'with neither, `none` wins — a photo creates the eighteen, so it is the right thing to ask for')
+
+  eq(CARD_STATE_TONE.none, 'loss', 'no scorecard is shown in rust, not grey')
+  eq(CARD_STATE_TONE.unrated, 'loss', 'and so is no rating — both mean nobody can play here')
+  const labels = Object.values(CARD_STATE_LABEL)
+  eq(new Set(labels).size, labels.length, 'no two states ever read the same on screen')
 
   // Yardages exist as columns and have never held a value. No empty column.
   // Comments stripped: explaining why there is no yardage row is fine, and

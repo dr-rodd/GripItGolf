@@ -1,0 +1,32 @@
+{
+  "name": "Esker Hills Golf Club", "slug": "esker-hills", "county": "Offaly",
+  "location": "Tullamore, Offaly, Ireland", "website": "https://www.eskerhillsgolf.com/",
+  "latitude": 53.3136, "longitude": -7.5575,
+  "holesConfidence": "HIGH", "teesConfidence": "NONE",
+  "note": "Men's card from the club's own scorecard page. The club publishes SSS, not a USGA course rating and slope, so no tee can be written yet — the ratings come later from a handicap table or Golf Ireland. A ladies card is published (par 72) but was not transcribed.",
+  "sources": {
+    "holes": ["https://www.eskerhillsgolf.com/scorecard.html"],
+    "tees": []
+  },
+  "holes": [
+    {"hole_number":1,"par":5,"stroke_index":17,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":2,"par":4,"stroke_index":11,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":3,"par":4,"stroke_index":1,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":4,"par":4,"stroke_index":5,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":5,"par":3,"stroke_index":15,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":6,"par":5,"stroke_index":9,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":7,"par":4,"stroke_index":3,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":8,"par":4,"stroke_index":13,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":9,"par":3,"stroke_index":7,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":10,"par":4,"stroke_index":18,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":11,"par":4,"stroke_index":4,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":12,"par":4,"stroke_index":6,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":13,"par":3,"stroke_index":14,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":14,"par":4,"stroke_index":10,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":15,"par":3,"stroke_index":8,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":16,"par":5,"stroke_index":16,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":17,"par":4,"stroke_index":2,"par_ladies":null,"stroke_index_ladies":null},
+    {"hole_number":18,"par":4,"stroke_index":12,"par_ladies":null,"stroke_index_ladies":null}
+  ],
+  "tees": []
+}

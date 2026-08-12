@@ -22,6 +22,13 @@
 -- scoring is gated, and the first photo takes handleCreate's create path
 -- and writes the card.
 --
+-- A course here may also have no tees. Irish clubs print SSS, not a slope,
+-- and without a rating and a slope together there is no tee row to write.
+-- It is the same gate from the other side — canStart needs a tee for every
+-- player — so the course is findable and cannot be started, and admin badges
+-- it "Awaiting ratings" rather than "Awaiting photo", because a photograph
+-- is not what it is short of. Those arrive later through data/course-tees/.
+--
 -- Replay-safe: every insert is ON CONFLICT DO NOTHING and nothing here
 -- deletes. Migration 008 cleared its tees first; that is no longer safe,
 -- because round_handicaps.tee_id is ON DELETE RESTRICT and a tee somebody

@@ -230,3 +230,35 @@ mapping is whatever each file's own `-- Platform courses batch X` line says, and
 The rule underneath: **the migration is a projection of `data/courses/`, never the other
 way round.** Because that holds, a numbering collision is a regeneration rather than an
 unpicking job.
+
+## The bulk gate was stricter than the app it feeds
+
+`validateCourseImport` made a men's tee fatal — "a course needs at least one" — and
+`validNewTee` needs par, course rating **and slope** together. Irish clubs publish
+**SSS**, a CONGU scratch score, not a USGA slope. So a club could publish a flawless
+scorecard and still have nothing a tee row could be written from, and the course was
+refused outright.
+
+That refused **all 24** courses of the first top-100 run's tail, including nine whose
+cards were perfect and verified. The reason it went unnoticed is that the shipped 65 all
+came from clubs that happened to publish ratings, so the rule never fired in anger.
+
+The rule was also **stricter than the app**, which is the part worth remembering.
+`app/api/courses/route.ts` takes `tees: []` from the add-course form without complaint,
+`teeDraftBlank` skips a row nobody touched, and there is an explicit path that ships a
+course whose tee insert *failed* — "The course was added, but its tees could not be
+saved". A teeless course had been a normal production state the whole time. Nothing can
+be mis-scored by one either: `canStart` requires a tee for every selected player, so no
+tees gates a round exactly as no holes does.
+
+**A gate in front of a pipeline should be checked against what the app already accepts.**
+Where the two disagree and the app is the looser, the gate is usually the one that is
+wrong — it was written from the happy path, and the app was written from what turned up.
+
+**The badge had the matching hole.** `cardState` read hole count and the verified flag,
+so a course with a card and no ratings would have said *Awaiting photo* — and a
+photograph cannot fix it, because the card is not what is missing and Irish cards do not
+print slope. It has a fourth state now, `unrated` / **Awaiting ratings**, and it ranks
+ahead of `confirmed`: a photographed card with nothing to play off still cannot be
+started, and nothing else on the row would ever say so. **The badge names the blocker,
+not the paperwork.**

@@ -83,17 +83,28 @@ will not slip past `Portstewart Golf Club -- The Strand Course`.
 **Nine-hole and short courses are out of scope.** The contract is eighteen holes or none,
 and the scorecard check requires exactly eighteen, so a nine-holer has nowhere to go.
 
-### Three shapes a course can take
+### Four shapes a course can take
 
 | | When | What happens |
 |---|---|---|
 | **Full card** | The club publishes a scorecard with men's and ladies' par and stroke index | Everything works from day one |
 | **Men's card only** | No ladies card published | Imports fine. Women play the men's pars and, if there is no ladies tee either, the men's tees — `teesForPlayer` handles it |
-| **No card at all** | No findable scorecard or stroke index anywhere | `holes: []` and `holesConfidence: "NONE"`. The course is searchable, files under its county, carries its weather, and is badged "Awaiting scorecard". Scoring is gated until somebody photographs the card, which then creates the eighteen holes |
+| **No ratings** | The club publishes a card but no course rating and slope — **the common case in Ireland, where cards print SSS** | `tees: []` and `teesConfidence: "NONE"`. The card is stored and correct; nobody can be given a tee, so `canStart` gates the round. Badged "Awaiting ratings", because a photograph is not what it is short of — the ratings arrive through `data/course-tees/` |
+| **No card at all** | No findable scorecard or stroke index anywhere | `holes: []` and `holesConfidence: "NONE"`. The course is searchable, files under its county, carries its weather, and is badged "No scorecard". Scoring is gated until somebody photographs the card, which then creates the eighteen holes |
 
-**Prefer a cardless import to omitting a course.** A course nobody can find is worse than
-one waiting on a photograph. But it is `NONE` only when the card genuinely is not
-published — never as a shortcut past a card that was hard to read.
+**The last two are independent** — a course can be missing either, or both, and a
+course missing both is still worth having. Each is a **declared** absence: `holes: []`
+if and only if `holesConfidence` is `NONE`, `tees: []` if and only if `teesConfidence`
+is `NONE`, checked in both directions. A list that vanished in an edit looks exactly
+like a club that publishes none, so the gate never infers it.
+
+**Prefer an incomplete import to omitting a course.** A course nobody can find is worse
+than one waiting on a photograph. But it is `NONE` only when the thing genuinely is not
+published — never as a shortcut past a card that was hard to read, or a rating that
+would have taken another click.
+
+**The 24 courses the first run dropped are written up in `docs/course-discards.md`**,
+with what each still needs. Seventeen of them need nothing but a latitude and longitude.
 
 ---
 

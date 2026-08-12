@@ -48,6 +48,8 @@ const DOC = join(__dirname, '..', 'docs', 'course-import.md')
 
 const fatalText = (problems: ReturnType<typeof validateCourseImport>) =>
   fatalsOf(problems).map(p => p.message)
+const warnText = (problems: ReturnType<typeof validateCourseImport>) =>
+  problems.filter(p => !p.fatal).map(p => p.message)
 const saysAny = (messages: string[], re: RegExp) => messages.some(m => re.test(m))
 
 // ─── Fixtures ──────────────────────────────────────────────────
@@ -209,8 +211,6 @@ section('The tees themselves')
     'the same tee name twice for one gender is refused')
   ok(saysAny(withTees([...GOOD.tees, { ...white, name: 'white' }]), /appears twice/),
     '  …and case does not get around it — the constraint folds too')
-  ok(saysAny(withTees(GOOD.tees.filter(t => t.gender !== 'M')), /no men's tee/),
-    'a course with no men\'s tee is refused')
   ok(withTees([{ ...white, slope: 300 }]).length > 0, 'a slope of 300 is refused')
   ok(withTees([{ ...white, course_rating: 12 }]).length > 0, 'a course rating of 12 is refused')
 
@@ -218,6 +218,56 @@ section('The tees themselves')
     { ...clone(), tees: GOOD.tees.filter(t => t.gender !== 'F') })
   eq(fatalText(noLadiesTee), [], 'no ladies tee is allowed')
   ok(noLadiesTee.some(p => !p.fatal), '  …but warned about')
+
+  // The mirror, and it is a warning for the same reason: `teesForPlayer` hands
+  // over every tee on the course when the player's own gender has none.
+  const noMensTee = validateCourseImport('example-golf-links.json',
+    { ...clone(), tees: GOOD.tees.filter(t => t.gender !== 'M') })
+  eq(fatalText(noMensTee), [], 'no men\'s tee is allowed too')
+  ok(saysAny(warnText(noMensTee), /plays off the ladies/), '  …and warned about the same way')
+}
+
+section('A course whose club publishes no rating and slope')
+{
+  const FILE = 'example-golf-links.json'
+  // Irish cards print SSS, not slope. This is the shape that used to be
+  // refused outright, and it is most of the top-100 tail.
+  const UNRATED: CourseImport = {
+    ...clone(), tees: [], teesConfidence: NO_CARD,
+    sources: { ...clone().sources, tees: [] },
+  }
+
+  eq(fatalText(validateCourseImport(FILE, UNRATED)), [],
+    'a full card with no tees at all is a complete course, when the file says so')
+  ok(saysAny(warnText(validateCourseImport(FILE, UNRATED)), /cannot be started/),
+    '  …and is warned about — nobody can be given a tee, so no round starts')
+
+  // Both directions, because tees deleted in an edit look exactly like a club
+  // that publishes no ratings — the same trap the holes have.
+  ok(saysAny(fatalText(validateCourseImport(FILE, { ...UNRATED, teesConfidence: 'HIGH' })),
+    /went missing in an edit/),
+    'tees that vanished in an edit are refused')
+  ok(saysAny(fatalText(validateCourseImport(FILE, { ...clone(), teesConfidence: NO_CARD })),
+    /delete one or the other/),
+    'and NONE alongside real tees is refused the other way')
+
+  // The two absences are independent: a course can be missing either, or both.
+  const NEITHER: CourseImport = {
+    ...UNRATED, holes: [], holesConfidence: NO_CARD,
+    note: 'Club site publishes neither a scorecard nor a course rating.',
+    sources: { holes: [], tees: [] },
+  }
+  eq(fatalText(validateCourseImport(FILE, NEITHER)), [],
+    'a course with neither a card nor a rating still lands — findable, and gated')
+
+  // NO_CARD_TEE_FLOOR is about tees that exist. With none there is nothing for
+  // a floor to be a floor over, and applying it would refuse the whole tail —
+  // but it must still bite where there are tees to grade.
+  ok(saysAny(fatalText(validateCourseImport(FILE, {
+    ...NEITHER, tees: GOOD.tees, teesConfidence: 'EST',
+    sources: { holes: [], tees: ['https://example.com/'] },
+  })), /source has to be better/),
+    '  …but the cardless tee floor still bites when there are tees to grade')
 }
 
 section('The card itself — the card check\'s own gate, reached through this one')
@@ -272,9 +322,9 @@ section('A course whose club publishes no card')
     'a source for holes that do not exist is refused')
   ok(fatalText(validateCourseImport(FILE, { ...CARDLESS, note: null })).length > 0,
     'the note is required — it is the only record of why there is no card')
-  ok(saysAny(fatalText(validateCourseImport(FILE, { ...CARDLESS, teesConfidence: NO_CARD as never })),
-    /belongs to the holes/),
-    'NONE is not a tee confidence — the two vocabularies stay apart')
+  ok(saysAny(fatalText(validateCourseImport(FILE, { ...CARDLESS, teesConfidence: NO_CARD })),
+    /delete one or the other/),
+    'NONE on tees that exist is refused — the absence is declared, never assumed')
   ok(fatalText(validateCourseImport(FILE, { ...CARDLESS, teesConfidence: 'EST' })).length > 0,
     'and estimated tees are refused when there is no card to correct them')
 

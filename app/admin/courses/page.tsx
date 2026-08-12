@@ -43,6 +43,7 @@ const STATE_FILTERS: readonly { key: '' | CardState; label: string }[] = [
   { key: '', label: 'All' },
   { key: 'confirmed', label: CARD_STATE_LABEL.confirmed },
   { key: 'researched', label: CARD_STATE_LABEL.researched },
+  { key: 'unrated', label: CARD_STATE_LABEL.unrated },
   { key: 'none', label: CARD_STATE_LABEL.none },
 ]
 
@@ -88,7 +89,8 @@ export default async function AdminCoursesPage({
     holeCount.set(h.course_id, (holeCount.get(h.course_id) ?? 0) + 1)
   }
 
-  const stateOf = (c: CourseRow) => cardState(holeCount.get(c.id) ?? 0, c.card_verified)
+  const stateOf = (c: CourseRow) =>
+    cardState(holeCount.get(c.id) ?? 0, c.card_verified, teeCount.get(c.id) ?? 0)
   const tally = (s: CardState) => all.filter(c => stateOf(c) === s).length
 
   const wanted = (STATE_FILTERS.find(f => f.key === state) ?? STATE_FILTERS[0]).key

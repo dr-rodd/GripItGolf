@@ -1,0 +1,13 @@
+{
+  "name": "The Castle Golf Club", "slug": "the-castle", "county": "Dublin",
+  "location": "Rathfarnham, Dublin, Ireland", "website": "https://castlegc.ie/",
+  "latitude": 53.2991, "longitude": -6.2774,
+  "holesConfidence": "NONE", "teesConfidence": "NONE",
+  "note": "Harry Colt parkland at Rathfarnham. The club site is video-led and publishes neither a per-hole scorecard nor a course rating and slope; no corroborated card was found elsewhere. Both arrive with the first scorecard photo.",
+  "sources": {
+    "holes": [],
+    "tees": []
+  },
+  "holes": [],
+  "tees": []
+}

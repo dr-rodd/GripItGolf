@@ -114,27 +114,38 @@ export function hasCard(holes: readonly RowHole[]): boolean {
  * first is whether the course can be **played** — that is `hasCard`, which is
  * holes — and only then whether a photograph has confirmed the numbers:
  *
- *   · `confirmed`  — eighteen holes, and a scorecard photo agreed with them
- *   · `researched` — eighteen holes, from a bulk import or an older seed. It
- *                    plays perfectly well; nobody has photographed the card
- *   · `none`       — no holes at all. **This one cannot be scored**, and it is
- *                    the only state where "scoring is gated" is a true sentence
+ *   · `confirmed`  — eighteen holes, tees to play off, and a scorecard photo
+ *                    agreed with the card
+ *   · `researched` — eighteen holes and tees, from a bulk import or an older
+ *                    seed. It plays perfectly well; nobody has photographed it
+ *   · `unrated`    — a card, but not one tee with a course rating and slope.
+ *                    **Cannot be scored**, and a photograph will not fix it:
+ *                    Irish cards print SSS, so the ratings come from elsewhere
+ *   · `none`       — no holes at all. **Cannot be scored**, and here a photo
+ *                    is exactly the answer — it creates the eighteen
  *
  * A course with no holes is not "unverified", it is unplayable, and showing
  * those two the same way is how somebody picks a course for a trip and finds
  * out on the first tee.
  *
- * **The hole count is checked before the flag, and that order is the point.**
- * Admin can set `card_verified` by hand, and a photograph cannot have confirmed
- * a card that does not exist — so `none` wins.
+ * **This names the blocker, not the paperwork**, which is why two of the four
+ * are failures and why the order below is what it is. The hole count is checked
+ * first — admin can set `card_verified` by hand and a photograph cannot have
+ * confirmed a card that does not exist. The tee count is checked next, ahead of
+ * the flag for the same reason in reverse: a confirmed card with nothing to
+ * play off still cannot be started, and `unrated` is the only thing on the row
+ * that would ever say so. Add the ratings and it flips to `confirmed` — nothing
+ * is lost by ranking the blocker first.
  */
-export type CardState = 'confirmed' | 'researched' | 'none'
+export type CardState = 'confirmed' | 'researched' | 'unrated' | 'none'
 
 export function cardState(
   holeCount: number,
   cardVerified: boolean | null | undefined,
+  teeCount: number,
 ): CardState {
   if (holeCount <= 0) return 'none'
+  if (teeCount <= 0) return 'unrated'
   return cardVerified ? 'confirmed' : 'researched'
 }
 
@@ -142,11 +153,13 @@ export function cardState(
 export const CARD_STATE_LABEL: Record<CardState, string> = {
   confirmed: 'Verified',
   researched: 'Awaiting photo',
+  unrated: 'Awaiting ratings',
   none: 'No scorecard',
 }
 
 export const CARD_STATE_TONE: Record<CardState, 'win' | 'neutral' | 'loss'> = {
   confirmed: 'win',
   researched: 'neutral',
+  unrated: 'loss',
   none: 'loss',
 }
