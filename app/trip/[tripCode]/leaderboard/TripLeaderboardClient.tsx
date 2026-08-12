@@ -51,13 +51,6 @@ type TeeRatingRow = { id: string; slope: number; course_rating: number; par: num
 interface Props {
   tripCode: string
   /**
-   * Whether the trip records putts and fairways.
-   *
-   * Only decides whether the chip through to the stats appears. A chip that
-   * leads to an empty state is worse than no chip.
-   */
-  showStats?: boolean
-  /**
    * Everything this trip is playing for, each board carrying its own complete
    * rules. Old trips arrive here too — the page reads their flags as boards
    * before this component sees them, so there is one shape to render.
@@ -1149,6 +1142,29 @@ function Board({
           )
         })}
       </div>
+
+      {/* ── The plinth ──
+          The table used to just stop. This card carries `rounded-2xl` and
+          deliberately no `overflow-hidden` — that would make it its own
+          scrollport and drop the sticky headings a header's height down it —
+          so the last row's square white fill sat over the rounded corners and
+          the card's own bottom border with them. The board ended on a hard
+          white edge against cream, with no line at all.
+
+          The hard edge is right: a table of figures should close flat, the
+          way the headings open flat. What was missing was the line. So this
+          is that line — a touch stronger than the rules between rows, because
+          it is closing the table rather than dividing it — and beneath it a
+          band that carries the corners the card was always meant to have.
+
+          **It must not read as another player.** A row is 44 pixels and
+          white; this is 12 and tinted, which is a base rather than a line of
+          the table. It holds nothing and is hidden from a screen reader for
+          the same reason. */}
+      <div
+        className="h-3 rounded-b-2xl border-t border-bark/25 bg-bark/[0.04]"
+        aria-hidden="true"
+      />
     </div>
   )
 }
@@ -1184,34 +1200,12 @@ function MatchplayTab({ tripCode }: { tripCode: string }) {
   )
 }
 
-/**
- * The way through to the stats, on the same terms as the draw.
- *
- * A link rather than a state change, for the same reason: none of the stats
- * code should load with the leaderboard. Shown only for a trip that has
- * switched stats on — a chip that leads to an empty state is worse than no
- * chip.
- */
-function StatsTab({ tripCode }: { tripCode: string }) {
-  return (
-    <Link
-      href={`/trip/${tripCode}/stats`}
-      className="flex-shrink-0 inline-flex items-center px-4 py-2.5 t-label rounded-xl
-        border bg-surface border-bark/12 text-ink/65
-        hover:text-ink/80 hover:border-accent/50 active:opacity-75
-        transition-colors duration-150"
-    >
-      Stats
-    </Link>
-  )
-}
-
 // ─── Main ──────────────────────────────────────────────────────
 
 export default function TripLeaderboardClient({
   tripCode, boards, activeRoundIds, livePlayerIds, legacyTeamScoring, rounds,
   teams, memberships, players, holes, scores, liveScores, roundHandicaps,
-  tees = [], showStats = false,
+  tees = [],
 }: Props) {
   // Matchplay has its own route, so it is a button rather than a tab. Every
   // other board is a table, and its own rules travel with it.
@@ -1256,7 +1250,21 @@ export default function TripLeaderboardClient({
 
   // A round counts as in play when a scorecard is actually open on it, not
   // merely because someone once entered a score into it.
-  const inPlay = activeRoundIds.length > 0
+  /**
+   * Somebody is out on the course right now.
+   *
+   * **A player holding a card, not a session existing.** Tapping Start opens
+   * a `live_rounds` row before anybody has been picked for it — the scoring
+   * screen even reuses a playerless one rather than making a second — so
+   * anyone who opened that screen to look at it and backed out left a session
+   * active with nobody on it, and this badge then said the trip was in play
+   * until the nightly cleanup closed it.
+   *
+   * `livePlayerIds` comes off the locks on those sessions, which is the same
+   * signal a row's own live dot reads. One answer to "who has a card open",
+   * and the board and the rows on it cannot disagree about it.
+   */
+  const inPlay = livePlayerIds.length > 0
 
   const rowsByBoard = useMemo(
     () => new Map(tabs.map(b => [b.id, buildRows(b, rowContext)])),
@@ -1283,10 +1291,12 @@ export default function TripLeaderboardClient({
    * draw always counts, even on its own: it is the only way to reach it from
    * here.
    */
-  // `showStats` widens this deliberately: a one-board trip with stats on has
-  // a genuine choice to offer even though it has only one board, and without
-  // this the chip it needs would be inside a strip that never renders.
-  const strip = (tabs.length > 1 || showMatchplay || showStats) && (
+  //
+  // **The stats had a chip here and no longer do.** They have a tab of their
+  // own on the bar at the bottom of every trip screen, so a second way in
+  // from this one page was a chip that said what the bar already said — and
+  // it was the only thing forcing this strip to exist on a one-board trip.
+  const strip = (tabs.length > 1 || showMatchplay) && (
     <div className="flex gap-1.5 mb-4 overflow-x-auto -mx-1 px-1 pb-1">
       {tabs.map(t => (
         <button
@@ -1302,7 +1312,6 @@ export default function TripLeaderboardClient({
         </button>
       ))}
       {showMatchplay && <MatchplayTab tripCode={tripCode} />}
-      {showStats && <StatsTab tripCode={tripCode} />}
     </div>
   )
 

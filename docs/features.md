@@ -253,7 +253,7 @@ Two answers a hole during scoring — how many putts, and which way the tee shot
 - **Stats never gate the Next button.** The row appears under a player's tile only once they have a score, and a hole can always be left without an answer.
 - **Stats are editable wherever the gross is.** The Edit Scorecard screen asks with the same `StatsRow` the live card does — one implementation, gated identically: a score on the hole, no NR, stats switched on. A no return clears both stats on either screen.
 
-Switched on per trip in the Trip Settings drawer, off by default. The full breakdown is at `/trip/[code]/stats`, reached from the hub section and from a chip on the leaderboard.
+Switched on per trip in the Trip Settings drawer, off by default. The full breakdown is at `/trip/[code]/stats`, reached from the hub section and from the **Stats tab on the bar** at the bottom of every trip screen. The leaderboard carried a chip through to it as well and no longer does: a second way in from one page said what the bar already said, and it was the only thing forcing that chip row to exist on a one-board trip running no draw.
 
 ### The stats hub is an instrument, not a printout
 

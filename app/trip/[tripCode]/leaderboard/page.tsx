@@ -151,7 +151,6 @@ export default async function TripLeaderboardPage({
         liveScores={liveScoresRes.data ?? []}
         roundHandicaps={hcpsRes.data ?? []}
         tees={teesRes.data ?? []}
-        showStats={trip.track_stats === true}
       />
 
       {/* Below the board, after everything worth reading */}

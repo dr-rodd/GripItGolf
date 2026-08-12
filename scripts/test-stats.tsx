@@ -1338,14 +1338,18 @@ section('A heading only where there is something behind it')
   ok(/<Link/.test(panel) && !/buttonClass|ButtonLink/.test(panel),
     'the way through is a link rather than a second primary action')
 
-  // The chip is a link to the route, so none of the stats code loads with
-  // the board — the same reason the draw is a link.
-  ok(/function StatsTab/.test(board), 'the leaderboard offers a stats chip')
-  ok(/href=\{`\/trip\/\$\{tripCode\}\/stats`\}/.test(board), '  …as a link to the route')
+  // **The leaderboard offers no stats chip.** It did, and the stats have a
+  // tab of their own on the bar at the bottom of every trip screen, so a
+  // second way in from this one page was saying what the bar already said —
+  // and it was the only thing forcing the chip row to exist on a one-board
+  // trip that runs no draw.
+  ok(!/function StatsTab/.test(board), 'the leaderboard has no stats chip of its own')
+  ok(!/`\/trip\/\$\{tripCode\}\/stats`/.test(board), '  …and no link to the route')
   ok(!/holeStats/.test(board), '  …and imports none of the stats code')
-  // Without widening this, a one-board trip never sees the chip at all.
-  ok(/tabs\.length > 1 \|\| showMatchplay \|\| showStats/.test(board),
-    'and the strip renders for a one-board trip that has stats on')
+  ok(/tabs\.length > 1 \|\| showMatchplay/.test(board),
+    'so the chip row is back to being about boards and the draw')
+  ok(/'stats'/.test(read('app/components/TabBar.tsx')),
+    'the way in is the tab bar, on every screen rather than on one')
 }
 
 // ─── Result ────────────────────────────────────────────────────

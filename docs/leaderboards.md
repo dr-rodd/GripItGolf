@@ -297,6 +297,18 @@ Committed scores always win over in-progress ones for the same hole.
 
 `lib/leaderboardStyle.ts` is the one place that decides, and both boards read it. Better than level is emerald; level is a quiet bark wash; **worse than level is *more* bark, never emerald.** The live board used to paint both sides of level emerald, so a round four over looked exactly as good as one four under. Which direction is better is passed in rather than guessed — Stableford counts up, strokes count down.
 
+#### The board closes on a plinth
+
+The card carries `rounded-2xl` and **deliberately no `overflow-hidden`** — that would make it its own scrollport and the sticky headings would then measure `top: HEADER_H` from the card's edge rather than the viewport's, dropping them a header's height down the table onto whoever is leading. The cost was that the last row's square white fill sat over the rounded corners, taking the card's own bottom border with it: the board ended on a hard white edge against cream with no line at all.
+
+The flat edge is right — a table of figures should close flat, the way the headings open flat. What was missing was the line. So under the rows sits a 12px band with a `border-bark/25` top rule (a touch stronger than the `bark/12` between rows, because it closes the table rather than dividing it) and `rounded-b-2xl` beneath it, carrying the corners the card was always meant to have. It is tinted and `aria-hidden`, and it is 12px against a row's 44 — a base, not another player.
+
+#### "In play" means somebody is holding a card
+
+The badge reads `livePlayerIds`, not `activeRoundIds`. Tapping Start opens a `live_rounds` row **before anybody has been picked for it** — `startNewScorecard` even reuses a playerless one rather than making a second — so anyone who opened the scoring screen to look at it and backed out left a session active with nobody on it, and the badge called the trip in play until the nightly cleanup closed it. The locks on those sessions are the same signal a row's own live dot reads, so the board and the rows on it cannot disagree about who is out.
+
+**The Poller on the page is deliberately left looser** (`activeRoundIds.length > 0`): polling is for noticing that scores have started arriving, and a board that only began polling once somebody was locked in would never notice the moment they were.
+
 #### The round columns scroll
 
 Past `INLINE_ROUNDS` (4) the per-round columns stop fitting a phone, so they scroll sideways while **Pos / Name and Tot stay put**.

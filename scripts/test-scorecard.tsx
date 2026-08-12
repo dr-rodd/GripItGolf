@@ -176,7 +176,14 @@ section('The column headings stay above the board')
 
   ok(/<div className="bg-surface border border-bark\/12 rounded-2xl">/.test(board),
     'the board card is found')
-  ok(!/rounded-2xl[^"]*overflow/.test(board),
+
+  // Read the class attributes rather than the source. This used to be one
+  // regex over the raw text, and a comment explaining *why* the card carries
+  // no overflow was enough to fail it — prose about a rule is not a breach
+  // of it.
+  const classAttrs = [...board.matchAll(/className="([^"]*)"/g)].map(m => m[1])
+  ok(classAttrs.some(c => /\brounded-2xl\b/.test(c)), 'the card rounds its corners')
+  ok(!classAttrs.some(c => /rounded-2xl/.test(c) && /overflow/.test(c)),
     'and does not scroll or clip on its own, which would break the sticky offset')
 
   ok(/style=\{\{ top: HEADER_H \}\}/.test(board),

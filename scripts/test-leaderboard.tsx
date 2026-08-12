@@ -577,19 +577,27 @@ section('In play badge')
   const idle = render([SF()])
   ok(!idle.includes('In play'), 'nothing shown when no scorecard is open')
 
-  const live = render([SF()], { activeRoundIds: ['r1'] })
-  ok(live.includes('In play'), 'shown while a scorecard is open')
+  const live = render([SF()], { activeRoundIds: ['r1'], livePlayerIds: ['p1'] })
+  ok(live.includes('In play'), 'shown while somebody is holding a card')
   ok(live.includes('bg-accent'), 'with an emerald dot')
   ok(live.includes('dot-live'), 'that breathes rather than blinks')
   ok(!live.includes('box-shadow'), 'and does not glow — the guide has none')
 
   // It belongs to the trip, not to one board
-  const liveMulti = render([SF(), ST()], { activeRoundIds: ['r2'] })
+  const liveMulti = render([SF(), ST()], { activeRoundIds: ['r2'], livePlayerIds: ['p2'] })
   ok(liveMulti.includes('In play'), 'shown on a multi-board leaderboard too')
 
   // A round that merely has scores is finished, not in play
   ok(!render([SF()], { activeRoundIds: [] }).includes('In play'),
     'recorded scores alone do not mean a round is in play')
+
+  // **A session with nobody on it is not a round in play.** Tapping Start
+  // opens a `live_rounds` row before anybody is picked for it, so opening
+  // the scoring screen to look at it and backing out left one active with
+  // no players — and the badge said the trip was in play until the nightly
+  // cleanup closed it.
+  ok(!render([SF()], { activeRoundIds: ['r1'], livePlayerIds: [] }).includes('In play'),
+    'an open session nobody is on is not in play')
 }
 
 section('Under par is coloured; over par is weighted')
@@ -644,8 +652,10 @@ section('The live dot belongs to a player, not to the trip')
   // A round open but nobody's card still going — every card signed. The
   // trip-wide "In play" badge carries a dot of its own, so one is the floor;
   // what matters is that no ROW has one.
+  // The trip badge reads the same locks, so with every card signed there is
+  // no badge either — and nought is the floor rather than one.
   const none = render([SF()], { activeRoundIds: ['r1'], livePlayerIds: [] })
-  eq(dots(none), 1, 'with every card signed, only the trip badge has a dot')
+  eq(dots(none), 0, 'with every card signed, nothing on the board is live')
 
   // One player out on the course. The badge counts as one, the row as another
   const one = render([SF()], { activeRoundIds: ['r1'], livePlayerIds: ['p1'] })
@@ -862,6 +872,9 @@ section('A card still open reads against level, in green')
     scores: [],
     liveScores: liveHoles('p1', 'r1', 9, 3),
     activeRoundIds: ['r1'],
+    // Somebody has to be holding the card for the trip to be in play — a
+    // session with nobody on it is not a round being played.
+    livePlayerIds: ['p1'],
   })
 
   ok(html.includes('+9'), 'the round shows how far ahead of level it stands')
