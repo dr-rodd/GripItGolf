@@ -138,13 +138,28 @@ a note, nothing else.
 | New Forest | Westmeath | newforestgolf.com |
 | Hog's Head | Kerry | hogsheadgolfclub.com — pars and yardages published, **no stroke index**, so cardless |
 
-### 5 · A judgement call
+### 5 · Dun Laoghaire — settled
 
-**Dun Laoghaire** is a 27-hole facility — Upper, Middle and Lower, each par 36 — and no
-combined eighteen is canonically published. Upper plus Middle would combine to a clean
-card, but that is an inference, and inventing which eighteen a club plays is worse than
-leaving it out. **Recommendation: land it cardless with the note saying exactly this**,
-and let a photograph of whatever card they hand out at the desk settle it.
+A 27-hole facility — Upper, Middle and Lower, each par 36 — with no canonically published
+combined eighteen. Upper plus Middle would combine to a clean card, but that is an
+inference, and inventing which eighteen a club plays is worse than leaving it out.
+
+**Land it cardless**, with the note saying exactly that, and let a photograph of whatever
+card they hand out at the desk settle which holes it really is.
+
+**How the composite gets named, when that photo arrives.** Take the scorecard's own title
+if it has one. Where it has none, it is `Dun Laoghaire Golf Club -- Composite 18 No 1`,
+then `No 2` and so on — the same two-hyphen sub-course convention as
+`Ballybunion Golf Club -- Old Course`.
+
+Two things about that are worth knowing before it comes up:
+
+- **It needs no code.** Admin can rename a course at `/admin/courses`, so the convention is
+  the whole of it.
+- **A second composite is a second course row, not a rename.** The card check's create path
+  writes its eighteen holes onto the row that is already there, so once the first composite
+  has its card, another one is added the ordinary way. That is the right shape anyway —
+  they are two different eighteens and each wants its own scores.
 
 ### Not eligible
 
@@ -185,3 +200,91 @@ WHS/CONGU **handicap-table PDFs**, the USGA **NCRDB** (`ncrdb.usga.org`, tee set
 A refresh upserts and never deletes, and it takes `par` from the **stored holes**
 rather than the file — so ratings landing on Esker Hills get the full tee-par
 cross-check against the card that is already there.
+
+---
+
+## The prompt to hand Cowork
+
+Paste this into a Cowork session on the Mac, in a checkout of this repo. It is kept here
+rather than in a chat message so the next pass can repeat it.
+
+```
+This repo is Green Dot Golf. There is a bulk course-import pipeline: researched
+courses land as one JSON file per course in data/courses/, a gate in `npm test`
+refuses anything that would corrupt a card or fail a migration, and Claude Code
+turns what survives into a migration afterwards.
+
+FIRST, before anything else:
+
+  git checkout master && git pull
+
+The import contract changed today — courses with no published course rating and
+slope are now allowed in. A stale checkout will refuse most of the files this job
+is about.
+
+Then read, in this order:
+  docs/course-discards.md   — the job. 19 courses, and what each one needs
+  docs/course-import.md     — the contract: the worked example, the field-by-field
+                              table, and what the gate refuses
+
+YOUR JOB — a short, bounded pass, not a research run.
+
+For each of the 19 courses listed in docs/course-discards.md, write
+data/courses/<slug>.json. Almost all of the research is already done and is in
+that file. What is missing:
+
+  · 18 of the 19 need a LATITUDE AND LONGITUDE and nothing else. The course, not
+    the town. Four decimal places at most — the column is numeric(7,4) and the
+    weather provider refuses more. Put the map link in sources.coordinates.
+  · Arklow already has coordinates. It needs its scorecard transcribed, from
+    the image URL given in the file.
+  · Kilkenny needs both — coordinates, and its card from /the-course/scorecard/.
+  · Three courses (Mount Wolseley, Tramore, Portumna) have their full par and
+    stroke index arrays written out in docs/course-discards.md already. Copy
+    them; do not re-source them. They have been checked.
+
+DO NOT hunt for course ratings and slopes. That is deliberate, not an oversight —
+Irish clubs publish SSS rather than a USGA slope, and chasing them is slow and
+mostly fruitless. A course with a card and no ratings is a valid import now:
+"teesConfidence": "NONE" with "tees": []. It lands findable, filed under its
+county, carrying its weather, with scoring gated until the ratings turn up. If a
+rating and slope happen to be on a page you are already reading, take them.
+
+TWO RULES THAT DECIDE WHETHER THIS IS CORRECT:
+
+  1. "NONE" means the club publishes none. It never means the card was awkward to
+     read. Kilkenny and Arklow have reachable, published cards — transcribe them.
+     Do not mark them cardless to save time.
+
+  2. Do not pick a winner between conflicting sources. Four courses (Dooks,
+     Kirkistown Castle, Galgorm Castle, Belvoir Park) have stroke index columns
+     that genuinely disagree between sources. Import them cardless, put the
+     conflict in the note, and let a scorecard photograph settle it. A wrong
+     stroke index mis-hands shots on every round of that course forever, and
+     nothing on any screen ever says so.
+
+WHAT TO PRODUCE — data/courses/*.json AND NOTHING ELSE.
+
+  · Do NOT run `npm run courses:migration`.
+  · Do NOT write or commit anything under supabase/migrations/.
+
+Last time the patch included its own generated migrations. They had to be thrown
+away: the generator had a different batch size, and one of its files collided at
+number 035 with a migration that had already been applied to the live database.
+The migration is a projection of data/courses/, never the other way round, so
+Claude Code regenerates it. Sending yours only creates work.
+
+CHECK AS YOU GO, NOT AT THE END:
+
+  npm run courses:migration -- --list   # what exists already; writes nothing
+  npm test                              # the gate. Under a second at this volume
+
+Run `npm test` after your first two or three files, then every ten. A method
+mistake found on file 3 costs an hour; found at the end it costs the pass.
+
+Read the gate's messages — they say what is wrong and why, and a fatal is a
+refusal to write, not a suggestion. Warnings are fine and expected: "no tees",
+"no ladies tee" and "cardless" will all print for these courses.
+
+WHEN YOU ARE DONE: export the whole thing as a single .patch and hand it back.
+```

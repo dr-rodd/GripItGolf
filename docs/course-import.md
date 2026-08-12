@@ -31,7 +31,8 @@ The list is
 plus **secondary courses on those same properties** — Ballybunion's Cashen beside its Old,
 Castlerock's Bann beside its Mussenden, and so on.
 
-**Roughly a quarter of that list is already on the platform. Start by finding out which:**
+**Most of that list is already on the platform — 69 courses, 73 once migration `038` is
+applied. Start by finding out which, and never trust a figure written here over the tool:**
 
 ```
 npm run courses:migration -- --list
@@ -43,6 +44,12 @@ card yet. It writes nothing and — unlike the gate — never fails on a broken 
 the point is to see the state including what is still wrong.
 
 ### How this run is being done
+
+**That first run is done.** What is left of the hundred is the tail it could not finish —
+24 courses, each one small field short, written up course by course in
+`docs/course-discards.md` with a brief for the short pass that closes them. **If you are
+starting work now, that file is the job**, and the paragraphs below are the standing
+method rather than the current instruction.
 
 **One handover of the whole hundred, as a patch.** Research everything, then export a
 single `.patch` for Claude Code to validate and turn into migrations. That is the shape
@@ -175,20 +182,20 @@ it is here to show the shape, not to be imported.
 
 | Field | Required | |
 |---|---|---|
-| `name` | yes | ≤80 chars. A sub-course is `Club Name -- Course Name`, two hyphens: `Ballybunion Golf Club -- Old Course` |
+| `name` | yes | ≤80 chars. A sub-course is `Club Name -- Course Name`, two hyphens: `Ballybunion Golf Club -- Old Course`. A club that plays a composite eighteen out of three nines takes the scorecard's own title where it has one, and otherwise `Club Name -- Composite 18 No 1` |
 | `slug` | yes | **Short and human** — `lahinch-old`, not `slugify(name)`. The filename must be `<slug>.json` |
 | `county` | yes | Canonical: no `Co.`/`County` prefix, **Derry not Londonderry** |
 | `location` | yes | `Town, County, Country`, ≤120 chars |
 | `website` | yes | Already normalised — usually with a trailing slash |
 | `latitude` / `longitude` | yes, both | The course, not the town. Four decimal places at most |
 | `holesConfidence` | yes | `HIGH` or `MEDIUM` only — or `NONE` when the club publishes no card |
-| `teesConfidence` | yes | Any of `HIGH` `MEDIUM` `LOW` `EST` |
-| `note` | yes, may be `null` | One line. Becomes a `-- Note:` comment in the migration. **Required, non-null, when `holesConfidence` is `NONE`** — it is the only record of what was looked at |
+| `teesConfidence` | yes | Any of `HIGH` `MEDIUM` `LOW` `EST` — or `NONE` when no tee has a published course rating and slope, which in Ireland is common |
+| `note` | yes, may be `null` | One line. Becomes a `-- Note:` comment in the migration. **Required, non-null, when either confidence is `NONE`** — it is the only record of what was looked at and what was not there |
 | `sources.holes` | yes, ≥1 URL | Must be **exactly `[]`** when `holesConfidence` is `NONE` — a source for holes that do not exist means one was found after all |
 | `sources.tees` | yes if `tees` non-empty | |
 | `sources.coordinates` | optional | Becomes the maps-link comment |
 | `holes` | yes, exactly 18 | Or **exactly `[]`**, and then `holesConfidence` must be `NONE`. Never anything in between: a card that vanished in an edit looks just like a club that publishes none, so emptiness has to be declared |
-| `tees` | yes, ≥1 with `"gender": "M"` | An `F` tee is a warning if missing, not an error |
+| `tees` | yes, ≥1 | Or **exactly `[]`**, and then `teesConfidence` must be `NONE` — the same declared emptiness, for the same reason. A missing men's *or* ladies tee is a warning, not an error: `teesForPlayer` hands over every tee on the course when a player's own gender has none |
 
 `holes[]` entries are exactly the `NewHoleRow` type and `tees[]` entries exactly
 `NewTeeRow`, both from `lib/cardCheck.ts` — **database column names, no camelCase**. That is
@@ -335,7 +342,7 @@ answer is in **`docs/randa-reconnaissance.md`**. In short:
 - Coordinates missing, half-null, outside 49–61 N / −11–2 E, or with a fifth decimal
 - `holesConfidence` of `LOW` or `EST`; a missing or non-URL source
 - A blank or over-long name, a missing county, a non-canonical county, a bad website
-- A tee that is not writable, no men's tee, the same tee name twice for one gender
+- A tee that is not writable, or the same tee name twice for one gender
 - **A tee par that disagrees with the holes** — checked by handing the file to `diffCard`
   with the tee pars nulled, so the rule has one implementation, not two
 - **A slug already used** by a shipped course or another file in the batch. This one is not
@@ -345,16 +352,20 @@ answer is in **`docs/randa-reconnaissance.md`**. In short:
 - A course name that duplicates a shipped one, fold-insensitively — **or that reads as the
   same club** once punctuation and the words The, Golf, Club, Links and Course are set
   aside. A shorter name wholly inside a longer one is a *warning*, not a refusal
-- `holes: []` without `holesConfidence: NONE`, or `NONE` with holes present — emptiness
-  must be declared, never inferred
-- On a cardless course: two different pars for the same gender across its tees, or tee
-  confidence below MEDIUM. With no holes to check against, those are the only structural
-  checks left
+- `holes: []` without `holesConfidence: NONE`, or `NONE` with holes present — and the same
+  both ways for `tees: []` and `teesConfidence`. Emptiness must be declared, never
+  inferred: a list that vanished in an edit looks exactly like a club that publishes none,
+  so each half is an if-and-only-if, checked in both directions
+- On a cardless course **that has tees**: two different pars for the same gender across
+  them, or tee confidence below MEDIUM. With no holes to check against, those are the only
+  structural checks left — and with no tees either, there is nothing for a floor to grade
 
-**Warnings — printed, import continues:** a county outside the thirty-two; no ladies tee
-(a woman plays off the men's); a par total outside 68–74; `teesConfidence` of `LOW` or
-`EST`; two courses at identical coordinates; a shorter name wholly contained in a longer
-one; a cardless course, whose tee par has nothing to be checked against.
+**Warnings — printed, import continues:** a county outside the thirty-two; no ladies tee,
+or no men's (a player whose own gender has none is given every tee on the course); **no
+tees at all**, so nobody can be given one and no round can start; a par total outside
+68–74; `teesConfidence` of `LOW` or `EST`; two courses at identical coordinates; a shorter
+name wholly contained in a longer one; a cardless course, whose tee par has nothing to be
+checked against.
 
 The list of already-shipped courses is **parsed out of `supabase/migrations/*.sql`**, not
 kept as a list here — the same reasoning `test:weather` applies to migration 026's
