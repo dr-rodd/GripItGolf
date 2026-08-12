@@ -447,24 +447,25 @@ section('The bottom tab bar')
 
   // ── The bar staying put at the bottom of a scroll ──
   //
-  // Two different iOS behaviours, and neither is a positioning bug — the
-  // nav's only ancestors are html and body, so `fixed` is never scoped to
-  // a transformed parent.
-  //
-  // The rubber-band is the one that can be forbidden, and only from the
-  // root element: `overscroll-behavior` propagates to the viewport from
-  // html, and does not from body the way overflow does.
-  const globals = read('app/globals.css')
-  ok(/html\s*\{[\s\S]*?overscroll-behavior-y:\s*none/.test(globals),
-    'the root forbids the rubber-band that carries a fixed bar off the edge')
-
-  // The toolbar-collapse lag cannot be forbidden, so the bar paints past
-  // itself and the lag shows more bar rather than the page behind it. The
-  // margin has to take back exactly what the padding added, or the room
-  // reserved by .has-tabbar stops matching what is on screen.
-  ok(/paddingBottom: `calc\(env\(safe-area-inset-bottom\) \+ \$\{OVERHANG\}px\)`/.test(src)
-    && /marginBottom: -OVERHANG/.test(src),
-    'the overhang is paint only — the margin gives back what the padding took')
+  // Two mitigations for iOS bar-flicker used to be pinned here — the root
+  // forbidding the rubber-band, and the bar painting 80px past itself for
+  // the toolbar-collapse lag — and both are now pinned ABSENT, because the
+  // deploy that carried them is when every trip screen on a real iPhone
+  // gained scroll range past the end of its content: a blank field the page
+  // could be scrolled into until the whole site sat above the top of the
+  // screen, on Safari and the installed app alike. A bounce always springs
+  // back; that page did not. The flicker they treated is cosmetic and
+  // self-correcting, and it is the accepted cost of never being stuck.
+  // Comments stripped first: the stylesheet explains this very removal in
+  // prose that names the property, and a pin that matches its own
+  // explanation is a pin that can never pass.
+  const globalsCode = read('app/globals.css').replace(/\/\*[\s\S]*?\*\//g, '')
+  ok(!/overscroll-behavior-y:\s*none/.test(globalsCode),
+    'the root does not forbid the rubber-band — the bounce springs back, the blank field did not')
+  ok(!/OVERHANG|marginBottom: -/.test(src),
+    'and the bar paints nothing past the viewport — iOS 26 clips it anyway')
+  ok(/paddingBottom: 'env\(safe-area-inset-bottom\)'/.test(src),
+    'the bar occupies its height plus the home-indicator inset, exactly')
   ok(src.includes('bg-surface'), 'on white')
   ok(src.includes('border-t border-bark/12'), 'with a hairline top border')
 

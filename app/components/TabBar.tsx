@@ -111,12 +111,6 @@ function Tab({
   )
 }
 
-/**
- * How far below itself the bar paints. Never occupied, never measured —
- * see the note on the nav's own style.
- */
-const OVERHANG = 80
-
 export default function TabBar({ tripCode }: { tripCode: string }) {
   const pathname = usePathname() ?? ''
   const base = `/trip/${tripCode}`
@@ -143,23 +137,19 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-bark/12"
-      style={{
-        // The bar paints `OVERHANG` further down than it occupies: the
-        // padding grows by it and the margin takes the same amount back,
-        // so its top edge, its height on screen and the room `.has-tabbar`
-        // reserves are all unchanged, and the extra is off the bottom of
-        // the screen where nobody sees it.
-        //
-        // It is there for the one bottom-bar problem CSS cannot forbid.
-        // Safari collapses its own toolbar as you scroll, and repositions
-        // fixed elements a frame or two behind that animation — for those
-        // frames the bar is short of the bottom edge. `overscroll-behavior`
-        // in globals.css stops the rubber-band, but nothing stops this. So
-        // what the gap exposes is more of the bar instead of the page
-        // behind it, and the lag becomes invisible rather than fixed.
-        paddingBottom: `calc(env(safe-area-inset-bottom) + ${OVERHANG}px)`,
-        marginBottom: -OVERHANG,
-      }}
+      // The bar occupies exactly what it shows: its height plus the home
+      // indicator's inset, and not a pixel of paint beyond the viewport.
+      //
+      // It briefly painted 80px below itself — padding grown, margin taking
+      // the same back — so Safari's toolbar-collapse lag would expose more
+      // bar instead of the page behind it. Two things retired that. iOS 26
+      // clips fixed content that extends below the browser controls, so the
+      // extra paint no longer shows where it was needed; and the deploy that
+      // carried it (with the root overscroll rule beside it) is when every
+      // trip screen on a real iPhone gained scroll range past the end of its
+      // content — see the html comment in globals.css. A bar that flickers
+      // short of the edge for a frame or two is a smaller cost than either.
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label="Trip"
     >
       <ul className="max-w-lg mx-auto grid grid-cols-5">

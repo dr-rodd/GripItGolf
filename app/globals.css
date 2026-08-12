@@ -54,23 +54,25 @@
 html {
   background-color: var(--color-cream);
 
-  /* The bottom bar's drift, and why it was never a positioning bug.
+  /* No `overscroll-behavior-y: none` here, and it is a removal with a
+     history rather than an omission.
 
-     Drag past the end of a page on iOS and Safari rubber-bands: it does not
-     scroll the document further, it translates the whole visual viewport —
-     and a `position: fixed` element goes with it. The bar lifts off the
-     bottom edge and cream shows underneath, exactly at the bottom of the
-     scroll and nowhere else.
+     It was added to forbid the iOS rubber-band, which momentarily lifts a
+     fixed bottom bar off the edge with cream showing underneath — a real
+     but cosmetic, self-correcting flicker. What shipped alongside it on
+     real iPhones was far worse: every trip screen gained scroll range past
+     the end of its content, a blank field the page could be scrolled into
+     until the whole site sat above the top of the screen — persistent, not
+     a bounce. Reported on Safari and the installed app alike, on every
+     screen, the deploy this rule went live; absent in Chromium, where the
+     rule is a no-op for scroll extent. WebKit's support for this property
+     on the root scroller is the moving part in that story, and a broken
+     bounce-clamp is exactly what "keeps scrolling past the end and stays
+     there" looks like.
 
-     Ruled out first, because it looks the same: a transformed ancestor
-     would make `fixed` behave like `absolute` and the bar would scroll away
-     with the page. The nav's only ancestors are html and body, and neither
-     is transformed, so that was never it.
-
-     `overscroll-behavior-y` on the root element is what propagates to the
-     viewport (on body it does not, unlike overflow). It costs pull-to-
-     refresh, which this app has never used for anything. */
-  overscroll-behavior-y: none;
+     So the bounce is allowed. It always springs back, which is the property
+     the page actually needs at its edges. The momentary lift of the bar is
+     the accepted cost, and it is the smaller one. */
 }
 
 body {
