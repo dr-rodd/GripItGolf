@@ -38,18 +38,25 @@ export default async function StatsPage({
   if (tripError) console.error('StatsPage trip query failed:', tripError)
   if (!trip) notFound()
 
-  const { stats, holes, players, rounds, courseByRound, error } =
+  // `courseNames` comes back with everything else. It used to be a fourth
+  // round trip, made here after this call had returned, because the page
+  // thought it needed `courseByRound` before it could know which ids to ask
+  // for — but `fetchTripContext` works those ids out itself and is already
+  // handing them to the holes and tees queries. See the note there.
+  //
+  // It is the wider map as a result: every course this trip plays, rather
+  // than only the ones left after a casual round opts out of stats. That is
+  // safe because it is a lookup and nothing else — `StatsClient` builds its
+  // chips by filtering these ids against the courses `stats` actually
+  // mentions, and `stats` is the filtered set. A course with no holes behind
+  // it still cannot become a chip.
+  const { stats, holes, players, rounds, courseByRound, courseNames, error } =
     await fetchTripStats(trip.id)
 
   // The roster is fetched here rather than taken from `players` above so the
   // cookie is matched against the same shape every other screen matches it
   // against. It personalises which tab opens first and nothing else.
   const me = await currentPlayer(tripCode, players.map(p => ({ id: p.id })))
-
-  const courseIds = [...new Set([...courseByRound.values()])]
-  const { data: courses } = courseIds.length > 0
-    ? await supabase.from('courses').select('id, name').in('id', courseIds)
-    : { data: [] }
 
   const cover = coverage(stats)
 
@@ -84,7 +91,7 @@ export default async function StatsPage({
             players={players.map(p => ({ id: p.id, name: p.name }))}
             rounds={rounds}
             courseByRound={[...courseByRound]}
-            courseNames={(courses ?? []).map(c => [c.id as string, c.name as string])}
+            courseNames={[...courseNames]}
             meId={me?.id ?? null}
             thin={cover.level === 'thin'}
             // Decided here because the server holds the clock. The honours

@@ -234,9 +234,15 @@ export async function fetchTripContext(
   ctx: RowContext | null
   holes: RowHole[]
   courseByRound: Map<string, string>
+  /** Course id → name, for the stats hub's chips. Free with the batch. */
+  courseNames: Map<string, string>
   error: string | null
 }> {
-  const empty = { ctx: null, holes: [], courseByRound: new Map<string, string>() }
+  const empty = {
+    ctx: null, holes: [],
+    courseByRound: new Map<string, string>(),
+    courseNames: new Map<string, string>(),
+  }
   const statCols = withStats ? ', putts, fairway_hit' : ''
   // `*` so the casual flags ride along without being named — migration 031
   // is run by hand, and this query is under every board and standing line.
@@ -262,8 +268,8 @@ export async function fetchTripContext(
   const nil = '00000000-0000-0000-0000-000000000000'
   const someCourses = courseIds.length > 0 ? courseIds : [nil]
 
-  const [playersRes, teamsRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes,
-         memberships] =
+  const [playersRes, teamsRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, coursesRes,
+         openRes, memberships] =
     await Promise.all([
       supabase.from('players')
         .select('id, name, handicap, gender')
@@ -284,13 +290,24 @@ export async function fetchTripContext(
         .in('round_id', roundIds),
       supabase.from('tees')
         .select('id, slope, course_rating, par').in('course_id', someCourses),
+      // The names of those courses, in the same breath as their tees and
+      // holes rather than after them.
+      //
+      // Only the stats hub reads them — for its course chips — and it used
+      // to ask separately, after this whole function had returned, because
+      // it needed `courseByRound` first to know which ids to ask for. It
+      // does not: the ids are `someCourses`, worked out above, and they are
+      // already being handed to two other queries in this very list. That
+      // was a fourth serial round trip on a page that makes four.
+      supabase.from('courses').select('id, name').in('id', someCourses),
       supabase.from('live_rounds')
         .select('round_id, live_player_locks(player_id)')
         .eq('status', 'active').in('round_id', roundIds),
       fetchMemberships(tripId),
     ])
 
-  const failed = [playersRes, teamsRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes]
+  const failed = [playersRes, teamsRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes,
+                  coursesRes]
     .find(r => r.error)
   if (failed?.error) {
     console.error('fetchTripContext query failed:', failed.error)
@@ -333,6 +350,9 @@ export async function fetchTripContext(
     ctx,
     holes,
     courseByRound: new Map(roundRows.map(r => [r.id as string, r.course_id as string])),
+    courseNames: new Map(
+      (coursesRes.data ?? []).map(c => [c.id as string, c.name as string]),
+    ),
     error: null,
   }
 }
@@ -353,12 +373,17 @@ export async function fetchTripStats(
   players: RowPlayer[]
   rounds: RowRound[]
   courseByRound: Map<string, string>
+  /** Course id → name, for the hub's chips. Comes free with the batch. */
+  courseNames: Map<string, string>
   error: string | null
 }> {
-  const { ctx, holes, courseByRound, error } =
+  const { ctx, holes, courseByRound, courseNames, error } =
     await fetchTripContext(tripId, null, onlyRoundIds, true)
   if (error || !ctx) {
-    return { stats: [], holes: [], players: [], rounds: [], courseByRound: new Map(), error }
+    return {
+      stats: [], holes: [], players: [], rounds: [],
+      courseByRound: new Map(), courseNames: new Map(), error,
+    }
   }
 
   // A casual round feeds the stats only if it opted in — `casual_stats`,
@@ -385,6 +410,7 @@ export async function fetchTripStats(
     players: ctx.players,
     rounds,
     courseByRound: new Map([...courseByRound].filter(([roundId]) => !excluded.has(roundId))),
+    courseNames,
     error: null,
   }
 }

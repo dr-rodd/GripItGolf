@@ -256,6 +256,17 @@ Three rules that are the whole design:
 
 Full detail — the handicap conventions, the pairs reading, the quota scales: `docs/leaderboards.md`.
 
+## Making a tab feel fast
+
+Every trip route is `force-dynamic`, so what a tab press costs is the number of database round trips the page makes **one after another** before it can send anything. `loading.tsx` already makes the tap itself feel instant; the work is in how long the skeleton then sits there. Four rules, in the order worth reaching for them:
+
+- **Anything that only needs `trip.id` goes in the same `Promise.all`.** The usual bug is a helper awaited on its own at the bottom of a page — and a helper is rarely one query: `fetchRoundRows` goes through `fetchTripContext`, which is a rounds lookup and then nine more.
+- **A dependent first query is usually an embed, not a hop.** Every trip page starts with `trips` by code and then wants something scoped by `trip.id`. PostgREST will do that join: `.select('*, rounds(*, courses(id, name))')` with `.order(col, { referencedTable: 'rounds' })`. The leaderboard does this.
+- **Start the slow optional thing, don't await it, and hand the promise to a `<Suspense>`.** The fetch goes out with the batch and the page stops waiting for it. The round summary's podium is the worked example. `.catch()` it — a promise nobody is awaiting yet is an unhandled rejection — and resolve to the shape the helper already returns on failure.
+- **A `<Suspense>` fallback follows the `loading.tsx` rule: never promise a shape you might not draw.** The podium's fallback is `null`, because a round nobody has played has no result section at all and a skeleton would appear and then vanish on exactly those rounds. This also rules Suspense *out* where the data decides whether a section exists — the hub's Stats heading only appears once a hole has been recorded, so it stays inline.
+
+**A list fetched for a control behind a tap does not belong on the server.** The platform course catalogue is fetched in the browser by `usePlatformCourses`, from the component that opens a picker. It grows by migration, and it was on the critical path of two tabs and serialised into both their payloads for a sheet most visitors never open.
+
 ## Data insertion order
 
 `trips` → `teams` → `players` → `courses` → `holes` → `rounds` → `round_handicaps` → `scores`

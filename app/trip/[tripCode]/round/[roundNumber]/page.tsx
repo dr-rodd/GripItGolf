@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, Suspense } from 'react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -14,7 +14,7 @@ import { mapsUrl } from '@/lib/places'
 import { describeGroups } from '@/lib/upNext'
 import { describeDay, describeTime } from '@/lib/itinerary'
 import { ordinal } from '@/lib/playerSummary'
-import type { RowHole } from '@/lib/boardRows'
+import type { RowHole, BoardRow } from '@/lib/boardRows'
 import TripHeader from '@/app/components/TripHeader'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
@@ -64,27 +64,47 @@ export default async function RoundSummaryPage({
   if (roundError) console.error('RoundSummary round query failed:', roundError)
   if (!round) notFound()
 
-  // ── The podium's question, asked before the answers are waited for ──
+  // ── The podium: started here, waited for at the bottom of the page ──
   //
   // Which board this round is scored on is a property of the trip, and the
-  // trip is already in hand — so it can be settled here, above the batch,
-  // and the podium can go into the batch with everything else.
+  // trip is already in hand — so it can be settled above the batch, and the
+  // question can go out with it.
   const boards = boardsForTrip(trip)
   const lead = primary(boards)
+
+  // **Started, deliberately not awaited.** `fetchRoundRows` needs `trip.id`
+  // and `round.id` and nothing else, both known by now — but it is not one
+  // query: it goes through `fetchTripContext`, which is a rounds lookup and
+  // then a Promise.all of nine, and it re-fetches the players, holes and tees
+  // the batch below is already asking for. It used to be awaited on its own,
+  // after all of that, which put two more serial round trips in front of a
+  // page that had otherwise finished.
+  //
+  // Calling it here sends it with the batch; awaiting it under a `<Suspense>`
+  // instead of inline means the rest of the page — the card, the tees, the
+  // weather, the way into scoring — is sent as soon as those five come back,
+  // rather than waiting on ten queries feeding a section at the bottom.
+  //
+  // `.catch` because a promise nobody is awaiting yet is an unhandled
+  // rejection if it throws before the boundary gets to it. The shape it
+  // resolves to is the shape the helper already returns on failure, so the
+  // section renders its error line exactly as it would have.
+  const podiumPromise = fetchRoundRows(
+    trip.id,
+    round.id,
+    lead,
+    isLegacy(parseLeaderboards(trip.leaderboards))
+      ? parseTeamScoring(trip.team_scoring)
+      : null,
+  ).catch((e: unknown) => {
+    console.error('RoundSummary podium query failed:', e)
+    return { rows: [], error: 'Could not work out the result.' }
+  })
 
   // Everything the page reads about the course, the day and the field. The
   // itinerary item is where the tee time lives — the date is on the round,
   // and `itinerary_item_id` is the only thing tying the two together.
-  //
-  // **The podium is in here rather than after it, and that is worth a note.**
-  // `fetchRoundRows` needs `trip.id` and `round.id` and nothing else, both
-  // known by the line above — but it used to be awaited on its own at the
-  // bottom of the page. It is not one query: it goes through
-  // `fetchTripContext`, which is a `rounds` query and then a `Promise.all` of
-  // nine. So a helper needing nothing this batch produces was adding two more
-  // serial round trips to the slowest part of the page, and re-fetching the
-  // players, holes and tees sitting beside it in this very list.
-  const [courseRes, holesRes, teesRes, itemRes, playersRes, roundRows] = await Promise.all([
+  const [courseRes, holesRes, teesRes, itemRes, playersRes] = await Promise.all([
     supabase.from('courses').select('name, location, latitude, longitude').eq('id', round.course_id).single(),
     supabase
       .from('holes')
@@ -109,16 +129,6 @@ export default async function RoundSummaryPage({
       .eq('trip_id', trip.id)
       .eq('is_composite', false)
       .order('name'),
-    // The trip's own board, over this round alone, through the one assembly
-    // and the one ordering there is. No comparator lives on this page.
-    fetchRoundRows(
-      trip.id,
-      round.id,
-      lead,
-      isLegacy(parseLeaderboards(trip.leaderboards))
-        ? parseTeamScoring(trip.team_scoring)
-        : null,
-    ),
   ])
 
   const problems: string[] = []
@@ -139,13 +149,6 @@ export default async function RoundSummaryPage({
   const me = await currentPlayer(tripCode, players)
   const card = hasCard(holes) ? courseCard(holes, me?.gender ?? 'M') : null
 
-  // ── The podium ──
-  //
-  // Fetched up in the batch above; this is only the reading of it.
-  const { rows, error: podiumError } = roundRows
-  const top = podium(rows, 3)
-  // Nobody has played it. Not an empty state — the section simply is not there.
-  const played = rows.length > 0
 
   // The first tee as an instant, for the forecast. Local clock time on the
   // round's date — the same construction `momentOf` in lib/upNext.ts uses, so
@@ -290,27 +293,19 @@ export default async function RoundSummaryPage({
         )}
 
         {/* ── The podium ──
-            Played rounds only. An unplayed one has no section at all — no
-            heading, no placeholder, nothing saying results are coming. */}
-        {podiumError && (
-          <p className="text-rust-deep text-sm text-center leading-snug">{podiumError}</p>
-        )}
+            Behind a boundary, with nothing for a fallback. Everything above
+            this line is sent as soon as the page's own five queries come
+            back; the result slots in when its ten do.
 
-        {played && (
-          <section>
-            <h2 className="t-h2 text-ink mb-3">Result</h2>
-            <div className="flex flex-col gap-2">
-              {top.map(place => <PodiumRow key={place.id} place={place} />)}
-            </div>
-            <Link
-              href={`/trip/${tripCode}/leaderboard`}
-              className="mt-3 inline-flex items-center gap-1.5 t-cap uppercase tracking-[0.15em] text-ink/65 hover:text-accent-deep transition-colors duration-150"
-            >
-              <IconTrophy size={14} />
-              Full leaderboard
-            </Link>
-          </section>
-        )}
+            **No skeleton, and that is the same rule `loading.tsx` follows.**
+            A round nobody has played has no section here at all — no
+            heading, no placeholder — so a skeleton would draw a Result
+            block, hold it, and then take it away again on exactly the
+            rounds that have no result. Promising a shape and being wrong
+            about it is worse than promising nothing. */}
+        <Suspense fallback={null}>
+          <RoundPodium promise={podiumPromise} tripCode={tripCode} />
+        </Suspense>
 
         {/* ── Whether it counts ──
             On the round's own page because this is where the decision gets
@@ -378,6 +373,49 @@ function Cell({
  * plausible-looking blank — invites somebody to read it as "no wind" rather
  * than "nobody asked".
  */
+/**
+ * The result, once the cards have been read.
+ *
+ * Its own component only so it can sit behind a `<Suspense>` — the page
+ * starts the fetch and this awaits it, so ten queries feeding the bottom of
+ * the screen stop holding up the top of it. Everything it decides was
+ * decided inline before and is unchanged: the podium comes from `podium`,
+ * the ordering from the one comparator there is, and no round anybody has
+ * played gets a section.
+ */
+async function RoundPodium({
+  promise, tripCode,
+}: {
+  promise: Promise<{ rows: BoardRow[]; error: string | null }>
+  tripCode: string
+}) {
+  const { rows, error } = await promise
+  const top = podium(rows, 3)
+  // Nobody has played it. Not an empty state — the section simply is not there.
+  const played = rows.length > 0
+
+  if (error) {
+    return <p className="text-rust-deep text-sm text-center leading-snug">{error}</p>
+  }
+  if (!played) return null
+
+  return (
+    <section>
+      <h2 className="t-h2 text-ink mb-3">Result</h2>
+      <div className="flex flex-col gap-2">
+        {top.map(place => <PodiumRow key={place.id} place={place} />)}
+      </div>
+      <Link
+        href={`/trip/${tripCode}/leaderboard`}
+        className="mt-3 inline-flex items-center gap-1.5 t-cap uppercase tracking-[0.15em] text-ink/65 hover:text-accent-deep transition-colors duration-150"
+      >
+        <IconTrophy size={14} />
+        Full leaderboard
+      </Link>
+    </section>
+  )
+}
+
 /** One place on the podium. Name, score, and where that puts them. */
 function PodiumRow({ place }: { place: PodiumPlace }) {
   return (
