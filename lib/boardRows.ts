@@ -176,6 +176,15 @@ export type BoardRow = {
    * safe to render as a claim that the card settled this.
    */
   tieBadge?: Segment
+  /**
+   * The round whose card that countback was read off.
+   *
+   * Set with `tieBadge`, and only there. The overall tie is broken on one
+   * round — the last both played and neither dropped — and saying which is
+   * what lets the round's own tile carry the note. Without it the fact would
+   * have nowhere to live once the badge came off the board's total.
+   */
+  tieBadgeRoundId?: string
   /** The same, per round, where a countback decided what that round paid. */
   tieBadgeByRound?: Record<string, Segment>
   /**
@@ -624,17 +633,25 @@ function rowOrder(lb: Leaderboard, totalOf: (r: UnplacedRow) => number) {
 function facing(
   lb: Leaderboard, a: UnplacedRow, b: UnplacedRow,
 ): [Countback | undefined, Countback | undefined, boolean] {
+  const { a: ca, b: cb, lower } = facingRound(lb, a, b)
+  return [ca, cb, lower]
+}
+
+/** The same, and which round it was — for the note that explains the result. */
+function facingRound(
+  lb: Leaderboard, a: UnplacedRow, b: UnplacedRow,
+): { a?: Countback; b?: Countback; lower: boolean; roundId?: string } {
   const lower = lb.scoring === 'strokes'
-  if (!a.countbackByRound || !b.countbackByRound) return [undefined, undefined, lower]
+  if (!a.countbackByRound || !b.countbackByRound) return { lower }
   const shared = a.playedRounds.filter(id =>
     b.playedRounds.includes(id)
     && !a.droppedRounds?.includes(id)
     && !b.droppedRounds?.includes(id))
   // `playedRounds` is built in round order, so the last shared one is the
   // most recent — which is the round a society goes back to.
-  const last = shared[shared.length - 1]
-  if (!last) return [undefined, undefined, lower]
-  return [a.countbackByRound[last], b.countbackByRound[last], lower]
+  const roundId = shared[shared.length - 1]
+  if (!roundId) return { lower }
+  return { a: a.countbackByRound[roundId], b: b.countbackByRound[roundId], lower, roundId }
 }
 
 /** The board's own order: by the competition total, after any discard. */
@@ -663,7 +680,8 @@ function placed(
     // A prize share is a division, so two rows that finished level can land a
     // whisker apart in binary. Level is level.
     if (Math.abs(totalOf(prev) - totalOf(row)) > 1e-9) { row.place = i + 1; continue }
-    const split = splitBy(...facing(lb, prev, row))
+    const read = facingRound(lb, prev, row)
+    const split = splitBy(read.a, read.b, read.lower)
     if (!split) {
       // Level, and the cards had nothing to say about it
       row.place = prev.place
@@ -674,7 +692,9 @@ function placed(
     // — so a row split from the one above on the back 9 and from the one
     // below on the back 3 wears the 9.
     prev.tieBadge = earlierSegment(prev.tieBadge, split.segment)
+    prev.tieBadgeRoundId = read.roundId
     row.tieBadge = split.segment
+    row.tieBadgeRoundId = read.roundId
   }
   return out
 }

@@ -382,20 +382,18 @@ section('Type is big enough to read')
 
   // Ad-hoc sizes bypass the scale, so they get the same floor
   const BRACKET = 'app/trip/[tripCode]/matchplay/MatchplayBracket.tsx'
-  const BOARD = 'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx'
   const tooSmall: string[] = []
   for (const f of uiFiles()) {
-    // Two exceptions, named rather than hidden. A knockout bracket is a dense
-    // grid of boxes sized to fit a round across a phone, and it is frozen for
-    // its own reasons.
+    // The one exception, named rather than hidden: a knockout bracket is a
+    // dense grid of boxes sized to fit a round across a phone, and it is
+    // frozen for its own reasons.
+    //
+    // There was briefly a second, for an 11px countback badge on the
+    // leaderboard. That badge is gone — it fought the totals column it hung
+    // off — and the fact it carried is words on a round tile now, at a size
+    // that needs no exception.
     if (f === BRACKET) continue
     for (const m of read(f).matchAll(/text-\[(\d+)px\]/g)) {
-      // The other is the countback badge on the leaderboard: a superscript
-      // mark on a figure rather than writing to be read, and at 13px its
-      // circle is nearly as tall as the total it sits against. It says what
-      // it means in words on a long press, at the reader's own size. 11px is
-      // the floor for that one thing, and anything smaller still fails here.
-      if (f === BOARD && Number(m[1]) === 11) continue
       if (Number(m[1]) < 13) tooSmall.push(`${f.split('/').pop()}:${m[1]}px`)
     }
   }

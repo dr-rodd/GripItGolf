@@ -175,16 +175,21 @@ A trip total is several cards; there is no ninth hole of it. So `overallTie` is 
 
 `countbackByRound` rides on a `BoardRow` **only** when the board breaks its overall tie that way. That is what lets `orderRowsUndiscarded` — handed rows and no context — reorder for the Discard switch without silently breaking a tie the board was told to leave alone.
 
-### The badge
+### Saying a countback decided it
 
-A superscript **9 / 6 / 3 / 2**, white on the green dot, on the figure the countback decided. **Both sides of a break wear it** — being put second on countback is as much the card's doing as being put first.
+**Not on the board.** It was, briefly: a superscript 9/6/3/2 in a green dot hanging off the figure. It read well on its own and badly in place — the totals column is `w-14` and pinned, so a mark on it pushed the one column on the board that must not move, and the round columns were no better. It also needed an 11px exception to the type floor, which is a sign on its own.
 
-Which figure that is follows from what was level, and the two cases barely overlap:
+So the fact lives on the **round tiles that drop out when a row is tapped**, which is where the card it describes already is. In words — "Back 9" — set directly above **View**, the only part of that tile always free: the note beside the course name may already be carrying a hero, and the score is a number that must not be crowded.
 
-- **A prize board** badges the **round column**. The countback resolved there, and it paid the two of them differently — ten and five rather than seven and a half each. Their totals then differ, so by the time the board is added up there is no tie left on the total to explain.
-- **A board that adds rounds up** badges the **total**. Its round columns show what each round scored, and nothing about those was decided by a card — 36 is 36 for both. What the back nine settled is the order, and the order is the total.
+It appears only where a card actually decided something, on the round it was read off:
 
-It appears only where a card actually decided something. A tie that stood, a countback against a card the board could not read, or a round still in play carries nothing, which is what makes it worth reading. It is 11px — under the 13px type floor — and `test:branding` names it as an exception rather than letting it through quietly; what it means is in words on a long press.
+- `tieBadgeByRound[round]` — that round's own prize, on a board paying by position
+- `tieBadge` + **`tieBadgeRoundId`** — the whole board's order, on the round the countback ran over. That second field exists for exactly this: the overall tie is broken on one round (the last both played and neither dropped) and, once the badge came off the total, saying *which* is what gives the fact a tile to land on.
+
+Two other things changed on that tile at the same time, both for the same reason — it is a small card and most of what it said was being cut off:
+
+- **It no longer says "Scores in".** The round picker in scoring still does, and should: there the tile is all there is. Here the score sits on the same line two inches to the right, so the words were telling you what the number already had. `ROUND_NOTE` is untouched — the leaderboard's tile just declines to use that one.
+- **The note runs to two lines before the ellipsis** (`line-clamp-2`, not `truncate`). "In play — carried by Rosaleen" is an ordinary note and it was losing the half that named the player, so the one thing on the tile with something to say was the one thing being clipped.
 
 ### Places
 

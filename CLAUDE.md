@@ -238,7 +238,7 @@ Four things that are easy to get wrong twice:
 
 **Rounds added up have no back nine**, so `overallTie` is a second answer under Tiebreak: leave the trip total level (the default), or break it on the last round both played and neither dropped. **A board counting a single round is always broken**, because there the total is that card — which is how a round summary gets it. `countbackByRound` is carried on a row only when the overall tie is broken that way, so `orderRowsUndiscarded` cannot break one the board was told to leave.
 
-Reading a prize table against a round's finishers is `placeRound`, in that same file, because what two level players are *worth* is the tie rule. `lib/customPoints.ts` owns the table itself and nothing about ties. `BoardRow.place` is golf's — two level are both 1st and the next is 3rd. Full detail, including the 9/6/3/2 badge: `docs/leaderboards.md`.
+Reading a prize table against a round's finishers is `placeRound`, in that same file, because what two level players are *worth* is the tie rule. `lib/customPoints.ts` owns the table itself and nothing about ties. `BoardRow.place` is golf's — two level are both 1st and the next is 3rd. **A countback says so on the round tile, not on the board** — "Back 9", above View, on the round it was read off (`tieBadgeRoundId`). A badge hanging off the total pushed the one pinned column that must not move. Full detail: `docs/leaderboards.md`.
 
 ## Deciding a knockout from the cards
 

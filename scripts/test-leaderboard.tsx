@@ -10,7 +10,10 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import fs from 'fs'
-import TripLeaderboardClient from '../app/trip/[tripCode]/leaderboard/TripLeaderboardClient'
+import TripLeaderboardClient, {
+  CourseTiles,
+} from '../app/trip/[tripCode]/leaderboard/TripLeaderboardClient'
+import type { BoardRow } from '../lib/boardRows'
 import { parseFormats, type TripFormats } from '../lib/formats'
 import { DEFAULT_TEAM_SCORING, type TeamScoring } from '../lib/teamScoring'
 import type { Leaderboard } from '../lib/leaderboards'
@@ -370,23 +373,23 @@ section('A countback pays the two it split, and the board says which stretch')
     'the cards were split, so one takes the ten and the other the five')
   ok(!html.includes('>7.5<'), 'nothing was pooled')
 
-  // The badge: a superscript 9 on the figure the back nine decided — which
-  // is the round column, on each of the two, and never on Cara.
-  //
-  // **Not on the total.** Splitting the round left them on ten and five, so
-  // by the time the totals are added up there is no tie there to explain. A
-  // badge on the total would be claiming the back nine settled an order that
-  // was never level. It earns its place on a board where the totals really do
-  // come out equal — see test:tiebreak.
-  eq((html.match(/rounded-full bg-accent-deep[^>]*>9</g) ?? []).length, 2,
-    'each of the two carries it on the round that paid them')
-  ok(html.includes('title="Tie broken on the back 9"'),
-    'and it says what it means in words on a long press')
+  // **The board itself says nothing about it.** A superscript badge used to
+  // hang off the figure, and the totals column is fourteen pixels wide and
+  // pinned — a mark on it pushed the one column that must not move. The fact
+  // lives on the round tiles now, which is where the card it describes is.
+  ok(!/Back 9/.test(html), 'and the board carries no countback mark of its own')
+  ok(!/rounded-full bg-accent-deep/.test(html), 'nor a badge on any figure')
+
+  // What the rows carry is what the tiles read
+  const paid = rowsFor(cb, one).board
+  eq(paid.map(r => r.tieBadgeByRound?.r1), [9, 9, undefined],
+    'the two the cards split carry the stretch that split them; Cara does not')
 
   // Left alone, the same round pools the two prizes and claims nothing
   const even = render([CU([10, 5, 3])], one)
   ok(even.includes('>7.5<'), 'an even split pools ten and five into seven and a half')
-  ok(!/rounded-full bg-accent-deep/.test(even), 'and no badge, because no card decided it')
+  eq(rowsFor(CU([10, 5, 3]), one).board.map(r => r.tieBadgeByRound), [undefined, undefined, undefined],
+    'and no row claims a countback, because no card decided it')
 
   // The same two cards on a board that pays nothing. Both still add to 36, so
   // this is where the total itself is the figure the countback decided — and
@@ -396,18 +399,72 @@ section('A countback pays the two it split, and the board says which stretch')
 
   const board: Leaderboard = { ...SF(), tieBreak: 'countback' }
   const totals = render([board], one)
-  // On the total, and only there. A round column on a board that adds rounds
-  // up is showing what that round scored — 36, for both of them — and nothing
-  // about it was decided by a countback. What the back nine settled is the
-  // order, and the order is the total.
-  eq((totals.match(/rounded-full bg-accent-deep[^>]*>9</g) ?? []).length, 2,
-    'the total carries it, for each of the two')
+  ok(!/Back 9/.test(totals), 'the board says nothing here either')
   eq(seats(totals).slice(0, 2), ['1', '2'],
-    'and they hold separate places rather than sharing first')
+    'but they hold separate places rather than sharing first')
+
+  // The round the countback was read off travels with the row, so the tile
+  // for that round can carry the note
+  const ordered = rowsFor(board, one).board
+  eq(ordered.map(r => r.tieBadge), [9, 9, undefined], 'the two split carry the stretch')
+  eq(ordered.map(r => r.tieBadgeRoundId), ['r1', 'r1', undefined],
+    'and the round it was read off, so the note has a tile to land on')
 
   const level36 = render([SF()], one)
   ok(!/rounded-full bg-accent-deep/.test(level36), 'an old board claims nothing')
   eq(seats(level36).slice(0, 2), ['1', '1'], 'and leaves them both first')
+}
+
+section('The round tiles a tapped row drops out')
+{
+  /** One tile, rendered on its own — the board never opens a row statically. */
+  const tiles = (over: Partial<BoardRow> = {}) => renderToStaticMarkup(
+    React.createElement(CourseTiles, {
+      row: {
+        id: 'p1', name: 'Alice', subLabel: '', place: 1,
+        perRound: { r1: 36 }, playedRounds: ['r1'],
+        total: 36, isLive: false, playerIds: ['p1'],
+        ...over,
+      } as BoardRow,
+      rounds: [rounds[0]] as never,
+      playerById: new Map(players.map(p => [p.id, p])) as never,
+      onTileClick: () => {},
+    })
+  )
+
+  // "Scores in" is what the round picker in scoring says, and it is right
+  // there. Here the score is on the same line two inches to the right, so the
+  // words would be telling you what the number already has.
+  const played = tiles()
+  ok(played.includes('Ballyliffin'), 'the tile names its course')
+  ok(played.includes('>36<'), 'and carries the score')
+  ok(!played.includes('Scores in'), 'and does not also say the score is in')
+
+  // A round nobody has played still has something to report
+  ok(tiles({ perRound: {}, playedRounds: [] }).includes('No scores yet'),
+    'an unplayed round says so — there is no number saying it instead')
+
+  // A note with something to say gets two lines before the ellipsis. It was
+  // one line and truncating, so the half that named the player was the half
+  // being cut off.
+  const hero = tiles({ heroByRound: { r1: 'p2' } })
+  ok(hero.includes('Carried by Bob'), 'a hero is named')
+  ok(/line-clamp-2/.test(hero), 'and the note runs to a second line before it is cut')
+  ok(!/t-cap[^"]*truncate/.test(hero), 'rather than being clipped on the first')
+
+  // The countback, in words, directly above View
+  const back9 = tiles({ tieBadge: 9, tieBadgeRoundId: 'r1' })
+  ok(back9.includes('Back 9'), 'a round the back nine settled says so')
+  ok(back9.includes('title="Tie broken on the back 9"'), 'and says what that means')
+  ok(back9.indexOf('Back 9') < back9.indexOf('View'),
+    'in the space above View, which is the only part of the tile always free')
+
+  // Per round, on a board that pays by position
+  ok(tiles({ tieBadgeByRound: { r1: 6 } }).includes('Back 6'),
+    'a round whose prize a countback decided says which stretch')
+  ok(!tiles({ tieBadge: 9, tieBadgeRoundId: 'r2' }).includes('Back 9'),
+    'and a countback read off another round says nothing on this one')
+  ok(!played.includes('Back '), 'a round nothing was settled on claims nothing')
 }
 
 section('Custom points with the worst round dropped')
