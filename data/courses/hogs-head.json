@@ -1,0 +1,14 @@
+{
+  "name": "Hog's Head Golf Club", "slug": "hogs-head", "county": "Kerry",
+  "location": "Waterville, Kerry, Ireland", "website": "https://hogsheadgolfclub.com/",
+  "latitude": 51.8181, "longitude": -10.1669,
+  "holesConfidence": "NONE", "teesConfidence": "NONE",
+  "note": "Private Robert Trent Jones Jr. links at Ballybrack, near Waterville (about 7,150 yards). The club course page lists hole names, pars and yardages but no stroke index, so no card could be transcribed; no USGA course rating or slope published either. Both arrive with the first scorecard photo.",
+  "sources": {
+    "holes": [],
+    "tees": [],
+    "coordinates": "https://www.google.com/maps/place/51.8181,-10.1669"
+  },
+  "holes": [],
+  "tees": []
+}

@@ -1,0 +1,14 @@
+{
+  "name": "Dooks Golf Club", "slug": "dooks", "county": "Kerry",
+  "location": "Glenbeigh, Kerry, Ireland", "website": "https://www.dooks.com/",
+  "latitude": 52.0827, "longitude": -9.9255,
+  "holesConfidence": "NONE", "teesConfidence": "NONE",
+  "note": "Par 71. The par is solid but the stroke index genuinely conflicts between sources: the club site (dooks.com) and the shared aggregator feed (18birdies/golfsherpa) disagree on most holes, and the course is not in the USGA NCRDB. No stroke index could be transcribed without picking a winner, so it lands cardless; the first scorecard photo settles it. No USGA course rating or slope published.",
+  "sources": {
+    "holes": [],
+    "tees": [],
+    "coordinates": "https://www.google.com/maps/place/52.0827,-9.9255"
+  },
+  "holes": [],
+  "tees": []
+}

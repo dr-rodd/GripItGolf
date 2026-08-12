@@ -1,0 +1,14 @@
+{
+  "name": "Royal County Down Golf Club -- Annesley Links", "slug": "royal-county-down-annesley", "county": "Down",
+  "location": "Newcastle, Down, Northern Ireland", "website": "https://www.royalcountydown.org/",
+  "latitude": 54.2268, "longitude": -5.8677,
+  "holesConfidence": "NONE", "teesConfidence": "NONE",
+  "note": "The shorter second links at Royal County Down (Annesley), remodelled by Mackenzie & Ebert in 2015 and sharing the clubhouse with the Championship course. No hole-by-hole scorecard is published on the club site and none was found corroborated elsewhere; no USGA course rating or slope published either. Both arrive with the first scorecard photo.",
+  "sources": {
+    "holes": [],
+    "tees": [],
+    "coordinates": "https://www.google.com/maps/place/54.2268,-5.8677"
+  },
+  "holes": [],
+  "tees": []
+}

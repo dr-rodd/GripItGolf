@@ -1,0 +1,14 @@
+{
+  "name": "Farnham Estate Golf Club", "slug": "farnham-estate", "county": "Cavan",
+  "location": "Cavan, Cavan, Ireland", "website": "https://www.farnhamestate.ie/",
+  "latitude": 53.9931, "longitude": -7.3985,
+  "holesConfidence": "NONE", "teesConfidence": "NONE",
+  "note": "Jeff Howes parkland in the Farnham estate, about 4 km west of Cavan town. The resort site published no reachable hole-by-hole scorecard and nothing was found corroborated elsewhere; no USGA course rating or slope published either. Both arrive with the first scorecard photo.",
+  "sources": {
+    "holes": [],
+    "tees": [],
+    "coordinates": "https://www.google.com/maps/place/53.9931,-7.3985"
+  },
+  "holes": [],
+  "tees": []
+}

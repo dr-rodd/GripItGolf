@@ -54,7 +54,6 @@ Don't read these up front. Open the matching file when the task actually touches
 | `docs/gotchas-and-debt.md` | Past incidents, refactor discipline, security debt, multi-year architecture note |
 | `docs/ios-app.md` | The home-screen install layer (manifest, generated icons, standalone quirks), how players install, and the deferred App Store route |
 | `docs/course-import.md` | Adding platform courses in bulk — the `data/courses/*.json` contract, what the gate refuses and why, the generator, and the research brief a Cowork session follows |
-| `docs/course-discards.md` | The 24 courses the first top-100 run could not import, what each one still needs, and the short Cowork pass that finishes them. A work list, not a contract — delete it when it is empty |
 | `docs/randa-reconnaissance.md` | Where tee ratings come from and what they do not carry. `randa.org`'s lookup 404s; `ncrdb.usga.org` is live and holds **tee sets only**, never a stroke index — which is why the brief sources tees and holes separately |
 
 ## Platform concept

@@ -1,0 +1,14 @@
+{
+  "name": "Arklow Golf Links", "slug": "arklow", "county": "Wicklow",
+  "location": "Arklow, Wicklow, Ireland", "website": "https://www.arklowgolflinks.com/",
+  "latitude": 52.7866, "longitude": -6.1475,
+  "holesConfidence": "NONE", "teesConfidence": "NONE",
+  "note": "Par 70 men / 72 ladies. The club publishes its scorecard only as an image (/wp-content/uploads/sites/7570/2019/06/Folded-Score-Card-2018-FINAL-Print-2.jpg), which the research tools cannot read. Aggregators agree on the par hole-by-hole but their stroke-index columns disagree on most holes (golfsherpa vs 18birdies), so no trustworthy stroke index could be transcribed without picking a winner. Lands cardless; the first scorecard photo settles the card. No USGA course rating or slope published either.",
+  "sources": {
+    "holes": [],
+    "tees": [],
+    "coordinates": "https://www.google.com/maps/place/52.7866,-6.1475"
+  },
+  "holes": [],
+  "tees": []
+}

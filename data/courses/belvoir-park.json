@@ -1,0 +1,14 @@
+{
+  "name": "Belvoir Park Golf Club", "slug": "belvoir-park", "county": "Down",
+  "location": "Belfast, Down, Northern Ireland", "website": "https://www.belvoirparkgolfclub.com/",
+  "latitude": 54.5617, "longitude": -5.9129,
+  "holesConfidence": "NONE", "teesConfidence": "NONE",
+  "note": "Par 71. The par is solid and 14 of 18 stroke indices agree across sources, but holes 11 and 18 are dead 2-2 ties between sources and cannot be resolved without the club's own card. No stroke index could be transcribed without guessing those, so it lands cardless; the first scorecard photo settles it. No USGA course rating or slope published.",
+  "sources": {
+    "holes": [],
+    "tees": [],
+    "coordinates": "https://www.google.com/maps/place/54.5617,-5.9129"
+  },
+  "holes": [],
+  "tees": []
+}

@@ -1,0 +1,14 @@
+{
+  "name": "Dun Laoghaire Golf Club", "slug": "dun-laoghaire", "county": "Dublin",
+  "location": "Enniskerry, Dublin, Ireland", "website": "https://www.dunlaoghairegolfclub.ie/",
+  "latitude": 53.2063, "longitude": -6.1541,
+  "holesConfidence": "NONE", "teesConfidence": "NONE",
+  "note": "A 27-hole facility at Ballyman Road, Enniskerry (Upper, Middle and Lower nines, each par 36) with no canonically published combined eighteen, so which holes make up the played card is not invented here. County is the clubhouse townland (Ballyman, Co. Dublin); the course straddles the Dublin/Wicklow border and the postal town Enniskerry is in Wicklow. Lands cardless with coordinates and weather; a photograph of the card handed out at the desk settles which eighteen it is. If a second composite is later needed it is a second course row, named 'Dun Laoghaire Golf Club -- Composite 18 No 2', not a rename.",
+  "sources": {
+    "holes": [],
+    "tees": [],
+    "coordinates": "https://www.google.com/maps/place/53.2063,-6.1541"
+  },
+  "holes": [],
+  "tees": []
+}

@@ -1,0 +1,14 @@
+{
+  "name": "New Forest Golf Club", "slug": "new-forest", "county": "Westmeath",
+  "location": "Tyrrellspass, Westmeath, Ireland", "website": "https://www.newforestgolf.com/",
+  "latitude": 53.3885, "longitude": -7.4310,
+  "holesConfidence": "NONE", "teesConfidence": "NONE",
+  "note": "Parkland at Higginstown, Tyrrellspass. The club site was intermittently unreachable and published no hole-by-hole scorecard; nothing was found corroborated elsewhere, and no USGA course rating or slope is published. Both arrive with the first scorecard photo.",
+  "sources": {
+    "holes": [],
+    "tees": [],
+    "coordinates": "https://www.google.com/maps/place/53.3885,-7.4310"
+  },
+  "holes": [],
+  "tees": []
+}

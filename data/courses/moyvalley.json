@@ -1,0 +1,14 @@
+{
+  "name": "Moyvalley Golf Club", "slug": "moyvalley", "county": "Kildare",
+  "location": "Moyvalley, Kildare, Ireland", "website": "https://www.moyvalley.com/",
+  "latitude": 53.4226, "longitude": -6.9273,
+  "holesConfidence": "NONE", "teesConfidence": "NONE",
+  "note": "Darren Clarke parkland at the Balyna estate, Moyvalley (par 72, four tees). The resort site published no reachable hole-by-hole scorecard and nothing was found corroborated elsewhere; no USGA course rating or slope published either. Both arrive with the first scorecard photo.",
+  "sources": {
+    "holes": [],
+    "tees": [],
+    "coordinates": "https://www.google.com/maps/place/53.4226,-6.9273"
+  },
+  "holes": [],
+  "tees": []
+}

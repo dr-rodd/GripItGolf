@@ -1,0 +1,14 @@
+{
+  "name": "Palmerstown House Estate", "slug": "palmerstown-house", "county": "Kildare",
+  "location": "Johnstown, Kildare, Ireland", "website": "https://www.palmerstownhouse.ie/",
+  "latitude": 53.2514, "longitude": -6.6261,
+  "holesConfidence": "NONE", "teesConfidence": "NONE",
+  "note": "Christy O'Connor Jnr parkland at Johnstown, near Naas (par 72, about 7,400 yards). The estate site published no reachable hole-by-hole scorecard and nothing was found corroborated elsewhere; no USGA course rating or slope published either. Both arrive with the first scorecard photo.",
+  "sources": {
+    "holes": [],
+    "tees": [],
+    "coordinates": "https://www.google.com/maps/place/53.2514,-6.6261"
+  },
+  "holes": [],
+  "tees": []
+}

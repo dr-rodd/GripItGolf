@@ -1,0 +1,14 @@
+{
+  "name": "Kirkistown Castle Golf Club", "slug": "kirkistown-castle", "county": "Down",
+  "location": "Cloughey, Down, Northern Ireland", "website": "https://kcgc.golf/",
+  "latitude": 54.4368, "longitude": -5.4729,
+  "holesConfidence": "NONE", "teesConfidence": "NONE",
+  "note": "Two whole scorecards circulate and disagree: one gives par 70 with hole 10 a par 5, the other par 69 with hole 10 a par 4, and their stroke-index columns differ on 13 of 18 holes. The published tee ratings conflict too (White 70.0/126 vs 70.3/118). Nothing could be transcribed without choosing between them, so it lands cardless; the first scorecard photo settles it.",
+  "sources": {
+    "holes": [],
+    "tees": [],
+    "coordinates": "https://www.google.com/maps/place/54.4368,-5.4729"
+  },
+  "holes": [],
+  "tees": []
+}

@@ -1,0 +1,14 @@
+{
+  "name": "Galway Golf Club", "slug": "galway-golf-club", "county": "Galway",
+  "location": "Salthill, Galway, Ireland", "website": "https://www.galwaygolf.com/",
+  "latitude": 53.2597, "longitude": -9.0949,
+  "holesConfidence": "NONE", "teesConfidence": "NONE",
+  "note": "Alister MacKenzie parkland-links at Blackrock, Salthill (1926). The club site returned no reachable hole-by-hole scorecard and nothing was found corroborated elsewhere; no USGA course rating or slope published either. Both arrive with the first scorecard photo.",
+  "sources": {
+    "holes": [],
+    "tees": [],
+    "coordinates": "https://www.google.com/maps/place/53.2597,-9.0949"
+  },
+  "holes": [],
+  "tees": []
+}

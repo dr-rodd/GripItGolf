@@ -1,0 +1,14 @@
+{
+  "name": "Galgorm Castle Golf Club", "slug": "galgorm-castle", "county": "Antrim",
+  "location": "Ballymena, Antrim, Northern Ireland", "website": "https://www.galgormcastle.com/",
+  "latitude": 54.8551, "longitude": -6.3126,
+  "holesConfidence": "NONE", "teesConfidence": "NONE",
+  "note": "Par 72. The par is solid but two different stroke-index allocations circulate (Hole19 vs 18birdies) and disagree, so no stroke index could be transcribed without picking a winner. Uncorroborated tee ratings exist on 18birdies but are left out rather than graded LOW. Lands cardless; the first scorecard photo settles the card.",
+  "sources": {
+    "holes": [],
+    "tees": [],
+    "coordinates": "https://www.google.com/maps/place/54.8551,-6.3126"
+  },
+  "holes": [],
+  "tees": []
+}

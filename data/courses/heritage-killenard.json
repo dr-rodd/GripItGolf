@@ -1,0 +1,14 @@
+{
+  "name": "The Heritage Golf Resort", "slug": "heritage-killenard", "county": "Laois",
+  "location": "Killenard, Laois, Ireland", "website": "https://www.theheritage.com/",
+  "latitude": 53.1285, "longitude": -7.1541,
+  "holesConfidence": "NONE", "teesConfidence": "NONE",
+  "note": "Seve Ballesteros and Jeff Howes parkland at Killenard (par 72, about 7,300 yards). The resort site published no reachable hole-by-hole scorecard and nothing was found corroborated elsewhere; no USGA course rating or slope published either. Both arrive with the first scorecard photo.",
+  "sources": {
+    "holes": [],
+    "tees": [],
+    "coordinates": "https://www.google.com/maps/place/53.1285,-7.1541"
+  },
+  "holes": [],
+  "tees": []
+}

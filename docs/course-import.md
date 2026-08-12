@@ -31,8 +31,9 @@ The list is
 plus **secondary courses on those same properties** — Ballybunion's Cashen beside its Old,
 Castlerock's Bann beside its Mussenden, and so on.
 
-**Most of that list is already on the platform — 69 courses, 73 once migration `038` is
-applied. Start by finding out which, and never trust a figure written here over the tool:**
+**Most of that list is already on the platform — 65 courses, 88 once migrations `038` and
+`039` are applied. Start by finding out which, and never trust a figure written here over
+the tool:**
 
 ```
 npm run courses:migration -- --list
@@ -45,11 +46,10 @@ the point is to see the state including what is still wrong.
 
 ### How this run is being done
 
-**That first run is done.** What is left of the hundred is the tail it could not finish —
-24 courses, each one small field short, written up course by course in
-`docs/course-discards.md` with a brief for the short pass that closes them. **If you are
-starting work now, that file is the job**, and the paragraphs below are the standing
-method rather than the current instruction.
+**That run is done, tail and all.** The hundred went over in one handover, and the 24
+courses it could not finish went over in a second short pass; both have landed. There is
+no current instruction, so what follows is the standing method — read it when the next
+list of courses comes along.
 
 **One handover of the whole hundred, as a patch.** Research everything, then export a
 single `.patch` for Claude Code to validate and turn into migrations. That is the shape
@@ -110,8 +110,11 @@ than one waiting on a photograph. But it is `NONE` only when the thing genuinely
 published — never as a shortcut past a card that was hard to read, or a rating that
 would have taken another click.
 
-**The 24 courses the first run dropped are written up in `docs/course-discards.md`**,
-with what each still needs. Seventeen of them need nothing but a latitude and longitude.
+**That is not a hypothetical: 17 of the 88 arrived with no card at all**, most of them
+because the club publishes none and four because two sources gave stroke indices that
+disagreed and picking a winner would have mis-handed shots forever. They are on the
+platform, findable and weathered, waiting on a photograph. `/admin/courses` lists them
+under **No scorecard**.
 
 ---
 
@@ -182,7 +185,7 @@ it is here to show the shape, not to be imported.
 
 | Field | Required | |
 |---|---|---|
-| `name` | yes | ≤80 chars. A sub-course is `Club Name -- Course Name`, two hyphens: `Ballybunion Golf Club -- Old Course`. A club that plays a composite eighteen out of three nines takes the scorecard's own title where it has one, and otherwise `Club Name -- Composite 18 No 1` |
+| `name` | yes | ≤80 chars. A sub-course is `Club Name -- Course Name`, two hyphens: `Ballybunion Golf Club -- Old Course`. A club that plays a composite eighteen out of three nines takes the scorecard's own title where it has one, and otherwise `Club Name -- Composite 18 No 1`. A **second** composite is a second course row added the ordinary way, never a rename of the first — the card check's create path writes its eighteen onto the row already there, and two composites are two different eighteens each wanting their own scores |
 | `slug` | yes | **Short and human** — `lahinch-old`, not `slugify(name)`. The filename must be `<slug>.json` |
 | `county` | yes | Canonical: no `Co.`/`County` prefix, **Derry not Londonderry** |
 | `location` | yes | `Town, County, Country`, ≤120 chars |
