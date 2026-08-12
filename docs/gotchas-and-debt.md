@@ -268,3 +268,44 @@ print slope. It has a fourth state now, `unrated` / **Awaiting ratings**, and it
 ahead of `confirmed`: a photographed card with nothing to play off still cannot be
 started, and nothing else on the row would ever say so. **The badge names the blocker,
 not the paperwork.**
+
+## Two things blocking a faster first paint that code alone cannot fix
+
+Both came out of the round-trip and motion work and neither could be finished from
+Claude Code's container. Neither affects tab-to-tab navigation — they are **first
+load** costs — which is why they were reported rather than half-done.
+
+**The Fontshare stylesheet is the one render-blocking third-party request on every
+page** (`app/layout.tsx`). Archivo comes through `next/font/google`, so it is
+self-hosted, subsetted and immune to somebody else's outage. Clash Display and Bespoke
+Serif do not: they load from `api.fontshare.com` via a `<link rel="stylesheet">` in
+`<head>`, and those are the *display* faces — every heading, every trip name, every
+score. `preconnect` hints are in place and the fallback chain in `globals.css` was
+chosen so a dead CDN degrades gracefully, but the request still blocks the first paint
+of every screen.
+
+The fix is `next/font/local` with the two WOFF2 files committed, which removes the
+third party entirely. **Fontshare is blocked by the container's proxy**, so the files
+have to be downloaded by hand and dropped into the repo before the code change is worth
+making. The tempting shortcut — loading the stylesheet non-blocking with
+`media="print"` and flipping it on load — was considered and not taken: it trades the
+block for a visible reflow of the largest type on the screen, on the one face the
+design system is most particular about.
+
+**The `title-*.png` header artwork is heavier than it needs to be.** Two-colour
+lettering at 28–66 KB each, served raw with `fetchPriority="high"` and
+`decoding="sync"` in the header of the leaderboard, scoring, Trip Setup and stats
+screens. As WebP, or as SVG, they would be a fraction of that. **No image tooling is
+installed in the container** — and it does not need to be: `TitleMark.tsx` renders them
+as plain `<img>` precisely so a file can be swapped with no code change. This is a file
+replacement, not a task for a session.
+
+**And one that is not code at all.** `vercel.json` sets no `regions`, so every function
+runs in Vercel's default US region. If the Supabase project is in Europe — which an
+Irish golf app plausibly is — each of the ten to twenty queries a page makes pays a
+transatlantic hop, and that would outweigh every query change made here put together.
+It could not be checked from the container: Supabase's API sits behind Cloudflare, so
+DNS says nothing about where the database is. It is one look at the Supabase dashboard,
+and if the answer is Europe, `"regions": ["dub1"]` in `vercel.json`. **Do not set it on
+a guess** — pointing the functions away from the database is the same mistake in
+reverse.
