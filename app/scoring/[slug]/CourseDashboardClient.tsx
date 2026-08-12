@@ -595,7 +595,7 @@ export default function CourseDashboardClient({
                 onClick={() => setShowLiveLeaderboard(true)}
                 className="w-full py-2.5 flex items-center justify-center gap-2.5 border border-accent/25 bg-accent/[0.08] hover:bg-accent/15 transition-colors rounded-xl"
               >
-                <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-accent dot-live" />
                 <span className="text-accent-deep text-sm tracking-[0.2em] uppercase">Live Leaderboard</span>
               </button>
             )}
@@ -614,7 +614,7 @@ export default function CourseDashboardClient({
               onClick={() => setView("live-board")}
               className="w-full py-3 flex items-center justify-center gap-2.5 border border-accent/25 bg-accent/[0.08] hover:bg-accent/15 transition-colors rounded-xl"
             >
-              <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-accent dot-live" />
               <span className="text-accent-deep text-sm tracking-[0.2em] uppercase">Live Leaderboard</span>
             </button>
           )}

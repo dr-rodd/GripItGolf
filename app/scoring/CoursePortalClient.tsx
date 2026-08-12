@@ -145,7 +145,7 @@ export default function CoursePortalClient({ courseIds, totalPlayers }: { course
               )}
               {status === "live" && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-green-500/40 bg-green-500/10 text-green-400 text-sm font-semibold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 dot-live" />
                   Active
                 </span>
               )}

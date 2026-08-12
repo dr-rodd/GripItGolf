@@ -316,10 +316,10 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
           gets painted over — the bar would stay bright and tappable behind a
           modal that is supposed to be blocking the screen. The panel below is
           z-50 too and comes after this in the DOM, so it still sits on top. */}
-      <div className="fixed inset-0 bg-ink/50 z-50" onClick={onClose} />
+      <div className="fixed inset-0 bg-ink/50 z-50 page-enter" onClick={onClose} />
 
       <div className="fixed inset-x-0 bottom-0 sm:inset-0 sm:flex sm:items-center sm:justify-center z-50 p-4">
-        <div className="bg-cream border border-bark/12 rounded-sm w-full sm:max-w-md shadow-2xl max-h-[90dvh] flex flex-col">
+        <div className="bg-cream border border-bark/12 rounded-sm w-full sm:max-w-md shadow-2xl max-h-[90dvh] flex flex-col sheet-up">
 
           <div className="flex items-center justify-between px-5 py-4 border-b border-bark/12 flex-shrink-0">
             <h2 className="font-[family-name:var(--font-display)] text-ink text-lg">Settings</h2>

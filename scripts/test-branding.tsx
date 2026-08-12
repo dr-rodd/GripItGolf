@@ -1027,6 +1027,33 @@ section('Empty states say what to do next')
 
 // ─── Motion ────────────────────────────────────────────────────
 
+section('The stylesheet parses')
+{
+  // Every other check in this file reads `globals.css` as a string, which
+  // means none of them can tell valid CSS from a comment that forgot to
+  // close. A paragraph added to the note above `.press` landed after the
+  // `*/` rather than before it, so half a sentence became a declaration —
+  // the whole file failed to compile, and all 473 string checks still
+  // passed. The build caught it; that is too late and too far away.
+  //
+  // Not a parser, just the two things that actually go wrong in a file that
+  // is nine-tenths prose.
+  const opens = (css.match(/\/\*/g) ?? []).length
+  const closes = (css.match(/\*\//g) ?? []).length
+  ok(opens === closes,
+    `every comment is closed (${opens} opened, ${closes} closed)`)
+
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, '')
+  let depth = 0
+  let wentNegative = false
+  for (const ch of bare) {
+    if (ch === '{') depth++
+    else if (ch === '}' && --depth < 0) { wentNegative = true; break }
+  }
+  ok(!wentNegative && depth === 0,
+    `and the braces balance (ends at depth ${depth})`)
+}
+
 section('Motion is calm, and can be switched off')
 {
   // "ease-out everywhere. No bounce, no spring, no elastic easing."

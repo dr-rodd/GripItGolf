@@ -134,7 +134,7 @@ export default function CourseSelect({
   return (
     <>
       {trigger}
-      <div className="fixed inset-0 z-[60] flex flex-col bg-cream">
+      <div className="fixed inset-0 z-[60] flex flex-col bg-cream sheet-up">
         {/* ── Header — always pinned, like the stats page's own ── */}
         <div className="flex-shrink-0 border-b border-bark/12">
           <div className="max-w-lg mx-auto w-full px-4 pt-4 pb-3 flex items-center justify-between">
@@ -505,7 +505,7 @@ function AddCourseForm({
         </div>
         {lookup.kind === 'busy' && (
           <p className="t-cap text-ink/65 mt-2 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-accent animate-pulse flex-shrink-0" />
+            <span className="w-2 h-2 rounded-full bg-accent dot-live flex-shrink-0" />
             Looking for the ratings box…
           </p>
         )}

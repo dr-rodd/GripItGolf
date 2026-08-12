@@ -172,6 +172,35 @@ None of them takes `backTo` on the header: `loading.tsx` is handed no params, so
 
 **The 400ms ceiling is about motion answering a touch.** A repeating animation is a different thing — the live dot's breath (2s), a skeleton's pulse (1.4s), a tab bar tab waiting for its page (900ms). It is not responding to a gesture and has no ending to be late for, so it runs slower on purpose and sits between 900ms and 2s. `test:branding` holds the two apart by whether the declaration says `infinite`. It used to hold only the first ceiling, and only over durations written in `ms` — which is why `2s` and `1.4s` were never checked at all. Both are now, in either unit.
 
+**Note that the duration checks read the file including its comments**, because `globals.css` is nine-tenths prose and stripping them would let a real declaration hide inside one. So a comment cannot mention a duration over 400ms in figures. `dot-live`'s note says "two seconds" in words for exactly this reason.
+
+#### `.press` — the tap that answers
+
+A phone gives no feedback of its own, so a card that does nothing under a finger reads as one that did not register the touch, and the second tap that gets is the real cost. `.press` is the one copy: `scale(0.97)` on `:active` over 120ms. It sits on the shared `Button` (`app/components/ui.tsx`), the round tiles, the itinerary tiles, the status card and the join rows.
+
+Three things about it are deliberate:
+
+- **0.97, not the tab bar's 0.94.** These are cards and rows the width of the screen; the bar's ratio on something that size is a lurch rather than a press.
+- **`:active`, unlike the tab bar** — and that is not an inconsistency. The bar cannot use `:active` because it never reaches descendants and iOS withholds it from elements it does not consider interactive. Neither applies to a class sitting on the tapped `<button>` or `<a>` itself. Put `.press` on a `<div>` and it will do nothing on an iPhone; that is the rule.
+- **It owns the whole transition on whatever carries it.** A rule naming only `transform` sits later in the file than Tailwind's utilities and would win, so a button with `.press` *and* `transition-colors` would quietly lose its colour fade. `.press` names the colour properties too, which is why anything carrying it should drop its own `transition-*` rather than keep a second answer.
+
+**Rows inside the leaderboard's scroller keep `active:opacity`, on purpose.** The board is one horizontal scroller with pinned columns either side; a row that scales breaks its alignment with the Name and Total columns holding still beside it. Scale is for things shaped like cards.
+
+#### Where `score-flash` actually fires
+
+It is on the live leaderboard panel inside the scoring card (`app/scoring/LiveLeaderboardPanel.tsx`), and nowhere else. That panel refreshes on a fifteen-second timer *and* on a Supabase realtime channel, so scores land with no gesture in front of them — a group watching the board on the fifth green sees a number that differs from the one they last read and cannot tell whether it changed or they misread it.
+
+Two details that are the whole implementation:
+
+- **The change is detected per hole, not per total.** Two holes that offset each other leave the total where it was, and the player still scored. The comparison is against the last set the component fetched, held in a ref, so a second fetch landing before a render cannot miss one.
+- **A counter, not a boolean, and it goes in the row's `key`.** A CSS animation only replays if the element is new, so bumping the number is what remounts the row and runs it again. The counter is undefined until a change is actually seen, so opening the board does not flash every row at once — arriving is not news, changing is.
+
+The keyframe animates colour and never `transform`, because the number is being read; `test:branding` pins the absence.
+
+#### Reduced motion means all of it now
+
+For a long time the block switched off six named `animation`s and never touched a `transition` — so every Tailwind `transition-*` in the app still ran at full speed for somebody who had asked the operating system for less: the hub sections' collapse (whose own comment claimed otherwise), the scoring card's sideways slide, the toggle knob, every `active:scale`. There is a blanket `*` rule now, collapsing `animation-duration` and `transition-duration` to a hundredth of a millisecond rather than to zero, so anything waiting on a `transitionend` still gets one. The named rules stay beside it: they are more specific about intent, and the branding test reads them by name.
+
 ### Scoring symbols
 
 **Filled, never outlined** — `app/components/ScoreShape.tsx`, one component used by every card in the app so a birdie cannot look like one thing in the scoring flow and another on the leaderboard.

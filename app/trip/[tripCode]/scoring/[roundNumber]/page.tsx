@@ -80,7 +80,7 @@ export default async function TripCoursePage({
     // navigation abandons is worse, so the room for it is reserved inside the
     // card's height instead. The Next button comes to rest just above the bar
     // rather than beneath it.
-    <div className="min-h-dvh bg-cream">
+    <div className="min-h-dvh bg-cream page-enter">
       <TripHeader backTo={`/trip/${tripCode}`} title="scoring" />
       <CourseDashboardClient
         courseName={(thisRound.courses as any).name}

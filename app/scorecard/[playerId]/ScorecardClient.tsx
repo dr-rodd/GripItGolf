@@ -118,7 +118,7 @@ export default function ScorecardClient({ player, rounds, holes, scores, roundHa
 
   function goTo(newIdx: number) {
     if (newIdx === idx || newIdx < 0 || newIdx >= rounds.length) return
-    setNav({ idx: newIdx, dir: newIdx > idx ? "animate-slide-from-right" : "animate-slide-from-left" })
+    setNav({ idx: newIdx, dir: newIdx > idx ? "slide-in-right" : "slide-in-left" })
   }
 
   const round = rounds[idx]

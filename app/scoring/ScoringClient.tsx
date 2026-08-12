@@ -185,11 +185,16 @@ function Landing({
             ? "border-green-500 text-green-400 hover:bg-green-500/10"
             : "border-white/20 text-white/60 hover:border-white/40 hover:text-white/80"}`}
       >
+        {/* The house live indicator, not a radar ping. `animate-ping` expands
+            a ring outwards on Tailwind's own curve — an attention-demanding
+            shape the guide does not have, and one the reduced-motion block
+            could not reach. `dot-live` is the same statement made as a slow
+            breath. */}
         {isLiveActive && (
-          <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
-          </span>
+          <span
+            className="absolute top-2 right-2 h-2.5 w-2.5 rounded-full bg-green-500 dot-live"
+            aria-hidden="true"
+          />
         )}
         {liveLabel}
         <div className="text-[10px] text-white/40 normal-case tracking-normal mt-1 font-normal">

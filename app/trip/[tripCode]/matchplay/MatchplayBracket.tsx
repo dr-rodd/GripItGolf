@@ -739,9 +739,9 @@ function DecideSheet({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
-      <div className="absolute inset-0 bg-ink/50" />
+      <div className="absolute inset-0 bg-ink/50 page-enter" />
       <div
-        className="relative bg-cream border-t border-bark/12 rounded-t-2xl px-5 pt-5"
+        className="relative bg-cream border-t border-bark/12 rounded-t-2xl px-5 pt-5 sheet-up"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 20px)' }}
         onClick={e => e.stopPropagation()}
       >

@@ -58,9 +58,15 @@ export function Eyebrow({ children, className = '' }: { children: React.ReactNod
 // One primary action per screen. Emerald is an accent, so a page with three
 // emerald buttons on it has none.
 
+// `press` rather than `transition-colors duration-150`: it carries both the
+// colour fade and the scale under a thumb, and having it own the whole
+// transition is what stops the two overriding each other — see the note on
+// `.press` in globals.css. Every button in the app answers a touch now; the
+// tab bar is the one that does it its own way, for reasons written down in
+// TabBar.tsx.
 const BUTTON_BASE =
-  'inline-flex items-center justify-center gap-2 rounded-xl t-label ' +
-  'transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed ' +
+  'inline-flex items-center justify-center gap-2 rounded-xl t-label press ' +
+  'disabled:opacity-40 disabled:cursor-not-allowed ' +
   'min-h-[48px] px-5'
 
 export const buttonClass = (

@@ -97,7 +97,7 @@ export default function AddRound({
       <button
         type="button"
         onClick={openSheet}
-        className="flex-shrink-0 flex items-center gap-2 pl-3.5 pr-4 py-2.5 -mr-1 rounded-2xl bg-surface border border-bark/[0.08] hover:border-accent active:opacity-75 transition-colors duration-150"
+        className="flex-shrink-0 flex items-center gap-2 pl-3.5 pr-4 py-2.5 -mr-1 rounded-2xl bg-surface border border-bark/[0.08] hover:border-accent press"
       >
         <span className="text-accent-deep"><IconPlus size={16} /></span>
         <span className="t-label text-ink">Add round</span>

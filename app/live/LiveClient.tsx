@@ -932,7 +932,7 @@ function LiveLeaderboard({ players, rounds, holes, roundHandicaps }: LiveLeaderb
     <div className="max-w-lg mx-auto w-full px-4 py-6 flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <span className="w-2 h-2 rounded-full bg-green-400 dot-live" />
           <span className="text-green-400 text-sm tracking-[0.2em] uppercase">Live — In Progress</span>
         </div>
         {lastFetch && (

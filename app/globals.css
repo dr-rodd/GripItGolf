@@ -166,6 +166,30 @@ body {
 }
 .sheet-up { animation: gdSheetUp 280ms ease-out; }
 
+/* Swiping from one round's card to the next.
+
+   The card comes in from the side the swipe came from, so the gesture and
+   the movement agree — a card that simply replaces itself reads as a
+   redraw rather than as travel. A small offset and a fade, not a full
+   screen-width slide: the surrounding chrome does not move, so a card
+   sliding the whole way looks detached from it.
+
+   This existed as intent long before it existed as code. The component set
+   `animate-slide-from-right` / `-left` and applied them, and neither class
+   was ever defined anywhere — a no-op since the day it was written. Named
+   the way the rest of this file is named now, rather than in a way that
+   looks like a Tailwind utility and is not. */
+@keyframes gdSlideInRight {
+  from { transform: translateX(12%); opacity: 0; }
+  to   { transform: translateX(0);   opacity: 1; }
+}
+@keyframes gdSlideInLeft {
+  from { transform: translateX(-12%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.slide-in-right { animation: gdSlideInRight 260ms ease-out; }
+.slide-in-left  { animation: gdSlideInLeft 260ms ease-out; }
+
 /* A live score changing. The cell flashes emerald and settles — the
    number itself must never jump or bounce, because it is being read. */
 @keyframes gdScoreFlash {
@@ -212,6 +236,43 @@ body {
 }
 .tab-pending { animation: gdTabPending 900ms ease-in-out infinite; }
 
+/* ── A tap that answers ────────────────────────────────────────
+   The press, for everything that is not the tab bar.
+
+   A phone gives no feedback of its own, so a card that does nothing under
+   a finger reads as a card that did not register the touch — and the
+   second tap that gets is the real cost. The bar has answered its taps
+   since it was written; the rest of the app had a colour change on some
+   things and nothing at all on most, plus a scattering of one-off
+   `active:scale-95`es that agreed with neither each other nor the guide.
+
+   This is the one copy. 0.97 rather than the bar's 0.94: these are cards
+   and rows, not 20px icons, and the same ratio on something the width of
+   the screen is a lurch. 120ms is the bottom of the micro band — a press
+   is the fastest thing in the app because the finger is already there.
+
+   **`:active`, unlike the tab bar, and that is not an inconsistency.**
+   The bar cannot use it for two reasons and neither applies here: it
+   never reaches descendants, and this class goes on the tapped element
+   itself rather than on something inside it; and iOS withholds it from
+   elements it does not consider interactive, which buttons and links are.
+   Put `.press` on a <div> and it will do nothing on an iPhone — that is
+   the rule, and it is why the bar keeps its pointer handlers.
+
+   **It owns the whole transition on whatever carries it, deliberately.**
+   A `transition` naming only `transform` sits later in this file than
+   Tailwind's utilities and would win, so a button with `.press` and
+   `transition-colors` would silently lose its colour fade. Naming the
+   colour properties here as well means the two cannot fight; the cost is
+   that `.press` sets the pace for both, which is why anything carrying it
+   should drop its own `transition-*` rather than keep a second answer. */
+.press {
+  transition-property: transform, color, background-color, border-color, opacity;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+.press:active { transform: scale(0.97); }
+
 /* Skeletons, preferred over spinners wherever the layout is known. */
 @keyframes gdSkeleton {
   0%, 100% { opacity: 0.5; }
@@ -224,9 +285,32 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .page-enter, .score-flash, .dot-live, .skeleton, .tab-pending, .sheet-up {
+  /* Everything, and this line is the one that was missing.
+
+     The named rules below switch off six animations by hand, which is what
+     this block was for years — and it never touched a `transition`. Every
+     Tailwind `transition-*` utility in the app still ran: the hub sections'
+     collapse (whose own comment claimed otherwise), the scoring card's
+     sideways slide, the toggle knob, every `active:scale`. Somebody who
+     asked the operating system for less motion got most of it anyway.
+
+     Not zero, a hundredth of a millisecond: a transition that never runs
+     fires no `transitionend`, and code waiting on one waits for good.
+     Named rules stay below — they are more specific about intent, and the
+     branding test reads them by name. */
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .page-enter, .score-flash, .dot-live, .skeleton, .tab-pending, .sheet-up,
+  .slide-in-right, .slide-in-left {
     animation: none !important;
   }
+  /* The press keeps its meaning without the movement, the same way the tab
+     does: the element is still tapped, it just does not shrink. */
+  .press:active { transform: none; }
   /* The press keeps its meaning without the movement: the tab still goes
      emerald the moment it is touched, which is the part that answers
      "did that land". Only the scale goes. */

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, Fragment } from "react"
+import { useState, useEffect, useCallback, useRef, Fragment } from "react"
 import { supabase } from "@/lib/supabase"
 import BackButton from "@/app/components/BackButton"
 import ScoreShape from "@/app/components/ScoreShape"
@@ -353,6 +353,28 @@ export default function LiveLeaderboardPanel({
     return { hcp: allowedHandicap(exact, allowance), teeName: tee?.name ?? null }
   }
 
+  /**
+   * Whose row just moved, and how many times.
+   *
+   * This board refreshes on a fifteen-second timer and on a realtime channel,
+   * so scores land under the reader with no gesture in front of them. Without
+   * a mark, a group on the fifth green watching the board sees a number that
+   * is different from the one they last looked at and cannot tell whether it
+   * changed or they misread it.
+   *
+   * `score-flash` has existed in the stylesheet, in the design guide and in
+   * the branding test since the beginning and was applied to nothing at all.
+   * This is what it was for.
+   *
+   * A counter rather than a boolean, because it goes in the row's `key`: a CSS
+   * animation only replays if the element is new, so bumping the number is
+   * what remounts the row and runs it again. Undefined until a change is
+   * actually seen, so a board opening does not flash every row at once —
+   * arriving is not news, changing is.
+   */
+  const seenScores = useRef<Map<string, number | null> | null>(null)
+  const [flashes, setFlashes] = useState<Record<string, number>>({})
+
   const fetchScores = useCallback(async () => {
     const [scoresRes, liveRoundsRes] = await Promise.all([
       supabase
@@ -366,7 +388,33 @@ export default function LiveLeaderboardPanel({
         .in("status", ["active", "finalised"]),
     ])
 
-    if (scoresRes.data) setLiveScores(scoresRes.data as LiveScoreRow[])
+    if (scoresRes.data) {
+      const rows = scoresRes.data as LiveScoreRow[]
+
+      // Per hole, not per total: two holes that offset each other leave the
+      // total where it was, and the player still scored. Compared against the
+      // last set this component saw rather than against React state, so a
+      // second fetch landing before a render cannot miss a change.
+      const now = new Map(rows.map(ls => [`${ls.player_id}:${ls.hole_number}`, ls.gross_score]))
+      const before = seenScores.current
+      seenScores.current = now
+
+      if (before) {
+        const moved = new Set<string>()
+        for (const [key, gross] of now) {
+          if (before.get(key) !== gross) moved.add(key.split(':')[0])
+        }
+        if (moved.size > 0) {
+          setFlashes(prev => {
+            const next = { ...prev }
+            for (const id of moved) next[id] = (next[id] ?? 0) + 1
+            return next
+          })
+        }
+      }
+
+      setLiveScores(rows)
+    }
 
     const liveRoundsData = (liveRoundsRes.data ?? []) as { id: string; status: string }[]
     const liveRoundIds = liveRoundsData.map(lr => lr.id)
@@ -497,7 +545,7 @@ export default function LiveLeaderboardPanel({
       {/* Header — scrolls away */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+          <span className="w-2 h-2 rounded-full bg-accent dot-live" />
           <span className="text-accent-deep text-sm tracking-[0.2em] uppercase">{roundLabel}</span>
         </div>
         {showBackButton && onClose && (
@@ -645,8 +693,15 @@ export default function LiveLeaderboardPanel({
             return (
               <Fragment key={player.id}>
                 <button
+                  // The key carries the flash count, so a score landing
+                  // remounts this row and the animation runs again. Without
+                  // it the class is already on the element and CSS has
+                  // nothing to restart. See `flashes` above.
+                  key={`${player.id}-${flashes[player.id] ?? 0}`}
                   onClick={() => setExpandedPlayerId(isExpanded ? null : player.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 text-left active:bg-bark/[0.04] transition-colors ${!isLast || isExpanded ? "border-b border-bark/12" : ""}`}
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-left active:bg-bark/[0.04] transition-colors ${
+                    flashes[player.id] ? "score-flash " : ""
+                  }${!isLast || isExpanded ? "border-b border-bark/12" : ""}`}
                 >
 
                   {/* Col 1: position */}

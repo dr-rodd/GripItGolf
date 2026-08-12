@@ -389,9 +389,9 @@ export function ScorecardSheet({
       }}
       onClick={onClose}
     >
-      <div className="absolute inset-0 bg-ink/50" />
+      <div className="absolute inset-0 bg-ink/50 page-enter" />
       <div
-        className={`relative w-full max-w-lg flex flex-col max-h-full overflow-hidden ${SC_CARD}`}
+        className={`relative w-full max-w-lg flex flex-col max-h-full overflow-hidden page-enter ${SC_CARD}`}
         onClick={e => e.stopPropagation()}
       >
         {/* Title — never scrolls */}
@@ -567,7 +567,7 @@ function CourseTiles({
           <button
             key={round.id}
             onClick={() => onTileClick(round)}
-            className={`w-full text-left rounded-2xl transition-colors duration-150 active:opacity-75 ${ROUND_TILE[tone]}`}
+            className={`w-full text-left rounded-2xl press ${ROUND_TILE[tone]}`}
           >
             <div className="px-5 py-4 flex items-center justify-between gap-4">
               <div className="min-w-0">

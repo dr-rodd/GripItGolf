@@ -21,6 +21,12 @@ import { IconChevronDown } from './icons'
  * it degrades to an instant open under `prefers-reduced-motion`, which
  * `app/globals.css` switches off centrally.
  *
+ * That last clause was untrue for as long as it had been written. The
+ * reduced-motion block switched off `animation` and never `transition`, and
+ * all three of the movements above are transitions — so this collapsed at
+ * full speed for anybody who had asked for less. It is a blanket rule now
+ * and the sentence is finally accurate; nothing here had to change.
+ *
  * The panel stays mounted when closed so its content is in the HTML — the
  * players list and the itinerary are worth having in the page for a reader
  * who never taps anything.

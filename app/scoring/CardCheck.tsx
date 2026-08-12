@@ -251,7 +251,7 @@ export default function CardCheck({
   if (step.kind === "reading" || step.kind === "applying") {
     return (
       <div className="border border-bark/12 rounded-xl px-4 py-3 flex items-center gap-3">
-        <span className="w-2 h-2 rounded-full bg-accent animate-pulse flex-shrink-0" />
+        <span className="w-2 h-2 rounded-full bg-accent dot-live flex-shrink-0" />
         <p className="text-ink/80 text-sm">
           {step.kind === "reading" ? "Reading the card…" : "Updating the card…"}
         </p>

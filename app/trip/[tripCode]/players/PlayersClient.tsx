@@ -219,7 +219,7 @@ export default function PlayersClient({
                   key={p.id}
                   onClick={() => handleTap(p)}
                   disabled={busy}
-                  className={`flex items-center justify-between w-full px-5 py-4 rounded-2xl text-left transition-colors duration-150 active:opacity-75 disabled:opacity-50 ${
+                  className={`flex items-center justify-between w-full px-5 py-4 rounded-2xl text-left press disabled:opacity-50 ${
                     isIn ? ROUND_TILE.played : ROUND_TILE.empty
                   }`}
                 >

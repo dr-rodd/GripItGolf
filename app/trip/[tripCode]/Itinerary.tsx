@@ -193,7 +193,7 @@ export default function Itinerary({
                       {roundNumber != null ? (
                         <Link
                           href={`/trip/${tripCode}/round/${roundNumber}`}
-                          className={`${tile} active:opacity-75`}
+                          className={`${tile} press`}
                         >
                           {inside}
                         </Link>

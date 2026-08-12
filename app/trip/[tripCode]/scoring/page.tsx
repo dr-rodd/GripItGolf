@@ -131,7 +131,7 @@ export default async function TripCoursePortalPage({
               <Link
                 key={round.id}
                 href={`/trip/${tripCode}/scoring/${round.round_number}`}
-                className={`flex items-center justify-between w-full px-5 py-4 rounded-2xl transition-colors duration-150 active:opacity-75 ${ROUND_TILE[tone]}`}
+                className={`flex items-center justify-between w-full px-5 py-4 rounded-2xl press ${ROUND_TILE[tone]}`}
               >
                 <div className="min-w-0">
                   <p className="t-cap uppercase tracking-[0.2em] text-ink/65 mb-1">

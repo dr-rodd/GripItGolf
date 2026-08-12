@@ -490,7 +490,7 @@ export default function TripSetupClient({
 
   /** The answer controls for one question. */
   return (
-    <main className="min-h-dvh bg-cream text-ink has-tabbar">
+    <main className="min-h-dvh bg-cream text-ink has-tabbar page-enter">
 
       {/* The page names itself in the header, the way the leaderboard and
           the scoring screens do. Tapping the mark is the way back. */}
@@ -534,9 +534,9 @@ export default function TripSetupClient({
 
       {detailsOpen && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={() => setDetailsOpen(false)}>
-          <div className="absolute inset-0 bg-ink/40" />
+          <div className="absolute inset-0 bg-ink/40 page-enter" />
           <div
-            className="relative bg-cream rounded-t-2xl max-h-[88vh] overflow-y-auto"
+            className="relative bg-cream rounded-t-2xl max-h-[88vh] overflow-y-auto sheet-up"
             style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
             onClick={e => e.stopPropagation()}
           >

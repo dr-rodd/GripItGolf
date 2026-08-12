@@ -142,7 +142,7 @@ export default function StatusBlock({
           nextRoundNumber != null ? (
             <Link
               href={`/trip/${tripCode}/round/${nextRoundNumber}`}
-              className="block active:opacity-75 transition-opacity duration-150"
+              className="block press"
             >
               <UpNextLines next={next} countdown={countdown} />
             </Link>
@@ -296,7 +296,7 @@ function ClaimSpot({ tripCode }: { tripCode: string }) {
     <div>
       <Link
         href={`/trip/${tripCode}/players`}
-        className="flex items-center gap-3 w-full rounded-2xl border border-bark/12 bg-surface px-4 py-4 active:opacity-75 transition-opacity duration-150"
+        className="flex items-center gap-3 w-full rounded-2xl border border-bark/12 bg-surface px-4 py-4 press"
       >
         <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent/[0.12] text-accent-deep flex items-center justify-center">
           <IconUsers size={16} />
