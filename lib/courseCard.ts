@@ -108,7 +108,7 @@ export function hasCard(holes: readonly RowHole[]): boolean {
 }
 
 /**
- * What a course's card is, in the three states it can actually be in.
+ * What a course's card is, in the four states it can actually be in.
  *
  * `card_verified` on its own answers a question nobody is asking. What matters
  * first is whether the course can be **played** — that is `hasCard`, which is
