@@ -331,8 +331,8 @@ if (dryRun) {
   say()
   say('Paste each file above marked `wrote` or `rewrote` into the Supabase SQL')
   say('editor, in numeric order, one at a time. Each is a single transaction, so')
-  say('a failure leaves nothing behind, and each ends with a commented-out SELECT')
-  say('you can run straight after to see its rows.')
+  say('a failure leaves nothing behind, and each ends with a SELECT that runs')
+  say('itself — so a paste finishes on a row per course, never on "no rows".')
   say()
   say('Then check /admin/courses — every course, with its card state.')
 }

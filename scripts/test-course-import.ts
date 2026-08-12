@@ -600,14 +600,25 @@ section('Every generated file says how to check it landed')
     ['a tee refresh', teeSql, REFRESH.slug],
   ] as const) {
     ok(sql.includes('Did it land?'), `${what} ends with a verify block`)
-    ok(sql.includes(`'${slug}'`) && /--\s+and c\.slug in \(/.test(sql),
+    ok(sql.includes(`'${slug}'`) && /^\s+and c\.slug in \(/m.test(sql),
       `  …naming its own courses, so it is right without anyone maintaining it`)
     ok(sql.indexOf('Did it land?') > sql.indexOf('COMMIT;'),
       '  …after the COMMIT, not inside the transaction')
-    // Commented out, or pasting the file would run a SELECT as live SQL.
+
     const block = sql.slice(sql.indexOf('-- ── Did it land?'))
-    ok(block.split('\n').filter(l => l.trim()).every(l => l.trim().startsWith('--')),
-      '  …and every line of it is a comment')
+    // Live SQL, not a comment. A file of nothing but inserts ends with
+    // "Success. No rows returned." — indistinguishable from a migration that
+    // did nothing, and that is how it was read the first time it mattered.
+    // Telling somebody to uncomment a block before running it does not survive
+    // contact with the moment they want the answer.
+    ok(/^select c\.slug,/m.test(block),
+      '  …and the SELECT runs itself rather than waiting to be uncommented')
+    ok(block.trimEnd().endsWith(';'),
+      '  …terminated, so it is the last thing the paste does')
+    // One only: the Supabase editor shows the last result grid, so a second
+    // SELECT here would hide this one.
+    eq((block.match(/^select /gm) ?? []).length, 1,
+      '  …and there is exactly one of them')
   }
 }
 

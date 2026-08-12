@@ -440,11 +440,36 @@ Paste each file into the Supabase SQL editor, **in numeric order**, one file at 
 `docs/testing-and-data.md` prefers the editor over `scripts/migrate.ts` for a single
 migration, and each generated file is one transaction, so a failure leaves nothing behind.
 
-**Then check.** Every generated file ends with a commented-out `SELECT` naming its own
-courses — uncomment it and run it, and its rows are either there or they are not. Or open
-**`/admin/courses`**, which lists every platform course with its card state and counts them
-in the subtitle: `Verified` for a photographed card, `Awaiting photo` for a researched one,
-`No scorecard` for a course with no holes that cannot yet be scored.
+**The paste checks itself.** Every generated file ends, after its `COMMIT`, with a live
+`SELECT` naming its own courses, so the last thing on screen is a row per course with its
+hole and tee counts. **A generated file should never finish on "Success. No rows
+returned."** — if it does, either the paste stopped early or the file is not one of these.
+Re-pasting a file already applied is safe and prints the same answer: the writes skip or
+rewrite the same values, and only the `SELECT` has anything left to say.
+
+That block was commented out until it mislead somebody: a file of nothing but inserts ends
+with "no rows returned", which is precisely what a migration that did nothing says, and an
+instruction to uncomment a query first does not survive the moment you actually want the
+answer.
+
+**`/admin/courses`** answers the same question for the platform as a whole — every course
+with its card state, counted in the subtitle: `Verified` for a photographed card,
+`Awaiting photo` for a researched one, `No scorecard` for a course with no holes that
+cannot yet be scored.
+
+### A research patch's own migrations are discarded
+
+A Cowork patch usually arrives carrying `*_platform_courses_*.sql` of its own. **Take the
+JSON and regenerate; do not commit their SQL.** Their generator may be a different vintage
+(a different batch size, so different files), and it numbers from what it can see — which
+is not what has landed on `master` since. That has already collided once: their
+`_035_platform_courses_d.sql` against the `_035_tee_par_follows_holes.sql` already applied
+here, two different migrations at one number, on a number half-run.
+
+The consequence to expect: **batch letters in a Cowork commit message will not match this
+repo's.** The repo's mapping is whatever each file's own `-- Platform courses batch X` line
+says, and `npm run courses:migration -- --list` is the authority on which courses exist at
+all. A patch's "batch C" going missing is normally this, not a lost course.
 
 In the app itself the courses then appear in the picker under the right county chip, badged
 **Awaiting scorecard**, with their tees on the round page.

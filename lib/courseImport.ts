@@ -840,29 +840,40 @@ const widest = (values: readonly string[]) => values.reduce((w, v) => Math.max(w
 
 /** Migration 008's rule, restated in the file it generates rather than in code. */
 /**
- * A commented-out SELECT naming this file's own courses.
+ * A live SELECT naming this file's own courses, after the COMMIT.
  *
  * Writing a migration changes nothing until somebody pastes it, and nothing in
  * the repo can tell you whether that has happened — there is no ledger, and a
  * push deploys the app rather than the data. So each file carries the query
- * that answers it for itself: run this straight after and the rows are either
- * there or they are not.
+ * that answers it for itself: paste the file and the rows are either there or
+ * they are not.
+ *
+ * **It used to be commented out**, on the reasoning that pasting a migration
+ * should not also run a SELECT. That cost more than it saved. A file of nothing
+ * but inserts ends with "Success. No rows returned.", which is exactly what a
+ * migration that did nothing says too, and the instruction to uncomment the
+ * block first was never going to be followed at the one moment it mattered —
+ * when somebody is trying to find out whether their courses arrived. The query
+ * runs after `COMMIT`, reads three tables and writes to none, and
+ * `scripts/migrate.ts` discards results, so it costs nothing on either path.
  *
  * Derived from the batch, so it is right for every future file without anybody
  * keeping it up to date.
  */
 const verifyBlock = (slugs: readonly string[]): string[] => [
   '-- ── Did it land? ──────────────────────────────────────────',
-  '-- Run this after the COMMIT above. Every course below should come back with',
-  '-- its holes and tees. /admin/courses says the same thing with badges.',
-  '--',
-  '-- select c.slug, c.name, c.county, c.card_verified,',
-  '--        (select count(*) from holes h where h.course_id = c.id) as holes,',
-  '--        (select count(*) from tees  t where t.course_id = c.id) as tees',
-  '-- from courses c',
-  '-- where c.trip_id is null',
-  `--   and c.slug in (${slugs.map(q).join(', ')})`,
-  '-- order by c.name;',
+  '-- This runs itself. Every course below should come back with its holes and',
+  '-- its tees; /admin/courses says the same thing with badges. Re-pasting the',
+  '-- whole file is safe and asks the question again — every write above either',
+  '-- skips or rewrites the same values, so a second run leaves the database',
+  '-- where the first one left it.',
+  'select c.slug, c.name, c.county, c.card_verified,',
+  '       (select count(*) from holes h where h.course_id = c.id) as holes,',
+  '       (select count(*) from tees  t where t.course_id = c.id) as tees',
+  'from courses c',
+  'where c.trip_id is null',
+  `  and c.slug in (${slugs.map(q).join(', ')})`,
+  'order by c.name;',
 ]
 
 const CONFIDENCE_KEY = `--   HIGH   = confirmed from 3+ independent sources

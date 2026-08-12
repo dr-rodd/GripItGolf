@@ -184,3 +184,49 @@ So closing it means adding a hole count to `DirectoryCourse` and to those three 
 **Until it is done, a cardless course is a trap in the picker.** It appears under its county, carries its weather, and is chosen exactly like any other course; the round page then has no card to print and the scoring flow has nothing to score. The admin list is the only place that says so, and only somebody with the password sees it.
 
 Same shape as the row cap in `app/admin/courses/page.tsx` that was fixed alongside it: a query written when the numbers were small, and correct only while they stay small.
+
+## "Success. No rows returned." reads exactly like a migration that did nothing
+
+Two generated course migrations were pasted into the Supabase SQL editor and both reported
+**"Success. No rows returned."** — the correct result for a file of inserts, and
+indistinguishable from a file that inserted nothing. The 37 courses were in fact all there.
+The doubt was the defect.
+
+Each generated file already carried a `-- ── Did it land? ──` block naming its own courses,
+placed after the `COMMIT` precisely so it could answer this. **Every line of it was
+commented out**, and `docs/course-import.md` told you to uncomment it and run it. The test
+suite pinned the commenting, with the reasoning inline: "or pasting the file would run a
+SELECT as live SQL."
+
+That trade was backwards. The SELECT reads three tables and writes to none, it sits outside
+the transaction, and `scripts/migrate.ts` discards results — so it cost nothing on either
+path. Against that, the one instruction it depended on was "before you find out whether
+this worked, first edit the file", which nobody does. **A safeguard that requires a manual
+step at the moment of anxiety is not a safeguard.** The block is live now, so a paste ends
+on a row per course with its hole and tee counts, and "no rows returned" from a generated
+course file means something genuinely went wrong.
+
+**A related trap, caught by an existing test rather than by review.** The verify block is
+shared by both generators, and the first wording of its new prose said "every insert above
+is ON CONFLICT DO NOTHING". True of a course migration, false of a tee refresh, which is
+`DO UPDATE` — and `test:course-import` asserts `!/DO NOTHING/` anywhere in a refresh, so it
+failed immediately. The guard was right and the prose was wrong; the wording changed, not
+the assertion. Shared output needs claims true of every file that carries it.
+
+## A research patch's batch letters are not this repo's
+
+Cowork sends its courses as a patch that includes generated `*_platform_courses_*.sql` of
+its own. Those are discarded and regenerated from the JSON — its generator is often a
+different vintage with a different batch size, and it numbers from what it can see, not
+from what has landed on `master` since. One of its files arrived as
+`_035_platform_courses_d.sql` against the already-applied `_035_tee_par_follows_holes.sql`:
+two migrations at one number, on a number half-run.
+
+The visible consequence is that **a patch's "batch C" and "batch D" do not exist in the
+repo under those names**, which reads as courses having gone missing. They have not. The
+mapping is whatever each file's own `-- Platform courses batch X` line says, and
+`npm run courses:migration -- --list` is the authority on which courses exist.
+
+The rule underneath: **the migration is a projection of `data/courses/`, never the other
+way round.** Because that holds, a numbering collision is a regeneration rather than an
+unpicking job.

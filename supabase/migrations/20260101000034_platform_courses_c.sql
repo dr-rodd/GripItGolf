@@ -119,13 +119,15 @@ ON CONFLICT ON CONSTRAINT uq_tees_course_name_gender DO NOTHING;
 COMMIT;
 
 -- ── Did it land? ──────────────────────────────────────────
--- Run this after the COMMIT above. Every course below should come back with
--- its holes and tees. /admin/courses says the same thing with badges.
---
--- select c.slug, c.name, c.county, c.card_verified,
---        (select count(*) from holes h where h.course_id = c.id) as holes,
---        (select count(*) from tees  t where t.course_id = c.id) as tees
--- from courses c
--- where c.trip_id is null
---   and c.slug in ('castlerock-mussenden', 'the-heath')
--- order by c.name;
+-- This runs itself. Every course below should come back with its holes and
+-- its tees; /admin/courses says the same thing with badges. Re-pasting the
+-- whole file is safe and asks the question again — every write above either
+-- skips or rewrites the same values, so a second run leaves the database
+-- where the first one left it.
+select c.slug, c.name, c.county, c.card_verified,
+       (select count(*) from holes h where h.course_id = c.id) as holes,
+       (select count(*) from tees  t where t.course_id = c.id) as tees
+from courses c
+where c.trip_id is null
+  and c.slug in ('castlerock-mussenden', 'the-heath')
+order by c.name;
