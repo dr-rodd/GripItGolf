@@ -18,6 +18,7 @@ import Itinerary from '../app/trip/[tripCode]/Itinerary'
 import type { ItineraryItem } from '../lib/itinerary'
 import {
   upNext, nextActivity, describeCountdown, describeGroups, momentOf, orderedItems, dayArrived,
+  firstTeeTarget,
 } from '../lib/upNext'
 import { nextMatch, describeNextMatch, type DrawMatch } from '../lib/nextMatch'
 import { stayRuns, travelLegs, describeStayRun } from '../lib/stays'
@@ -1160,6 +1161,49 @@ section('The hub is the sections it should be, and nothing else')
 
   // A failed query is said out loud rather than rendering as an absence.
   ok(hubCode.includes('standingError'), 'a standing that could not be worked out says so')
+}
+
+section('The big countdown counts to the first tee, not to midnight')
+{
+  // A bare start date parses as midnight, so the timer hit zero and
+  // vanished the night before anybody was due on a course — thirteen hours
+  // of trip morning with nothing left to count.
+  const items = [
+    travel('t0', 0, 0, 'Carne'),
+    golf('g0', 0, 1, '13:00', 2),
+    golf('g1', 1, 0, '09:20'),
+  ]
+  eq(firstTeeTarget(items, START, DATES), '2026-08-13T13:00',
+    'the target is the first round\'s tee, on its own date')
+
+  // A zoneless string, not a Date, and that is the whole design: this runs
+  // on the server, whose clock is UTC, and a Date built there would stamp
+  // an Irish August tee an hour wrong. The browser parses it instead — the
+  // same side of the wire `momentOf` runs on.
+  ok(typeof firstTeeTarget(items, START, DATES) === 'string', 'handed over as a string')
+  ok(!/Z|\+/.test(firstTeeTarget(items, START, DATES) ?? ''), 'with no zone on it')
+
+  // The round's own date wins over counting days off the start, exactly as
+  // it does everywhere else an item is dated.
+  const moved = new Map(DATES); moved.set('g0', '2026-08-14')
+  eq(firstTeeTarget(items, START, moved), '2026-08-14T13:00',
+    'a rescheduled first round moves the countdown with it')
+
+  // No tee time is a date and nothing finer — the fallback, never a guess.
+  // Counting to the SECOND round's tee from before the first would be
+  // precise and wrong, which is worse than midnight.
+  eq(firstTeeTarget([golf('g0', 0, 0, null), golf('g1', 1, 0, '09:20')], START, DATES), null,
+    'a first round with no tee time yields nothing rather than the second\'s')
+  eq(firstTeeTarget([stay('s0', 0, 0, 'The Shandon')], START, DATES), null,
+    'and a trip with no golf has no tee to count to')
+
+  // The wiring: the hub hands the countdown this, with the bare date only
+  // as the fallback.
+  const hub = read('app/trip/[tripCode]/page.tsx')
+  ok(/firstTeeTarget\(itinerary, trip\.start_date \?\? null, new Map\(roundDates\)\)/.test(hub),
+    'the hub asks for the first tee')
+  ok(/firstTeeTarget[\s\S]{0,120}\?\? trip\.start_date \?\? null/.test(hub),
+    '  …and falls back to the date only when there is no tee to count to')
 }
 
 section('The countdown is the first thing under the trip name')

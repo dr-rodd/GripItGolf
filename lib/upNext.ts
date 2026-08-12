@@ -203,6 +203,34 @@ export function nextActivity(
   return describeUpNext(item, startDate, roundDates, courseNames)
 }
 
+/**
+ * The moment the trip itself starts: the first tee time on the running
+ * order, as a local-clock string — "2026-08-13T13:00:00" — for the big
+ * countdown on the hub.
+ *
+ * A string without a zone rather than a Date, deliberately. This runs on
+ * the server, whose clock is UTC, so building the Date here would stamp an
+ * Irish August tee an hour wrong. Parsed in the browser, a zoneless string
+ * lands in the reader's own timezone — the same convention `momentOf`
+ * keeps, kept the same way: the parse happens on the phone.
+ *
+ * Null when there is no golf, or the first round has no tee time recorded —
+ * the caller falls back to the bare start date, because a date is then all
+ * that is actually known. Counting to the *second* round's tee from before
+ * the first would be worse than counting to midnight: precise, and wrong.
+ */
+export function firstTeeTarget(
+  items: readonly ItineraryItem[],
+  startDate: string | null,
+  roundDates: RoundDates,
+): string | null {
+  const first = orderedItems(items).find(i => i.kind === 'golf')
+  if (!first?.teeTime) return null
+  const date = dateOf(first, startDate, roundDates)
+  if (!date) return null
+  return `${date.slice(0, 10)}T${first.teeTime}`
+}
+
 /** One item, dressed for the card. */
 export function describeUpNext(
   item: ItineraryItem,

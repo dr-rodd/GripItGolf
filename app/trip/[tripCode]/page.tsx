@@ -15,6 +15,7 @@ import {
 } from '@/lib/holeStats'
 import { describePlacing } from '@/lib/standing'
 import { nextMatch, describeNextMatch, type DrawMatch } from '@/lib/nextMatch'
+import { firstTeeTarget } from '@/lib/upNext'
 import { SectionStack } from '@/app/components/Section'
 import TripCountdown from './TripCountdown'
 import TripDescription from './TripDescription'
@@ -365,8 +366,20 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
 
           {/* And how long until it. Inside the title rather than below it:
               the name, the dates and the countdown are three lines of one
-              heading, all answering what this trip is and when. */}
-          <TripCountdown target={trip.start_date ?? null} />
+              heading, all answering what this trip is and when.
+
+              Counting to the first tee, not to the start date. A bare date
+              parses as midnight, so the timer hit zero and vanished the
+              night before anybody was due on a course — thirteen hours of
+              trip morning with nothing left to count. The tee time is on
+              the running order; the date without it is the fallback,
+              because a date is then all that is actually known. */}
+          <TripCountdown
+            target={
+              firstTeeTarget(itinerary, trip.start_date ?? null, new Map(roundDates))
+              ?? trip.start_date ?? null
+            }
+          />
 
           {/* What the lead player wrote about it — the heading's fourth
               line, on the cream. Three lines then an ellipsis; the

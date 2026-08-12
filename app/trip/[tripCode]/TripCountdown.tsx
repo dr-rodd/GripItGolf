@@ -49,7 +49,17 @@ function getTimeLeft(target: Date): TimeLeft | null {
 export default function TripCountdown({
   target,
 }: {
-  /** ISO date string (YYYY-MM-DD or full ISO); null skips the countdown. */
+  /**
+   * What is being counted to. Null skips the countdown.
+   *
+   * Usually a zoneless local datetime — "2026-08-13T13:00:00", the first
+   * tee, built by `firstTeeTarget` and deliberately parsed HERE, in the
+   * browser, so the clock time lands in the reader's own timezone. A bare
+   * "YYYY-MM-DD" is the fallback for a trip with no tee time recorded, and
+   * parses as midnight UTC — which is why it is only ever the fallback:
+   * counting a whole trip down to the stroke of midnight had the timer
+   * vanishing the night before anybody was due on a course.
+   */
   target: string | null
 }) {
   const [mounted, setMounted]     = useState(false)
