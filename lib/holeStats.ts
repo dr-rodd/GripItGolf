@@ -299,6 +299,69 @@ export function puttingStats(stats: readonly HoleStat[]): PuttingStats {
   }
 }
 
+// ─── Like-for-like putting ─────────────────────────────────────
+
+export type LikeForLikeSide = {
+  /** This player's average putts in that situation. */
+  mine: number | null
+  /** Everyone else's, over the same situation. */
+  field: number | null
+  holes: number
+}
+
+export type LikeForLikePutting = {
+  playerId: string
+  greensHit: LikeForLikeSide
+  greensMissed: LikeForLikeSide
+}
+
+/**
+ * Putts compared with the field's putts *in the same situation* — greens
+ * hit against greens hit, missed against missed.
+ *
+ * The raw putting average flatters a green-misser: a chip finishing close
+ * leaves an easier first putt than a green found from 160 yards, so fewer
+ * putts per hole can mean a worse putter with a better wedge. Conditioning
+ * on whether the green was hit removes most of that. Aggregate rather than
+ * per-hole, deliberately: per-hole pools split by green outcome are too
+ * thin on one trip to say anything, and this is a comparison of averages,
+ * not a strokes-gained figure — it does not sum to zero and does not claim
+ * to.
+ */
+export function likeForLikePutting(
+  stats: readonly HoleStat[],
+): Map<string, LikeForLikePutting> {
+  const known = stats.filter(s => s.gir != null && s.putts != null)
+  const hitAll = known.filter(s => s.gir === true)
+  const missAll = known.filter(s => s.gir === false)
+  const sum = (xs: readonly HoleStat[]) => xs.reduce((n, s) => n + s.putts!, 0)
+  const hitSum = sum(hitAll)
+  const missSum = sum(missAll)
+
+  const players = new Set(known.map(s => s.playerId))
+  const out = new Map<string, LikeForLikePutting>()
+  for (const playerId of players) {
+    const mineHit = hitAll.filter(s => s.playerId === playerId)
+    const mineMiss = missAll.filter(s => s.playerId === playerId)
+    const side = (
+      mine: readonly HoleStat[], allSum: number, allCount: number,
+    ): LikeForLikeSide => {
+      const others = allCount - mine.length
+      return {
+        mine: mine.length === 0 ? null : sum(mine) / mine.length,
+        field: others === 0 ? null : (allSum - sum(mine)) / others,
+        holes: mine.length,
+      }
+    }
+    out.set(playerId, {
+      playerId,
+      greensHit: side(mineHit, hitSum, hitAll.length),
+      greensMissed: side(mineMiss, missSum, missAll.length),
+    })
+  }
+  return out
+}
+
 // ─── Scoring, off the gross alone ──────────────────────────────
 //
 // These need no putt count and no fairway, so they cover every scored hole
@@ -1079,6 +1142,14 @@ export type PlayerStats = {
   /** Only pars actually played appear — no par-3 row on a course without one. */
   splits: ParSplit[]
   misc: MiscStats
+  /**
+   * `gross − par`, summed over every scored hole — the against-the-course
+   * figure. The field's gains trade to zero between the players; this is
+   * the one that can be negative for everybody on a hard day.
+   */
+  toParTotal: number
+  /** Putts against the field's putts in the same situation. */
+  like: LikeForLikePutting
   /** Net gained on the field, by handicap apportionment. */
   netGained: NetGained
   /** The same net figures against the course rather than the field. */
@@ -1109,6 +1180,7 @@ export function playerStats(
   const apportioned = netGainedOnField(stats, puttShareMode)
   const vsPar = netVsPar(stats, puttShareMode)
   const long = longGameGained(stats)
+  const like = likeForLikePutting(stats)
   const byPlayer = new Map<string, HoleStat[]>()
   for (const s of stats) {
     const list = byPlayer.get(s.playerId)
@@ -1128,6 +1200,12 @@ export function playerStats(
     approach: approachStats(mine),
     splits: parSplits(mine),
     misc: miscStats(mine),
+    toParTotal: mine.reduce((n, s) => n + (s.gross - s.par), 0),
+    like: like.get(playerId) ?? {
+      playerId,
+      greensHit: { mine: null, field: null, holes: 0 },
+      greensMissed: { mine: null, field: null, holes: 0 },
+    },
     netGained: apportioned.get(playerId)
       ?? { playerId, putting: 0, toGreen: 0, total: 0, holes: 0 },
     netVsPar: vsPar.get(playerId)

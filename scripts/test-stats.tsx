@@ -24,7 +24,7 @@ import {
   scoringCounts, scrambling, approachStats, parSplits,
   roundForm, miscStats,
   holeAllocation, puttShare, FIXED_PUTT_SHARE,
-  netGainedOnField, netVsPar, longGameGained, fairwayCost,
+  netGainedOnField, netVsPar, longGameGained, fairwayCost, likeForLikePutting,
   MIN_OTHERS, MIN_HOLE_SAMPLE, MIN_MISSES, MIN_SIDE,
   type StatsContext, type Fairway,
 } from '../lib/holeStats'
@@ -810,6 +810,42 @@ section('The cost of a miss keeps left and right apart')
   eq(c.hit.holes + c.miss.holes, 4, 'the par 3 and the unanswered hole are in no column')
 }
 
+section('Like-for-like putting compares the same situation on both sides')
+{
+  // Bob and Cal both hit the first green; Bob one-putts what Cal three-putts.
+  // Both miss the second; Bob gets down in one against Cal's two.
+  const stats = holeStats(ctxOf([
+    sc('b', 'h1', 3, 1), sc('c', 'h1', 5, 3),   // both on in 2 — greens hit
+    sc('b', 'h2', 5, 1), sc('c', 'h2', 6, 2),   // both on in 4 — greens missed
+  ]))
+  const l = likeForLikePutting(stats)
+
+  eq(l.get('b')!.greensHit.mine, 1, 'Bob putts once on greens he hits')
+  eq(l.get('b')!.greensHit.field, 3, '  …against a field that takes three')
+  eq(l.get('b')!.greensMissed.mine, 1, 'and once when he misses')
+  eq(l.get('b')!.greensMissed.field, 2, '  …against a field that takes two')
+  eq(l.get('c')!.greensHit.field, 1, 'Cal reads Bob as his field, both ways round')
+
+  // The situations never cross: a missed green's easy putt cannot flatter
+  // the greens-hit column, which is the whole point of the split.
+  const one = likeForLikePutting(holeStats(ctxOf([sc('b', 'h1', 4, 2)])))
+  eq(one.get('b')!.greensHit.field, null, 'a field of nobody is a dash, not a zero')
+  eq(one.get('b')!.greensMissed.mine, null, '  …and an empty situation says nothing')
+}
+
+section('Against the course is the yardstick that does not sum to zero')
+{
+  // Everyone over par: the field trades to zero between them, but the
+  // course took strokes off everybody — the two yardsticks must be free to
+  // disagree, which is why both are shown.
+  const rough = ['a', 'b', 'c', 'd', 'e'].map(p => sc(p, 'h1', 5, 2))
+  const ps = playerStats(holeStats(ctxOf(rough, HCP)))
+  ok(ps.every(p => p.toParTotal === 1), 'everyone is one over the course')
+  const fieldSum = ps.reduce((n, p) => n + p.gained.total, 0)
+  ok(Math.abs(fieldSum) < 1e-9,
+    '  …while their gains on each other still sum to exactly zero')
+}
+
 section('Round form is the Stableford sign every golfer already reads')
 {
   const form = roundForm(holeStats(ctxOf([
@@ -1169,8 +1205,13 @@ section('The lab reads the derivation and does none of its own')
   // counting a live card; that is the in-play banter, this is the analysis.
   ok(/filtered\.filter\(s => !s\.live\)/.test(client),
     'the hero charts read finalised holes only')
-  ok(/PentagonChart/.test(client) && /TrendChart/.test(client),
-    '  …as a pentagon with a trend toggle')
+  // The trend is the per-round bars, not a line: above-and-below the zero
+  // line reads better than a line joining points, and one chart draws all
+  // per-round bars everywhere — the panel copy was retired with it.
+  ok(/PentagonChart/.test(client) && /GainedByRoundChart bars=\{trend\}/.test(client),
+    '  …as a pentagon with a per-round bar trend')
+  ok(!/TrendChart/.test(client) && !/TrendChart/.test(code('app/trip/[tripCode]/stats/charts.tsx')),
+    '  …and the line chart is gone, not kept beside the bars')
   ok(/\(v \/ g\.holes\) \* 18/.test(client),
     '  …per 18 holes, so a nine-hole evening compares honestly')
   ok(/longGameGained\(rs, finalised\)/.test(client),
@@ -1184,6 +1225,15 @@ section('The lab reads the derivation and does none of its own')
   ok(/netGained/.test(panels), '  …replaced by net strokes by apportionment')
   ok(/Vs your handicap/.test(panels),
     '  …while "vs your handicap" stays, points-based by definition')
+
+  // ── The hero is named, floored, and scaled ──
+  const charts2 = code('app/trip/[tripCode]/stats/charts.tsx')
+  ok(/Skill Profile/.test(client) && !/shape of your game/i.test(client),
+    'the hero is the Skill Profile, by name')
+  ok(/const R_FLOOR = \d/.test(charts2) && /R_FLOOR \+ \(R - R_FLOOR\)/.test(charts2),
+    'the pentagon\'s scale floors on a ring, not the centre — no V shapes')
+  ok(/ticks\.map/.test(charts2) && /PAD_L - 5/.test(charts2),
+    'the round bars carry a printed y axis')
 
   // ── Advanced settings ──
   ok(/localStorage\.setItem\(PUTT_SHARE_KEY/.test(client),
@@ -1260,9 +1310,10 @@ section('The lab reads the derivation and does none of its own')
   ok(/fill="transparent"/.test(charts) && /role="button"/.test(charts),
     'the tap target is wider than the mark, and announces itself')
 
-  // The per-round bars are sliced per round AFTER the course filter, so the
-  // filter-the-holes rule holds for the chart too.
-  ok(/filtered\.filter\(s => s\.roundId === r\.id\)/.test(client),
+  // The per-round bars are sliced per round AFTER the course filter (and
+  // the finalised cut), so the filter-the-holes rule holds for the chart
+  // too.
+  ok(/finalised\.filter\(s => s\.roundId === r\.id\)/.test(client),
     'the round chart slices the filtered holes, keeping the field whole')
 }
 

@@ -62,6 +62,8 @@ export function GainedByRoundChart({ bars, hint }: {
   const W = 320
   const H = 132
   const PAD_X = 8
+  /** The y-axis gutter. A chart read as "how much" needs its scale printed. */
+  const PAD_L = 30
   const LABEL_H = 20
   const plotH = H - LABEL_H
 
@@ -74,7 +76,15 @@ export function GainedByRoundChart({ bars, hint }: {
   const yOf = (v: number) => 8 + ((top - v) / span) * (plotH - 16)
   const zeroY = yOf(0)
 
-  const slot = (W - PAD_X * 2) / bars.length
+  // Whole strokes up the axis, thinned to every other one when the range
+  // would crowd them. Zero is left to the zero line, which is heavier.
+  const step = span > 4 ? 2 : 1
+  const ticks: number[] = []
+  for (let v = Math.ceil(bottom / step) * step; v <= top + 1e-9; v += step) {
+    if (v !== 0) ticks.push(v)
+  }
+
+  const slot = (W - PAD_L - PAD_X) / bars.length
   const barW = Math.min(28, Math.max(10, slot - 8))
 
   const current = pinned != null ? bars[pinned] : null
@@ -97,13 +107,30 @@ export function GainedByRoundChart({ bars, hint }: {
         role="img"
         aria-label={`${hint}: ${bars.map(b => `${b.label} ${formatGained(b.value)}`).join(', ')}`}
       >
-        {/* The zero line is the chart: which side of it a round fell is the
-            encoding, and the colour only agrees. */}
-        <line x1={PAD_X} x2={W - PAD_X} y1={zeroY} y2={zeroY}
+        {/* The scale, printed. Faint lines at the whole strokes, the number
+            in the gutter; the zero line stays the heavier one because which
+            side of it a bar falls is the encoding. */}
+        {ticks.map(v => (
+          <g key={v}>
+            <line x1={PAD_L} x2={W - PAD_X} y1={yOf(v)} y2={yOf(v)}
+              stroke={BARK} strokeOpacity="0.08" strokeWidth="1" />
+            <text x={PAD_L - 5} y={yOf(v) + 3.5} textAnchor="end" fontSize="11"
+              fill={INK} fillOpacity="0.45"
+              style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {v > 0 ? `+${v}` : String(v)}
+            </text>
+          </g>
+        ))}
+        <line x1={PAD_L} x2={W - PAD_X} y1={zeroY} y2={zeroY}
           stroke={BARK} strokeOpacity="0.25" strokeWidth="1" />
+        <text x={PAD_L - 5} y={zeroY + 3.5} textAnchor="end" fontSize="11"
+          fill={INK} fillOpacity="0.6"
+          style={{ fontVariantNumeric: 'tabular-nums' }}>
+          0
+        </text>
 
         {bars.map((b, i) => {
-          const x = PAD_X + slot * i + (slot - barW) / 2
+          const x = PAD_L + slot * i + (slot - barW) / 2
           const y = Math.min(zeroY, yOf(b.value))
           const h = Math.max(2, Math.abs(yOf(b.value) - zeroY))
           const up = b.value >= 0
@@ -125,7 +152,7 @@ export function GainedByRoundChart({ bars, hint }: {
               </text>
               {/* The tap target is the whole column, not the mark. */}
               <rect
-                x={PAD_X + slot * i} y={0} width={slot} height={H}
+                x={PAD_L + slot * i} y={0} width={slot} height={H}
                 fill="transparent"
                 role="button"
                 aria-pressed={isPinned}
@@ -176,11 +203,18 @@ export function PentagonChart({ axes, hint }: {
   const CX = W / 2
   const CY = 128
   const R = 88
-  // The scale: −2.5 at the centre, +2.5 at the rim, rings at the integers.
+  /**
+   * The floor ring. The scale's minimum renders here, not at the centre —
+   * two poor figures collapsing to the middle turned the pentagon into a V,
+   * with the shape's worst corners carrying no shape at all. A quarter of
+   * the radius keeps even a bad profile a visible five-sided thing.
+   */
+  const R_FLOOR = 24
+  // The scale: −2.5 at the floor ring, +2.5 at the rim, rings at the integers.
   const MIN = -2.5
   const MAX = 2.5
   const rOf = (v: number) =>
-    R * (Math.min(MAX, Math.max(MIN + 0.08, v)) - MIN) / (MAX - MIN)
+    R_FLOOR + (R - R_FLOOR) * (Math.min(MAX, Math.max(MIN, v)) - MIN) / (MAX - MIN)
   const angle = (i: number) => -Math.PI / 2 + (i * 2 * Math.PI) / 5
   const pt = (i: number, r: number): [number, number] =>
     [CX + r * Math.cos(angle(i)), CY + r * Math.sin(angle(i))]
@@ -264,99 +298,6 @@ export function PentagonChart({ axes, hint }: {
                 aria-pressed={isPinned}
                 aria-label={`${a.label}: ${formatGained(a.value)} a round`}
                 onClick={() => setPinned(isPinned ? null : i)} />
-            </g>
-          )
-        })}
-      </svg>
-    </div>
-  )
-}
-
-/**
- * One component of strokes gained, round by round — a line joining the
- * finalised rounds so a player can watch that part of their game move
- * across the trip.
- *
- * One line at a time, chosen by the chips above it, deliberately: five
- * lines need five distinguishable colours, and the palette's law is that
- * colour never carries meaning alone. A null is a round that could not
- * pay that figure — the line breaks rather than inventing a zero.
- */
-export function TrendChart({ points, hint }: {
-  points: GainedBar[]
-  hint: string
-}) {
-  const [pinned, setPinned] = useState<number | null>(null)
-  if (points.filter(p => p.value != null).length < 2) return null
-
-  const W = 328
-  const H = 148
-  const PAD_X = 14
-  const LABEL_H = 20
-  const plotH = H - LABEL_H
-
-  const values = points.map(p => p.value)
-  const top = Math.max(0.5, ...values)
-  const bottom = Math.min(-0.5, ...values)
-  const span = top - bottom
-  const yOf = (v: number) => 10 + ((top - v) / span) * (plotH - 20)
-  const zeroY = yOf(0)
-  const xOf = (i: number) =>
-    points.length === 1 ? W / 2 : PAD_X + (i * (W - PAD_X * 2)) / (points.length - 1)
-
-  const path = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(1)},${yOf(p.value).toFixed(1)}`)
-    .join(' ')
-
-  const current = pinned != null ? points[pinned] : null
-
-  return (
-    <div className="pt-1">
-      <p className="t-cap text-ink/65 leading-snug mb-1" aria-live="polite">
-        {current
-          ? <>
-              <span className="text-ink">{current.label}</span>
-              {' · '}
-              <span className="t-num text-ink">{formatGained(current.value)}</span>
-              {current.detail ? <span className="text-ink/50"> — {current.detail}</span> : null}
-            </>
-          : hint}
-      </p>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="w-full h-auto"
-        role="img"
-        aria-label={`${hint}: ${points.map(p => `${p.label} ${formatGained(p.value)}`).join(', ')}`}
-      >
-        <line x1={PAD_X - 6} x2={W - PAD_X + 6} y1={zeroY} y2={zeroY}
-          stroke={BARK} strokeOpacity="0.25" strokeWidth="1" />
-        <path d={path} fill="none" stroke={ACCENT_DEEP} strokeWidth="1.75"
-          strokeLinejoin="round" strokeLinecap="round" />
-        {points.map((p, i) => {
-          const isPinned = pinned === i
-          const up = p.value >= 0
-          return (
-            <g key={p.label}>
-              {/* The dot carries the polarity the line cannot: emerald
-                  above the field line, rust below, and always on one side
-                  of zero for the reader the hue is lost on. */}
-              <circle cx={xOf(i)} cy={yOf(p.value)} r={isPinned ? 5 : 3.5}
-                fill={up ? (isPinned ? ACCENT_DEEP : ACCENT) : RUST} />
-              <text x={xOf(i)} y={H - 6} textAnchor="middle" fontSize="12"
-                fill={INK} fillOpacity={isPinned ? 0.9 : 0.5}>
-                {p.label}
-              </text>
-              <rect
-                x={xOf(i) - (W - PAD_X * 2) / (2 * Math.max(1, points.length - 1))}
-                y={0}
-                width={(W - PAD_X * 2) / Math.max(1, points.length - 1)}
-                height={H}
-                fill="transparent"
-                role="button"
-                aria-pressed={isPinned}
-                aria-label={`${p.label}: ${formatGained(p.value)}`}
-                onClick={() => setPinned(isPinned ? null : i)}
-              />
             </g>
           )
         })}

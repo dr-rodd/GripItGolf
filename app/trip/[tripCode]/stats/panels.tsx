@@ -100,7 +100,7 @@ export function BasisToggle({ basis, onBasis }: {
 // ─── One player, down the page ─────────────────────────────────
 
 export function PlayerPanels({
-  mine, stats, playerId, rounds, courseFor, courseName, basis, onBasis, chart,
+  mine, stats, playerId, rounds, courseFor, courseName, basis, onBasis,
 }: {
   mine: PlayerStats
   /** Already course-filtered — every panel below reads only this. */
@@ -111,8 +111,6 @@ export function PlayerPanels({
   courseName: Map<string, string>
   basis: 'gross' | 'net'
   onBasis: (b: 'gross' | 'net') => void
-  /** The gained-per-round chart, mounted by the shell so panels stay pure. */
-  chart?: React.ReactNode
 }) {
   const { fairways: f, putting: p, gained: g, netGained: n, scoring: sc, scrambling: scr, approach: a, misc: m } = mine
   const vsHandicap = mine.form.reduce((acc, r) => acc + r.vsHandicap, 0)
@@ -147,11 +145,16 @@ export function PlayerPanels({
           holes and subtracted before the comparison — so it splits exactly
           the way gross does, and no longer saturates on a blow-up the way
           the old points comparison did. */}
+      {/* Two yardsticks in one box, on purpose. Gained is against the
+          field, and the field always trades to zero — some up, some down,
+          summing to nothing. "Against the course" is the other yardstick:
+          it can be negative for everybody on a hard day, which is exactly
+          the day the field figures stay calm about. */}
       <Panel
         title="Strokes gained"
         aside={<BasisToggle basis={basis} onBasis={onBasis} />}
         hint={basis === 'gross'
-          ? "Against everyone else's cards on the same holes, on the shots played."
+          ? "Against everyone else's cards on the same holes, on the shots played. The field trades to zero between you — the course is what takes strokes off everybody."
           : 'Net strokes against the field — your handicap shared over the holes and taken off first.'}
       >
         {basis === 'gross' ? (
@@ -159,6 +162,7 @@ export function PlayerPanels({
             <Line label="To the green" value={formatGained(g.toGreen)} tone={gainTone(g.toGreen)} />
             <Line label="Putting" value={formatGained(g.putting)} tone={gainTone(g.putting)} />
             <Line label="Total" value={formatGained(g.total)} tone={gainTone(g.total)} />
+            <Line label="Against the course" value={`${toPar(mine.toParTotal)} to par`} />
             <Line label="Holes counted" value={String(g.holes)} />
           </>
         ) : (
@@ -166,6 +170,11 @@ export function PlayerPanels({
             <Line label="To the green" value={formatGained(n.toGreen)} tone={gainTone(n.toGreen)} />
             <Line label="Putting" value={formatGained(n.putting)} tone={gainTone(n.putting)} />
             <Line label="Total" value={formatGained(n.total)} tone={gainTone(n.total)} />
+            {/* The course yardstick, net: expected score is par plus your
+                allocation, so this is "did the course beat you after your
+                shots" — it does not sum to zero across the field. */}
+            <Line label="Against the course" value={formatGained(mine.netVsPar.total)}
+              tone={gainTone(mine.netVsPar.total)} />
             <Line label="Holes counted" value={String(n.holes)} />
             {/* Points-based on purpose, whatever the toggle: "did I play to
                 my handicap" is a Stableford question by definition. */}
@@ -174,7 +183,6 @@ export function PlayerPanels({
               tone={gainTone(vsHandicap)} />
           </>
         )}
-        {chart}
       </Panel>
 
       <Panel title="Off the tee" hint={`${f.counted} par 4s and 5s answered`}>
@@ -226,6 +234,21 @@ export function PlayerPanels({
         <Line label="Putts a green hit" value={formatAverage(p.puttsPerGreenHit)} />
         <Line label="One-putts" value={`${p.onePutts} · ${formatRate(p.onePuttRate)}`} />
         <Line label="Three-putts or worse" value={`${p.threePuttsOrWorse} · ${formatRate(p.threePuttRate)}`} />
+        {/* The like-for-like experiment: a green-misser's chip often leaves
+            an easier first putt, so a raw average flatters them. Comparing
+            greens-hit against the field's greens-hit — same situation both
+            sides — removes most of that. Averages, not a gain: it does not
+            sum to zero and does not claim to. */}
+        {mine.like.greensHit.mine != null && mine.like.greensHit.field != null && (
+          <Line label="Like for like — greens hit" value={
+            `${formatAverage(mine.like.greensHit.mine)} vs field ${formatAverage(mine.like.greensHit.field)}`
+          } />
+        )}
+        {mine.like.greensMissed.mine != null && mine.like.greensMissed.field != null && (
+          <Line label="Like for like — missed" value={
+            `${formatAverage(mine.like.greensMissed.mine)} vs field ${formatAverage(mine.like.greensMissed.field)}`
+          } />
+        )}
         <Line label="Scrambling" value={
           scr.chances === 0 ? '—'
             : `${scr.saves} of ${scr.chances} · ${formatRate(scr.rate)}`
