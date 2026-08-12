@@ -7,7 +7,7 @@ import ScoreShape from "@/app/components/ScoreShape"
 import { scoreTone, TONE_PILL } from "@/lib/leaderboardStyle"
 import { shotsReceived } from "@/lib/boardRows"
 import { type Countback, countbackOf, compareCountback } from "@/lib/tiebreak"
-import { quotaPoints, quotaTarget } from "@/lib/quota"
+import { type QuotaScale, quotaPoints, quotaTarget } from "@/lib/quota"
 import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
 import { exactCourseHandicap } from "@/lib/courseHandicap"
 import { formatHandicap } from "@/lib/handicap"
@@ -297,12 +297,19 @@ interface Props {
    */
   allowance?: number
   /**
-   * Whether one of this trip's boards scores Quota, which is the only time
-   * the Quota tab appears here — a mode nobody is playing is a tab that
-   * teaches the wrong game. The legacy screens pass nothing and keep the two
-   * tabs they have always had.
+   * The scale this trip's Quota board is playing, or nothing where it runs no
+   * Quota board at all.
+   *
+   * Two answers in one, deliberately. **Whether** to show the Quota tab is
+   * exactly whether a board is scoring Quota — a mode nobody is playing is a
+   * tab that teaches the wrong game — and **which** points to count is that
+   * same board's scale. A boolean beside a scale would let the card in your
+   * hand count Chicago while the board counted Liverpool, which is the whole
+   * class of bug this app keeps closing.
+   *
+   * The legacy screens pass nothing and keep the two tabs they always had.
    */
-  offerQuota?: boolean
+  quotaScale?: QuotaScale | null
   onClose?: () => void
   showBackButton?: boolean
 }
@@ -311,7 +318,7 @@ interface Props {
 
 export default function LiveLeaderboardPanel({
   liveRound, players, holes, roundHandicaps, tees = [],
-  allowance = FULL_ALLOWANCE, offerQuota = false, onClose, showBackButton = false,
+  allowance = FULL_ALLOWANCE, quotaScale = null, onClose, showBackButton = false,
 }: Props) {
   const [liveScores, setLiveScores]     = useState<LiveScoreRow[]>([])
   const [validPlayerIds, setValidPlayerIds] = useState<Set<string>>(new Set())
@@ -425,7 +432,9 @@ export default function LiveLeaderboardPanel({
       // copy of the table.
       const quotaOn = (ls: LiveScoreRow) => {
         const hole = courseHoles.find(h => h.hole_number === ls.hole_number)
-        return hole ? quotaPoints(ls.gross_score, effectivePar(hole, player.gender)) : 0
+        return hole && quotaScale
+          ? quotaPoints(ls.gross_score, effectivePar(hole, player.gender), quotaScale)
+          : 0
       }
 
       const totalStableford = playerScores.reduce((s, ls) => s + pointsOn(ls), 0)
@@ -501,7 +510,7 @@ export default function LiveLeaderboardPanel({
       <div className="flex gap-1.5">
         {/* Quota only when a board is actually playing it — a mode nobody is
             scored on would teach the wrong game. */}
-        {(offerQuota
+        {(quotaScale
           ? (["stableford", "strokes", "quota"] as Mode[])
           : (["stableford", "strokes"] as Mode[])
         ).map(m => (

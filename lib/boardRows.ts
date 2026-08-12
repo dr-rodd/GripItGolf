@@ -16,7 +16,7 @@
 import type { Leaderboard } from './leaderboards'
 import { FULL_ALLOWANCE, allowanceOf, allowedHandicap } from './handicapAllowance'
 import { shotsReceived } from './handicap'
-import { quotaPoints, quotaTarget } from './quota'
+import { quotaPoints, quotaTarget, quotaScaleOf } from './quota'
 import { setOf, teamsOnSheet, membersOf, type Membership } from './teamSets'
 import {
   type TeamScoring, type TeamScoreInput, type ScoringBasis,
@@ -362,7 +362,8 @@ export function scoresForBoard(lb: Leaderboard, ctx: RowContext): ResolvedScore[
       return {
         ...s,
         points: hole
-          ? quotaPoints(s.noReturn ? null : s.gross, effectivePar(hole, gender))
+          ? quotaPoints(s.noReturn ? null : s.gross, effectivePar(hole, gender),
+            quotaScaleOf(lb))
           : 0,
       }
     }
@@ -706,6 +707,9 @@ function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   // breaks ties that way. Everywhere else this is four sums a round nobody
   // would ever look at.
   const reads = tieBreakOf(lb) === 'countback'
+  // The board's own scale. A quota is meaningless without one — see
+  // lib/quota.ts — and reading it once here keeps every card on one.
+  const scale = quotaScaleOf(lb)
 
   const perPlayer = ctx.players.map(p => {
     let holesPlayed = 0, gross = 0
@@ -728,7 +732,8 @@ function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
           return {
             n: s.holeNumber,
             v: hole
-              ? quotaPoints(s.noReturn ? null : s.gross, effectivePar(hole, p.gender))
+              ? quotaPoints(s.noReturn ? null : s.gross, effectivePar(hole, p.gender),
+                scale)
               : 0,
           }
         })

@@ -1,14 +1,18 @@
 /**
  * Quota play. Run with: npm run test:quota
  *
- * The rules live once, in lib/quota.ts: bogey 1, par 2, birdie 4, eagle 6,
+ * The rules live once, in lib/quota.ts. Two scales, differing only under par
+ * — Chicago 1, 2, 4, 8 and Liverpool 1, 2, 3, 4 —
  * chasing 36 minus the course handicap, result signed against that target.
  * These tests hold the table, the target — plus handicaps included — and the
  * board builder that turns cards into a quota leaderboard, with the
  * allowance moving the target rather than the per-hole points.
  */
 
-import { QUOTA_BASE, quotaPoints, quotaTarget } from '../lib/quota'
+import {
+  QUOTA_BASE, QUOTA_SCALES, DEFAULT_QUOTA_SCALE,
+  quotaPoints, quotaTarget, parseQuotaScale, quotaScaleOf,
+} from '../lib/quota'
 import type { Leaderboard } from '../lib/leaderboards'
 import {
   buildRows, scoresForBoard,
@@ -32,16 +36,35 @@ const section = (n: string) => console.log(`\n${n}`)
 
 section('What a hole earns')
 {
-  eq(quotaPoints(5, 4), 1, 'a bogey is worth 1')
-  eq(quotaPoints(4, 4), 2, 'a par 2')
-  eq(quotaPoints(3, 4), 4, 'a birdie 4')
-  eq(quotaPoints(2, 4), 6, 'an eagle 6')
-  eq(quotaPoints(2, 5), 8, 'an albatross continues the step to 8')
-  eq(quotaPoints(6, 4), 0, 'a double bogey earns nothing')
-  eq(quotaPoints(10, 4), 0, 'and so does anything worse')
-  eq(quotaPoints(null, 4), 0, 'a hole with no score earns nothing, never a penalty')
-  eq(quotaPoints(3, 3), 2, 'par is par whatever the par — a 3 on a par 3 is 2 points')
-  eq(quotaPoints(2, 3), 4, 'and a 2 there is a birdie')
+  // Chicago is what a board with nothing stored plays — see DEFAULT_QUOTA_SCALE
+  eq(quotaPoints(5, 4, 'chicago'), 1, 'a bogey is worth 1')
+  eq(quotaPoints(4, 4, 'chicago'), 2, 'a par 2')
+  eq(quotaPoints(3, 4, 'chicago'), 4, 'a birdie 4')
+  eq(quotaPoints(2, 4, 'chicago'), 8, 'an eagle 8 — Chicago doubles from par up')
+  eq(quotaPoints(2, 5, 'chicago'), 16, 'and an albatross keeps doubling')
+  eq(quotaPoints(6, 4, 'chicago'), 0, 'a double bogey earns nothing')
+  eq(quotaPoints(10, 4, 'chicago'), 0, 'and so does anything worse')
+  eq(quotaPoints(null, 4, 'chicago'), 0, 'a hole with no score earns nothing, never a penalty')
+  eq(quotaPoints(3, 3, 'chicago'), 2, 'par is par whatever the par — a 3 on a par 3 is 2 points')
+
+  // Liverpool climbs one at a time
+  eq([6, 5, 4, 3, 2].map(g => quotaPoints(g, 4, 'liverpool')), [0, 1, 2, 3, 4],
+    'Liverpool: a point a step, and a double bogey still nothing')
+  eq(quotaPoints(1, 4, 'liverpool'), 5, 'an albatross continues that step too')
+
+  // Above par the two agree, which is why that half is written once
+  for (const scale of QUOTA_SCALES.map(q => q.key)) {
+    eq([quotaPoints(5, 4, scale), quotaPoints(6, 4, scale)], [1, 0],
+      `${scale}: a bogey is one and a double is nothing`)
+  }
+
+  eq(QUOTA_SCALES.map(q => q.key), ['liverpool', 'chicago'], 'two scales, no more')
+  eq(DEFAULT_QUOTA_SCALE, 'chicago',
+    'a board with nothing stored plays Chicago — nearest to the scale it replaced')
+  eq(parseQuotaScale('sideways'), null, 'junk is dropped rather than repaired')
+  eq(quotaScaleOf({}), 'chicago', 'and a board that was never asked gets the default')
+  eq(quotaScaleOf({ quotaScale: 'liverpool' }), 'liverpool', 'one that was gets its own')
+  eq(quotaPoints(2, 3, 'chicago'), 4, 'and a 2 there is a birdie')
 }
 
 section('The number being chased')

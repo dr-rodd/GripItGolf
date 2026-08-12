@@ -29,6 +29,9 @@ import {
 } from './handicapAllowance'
 import { type TieBreak, type OverallTie, TIE_BREAKS, describeTieBreak } from './tiebreak'
 import { type RoundLink, parseRoundLinks, decisionLabel } from './matchDecision'
+import {
+  type QuotaScale, parseQuotaScale, quotaScaleOf, quotaScaleLabel,
+} from './quota'
 
 export type Audience = 'individual' | 'team'
 export type Competition = 'league' | 'matchplay'
@@ -83,6 +86,15 @@ export type Leaderboard = {
 
   /** `combine: 'position'` only — what each finishing place pays. */
   customPoints?: number[]
+
+  /**
+   * `scoring: 'quota'` only — which scale the quota is earned on.
+   *
+   * Absent reads as Chicago, which is what the retired in-between scale most
+   * resembles, so a Quota board set up before the question was asked keeps
+   * the nearest thing to what it had. See lib/quota.ts.
+   */
+  quotaScale?: QuotaScale
 
   /**
    * What this board does when two entrants finish level.
@@ -353,6 +365,30 @@ export function offersTieBreak(draft: Partial<Leaderboard>): boolean {
 }
 
 /**
+ * Whether to ask which scale the quota is earned on.
+ *
+ * Only a Quota board, because only a Quota board earns any. A knockout can be
+ * decided on quota too and takes the same scale — but it takes it from *this*
+ * board, and only overrides it where somebody says so, which is a question
+ * asked beside the link rather than here. See lib/matchDecision.ts.
+ */
+export function offersQuotaScale(draft: Partial<Leaderboard>): boolean {
+  return draft.competition === 'league' && draft.scoring === 'quota'
+}
+
+/**
+ * The scale this trip's quota is earned on.
+ *
+ * The Quota board's, if it runs one. A trip with no quota board still has a
+ * knockout that can be decided on quota, and that falls to the default —
+ * which is exactly why this is asked of the boards rather than of a board.
+ */
+export function tripQuotaScale(boards: readonly Leaderboard[]): QuotaScale {
+  const quota = boards.find(b => b.competition === 'league' && b.scoring === 'quota')
+  return quotaScaleOf(quota ?? {})
+}
+
+/**
  * Whether to ask about the handicap allowance yet.
  *
  * Last question of the cascade, and only once the board knows what it is: the
@@ -409,6 +445,9 @@ export function boardRules(lb: Leaderboard): string {
     parts.push(ALL_TEAM_FORMATS.find(f => f.key === lb.teamFormat)?.hint ?? '')
   }
   parts.push(SCORINGS.find(s => s.key === lb.scoring)?.hint ?? '')
+  // The scale is the whole of what a Quota board's numbers mean, so it is
+  // named rather than left to whoever remembers setting it.
+  if (lb.scoring === 'quota') parts.push(`${quotaScaleLabel(quotaScaleOf(lb))}.`)
   parts.push(COMBINES.find(c => c.key === lb.combine)?.hint ?? '')
   if (lb.discardWorst) {
     parts.push(`Worst ${lb.discardWorst === 1 ? 'round' : `${lb.discardWorst} rounds`} dropped.`)
@@ -510,6 +549,13 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
       // Kept off the object entirely when there is no reduction, so a board
       // that never asked for one reads back byte-for-byte as it always did.
       // Every trip on the platform predates this question.
+      // Only a Quota board earns quota points, so only a Quota board is
+      // asked. Kept off anything else rather than carried silently.
+      if (scoring === 'quota') {
+        const scale = parseQuotaScale(r.quotaScale)
+        if (scale) lb.quotaScale = scale
+      }
+
       const allowance = clampAllowance(r.handicapAllowance)
       if (allowance !== FULL_ALLOWANCE) lb.handicapAllowance = allowance
       if (lb.combine === 'position') lb.customPoints = points(r.customPoints)

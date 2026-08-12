@@ -431,7 +431,7 @@ section('Every method can be named under a round heading')
     'stableford_match', 'stableford_total',
     'strokes_match_gross', 'strokes_match_nett',
     'strokes_total_gross', 'strokes_total_nett',
-    'quota_liverpool', 'quota_chicago',
+    'quota_total',
   ]
   for (const method of methods) {
     const html = renderLinked(8, [

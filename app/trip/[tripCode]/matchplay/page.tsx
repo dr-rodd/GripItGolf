@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { hasMatchplay, needsPairings } from '@/lib/leaderboards'
+import { hasMatchplay, needsPairings, tripQuotaScale } from '@/lib/leaderboards'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { MAIN_SET, setOf, teamsOnSheet, membersOf } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
@@ -9,6 +9,7 @@ import { playerEntrant, pairEntrant, type Entrant } from '@/lib/matchplayEntrant
 import { parseTeamScoring } from '@/lib/teamScoring'
 import { buildRowContext } from '@/lib/rowContext'
 import { readBracket, type MatchReading } from '@/lib/matchResults'
+import { type QuotaScale } from '@/lib/quota'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
@@ -125,7 +126,8 @@ export default async function MatchplayPage({
   // queries it always was.
   const links = draw?.roundLinks ?? []
   const readings = links.length > 0
-    ? await readLinkedRounds(trip, links, matches, entrants, memberships)
+    ? await readLinkedRounds(trip, links, matches, entrants, memberships,
+        tripQuotaScale(boards))
     : []
 
   return (
@@ -193,6 +195,8 @@ async function readLinkedRounds(
   matches: readonly Record<string, unknown>[],
   entrants: readonly { id: string }[],
   memberships: readonly { team_id: string; player_id: string }[],
+  /** What this trip's Quota board plays, which a link may override. */
+  quotaScale: QuotaScale,
 ): Promise<MatchReading[]> {
   const roundIds = [...new Set(links.map(l => l.roundId))]
   const nilId = '00000000-0000-0000-0000-000000000000'
@@ -262,6 +266,7 @@ async function readLinkedRounds(
     matches: matches as never,
     links: links as never,
     ctx,
+    tripQuotaScale: quotaScale,
     playersOf,
   }).values()]
 }

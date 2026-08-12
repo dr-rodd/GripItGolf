@@ -19,6 +19,7 @@ import {
   type MatchState, type MatchSide, type PlayerHole, type RoundLink,
   readMatch, linkFor,
 } from './matchDecision'
+import { type QuotaScale, DEFAULT_QUOTA_SCALE } from './quota'
 import type { ProgressMatch } from './matchplayProgress'
 
 /** A match as the cards have it. */
@@ -44,6 +45,15 @@ export type ReadBracketInput = {
   matches: readonly ProgressMatch[]
   links: readonly RoundLink[]
   ctx: RowContext
+  /**
+   * The scale this trip's quota is earned on — its Quota leaderboard's, if it
+   * runs one. `tripQuotaScale` in lib/leaderboards.ts answers it.
+   *
+   * A link may override it for the knockout alone, and that is the only place
+   * the two can differ: the override is on the link, the answer is here, and
+   * whichever wins is worked out once, below.
+   */
+  tripQuotaScale?: QuotaScale
   /**
    * The players behind a side.
    *
@@ -99,6 +109,10 @@ export function readBracket(input: ReadBracketInput): Map<string, MatchReading> 
       method: link.decidedBy,
       a, b, holes, handicapOf,
       holeCount: holeCountOf(input.ctx, link.roundId, holeById),
+      // The link's own, then the trip's, then the default. Written out here
+      // rather than left to a `??` at the call site because "which scale"
+      // is the whole of what an override means.
+      quotaScale: link.quotaScale ?? input.tripQuotaScale ?? DEFAULT_QUOTA_SCALE,
     })
 
     out.set(match.id, {

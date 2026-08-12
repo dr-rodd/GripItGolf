@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { allowanceCycle } from '@/lib/handicapAllowance'
+import { tripQuotaScale } from '@/lib/leaderboards'
 import CourseDashboardClient from '@/app/scoring/[slug]/CourseDashboardClient'
 import TripHeader from '@/app/components/TripHeader'
 import { HEADER_H } from '@/app/components/headerMetrics'
@@ -98,7 +99,11 @@ export default async function TripCoursePage({
         allowanceStart={allowances.startIndex}
         // The live panel only offers its Quota tab when one of this trip's
         // boards is actually scoring it.
-        offerQuota={boards.some(b => b.competition === 'league' && b.scoring === 'quota')}
+        // The scale rather than a yes/no: whether the Quota tab appears and
+        // what it counts are the same answer, and two props could disagree.
+        quotaScale={boards.some(b => b.competition === 'league' && b.scoring === 'quota')
+          ? tripQuotaScale(boards)
+          : null}
         // Off unless this trip asked for it. The legacy `/scoring/[slug]`
         // route passes nothing and so gets the default, which is the
         // scorecard exactly as it has always been.

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { mergeSaved, anyScored, type Fairway } from "@/lib/liveScores"
 import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
+import { type QuotaScale } from "@/lib/quota"
 import { exactCourseHandicap, courseHandicap, teesForPlayer, type TeeRating } from "@/lib/courseHandicap"
 import { shotsReceived, formatHandicap } from "@/lib/handicap"
 import { voidScorecard as voidScorecardData } from "@/lib/scorecardVoid"
@@ -132,7 +133,12 @@ interface Props {
    * Whether the trip runs a Quota board — the live panel beside the card
    * only offers the Quota tab when someone is actually being scored on it.
    */
-  offerQuota?: boolean
+  /**
+   * The scale this trip's Quota board plays, or nothing where it runs none.
+   * Passed straight through — whether the Quota tab appears and what it
+   * counts are the same answer. See LiveLeaderboardPanel.
+   */
+  quotaScale?: QuotaScale | null
   /** Every allowance the trip's boards play off, for the player picker. */
   allowances?: number[]
   /**
@@ -408,7 +414,7 @@ export default function LiveScoringFlow({
   autoResume = false,
   onHoleChange,
   allowance = FULL_ALLOWANCE,
-  offerQuota = false,
+  quotaScale = null,
   allowances = [FULL_ALLOWANCE],
   trackStats = false,
   tripCode,
@@ -960,7 +966,7 @@ export default function LiveScoringFlow({
         roundHandicaps={roundHandicaps}
         tees={tees}
         allowance={allowance}
-        offerQuota={offerQuota}
+        quotaScale={quotaScale}
         onClose={() => onLeaderboardChange(false)}
       />
     )
@@ -1362,7 +1368,7 @@ export default function LiveScoringFlow({
                 // card does. Swiping between two different handicaps would
                 // read as two different rounds.
                 allowance={allowance}
-                offerQuota={offerQuota}
+                quotaScale={quotaScale}
               />
             )}
           </div>

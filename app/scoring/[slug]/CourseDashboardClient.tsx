@@ -9,6 +9,7 @@ import type { ActiveLiveRound } from "../ScoringClient"
 import BackButton from "@/app/components/BackButton"
 import { CHROME_VAR, LEGACY_CHROME } from "../scoringHeaderMetrics"
 import { FULL_ALLOWANCE, hasReduction } from "@/lib/handicapAllowance"
+import { type QuotaScale } from "@/lib/quota"
 import {
   voidScorecard as voidScorecardData,
   removePlayerFromScorecard as removePlayerData,
@@ -98,7 +99,12 @@ interface Props {
    * just teach the wrong game. The legacy /scoring/[slug] route knows
    * nothing about a trip's boards and leaves this off.
    */
-  offerQuota?: boolean
+  /**
+   * The scale this trip's Quota board plays, or nothing where it runs none.
+   * Passed straight through — whether the Quota tab appears and what it
+   * counts are the same answer. See LiveLeaderboardPanel.
+   */
+  quotaScale?: QuotaScale | null
   /**
    * Room to leave at the bottom for anything fixed over this screen.
    *
@@ -131,7 +137,7 @@ type View = "dashboard" | "scoring" | "live-board" | "settings"
 export default function CourseDashboardClient({
   courseName, courseId, players, rounds, holes, tees, roundHandicaps,
   backHref = "/scoring", roundId, stickyTop = 0,
-  allowances = [FULL_ALLOWANCE], allowanceStart = 0, offerQuota = false,
+  allowances = [FULL_ALLOWANCE], allowanceStart = 0, quotaScale = null,
   bottomInset = "0", trackStats = false, tripCode,
 }: Props) {
   // The course card, held as state rather than read straight off the props:
@@ -972,7 +978,7 @@ export default function CourseDashboardClient({
           autoResume={isResuming}
           allowance={allowance}
           allowances={allowances}
-          offerQuota={offerQuota}
+          quotaScale={quotaScale}
           trackStats={trackStats}
           onBack={goBack}
           onLiveRoundChange={r => {
@@ -994,7 +1000,7 @@ export default function CourseDashboardClient({
           roundHandicaps={roundHandicaps}
           tees={courseTees}
           allowance={allowance}
-          offerQuota={offerQuota}
+          quotaScale={quotaScale}
           onClose={goBack}
           showBackButton={false}
         />

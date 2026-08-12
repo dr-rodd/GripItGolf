@@ -15,13 +15,13 @@ A league board is three answers, and they do not constrain one another:
 | *(teams only)* how the players combine | better ball · hero · cut the dead weight |
 | How the rounds add up | total them · pay by finishing position |
 
-Discard (0–2 worst rounds) and **how ties are broken** are asked of **every** league board. A draw asks nothing — it is generated at random.
+Discard (0–2 worst rounds) and **how ties are broken** are asked of **every** league board; a Quota board is asked one more, **which scale** its points are earned on.  A draw asks nothing — it is generated at random.
 
 **Every combination is a board that exists and is implemented.** `everyBoard()` is that grid, and the form offers cells from it and nothing else, so settings can never ask for maths that has not been written. This is the whole design: the renderer's capability is the fixed thing and the form is a selector over it, rather than each new option needing new scoring code.
 
 **"Custom points" used to sit beside Stableford and Strokes as a third way of scoring a round.** It never was one — it is Stableford, paid out by position — and having it in the wrong slot is what forced discard to be switched off for it, made the prize table hang off two unrelated fields, and made teams ask the same question again under the name `aggregation`. Splitting scoring from combining is what opened up nett-strokes team formats and strokes paid by position, neither of which was expressible before.
 
-**Quota** (`lib/quota.ts`, the only copy of its rules): every player chases their own number — 36 minus course handicap — with points earned off the **gross** against par: bogey 1, par 2, birdie 4, eagle 6, an albatross continuing the step to 8, double bogey or worse (or no score) nothing. The round's result is points minus quota, **signed** — positive beat it, negative fell short, higher is better. The handicap enters exactly once, in the target: a board allowance reduces the course handicap before the subtraction (`allowedHandicap`, same as everywhere), never the per-hole points. A plus handicap is negative and pushes the target above 36. **Individual-only** — the quota is personal, and no team format says whose number a composite card would chase; `scoringsFor`, `everyBoard` and `parseLeaderboards` all enforce it, so a team quota board cannot be made, offered or read back. The stored `scores.points` are Stableford's, so `scoresForBoard` restates a quota board's per-hole points even at the full allowance — that is why the early-return there checks the scoring too. The live panel in scoring offers a Quota tab only when a trip board actually plays it (`offerQuota`, threaded from the trip route), with a pts/quota sub-toggle in the same pill nett/gross uses: pts is the points accumulated, quota the signed distance to breaking even, and a finalised card always reads as its distance — higher is better — because "38 points" says nothing without knowing the quota.
+**Quota** (`lib/quota.ts`, the only copy of its rules): every player chases their own number — 36 minus course handicap — with points earned off the **gross** against par. **Which points is the trip's own choice**, made on the board when it is created (`quotaScale`) and offered as two scales — see *Which quota* below. The round's result is points minus quota, **signed** — positive beat it, negative fell short, higher is better. The handicap enters exactly once, in the target: a board allowance reduces the course handicap before the subtraction (`allowedHandicap`, same as everywhere), never the per-hole points. A plus handicap is negative and pushes the target above 36. **Individual-only** — the quota is personal, and no team format says whose number a composite card would chase; `scoringsFor`, `everyBoard` and `parseLeaderboards` all enforce it, so a team quota board cannot be made, offered or read back. The stored `scores.points` are Stableford's, so `scoresForBoard` restates a quota board's per-hole points even at the full allowance — that is why the early-return there checks the scoring too. The live panel in scoring offers a Quota tab only when a trip board actually plays it, and it is handed **the scale rather than a yes/no** (`quotaScale`, threaded from the trip route): whether the tab appears and what it counts are the same answer, and two props could disagree — the card in your hand counting Chicago while the board counted Liverpool is exactly the class of bug this app keeps closing. A pts/quota sub-toggle sits in the same pill nett/gross uses: pts is the points accumulated, quota the signed distance to breaking even, and a finalised card always reads as its distance — higher is better — because "38 points" says nothing without knowing the quota.
 
 **Team formats** (`lib/teamScoring.ts`): `better_ball` (best score on each hole), `hero` (best single card carries it), `cut_dead_weight` (everyone counts except the worst card of the day — that player is back in next round; ties broken by id so the same total is produced every time). Each works on either scoring: `teamRoundPoints` takes a `basis`, and `beats()` is the one place the direction lives — lowest wins on strokes, highest on Stableford.
 
@@ -213,12 +213,12 @@ A bracket round can be **linked to a round of golf** and told how a match on it 
 
 **A link is stored against the bracket round's *number*, not its name.** A field growing from seven to nine turns a Quarter-Final into a Round of 16 and adds a round below it — every name shifts, the numbers do not.
 
-Eight methods, in two shapes that behave differently:
+Seven methods, in two shapes that behave differently:
 
 | | Method | Settled |
 |---|---|---|
 | **hole by hole** | Stableford matchplay · Strokes matchplay gross · Strokes matchplay nett | when somebody is more holes up than there are holes left — or the holes run out |
-| **the whole card** | Total Stableford · Total strokes gross · Total strokes nett · Total quota Liverpool · Total quota Chicago | only when both cards are complete: the eighteenth can turn over any lead |
+| **the whole card** | Total Stableford · Total strokes gross · Total strokes nett · Total quota | only when both cards are complete: the eighteenth can turn over any lead |
 
 That difference is why **"3&2" is a real result** and a total has none like it — the last two holes were never played. `marginLabel` only uses the ampersand form when the match ended early; one that went the distance is simply "2 up".
 
@@ -228,17 +228,24 @@ That difference is why **"3&2" is a real result** and a total has none like it �
 
 **Quota is the one exception**, and deliberately: a quota is a target for a whole round (36 − course handicap), so no share of it belongs to the ninth hole and there is nothing to take the better of there. A pairing's quota is the **better of its two members' own cards**.
 
-**Every quota scale lives in `lib/quota.ts`**, alongside the target — a Quota *leaderboard* was already scoring on one before a knockout could be decided on any, and a second table would have been the same arithmetic under two roofs. `QUOTA_SCALES` holds all three, and the words describing each are read from there too, so a scale cannot be changed in one place and described in another:
+## Which quota
 
-| Scale | Bogey | Par | Birdie | Eagle | Used by |
-|---|---|---|---|---|---|
-| `standard` | 1 | 2 | 4 | 6 | the Quota leaderboard |
-| `liverpool` | 1 | 2 | 3 | 4 | matchplay link |
-| `chicago` | 1 | 2 | 4 | 8 | matchplay link |
+`lib/quota.ts` owns the table and the target. **Two scales**, differing only in what going under par is worth:
 
-Above par they all agree — a bogey is one and a double is nothing wherever you play — so that half is written once and the scales only answer for the holes they disagree about. `quotaPoints(gross, par)` is `standard` under its own name, unchanged, so the leaderboard is untouched by any of this.
+| Scale | Bogey | Par | Birdie | Eagle |
+|---|---|---|---|---|
+| `liverpool` | 1 | 2 | 3 | 4 |
+| `chicago` | 1 | 2 | 4 | 8 |
 
-**Three scales is one more than anybody asked for**, and it is worth knowing why: the Quota leaderboard's scale and the matchplay Chicago scale differ only at eagle (6 against 8) and were chosen separately. Aligning them is a decision nobody has taken.
+Above par they agree — a bogey is one point and a double bogey nothing wherever you play — so that half is written once and the scales only answer for the holes they actually disagree about. Going further under par continues whatever step the scale is on: an albatross is 5 on Liverpool, 16 on Chicago.
+
+**There was a third**, an in-between 1/2/4/6, and it was the default for exactly as long as it took somebody to notice it differed from Chicago at eagle alone. Two names for nearly the same thing is worse than one name, so it was retired and the boards playing it moved onto Chicago — which is why `DEFAULT_QUOTA_SCALE` is Chicago rather than the first row of the table. That re-scores any Quota board set up before the merge: eagles are worth 8 where they were worth 6.
+
+**The scale is the trip's, chosen once.** A Quota leaderboard is asked when it is created (`quotaScale` on the board) and every reader takes it from there — the board itself, and the live panel's Quota tab, which receives the scale rather than a yes/no so the card in your hand cannot count Chicago while the board counts Liverpool. `tripQuotaScale(boards)` is that answer.
+
+**A matchplay link may override it, for the knockout alone.** `RoundLink.quotaScale` is absent by default and the picker opens on "Same as the trip — Chicago style", so a trip playing Liverpool all week says so once. The resolution order is the link, then the trip, then the default, and it is written out in one place: `readBracket` in `lib/matchResults.ts`.
+
+The method list carries **one** quota entry, `quota_total`. It used to carry two — `quota_liverpool` beside `quota_chicago` — which put the choice of scale in two places with nothing keeping them in step. Links stored under either old name read back as the one method carrying the scale they named.
 
 **A halved match is left halved.** A knockout needs somebody to go through and the cards did not say who, so the tile reads All Square and whoever was there records it. Inventing a winner from a seeding would be putting a name on a result nobody played.
 

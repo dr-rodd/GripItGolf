@@ -4,7 +4,7 @@
 // settled. Once the cards are in, the winner follows from them — nobody taps
 // a name.
 //
-// Eight ways, and they fall into two shapes that behave quite differently:
+// Seven ways, and they fall into two shapes that behave quite differently:
 //
 //   **hole by hole** — stableford matchplay, strokes matchplay gross and
 //   nett. The match is won when somebody is more holes up than there are
@@ -12,13 +12,14 @@
 //   last two holes were never played.
 //
 //   **the whole card** — total stableford, total strokes gross and nett, and
-//   the two quotas. Nothing is settled until both cards are complete, because
+//   total quota. Nothing is settled until both cards are complete, because
 //   any hole left can still change the answer.
 //
-// **The quota scales are not here either.** `lib/quota.ts` owns the table and
-// the target — a Quota leaderboard already scored on one of them before a
-// knockout could be decided on any, and a second table would have been the
-// same arithmetic under two roofs.
+// **The quota scale is not chosen here either.** `lib/quota.ts` owns the table
+// and the target, and *which* scale is the trip's own answer — the Quota
+// leaderboard is asked when it is created. A link may override it for the
+// knockout alone, which is what `RoundLink.quotaScale` is; this file is handed
+// whichever won.
 //
 // **A pairing reads as one card.** Every method builds a per-hole card for
 // each side first — for a singles draw that is simply the player's own — so
@@ -35,7 +36,9 @@
 
 import { shotsReceived } from './handicap'
 import { bestOnHole, type ScoringBasis } from './teamScoring'
-import { type QuotaScale, QUOTA_SCALES, quotaPointsOn, quotaTarget } from './quota'
+import {
+  type QuotaScale, DEFAULT_QUOTA_SCALE, parseQuotaScale, quotaPoints, quotaTarget,
+} from './quota'
 
 // ─── The methods ───────────────────────────────────────────────
 
@@ -46,21 +49,7 @@ export type MatchDecision =
   | 'strokes_match_nett'
   | 'strokes_total_gross'
   | 'strokes_total_nett'
-  | 'quota_liverpool'
-  | 'quota_chicago'
-
-/**
- * What a quota method says under its button.
- *
- * The scale is the whole difference between the two quota options, so it has
- * to be on screen — but the words for it come from `QUOTA_SCALES` rather than
- * being typed again here. Typing them again is how a scale gets changed in
- * one place and described in another.
- */
-function quotaHint(scale: QuotaScale): string {
-  const words = QUOTA_SCALES.find(s => s.key === scale)?.hint ?? ''
-  return `Quota is 36 minus your course handicap. ${words} Beat it by most.`
-}
+  | 'quota_total'
 
 export const MATCH_DECISIONS: {
   key: MatchDecision
@@ -79,20 +68,34 @@ export const MATCH_DECISIONS: {
     hint: 'The lower gross score over the round.' },
   { key: 'strokes_total_nett', label: 'Total strokes — nett',
     hint: 'The lower nett score, each off their own full course handicap.' },
-  { key: 'quota_liverpool', label: 'Total quota — Liverpool style',
-    hint: quotaHint('liverpool') },
-  { key: 'quota_chicago', label: 'Total quota — Chicago style',
-    hint: quotaHint('chicago') },
+  { key: 'quota_total', label: 'Total quota',
+    hint: 'Quota is 36 minus your course handicap. Beat it by most.' },
 ]
 
 export const DEFAULT_MATCH_DECISION: MatchDecision = 'stableford_match'
 
 export function decisionOf(v: unknown): MatchDecision | null {
-  return MATCH_DECISIONS.find(m => m.key === v)?.key ?? null
+  const found = MATCH_DECISIONS.find(m => m.key === v)?.key
+  if (found) return found
+  // The two quota methods that used to be separate are one method and a
+  // scale now. A link stored under either old name is still a real link.
+  return legacyScale(v) ? 'quota_total' : null
+}
+
+/** The scale an older, scale-in-the-method link was naming. */
+function legacyScale(v: unknown): QuotaScale | null {
+  if (v === 'quota_liverpool') return 'liverpool'
+  if (v === 'quota_chicago') return 'chicago'
+  return null
 }
 
 export function decisionLabel(m: MatchDecision): string {
   return MATCH_DECISIONS.find(d => d.key === m)?.label ?? 'Matchplay'
+}
+
+/** Whether this method earns quota points, and so needs a scale. */
+export function isQuota(m: MatchDecision): boolean {
+  return m === 'quota_total'
 }
 
 /** Whether this method is settled hole by hole rather than over the whole card. */
@@ -155,6 +158,16 @@ export type MatchInput = {
   handicapOf: ReadonlyMap<string, number>
   /** How many holes the round is over. */
   holeCount?: number
+  /**
+   * The scale a quota is earned on, for the one method that earns any.
+   *
+   * Resolved by the caller — the link's own override if it has one, otherwise
+   * the trip's Quota board, otherwise the default. This module is handed the
+   * answer rather than working it out, because "which scale is this trip on"
+   * is a question about the trip's leaderboards and this file knows nothing
+   * about those. See lib/matchResults.ts.
+   */
+  quotaScale?: QuotaScale
 }
 
 // ─── What it answers ───────────────────────────────────────────
@@ -258,9 +271,7 @@ function receivedIn(input: MatchInput, playerId: string): number {
  */
 function sideCard(input: MatchInput, side: MatchSide): Card {
   const holeCount = input.holeCount ?? 18
-  if (input.method === 'quota_liverpool' || input.method === 'quota_chicago') {
-    return quotaCard(input, side, holeCount)
-  }
+  if (isQuota(input.method)) return quotaCard(input, side, holeCount)
 
   const basis: ScoringBasis = lowerWins(input.method) ? 'strokes' : 'stableford'
   const holes = new Map<number, number>()
@@ -314,14 +325,14 @@ function valueOf(input: MatchInput, h: PlayerHole): number | null {
  * are real holes rather than a composite of two players.
  */
 function quotaCard(input: MatchInput, side: MatchSide, holeCount: number): Card {
-  const scale: QuotaScale = input.method === 'quota_chicago' ? 'chicago' : 'liverpool'
+  const scale = input.quotaScale ?? DEFAULT_QUOTA_SCALE
 
   const cards = side.playerIds.map(playerId => {
     const holes = new Map<number, number>()
     for (const h of input.holes) {
       if (h.playerId !== playerId) continue
       if (h.gross == null || h.noReturn) continue
-      holes.set(h.holeNumber, quotaPointsOn(h.gross, h.par, scale))
+      holes.set(h.holeNumber, quotaPoints(h.gross, h.par, scale))
     }
     const target = quotaTarget(input.handicapOf.get(playerId) ?? 0)
     return { id: side.id, holes, target, complete: holes.size >= holeCount }
@@ -452,6 +463,15 @@ export type RoundLink = {
   /** `rounds.id`. */
   roundId: string
   decidedBy: MatchDecision
+  /**
+   * The quota scale this link overrides the trip's with. `quota_total` only.
+   *
+   * Absent means the trip's own — the Quota leaderboard's, if it runs one.
+   * That is the point of it being an override rather than a setting: a trip
+   * playing Liverpool all week does not have to say so twice, and the one
+   * knockout somebody wants on Chicago says so once, here.
+   */
+  quotaScale?: QuotaScale
 }
 
 export function parseRoundLinks(raw: unknown): RoundLink[] {
@@ -465,10 +485,22 @@ export function parseRoundLinks(raw: unknown): RoundLink[] {
     if (!Number.isInteger(bracketRound) || bracketRound < 1) continue
     if (typeof r.roundId !== 'string' || !r.roundId) continue
     if (!decidedBy) continue
+
+    // The scale rides on the link, and only where the method earns any. It
+    // used to be part of the method itself — `quota_liverpool` beside
+    // `quota_chicago` — which put the trip's choice of scale in two places
+    // with nothing keeping them in step. Those older links read back as the
+    // one method carrying the scale they named.
+    const scale = decidedBy === 'quota_total'
+      ? parseQuotaScale(r.quotaScale) ?? legacyScale(r.decidedBy)
+      : null
     // One link per bracket round. A second is not a second competition, it is
     // a contradiction about how the same matches are decided.
     if (out.some(l => l.bracketRound === bracketRound)) continue
-    out.push({ bracketRound, roundId: r.roundId, decidedBy })
+    out.push({
+      bracketRound, roundId: r.roundId, decidedBy,
+      ...(scale ? { quotaScale: scale } : {}),
+    })
   }
   return out.sort((a, b) => a.bracketRound - b.bracketRound)
 }

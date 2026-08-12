@@ -23,10 +23,12 @@ import fs from 'fs'
 import {
   type MatchDecision, type PlayerHole, type MatchSide,
   MATCH_DECISIONS, DEFAULT_MATCH_DECISION,
-  readMatch, isHoleByHole, decisionOf, decisionLabel,
+  readMatch, isHoleByHole, isQuota, decisionOf, decisionLabel,
   parseRoundLinks, linkFor,
 } from '../lib/matchDecision'
-import { QUOTA_SCALES, quotaPoints, quotaPointsOn, quotaTarget } from '../lib/quota'
+import {
+  type QuotaScale, QUOTA_SCALES, DEFAULT_QUOTA_SCALE, quotaPoints, quotaTarget,
+} from '../lib/quota'
 import { pendingResults, type MatchReading } from '../lib/matchResults'
 import { parseLeaderboards, boardRules } from '../lib/leaderboards'
 import { bestOnHole } from '../lib/teamScoring'
@@ -94,6 +96,7 @@ function match(
   holes: PlayerHole[],
   handicaps: Record<string, number> = {},
   sides: [MatchSide, MatchSide] = [solo('a'), solo('b')],
+  quotaScale?: QuotaScale,
 ) {
   return readMatch({
     method,
@@ -102,19 +105,20 @@ function match(
     holes,
     handicapOf: new Map(Object.entries(handicaps)),
     holeCount: 18,
+    quotaScale,
   })
 }
 
 // ─── The list ──────────────────────────────────────────────────
 
-section('The eight ways a match can be decided')
+section('The seven ways a match can be decided')
 {
-  eq(MATCH_DECISIONS.length, 8, 'eight of them')
+  eq(MATCH_DECISIONS.length, 7, 'seven of them')
   eq(MATCH_DECISIONS.map(m => m.key), [
     'stableford_match', 'stableford_total',
     'strokes_match_gross', 'strokes_match_nett',
     'strokes_total_gross', 'strokes_total_nett',
-    'quota_liverpool', 'quota_chicago',
+    'quota_total',
   ], 'in the order the form offers them')
 
   ok(MATCH_DECISIONS.every(m => m.hint.endsWith('.')), 'every hint closes')
@@ -122,21 +126,23 @@ section('The eight ways a match can be decided')
 
   eq(MATCH_DECISIONS.filter(m => isHoleByHole(m.key)).map(m => m.key),
     ['stableford_match', 'strokes_match_gross', 'strokes_match_nett'],
-    'three are settled hole by hole; the other five are totals')
+    'three are settled hole by hole; the other four are totals')
+
+  eq(MATCH_DECISIONS.filter(m => isQuota(m.key)).map(m => m.key), ['quota_total'],
+    'and one earns quota points, so one takes a scale')
 
   eq(decisionOf('stableford_match'), 'stableford_match', 'a known key reads back')
   eq(decisionOf('sideways'), null, 'an unknown one is dropped rather than repaired')
   eq(decisionOf(undefined), null, 'and so is nothing at all')
-  eq(decisionLabel('quota_chicago'), 'Total quota — Chicago style', 'each has a name')
+  eq(decisionLabel('quota_total'), 'Total quota', 'each has a name')
   eq(DEFAULT_MATCH_DECISION, 'stableford_match', 'a fresh link starts on Stableford matchplay')
 
-  // The two quota scales are the whole difference between those two options,
-  // so each has to say its own scale
-  const liverpool = MATCH_DECISIONS.find(m => m.key === 'quota_liverpool')!
-  const chicago = MATCH_DECISIONS.find(m => m.key === 'quota_chicago')!
-  ok(/birdie 3/.test(liverpool.hint), 'Liverpool names its scale')
-  ok(/birdie 4/.test(chicago.hint), 'and so does Chicago')
-  ok(/36/.test(liverpool.hint), 'and the quota it is measured against')
+  // The scale is the trip's, not the method's, so the method names the quota
+  // and leaves the points to whoever set the board
+  const quota = MATCH_DECISIONS.find(m => m.key === 'quota_total')!
+  ok(/36/.test(quota.hint), 'the quota method names the number being chased')
+  ok(!/birdie/.test(quota.hint),
+    'and not the scale — that is the trip\'s answer, given on its Quota board')
 }
 
 // ─── Hole by hole ──────────────────────────────────────────────
@@ -269,38 +275,31 @@ section('A total that finishes level is halved too')
 
 // ─── Quota ─────────────────────────────────────────────────────
 
-section('The quota scales, which all live in lib/quota.ts')
+section('The scale a knockout quota is read on')
 {
-  // A double bogey, a bogey, a par, a birdie, an eagle — on each scale
-  const ladder = (scale: 'standard' | 'liverpool' | 'chicago') =>
-    [6, 5, 4, 3, 2].map(g => quotaPointsOn(g, 4, scale))
-
-  eq(ladder('liverpool'), [0, 1, 2, 3, 4],
-    'Liverpool climbs one at a time, and a double bogey is worth nothing')
-  eq(ladder('chicago'), [0, 1, 2, 4, 8], 'Chicago doubles from par up')
-  eq(ladder('standard'), [0, 1, 2, 4, 6],
-    'and the standard scale — what a Quota leaderboard plays — steps by two')
-
-  // Above par every scale agrees, which is why that half is written once
-  for (const scale of ['standard', 'liverpool', 'chicago'] as const) {
-    eq([quotaPointsOn(5, 4, scale), quotaPointsOn(6, 4, scale), quotaPointsOn(9, 4, scale)],
-      [1, 0, 0], `${scale}: a bogey is one and anything worse is nothing`)
-  }
-
-  eq(quotaPointsOn(1, 4, 'chicago'), 16, 'an albatross keeps doubling on Chicago')
-  eq(quotaPointsOn(null, 4, 'liverpool'), 0, 'and a hole with no score earns nothing')
-
-  // The landed Quota leaderboard must be untouched by any of this
-  eq([6, 5, 4, 3, 2, 1].map(g => quotaPoints(g, 4)), [0, 1, 2, 4, 6, 8],
-    'quotaPoints is the standard scale under its own name, exactly as it was')
+  eq(QUOTA_SCALES.map(s => s.key), ['liverpool', 'chicago'], 'two scales, in one table')
+  ok(QUOTA_SCALES.every(s => s.hint.endsWith('.')), 'each saying its own scale')
 
   eq(quotaTarget(12), 24, 'a 12 handicap is trying to beat 24')
-  eq(quotaTarget(0), 36, 'a scratch player 36')
   eq(quotaTarget(-1), 37, 'and a plus handicap has further to go')
 
-  eq(QUOTA_SCALES.map(s => s.key), ['standard', 'liverpool', 'chicago'],
-    'three scales, in one table')
-  ok(QUOTA_SCALES.every(s => s.hint.endsWith('.')), 'each saying its own scale')
+  // Same cards, two scales — the eagle is the whole difference
+  const holes = [
+    ...card('a', withHoles(4, { 1: 2 }), 12),   // one eagle
+    ...card('b', flat(4), 12),
+  ]
+  eq(match('quota_total', holes, { a: 12, b: 12 }, undefined, 'liverpool').margin, 2,
+    'on Liverpool an eagle is two points clear of the par it replaced')
+  eq(match('quota_total', holes, { a: 12, b: 12 }, undefined, 'chicago').margin, 6,
+    'on Chicago it is six')
+
+  // No scale given falls to the default rather than scoring nothing
+  eq(match('quota_total', holes, { a: 12, b: 12 }).margin,
+    match('quota_total', holes, { a: 12, b: 12 }, undefined, DEFAULT_QUOTA_SCALE).margin,
+    'a link that names no scale reads on the default')
+
+  // And the table itself is not restated here
+  eq(quotaPoints(2, 4, 'chicago'), 8, 'the scale comes from lib/quota.ts')
 }
 
 section('Total quota — beating your own target by most')
@@ -309,7 +308,7 @@ section('Total quota — beating your own target by most')
   // b is a 20 (quota 16) and bogeys everything: 18 points, +2
   const holes = [...card('a', flat(4), 12), ...card('b', flat(5), 20)]
 
-  const m = match('quota_liverpool', holes, { a: 12, b: 20 })
+  const m = match('quota_total', holes, { a: 12, b: 20 }, undefined, 'liverpool')
   eq(m.leaderId, 'a', 'a beat their quota by more')
   eq(m.margin, 10, 'by ten points of it')
   eq(m.result, 'by 10 points', 'counted in points')
@@ -317,7 +316,7 @@ section('Total quota — beating your own target by most')
 
   // The steeper scale changes nothing here — nobody birdied — but it must
   // still read the same cards without falling over
-  const chicago = match('quota_chicago', holes, { a: 12, b: 20 })
+  const chicago = match('quota_total', holes, { a: 12, b: 20 }, undefined, 'chicago')
   eq(chicago.margin, 10, 'Chicago agrees where nobody went under par')
 
   // One birdie each way, and the scales part company
@@ -325,9 +324,9 @@ section('Total quota — beating your own target by most')
     ...card('a', withHoles(4, { 1: 3, 2: 3 }), 12),
     ...card('b', flat(5), 20),
   ]
-  eq(match('quota_liverpool', birdies, { a: 12, b: 20 }).margin, 12,
+  eq(match('quota_total', birdies, { a: 12, b: 20 }, undefined, 'liverpool').margin, 12,
     'two birdies are worth a point each more on Liverpool')
-  eq(match('quota_chicago', birdies, { a: 12, b: 20 }).margin, 14,
+  eq(match('quota_total', birdies, { a: 12, b: 20 }, undefined, 'chicago').margin, 14,
     'and two each more on Chicago')
 }
 
@@ -373,7 +372,8 @@ section('Quota for a pairing is the better card, not a better ball')
     ...card('q2', flat(5), 20),
   ]
   const m = readMatch({
-    method: 'quota_liverpool',
+    method: 'quota_total',
+    quotaScale: 'liverpool',
     a: { id: 'A', playerIds: ['p1', 'p2'] },
     b: { id: 'B', playerIds: ['q1', 'q2'] },
     holes,
@@ -431,6 +431,35 @@ section('Linking a bracket round to a round of golf')
     'and a link to no round at all is not a link')
   eq(parseRoundLinks('nonsense'), [], 'junk reads as nothing linked')
 
+  // The scale used to be part of the method — `quota_liverpool` beside
+  // `quota_chicago` — which put the trip's choice of scale in two places with
+  // nothing keeping them in step. A link stored that way is still a real link.
+  const old = parseRoundLinks([
+    { bracketRound: 1, roundId: 'r1', decidedBy: 'quota_liverpool' },
+    { bracketRound: 2, roundId: 'r2', decidedBy: 'quota_chicago' },
+  ])
+  eq(old.map(l => l.decidedBy), ['quota_total', 'quota_total'],
+    'both older quota methods read back as the one method')
+  eq(old.map(l => l.quotaScale), ['liverpool', 'chicago'],
+    'each carrying the scale it was naming')
+
+  const plain = parseRoundLinks([
+    { bracketRound: 1, roundId: 'r1', decidedBy: 'quota_total' },
+  ])[0]
+  ok(!('quotaScale' in plain),
+    'a link that names no scale carries none — it takes the trip\'s')
+
+  const overridden = parseRoundLinks([
+    { bracketRound: 1, roundId: 'r1', decidedBy: 'quota_total', quotaScale: 'liverpool' },
+  ])[0]
+  eq(overridden.quotaScale, 'liverpool', 'and one that overrides keeps its override')
+
+  const notQuota = parseRoundLinks([
+    { bracketRound: 1, roundId: 'r1', decidedBy: 'stableford_match', quotaScale: 'liverpool' },
+  ])[0]
+  ok(!('quotaScale' in notQuota),
+    'a scale on a method that earns no quota is dropped, not carried silently')
+
   const dupes = parseRoundLinks([
     { bracketRound: 1, roundId: 'r1', decidedBy: 'stableford_match' },
     { bracketRound: 1, roundId: 'r2', decidedBy: 'strokes_total_gross' },
@@ -459,7 +488,7 @@ section('A draw carries its links through storage')
     ...stored[0],
     roundLinks: [
       { bracketRound: 1, roundId: 'r1', decidedBy: 'stableford_match' },
-      { bracketRound: 2, roundId: 'r2', decidedBy: 'quota_chicago' },
+      { bracketRound: 2, roundId: 'r2', decidedBy: 'quota_total' },
     ],
   }])[0]
   ok(/2 rounds linked/.test(boardRules(mixed)),

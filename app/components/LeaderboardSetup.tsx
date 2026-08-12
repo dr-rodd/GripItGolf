@@ -4,8 +4,8 @@ import { useState } from 'react'
 import {
   type Leaderboard, type Audience,
   scoringsFor, TEAM_FORMATS, COMBINES, MAX_DISCARD,
-  unanswered, isComplete, offersDiscard, offersTieBreak, offersAllowance,
-  slotKey, isFormatFree,
+  unanswered, isComplete, offersDiscard, offersTieBreak, offersQuotaScale,
+  offersAllowance, tripQuotaScale, slotKey, isFormatFree,
   freeScorings, freeTeamFormats,
   hasMatchplay, boardTitle, boardRules,
 } from '@/lib/leaderboards'
@@ -16,8 +16,11 @@ import {
 import { TIE_BREAKS, OVERALL_TIES, DEFAULT_TIE_BREAK, tieBreakOf, overallTieOf } from '@/lib/tiebreak'
 import {
   type RoundLink, type MatchDecision,
-  MATCH_DECISIONS, DEFAULT_MATCH_DECISION, linkFor,
+  MATCH_DECISIONS, DEFAULT_MATCH_DECISION, linkFor, isQuota,
 } from '@/lib/matchDecision'
+import {
+  type QuotaScale, QUOTA_SCALES, DEFAULT_QUOTA_SCALE, quotaScaleOf, quotaScaleLabel,
+} from '@/lib/quota'
 import { previewBracket } from '@/lib/matchplay'
 import { nextSheetId } from '@/lib/teamSets'
 import { defaultCustomPoints, editableRows, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
@@ -404,12 +407,14 @@ function AllowancePicker({
  * and adds a round below it — the names all shift, the numbers do not.
  */
 function RoundLinks({
-  links, rounds, entrantCount, onChange,
+  links, rounds, entrantCount, tripScale, onChange,
 }: {
   links: RoundLink[]
   rounds: LinkableRound[]
   /** Players in a singles draw, pairings in a pairs one. */
   entrantCount: number
+  /** What the trip's Quota board plays, which a link may override. */
+  tripScale: QuotaScale
   onChange: (links: RoundLink[]) => void
 }) {
   const shape = previewBracket(entrantCount)
@@ -422,10 +427,16 @@ function RoundLinks({
     // to being decided by hand, so it is a removal rather than a half-filled
     // entry the scoring side would have to guard against.
     if (roundId) {
+      const decidedBy = patch.decidedBy ?? current?.decidedBy ?? DEFAULT_MATCH_DECISION
+      // The override belongs to the quota method. A link switched to
+      // something else would otherwise carry an answer to a question it is
+      // no longer being asked, and switching back would silently restore it.
+      const quotaScale = isQuota(decidedBy)
+        ? patch.quotaScale ?? current?.quotaScale
+        : undefined
       next.push({
-        bracketRound,
-        roundId,
-        decidedBy: patch.decidedBy ?? current?.decidedBy ?? DEFAULT_MATCH_DECISION,
+        bracketRound, roundId, decidedBy,
+        ...(quotaScale ? { quotaScale } : {}),
       })
     }
     onChange(next.sort((a, b) => a.bracketRound - b.bracketRound))
@@ -489,13 +500,36 @@ function RoundLinks({
                         <option key={m.key} value={m.key}>{m.label}</option>
                       ))}
                     </select>
-                    {/* The scale a quota runs on is the whole difference
-                        between the two of them, and nobody carries it in
-                        their head — so it is under the control, not in a
-                        help page. */}
                     <p className="t-cap text-ink/65 mt-2 leading-snug">
                       {MATCH_DECISIONS.find(m => m.key === link.decidedBy)?.hint}
                     </p>
+
+                    {/* The scale is the trip's, set on its Quota board. This
+                        is only here to disagree with it for the knockout —
+                        so it opens on "the trip's" and names what that is,
+                        rather than asking the same question twice. */}
+                    {isQuota(link.decidedBy) && (
+                      <>
+                        <label className={`${FIELD_LABEL} mt-3`}>Quota scale</label>
+                        <select
+                          value={link.quotaScale ?? ''}
+                          onChange={e => setLink(bracketRound, {
+                            quotaScale: (e.target.value || undefined) as QuotaScale | undefined,
+                          })}
+                          className={FIELD}
+                        >
+                          <option value="">
+                            Same as the trip — {quotaScaleLabel(tripScale)}
+                          </option>
+                          {QUOTA_SCALES.map(q => (
+                            <option key={q.key} value={q.key}>{q.label}</option>
+                          ))}
+                        </select>
+                        <p className="t-cap text-ink/65 mt-2 leading-snug">
+                          {QUOTA_SCALES.find(q => q.key === (link.quotaScale ?? tripScale))?.hint}
+                        </p>
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -633,6 +667,28 @@ function Builder({
               onClick={() => set({ scoring: s.key })}
             />
           ))}
+        </Question>
+      )}
+
+      {/* Only a Quota board earns quota points, so only a Quota board is
+          asked. It sits directly under the scoring rather than at the end of
+          the cascade because it is not a refinement of the board — it is what
+          the board's numbers mean. */}
+      {offersQuotaScale(draft) && (
+        <Question n={next()} title="How is quota scored?">
+          {QUOTA_SCALES.map(q => (
+            <Choice
+              key={q.key}
+              on={quotaScaleOf(draft) === q.key}
+              label={q.label}
+              hint={q.hint}
+              onClick={() => set({ quotaScale: q.key })}
+            />
+          ))}
+          <p className="t-cap text-ink/65 leading-snug">
+            Your quota is 36 minus your course handicap either way — the scale
+            only decides what going under par is worth.
+          </p>
         </Question>
       )}
 
@@ -776,6 +832,9 @@ function Builder({
             links={draft.roundLinks ?? []}
             rounds={rounds}
             entrantCount={field}
+            // The trip's own scale, off the boards it already runs — the
+            // draw being made is not one of them and has no scale of its own.
+            tripScale={tripQuotaScale(existing)}
             onChange={roundLinks => set({ roundLinks })}
           />
         </>
