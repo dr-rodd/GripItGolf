@@ -177,7 +177,7 @@ The general lesson is the one `docs/course-import.md` already names: eighteen pa
 
 ## The course picker still cannot tell a researched course from a cardless one
 
-`cardState` in `lib/courseCard.ts` gives a course three states, and `/admin/courses` shows all three. **The picker shows two.** `CourseSelect.tsx` badges `Awaiting scorecard` on `card_verified === false` and nothing else, so a course with eighteen researched holes and a course with no card at all look identical to whoever is building a trip — and only one of them can be scored.
+`cardState` in `lib/courseCard.ts` gives a course three states, and `/admin/courses` shows all three. **The picker shows two.** `CourseSelect.tsx` marks `Awaiting card` on `card_verified === false` and nothing else, so a course with eighteen researched holes and a course with no card at all look identical to whoever is building a trip — and only one of them can be scored.
 
 The reason it was not fixed with the admin side is that the picker has no hole data at all. `DirectoryCourse` (`lib/courseDirectory.ts`) carries id, name, location, county, website and `card_verified`, and all three callers feed it a plain `courses` select with no join:
 

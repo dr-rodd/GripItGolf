@@ -9,7 +9,7 @@ import {
 } from '@/lib/courseDirectory'
 import type { SuggestedTee } from '@/lib/courseLookup'
 import CardCheck from '@/app/scoring/CardCheck'
-import { FIELD, FIELD_LABEL, buttonClass, Badge } from './ui'
+import { FIELD, FIELD_LABEL, buttonClass } from './ui'
 import { IconChevronDown, IconX, IconPlus } from './icons'
 
 /**
@@ -38,6 +38,42 @@ type View =
   | { kind: 'browse' }
   | { kind: 'add' }
   | { kind: 'created'; course: DirectoryCourse }
+
+/**
+ * The mark on a course whose card has not been photographed yet — on the list
+ * rows and on the field they collapse into, from here so the two cannot drift.
+ *
+ * Deliberately not `Badge`. A filled pill at `t-cap` is 15px, uppercase and
+ * tracked, which ran "AWAITING SCORECARD" to some 190px of a 320px phone row
+ * and left the course name truncating inside the rest — and a pill that size
+ * is the treatment for something happening now, where this is a footnote about
+ * paperwork on a course you can still pick. Seventeen of the eighty-eight
+ * carry it, so it is a common sight rather than an alarm.
+ *
+ * Still uppercase and tracked, because unfilled text next to a name has to
+ * read as a status and not as part of the name — or as part of the location
+ * line under it. 13px because that is the floor `scripts/test-branding.tsx`
+ * holds for any hand-set size, and this is writing to be read rather than one
+ * of the two marks it exempts. Between the shorter words, losing the fill and
+ * losing the padding it still comes out at not much over half the width.
+ * `ink/65` is the muted tier and is not a free choice either: the same suite
+ * walks every `text-ink/N` in the app and reserves anything lighter for large
+ * text.
+ *
+ * It says nothing about *which* card is missing, because the picker cannot
+ * tell — `DirectoryCourse` carries no hole count, so a researched course that
+ * plays perfectly well and a cardless one nobody can score look the same here.
+ * `docs/gotchas-and-debt.md` has that one.
+ */
+function AwaitingCard({ className = '' }: { className?: string }) {
+  return (
+    <span
+      className={`flex-shrink-0 text-[13px] leading-none uppercase tracking-[0.1em] text-ink/65 whitespace-nowrap ${className}`.trim()}
+    >
+      Awaiting card
+    </span>
+  )
+}
 
 export default function CourseSelect({
   courses, value, onChange, onCourseAdded,
@@ -86,7 +122,7 @@ export default function CourseSelect({
       <span className={`flex-1 min-w-0 truncate ${chosen ? 'text-ink' : 'text-ink/60'}`}>
         {chosen ? chosen.name : 'Choose a course'}
       </span>
-      {chosen?.card_verified === false && <Badge>Awaiting scorecard</Badge>}
+      {chosen?.card_verified === false && <AwaitingCard />}
       <span className="flex-shrink-0 text-ink/65">
         <IconChevronDown size={16} />
       </span>
@@ -182,7 +218,7 @@ export default function CourseSelect({
                         role="option"
                         aria-selected={on}
                         onClick={() => { onChange(c.id); close() }}
-                        className={`w-full flex items-center gap-3 px-1 py-3.5 text-left border-b border-bark/[0.08] transition-colors duration-150 ${
+                        className={`w-full flex items-start gap-3 px-1 py-3.5 text-left border-b border-bark/[0.08] transition-colors duration-150 ${
                           on ? 'bg-accent/[0.06]' : 'active:bg-bark/[0.04]'
                         }`}
                       >
@@ -194,12 +230,15 @@ export default function CourseSelect({
                             <span className="block truncate t-cap text-ink/65 mt-0.5">{c.location}</span>
                           )}
                         </span>
-                        {c.card_verified === false && (
-                          <Badge className="flex-shrink-0">Awaiting scorecard</Badge>
-                        )}
+                        {/* Both of these are nudged down onto the name's own
+                            line. The row is `items-start` so the label sits
+                            top-right rather than floating against the middle
+                            of a two-line block; the margins are half of what
+                            the 17px name leaves over each one. */}
+                        {c.card_verified === false && <AwaitingCard className="mt-1" />}
                         {/* The green dot, marking the one that counts. */}
                         <span
-                          className={`w-2 h-2 rounded-full flex-shrink-0 ${on ? 'bg-accent' : 'bg-transparent'}`}
+                          className={`w-2 h-2 mt-2.5 rounded-full flex-shrink-0 ${on ? 'bg-accent' : 'bg-transparent'}`}
                           aria-hidden="true"
                         />
                       </button>
