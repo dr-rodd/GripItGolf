@@ -12,6 +12,22 @@ import TripHeader from '@/app/components/TripHeader'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * What this page reads off a round.
+ *
+ * The query asks for `rounds(*)` so the casual flag rides along without being
+ * named — migration 031 is run by hand. This names the columns actually used,
+ * which is also what lets the file drop the three `any` casts it carried back
+ * when `rounds` came out of a separate untyped query.
+ */
+type BoardRound = {
+  id: string
+  round_number: number
+  status?: string
+  casual?: boolean
+  courses: { id: string; name: string } | null
+}
+
 export default async function TripLeaderboardPage({
   params,
 }: {
@@ -19,24 +35,33 @@ export default async function TripLeaderboardPage({
 }) {
   const { tripCode } = await params
 
+  // The trip and its rounds in one request.
+  //
+  // Everything below is scoped by round or by course, so the rounds have to
+  // be known before the big batch can be asked for — which used to mean a
+  // second round trip, waited for on its own, between the trip lookup and the
+  // nine queries under it. Embedding them costs nothing: the two are joined
+  // by `rounds.trip_id`, so Postgres does the work this end and one request
+  // comes back with both. This is the slowest page in the app and that hop
+  // was pure latency on it.
+  //
+  // `rounds(*)` rather than a column list, so the casual flag rides along
+  // without being named — migration 031 is run by hand, and this page must
+  // keep working on a database without it. The ordering has to name the
+  // embedded table; left off, the rounds come back in whatever order the
+  // join produced and the board's columns are shuffled.
   const { data: trip } = await supabase
     .from('trips')
-    .select('*')
+    .select('*, rounds(*, courses(id, name))')
     .eq('trip_code', tripCode)
+    .order('round_number', { referencedTable: 'rounds' })
     .single()
   if (!trip) notFound()
 
-  // Rounds first so we can scope holes, scores and handicaps by round/course.
-  // `*` so the casual flag rides along without being named — migration 031 is
-  // run by hand, and this page must keep working on a database without it.
-  const { data: rounds } = await supabase
-    .from('rounds')
-    .select('*, courses(id, name)')
-    .eq('trip_id', trip.id)
-    .order('round_number')
+  const rounds = (trip.rounds ?? []) as BoardRound[]
 
-  const roundIds  = (rounds ?? []).map(r => r.id)
-  const courseIds = (rounds ?? []).map(r => (r.courses as any)?.id).filter(Boolean)
+  const roundIds  = rounds.map(r => r.id)
+  const courseIds = rounds.map(r => r.courses?.id).filter(Boolean)
   const nilId     = '00000000-0000-0000-0000-000000000000'
 
   const [teamsRes, playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes,
@@ -100,7 +125,7 @@ export default async function TripLeaderboardPage({
     openRounds.flatMap(r => (r.live_player_locks ?? []).map(l => l.player_id))
   )]
   const hasActiveRound =
-    activeRoundIds.length > 0 || (rounds ?? []).some((r: any) => r.status === 'active')
+    activeRoundIds.length > 0 || rounds.some(r => r.status === 'active')
 
   return (
     <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
@@ -117,7 +142,7 @@ export default async function TripLeaderboardPage({
         activeRoundIds={activeRoundIds}
         livePlayerIds={livePlayerIds}
         legacyTeamScoring={isLegacy(stored) ? teamScoring : null}
-        rounds={(rounds ?? []) as any}
+        rounds={rounds}
         teams={teamsRes.data ?? []}
         memberships={memberships}
         players={playersRes.data ?? []}

@@ -21,6 +21,7 @@ import { parseHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING } from '@/lib/hand
 import HandicapField from '@/app/components/HandicapField'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
+import { usePlatformCourses } from '@/app/components/usePlatformCourses'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -78,25 +79,7 @@ export default function CreateTripForm() {
    * round trip and a query after the mark had already landed. They are not
    * wanted until step two, so they load while the trip is being named.
    */
-  const [courses, setCourses] = useState<Course[]>([])
-  const [coursesLoaded, setCoursesLoaded] = useState(false)
-
-  useEffect(() => {
-    let live = true
-    supabase
-      .from('courses')
-      // `*` so `county` (migration 032, run by hand) rides along without
-      // being named — absent, the picker falls back to parsing the location.
-      .select('*')
-      .is('trip_id', null)
-      .order('name')
-      .then(({ data }) => {
-        if (!live) return
-        setCourses(data ?? [])
-        setCoursesLoaded(true)
-      })
-    return () => { live = false }
-  }, [])
+  const { courses, loaded: coursesLoaded } = usePlatformCourses()
 
   const [step, setStep] = useState<1 | 2 | 3 | 'done'>(1)
 

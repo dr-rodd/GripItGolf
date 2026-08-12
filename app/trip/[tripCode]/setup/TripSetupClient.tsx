@@ -9,7 +9,6 @@ import {
 } from '@/lib/teamLimits'
 import MatchplayPanel from './MatchplayPanel'
 import ItineraryEditor from './ItineraryEditor'
-import type { DirectoryCourse } from '@/lib/courseDirectory'
 import DateField from '@/app/components/DateField'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import TripHeader from '@/app/components/TripHeader'
@@ -77,7 +76,6 @@ type RoundInfo = {
   courseName?: string | null
 }
 
-type Course = DirectoryCourse
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -163,7 +161,6 @@ export default function TripSetupClient({
   memberships: initialMemberships,
   rounds,
   itinerary,
-  courses,
   lockedGolfItemIds,
 }: {
   trip: Trip
@@ -175,8 +172,6 @@ export default function TripSetupClient({
    * before the itinerary existed; the editor still opens on one and lets an
    * organiser start building it from nothing. */
   itinerary: ItineraryItem[]
-  /** The platform course list, for the golf sheet inside the editor. */
-  courses: Course[]
   /**
    * Golf items whose round already has a score or a live session recorded.
    * The editor locks exactly those — a course change would orphan real data
@@ -713,7 +708,6 @@ export default function TripSetupClient({
           tripId={trip.id}
           startDate={startDate || null}
           endDate={endDate || null}
-          courses={courses}
           initialItems={itinerary}
           lockedGolfItemIds={lockedGolfItemIds}
           trackStats={trackStats}

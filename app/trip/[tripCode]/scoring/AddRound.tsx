@@ -8,6 +8,7 @@ import {
 } from '@/lib/itinerary'
 import { saveItinerary } from '@/lib/itineraryStore'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
+import { usePlatformCourses } from '@/app/components/usePlatformCourses'
 import {
   Sheet, GolfFields, golfDraftFields, EMPTY_GOLF_DRAFT, type GolfDraft,
 } from '@/app/components/ItineraryForms'
@@ -26,7 +27,7 @@ import { IconPlus } from '@/app/components/icons'
  * with the next number, handicap snapshots for every player.
  */
 export default function AddRound({
-  tripId, startDate, endDate, trackStats, items, players, courses,
+  tripId, startDate, endDate, trackStats, items, players,
 }: {
   tripId: string
   startDate: string | null
@@ -35,8 +36,11 @@ export default function AddRound({
   /** The whole itinerary as saved — the diff needs what already exists. */
   items: ItineraryItem[]
   players: { id: string; handicap: number | null }[]
-  courses: DirectoryCourse[]
 }) {
+  // Loaded here rather than handed down from the page: the scoring screen is
+  // a list of rounds and does not need a course catalogue to draw itself.
+  // See the note in `usePlatformCourses`.
+  const { courses } = usePlatformCourses()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<GolfDraft>(EMPTY_GOLF_DRAFT)

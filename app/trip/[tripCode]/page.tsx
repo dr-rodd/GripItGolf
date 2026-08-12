@@ -260,8 +260,18 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       // In a pairs draw the entrant is the PAIRING, not the player — and the
       // pairing is their place on that draw's sheet, which need not be the
       // team they play the league in.
+      //
+      // Both halves of that come from the same place and neither waits on the
+      // other: the memberships say which pairing this player is, the teams
+      // say what a pairing is called. They were awaited one after the other,
+      // which is two round trips for a single line of text on the hub.
       const pairs = needsPairings(boards)
-      const memberships = pairs ? await fetchMemberships(trip.id) : []
+      const [memberships, teamsRes] = pairs
+        ? await Promise.all([
+            fetchMemberships(trip.id),
+            supabase.from('teams').select('id, name').eq('trip_id', trip.id),
+          ])
+        : [[], null]
       const entrantId = pairs
         ? teamFor(memberships, me.id, drawBoard ? setOf(drawBoard) : MAIN_SET)
         : me.id
@@ -280,10 +290,8 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       // pairs one. Teams are only fetched when there is a draw to name.
       let nameOf: (id: string) => string | null = id =>
         players.find(p => p.id === id)?.name ?? null
-      if (pairs) {
-        const { data: teams } = await supabase
-          .from('teams').select('id, name').eq('trip_id', trip.id)
-        const byId = new Map((teams ?? []).map(t => [t.id as string, t.name as string]))
+      if (pairs && teamsRes) {
+        const byId = new Map((teamsRes.data ?? []).map(t => [t.id as string, t.name as string]))
         nameOf = id => byId.get(id) ?? null
       }
 

@@ -7,9 +7,7 @@ import { saveItinerary } from '@/lib/itineraryStore'
 import ItineraryBuilder from '@/app/components/ItineraryBuilder'
 import { IconX } from '@/app/components/icons'
 import { buttonClass } from '@/app/components/ui'
-import type { DirectoryCourse } from '@/lib/courseDirectory'
-
-type Course = DirectoryCourse
+import { usePlatformCourses } from '@/app/components/usePlatformCourses'
 
 /**
  * Editing the running order after the trip already exists.
@@ -41,12 +39,11 @@ type Course = DirectoryCourse
  * out is the X, not the nav underneath.
  */
 export default function ItineraryEditor({
-  tripId, startDate, endDate, courses, initialItems, lockedGolfItemIds, trackStats, players, onClose,
+  tripId, startDate, endDate, initialItems, lockedGolfItemIds, trackStats, players, onClose,
 }: {
   tripId: string
   startDate: string | null
   endDate: string | null
-  courses: Course[]
   initialItems: ItineraryItem[]
   /**
    * Golf items whose round already has a score or a card open on it. Those
@@ -61,6 +58,11 @@ export default function ItineraryEditor({
   onClose: () => void
 }) {
   const router = useRouter()
+  // The picker's list, loaded here rather than handed down from Trip Setup.
+  // This editor is mounted only once it is opened, so the catalogue is
+  // fetched the first time somebody actually goes looking for a course —
+  // not on every load of the tab. See `usePlatformCourses`.
+  const { courses } = usePlatformCourses()
   const [before] = useState(initialItems)
   const [items, setItems] = useState(initialItems)
   const [saving, setSaving] = useState(false)

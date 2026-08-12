@@ -31,7 +31,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
     )
   }
 
-  const [teamsResult, playersResult, roundsResult, memberships, itineraryResult, platformCoursesResult] =
+  const [teamsResult, playersResult, roundsResult, memberships, itineraryResult] =
     await Promise.all([
       supabase
         .from('teams')
@@ -55,9 +55,15 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       // column list so a database that has not run migration 031 yet still
       // loads this page — the flags simply come back undefined, which reads
       // as counting. Still ordered, so the ids arrive in playing order.
+      //
+      // The course rides along embedded, which is how this page learns what
+      // each round is called. It used to read that out of the whole platform
+      // catalogue, fetched below purely to be indexed by id — a growing list
+      // of every course on the site, on every load of this tab, to name the
+      // two or three this trip actually plays.
       supabase
         .from('rounds')
-        .select('*')
+        .select('*, courses(id, name)')
         .eq('trip_id', trip.id)
         .order('round_number'),
       fetchMemberships(trip.id),
@@ -69,24 +75,22 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         .eq('trip_id', trip.id)
         .order('day_index')
         .order('position'),
-      // The picker inside the itinerary editor offers the same list trip
-      // creation does — platform courses only, never another trip's own.
-      // `*` so `county` (migration 032, run by hand) rides along without
-      // being named — absent, the picker falls back to parsing the location.
-      supabase.from('courses').select('*').is('trip_id', null).order('name'),
     ])
 
   if (teamsResult.error) console.error('TripSetupPage teams query failed:', teamsResult.error)
   if (playersResult.error) console.error('TripSetupPage players query failed:', playersResult.error)
   if (roundsResult.error) console.error('TripSetupPage rounds query failed:', roundsResult.error)
   if (itineraryResult.error) console.error('TripSetupPage itinerary query failed:', itineraryResult.error)
-  if (platformCoursesResult.error) console.error('TripSetupPage platform courses query failed:', platformCoursesResult.error)
 
   const rounds = roundsResult.data ?? []
-  // Platform courses are the only list this page fetches, and every round on
-  // a trip is played on one of them.
+  // Each round's course, off the round itself. The itinerary editor's picker
+  // fetches the full catalogue for itself when it opens — see
+  // `usePlatformCourses`.
   const courseNameById = new Map(
-    (platformCoursesResult.data ?? []).map(c => [c.id as string, c.name as string]),
+    rounds
+      .map(r => (r.courses as unknown as { id: string; name: string } | null))
+      .filter((c): c is { id: string; name: string } => Boolean(c))
+      .map(c => [c.id, c.name]),
   )
 
   type ItinRow = {
@@ -166,7 +170,6 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         courseName: courseNameById.get(r.course_id as string) ?? null,
       }))}
       itinerary={itinerary}
-      courses={platformCoursesResult.data ?? []}
       lockedGolfItemIds={lockedGolfItemIds}
     />
   )

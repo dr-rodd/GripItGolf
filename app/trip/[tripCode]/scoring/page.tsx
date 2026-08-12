@@ -26,9 +26,14 @@ export default async function TripCoursePortalPage({
   if (!trip) notFound()
 
   // Alongside the rounds: what the add-round sheet needs — the itinerary
-  // (the diff wants what already exists), the players (each new round
-  // snapshots their handicaps) and the platform course list for its picker.
-  const [roundsRes, itineraryRes, playersRes, coursesRes] = await Promise.all([
+  // (the diff wants what already exists) and the players (each new round
+  // snapshots their handicaps).
+  //
+  // The platform course list used to be a fourth query here, and it is not
+  // any more: it loads inside `AddRound` when that sheet exists, because a
+  // screen listing this trip's rounds does not need a catalogue of every
+  // course on the platform to draw itself. See `usePlatformCourses`.
+  const [roundsRes, itineraryRes, playersRes] = await Promise.all([
     supabase
       .from('rounds')
       .select('id, round_number, status, courses(name, location)')
@@ -47,20 +52,12 @@ export default async function TripCoursePortalPage({
       .select('id, handicap')
       .eq('trip_id', trip.id)
       .eq('is_composite', false),
-    // `*` so `county` (migration 032, run by hand) rides along without
-    // being named — absent, the picker falls back to parsing the location.
-    supabase
-      .from('courses')
-      .select('*')
-      .is('trip_id', null)
-      .order('name'),
   ])
 
   const rounds = roundsRes.data
   if (roundsRes.error) console.error('TripCoursePortal rounds query failed:', roundsRes.error)
   if (itineraryRes.error) console.error('TripCoursePortal itinerary query failed:', itineraryRes.error)
   if (playersRes.error) console.error('TripCoursePortal players query failed:', playersRes.error)
-  if (coursesRes.error) console.error('TripCoursePortal courses query failed:', coursesRes.error)
 
   const itinerary = ((itineraryRes.data ?? []) as unknown as (Omit<ItemRow, 'trip_id'> & { id: string })[])
     .map(fromItemRow)
@@ -117,7 +114,6 @@ export default async function TripCoursePortalPage({
             trackStats={trip.track_stats === true}
             items={itinerary}
             players={playersRes.data ?? []}
-            courses={coursesRes.data ?? []}
           />
         </div>
 

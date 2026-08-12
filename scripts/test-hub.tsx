@@ -1233,9 +1233,24 @@ section('A platform course belongs to no trip, so it cannot be asked for by one'
   const round = read('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
   ok(/from\('courses'\)[\s\S]{0,120}\.eq\('id', round\.course_id\)/.test(round),
     'the round page asks by id, which needs no scope at all')
-  const setup = read('app/trip/[tripCode]/setup/page.tsx')
-  ok(/from\('courses'\)[\s\S]{0,120}\.is\('trip_id', null\)/.test(setup),
+  // The picker's own list. It used to be fetched by Trip Setup and the
+  // scoring screen on the server and threaded down as a prop, and there were
+  // three copies of this query — here, in `AddRound`'s page, and in trip
+  // creation. It is one now, loaded in the browser by the component that
+  // actually opens a picker, so the two tabs stop paying for a catalogue on
+  // every render. `usePlatformCourses` is where the `trip_id IS NULL` rule
+  // has to hold; the pin follows it there rather than lapsing.
+  const picker = read('app/components/usePlatformCourses.ts')
+  ok(/from\('courses'\)[\s\S]{0,160}\.is\('trip_id', null\)/.test(picker),
     'and the picker asks for the platform list explicitly')
+
+  // …and nowhere else, because a second copy is how the three diverged.
+  const copies = ['app/trip/[tripCode]/setup/page.tsx',
+                  'app/trip/[tripCode]/scoring/page.tsx',
+                  'app/dashboard/create/CreateTripForm.tsx']
+    .filter(f => /from\('courses'\)[\s\S]{0,160}\.is\('trip_id', null\)/.test(read(f)))
+  ok(copies.length === 0,
+    `and no page fetches it a second time (found: ${copies.join(', ') || 'none'})`)
 }
 
 // ─── The itinerary, rendered ───────────────────────────────

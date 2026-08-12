@@ -1159,8 +1159,18 @@ section('The destinations are prefetchable whole')
   // What moved off the server had to land somewhere
   ok(read('app/join/JoinForm.tsx').includes('window.location.search'),
     'the join code is read from the URL on the client instead')
+  // The course list is fetched in the browser rather than by the page, which
+  // is what lets `/dashboard/create` stay static and the landing animation
+  // hand over without a gap. The query itself moved into a shared hook once
+  // Trip Setup and the scoring screen stopped fetching it on the server too —
+  // so what this pins is that it is still client-side, not which file the
+  // `from('courses')` happens to sit in.
   const create = read('app/dashboard/create/CreateTripForm.tsx')
-  ok(create.includes("from('courses')"), 'and the course list is fetched by the form')
+  ok(/usePlatformCourses|from\('courses'\)/.test(create),
+    'and the course list is fetched by the form')
+  const coursesHook = read('app/components/usePlatformCourses.ts')
+  ok(coursesHook.trimStart().startsWith("'use client'") && coursesHook.includes("from('courses')"),
+    '  …in the browser, from a client hook')
   ok(create.includes('coursesLoaded && courses.length === 0'),
     'which only reports an empty list once it actually knows')
 

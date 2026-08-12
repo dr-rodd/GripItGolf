@@ -64,10 +64,27 @@ export default async function RoundSummaryPage({
   if (roundError) console.error('RoundSummary round query failed:', roundError)
   if (!round) notFound()
 
+  // ── The podium's question, asked before the answers are waited for ──
+  //
+  // Which board this round is scored on is a property of the trip, and the
+  // trip is already in hand — so it can be settled here, above the batch,
+  // and the podium can go into the batch with everything else.
+  const boards = boardsForTrip(trip)
+  const lead = primary(boards)
+
   // Everything the page reads about the course, the day and the field. The
   // itinerary item is where the tee time lives — the date is on the round,
   // and `itinerary_item_id` is the only thing tying the two together.
-  const [courseRes, holesRes, teesRes, itemRes, playersRes] = await Promise.all([
+  //
+  // **The podium is in here rather than after it, and that is worth a note.**
+  // `fetchRoundRows` needs `trip.id` and `round.id` and nothing else, both
+  // known by the line above — but it used to be awaited on its own at the
+  // bottom of the page. It is not one query: it goes through
+  // `fetchTripContext`, which is a `rounds` query and then a `Promise.all` of
+  // nine. So a helper needing nothing this batch produces was adding two more
+  // serial round trips to the slowest part of the page, and re-fetching the
+  // players, holes and tees sitting beside it in this very list.
+  const [courseRes, holesRes, teesRes, itemRes, playersRes, roundRows] = await Promise.all([
     supabase.from('courses').select('name, location, latitude, longitude').eq('id', round.course_id).single(),
     supabase
       .from('holes')
@@ -92,6 +109,16 @@ export default async function RoundSummaryPage({
       .eq('trip_id', trip.id)
       .eq('is_composite', false)
       .order('name'),
+    // The trip's own board, over this round alone, through the one assembly
+    // and the one ordering there is. No comparator lives on this page.
+    fetchRoundRows(
+      trip.id,
+      round.id,
+      lead,
+      isLegacy(parseLeaderboards(trip.leaderboards))
+        ? parseTeamScoring(trip.team_scoring)
+        : null,
+    ),
   ])
 
   const problems: string[] = []
@@ -114,18 +141,8 @@ export default async function RoundSummaryPage({
 
   // ── The podium ──
   //
-  // The trip's own board, over this round alone, through the one assembly
-  // and the one ordering there is. No comparator lives on this page.
-  const boards = boardsForTrip(trip)
-  const lead = primary(boards)
-  const { rows, error: podiumError } = await fetchRoundRows(
-    trip.id,
-    round.id,
-    lead,
-    isLegacy(parseLeaderboards(trip.leaderboards))
-      ? parseTeamScoring(trip.team_scoring)
-      : null,
-  )
+  // Fetched up in the batch above; this is only the reading of it.
+  const { rows, error: podiumError } = roundRows
   const top = podium(rows, 3)
   // Nobody has played it. Not an empty state — the section simply is not there.
   const played = rows.length > 0
