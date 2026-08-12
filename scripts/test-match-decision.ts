@@ -24,8 +24,9 @@ import {
   type MatchDecision, type PlayerHole, type MatchSide,
   MATCH_DECISIONS, DEFAULT_MATCH_DECISION,
   readMatch, isHoleByHole, decisionOf, decisionLabel,
-  quotaPoints, quotaFor, parseRoundLinks, linkFor,
+  parseRoundLinks, linkFor,
 } from '../lib/matchDecision'
+import { QUOTA_SCALES, quotaPoints, quotaPointsOn, quotaTarget } from '../lib/quota'
 import { pendingResults, type MatchReading } from '../lib/matchResults'
 import { parseLeaderboards, boardRules } from '../lib/leaderboards'
 import { bestOnHole } from '../lib/teamScoring'
@@ -268,20 +269,38 @@ section('A total that finishes level is halved too')
 
 // ─── Quota ─────────────────────────────────────────────────────
 
-section('The two quota scales')
+section('The quota scales, which all live in lib/quota.ts')
 {
-  // Liverpool: bogey 1, par 2, birdie 3, eagle 4
-  eq([6, 5, 4, 3, 2].map(g => quotaPoints(g, 4, 'liverpool')), [0, 1, 2, 3, 4],
-    'Liverpool climbs one at a time, and a double bogey is worth nothing')
-  // Chicago: bogey 1, par 2, birdie 4, eagle 8
-  eq([6, 5, 4, 3, 2].map(g => quotaPoints(g, 4, 'chicago')), [0, 1, 2, 4, 8],
-    'Chicago doubles from par up, and pays the same below it')
-  eq(quotaPoints(1, 4, 'chicago'), 16, 'an albatross keeps doubling')
-  eq(quotaPoints(9, 4, 'liverpool'), 0, 'a blow-up is nought on either')
+  // A double bogey, a bogey, a par, a birdie, an eagle — on each scale
+  const ladder = (scale: 'standard' | 'liverpool' | 'chicago') =>
+    [6, 5, 4, 3, 2].map(g => quotaPointsOn(g, 4, scale))
 
-  eq(quotaFor(12), 24, 'a 12 handicap is trying to beat 24')
-  eq(quotaFor(0), 36, 'a scratch player 36')
-  eq(quotaFor(-1), 37, 'and a plus handicap has further to go')
+  eq(ladder('liverpool'), [0, 1, 2, 3, 4],
+    'Liverpool climbs one at a time, and a double bogey is worth nothing')
+  eq(ladder('chicago'), [0, 1, 2, 4, 8], 'Chicago doubles from par up')
+  eq(ladder('standard'), [0, 1, 2, 4, 6],
+    'and the standard scale — what a Quota leaderboard plays — steps by two')
+
+  // Above par every scale agrees, which is why that half is written once
+  for (const scale of ['standard', 'liverpool', 'chicago'] as const) {
+    eq([quotaPointsOn(5, 4, scale), quotaPointsOn(6, 4, scale), quotaPointsOn(9, 4, scale)],
+      [1, 0, 0], `${scale}: a bogey is one and anything worse is nothing`)
+  }
+
+  eq(quotaPointsOn(1, 4, 'chicago'), 16, 'an albatross keeps doubling on Chicago')
+  eq(quotaPointsOn(null, 4, 'liverpool'), 0, 'and a hole with no score earns nothing')
+
+  // The landed Quota leaderboard must be untouched by any of this
+  eq([6, 5, 4, 3, 2, 1].map(g => quotaPoints(g, 4)), [0, 1, 2, 4, 6, 8],
+    'quotaPoints is the standard scale under its own name, exactly as it was')
+
+  eq(quotaTarget(12), 24, 'a 12 handicap is trying to beat 24')
+  eq(quotaTarget(0), 36, 'a scratch player 36')
+  eq(quotaTarget(-1), 37, 'and a plus handicap has further to go')
+
+  eq(QUOTA_SCALES.map(s => s.key), ['standard', 'liverpool', 'chicago'],
+    'three scales, in one table')
+  ok(QUOTA_SCALES.every(s => s.hint.endsWith('.')), 'each saying its own scale')
 }
 
 section('Total quota — beating your own target by most')
@@ -510,6 +529,10 @@ section('The rules live in one place each')
     'and is not sorted a second time here')
   ok(/from '\.\/handicap'/.test(decision),
     'and shots received comes from the one copy of that')
+  ok(/from '\.\/quota'/.test(decision),
+    'and the quota scales from theirs — a Quota leaderboard was scoring on one '
+    + 'of them before a knockout could be decided on any')
+  ok(!/birdie 4, eagle 8/.test(decision), 'no scale is written out twice')
 
   const scoring = read('lib/teamScoring.ts')
   ok(/export function bestOnHole/.test(scoring), 'which exports it for both')

@@ -24,12 +24,51 @@
 // subtraction, exactly as it reduces the handicap everywhere else, so 85%
 // quota and full quota are two boards off the same cards.
 //
-// This is the only copy of these rules. The board (lib/boardRows.ts) and the
-// live panel in scoring both import from here; neither restates the table.
+// **The scale above is not the only one clubs play.** It is this app's
+// `standard`, and it is what a Quota leaderboard scores on. A knockout match
+// can be linked to a round and decided on quota too — see
+// lib/matchDecision.ts — and that offers two others by name, so the scales
+// all live here together rather than a second table growing up beside this
+// one. Adding a scale means adding a row to QUOTA_SCALES and nothing else.
+//
+// This is the only copy of these rules. The board (lib/boardRows.ts), the
+// live panel in scoring and the matchplay decision all import from here; none
+// of them restates a table.
 //
 // Pure. No I/O, no React.
 
 export const QUOTA_BASE = 36
+
+/**
+ * The scales a quota can be played on.
+ *
+ * They differ only in what going under par is worth, and that difference is
+ * the whole of the choice — so each one carries the words that describe it,
+ * and the form prints them under the control rather than hiding them in a
+ * help page. Nobody carries a points table in their head.
+ *
+ *   standard   1, 2, 4, 6 — what a Quota leaderboard scores on
+ *   liverpool  1, 2, 3, 4 — one point a step, which is gross Stableford
+ *   chicago    1, 2, 4, 8 — doubling from par up
+ *
+ * Below par each is its own; at par and above all three agree, because a
+ * bogey is one and a double is nothing wherever you play.
+ */
+export type QuotaScale = 'standard' | 'liverpool' | 'chicago'
+
+export const QUOTA_SCALES: {
+  key: QuotaScale
+  label: string
+  /** Bogey, par, birdie, eagle — in words, for the form. */
+  hint: string
+}[] = [
+  { key: 'standard', label: 'Quota',
+    hint: 'Bogey 1, par 2, birdie 4, eagle 6.' },
+  { key: 'liverpool', label: 'Liverpool style',
+    hint: 'Bogey 1, par 2, birdie 3, eagle 4.' },
+  { key: 'chicago', label: 'Chicago style',
+    hint: 'Bogey 1, par 2, birdie 4, eagle 8.' },
+]
 
 /**
  * What a hole earns, off the gross against the par the player is playing —
@@ -39,14 +78,32 @@ export const QUOTA_BASE = 36
  * the quota itself is the pressure.
  */
 export function quotaPoints(gross: number | null, par: number): number {
+  return quotaPointsOn(gross, par, 'standard')
+}
+
+/**
+ * The same, on a named scale.
+ *
+ * `quotaPoints` above is this one on `standard`, kept under its own name
+ * because it is what every quota board in the app scores on and reads better
+ * at the call site than a third argument repeated everywhere.
+ *
+ * Under par the scales part company and each says its own thing. **Above par
+ * they agree**, and that is not a coincidence worth restating three times: a
+ * bogey is one point and a double bogey is nothing on every scale anybody
+ * plays, so it is written once here and the scales only answer for the holes
+ * they actually disagree about.
+ */
+export function quotaPointsOn(
+  gross: number | null, par: number, scale: QuotaScale,
+): number {
   if (gross == null) return 0
-  const over = gross - par
-  if (over >= 2) return 0
-  if (over === 1) return 1
-  if (over === 0) return 2
-  if (over === -1) return 4
-  if (over === -2) return 6
-  return 8
+  const under = par - gross
+  if (under <= -2) return 0        // double bogey or worse
+  if (under <= 0) return under + 2 // bogey 1, par 2
+  if (scale === 'liverpool') return under + 2          // 3, 4, 5 …
+  if (scale === 'chicago') return 2 ** (under + 1)     // 4, 8, 16 …
+  return 2 * under + 2                                 // 4, 6, 8 …
 }
 
 /**

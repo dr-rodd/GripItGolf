@@ -242,7 +242,7 @@ Reading a prize table against a round's finishers is `placeRound`, in that same 
 
 ## Deciding a knockout from the cards
 
-A bracket round can be linked to a round of golf (`roundLinks` on the matchplay board, in `trips.leaderboards` — no migration) and told how a match is settled: Stableford matchplay, total Stableford, strokes matchplay or total in gross or nett, or total quota on either the **Liverpool** scale (bogey 1, par 2, birdie 3, eagle 4) or **Chicago** (1, 2, 4, 8). Quota is 36 − course handicap on both.
+A bracket round can be linked to a round of golf (`roundLinks` on the matchplay board, in `trips.leaderboards` — no migration) and told how a match is settled: Stableford matchplay, total Stableford, strokes matchplay or total in gross or nett, or total quota on either the **Liverpool** scale (bogey 1, par 2, birdie 3, eagle 4) or **Chicago** (1, 2, 4, 8). **Every quota scale lives in `lib/quota.ts`** with the target — the Quota leaderboard's own `standard` scale (1, 2, 4, 6) is in that same table, and `quotaPoints` is it under its own name. Three scales exist; `standard` and `chicago` differ only at eagle and were chosen separately, which nobody has yet reconciled.
 
 **The link is stored by bracket round *number*, never its name** — a field growing from seven to nine turns a Quarter-Final into a Round of 16 and shifts every name.
 

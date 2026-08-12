@@ -15,6 +15,11 @@
 //   the two quotas. Nothing is settled until both cards are complete, because
 //   any hole left can still change the answer.
 //
+// **The quota scales are not here either.** `lib/quota.ts` owns the table and
+// the target — a Quota leaderboard already scored on one of them before a
+// knockout could be decided on any, and a second table would have been the
+// same arithmetic under two roofs.
+//
 // **A pairing reads as one card.** Every method builds a per-hole card for
 // each side first — for a singles draw that is simply the player's own — so
 // nothing below has to ask how many people are on a side. Better ball is the
@@ -30,6 +35,7 @@
 
 import { shotsReceived } from './handicap'
 import { bestOnHole, type ScoringBasis } from './teamScoring'
+import { type QuotaScale, QUOTA_SCALES, quotaPointsOn, quotaTarget } from './quota'
 
 // ─── The methods ───────────────────────────────────────────────
 
@@ -42,6 +48,19 @@ export type MatchDecision =
   | 'strokes_total_nett'
   | 'quota_liverpool'
   | 'quota_chicago'
+
+/**
+ * What a quota method says under its button.
+ *
+ * The scale is the whole difference between the two quota options, so it has
+ * to be on screen — but the words for it come from `QUOTA_SCALES` rather than
+ * being typed again here. Typing them again is how a scale gets changed in
+ * one place and described in another.
+ */
+function quotaHint(scale: QuotaScale): string {
+  const words = QUOTA_SCALES.find(s => s.key === scale)?.hint ?? ''
+  return `Quota is 36 minus your course handicap. ${words} Beat it by most.`
+}
 
 export const MATCH_DECISIONS: {
   key: MatchDecision
@@ -61,9 +80,9 @@ export const MATCH_DECISIONS: {
   { key: 'strokes_total_nett', label: 'Total strokes — nett',
     hint: 'The lower nett score, each off their own full course handicap.' },
   { key: 'quota_liverpool', label: 'Total quota — Liverpool style',
-    hint: 'Quota is 36 minus your course handicap. Bogey 1, par 2, birdie 3, eagle 4. Beat your quota by most.' },
+    hint: quotaHint('liverpool') },
   { key: 'quota_chicago', label: 'Total quota — Chicago style',
-    hint: 'The same quota, a steeper scale. Bogey 1, par 2, birdie 4, eagle 8.' },
+    hint: quotaHint('chicago') },
 ]
 
 export const DEFAULT_MATCH_DECISION: MatchDecision = 'stableford_match'
@@ -229,21 +248,6 @@ function receivedIn(input: MatchInput, playerId: string): number {
   return own - Math.min(...inMatch)
 }
 
-/** The gross points a hole is worth on a quota scale. */
-export function quotaPoints(gross: number, par: number, scale: 'liverpool' | 'chicago'): number {
-  const under = par - gross
-  // A double bogey or worse is worth nothing on either scale
-  if (under <= -2) return 0
-  if (scale === 'liverpool') return under + 2          // 1, 2, 3, 4, …
-  if (under <= 0) return under + 2                     // bogey 1, par 2
-  return 2 ** (under + 1)                              // birdie 4, eagle 8, …
-}
-
-/** A player's quota — the score they are trying to beat. */
-export function quotaFor(courseHandicap: number): number {
-  return 36 - courseHandicap
-}
-
 /**
  * One side's card, in the units the method compares.
  *
@@ -310,16 +314,16 @@ function valueOf(input: MatchInput, h: PlayerHole): number | null {
  * are real holes rather than a composite of two players.
  */
 function quotaCard(input: MatchInput, side: MatchSide, holeCount: number): Card {
-  const scale = input.method === 'quota_chicago' ? 'chicago' : 'liverpool'
+  const scale: QuotaScale = input.method === 'quota_chicago' ? 'chicago' : 'liverpool'
 
   const cards = side.playerIds.map(playerId => {
     const holes = new Map<number, number>()
     for (const h of input.holes) {
       if (h.playerId !== playerId) continue
       if (h.gross == null || h.noReturn) continue
-      holes.set(h.holeNumber, quotaPoints(h.gross, h.par, scale))
+      holes.set(h.holeNumber, quotaPointsOn(h.gross, h.par, scale))
     }
-    const target = quotaFor(input.handicapOf.get(playerId) ?? 0)
+    const target = quotaTarget(input.handicapOf.get(playerId) ?? 0)
     return { id: side.id, holes, target, complete: holes.size >= holeCount }
   })
 

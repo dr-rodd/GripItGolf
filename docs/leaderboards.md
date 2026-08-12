@@ -226,12 +226,19 @@ That difference is why **"3&2" is a real result** and a total has none like it �
 
 **A pairing reads as one card.** Every method builds a per-hole card per side first — for singles that is simply the player's own — so nothing downstream asks how many people are on a side. Better ball is the rule, and `bestOnHole` comes from `lib/teamScoring.ts` so a four-ball and a team board cannot disagree about which way strokes sort.
 
-**Quota is the one exception**, and deliberately: a quota is a target for a whole round (36 − course handicap), so no share of it belongs to the ninth hole and there is nothing to take the better of there. A pairing's quota is the **better of its two members' own cards**. The two scales:
+**Quota is the one exception**, and deliberately: a quota is a target for a whole round (36 − course handicap), so no share of it belongs to the ninth hole and there is nothing to take the better of there. A pairing's quota is the **better of its two members' own cards**.
 
-- **Liverpool** — bogey 1, par 2, birdie 3, eagle 4 (gross Stableford)
-- **Chicago** — bogey 1, par 2, birdie 4, eagle 8, doubling from par up
+**Every quota scale lives in `lib/quota.ts`**, alongside the target — a Quota *leaderboard* was already scoring on one before a knockout could be decided on any, and a second table would have been the same arithmetic under two roofs. `QUOTA_SCALES` holds all three, and the words describing each are read from there too, so a scale cannot be changed in one place and described in another:
 
-Both are spelled out under the control in setup, because the scale *is* the difference between the two options and nobody carries it in their head.
+| Scale | Bogey | Par | Birdie | Eagle | Used by |
+|---|---|---|---|---|---|
+| `standard` | 1 | 2 | 4 | 6 | the Quota leaderboard |
+| `liverpool` | 1 | 2 | 3 | 4 | matchplay link |
+| `chicago` | 1 | 2 | 4 | 8 | matchplay link |
+
+Above par they all agree — a bogey is one and a double is nothing wherever you play — so that half is written once and the scales only answer for the holes they disagree about. `quotaPoints(gross, par)` is `standard` under its own name, unchanged, so the leaderboard is untouched by any of this.
+
+**Three scales is one more than anybody asked for**, and it is worth knowing why: the Quota leaderboard's scale and the matchplay Chicago scale differ only at eagle (6 against 8) and were chosen separately. Aligning them is a decision nobody has taken.
 
 **A halved match is left halved.** A knockout needs somebody to go through and the cards did not say who, so the tile reads All Square and whoever was there records it. Inventing a winner from a seeding would be putting a name on a result nobody played.
 
