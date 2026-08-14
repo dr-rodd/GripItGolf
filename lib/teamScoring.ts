@@ -17,6 +17,17 @@ export const DEFAULT_TEAM_SCORING: TeamScoring = {
   aggregateHoles: 18,
 }
 
+/**
+ * The most scores a composite card can be told to count on a hole.
+ *
+ * One copy, read by both parsers — this legacy trip-wide setting and the
+ * per-board `countingScores` on lib/leaderboards.ts — and by the form's
+ * manual entry, so the three cannot disagree about what a valid count is.
+ * Teams are deliberately any size, so the ceiling is generous; a count above
+ * the team's size simply caps out at everyone.
+ */
+export const MAX_COUNTING_SCORES = 8
+
 export const TEAM_SCORING_MODES: {
   key: TeamScoringMode
   label: string
@@ -55,7 +66,7 @@ export function parseTeamScoring(raw: unknown): TeamScoring {
   const holes    = Number(r.aggregateHoles)
   return {
     mode,
-    countingScores:  Number.isFinite(counting) ? Math.min(4,  Math.max(1, Math.round(counting))) : DEFAULT_TEAM_SCORING.countingScores,
+    countingScores:  Number.isFinite(counting) ? Math.min(MAX_COUNTING_SCORES, Math.max(1, Math.round(counting))) : DEFAULT_TEAM_SCORING.countingScores,
     aggregateFinish: Number.isFinite(finish)   ? Math.min(18, Math.max(0, Math.round(finish)))   : DEFAULT_TEAM_SCORING.aggregateFinish,
     aggregateHoles:  Number.isFinite(holes)    ? Math.min(18, Math.max(1, Math.round(holes)))    : DEFAULT_TEAM_SCORING.aggregateHoles,
   }

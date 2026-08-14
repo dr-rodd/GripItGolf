@@ -32,6 +32,7 @@ import { type RoundLink, parseRoundLinks, decisionLabel } from './matchDecision'
 import {
   type QuotaScale, parseQuotaScale, quotaScaleOf, quotaScaleLabel,
 } from './quota'
+import { DEFAULT_TEAM_SCORING, MAX_COUNTING_SCORES } from './teamScoring'
 
 export type Audience = 'individual' | 'team'
 export type Competition = 'league' | 'matchplay'
@@ -72,6 +73,18 @@ export type Leaderboard = {
 
   /** Team league only. */
   teamFormat?: TeamFormat
+
+  /**
+   * `teamFormat: 'better_ball'` only — how many of the team's scores make the
+   * composite card on each hole.
+   *
+   * Absent reads as 2, which is what the maths has always counted for a board
+   * that was never asked (`DEFAULT_TEAM_SCORING`), so a stored trip is scored
+   * exactly as it was. Usually 1 or 2; anything up to `MAX_COUNTING_SCORES`
+   * can be typed in for the rare board that wants more. A count above a
+   * team's size simply caps out at everyone.
+   */
+  countingScores?: number
 
   /**
    * What percentage of a player's course handicap this board plays off.
@@ -154,7 +167,7 @@ export function scoringsFor(audience: Audience): { key: Scoring; label: string; 
 
 export const TEAM_FORMATS: { key: TeamFormat; label: string; hint: string }[] = [
   { key: 'better_ball', label: 'Better ball',
-    hint: 'A composite card: the team\'s best score on every hole.' },
+    hint: 'A composite card from the team\'s best scores on every hole — you choose how many count.' },
   { key: 'hero', label: 'Hero',
     hint: 'The best single card in the team that day carries it.' },
   { key: 'cut_dead_weight', label: 'Cut the dead weight',
@@ -377,6 +390,36 @@ export function offersQuotaScale(draft: Partial<Leaderboard>): boolean {
 }
 
 /**
+ * Whether to ask how many scores count on each hole.
+ *
+ * Only a team better-ball board — the count is what "composite card" means
+ * there. Hero and cut-the-dead-weight judge whole cards, and an individual
+ * board has one score a hole whoever is asked.
+ */
+export function offersCountingScores(draft: Partial<Leaderboard>): boolean {
+  return draft.competition === 'league'
+    && draft.audience === 'team'
+    && draft.teamFormat === 'better_ball'
+}
+
+/**
+ * How many of the team's scores this board counts on a hole.
+ *
+ * Absent reads as the default the maths has always used — 2 — so every board
+ * stored before the question existed keeps scoring exactly as it did.
+ */
+export function countingScoresOf(lb: Pick<Partial<Leaderboard>, 'countingScores'>): number {
+  return lb.countingScores ?? DEFAULT_TEAM_SCORING.countingScores
+}
+
+/** The one line that says what a better-ball composite card is made of. */
+export function describeBetterBall(countingScores: number): string {
+  return countingScores === 1
+    ? 'A composite card: the team\'s best score on every hole.'
+    : `A composite card: the team's best ${countingScores} scores on every hole.`
+}
+
+/**
  * The scale this trip's quota is earned on.
  *
  * The Quota board's, if it runs one. A trip with no quota board still has a
@@ -442,7 +485,11 @@ export function boardRules(lb: Leaderboard): string {
 
   const parts: string[] = []
   if (lb.audience === 'team') {
-    parts.push(ALL_TEAM_FORMATS.find(f => f.key === lb.teamFormat)?.hint ?? '')
+    // Better ball states its count rather than its hint — how many scores
+    // make the composite card is the whole of what the format is.
+    parts.push(lb.teamFormat === 'better_ball'
+      ? describeBetterBall(countingScoresOf(lb))
+      : ALL_TEAM_FORMATS.find(f => f.key === lb.teamFormat)?.hint ?? '')
   }
   parts.push(SCORINGS.find(s => s.key === lb.scoring)?.hint ?? '')
   // The scale is the whole of what a Quota board's numbers mean, so it is
@@ -577,6 +624,15 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
         const teamFormat = ALL_TEAM_FORMATS.find(f => f.key === r.teamFormat)?.key
         if (!teamFormat) continue
         lb.teamFormat = teamFormat
+
+        // Only better ball counts scores on a hole, and kept off the object
+        // when it is the default — absent reads as 2, so a board stored
+        // before the question existed is byte-for-byte what it always was
+        // and is scored the way it always was.
+        if (teamFormat === 'better_ball' && Number.isFinite(Number(r.countingScores))) {
+          const counting = clamp(r.countingScores, 1, MAX_COUNTING_SCORES)
+          if (counting !== DEFAULT_TEAM_SCORING.countingScores) lb.countingScores = counting
+        }
       }
     }
 

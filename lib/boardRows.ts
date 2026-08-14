@@ -403,16 +403,20 @@ export function boardHandicapFor(
 /**
  * The scoring settings a team board runs under.
  *
- * A board names its format; the options that format takes — how many scores
- * count on a hole, whether the closing holes open up — are not asked for any
- * more. A trip that was already set up under the old single setting keeps it
- * verbatim, so switching to the new model does not silently re-score rounds
- * that have already been played.
+ * A board names its format, and a better-ball board now names its own count —
+ * `lb.countingScores`, asked in settings. The other option — whether the
+ * closing holes open up — is not asked for any more. A trip that was already
+ * set up under the old single setting keeps it verbatim, so switching to the
+ * new model does not silently re-score rounds that have already been played;
+ * a legacy board never carries a per-board count, so the two cannot clash.
  */
 export function teamScoringFor(lb: Leaderboard, legacy: TeamScoring | null): TeamScoring {
   const mode = lb.teamFormat ?? DEFAULT_TEAM_SCORING.mode
-  if (legacy && legacy.mode === mode) return legacy
-  return { ...DEFAULT_TEAM_SCORING, mode }
+  const base = legacy && legacy.mode === mode ? legacy : { ...DEFAULT_TEAM_SCORING, mode }
+  // Absent means the default, which is what `base` already holds either way.
+  return lb.countingScores !== undefined
+    ? { ...base, countingScores: lb.countingScores }
+    : base
 }
 
 

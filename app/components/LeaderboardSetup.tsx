@@ -5,10 +5,12 @@ import {
   type Leaderboard, type Audience,
   scoringsFor, TEAM_FORMATS, COMBINES, MAX_DISCARD,
   unanswered, isComplete, offersDiscard, offersTieBreak, offersQuotaScale,
+  offersCountingScores, countingScoresOf,
   offersAllowance, tripQuotaScale, slotKey, isFormatFree,
   freeScorings, freeTeamFormats,
   hasMatchplay, boardTitle, boardRules,
 } from '@/lib/leaderboards'
+import { DEFAULT_TEAM_SCORING, MAX_COUNTING_SCORES } from '@/lib/teamScoring'
 import {
   FULL_ALLOWANCE, MIN_ALLOWANCE, ALLOWANCE_PRESETS,
   clampAllowance, allowanceOf, suggestedAllowance,
@@ -388,6 +390,89 @@ function AllowancePicker({
 }
 
 /**
+ * How many of the team's scores make the composite card on each hole.
+ *
+ * Two chips cover almost every board — best score is classic better ball,
+ * best 2 the platform's long-standing default — with a keypad behind
+ * "Something else" for the rare board that counts more. Above the team's
+ * size a count simply caps out at everyone, so a big number is never wrong,
+ * only pointless.
+ */
+function CountingScoresPicker({
+  value, onChange,
+}: {
+  value: number
+  onChange: (n: number) => void
+}) {
+  const presets = [1, 2]
+  const [custom, setCustom] = useState(!presets.includes(value))
+  const [text, setText] = useState(String(value))
+
+  const pick = (n: number) => { setCustom(false); setText(String(n)); onChange(n) }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-2 gap-2">
+        {presets.map(n => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => pick(n)}
+            className={chipClass(!custom && value === n)}
+          >
+            {n === 1 ? 'Best score' : `Best ${n} scores`}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setCustom(true)}
+          className={`${chipClass(custom)} px-4 flex-shrink-0`}
+        >
+          Something else
+        </button>
+        {custom && (
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={MAX_COUNTING_SCORES}
+            value={text}
+            aria-label="Scores counting on each hole"
+            onChange={e => {
+              setText(e.target.value)
+              const n = Number(e.target.value)
+              // Committed as it is typed while it reads as a real answer —
+              // the same rule as the allowance keypad above.
+              if (Number.isFinite(n) && n >= 1 && n <= MAX_COUNTING_SCORES) {
+                onChange(Math.round(n))
+              }
+            }}
+            onBlur={() => {
+              const n = Number(text)
+              const clamped = Number.isFinite(n) && n >= 1
+                ? Math.min(MAX_COUNTING_SCORES, Math.round(n))
+                : DEFAULT_TEAM_SCORING.countingScores
+              setText(String(clamped))
+              onChange(clamped)
+            }}
+            className={`${FIELD} flex-1 min-w-0 tabular-nums`}
+          />
+        )}
+      </div>
+
+      <p className="t-cap text-ink/65 leading-snug">
+        {value === 1
+          ? 'Only the team\'s best score on each hole goes on the composite card.'
+          : `The team's best ${value} scores on each hole go on the composite card. A count above a team's size just counts everyone.`}
+      </p>
+    </div>
+  )
+}
+
+/**
  * Linking each bracket round to a round of golf.
  *
  * A knockout is played somewhere. Say which round of the trip each bracket
@@ -701,9 +786,31 @@ function Builder({
               label={f.label}
               hint={f.hint}
               taken={!freeTeamFormats(existing, draft.scoring).includes(f.key)}
-              onClick={() => set({ teamFormat: f.key })}
+              // The count belongs to better ball. Carrying it across to
+              // another format would leave the board storing an answer to a
+              // question it is no longer being asked.
+              onClick={() => set({
+                teamFormat: f.key,
+                ...(f.key === 'better_ball' ? {} : { countingScores: undefined }),
+              })}
             />
           ))}
+        </Question>
+      )}
+
+      {/* Directly under the format it refines: how many scores build the
+          composite card. Best 2 is what every board counted before this was
+          asked, so leaving it alone changes nothing. */}
+      {offersCountingScores(draft) && (
+        <Question n={next()} title="How many scores count on each hole?">
+          <CountingScoresPicker
+            value={countingScoresOf(draft)}
+            // Not stored when it is the default, so a board that leaves this
+            // alone is the object it has always been.
+            onChange={n => set({
+              countingScores: n === DEFAULT_TEAM_SCORING.countingScores ? undefined : n,
+            })}
+          />
         </Question>
       )}
 

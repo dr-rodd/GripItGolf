@@ -20,10 +20,11 @@ import {
   slotKey, isSlotFree, formatKey, isFormatFree, hasMatchplay,
   freeScorings, freeTeamFormats, everyBoard,
   unanswered, isComplete, offersDiscard, needsTeams, needsPairings,
+  offersCountingScores, countingScoresOf, describeBetterBall,
   boardTitle, boardRules, primary, parseLeaderboards,
 } from '../lib/leaderboards'
 import { DEFAULT_FORMATS, parseFormats, matchplayOn } from '../lib/formats'
-import { DEFAULT_TEAM_SCORING } from '../lib/teamScoring'
+import { DEFAULT_TEAM_SCORING, MAX_COUNTING_SCORES } from '../lib/teamScoring'
 import { boardsForTrip } from '../lib/leaderboardsCompat'
 
 let passed = 0, failed = 0
@@ -232,7 +233,14 @@ section('Boards are titled the way people would say them')
     'including its discard rule')
   ok(boardRules({ ...sf, discardWorst: 2 }).includes('2 rounds'), 'in the plural where it is plural')
   ok(boardRules(pairsDraw).includes('pairings'), 'a pairs draw says who it is between')
-  ok(boardRules(teamBB).includes('best score on every hole'), 'a team board names its format')
+  ok(boardRules(teamBB).includes('best 2 scores on every hole'),
+    'a better-ball board names its count — the default when it never answered')
+  ok(boardRules({ ...teamBB, countingScores: 1 }).includes('best score on every hole'),
+    'best 1 reads in the singular')
+  ok(boardRules({ ...teamBB, countingScores: 3 }).includes('best 3 scores on every hole'),
+    'and a chosen count is the one named')
+  ok(boardRules({ ...teamBB, teamFormat: 'hero' }).includes('carries it'),
+    'the other formats keep their own line')
 
   eq(primary([teamBB, sf])?.id, teamBB.id, 'the first board made is the primary')
   eq(primary([]), null, 'and an empty trip has none')
@@ -282,6 +290,51 @@ section('Stored boards read back, and nonsense does not')
   eq(ordered[0].audience, 'team', 'the stored order is kept, because the first one leads')
 
   eq(COMBINES.length, 2, 'rounds are put together one of two ways')
+}
+
+// ─── How many scores build the composite card ──────────────────
+
+section('A better-ball board can say how many scores count on a hole')
+{
+  // Only the format the question belongs to is asked
+  ok(offersCountingScores(teamBB), 'a team better-ball league is asked')
+  ok(!offersCountingScores({ ...teamBB, teamFormat: 'hero' }),
+    'hero judges whole cards, so it is not')
+  ok(!offersCountingScores(sf), 'nor an individual board')
+  ok(!offersCountingScores({ audience: 'team', competition: 'matchplay' }),
+    'nor a draw')
+
+  // Absent reads as the default the maths has always used
+  eq(countingScoresOf(teamBB), DEFAULT_TEAM_SCORING.countingScores,
+    'a board that never answered counts what it always counted')
+  eq(countingScoresOf({ countingScores: 1 }), 1, 'and an answer is the answer')
+
+  // The wording has one copy
+  eq(describeBetterBall(1), 'A composite card: the team\'s best score on every hole.',
+    'one score is the singular')
+  eq(describeBetterBall(2), 'A composite card: the team\'s best 2 scores on every hole.',
+    'more is the plural, with the count named')
+
+  // Stored boards round-trip, and the default is kept off the object
+  const stored = parseLeaderboards([{ ...teamBB, countingScores: 1 }])
+  eq(stored[0].countingScores, 1, 'a chosen count reads back')
+  eq('countingScores' in parseLeaderboards([teamBB])[0], false,
+    'a board that never answered stays byte-for-byte what it was')
+  eq('countingScores' in parseLeaderboards([{ ...teamBB, countingScores: 2 }])[0], false,
+    'and an explicit default is not stored either — absent means 2')
+
+  // Clamped rather than trusted, like every stored figure
+  eq(parseLeaderboards([{ ...teamBB, countingScores: 99 }])[0].countingScores,
+    MAX_COUNTING_SCORES, 'a silly count is clamped down')
+  eq(parseLeaderboards([{ ...teamBB, countingScores: 0 }])[0].countingScores, 1,
+    'and up — nothing counting is not a competition')
+  eq('countingScores' in parseLeaderboards([{ ...teamBB, countingScores: 'x' }])[0], false,
+    'junk is dropped, not repaired')
+
+  // The count belongs to better ball alone
+  eq('countingScores' in parseLeaderboards(
+    [{ ...teamBB, teamFormat: 'hero', countingScores: 1 }])[0], false,
+    'a count stored on another format is not carried')
 }
 
 // ─── Quota ─────────────────────────────────────────────────────

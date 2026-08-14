@@ -80,7 +80,9 @@ The leaderboard page renders `Leaderboard[]` and nothing else. Tabs are the leag
 
 **Old trips are read, not migrated.** `lib/leaderboardsCompat.ts` turns `trips.formats` into the boards those flags always described: teams first, then each individual board ticked (all inheriting the single trip-wide discard, exactly as they always did), then the draw. `parseLeaderboards` also reads the first shape of the current model — `scoring: 'custom'` and `aggregation: 'custom_points'` both come back as Stableford paid by position, and a team board with no scoring at all reads as Stableford, which is the only thing that model could mean. A stored list always wins; an empty one means a trip from before the column existed, not a trip playing for nothing. Delete the file whole once no trip has an empty `leaderboards`.
 
-**Team format options survive the switch.** `better_ball` with three scores counting and a grandstand finish is not expressible as a leaderboard — the form asks for the format only. `teamScoringFor(board, legacy)` hands back the trip's old `team_scoring` verbatim when the format matches, so a trip mid-way through is never silently re-scored. Options from a *different* format are not carried across. `aggregate` was retired from the form but stays in `ALL_TEAM_FORMATS` so trips running it still read and score as themselves.
+**A better-ball board names its own count.** `countingScores` on the board — how many of the team's scores make the composite card on each hole, asked in settings directly under the format (chips for 1 and 2, a keypad behind "Something else" up to `MAX_COUNTING_SCORES`). **Absent reads as 2**, which is what the maths always counted for a board that was never asked, so every stored trip scores exactly as it did; the explicit default is likewise kept off the object. `countingScoresOf` resolves it, `describeBetterBall` is the one copy of the wording, and a count above a team's size simply caps out at everyone. The question belongs to `better_ball` alone — hero and cut-the-dead-weight judge whole cards.
+
+**Team format options survive the switch.** `better_ball` with a grandstand finish is not expressible as a leaderboard — the form asks for the format and its counting scores, never the finish. `teamScoringFor(board, legacy)` hands back the trip's old `team_scoring` verbatim when the format matches (a per-board `countingScores` still wins, since only a board that was asked carries one), so a trip mid-way through is never silently re-scored. Options from a *different* format are not carried across. `aggregate` was retired from the form but stays in `ALL_TEAM_FORMATS` so trips running it still read and score as themselves.
 
 ## Pairing names
 
@@ -348,7 +350,7 @@ When Team Play is on, `trips.team_scoring` (JSONB) decides how a team's points f
 | Mode | Calculation | Options |
 |---|---|---|
 | `hero` | Best single individual card in the team counts for that round | — |
-| `better_ball` | Composite card: best N Stableford scores on each hole, optionally opening up to the whole team over the closing holes | `countingScores` 1–4, `aggregateFinish` 0/1/2/3/6/9 |
+| `better_ball` | Composite card: best N Stableford scores on each hole, optionally opening up to the whole team over the closing holes | `countingScores` 1 to `MAX_COUNTING_SCORES`, `aggregateFinish` 0/1/2/3/6/9 |
 | `aggregate` | Every member's score counts, over the closing X holes | `aggregateHoles` 18/9/6/3/2/1 |
 
 `aggregateFinish` is the grandstand-finish rule: holes inside the closing stretch count **every** player rather than the best N, so a trailing team can still catch up. It can only raise a team's total, never lower it. Setting it to 18 is equivalent to the standalone `aggregate` mode.

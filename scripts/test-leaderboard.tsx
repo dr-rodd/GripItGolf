@@ -1170,9 +1170,10 @@ section('An old trip is read as the boards its flags described')
 
 section('An old team trip keeps the options the new model does not ask for')
 {
-  // Better ball with three scores counting and a grandstand finish is not
-  // expressible as a leaderboard — the new form asks for the format only. A
-  // trip already playing it must not be silently re-scored to the default.
+  // Better ball with a grandstand finish is not expressible as a leaderboard
+  // — the new form asks for the format and its counting scores, never the
+  // finish. A trip already playing it must not be silently re-scored to the
+  // default.
   const legacy: TeamScoring = {
     mode: 'better_ball', countingScores: 3, aggregateFinish: 6, aggregateHoles: 18,
   }
@@ -1203,6 +1204,30 @@ section('An old team trip keeps the options the new model does not ask for')
   })
   ok(html.includes('>18<'), 'and is scored by its own old settings — 3 holes, everyone counting')
   ok(!html.includes('>108<'), 'not over all eighteen, which the defaults would have given')
+}
+
+section('A board chooses how many scores build its composite card')
+{
+  // The board's own count reaches the maths — and wins over a legacy row of
+  // the same mode, because a board carrying the answer was asked the question
+  eq(teamScoringFor({ ...TEAM('better_ball'), countingScores: 1 }, null).countingScores, 1,
+    'a per-board count is what the composite card is built from')
+  eq(teamScoringFor({ ...TEAM('better_ball'), countingScores: 1 }, DEFAULT_TEAM_SCORING).countingScores, 1,
+    'even beside a legacy setting of the same format')
+  eq(teamScoringFor(TEAM('better_ball'), null).countingScores,
+    DEFAULT_TEAM_SCORING.countingScores,
+    'a board that never answered counts the 2 it always did')
+
+  // One round, one team: Alice 3 a hole, Bob 2, Cara 1
+  const opts = { teams: oneTeam, players: allInReds, rounds: [rounds[0]] }
+  eq(rowsFor({ ...TEAM('better_ball'), countingScores: 1 }, opts).board[0]?.total, 54,
+    'best 1: only the best score on each hole makes the card')
+  eq(rowsFor(TEAM('better_ball'), opts).board[0]?.total, 90,
+    'unanswered: the best 2, exactly as every stored board is scored')
+  eq(rowsFor({ ...TEAM('better_ball'), countingScores: 3 }, opts).board[0]?.total, 108,
+    'best 3: the whole team of three')
+  eq(rowsFor({ ...TEAM('better_ball'), countingScores: 8 }, opts).board[0]?.total, 108,
+    'a count above the team\'s size caps out at everyone')
 }
 
 section('Two team boards, two sets of teams')
