@@ -1,0 +1,23 @@
+{
+  "name": "Carne Golf Links -- Hackett Course",
+  "slug": "carne-hackett",
+  "county": "Mayo",
+  "location": "Belmullet, Mayo, Ireland",
+  "website": "https://carnegolflinks.com/",
+  "latitude": 54.2237,
+  "longitude": -10.0338,
+  "holesConfidence": "NONE",
+  "teesConfidence": "HIGH",
+  "note": "The original Eddie Hackett 18 at Carne, beside the Wild Atlantic Dunes composite. No card sourced — the eighteen arrive with the first scorecard photo. Tees are official WHS ratings from the Golf Ireland app (listed there as Belmullet-Hackett), Aug 2026.",
+  "sources": {
+    "holes": [],
+    "tees": ["https://www.golfireland.ie/"]
+  },
+  "holes": [],
+  "tees": [
+    { "name": "Blue",   "gender": "M", "par": 72, "course_rating": 72.6, "slope": 124 },
+    { "name": "White",  "gender": "M", "par": 72, "course_rating": 71.2, "slope": 120 },
+    { "name": "Yellow", "gender": "M", "par": 72, "course_rating": 68.4, "slope": 116 },
+    { "name": "Red",    "gender": "F", "par": 73, "course_rating": 72.0, "slope": 121 }
+  ]
+}
