@@ -1,0 +1,13 @@
+{
+  "slug": "county-sligo-colt-championship",
+  "name": "County Sligo Golf Club -- Colt Championship",
+  "teesConfidence": "HIGH",
+  "note": "Official WHS ratings from the Golf Ireland app, Aug 2026 — replaces migration 008's estimated White and adds Gold and Green; the Women's Red was not in the source and is left as stored.",
+  "sources": { "tees": ["https://www.golfireland.ie/"] },
+  "tees": [
+    { "name": "Black", "gender": "M", "par": 71, "course_rating": 75.9, "slope": 135 },
+    { "name": "White", "gender": "M", "par": 71, "course_rating": 72.6, "slope": 129 },
+    { "name": "Gold",  "gender": "M", "par": 71, "course_rating": 71.4, "slope": 128 },
+    { "name": "Green", "gender": "M", "par": 71, "course_rating": 69.8, "slope": 124 }
+  ]
+}

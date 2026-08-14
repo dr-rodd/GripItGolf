@@ -1,0 +1,16 @@
+{
+  "slug": "enniscrone-dunes",
+  "name": "Enniscrone Golf Club -- The Dunes",
+  "teesConfidence": "HIGH",
+  "note": "Official WHS ratings from the Golf Ireland app, Aug 2026 — corrects migration 008's Blue and Black slopes and adds White, Green and Red men's tees plus the Women's Green.",
+  "sources": { "tees": ["https://www.golfireland.ie/"] },
+  "tees": [
+    { "name": "Black", "gender": "M", "par": 73, "course_rating": 74.8, "slope": 140 },
+    { "name": "Blue",  "gender": "M", "par": 73, "course_rating": 73.5, "slope": 134 },
+    { "name": "White", "gender": "M", "par": 73, "course_rating": 72.3, "slope": 128 },
+    { "name": "Green", "gender": "M", "par": 73, "course_rating": 70.5, "slope": 118 },
+    { "name": "Red",   "gender": "M", "par": 73, "course_rating": 69.3, "slope": 110 },
+    { "name": "Green", "gender": "F", "par": 73, "course_rating": 76.2, "slope": 134 },
+    { "name": "Red",   "gender": "F", "par": 73, "course_rating": 74.3, "slope": 126 }
+  ]
+}

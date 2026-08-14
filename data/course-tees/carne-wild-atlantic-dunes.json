@@ -1,0 +1,13 @@
+{
+  "slug": "carne-wild-atlantic-dunes",
+  "name": "Carne Golf Links -- Wild Atlantic Dunes",
+  "teesConfidence": "HIGH",
+  "note": "Official WHS ratings from the Golf Ireland app (listed there as Belmullet-Hackett), Aug 2026 — replaces migration 008's MEDIUM figures and adds the Yellow tee.",
+  "sources": { "tees": ["https://www.golfireland.ie/"] },
+  "tees": [
+    { "name": "Blue",   "gender": "M", "par": 72, "course_rating": 72.6, "slope": 124 },
+    { "name": "White",  "gender": "M", "par": 72, "course_rating": 71.2, "slope": 120 },
+    { "name": "Yellow", "gender": "M", "par": 72, "course_rating": 68.4, "slope": 116 },
+    { "name": "Red",    "gender": "F", "par": 73, "course_rating": 72.0, "slope": 121 }
+  ]
+}
