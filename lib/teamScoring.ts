@@ -73,8 +73,12 @@ export function parseTeamScoring(raw: unknown): TeamScoring {
 }
 
 /** One-line summary of the current setting, for the setup and leaderboard screens. */
-/** "the last hole" / "the last 3 holes" — reads properly at either end. */
-function lastHoles(n: number) {
+/**
+ * "the last hole" / "the last 3 holes" — reads properly at either end.
+ * Exported because the per-board rules line in lib/leaderboards.ts says the
+ * same thing about the same setting, and two spellings of it would drift.
+ */
+export function lastHoles(n: number) {
   return n === 1 ? 'the last hole' : `the last ${n} holes`
 }
 

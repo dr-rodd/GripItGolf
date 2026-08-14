@@ -337,6 +337,40 @@ section('A better-ball board can say how many scores count on a hole')
     'a count stored on another format is not carried')
 }
 
+section('A better-ball board can open the closing holes to everyone')
+{
+  // Stored boards round-trip, and off is kept off the object
+  eq(parseLeaderboards([{ ...teamBB, aggregateFinish: 6 }])[0].aggregateFinish, 6,
+    'a grandstand finish reads back')
+  eq('aggregateFinish' in parseLeaderboards([teamBB])[0], false,
+    'absent means off, which is what every board has always done')
+  eq('aggregateFinish' in parseLeaderboards([{ ...teamBB, aggregateFinish: 0 }])[0], false,
+    'and an explicit off is not stored either')
+
+  // Clamped rather than trusted
+  eq(parseLeaderboards([{ ...teamBB, aggregateFinish: 99 }])[0].aggregateFinish, 18,
+    'a silly finish is clamped to the whole round')
+  eq('aggregateFinish' in parseLeaderboards([{ ...teamBB, aggregateFinish: -3 }])[0], false,
+    'a negative one is off')
+  eq('aggregateFinish' in parseLeaderboards([{ ...teamBB, aggregateFinish: 'x' }])[0], false,
+    'junk is dropped, not repaired')
+
+  // The finish belongs to better ball alone
+  eq('aggregateFinish' in parseLeaderboards(
+    [{ ...teamBB, teamFormat: 'hero', aggregateFinish: 6 }])[0], false,
+    'a finish stored on another format is not carried')
+
+  // The rules line names it, in one copy of the wording
+  ok(boardRules({ ...teamBB, aggregateFinish: 6 })
+    .includes('everyone counts on the last 6 holes'),
+    'the line under the title says the finish is open')
+  eq(describeBetterBall(2, 1),
+    'A composite card: the team\'s best 2 scores on every hole, and everyone counts on the last hole.',
+    'one hole reads in the singular')
+  ok(!boardRules(teamBB).includes('everyone counts'),
+    'a board with it off says nothing about it')
+}
+
 // ─── Quota ─────────────────────────────────────────────────────
 
 section('Quota is a third scoring, and an individual one')

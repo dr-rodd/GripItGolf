@@ -45,10 +45,13 @@ export type OverallTie = 'level' | 'last_round'
  * What a board does with a tie.
  *
  * Absent means `even_split`, which is what every board did before the question
- * was asked. New boards are seeded with `countback` by the form — the default
- * for something already saved and the default for something being made are
- * different questions, and answering them with one constant would re-score
- * trips that have already been played.
+ * was asked. A new *prizes* board is seeded with `countback` by the form — the
+ * default for something already saved and the default for something being made
+ * are different questions, and answering them with one constant would re-score
+ * trips that have already been played. A board that pays nothing is never
+ * asked at all: the question is a prizes question, `offersTieBreak` in
+ * lib/leaderboards.ts is the gate, and `parseLeaderboards` drops the answer
+ * off any totals board that stored one before that was true.
  */
 export function tieBreakOf(lb: Pick<Leaderboard, 'tieBreak'>): TieBreak {
   return TIE_BREAKS.some(t => t.key === lb.tieBreak)

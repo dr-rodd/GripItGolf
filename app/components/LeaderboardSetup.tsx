@@ -5,12 +5,12 @@ import {
   type Leaderboard, type Audience,
   scoringsFor, TEAM_FORMATS, COMBINES, MAX_DISCARD,
   unanswered, isComplete, offersDiscard, offersTieBreak, offersQuotaScale,
-  offersCountingScores, countingScoresOf,
+  offersCountingScores, countingScoresOf, aggregateFinishOf,
   offersAllowance, tripQuotaScale, slotKey, isFormatFree,
   freeScorings, freeTeamFormats,
   hasMatchplay, boardTitle, boardRules,
 } from '@/lib/leaderboards'
-import { DEFAULT_TEAM_SCORING, MAX_COUNTING_SCORES } from '@/lib/teamScoring'
+import { DEFAULT_TEAM_SCORING, MAX_COUNTING_SCORES, lastHoles } from '@/lib/teamScoring'
 import {
   FULL_ALLOWANCE, MIN_ALLOWANCE, ALLOWANCE_PRESETS,
   clampAllowance, allowanceOf, suggestedAllowance,
@@ -56,15 +56,13 @@ import { Card, Badge, buttonClass, FIELD, FIELD_LABEL } from './ui'
  */
 
 /**
- * What a board being made starts out as.
- *
- * Only the tie rule, and only because its two defaults differ: a board read
- * back off a trip with no answer stored is an even split — that is what every
- * board did before the question existed and re-scoring played trips is not on
- * — while a board somebody is making now defaults to countback, which is what
- * golf does. See lib/tiebreak.ts.
+ * What a board being made starts out as. Nothing: every answer with a
+ * default is seeded when the question it belongs to is reached — the tie
+ * rule, whose two defaults differ (see lib/tiebreak.ts), is seeded when the
+ * board says it pays by position, because that is the only board the
+ * question is asked of.
  */
-const FRESH: Partial<Leaderboard> = { tieBreak: DEFAULT_TIE_BREAK }
+const FRESH: Partial<Leaderboard> = {}
 
 /** A round of golf on this trip, as the matchplay link picker needs it. */
 export type LinkableRound = {
@@ -473,6 +471,80 @@ function CountingScoresPicker({
 }
 
 /**
+ * The grandstand finish: closing holes where the whole team counts.
+ *
+ * Off, or a number of holes typed in — it can only add scores to the card,
+ * so a trailing team can still catch up over the last few while the leaders
+ * carry their weakest players home.
+ */
+function GrandstandFinishPicker({
+  value, onChange,
+}: {
+  /** 0 when off, else how many closing holes. */
+  value: number
+  onChange: (n: number) => void
+}) {
+  const [on, setOn] = useState(value > 0)
+  const [text, setText] = useState(String(value > 0 ? value : 3))
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => { setOn(false); onChange(0) }}
+          className={`${chipClass(!on)} px-5 flex-shrink-0`}
+        >
+          No
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setOn(true)
+            const n = Number(text)
+            if (Number.isFinite(n) && n >= 1 && n <= 18) onChange(Math.round(n))
+          }}
+          className={`${chipClass(on)} px-4 flex-shrink-0`}
+        >
+          Yes, the last…
+        </button>
+        {on && (
+          <>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={18}
+              value={text}
+              aria-label="Closing holes where everyone counts"
+              onChange={e => {
+                setText(e.target.value)
+                const n = Number(e.target.value)
+                if (Number.isFinite(n) && n >= 1 && n <= 18) onChange(Math.round(n))
+              }}
+              onBlur={() => {
+                const n = Number(text)
+                const clamped = Number.isFinite(n) && n >= 1 ? Math.min(18, Math.round(n)) : 3
+                setText(String(clamped))
+                onChange(clamped)
+              }}
+              className={`${FIELD} flex-1 min-w-0 tabular-nums`}
+            />
+            <span className="t-cap text-ink/50 flex-shrink-0">holes</span>
+          </>
+        )}
+      </div>
+
+      <p className="t-cap text-ink/65 leading-snug">
+        {value > 0
+          ? `Over ${lastHoles(value)}, every score in the team counts — a trailing team can still catch up.`
+          : 'A grandstand finish: over the closing holes every score in the team counts, so a trailing team can still catch up.'}
+      </p>
+    </div>
+  )
+}
+
+/**
  * Linking each bracket round to a round of golf.
  *
  * A knockout is played somewhere. Say which round of the trip each bracket
@@ -786,12 +858,14 @@ function Builder({
               label={f.label}
               hint={f.hint}
               taken={!freeTeamFormats(existing, draft.scoring).includes(f.key)}
-              // The count belongs to better ball. Carrying it across to
-              // another format would leave the board storing an answer to a
-              // question it is no longer being asked.
+              // The count and the finish belong to better ball. Carrying
+              // them across to another format would leave the board storing
+              // answers to questions it is no longer being asked.
               onClick={() => set({
                 teamFormat: f.key,
-                ...(f.key === 'better_ball' ? {} : { countingScores: undefined }),
+                ...(f.key === 'better_ball'
+                  ? {}
+                  : { countingScores: undefined, aggregateFinish: undefined }),
               })}
             />
           ))}
@@ -814,6 +888,19 @@ function Builder({
         </Question>
       )}
 
+      {/* The same format's other option: does the whole team count at the
+          finish? Off is what every board has always done, so leaving it
+          alone changes nothing. */}
+      {offersCountingScores(draft) && (
+        <Question n={next()} title="Should every score count on the closing holes?">
+          <GrandstandFinishPicker
+            value={aggregateFinishOf(draft)}
+            // Not stored when it is off, for the same reason as the count.
+            onChange={n => set({ aggregateFinish: n > 0 ? n : undefined })}
+          />
+        </Question>
+      )}
+
       {league && draft.scoring && (draft.audience === 'individual' || draft.teamFormat) && (
         <Question n={next()} title="How do the rounds add up?">
           {COMBINES.map(c => (
@@ -823,9 +910,15 @@ function Builder({
               label={c.label}
               hint={c.hint}
               taken={!isFormatFree(existing, { ...draft, combine: c.key } as Leaderboard)}
+              // The tie rule is a prizes question, so it arrives and leaves
+              // with the prize table: seeded with golf's answer when the
+              // board starts paying by position, cleared when it stops —
+              // a totals board must not store an answer it is never asked.
               onClick={() => set({
                 combine: c.key,
                 customPoints: c.key === 'position' ? defaultCustomPoints(fieldSize) : undefined,
+                tieBreak: c.key === 'position' ? (draft.tieBreak ?? DEFAULT_TIE_BREAK) : undefined,
+                overallTie: c.key === 'position' ? draft.overallTie : undefined,
               })}
             />
           ))}
@@ -867,9 +960,9 @@ function Builder({
         </Question>
       )}
 
-      {/* Asked of every league board, prizes or no prizes. Two players level
-          happens either way — with a prize table it decides what they are
-          paid, without one it decides who is on top. */}
+      {/* Only a board that pays by position is asked. A tie only needs
+          breaking where the places are worth something different — on a
+          totals board level players simply share the place. */}
       {offersTieBreak(draft) && (
         <Question n={next()} title="How are ties broken?">
           {TIE_BREAKS.map(t => (
@@ -877,12 +970,7 @@ function Builder({
               key={t.key}
               on={tieBreakOf(draft) === t.key}
               label={t.label}
-              // "Everybody Wins" and "Even Split" are the same act on a board
-              // that pays nothing, so it says so rather than offering two
-              // buttons that look like a choice and are not.
-              hint={draft.combine !== 'position' && t.key !== 'countback'
-                ? 'Level players stay level and share the place.'
-                : t.hint}
+              hint={t.hint}
               onClick={() => set({
                 tieBreak: t.key,
                 // The overall answer belongs to countback. Carrying it across

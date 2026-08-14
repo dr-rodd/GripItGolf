@@ -393,7 +393,10 @@ section('A countback pays the two it split, and the board says which stretch')
 
   // The same two cards on a board that pays nothing. Both still add to 36, so
   // this is where the total itself is the figure the countback decided — and
-  // where the badge lands on it.
+  // where the badge lands on it. A board like this can no longer be *stored*
+  // — the tie rule is a prizes question now, and parseLeaderboards drops a
+  // countback off a totals board — but the maths beneath it is pinned here
+  // all the same, because it is what a prizes board's totals lean on.
   const seats = (h: string) =>
     [...h.matchAll(/tabular-nums w-3\.5 flex-shrink-0">(\d+)</g)].map(m => m[1])
 
@@ -1228,6 +1231,14 @@ section('A board chooses how many scores build its composite card')
     'best 3: the whole team of three')
   eq(rowsFor({ ...TEAM('better_ball'), countingScores: 8 }, opts).board[0]?.total, 108,
     'a count above the team\'s size caps out at everyone')
+
+  // The grandstand finish travels the same road
+  eq(teamScoringFor({ ...TEAM('better_ball'), aggregateFinish: 6 }, null).aggregateFinish, 6,
+    'a per-board finish reaches the maths')
+  eq(teamScoringFor(TEAM('better_ball'), null).aggregateFinish, 0,
+    'and is off unless asked for')
+  eq(rowsFor({ ...TEAM('better_ball'), countingScores: 1, aggregateFinish: 3 }, opts).board[0]?.total, 63,
+    'best 1 opening up over the last 3: fifteen holes of the best score, three of everyone')
 }
 
 section('Two team boards, two sets of teams')

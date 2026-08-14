@@ -232,9 +232,9 @@ Four things that are easy to get wrong twice:
 
 ## Breaking ties
 
-`lib/tiebreak.ts` is the only copy of the rule, and of the countback. Every league board answers it (`tieBreak`): **Tiebreak** splits level players on the cards — back 9, then 6, then 3, then 2 — **Everybody Wins** pays each of them the better prize, **Even Split** pools those prizes and shares them. A tie the cards cannot split is shared, whichever way the board is set.
+`lib/tiebreak.ts` is the only copy of the rule, and of the countback. **Only a prizes board (`combine: 'position'`) answers it** (`tieBreak`) — a tie is a prizes question, and on a board that just adds rounds up, level players share the place: `offersTieBreak` is the gate and `parseLeaderboards` drops the answer off any totals board, including the countback the form used to seed onto every board. Three answers: **Tiebreak** splits level players on the cards — back 9, then 6, then 3, then 2 — **Everybody Wins** pays each of them the better prize, **Even Split** pools those prizes and shares them. A tie the cards cannot split is shared, whichever way the board is set. The in-play panel keeps its mid-round countback regardless — that is the card in your hand, not a board.
 
-**Absent means Even Split** — what every board did before the question existed, so no trip already stored is re-scored. A board being *made* defaults to Tiebreak. Two different defaults for two different questions.
+**Absent means Even Split** — what every board did before the question existed, so no trip already stored is re-scored. A prizes board being *made* is seeded with Tiebreak when “points by position” is picked, and the answer is cleared if it stops paying by position. Two different defaults for two different questions.
 
 **Rounds added up have no back nine**, so `overallTie` is a second answer under Tiebreak: leave the trip total level (the default), or break it on the last round both played and neither dropped. **A board counting a single round is always broken**, because there the total is that card — which is how a round summary gets it. `countbackByRound` is carried on a row only when the overall tie is broken that way, so `orderRowsUndiscarded` cannot break one the board was told to leave.
 

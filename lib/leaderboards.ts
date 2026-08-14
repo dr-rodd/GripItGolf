@@ -32,7 +32,7 @@ import { type RoundLink, parseRoundLinks, decisionLabel } from './matchDecision'
 import {
   type QuotaScale, parseQuotaScale, quotaScaleOf, quotaScaleLabel,
 } from './quota'
-import { DEFAULT_TEAM_SCORING, MAX_COUNTING_SCORES } from './teamScoring'
+import { DEFAULT_TEAM_SCORING, MAX_COUNTING_SCORES, lastHoles } from './teamScoring'
 
 export type Audience = 'individual' | 'team'
 export type Competition = 'league' | 'matchplay'
@@ -85,6 +85,16 @@ export type Leaderboard = {
    * team's size simply caps out at everyone.
    */
   countingScores?: number
+
+  /**
+   * `teamFormat: 'better_ball'` only — the grandstand finish: closing holes
+   * on which every score counts rather than the best few, so a trailing team
+   * can still catch up. It can only raise a team's total, never lower it.
+   *
+   * Absent means off, which is what every board did before the question was
+   * asked. 1 to 18 when on.
+   */
+  aggregateFinish?: number
 
   /**
    * What percentage of a player's course handicap this board plays off.
@@ -367,14 +377,15 @@ export function offersDiscard(draft: Partial<Leaderboard>): boolean {
 /**
  * Whether to ask how ties are broken.
  *
- * Every league board. Two players level is a thing that happens whether the
- * round was worth points or worth a place — on a board that pays nothing the
- * answer only decides who is on top, which is the whole of what that board is
- * for. A draw is not asked: a match that finishes level is halved, and that is
- * the format's own rule rather than a setting.
+ * Only a board that pays by position. A tie only needs breaking where the
+ * places are worth something different — on a board that just adds rounds up,
+ * two players level simply share the place, and asking which back nine was
+ * better decides nothing anybody is playing for. A draw is not asked either:
+ * a match that finishes level is halved, and that is the format's own rule
+ * rather than a setting.
  */
 export function offersTieBreak(draft: Partial<Leaderboard>): boolean {
-  return draft.competition === 'league' && !!draft.scoring
+  return draft.competition === 'league' && !!draft.scoring && draft.combine === 'position'
 }
 
 /**
@@ -412,11 +423,22 @@ export function countingScoresOf(lb: Pick<Partial<Leaderboard>, 'countingScores'
   return lb.countingScores ?? DEFAULT_TEAM_SCORING.countingScores
 }
 
+/**
+ * The closing holes on which everyone counts. Absent reads as off — no board
+ * had a grandstand finish before it could be asked for.
+ */
+export function aggregateFinishOf(lb: Pick<Partial<Leaderboard>, 'aggregateFinish'>): number {
+  return lb.aggregateFinish ?? 0
+}
+
 /** The one line that says what a better-ball composite card is made of. */
-export function describeBetterBall(countingScores: number): string {
-  return countingScores === 1
-    ? 'A composite card: the team\'s best score on every hole.'
-    : `A composite card: the team's best ${countingScores} scores on every hole.`
+export function describeBetterBall(countingScores: number, aggregateFinish = 0): string {
+  const base = countingScores === 1
+    ? 'A composite card: the team\'s best score on every hole'
+    : `A composite card: the team's best ${countingScores} scores on every hole`
+  return aggregateFinish > 0
+    ? `${base}, and everyone counts on ${lastHoles(aggregateFinish)}.`
+    : `${base}.`
 }
 
 /**
@@ -485,10 +507,10 @@ export function boardRules(lb: Leaderboard): string {
 
   const parts: string[] = []
   if (lb.audience === 'team') {
-    // Better ball states its count rather than its hint — how many scores
-    // make the composite card is the whole of what the format is.
+    // Better ball states its count and its finish rather than its hint — how
+    // many scores make the composite card is the whole of what the format is.
     parts.push(lb.teamFormat === 'better_ball'
-      ? describeBetterBall(countingScoresOf(lb))
+      ? describeBetterBall(countingScoresOf(lb), aggregateFinishOf(lb))
       : ALL_TEAM_FORMATS.find(f => f.key === lb.teamFormat)?.hint ?? '')
   }
   parts.push(SCORINGS.find(s => s.key === lb.scoring)?.hint ?? '')
@@ -611,13 +633,21 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
       // of 100 is. Absent reads as `even_split` — what every board did before
       // the question was asked — so a trip that predates it is byte-for-byte
       // the object it has always been, and is scored the way it always was.
-      const tieBreak = TIE_BREAKS.find(t => t.key === r.tieBreak)?.key
-      if (tieBreak && tieBreak !== 'even_split') lb.tieBreak = tieBreak
-      // Only countback has an overall question, and only one of its answers
-      // is worth storing. A board told to leave the total level is the board
-      // that never answered.
-      if (lb.tieBreak === 'countback' && r.overallTie === 'last_round') {
-        lb.overallTie = 'last_round'
+      //
+      // And only read at all on a board that pays by position. A tie rule is
+      // a prizes question — on a board that just adds rounds up, level
+      // players share the place — so a countback stored on a totals board
+      // (every one the form seeded before it learned this) is dropped here,
+      // which is what retires it everywhere at once.
+      if (lb.combine === 'position') {
+        const tieBreak = TIE_BREAKS.find(t => t.key === r.tieBreak)?.key
+        if (tieBreak && tieBreak !== 'even_split') lb.tieBreak = tieBreak
+        // Only countback has an overall question, and only one of its answers
+        // is worth storing. A board told to leave the total level is the board
+        // that never answered.
+        if (lb.tieBreak === 'countback' && r.overallTie === 'last_round') {
+          lb.overallTie = 'last_round'
+        }
       }
 
       if (audience === 'team') {
@@ -632,6 +662,13 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
         if (teamFormat === 'better_ball' && Number.isFinite(Number(r.countingScores))) {
           const counting = clamp(r.countingScores, 1, MAX_COUNTING_SCORES)
           if (counting !== DEFAULT_TEAM_SCORING.countingScores) lb.countingScores = counting
+        }
+
+        // The grandstand finish is better ball's too, and kept off when it is
+        // off — no board had one before the question existed.
+        if (teamFormat === 'better_ball' && Number.isFinite(Number(r.aggregateFinish))) {
+          const finish = clamp(r.aggregateFinish, 0, 18)
+          if (finish > 0) lb.aggregateFinish = finish
         }
       }
     }

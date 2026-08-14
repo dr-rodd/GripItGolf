@@ -88,25 +88,34 @@ section('Reading one back off a trip')
     'a board stored before the question existed comes back without it')
   ok(!('overallTie' in plain), 'and without an answer to a question it was never asked')
 
-  const cb = parseLeaderboards([{ ...stored[0], tieBreak: 'countback' }])[0]
-  eq(cb.tieBreak, 'countback', 'a countback board survives the round trip')
+  // The tie rule is a prizes question, so it only rides on a board that pays
+  // by position — see offersTieBreak. A countback stored on a totals board
+  // (the form used to seed one onto every board it made) is dropped on read,
+  // which is what retires it there: level players simply share the place.
+  const prizes = { ...stored[0], combine: 'position', customPoints: [10, 5, 1] }
+
+  const cb = parseLeaderboards([{ ...prizes, tieBreak: 'countback' }])[0]
+  eq(cb.tieBreak, 'countback', 'a countback prizes board survives the round trip')
   ok(!('overallTie' in cb), 'and leaves the total level until somebody says otherwise')
 
+  eq(parseLeaderboards([{ ...stored[0], tieBreak: 'countback' }])[0].tieBreak, undefined,
+    'a countback on a totals board is dropped — there is nothing there for it to decide')
+
   const both = parseLeaderboards([{
-    ...stored[0], tieBreak: 'countback', overallTie: 'last_round',
+    ...prizes, tieBreak: 'countback', overallTie: 'last_round',
   }])[0]
   eq(both.overallTie, 'last_round', 'the overall answer survives it too')
 
   // Kept off the object when it is the no-op, the same way an allowance of
   // 100 is — so an even-split board is byte-for-byte the board it always was
-  const even = parseLeaderboards([{ ...stored[0], tieBreak: 'even_split' }])[0]
+  const even = parseLeaderboards([{ ...prizes, tieBreak: 'even_split' }])[0]
   ok(!('tieBreak' in even), 'an even split is not stored: it is what absent means')
 
-  const orphan = parseLeaderboards([{ ...stored[0], overallTie: 'last_round' }])[0]
+  const orphan = parseLeaderboards([{ ...prizes, overallTie: 'last_round' }])[0]
   ok(!('overallTie' in orphan),
     'an overall answer without a countback is dropped — only countback has that question')
 
-  eq(parseLeaderboards([{ ...stored[0], tieBreak: 'sideways' }])[0].tieBreak, undefined,
+  eq(parseLeaderboards([{ ...prizes, tieBreak: 'sideways' }])[0].tieBreak, undefined,
     'and junk is dropped rather than repaired')
 }
 
@@ -125,18 +134,21 @@ section('What the board says it is doing')
     'Level players all take the better prize.',
     'and says the other thing when that is what happens')
 
-  ok(describeTieBreak({ ...base, tieBreak: 'countback' }).startsWith('Round ties'),
+  const prizes = { ...base, combine: 'position' as const, customPoints: [10, 5, 1] }
+  ok(describeTieBreak({ ...prizes, tieBreak: 'countback' }).startsWith('Round ties'),
     'a countback board that leaves the total level says so — it is round ties it breaks')
-  ok(describeTieBreak({ ...base, tieBreak: 'countback', overallTie: 'last_round' })
+  ok(describeTieBreak({ ...prizes, tieBreak: 'countback', overallTie: 'last_round' })
     .startsWith('Ties broken'),
     'and one that breaks the total does not qualify it')
 
-  ok(boardRules({ ...base, tieBreak: 'countback', overallTie: 'last_round' })
+  ok(boardRules({ ...prizes, tieBreak: 'countback', overallTie: 'last_round' })
     .includes('back 9'), 'the rules line under the title carries it')
   ok(!boardRules(base).includes('back 9'), 'and an old board gains no new sentence')
 
-  ok(offersTieBreak(base), 'every league board is asked')
-  ok(!offersTieBreak({ ...base, competition: 'matchplay' }),
+  ok(offersTieBreak(prizes), 'a board that pays by position is asked')
+  ok(!offersTieBreak(base),
+    'a totals board is not — level players share the place, and a back nine decides nothing they are playing for')
+  ok(!offersTieBreak({ ...prizes, competition: 'matchplay' }),
     'a draw is not — a level match is halved, which is the format rather than a setting')
 }
 
