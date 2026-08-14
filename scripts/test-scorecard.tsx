@@ -328,7 +328,11 @@ section('A team card keeps the holes in view however big the team')
   }))
   const round = { id: 'r1', round_number: 1, courses: { id: 'c1', name: 'Carne' } }
 
-  const card = (n: number, opts: { pointsForFirstHole?: number; heroPoints?: number } = {}) => {
+  const card = (n: number, opts: {
+    pointsForFirstHole?: number
+    heroPoints?: number
+    teamHolePoints?: Map<number, number>
+  } = {}) => {
     const players = Array.from({ length: n }, (_, i) => ({
       id: `p${i + 1}`, name: `Player${i + 1} Surname`, handicap: 10 + i, gender: 'M',
     }))
@@ -351,6 +355,7 @@ section('A team card keeps the holes in view however big the team')
         // played, rather than whatever snapshot happens to sit in the table.
         handicapFor: (pid: string) =>
           players.find(p => p.id === pid)?.handicap ?? null,
+        teamHolePoints: opts.teamHolePoints ?? null,
         onClose: () => {},
       } as never)
     )
@@ -388,6 +393,30 @@ section('A team card keeps the holes in view however big the team')
     // so the same number twice on one row would say nothing the second time.
     const solo = card(1)
     ok(!solo.includes('points"'), 'a single-player card does not repeat itself')
+  }
+
+  // ── The team's figure is the board's, not a sum ──
+  //
+  // Handed the board's per-hole figures (teamCardHolePoints), the right-hand
+  // column prints them. Without this the card summed every member on every
+  // hole — only what aggregate means — and a best-1 better ball read as
+  // counting two while the leaderboard counted one.
+  {
+    // Nothing else on this card can produce a 99, so its presence is the
+    // board's figure being read. Everyone summing 2s would print 6 a hole
+    // and 18 a nine — and with the map in hand neither of those sums exists:
+    // every other hole is the nought the board scored it at.
+    // Three players at 2 points a hole over nine holes used to band to 54 —
+    // a figure nothing else on the card produces, so its absence is the sum
+    // being gone. Each player's own raised 18 stays: that is who contributed.
+    const counted = card(3, { teamHolePoints: new Map([[1, 99]]) })
+    ok(counted.includes('>99<'), 'the right-hand column prints the board\'s own figure')
+    ok(!counted.includes('>54<'),
+      'and the bands total those figures, not the sum of every member')
+
+    // A card handed nothing still sums — which on one player is their own
+    // points column, exactly as it always was.
+    ok(card(3).includes('>54<'), 'without the board\'s figures the members are summed as before')
   }
 
   // Three fit; more than that and the columns have to start scrolling or the

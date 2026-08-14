@@ -15,11 +15,14 @@ import TripLeaderboardClient, {
 } from '../app/trip/[tripCode]/leaderboard/TripLeaderboardClient'
 import type { BoardRow } from '../lib/boardRows'
 import { parseFormats, type TripFormats } from '../lib/formats'
-import { DEFAULT_TEAM_SCORING, type TeamScoring } from '../lib/teamScoring'
+import {
+  DEFAULT_TEAM_SCORING, teamHolePoints, teamRoundPoints,
+  type TeamScoring, type TeamScoreInput,
+} from '../lib/teamScoring'
 import type { Leaderboard } from '../lib/leaderboards'
 import { scoreTone, TONE_PILL } from '../lib/leaderboardStyle'
 import { boardsFromFormats, tripBoards, isLegacy } from '../lib/leaderboardsCompat'
-import { teamScoringFor, buildRows, orderRowsUndiscarded } from '../lib/boardRows'
+import { teamScoringFor, teamCardHolePoints, buildRows, orderRowsUndiscarded } from '../lib/boardRows'
 import { buildRowContext } from '../lib/rowContext'
 
 let passed = 0, failed = 0
@@ -146,7 +149,7 @@ function rowsFor(board: Leaderboard, opts: RenderOpts = {}) {
     livePlayerIds: opts.livePlayerIds ?? [],
     legacyTeamScoring: opts.legacyTeamScoring ?? null,
   })
-  return { board: buildRows(board, ctx), all: orderRowsUndiscarded(board, buildRows(board, ctx)) }
+  return { board: buildRows(board, ctx), all: orderRowsUndiscarded(board, buildRows(board, ctx)), ctx }
 }
 
 /** Holes 1..n of a round, still sitting in the in-progress table. */
@@ -1239,6 +1242,56 @@ section('A board chooses how many scores build its composite card')
     'and is off unless asked for')
   eq(rowsFor({ ...TEAM('better_ball'), countingScores: 1, aggregateFinish: 3 }, opts).board[0]?.total, 63,
     'best 1 opening up over the last 3: fifteen holes of the best score, three of everyone')
+}
+
+section('The opened team card prints the same holes the board summed')
+{
+  // The card used to add every member's points on every hole — right only
+  // for aggregate. teamHolePoints is the one copy of the team's per-hole
+  // figure now, and the round score is its sum by construction.
+  const S = (playerId: string, holeNumber: number, points: number): TeamScoreInput =>
+    ({ playerId, roundId: 'r1', holeNumber, points })
+  const trio = ['a', 'b', 'c']
+  // a: 3 a hole, b: 2, c: 1 — eighteen holes each
+  const cards = trio.flatMap((id, i) =>
+    Array.from({ length: 18 }, (_, h) => S(id, h + 1, 3 - i)))
+
+  // The invariant that makes a card trustworthy, in every mode
+  const modes: TeamScoring[] = [
+    { ...DEFAULT_TEAM_SCORING, countingScores: 1 },
+    { ...DEFAULT_TEAM_SCORING, countingScores: 2, aggregateFinish: 3 },
+    { ...DEFAULT_TEAM_SCORING, mode: 'hero' },
+    { ...DEFAULT_TEAM_SCORING, mode: 'cut_dead_weight' },
+    { ...DEFAULT_TEAM_SCORING, mode: 'aggregate', aggregateHoles: 6 },
+  ]
+  for (const scoring of modes) {
+    let sum = 0
+    for (const v of teamHolePoints(trio, 'r1', cards, scoring).values()) sum += v
+    eq(sum, teamRoundPoints(trio, 'r1', cards, scoring).score,
+      `${scoring.mode}${scoring.aggregateFinish ? ' with a finish' : ''}: the holes sum to the round`)
+  }
+
+  eq(teamHolePoints(trio, 'r1', cards, { ...DEFAULT_TEAM_SCORING, countingScores: 1 }).get(5), 3,
+    'best 1: a hole is the best score alone, not a sum of two')
+  eq(teamHolePoints(trio, 'r1', cards, DEFAULT_TEAM_SCORING).get(5), 5,
+    'best 2: the best two — 3 and 2')
+  eq(teamHolePoints(trio, 'r1', cards, { ...DEFAULT_TEAM_SCORING, mode: 'hero' }).get(5), 3,
+    'hero: the hole is the hero\'s own, nobody else\'s')
+  eq(teamHolePoints(trio, 'r1', cards, { ...DEFAULT_TEAM_SCORING, mode: 'cut_dead_weight' }).get(5), 5,
+    'the cut: everyone but the worst card')
+  eq(teamHolePoints(trio, 'r1', cards,
+    { ...DEFAULT_TEAM_SCORING, mode: 'aggregate', aggregateHoles: 6 }).get(5), undefined,
+    'aggregate over the last 6: a hole outside them is not on the card')
+
+  // The join the scorecard actually opens through: the board's own count,
+  // allowance and legacy fallback, not a restatement of any of them
+  const opts = { teams: oneTeam, players: allInReds, rounds: [rounds[0]] }
+  const { ctx } = rowsFor({ ...TEAM('better_ball'), countingScores: 1 }, opts)
+  const onCard = teamCardHolePoints(
+    { ...TEAM('better_ball'), countingScores: 1 }, ctx, 'r1', ['p1', 'p2', 'p3'])
+  eq(onCard?.get(1), 3, 'the card the sheet opens reads the board\'s count')
+  eq(teamCardHolePoints(SF(), ctx, 'r1', ['p1']), null,
+    'an individual board hands the sheet nothing — the player\'s points are already the column')
 }
 
 section('Two team boards, two sets of teams')

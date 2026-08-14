@@ -20,7 +20,7 @@ import { quotaPoints, quotaTarget, quotaScaleOf } from './quota'
 import { setOf, teamsOnSheet, membersOf, type Membership } from './teamSets'
 import {
   type TeamScoring, type TeamScoreInput, type ScoringBasis,
-  DEFAULT_TEAM_SCORING, teamRoundPoints,
+  DEFAULT_TEAM_SCORING, teamRoundPoints, teamHolePoints,
 } from './teamScoring'
 import {
   resolveCustomPoints, totalAfterDiscard, discardedIndices,
@@ -418,6 +418,32 @@ export function teamScoringFor(lb: Leaderboard, legacy: TeamScoring | null): Tea
   if (lb.countingScores !== undefined) patch.countingScores = lb.countingScores
   if (lb.aggregateFinish !== undefined) patch.aggregateFinish = lb.aggregateFinish
   return Object.keys(patch).length > 0 ? { ...base, ...patch } : base
+}
+
+/**
+ * The team's score on each hole of one round, for the opened scorecard.
+ *
+ * The same settings, allowance and basis `teamRows` scores the board with —
+ * through `teamScoringFor` and `teamScoreInputs`, not a restatement — so the
+ * card's right-hand column is the round figure on the board, hole by hole.
+ * The card used to sum every member's points on every hole, which is only
+ * what aggregate means: on a best-1 better ball it read as counting two
+ * while the leaderboard counted one.
+ *
+ * Null for an individual board, where the player's own points are already
+ * the column.
+ */
+export function teamCardHolePoints(
+  lb: Leaderboard, ctx: RowContext, roundId: string, memberIds: string[],
+): Map<number, number> | null {
+  if (lb.audience !== 'team') return null
+  const basis: ScoringBasis = lb.scoring === 'strokes' ? 'strokes' : 'stableford'
+  return teamHolePoints(
+    memberIds, roundId,
+    teamScoreInputs(ctx, allowanceOf(lb)),
+    teamScoringFor(lb, ctx.legacyTeamScoring),
+    basis,
+  )
 }
 
 

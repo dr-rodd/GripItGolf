@@ -10,7 +10,7 @@ import {
 import {
   type BoardRow, type ResolvedScore, type RowContext,
   buildRows, scoresForBoard, boardHandicapFor, effectivePar, effectiveSI,
-  orderRowsUndiscarded,
+  orderRowsUndiscarded, teamCardHolePoints,
 } from '@/lib/boardRows'
 import { type Segment } from '@/lib/tiebreak'
 import { buildRowContext, sortRounds } from '@/lib/rowContext'
@@ -194,6 +194,7 @@ function Row({ children, className = '' }: { children: React.ReactNode; classNam
  */
 export function ScorecardSheet({
   title, subtitle, players, round, holes, resolved, handicapFor, onClose,
+  teamHolePoints = null,
 }: {
   title: string
   subtitle: string
@@ -210,6 +211,14 @@ export function ScorecardSheet({
    * the arithmetic and find it wrong.
    */
   handicapFor: (playerId: string) => number | null
+  /**
+   * The team's own figure on each hole, under the board's format — from
+   * `teamCardHolePoints`. Without it a team card sums every member on every
+   * hole, which is only what aggregate means: a best-1 better ball read as
+   * counting two while the leaderboard counted one. Null on a one-player
+   * card, whose own points are already the column.
+   */
+  teamHolePoints?: Map<number, number> | null
   onClose: () => void
 }) {
   const { register, onScroll } = useSyncedStrips()
@@ -276,6 +285,17 @@ export function ScorecardSheet({
   const sumGross = (hs: Hole[], playerId: string) =>
     hs.reduce((s, h) => s + (scoreFor(playerId, h.hole_number)?.gross ?? 0), 0)
 
+  /**
+   * What the right-hand column holds for these holes: the team's figure under
+   * its format where one was handed in, else the players' own points — which
+   * on a one-player card is the same column it always was.
+   */
+  const teamPts = (hs: Hole[]) =>
+    teamHolePoints
+      ? hs.reduce((s, h) => s + (teamHolePoints.get(h.hole_number) ?? 0), 0)
+      : hs.reduce((s, h) => s + players.reduce(
+        (t, p) => t + (scoreFor(p.id, h.hole_number)?.points ?? 0), 0), 0)
+
   const front = nine(1, 9)
   const back  = nine(10, 18)
   const gender = players[0]?.gender ?? 'M'
@@ -339,7 +359,7 @@ export function ScorecardSheet({
         })}
       </Strip>
       <span className={`${PTS_W} font-bold text-ink ${total ? 'text-xl' : 'text-base'}`} style={SC_SF}>
-        {players.reduce((s, p) => s + sumPts(hs, p.id), 0)}
+        {teamPts(hs)}
       </span>
     </Row>
   )
@@ -447,9 +467,7 @@ export function ScorecardSheet({
               // is a nought. Testing the total alone conflated the two, and
               // a wiped-out hole is exactly the one worth being able to see.
               const played = players.some(p => scoreFor(p.id, hole.hole_number))
-              const rowPts = players.reduce(
-                (s, p) => s + (scoreFor(p.id, hole.hole_number)?.points ?? 0), 0
-              )
+              const rowPts = teamPts([hole])
               return (
                 <Fragment key={hole.id}>
                   <Row className={`py-1.5 ${SC_RULE} ${scRow(hole.hole_number)}`}>
@@ -1278,6 +1296,16 @@ export default function TripLeaderboardClient({
     [activeBoard, rowContext, resolved]
   )
 
+  // And on a team card, the team's own figure per hole under the board's
+  // format — best 1, best 2, the hero's card — rather than a sum of everyone,
+  // which is only what aggregate means. Null everywhere else.
+  const cardTeamPoints = useMemo(
+    () => (card && activeBoard
+      ? teamCardHolePoints(activeBoard, rowContext, card.round.id, card.row.playerIds)
+      : null),
+    [card, activeBoard, rowContext]
+  )
+
   // ── Render ──────────────────────────────────────────────────
 
   const showMatchplay = hasMatchplay(boards)
@@ -1417,6 +1445,7 @@ export default function TripLeaderboardClient({
           // totalling 33 whose scorecard adds up to 36 is a bug report, and
           // the difference between them is the allowance it is played off.
           resolved={cardScores}
+          teamHolePoints={cardTeamPoints}
           handicapFor={pid =>
             activeBoard ? boardHandicapFor(activeBoard, rowContext, card.round.id, pid) : null}
           onClose={() => setCard(null)}

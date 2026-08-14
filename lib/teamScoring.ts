@@ -168,10 +168,112 @@ function worstOf(
     beats(worst.total, m.total, basis) || (m.total === worst.total && m.id < worst.id) ? m : worst)
 }
 
+/** Each played member's whole-card total — what hero and the cut judge on. */
+function playedTotals(
+  memberIds: string[],
+  mine: TeamScoreInput[],
+  value: (s: TeamScoreInput) => number,
+): { id: string; total: number }[] {
+  return memberIds
+    // A player with no scores at all is not a card — they must not win the
+    // hero slot with 0, and cutting them would cut nobody.
+    .filter(id => mine.some(s => s.playerId === id))
+    .map(id => ({
+      id,
+      total: mine.filter(s => s.playerId === id).reduce((sum, s) => sum + value(s), 0),
+    }))
+}
+
+/** The best whole card in the team this round. Null when nobody has scored. */
+function heroOf(
+  memberIds: string[],
+  mine: TeamScoreInput[],
+  value: (s: TeamScoreInput) => number,
+  basis: ScoringBasis,
+): string | null {
+  let best: { id: string; total: number } | null = null
+  for (const m of playedTotals(memberIds, mine, value)) {
+    if (best === null || beats(m.total, best.total, basis)) best = m
+  }
+  return best?.id ?? null
+}
+
+/**
+ * A team's score on each hole of one round — the composite card itself.
+ *
+ * One copy, because two readers already need it: `teamRoundPoints` below sums
+ * it, and the opened team scorecard prints it hole by hole. The card used to
+ * add every member's points on every hole — right only for aggregate, and on
+ * a best-1 board it read as counting two while the leaderboard counted one.
+ *
+ * The invariant that makes a card trustworthy: **these figures sum to exactly
+ * `teamRoundPoints().score`**, whichever mode, because the round total is
+ * literally their sum. A hole nobody in the team has reached is simply absent
+ * from the map; a hole played for nothing is a nought, which the card shows.
+ *
+ * Hero and the cut are judged on whole cards, so their per-hole figures are
+ * the counting players' own holes — the hero's card, or everyone's but the
+ * cut player's — not a per-hole best.
+ */
+export function teamHolePoints(
+  memberIds: string[],
+  roundId: string,
+  scores: TeamScoreInput[],
+  scoring: TeamScoring,
+  basis: ScoringBasis = 'stableford',
+): Map<number, number> {
+  const members = new Set(memberIds)
+  const mine = scores.filter(s => s.roundId === roundId && members.has(s.playerId))
+  const value = (s: TeamScoreInput) => basis === 'strokes' ? s.nett ?? 0 : s.points
+  const out = new Map<number, number>()
+  const add = (hole: number, v: number) => out.set(hole, (out.get(hole) ?? 0) + v)
+
+  if (scoring.mode === 'hero') {
+    const hero = heroOf(memberIds, mine, value, basis)
+    for (const s of mine) if (s.playerId === hero) add(s.holeNumber, value(s))
+    return out
+  }
+
+  if (scoring.mode === 'cut_dead_weight') {
+    // Every member counts except whoever had the worst round. Judged on the
+    // whole card, not hole by hole: it is one bad day being set aside, and
+    // that player is eligible again next round. With one player there is
+    // nothing to cut — dropping them would leave the team with no score.
+    const totals = playedTotals(memberIds, mine, value)
+    const cut = totals.length > 1 ? worstOf(totals, basis).id : null
+    for (const s of mine) if (s.playerId !== cut) add(s.holeNumber, value(s))
+    return out
+  }
+
+  if (scoring.mode === 'better_ball') {
+    // Holes inside the closing stretch open up to the whole team, so a
+    // trailing side can still catch up over the last few.
+    const finishFrom = scoring.aggregateFinish > 0
+      ? 18 - scoring.aggregateFinish + 1
+      : Infinity
+
+    for (let hole = 1; hole <= 18; hole++) {
+      const holeScores = mine.filter(s => s.holeNumber === hole)
+      if (holeScores.length === 0) continue
+      const counting = hole >= finishFrom ? holeScores.length : scoring.countingScores
+      add(hole, bestOnHole(holeScores.map(value), basis, counting)
+        .reduce((sum, p) => sum + p, 0))
+    }
+    return out
+  }
+
+  // aggregate — every score counts, over the closing `aggregateHoles` holes
+  const firstHole = 18 - scoring.aggregateHoles + 1
+  for (const s of mine) if (s.holeNumber >= firstHole) add(s.holeNumber, value(s))
+  return out
+}
+
 /**
  * A team's score for one round under the given mode.
  *
  * `memberIds` may be any size — teams are deliberately not fixed at three.
+ * The score is the sum of `teamHolePoints` — by construction, so the round
+ * figure on the board and the card that opens under it cannot disagree.
  */
 export function teamRoundPoints(
   memberIds: string[],
@@ -188,66 +290,14 @@ export function teamRoundPoints(
     return { roundId, score: 0, heroPlayerId: null, played: false }
   }
 
-  if (scoring.mode === 'hero') {
-    let bestId: string | null = null
-    let best: number | null = null
-    for (const id of memberIds) {
-      // A player with no scores at all shouldn't win the hero slot with 0
-      if (!mine.some(s => s.playerId === id)) continue
-      const total = mine
-        .filter(s => s.playerId === id)
-        .reduce((sum, s) => sum + value(s), 0)
-      if (best === null || beats(total, best, basis)) { best = total; bestId = id }
-    }
-    return { roundId, score: best ?? 0, heroPlayerId: bestId, played: true }
+  let score = 0
+  for (const v of teamHolePoints(memberIds, roundId, scores, scoring, basis).values()) {
+    score += v
   }
-
-  if (scoring.mode === 'cut_dead_weight') {
-    // Every member counts except whoever had the worst round. Judged on the
-    // whole card, not hole by hole: it is one bad day being set aside, and
-    // that player is eligible again next round.
-    const totals = memberIds
-      .map(id => ({
-        id,
-        played: mine.some(s => s.playerId === id),
-        total: mine.filter(s => s.playerId === id).reduce((sum, s) => sum + value(s), 0),
-      }))
-      .filter(m => m.played)
-
-    // With one player there is nothing to cut — dropping them would leave
-    // the team with no score at all.
-    const counting = totals.length > 1
-      ? totals.filter(m => m.id !== worstOf(totals, basis).id)
-      : totals
-
-    return {
-      roundId,
-      score: counting.reduce((sum, m) => sum + m.total, 0),
-      heroPlayerId: null,
-      played: true,
-    }
+  return {
+    roundId,
+    score,
+    heroPlayerId: scoring.mode === 'hero' ? heroOf(memberIds, mine, value, basis) : null,
+    played: true,
   }
-
-  if (scoring.mode === 'better_ball') {
-    // Holes inside the closing stretch open up to the whole team, so a
-    // trailing side can still catch up over the last few.
-    const finishFrom = scoring.aggregateFinish > 0
-      ? 18 - scoring.aggregateFinish + 1
-      : Infinity
-
-    let total = 0
-    for (let hole = 1; hole <= 18; hole++) {
-      const holeScores = mine.filter(s => s.holeNumber === hole).map(value)
-      const counting = hole >= finishFrom ? holeScores.length : scoring.countingScores
-      total += bestOnHole(holeScores, basis, counting).reduce((sum, p) => sum + p, 0)
-    }
-    return { roundId, score: total, heroPlayerId: null, played: true }
-  }
-
-  // aggregate — every score counts, over the closing `aggregateHoles` holes
-  const firstHole = 18 - scoring.aggregateHoles + 1
-  const total = mine
-    .filter(s => s.holeNumber >= firstHole)
-    .reduce((sum, s) => sum + value(s), 0)
-  return { roundId, score: total, heroPlayerId: null, played: true }
 }
