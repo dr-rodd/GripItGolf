@@ -127,6 +127,15 @@ A row is deleted only when **no card can reach it**: no active card to resume it
 
 **Still open:** `live_scores` has no `live_round_id`, so a resume and a commit both read every row for a player and round whichever card wrote it. Between a card being closed and its rows aging out, a new card on the same round for the same player would merge them in. The window is 36 hours and the flow makes it hard to reach — but the real fix is the missing column, and that is a schema job inside the scoring entry flow.
 
+### The refinalised card that stayed "in play"
+
+A card was unfinalised, amended and refinalised — and the round kept reading as in play on the hub, the round tile and the board's badge, with the totals themselves correct. Two doors into the same ghost, both closed now:
+
+- **Unfinalising minted a fresh active `live_rounds` row per player.** The only way to unfinalise a scorecard is player by player, so reopening a group's card made one single-player card each — and refinalising through one left the others `status = 'active'` with a lock, invisibly, for the nightly job to find. `unfinalisePlayer` now puts an unfinalised player back onto the round's existing reopened card when one is open — identified as an active card whose **every** locked player already has committed `scores` for the round, which is what separates a card being amended from a group still out on the course. One card back, one amendment, one commit.
+- **The commit's last two writes were unchecked.** Marking `live_scores` committed and flipping the card to `finalised` were fire-and-forget, so a connection blip on the eighteenth left the scores in and the card open — right board, stuck badge. Both are checked now; a failure keeps the person on the screen with "the scores are saved… press Commit again", which is safe because every write in the commit is an upsert.
+
+A card already stuck this way is closed by the nightly job 12 hours after its last entered hole, or immediately from `/admin` → live cards → **close** (never void — void erases the committed scores too). Pinned in `test:scorecard`.
+
 ## A par 6 passes the app and fails the database
 
 `holes.par` has been CHECKed `between 3 and 5` since migration 000. Every application-layer validator allows **3 to 6** — `validateCard`, `validateNewHoleRows` and `HOLE_COLUMN_RANGE` in `lib/cardCheck.ts`, and the extraction prompt itself. So the two disagree, and the permissive one is the one a person meets first.

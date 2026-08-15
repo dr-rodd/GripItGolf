@@ -372,13 +372,39 @@ export default function CourseDashboardClient({
     // Clear hole 18 so resume positions there
     await supabase.from("live_scores").delete()
       .eq("player_id", playerId).eq("round_id", roundId).eq("hole_number", 18)
-    // Create a new active round for just this player
-    const { data: newRound } = await supabase
-      .from("live_rounds")
-      .insert({ course_id: courseId, round_id: roundId, status: "active" })
-      .select("id").single()
-    if (newRound) {
-      await supabase.from("live_player_locks").insert({ live_round_id: newRound.id, player_id: playerId })
+
+    // The reopened card, shared. Unfinalising used to mint a fresh card per
+    // player, so reopening a group made one single-player card each — and
+    // refinalising through one of them left the others open for good: the
+    // round read "in play" on the hub, the round tile and the board's badge
+    // long after the amendment was made. Players unfinalised together belong
+    // back on one card together, amended and refinalised with one commit.
+    //
+    // Only a card whose every player has already committed scores for this
+    // round qualifies — that is what marks it as a reopened card rather than
+    // a group still out on the course, which must never gain a passenger.
+    const candidates = scorecards.filter(s =>
+      !s.finalised && s.liveRound.round_id === roundId && s.playerIds.length > 0)
+    let target: string | null = null
+    if (candidates.length > 0) {
+      const everyId = [...new Set(candidates.flatMap(c => c.playerIds))]
+      const { data: committedRows } = await supabase
+        .from("scores").select("player_id")
+        .eq("round_id", roundId).in("player_id", everyId)
+      const committed = new Set((committedRows ?? []).map(r => r.player_id as string))
+      target = candidates.find(c =>
+        c.playerIds.every(pid => committed.has(pid)))?.liveRound.id ?? null
+    }
+
+    if (!target) {
+      const { data: newRound } = await supabase
+        .from("live_rounds")
+        .insert({ course_id: courseId, round_id: roundId, status: "active" })
+        .select("id").single()
+      target = newRound?.id ?? null
+    }
+    if (target) {
+      await supabase.from("live_player_locks").insert({ live_round_id: target, player_id: playerId })
     }
     setPlayerConfirm(null)
     setSettingsWorking(false)

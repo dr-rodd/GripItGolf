@@ -559,6 +559,38 @@ section('A round tile says what has happened on it')
   ok(ROUND_NOTE.live === 'In play', 'and the live tile says so in words too')
 }
 
+// ─── Refinalising actually finishes ────────────────────────────
+
+section('A refinalised card closes, and a reopened group is one card')
+{
+  const flow = read('app/scoring/LiveScoringFlow.tsx')
+  const dash = read('app/scoring/[slug]/CourseDashboardClient.tsx')
+
+  // The commit's last two writes went unchecked, and a failure there is a
+  // ghost: the scores are already in, so the board reads right while the
+  // card stays active — and the hub, the round tile and the board's badge
+  // all say "in play" with nothing wrong on the leaderboard to hint at why.
+  const commitBody = flow.slice(flow.indexOf('async function handleCommit'),
+                                flow.indexOf('Close confirm overlay'))
+  ok(/error: markErr/.test(commitBody), 'marking the live scores committed is checked')
+  ok(/error: closeErr/.test(commitBody), 'and so is closing the card')
+  ok(/if \(markErr \|\| closeErr\)/.test(commitBody),
+    'a failure keeps the person on the screen instead of walking away from an open card')
+  ok(commitBody.includes('press Commit again'),
+    'and says the scores are safe and what to do — every write is an upsert')
+
+  // Unfinalising minted a fresh active card per player, so reopening a
+  // group's card made one single-player card each — and refinalising through
+  // one left the others open for good, which is the same ghost by another
+  // door. Players unfinalised from a card go back onto one card together.
+  const unfin = dash.slice(dash.indexOf('async function unfinalisePlayer'),
+                           dash.indexOf('async function voidLiveSession'))
+  ok(/candidates/.test(unfin) && /committed\.has/.test(unfin),
+    'an unfinalised player rejoins the round\'s reopened card when one is open')
+  ok(/playerIds\.every/.test(unfin),
+    'and only a card whose every player has committed qualifies — never a group still out')
+}
+
 // ─── Coming back to a card ─────────────────────────────────────
 
 section('A scorecard survives being left and reopened')

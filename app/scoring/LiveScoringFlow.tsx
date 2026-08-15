@@ -916,8 +916,7 @@ export default function LiveScoringFlow({
       })
 
       // 5. Mark live_scores committed
-      // TODO(error-handling): check error, revert optimistic UI, toast on failure
-      await supabase.from("live_scores")
+      const { error: markErr } = await supabase.from("live_scores")
         .update({ committed: true })
         .in("player_id", playerSetups.map(p => p.player.id))
         .eq("round_id", roundId)
@@ -925,11 +924,23 @@ export default function LiveScoringFlow({
       // 6. Finalise the live round and return to the course portal
       // Note: player locks are intentionally kept so the live leaderboard
       // continues to display finalised players. Locks are only removed on discard.
-      // TODO(error-handling): check error, revert optimistic UI, toast on failure
-      await supabase
+      const { error: closeErr } = await supabase
         .from("live_rounds")
         .update({ status: "finalised", closed_at: new Date().toISOString() })
         .eq("id", liveRound.id)
+
+      // These two used to go unchecked, and a failure here is not cosmetic:
+      // the scores above are already in, so walking away leaves a card that
+      // reads "in play" everywhere — the hub, the round tile, the board's
+      // badge — with nothing wrong on the leaderboard to hint at why. Say so
+      // and stay put instead: every write in this function is an upsert, so
+      // pressing Commit again finishes the job.
+      if (markErr || closeErr) {
+        throw new Error(
+          "The scores are saved, but the card could not be closed — " +
+          "check the connection and press Commit again."
+        )
+      }
       onBack()
     } catch (e: any) {
       setError(e?.message ?? "Could not save the scores — try again")
