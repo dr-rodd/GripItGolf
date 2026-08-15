@@ -22,6 +22,7 @@ import {
   type TeamScoring, type TeamScoreInput, type ScoringBasis,
   DEFAULT_TEAM_SCORING, teamRoundPoints, teamHolePoints,
 } from './teamScoring'
+import { shortNames } from './matchplayEntrants'
 import {
   resolveCustomPoints, totalAfterDiscard, discardedIndices,
 } from './customPoints'
@@ -973,11 +974,17 @@ function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const rows = perTeam.map(({ team, memberIds, rounds }) => {
     const c = combined.get(team.id)!
     const members = ctx.players.filter(p => memberIds.includes(p.id))
+    // A board can name its rows by the players instead of the team — for the
+    // group that never christened its teams. `shortNames` rather than bare
+    // first names, so two Rosses on one team stay two different people.
+    const byPlayers = lb.hideTeamName === true
     const row: UnplacedRow = {
       id: team.id,
-      name: team.name,
+      name: byPlayers ? shortNames(members.map(m => m.name)).join(', ') : team.name,
       color: team.color,
-      subLabel: members.map(m => firstName(m.name)).join(', '),
+      // Empty rather than the members again: with the players already on the
+      // top line, the same names underneath would say nothing twice.
+      subLabel: byPlayers ? '' : members.map(m => firstName(m.name)).join(', '),
       perRound: c.perRound,
       playedRounds: rounds.filter(r => r.played).map(r => r.roundId),
       droppedRounds: c.dropped,

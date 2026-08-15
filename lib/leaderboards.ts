@@ -97,6 +97,16 @@ export type Leaderboard = {
   aggregateFinish?: number
 
   /**
+   * Team league only — name the board's rows by the players rather than by
+   * the team. A group that never christened its teams reads "Team A · Dave,
+   * Ross" as noise; with this on, the row is simply the players.
+   *
+   * Absent means the team name shows, which is what every board did before
+   * the question was asked. Presentation only — nothing about scoring.
+   */
+  hideTeamName?: boolean
+
+  /**
    * What percentage of a player's course handicap this board plays off.
    *
    * Absent means all of it. A four-ball is normally 85% and a singles
@@ -414,6 +424,19 @@ export function offersCountingScores(draft: Partial<Leaderboard>): boolean {
 }
 
 /**
+ * Whether to ask how the board's rows are named.
+ *
+ * Any team league board, whatever its format — the question is about the
+ * table, not the maths. A draw is not asked: a bracket seats entrants, and a
+ * pairing is already written as its players.
+ */
+export function offersTeamNames(draft: Partial<Leaderboard>): boolean {
+  return draft.competition === 'league'
+    && draft.audience === 'team'
+    && !!draft.teamFormat
+}
+
+/**
  * How many of the team's scores this board counts on a hole.
  *
  * Absent reads as the default the maths has always used — 2 — so every board
@@ -670,6 +693,10 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
           const finish = clamp(r.aggregateFinish, 0, 18)
           if (finish > 0) lb.aggregateFinish = finish
         }
+
+        // Rows named by the players rather than the team. Kept off when the
+        // team name shows, which is what every board did before the question.
+        if (r.hideTeamName === true) lb.hideTeamName = true
       }
     }
 

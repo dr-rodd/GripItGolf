@@ -5,7 +5,7 @@ import {
   type Leaderboard, type Audience,
   scoringsFor, TEAM_FORMATS, COMBINES, MAX_DISCARD,
   unanswered, isComplete, offersDiscard, offersTieBreak, offersQuotaScale,
-  offersCountingScores, countingScoresOf, aggregateFinishOf,
+  offersCountingScores, countingScoresOf, aggregateFinishOf, offersTeamNames,
   offersAllowance, tripQuotaScale, slotKey, isFormatFree,
   freeScorings, freeTeamFormats,
   hasMatchplay, boardTitle, boardRules,
@@ -897,6 +897,25 @@ function Builder({
             value={aggregateFinishOf(draft)}
             // Not stored when it is off, for the same reason as the count.
             onChange={n => set({ aggregateFinish: n > 0 ? n : undefined })}
+          />
+        </Question>
+      )}
+
+      {/* How the rows read, not how they score. A group that never names its
+          teams would rather see the players. */}
+      {offersTeamNames(draft) && (
+        <Question n={next()} title="How should teams be named on the board?">
+          <Choice
+            on={!draft.hideTeamName}
+            label="Team names"
+            hint="Each row is the team — Team A, with the players underneath."
+            onClick={() => set({ hideTeamName: undefined })}
+          />
+          <Choice
+            on={draft.hideTeamName === true}
+            label="Just the players"
+            hint="No team name — each row reads as the players themselves."
+            onClick={() => set({ hideTeamName: true })}
           />
         </Question>
       )}

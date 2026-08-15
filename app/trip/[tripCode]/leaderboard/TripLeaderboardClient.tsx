@@ -879,6 +879,19 @@ function Board({
   const GAP  = scrolls ? 'gap-1.5' : 'gap-2'
 
   /**
+   * The total column, as wide as the widest total on this board and no wider.
+   *
+   * It was a flat `w-14` — four digits' worth — so a board of two-digit
+   * Stableford totals carried sixteen pixels of nothing against its right
+   * edge, paid for by the names on the left. Same reasoning as the position
+   * column: the board knows its own figures, so it measures rather than
+   * reserves. The floor is the "Tot" heading, which is what w-10 fits.
+   */
+  const totChars = Math.max(...allRows.map(r =>
+    Math.max(formatScore(r.total).length, formatScore(r.totalAll ?? r.total).length)), 2)
+  const TOT_W = totChars >= 4 ? 'w-14' : totChars === 3 ? 'w-11' : 'w-10'
+
+  /**
    * The position column, as wide as the deepest place on this board and no
    * wider.
    *
@@ -1035,7 +1048,7 @@ function Board({
             ))}
             <span className={pin('r', '-my-1.5 py-1.5')}>
               {shadeR}
-              <span className="block w-14 text-right text-[13px] tracking-widest uppercase text-ink/65">Tot</span>
+              <span className={`block ${TOT_W} text-right text-[13px] tracking-widest uppercase text-ink/65`}>Tot</span>
             </span>
           </div>
         </div>
@@ -1074,17 +1087,28 @@ function Board({
                       board that leaves ties standing is saying. */}
                   <span className={`t-cap text-ink/65 tabular-nums ${POS_W}`}>{row.place}</span>
 
+                  {/* The name, a size down from t-card and scrolling rather
+                      than truncating — the column fits a dozen characters
+                      and a longer name can be dragged into view, the same
+                      way the round columns work. "Tea…" told nobody which
+                      team was leading. */}
                   <span className={`block min-w-0 ${NAME_W}`}>
                     <span className="flex items-center gap-1.5">
                       {row.color && (
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} />
                       )}
-                      <span className="t-card text-ink truncate">{row.name}</span>
+                      <span className="min-w-0 flex-1 overflow-x-auto scroll-strip">
+                        <span className="block w-max font-[family-name:var(--font-display)] font-semibold text-[15px] leading-tight text-ink">
+                          {row.name}
+                        </span>
+                      </span>
                       {row.isLive && <LiveDot />}
                     </span>
                     {row.subLabel && (
-                      <span className={`block text-ink/65 text-[13px] truncate leading-snug ${row.color ? 'pl-3.5' : ''}`}>
-                        {row.subLabel}
+                      <span className={`block overflow-x-auto scroll-strip ${row.color ? 'pl-3.5' : ''}`}>
+                        <span className="block w-max text-ink/65 text-[13px] leading-snug">
+                          {row.subLabel}
+                        </span>
                       </span>
                     )}
                   </span>
@@ -1131,7 +1155,7 @@ function Board({
                     on this board means one thing only: still being played. */}
                 <span className={pin('r', '-my-2 py-2')}>
                   {shadeR}
-                  <span className="block w-14 text-right t-num font-semibold text-xl text-ink">
+                  <span className={`block ${TOT_W} text-right t-num font-semibold text-xl text-ink`}>
                     {/* The total the columns beside it add up to, whichever
                         way the switch is set. `totalAll` is only there when
                         something was dropped, so the fallback is exact. */}

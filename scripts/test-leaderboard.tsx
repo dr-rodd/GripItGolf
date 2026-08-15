@@ -738,12 +738,15 @@ section('A board with columns off the edge says so')
   const few  = render([SF()], { rounds: roundsFor(4) })
   const many = render([SF()], { rounds: roundsFor(6) })
 
-  ok(!few.includes('overflow-x-auto scroll-strip'),
-    'four rounds fit, so nothing scrolls')
+  // The *column* scroller specifically — the name cells carry little
+  // scrollers of their own on every board now, so the bare class would match
+  // a board whose rounds all fit.
+  ok(!few.includes('board-scroll overflow-x-auto'),
+    'four rounds fit, so the columns do not scroll')
   ok(!few.includes('scroll-fade'),
     '  …and a board with nothing hidden shows no shadow')
 
-  ok(many.includes('overflow-x-auto scroll-strip'), 'six rounds scroll')
+  ok(many.includes('board-scroll overflow-x-auto'), 'six rounds scroll')
   ok(many.includes('scroll-shade-r'), '  …and carry the shade that says so')
 
   // The shade is an element, not a background, so it can only be painted
@@ -782,9 +785,15 @@ section('The board is one scroller, and the rows are one element')
   // to keep step but never to move as one table: only the row under the
   // thumb was scrolled by the browser, and the rest followed. The rows are
   // the same element now, so there is nothing left to fall out of step.
+  //
+  // Four `overflow-x-auto`s, and only two of them are column scrollers: the
+  // table and its headings. The other two are the name and sub-label cells,
+  // which scroll a long name into view *within* the pinned column — they
+  // move no columns, so they have nothing to keep in step with.
   const scrollers = board.match(/overflow-x-auto/g) ?? []
-  eq(scrollers.length, 2, 'the board has exactly two scrollers: the table, and its headings')
-  ok(!/<Strip\b/.test(board), 'and none of the per-row strips it used to have')
+  eq(scrollers.length, 4,
+    'the table, its headings, and the two name lines — nothing else scrolls')
+  ok(!/<Strip\b/.test(board), 'and none of the per-row column strips it used to have')
 
   // The headings are the second one, and they cannot be folded into the
   // first. `position: sticky` resolves against the nearest scroll
@@ -1242,6 +1251,24 @@ section('A board chooses how many scores build its composite card')
     'and is off unless asked for')
   eq(rowsFor({ ...TEAM('better_ball'), countingScores: 1, aggregateFinish: 3 }, opts).board[0]?.total, 63,
     'best 1 opening up over the last 3: fifteen holes of the best score, three of everyone')
+}
+
+section('A board told to hide the team name is the players')
+{
+  const opts = { teams: oneTeam, players: allInReds, rounds: [rounds[0]] }
+
+  const named = rowsFor(TEAM('better_ball'), opts).board[0]
+  eq(named?.name, 'Reds', 'left alone, the row is the team')
+  ok((named?.subLabel ?? '').includes('Alice'), 'with the players underneath')
+
+  const hidden = rowsFor({ ...TEAM('better_ball'), hideTeamName: true }, opts).board[0]
+  eq(hidden?.name, 'Alice, Bob, Cara', 'hidden, the row reads as the players themselves')
+  ok(!hidden?.subLabel, 'and nothing underneath repeats them')
+
+  // On screen too — the board shows the players and never prints the team
+  const html = render([{ ...TEAM('better_ball'), hideTeamName: true }], opts)
+  ok(html.includes('Alice, Bob, Cara'), 'the rendered row is the players')
+  ok(!html.includes('Reds'), 'and the team name is nowhere on it')
 }
 
 section('The opened team card prints the same holes the board summed')

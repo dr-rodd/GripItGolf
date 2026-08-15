@@ -20,7 +20,7 @@ import {
   slotKey, isSlotFree, formatKey, isFormatFree, hasMatchplay,
   freeScorings, freeTeamFormats, everyBoard,
   unanswered, isComplete, offersDiscard, needsTeams, needsPairings,
-  offersCountingScores, countingScoresOf, describeBetterBall,
+  offersCountingScores, countingScoresOf, describeBetterBall, offersTeamNames,
   boardTitle, boardRules, primary, parseLeaderboards,
 } from '../lib/leaderboards'
 import { DEFAULT_FORMATS, parseFormats, matchplayOn } from '../lib/formats'
@@ -335,6 +335,25 @@ section('A better-ball board can say how many scores count on a hole')
   eq('countingScores' in parseLeaderboards(
     [{ ...teamBB, teamFormat: 'hero', countingScores: 1 }])[0], false,
     'a count stored on another format is not carried')
+}
+
+section('A team board can name its rows by the players')
+{
+  eq(parseLeaderboards([{ ...teamBB, hideTeamName: true }])[0].hideTeamName, true,
+    'the answer reads back')
+  eq('hideTeamName' in parseLeaderboards([teamBB])[0], false,
+    'absent means the team name shows, as it always did')
+  eq('hideTeamName' in parseLeaderboards([{ ...teamBB, hideTeamName: false }])[0], false,
+    'an explicit no is not stored')
+  eq('hideTeamName' in parseLeaderboards([{ ...teamBB, hideTeamName: 'yes' }])[0], false,
+    'junk is dropped, not repaired')
+  eq('hideTeamName' in parseLeaderboards([{ ...sf, hideTeamName: true }])[0], false,
+    'an individual board is never asked — a player is already a name')
+  ok(offersTeamNames(teamBB), 'every team league format is asked')
+  ok(offersTeamNames({ ...teamBB, teamFormat: 'hero' }), 'not only better ball')
+  ok(!offersTeamNames(sf), 'an individual board is not')
+  ok(!offersTeamNames({ audience: 'team', competition: 'matchplay' }),
+    'nor a draw — a pairing is already written as its players')
 }
 
 section('A better-ball board can open the closing holes to everyone')

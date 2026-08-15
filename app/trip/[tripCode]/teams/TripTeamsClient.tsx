@@ -16,6 +16,7 @@ import {
   sheetChanges, teamsOnSheet, teamFor, membersOf, type Membership,
 } from '@/lib/teamSets'
 import { setTeam, clearMirror } from '@/lib/teamMembers'
+import { duplicateName, duplicateNameError, isDuplicateNameError } from '@/lib/roster'
 import { failed, why } from '@/lib/writeFailure'
 import {
   teamNoun, teamSizeLimit, teamSizeBanner, teamCountOptions, canJoinTeam,
@@ -23,7 +24,7 @@ import {
 } from '@/lib/teamLimits'
 import { anyPointsOutOfStep, TEAM_POINTS_MISMATCH } from '@/lib/customPoints'
 import { Card, Badge, buttonClass } from '@/app/components/ui'
-import { IconCheck, IconChevronDown, IconUsers } from '@/app/components/icons'
+import { IconCheck, IconChevronDown, IconPencil, IconUsers } from '@/app/components/icons'
 
 /**
  * Team selection — apportioning teams to the leaderboards that need them.
@@ -72,16 +73,52 @@ const ABOVE_TABBAR = `calc(${TABBAR_SPACE} + 1rem)`
 
 // ─── Player tile ───────────────────────────────────────────────
 
-function PlayerTile({ player, faded = false }: { player: Placed; faded?: boolean }) {
+function PlayerTile({
+  player, faded = false, onRename,
+}: {
+  player: Placed
+  faded?: boolean
+  /** Absent on the drag preview, where a tap means nothing. */
+  onRename?: (id: string, name: string) => void
+}) {
+  /**
+   * The name is a tap target when renaming is on offer. The stopPropagation
+   * trio is what keeps a tap a tap: the drag sensors listen on the tile's
+   * wrapper, and without it a finger aiming for the pencil starts a drag
+   * instead on the slower phones.
+   */
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation()
+  const ask = () => {
+    const next = window.prompt('Player name — shorter reads better on the leaderboard', player.name)
+    const name = next?.trim()
+    if (name && name !== player.name && onRename) onRename(player.id, name)
+  }
   return (
     <div
       className={`border border-bark/12 rounded-lg px-3 py-2.5 flex items-center justify-between gap-2 bg-surface transition-opacity ${
         faded ? 'opacity-25' : 'opacity-100'
       }`}
     >
-      <span className="text-ink text-sm font-medium leading-tight flex-1 min-w-0 truncate">
-        {player.name}
-      </span>
+      {onRename ? (
+        <button
+          type="button"
+          onPointerDown={stop}
+          onMouseDown={stop}
+          onTouchStart={stop}
+          onClick={e => { stop(e); ask() }}
+          className="flex-1 min-w-0 flex items-center gap-1.5 text-left"
+          aria-label={`Edit ${player.name}'s name`}
+        >
+          <span className="text-ink text-sm font-medium leading-tight min-w-0 truncate">
+            {player.name}
+          </span>
+          <span className="flex-shrink-0 text-ink/50"><IconPencil size={12} /></span>
+        </button>
+      ) : (
+        <span className="text-ink text-sm font-medium leading-tight flex-1 min-w-0 truncate">
+          {player.name}
+        </span>
+      )}
       <span
         className={`text-[13px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
           player.gender === 'F'
@@ -100,7 +137,12 @@ function PlayerTile({ player, faded = false }: { player: Placed; faded?: boolean
   )
 }
 
-function DraggablePlayer({ player }: { player: Placed }) {
+function DraggablePlayer({
+  player, onRename,
+}: {
+  player: Placed
+  onRename?: (id: string, name: string) => void
+}) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: player.id })
   return (
     <div
@@ -109,7 +151,7 @@ function DraggablePlayer({ player }: { player: Placed }) {
       {...attributes}
       className="touch-none cursor-grab active:cursor-grabbing"
     >
-      <PlayerTile player={player} faded={isDragging} />
+      <PlayerTile player={player} faded={isDragging} onRename={onRename} />
     </div>
   )
 }
@@ -117,7 +159,7 @@ function DraggablePlayer({ player }: { player: Placed }) {
 // ─── Drop zones ────────────────────────────────────────────────
 
 function TeamColumn({
-  team, players, totalHandicap, sizeLimit, onRename, onRecolour,
+  team, players, totalHandicap, sizeLimit, onRename, onRecolour, onRenamePlayer,
 }: {
   team: Team
   players: Placed[]
@@ -126,6 +168,7 @@ function TeamColumn({
   sizeLimit: number | null
   onRename: (id: string, name: string) => void
   onRecolour: (id: string, color: string) => void
+  onRenamePlayer: (id: string, name: string) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: team.id })
   const [showColors, setShowColors] = useState(false)
@@ -187,7 +230,7 @@ function TeamColumn({
       )}
 
       <div className="p-2 space-y-2 flex-1">
-        {players.map(p => <DraggablePlayer key={p.id} player={p} />)}
+        {players.map(p => <DraggablePlayer key={p.id} player={p} onRename={onRenamePlayer} />)}
         {players.length === 0 && (
           <p className="text-ink/50 text-sm text-center py-8 select-none">Drop here</p>
         )}
@@ -201,7 +244,12 @@ function TeamColumn({
   )
 }
 
-function UnassignedZone({ players }: { players: Placed[] }) {
+function UnassignedZone({
+  players, onRenamePlayer,
+}: {
+  players: Placed[]
+  onRenamePlayer: (id: string, name: string) => void
+}) {
   const { setNodeRef, isOver } = useDroppable({ id: UNASSIGNED })
   return (
     <div
@@ -217,7 +265,7 @@ function UnassignedZone({ players }: { players: Placed[] }) {
         <span className="text-ink/50 text-[13px] tabular-nums">{players.length}</span>
       </div>
       <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 min-h-[72px]">
-        {players.map(p => <DraggablePlayer key={p.id} player={p} />)}
+        {players.map(p => <DraggablePlayer key={p.id} player={p} onRename={onRenamePlayer} />)}
         {players.length === 0 && (
           <p className="text-ink/50 text-sm py-4 col-span-full text-center select-none">
             Everyone&apos;s in
@@ -334,7 +382,7 @@ export default function TripTeamsClient({
   tripCode,
   boards: initialBoards,
   teams: initialTeams,
-  players,
+  players: initialPlayers,
   memberships: initialMemberships,
 }: {
   tripId: string
@@ -350,6 +398,7 @@ export default function TripTeamsClient({
 
   const [boards, setBoards]           = useState<Leaderboard[]>(initialBoards)
   const [teams, setTeams]             = useState<Team[]>(initialTeams)
+  const [players, setPlayers]         = useState<Player[]>(initialPlayers)
   const [memberships, setMemberships] = useState<Membership[]>(initialMemberships)
 
   /** Which boards are being given teams. Board ids. */
@@ -584,6 +633,35 @@ export default function TripTeamsClient({
     if (err) { setTeams(prev); flashError(`Could not change colour${why(failed('team recolour', err))}`) }
   }
 
+  /**
+   * Renaming a player, from the tile their name sits on.
+   *
+   * Safe mid-trip: scores and the claim cookie are keyed by player id, so a
+   * name is only ever a label. The no-two-same-names rule is the roster's —
+   * checked here first for a calm message, and `uq_players_trip_name`
+   * catches the race two phones can still make.
+   */
+  async function renamePlayer(id: string, name: string) {
+    if (duplicateName(name, players, id)) {
+      flashError(duplicateNameError(name))
+      return
+    }
+    const prev = players
+    setPlayers(ps => ps.map(p => (p.id === id ? { ...p, name } : p)))
+    const { error: err } = await supabase
+      .from('players').update({ name }).eq('id', id).eq('trip_id', tripId)
+    if (err) {
+      setPlayers(prev)
+      flashError(isDuplicateNameError(err)
+        ? duplicateNameError(name)
+        : `Could not rename${why(failed('player rename', err))}`)
+      return
+    }
+    // The hub, the boards and the scoring screen all print this name off the
+    // server, so they are told now rather than on the next confirm.
+    await revalidateTrip(tripCode)
+  }
+
   // ── Auto-balance ─────────────────────────────────────────────
   // Snake draft by handicap so team totals land close together. At two per
   // team that is exactly high-with-low pairing: the first lap deals out the
@@ -816,9 +894,11 @@ export default function TripTeamsClient({
 
         <p className="text-ink/65 text-[13px] text-center">
           Drag players between {noun.many}. On a phone, press and hold briefly first.
+          <br />
+          Tap a name to edit it — shorter names read better on the leaderboard.
         </p>
 
-        <UnassignedZone players={unassigned} />
+        <UnassignedZone players={unassigned} onRenamePlayer={renamePlayer} />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {sheetTeams.map(team => (
@@ -830,6 +910,7 @@ export default function TripTeamsClient({
               sizeLimit={sizeLimit}
               onRename={renameTeam}
               onRecolour={recolourTeam}
+              onRenamePlayer={renamePlayer}
             />
           ))}
         </div>
