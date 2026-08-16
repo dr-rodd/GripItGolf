@@ -5,8 +5,7 @@ import {
   type Leaderboard, type Audience,
   scoringsFor, TEAM_FORMATS, COMBINES, MAX_DISCARD,
   unanswered, isComplete, offersDiscard, offersTieBreak, offersQuotaScale,
-  offersCountingScores, countingScoresOf, aggregateFinishOf, MAX_AGGREGATE_FINISH,
-  offersTeamNames,
+  offersCountingScores, countingScoresOf, aggregateFinishOf, offersTeamNames,
   offersAllowance, tripQuotaScale, slotKey, isFormatFree,
   freeScorings, freeTeamFormats,
   hasMatchplay, boardTitle, boardRules,
@@ -514,7 +513,7 @@ function GrandstandFinishPicker({
           onClick={() => {
             setOn(true)
             const n = Number(text)
-            if (Number.isFinite(n) && n >= 1 && n <= MAX_AGGREGATE_FINISH) onChange(Math.round(n))
+            if (Number.isFinite(n) && n >= 1 && n <= 18) onChange(Math.round(n))
           }}
           className={`${chipClass(on)} px-4 flex-shrink-0`}
         >
@@ -533,21 +532,21 @@ function GrandstandFinishPicker({
             type="number"
             inputMode="numeric"
             min={1}
-            max={MAX_AGGREGATE_FINISH}
+            max={18}
             value={text}
             aria-label="Closing holes where everyone counts"
             onChange={e => {
               setText(e.target.value)
               const n = Number(e.target.value)
-              if (Number.isFinite(n) && n >= 1 && n <= MAX_AGGREGATE_FINISH) onChange(Math.round(n))
+              if (Number.isFinite(n) && n >= 1 && n <= 18) onChange(Math.round(n))
             }}
             onBlur={() => {
               const n = Number(text)
               // Only a real answer is kept. "33" rounded down to 18 stored a
-              // decision nobody made — and a finish of the whole round is
-              // not a finish at all, which is why 17 is the ceiling — so an
+              // decision nobody made — and 18 is the biggest decision on the
+              // question, everyone counting on every hole — so an
               // out-of-range number goes back to what the board holds.
-              if (Number.isFinite(n) && n >= 1 && n <= MAX_AGGREGATE_FINISH) {
+              if (Number.isFinite(n) && n >= 1 && n <= 18) {
                 const v = Math.round(n)
                 setText(String(v))
                 onChange(v)

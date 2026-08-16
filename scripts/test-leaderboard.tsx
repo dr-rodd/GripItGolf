@@ -1262,12 +1262,8 @@ section('A board chooses how many scores build its composite card')
       perHole * 15 + 6 * 3,
       `best ${c} of 3 with the last 3 open to everyone`)
   }
-  // The maths layer honours whatever it is handed, 18 included — which is
-  // exactly why parseLeaderboards refuses to hand it one: a stored 18 reads
-  // as off. This pins what the phantom finish *did*, so the drop rule in
-  // test:leaderboards is guarding something real.
   eq(rowsFor({ ...TEAM('better_ball'), countingScores: 2, aggregateFinish: 18 }, opts).board[0]?.total, 108,
-    'a finish of 18 holes is everyone counting everywhere — why the count looked ignored')
+    'a finish of 18 holes is everyone counting everywhere — what a blind-typed finish stored, and why the count looked ignored')
 }
 
 section('A board told to hide the team name is the players')
