@@ -165,6 +165,18 @@ Five things, none of which lost a score — they only made getting to the card s
 
 There is still **no service worker**, so a genuine dead spot serves nothing at all. That decision is recorded in `docs/ios-app.md` and was re-taken, not forgotten: the outbox means a card *already open* survives a dead spot completely, which is the case that mattered. Full offline is a separate project.
 
+## The live board read the handicap index, not the course handicap
+
+Playing handicap **13** on the score entry tile, **10** on the live leaderboard beside it, and — on a board played off an allowance — the Stableford points recomputed off the 10. One card, two answers, three feet apart.
+
+`round_handicaps` gets a row for every player of every round long before anybody tees off: at trip creation, at finalise, and again on every handicap edit. **Every one of those writes stores the player's index, with `tee_id` null**, because no tee has been chosen yet and a course handicap needs a slope and a rating. `lockPlayers` writes the real course handicap and the tee when the session starts. That is all correct and already documented on `resolveCourseHandicap`.
+
+The failure was in who read it. `LiveLeaderboardPanel` was handed `roundHandicaps` as a **prop, from the page's server render** — which happens before the session starts. Its `handicapFor` looks up the tee by `rh.tee_id`, finds null, and falls back to `rh.playing_handicap`: the index. An index of 10 off a 134-slope tee is a course handicap of 13, which is exactly the pair reported.
+
+The board fetches `round_handicaps` itself now, in the same batch as the scores it already polls, so being right costs no extra round trip. That also closes two cases a prop never could: a second group starting on another phone after this page loaded, and a handicap the lead player corrects mid-round. `lockPlayers` additionally writes what it just saved into the copy the board is seeded from, so the first frame is right rather than briefly wrong.
+
+**The general rule, and it is the one worth carrying:** a page-load prop is a snapshot, and `round_handicaps` is the one table on the scoring path whose rows *change meaning* between page load and the first tee shot — from an index to a course handicap. Anything read mid-round must fetch it rather than accept it. Pinned in `test:handicap-allowance`, including the 10 → 13 arithmetic itself.
+
 ## A par 6 passes the app and fails the database
 
 `holes.par` has been CHECKed `between 3 and 5` since migration 000. Every application-layer validator allows **3 to 6** — `validateCard`, `validateNewHoleRows` and `HOLE_COLUMN_RANGE` in `lib/cardCheck.ts`, and the extraction prompt itself. So the two disagree, and the permissive one is the one a person meets first.

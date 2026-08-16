@@ -176,7 +176,7 @@ Calculated by the Postgres trigger `trg_scores_stableford` on every insert/updat
 
 `handicap` here is always the **full** course handicap. A competition allowance (85% for a four-ball, 95% for a singles) belongs to the leaderboard, not to the card: it is applied when a board reads the scores and is never written to `round_handicaps` or `scores`. Store it reduced and a second board on a different allowance can no longer be scored. The percentage comes off the *unrounded* course handicap — 11.63 shows as 12, but 90% of those two are a shot apart.
 
-**`round_handicaps.playing_handicap` starts life as the handicap _index_**, not a course handicap — creation, finalise and every handicap edit write it before any tee exists. Anything holding a tee must compute from the tee instead of trusting that snapshot.
+**`round_handicaps.playing_handicap` starts life as the handicap _index_**, not a course handicap — creation, finalise and every handicap edit write it before any tee exists. Anything holding a tee must compute from the tee instead of trusting that snapshot. **And anything read mid-round must fetch the row rather than accept it as a prop**: `lockPlayers` replaces the index with the real course handicap and the tee when a session starts, which is *after* the page rendered, so a page-load snapshot is the index. That is how the live board came to show 10 where the card showed 13 — `docs/gotchas-and-debt.md`.
 
 ## Stats
 

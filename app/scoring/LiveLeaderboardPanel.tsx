@@ -327,6 +327,9 @@ export default function LiveLeaderboardPanel({
   const [strokesView, setStrokesView]   = useState<StrokesView>("nett")
   const [quotaView, setQuotaView]       = useState<QuotaView>("pts")
   const [lastFetch, setLastFetch]       = useState<Date | null>(null)
+  // Read fresh below; the prop is only what to show before the first fetch
+  // lands. See the note in `fetchScores`.
+  const [liveHandicaps, setLiveHandicaps] = useState<RoundHandicap[]>(roundHandicaps)
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null)
   const [finalisedPlayerIds, setFinalisedPlayerIds] = useState<Set<string>>(new Set())
 
@@ -343,7 +346,7 @@ export default function LiveLeaderboardPanel({
    * written before anyone teed off — the stored number is all there is.
    */
   const handicapFor = (player: Player) => {
-    const rh = roundHandicaps.find(
+    const rh = liveHandicaps.find(
       r => r.player_id === player.id && r.round_id === liveRound.round_id)
     const tee = tees.find(t => t.id === rh?.tee_id)
     const rated = tee?.slope != null && tee.course_rating != null && tee.par != null
@@ -377,7 +380,7 @@ export default function LiveLeaderboardPanel({
   const [flashes, setFlashes] = useState<Record<string, number>>({})
 
   const fetchScores = useCallback(async () => {
-    const [scoresRes, liveRoundsRes] = await Promise.all([
+    const [scoresRes, liveRoundsRes, hcpsRes] = await Promise.all([
       supabase
         .from("live_scores")
         .select("player_id, hole_number, gross_score, stableford_points")
@@ -387,7 +390,31 @@ export default function LiveLeaderboardPanel({
         .select("id, status")
         .eq("round_id", liveRound.round_id)
         .in("status", ["active", "finalised"]),
+      // The handicaps, read here rather than taken from the page's props.
+      //
+      // **This is what made the board disagree with the card.** Every path
+      // handed this component the snapshot the page was rendered with, and
+      // `round_handicaps` gets a row for every player long before anybody
+      // tees off — at trip creation, at finalise, and on every handicap edit.
+      // Those rows hold the player's *index*, with `tee_id` null, because no
+      // tee has been chosen yet (see the note on `resolveCourseHandicap`).
+      // `lockPlayers` writes the real course handicap and the tee when the
+      // session starts, but the page had already rendered, so the board went
+      // on reading the placeholder: an index of 10 shown as the handicap
+      // where the card said 13, and — on any board played off an allowance —
+      // the points recomputed off the wrong figure.
+      //
+      // Fetched on the same poll as the scores, in the same batch, so it
+      // costs no extra wait. It also fixes two cases props never could: a
+      // second group starting on another phone after this page loaded, and a
+      // handicap the lead player corrects mid-round.
+      supabase
+        .from("round_handicaps")
+        .select("round_id, player_id, playing_handicap, tee_id")
+        .eq("round_id", liveRound.round_id),
     ])
+
+    if (hcpsRes.data) setLiveHandicaps(hcpsRes.data as RoundHandicap[])
 
     if (scoresRes.data) {
       const rows = scoresRes.data as LiveScoreRow[]

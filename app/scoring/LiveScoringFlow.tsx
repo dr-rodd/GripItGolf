@@ -707,15 +707,26 @@ export default function LiveScoringFlow({
     // wrote a placeholder handicap row with no tee against it; this is the
     // real answer arriving over it.
     // TODO(error-handling): check error, surface a failure
+    const written = playerSetups.map(({ player, playingHcp, tee }) => ({
+      round_id: liveRound.round_id,
+      player_id: player.id,
+      playing_handicap: playingHcp,
+      tee_id: tee?.id ?? null,
+    }))
     await supabase.from("round_handicaps").upsert(
-      playerSetups.map(({ player, playingHcp, tee }) => ({
-        round_id: liveRound.round_id,
-        player_id: player.id,
-        playing_handicap: playingHcp,
-        tee_id: tee?.id ?? null,
-      })),
-      { onConflict: "round_id,player_id" },
+      written, { onConflict: "round_id,player_id" },
     )
+
+    // And into this component's own copy, which is what the live board is
+    // seeded from. Without it the board opens on the placeholder rows the
+    // page was rendered with — the player's index, with no tee — until its
+    // own first fetch lands a moment later. The board reads fresh either
+    // way; this is so the first frame is right rather than briefly wrong.
+    setEffectiveRoundHandicaps(prev => [
+      ...prev.filter(rh => !written.some(
+        w => w.round_id === rh.round_id && w.player_id === rh.player_id)),
+      ...written,
+    ])
   }
 
   function syncLiveRound(r: ActiveLiveRound | null) {
@@ -1050,7 +1061,7 @@ export default function LiveScoringFlow({
         liveRound={liveRound}
         players={players}
         holes={holes}
-        roundHandicaps={roundHandicaps}
+        roundHandicaps={effectiveRoundHandicaps}
         tees={tees}
         allowance={allowance}
         quotaScale={quotaScale}
@@ -1455,7 +1466,7 @@ export default function LiveScoringFlow({
                 liveRound={liveRound}
                 players={players}
                 holes={holes}
-                roundHandicaps={roundHandicaps}
+                roundHandicaps={effectiveRoundHandicaps}
                 tees={tees}
                 // The board beside the card answers the same question the
                 // card does. Swiping between two different handicaps would

@@ -663,6 +663,50 @@ section('No scoring surface filters tees by gender on its own')
     '  …and no longer by the rating that merely resembled it')
 }
 
+section('The live board reads the handicap the card is actually playing off')
+{
+  // The bug, exactly: playing handicap 13 on the score entry tile and 10 on
+  // the live leaderboard, with the points recomputed off the 10.
+  //
+  // `round_handicaps` gets a row for every player of every round long before
+  // anybody tees off — trip creation, finalise, every handicap edit — and all
+  // of those store the player's **index**, with `tee_id` null, because no tee
+  // has been chosen yet. `lockPlayers` writes the real course handicap and
+  // the tee when the session starts. The board was handed the snapshot the
+  // page had been rendered with, which is from before that, so it read the
+  // index: 10 where the card said 13.
+  const tee = { slope: 134, course_rating: 73.4, par: 72 }
+  eq(courseHandicap(10, tee), 13,
+    'an index of 10 off this tee is a course handicap of 13 — the reported pair')
+
+  const panel = readFileSync('app/scoring/LiveLeaderboardPanel.tsx', 'utf-8')
+  const fetcher = panel.slice(panel.indexOf('const fetchScores'), panel.indexOf('// ─── Build rows'))
+  ok(/from\("round_handicaps"\)/.test(fetcher),
+    'the board reads the handicaps itself rather than trusting a page-load prop')
+  ok(/setLiveHandicaps/.test(fetcher), '  …and keeps what it read')
+  ok(/const rh = liveHandicaps\.find\(/.test(panel),
+    'and every figure on it comes off those rows')
+  ok(!/const rh = roundHandicaps\.find\(/.test(panel),
+    'with nothing still reading the snapshot')
+
+  // Fetched in the same batch as the scores it already polls, so being right
+  // costs no extra wait — and it is the same request that fixes the two cases
+  // a prop never could: another group starting on a second phone after this
+  // page loaded, and a handicap corrected by the lead player mid-round.
+  ok(/const \[scoresRes, liveRoundsRes, hcpsRes\] = await Promise\.all\(\[/.test(fetcher),
+    'in the same batch as the scores, so it costs no extra round trip')
+
+  // The seed matters too: the board opens on whatever it was handed until its
+  // own fetch lands, and briefly-wrong on the one screen read mid-round is
+  // still wrong. `lockPlayers` knows the answer — it just wrote it.
+  const flow = readFileSync('app/scoring/LiveScoringFlow.tsx', 'utf-8')
+  ok(!/roundHandicaps=\{roundHandicaps\}/.test(flow),
+    'the board is never seeded from the page-load snapshot')
+  const lock = flow.slice(flow.indexOf('async function lockPlayers'), flow.indexOf('function syncLiveRound'))
+  ok(/setEffectiveRoundHandicaps/.test(lock),
+    'starting a session puts the real handicap and tee into the copy the board is seeded from')
+}
+
 // ─── Result ────────────────────────────────────────────────────
 
 console.log(`\n${'─'.repeat(56)}`)
