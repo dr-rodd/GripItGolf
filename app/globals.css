@@ -9,20 +9,29 @@
 @theme {
   /* ── Colour ──
      No pure grey anywhere. Every neutral — borders, secondary text,
-     inactive icons — is `bark` at an opacity, never a separate hex. */
-  --color-cream:   #F6F4F0;   /* the page, everywhere */
-  --color-surface: #FFFFFF;   /* cards, nav bar, anything raised */
-  --color-ink:     #2B2118;   /* headlines and body text */
-  --color-bark:    #4A3728;   /* every neutral is this at an opacity */
+     inactive icons — is `bark` at an opacity, never a separate hex.
+
+     Each token points at a plain custom property rather than carrying its
+     hex, and that indirection is load-bearing: given a literal, Tailwind
+     folds every opacity-modified utility to a baked hex at build time —
+     `text-ink/65` compiles to `#2b2118a6` and no amount of re-theming the
+     token can reach it. Given a var() it cannot fold, so the same utility
+     compiles to a color-mix over the token and follows the theme at
+     runtime. The hexes live in the :root block below; dark mode re-points
+     the same properties further down. */
+  --color-cream:   var(--gd-cream);   /* the page, everywhere */
+  --color-surface: var(--gd-surface); /* cards, nav bar, anything raised */
+  --color-ink:     var(--gd-ink);     /* headlines and body text */
+  --color-bark:    var(--gd-bark);    /* every neutral is this at an opacity */
 
   /* Emerald is an accent: one primary action per screen, status, the dot.
      Never a large fill, never a wash, never a gradient. */
-  --color-accent:      #0A9D56;
-  --color-accent-deep: #0A6B3C;   /* text on an emerald-tinted pill */
+  --color-accent:      var(--gd-accent);
+  --color-accent-deep: var(--gd-accent-deep);   /* text on an emerald-tinted pill */
 
   /* Loss only. Not "bad", not "warning" — loss. */
-  --color-rust:      #B5533C;
-  --color-rust-deep: #8A3E2C;
+  --color-rust:      var(--gd-rust);
+  --color-rust-deep: var(--gd-rust-deep);
 
   /* ── Type ──
      Three families, one job each, never mixed.
@@ -49,6 +58,54 @@
   --text-xs--line-height: 1.35;
   --text-sm: 15px;
   --text-sm--line-height: 1.45;
+}
+
+/* The palette itself — the hexes the tokens above point at. */
+:root {
+  --gd-cream:   #F6F4F0;
+  --gd-surface: #FFFFFF;
+  --gd-ink:     #2B2118;
+  --gd-bark:    #4A3728;
+
+  --gd-accent:      #0A9D56;
+  --gd-accent-deep: #0A6B3C;
+
+  --gd-rust:      #B5533C;
+  --gd-rust-deep: #8A3E2C;
+}
+
+/* ── Dark mode ──
+   The same eight tokens, given night values. Not a second design system:
+   every utility in the app reads the custom properties above, so re-pointing
+   them under one class re-themes every screen at once, and a component that
+   names a raw hex instead of a token is a bug in light mode already.
+
+   The class is put on <html> by an inline script in the head (see
+   THEME_BOOT_SCRIPT in lib/theme.ts) before first paint, from the gg_theme
+   cookie — server rendering can stay static and a dark phone never flashes
+   cream. The toggle lives behind the gear on the trip hub and is saved per
+   player; lib/theme.ts is the only writer of the class and the cookie.
+
+   The palette keeps the brand's rules in the dark: warm browns rather than
+   grey — the page is ink-dark cream, not black — and emerald stays an
+   accent, never a wash. Two values move for legibility rather than mood:
+   accent-deep lightens because it is both a button fill under white text and
+   link text on the page, and #0E9151 is the balance point that clears 4:1 in
+   both jobs; rust-deep lightens further because it mostly appears as error
+   text, which has to clear AA against the dark page. Contrast is arithmetic,
+   not taste — test:branding checks the dark palette the same way it checks
+   the light one. */
+html.dark {
+  --gd-cream:   #1B1510;
+  --gd-surface: #272019;
+  --gd-ink:     #F2EBE2;
+  --gd-bark:    #D9C6B2;
+
+  --gd-accent:      #22B573;
+  --gd-accent-deep: #0E9151;
+
+  --gd-rust:      #D9765B;
+  --gd-rust-deep: #E0937D;
 }
 
 html {
@@ -281,7 +338,9 @@ body {
   50%      { opacity: 0.85; }
 }
 .skeleton {
-  background-color: rgba(74, 55, 40, 0.09);
+  /* Bark at 9%, via the token rather than a baked rgba, so a skeleton on the
+     dark page shimmers light-on-dark instead of vanishing into it. */
+  background-color: color-mix(in srgb, var(--color-bark) 9%, transparent);
   border-radius: 6px;
   animation: gdSkeleton 1.4s ease-in-out infinite;
 }
@@ -455,6 +514,15 @@ body {
 .scroll-shade-r {
   background: linear-gradient(to left, rgba(74, 55, 40, 0.10), rgba(255, 255, 255, 0));
 }
+/* On the dark board the cue inverts: a dark shade over a dark surface says
+   nothing, so the haze is the light bark instead — same alpha band, same
+   both-ends-equal rule as the light pair above. */
+html.dark .scroll-shade-l {
+  background: linear-gradient(to right, rgba(217, 198, 178, 0.12), rgba(255, 255, 255, 0));
+}
+html.dark .scroll-shade-r {
+  background: linear-gradient(to left, rgba(217, 198, 178, 0.12), rgba(255, 255, 255, 0));
+}
 
 /* ── An expanded row, inside a table that scrolls sideways ─────
    The board is one horizontal scroller so its rows cannot come apart from
@@ -489,6 +557,11 @@ input, select, textarea {
    page, which is below anything WCAG calls text. */
 input::placeholder, textarea::placeholder {
   color: rgba(43, 33, 24, 0.6);
+}
+/* The same 60%, of the dark palette's ink — the literal above is the light
+   ink and would disappear into a dark field. */
+html.dark input::placeholder, html.dark textarea::placeholder {
+  color: color-mix(in srgb, var(--color-ink) 60%, transparent);
 }
 
 /* A date input's intrinsic width overflows a grid column; min-width:0

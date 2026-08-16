@@ -23,6 +23,7 @@ import StatusBlock from './StatusBlock'
 import TravelStays from './TravelStays'
 import StatsPanel from './StatsPanel'
 import TripHeader from '@/app/components/TripHeader'
+import PlayerSettings from '@/app/components/PlayerSettings'
 import Itinerary from './Itinerary'
 import { type ItemKind, type ItineraryItem, dayCount } from '@/lib/itinerary'
 import BackButton from '@/app/components/BackButton'
@@ -335,6 +336,16 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
     </p>
   )
 
+  // The gear in the header's corner — a claimed player's OWN preferences
+  // (dark mode, so far), saved to their player row. Not a second door to
+  // Trip Setup, which stays on the tab bar: that room is the trip's, this
+  // one is the person's. A device that is nobody yet gets no gear at all —
+  // personalisation belongs to a claimed player, and an unclaimed phone has
+  // nobody to save it against.
+  const preferences = me && isConfirmed(me)
+    ? <PlayerSettings tripId={trip.id} playerId={me.id} />
+    : undefined
+
   return (
     <main className="min-h-dvh bg-cream has-tabbar page-enter">
 
@@ -342,11 +353,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
           page: this screen is opened to be read, and the brand performing on
           the way in only delays it. The mark goes to the start of the site,
           not to this page — this IS the trip hub. */}
-      <TripHeader backTo="/" />
-
-      {/* No gear here. The tab bar already carries Settings, on every screen
-          in the trip, and a second door to the same room in the corner of one
-          of them is a control to explain rather than one to use. */}
+      <TripHeader backTo="/" action={preferences} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
 

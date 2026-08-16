@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo } from "next/font/google";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 /**
@@ -61,8 +62,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning is scoped to this element's own attributes: the
+    // theme boot script below adds `class="dark"` before React hydrates, and
+    // without it React reports the server/client mismatch on every dark visit.
+    <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Dark mode, before first paint. An inline script rather than a
+            cookie read on the server, because cookies() in the root layout
+            would force every route dynamic — including the landing page,
+            whose static-ness the entry animation depends on. The script is
+            the only thing that may set the class; see lib/theme.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
         <link rel="preconnect" href="https://api.fontshare.com" />
         <link rel="preconnect" href="https://cdn.fontshare.com" crossOrigin="" />
         <link rel="stylesheet" href={FONTSHARE} />

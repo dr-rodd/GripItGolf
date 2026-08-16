@@ -31,6 +31,28 @@ Mobile first, always. Nearly all real use is a phone, on a course, in daylight.
 
 **A solid emerald button rests on `accent-deep`, not `accent`.** White on the brighter emerald is 3.5:1 and dark ink on it is 4.5:1 — neither reads at button size. The deeper green is 6.6:1, and it was already that button's own hover state, so the button uses the same two colours it always did with the resting one swapped. The brighter emerald is untouched everywhere it is not behind words: the dot, the bars, tints, active states.
 
+### Dark mode
+
+The same tokens with night values — not a second design system. `html.dark` re-points the eight `--gd-*` properties and every `bg-surface`, `text-ink/65` and `border-bark/12` follows; a component that names a raw hex instead of a token is a bug in light mode already.
+
+| Token | Dark value | Note |
+|---|---|---|
+| `cream` | `#1B1510` | Ink-dark warm brown — the page, never black or grey |
+| `surface` | `#272019` | Raised, a step lighter than the page |
+| `ink` | `#F2EBE2` | Warm off-white |
+| `bark` | `#D9C6B2` | Neutrals invert to a light tan at the same opacities |
+| `accent` | `#22B573` | Brightened to read as text on the dark page (6.8:1) |
+| `accent-deep` | `#0E9151` | The balance point: ≥4:1 as a button fill under white **and** as link text on the page |
+| `rust` / `rust-deep` | `#D9765B` / `#E0937D` | Lightened; rust-deep is mostly error copy and clears AA (7.4:1) |
+
+**How it turns on.** An inline script in the `<head>` (`THEME_BOOT_SCRIPT`, `lib/theme.ts`) reads the `gg_theme` cookie and puts `dark` on `<html>` before first paint — no flash, and no `cookies()` in the root layout, which would force the landing page dynamic and break its prefetched hand-off. The script also repaints the `theme-color` meta so the browser chrome follows the page. `lib/theme.ts` is the only writer of the class and the cookie.
+
+**Whose choice it is.** The toggle sits behind the gear on the trip hub (`PlayerSettings`), rendered only for a device that has claimed a player — personalisation belongs to a claimed player. The choice is written to `players.dark_mode` (migration 044) so it follows the player to other devices; the cookie is the device-local echo, and the column outranks it when the hub loads. Both the read and the write fail soft, so a database without the column costs only the cross-device sync.
+
+**Two build traps hold this together, and `test:branding` pins both.** Each `--color-*` token points at a plain `--gd-*` property instead of carrying its hex — given a literal, Tailwind folds every opacity-modified utility to a baked hex at build time (`text-ink/65` became `#2b2118a6`, unreachable by any theme). And `package.json` carries a modern `browserslist` (Safari/iOS ≥ 16.4, Chrome ≥ 111) — without it, the build's CSS pass strips the `color-mix` branches those utilities compile to, and every tint quietly renders solid. The stylesheet already assumed this baseline (`100cqw`, `dvh`) before dark mode did.
+
+The wordmark stays the artwork's own brown in both themes — the guide forbids recolouring it, and on the dark page it reads as a deliberately muted mark closed by the emerald dot.
+
 ### Type
 
 Three families, one job each, never mixed. Clash Display (headlines), Bespoke Serif (body and all dense data), Archivo (buttons, labels, form fields). Use the scale classes — `t-h1` (30) `t-h2` (21) `t-card` (16) `t-body` (17) `t-data` (15) `t-label` (13) `t-cap` (13) — rather than ad-hoc sizes.

@@ -352,6 +352,113 @@ section('A label on a coloured fill is dark enough too')
     'the emerald is still the dot, the bar and the active state')
 }
 
+section('Dark mode is the same tokens with night values')
+{
+  // One class, redefining every token — not a second stylesheet. The block
+  // lives under html.dark so it outranks :root by specificity, whatever
+  // order the compiled sheet lands in.
+  const darkBlock = css.match(/html\.dark \{([\s\S]*?)\}/)?.[1] ?? ''
+  ok(darkBlock !== '', 'html.dark exists in the stylesheet')
+  const darkHex = (name: string) =>
+    darkBlock.match(new RegExp(`--gd-${name}:\\s*(#[0-9A-Fa-f]{6})`))?.[1] ?? ''
+
+  // The indirection the whole feature rests on: a token that carries its hex
+  // straight gets folded into every opacity-modified utility at build time
+  // (`text-ink/65` becomes a baked `#2b2118a6` no theme can reach), so each
+  // token must point at the plain property the theme blocks re-point.
+  for (const name of ['cream', 'surface', 'ink', 'bark',
+                      'accent', 'accent-deep', 'rust', 'rust-deep']) {
+    ok(new RegExp(`--color-${name}:\\s*var\\(--gd-${name}\\)`).test(css),
+      `the ${name} token is a var(), which the build cannot fold away`)
+  }
+  for (const name of ['cream', 'surface', 'ink', 'bark',
+                      'accent', 'accent-deep', 'rust', 'rust-deep']) {
+    ok(darkHex(name) !== '', `${name} has a dark value`)
+  }
+
+  const rgb = (h: string) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16))
+  const DCREAM   = rgb(darkHex('cream'))
+  const DSURFACE = rgb(darkHex('surface'))
+  const DINK     = rgb(darkHex('ink'))
+  const DDEEP    = rgb(darkHex('accent-deep'))
+  const WHITE    = [255, 255, 255]
+  const overD = (fg: number[], a: number, bg: number[]) =>
+    fg.map((c, i) => c * a + bg[i] * (1 - a))
+
+  // No pure grey at night either — every neutral stays warm, red over green
+  // over blue, the same rule the light palette lives by.
+  for (const name of ['cream', 'surface', 'ink', 'bark']) {
+    const [r, g, b] = rgb(darkHex(name))
+    ok(r > g && g > b, `dark ${name} is warm, not grey (${darkHex(name)})`)
+  }
+
+  // The same contrast arithmetic the light palette answers to. Ink at an
+  // opacity is composited over the dark page exactly as the light checks
+  // composite it over cream.
+  ok(contrast(DINK, DCREAM) >= 10,
+    `dark ink on the dark page is emphatic (${contrast(DINK, DCREAM).toFixed(2)}:1)`)
+  for (const bg of [DCREAM, DSURFACE]) {
+    ok(contrast(overD(DINK, 0.65, bg), bg) >= 4.5,
+      `dark ink/65 clears AA (${contrast(overD(DINK, 0.65, bg), bg).toFixed(2)}:1)`)
+    ok(contrast(overD(DINK, 0.5, bg), bg) >= 3,
+      `dark ink/50 clears 3:1 for large text (${contrast(overD(DINK, 0.5, bg), bg).toFixed(2)}:1)`)
+  }
+
+  // accent-deep works two jobs — a button fill under white text, and link
+  // text on the page — and the dark value is chosen as the balance point
+  // that clears 4:1 in the fill job without failing the text one.
+  ok(contrast(WHITE, DDEEP) >= 4,
+    `white on the dark accent-deep reads at button size (${contrast(WHITE, DDEEP).toFixed(2)}:1)`)
+  ok(contrast(DDEEP, DCREAM) >= 4,
+    `and the same green reads as a link on the page (${contrast(DDEEP, DCREAM).toFixed(2)}:1)`)
+  ok(contrast(rgb(darkHex('accent')), DCREAM) >= 4.5,
+    `the accent itself reads as text on the dark page (${contrast(rgb(darkHex('accent')), DCREAM).toFixed(2)}:1)`)
+
+  // Errors are text before they are colour
+  ok(contrast(rgb(darkHex('rust-deep')), DCREAM) >= 4.5,
+    `dark rust-deep clears AA for error copy (${contrast(rgb(darkHex('rust-deep')), DCREAM).toFixed(2)}:1)`)
+
+  // The class arrives before first paint, from an inline script — cookies()
+  // in the root layout would force every route dynamic, which the landing
+  // animation's prefetch checks above forbid.
+  const layout = read('app/layout.tsx')
+  ok(layout.includes('THEME_BOOT_SCRIPT'), 'the layout carries the boot script')
+  ok(layout.includes('suppressHydrationWarning'),
+    '  …and tells React the class is allowed to differ from the server')
+
+  // The browser chrome follows the page: theme.ts names one colour per
+  // theme, and each must be that theme\'s own page colour or the status bar
+  // sits on a page it does not match.
+  const theme = read('lib/theme.ts')
+  ok(theme.includes(`DARK_THEME_COLOR = '${darkHex('cream')}'`),
+    'the dark browser chrome is the dark page')
+  ok(theme.includes("LIGHT_THEME_COLOR = '#F6F4F0'"),
+    'and the light one is still cream')
+
+  // The toggle is a claimed player\'s, on the hub, and nobody else\'s
+  const hub = read('app/trip/[tripCode]/page.tsx')
+  ok(hub.includes('<PlayerSettings'), 'the hub carries the preferences gear')
+  ok(/me && isConfirmed\(me\)/.test(hub),
+    '  …only for a device that has claimed a player')
+
+  // The other half of the indirection: Turbopack's CSS pass strips the
+  // color-mix branches the tinted utilities compile to when the browser
+  // targets predate color-mix — every `/65` then quietly renders solid.
+  // The stylesheet already assumed this baseline (100cqw, dvh) before dark
+  // mode did; what is pinned is that nobody deletes the browserslist
+  // without knowing what it holds up.
+  ok(read('package.json').includes('"safari >= 16.4"'),
+    'package.json pins modern CSS targets, or the build bakes every tint solid')
+
+  // The stylesheet\'s baked literals are themed where they would vanish
+  ok(/\.skeleton \{[\s\S]{0,400}color-mix\(in srgb, var\(--color-bark\)/.test(css),
+    'skeletons read the bark token, so they shimmer on either page')
+  ok(css.includes('html.dark input::placeholder'),
+    'placeholders lighten with the ink')
+  ok(css.includes('html.dark .scroll-shade-l') && css.includes('html.dark .scroll-shade-r'),
+    'and the board\'s scroll shades invert to a light haze')
+}
+
 section('Type is big enough to read')
 {
   // The scale itself
@@ -1274,7 +1381,9 @@ section('The screens before a trip wear the same header')
   // The hub is the exception, because it IS the trip: pointing the mark here
   // made the one obvious tap on the screen do nothing. It goes to the start
   // of the site instead, and Home on the tab bar is what comes back here.
-  ok(/<TripHeader backTo="\/" \/>/.test(read('app/trip/[tripCode]/page.tsx')),
+  // (Matched on the backTo alone: the hub's header also carries the
+  // preferences gear in its action slot.)
+  ok(/<TripHeader backTo="\/"/.test(read('app/trip/[tripCode]/page.tsx')),
     'the hub points its mark at the start of the site, not at itself')
 
   // A tap target with only a logo in it has to say where it goes
@@ -1399,6 +1508,7 @@ section('A full-screen overlay covers the tab bar, never ties with it')
   for (const f of [
     'app/trip/[tripCode]/setup/ItineraryEditor.tsx',
     'app/components/SettingsModal.tsx',
+    'app/components/PlayerSettings.tsx',
   ]) {
     const src = read(f)
     const name = f.split('/').pop()
@@ -1679,7 +1789,7 @@ section('The old branding is gone')
   // Tied to the palette rather than merely emerald-ish. An SVG cannot read a
   // CSS custom property, so this is the one file outside globals.css that has
   // to carry the hex — and this is what makes the two move together.
-  const accent = css.match(/--color-accent:\s*(#[0-9A-Fa-f]{6})/)?.[1] ?? ''
+  const accent = css.match(/--gd-accent:\s*(#[0-9A-Fa-f]{6})/)?.[1] ?? ''
   ok(accent !== '' && icon.toUpperCase().includes(accent.toUpperCase()),
     `and it is the palette's own emerald (${accent})`)
   ok(!/rect|fill="#F6F4F0"/i.test(icon),

@@ -36,6 +36,7 @@ export default function TripHeader({
   title = 'green-dot',
   progress,
   wobble,
+  action,
 }: {
   /**
    * Where tapping the mark goes — the trip hub from inside a trip, the
@@ -55,6 +56,13 @@ export default function TripHeader({
   progress?: number
   /** How far through the shake that precedes the move, 0 → 1. */
   wobble?: number
+  /**
+   * One small control at the bar's right edge — the trip hub's preferences
+   * gear. Sat above the backTo link (which is the whole bar), so it stays
+   * tappable; kept to the header so it is in the same corner a phone puts
+   * its own settings.
+   */
+  action?: React.ReactNode
 }) {
   // A named page has no stacked form to collapse out of, and the word is a
   // label rather than a brand moment — so it is always settled.
@@ -95,9 +103,11 @@ export default function TripHeader({
       style={{
         height: HEADER_H,
         // The bar itself only appears once the mark has arrived, so an
-        // untouched hub has no band across the top of it.
-        backgroundColor: `rgba(246, 244, 240, ${0.4 + 0.55 * t})`,
-        borderBottom: `1px solid rgba(74, 55, 40, ${0.12 * t})`,
+        // untouched hub has no band across the top of it. Mixed from the
+        // tokens rather than baked rgba, so the bar is cream by day and dark
+        // by night without this file knowing which.
+        backgroundColor: `color-mix(in srgb, var(--color-cream) ${(0.4 + 0.55 * t) * 100}%, transparent)`,
+        borderBottom: `1px solid color-mix(in srgb, var(--color-bark) ${12 * t}%, transparent)`,
         backdropFilter: t > 0.9 ? 'blur(2px)' : undefined,
       }}
     >
@@ -132,6 +142,16 @@ export default function TripHeader({
             style={{ left: lineOrigin[0], top: lineOrigin[1] }}
           >
             <TitleMark name={title} height={lineH} />
+          </span>
+        )}
+        {action && (
+          <span
+            className="absolute flex items-center"
+            // Above the backTo link (zIndex 1), which is the whole bar —
+            // without this the gear would be a picture of a button.
+            style={{ right: 8, top: 0, height: HEADER_H, zIndex: 2 }}
+          >
+            {action}
           </span>
         )}
       </div>
