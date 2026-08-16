@@ -431,9 +431,14 @@ function CountingScoresPicker({
         Something else
       </button>
 
-      {/* Its own row, full size. It shared a row with the chip and was
+      {/* Its own row, visibly sized. It shared a row with the chip and was
           squeezed to a sliver — the number being typed was invisible, and a
-          number typed blind is how a wrong count gets stored. */}
+          number typed blind is how a wrong count gets stored. The width is a
+          max-w cap rather than a w-*: FIELD carries w-full, both are width
+          utilities, and which wins is stylesheet order — a coin toss this
+          file has been burnt by once already. max-width is a different
+          property and always caps. Sized to two digits, which is every
+          answer this box can hold. */}
       {custom && (
         <div className="flex items-center gap-3">
           <input
@@ -466,7 +471,7 @@ function CountingScoresPicker({
                 setText(String(value))
               }
             }}
-            className={`${FIELD} w-24 flex-none text-center text-lg tabular-nums`}
+            className={`${FIELD} max-w-[4.5rem] flex-none text-center text-lg tabular-nums`}
           />
           <span className="t-cap text-ink/65">scores a hole</span>
         </div>
@@ -521,11 +526,14 @@ function GrandstandFinishPicker({
         </button>
       </div>
 
-      {/* Its own row, full size. It shared a row with two chips and was
+      {/* Its own row, visibly sized. It shared a row with two chips and was
           squeezed to a sliver — the number being typed was invisible, and a
           number typed blind is how "the last 18" got stored: at 18 every
           hole is the finish and the whole team counts everywhere, which
-          reads as the counting-scores setting being ignored. */}
+          reads as the counting-scores setting being ignored. The width is a
+          max-w cap, not a w-*, for the reason on the counting box above —
+          FIELD's own w-full wins the utility coin toss otherwise, which is
+          how this box came to span the whole card. Two digits fit 1–18. */}
       {on && (
         <div className="flex items-center gap-3">
           <input
@@ -554,7 +562,7 @@ function GrandstandFinishPicker({
                 setText(String(value > 0 ? value : 3))
               }
             }}
-            className={`${FIELD} w-24 flex-none text-center text-lg tabular-nums`}
+            className={`${FIELD} max-w-[4.5rem] flex-none text-center text-lg tabular-nums`}
           />
           <span className="t-cap text-ink/65">holes</span>
         </div>

@@ -540,9 +540,14 @@ async function main() {
     // Both keypads shared a row with their chips and were squeezed to a
     // sliver — the number being typed was invisible, and a number typed
     // blind is how "the last 18" got stored on a real trip. Each now sits
-    // on a row of its own at a fixed, visible width.
-    const boxes = setup.match(/w-24 flex-none text-center text-lg tabular-nums/g) ?? []
-    eq(boxes.length, 2, 'the counting and finish keypads are fixed-width boxes on their own rows')
+    // on a row of its own, sized to the two digits it can hold — and sized
+    // with max-w, not w-*: FIELD carries w-full, two width utilities are a
+    // stylesheet-order coin toss, and w-full won it in production, which is
+    // how the box came to span the whole card.
+    const boxes = setup.match(/max-w-\[4\.5rem\] flex-none text-center text-lg tabular-nums/g) ?? []
+    eq(boxes.length, 2, 'the counting and finish keypads are two-digit boxes on their own rows')
+    ok(!/\$\{FIELD\} w-\d+ flex-none/.test(setup),
+      'sized by max-w — a w-* beside FIELD\'s own w-full is a coin toss it loses')
     ok(!/\$\{FIELD\} flex-1 min-w-0 tabular-nums/.test(
       setup.slice(setup.indexOf('function CountingScoresPicker'))),
       'and neither is a flex sliver beside its chips any more')
