@@ -115,7 +115,13 @@ export default async function RoundSummaryPage({
       .from('tees')
       .select('name, gender, par, course_rating, slope')
       .eq('course_id', round.course_id)
-      .order('course_rating', { ascending: false }),
+      // Hardest first, by slope — the same order `teesForPlayer` hands the
+      // picker, so the table a player reads after the round lists the tees in
+      // the order they were offered before it. It was by course rating, which
+      // usually agrees and is not the same thing; an unrated tee sorts last
+      // rather than to the top, which is where a bare DESC would put a null.
+      .order('slope', { ascending: false, nullsFirst: false })
+      .order('name'),
     round.itinerary_item_id
       ? supabase
           .from('itinerary_items')

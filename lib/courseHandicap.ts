@@ -60,13 +60,51 @@ export function courseHandicap(handicapIndex: number, tee: TeeRating): number {
  * copy of `t.gender === player.gender` is how this reopens, which is what the
  * structural check in `test:handicap-allowance` is watching for.
  *
- * Order is preserved, so a caller's "exactly one option" test still means
- * what it says.
+ * **Hardest tee first, by slope**, which is the order a scorecard prints and
+ * the order a group talks in — the back tees at the top, the forward ones
+ * below. It used to come back in whatever order the database happened to
+ * return, so the same course could offer its tees one way on one screen and
+ * another way on the next, and neither matched the card in the pocket. The
+ * legacy `/score-entry` screen had already reached for this and solved it in
+ * its own query (`.order('slope', { ascending: false })`); doing it here
+ * makes it true of the four screens that go through this function as well,
+ * and that query is now merely agreeing rather than deciding.
+ *
+ * Slope rather than name, because the names are not a sequence: a course can
+ * print Black/Blue/White, or Championship/Medal/Society, or Sandstone/Slate/
+ * Granite/Claret, and only the rating says which is the harder of two.
+ *
+ * **A tee with no slope sorts last, never first.** An unrated tee is one the
+ * research or the card check could not fill in, and putting it at the head of
+ * the list would make it both the first thing offered and — through
+ * `teesForPlayer(...)[0]` on the resume path — the fallback guess. Ties go to
+ * the name so the order is stable rather than merely sorted.
+ *
+ * A caller's "exactly one option" test is unaffected: sorting does not change
+ * how many there are.
  */
-export function teesForPlayer<T extends { gender: string }>(
+export function teesForPlayer<
+  T extends { gender: string; slope?: number | null; name?: string | null },
+>(
   courseTees: readonly T[],
   gender: string,
 ): T[] {
   const mine = courseTees.filter(t => t.gender === gender)
-  return mine.length > 0 ? mine : [...courseTees]
+  return bySlopeDesc(mine.length > 0 ? mine : courseTees)
+}
+
+/** Hardest first; unrated last; then by name, so the order never wobbles. */
+function bySlopeDesc<T extends { slope?: number | null; name?: string | null }>(
+  tees: readonly T[],
+): T[] {
+  return [...tees].sort((a, b) => {
+    const sa = typeof a.slope === 'number' ? a.slope : null
+    const sb = typeof b.slope === 'number' ? b.slope : null
+    if (sa !== sb) {
+      if (sa === null) return 1
+      if (sb === null) return -1
+      return sb - sa
+    }
+    return (a.name ?? '').localeCompare(b.name ?? '')
+  })
 }

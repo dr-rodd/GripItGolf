@@ -576,9 +576,12 @@ section('A question ends in a question mark')
 
 section('teesForPlayer — nobody is left with nothing to play off')
 {
-  const tee = (name: string, gender: string) => ({ id: name, name, gender, par: 72, course_rating: 71, slope: 125 })
-  const mixed = [tee('Blue', 'M'), tee('White', 'M'), tee('Red', 'F')]
-  const mensOnly = [tee('Blue', 'M'), tee('White', 'M'), tee('Red', 'M')]
+  // Slopes are distinct and deliberately not in the array's own order, so an
+  // expectation below can only be met by actually sorting.
+  const tee = (name: string, gender: string, slope: number | null = 125) =>
+    ({ id: name, name, gender, par: 72, course_rating: 71, slope })
+  const mixed = [tee('White', 'M', 122), tee('Blue', 'M', 134), tee('Red', 'F', 118)]
+  const mensOnly = [tee('White', 'M', 122), tee('Blue', 'M', 134), tee('Red', 'M', 113)]
 
   eq(teesForPlayer(mixed, 'F').map(t => t.name), ['Red'],
     'a woman on a course with a ladies tee gets only the ladies tee')
@@ -597,6 +600,36 @@ section('teesForPlayer — nobody is left with nothing to play off')
   // to mean what they say.
   eq(teesForPlayer([tee('Red', 'F'), tee('Blue', 'M')], 'F').length, 1,
     'one matching tee is still exactly one option')
+
+  // ── Hardest first, by slope ──
+  //
+  // The order used to be whatever the database happened to return, so one
+  // course could offer its tees one way on one screen and another way on the
+  // next, and neither matched the card in the pocket.
+  eq(teesForPlayer(mensOnly, 'M').map(t => t.slope), [134, 122, 113],
+    'the tees come back hardest first, by slope')
+
+  // By slope and not by name, because the names are not a sequence — a course
+  // can print Championship/Medal/Society or Sandstone/Slate/Granite, and only
+  // the rating says which of two is the harder.
+  eq(teesForPlayer(
+    [tee('Society', 'M', 118), tee('Championship', 'M', 141), tee('Medal', 'M', 130)], 'M',
+  ).map(t => t.name), ['Championship', 'Medal', 'Society'],
+    'named tees with no alphabetical sequence still come out in playing order')
+
+  // An unrated tee is one the research or the card check could not fill in.
+  // First in the list would make it both the first thing offered and, through
+  // `teesForPlayer(...)[0]` on the resume path, the fallback guess.
+  eq(teesForPlayer(
+    [tee('Yellow', 'M', null), tee('White', 'M', 122), tee('Blue', 'M', 134)], 'M',
+  ).map(t => t.name), ['Blue', 'White', 'Yellow'],
+    'a tee with no slope sorts last rather than first')
+
+  // Ties are broken by name, so the order is stable rather than merely
+  // sorted — two tees on the same slope must not swap between renders.
+  eq(teesForPlayer([tee('White', 'M'), tee('Blue', 'M')], 'M').map(t => t.name),
+    ['Blue', 'White'],
+    'two tees on the same slope keep a settled order')
 }
 
 section('No scoring surface filters tees by gender on its own')
@@ -614,7 +647,20 @@ section('No scoring surface filters tees by gender on its own')
       `${path} does not filter tees by gender itself`)
     ok(!/courseTees\.find\(\s*t\s*=>\s*t\.gender\s*===/.test(src),
       `${path} does not pick a tee by gender itself either`)
+    ok(!/\.sort\([^)]*slope/.test(src),
+      `${path} does not order tees itself — teesForPlayer already did`)
   }
+
+  // The round summary is a table rather than a picker, so it does not go
+  // through `teesForPlayer` — but a player reads it straight after using the
+  // picker, and the two listing the same course's tees in different orders is
+  // exactly the inconsistency this was asked to end. It was by course rating,
+  // which usually agrees with slope and is not the same thing.
+  const summary = readFileSync('app/trip/[tripCode]/round/[roundNumber]/page.tsx', 'utf-8')
+  ok(/\.order\('slope', \{ ascending: false, nullsFirst: false \}\)/.test(summary),
+    'the round summary lists tees hardest first too, with unrated ones last')
+  ok(!/\.order\('course_rating'/.test(summary),
+    '  …and no longer by the rating that merely resembled it')
 }
 
 // ─── Result ────────────────────────────────────────────────────
