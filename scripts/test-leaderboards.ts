@@ -366,9 +366,18 @@ section('A better-ball board can open the closing holes to everyone')
   eq('aggregateFinish' in parseLeaderboards([{ ...teamBB, aggregateFinish: 0 }])[0], false,
     'and an explicit off is not stored either')
 
-  // Clamped rather than trusted
-  eq(parseLeaderboards([{ ...teamBB, aggregateFinish: 99 }])[0].aggregateFinish, 18,
-    'a silly finish is clamped to the whole round')
+  // Clamped rather than trusted — and a finish of the whole round is not a
+  // finish. Eighteen holes of "everyone counts" is the retired aggregate
+  // format overriding the counting answer on every hole, and the only
+  // stored 18s came from the old invisible keypad rounding a mistyped
+  // figure up. Off restores the format the board actually names — which is
+  // what healed the trip that reported "best 2 is counting all 3".
+  eq(parseLeaderboards([{ ...teamBB, aggregateFinish: 17 }])[0].aggregateFinish, 17,
+    'seventeen is the ceiling — at least one hole plays the counting rule')
+  eq('aggregateFinish' in parseLeaderboards([{ ...teamBB, aggregateFinish: 18 }])[0], false,
+    'a finish of all eighteen reads as off, not as a softened seventeen')
+  eq('aggregateFinish' in parseLeaderboards([{ ...teamBB, aggregateFinish: 99 }])[0], false,
+    'and so does anything past it')
   eq('aggregateFinish' in parseLeaderboards([{ ...teamBB, aggregateFinish: -3 }])[0], false,
     'a negative one is off')
   eq('aggregateFinish' in parseLeaderboards([{ ...teamBB, aggregateFinish: 'x' }])[0], false,

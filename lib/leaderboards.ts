@@ -92,7 +92,7 @@ export type Leaderboard = {
    * can still catch up. It can only raise a team's total, never lower it.
    *
    * Absent means off, which is what every board did before the question was
-   * asked. 1 to 18 when on.
+   * asked. 1 to `MAX_AGGREGATE_FINISH` when on.
    */
   aggregateFinish?: number
 
@@ -447,6 +447,19 @@ export function countingScoresOf(lb: Pick<Partial<Leaderboard>, 'countingScores'
 }
 
 /**
+ * The most closing holes a grandstand finish can open.
+ *
+ * Seventeen, not eighteen: a finish covering the whole round is not a finish
+ * — it is the retired aggregate format, and it silently overrides the
+ * counting-scores answer on every hole, which is exactly what happened when
+ * the old invisible keypad rounded a mistyped figure up to 18. A stored 18
+ * reads as off (`parseLeaderboards`), because no visible keypad ever offered
+ * it and every one in storage was that bug, sitting on a board whose owner
+ * had chosen best-2.
+ */
+export const MAX_AGGREGATE_FINISH = 17
+
+/**
  * The closing holes on which everyone counts. Absent reads as off — no board
  * had a grandstand finish before it could be asked for.
  */
@@ -688,10 +701,15 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
         }
 
         // The grandstand finish is better ball's too, and kept off when it is
-        // off — no board had one before the question existed.
+        // off — no board had one before the question existed. Anything past
+        // MAX_AGGREGATE_FINISH is dropped rather than softened: an 18-hole
+        // "finish" is the whole round counting everyone — the retired
+        // aggregate format — and the only stored 18s came from a keypad
+        // that rounded a mistyped figure up. Off restores the format the
+        // board actually names.
         if (teamFormat === 'better_ball' && Number.isFinite(Number(r.aggregateFinish))) {
           const finish = clamp(r.aggregateFinish, 0, 18)
-          if (finish > 0) lb.aggregateFinish = finish
+          if (finish > 0 && finish <= MAX_AGGREGATE_FINISH) lb.aggregateFinish = finish
         }
 
         // Rows named by the players rather than the team. Kept off when the
