@@ -786,13 +786,14 @@ section('The board is one scroller, and the rows are one element')
   // thumb was scrolled by the browser, and the rest followed. The rows are
   // the same element now, so there is nothing left to fall out of step.
   //
-  // Four `overflow-x-auto`s, and only two of them are column scrollers: the
-  // table and its headings. The other two are the name and sub-label cells,
-  // which scroll a long name into view *within* the pinned column — they
-  // move no columns, so they have nothing to keep in step with.
+  // Two `overflow-x-auto`s, and both are column scrollers: the table and its
+  // headings. The name and sub-label cells were the other two for a while,
+  // dragged sideways to read a long name — a gesture that never worked in a
+  // hand, since every row is a button and a short drag lands as a tap. They
+  // move by themselves now (see ScrollingName) and scroll nothing.
   const scrollers = board.match(/overflow-x-auto/g) ?? []
-  eq(scrollers.length, 4,
-    'the table, its headings, and the two name lines — nothing else scrolls')
+  eq(scrollers.length, 2,
+    'the table and its headings — nothing else scrolls')
   ok(!/<Strip\b/.test(board), 'and none of the per-row column strips it used to have')
 
   // The headings are the second one, and they cannot be folded into the
@@ -875,6 +876,56 @@ section('Nothing about the scroll can spring or lag')
     '  …and an echo is told apart by where the scroller already is')
   ok(hook.indexOf('applied.current.get(source)') < hook.indexOf('applied.current.set'),
     'and the echo is checked before anything is written')
+}
+
+section('A long name shows itself, and a short one holds still')
+{
+  const src = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  // The function body alone — the next `/**` is useBoardScroll's note, and it
+  // discusses `overflow-x: auto` at length, which the last check here forbids.
+  const cmpFrom = src.indexOf('function ScrollingName(')
+  const cmp = src.slice(cmpFrom, src.indexOf('/**', cmpFrom))
+
+  // The whole guard. A board where every name fits is a board where nothing
+  // moves — a leaderboard that fidgets for no reason is worse than one that
+  // clips, and every row of a full field animating at once is that board.
+  ok(/scrollWidth - el\.clientWidth/.test(cmp),
+    'a name is measured against its column rather than guessed at by length')
+  ok(/shift > 0 \? ' name-scroll-track' : ''/.test(cmp),
+    "…and only a name that overran it is given the animation")
+  ok(/style=\{shift > 0/.test(cmp) && /'--name-shift'/.test(cmp),
+    '…and only that one carries the distance it has to travel')
+
+  // Both lines. The grey line of first names under a team name is usually
+  // the longer of the two, so pinning only the bold one would leave the
+  // half that needed this most still clipped.
+  const board = src.slice(src.indexOf('function Board('), src.indexOf('* The draw, as a chip'))
+  eq((board.match(/<ScrollingName\b/g) ?? []).length, 2,
+    'the name and the line of first names under it both move')
+
+  // The pace comes from the distance, so a long name does not whip past and
+  // a two-character overrun does not creep. Clamped at both ends.
+  ok(/Math\.min\(14, Math\.max\(4,/.test(cmp),
+    'the pace is set by the distance, and clamped so neither end is silly')
+
+  // The overflow is CSS, not a utility beside it: `.overflow-hidden` and
+  // `.name-scroll` are both one class, so which won would be decided by
+  // their order in the generated stylesheet — and the reduced-motion rule
+  // has to be able to put the axis back.
+  ok(!/overflow-/.test(cmp),
+    'no overflow utility sits beside the class that declares it')
+  const rule = css.split('.name-scroll {')[1]?.split('}')[0] ?? ''
+  ok(/overflow:\s*hidden/.test(rule), 'the cell clips rather than scrolls')
+
+  // Held still by a phone that asked for no motion, the name is clipped
+  // again — so the drag comes back. The worse gesture, but the only one left.
+  const reduced = css.slice(css.lastIndexOf('prefers-reduced-motion'))
+  ok(/\.name-scroll-track\s*\{[^}]*animation:\s*none/.test(reduced),
+    'a phone asking for no motion gets none')
+  ok(/\.name-scroll\s*\{[^}]*overflow-x:\s*auto/.test(reduced),
+    '…and gets the drag back, since the name is clipped again')
+  ok(css.indexOf('.name-scroll {') < css.lastIndexOf('prefers-reduced-motion'),
+    'and that override comes later in the same file, so it is not a coin toss')
 }
 
 // ─── Live vs finalised ─────────────────────────────────────────

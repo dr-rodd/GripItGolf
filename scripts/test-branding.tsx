@@ -1091,7 +1091,28 @@ section('Motion is calm, and can be switched off')
   ok(durations.every(d => d <= 400),
     `no motion answering a touch exceeds 400ms (longest ${Math.max(...durations)}ms)`)
 
-  const looping = loops.flatMap(durationsIn)
+  // One repeating animation is not a breath, and it is named here rather
+  // than left as a gap in the pattern — which is what the note above asks of
+  // an exemption. A name too long for the leaderboard's column glides out
+  // and back (`.name-scroll-track`). That is a distance at a reading pace,
+  // not a pulse: the duration is computed per name from how far it has to
+  // travel, and a two-second ceiling would whip a long one past unread.
+  //
+  // The stylesheet carries only the fallback. The real bounds are the clamp
+  // in ScrollingName, and the fallback is checked against them so the two
+  // cannot drift into a rule the other would refuse.
+  const travel = loops.filter(l => l.includes('name-scroll'))
+  ok(travel.length === 1, 'exactly one repeat is a travel rather than a breath')
+
+  const clamp = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+    .match(/Math\.min\((\d+), Math\.max\((\d+),/)
+  ok(!!clamp, 'and the component clamps how long that travel may take')
+  const [lo, hi] = [Number(clamp?.[2]) * 1000, Number(clamp?.[1]) * 1000]
+  const [fallback] = durationsIn(travel[0] ?? '')
+  ok(fallback >= lo && fallback <= hi,
+    `the stylesheet's fallback sits inside that clamp (${fallback}ms in ${lo}–${hi}ms)`)
+
+  const looping = loops.filter(l => !travel.includes(l)).flatMap(durationsIn)
   ok(looping.length > 0, 'and some motion repeats rather than answering anything')
   ok(looping.every(d => d >= 900 && d <= 2000),
     `each repeat is a slow breath, 900ms to 2s (${looping.join('ms, ')}ms)`)

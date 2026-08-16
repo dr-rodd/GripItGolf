@@ -730,6 +730,75 @@ function Strip({
 }
 
 /**
+ * A name too long for its column, shown in full by moving.
+ *
+ * The column is about a dozen characters wide, and the first answer to a
+ * longer name was to make the cell a scroller you could drag — the same
+ * gesture the round columns take. It never worked in a hand: every row is a
+ * `<button>`, so a short sideways drag ends as a click and expands the row
+ * instead of moving the name, and nothing on the row said there was more of
+ * it to find. So the name moves by itself.
+ *
+ * **Only when it actually overflows**, which is why this measures rather than
+ * guesses. A board where every name fits is a board where nothing moves — a
+ * leaderboard that fidgets for no reason is worse than one that clips.
+ * `scrollWidth` still reports the full content width under `overflow: hidden`,
+ * and `transform` does not change it, so the measurement holds while the
+ * animation runs.
+ *
+ * The travel is a CSS variable rather than a keyframe per length: one
+ * animation, and the distance and pace come from the element. Pace is roughly
+ * constant so a long name does not whip past, clamped at both ends so a name
+ * two characters over does not creep and a very long one does not park itself
+ * for half a minute. Under `prefers-reduced-motion` it holds still and becomes
+ * a drag strip again — the worse gesture, but the only one left.
+ */
+const NAME_SCROLL_SPEED = 26   // px a second, at the glide
+const NAME_SCROLL_GLIDE = 0.64 // of the cycle spent moving; the rest is the pauses at each end
+
+function ScrollingName({
+  text, className = '', textClassName,
+}: {
+  text: string
+  className?: string
+  textClassName: string
+}) {
+  const box = useRef<HTMLSpanElement>(null)
+  const [shift, setShift] = useState(0)
+
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    // A pixel of slack: sub-pixel text metrics leave a fraction over on names
+    // that plainly fit, and animating those is the fidget this guards against.
+    const measure = () => setShift(Math.max(0, el.scrollWidth - el.clientWidth - 1))
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    // The box for a column that changes width, the track for a name that
+    // changes length — a rename lands as neither a resize nor a remount.
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    if (el.firstElementChild) ro.observe(el.firstElementChild)
+    return () => ro.disconnect()
+  }, [text])
+
+  const seconds = Math.min(14, Math.max(4, shift / (NAME_SCROLL_SPEED * NAME_SCROLL_GLIDE)))
+
+  return (
+    <span ref={box} className={`name-scroll ${className}`}>
+      <span
+        className={`block w-max ${textClassName}${shift > 0 ? ' name-scroll-track' : ''}`}
+        style={shift > 0
+          ? ({ '--name-shift': `${shift}px`, '--name-secs': `${seconds}s` } as React.CSSProperties)
+          : undefined}
+      >
+        {text}
+      </span>
+    </span>
+  )
+}
+
+/**
  * The board's horizontal scroll: one scroller, and the headings kept level.
  *
  * **Why the headings are a second scroller rather than part of the first.**
@@ -1087,29 +1156,30 @@ function Board({
                       board that leaves ties standing is saying. */}
                   <span className={`t-cap text-ink/65 tabular-nums ${POS_W}`}>{row.place}</span>
 
-                  {/* The name, a size down from t-card and scrolling rather
-                      than truncating — the column fits a dozen characters
-                      and a longer name can be dragged into view, the same
-                      way the round columns work. "Tea…" told nobody which
-                      team was leading. */}
+                  {/* The name, a size down from t-card, and shown in full by
+                      moving rather than by truncating — the column fits a
+                      dozen characters and "Tea…" told nobody which team was
+                      leading. See ScrollingName: a name that fits does not
+                      move. Both lines carry it, because the grey line of
+                      first names underneath is usually the longer one. */}
                   <span className={`block min-w-0 ${NAME_W}`}>
                     <span className="flex items-center gap-1.5">
                       {row.color && (
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} />
                       )}
-                      <span className="min-w-0 flex-1 overflow-x-auto scroll-strip">
-                        <span className="block w-max font-[family-name:var(--font-display)] font-semibold text-[15px] leading-tight text-ink">
-                          {row.name}
-                        </span>
-                      </span>
+                      <ScrollingName
+                        text={row.name}
+                        className="min-w-0 flex-1"
+                        textClassName="font-[family-name:var(--font-display)] font-semibold text-[15px] leading-tight text-ink"
+                      />
                       {row.isLive && <LiveDot />}
                     </span>
                     {row.subLabel && (
-                      <span className={`block overflow-x-auto scroll-strip ${row.color ? 'pl-3.5' : ''}`}>
-                        <span className="block w-max text-ink/65 text-[13px] leading-snug">
-                          {row.subLabel}
-                        </span>
-                      </span>
+                      <ScrollingName
+                        text={row.subLabel}
+                        className={`block ${row.color ? 'pl-3.5' : ''}`}
+                        textClassName="text-ink/65 text-[13px] leading-snug"
+                      />
                     )}
                   </span>
                   {shadeL}

@@ -350,6 +350,62 @@ body {
   display: none;
 }
 
+/* ── A name that shows itself ──────────────────────────────────
+   The leaderboard's name column fits about a dozen characters. Dragging a
+   longer one into view was the first answer and it never worked in a hand:
+   every row is a button, so a short sideways drag ends as a click and
+   expands the row. So the name glides out and back on its own.
+
+   The overflow is declared here rather than as a Tailwind utility on the
+   element. Both would be a single class and which one won would be decided
+   by their order in the generated stylesheet — the coin toss this codebase
+   has now lost twice — and the reduced-motion rule below has to be able to
+   put the axis back. Same file, same specificity, later wins: deterministic.
+
+   Only ever applied by ScrollingName, and only to a name that measured
+   wider than its column. A board where every name fits does not move. */
+.name-scroll {
+  overflow: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.name-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hold at the start, glide to the end, hold there, glide back — rather than
+   a ticker that loops. A name that comes to rest on its own beginning can be
+   read at a glance between passes, which is what a leaderboard is for; a
+   ticker never rests and a board of them never settles.
+
+   The two holds are 18% of the cycle each. `--name-secs` is set from the
+   distance so the glide keeps roughly one pace whatever the name's length. */
+@keyframes name-scroll {
+  0%, 18%   { transform: translateX(0); }
+  50%, 68%  { transform: translateX(calc(-1 * var(--name-shift, 0px))); }
+  100%      { transform: translateX(0); }
+}
+.name-scroll-track {
+  animation: name-scroll var(--name-secs, 6s) ease-in-out infinite;
+  /* The transform is the whole animation, so it is worth a layer of its own
+     — without it every frame repaints the row behind the name. */
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Held still, the name is clipped again, so the axis goes back and the
+     drag returns. It is the worse gesture — that is why the animation
+     exists — but on a phone asking for no motion it is the only one left. */
+  .name-scroll {
+    overflow-x: auto;
+    overscroll-behavior-x: none;
+  }
+  .name-scroll-track {
+    animation: none;
+    will-change: auto;
+  }
+}
+
 /* ── …and the shadow that says so after all ────────────────────
    Hiding the scrollbar left the leaderboard with no cue at all that
    there were rounds off the right-hand edge, so a trip of six read as a
