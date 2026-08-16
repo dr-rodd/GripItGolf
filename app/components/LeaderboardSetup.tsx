@@ -423,15 +423,19 @@ function CountingScoresPicker({
         ))}
       </div>
 
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setCustom(true)}
-          className={`${chipClass(custom)} px-4 flex-shrink-0`}
-        >
-          Something else
-        </button>
-        {custom && (
+      <button
+        type="button"
+        onClick={() => setCustom(true)}
+        className={`${chipClass(custom)} px-4 self-start`}
+      >
+        Something else
+      </button>
+
+      {/* Its own row, full size. It shared a row with the chip and was
+          squeezed to a sliver — the number being typed was invisible, and a
+          number typed blind is how a wrong count gets stored. */}
+      {custom && (
+        <div className="flex items-center gap-3">
           <input
             type="number"
             inputMode="numeric"
@@ -450,16 +454,23 @@ function CountingScoresPicker({
             }}
             onBlur={() => {
               const n = Number(text)
-              const clamped = Number.isFinite(n) && n >= 1
-                ? Math.min(MAX_COUNTING_SCORES, Math.round(n))
-                : DEFAULT_TEAM_SCORING.countingScores
-              setText(String(clamped))
-              onChange(clamped)
+              // Only a real answer is kept. An out-of-range number is a slip
+              // of the thumb, and rounding it to the nearest legal value
+              // would store a decision nobody made — the box goes back to
+              // what the board actually holds instead.
+              if (Number.isFinite(n) && n >= 1 && n <= MAX_COUNTING_SCORES) {
+                const v = Math.round(n)
+                setText(String(v))
+                onChange(v)
+              } else {
+                setText(String(value))
+              }
             }}
-            className={`${FIELD} flex-1 min-w-0 tabular-nums`}
+            className={`${FIELD} w-24 flex-none text-center text-lg tabular-nums`}
           />
-        )}
-      </div>
+          <span className="t-cap text-ink/65">scores a hole</span>
+        </div>
+      )}
 
       <p className="t-cap text-ink/65 leading-snug">
         {value === 1
@@ -508,32 +519,46 @@ function GrandstandFinishPicker({
         >
           Yes, the last…
         </button>
-        {on && (
-          <>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={18}
-              value={text}
-              aria-label="Closing holes where everyone counts"
-              onChange={e => {
-                setText(e.target.value)
-                const n = Number(e.target.value)
-                if (Number.isFinite(n) && n >= 1 && n <= 18) onChange(Math.round(n))
-              }}
-              onBlur={() => {
-                const n = Number(text)
-                const clamped = Number.isFinite(n) && n >= 1 ? Math.min(18, Math.round(n)) : 3
-                setText(String(clamped))
-                onChange(clamped)
-              }}
-              className={`${FIELD} flex-1 min-w-0 tabular-nums`}
-            />
-            <span className="t-cap text-ink/50 flex-shrink-0">holes</span>
-          </>
-        )}
       </div>
+
+      {/* Its own row, full size. It shared a row with two chips and was
+          squeezed to a sliver — the number being typed was invisible, and a
+          number typed blind is how "the last 18" got stored: at 18 every
+          hole is the finish and the whole team counts everywhere, which
+          reads as the counting-scores setting being ignored. */}
+      {on && (
+        <div className="flex items-center gap-3">
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={18}
+            value={text}
+            aria-label="Closing holes where everyone counts"
+            onChange={e => {
+              setText(e.target.value)
+              const n = Number(e.target.value)
+              if (Number.isFinite(n) && n >= 1 && n <= 18) onChange(Math.round(n))
+            }}
+            onBlur={() => {
+              const n = Number(text)
+              // Only a real answer is kept. "33" rounded down to 18 stored a
+              // decision nobody made — and 18 is the biggest decision on the
+              // question, everyone counting on every hole — so an
+              // out-of-range number goes back to what the board holds.
+              if (Number.isFinite(n) && n >= 1 && n <= 18) {
+                const v = Math.round(n)
+                setText(String(v))
+                onChange(v)
+              } else {
+                setText(String(value > 0 ? value : 3))
+              }
+            }}
+            className={`${FIELD} w-24 flex-none text-center text-lg tabular-nums`}
+          />
+          <span className="t-cap text-ink/65">holes</span>
+        </div>
+      )}
 
       <p className="t-cap text-ink/65 leading-snug">
         {value > 0

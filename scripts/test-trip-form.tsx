@@ -532,6 +532,39 @@ async function main() {
       'under the countdown, where it belongs')
   }
 
+  section('The composite-card number boxes can be seen and cannot balloon')
+  {
+    const setup = require('fs').readFileSync(
+      'app/components/LeaderboardSetup.tsx', 'utf-8')
+
+    // Both keypads shared a row with their chips and were squeezed to a
+    // sliver — the number being typed was invisible, and a number typed
+    // blind is how "the last 18" got stored on a real trip. Each now sits
+    // on a row of its own at a fixed, visible width.
+    const boxes = setup.match(/w-24 flex-none text-center text-lg tabular-nums/g) ?? []
+    eq(boxes.length, 2, 'the counting and finish keypads are fixed-width boxes on their own rows')
+    ok(!/\$\{FIELD\} flex-1 min-w-0 tabular-nums/.test(
+      setup.slice(setup.indexOf('function CountingScoresPicker'))),
+      'and neither is a flex sliver beside its chips any more')
+
+    // A blur used to round any figure to the nearest legal value, so a
+    // doubled digit — "33" — stored an 18-hole finish: every hole open to
+    // everyone, which reads as the counting setting being ignored. An
+    // out-of-range number now goes back to what the board holds.
+    const finish = setup.slice(setup.indexOf('function GrandstandFinishPicker'),
+                               setup.indexOf('function RoundLinks'))
+    ok(!/Math\.min\(18, Math\.round/.test(finish),
+      'an out-of-range finish is never rounded into a real one')
+    ok(finish.includes('setText(String(value > 0 ? value : 3))'),
+      'it reverts to the stored answer instead')
+    const counting = setup.slice(setup.indexOf('function CountingScoresPicker'),
+                                 setup.indexOf('function GrandstandFinishPicker'))
+    ok(!/Math\.min\(MAX_COUNTING_SCORES, Math\.round/.test(counting),
+      'and the same for the counting box')
+    ok(counting.includes('setText(String(value))'),
+      'which also reverts rather than inventing an answer')
+  }
+
   section('The generated trip code fits its box')
   {
     const source = require('fs').readFileSync(

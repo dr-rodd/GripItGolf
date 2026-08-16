@@ -1251,6 +1251,19 @@ section('A board chooses how many scores build its composite card')
     'and is off unless asked for')
   eq(rowsFor({ ...TEAM('better_ball'), countingScores: 1, aggregateFinish: 3 }, opts).board[0]?.total, 63,
     'best 1 opening up over the last 3: fifteen holes of the best score, three of everyone')
+
+  // The whole grid, because "best 2 of 3 counted all 3" was reported and
+  // turned out to be a stored 18-hole finish, not the counting rule failing.
+  // Per hole the best 1 of {3,2,1} is 3, the best 2 are 5, all 3 are 6.
+  for (const [c, perHole] of [[1, 3], [2, 5], [3, 6]] as const) {
+    eq(rowsFor({ ...TEAM('better_ball'), countingScores: c }, opts).board[0]?.total, perHole * 18,
+      `best ${c} of 3 counts exactly ${c} on every hole`)
+    eq(rowsFor({ ...TEAM('better_ball'), countingScores: c, aggregateFinish: 3 }, opts).board[0]?.total,
+      perHole * 15 + 6 * 3,
+      `best ${c} of 3 with the last 3 open to everyone`)
+  }
+  eq(rowsFor({ ...TEAM('better_ball'), countingScores: 2, aggregateFinish: 18 }, opts).board[0]?.total, 108,
+    'a finish of 18 holes is everyone counting everywhere — what a blind-typed finish stored, and why the count looked ignored')
 }
 
 section('A board told to hide the team name is the players')
