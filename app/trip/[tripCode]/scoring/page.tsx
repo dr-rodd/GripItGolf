@@ -4,7 +4,6 @@ import { supabase } from '@/lib/supabase'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
 import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundState'
-import { fromItemRow, type ItemRow } from '@/lib/itinerarySync'
 import AddRound from './AddRound'
 
 export const dynamic = 'force-dynamic'
@@ -16,70 +15,68 @@ export default async function TripCoursePortalPage({
 }) {
   const { tripCode } = await params
 
+  // The trip and its rounds in one request rather than two, one after the
+  // other. Every trip page starts by looking a trip up by its code and then
+  // wants something scoped by `trip.id`, and PostgREST will do that join —
+  // the leaderboard already asks this way. On a bad connection the wait it
+  // removes is a whole round trip, which is the expensive unit here.
+  //
+  // Three more things used to load alongside, for the Add round sheet: the
+  // platform course catalogue, the whole itinerary and every player's
+  // handicap. All three were on the critical path of a tab a group opens over
+  // and over on a course, serialised into its HTML, for a sheet most visits
+  // never open. They load inside `AddRound` on the tap now — see the note
+  // there and in `usePlatformCourses`; it is the same rule three times.
   const { data: trip, error: tripError } = await supabase
     .from('trips')
-    .select('id, name, start_date, end_date, track_stats')
+    // One string, not two joined: supabase-js reads the select as a literal
+    // type to work out the row shape, and a `+` between two halves leaves it
+    // with nothing to read — every field on `trip` then fails to typecheck.
+    .select('id, name, start_date, end_date, track_stats, rounds(id, round_number, status, courses(name, location))')
     .eq('trip_code', tripCode)
+    .order('round_number', { referencedTable: 'rounds' })
     .single()
 
   if (tripError) console.error('TripCoursePortal trip query failed:', tripError)
   if (!trip) notFound()
 
-  // Alongside the rounds: what the add-round sheet needs — the itinerary
-  // (the diff wants what already exists) and the players (each new round
-  // snapshots their handicaps).
-  //
-  // The platform course list used to be a fourth query here, and it is not
-  // any more: it loads inside `AddRound` when that sheet exists, because a
-  // screen listing this trip's rounds does not need a catalogue of every
-  // course on the platform to draw itself. See `usePlatformCourses`.
-  const [roundsRes, itineraryRes, playersRes] = await Promise.all([
-    supabase
-      .from('rounds')
-      .select('id, round_number, status, courses(name, location)')
-      .eq('trip_id', trip.id)
-      .order('round_number'),
-    supabase
-      .from('itinerary_items')
-      .select('id, day_index, position, kind, course_id, tee_time, tee_count, ' +
-              'stay_name, travel_mode, from_place, to_place, duration_mins, ' +
-              'activity_name, activity_time')
-      .eq('trip_id', trip.id)
-      .order('day_index')
-      .order('position'),
-    supabase
-      .from('players')
-      .select('id, handicap')
-      .eq('trip_id', trip.id)
-      .eq('is_composite', false),
-  ])
-
-  const rounds = roundsRes.data
-  if (roundsRes.error) console.error('TripCoursePortal rounds query failed:', roundsRes.error)
-  if (itineraryRes.error) console.error('TripCoursePortal itinerary query failed:', itineraryRes.error)
-  if (playersRes.error) console.error('TripCoursePortal players query failed:', playersRes.error)
-
-  const itinerary = ((itineraryRes.data ?? []) as unknown as (Omit<ItemRow, 'trip_id'> & { id: string })[])
-    .map(fromItemRow)
+  const rounds = (trip.rounds ?? []) as unknown as {
+    id: string; round_number: number; status: string
+    courses: { name: string; location: string | null } | null
+  }[]
 
   // What has actually happened on each round, rather than what `rounds.status`
   // claims: the status column is set by hand and drifts, and the tile is the
   // one place someone checks before walking to the first tee.
+  //
+  // **Counted, never fetched.** This asked for `scores.round_id` and
+  // `live_scores.round_id` across every round of the trip and built a Set of
+  // at most half a dozen ids out of the answer — a week's golf for sixteen
+  // players is some seventeen hundred rows, scanned, serialised and parsed on
+  // the critical path of the Scoring tab, to answer one yes-or-no per tile.
+  // `head: true` returns the count in a header and no body at all, so the
+  // reply is bytes. One request per round rather than one for the lot, but
+  // they go together over the one connection and each is a rounding error;
+  // on a bad radio, small and many beats large and few every time.
   const roundIds = (rounds ?? []).map(r => r.id)
-  const [openRes, scoredRes, liveScoredRes] = roundIds.length > 0
-    ? await Promise.all([
-        supabase.from('live_rounds').select('round_id')
-          .eq('status', 'active').in('round_id', roundIds),
-        supabase.from('scores').select('round_id').in('round_id', roundIds),
-        supabase.from('live_scores').select('round_id').in('round_id', roundIds),
-      ])
-    : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }]
 
-  if (openRes.error) console.error('TripCoursePortal live rounds query failed:', openRes.error)
-  if (scoredRes.error) console.error('TripCoursePortal scores query failed:', scoredRes.error)
-  if (liveScoredRes.error) console.error('TripCoursePortal live scores query failed:', liveScoredRes.error)
+  const { data: openData, error: openErr } = roundIds.length > 0
+    ? await supabase.from('live_rounds').select('round_id')
+        .eq('status', 'active').in('round_id', roundIds)
+    : { data: [], error: null }
+  if (openErr) console.error('TripCoursePortal live rounds query failed:', openErr)
+  const openRounds = new Set((openData ?? []).map(r => r.round_id as string))
 
-  const openRounds = new Set((openRes.data ?? []).map(r => r.round_id as string))
+  const anyRows = async (table: 'scores' | 'live_scores', roundId: string) => {
+    const { count, error } = await supabase
+      .from(table)
+      .select('round_id', { count: 'exact', head: true })
+      .eq('round_id', roundId)
+      .limit(1)
+    if (error) console.error(`TripCoursePortal ${table} count failed:`, error)
+    return (count ?? 0) > 0
+  }
+
   // A round counts as played once anything has been committed to it, or once
   // there are uncommitted scores against a card that is **still open**.
   //
@@ -88,12 +85,20 @@ export default async function TripCoursePortalPage({
   // half-entered and abandoned leaves its holes behind for good and the tile
   // read "Scores in" on a round nobody finished. The same rule the board
   // applies — see the note on `buildRowContext` in lib/rowContext.ts.
-  const scoredRounds = new Set([
-    ...(scoredRes.data ?? []).map(r => r.round_id as string),
-    ...(liveScoredRes.data ?? [])
-      .map(r => r.round_id as string)
-      .filter(id => openRounds.has(id)),
-  ])
+  //
+  // Which is also why `live_scores` is only asked about for a round that is
+  // open: on every other round the answer could not change the tile, so the
+  // request would be one nobody could read the result of.
+  const played = await Promise.all(
+    roundIds.map(async id => {
+      const [committed, live] = await Promise.all([
+        anyRows('scores', id),
+        openRounds.has(id) ? anyRows('live_scores', id) : Promise.resolve(false),
+      ])
+      return { id, scored: committed || live }
+    }),
+  )
+  const scoredRounds = new Set(played.filter(r => r.scored).map(r => r.id))
 
   return (
     <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
@@ -112,8 +117,6 @@ export default async function TripCoursePortalPage({
             startDate={trip.start_date ?? null}
             endDate={trip.end_date ?? null}
             trackStats={trip.track_stats === true}
-            items={itinerary}
-            players={playersRes.data ?? []}
           />
         </div>
 

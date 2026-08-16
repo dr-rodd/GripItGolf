@@ -615,9 +615,15 @@ section('Migration 027 and lib/itinerary.ts describe the same table')
   const mapper = fs.readFileSync('lib/itinerarySync.ts', 'utf-8')
   ok(mapper.includes('activityName: r.activity_name'),
     'fromItemRow maps the new columns onto the item')
+  // Pinned against whichever file does the fetching, which is not always the
+  // page. The Scoring tab's itinerary moved into `AddRound` — it is the
+  // `before` half of a diff for a sheet behind a tap, and it was loading on
+  // every visit to the one screen a group opens over and over on a course.
+  // The check is the same either way: selected, and mapped through the shared
+  // helper rather than by hand.
   for (const page of [
     'app/trip/[tripCode]/setup/page.tsx',
-    'app/trip/[tripCode]/scoring/page.tsx',
+    'app/trip/[tripCode]/scoring/AddRound.tsx',
   ]) {
     const src = fs.readFileSync(page, 'utf-8')
     ok(src.includes('activity_name, activity_time'),
@@ -625,6 +631,13 @@ section('Migration 027 and lib/itinerary.ts describe the same table')
     ok(src.includes('fromItemRow'),
       `  …and maps them through the shared mapping`)
   }
+
+  // And the page it left does not still carry them, which is the way this
+  // gets quietly undone: a copy left behind loads on every visit and the
+  // check above passes on the other file.
+  const portal = fs.readFileSync('app/trip/[tripCode]/scoring/page.tsx', 'utf-8')
+  ok(!portal.includes('itinerary_items'),
+    'and the Scoring tab itself no longer fetches an itinerary it does not draw')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

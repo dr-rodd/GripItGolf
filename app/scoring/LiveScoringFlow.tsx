@@ -283,8 +283,8 @@ function UnsentNote({ count, inline = false }: { count: number; inline?: boolean
         aria-hidden="true"
       />
       <p className="t-cap text-ink/65 leading-snug">
-        {count === 1 ? '1 hole' : `${count} holes`} saved on this phone, waiting for signal.
-        Keep scoring — they send themselves.
+        {count === 1 ? '1 hole' : `${count} holes`} saved on phone, leaderboard will sync
+        when signal available.
       </p>
     </div>
   )
@@ -589,14 +589,16 @@ export default function LiveScoringFlow({
         return
       }
 
-      // Fresh-fetch round_handicaps so we don't use a stale prop value if the
-      // organiser corrected a handicap after this page loaded.
-      const { data: freshHcps } = await supabase
-        .from("round_handicaps")
-        .select("round_id, player_id, playing_handicap, tee_id")
-        .eq("round_id", rId)
-        .in("player_id", lockedIds)
-
+      // The handicaps and the card together, not one after the other. Both
+      // need the locked players and neither needs the other, so waiting for
+      // the first before asking for the second was a round trip spent on
+      // nothing — and resuming a card is exactly the moment somebody is
+      // standing on a tee with one bar of signal.
+      //
+      // Fresh-fetched rather than taken from the page's props, so a handicap
+      // the lead player corrected after this page loaded is the one the card
+      // opens on.
+      //
       // No `no_return` here: that column is on `scores`, not on
       // `live_scores`. Asking for it made the whole select fail, the error was
       // swallowed by a `?? []`, and the card came back empty — so every
@@ -610,11 +612,18 @@ export default function LiveScoringFlow({
       // would open the card with every stat blank and the next hole submitted
       // would write that blank over what was really entered — the same shape
       // of loss as above, one column along.
-      const { data: existingScores, error: scoresError } = await supabase
-        .from("live_scores")
-        .select("player_id, hole_number, gross_score, stableford_points, fairway_hit, putts")
-        .in("player_id", lockedIds)
-        .eq("round_id", rId)
+      const [{ data: freshHcps }, { data: existingScores, error: scoresError }] = await Promise.all([
+        supabase
+          .from("round_handicaps")
+          .select("round_id, player_id, playing_handicap, tee_id")
+          .eq("round_id", rId)
+          .in("player_id", lockedIds),
+        supabase
+          .from("live_scores")
+          .select("player_id, hole_number, gross_score, stableford_points, fairway_hit, putts")
+          .in("player_id", lockedIds)
+          .eq("round_id", rId),
+      ])
 
       // A card that cannot be read must not open as a blank one. Blank is
       // indistinguishable from "nothing played yet", and the next commit

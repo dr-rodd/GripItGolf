@@ -19,11 +19,16 @@ export default async function TripCoursePage({
   const roundNum = parseInt(roundNumber)
   if (isNaN(roundNum)) notFound()
 
-  // Look up trip
+  // The trip and its rounds in one request rather than two, one after the
+  // other — PostgREST does the join, and on a bad connection the wait that
+  // removes is a whole round trip. `CourseDashboardClient` needs every round
+  // of the trip (the activate step offers them), so this is the same data as
+  // before, arriving with the trip instead of after it.
   const { data: trip } = await supabase
     .from('trips')
-    .select('*')
+    .select('*, rounds(id, round_number, status, courses(id, name))')
     .eq('trip_code', tripCode)
+    .order('round_number', { referencedTable: 'rounds' })
     .single()
   if (!trip) notFound()
 
@@ -34,18 +39,15 @@ export default async function TripCoursePage({
   const boards = boardsForTrip(trip as never)
   const allowances = allowanceCycle(boards)
 
-  // All rounds for this trip (needed for CourseDashboardClient + round_handicaps scope)
-  const { data: allRounds } = await supabase
-    .from('rounds')
-    .select('id, round_number, status, courses(id, name)')
-    .eq('trip_id', trip.id)
-    .order('round_number')
+  const allRounds = (trip.rounds ?? []) as {
+    id: string; round_number: number; status: string
+    courses: { id: string; name: string } | null
+  }[]
 
-  const thisRound = (allRounds ?? []).find(r => r.round_number === roundNum)
+  const thisRound = allRounds.find(r => r.round_number === roundNum)
   if (!thisRound || !(thisRound.courses as any)?.id) notFound()
 
   const courseId = (thisRound.courses as any).id as string
-  const roundIds = (allRounds ?? []).map(r => r.id)
 
   const [playersRes, holesRes, teesRes, hcpsRes] = await Promise.all([
     supabase
@@ -66,10 +68,17 @@ export default async function TripCoursePage({
       .from('tees')
       .select('id, course_id, name, gender, par, course_rating, slope')
       .eq('course_id', courseId),
+    // This round's handicaps, not the trip's.
+    //
+    // It asked for every round of the trip — a week for sixteen players is a
+    // hundred-odd rows, all but a sixth of them unreadable by anything on
+    // this screen. Every consumer filters to `liveRound.round_id` before it
+    // uses one: the scoring flow, the live board, the card. Scoped here
+    // instead, so the rows that arrive are the rows that get read.
     supabase
       .from('round_handicaps')
       .select('round_id, player_id, playing_handicap, tee_id')
-      .in('round_id', roundIds.length > 0 ? roundIds : ['00000000-0000-0000-0000-000000000000']),
+      .eq('round_id', thisRound.id),
   ])
 
   return (

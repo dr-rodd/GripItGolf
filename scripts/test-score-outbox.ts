@@ -426,6 +426,52 @@ section('Nothing polls a screen nobody is reading')
     'and the callback is held in a ref, so the interval is not rebuilt every render')
 }
 
+section('Nothing loads on the scoring path that the screen does not draw')
+{
+  const picker = read('app/trip/[tripCode]/scoring/page.tsx')
+  const roundPage = read('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')
+  const sheet = read('app/trip/[tripCode]/scoring/AddRound.tsx')
+  const catalogue = read('app/components/usePlatformCourses.ts')
+
+  // The Scoring tab is a list of rounds. It carried three things for a sheet
+  // behind a `+` — the platform course catalogue, the whole itinerary and
+  // every player's handicap — on every visit, serialised into its HTML.
+  ok(!/itinerary_items/.test(picker), 'the tab fetches no itinerary')
+  ok(!/from\('players'\)/.test(picker), 'and no players')
+  ok(/usePlatformCourses\(open\)/.test(sheet),
+    'and the course catalogue waits for the sheet to be opened')
+  ok(/if \(!enabled\) return/.test(catalogue),
+    'which the hook honours rather than fetching anyway')
+
+  // `items` is the `before` half of a diff. An empty `before` against a
+  // populated `after` is a request to delete the trip's whole itinerary, so
+  // a fetch that has not finished — or failed — must stop the save dead
+  // rather than falling back to `[]`.
+  ok(/dataState !== 'ready'/.test(sheet),
+    'a sheet whose itinerary has not arrived refuses to save rather than diffing against nothing')
+
+  // Every trip page looks a trip up by code and then wants something scoped
+  // by its id. PostgREST joins that in one request; two sequential ones is a
+  // whole round trip, which is the expensive unit on a bad connection.
+  for (const [name, src] of [['picker', picker], ['round page', roundPage]] as const) {
+    ok(/rounds\(id, round_number, status/.test(src),
+      `the ${name} embeds its rounds in the trip lookup`)
+    ok(!/from\('rounds'\)/.test(src), `  …rather than waiting for a second query`)
+  }
+
+  // Every consumer of this filters to the round being scored before it uses
+  // one. Fetching the trip's is five sixths of a payload nothing can read.
+  ok(/\.eq\('round_id', thisRound\.id\)/.test(roundPage),
+    'handicaps are fetched for the round being played, not for the whole trip')
+
+  // Resuming a card is somebody standing on a tee with one bar. The
+  // handicaps and the card need the same locked players and not each other.
+  const flow = read('app/scoring/LiveScoringFlow.tsx')
+  const resume = flow.slice(flow.indexOf('async function doResume'), flow.indexOf('function resetFlow'))
+  ok(/await Promise\.all\(\[/.test(resume),
+    'a resume asks for the handicaps and the card at once, not one after the other')
+}
+
 section('The outbox is one instance, wired once')
 {
   const wired = read('app/scoring/outbox.ts')

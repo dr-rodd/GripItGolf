@@ -1,11 +1,13 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 import {
   type ItineraryItem,
   addItem, dayCount, dateForDay, dayNumber, itemError,
 } from '@/lib/itinerary'
+import { fromItemRow, type ItemRow } from '@/lib/itinerarySync'
 import { saveItinerary } from '@/lib/itineraryStore'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
@@ -27,26 +29,27 @@ import { IconPlus } from '@/app/components/icons'
  * with the next number, handicap snapshots for every player.
  */
 export default function AddRound({
-  tripId, startDate, endDate, trackStats, items, players,
+  tripId, startDate, endDate, trackStats,
 }: {
   tripId: string
   startDate: string | null
   endDate: string | null
   trackStats: boolean
-  /** The whole itinerary as saved — the diff needs what already exists. */
-  items: ItineraryItem[]
-  players: { id: string; handicap: number | null }[]
 }) {
-  // Loaded here rather than handed down from the page: the scoring screen is
-  // a list of rounds and does not need a course catalogue to draw itself.
-  // See the note in `usePlatformCourses`.
-  const { courses } = usePlatformCourses()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<GolfDraft>(EMPTY_GOLF_DRAFT)
   const [dayIndex, setDayIndex] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+
+  // Everything this sheet needs, fetched when the sheet exists and not before
+  // — the catalogue included. The Scoring tab is a list of rounds; it does
+  // not need a course directory, the whole itinerary and every player's
+  // handicap to draw one, and it was carrying all three on every visit for a
+  // sheet most visits never open. See the note in `usePlatformCourses`.
+  const { courses } = usePlatformCourses(open)
+  const { items, players, state: dataState } = useSheetData(tripId, open)
 
   const days = dayCount(startDate, endDate)
 
@@ -71,6 +74,18 @@ export default function AddRound({
   }
 
   async function add() {
+    // The itinerary this sheet was handed is the `before` half of a diff, and
+    // a diff against an empty `before` reads as "remove everything". So a
+    // failed or unfinished fetch stops the save dead rather than defaulting to
+    // `[]` — the one way moving this data off the server could have done real
+    // harm, and the reason `dataState` exists rather than a bare `?? []`.
+    if (dataState !== 'ready' || !items || !players) {
+      setError(dataState === 'failed'
+        ? 'Could not load the trip’s existing rounds — try again'
+        : 'Still loading this trip’s rounds — try again in a moment')
+      return
+    }
+
     const problem = itemError({ kind: 'golf', courseId: draft.courseId, teeCount: draft.teeCount })
     if (problem) { setError(problem); return }
 
@@ -156,6 +171,64 @@ export default function AddRound({
       )}
     </>
   )
+}
+
+/**
+ * The itinerary and the players, fetched when the sheet opens.
+ *
+ * Two queries that used to sit in the page's own `Promise.all`, serialised
+ * into the HTML of the Scoring tab on every visit, so that a sheet behind a
+ * `+` could have its data ready in case anybody pressed it. The tab is the
+ * one screen a group loads over and over on a course, often on bad signal,
+ * and this is the CLAUDE.md rule about a list fetched for a control behind a
+ * tap — the same rule the platform course catalogue already followed.
+ *
+ * `state` is not decoration. `items` is the `before` half of the diff
+ * `saveItinerary` writes from, and an empty `before` against a populated
+ * `after` is a request to delete the trip's whole itinerary. So the three
+ * cases are kept apart and only `ready` may save.
+ */
+function useSheetData(tripId: string, enabled: boolean) {
+  const [items, setItems] = useState<ItineraryItem[] | null>(null)
+  const [players, setPlayers] = useState<{ id: string; handicap: number | null }[] | null>(null)
+  const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')
+
+  useEffect(() => {
+    if (!enabled || state === 'ready' || state === 'loading') return
+    let live = true
+    setState('loading')
+
+    Promise.all([
+      supabase
+        .from('itinerary_items')
+        .select('id, day_index, position, kind, course_id, tee_time, tee_count, ' +
+                'stay_name, travel_mode, from_place, to_place, duration_mins, ' +
+                'activity_name, activity_time')
+        .eq('trip_id', tripId)
+        .order('day_index')
+        .order('position'),
+      supabase
+        .from('players')
+        .select('id, handicap')
+        .eq('trip_id', tripId)
+        .eq('is_composite', false),
+    ]).then(([itinRes, playerRes]) => {
+      if (!live) return
+      if (itinRes.error || playerRes.error) {
+        console.error('AddRound sheet data failed:', itinRes.error ?? playerRes.error)
+        setState('failed')
+        return
+      }
+      setItems(((itinRes.data ?? []) as unknown as (Omit<ItemRow, 'trip_id'> & { id: string })[])
+        .map(fromItemRow))
+      setPlayers(playerRes.data ?? [])
+      setState('ready')
+    })
+
+    return () => { live = false }
+  }, [tripId, enabled, state])
+
+  return { items, players, state }
 }
 
 /**

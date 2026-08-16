@@ -553,7 +553,23 @@ section('A round tile says what has happened on it')
   // checks on the way to the first tee.
   const picker = read('app/trip/[tripCode]/scoring/page.tsx')
   ok(picker.includes("from('live_rounds')"), 'the picker asks which cards are open')
-  ok(picker.includes("from('scores')"), '  …and which rounds have scores')
+  ok(/anyRows\('scores', id\)/.test(picker), '  …and which rounds have scores')
+
+  // Counted, not fetched. It asked for `scores.round_id` across every round
+  // of the trip — seventeen hundred rows for a week's golf — and reduced the
+  // answer to one yes-or-no per tile. `head: true` sends the count in a
+  // header and no body at all, on the critical path of the tab a group opens
+  // most often, on the connection least able to carry it.
+  ok(/count: 'exact', head: true/.test(picker),
+    'and it counts them rather than downloading them to count them')
+  ok(!/from\('scores'\)\s*\.select\('round_id'\)\s*\.in\(/.test(picker),
+    'with no bulk fetch of score rows left behind')
+
+  // A round nobody has open cannot be told apart by its live scores — the
+  // tile rule ignores them — so asking about them would be a request whose
+  // answer could not change anything.
+  ok(/openRounds\.has\(id\) \? anyRows\('live_scores', id\)/.test(picker),
+    'live scores are only asked about for a card that is actually open')
   ok(!/round\.status === /.test(picker), '  …rather than trusting rounds.status')
 
   ok(ROUND_NOTE.live === 'In play', 'and the live tile says so in words too')
