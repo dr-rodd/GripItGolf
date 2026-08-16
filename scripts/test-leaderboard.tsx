@@ -878,6 +878,10 @@ section('Nothing about the scroll can spring or lag')
     'and the echo is checked before anything is written')
 }
 
+/** The duration the component believes in, so it can be held against the CSS. */
+const NAME_SCROLL_MS_IN = (src: string) =>
+  Number((src.match(/const NAME_SCROLL_MS = ([\d_]+)/)?.[1] ?? '0').replace(/_/g, ''))
+
 section('A long name shows itself, and a short one holds still')
 {
   const src = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
@@ -891,9 +895,9 @@ section('A long name shows itself, and a short one holds still')
   // clips, and every row of a full field animating at once is that board.
   ok(/scrollWidth - el\.clientWidth/.test(cmp),
     'a name is measured against its column rather than guessed at by length')
-  ok(/shift > 0 \? ' name-scroll-track' : ''/.test(cmp),
+  ok(/motion \? ' name-scroll-track' : ''/.test(cmp),
     "…and only a name that overran it is given the animation")
-  ok(/style=\{shift > 0/.test(cmp) && /'--name-shift'/.test(cmp),
+  ok(/style=\{motion/.test(cmp) && /'--name-shift'/.test(cmp),
     '…and only that one carries the distance it has to travel')
 
   // Both lines. The grey line of first names under a team name is usually
@@ -903,10 +907,26 @@ section('A long name shows itself, and a short one holds still')
   eq((board.match(/<ScrollingName\b/g) ?? []).length, 2,
     'the name and the line of first names under it both move')
 
-  // The pace comes from the distance, so a long name does not whip past and
-  // a two-character overrun does not creep. Clamped at both ends.
-  ok(/Math\.min\(14, Math\.max\(4,/.test(cmp),
-    'the pace is set by the distance, and clamped so neither end is silly')
+  // One timing for the whole board. It was set per name from how far that
+  // name had to travel, and four names of four lengths ran four cycles that
+  // slid in and out of step with each other for ever — jarring to read as a
+  // table, and worse than the clipping it replaced. Only the distance is the
+  // element's now; the duration is the stylesheet's, once.
+  ok(!/--name-secs/.test(cmp) && !/Math\.min\(\d+, Math\.max\(/.test(cmp),
+    'no per-name duration: every name leaves and returns with the others')
+  const trackRule = css.split('.name-scroll-track {')[1]?.split('}')[0] ?? ''
+  const shared = trackRule.match(/animation:\s*name-scroll\s+(\d+(?:\.\d+)?)s/)
+  ok(!!shared, 'the one duration is a plain figure in the stylesheet')
+  ok(Number(shared?.[1]) * 1000 === NAME_SCROLL_MS_IN(src),
+    'and the component carries the same figure, for the phase anchor')
+
+  // Sharing a duration is not sharing a phase: a track that starts late — a
+  // column resized, a board switched — would run the same cycle offset by
+  // however late it was. The negative delay puts it where the others are.
+  ok(/animationDelay/.test(cmp) && /-\(clock % NAME_SCROLL_MS\)/.test(cmp),
+    'a name that starts animating late joins the others in step')
+  ok(/prev\.shift === over\) return prev/.test(cmp),
+    'and a resize that moved nothing does not restart the glide')
 
   // The overflow is CSS, not a utility beside it: `.overflow-hidden` and
   // `.name-scroll` are both one class, so which won would be decided by

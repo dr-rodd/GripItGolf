@@ -746,15 +746,27 @@ function Strip({
  * and `transform` does not change it, so the measurement holds while the
  * animation runs.
  *
- * The travel is a CSS variable rather than a keyframe per length: one
- * animation, and the distance and pace come from the element. Pace is roughly
- * constant so a long name does not whip past, clamped at both ends so a name
- * two characters over does not creep and a very long one does not park itself
- * for half a minute. Under `prefers-reduced-motion` it holds still and becomes
- * a drag strip again — the worse gesture, but the only one left.
+ * Only the distance travelled comes from the element. **The timing is one
+ * figure for the whole board** (`.name-scroll-track` in globals.css), because
+ * the first version set it per name from how far that name had to go — so a
+ * board of long and short names had four animations of four different lengths
+ * running against each other, sliding in and out of step for ever. Read as a
+ * table it was worse than clipping. Every name now leaves and returns
+ * together, and a long one simply covers more ground in the same time.
+ *
+ * **And in the same phase**, which the shared duration alone does not give:
+ * a name that starts animating later than its neighbours — a column resized,
+ * a board switched, a row that arrived with a score — would run the same
+ * cycle offset by however late it was. The negative `animationDelay` anchors
+ * every track to one clock, so a track joining at any moment lands exactly
+ * where the others already are. Recomputing it is harmless for the same
+ * reason: the phase it produces is the phase already on screen.
+ *
+ * Under `prefers-reduced-motion` it holds still and becomes a drag strip
+ * again — the worse gesture, but the only one left.
  */
-const NAME_SCROLL_SPEED = 26   // px a second, at the glide
-const NAME_SCROLL_GLIDE = 0.64 // of the cycle spent moving; the rest is the pauses at each end
+/** Must match `.name-scroll-track`'s duration in globals.css. */
+const NAME_SCROLL_MS = 11_000
 
 function ScrollingName({
   text, className = '', textClassName,
@@ -764,14 +776,27 @@ function ScrollingName({
   textClassName: string
 }) {
   const box = useRef<HTMLSpanElement>(null)
-  const [shift, setShift] = useState(0)
+  const [motion, setMotion] = useState<{ shift: number; delay: number } | null>(null)
 
   useEffect(() => {
     const el = box.current
     if (!el) return
-    // A pixel of slack: sub-pixel text metrics leave a fraction over on names
-    // that plainly fit, and animating those is the fidget this guards against.
-    const measure = () => setShift(Math.max(0, el.scrollWidth - el.clientWidth - 1))
+
+    const measure = () => {
+      // A pixel of slack: sub-pixel text metrics leave a fraction over on
+      // names that plainly fit, and animating those is the fidget the
+      // measurement exists to prevent.
+      const over = Math.max(0, el.scrollWidth - el.clientWidth - 1)
+      setMotion(prev => {
+        if (over === 0) return null
+        // Unchanged distance keeps the old object, so a resize that moved
+        // nothing does not hand React a new style and restart the glide.
+        if (prev && prev.shift === over) return prev
+        const clock = typeof performance !== 'undefined' ? performance.now() : 0
+        return { shift: over, delay: -(clock % NAME_SCROLL_MS) }
+      })
+    }
+
     measure()
     if (typeof ResizeObserver === 'undefined') return
     // The box for a column that changes width, the track for a name that
@@ -782,14 +807,12 @@ function ScrollingName({
     return () => ro.disconnect()
   }, [text])
 
-  const seconds = Math.min(14, Math.max(4, shift / (NAME_SCROLL_SPEED * NAME_SCROLL_GLIDE)))
-
   return (
     <span ref={box} className={`name-scroll ${className}`}>
       <span
-        className={`block w-max ${textClassName}${shift > 0 ? ' name-scroll-track' : ''}`}
-        style={shift > 0
-          ? ({ '--name-shift': `${shift}px`, '--name-secs': `${seconds}s` } as React.CSSProperties)
+        className={`block w-max ${textClassName}${motion ? ' name-scroll-track' : ''}`}
+        style={motion
+          ? ({ '--name-shift': `${motion.shift}px`, animationDelay: `${motion.delay}ms` } as React.CSSProperties)
           : undefined}
       >
         {text}

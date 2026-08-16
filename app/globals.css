@@ -376,17 +376,31 @@ body {
 /* Hold at the start, glide to the end, hold there, glide back — rather than
    a ticker that loops. A name that comes to rest on its own beginning can be
    read at a glance between passes, which is what a leaderboard is for; a
-   ticker never rests and a board of them never settles.
+   ticker never rests and a board of them never settles. The two holds are
+   18% of the cycle each.
 
-   The two holds are 18% of the cycle each. `--name-secs` is set from the
-   distance so the glide keeps roughly one pace whatever the name's length. */
+   **One duration for every name on the board, and that is the point.** It
+   was set per name from how far that name had to travel, at a constant pace
+   — which meant four names of four lengths running four different cycles,
+   permanently sliding in and out of step with each other. As a table it read
+   worse than clipping did. Sharing the figure means they leave and return
+   together and a longer name simply covers more ground in the same time.
+
+   Eleven seconds, in words because the duration checks in test:branding read
+   this file's comments too and would take a figure here for a real
+   declaration. Slower than the pace it replaced, deliberately: a leaderboard
+   is glanced at, and the glance should mostly land on a name at rest.
+
+   ScrollingName carries the same figure in `NAME_SCROLL_MS`, for the
+   negative delay that puts a late-starting track into the same phase as the
+   ones already running. */
 @keyframes name-scroll {
   0%, 18%   { transform: translateX(0); }
   50%, 68%  { transform: translateX(calc(-1 * var(--name-shift, 0px))); }
   100%      { transform: translateX(0); }
 }
 .name-scroll-track {
-  animation: name-scroll var(--name-secs, 6s) ease-in-out infinite;
+  animation: name-scroll 11s ease-in-out infinite;
   /* The transform is the whole animation, so it is worth a layer of its own
      — without it every frame repaints the row behind the name. */
   will-change: transform;

@@ -1094,23 +1094,28 @@ section('Motion is calm, and can be switched off')
   // One repeating animation is not a breath, and it is named here rather
   // than left as a gap in the pattern — which is what the note above asks of
   // an exemption. A name too long for the leaderboard's column glides out
-  // and back (`.name-scroll-track`). That is a distance at a reading pace,
-  // not a pulse: the duration is computed per name from how far it has to
-  // travel, and a two-second ceiling would whip a long one past unread.
+  // and back (`.name-scroll-track`). That is a journey at a reading pace,
+  // not a pulse: a two-second ceiling would whip it past unread.
   //
-  // The stylesheet carries only the fallback. The real bounds are the clamp
-  // in ScrollingName, and the fallback is checked against them so the two
-  // cannot drift into a rule the other would refuse.
+  // It is **one figure shared by every name on the board**, which is the
+  // half worth pinning. Set per name from how far each had to travel, four
+  // names ran four cycles permanently out of step with each other — read as
+  // a table that was worse than the clipping it replaced. The component
+  // carries the same number for its phase anchor, and the two are held
+  // against each other so neither can drift.
   const travel = loops.filter(l => l.includes('name-scroll'))
   ok(travel.length === 1, 'exactly one repeat is a travel rather than a breath')
 
-  const clamp = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
-    .match(/Math\.min\((\d+), Math\.max\((\d+),/)
-  ok(!!clamp, 'and the component clamps how long that travel may take')
-  const [lo, hi] = [Number(clamp?.[2]) * 1000, Number(clamp?.[1]) * 1000]
-  const [fallback] = durationsIn(travel[0] ?? '')
-  ok(fallback >= lo && fallback <= hi,
-    `the stylesheet's fallback sits inside that clamp (${fallback}ms in ${lo}–${hi}ms)`)
+  const travelMs = durationsIn(travel[0] ?? '')
+  ok(travelMs.length === 1, 'and it is one duration, not one per name')
+  ok(travelMs[0] > 2000,
+    `slower than a breath on purpose, so a glance mostly lands on a name at rest (${travelMs[0]}ms)`)
+
+  const anchor = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+    .match(/const NAME_SCROLL_MS = ([\d_]+)/)
+  ok(!!anchor, 'the component names that duration too, for the phase anchor')
+  ok(Number((anchor?.[1] ?? '0').replace(/_/g, '')) === travelMs[0],
+    'and the two agree, so a track joining late lands in step rather than beside')
 
   const looping = loops.filter(l => !travel.includes(l)).flatMap(durationsIn)
   ok(looping.length > 0, 'and some motion repeats rather than answering anything')
