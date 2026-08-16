@@ -136,6 +136,27 @@ A card was unfinalised, amended and refinalised — and the round kept reading a
 
 A card already stuck this way is closed by the nightly job 12 hours after its last entered hole, or immediately from `/admin` → live cards → **close** (never void — void erases the committed scores too). Pinned in `test:scorecard`.
 
+## Scoring on patchy service — the score outbox
+
+A round was played on a course with bad signal and score entry "was a challenge". Four separate things were wrong, and the first one was losing scores.
+
+- **Every hole was a fire-and-forget upsert that nobody checked.** `handleHoleSubmit` sent the row and advanced the card without reading the answer; three `TODO(error-handling)` notes sat on those lines. In good signal that is invisible. In patchy signal the write failed, the card moved on as though it had saved, and the hole was gone — discovered on the eighteenth green at the earliest.
+- **The round dashboard and the live board each polled every fifteen seconds, for ever.** Not paused during score entry, not when the phone was in a pocket, not when there was no signal. Two queries a go on a struggling radio, and the hole just entered queued behind them.
+
+Both are closed. **`lib/scoreOutbox.ts` is the only copy of "a hole this phone has and the server has not"**, and `app/scoring/outbox.ts` is the single instance wired to Supabase and `localStorage`. A hole is written to the queue — which cannot fail — and reaches the server afterwards, with backoff, flushing immediately when the radio comes back or the phone comes out of a pocket. Five rules make it safe, and each is a way of getting it wrong:
+
+- **Keyed by player, round and hole** — the same key the upsert conflicts on — so a correction replaces its own pending entry instead of queuing behind it. Otherwise an older value arrives late and overwrites the fix.
+- **A flush drops only what it actually sent**, matched on a per-entry `seq`. A hole re-entered mid-request keeps its newer value rather than being discarded by the older send's success.
+- **The commit flushes first and refuses to run with anything queued.** This is not politeness: step 2 of `handleCommit` reconciles against `live_scores` and writes a hole missing from it off as a no return, so committing with holes still queued would destroy the very scores the queue exists to protect.
+- **Committing or voiding a card discards its queue** (`discardRound`). Every queued row carries `committed: false`, so a straggler arriving after the commit would quietly un-commit a signed card; and after a void it would put back a score somebody deliberately erased.
+- **Entries expire after `MAX_AGE_MS`.** The backstop for the cross-device version of the same thing, which no amount of local bookkeeping can see.
+
+**`app/scoring/usePoll.ts` is the only copy of "refresh while somebody is reading this"** — hidden or offline stops it, coming back starts it *immediately* rather than waiting out the interval, and the callback lives in a ref so a caller that does not memoise cannot rebuild the timer every render. Both screens go through it; neither has a `setInterval` of its own any more, and `test:score-outbox` greps for one.
+
+Still open, and deliberately not done in this pass: the Scoring tab downloads **every** `scores` and `live_scores` row for the trip to decide which round tiles say "Scores in" (`app/trip/[tripCode]/scoring/page.tsx`); the round page fetches `round_handicaps` for every round when it uses one; `AddRound`'s itinerary and players load whether or not the sheet is opened, against CLAUDE.md's own rule about lists behind a tap; and the resume path makes three sequential client round trips where two would do. None of those lose a score — they only make getting to the card slower.
+
+There is still **no service worker**, so a genuine dead spot serves nothing at all. That decision is recorded in `docs/ios-app.md` and was re-taken, not forgotten: the outbox means a card *already open* survives a dead spot completely, which is the case that mattered. Full offline is a separate project.
+
 ## A par 6 passes the app and fails the database
 
 `holes.par` has been CHECKed `between 3 and 5` since migration 000. Every application-layer validator allows **3 to 6** — `validateCard`, `validateNewHoleRows` and `HOLE_COLUMN_RANGE` in `lib/cardCheck.ts`, and the extraction prompt itself. So the two disagree, and the permissive one is the one a person meets first.

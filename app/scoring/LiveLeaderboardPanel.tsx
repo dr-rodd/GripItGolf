@@ -12,6 +12,7 @@ import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
 import { exactCourseHandicap } from "@/lib/courseHandicap"
 import { formatHandicap } from "@/lib/handicap"
 import { CHROME } from "./scoringHeaderMetrics"
+import { usePoll } from "./usePoll"
 import {
   SC_SF, SC_NUM, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL,
   SC_MUTED, SC_DARK, scRow, scPoints, teeDot,
@@ -436,10 +437,15 @@ export default function LiveLeaderboardPanel({
     setLastFetch(new Date())
   }, [liveRound.round_id])
 
-  useEffect(() => {
-    fetchScores()
-    const interval = setInterval(fetchScores, 15000)
+  // Stopped while the phone is asleep or out of signal, and started again the
+  // moment either changes — see ../usePoll. This board is only mounted when
+  // it is being looked at, but "on screen" and "being read" are not the same
+  // thing on a golf course: a phone goes back in a pocket with this open, and
+  // a timer left running there is two queries every fifteen seconds competing
+  // with the scores somebody else in the group is trying to enter.
+  usePoll(fetchScores, 15000)
 
+  useEffect(() => {
     const channel = supabase
       .channel(`live-lb-${liveRound.round_id}`)
       .on("postgres_changes", {
@@ -450,10 +456,7 @@ export default function LiveLeaderboardPanel({
       }, () => fetchScores())
       .subscribe()
 
-    return () => {
-      clearInterval(interval)
-      supabase.removeChannel(channel)
-    }
+    return () => { supabase.removeChannel(channel) }
   }, [fetchScores, liveRound.round_id])
 
   // ─── Build rows ───────────────────────────────────────────

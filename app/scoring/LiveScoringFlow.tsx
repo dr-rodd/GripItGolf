@@ -8,6 +8,8 @@ import { type QuotaScale } from "@/lib/quota"
 import { exactCourseHandicap, courseHandicap, teesForPlayer, type TeeRating } from "@/lib/courseHandicap"
 import { shotsReceived, formatHandicap } from "@/lib/handicap"
 import { voidScorecard as voidScorecardData } from "@/lib/scorecardVoid"
+import { type ScoreRow } from "@/lib/scoreOutbox"
+import { scoreOutbox } from "./outbox"
 import { why } from "@/lib/writeFailure"
 import { CHROME } from "./scoringHeaderMetrics"
 import type { ActiveLiveRound } from "./ScoringClient"
@@ -256,6 +258,38 @@ function yardageForTee(hole: Hole, teeName: string): number | null {
   const key = `yardage_${teeName.toLowerCase()}` as keyof Hole
   return (hole[key] as number | undefined) ?? null
 }
+/**
+ * Holes sitting on this phone that the server has not taken yet.
+ *
+ * The one thing a scorer on a bad connection has to be told, and the tone is
+ * the whole design: **nothing is wrong and nothing needs doing.** The score is
+ * safe, entry carries on exactly as before, and the phone will send it when
+ * there is signal to send it with. A warning would be a lie — there is no
+ * action to take — and silence would be worse, because the one screen that
+ * must not surprise anybody is the one that says Submit.
+ *
+ * Rendered nowhere when the queue is empty, which on a normal round is always.
+ */
+function UnsentNote({ count, inline = false }: { count: number; inline?: boolean }) {
+  if (count <= 0) return null
+  return (
+    <div
+      className={`flex items-start gap-2 rounded-xl border border-bark/12 bg-surface px-3 py-2 ${
+        inline ? '' : 'mx-4 mt-3'
+      }`}
+    >
+      <span
+        className="w-1.5 h-1.5 rounded-full bg-rust flex-shrink-0 mt-1.5 dot-live"
+        aria-hidden="true"
+      />
+      <p className="t-cap text-ink/65 leading-snug">
+        {count === 1 ? '1 hole' : `${count} holes`} saved on this phone, waiting for signal.
+        Keep scoring — they send themselves.
+      </p>
+    </div>
+  )
+}
+
 function scoreToPar(gross: number, par: number): { label: string; color: string } {
   const d = gross - par
   if (d <= -3) return { label: "Albatross", color: "text-accent-deep" }
@@ -451,6 +485,13 @@ export default function LiveScoringFlow({
 
   // Round handicaps — starts from page-load prop, replaced by doResume() fresh fetch
   const [effectiveRoundHandicaps, setEffectiveRoundHandicaps] = useState<RoundHandicap[]>(roundHandicaps)
+
+  // Holes entered on this phone that the server has not confirmed. The queue
+  // is the app's one instance — see ./outbox — and this is only the count, so
+  // the card can say so rather than leaving somebody to guess.
+  const outbox = scoreOutbox()
+  const [unsent, setUnsent] = useState(0)
+  useEffect(() => outbox.subscribe(setUnsent), [outbox])
 
   // Swipe gesture tracking
   const touchStartX = useRef<number | null>(null)
@@ -726,6 +767,10 @@ export default function LiveScoringFlow({
       setCloseConfirm(false)
       return
     }
+    // Discarding erases this round's scores. Anything of it still queued on
+    // this phone would put some of them straight back, which is the one way
+    // a void could fail to stick.
+    outbox.discardRound(liveRound.round_id)
     setCloseConfirm(false)
     resetFlow()
     onBack()
@@ -794,16 +839,13 @@ export default function LiveScoringFlow({
       }
     }
 
-    // TODO(error-handling): check error, revert optimistic UI, toast on failure
-    await Promise.all([
-      upsertRows.length > 0
-        ? supabase.from("live_scores").upsert(upsertRows, { onConflict: "player_id,round_id,hole_number" })
-        : Promise.resolve(),
-      deleteHoleNums.length > 0
-        ? supabase.from("live_scores").delete()
-            .eq("player_id", playerId).eq("round_id", roundId).in("hole_number", deleteHoleNums)
-        : Promise.resolve(),
-    ])
+    // Through the outbox, the same as a hole entered on the card — an edit
+    // made in a dead spot is no more allowed to disappear than a first entry
+    // is. A hole cleared here is a `clear`, not an absent `save`: the outbox
+    // has to know the difference, or the row would sit on the server for ever
+    // while the card in the hand shows the hole as blank.
+    outbox.save(upsertRows as ScoreRow[])
+    outbox.clear(deleteHoleNums.map(hole_number => ({ player_id: playerId, round_id: roundId, hole_number })))
 
     setScores(prev => {
       const next = { ...prev }
@@ -822,6 +864,20 @@ export default function LiveScoringFlow({
     setSaving(true)
     setError(null)
     try {
+      // 0. Everything entered on this phone reaches the server *before* the
+      //    card is read back below. Step 2 reconciles against `live_scores`
+      //    and treats a hole missing from it as a no return — so committing
+      //    with holes still queued would write off the very scores this
+      //    mechanism exists to protect. The commit is the one place that is
+      //    allowed to wait for the network, because it is a deliberate act
+      //    with a button and a spinner rather than a tap between shots.
+      if (await outbox.flush() > 0) {
+        throw new Error(
+          "Some holes have not reached the server yet. Move somewhere with signal " +
+          "and press Submit again — the scores are safe on this phone until then."
+        )
+      }
+
       // 1. Upsert round_handicaps
       // TODO(error-handling): check error, revert optimistic UI, toast on failure
       await Promise.all(
@@ -941,6 +997,13 @@ export default function LiveScoringFlow({
           "check the connection and press Commit again."
         )
       }
+
+      // The card is closed, so nothing of this round belongs in the queue any
+      // more. It is already empty — step 0 refuses to get this far otherwise —
+      // and this is the guard against the one way a straggler could still do
+      // harm: every queued row carries `committed: false`, so one arriving
+      // after step 5 would quietly un-commit a signed card.
+      outbox.discardRound(roundId, playerSetups.map(ps => ps.player.id))
       onBack()
     } catch (e: any) {
       setError(e?.message ?? "Could not save the scores — try again")
@@ -1268,7 +1331,8 @@ export default function LiveScoringFlow({
     }
 
     async function handleHoleSubmit(holeScores: Record<string, HoleScore>) {
-      // Save to live_scores (non-blocking)
+      // The hole, as it will be stored. Handed to the outbox below rather
+      // than to the network.
       const rows = playerSetups
         .map(({ player, playingHcp }) => {
           const hs = holeScores[player.id]
@@ -1299,11 +1363,13 @@ export default function LiveScoringFlow({
             committed: false,
           }
         }).filter(Boolean)
-      if (rows.length > 0) {
-        // TODO(error-handling): check error, revert optimistic UI, toast on failure
-        supabase.from("live_scores").upsert(rows as any, { onConflict: "player_id,round_id,hole_number" })
-          .then(() => {}) // fire and forget
-      }
+      // Into the outbox, not onto the network. Entry never waits and never
+      // depends on a connection: this write cannot fail, and the hole reaches
+      // the server whenever there is signal to reach it with. What used to be
+      // here was a fire-and-forget upsert with a `TODO(error-handling)` on it
+      // — in patchy service the request failed, the card advanced as though it
+      // had saved, and the hole was gone. See lib/scoreOutbox.ts.
+      if (rows.length > 0) outbox.save(rows as ScoreRow[])
 
       const updated: Record<string, HoleScore> = {}
       for (const { player, playingHcp } of playerSetups) {
@@ -1341,6 +1407,8 @@ export default function LiveScoringFlow({
     // establishing a scrollport, so the headings resolve against the window
     // again and land where the header ends.
     return (
+      <>
+      <UnsentNote count={unsent} />
       <div
         className="overflow-x-clip"
         onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX }}
@@ -1390,6 +1458,7 @@ export default function LiveScoringFlow({
           </div>
         </div>
       </div>
+      </>
     )
   }
 
@@ -1584,6 +1653,12 @@ export default function LiveScoringFlow({
 
     return (
       <div className="max-w-lg mx-auto w-full px-4 pt-5 pb-8 flex flex-col gap-4">
+
+        {/* Said here as well as on the card, because this is the screen with
+            Submit on it: the commit refuses to run with holes still queued,
+            and a person about to press it should know that before they do
+            rather than from an error afterwards. */}
+        <UnsentNote count={unsent} inline />
 
         {/* Player selector tiles — 2+ players only */}
         {playerSetups.length >= 2 && (

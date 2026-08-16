@@ -5,6 +5,7 @@ import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import LiveScoringFlow from "../LiveScoringFlow"
 import LiveLeaderboardPanel from "../LiveLeaderboardPanel"
+import { usePoll } from "../usePoll"
 import type { ActiveLiveRound } from "../ScoringClient"
 import BackButton from "@/app/components/BackButton"
 import { CHROME_VAR, LEGACY_CHROME } from "../scoringHeaderMetrics"
@@ -262,11 +263,14 @@ export default function CourseDashboardClient({
     setLoading(false)
   }, [courseId, roundId, players])
 
-  useEffect(() => {
-    fetchScorecards()
-    const interval = setInterval(fetchScorecards, 15000)
-    return () => clearInterval(interval)
-  }, [fetchScorecards])
+  // Only while this list is the thing on screen.
+  //
+  // It used to refresh every fifteen seconds for as long as the component was
+  // mounted — which is the whole time a card is open in front of it, and the
+  // whole time the phone is in a pocket. Two queries a go, on a radio that on
+  // a bad course is already struggling, for a list nobody is looking at. The
+  // hole just entered queued behind them. See ../usePoll for the rest of it.
+  usePoll(fetchScorecards, 15000, view === "dashboard" || view === "settings")
 
   // Reference live round for the leaderboard panel — prefer active, fall back to any
   const firstLiveRound = (
