@@ -24,6 +24,11 @@ import {
 // the function dies would leave the flag set and the email unsent — for
 // never sending twice, which is the right trade for a courtesy email.
 //
+// **The payload carries the trip code and nothing else.** The recipient is
+// always trips.lead_email, read here on the service role — an address in the
+// request body would let anyone mail themselves any trip's invitation, so
+// none is ever accepted.
+//
 // **Every early exit is a quiet 200.** No key configured, no address given,
 // already sent, column not yet migrated: all of them mean "no email today",
 // none of them is the caller's problem, and the form ignores the response

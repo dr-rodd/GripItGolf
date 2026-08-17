@@ -382,12 +382,14 @@ export default function CreateTripForm() {
     // purpose: the server decides everything — whether a key is configured,
     // whether this trip already had its one email — and nothing about it may
     // stand between the organiser and their finished trip, so the response
-    // is not awaited and a failure is not news here.
+    // is not awaited and a failure is not news here. keepalive lets the
+    // request outlive this tab — created, shared, closed is a normal sequence.
     if (email) {
       fetch('/api/trip-confirmation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tripCode: code }),
+        keepalive: true,
       }).catch(() => { /* the trip is created; the email is best-effort */ })
     }
 
