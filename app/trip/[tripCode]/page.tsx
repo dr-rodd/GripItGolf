@@ -28,6 +28,7 @@ import Itinerary from './Itinerary'
 import { type ItemKind, type ItineraryItem, dayCount } from '@/lib/itinerary'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
+import ShareTrip from './ShareTrip'
 
 export const dynamic = 'force-dynamic'
 
@@ -392,6 +393,14 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
               line, on the cream. Three lines then an ellipsis; the
               paragraph itself is the tap that opens the rest. */}
           <TripDescription text={trip.description} />
+
+          {/* The trip, handed on. Under the heading rather than in it: the
+              name and dates are what a visitor reads, this is what the lead
+              player does next. The whole URL travels, so the person on the
+              other end taps once instead of typing a code. */}
+          <div className="mt-6">
+            <ShareTrip tripCode={tripCode} tripName={trip.name} />
+          </div>
         </div>
 
         {/* What the trip plays for used to print here, under the dates —
