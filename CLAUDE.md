@@ -63,6 +63,7 @@ Don't read these up front. Open the matching file when the task actually touches
 
 ## Platform concept
 
+- **The platform has run a full live trip**: North West 26, August 2026 — live scoring, leaderboards and teams, end to end. That trip's rows are real history, never test data. This is ongoing platform work now, on no fixed date.
 - A **lead player** creates a trip — no account required, open access for now
 - A **6-character alphanumeric trip code** is generated on creation (e.g. `GX7K2P`)
 - Other players join by entering the trip code at `/join`
@@ -319,13 +320,14 @@ Both need a full stop or the joined line runs on.
 
 ## Pushing straight to production
 
-Every push to `master` deploys to greendot.live within a minute or two. There is no staging step and, by decision, no branch to check first. That was re-examined and re-chosen — **while there are no live trips.** The reasoning, and the condition, both matter:
+Every push to `master` deploys to greendot.live within a minute or two. There is no staging step and, by decision, no branch to check first. The condition on that decision used to be "while there are no live trips"; the first full live trip has now run (August 2026, completed successfully), so the condition reads by **trip state**, not by launch:
 
-- The cost of a bad deploy right now is a few minutes of a broken site nobody is on. Once groups are out on a course scoring, the same deploy is visible to everyone at once, mid-round, and there is no way to tell them to wait.
+- **Between trips** the cost of a bad deploy is a few minutes of a broken site with nobody mid-round on it — which is what keeps push-to-master cheap.
+- **While a trip is live**, the same deploy lands on every phone at once, mid-round, and there is no way to tell anyone to wait. In that window, anything worth eyeballing first goes to the preview path below.
 - The safety net is the test suite, which is structural: it catches a component that stopped rendering, a rule that changed, a colour that fails contrast. It cannot tell whether a screen *looks right on a phone*. That check happens on greendot.live, after the fact.
 - **Instant Rollback is the real backstop.** Vercel keeps every past deployment; the project dashboard has a one-click rollback on each. Live again in about thirty seconds, and it needs nobody's help. Reach for this first when something ships broken, before debugging under pressure.
 
-**When trips go live, this decision has to be taken again** — not silently kept. Vercel builds a preview deployment for any branch push, on its own URL, with no setup: that is the protected environment for anything worth eyeballing before the field sees it. Two things to know before relying on it: preview shares the production Supabase, so it is safe for looking and not for writing test data; and `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` must be ticked for **Preview** in the Vercel environment variables, or preview builds fail on the same "Missing Supabase environment variables" error a local build without a `.env` hits.
+**The preview path, for live-trip windows:** Vercel builds a preview deployment for any branch push, on its own URL, with no setup — the protected environment for anything worth eyeballing before the field sees it. Two things to know before relying on it: preview shares the production Supabase, so it is safe for looking and not for writing test data; and `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` must be ticked for **Preview** in the Vercel environment variables, or preview builds fail on the same "Missing Supabase environment variables" error a local build without a `.env` hits.
 
 ### The stop hook that cries wolf
 

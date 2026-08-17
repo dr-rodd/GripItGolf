@@ -310,7 +310,7 @@ No scores, or no position: the line is omitted. A zero is worse than nothing.
 
 Icon-led and centred, the way a course is presented. The icon carries more weight than the guide's defaults would allow for a list item — the deliberate exception this section is granted, and what makes it scannable rather than readable.
 
-**One icon per mode the itinerary can store: car, flight, train.** `travel_mode` allows no others, so a ferry or a bus icon would be one nothing can select. Adding them is a migration and is post-13-August work.
+**One icon per mode the itinerary can store: car, flight, train.** `travel_mode` allows no others, so a ferry or a bus icon would be one nothing can select. Adding them is a migration, deferred until a trip actually needs one.
 
 **Every place gets a maps link and nothing gets a dead one.** `lib/places.ts` — no phone or address detection: these fields hold names ("The Shandon Hotel", "Carne") because that is what the form asks for, and a maps *search* takes a name perfectly well. Scheme and host are fixed, only the query is interpolated, so nothing typed can change where the link goes.
 
