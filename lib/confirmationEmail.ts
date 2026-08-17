@@ -109,6 +109,12 @@ ${dates ? `
           </tr>
 ` : ''}
           <tr>
+            <td align="center" style="font-family:${FONT};font-size:16px;line-height:1.5;color:#2B2118;padding:14px 12px 0;">
+              Nice one — that&rsquo;s a serious trip! Share the link with the other players.
+            </td>
+          </tr>
+
+          <tr>
             <td align="center" style="padding:20px 0 32px;">
               <a href="${url}" style="display:inline-block;background-color:#0A6B3C;color:#FFFFFF;font-family:${FONT};font-size:16px;font-weight:600;text-decoration:none;padding:14px 40px;border-radius:12px;">
                 Open your trip
@@ -129,8 +135,20 @@ ${dates ? `
           </tr>
 
           <tr>
-            <td align="center" style="font-family:${FONT};font-size:15px;color:#2B2118;padding-bottom:36px;">
+            <td align="center" style="font-family:${FONT};font-size:15px;color:#2B2118;padding-bottom:28px;">
               Trip code: <strong>${escapeHtml(d.tripCode)}</strong>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="font-family:${FONT};font-size:14px;line-height:1.5;color:#4A3728;padding:0 12px 20px;">
+              <strong>Hot tip:</strong> pin the link in your messaging group for easy access.
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="font-family:${FONT};font-size:16px;font-weight:600;color:#2B2118;padding-bottom:36px;">
+              Let&rsquo;s go — launch &rsquo;em&nbsp;🏌️
             </td>
           </tr>
 
@@ -154,8 +172,14 @@ export function confirmationText(d: ConfirmationDetails): string {
     d.tripName,
     d.dates,
     '',
+    "Nice one — that's a serious trip! Share the link with the other players.",
+    '',
     `Open your trip: ${d.tripUrl}`,
     `Trip code: ${d.tripCode}`,
+    '',
+    'Hot tip: pin the link in your messaging group for easy access.',
+    '',
+    "Let's go — launch 'em 🏌️",
     '',
     'Sent by Green Dot because this address was given when the trip was created.',
   ].filter(line => line !== null).join('\n')
