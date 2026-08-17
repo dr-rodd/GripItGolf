@@ -186,7 +186,11 @@ export default function MorphWordmark({
 
   return (
     <div
-      className={className}
+      // `gd-mark` is what dark mode hangs off: the words' brown fill is an
+      // attribute in the generated markup, and globals.css lifts it to the
+      // dark palette's bark under html.dark. The emerald dot keeps its own
+      // fill either way.
+      className={`gd-mark ${className}`}
       style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
       role="img"
       aria-label="green dot."

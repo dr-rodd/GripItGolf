@@ -57,16 +57,31 @@ export default function TitleMark({
 }) {
   const mark = TITLE_MARKS[name]
   const width = Math.round(height / mark.ratio)
+  // Two renderings of one artwork, one visible per theme. The lettering is
+  // ink in a PNG, so dark mode cannot re-point it the way it re-points the
+  // tokens — each file has a pre-rendered twin with the words in the dark
+  // palette's bark and the dot untouched (scripts/make-dark-titles.py, same
+  // dimensions, so the ratio above serves both). CSS decides which shows
+  // (`only-light` / `only-dark` in globals.css), which keeps the choice
+  // paintable before hydration, exactly like the rest of the theme.
+  const common = {
+    width,
+    height: Math.round(height),
+    style: { height, width: 'auto' } as const,
+    fetchPriority: 'high' as const,
+    decoding: 'sync' as const,
+  }
+  // The same alt on both is not a double announcement: display: none takes
+  // the hidden one out of the accessibility tree with it.
   return (
-    <img
-      src={mark.src}
-      alt={mark.alt}
-      width={width}
-      height={Math.round(height)}
-      className={className}
-      style={{ height, width: 'auto' }}
-      fetchPriority="high"
-      decoding="sync"
-    />
+    <>
+      <img src={mark.src} alt={mark.alt} className={`only-light ${className}`} {...common} />
+      <img
+        src={mark.src.replace('.png', '-dark.png')}
+        alt={mark.alt}
+        className={`only-dark ${className}`}
+        {...common}
+      />
+    </>
   )
 }

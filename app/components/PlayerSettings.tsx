@@ -20,6 +20,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { applyTheme, isDark, rememberTheme } from '@/lib/theme'
 import { IconSettings } from './icons'
@@ -90,8 +91,16 @@ export default function PlayerSettings({
         <IconSettings size={20} />
       </button>
 
-      {open && (
+      {open && createPortal(
         <>
+          {/* Portalled to <body>, and that is not optional. The gear lives
+              inside the sticky header, whose backdrop-filter makes it the
+              containing block for fixed descendants — rendered in place,
+              this sheet pinned itself to the 52px bar instead of the
+              viewport: the scrim became a brown band across the top of the
+              screen and the sheet dangled under it. position: fixed means
+              the viewport only from somewhere no ancestor has a filter,
+              which <body> is. */}
           {/* z-50, not z-40 — the tab bar's rung, and a scrim tied with it
               leaves the bar bright and tappable. The colour is a warm
               near-black constant rather than a token: a scrim darkens in
@@ -138,7 +147,8 @@ export default function PlayerSettings({
 
             </div>
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </>
   )

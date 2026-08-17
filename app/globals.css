@@ -198,6 +198,26 @@ body {
 /* Numbers in a table must not jitter as they change */
 .t-data, .t-num { font-variant-numeric: tabular-nums; }
 
+/* ── The mark, after dark ──────────────────────────────────────
+   The wordmark's letters are the artwork's own brown, carried as a fill
+   attribute in the generated markup — on the dark page that is 1.8:1, a
+   shadow of a logo. The words lift to the dark palette's bark; the emerald
+   dot carries its own fill and is untouched, so the mark stays brown-ish
+   words closed by a green dot in both themes. An attribute override rather
+   than a filter, because a filter that lightens the brown drags the dot
+   somewhere unbrandable on its way through. */
+html.dark .gd-mark [fill="#4a3728"] {
+  fill: var(--gd-bark);
+}
+
+/* The page-title marks (leaderboard., scoring., …) are two-ink PNGs, so
+   they cannot take the fill override — each has a pre-rendered dark twin
+   (scripts/make-dark-titles.py) and TitleMark draws the pair. One visible
+   per theme; `revert` puts the shown one back to whatever display it had. */
+.only-dark { display: none; }
+html.dark .only-dark { display: revert; }
+html.dark .only-light { display: none; }
+
 /* Space for the fixed bottom tab bar, plus the iPhone home indicator.
    Applied by the pages that carry the nav, not globally, so a screen
    without it does not end in dead space. */

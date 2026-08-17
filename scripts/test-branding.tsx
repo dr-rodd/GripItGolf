@@ -457,6 +457,43 @@ section('Dark mode is the same tokens with night values')
     'placeholders lighten with the ink')
   ok(css.includes('html.dark .scroll-shade-l') && css.includes('html.dark .scroll-shade-r'),
     'and the board\'s scroll shades invert to a light haze')
+
+  // The preferences sheet must escape the header before it can be fixed to
+  // the viewport: the sticky bar\'s backdrop-filter makes it the containing
+  // block for fixed descendants, and rendered in place the sheet pinned
+  // itself to the 52px bar — a brown band across the top of a live phone.
+  const sheet = read('app/components/PlayerSettings.tsx')
+  ok(sheet.includes('createPortal') && sheet.includes('document.body'),
+    'the preferences sheet portals to <body>, out of the header\'s filter')
+
+  // The mark\'s letters lift after dark. The wordmark\'s brown is a fill
+  // attribute in the generated markup, overridden to bark under html.dark —
+  // an attribute override, never a filter, which would drag the emerald dot
+  // through colours that are not the brand\'s on its way to lightening the
+  // words.
+  ok(css.includes('html.dark .gd-mark [fill="#4a3728"]'),
+    'the wordmark\'s words lift to bark in the dark')
+  ok(read('app/components/MorphWordmark.tsx').includes('gd-mark'),
+    '  …and the mark actually wears the class that rule hangs off')
+
+  // The page-title marks are two-ink PNGs, so each carries a pre-rendered
+  // dark twin at the same dimensions — the ratio in the register serves
+  // both. Same-size is load-bearing: TitleMark sizes by height and hands
+  // the width to the light file\'s ratio.
+  const titleSrc = read('app/components/TitleMark.tsx')
+  ok(titleSrc.includes("only-light") && titleSrc.includes("only-dark"),
+    'TitleMark draws the pair and lets the theme pick')
+  for (const m of [...titleSrc.matchAll(/src: '\/title-([a-z-]+)\.png'/g)]) {
+    const name = m[1]
+    ok(fs.existsSync(`public/title-${name}-dark.png`),
+      `title-${name} has a dark twin`)
+    if (!fs.existsSync(`public/title-${name}-dark.png`)) continue
+    const light = fs.readFileSync(`public/title-${name}.png`)
+    const dark  = fs.readFileSync(`public/title-${name}-dark.png`)
+    ok(light.readUInt32BE(16) === dark.readUInt32BE(16) &&
+       light.readUInt32BE(20) === dark.readUInt32BE(20),
+      `  …at the same dimensions, so one ratio serves both`)
+  }
 }
 
 section('Type is big enough to read')

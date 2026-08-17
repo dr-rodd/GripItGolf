@@ -51,7 +51,7 @@ The same tokens with night values — not a second design system. `html.dark` re
 
 **Two build traps hold this together, and `test:branding` pins both.** Each `--color-*` token points at a plain `--gd-*` property instead of carrying its hex — given a literal, Tailwind folds every opacity-modified utility to a baked hex at build time (`text-ink/65` became `#2b2118a6`, unreachable by any theme). And `package.json` carries a modern `browserslist` (Safari/iOS ≥ 16.4, Chrome ≥ 111) — without it, the build's CSS pass strips the `color-mix` branches those utilities compile to, and every tint quietly renders solid. The stylesheet already assumed this baseline (`100cqw`, `dvh`) before dark mode did.
 
-The wordmark stays the artwork's own brown in both themes — the guide forbids recolouring it, and on the dark page it reads as a deliberately muted mark closed by the emerald dot.
+**The mark's letters lift after dark.** The guide's no-recolour rule is about pages, not themes: on the dark page the artwork's brown was 1.8:1, a shadow of a logo. The wordmark's words carry their brown as a fill attribute, so `html.dark .gd-mark [fill="#4a3728"]` re-inks them in bark — an attribute override, never a filter, which would drag the emerald dot through colours that are not the brand's. The page-title marks (leaderboard., scoring., …) are two-ink PNGs and get pre-rendered dark twins instead (`scripts/make-dark-titles.py`, re-run after replacing any title artwork); `TitleMark` draws the pair and the theme picks. The dot is untouched everywhere.
 
 ### Type
 
