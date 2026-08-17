@@ -4,22 +4,16 @@ import { useEffect, useRef } from 'react'
 
 /**
  * The trip URL as a scannable code, held up rather than sent: round brown
- * modules on a white card, the three corner anchors in emerald, and the
- * brand's green dot sitting in the middle.
+ * modules on a white card, with the three corner anchors carrying the
+ * brand's emerald dot — each anchor is a green ring around a green dot,
+ * which turned out to say it better than a stamp over the middle. There was
+ * one, briefly; it came off because the anchors already do its job.
  *
- * Drawn by qr-code-styling (MIT), in the app — no external QR service. The
- * centre dot stays our own overlay rather than the library's image option:
- * its `imageSize` is a coverage coefficient tangled up with the error
- * correction level, not a width fraction, and the one rule that keeps this
- * scannable is stated in width.
- *
- * Two rules keep it scannable, and they are a pair:
- *
- * - **Error correction is H**, the highest level, so the code survives
- *   losing what the dot covers. H tolerates ~30% damage.
- * - **The dot stays under 20% of the code's width.** DOT_FRACTION is 0.18;
- *   grow it past 0.2 and phones start failing at arm's length, which was
- *   the test that set the number.
+ * Drawn by qr-code-styling (MIT), in the app — no external QR service.
+ * Error correction stays H: nothing covers the code any more, but the
+ * headroom is what keeps a scan working through glare, a cracked screen or
+ * a shaking hand, and the URL is short enough that the extra density costs
+ * nothing worth having back.
  *
  * MODULE_TYPE is the styling's one dial. 'dots' is the brand answer — a
  * field of round dots is what the mark is. **If real phones start refusing
@@ -37,7 +31,6 @@ import { useEffect, useRef } from 'react'
  * prints codes that stay on the preview.
  */
 
-const DOT_FRACTION = 0.18
 const MODULE_TYPE: 'dots' | 'square' = 'dots'
 
 /** The drawing resolution. The SVG carries a viewBox, so CSS does the rest. */
@@ -82,37 +75,19 @@ export default function TripQr({ tripCode }: { tripCode: string }) {
 
   return (
     <div
-      className="relative mx-auto rounded-2xl border border-bark/12 p-5"
+      className="mx-auto rounded-2xl border border-bark/12 p-5"
       style={{
         width: 'min(70vw, 340px)',
         backgroundColor: '#FFFFFF',
       }}
     >
-      {/* Sized by the code, not the card: the wrapper is exactly the QR's
-          own square, so the dot's fraction below means what the rule
-          means. Against the padded card it was quietly a fifth wider. */}
-      <div className="relative">
-        {/* The library appends its SVG here; the square holds the card's
-            shape for the frame before it lands. */}
-        <div
-          ref={box}
-          className="w-full [&_svg]:w-full [&_svg]:h-auto [&_svg]:block"
-          style={{ aspectRatio: '1' }}
-        />
-
-        {/* The green dot, over the middle of the code. A plain circle laid
-            on top rather than woven into the modules — level H above is
-            what pays for it. */}
-        <span
-          aria-hidden="true"
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
-          style={{
-            width: `${DOT_FRACTION * 100}%`,
-            aspectRatio: '1',
-            backgroundColor: '#0A9D56',
-          }}
-        />
-      </div>
+      {/* The library appends its SVG here; the square holds the card's
+          shape for the frame before it lands. */}
+      <div
+        ref={box}
+        className="w-full [&_svg]:w-full [&_svg]:h-auto [&_svg]:block"
+        style={{ aspectRatio: '1' }}
+      />
     </div>
   )
 }
