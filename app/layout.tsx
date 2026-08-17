@@ -28,9 +28,24 @@ const FONTSHARE =
   "display=swap";
 
 export const metadata: Metadata = {
+  // What a pasted link unfurls into. The base is the canonical site, so the
+  // relative image below resolves absolute — WhatsApp's fetcher refuses a
+  // relative og:image and runs no JavaScript, which is why all of this is
+  // server-rendered metadata rather than anything in a component. A preview
+  // deploy's links unfurl with the production image, which is the right
+  // image either way.
+  metadataBase: new URL("https://greendot.live"),
   title: "green dot.",
   description:
     "Your handicap is the best 8 of your last 20. Live scoring, leaderboards and matchplay for your golf trip.",
+  openGraph: {
+    siteName: "Green Dot",
+    title: "green dot.",
+    description:
+      "Your handicap is the best 8 of your last 20. Live scoring, leaderboards and matchplay for your golf trip.",
+    type: "website",
+    images: "/og-image.png",
+  },
   // The install layer's Apple half — the manifest (app/manifest.ts) covers
   // everyone else. `title` is the label under the home-screen icon.
   // statusBarStyle stays "default": dark text, readable over the cream

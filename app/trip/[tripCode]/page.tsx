@@ -1,3 +1,5 @@
+import { cache } from 'react'
+import type { Metadata } from 'next'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { hasMatchplay, needsPairings, primary } from '@/lib/leaderboards'
@@ -49,16 +51,79 @@ function formatDate(d: string | null) {
   return new Date(d).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export default async function TripPage({ params }: { params: Promise<{ tripCode: string }> }) {
-  const { tripCode } = await params
-
-  const { data: trip, error: tripError } = await supabase
+/**
+ * The trip, once per request. `generateMetadata` and the page both need the
+ * row and run separately, so without `cache` the link-preview metadata would
+ * cost this screen a second copy of its first query.
+ */
+const fetchTrip = cache(async (tripCode: string) => {
+  const { data, error } = await supabase
     .from('trips')
     .select('*')
     .eq('trip_code', tripCode)
     .single()
+  if (error) console.error('TripPage trip query failed:', error)
+  return data
+})
 
-  if (tripError) console.error('TripPage trip query failed:', tripError)
+/** "13–16 August", for the unfurl — the month said once when it is one month. */
+function describeRange(start: string | null, end: string | null): string | null {
+  const parse = (d: string | null) => {
+    if (!d) return null
+    const [y, m, day] = d.split('-').map(Number)
+    if (!y || !m || !day) return null
+    return new Date(Date.UTC(y, m - 1, day))
+  }
+  const fmt = (d: Date) =>
+    d.toLocaleDateString('en-IE', { day: 'numeric', month: 'long', timeZone: 'UTC' })
+  const a = parse(start)
+  const b = parse(end)
+  if (!a) return b ? fmt(b) : null
+  if (!b || a.getTime() === b.getTime()) return fmt(a)
+  if (a.getUTCMonth() === b.getUTCMonth() && a.getUTCFullYear() === b.getUTCFullYear()) {
+    return `${a.getUTCDate()}–${b.getUTCDate()} ${fmt(a).replace(/^\d+ /, '')}`
+  }
+  return `${fmt(a)} – ${fmt(b)}`
+}
+
+/**
+ * What a trip link unfurls into when it is pasted into WhatsApp or a text:
+ * the trip's name, its dates, and the invitation. This is the other half of
+ * the Share trip button — the link it sends arrives looking like an invite
+ * rather than a bare URL. WhatsApp's fetcher runs no JavaScript, so this is
+ * server-side metadata or it is nothing. The image is the one site-wide
+ * brand card from the root layout, restated because Next replaces the
+ * openGraph object per page rather than merging it.
+ */
+export async function generateMetadata(
+  { params }: { params: Promise<{ tripCode: string }> },
+): Promise<Metadata> {
+  const { tripCode } = await params
+  const trip = await fetchTrip(tripCode)
+  if (!trip) return {}
+
+  const description = [
+    describeRange(trip.start_date ?? null, trip.end_date ?? null),
+    'You’re invited — tap to join on Green Dot.',
+  ].filter(Boolean).join(' · ')
+
+  return {
+    title: trip.name,
+    description,
+    openGraph: {
+      siteName: 'Green Dot',
+      title: trip.name,
+      description,
+      type: 'website',
+      images: '/og-image.png',
+    },
+  }
+}
+
+export default async function TripPage({ params }: { params: Promise<{ tripCode: string }> }) {
+  const { tripCode } = await params
+
+  const trip = await fetchTrip(tripCode)
 
   if (!trip) {
     return (
