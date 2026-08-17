@@ -571,7 +571,7 @@ export default function CreateTripForm() {
                 className={INPUT}
               />
               <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                So we can confirm your trip and keep you updated. Leave it blank
+                We&apos;ll send you the trip details and share link. Leave it blank
                 if you would rather not — the trip works either way, and no other
                 player ever sees it.
               </p>
