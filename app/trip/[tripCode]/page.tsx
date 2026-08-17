@@ -18,6 +18,8 @@ import {
 import { describePlacing } from '@/lib/standing'
 import { nextMatch, describeNextMatch, type DrawMatch } from '@/lib/nextMatch'
 import { firstTeeTarget } from '@/lib/upNext'
+// "13–16 August" — one copy, shared with the confirmation email.
+import { describeRange } from '@/lib/confirmationEmail'
 import { SectionStack } from '@/app/components/Section'
 import TripCountdown from './TripCountdown'
 import TripDescription from './TripDescription'
@@ -65,26 +67,6 @@ const fetchTrip = cache(async (tripCode: string) => {
   if (error) console.error('TripPage trip query failed:', error)
   return data
 })
-
-/** "13–16 August", for the unfurl — the month said once when it is one month. */
-function describeRange(start: string | null, end: string | null): string | null {
-  const parse = (d: string | null) => {
-    if (!d) return null
-    const [y, m, day] = d.split('-').map(Number)
-    if (!y || !m || !day) return null
-    return new Date(Date.UTC(y, m - 1, day))
-  }
-  const fmt = (d: Date) =>
-    d.toLocaleDateString('en-IE', { day: 'numeric', month: 'long', timeZone: 'UTC' })
-  const a = parse(start)
-  const b = parse(end)
-  if (!a) return b ? fmt(b) : null
-  if (!b || a.getTime() === b.getTime()) return fmt(a)
-  if (a.getUTCMonth() === b.getUTCMonth() && a.getUTCFullYear() === b.getUTCFullYear()) {
-    return `${a.getUTCDate()}–${b.getUTCDate()} ${fmt(a).replace(/^\d+ /, '')}`
-  }
-  return `${fmt(a)} – ${fmt(b)}`
-}
 
 /**
  * What a trip link unfurls into when it is pasted into WhatsApp or a text:

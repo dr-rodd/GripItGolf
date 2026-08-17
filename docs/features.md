@@ -54,6 +54,8 @@ Still a shared password: no per-user accounts, no audit trail, no way to revoke 
 
 Never shown to other players. Only surfaced on `/admin/trips`, and searched there.
 
+**One confirmation email, ever, per trip.** When an address was given, the creation form fires `/api/trip-confirmation` (fire-and-forget) and the route sends the trip's name, dates, link, QR and code via Resend — words in `lib/confirmationEmail.ts` (pure: tables, inline styles, system fonts, the literal light palette; an inbox has no globals.css), claiming and sending in the route. `trips.confirmation_sent_at` (migration 045) is claimed with an `UPDATE … WHERE … IS NULL` *before* Resend is asked — so two calls cannot both send — and handed back if the send fails, so the column only ever says what happened. Every way it cannot send (no `RESEND_API_KEY`, no address, already sent, migration 045 not yet run, Resend down) is a logged no-op and the trip creates exactly as before. The QR is the plain `qrcode` package server-side — `qr-code-styling` needs a browser — attached inline by cid; the trip link follows the creating deploy's origin, the wordmark image (`public/email-logo.png`) is pinned to production so it renders whoever sent it.
+
 ## Returning players
 
 A player joins without an account, so a cookie is the only way to greet them next time. `lib/playerCookie.ts`, `lib/currentPlayer.ts`, `StatusBlock.tsx`.

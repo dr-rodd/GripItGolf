@@ -34,6 +34,11 @@ ANTHROPIC_API_KEY=...        # server only. The card check — photographing a
                              # photo to the Claude API with this key. Unset,
                              # the check answers with a calm "not set up yet"
                              # and everything else works as before.
+RESEND_API_KEY=...           # server only. The one confirmation email sent to
+                             # trips.lead_email after creation — unset, the
+                             # send is a silent no-op and trips create exactly
+                             # as before. Needs greendot.live verified as a
+                             # sending domain in Resend.
 NEXT_PUBLIC_DONATION_URL=... # unset = support link vanishes entirely.
                              # Currently moot: SUPPORT_ENABLED in lib/donation.ts
                              # is false, so the link is off whatever this says.
