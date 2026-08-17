@@ -35,6 +35,7 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:scorecard` | Every score shape, the nett/no-return arithmetic, and that a card survives being left and reopened |
 | `test:branding` | The green dot, the wordmark, back controls, contrast, type size, and the footer/tab-bar carrier list |
 | `test:course-import` | The bulk-import contract: every file in `data/courses/` and `data/course-tees/`, the rules Postgres has that the application does not (chiefly par 3–5 against the card check's 3–6), slug and near-name collisions against what has shipped, the two `[].every(…)` traps a cardless course walks into, and that the generated SQL loses or transposes no number |
+| `test:qr-email` | The confirmation email's hand-rasterised QR (`lib/qrPng.ts`) decodes with jsQR to exactly the URL that went in, carries the bark dots and emerald anchors rather than a silent fallback to black squares, and keeps its quiet zone |
 
 Order above follows `npm test`'s own chain in `package.json`, which is worth keeping in step: it is the fastest way to tell whether a new suite was wired in or just left as a standalone script.
 

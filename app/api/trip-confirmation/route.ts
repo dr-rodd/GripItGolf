@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import QRCode from 'qrcode'
 import { Resend } from 'resend'
+import { styledQrPng } from '@/lib/qrPng'
 import { createAdminClient } from '@/lib/supabase-admin'
 import {
   CONFIRMATION_FROM, QR_CID,
@@ -117,14 +117,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Brown on white, level H — the email twin of the share page's code.
-    // 400px for a 200px slot, so it stays crisp on a retina screen.
-    const qrPng = await QRCode.toBuffer(tripUrl, {
-      errorCorrectionLevel: 'H',
-      width: 400,
-      margin: 2,
-      color: { dark: '#4A3728', light: '#FFFFFF' },
-    })
+    // The share page's QR, as pixels — dots and emerald anchors, level H,
+    // drawn by lib/qrPng.ts because qr-code-styling cannot run here.
+    // ~490px for a 200px slot, so it stays crisp on a retina screen.
+    const qrPng = styledQrPng(tripUrl)
 
     const resend = new Resend(key)
     const send = resend.emails.send({
