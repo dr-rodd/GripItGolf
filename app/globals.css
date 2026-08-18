@@ -315,6 +315,46 @@ html.dark .only-light { display: none; }
 }
 .tab-pending { animation: gdTabPending 900ms ease-in-out infinite; }
 
+/* ── The site intro ────────────────────────────────────────────
+   A newcomer's guided lap of the app (app/components/SiteIntro.tsx): big
+   green dots with cream writing, a friendly brown arrow pointing at the tab
+   each one is talking about. Shown on the trip hub until the gg_intro
+   cookie says it has been seen — lib/intro.ts is the only writer.
+
+   Fixed literals, deliberately, in the one file allowed to carry them: the
+   intro paints the same in both themes, the way the wordmark's dot carries
+   its own fill. The dot is the deep emerald so the cream copy on it clears
+   AA at body size — the bright accent does not; the arrow is the dark
+   palette's bark, a light warm brown that reads on the dimmed page in
+   either theme; and the scrim is the dark cream rather than a grey, because
+   no pure grey means no pure grey here either. The one deliberate breach of
+   "emerald is never a large fill": on this screen the dot is the subject,
+   not decoration — it is the wordmark's full stop blown up large enough to
+   write on. Nothing else inherits the exception. */
+.intro-scrim   { background-color: rgba(27, 21, 16, 0.78); }
+.intro-dot     { background-color: #0A6B3C; color: #F6F4F0; }
+.intro-arrow   { color: #D9C6B2; }
+.intro-cream   { color: #F6F4F0; }
+.intro-step    { background-color: rgba(246, 244, 240, 0.35); }
+.intro-step-on { background-color: #0A9D56; }
+
+/* The pop. Scale and fade together, ease-out, no bounce — "pop up" is the
+   arrival being quick, not springy. Each dot re-mounts per step, so the
+   animation runs once at every stop on the lap. */
+@keyframes gdIntroPop {
+  from { transform: scale(0.6); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+.intro-pop { animation: gdIntroPop 250ms ease-out both; }
+
+/* The arrow arrives a beat after the dot it belongs to, so the eye reads
+   the words first and is then pointed somewhere. `both` holds it invisible
+   through the delay. */
+.intro-arrow-in {
+  animation: gdFade 200ms ease-out both;
+  animation-delay: 150ms;
+}
+
 /* ── A tap that answers ────────────────────────────────────────
    The press, for everything that is not the tab bar.
 
@@ -386,7 +426,7 @@ html.dark .only-light { display: none; }
   }
 
   .page-enter, .score-flash, .dot-live, .skeleton, .tab-pending, .sheet-up,
-  .slide-in-right, .slide-in-left {
+  .slide-in-right, .slide-in-left, .intro-pop, .intro-arrow-in {
     animation: none !important;
   }
   /* The press keeps its meaning without the movement, the same way the tab

@@ -8,7 +8,10 @@ import { parseLeaderboards } from '@/lib/leaderboards'
 import { parseTeamScoring } from '@/lib/teamScoring'
 import { MAIN_SET, setOf, teamFor } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
+import { cookies } from 'next/headers'
 import { currentPlayer } from '@/lib/currentPlayer'
+import { INTRO_COOKIE } from '@/lib/intro'
+import SiteIntro from '@/app/components/SiteIntro'
 import { isConfirmed, confirmedCount as countConfirmed } from '@/lib/roster'
 import { ROUND_TILE } from '@/lib/roundState'
 import { fetchPlacing, fetchTripStats } from '@/lib/hubStanding'
@@ -245,6 +248,16 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   // somebody real, so a first-time visitor pays nothing for a personalised
   // page they will not see.
   const me = await currentPlayer(tripCode, players)
+
+  // ── Has this device been shown around? ──
+  //
+  // Decided here, on the server, rather than in the browser after hydration:
+  // the page is force-dynamic and already reads the jar for the player
+  // cookie, so the check is free — and it puts the intro in the first paint
+  // instead of popping it over a page somebody has started reading. The
+  // cookie is written by the intro itself, on skip and finish alike
+  // (lib/intro.ts).
+  const showIntro = !(await cookies()).has(INTRO_COOKIE)
 
   let placingLine = ''
   let nextMatchLine = ''
@@ -555,6 +568,10 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
       <div className="px-6 pb-10 flex justify-center">
         <BackButton href="/" label="All trips" />
       </div>
+
+      {/* A newcomer's guided lap — over everything, pointing at the tab
+          bar, gone for good once skipped or finished. */}
+      {showIntro && <SiteIntro tripName={trip.name} />}
 
     </main>
   )
