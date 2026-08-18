@@ -145,8 +145,7 @@ type Pt = { x: number; y: number }
 type Rects = {
   vw: number
   vh: number
-  /** The emerald dot's <g> inside the wordmark, or null if it can't be found. */
-  dotEl: Element | null
+  /** Where the wordmark's emerald dot sits, or null if it can't be found. */
   dot: DOMRect | null
   tabs: Partial<Record<TabKey, { el: Element; rect: DOMRect }>>
 }
@@ -161,7 +160,7 @@ function measure(): Rects {
     const el = document.querySelector(`[data-intro-tab="${key}"]`)
     if (el) tabs[key] = { el, rect: el.getBoundingClientRect() }
   }
-  return { vw, vh, dotEl, dot: dotEl?.getBoundingClientRect() ?? null, tabs }
+  return { vw, vh, dot: dotEl?.getBoundingClientRect() ?? null, tabs }
 }
 
 /** Deliberately oversized: 88% of the viewport, allowed off the edge. */
@@ -247,6 +246,34 @@ function arrowShape(centre: Pt, D: number, icon: DOMRect): ArrowShape {
   }
 }
 
+/**
+ * The real dot in the wordmark, leaving as the big one departs and coming
+ * home as it lands. Styled on the <g>, which React's own props never touch
+ * — but queried FRESH on every call rather than cached from the mount
+ * measurement, because React re-applies the wordmark's
+ * dangerouslySetInnerHTML once on its first update after hydration, which
+ * replaces the <g> we styled with an unstyled twin. A cached reference dies
+ * with the old node; a fresh query finds whichever one is real. Each
+ * arrival re-asserts the hide for the same reason. Pure DOM, no component
+ * state — which is why these live at module scope.
+ */
+const logoDotEl = () =>
+  document.querySelector('.gd-mark [fill="#0a9d56"]') as HTMLElement | null
+
+function fadeLogoDot(to: 0 | 1, instant = false) {
+  const el = logoDotEl()
+  if (!el?.style) return
+  el.style.transition = instant ? '' : `opacity ${DOT_FADE_MS}ms ease-out`
+  el.style.opacity = String(to)
+}
+
+function restoreLogoDot() {
+  const el = logoDotEl()
+  if (!el?.style) return
+  el.style.transition = ''
+  el.style.opacity = ''
+}
+
 type Phase = 'birth' | 'arriving' | 'idle' | 'leaving' | 'travel' | 'exit' | 'done'
 
 export default function SiteIntro({ tripName }: { tripName: string }) {
@@ -280,21 +307,6 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
     timers.current = []
   }
 
-  /** The real dot in the wordmark, leaving as the big one departs and
-      coming home as it lands. Styled on the <g>, which React never touches. */
-  const fadeLogoDot = (to: 0 | 1, instant = false) => {
-    const el = rects.current?.dotEl as HTMLElement | null
-    if (!el?.style) return
-    el.style.transition = instant ? '' : `opacity ${DOT_FADE_MS}ms ease-out`
-    el.style.opacity = String(to)
-  }
-  const restoreLogoDot = () => {
-    const el = rects.current?.dotEl as HTMLElement | null
-    if (!el?.style) return
-    el.style.transition = ''
-    el.style.opacity = ''
-  }
-
   /** Arrival at stop `i`: settle, then speak, then point. */
   const arrive = useCallback((i: number) => {
     const r = rects.current
@@ -309,6 +321,8 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
       transition: `transform ${SETTLE_MS}ms ${PUTT}`,
     }))
     setDrifting(true)
+    // Idempotent while the tour is out — see the note on fadeLogoDot.
+    fadeLogoDot(0)
     later(SETTLE_MS, () => { phase.current = 'idle' })
 
     const q = rm.current
