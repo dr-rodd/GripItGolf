@@ -59,11 +59,13 @@ const ITEMS = [
  * that gets is the real cost. `pending` is true from the touch.
  */
 function Tab({
-  label, active, Icon,
+  label, active, Icon, tabKey,
 }: {
   label: string
   active: boolean
   Icon: (typeof ITEMS)[number]['icon']
+  /** Stable handle for the site intro's arrows — see SiteIntro.tsx. */
+  tabKey: (typeof ITEMS)[number]['key']
 }) {
   const { pending } = useLinkStatus()
 
@@ -96,7 +98,13 @@ function Tab({
         lit ? 'text-accent' : 'text-bark/60 hover:text-bark/80'
       } ${pressed ? 'tab-pressed' : ''} ${pending ? 'tab-pending' : ''}`}
     >
-      <Icon size={20} />
+      {/* The wrapper is what the site intro finds and measures at runtime —
+          its arrow points at this icon wherever the real device puts it,
+          and the icon's acknowledging pulse lands here too. A span of its
+          own so neither ever touches the elements React is styling. */}
+      <span data-intro-tab={tabKey} className="flex">
+        <Icon size={20} />
+      </span>
       {/* The smallest type in the app, and the one place it is
           justified: five labels across the narrowest phone. 11px,
           read at arm's length; "Leaderboard" is the tight one and
@@ -181,7 +189,7 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
                 // whole benefit and it costs nothing to be wrong about.
                 className="block touch-manipulation"
               >
-                <Tab label={item.label} active={active} Icon={Icon} />
+                <Tab label={item.label} active={active} Icon={Icon} tabKey={item.key} />
               </Link>
             </li>
           )
