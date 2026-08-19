@@ -27,6 +27,7 @@
     "test:support": "tsx scripts/test-support.tsx",
     "test:recognition": "NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder tsx scripts/test-recognition.tsx",
     "logo:line": "tsx scripts/make-line-logo.ts",
+    "intro:shots": "node scripts/make-intro-shots.mjs",
     "test:itinerary": "tsx scripts/test-itinerary.ts",
     "test:leaderboards": "tsx scripts/test-leaderboards.ts",
     "test:quota": "tsx scripts/test-quota.ts",

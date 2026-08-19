@@ -316,36 +316,40 @@ html.dark .only-light { display: none; }
 .tab-pending { animation: gdTabPending 900ms ease-in-out infinite; }
 
 /* ── The site intro ────────────────────────────────────────────
-   The travelling dot (app/components/SiteIntro.tsx): the wordmark's
-   emerald dot swells out of the logo into a large wordless circle that
-   criss-crosses the screen while a stationary block of writing walks a
-   newcomer round the app, one thought per tap — the tab being talked
-   about left sharp in a feathered hole through the blur, warmed by a soft
-   emerald glow — before the circle shrinks home. Shown on the trip hub
-   until the gg_intro cookie says it has been seen; lib/intro.ts is the
-   only writer.
+   The travelling dot (app/components/SiteIntro.tsx): after a beat, the
+   wordmark's emerald dot stirs, swells and blooms into a big green
+   bubble of cream writing that parks high — favouring the top-middle-
+   left — and hops aside on every tap, one thought at a time, while a
+   miniature of the real page being described (hand-traced SVG replicas
+   in public/intro) shows beneath it. The page's edges soften behind a
+   faint vignette blur, the tab being talked about stays sharp and glows,
+   and the bubble shrinks home at the end. Shown on the trip hub until
+   the gg_intro cookie says it has been seen; lib/intro.ts is the only
+   writer, and ?intro on the hub URL overrides it.
 
-   Only these three surfaces live here. The choreography — the putt curve,
-   the long travels, the gliding spotlight — is a documented exception to
-   this file's motion ceilings and lives in the component, where
-   test:branding's stylesheet checks deliberately do not reach (see Motion
-   in docs/design-system.md).
+   Only these surfaces live here. The choreography — the putt curve, the
+   long travels, the vignette mask — is a documented exception to this
+   file's motion ceilings and lives in the component, where
+   test:branding's stylesheet checks deliberately do not reach (see
+   Motion in docs/design-system.md).
 
-   The veil is a soft blur over the page rather than a dark scrim — a
-   light touch, enough to push the page back without hiding it — tinted
-   with the page's own cream through the tokens so it follows the theme.
-   The bubble rests on the deep emerald so the cream writing it carries
-   clears AA at body size — the bright accent does not, and appears only
-   in the birth and the farewell, while the bubble still is the logo's
-   dot. The glow is that same emerald as light rather than as a fill. The
-   one deliberate breach of "emerald is never a large fill": here the dot
-   is the subject, not decoration. Nothing else inherits the exception. */
+   The veil is a faint blur framing the page's edges rather than a dark
+   scrim — the component masks it to a vignette, clear through the middle
+   — tinted with the page's own cream through the tokens so it follows
+   the theme. The bubble is the accent emerald itself, by Big Dog's
+   explicit call: it IS the logo's dot, writ large, and matching the mark
+   won over the contrast arithmetic — the cream copy on it sits near 3:1,
+   which is why the bubble's writing stays short and large-ish and the
+   detail lives in the example screens beneath. The glow is that same
+   emerald as light rather than as a fill. The one deliberate breach of
+   "emerald is never a large fill": here the dot is the subject, not
+   decoration. Nothing else inherits the exception. */
 .intro-veil {
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   background-color: color-mix(in srgb, var(--color-cream) 32%, transparent);
 }
-.intro-dot     { background-color: #0A6B3C; color: #F6F4F0; }
+.intro-dot     { background-color: #0A9D56; color: #F6F4F0; }
 .intro-step    { background-color: rgba(246, 244, 240, 0.4); }
 .intro-step-on { background-color: #F6F4F0; }
 .intro-glow {
