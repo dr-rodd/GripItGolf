@@ -108,6 +108,26 @@ html.dark {
   --gd-rust-deep: #E0937D;
 }
 
+/* Paper is always daylight. The trip export prints to PDF, and a phone in
+   dark mode would otherwise hand over a document of cream writing on a
+   near-black page — so print re-points the dark palette back to the light
+   values above. The eight values are the light block's, verbatim; a change
+   there belongs here too. */
+@media print {
+  html.dark {
+    --gd-cream:   #F6F4F0;
+    --gd-surface: #FFFFFF;
+    --gd-ink:     #2B2118;
+    --gd-bark:    #4A3728;
+
+    --gd-accent:      #0A9D56;
+    --gd-accent-deep: #0A6B3C;
+
+    --gd-rust:      #B5533C;
+    --gd-rust-deep: #8A3E2C;
+  }
+}
+
 html {
   background-color: var(--color-cream);
 

@@ -144,7 +144,10 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-bark/12"
+      // print:hidden — navigation has no business on paper. The export page
+      // is what makes this real: it prints the trip to PDF, and the bar was
+      // otherwise pinned across the bottom of every page of it.
+      className="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-bark/12 print:hidden"
       // The bar occupies exactly what it shows: its height plus the home
       // indicator's inset, and not a pixel of paint beyond the viewport.
       //

@@ -1117,6 +1117,19 @@ export default function TripSetupClient({
           />
         )}
 
+        {/* The trip on paper. Quiet and last: it matters most once the trip
+            is over — save the PDF, keep the record — which is also the first
+            step of retiring an old trip. Everyone may look; it writes
+            nothing. */}
+        <div className="text-center">
+          <Link
+            href={`/trip/${trip.trip_code}/export`}
+            className="inline-block px-4 py-2.5 t-label text-ink/65 hover:text-ink"
+          >
+            Export trip (PDF)
+          </Link>
+        </div>
+
         {/* Error toast */}
         {error && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 bg-surface border border-rust/40 rounded-xl shadow-xl z-50">
