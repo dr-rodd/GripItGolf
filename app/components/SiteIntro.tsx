@@ -87,10 +87,17 @@ type Step = {
   title: string
   /** Which tab the spotlight rests on. The welcome has none. */
   tab?: TabKey
-  /** The example screen shown beneath the bubble — public/intro/*.svg. */
-  shot?: string
+  /** The example screen behind each paragraph — public/intro SVGs, one
+      entry per para (the last entry carries any overflow). */
+  shots?: string[]
   /** One thought per tap — never the whole spiel at once. */
   paras: string[]
+}
+
+/** The example screen a given thought shows, or null for none. */
+function shotFor(step: Step, para: number): string | null {
+  if (!step.shots?.length) return null
+  return step.shots[Math.min(para, step.shots.length - 1)]
 }
 
 /** Steps follow the tab bar left to right; the bubble's side-hops supply
@@ -105,7 +112,7 @@ function makeSteps(tripName: string): Step[] {
     {
       key: 'hub',
       tab: 'home',
-      shot: '/intro/hub.svg',
+      shots: ['/intro/hub.svg'],
       title: 'Trip Hub',
       paras: [
         'The front page of the app. Check out your itinerary, golf tee ' +
@@ -116,7 +123,7 @@ function makeSteps(tripName: string): Step[] {
     {
       key: 'scoring',
       tab: 'scoring',
-      shot: '/intro/scoring.svg',
+      shots: ['/intro/scoring.svg', '/intro/scorecard.svg', '/intro/scorecard.svg'],
       title: 'Scoring',
       paras: [
         'Enter your scores as you play. We do the rest.',
@@ -129,7 +136,7 @@ function makeSteps(tripName: string): Step[] {
     {
       key: 'leaderboard',
       tab: 'leaderboard',
-      shot: '/intro/leaderboard.svg',
+      shots: ['/intro/leaderboard.svg', '/intro/leaderboard.svg', '/intro/matchplay.svg'],
       title: 'Leaderboard',
       paras: [
         'This is what it’s all about. You set the rules; we crunch the ' +
@@ -143,7 +150,7 @@ function makeSteps(tripName: string): Step[] {
     {
       key: 'stats',
       tab: 'stats',
-      shot: '/intro/stats.svg',
+      shots: ['/intro/stats.svg'],
       title: 'Stats Hub',
       paras: [
         'Check out your personal statistics. How do you compare to the ' +
@@ -155,7 +162,7 @@ function makeSteps(tripName: string): Step[] {
     {
       key: 'setup',
       tab: 'settings',
-      shot: '/intro/setup.svg',
+      shots: ['/intro/setup.svg'],
       title: 'Trip Setup',
       paras: [
         'The lead player has set up your contests.',
@@ -220,7 +227,7 @@ function restoreLogoDot() {
 }
 
 /** Sized to speak from up top and still leave the example screen its room. */
-const circleD = (vw: number) => Math.min(Math.round(vw * 0.72), 320)
+const circleD = (vw: number) => Math.min(Math.round(vw * 0.68), 300)
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.min(Math.max(v, lo), hi)
@@ -305,10 +312,10 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
   const [circleStyle, setCircleStyle] = useState<React.CSSProperties>({})
   const [textOn, setTextOn] = useState(false)
   const [drifting, setDrifting] = useState(false)
-  // The example screen: which step's it is, and whether it is up. Its own
-  // pair rather than riding textOn, so paragraphs within a step swap
-  // without the example blinking.
-  const [shotStep, setShotStep] = useState(0)
+  // The example screen: which file is up, and whether it is showing. Its
+  // own pair rather than riding textOn, so thoughts that share a screen
+  // swap words without the example blinking.
+  const [shotSrc, setShotSrc] = useState<string | null>(null)
   const [shotOn, setShotOn] = useState(false)
 
   const rects = useRef<Rects | null>(null)
@@ -424,12 +431,15 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
       setTextOn(true)
     })
     moveCircle(hop.current, next.step)
-    if (next.step !== cur.step) {
-      // The example changes with the step: the old one slips out with the
-      // words, the new one rises once the bubble is out of its way.
+    const nextShot = shotFor(steps[next.step], next.para)
+    if (nextShot !== shotFor(step, cur.para)) {
+      // The example changes: the old page slips out with the words, the
+      // new one rises once the bubble is on its way aside.
       setShotOn(false)
-      later(rm.current ? 0 : OUT_MS, () => setShotStep(next.step))
-      later(rm.current ? 0 : TRAVEL_MS - 80, () => setShotOn(true))
+      later(rm.current ? 0 : OUT_MS, () => setShotSrc(nextShot))
+      if (nextShot) later(rm.current ? 0 : TRAVEL_MS - 120, () => setShotOn(true))
+    }
+    if (next.step !== cur.step) {
       later(rm.current ? 0 : TRAVEL_MS, () => pulse(steps[next.step].tab))
     }
     // steps is rebuilt per render but its content is constant per tripName.
@@ -562,15 +572,14 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
     ? { x: focus.left + focus.width / 2, y: focus.top + focus.height / 2 }
     : null
 
-  // The example screen's frame: centred beneath the bubble's lane, ending
-  // above the tab bar. Skipped entirely when the screen is too short to
-  // give it a fair showing.
-  const shot = steps[shotStep].shot
-  const shotTop = 72 + D + 20
-  const shotBottom = tabTopOf(r) - 12
-  const shotH = shotBottom - shotTop
-  const shotW = Math.min(Math.round(shotH * (360 / 585)), Math.round(r.vw * 0.7))
-  const showShot = !!shot && shotH >= 150
+  // The example screen occupies the whole screen: full-bleed from the top
+  // down to the real tab bar, which stays the user's own footer. The
+  // artboards are 360x700 with a sacrificial bottom, cover-fit and
+  // anchored to the top, so different phone shapes crop the padding, not
+  // the content. Every unique screen is mounted from the start so each is
+  // loaded before it is needed; only the current one shows.
+  const allShots = [...new Set(steps.flatMap(s => s.shots ?? []))]
+  const shotH = tabTopOf(r)
 
   return (
     <div
@@ -595,9 +604,38 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
         .gd-intro-drift-off { animation-play-state: paused; }
       `}</style>
 
-      {/* The veil: a faint blur framing the page's edges, clear through
-          the middle where the example shows, with the focused tab cut
-          sharp at the bottom. */}
+      {/* The example screen — the real page this thought is talking
+          about, full-bleed down to the user's own tab bar, which stays
+          the footer of the picture. Beneath the veil, so its edges soften
+          like everything else's. */}
+      <div
+        className="absolute left-0 top-0 overflow-hidden pointer-events-none"
+        style={{
+          width: r.vw,
+          height: shotH,
+          opacity: shotOn && shotSrc ? 1 : 0,
+          transform: shotOn && shotSrc ? 'translateY(0)' : 'translateY(12px)',
+          transition: shotOn
+            ? `opacity ${SHOT_IN_MS}ms ${PUTT}, transform ${SHOT_IN_MS}ms ${PUTT}`
+            : `opacity ${OUT_MS}ms ${PUTT}, transform ${OUT_MS}ms ${PUTT}`,
+        }}
+      >
+        {allShots.map(src => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={src}
+            src={src}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-cover object-top"
+            style={{ opacity: src === shotSrc ? 1 : 0 }}
+          />
+        ))}
+      </div>
+
+      {/* The veil: a faint blur framing the edges of whatever is showing
+          — the example, and the real page around it — clear through the
+          middle, with the focused tab cut sharp at the bottom. */}
       <div
         className="intro-veil absolute inset-0"
         style={{
@@ -628,42 +666,6 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
         }}
       />
 
-      {/* The example screen — a miniature of the real page this stop is
-          talking about, in a card. All five are mounted so they are
-          loaded before they are needed; only the current one shows. */}
-      {showShot && (
-        <div
-          className="absolute pointer-events-none"
-          style={{
-            left: Math.round((r.vw - shotW) / 2),
-            top: shotTop,
-            width: shotW,
-            height: shotH,
-            opacity: shotOn ? 1 : 0,
-            transform: shotOn ? 'translateY(0)' : 'translateY(10px)',
-            transition: shotOn
-              ? `opacity ${SHOT_IN_MS}ms ${PUTT}, transform ${SHOT_IN_MS}ms ${PUTT}`
-              : `opacity ${OUT_MS}ms ${PUTT}, transform ${OUT_MS}ms ${PUTT}`,
-          }}
-        >
-          <div
-            className="w-full h-full rounded-2xl overflow-hidden bg-surface border border-bark/12"
-            style={{ boxShadow: '0 12px 32px rgba(43, 33, 24, 0.18)' }}
-          >
-            {steps.filter(s => s.shot).map(s => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={s.key}
-                src={s.shot}
-                alt=""
-                aria-hidden="true"
-                className="absolute inset-0 w-full h-full object-cover"
-                style={{ opacity: s.key === steps[shotStep].key ? 1 : 0 }}
-              />
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* The bubble — the logo's own emerald, the writing riding it. The
           outer element carries the travel; the inner wrapper carries the
