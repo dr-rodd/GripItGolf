@@ -7,14 +7,14 @@ import { rememberIntroSeen } from '@/lib/intro'
  * The site intro — the travelling dot.
  *
  * A first-time visitor lands on the trip hub. The page softens behind a
- * gentle blur, the emerald dot in the wordmark swells out of the logo into
- * a large green circle, and a stationary block of writing walks the
- * newcomer round the app one thought at a time — a tap for each paragraph.
- * The tab being talked about is the one part of the page left sharp: a
- * feathered clear hole in the blur, warmed by a soft emerald glow. The
- * circle itself carries no words; it criss-crosses the screen below the
- * writing, side to side on every tap, the brand keeping the reader
- * company. On finishing — or skipping — it shrinks back into the logo.
+ * gentle blur, and the emerald dot in the wordmark swells out of the logo
+ * into a large green bubble carrying cream writing — a pronounced title
+ * and one thought at a time, a tap for each paragraph. On every tap the
+ * bubble criss-crosses the screen, side to side at wandering heights,
+ * words aboard. The tab being talked about is the one part of the page
+ * left sharp: a feathered clear hole in the blur, warmed by a soft
+ * emerald glow. On finishing — or skipping — the bubble shrinks back into
+ * the logo.
  *
  * ── How things are found ────────────────────────────────────────
  *
@@ -69,6 +69,17 @@ const OUT_MS = 120     // the writing fading between thoughts
 const PULSE_MS = 300   // the focused icon's single soft acknowledgement
 const DOT_FADE_MS = 200 // the real logo dot leaving and coming home
 const VEIL_MS = 400    // the blur arriving and leaving
+
+/**
+ * The bubble's two greens. It is born the logo dot's own bright emerald
+ * and crossfades to the deep emerald as it grows — deep, because cream
+ * body copy on the bright accent misses AA and on the deep it clears it —
+ * then back to bright on the way home. Same values as globals.css's
+ * `.intro-dot`; lib/theme.ts carries its pair of palette hexes the same
+ * way.
+ */
+const ACCENT_EMERALD = '#0A9D56'
+const DEEP_EMERALD = '#0A6B3C'
 
 type TabKey = 'home' | 'scoring' | 'leaderboard' | 'stats' | 'settings'
 
@@ -202,8 +213,8 @@ function restoreLogoDot() {
   el.style.opacity = ''
 }
 
-/** A wordless circle now, so it travels lighter than it used to. */
-const circleD = (vw: number) => Math.min(Math.round(vw * 0.62), 260)
+/** Big enough to speak from — the writing rides the bubble. */
+const circleD = (vw: number) => Math.min(Math.round(vw * 0.84), 400)
 
 /** The transform that puts the circle's centre at p, at scale s. */
 function placed(p: Pt, s: number, D: number) {
@@ -211,20 +222,24 @@ function placed(p: Pt, s: number, D: number) {
 }
 
 /**
- * Where the circle rests after hop number `h`: alternate sides of the
- * screen — the criss-cross — hanging well off the edge, at a height that
- * wanders the lane between the writing and the tab bar without covering
- * either.
+ * Where the bubble rests after hop number `h`: alternate sides of the
+ * screen — the criss-cross — hanging off the edge, but only as far as
+ * keeps the writing on the glass: the text block is 0.66 of the diameter,
+ * so the centre never comes closer to an edge than 0.34 diameters plus a
+ * small margin. Height wanders the lane between the header and the tab
+ * bar, so neither the wordmark it was born from nor the icons being
+ * spotlit are ever covered.
  */
-function crissCross(h: number, r: Rects, textBottom: number): Pt {
+function crissCross(h: number, r: Rects): Pt {
   const D = circleD(r.vw)
   const side = h % 2 === 0 ? 1 : -1
-  const x = side === 1 ? r.vw - D * 0.3 : D * 0.3
+  const inset = D * 0.34 + 8
+  const x = side === 1 ? r.vw - inset : inset
   const tabTop = Math.min(
     ...TAB_KEYS.map(k => r.tabs[k]?.rect.top ?? Infinity),
     r.vh - 88,
   )
-  const lo = textBottom + D / 2 + 12
+  const lo = 76 + D / 2
   const hi = tabTop - D / 2 - 10
   const fr = [0.72, 0.18, 0.95, 0.45, 0.05, 0.62][h % 6]
   const y = hi <= lo ? (lo + hi) / 2 : lo + (hi - lo) * fr
@@ -276,7 +291,6 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
   const hop = useRef(0)
   const timers = useRef<number[]>([])
   const rm = useRef(false)
-  const textRef = useRef<HTMLDivElement | null>(null)
 
   const later = (ms: number, fn: () => void) => {
     timers.current.push(window.setTimeout(fn, ms))
@@ -286,16 +300,12 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
     timers.current = []
   }
 
-  const textBottom = () =>
-    textRef.current?.getBoundingClientRect().bottom ??
-    (rects.current ? rects.current.vh * 0.42 : 360)
-
   /** One criss-cross: out on the putt curve, 2% over, settle. */
   const moveCircle = useCallback((h: number) => {
     const r = rects.current
     if (!r) return
     const D = circleD(r.vw)
-    const p = crissCross(h, r, textBottom())
+    const p = crissCross(h, r)
     setDrifting(false)
     setCircleStyle(s => ({
       ...s,
@@ -309,6 +319,8 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
         transition: `transform ${SETTLE_MS}ms ${PUTT}`,
       }))
       setDrifting(true)
+      // Idempotent while the tour is out — see the note on fadeLogoDot.
+      fadeLogoDot(0)
     })
   }, [])
 
@@ -339,7 +351,8 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
       setCircleStyle(st => ({
         ...st,
         transform: placed(c, s, D),
-        transition: `transform ${EXIT_MS}ms ${PUTT}`,
+        backgroundColor: ACCENT_EMERALD,
+        transition: `transform ${EXIT_MS}ms ${PUTT}, background-color ${EXIT_MS}ms ${PUTT}`,
       }))
       later(Math.max(0, EXIT_MS - DOT_FADE_MS), () => fadeLogoDot(1))
     } else {
@@ -411,26 +424,35 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
     const D = circleD(r.vw)
-    const p0 = crissCross(0, r, r.vh * 0.42)
+    const p0 = crissCross(0, r)
 
     if (r.dot && !rm.current) {
       const c = { x: r.dot.left + r.dot.width / 2, y: r.dot.top + r.dot.height / 2 }
       const s = Math.max(r.dot.width / D, 0.015)
-      setCircleStyle({ transform: placed(c, s, D), transition: 'none' })
+      setCircleStyle({
+        transform: placed(c, s, D),
+        backgroundColor: ACCENT_EMERALD,
+        transition: 'none',
+      })
       fadeLogoDot(0)
       requestAnimationFrame(() => requestAnimationFrame(() => {
         setVeilOn(true)
         setCircleStyle({
           transform: placed(p0, OVERSHOOT, D),
-          transition: `transform ${BIRTH_MS}ms ${PUTT}`,
+          backgroundColor: DEEP_EMERALD,
+          transition: `transform ${BIRTH_MS}ms ${PUTT}, background-color ${BIRTH_MS}ms ${PUTT}`,
         })
         later(BIRTH_MS, () => {
           setCircleStyle({
             transform: placed(p0, 1, D),
+            backgroundColor: DEEP_EMERALD,
             transition: `transform ${SETTLE_MS}ms ${PUTT}`,
           })
           setDrifting(true)
           phase.current = 'run'
+          // React's first post-hydration update replaces the wordmark's
+          // innerHTML, undoing the hide from a moment ago — re-assert it.
+          fadeLogoDot(0)
         })
         later(BIRTH_MS + TEXT_DELAY_MS, () => setTextOn(true))
       }))
@@ -481,7 +503,7 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
       const r = rects.current
       if (!r || phase.current !== 'run') return
       const D = circleD(r.vw)
-      const p = crissCross(hop.current, r, textBottom())
+      const p = crissCross(hop.current, r)
       setCircleStyle(s => ({ ...s, transform: placed(p, 1, D), transition: 'none' }))
     }
     window.addEventListener('resize', onResize)
@@ -567,72 +589,64 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
         }}
       />
 
-      {/* The circle — wordless now, the brand keeping the reader company.
-          The outer element carries the criss-cross; the inner wrapper
-          carries the idle drift, so the two never fight over one
-          transform. */}
+      {/* The bubble — the writing rides it. The outer element carries the
+          criss-cross; the inner wrapper carries the idle drift, so the two
+          never fight over one transform. The words fade between thoughts
+          while the bubble travels, so a paragraph never streaks across the
+          screen mid-read. */}
       <div
         className="intro-dot absolute left-0 top-0 rounded-full"
         style={{ width: D, height: D, willChange: 'transform', ...circleStyle }}
       >
         <div
-          className={`w-full h-full rounded-full gd-intro-drift ${
+          className={`w-full h-full rounded-full flex flex-col items-center justify-center text-center gd-intro-drift ${
             drifting ? '' : 'gd-intro-drift-off'
           }`}
-        />
-      </div>
-
-      {/* The writing, stationary while everything else moves. One thought
-          at a time; a tap brings the next. */}
-      <div
-        ref={textRef}
-        className="absolute inset-x-0 text-center px-8"
-        style={{ top: 'calc(env(safe-area-inset-top) + 92px)' }}
-      >
-        <div
-          className="mx-auto max-w-[340px]"
-          style={{
-            opacity: textOn ? 1 : 0,
-            transform: textOn ? 'translateY(0)' : 'translateY(8px)',
-            transition: textOn
-              ? `opacity ${TEXT_IN_MS}ms ${PUTT}, transform ${TEXT_IN_MS}ms ${PUTT}`
-              : `opacity ${OUT_MS}ms ${PUTT}, transform ${OUT_MS}ms ${PUTT}`,
-          }}
+          style={{ padding: `0 ${Math.round(D * 0.17)}px` }}
         >
-          <p
-            className="font-[family-name:var(--font-display)] font-semibold text-ink text-balance"
-            style={{ fontSize: 'clamp(27px, 7.6vw, 33px)', lineHeight: 1.15 }}
+          <div
+            style={{
+              opacity: textOn ? 1 : 0,
+              transform: textOn ? 'translateY(0)' : 'translateY(8px)',
+              transition: textOn
+                ? `opacity ${TEXT_IN_MS}ms ${PUTT}, transform ${TEXT_IN_MS}ms ${PUTT}`
+                : `opacity ${OUT_MS}ms ${PUTT}, transform ${OUT_MS}ms ${PUTT}`,
+            }}
           >
-            {step.title}
-            {step.tab && <span className="t-title-dot" aria-hidden="true" />}
-          </p>
-          <p
-            className="font-[family-name:var(--font-serif)] text-ink/80 mt-3"
-            style={{ fontSize: 17, lineHeight: 1.55 }}
-          >
-            {step.paras[pos.para]}
-          </p>
-
-          {/* Where you are in the lap, one dot per stop. */}
-          <span
-            className="mt-5 flex items-center justify-center gap-2"
-            aria-hidden="true"
-          >
-            {steps.map((s, i) => (
-              <span
-                key={s.key}
-                className={`w-1.5 h-1.5 rounded-full ${
-                  i === pos.step ? 'bg-accent' : 'bg-bark/25'
-                }`}
-              />
-            ))}
-          </span>
-
-          {pos.step === 0 && (
-            <p className="font-[family-name:var(--font-ui)] text-ink/60 mt-3 text-[13px]">
-              Tap anywhere to look around
+            <p
+              className="font-[family-name:var(--font-display)] font-semibold text-balance"
+              style={{ fontSize: 'clamp(22px, 6.2vw, 27px)', lineHeight: 1.15 }}
+            >
+              {step.title}
             </p>
-          )}
+            <p
+              className="font-[family-name:var(--font-serif)] mt-3"
+              style={{ fontSize: 'clamp(14px, 4vw, 16px)', lineHeight: 1.5 }}
+            >
+              {step.paras[pos.para]}
+            </p>
+
+            {/* Where you are in the lap, one dot per stop. */}
+            <span
+              className="mt-4 flex items-center justify-center gap-2"
+              aria-hidden="true"
+            >
+              {steps.map((s, i) => (
+                <span
+                  key={s.key}
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    i === pos.step ? 'intro-step-on' : 'intro-step'
+                  }`}
+                />
+              ))}
+            </span>
+
+            {pos.step === 0 && (
+              <p className="font-[family-name:var(--font-ui)] mt-3 opacity-75 text-[13px]">
+                Tap anywhere to look around
+              </p>
+            )}
+          </div>
         </div>
       </div>
 

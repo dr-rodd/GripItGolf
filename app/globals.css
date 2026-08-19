@@ -331,21 +331,23 @@ html.dark .only-light { display: none; }
    test:branding's stylesheet checks deliberately do not reach (see Motion
    in docs/design-system.md).
 
-   The veil is a soft blur over the page rather than a dark scrim, tinted
-   with the page's own cream through the tokens, so it follows the theme
-   and the writing on top is the app's ordinary ink. The circle is the
-   accent emerald itself — it IS the logo's dot, writ large, and carries
-   no text, so the deep-emerald AA compromise the old carrying circle
-   needed is gone. The glow is that same emerald as light rather than as a
-   fill. The one deliberate breach of "emerald is never a large fill":
-   here the dot is the subject, not decoration. Nothing else inherits the
-   exception. */
+   The veil is a soft blur over the page rather than a dark scrim — a
+   light touch, enough to push the page back without hiding it — tinted
+   with the page's own cream through the tokens so it follows the theme.
+   The bubble rests on the deep emerald so the cream writing it carries
+   clears AA at body size — the bright accent does not, and appears only
+   in the birth and the farewell, while the bubble still is the logo's
+   dot. The glow is that same emerald as light rather than as a fill. The
+   one deliberate breach of "emerald is never a large fill": here the dot
+   is the subject, not decoration. Nothing else inherits the exception. */
 .intro-veil {
-  -webkit-backdrop-filter: blur(7px);
-  backdrop-filter: blur(7px);
-  background-color: color-mix(in srgb, var(--color-cream) 45%, transparent);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  background-color: color-mix(in srgb, var(--color-cream) 32%, transparent);
 }
-.intro-dot  { background-color: #0A9D56; }
+.intro-dot     { background-color: #0A6B3C; color: #F6F4F0; }
+.intro-step    { background-color: rgba(246, 244, 240, 0.4); }
+.intro-step-on { background-color: #F6F4F0; }
 .intro-glow {
   background-color: rgba(10, 157, 86, 0.12);
   box-shadow: 0 0 26px 14px rgba(10, 157, 86, 0.45);

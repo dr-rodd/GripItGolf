@@ -105,7 +105,10 @@ export async function generateMetadata(
   }
 }
 
-export default async function TripPage({ params }: { params: Promise<{ tripCode: string }> }) {
+export default async function TripPage({ params, searchParams }: {
+  params: Promise<{ tripCode: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { tripCode } = await params
 
   const trip = await fetchTrip(tripCode)
@@ -253,11 +256,15 @@ export default async function TripPage({ params }: { params: Promise<{ tripCode:
   //
   // Decided here, on the server, rather than in the browser after hydration:
   // the page is force-dynamic and already reads the jar for the player
-  // cookie, so the check is free — and it puts the intro in the first paint
-  // instead of popping it over a page somebody has started reading. The
-  // cookie is written by the intro itself, on skip and finish alike
-  // (lib/intro.ts).
-  const showIntro = !(await cookies()).has(INTRO_COOKIE)
+  // cookie, so the check is free. The cookie is written by the intro itself,
+  // on skip and finish alike (lib/intro.ts) — once per DEVICE, not per trip,
+  // which is why a second trip on the same phone shows nothing.
+  //
+  // `?intro` on the hub URL overrides the cookie: the tour runs again, for
+  // showing a mate or for testing on a phone that has already seen it.
+  // Harmless to leave in a shared link — finishing just rewrites the cookie.
+  const showIntro =
+    'intro' in (await searchParams) || !(await cookies()).has(INTRO_COOKIE)
 
   let placingLine = ''
   let nextMatchLine = ''
