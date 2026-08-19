@@ -4,10 +4,16 @@
 //
 // Shape: 360x700, no tab bar — the intro shows these full-bleed with the
 // user's REAL tab bar as the footer, object-fit cover anchored to the
-// top, so the bottom of each artboard is sacrificial: everything that
-// matters sits above y=560, and the last stretch is padding that shorter
-// phones crop without loss. The bubble floats over the top third, so the
-// money content starts around y=200.
+// top. Two hard layout rules, learned from real phones:
+//
+//   · Safari's chrome makes the visible height as little as ~520 artboard
+//     units, so everything that matters sits above y=515 and the last
+//     stretch is sacrificial padding.
+//   · Every feature the intro RINGS must sit in the top band (ending by
+//     y=228) or the low band (starting after y=334) — the bubble parks on
+//     the other side of the ring, and a mid-artboard ring leaves it
+//     nowhere to stand on a short viewport. The gaps this forces in the
+//     middle of some screens are deliberate.
 import { writeFileSync, mkdirSync } from 'fs'
 
 const W = 360, H = 700
@@ -48,15 +54,7 @@ const wrap = body =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">` +
   `<rect width="${W}" height="${H}" fill="${CREAM}"/>${body}</svg>`
 
-// ── 1. Trip hub ──
-function golfCard(y, l1, l2, sub) {
-  return card(16, y, 328, l2 ? 78 : 64) +
-    `<rect x="28" y="${y + 16}" width="22" height="22" rx="5" fill="${CREAM}"/>` +
-    `<path d="M36 ${y + 34} V${y + 22} L44 ${y + 24} L36 ${y + 27}" stroke="${BARK}" stroke-width="1.4" fill="none" stroke-linejoin="round"/>` +
-    t(60, y + 28, 14, INK, l1, { w: 700 }) +
-    (l2 ? t(60, y + 46, 14, INK, l2, { w: 700 }) : '') +
-    t(60, y + (l2 ? 65 : 46), 11.5, MUT2, sub)
-}
+// ── 1. Trip hub — rings: itinerary heading (low band), golf card (low) ──
 const hub = wrap(
   header('green dot') +
   `<rect x="70" y="58" width="110" height="30" rx="15" fill="${SURF}" stroke="${BARK}" stroke-opacity="0.4"/>` +
@@ -70,19 +68,23 @@ const hub = wrap(
   t(50, 181, 12, MUT2, 'Every round is in. The leaderboard is final.') +
   `<line x1="32" y1="192" x2="328" y2="192" stroke="${BORDER}"/>` +
   t(32, 210, 12, INK, 'Plays Jack · Quarter-Final') +
-  t(16, 268, 22, INK, 'Your Itinerary', { w: 700 }) +
-  t(16, 290, 11.5, MUT2, 'Tap a course card for current weather and course') +
-  t(16, 305, 11.5, MUT2, 'details.') +
-  t(16, 336, 12, INK, 'THURSDAY, 20 AUGUST', { f: SANS, w: 700, ls: 1.6 }) +
-  t(104, 361, 11.5, MUT2, 'Dublin to Carne  ·  4 hr drive') +
-  golfCard(376, 'Carne Golf Links -- Wild', 'Atlantic Dunes', '2 tee times from 1:00 pm') +
-  t(16, 490, 12, INK, 'FRIDAY, 21 AUGUST', { f: SANS, w: 700, ls: 1.6 }) +
-  golfCard(504, 'Carne Golf Links -- Wild', 'Atlantic Dunes', '2 tee times from 9:30 am'),
+  t(16, 360, 22, INK, 'Your Itinerary', { w: 700 }) +
+  t(16, 381, 11.5, MUT2, 'Tap a course card for weather and course details.') +
+  t(16, 410, 12, INK, 'THURSDAY, 20 AUGUST', { f: SANS, w: 700, ls: 1.6 }) +
+  t(104, 431, 11.5, MUT2, 'Dublin to Carne  ·  4 hr drive') +
+  card(16, 442, 328, 70) +
+  `<rect x="28" y="456" width="22" height="22" rx="5" fill="${CREAM}"/>` +
+  `<path d="M36 474 V462 L44 464 L36 467" stroke="${BARK}" stroke-width="1.4" fill="none" stroke-linejoin="round"/>` +
+  t(60, 468, 14, INK, 'Carne Golf Links -- Wild Atlantic…', { w: 700 }) +
+  t(60, 488, 11.5, MUT2, '2 tee times from 1:00 pm') +
+  t(16, 550, 12, INK, 'FRIDAY, 21 AUGUST', { f: SANS, w: 700, ls: 1.6 }),
 )
 
-// ── 2. Scoring: choose a round (round 1 in play) ──
+// ── 2. Scoring: choose a round — ring: Round 1 (top band). No emerald
+//      border of its own: the intro's ring is the only box, so the live
+//      dot and the "In play" line carry the in-play state here. ──
 function roundCard(y, n, course, place, live = false) {
-  return card(16, y, 328, 74, live ? { stroke: ACC, sw: 1.6 } : {}) +
+  return card(16, y, 328, 74) +
     t(32, y + 24, 10.5, MUT, `ROUND ${n}`, { f: SANS, ls: 2 }) +
     t(32, y + 45, 15, INK, course) +
     t(32, y + 63, 11.5, live ? DEEP : MUT2, `${place} · ${live ? 'In play' : 'No scores yet'}`) +
@@ -93,14 +95,15 @@ const scoring = wrap(
   t(16, 78, 11, MUT, 'CHOOSE A ROUND', { f: SANS, ls: 2 }) +
   `<rect x="228" y="58" width="116" height="30" rx="15" fill="${SURF}"/>` +
   t(286, 77, 12.5, INK, '+ Add round', { w: 700, a: 'middle' }) +
-  roundCard(104, 1, 'Carne Golf Links -- Wild Atlan…', 'Belmullet, Mayo, Ireland', true) +
-  roundCard(192, 2, 'Carne Golf Links -- Wild Atlan…', 'Belmullet, Mayo, Ireland') +
-  roundCard(280, 3, 'County Sligo Golf Club -- Colt…', 'Rosses Point, Sligo, Ireland') +
-  roundCard(368, 4, 'Ballyliffin Golf Club -- Old Links', 'Ballyliffin, Donegal, Ireland') +
-  roundCard(456, 5, 'Portsalon Golf Club', 'Portsalon, Donegal, Ireland'),
+  roundCard(96, 1, 'Carne Golf Links -- Wild Atlan…', 'Belmullet, Mayo, Ireland', true) +
+  roundCard(184, 2, 'Carne Golf Links -- Wild Atlan…', 'Belmullet, Mayo, Ireland') +
+  roundCard(272, 3, 'County Sligo Golf Club -- Colt…', 'Rosses Point, Sligo, Ireland') +
+  roundCard(360, 4, 'Ballyliffin Golf Club -- Old Links', 'Ballyliffin, Donegal, Ireland') +
+  roundCard(448, 5, 'Portsalon Golf Club', 'Portsalon, Donegal, Ireland'),
 )
 
-// ── 3. Scoring: the group's scorecard — players and tees ──
+// ── 3. Scoring: the scorecard — rings: Jack's block and his playing-
+//      handicap line, both in the low band. Ernie sits mid, unringed. ──
 function playerBlock(y, dotC, name, hcp, ph, ninety) {
   return `<rect x="16" y="${y}" width="328" height="46" rx="6" fill="${TINT}" stroke="${DEEP}" stroke-opacity="0.5"/>` +
     `<circle cx="34" cy="${y + 23}" r="4.5" fill="${dotC}"/>` +
@@ -126,13 +129,12 @@ const scorecard = wrap(
   `<circle cx="112" cy="129" r="4" fill="${ACC}"/>` +
   t(126, 134, 11.5, DEEP, 'LIVE LEADERBOARD', { f: SANS, ls: 2 }) +
   t(16, 174, 11, MUT, 'SELECT PLAYERS (1–4)', { f: SANS, ls: 2 }) +
-  playerBlock(188, '#C0392B', 'Ernie', 10, 11, 10) +
-  playerBlock(316, ACC, 'Jack', 3, 4, 3) +
-  playerBlock(444, '#C0392B', 'Phil', 10, 11, 10) +
-  t(180, 600, 12.5, MUT2, 'Tap a player to add them to the card', { a: 'middle' }),
+  playerBlock(190, '#C0392B', 'Ernie', 10, 11, 10) +
+  playerBlock(348, ACC, 'Jack', 3, 4, 3),
 )
 
-// ── 4. Leaderboard ──
+// ── 4. Leaderboard — rings: the board tabs and the description card,
+//      both in the top band; the table below is scenery. ──
 const rows = [
   ['1', 'Ross', 32, 29, 33, 30, 124], ['2', 'Dave', 26, 33, 33, 29, 121],
   ['3', 'Jeff', 32, 32, 24, 32, 120], ['3', 'Mark', 27, 29, 31, 33, 120],
@@ -140,8 +142,8 @@ const rows = [
 ]
 let table = ''
 rows.forEach((r, i) => {
-  const y = 296 + i * 46
-  table += `<line x1="16" y1="${y - 28}" x2="344" y2="${y - 28}" stroke="${BORDER}"/>` +
+  const y = 296 + i * 42
+  table += `<line x1="16" y1="${y - 26}" x2="344" y2="${y - 26}" stroke="${BORDER}"/>` +
     t(26, y, 11, MUT, r[0]) + t(44, y, 14.5, INK, r[1], { w: 700 })
   ;[2, 3, 4, 5].forEach((c, j) => {
     table += t(158 + j * 46, y, 15, INK, String(r[c]), { w: 700, a: 'middle' })
@@ -168,7 +170,7 @@ const leaderboard = wrap(
   table,
 )
 
-// ── 5. Matchplay bracket ──
+// ── 5. Matchplay bracket — ring: the live tie, in the low band. ──
 function tie(x, y, w, top, topScore, bottom, botScore, opts = {}) {
   const h = 86
   const mid = y + h / 2
@@ -192,23 +194,21 @@ const matchplay = wrap(
   backBtn(16, 58) +
   t(180, 82, 20, INK, 'Matchplay', { w: 700, a: 'middle' }) +
   `<line x1="0" y1="106" x2="${W}" y2="106" stroke="${BORDER}"/>` +
-  t(180, 140, 15, INK, 'Quarter-Final', { a: 'middle' }) +
-  `<rect x="308" y="120" width="32" height="32" rx="10" fill="${SURF}" stroke="${BORDER}"/>` +
-  `<path d="M321 128 L328 136 L321 144" stroke="${BARK}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>` +
-  tie(16, 170, 176, 'Ernie', 10, '', null, { seedTop: '1', byeBot: true }) +
-  tie(16, 272, 176, 'Scottie', '4/1', 'Phil', 10, { seedTop: '4', seedBot: '5', hl: true }) +
-  elbow(192, 213, 216, 264) + elbow(192, 315, 216, 264) +
-  tie(216, 221, 128, 'Ernie', 10, 'Scottie', 6) +
-  tie(16, 420, 176, 'Tiger', 8, '', null, { seedTop: '2', byeBot: true }) +
-  tie(16, 522, 176, 'Rory', 0, 'Jack', 3, { seedTop: '3', seedBot: '6' }) +
-  elbow(192, 463, 216, 514) + elbow(192, 565, 216, 514) +
-  tie(216, 471, 128, 'Tiger', 8, 'To be decided', null, { tbd: true }) +
-  `<rect x="160" y="640" width="24" height="5" rx="2.5" fill="${ACC}"/>` +
-  `<circle cx="196" cy="642.5" r="2.5" fill="rgba(74,55,40,0.25)"/>` +
-  `<circle cx="208" cy="642.5" r="2.5" fill="rgba(74,55,40,0.25)"/>`,
+  t(180, 138, 15, INK, 'Quarter-Final', { a: 'middle' }) +
+  `<rect x="308" y="118" width="32" height="32" rx="10" fill="${SURF}" stroke="${BORDER}"/>` +
+  `<path d="M321 126 L328 134 L321 142" stroke="${BARK}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>` +
+  tie(16, 162, 176, 'Ernie', 10, '', null, { seedTop: '1', byeBot: true }) +
+  tie(16, 348, 176, 'Scottie', '4/1', 'Phil', 10, { seedTop: '4', seedBot: '5', hl: true }) +
+  elbow(192, 205, 216, 298) + elbow(192, 391, 216, 298) +
+  tie(216, 255, 128, 'Ernie', 10, 'Scottie', 6) +
+  tie(16, 470, 176, 'Tiger', 8, '', null, { seedTop: '2', byeBot: true }) +
+  tie(16, 572, 176, 'Rory', 0, 'Jack', 3, { seedTop: '3', seedBot: '6' }) +
+  elbow(192, 513, 216, 564) + elbow(192, 615, 216, 564) +
+  tie(216, 521, 128, 'Tiger', 8, 'To be decided', null, { tbd: true }),
 )
 
-// ── 6. Stats hub ──
+// ── 6. Stats hub — rings: the player chips (top band) and the strokes-
+//      gained panel (low band). ──
 const statRow = (y, label, val, valC = INK) =>
   t(32, y, 11, MUT, label, { f: SANS, ls: 1.6 }) +
   t(328, y, 15, valC, String(val), { w: 700, a: 'end' }) +
@@ -231,24 +231,23 @@ const stats = wrap(
   t(32, 162, 10, MUT, 'COURSES', { f: SANS, ls: 1.6 }) +
   t(32, 179, 13.5, INK, 'All courses', { w: 700 }) +
   t(300, 172, 12, MUT2, '4 rounds', { a: 'end' }) +
-  card(16, 202, 328, 224) +
-  t(32, 232, 16, INK, 'Scoring', { w: 700 }) +
-  t(32, 251, 11.5, MUT2, 'Every scored hole, against your own par.') +
-  statRow(284, 'BIRDIES', 2, DEEP) +
-  statRow(320, 'PARS', 27) +
-  statRow(356, 'BOGEYS', 25) +
-  statRow(392, 'DOUBLES OR WORSE', 18) +
-  card(16, 440, 328, 156) +
-  t(32, 470, 16, INK, 'Strokes gained', { w: 700 }) +
-  `<rect x="216" y="454" width="60" height="28" rx="14" fill="${TINT}" stroke="${DEEP}"/>` +
-  t(246, 472, 12, DEEP, 'Gross', { a: 'middle' }) +
-  `<rect x="284" y="454" width="48" height="28" rx="14" fill="${SURF}" stroke="${BORDER}"/>` +
-  t(308, 472, 12, MUT2, 'Net', { a: 'middle' }) +
-  statRow(512, 'TO THE GREEN', 5, DEEP) +
-  statRow(548, 'PUTTING', 2, DEEP),
+  card(16, 200, 328, 128) +
+  t(32, 228, 16, INK, 'Scoring', { w: 700 }) +
+  t(32, 247, 11.5, MUT2, 'Every scored hole, against your own par.') +
+  statRow(280, 'BIRDIES', 2, DEEP) +
+  statRow(312, 'PARS', 27) +
+  card(16, 380, 328, 132) +
+  t(32, 410, 16, INK, 'Strokes gained', { w: 700 }) +
+  `<rect x="216" y="394" width="60" height="28" rx="14" fill="${TINT}" stroke="${DEEP}"/>` +
+  t(246, 412, 12, DEEP, 'Gross', { a: 'middle' }) +
+  `<rect x="284" y="394" width="48" height="28" rx="14" fill="${SURF}" stroke="${BORDER}"/>` +
+  t(308, 412, 12, MUT2, 'Net', { a: 'middle' }) +
+  statRow(448, 'TO THE GREEN', 5, DEEP) +
+  statRow(484, 'PUTTING', 2, DEEP),
 )
 
-// ── 7. Trip setup ──
+// ── 7. Trip setup — rings: Trip Settings (top band) and the Stableford
+//      card (low band). ──
 const setup = wrap(
   header('settings') +
   card(16, 58, 328, 66) +
@@ -259,25 +258,21 @@ const setup = wrap(
   t(70, 100, 11.5, MUT2, 'Name, dates, itinerary and stats —') +
   t(70, 115, 11.5, MUT2, 'leaderboards are below') +
   t(330, 96, 14, MUT, '›', { a: 'end' }) +
-  card(16, 138, 328, 452) +
+  card(16, 140, 328, 450) +
   t(32, 168, 12.5, DEEP, 'LEADERBOARDS', { f: SANS, w: 700, ls: 2 }) +
   t(32, 188, 11.5, MUT2, 'Choose your Competition Leaderboards. Add as') +
   t(32, 203, 11.5, MUT2, 'many formats as you like.') +
-  card(30, 218, 300, 128) +
-  t(44, 246, 17, INK, 'Stableford Points', { w: 700 }) +
-  `<rect x="44" y="256" width="74" height="20" rx="10" fill="rgba(10,157,86,0.16)"/>` +
-  t(81, 270, 9.5, DEEP, 'PRIMARY', { f: SANS, w: 600, a: 'middle', ls: 1.2 }) +
-  t(44, 296, 11, MUT2, "Stableford points. Man's greatest achievement.") +
-  t(44, 311, 11, MUT2, 'One running total across the trip. Worst round') +
-  t(44, 326, 11, MUT2, 'dropped. Played off 90% of course handicap.') +
-  card(30, 360, 300, 104) +
-  t(44, 388, 17, INK, 'Team better ball', { w: 700 }) +
-  t(44, 410, 11, MUT2, "A composite card: the team's best score on") +
-  t(44, 425, 11, MUT2, 'every hole, and everyone counts on the last 3.') +
-  card(30, 478, 300, 96) +
-  t(44, 506, 17, INK, 'Matchplay knockout', { w: 700 }) +
-  t(44, 528, 11, MUT2, 'A seeded singles draw. Quarter-finals through') +
-  t(44, 543, 11, MUT2, 'to the final, settled from the cards.'),
+  card(30, 348, 300, 130) +
+  t(44, 376, 17, INK, 'Stableford Points', { w: 700 }) +
+  `<rect x="44" y="386" width="74" height="20" rx="10" fill="rgba(10,157,86,0.16)"/>` +
+  t(81, 400, 9.5, DEEP, 'PRIMARY', { f: SANS, w: 600, a: 'middle', ls: 1.2 }) +
+  t(44, 426, 11, MUT2, "Stableford points. Man's greatest achievement.") +
+  t(44, 441, 11, MUT2, 'One running total across the trip. Worst round') +
+  t(44, 456, 11, MUT2, 'dropped. Played off 90% of course handicap.') +
+  card(30, 492, 300, 96) +
+  t(44, 520, 17, INK, 'Team better ball', { w: 700 }) +
+  t(44, 542, 11, MUT2, "A composite card: the team's best score on") +
+  t(44, 557, 11, MUT2, 'every hole, and everyone counts on the last 3.'),
 )
 
 mkdirSync('public/intro', { recursive: true })

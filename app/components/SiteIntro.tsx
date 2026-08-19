@@ -57,7 +57,7 @@ import { rememberIntroSeen } from '@/lib/intro'
  *
  * Everything animated is transform or opacity — nothing that triggers
  * layout. Under prefers-reduced-motion the choreography collapses: no
- * birth, no travel, no drift, no overshoot — each thought simply appears
+ * birth, no travel, no overshoot — each thought simply appears
  * in place, spotlight already on its tab.
  */
 
@@ -118,10 +118,8 @@ function makeSteps(tripName: string): Step[] {
       tab: 'home',
       shots: ['/intro/hub.svg'],
       focus: [
-        // The heading and its caption, not the whole itinerary — a ring
-        // spanning mid-screen leaves the bubble nowhere clear to park.
-        { x: 8, y: 248, w: 344, h: 84 },
-        { x: 12, y: 372, w: 336, h: 86 },
+        { x: 8, y: 336, w: 344, h: 58 },
+        { x: 12, y: 434, w: 336, h: 84 },
       ],
       title: 'Trip Hub',
       paras: [
@@ -135,8 +133,8 @@ function makeSteps(tripName: string): Step[] {
       tab: 'settings',
       shots: ['/intro/setup.svg'],
       focus: [
-        { x: 24, y: 210, w: 312, h: 142 },
-        { x: 12, y: 54, w: 336, h: 74 },
+        { x: 24, y: 340, w: 312, h: 144 },
+        { x: 12, y: 52, w: 336, h: 78 },
       ],
       title: 'Trip Setup',
       paras: [
@@ -150,9 +148,9 @@ function makeSteps(tripName: string): Step[] {
       tab: 'scoring',
       shots: ['/intro/scoring.svg', '/intro/scorecard.svg', '/intro/scorecard.svg'],
       focus: [
-        { x: 12, y: 98, w: 336, h: 86 },
-        { x: 12, y: 182, w: 336, h: 136 },
-        { x: 16, y: 402, w: 220, h: 36 },
+        { x: 12, y: 90, w: 336, h: 86 },
+        { x: 12, y: 342, w: 336, h: 140 },
+        { x: 16, y: 444, w: 220, h: 34 },
       ],
       title: 'Scoring',
       paras: [
@@ -169,7 +167,7 @@ function makeSteps(tripName: string): Step[] {
       shots: ['/intro/stats.svg'],
       focus: [
         { x: 8, y: 94, w: 296, h: 42 },
-        { x: 12, y: 432, w: 336, h: 170 },
+        { x: 12, y: 374, w: 336, h: 144 },
       ],
       title: 'Stats Hub',
       paras: [
@@ -184,9 +182,9 @@ function makeSteps(tripName: string): Step[] {
       tab: 'leaderboard',
       shots: ['/intro/leaderboard.svg', '/intro/leaderboard.svg', '/intro/matchplay.svg'],
       focus: [
-        { x: 12, y: 94, w: 336, h: 84 },
+        { x: 12, y: 94, w: 336, h: 86 },
         { x: 10, y: 50, w: 310, h: 44 },
-        { x: 10, y: 264, w: 192, h: 100 },
+        { x: 10, y: 342, w: 192, h: 98 },
       ],
       title: 'Leaderboard',
       paras: [
@@ -265,8 +263,9 @@ function restoreLogoDot() {
   el.style.opacity = ''
 }
 
-/** Big enough for the writing to breathe — the bubble carries the words. */
-const circleD = (vw: number) => Math.min(Math.round(vw * 0.84), 400)
+/** Big enough for the writing to breathe, small enough to dodge — the
+    inner padding is tight, so the words use most of the circle. */
+const circleD = (vw: number) => Math.min(Math.round(vw * 0.76), 350)
 
 /**
  * The bubble's typography — Big Dog's pick from the five candidates that
@@ -304,25 +303,40 @@ function shotScale(r: Rects) {
 type Side = 'L' | 'R' | 'C'
 
 /**
- * Where the bubble parks for a thought: on the OPPOSITE half of the
- * screen from the feature being ringed, fully clear of it — a feature in
- * the upper half puts the bubble down by the tab bar, a feature in the
- * lower half puts it up under the header. Every highlight region in the
- * steps is sized so its opposite half genuinely fits the bubble; the
- * clamp is only a guard. No feature means the top parking spot.
+ * Where the bubble parks for a thought: fully clear of the ringed
+ * feature, worked out against the REAL viewport — Safari's chrome makes
+ * a phone's usable height far shorter than the screen, which is what
+ * sank the fixed-halves version of this. The bubble takes the far
+ * parking spot on whichever side of the ring it actually fits (the
+ * artboards keep every ringed feature in a top or a low band, so on any
+ * normal phone one side always fits); if some viewport is too short for
+ * either, it parks as far from the ring as the glass allows.
  */
 function spotFor(side: Side, reg: Region | null, r: Rects): Pt {
   const D = circleD(r.vw)
-  if (side === 'C') return { x: r.vw / 2, y: Math.max(r.vh * 0.32, 72 + D / 2) }
+  if (side === 'C') return { x: r.vw / 2, y: Math.max(r.vh * 0.32, 66 + D / 2) }
   const lean = side === 'L' ? 0.42 : 0.58
   const x = clamp(lean * r.vw, D * 0.34 + 6, r.vw - D * 0.34 - 6)
   const tabTop = tabTopOf(r)
-  const topY = 60 + D / 2
-  const bottomY = tabTop - 10 - D / 2
+  const topY = 54 + D / 2
+  const bottomY = tabTop - 8 - D / 2
   if (!reg) return { x, y: topY }
   const { s } = shotScale(r)
-  const regionMid = (reg.y + reg.h / 2) * s
-  return { x, y: regionMid < tabTop / 2 ? bottomY : topY }
+  const ringTop = reg.y * s
+  const ringBottom = (reg.y + reg.h) * s
+  const GAP = 12
+  const above = ringTop - GAP - D / 2
+  const below = ringBottom + GAP + D / 2
+  const fitsAbove = above >= topY
+  const fitsBelow = below <= bottomY
+  const preferAbove = (ringTop + ringBottom) / 2 > (54 + tabTop) / 2
+  let y: number
+  if (preferAbove && fitsAbove) y = topY
+  else if (!preferAbove && fitsBelow) y = bottomY
+  else if (fitsAbove) y = topY
+  else if (fitsBelow) y = bottomY
+  else y = clamp(above - topY > bottomY - below ? above : below, topY, bottomY)
+  return { x, y }
 }
 
 /**
@@ -375,7 +389,6 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
   const [veilOn, setVeilOn] = useState(false)
   const [circleStyle, setCircleStyle] = useState<React.CSSProperties>({})
   const [textOn, setTextOn] = useState(false)
-  const [drifting, setDrifting] = useState(false)
   // The example screen currently up, and the one it is replacing. On a
   // page change the NEW image fades in OVER the old one, which holds at
   // full opacity beneath until the fade is done — so the pages' combined
@@ -408,7 +421,6 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
     if (last && Math.hypot(p.x - last.x, p.y - last.y) < 4) return
     lastSpot.current = p
     const D = circleD(r.vw)
-    setDrifting(false)
     setCircleStyle(s => ({
       ...s,
       transform: placed(p, OVERSHOOT, D),
@@ -420,7 +432,6 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
         transform: placed(p, 1, D),
         transition: `transform ${SETTLE_MS}ms ${PUTT}`,
       }))
-      setDrifting(true)
       // Idempotent while the tour is out — see the note on fadeLogoDot.
       fadeLogoDot(0)
     })
@@ -447,7 +458,6 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
     setShotOn(false)
     setFocusOn(false)
     setVeilOn(false)
-    setDrifting(false)
     if (r?.dot) {
       const D = circleD(r.vw)
       const c = { x: r.dot.left + r.dot.width / 2, y: r.dot.top + r.dot.height / 2 }
@@ -578,7 +588,6 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
             transform: placed(p0, 1, D),
             transition: `transform ${SETTLE_MS}ms ${PUTT}`,
           })
-          setDrifting(true)
           phase.current = 'run'
           // React's first post-hydration update replaces the wordmark's
           // innerHTML, undoing the hide — re-assert it.
@@ -594,7 +603,6 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
         setVeilOn(true)
         setCircleStyle(st => ({ ...st, opacity: 1, transition: `opacity 250ms ${PUTT}` }))
         setTextOn(true)
-        setDrifting(true)
         phase.current = 'run'
       }))
     }
@@ -679,21 +687,6 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
       aria-label="Welcome to Green Dot Golf"
       onClick={advance}
     >
-      {/* The idle drift lives here rather than in globals.css: it is a
-          six-second loop, and the stylesheet's looping animations are held
-          to breath-length by test:branding. Kept beneath 3px and 0.5% so
-          the bubble reads as alive, not restless. */}
-      <style>{`
-        @keyframes gdIntroDrift {
-          0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
-          25%      { transform: translate3d(2px, -2px, 0) scale(1.004); }
-          50%      { transform: translate3d(-2px, 1px, 0) scale(0.997); }
-          75%      { transform: translate3d(1px, 2px, 0) scale(1.002); }
-        }
-        .gd-intro-drift { animation: gdIntroDrift 6s ease-in-out infinite; }
-        .gd-intro-drift-off { animation-play-state: paused; }
-      `}</style>
-
       {/* The example screen — the real page this thought is talking
           about, full-bleed down to the user's own tab bar, which stays
           the footer of the picture. Each image fades on its own, so one
@@ -785,18 +778,14 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
       />
 
       {/* The bubble — the logo's own emerald, the writing riding it,
-          stationary unless the page changes or a feature needs the space.
-          The outer element carries the travel; the inner wrapper carries
-          the idle drift, so the two never fight over one transform. */}
+          stationary unless the page changes or a feature needs the space. */}
       <div
         className="intro-dot absolute left-0 top-0 rounded-full"
         style={{ width: D, height: D, willChange: 'transform', ...circleStyle }}
       >
         <div
-          className={`w-full h-full rounded-full flex flex-col items-center justify-center text-center gd-intro-drift ${
-            drifting ? '' : 'gd-intro-drift-off'
-          }`}
-          style={{ padding: `0 ${Math.round(D * 0.16)}px` }}
+          className="w-full h-full rounded-full flex flex-col items-center justify-center text-center"
+          style={{ padding: `0 ${Math.round(D * 0.12)}px` }}
         >
           <div
             style={{
