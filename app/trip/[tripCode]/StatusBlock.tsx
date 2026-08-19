@@ -9,6 +9,7 @@ import {
   upNext, nextActivity, describeCountdown, describeGroups, type RoundDates,
 } from '@/lib/upNext'
 import { useMinute } from '@/app/components/useMinute'
+import type { TripWrap } from '@/lib/tripStatus'
 import CourseWeather from '@/app/components/CourseWeather'
 import { IconArrowRight, IconFlag, IconHome, IconCar, IconPlane, IconTrain, IconFork, IconUsers } from '@/app/components/icons'
 
@@ -65,6 +66,7 @@ export default function StatusBlock({
   roundDates,
   roundNumbers,
   courseNames,
+  wrap,
 }: {
   tripCode: string
   /** Null when this device is not linked to anybody on this trip. */
@@ -76,6 +78,13 @@ export default function StatusBlock({
   /** Itinerary item id → round number, for the golf items that have a page. */
   roundNumbers: Record<string, number>
   courseNames: Record<string, string>
+  /**
+   * What to say once nothing is left on the running order — decided on the
+   * server (lib/tripStatus.ts `tripWrap`), because only the server knows
+   * whether every round's scores are actually in. "The leaderboard is final"
+   * is a claim about the scores, not the calendar.
+   */
+  wrap: TripWrap
 }) {
   const router = useRouter()
   const now = useMinute()
@@ -149,7 +158,7 @@ export default function StatusBlock({
           ) : (
             <UpNextLines next={next} countdown={countdown} />
           )
-        ) : <TripOver />}
+        ) : <WrapCard wrap={wrap} />}
 
         {/* What else is booked.
             Outside the <Link> above rather than inside it, which is the
@@ -258,16 +267,27 @@ function UpNextLines({
   )
 }
 
-/** Nothing left on the running order. */
-function TripOver() {
+/**
+ * Nothing left on the running order — what the trip has to say for itself.
+ *
+ * The words come from `tripWrap` in lib/tripStatus.ts, not from here: this
+ * card used to say "Every round is in. The leaderboard is final." off the
+ * running order alone, which called a board final with cards still out on
+ * it. While scores are outstanding the flag square warms to the accent —
+ * something is still happening, and this is the line saying what.
+ */
+function WrapCard({ wrap }: { wrap: TripWrap }) {
+  const waiting = wrap.key === 'waiting'
   return (
     <div className="flex items-center gap-3">
-      <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-bark/[0.06] text-bark flex items-center justify-center">
+      <span className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
+        waiting ? 'bg-accent/[0.12] text-accent-deep' : 'bg-bark/[0.06] text-bark'
+      }`}>
         <IconFlag size={16} />
       </span>
       <div className="min-w-0">
-        <p className="t-cap uppercase tracking-[0.12em] text-ink/50">That&apos;s the trip</p>
-        <p className="t-cap text-ink/65 mt-0.5">Every round is in. The leaderboard is final.</p>
+        <p className="t-cap uppercase tracking-[0.12em] text-ink/50">{wrap.cap}</p>
+        <p className="t-cap text-ink/65 mt-0.5">{wrap.body}</p>
       </div>
     </div>
   )

@@ -60,12 +60,25 @@ export default async function TripCoursePortalPage({
   // on a bad radio, small and many beats large and few every time.
   const roundIds = (rounds ?? []).map(r => r.id)
 
+  // "Live" is a player holding a card, not a session existing. Tapping Start
+  // opens a `live_rounds` row before anybody has been picked for it, so
+  // someone who looked at a finished round's scoring screen and backed out
+  // left an active session with nobody on it — and this tile then glowed
+  // "In play" on a round everyone had signed for, until the nightly cleanup
+  // closed the empty card. The locks are the same signal the leaderboard
+  // reads for its live dot, so the two screens cannot disagree.
   const { data: openData, error: openErr } = roundIds.length > 0
-    ? await supabase.from('live_rounds').select('round_id')
+    ? await supabase.from('live_rounds')
+        .select('round_id, live_player_locks(player_id)')
         .eq('status', 'active').in('round_id', roundIds)
     : { data: [], error: null }
   if (openErr) console.error('TripCoursePortal live rounds query failed:', openErr)
-  const openRounds = new Set((openData ?? []).map(r => r.round_id as string))
+  type OpenCard = { round_id: string; live_player_locks: { player_id: string }[] | null }
+  const openRounds = new Set(
+    ((openData ?? []) as unknown as OpenCard[])
+      .filter(r => (r.live_player_locks ?? []).length > 0)
+      .map(r => r.round_id),
+  )
 
   const anyRows = async (table: 'scores' | 'live_scores', roundId: string) => {
     const { count, error } = await supabase

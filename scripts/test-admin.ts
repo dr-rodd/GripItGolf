@@ -15,7 +15,7 @@
  */
 
 import { looksLikeEmail, normaliseEmail, emailWarning, MAX_EMAIL } from '../lib/email'
-import { tripState, todayString } from '../lib/tripStatus'
+import { tripState, todayString, tripWrap } from '../lib/tripStatus'
 import {
   signSession, verifySession, newSession, passwordMatches, SESSION_HOURS,
 } from '../lib/adminAuth'
@@ -140,6 +140,27 @@ section('Open means somebody is still doing something')
   eq(tripState({}, TODAY).open, true, 'a trip with no dates at all is open')
   eq(tripState({ start_date: '2026-08-10' }, TODAY).open, true, 'an upcoming one is open')
   eq(tripState({ end_date: '2026-07-01' }, TODAY).open, false, 'a completed one is not')
+}
+
+section('The wrap-up only calls a leaderboard final when it is')
+{
+  // The claim is earned twice over: the dates are done AND every score is in.
+  const done = tripWrap('completed', false)
+  eq(done.key, 'final', 'dates done and every score in is final')
+  ok(done.body.includes('final'), '  …and says so')
+
+  // Beyond the dates with cards still out — the case the card used to lie
+  // about, calling a board final that could still move.
+  const waiting = tripWrap('completed', true)
+  eq(waiting.key, 'waiting', 'beyond the dates with scores missing is waiting, not final')
+  ok(waiting.body.includes('waiting on a few scores'),
+    '  …and says the scores are what it waits on')
+
+  eq(tripWrap('active', true).key, 'waiting', 'mid-trip with cards still out waits too')
+  eq(tripWrap('active', false).key, 'quiet',
+    'mid-trip with everything in is quiet — the dates are not done, so nothing is final')
+  eq(tripWrap('upcoming', true).key, 'quiet',
+    'a trip that has not started is not "waiting" on its unplayed rounds')
 }
 
 section('Today is a plain date, not a moment')

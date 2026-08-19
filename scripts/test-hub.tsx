@@ -114,6 +114,54 @@ section('Up next picks the next thing that has not happened')
     'a trip with no itinerary has nothing next either')
 }
 
+// ─── A re-dated trip ───────────────────────────────────────
+
+section('New golf on a re-dated trip beats the watermark')
+{
+  // The trip ran; the dates were then pushed out and a new round added. Its
+  // day sits BEFORE the old rounds' days in the running order, but its date
+  // is in the future — the watermark must not sweep it away, and "that's
+  // the trip" must not be said about golf nobody has played yet.
+  const items = [
+    golf('g0', 0, 0, '14:00'),
+    golf('gNew', 1, 0, '10:00'),
+    golf('g2', 2, 0, '10:00'),
+  ]
+  const dates = new Map(DATES)
+  dates.set('gNew', '2026-09-10')
+  const after = upNext(items, START, dates, COURSES, new Date(2026, 8, 1, 9, 0))
+  eq(after?.item.id, 'gNew',
+    'a future round leads even sitting behind a past one in the running order')
+}
+
+// ─── The wrap-up card ──────────────────────────────────────
+
+section('The wrap-up card is earned, not assumed')
+{
+  const status = code('app/trip/[tripCode]/StatusBlock.tsx')
+  const hub = code('app/trip/[tripCode]/page.tsx')
+  const picker = code('app/trip/[tripCode]/scoring/page.tsx')
+
+  // The words come from the server, which is the only place that can know
+  // whether every round's scores are actually in. The client renders what
+  // it is handed and claims nothing of its own.
+  ok(status.includes('WrapCard') && status.includes('wrap.body'),
+    'the status block renders the wrap it is handed')
+  ok(!status.includes('leaderboard is final'),
+    '  …and holds no copy of the final claim itself')
+  ok(hub.includes('tripWrap('), 'the hub decides the wrap with tripWrap')
+  ok(hub.includes("count: 'exact', head: true"),
+    '  …counting each round\'s scores rather than fetching them')
+  ok(hub.includes('(r.live_player_locks ?? []).length > 0'),
+    '  …and reads cards still out off the locks, not bare sessions')
+
+  // The round picker's live glow is the same rule: a player holding a card,
+  // not a session existing. A playerless session someone backed out of used
+  // to keep the last round glowing "In play" after every card was signed.
+  ok(picker.includes('(r.live_player_locks ?? []).length > 0'),
+    'the round picker calls a round live only with a player on the card')
+}
+
 // ─── Activities are mentioned, never promoted ──────────────
 
 section('An activity never takes the card from golf')

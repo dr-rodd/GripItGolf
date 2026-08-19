@@ -63,6 +63,60 @@ export function tripState(trip: TripDates, today: string): TripState {
   return STATES.active
 }
 
+// ─── The wrap-up card ──────────────────────────────────────────
+//
+// What the hub's status card says once there is nothing left on the running
+// order. "That's the trip — the leaderboard is final" is a strong claim, and
+// it used to be made from the running order alone: the moment nothing was
+// left to come, the board was called final, with cards still out on it and
+// whatever the calendar said. Now the claim is earned twice over — the dates
+// have to be done, and every round's scores have to be in.
+
+export type TripWrapKey = 'waiting' | 'final' | 'quiet'
+
+export type TripWrap = {
+  key: TripWrapKey
+  /** The small-caps line over the message. */
+  cap: string
+  /** The sentence under it. */
+  body: string
+}
+
+/**
+ * The three things the card can say, in the order they are checked:
+ *
+ *   waiting  a card is still out, or a round has nothing committed — the
+ *            board could yet move, and the card says what it is waiting on.
+ *            Never before the trip has started: an upcoming trip's unplayed
+ *            rounds are the future, not a delay.
+ *   final    the dates are done and every round's scores are in. The one
+ *            state allowed to call the leaderboard final.
+ *   quiet    nothing is next, nothing is owed, but the dates are not done —
+ *            the trip was re-dated with nothing added yet, or it is simply
+ *            the last evening. Says only what is true.
+ */
+export function tripWrap(state: TripStateKey, scoresOutstanding: boolean): TripWrap {
+  if (scoresOutstanding && state !== 'upcoming') {
+    return {
+      key: 'waiting',
+      cap: 'Waiting on scores',
+      body: 'Still waiting on a few scores to come in. The leaderboard could yet move.',
+    }
+  }
+  if (state === 'completed') {
+    return {
+      key: 'final',
+      cap: 'That’s the trip',
+      body: 'Every round is in. The leaderboard is final.',
+    }
+  }
+  return {
+    key: 'quiet',
+    cap: 'Up next',
+    body: 'Nothing further on the running order.',
+  }
+}
+
 /** Today as a plain date string, in the timezone the code is running in. */
 export function todayString(now: Date): string {
   const y = now.getFullYear()

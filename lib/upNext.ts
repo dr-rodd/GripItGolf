@@ -91,6 +91,14 @@ export function dateOf(
  * So the running order is treated as running: **anything sitting before
  * something that has finished is behind us too.** A trip moves forwards, and
  * the last thing to have visibly happened is the watermark.
+ *
+ * With one exception: **an item whose own day is still to come is never
+ * behind us**, wherever it sits in the running order. The watermark exists
+ * to sweep away the earlier half of a day already under way — it was never
+ * meant to reach into the future. It could: a trip re-dated after it ran
+ * keeps its old rounds on their old (past) dates, and a new round added on
+ * an early day slots in *before* them, so the watermark swallowed it and the
+ * hub said "that's the trip" about golf that had not been played yet.
  */
 export function stillToCome(
   ordered: readonly ItineraryItem[],
@@ -100,7 +108,8 @@ export function stillToCome(
 ): ItineraryItem[] {
   const states = ordered.map(i => itemState(i, dateOf(i, startDate, roundDates), now))
   const lastDone = states.lastIndexOf('past')
-  return ordered.filter((_, i) => i > lastDone && states[i] !== 'past')
+  return ordered.filter((_, i) =>
+    states[i] === 'future' || (i > lastDone && states[i] !== 'past'))
 }
 
 /** Whether the day this falls on has come round yet. Today counts. */

@@ -20,7 +20,8 @@ import {
 } from '@/lib/holeStats'
 import { describePlacing } from '@/lib/standing'
 import { nextMatch, describeNextMatch, type DrawMatch } from '@/lib/nextMatch'
-import { firstTeeTarget } from '@/lib/upNext'
+import { firstTeeTarget, upNext } from '@/lib/upNext'
+import { tripState, todayString, tripWrap } from '@/lib/tripStatus'
 // "13–16 August" — one copy, shared with the confirmation email.
 import { describeRange } from '@/lib/confirmationEmail'
 import { SectionStack } from '@/app/components/Section'
@@ -129,7 +130,10 @@ export default async function TripPage({ params, searchParams }: {
     // is the only column tying the two together.
     supabase
       .from('rounds')
-      .select('round_number, course_id, scheduled_date, itinerary_item_id')
+      // `id` and `casual` are for the wrap-up card below: whether every
+      // round's scores are in is asked per round, and a casual round is on
+      // no board so it can never hold the leaderboard open.
+      .select('id, round_number, course_id, scheduled_date, itinerary_item_id, casual')
       .eq('trip_id', trip.id)
       .order('round_number'),
     supabase
@@ -228,6 +232,46 @@ export default async function TripPage({ params, searchParams }: {
     if (existing) existing.courses.push(name)
     else days.push({ key, label: formatDay(r.scheduled_date), courses: [name] })
   }
+
+  // ── Can the trip call itself finished? ──
+  //
+  // The status card's last word ("that's the trip", or "still waiting on a
+  // few scores") is decided here, where the scores can actually be asked
+  // about, and handed to the client as words — see `tripWrap`. The asking is
+  // gated: only a trip whose dates are done, or whose running order has
+  // nothing left on it, could show the card at all, so every other visit
+  // pays nothing. Counted, never fetched — same rule as the Scoring tab.
+  const phase = tripState(trip, todayString(new Date())).key
+  const wrapCould = phase === 'completed' ||
+    upNext(itinerary, trip.start_date ?? null, new Map(roundDates), courseMap, new Date()) === null
+  const compRoundIds = rounds.filter(r => r.casual !== true).map(r => r.id as string)
+  let scoresOutstanding = false
+  if (wrapCould && compRoundIds.length > 0) {
+    const [openRes, committed] = await Promise.all([
+      // A card still out: an active session with a player actually on it. A
+      // playerless session — someone opened the scoring screen and backed
+      // out — holds nothing and must not hold the trip open.
+      supabase.from('live_rounds')
+        .select('round_id, live_player_locks(player_id)')
+        .eq('status', 'active')
+        .in('round_id', compRoundIds),
+      Promise.all(compRoundIds.map(async id => {
+        const { count, error } = await supabase
+          .from('scores')
+          .select('round_id', { count: 'exact', head: true })
+          .eq('round_id', id)
+          .limit(1)
+        if (error) console.error('TripPage scores count failed:', error)
+        return (count ?? 0) > 0
+      })),
+    ])
+    if (openRes.error) console.error('TripPage live rounds query failed:', openRes.error)
+    type OpenCard = { round_id: string; live_player_locks: { player_id: string }[] | null }
+    const stillOut = ((openRes.data ?? []) as unknown as OpenCard[])
+      .some(r => (r.live_player_locks ?? []).length > 0)
+    scoresOutstanding = stillOut || committed.some(c => !c)
+  }
+  const wrap = tripWrap(phase, scoresOutstanding)
 
   const dateRange  = [formatDate(trip.start_date), formatDate(trip.end_date)].filter(Boolean).join(' – ')
 
@@ -488,6 +532,7 @@ export default async function TripPage({ params, searchParams }: {
           roundDates={roundDates}
           roundNumbers={roundNumbers}
           courseNames={courseMap}
+          wrap={wrap}
         />
 
         {standingError && (
