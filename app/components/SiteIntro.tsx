@@ -7,40 +7,41 @@ import { rememberIntroSeen } from '@/lib/intro'
  * The site intro — the travelling dot.
  *
  * A first-time visitor lands on the trip hub. After a beat, the emerald
- * dot in the wordmark stirs, swells, and blooms into a big green bubble —
- * the logo's own emerald, writ large — carrying cream writing: a title
- * and one thought at a time, a tap for each paragraph. The bubble parks
- * high, favouring the top-middle-left, and hops aside on every tap so it
- * never sits over what it is showing: beneath it, each stop presents a
- * miniature of the real page it describes — hand-traced SVG replicas of
- * live screenshots, a few kilobytes each (public/intro/*.svg) — while the
- * page's edges soften behind a faint vignette blur and the tab being
- * talked about glows sharp at the bottom. On finishing — or skipping —
- * the bubble shrinks back into the logo.
+ * dot in the wordmark blooms — one continuous swell on the putt curve —
+ * into a big bubble of the logo's own emerald carrying cream writing: a
+ * title and one thought at a time, a tap for each paragraph. Behind it,
+ * each stop fills the screen with the real page it describes — hand-
+ * traced SVG replicas of live screenshots (public/intro), full-bleed down
+ * to the user's own tab bar — and the specific feature each thought is
+ * talking about is ringed in a soft emerald highlight. The bubble is
+ * stationary by default: it moves only when the page changes or when it
+ * would sit on the very feature being shown, and pages crossfade so the
+ * hub never peeks through between them. On finishing — or skipping — the
+ * bubble shrinks back into the logo.
  *
  * ── How things are found ────────────────────────────────────────
  *
- * Nothing is hardcoded to a coordinate. The tab icons carry
- * `data-intro-tab` (TabBar.tsx) and are measured with
- * getBoundingClientRect at runtime, re-measured on resize and orientation
- * change. The logo dot is the `<g fill="#0a9d56">` inside `.gd-mark` —
- * MorphWordmark renders each word as inline SVG, so the dot is a real
- * element with a real rect. If the dot can't be found the bubble fades in
- * and out instead of being born; if a tab can't be found that step simply
- * has no spotlight. Skip and tap-to-advance depend on no measurement at
- * all — the intro must never trap anyone behind a broken overlay.
+ * Nothing on the REAL page is hardcoded to a coordinate. The tab icons
+ * carry `data-intro-tab` (TabBar.tsx) and are measured at runtime,
+ * re-measured on resize and orientation change. The logo dot is the
+ * `<g fill="#0a9d56">` inside `.gd-mark` — a real element with a real
+ * rect. If the dot can't be found the bubble fades in and out instead of
+ * being born; if a tab can't be found that step simply has no spotlight.
+ * The highlight regions are the one deliberate exception: they are
+ * artboard coordinates into our own SVG replicas, fixed by construction,
+ * mapped to the screen through the same cover-fit maths the image uses.
+ * Skip and tap-to-advance depend on no measurement at all — the intro
+ * must never trap anyone behind a broken overlay.
  *
  * ── The veil ────────────────────────────────────────────────────
  *
  * One full-screen backdrop blur, masked to a vignette: clear in the
- * middle where the example screen sits, fading to a faint blur at the
- * edges — plus a feathered clear hole over the focused tab, so the thing
- * being pointed at is the one sharp element on the bottom edge. The mask
- * is an SVG alpha feather rebuilt per step and carried as a data URI —
- * SVG rather than a CSS gradient function on purpose: the brand's
- * no-gradients rule is about colour decoration, and keeping the feather
- * out of CSS syntax keeps that rule mechanically enforceable exactly as
- * it is.
+ * middle, a faint soft frame at the edges, with a feathered clear hole
+ * over the focused tab. The mask is an SVG alpha feather rebuilt per step
+ * and carried as a data URI — SVG rather than a CSS gradient function on
+ * purpose: the brand's no-gradients rule is about colour decoration, and
+ * keeping the feather out of CSS syntax keeps that rule mechanically
+ * enforceable exactly as it is.
  *
  * ── The putt curve ──────────────────────────────────────────────
  *
@@ -66,21 +67,27 @@ const PUTT = 'cubic-bezier(0.16, 1, 0.3, 1)'
 /** The beat before anything moves — a page that starts performing the
     instant it appears reads as an ad, not a welcome. */
 const BIRTH_DELAY_MS = 600
-const SWELL_MS = 320   // the dot stirring and swelling beside the logo
-const BIRTH_MS = 750   // then blooming out to its first resting spot
-const TRAVEL_MS = 480  // each hop aside, and the glow's glide
+/** One continuous bloom, logo dot to resting bubble. A single transition
+    on a single curve — a staged swell was tried and read as a stutter. */
+const BIRTH_MS = 900
+const TRAVEL_MS = 480  // a hop aside, and the glow's glide
 const EXIT_MS = 500    // back into the logo
 const SETTLE_MS = 220  // the 2% overshoot easing back
 const OVERSHOOT = 1.02
 const TEXT_DELAY_MS = 180 // the bubble lands, then speaks
 const TEXT_IN_MS = 220
-const OUT_MS = 120     // words and example fading before anything travels
-const SHOT_IN_MS = 260 // the next example screen rising in
+const OUT_MS = 120     // the words fading between thoughts
+const SHOT_XFADE_MS = 300 // one page dissolving into the next — no gap
+const FOCUS_IN_MS = 250 // the feature highlight arriving
+const FOCUS_DELAY_MS = 420 // ...after the words have started speaking
 const PULSE_MS = 300   // the focused icon's single soft acknowledgement
 const DOT_FADE_MS = 200 // the real logo dot leaving and coming home
 const VEIL_MS = 500    // the blur arriving and leaving
 
 type TabKey = 'home' | 'scoring' | 'leaderboard' | 'stats' | 'settings'
+
+/** A region of the 360x700 artboard — the feature a thought points at. */
+type Region = { x: number; y: number; w: number; h: number }
 
 type Step = {
   key: string
@@ -90,18 +97,15 @@ type Step = {
   /** The example screen behind each paragraph — public/intro SVGs, one
       entry per para (the last entry carries any overflow). */
   shots?: string[]
+  /** The feature each paragraph highlights, in artboard coordinates —
+      null for a thought that describes the whole page. */
+  focus?: (Region | null)[]
   /** One thought per tap — never the whole spiel at once. */
   paras: string[]
 }
 
-/** The example screen a given thought shows, or null for none. */
-function shotFor(step: Step, para: number): string | null {
-  if (!step.shots?.length) return null
-  return step.shots[Math.min(para, step.shots.length - 1)]
-}
-
-/** Steps follow the tab bar left to right; the bubble's side-hops supply
-    the motion, so the tour still reads as one steady lap. */
+/** The tour's running order — Big Dog's: hub, settings, scoring, stats,
+    and the leaderboard last, because that is what it's all about. */
 function makeSteps(tripName: string): Step[] {
   return [
     {
@@ -113,6 +117,10 @@ function makeSteps(tripName: string): Step[] {
       key: 'hub',
       tab: 'home',
       shots: ['/intro/hub.svg'],
+      focus: [
+        { x: 8, y: 250, w: 344, h: 232 },
+        { x: 12, y: 372, w: 336, h: 86 },
+      ],
       title: 'Trip Hub',
       paras: [
         'The front page of the app. Check out your itinerary, golf tee ' +
@@ -121,9 +129,29 @@ function makeSteps(tripName: string): Step[] {
       ],
     },
     {
+      key: 'setup',
+      tab: 'settings',
+      shots: ['/intro/setup.svg'],
+      focus: [
+        { x: 24, y: 210, w: 312, h: 142 },
+        { x: 12, y: 54, w: 336, h: 74 },
+      ],
+      title: 'Trip Setup',
+      paras: [
+        'The lead player has set up your contests.',
+        'Drop in here if you need to tweak a setting, add an activity, or ' +
+          'slot in an impromptu extra round.',
+      ],
+    },
+    {
       key: 'scoring',
       tab: 'scoring',
       shots: ['/intro/scoring.svg', '/intro/scorecard.svg', '/intro/scorecard.svg'],
+      focus: [
+        { x: 12, y: 98, w: 336, h: 86 },
+        { x: 12, y: 182, w: 336, h: 136 },
+        { x: 16, y: 402, w: 220, h: 36 },
+      ],
       title: 'Scoring',
       paras: [
         'Enter your scores as you play. We do the rest.',
@@ -134,9 +162,30 @@ function makeSteps(tripName: string): Step[] {
       ],
     },
     {
+      key: 'stats',
+      tab: 'stats',
+      shots: ['/intro/stats.svg'],
+      focus: [
+        { x: 8, y: 94, w: 296, h: 42 },
+        { x: 12, y: 432, w: 336, h: 170 },
+      ],
+      title: 'Stats Hub',
+      paras: [
+        'Check out your personal statistics. How do you compare to the ' +
+          'field?',
+        'Where are you losing and gaining shots? Which courses and holes ' +
+          'tripped you up? There’s nowhere to hide.',
+      ],
+    },
+    {
       key: 'leaderboard',
       tab: 'leaderboard',
       shots: ['/intro/leaderboard.svg', '/intro/leaderboard.svg', '/intro/matchplay.svg'],
+      focus: [
+        { x: 12, y: 94, w: 336, h: 84 },
+        { x: 10, y: 50, w: 310, h: 44 },
+        { x: 10, y: 264, w: 192, h: 100 },
+      ],
       title: 'Leaderboard',
       paras: [
         'This is what it’s all about. You set the rules; we crunch the ' +
@@ -147,30 +196,18 @@ function makeSteps(tripName: string): Step[] {
           'where you stand.',
       ],
     },
-    {
-      key: 'stats',
-      tab: 'stats',
-      shots: ['/intro/stats.svg'],
-      title: 'Stats Hub',
-      paras: [
-        'Check out your personal statistics. How do you compare to the ' +
-          'field?',
-        'Where are you losing and gaining shots? Which courses and holes ' +
-          'tripped you up? There’s nowhere to hide.',
-      ],
-    },
-    {
-      key: 'setup',
-      tab: 'settings',
-      shots: ['/intro/setup.svg'],
-      title: 'Trip Setup',
-      paras: [
-        'The lead player has set up your contests.',
-        'Drop in here if you need to tweak a setting, add an activity, or ' +
-          'slot in an impromptu extra round.',
-      ],
-    },
   ]
+}
+
+/** The example screen a given thought shows, or null for none. */
+function shotFor(step: Step, para: number): string | null {
+  if (!step.shots?.length) return null
+  return step.shots[Math.min(para, step.shots.length - 1)]
+}
+
+/** The feature a given thought rings, or null. */
+function focusFor(step: Step, para: number): Region | null {
+  return step.focus?.[para] ?? null
 }
 
 const TAB_KEYS: TabKey[] = ['home', 'scoring', 'leaderboard', 'stats', 'settings']
@@ -226,8 +263,8 @@ function restoreLogoDot() {
   el.style.opacity = ''
 }
 
-/** Sized to speak from up top and still leave the example screen its room. */
-const circleD = (vw: number) => Math.min(Math.round(vw * 0.68), 300)
+/** Big enough for the writing to breathe — the bubble carries the words. */
+const circleD = (vw: number) => Math.min(Math.round(vw * 0.78), 360)
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.min(Math.max(v, lo), hi)
@@ -237,35 +274,83 @@ function placed(p: Pt, s: number, D: number) {
   return `translate3d(${(p.x - D / 2).toFixed(1)}px, ${(p.y - D / 2).toFixed(1)}px, 0) scale(${s.toFixed(4)})`
 }
 
-/**
- * Where the bubble rests: high on the screen, favouring the middle-left,
- * hopping to a middle-right lean on alternate taps so every tap moves it —
- * and always clear of the example screen below. The welcome, with nothing
- * to show yet, takes the centre.
- */
-function bubbleSpot(h: number, r: Rects, welcome: boolean): Pt {
-  const D = circleD(r.vw)
-  if (welcome) {
-    return { x: r.vw / 2, y: Math.max(r.vh * 0.3, 76 + D / 2) }
-  }
-  // Odd hops are each step's arrival (the welcome takes hop zero), so the
-  // favoured top-middle-left is where every new page's talk begins.
-  const lean = h % 2 === 1 ? 0.4 : 0.6
-  const x = clamp(lean * r.vw, D * 0.34 + 8, r.vw - D * 0.34 - 8)
-  const y = 72 + D / 2 + (h % 3) * 7
-  return { x, y }
-}
-
-/** Where the tab bar begins — the example screen stops above it. */
+/** Where the tab bar begins — the example screens stop there. */
 function tabTopOf(r: Rects): number {
   return Math.min(...TAB_KEYS.map(k => r.tabs[k]?.rect.top ?? Infinity), r.vh - 88)
 }
 
+/** The cover-fit maths the example <img> uses, shared by the highlight. */
+function shotScale(r: Rects) {
+  const h = tabTopOf(r)
+  const s = Math.max(r.vw / 360, h / 700)
+  return { s, ox: (r.vw - 360 * s) / 2, h }
+}
+
 /**
- * The veil's mask: a vignette — clear through the middle, fading to
- * opaque at the edges, so the blur is a soft frame rather than a wall —
- * with a feathered clear hole cut over the focused tab. Rebuilt per step
- * at viewport size; SVG's own camelCase gradients, see the note up top.
+ * The bubble's parking spots. 'L' is the favoured top-middle-left, 'R'
+ * its mirror, 'B' the escape hatch above the tab bar for when a thought
+ * highlights something across the top of the page. 'C' is the welcome's
+ * centre-stage.
+ */
+type Side = 'L' | 'R' | 'B' | 'C'
+
+function spotAt(side: Side, r: Rects): Pt {
+  const D = circleD(r.vw)
+  if (side === 'C') return { x: r.vw / 2, y: Math.max(r.vh * 0.32, 76 + D / 2) }
+  if (side === 'B') return { x: r.vw / 2, y: tabTopOf(r) - D / 2 - 12 }
+  const lean = side === 'L' ? 0.4 : 0.6
+  return { x: clamp(lean * r.vw, D * 0.34 + 8, r.vw - D * 0.34 - 8), y: 74 + D / 2 }
+}
+
+/** How much of the highlighted feature a bubble at p would cover. */
+function covered(p: Pt, D: number, reg: Region | null, r: Rects): number {
+  if (!reg) return 0
+  const { s, ox } = shotScale(r)
+  const rx1 = ox + reg.x * s
+  const ry1 = reg.y * s
+  const rx2 = rx1 + reg.w * s
+  const ry2 = ry1 + reg.h * s
+  const m = 6 // breathing room around the ring
+  const bx1 = p.x - D / 2 - m
+  const by1 = p.y - D / 2 - m
+  const bx2 = p.x + D / 2 + m
+  const by2 = p.y + D / 2 + m
+  const w = Math.min(rx2, bx2) - Math.max(rx1, bx1)
+  const h = Math.min(ry2, by2) - Math.max(ry1, by1)
+  return w > 0 && h > 0 ? w * h : 0
+}
+
+/**
+ * Where the bubble should be for a thought: stay where it is unless it
+ * would sit on the feature being shown; on a page change, hop to the
+ * other lean by preference. If every spot covers some of the feature,
+ * the least-covering wins.
+ */
+function pickSide(
+  prev: Side, stepChanged: boolean, reg: Region | null, r: Rects,
+): Side {
+  const D = circleD(r.vw)
+  const cur: Side = prev === 'C' ? 'L' : prev
+  const other: Side = cur === 'L' ? 'R' : 'L'
+  const order: Side[] = stepChanged ? [other, cur, 'B'] : [cur, other, 'B']
+  let best: Side = order[0]
+  let bestCost = Infinity
+  for (const side of order) {
+    const cost = covered(spotAt(side, r), D, reg, r)
+    if (cost === 0) return side
+    if (cost < bestCost) {
+      bestCost = cost
+      best = side
+    }
+  }
+  return best
+}
+
+/**
+ * The veil's mask: a vignette — clear through the middle, a faint frame
+ * at the edges — with a feathered clear hole cut over the focused tab.
+ * Rebuilt per step at viewport size; SVG's own camelCase gradients, see
+ * the note up top.
  */
 function maskFor(vw: number, vh: number, hole: Pt | null): string {
   const cx = vw / 2
@@ -312,15 +397,18 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
   const [circleStyle, setCircleStyle] = useState<React.CSSProperties>({})
   const [textOn, setTextOn] = useState(false)
   const [drifting, setDrifting] = useState(false)
-  // The example screen: which file is up, and whether it is showing. Its
-  // own pair rather than riding textOn, so thoughts that share a screen
-  // swap words without the example blinking.
+  // The example screen currently up, and the one it is replacing. On a
+  // page change the NEW image fades in OVER the old one, which holds at
+  // full opacity beneath until the fade is done — so the pages' combined
+  // cover never dips and the real hub can never peek through the gap.
   const [shotSrc, setShotSrc] = useState<string | null>(null)
+  const [prevShot, setPrevShot] = useState<string | null>(null)
   const [shotOn, setShotOn] = useState(false)
+  const [focusOn, setFocusOn] = useState(false)
 
   const rects = useRef<Rects | null>(null)
   const phase = useRef<Phase>('birth')
-  const hop = useRef(0)
+  const side = useRef<Side>('C')
   const timers = useRef<number[]>([])
   const rm = useRef(false)
 
@@ -332,12 +420,14 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
     timers.current = []
   }
 
-  /** One hop aside: out on the putt curve, 2% over, settle. */
-  const moveCircle = useCallback((h: number, toStep: number) => {
+  /** Move to a spot — or, if the bubble is already there, don't. */
+  const moveCircle = useCallback((to: Side) => {
     const r = rects.current
     if (!r) return
+    if (to === side.current) return
+    side.current = to
     const D = circleD(r.vw)
-    const p = bubbleSpot(h, r, toStep === 0)
+    const p = spotAt(to, r)
     setDrifting(false)
     setCircleStyle(s => ({
       ...s,
@@ -375,12 +465,13 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
     phase.current = 'exit'
     setTextOn(false)
     setShotOn(false)
+    setFocusOn(false)
     setVeilOn(false)
     setDrifting(false)
     if (r?.dot) {
       const D = circleD(r.vw)
       const c = { x: r.dot.left + r.dot.width / 2, y: r.dot.top + r.dot.height / 2 }
-      const s = Math.max(r.dot.width / D, 0.015)
+      const s = Math.max(r.dot.width / D, 0.012)
       setCircleStyle(st => ({
         ...st,
         transform: placed(c, s, D),
@@ -407,8 +498,7 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
     exitTravel()
   }, [exitTravel])
 
-  /** A tap: the next thought — or the next tab, or the farewell. The
-      bubble hops aside on every one of them. */
+  /** A tap: the next thought — or the next page, or the farewell. */
   const advance = useCallback(() => {
     if (phase.current !== 'run') return
     const cur = pos
@@ -424,23 +514,38 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
       return
     }
     clearTimers()
-    hop.current += 1
+    const r = rects.current
+    const nextStep = steps[next.step]
+    const stepChanged = next.step !== cur.step
+    const nextShot = shotFor(nextStep, next.para)
+    const nextFocus = focusFor(nextStep, next.para)
+
     setTextOn(false)
+    setFocusOn(false)
     later(rm.current ? 0 : OUT_MS, () => {
       setPos(next)
       setTextOn(true)
     })
-    moveCircle(hop.current, next.step)
-    const nextShot = shotFor(steps[next.step], next.para)
-    if (nextShot !== shotFor(step, cur.para)) {
-      // The example changes: the old page slips out with the words, the
-      // new one rises once the bubble is on its way aside.
-      setShotOn(false)
-      later(rm.current ? 0 : OUT_MS, () => setShotSrc(nextShot))
-      if (nextShot) later(rm.current ? 0 : TRAVEL_MS - 120, () => setShotOn(true))
+
+    // The bubble stays put unless the page changes or it is sitting on
+    // the feature this thought is about to ring.
+    if (r) moveCircle(pickSide(side.current, stepChanged, nextFocus, r))
+
+    const curShot = shotFor(step, cur.para)
+    if (nextShot !== curShot) {
+      later(rm.current ? 0 : OUT_MS, () => {
+        setPrevShot(curShot)
+        setShotSrc(nextShot)
+        setShotOn(true)
+      })
+      // The old page is released only once the new one fully covers it.
+      later(rm.current ? 0 : OUT_MS + SHOT_XFADE_MS + 60, () => setPrevShot(null))
     }
-    if (next.step !== cur.step) {
-      later(rm.current ? 0 : TRAVEL_MS, () => pulse(steps[next.step].tab))
+    if (nextFocus) {
+      later(rm.current ? 0 : FOCUS_DELAY_MS, () => setFocusOn(true))
+    }
+    if (stepChanged) {
+      later(rm.current ? 0 : TRAVEL_MS, () => pulse(nextStep.tab))
     }
     // steps is rebuilt per render but its content is constant per tripName.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -464,41 +569,33 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
     const D = circleD(r.vw)
-    const p0 = bubbleSpot(0, r, true)
+    side.current = 'C'
+    const p0 = spotAt('C', r)
 
     if (r.dot && !rm.current) {
       const c = { x: r.dot.left + r.dot.width / 2, y: r.dot.top + r.dot.height / 2 }
-      const s = Math.max(r.dot.width / D, 0.015)
+      const s = Math.max(r.dot.width / D, 0.012)
       setCircleStyle({ transform: placed(c, s, D), transition: 'none' })
-      // A beat of stillness first — the page arrives, then the dot stirs.
+      // A beat of stillness first — the page arrives, then the dot goes.
       later(BIRTH_DELAY_MS, () => {
         fadeLogoDot(0)
-        // The swell: still beside the logo, growing from a full stop into
-        // a small ball — the "watch this" moment before the bloom.
-        const sw = { x: c.x + 30, y: c.y + 34 }
+        setVeilOn(true)
         setCircleStyle({
-          transform: placed(sw, 0.18, D),
-          transition: `transform ${SWELL_MS}ms ease-out`,
+          transform: placed(p0, OVERSHOOT, D),
+          transition: `transform ${BIRTH_MS}ms ${PUTT}`,
         })
-        later(SWELL_MS, () => {
-          setVeilOn(true)
+        later(BIRTH_MS, () => {
           setCircleStyle({
-            transform: placed(p0, OVERSHOOT, D),
-            transition: `transform ${BIRTH_MS}ms ${PUTT}`,
+            transform: placed(p0, 1, D),
+            transition: `transform ${SETTLE_MS}ms ${PUTT}`,
           })
-          later(BIRTH_MS, () => {
-            setCircleStyle({
-              transform: placed(p0, 1, D),
-              transition: `transform ${SETTLE_MS}ms ${PUTT}`,
-            })
-            setDrifting(true)
-            phase.current = 'run'
-            // React's first post-hydration update replaces the wordmark's
-            // innerHTML, undoing the hide — re-assert it.
-            fadeLogoDot(0)
-          })
-          later(BIRTH_MS + TEXT_DELAY_MS, () => setTextOn(true))
+          setDrifting(true)
+          phase.current = 'run'
+          // React's first post-hydration update replaces the wordmark's
+          // innerHTML, undoing the hide — re-assert it.
+          fadeLogoDot(0)
         })
+        later(BIRTH_MS + TEXT_DELAY_MS, () => setTextOn(true))
       })
     } else {
       // No dot to be born from (or no motion asked for): appear in place.
@@ -547,7 +644,7 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
       const r = rects.current
       if (!r || phase.current !== 'run') return
       const D = circleD(r.vw)
-      const p = bubbleSpot(hop.current, r, pos.step === 0)
+      const p = spotAt(side.current, r)
       setCircleStyle(s => ({ ...s, transform: placed(p, 1, D), transition: 'none' }))
     }
     window.addEventListener('resize', onResize)
@@ -556,7 +653,7 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
       window.removeEventListener('resize', onResize)
       window.removeEventListener('orientationchange', onResize)
     }
-  }, [open, pos.step])
+  }, [open])
 
   if (!open || !ready || !rects.current) return null
 
@@ -567,19 +664,20 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
   // The spotlight: the focused tab's icon, sharp and glowing at the
   // bottom edge. The hole is baked into the vignette mask per step; the
   // glow glides between tabs on the putt curve.
-  const focus = step.tab ? r.tabs[step.tab]?.rect : undefined
-  const hole: Pt | null = focus
-    ? { x: focus.left + focus.width / 2, y: focus.top + focus.height / 2 }
+  const tabFocus = step.tab ? r.tabs[step.tab]?.rect : undefined
+  const hole: Pt | null = tabFocus
+    ? { x: tabFocus.left + tabFocus.width / 2, y: tabFocus.top + tabFocus.height / 2 }
     : null
 
-  // The example screen occupies the whole screen: full-bleed from the top
-  // down to the real tab bar, which stays the user's own footer. The
-  // artboards are 360x700 with a sacrificial bottom, cover-fit and
-  // anchored to the top, so different phone shapes crop the padding, not
-  // the content. Every unique screen is mounted from the start so each is
-  // loaded before it is needed; only the current one shows.
+  // The example screens, full-bleed down to the real tab bar. Every
+  // unique screen is mounted from the start so each is loaded before it
+  // is needed; the current one shows, and changes crossfade in place.
   const allShots = [...new Set(steps.flatMap(s => s.shots ?? []))]
-  const shotH = tabTopOf(r)
+  const { s: shotS, ox: shotOx, h: shotH } = shotScale(r)
+
+  // The feature this thought is talking about, mapped through the same
+  // cover-fit the image uses.
+  const reg = focusFor(step, pos.para)
 
   return (
     <div
@@ -606,18 +704,15 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
 
       {/* The example screen — the real page this thought is talking
           about, full-bleed down to the user's own tab bar, which stays
-          the footer of the picture. Beneath the veil, so its edges soften
-          like everything else's. */}
+          the footer of the picture. Each image fades on its own, so one
+          page dissolves into the next with no gap. */}
       <div
         className="absolute left-0 top-0 overflow-hidden pointer-events-none"
         style={{
           width: r.vw,
           height: shotH,
           opacity: shotOn && shotSrc ? 1 : 0,
-          transform: shotOn && shotSrc ? 'translateY(0)' : 'translateY(12px)',
-          transition: shotOn
-            ? `opacity ${SHOT_IN_MS}ms ${PUTT}, transform ${SHOT_IN_MS}ms ${PUTT}`
-            : `opacity ${OUT_MS}ms ${PUTT}, transform ${OUT_MS}ms ${PUTT}`,
+          transition: `opacity ${SHOT_XFADE_MS}ms ${PUTT}`,
         }}
       >
         {allShots.map(src => (
@@ -628,10 +723,33 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
             alt=""
             aria-hidden="true"
             className="absolute inset-0 w-full h-full object-cover object-top"
-            style={{ opacity: src === shotSrc ? 1 : 0 }}
+            style={
+              src === shotSrc
+                ? { opacity: 1, zIndex: 2, transition: `opacity ${SHOT_XFADE_MS}ms ${PUTT}` }
+                : src === prevShot
+                  ? { opacity: 1, zIndex: 1, transition: 'none' }
+                  : { opacity: 0, zIndex: 0, transition: 'none' }
+            }
           />
         ))}
       </div>
+
+      {/* The feature this thought describes, ringed in emerald on the
+          example itself. Artboard coordinates mapped through the same
+          cover-fit as the image. */}
+      {reg && (
+        <div
+          className="intro-focus absolute pointer-events-none"
+          style={{
+            left: (shotOx + reg.x * shotS).toFixed(0) + 'px',
+            top: (reg.y * shotS).toFixed(0) + 'px',
+            width: (reg.w * shotS).toFixed(0) + 'px',
+            height: (reg.h * shotS).toFixed(0) + 'px',
+            opacity: focusOn && shotOn ? 1 : 0,
+            transition: `opacity ${FOCUS_IN_MS}ms ${PUTT}`,
+          }}
+        />
+      )}
 
       {/* The veil: a faint blur framing the edges of whatever is showing
           — the example, and the real page around it — clear through the
@@ -666,10 +784,10 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
         }}
       />
 
-
-      {/* The bubble — the logo's own emerald, the writing riding it. The
-          outer element carries the travel; the inner wrapper carries the
-          idle drift, so the two never fight over one transform. */}
+      {/* The bubble — the logo's own emerald, the writing riding it,
+          stationary unless the page changes or a feature needs the space.
+          The outer element carries the travel; the inner wrapper carries
+          the idle drift, so the two never fight over one transform. */}
       <div
         className="intro-dot absolute left-0 top-0 rounded-full"
         style={{ width: D, height: D, willChange: 'transform', ...circleStyle }}
@@ -691,25 +809,28 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
           >
             <p
               className="font-[family-name:var(--font-display)] font-semibold text-balance"
-              style={{ fontSize: 'clamp(19px, 5.4vw, 23px)', lineHeight: 1.15 }}
+              style={{ fontSize: 'clamp(21px, 6vw, 26px)', lineHeight: 1.15 }}
             >
               {step.title}
             </p>
+            {/* The UI face rather than the serif or the system stack —
+                Archivo carries small sizes on a saturated ground more
+                cleanly than either. */}
             <p
-              className="font-[family-name:var(--font-serif)] mt-2.5"
-              style={{ fontSize: 'clamp(13px, 3.7vw, 15px)', lineHeight: 1.45 }}
+              className="font-[family-name:var(--font-ui)] mt-3"
+              style={{ fontSize: 'clamp(14.5px, 4.1vw, 16.5px)', lineHeight: 1.5 }}
             >
               {step.paras[pos.para]}
             </p>
 
             {/* Where you are in the lap, one dot per stop. */}
             <span
-              className="mt-3.5 flex items-center justify-center gap-2"
+              className="mt-4 flex items-center justify-center gap-2"
               aria-hidden="true"
             >
-              {steps.map((s, i) => (
+              {steps.map((st, i) => (
                 <span
-                  key={s.key}
+                  key={st.key}
                   className={`w-1.5 h-1.5 rounded-full ${
                     i === pos.step ? 'intro-step-on' : 'intro-step'
                   }`}

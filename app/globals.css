@@ -356,6 +356,16 @@ html.dark .only-light { display: none; }
   background-color: rgba(10, 157, 86, 0.12);
   box-shadow: 0 0 26px 14px rgba(10, 157, 86, 0.45);
 }
+/* The ring around the feature a thought is describing, drawn on the
+   example screen itself — an emerald outline with a soft halo, no fill,
+   so the feature stays perfectly legible inside it. */
+.intro-focus {
+  border: 2px solid #0A9D56;
+  border-radius: 14px;
+  box-shadow:
+    0 0 20px 4px rgba(10, 157, 86, 0.35),
+    inset 0 0 12px rgba(10, 157, 86, 0.15);
+}
 
 /* ── A tap that answers ────────────────────────────────────────
    The press, for everything that is not the tab bar.
