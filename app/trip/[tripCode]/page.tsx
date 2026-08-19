@@ -263,11 +263,8 @@ export default async function TripPage({ params, searchParams }: {
   // `?intro` on the hub URL overrides the cookie: the tour runs again, for
   // showing a mate or for testing on a phone that has already seen it.
   // Harmless to leave in a shared link — finishing just rewrites the cookie.
-  // A letter value (`?intro=b`) also picks a bubble font variant while that
-  // choice is being made — see FONT_VARIANTS in SiteIntro.tsx.
-  const sp = await searchParams
-  const showIntro = 'intro' in sp || !(await cookies()).has(INTRO_COOKIE)
-  const introVariant = typeof sp.intro === 'string' ? sp.intro : undefined
+  const showIntro =
+    'intro' in (await searchParams) || !(await cookies()).has(INTRO_COOKIE)
 
   let placingLine = ''
   let nextMatchLine = ''
@@ -581,7 +578,7 @@ export default async function TripPage({ params, searchParams }: {
 
       {/* A newcomer's guided lap — over everything, pointing at the tab
           bar, gone for good once skipped or finished. */}
-      {showIntro && <SiteIntro tripName={trip.name} fontVariant={introVariant} />}
+      {showIntro && <SiteIntro tripName={trip.name} />}
 
     </main>
   )

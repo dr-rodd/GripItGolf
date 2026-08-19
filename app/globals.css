@@ -349,9 +349,7 @@ html.dark .only-light { display: none; }
   backdrop-filter: blur(4px);
   background-color: color-mix(in srgb, var(--color-cream) 32%, transparent);
 }
-.intro-dot     { background-color: #0A9D56; color: #F6F4F0; }
-.intro-step    { background-color: rgba(246, 244, 240, 0.4); }
-.intro-step-on { background-color: #F6F4F0; }
+.intro-dot { background-color: #0A9D56; color: #F6F4F0; }
 .intro-glow {
   background-color: rgba(10, 157, 86, 0.12);
   box-shadow: 0 0 26px 14px rgba(10, 157, 86, 0.45);

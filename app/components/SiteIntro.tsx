@@ -118,7 +118,9 @@ function makeSteps(tripName: string): Step[] {
       tab: 'home',
       shots: ['/intro/hub.svg'],
       focus: [
-        { x: 8, y: 250, w: 344, h: 232 },
+        // The heading and its caption, not the whole itinerary — a ring
+        // spanning mid-screen leaves the bubble nowhere clear to park.
+        { x: 8, y: 248, w: 344, h: 84 },
         { x: 12, y: 372, w: 336, h: 86 },
       ],
       title: 'Trip Hub',
@@ -267,29 +269,12 @@ function restoreLogoDot() {
 const circleD = (vw: number) => Math.min(Math.round(vw * 0.84), 400)
 
 /**
- * The bubble's typography, pickable while the choice is being made:
- * `?intro=<letter>` on the hub URL tries each pairing on the real device
- * with the real webfonts — screenshots cannot show Clash Display or
- * Bespoke Serif, phones can. `a` is the default and what plain `?intro`
- * gets. Once Big Dog picks, the winner becomes the only entry.
+ * The bubble's typography — Big Dog's pick from the five candidates that
+ * were tried on-device: Clash Display titles over Bespoke Serif body, the
+ * site's display voice over its reading voice.
  */
-const FONT_VARIANTS: Record<string, {
-  title: string; titleWeight: number; body: string; bodyWeight: number
-}> = {
-  // Clash Display titles over Archivo body — the site's display voice.
-  a: { title: 'var(--font-display)', titleWeight: 600, body: 'var(--font-ui)', bodyWeight: 400 },
-  // Clash Display for everything — one display voice, geometric and warm.
-  b: { title: 'var(--font-display)', titleWeight: 600, body: 'var(--font-display)', bodyWeight: 500 },
-  // Archivo for everything — the cleanest workhorse take.
-  c: { title: 'var(--font-ui)', titleWeight: 700, body: 'var(--font-ui)', bodyWeight: 400 },
-  // The system face — SF Pro on an iPhone, the crispest rendering there is.
-  d: {
-    title: "-apple-system, 'SF Pro Display', system-ui, sans-serif", titleWeight: 700,
-    body: "-apple-system, 'SF Pro Text', system-ui, sans-serif", bodyWeight: 400,
-  },
-  // Clash Display titles over Bespoke Serif body — the site's reading voice.
-  e: { title: 'var(--font-display)', titleWeight: 600, body: 'var(--font-serif)', bodyWeight: 400 },
-}
+const TITLE_FONT = 'var(--font-display)'
+const BODY_FONT = 'var(--font-serif)'
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.min(Math.max(v, lo), hi)
@@ -312,63 +297,32 @@ function shotScale(r: Rects) {
 }
 
 /**
- * The bubble's parking spots. 'L' is the favoured top-middle-left, 'R'
- * its mirror, 'B' the escape hatch above the tab bar for when a thought
- * highlights something across the top of the page. 'C' is the welcome's
- * centre-stage.
+ * The bubble's lean: 'L' is the favoured middle-left, 'R' its mirror —
+ * alternated on page changes so a new page always brings a move — and
+ * 'C' is the welcome's centre-stage.
  */
-type Side = 'L' | 'R' | 'B' | 'C'
-
-function spotAt(side: Side, r: Rects): Pt {
-  const D = circleD(r.vw)
-  if (side === 'C') return { x: r.vw / 2, y: Math.max(r.vh * 0.32, 76 + D / 2) }
-  if (side === 'B') return { x: r.vw / 2, y: tabTopOf(r) - D / 2 - 12 }
-  const lean = side === 'L' ? 0.4 : 0.6
-  return { x: clamp(lean * r.vw, D * 0.34 + 8, r.vw - D * 0.34 - 8), y: 74 + D / 2 }
-}
-
-/** How much of the highlighted feature a bubble at p would cover. */
-function covered(p: Pt, D: number, reg: Region | null, r: Rects): number {
-  if (!reg) return 0
-  const { s, ox } = shotScale(r)
-  const rx1 = ox + reg.x * s
-  const ry1 = reg.y * s
-  const rx2 = rx1 + reg.w * s
-  const ry2 = ry1 + reg.h * s
-  const m = 6 // breathing room around the ring
-  const bx1 = p.x - D / 2 - m
-  const by1 = p.y - D / 2 - m
-  const bx2 = p.x + D / 2 + m
-  const by2 = p.y + D / 2 + m
-  const w = Math.min(rx2, bx2) - Math.max(rx1, bx1)
-  const h = Math.min(ry2, by2) - Math.max(ry1, by1)
-  return w > 0 && h > 0 ? w * h : 0
-}
+type Side = 'L' | 'R' | 'C'
 
 /**
- * Where the bubble should be for a thought: stay where it is unless it
- * would sit on the feature being shown; on a page change, hop to the
- * other lean by preference. If every spot covers some of the feature,
- * the least-covering wins.
+ * Where the bubble parks for a thought: on the OPPOSITE half of the
+ * screen from the feature being ringed, fully clear of it — a feature in
+ * the upper half puts the bubble down by the tab bar, a feature in the
+ * lower half puts it up under the header. Every highlight region in the
+ * steps is sized so its opposite half genuinely fits the bubble; the
+ * clamp is only a guard. No feature means the top parking spot.
  */
-function pickSide(
-  prev: Side, stepChanged: boolean, reg: Region | null, r: Rects,
-): Side {
+function spotFor(side: Side, reg: Region | null, r: Rects): Pt {
   const D = circleD(r.vw)
-  const cur: Side = prev === 'C' ? 'L' : prev
-  const other: Side = cur === 'L' ? 'R' : 'L'
-  const order: Side[] = stepChanged ? [other, cur, 'B'] : [cur, other, 'B']
-  let best: Side = order[0]
-  let bestCost = Infinity
-  for (const side of order) {
-    const cost = covered(spotAt(side, r), D, reg, r)
-    if (cost === 0) return side
-    if (cost < bestCost) {
-      bestCost = cost
-      best = side
-    }
-  }
-  return best
+  if (side === 'C') return { x: r.vw / 2, y: Math.max(r.vh * 0.32, 72 + D / 2) }
+  const lean = side === 'L' ? 0.42 : 0.58
+  const x = clamp(lean * r.vw, D * 0.34 + 6, r.vw - D * 0.34 - 6)
+  const tabTop = tabTopOf(r)
+  const topY = 60 + D / 2
+  const bottomY = tabTop - 10 - D / 2
+  if (!reg) return { x, y: topY }
+  const { s } = shotScale(r)
+  const regionMid = (reg.y + reg.h / 2) * s
+  return { x, y: regionMid < tabTop / 2 ? bottomY : topY }
 }
 
 /**
@@ -409,18 +363,8 @@ function maskFor(vw: number, vh: number, hole: Pt | null): string {
 
 type Phase = 'birth' | 'run' | 'exit' | 'done'
 
-export default function SiteIntro({ tripName, fontVariant }: {
-  tripName: string
-  /** A FONT_VARIANTS key, from ?intro=<letter> — absent means the default. */
-  fontVariant?: string
-}) {
+export default function SiteIntro({ tripName }: { tripName: string }) {
   const steps = makeSteps(tripName)
-  // The variant is read straight off the URL in the browser as well as
-  // from the prop — the component renders nothing until it has measured
-  // anyway, so the client read is always in time, and it cannot be lost
-  // in transit the way a prop can.
-  const [variant, setVariant] = useState(fontVariant)
-  const font = FONT_VARIANTS[variant ?? 'a'] ?? FONT_VARIANTS.a
 
   const [open, setOpen] = useState(true)
   // Nothing renders until the screen has been measured — the whole point
@@ -444,6 +388,7 @@ export default function SiteIntro({ tripName, fontVariant }: {
   const rects = useRef<Rects | null>(null)
   const phase = useRef<Phase>('birth')
   const side = useRef<Side>('C')
+  const lastSpot = useRef<Pt | null>(null)
   const timers = useRef<number[]>([])
   const rm = useRef(false)
 
@@ -456,13 +401,13 @@ export default function SiteIntro({ tripName, fontVariant }: {
   }
 
   /** Move to a spot — or, if the bubble is already there, don't. */
-  const moveCircle = useCallback((to: Side) => {
+  const moveCircle = useCallback((p: Pt) => {
     const r = rects.current
     if (!r) return
-    if (to === side.current) return
-    side.current = to
+    const last = lastSpot.current
+    if (last && Math.hypot(p.x - last.x, p.y - last.y) < 4) return
+    lastSpot.current = p
     const D = circleD(r.vw)
-    const p = spotAt(to, r)
     setDrifting(false)
     setCircleStyle(s => ({
       ...s,
@@ -562,9 +507,18 @@ export default function SiteIntro({ tripName, fontVariant }: {
       setTextOn(true)
     })
 
-    // The bubble stays put unless the page changes or it is sitting on
-    // the feature this thought is about to ring.
-    if (r) moveCircle(pickSide(side.current, stepChanged, nextFocus, r))
+    // The bubble parks on the opposite half of the screen from the
+    // feature being ringed — well out of its way. The lean alternates on
+    // page changes; within a page the bubble moves only when the next
+    // feature actually needs its spot.
+    if (r) {
+      if (stepChanged) {
+        side.current = side.current === 'L' ? 'R' : 'L'
+      } else if (side.current === 'C') {
+        side.current = 'L'
+      }
+      moveCircle(spotFor(side.current, nextFocus, r))
+    }
 
     const curShot = shotFor(step, cur.para)
     if (nextShot !== curShot) {
@@ -602,14 +556,10 @@ export default function SiteIntro({ tripName, fontVariant }: {
     rm.current =
       typeof window.matchMedia === 'function' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    try {
-      const q = new URLSearchParams(window.location.search).get('intro')
-      if (q && FONT_VARIANTS[q]) setVariant(q)
-    } catch { /* no variant asked for */ }
-
     const D = circleD(r.vw)
     side.current = 'C'
-    const p0 = spotAt('C', r)
+    const p0 = spotFor('C', null, r)
+    lastSpot.current = p0
 
     if (r.dot && !rm.current) {
       const c = { x: r.dot.left + r.dot.width / 2, y: r.dot.top + r.dot.height / 2 }
@@ -683,7 +633,8 @@ export default function SiteIntro({ tripName, fontVariant }: {
       const r = rects.current
       if (!r || phase.current !== 'run') return
       const D = circleD(r.vw)
-      const p = spotAt(side.current, r)
+      const p = spotFor(side.current, focusFor(steps[pos.step], pos.para), r)
+      lastSpot.current = p
       setCircleStyle(s => ({ ...s, transform: placed(p, 1, D), transition: 'none' }))
     }
     window.addEventListener('resize', onResize)
@@ -692,7 +643,9 @@ export default function SiteIntro({ tripName, fontVariant }: {
       window.removeEventListener('resize', onResize)
       window.removeEventListener('orientationchange', onResize)
     }
-  }, [open])
+    // steps is rebuilt per render but its content is constant per tripName.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, pos])
 
   if (!open || !ready || !rects.current) return null
 
@@ -857,10 +810,10 @@ export default function SiteIntro({ tripName, fontVariant }: {
             <p
               className="text-balance"
               style={{
-                fontFamily: font.title,
-                fontWeight: font.titleWeight,
-                fontSize: 'clamp(24px, 6.8vw, 29px)',
-                lineHeight: 1.15,
+                fontFamily: TITLE_FONT,
+                fontWeight: 600,
+                fontSize: 'clamp(26px, 7.4vw, 32px)',
+                lineHeight: 1.12,
               }}
             >
               {step.title}
@@ -868,34 +821,18 @@ export default function SiteIntro({ tripName, fontVariant }: {
             <p
               className="mt-3"
               style={{
-                fontFamily: font.body,
-                fontWeight: font.bodyWeight,
-                fontSize: 'clamp(16.5px, 4.6vw, 19px)',
-                lineHeight: 1.45,
+                fontFamily: BODY_FONT,
+                fontSize: 'clamp(18px, 5.1vw, 21px)',
+                lineHeight: 1.4,
               }}
             >
               {step.paras[pos.para]}
             </p>
 
-            {/* Where you are in the lap, one dot per stop. */}
-            <span
-              className="mt-4 flex items-center justify-center gap-2"
-              aria-hidden="true"
-            >
-              {steps.map((st, i) => (
-                <span
-                  key={st.key}
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    i === pos.step ? 'intro-step-on' : 'intro-step'
-                  }`}
-                />
-              ))}
-            </span>
-
             {pos.step === 0 && (
               <p
-                className="mt-2.5 opacity-80"
-                style={{ fontFamily: font.body, fontSize: 14 }}
+                className="mt-3 opacity-80"
+                style={{ fontFamily: BODY_FONT, fontSize: 15 }}
               >
                 Tap anywhere to look around
               </p>
