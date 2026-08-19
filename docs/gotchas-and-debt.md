@@ -359,3 +359,28 @@ DNS says nothing about where the database is. It is one look at the Supabase das
 and if the answer is Europe, `"regions": ["dub1"]` in `vercel.json`. **Do not set it on
 a guess** — pointing the functions away from the database is the same mistake in
 reverse.
+
+## A round was deleted out of the wrong trip
+
+August 2026, just after the first live trip: round 1 vanished from a trip while round 1
+of a *different* trip was the one being deleted. The only path that deletes a single
+round is the itinerary editor's save, and every write on it was already scoped to the
+trip whose Trip Setup screen the tap happened on — so the tap almost certainly happened
+on the wrong trip's screen: two setup screens are pixel-identical, an old tab or a
+restored session lands wherever it was, and nothing on the editor said whose itinerary
+it was showing. The app made the mistake cheap: removing a round was one tap on an ×
+plus Save, unconfirmed, and the at-write score guard **failed open** — a count query
+that errored came back `null`, and `?? 0` read that as "no scores, go ahead".
+
+Three defences went in (`test:itinerary` pins all three): the editor names its trip and
+a save that drops golf opens a confirm naming each round, with its own button; every
+mutation in `lib/itineraryStore.ts` carries `.eq('trip_id', tripId)` belt-and-braces;
+and the score guard refuses on any query error. The general rules underneath, for any
+future delete path: **a guard that can't get its answer must refuse, never default
+open**, and **a destructive confirm must name what it is about to destroy and whose it
+is** — "are you sure?" confirms the tap, not the target.
+
+Recovery for anything already lost is the Supabase dashboard's backups; the app keeps
+no tombstones. And the deeper debt is unchanged from the RLS section above: with no
+auth, any browser holding the anon key can write to any trip's rows — the guards here
+raise the cost of an *accident*, not of an attack.

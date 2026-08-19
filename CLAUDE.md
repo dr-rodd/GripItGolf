@@ -114,6 +114,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `/trip/[tripCode]/scoring` | Round picker |
 | `/trip/[tripCode]/scoring/[roundNumber]` | Live scoring |
 | `/trip/[tripCode]/leaderboard` | Leaderboard tabs |
+| `/trip/[tripCode]/export` | The trip on paper — section checkboxes, Save as PDF via the print dialog, committed scores only. First step of retiring a legacy trip — `docs/features.md` |
 | `/dashboard` | Lead player's trip list (future — post auth) |
 | `/dashboard/create` | Trip creation wizard |
 | `/admin` | Owner-only, unlinked, password-gated. Three sections: trips (search, delete), live cards (close/void a hung scorecard), courses (edit names, counties, tees; card read-only) — `docs/features.md` |

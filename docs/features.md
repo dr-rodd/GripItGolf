@@ -224,6 +224,28 @@ There used to be a `setup_status` of `draft` or `live`, flipped by a **Finalise 
 
 The flag's fragility is the known weakness: clear the browser storage, or open the trip on a new phone, and the owner is an ordinary player. With `everyone` that costs nothing. With `owner` it is a one-way door, which is why nothing can walk through it by accident. Real ownership needs auth.
 
+## Exporting a trip, and retiring an old one
+
+`/trip/[code]/export` renders the trip as one printable document — itinerary, players and teams, every league board with per-round columns (discards struck through), and round-by-round results off the trip's main board — behind a quiet **Export trip (PDF)** link at the foot of Trip Setup. Checkboxes choose which sections go in; **Save as PDF** is the browser's own print dialog, so there is no PDF library and no second rendering path — what is on screen is what lands on paper. Only signed cards print: the page passes `activeRoundIds` empty into the same `buildRowContext` + `buildRows` the leaderboard uses, so an export taken mid-round shows committed scores and nothing live. Two things around it hold this up: the tab bar is `print:hidden`, and `@media print` in `globals.css` re-points the dark palette back to daylight — paper is always light, whatever mode the phone is in.
+
+**The process for a legacy trip** — a trip that is over and will not be looked at again — is export first, delete second, in that order and never the reverse:
+
+1. Open the trip's **Trip Setup → Export trip (PDF)**, tick everything, save the PDF, and open it to check it holds what you expect. The PDF is about to be the only copy.
+2. Delete the trip in `/admin` (trips section — search by name or code, delete asks twice). That removes every row the trip owns: rounds, scores, handicap snapshots, itinerary, teams, matchplay. Platform courses stay — they belong to everyone.
+3. If in doubt, don't. A trip costs nothing to keep, and **North West 26 is real history, never to be deleted**. Deletion is for test trips and abandoned duplicates.
+
+There is deliberately no "archive" flag: a kept trip simply stays, readable at its code, and the export exists so keeping the database row is a choice rather than a hostage situation.
+
+## Deleting a round — the guards
+
+A round was once deleted out of a live trip while a different trip was meant to be the target (August 2026). Removing a round happens in exactly one place — deleting its golf item in the itinerary editor and saving — and that path now has three independent defences, pinned by `test:itinerary`:
+
+- **The editor names its trip** in the header, and a save that removes golf opens a confirm listing each round against the trip's name — Day and course — with its own **Remove and save** button. Save itself goes inert while the confirm is open, so a double-tap cannot fall through.
+- **Every write the store makes is scoped by `trip_id`** as well as by id (`lib/itineraryStore.ts`). Ids are unique, so this should never matter — which is why it is there: a delete is the one write where "should never cross trips" is enforced, not assumed.
+- **The score guard fails closed.** `removeRounds` refuses to delete when its score/live-count queries error, where it used to read a failed count as zero and proceed. Deleting a round cascades its scores and handicap snapshots, so the guard may only pass on a real answer of zero.
+
+If a round is deleted wrongly despite all that, the recovery path is the Supabase dashboard's backups (database → backups; point-in-time restore where the plan has it) — the app keeps no tombstones.
+
 ## The trip hub
 
 Rebuilt in phases. The order, top to bottom: header with the settings gear, trip name and dates with the format line beneath, the status block, the three nav buttons inside `TripCountdown`, then collapsible sections — Itinerary (open on arrival), Travel & accommodation, Players (closed).
