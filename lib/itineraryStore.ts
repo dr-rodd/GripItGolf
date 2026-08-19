@@ -51,7 +51,15 @@ export async function saveItinerary({
   const diff = diffItems(before, after)
 
   if (diff.toDelete.length > 0) {
-    const { error } = await supabase.from('itinerary_items').delete().in('id', diff.toDelete)
+    // Scoped by trip as well as by id. The ids alone are unique, so this
+    // should never matter — which is exactly why it is here: a delete is the
+    // one write where "should never" is not enough, and a stale screen or a
+    // mixed-up `before` list must not be able to reach into another trip.
+    const { error } = await supabase
+      .from('itinerary_items')
+      .delete()
+      .eq('trip_id', tripId)
+      .in('id', diff.toDelete)
     if (error) return { ok: false, error: FAIL }
   }
 
@@ -115,6 +123,7 @@ export async function saveItinerary({
           ? { casual: item.casual ?? false, casual_stats: item.casualStats ?? false }
           : {}),
       })
+      .eq('trip_id', tripId)
       .eq('itinerary_item_id', item.id)
     if (error) return { ok: false, error: 'Could not update a round — try again.' }
   }
@@ -151,11 +160,23 @@ async function removeRounds(tripId: string, itemIds: string[]): Promise<SaveResu
     supabase.from('scores').select('id', { count: 'exact', head: true }).in('round_id', roundIds),
     supabase.from('live_rounds').select('id', { count: 'exact', head: true }).in('round_id', roundIds),
   ])
+  // Fail closed. A count that *errored* comes back null, and `?? 0` alone
+  // read that as "no scores — go ahead": the one guard between a flaky
+  // connection and deleting a played round, defaulting open. Deleting a
+  // round cascades its scores and handicap snapshots with it, so this check
+  // may only pass on a real answer of zero.
+  if (scoresRes.error || liveRes.error) {
+    return { ok: false, error: 'Could not remove a round — try again.' }
+  }
   if ((scoresRes.count ?? 0) > 0 || (liveRes.count ?? 0) > 0) {
     return { ok: false, error: 'A round already has scores recorded — it cannot be removed.' }
   }
 
-  const { error } = await supabase.from('rounds').delete().in('id', roundIds)
+  const { error } = await supabase
+    .from('rounds')
+    .delete()
+    .eq('trip_id', tripId)
+    .in('id', roundIds)
   return error ? { ok: false, error: 'Could not remove a round — try again.' } : { ok: true }
 }
 

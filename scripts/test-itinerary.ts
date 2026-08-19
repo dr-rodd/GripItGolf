@@ -640,6 +640,51 @@ section('Migration 027 and lib/itinerary.ts describe the same table')
     'and the Scoring tab itself no longer fetches an itinerary it does not draw')
 }
 
+// ─── Deleting a round is the write that must not miss ──────────
+//
+// A round was deleted out of a live trip while a different trip was being
+// edited (August 2026). Every mutation the store makes is therefore pinned
+// to carry the trip id — ids alone are unique, but a delete is the one
+// write where "should never cross trips" has to be enforced, not assumed —
+// and the score guard must fail *closed*: a count query that errored comes
+// back null, and `?? 0` alone read that as "no scores, go ahead".
+
+section('The itinerary store scopes every write by trip and fails closed')
+{
+  const store = fs.readFileSync('lib/itineraryStore.ts', 'utf-8')
+
+  const removeFn = store.slice(store.indexOf('async function removeRounds'))
+  ok(removeFn.includes('scoresRes.error || liveRes.error'),
+    'a failed score-count query refuses the delete rather than reading as zero')
+  ok(removeFn.indexOf('scoresRes.error || liveRes.error') < removeFn.indexOf(".delete()"),
+    '  …and the refusal comes before the delete, not after')
+
+  // Every delete and every rounds update the store makes names the trip.
+  const mutations = store.split('\n').reduce<number[]>((at, line, i) =>
+    /\.delete\(\)|\.update\(/.test(line) ? [...at, i] : at, [])
+  const lines = store.split('\n')
+  ok(mutations.length >= 3, 'the store still has its three mutations to pin')
+  for (const at of mutations) {
+    // The window runs to the statement's own error check, so a scoping
+    // clause has to be part of *this* chain to count.
+    const end = lines.findIndex((l, i) => i > at && l.includes('error'))
+    const window = lines.slice(at, end === -1 ? at + 6 : end + 1).join('\n')
+    ok(window.includes("eq('trip_id', tripId)"),
+      `the mutation at itineraryStore line ${at + 1} is scoped to the trip`)
+  }
+
+  // And the editor never deletes on one tap: a save that drops golf opens a
+  // confirm that names the trip and each round, with its own button — Save
+  // itself goes inert while it is open, so a double-tap cannot fall through.
+  const editor = fs.readFileSync('app/trip/[tripCode]/setup/ItineraryEditor.tsx', 'utf-8')
+  ok(editor.includes('removedGolf.length > 0') && editor.includes('setConfirmOpen(true)'),
+    'a save that removes golf opens the confirm instead of writing')
+  ok(editor.includes('|| confirmOpen'),
+    '  …and Save is disabled while the confirm is open')
+  ok(editor.includes('from {tripName}'),
+    '  …which says which trip the rounds would come off')
+}
+
 console.log(`\n${'─'.repeat(56)}`)
 if (failed === 0) console.log(`✓ all ${passed} checks passed`)
 else {

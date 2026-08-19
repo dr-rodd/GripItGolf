@@ -706,6 +706,7 @@ export default function TripSetupClient({
       {itineraryOpen && (
         <ItineraryEditor
           tripId={trip.id}
+          tripName={trip.name}
           startDate={startDate || null}
           endDate={endDate || null}
           initialItems={itinerary}

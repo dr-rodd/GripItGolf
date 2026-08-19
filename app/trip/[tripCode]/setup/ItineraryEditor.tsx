@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { ItineraryItem } from '@/lib/itinerary'
+import { golfItems, type ItineraryItem } from '@/lib/itinerary'
 import { saveItinerary } from '@/lib/itineraryStore'
 import ItineraryBuilder from '@/app/components/ItineraryBuilder'
 import { IconX } from '@/app/components/icons'
@@ -39,9 +39,14 @@ import { usePlatformCourses } from '@/app/components/usePlatformCourses'
  * out is the X, not the nav underneath.
  */
 export default function ItineraryEditor({
-  tripId, startDate, endDate, initialItems, lockedGolfItemIds, trackStats, players, onClose,
+  tripId, tripName, startDate, endDate, initialItems, lockedGolfItemIds, trackStats, players, onClose,
 }: {
   tripId: string
+  /** Named in the header and in the removal confirm, so what is being edited
+   * — and what a removal would come off — is never a guess. A round was once
+   * deleted out of the wrong trip from a screen that never said whose
+   * itinerary it was showing. */
+  tripName: string
   startDate: string | null
   endDate: string | null
   initialItems: ItineraryItem[]
@@ -64,13 +69,46 @@ export default function ItineraryEditor({
   // not on every load of the tab. See `usePlatformCourses`.
   const { courses } = usePlatformCourses()
   const [before] = useState(initialItems)
-  const [items, setItems] = useState(initialItems)
+  const [items, setItemsRaw] = useState(initialItems)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  // Whether the removal confirm is on screen. Opened by Save when the draft
+  // drops golf, closed by any further edit — so what was confirmed is always
+  // exactly what is written. While it is open, Save itself goes quiet: the
+  // only way through is the panel's own button, which a double-tap on Save
+  // can never reach.
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
+  const setItems = (next: ItineraryItem[]) => {
+    setConfirmOpen(false)
+    setItemsRaw(next)
+  }
 
   const dirty = items !== initialItems
 
-  async function save() {
+  // Golf that was loaded and is gone from the draft — each one is a round
+  // this save deletes, and deleting a round is the one edit on this screen
+  // that cannot be walked back. So it is never one tap: the save names each
+  // round, against the trip's own name, and asks.
+  const removedGolf = useMemo(() => {
+    const surviving = new Set(golfItems(items).map(i => i.id))
+    return golfItems(before).filter(b => !surviving.has(b.id))
+  }, [before, items])
+
+  const courseName = (id: string | null | undefined) =>
+    (id && courses.find(c => c.id === id)?.name) || 'course to be confirmed'
+
+  function requestSave() {
+    if (confirmOpen) return
+    if (removedGolf.length > 0) {
+      setConfirmOpen(true)
+      return
+    }
+    void doSave()
+  }
+
+  async function doSave() {
+    setConfirmOpen(false)
     setSaving(true)
     setError('')
     const result = await saveItinerary({
@@ -98,11 +136,17 @@ export default function ItineraryEditor({
         >
           <IconX size={18} />
         </button>
-        <h2 className="t-h2 text-ink">Itinerary</h2>
+        <div className="text-center min-w-0 px-2">
+          <h2 className="t-h2 text-ink">Itinerary</h2>
+          {/* Whose itinerary this is, said on the screen itself. Two trips'
+              editors are otherwise identical, and an edit made on the wrong
+              one is a real deletion on a real trip. */}
+          <p className="t-cap text-ink/65 truncate">{tripName}</p>
+        </div>
         <button
           type="button"
-          onClick={save}
-          disabled={saving || !dirty}
+          onClick={requestSave}
+          disabled={saving || !dirty || confirmOpen}
           className={`${buttonClass('primary', false)} px-5 py-2.5 text-[13px]`}
         >
           {saving ? 'Saving…' : 'Save'}
@@ -115,6 +159,37 @@ export default function ItineraryEditor({
         </p>
       )}
 
+      {confirmOpen && (
+        <div className="flex-shrink-0 px-4 py-3 bg-rust/10 border-b border-rust/25 space-y-2">
+          <p className="t-label text-rust-deep">
+            Saving removes {removedGolf.length === 1 ? 'a round' : `${removedGolf.length} rounds`} from {tripName}:
+          </p>
+          <ul className="space-y-0.5">
+            {removedGolf.map(item => (
+              <li key={item.id} className="t-cap text-ink/80">
+                Day {item.dayIndex + 1} — {courseName(item.courseId)}
+              </li>
+            ))}
+          </ul>
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setConfirmOpen(false)}
+              className={`${buttonClass('secondary', false)} px-4 py-2 text-[13px]`}
+            >
+              Keep {removedGolf.length === 1 ? 'it' : 'them'}
+            </button>
+            <button
+              type="button"
+              onClick={doSave}
+              className={`${buttonClass('danger', false)} px-4 py-2 text-[13px]`}
+            >
+              Remove and save
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto px-4 pt-4">
         <ItineraryBuilder
           startDate={startDate}
@@ -122,7 +197,7 @@ export default function ItineraryEditor({
           courses={courses}
           items={items}
           onChange={setItems}
-          onContinue={save}
+          onContinue={requestSave}
           lockedGolfIds={lockedGolfItemIds}
           trackStats={trackStats}
           continueLabel={saving ? 'Saving…' : 'Done'}
