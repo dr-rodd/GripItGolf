@@ -264,7 +264,32 @@ function restoreLogoDot() {
 }
 
 /** Big enough for the writing to breathe — the bubble carries the words. */
-const circleD = (vw: number) => Math.min(Math.round(vw * 0.78), 360)
+const circleD = (vw: number) => Math.min(Math.round(vw * 0.84), 400)
+
+/**
+ * The bubble's typography, pickable while the choice is being made:
+ * `?intro=<letter>` on the hub URL tries each pairing on the real device
+ * with the real webfonts — screenshots cannot show Clash Display or
+ * Bespoke Serif, phones can. `a` is the default and what plain `?intro`
+ * gets. Once Big Dog picks, the winner becomes the only entry.
+ */
+const FONT_VARIANTS: Record<string, {
+  title: string; titleWeight: number; body: string; bodyWeight: number
+}> = {
+  // Clash Display titles over Archivo body — the site's display voice.
+  a: { title: 'var(--font-display)', titleWeight: 600, body: 'var(--font-ui)', bodyWeight: 400 },
+  // Clash Display for everything — one display voice, geometric and warm.
+  b: { title: 'var(--font-display)', titleWeight: 600, body: 'var(--font-display)', bodyWeight: 500 },
+  // Archivo for everything — the cleanest workhorse take.
+  c: { title: 'var(--font-ui)', titleWeight: 700, body: 'var(--font-ui)', bodyWeight: 400 },
+  // The system face — SF Pro on an iPhone, the crispest rendering there is.
+  d: {
+    title: "-apple-system, 'SF Pro Display', system-ui, sans-serif", titleWeight: 700,
+    body: "-apple-system, 'SF Pro Text', system-ui, sans-serif", bodyWeight: 400,
+  },
+  // Clash Display titles over Bespoke Serif body — the site's reading voice.
+  e: { title: 'var(--font-display)', titleWeight: 600, body: 'var(--font-serif)', bodyWeight: 400 },
+}
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.min(Math.max(v, lo), hi)
@@ -384,8 +409,18 @@ function maskFor(vw: number, vh: number, hole: Pt | null): string {
 
 type Phase = 'birth' | 'run' | 'exit' | 'done'
 
-export default function SiteIntro({ tripName }: { tripName: string }) {
+export default function SiteIntro({ tripName, fontVariant }: {
+  tripName: string
+  /** A FONT_VARIANTS key, from ?intro=<letter> — absent means the default. */
+  fontVariant?: string
+}) {
   const steps = makeSteps(tripName)
+  // The variant is read straight off the URL in the browser as well as
+  // from the prop — the component renders nothing until it has measured
+  // anyway, so the client read is always in time, and it cannot be lost
+  // in transit the way a prop can.
+  const [variant, setVariant] = useState(fontVariant)
+  const font = FONT_VARIANTS[variant ?? 'a'] ?? FONT_VARIANTS.a
 
   const [open, setOpen] = useState(true)
   // Nothing renders until the screen has been measured — the whole point
@@ -567,6 +602,10 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
     rm.current =
       typeof window.matchMedia === 'function' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    try {
+      const q = new URLSearchParams(window.location.search).get('intro')
+      if (q && FONT_VARIANTS[q]) setVariant(q)
+    } catch { /* no variant asked for */ }
 
     const D = circleD(r.vw)
     side.current = 'C'
@@ -705,12 +744,20 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
       {/* The example screen — the real page this thought is talking
           about, full-bleed down to the user's own tab bar, which stays
           the footer of the picture. Each image fades on its own, so one
-          page dissolves into the next with no gap. */}
+          page dissolves into the next with no gap.
+
+          `isolation: isolate` is load-bearing: the images carry z-indexes
+          for their over-fade, and without a stacking context here those
+          indexes would count against the overlay's other children — which
+          is exactly how the pages came to paint OVER the bubble on every
+          step after the welcome. Isolated, the indexes settle their order
+          among the images alone and the bubble stays on top. */}
       <div
         className="absolute left-0 top-0 overflow-hidden pointer-events-none"
         style={{
           width: r.vw,
           height: shotH,
+          isolation: 'isolate',
           opacity: shotOn && shotSrc ? 1 : 0,
           transition: `opacity ${SHOT_XFADE_MS}ms ${PUTT}`,
         }}
@@ -808,17 +855,24 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
             }}
           >
             <p
-              className="font-[family-name:var(--font-display)] font-semibold text-balance"
-              style={{ fontSize: 'clamp(21px, 6vw, 26px)', lineHeight: 1.15 }}
+              className="text-balance"
+              style={{
+                fontFamily: font.title,
+                fontWeight: font.titleWeight,
+                fontSize: 'clamp(24px, 6.8vw, 29px)',
+                lineHeight: 1.15,
+              }}
             >
               {step.title}
             </p>
-            {/* The UI face rather than the serif or the system stack —
-                Archivo carries small sizes on a saturated ground more
-                cleanly than either. */}
             <p
-              className="font-[family-name:var(--font-ui)] mt-3"
-              style={{ fontSize: 'clamp(14.5px, 4.1vw, 16.5px)', lineHeight: 1.5 }}
+              className="mt-3"
+              style={{
+                fontFamily: font.body,
+                fontWeight: font.bodyWeight,
+                fontSize: 'clamp(16.5px, 4.6vw, 19px)',
+                lineHeight: 1.45,
+              }}
             >
               {step.paras[pos.para]}
             </p>
@@ -839,7 +893,10 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
             </span>
 
             {pos.step === 0 && (
-              <p className="font-[family-name:var(--font-ui)] mt-2.5 opacity-80 text-[13px]">
+              <p
+                className="mt-2.5 opacity-80"
+                style={{ fontFamily: font.body, fontSize: 14 }}
+              >
                 Tap anywhere to look around
               </p>
             )}
