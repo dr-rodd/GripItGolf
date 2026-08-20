@@ -41,7 +41,7 @@ export default function JoinForm() {
 
     if (!data) {
       setLoading(false)
-      setError('Trip not found — check your code and try again')
+      setError('Event not found — check your code and try again')
       return
     }
 
@@ -62,10 +62,10 @@ export default function JoinForm() {
         <div className="w-full max-w-xs">
 
         <h1 className="font-[family-name:var(--font-display)] text-4xl text-ink mb-2">
-          Join a Trip
+          Join an Event
         </h1>
         <p className="text-ink/65 text-sm mb-8">
-          Enter the 6-character code from your lead player.
+          Enter the 6-character code you were given.
         </p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -91,7 +91,7 @@ export default function JoinForm() {
             disabled={loading || code.trim().length < 6}
             className="w-full py-5 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {loading ? 'Checking…' : 'Join Trip'}
+            {loading ? 'Checking…' : 'Join Event'}
           </button>
         </form>
 

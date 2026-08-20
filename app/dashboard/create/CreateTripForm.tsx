@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import BackButton from '@/app/components/BackButton'
@@ -42,6 +42,25 @@ const LABEL = 'block text-ink/80 text-[13px] uppercase tracking-wider mb-2'
 // the leaderboards it runs, and that question lives in trip settings — asking
 // it twice is how the two answers come to disagree.
 const STEP_LABELS = ['Trip details', 'Itinerary', 'Players']
+const EVENT_STEP_LABELS = ['Event details', 'Itinerary', 'Players']
+
+/**
+ * Which door on /golf this form was opened through.
+ *
+ * A tournament is the same wizard with a different posture: event wording, a
+ * standalone-or-multi-day choice up front, and an **event organiser** rather
+ * than a lead player — somebody who runs the thing and may or may not be
+ * playing in it. When they play, their name goes in the player list with
+ * everyone else's.
+ *
+ * Read the way JoinForm reads its `?code`: the server has no URL, so it
+ * renders the trip form and the browser corrects it on hydration — which
+ * keeps this route static, and a dynamic route cannot be prefetched whole.
+ */
+const subscribe = () => () => {}
+const readTournament = () =>
+  new URLSearchParams(window.location.search).get('type') === 'tournament'
+const readOnServer = () => false
 
 // Presets cover the common cases; the + button goes beyond them.
 
@@ -81,6 +100,12 @@ export default function CreateTripForm() {
    */
   const { courses, loaded: coursesLoaded } = usePlatformCourses()
 
+  const isTournament = useSyncExternalStore(subscribe, readTournament, readOnServer)
+  // The word for the thing being made, everywhere one is needed. The screen
+  // names — Trip Setup, Trip Settings — keep their proper names either way.
+  const noun = isTournament ? 'event' : 'trip'
+  const Noun = isTournament ? 'Event' : 'Trip'
+
   const [step, setStep] = useState<1 | 2 | 3 | 'done'>(1)
 
   // Step 1
@@ -89,6 +114,13 @@ export default function CreateTripForm() {
   const [leadEmail, setLeadEmail] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+
+  // Tournament shape. A standalone event is one day, so it asks for one
+  // date and writes it to both ends; multi-day behaves exactly like a trip.
+  const [multiDay, setMultiDay] = useState(false)
+  // Whether the organiser is on the tee sheet at all. When they are, their
+  // name is the first in the player list — with everyone else's, not above.
+  const [organiserPlaying, setOrganiserPlaying] = useState(true)
 
   // Step 2
   // The trip's running order. Golf items in it become the rounds.
@@ -197,7 +229,7 @@ export default function CreateTripForm() {
       try {
         passcodeHash = await hashPasscode(passcode)
       } catch {
-        setError('Could not set the passcode on this device. Try again, or create the trip without one.')
+        setError(`Could not set the passcode on this device. Try again, or create the ${noun} without one.`)
         setSubmitting(false)
         return
       }
@@ -249,7 +281,7 @@ export default function CreateTripForm() {
       .single()
 
     if (tripErr || !trip) {
-      setError(`Could not create the trip. ${describeError(tripErr)}`)
+      setError(`Could not create the ${noun}. ${describeError(tripErr)}`)
       setSubmitting(false)
       return
     }
@@ -261,6 +293,12 @@ export default function CreateTripForm() {
     // Nobody is put in a team here. There are no teams yet, and there may
     // never be any — the leaderboards a trip runs decide that, and they are
     // chosen in settings. Everyone starts unassigned.
+    // On a trip the first name is the lead player's own. On a tournament the
+    // first name is the organiser's only if they said they are playing — an
+    // organiser off the tee sheet has no player row at all, and nobody in
+    // the field is anything but a player.
+    const firstIsOrganiser = !isTournament || organiserPlaying
+
     const validPlayers = players.filter(p => p.name.trim())
     let playerRows: { id: string; handicap: number; is_lead?: boolean }[] = []
     if (validPlayers.length > 0) {
@@ -273,17 +311,17 @@ export default function CreateTripForm() {
             handicap: parseHandicap(p.handicap) ?? 0,
             gender: p.gender,
             role: 'player',
-            is_lead: i === 0,
+            is_lead: firstIsOrganiser && i === 0,
             // The organiser entered themselves, so they're in. Everyone else
             // named here is a placeholder until they claim their own slot.
-            claimed: i === 0,
+            claimed: firstIsOrganiser && i === 0,
             team_id: null,
           }))
         )
         .select('id, handicap, is_lead')
 
       if (playersErr || !insertedPlayers) {
-        setError(`Trip created, but the players failed. ${describeError(playersErr)}`)
+        setError(`${Noun} created, but the players failed. ${describeError(playersErr)}`)
         setSubmitting(false)
         return
       }
@@ -316,7 +354,7 @@ export default function CreateTripForm() {
       : { data: [], error: null }
 
     if (itinErr) {
-      setError(`Trip created, but the itinerary failed. ${describeError(itinErr)}`)
+      setError(`${Noun} created, but the itinerary failed. ${describeError(itinErr)}`)
       setSubmitting(false)
       return
     }
@@ -348,7 +386,7 @@ export default function CreateTripForm() {
       .select('id')
 
     if (roundsErr || !insertedRounds) {
-      setError(`Trip created, but the rounds failed. ${describeError(roundsErr)}`)
+      setError(`${Noun} created, but the rounds failed. ${describeError(roundsErr)}`)
       setSubmitting(false)
       return
     }
@@ -366,7 +404,7 @@ export default function CreateTripForm() {
       )
       const { error: hcpErr } = await supabase.from('round_handicaps').insert(hcpRows)
       if (hcpErr) {
-        setError(`Trip created, but the handicaps failed. ${describeError(hcpErr)}`)
+        setError(`${Noun} created, but the handicaps failed. ${describeError(hcpErr)}`)
         setSubmitting(false)
         return
       }
@@ -421,7 +459,7 @@ export default function CreateTripForm() {
           </div>
 
           <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-2">
-            Trip Created!
+            {Noun} Created!
           </h1>
           <p className="text-ink/65 text-sm mb-10">
             Share this code with your group to join. Next, choose leaderboard
@@ -429,7 +467,7 @@ export default function CreateTripForm() {
           </p>
 
           <div className="bg-surface border border-bark/25 rounded-2xl px-4 py-8 mb-4">
-            <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-4">Your Trip Code</p>
+            <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-4">Your {Noun} Code</p>
             {/* Laid out as characters with a gap rather than letter-spacing:
                 tracking adds space after the final character too, which pushed
                 the code off the right edge of the box. */}
@@ -465,7 +503,7 @@ export default function CreateTripForm() {
             href={`/trip/${resultCode}`}
             className="block w-full py-4 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors"
           >
-            Go to Your Trip
+            Go to Your {Noun}
           </Link>
         </div>
       </div>
@@ -515,7 +553,7 @@ export default function CreateTripForm() {
             </div>
           )}
           <p className="text-center text-ink/65 text-[13px] tracking-wider uppercase">
-            Step {stepNum} of 3 — {STEP_LABELS[stepNum - 1]}
+            Step {stepNum} of 3 — {(isTournament ? EVENT_STEP_LABELS : STEP_LABELS)[stepNum - 1]}
           </p>
         </div>
       </div>
@@ -526,31 +564,71 @@ export default function CreateTripForm() {
         {step === 1 && (
           <div className="space-y-6">
             <div>
-              <label className={LABEL}>Trip name</label>
+              <label className={LABEL}>{Noun} name</label>
               <input
                 type="text"
                 value={tripName}
                 onChange={e => setTripName(e.target.value)}
-                placeholder="e.g. Portugal 2027"
+                placeholder={isTournament ? 'e.g. Captain’s Prize 2026' : 'e.g. Portugal 2027'}
                 className={INPUT}
                 autoFocus
               />
             </div>
 
-            {/* Two equal columns that cannot outgrow the row. The explicit
-                minmax(0,1fr) is what stops a date input's intrinsic width
-                pushing the second column off the right of the page. */}
-            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-              <DateField label="Start date" value={startDate} onChange={setStartDate} />
-              <DateField label="End date"   value={endDate}   onChange={setEndDate} />
-            </div>
+            {/* A tournament says its shape first: one day, or a run of them.
+                Choosing standalone folds the dates into one, and writes that
+                one to both ends so everything downstream sees a normal trip
+                one day long. */}
+            {isTournament && (
+              <div>
+                <label className={LABEL}>Event length</label>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => { setMultiDay(false); setEndDate(startDate) }}
+                    className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors ${
+                      !multiDay
+                        ? 'bg-accent-deep text-white'
+                        : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
+                    }`}
+                  >
+                    Standalone
+                  </button>
+                  <button
+                    onClick={() => setMultiDay(true)}
+                    className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors ${
+                      multiDay
+                        ? 'bg-accent-deep text-white'
+                        : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
+                    }`}
+                  >
+                    Multi-day
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {isTournament && !multiDay ? (
+              <DateField
+                label="Event date"
+                value={startDate}
+                onChange={v => { setStartDate(v); setEndDate(v) }}
+              />
+            ) : (
+              /* Two equal columns that cannot outgrow the row. The explicit
+                 minmax(0,1fr) is what stops a date input's intrinsic width
+                 pushing the second column off the right of the page. */
+              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                <DateField label="Start date" value={startDate} onChange={setStartDate} />
+                <DateField label="End date"   value={endDate}   onChange={setEndDate} />
+              </div>
+            )}
 
             {/* A few lines about the trip, shown on the hub under the
                 countdown. Optional like the email: nothing below depends on
                 it, and it can be written or rewritten later in Trip
                 Settings. */}
             <div>
-              <label className={LABEL} htmlFor="trip-description">About the trip (optional)</label>
+              <label className={LABEL} htmlFor="trip-description">About the {noun} (optional)</label>
               <textarea
                 id="trip-description"
                 value={description}
@@ -561,7 +639,7 @@ export default function CreateTripForm() {
                 className={`${INPUT} resize-none leading-snug`}
               />
               <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                Shows on the trip hub, under the countdown. It can be changed
+                Shows on the {noun} hub, under the countdown. It can be changed
                 any time in Trip Settings.
               </p>
             </div>
@@ -586,8 +664,8 @@ export default function CreateTripForm() {
                 className={INPUT}
               />
               <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                We&apos;ll send you the trip details and share link. Leave it blank
-                if you would rather not — the trip works either way, and no other
+                We&apos;ll send you the {noun} details and share link. Leave it blank
+                if you would rather not — the {noun} works either way, and no other
                 player ever sees it.
               </p>
               {emailWarning(leadEmail) && (
@@ -632,13 +710,42 @@ export default function CreateTripForm() {
         {step === 3 && (
           <div className="space-y-4">
             <p className="text-ink/65 text-sm mb-2">
-              Optional — players can also join later with the trip code.
+              Optional — players can also join later with the {noun} code.
             </p>
+
+            {/* A tournament has an organiser, never a "lead player" — and the
+                organiser may not be playing at all. When they are, their name
+                is simply the first card below, in the list with everyone
+                else's. */}
+            {isTournament && (
+              <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-ink text-sm font-medium">Are you playing?</p>
+                    <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
+                      {organiserPlaying
+                        ? 'Put your own name first below — the rest of the field follows.'
+                        : 'You run the event; the names below are the field.'}
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={organiserPlaying}
+                    onChange={setOrganiserPlaying}
+                    label="The organiser is playing"
+                  />
+                </div>
+              </div>
+            )}
+
             {players.map((player, i) => (
               <div key={i} className="bg-surface border border-bark/12 rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-ink/65 text-[13px] tracking-widest uppercase">
-                    {i === 0 ? 'Lead player' : `Player ${i + 1}`}
+                    {i === 0 && !isTournament
+                      ? 'Lead player'
+                      : i === 0 && organiserPlaying
+                        ? 'Organiser — you'
+                        : `Player ${i + 1}`}
                   </span>
                   {i > 0 && (
                     <button
@@ -713,12 +820,12 @@ export default function CreateTripForm() {
             <div className="mt-8 pt-6 border-t border-bark/12">
               <div className="flex items-start justify-between gap-4 bg-surface border border-bark/12 rounded-xl px-4 py-4">
                 <div className="min-w-0">
-                  <p className="text-ink text-sm font-medium">Lock trip settings</p>
+                  <p className="text-ink text-sm font-medium">Lock {noun} settings</p>
                   <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
                     Ask for a passcode before anyone can change formats, players or teams
                   </p>
                 </div>
-                <Toggle checked={lockSettings} onChange={setLockSettings} label="Lock trip settings" />
+                <Toggle checked={lockSettings} onChange={setLockSettings} label={`Lock ${noun} settings`} />
               </div>
 
               {lockSettings && (
@@ -779,7 +886,7 @@ export default function CreateTripForm() {
               disabled={!canProceed}
               className="w-full py-5 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {submitting ? 'Creating…' : isFinalStep ? 'Create Trip' : 'Continue'}
+              {submitting ? 'Creating…' : isFinalStep ? `Create ${Noun}` : 'Continue'}
             </button>
             {isFinalStep && (
               <p className="text-center text-ink/65 text-[13px] mt-3">

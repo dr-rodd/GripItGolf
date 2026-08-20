@@ -63,6 +63,9 @@ Don't read these up front. Open the matching file when the task actually touches
 
 ## Platform concept
 
+- **The enterprise is Green Dot Live** — live scoring tied to live leaderboard generation, with leaderboard settings as the rules, for any event with a winner. Golf is the first sport and the current focus; tennis events, sports days, multi-event competitions, park runs and sailing are the direction. The wordmark and visual identity are unchanged until the new Green Dot Live logo arrives.
+- **The landing page is the portal**: the 6-character code is typed straight on the front page (Join Event — `/join` survives for shared `?code=` links), and Create an Event goes to `/golf`, which offers Golf Trip, Golf Tournament, and Personal usage (named, not built — the card says Coming soon). A new sport gets a doorway beside `/golf`; the landing page doesn't change.
+- **A tournament is the create wizard through a second door** — `/dashboard/create?type=tournament`, read client-side so the route stays static. It swaps trip wording for event wording, asks standalone-or-multi-day first (standalone writes one date to both ends), and has an **event organiser — never "lead player"** — who may or may not be playing: playing, their name is the first player card, in the list with everyone else, and carries `is_lead`/`claimed`/the cookie; not playing, no player row exists for them and no row has `is_lead`. **No schema change yet** — a tournament is stored as an ordinary trip, so the hub and setup screens don't know the difference; a `trips.kind` column is the likely next step when they need to.
 - **The platform has run a full live trip**: North West 26, August 2026 — live scoring, leaderboards and teams, end to end. That trip's rows are real history, never test data. This is ongoing platform work now, on no fixed date.
 - A **lead player** creates a trip — no account required, open access for now
 - A **6-character alphanumeric trip code** is generated on creation (e.g. `GX7K2P`)
@@ -104,8 +107,9 @@ Don't read these up front. Open the matching file when the task actually touches
 
 | Route | Purpose |
 |---|---|
-| `/` | Landing — create or join a trip |
-| `/join` | Enter trip code |
+| `/` | Landing — event code typed in place (Join Event), or Create an Event → `/golf` |
+| `/golf` | The golf doorway: Golf Trip, Golf Tournament (`/dashboard/create?type=tournament`), Personal usage (coming soon) |
+| `/join` | Enter trip code — kept for shared `?code=` links |
 | `/trip/[tripCode]` | Trip hub |
 | `/trip/[tripCode]/setup` | Formats, players, finalise/unlock |
 | `/trip/[tripCode]/teams` | Team assignment |
@@ -292,7 +296,9 @@ piecemeal. Four rules came out of it, and they are rules because each one had
 three or four variants in the wild:
 
 - **The person who made the trip is the lead player.** Not organiser, not trip
-  owner, not "whoever created it".
+  owner, not "whoever created it". **A tournament is the exception**: the
+  person who made it is the **event organiser**, never the lead player, and
+  a tournament is an event, not a trip, in every sentence about one.
 - **The screen at `/trip/[code]/setup` is Trip Setup** — the tab bar's fourth
   label and every sentence that points at it. **Trip Settings is the drawer
   inside it**, behind the gear: name, dates, itinerary, who can edit. Two

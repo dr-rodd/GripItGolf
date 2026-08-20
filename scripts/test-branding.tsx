@@ -55,7 +55,7 @@ function uiFiles(): string[] {
       else if (/\.tsx?$/.test(e.name)) out.push(p)
     }
   }
-  for (const d of ['app/trip', 'app/components', 'app/join', 'app/dashboard', 'app/admin']) walk(d)
+  for (const d of ['app/trip', 'app/components', 'app/join', 'app/dashboard', 'app/admin', 'app/golf']) walk(d)
   out.push('app/page.tsx', 'app/layout.tsx', 'app/Landing.tsx')
   return out
 }
@@ -1384,7 +1384,7 @@ section('The screens before a trip wear the same header')
   // The mark lands in the bar on the way off the landing page. If the screen
   // it lands on did not have it there, the collapse would be explaining a
   // move to somewhere the mark does not end up.
-  for (const f of ['app/join/JoinForm.tsx', 'app/dashboard/create/CreateTripForm.tsx']) {
+  for (const f of ['app/join/JoinForm.tsx', 'app/dashboard/create/CreateTripForm.tsx', 'app/golf/page.tsx']) {
     const src = read(f)
     const name = f.split('/').pop()
     ok(src.includes('<TripHeader backTo="/" />'),
@@ -1774,16 +1774,21 @@ section('Landing page')
   ok(/#0a9d56/i.test(home), '  …closed by the emerald dot')
   ok(!home.includes('<h1'), 'and is not restated as a heading beneath itself')
 
-  // One line underneath saying what the app is. It used to go on to tell you
-  // to tap the buttons below it; the copy review cut that half — the two
-  // buttons sit directly under it and name themselves.
-  ok(/Live scoring, leaderboards and matchplay/i.test(home),
-    'one line says what the app is for')
-  ok(home.includes('/dashboard/create'), 'Create a trip is one of the two')
-  ok(home.includes('/join'), 'Join a trip is the other')
-  ok(/Create a trip/i.test(home) && /Join a trip/i.test(home), 'both are named plainly')
+  // One line underneath saying what the platform is. The enterprise is
+  // Green Dot Live now: leaderboards for any event, golf first — so the
+  // line stopped naming golf.
+  ok(/Live scoring and leaderboards for your event/i.test(home),
+    'one line says what the platform is for')
 
-  // One primary action: creating. Joining is secondary.
+  // The event code goes straight in on the front page — no screen between a
+  // person holding a code and typing it. /join survives for shared links.
+  ok(home.includes('maxLength="6"'), 'the event code is typed straight into the page')
+  ok(/Join Event/i.test(home), 'and joined from it')
+  ok(home.includes('/golf'), 'creating goes through the golf doorway')
+  ok(/Create an Event/i.test(home), 'named plainly')
+
+  // One primary action: joining, which is the box directly above it.
+  // Creating is secondary.
   // Counted as elements, not substrings: "hover:bg-accent-deep" contains
   // "bg-accent" and would double every button.
   // Either green counts: a solid emerald fill is a solid emerald fill
@@ -1804,7 +1809,7 @@ section('Landing page')
 
 section('The old branding is gone')
 {
-  eq(SITE.name, 'Green Dot Golf', 'the site config still names the app')
+  eq(SITE.name, 'Green Dot Live', 'the site config names the enterprise')
 
   const layout = read('app/layout.tsx')
   ok(layout.includes('green dot.'), 'the browser tab carries the wordmark')

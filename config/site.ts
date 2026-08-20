@@ -1,5 +1,10 @@
 export const SITE = {
-  name: "Green Dot Golf",
+  /**
+   * The enterprise is Green Dot Live now: live scoring and leaderboards for
+   * any event, with golf as the first sport. The wordmark and the rest of
+   * the visual identity are unchanged until the new logo arrives.
+   */
+  name: "Green Dot Live",
   /**
    * Your handicap is the best 8 of your last 20 rounds. On the graph those
    * eight show as green dots — so a green dot is a round that counted, and

@@ -472,8 +472,10 @@ async function main() {
     // The lock sits on step 4, so it is not in step 1's markup
     const source = require('fs').readFileSync(
       'app/dashboard/create/CreateTripForm.tsx', 'utf-8')
-    ok(source.includes('Lock trip settings'), 'the option is on the form')
-    ok(source.includes('label="Lock trip settings"'), 'as a labelled switch')
+    // The wording follows the door the wizard was opened through — "Lock
+    // trip settings" on a trip, "Lock event settings" on a tournament.
+    ok(source.includes('Lock {noun} settings'), 'the option is on the form')
+    ok(source.includes('label={`Lock ${noun} settings`}'), 'as a labelled switch')
     ok(source.includes('tripRow.settings_passcode_hash = passcodeHash'),
       'and the hash is stored on the trip')
     // Sent only when a passcode exists: a database that has not had that
