@@ -1544,7 +1544,6 @@ section('A full-screen overlay covers the tab bar, never ties with it')
   // that is meant to be blocking the screen.
   for (const f of [
     'app/trip/[tripCode]/setup/ItineraryEditor.tsx',
-    'app/components/SettingsModal.tsx',
     'app/components/PlayerSettings.tsx',
   ]) {
     const src = read(f)

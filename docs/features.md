@@ -238,7 +238,7 @@ There is deliberately no "archive" flag: a kept trip simply stays, readable at i
 
 ## Deleting a round — the guards
 
-A round was once deleted out of a live trip while a different trip was meant to be the target (August 2026). Removing a round happens in exactly one place — deleting its golf item in the itinerary editor and saving — and that path now has three independent defences, pinned by `test:itinerary`:
+A live trip's round lost its committed scores while a different trip was meant to be the target (August 2026) — the culprit turned out to be the scoring dashboard's course-scoped void, since fixed and pinned by `test:legacy`; `docs/gotchas-and-debt.md` has the full story. The itinerary editor was hardened in the same investigation, and stays hardened: removing a round happens in exactly one place — deleting its golf item in the itinerary editor and saving — and that path has three independent defences, pinned by `test:itinerary`:
 
 - **The editor names its trip** in the header, and a save that removes golf opens a confirm listing each round against the trip's name — Day and course — with its own **Remove and save** button. Save itself goes inert while the confirm is open, so a double-tap cannot fall through.
 - **Every write the store makes is scoped by `trip_id`** as well as by id (`lib/itineraryStore.ts`). Ids are unique, so this should never matter — which is why it is there: a delete is the one write where "should never cross trips" is enforced, not assumed.
