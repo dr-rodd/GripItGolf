@@ -1,7 +1,6 @@
-import { cache } from 'react'
 import TabBar from '@/app/components/TabBar'
-import { supabase } from '@/lib/supabase'
 import { isEvent } from '@/lib/eventHub'
+import { fetchTripKind } from './kind'
 
 /**
  * Everything under `/trip/[tripCode]`, with the bottom bar around it.
@@ -28,16 +27,6 @@ import { isEvent } from '@/lib/eventHub'
  * the trip never re-pays it. Nothing heavier belongs here.
  */
 
-/** The kind, once per request — and fail-soft: no column, no kind, a trip. */
-const fetchKind = cache(async (tripCode: string): Promise<string | null> => {
-  const { data } = await supabase
-    .from('trips')
-    .select('kind')
-    .eq('trip_code', tripCode)
-    .single()
-  return (data as { kind?: string } | null)?.kind ?? null
-})
-
 export default async function TripLayout({
   children,
   params,
@@ -46,7 +35,7 @@ export default async function TripLayout({
   params: Promise<{ tripCode: string }>
 }) {
   const { tripCode } = await params
-  const kind = await fetchKind(tripCode)
+  const kind = await fetchTripKind(tripCode)
 
   return (
     <>

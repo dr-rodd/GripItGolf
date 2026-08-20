@@ -7,6 +7,10 @@ import BackButton from '@/app/components/BackButton'
 import TripTeamsClient from './TripTeamsClient'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
+import PasscodeGate from '../setup/PasscodeGate'
+import { isLocked } from '@/lib/passcode'
+import { isEvent } from '@/lib/eventHub'
+import { fetchTripKind } from '../kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,11 +30,17 @@ export default async function TripTeamsPage({
 }) {
   const { tripCode } = await params
 
-  const { data: trip, error: tripError } = await supabase
-    .from('trips')
-    .select('id, trip_code, name, formats, leaderboards, team_scoring')
-    .eq('trip_code', tripCode)
-    .single()
+  // The kind alongside, not inside: a named `kind` would fail this select
+  // on an un-migrated database — the note on fetchTripKind.
+  const [kind, { data: trip, error: tripError }] = await Promise.all([
+    fetchTripKind(tripCode),
+    supabase
+      .from('trips')
+      .select('id, trip_code, name, formats, leaderboards, team_scoring, settings_passcode_hash')
+      .eq('trip_code', tripCode)
+      .single(),
+  ])
+  const event = isEvent(kind)
 
   if (tripError) console.error('TripTeamsPage trip query failed:', tripError)
   if (!trip) notFound()
@@ -59,7 +69,7 @@ export default async function TripTeamsPage({
     team_set: (t.team_set as string | null) ?? MAIN_SET,
   }))
 
-  return (
+  const screen = (
     <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
       <TripHeader backTo={`/trip/${tripCode}`} />
       <div className="bg-cream border-b border-bark/12">
@@ -89,4 +99,24 @@ export default async function TripTeamsPage({
       <SupportLink className="px-4 pb-12" />
     </div>
   )
+
+  // On a trip, teams are the group's to argue over. On an event they are
+  // the organiser's — the whole screen assigns people to sheets — so it
+  // stands behind the same PIN as the rest of the running of the event.
+  // Unlocking any organiser screen unlocks them all for the session.
+  if (event && isLocked(trip.settings_passcode_hash as string | null)) {
+    return (
+      <PasscodeGate
+        tripCode={tripCode}
+        tripName={trip.name}
+        passcodeHash={trip.settings_passcode_hash as string}
+        title="Organisers only"
+        hint={`Enter the organiser PIN for ${trip.name}.`}
+      >
+        {screen}
+      </PasscodeGate>
+    )
+  }
+
+  return screen
 }

@@ -173,8 +173,26 @@ section('An event hides Trip Setup from the field')
   const layout = read('app/trip/[tripCode]/layout.tsx')
   ok(layout.includes('isEvent={isEvent(kind)}'),
     'the layout decides, being the one place that knows before first paint')
-  ok(layout.includes("select('kind')") && layout.includes('cache('),
-    'off one cached column — the layout stays as light as its note demands')
+  ok(layout.includes('fetchTripKind'), 'off the shared kind lookup')
+
+  // The lookup is one copy, cached per request, and fails soft — a named
+  // `kind` inside a page's own select would break that page on a database
+  // that has not run migration 046.
+  const kindSrc = read('app/trip/[tripCode]/kind.ts')
+  ok(kindSrc.includes('cache(') && kindSrc.includes("select('kind')"),
+    'the kind lookup is one cached column, asked once per request')
+
+  const scoring = read('app/trip/[tripCode]/scoring/page.tsx')
+  ok(scoring.includes('fetchTripKind') && /\{!event && \(\s*<AddRound/.test(scoring),
+    'the scoring picker offers no add-round on an event')
+
+  const roundPage = read('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
+  ok(/\{!event && \(\s*<CasualToggle/.test(roundPage),
+    'nor does an event round offer the casual switch')
+
+  const teams = read('app/trip/[tripCode]/teams/page.tsx')
+  ok(teams.includes('<PasscodeGate') && teams.includes('title="Organisers only"'),
+    'and the teams screen stands behind the PIN on an event')
 
   const organiser = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
   ok(/href=\{`\/trip\/\$\{tripCode\}\/setup`\}/.test(organiser),

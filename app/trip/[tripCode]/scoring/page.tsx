@@ -5,6 +5,8 @@ import { liveRoundPresence, type OpenCard } from '@/lib/rowContext'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
 import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundState'
+import { isEvent } from '@/lib/eventHub'
+import { fetchTripKind } from '../kind'
 import AddRound from './AddRound'
 
 export const dynamic = 'force-dynamic'
@@ -28,15 +30,22 @@ export default async function TripCoursePortalPage({
   // and over on a course, serialised into its HTML, for a sheet most visits
   // never open. They load inside `AddRound` on the tap now — see the note
   // there and in `usePlatformCourses`; it is the same rule three times.
-  const { data: trip, error: tripError } = await supabase
-    .from('trips')
-    // One string, not two joined: supabase-js reads the select as a literal
-    // type to work out the row shape, and a `+` between two halves leaves it
-    // with nothing to read — every field on `trip` then fails to typecheck.
-    .select('id, name, start_date, end_date, track_stats, rounds(id, round_number, status, courses(name, location))')
-    .eq('trip_code', tripCode)
-    .order('round_number', { referencedTable: 'rounds' })
-    .single()
+  // The kind rides alongside rather than inside the select: a named `kind`
+  // column would fail this whole query on an un-migrated database — the
+  // note on fetchTripKind — and alongside it costs no round trip.
+  const [kind, { data: trip, error: tripError }] = await Promise.all([
+    fetchTripKind(tripCode),
+    supabase
+      .from('trips')
+      // One string, not two joined: supabase-js reads the select as a literal
+      // type to work out the row shape, and a `+` between two halves leaves it
+      // with nothing to read — every field on `trip` then fails to typecheck.
+      .select('id, name, start_date, end_date, track_stats, rounds(id, round_number, status, courses(name, location))')
+      .eq('trip_code', tripCode)
+      .order('round_number', { referencedTable: 'rounds' })
+      .single(),
+  ])
+  const event = isEvent(kind)
 
   if (tripError) console.error('TripCoursePortal trip query failed:', tripError)
   if (!trip) notFound()
@@ -118,18 +127,24 @@ export default async function TripCoursePortalPage({
             Choose a round
           </p>
           {/* The door for the impromptu game — the same golf form the
-              itinerary uses, in a sheet, without a trip through Trip Setup. */}
-          <AddRound
-            tripId={trip.id}
-            startDate={trip.start_date ?? null}
-            endDate={trip.end_date ?? null}
-            trackStats={trip.track_stats === true}
-          />
+              itinerary uses, in a sheet, without a trip through Trip Setup.
+              A trip's door: on an event the field plays the rounds the
+              organiser set, and anything modifiable lives behind the PIN —
+              the organiser adds golf through the setup screen's running
+              order. */}
+          {!event && (
+            <AddRound
+              tripId={trip.id}
+              startDate={trip.start_date ?? null}
+              endDate={trip.end_date ?? null}
+              trackStats={trip.track_stats === true}
+            />
+          )}
         </div>
 
         {(rounds ?? []).length === 0 && (
           <p className="text-ink/65 text-sm py-8 text-center">
-            No rounds set up for this trip yet.
+            No rounds set up for this {event ? 'event' : 'trip'} yet.
           </p>
         )}
 

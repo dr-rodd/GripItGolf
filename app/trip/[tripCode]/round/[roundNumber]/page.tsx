@@ -22,6 +22,8 @@ import { IconMapPin, IconClipboardList, IconTrophy } from '@/app/components/icon
 import RoundCard from './RoundCard'
 import CasualToggle from './CasualToggle'
 import CourseWeather from '@/app/components/CourseWeather'
+import { isEvent } from '@/lib/eventHub'
+import { fetchTripKind } from '../../kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,11 +44,17 @@ export default async function RoundSummaryPage({
   const roundNum = parseInt(roundNumber, 10)
   if (!Number.isFinite(roundNum)) notFound()
 
-  const { data: trip, error: tripError } = await supabase
-    .from('trips')
-    .select('id, name, start_date, formats, leaderboards, team_scoring, track_stats')
-    .eq('trip_code', tripCode)
-    .single()
+  // The kind alongside, not inside: a named `kind` would fail this select
+  // on an un-migrated database — the note on fetchTripKind.
+  const [kind, { data: trip, error: tripError }] = await Promise.all([
+    fetchTripKind(tripCode),
+    supabase
+      .from('trips')
+      .select('id, name, start_date, formats, leaderboards, team_scoring, track_stats')
+      .eq('trip_code', tripCode)
+      .single(),
+  ])
+  const event = isEvent(kind)
 
   if (tripError) console.error('RoundSummary trip query failed:', tripError)
   if (!trip) notFound()
@@ -317,13 +325,17 @@ export default async function RoundSummaryPage({
             On the round's own page because this is where the decision gets
             made after the fact — a subgroup's extra game that should not
             move the trip standings. The same question the golf sheet asks
-            when a round is added. */}
-        <CasualToggle
-          roundId={round.id}
-          casual={round.casual === true}
-          casualStats={round.casual_stats === true}
-          trackStats={trip.track_stats === true}
-        />
+            when a round is added. A trip's question: on an event the rounds
+            are the competition, and anything modifiable lives behind the
+            organiser PIN. */}
+        {!event && (
+          <CasualToggle
+            roundId={round.id}
+            casual={round.casual === true}
+            casualStats={round.casual_stats === true}
+            trackStats={trip.track_stats === true}
+          />
+        )}
 
         {/* ── Into the card ── */}
         <Link
