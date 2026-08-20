@@ -158,7 +158,12 @@ export default function CreateTripForm() {
       ? 'Add at least one round of golf — otherwise what\'s the point?'
       : roundCountError(plannedGolf.length)
 
-  const passcodeIssue = !lockSettings
+  // A tournament always sets one: the PIN is the organiser's key to the
+  // Event Hub's admin side (and Trip Setup — one code, one lock). On a trip
+  // the lock stays a choice.
+  const lockOn = isTournament || lockSettings
+
+  const passcodeIssue = !lockOn
     ? null
     : passcodeError(passcode) ??
       (passcode !== passcodeConfirm ? 'The two passcodes do not match.' : null)
@@ -225,7 +230,7 @@ export default function CreateTripForm() {
 
     // Hashed here so the passcode itself never leaves the device
     let passcodeHash: string | null = null
-    if (lockSettings) {
+    if (lockOn) {
       try {
         passcodeHash = await hashPasscode(passcode)
       } catch {
@@ -261,6 +266,11 @@ export default function CreateTripForm() {
     // Only sent when a passcode was actually set, so a database that has not
     // had that column added yet can still create ordinary trips.
     if (passcodeHash) tripRow.settings_passcode_hash = passcodeHash
+
+    // Only for tournaments, so ordinary trips still create before migration
+    // 046 has run. A tournament insert does need the column — until the
+    // migration lands it fails, and describeError says why in as many words.
+    if (isTournament) tripRow.kind = 'tournament'
 
     // Same reasoning, and the same for anything that is not an address:
     // blank, half-typed or nonsense all mean "not given", and none of them is
@@ -483,11 +493,12 @@ export default function CreateTripForm() {
             </div>
           </div>
 
-          {lockSettings && (
+          {lockOn && (
             <div className="mb-4 px-4 py-3 bg-surface border border-bark/12 rounded-xl">
               <p className="text-ink/80 text-[13px] leading-snug">
-                Settings are locked. Keep your passcode safe — it cannot be recovered
-                or changed.
+                {isTournament
+                  ? 'Your organiser PIN is set. Keep it safe — it cannot be recovered or changed.'
+                  : 'Settings are locked. Keep your passcode safe — it cannot be recovered or changed.'}
               </p>
             </div>
           )}
@@ -816,19 +827,34 @@ export default function CreateTripForm() {
 
             {/* ── Settings lock ──
                 Only settable here. Once the trip exists, anyone holding the
-                trip code could otherwise lock a trip they do not run. */}
+                trip code could otherwise lock a trip they do not run.
+
+                A tournament does not ask — it tells. The PIN is how the
+                organiser gets into the admin side of the Event Hub from any
+                phone (and it locks Trip Setup with the same code), so a
+                tournament without one would have no organiser side at all. */}
             <div className="mt-8 pt-6 border-t border-bark/12">
-              <div className="flex items-start justify-between gap-4 bg-surface border border-bark/12 rounded-xl px-4 py-4">
-                <div className="min-w-0">
-                  <p className="text-ink text-sm font-medium">Lock {noun} settings</p>
+              {isTournament ? (
+                <div className="bg-surface border border-bark/12 rounded-xl px-4 py-4">
+                  <p className="text-ink text-sm font-medium">Organiser PIN</p>
                   <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                    Ask for a passcode before anyone can change formats, players or teams
+                    Your key to the organiser side of the Event Hub — notices,
+                    tee times and event settings ask for it.
                   </p>
                 </div>
-                <Toggle checked={lockSettings} onChange={setLockSettings} label={`Lock ${noun} settings`} />
-              </div>
+              ) : (
+                <div className="flex items-start justify-between gap-4 bg-surface border border-bark/12 rounded-xl px-4 py-4">
+                  <div className="min-w-0">
+                    <p className="text-ink text-sm font-medium">Lock {noun} settings</p>
+                    <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
+                      Ask for a passcode before anyone can change formats, players or teams
+                    </p>
+                  </div>
+                  <Toggle checked={lockSettings} onChange={setLockSettings} label={`Lock ${noun} settings`} />
+                </div>
+              )}
 
-              {lockSettings && (
+              {lockOn && (
                 <div className="mt-3 space-y-3">
                   <div className="px-4 py-3.5 bg-rust/10 border border-rust/40 rounded-xl">
                     <p className="text-rust-deep text-sm font-semibold leading-snug">
@@ -846,7 +872,7 @@ export default function CreateTripForm() {
                     autoComplete="new-password"
                     value={passcode}
                     onChange={e => setPasscode(e.target.value.replace(/\D/g, ''))}
-                    placeholder={`Passcode (${MIN_PASSCODE}–${MAX_PASSCODE} digits)`}
+                    placeholder={`${isTournament ? 'PIN' : 'Passcode'} (${MIN_PASSCODE}–${MAX_PASSCODE} digits)`}
                     maxLength={MAX_PASSCODE}
                     className={INPUT}
                   />

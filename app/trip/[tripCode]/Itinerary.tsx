@@ -116,7 +116,7 @@ function ActivityRow({
 }
 
 export default function Itinerary({
-  items, startDate, courseNames, days, tripCode, roundNumbers,
+  items, startDate, courseNames, days, tripCode, roundNumbers, startLines,
 }: {
   items: ItineraryItem[]
   startDate: string | null
@@ -132,6 +132,14 @@ export default function Itinerary({
    * already on the tile — so they stay as they are and are not tappable.
    */
   roundNumbers: Record<string, number>
+  /**
+   * Itinerary item id → the line an event's start format writes over the
+   * golf tile's detail — "Shotgun start 9:30 am", "Tee sheet". Built on the
+   * server from `rounds.start_format` via lib/eventHub's `describeStart`,
+   * because the format is the round's fact, not the itinerary item's. A
+   * trip passes nothing and every tile reads exactly as before.
+   */
+  startLines?: Record<string, string>
 }) {
   const now = useMinute()
 
@@ -210,6 +218,9 @@ export default function Itinerary({
 
                   const Icon = IconFlag
                   const roundNumber = roundNumbers[item.id]
+                  // An event round with a chosen start says so instead of
+                  // the generic tee-time line.
+                  const detailLine = startLines?.[item.id] ?? detail
 
                   const tile = `flex items-center gap-3 rounded-xl border px-3.5 py-3 transition-opacity duration-200 ${
                     state === 'now'
@@ -241,8 +252,8 @@ export default function Itinerary({
                         >
                           {title}
                         </span>
-                        {detail && (
-                          <span className="block t-cap text-ink/65 truncate mt-0.5">{detail}</span>
+                        {detailLine && (
+                          <span className="block t-cap text-ink/65 truncate mt-0.5">{detailLine}</span>
                         )}
                       </span>
 

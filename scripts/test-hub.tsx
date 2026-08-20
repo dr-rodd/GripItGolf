@@ -1109,7 +1109,10 @@ section('The hub is the sections it should be, and nothing else')
   const hubCode = code('app/trip/[tripCode]/page.tsx')
 
   ok(hub.includes('SectionStack'), 'the collapsible sections are one shared component')
-  ok(hub.includes("initial=\"itinerary\""), 'and the itinerary is the one open on arrival')
+  // A trip opens on the itinerary; an event with notices posted opens on
+  // them — the organiser's line to the field is the hub's news.
+  ok(hub.includes("initial={isEvent && notices.length > 0 ? 'notices' : 'itinerary'}"),
+    'and the itinerary is the one open on arrival, unless an event has news')
 
   for (const title of ['Your Itinerary', 'Travel & Accommodation', 'Players']) {
     ok(hub.includes(`'${title}'`) || hub.includes(`"${title}"`), `there is a ${title} section`)
@@ -1140,8 +1143,8 @@ section('The hub is the sections it should be, and nothing else')
     '  …and on a card having actually recorded something')
   ok(hub.indexOf("key: 'itinerary'") < hub.indexOf("key: 'stats'"),
     'and it is added after the three sections that were always there')
-  ok(/initial="itinerary"/.test(hub),
-    '  …so the hub still opens on the itinerary either way')
+  ok(/initial=\{isEvent && notices\.length > 0 \? 'notices' : 'itinerary'\}/.test(hub),
+    '  …so a trip still opens on the itinerary either way')
 
   // Nothing personal is fetched for a phone the trip does not recognise, and
   // the stats are inside that same gate rather than beside it.
