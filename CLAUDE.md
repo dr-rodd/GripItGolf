@@ -111,6 +111,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `/` | Landing — event code typed in place (Join Event), or Create an Event → `/golf` |
 | `/golf` | The golf doorway: Golf Trip, Golf Tournament (`/dashboard/create?type=tournament`), Personal usage (coming soon) |
 | `/join` | Enter trip code — kept for shared `?code=` links |
+| `/[code]` | The short link — `greendot.live/GX7K2P` redirects to `/trip/[code]` (case-insensitive; a route, not a config redirect, so real pages always win — "tennis" is code-shaped) |
 | `/trip/[tripCode]` | Trip hub |
 | `/trip/[tripCode]/setup` | Formats, players, finalise/unlock |
 | `/trip/[tripCode]/organiser` | Event Hub admin (events only, behind the organiser PIN) — notices, round starts |

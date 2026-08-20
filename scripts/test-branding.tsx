@@ -56,7 +56,7 @@ function uiFiles(): string[] {
     }
   }
   for (const d of ['app/trip', 'app/components', 'app/join', 'app/dashboard', 'app/admin', 'app/golf']) walk(d)
-  out.push('app/page.tsx', 'app/layout.tsx', 'app/Landing.tsx')
+  out.push('app/page.tsx', 'app/layout.tsx', 'app/Landing.tsx', 'app/[code]/page.tsx')
   return out
 }
 
@@ -1803,6 +1803,22 @@ section('Landing page')
   // quotation is no longer the thing that tells the two pages apart.
   ok(/both green and not green/i.test(home), 'the footnote is the green-dot line')
   ok(!home.includes('GripItGolf'), 'and the old name is gone')
+}
+
+// ─── The short link ────────────────────────────────────────────
+
+section('A bare code is an address')
+{
+  // greendot.live/GX7K2P. A route rather than a config redirect, because a
+  // config redirect runs before the filesystem and would swallow any future
+  // six-letter page — "tennis" is exactly code-shaped.
+  const short = read('app/[code]/page.tsx')
+  ok(/\^\[A-Za-z0-9\]\{6\}\$/.test(short), 'only a code shape earns a lookup')
+  ok(short.includes('code.toUpperCase()'), 'a typed lowercase code still finds its event')
+  ok(short.includes('redirect(`/trip/${data.trip_code}`)'),
+    'and lands on the hub, which stays the one canonical address')
+  ok(short.includes('notFound()'), 'anything else is a plain 404')
+  ok(/Event not found/.test(short), 'a code nobody owns gets the calm answer, not a 404')
 }
 
 // ─── Everywhere else ───────────────────────────────────────────
