@@ -175,6 +175,44 @@ export function sortRounds<T extends RowRound>(rounds: readonly T[]): T[] {
   return [...rounds].sort((a, b) => a.round_number - b.round_number)
 }
 
+// ─── Which rounds are in play ──────────────────────────────
+
+/** An open card as the callers fetch it: its round, and who is locked on. */
+export type OpenCard = {
+  round_id: string
+  live_player_locks: { player_id: string }[] | null
+}
+
+/**
+ * The rounds in play and the players out on them — the only copy.
+ *
+ * **A card with nobody locked on it does not put its round in play.** An
+ * open card is a claim that a group is out on the course, and the locks are
+ * the group; a vacant card — opened and abandoned before anyone picked a
+ * player — holds nothing and claims nothing. Without this rule, one stray
+ * tap on "start a scorecard" kept a finished round green after every real
+ * card on it was finalised, until the nightly job got around to closing it.
+ *
+ * Every caller fetches the same shape — active `live_rounds` with their
+ * `live_player_locks` embedded — and derives through here: the leaderboard
+ * page, the Scoring tab, the matchplay page, and `fetchTripContext` (the
+ * hub, the round summary and the stats page behind it). Deriving inline is
+ * how a fifth answer to "is this round live?" starts to drift from the
+ * other four.
+ */
+export function liveRoundPresence(open: readonly OpenCard[]): {
+  activeRoundIds: string[]
+  livePlayerIds: string[]
+} {
+  const manned = open.filter(card => (card.live_player_locks ?? []).length > 0)
+  return {
+    activeRoundIds: [...new Set(manned.map(card => card.round_id))],
+    livePlayerIds: [...new Set(
+      manned.flatMap(card => (card.live_player_locks ?? []).map(l => l.player_id)),
+    )],
+  }
+}
+
 // ─── The one assembly ──────────────────────────────────────
 
 /** Everything the two callers have between them, as their queries return it. */

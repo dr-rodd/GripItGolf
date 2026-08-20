@@ -5,6 +5,7 @@ import { parseLeaderboards } from '@/lib/leaderboards'
 import { tripBoards, isLegacy } from '@/lib/leaderboardsCompat'
 import { parseTeamScoring } from '@/lib/teamScoring'
 import { fetchMemberships } from '@/lib/teamMembers'
+import { liveRoundPresence, type OpenCard } from '@/lib/rowContext'
 import Poller from '@/app/components/Poller'
 import TripLeaderboardClient from './TripLeaderboardClient'
 import SupportLink from '@/app/components/SupportLink'
@@ -115,15 +116,10 @@ export default async function TripLeaderboardPage({
   const teamScoring = parseTeamScoring(trip.team_scoring)
   const boards = tripBoards(stored, parseFormats(trip.formats), teamScoring)
 
-  type OpenRound = {
-    round_id: string
-    live_player_locks: { player_id: string }[] | null
-  }
-  const openRounds = (openRes.data ?? []) as unknown as OpenRound[]
-  const activeRoundIds = [...new Set(openRounds.map(r => r.round_id))]
-  const livePlayerIds = [...new Set(
-    openRounds.flatMap(r => (r.live_player_locks ?? []).map(l => l.player_id))
-  )]
+  // Derived through the one copy of the rule: a vacant card — open, nobody
+  // locked on — puts nothing in play. See liveRoundPresence in rowContext.
+  const { activeRoundIds, livePlayerIds } =
+    liveRoundPresence((openRes.data ?? []) as unknown as OpenCard[])
   const hasActiveRound =
     activeRoundIds.length > 0 || rounds.some(r => r.status === 'active')
 

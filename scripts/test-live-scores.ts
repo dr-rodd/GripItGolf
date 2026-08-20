@@ -20,6 +20,8 @@
  * complete one, whatever the reason it arrived partial.
  */
 
+import fs from 'fs'
+import { liveRoundPresence } from '../lib/rowContext'
 import {
   isScored, mergeSaved, anyScored, holesScored,
   type Card, type SavedScore,
@@ -374,6 +376,47 @@ section('Two groups on one round are separated')
     'the group still out is not closed by the abandoned one beside it')
   eq(deadScoreKeys(activity, cards, locks, NOW), [{ playerId: 'p2', roundId: 'r1' }],
     'and only the abandoned card\'s player loses their rows')
+}
+
+// ─── A vacant card puts nothing in play ────────────────────────
+
+section('A round is in play only while somebody is locked on a card')
+{
+  // The complaint that made this a rule: every real card on the final round
+  // was finalised, and the round stayed green — because one vacant card,
+  // opened and abandoned before anyone picked a player, still sat active.
+  // An open card is a claim that a group is out on the course; the locks
+  // are the group.
+  const vacant = { round_id: 'r1', live_player_locks: [] }
+  const manned = { round_id: 'r2', live_player_locks: [{ player_id: 'p1' }, { player_id: 'p2' }] }
+  const nullLocks = { round_id: 'r3', live_player_locks: null }
+
+  eq(liveRoundPresence([vacant]), { activeRoundIds: [], livePlayerIds: [] },
+    'a vacant card claims neither its round nor any player')
+  eq(liveRoundPresence([nullLocks]), { activeRoundIds: [], livePlayerIds: [] },
+    'locks that never came back read the same as none')
+  eq(liveRoundPresence([vacant, manned]),
+    { activeRoundIds: ['r2'], livePlayerIds: ['p1', 'p2'] },
+    'a manned card beside it still puts its own round in play')
+  eq(liveRoundPresence([manned, { round_id: 'r2', live_player_locks: [{ player_id: 'p1' }] }]),
+    { activeRoundIds: ['r2'], livePlayerIds: ['p1', 'p2'] },
+    'two cards on one round are one round in play, each player counted once')
+
+  // Every screen that answers "is this round live?" derives through the one
+  // copy, and fetches the locks it needs to. Deriving inline is how a fifth
+  // answer starts to drift from the other four.
+  for (const page of [
+    'lib/hubStanding.ts',
+    'app/trip/[tripCode]/leaderboard/page.tsx',
+    'app/trip/[tripCode]/scoring/page.tsx',
+    'app/trip/[tripCode]/matchplay/page.tsx',
+  ]) {
+    const src = fs.readFileSync(page, 'utf-8')
+    ok(src.includes('liveRoundPresence('),
+      `${page.split('/').pop()} derives in-play through liveRoundPresence`)
+    ok(src.includes('live_player_locks(player_id)'),
+      `  …and fetches the locks the rule reads`)
+  }
 }
 
 console.log(`\n${'─'.repeat(56)}`)

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { liveRoundPresence, type OpenCard } from '@/lib/rowContext'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
 import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundState'
@@ -60,12 +61,18 @@ export default async function TripCoursePortalPage({
   // on a bad radio, small and many beats large and few every time.
   const roundIds = (rounds ?? []).map(r => r.id)
 
+  // The locks ride along because they are half the question: a vacant card —
+  // open, nobody on it — does not make a round "In play", or one stray tap
+  // on "start a scorecard" keeps a finished round green until the nightly
+  // job closes it. The rule is liveRoundPresence's, in lib/rowContext.ts.
   const { data: openData, error: openErr } = roundIds.length > 0
-    ? await supabase.from('live_rounds').select('round_id')
+    ? await supabase.from('live_rounds').select('round_id, live_player_locks(player_id)')
         .eq('status', 'active').in('round_id', roundIds)
     : { data: [], error: null }
   if (openErr) console.error('TripCoursePortal live rounds query failed:', openErr)
-  const openRounds = new Set((openData ?? []).map(r => r.round_id as string))
+  const openRounds = new Set(
+    liveRoundPresence((openData ?? []) as unknown as OpenCard[]).activeRoundIds,
+  )
 
   const anyRows = async (table: 'scores' | 'live_scores', roundId: string) => {
     const { count, error } = await supabase

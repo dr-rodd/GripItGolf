@@ -22,7 +22,10 @@ import { fetchMemberships } from './teamMembers'
 import {
   usesSimpleStandings, placingFromStandings, placingFromRows, type Placing,
 } from './standing'
-import { buildRowContext, type ScoreRow, type LiveScoreRow } from './rowContext'
+import {
+  buildRowContext, liveRoundPresence,
+  type OpenCard, type ScoreRow, type LiveScoreRow,
+} from './rowContext'
 
 export type PlacingResult = {
   placing: Placing | null
@@ -317,8 +320,8 @@ export async function fetchTripContext(
   const players = playersRes.data ?? []
   const holes = (holesRes.data ?? []) as unknown as RowHole[]
 
-  type OpenRound = { round_id: string; live_player_locks: { player_id: string }[] | null }
-  const open = (openRes.data ?? []) as unknown as OpenRound[]
+  // A vacant card puts nothing in play — see liveRoundPresence.
+  const presence = liveRoundPresence((openRes.data ?? []) as unknown as OpenCard[])
 
   // The same assembly the leaderboard uses, from the same function. This
   // screen fetches its own rows; what it does with them is not its own.
@@ -341,8 +344,8 @@ export async function fetchTripContext(
     liveScores: (liveScoresRes.data ?? []) as unknown as LiveScoreRow[],
     roundHandicaps: hcpsRes.data ?? [],
     tees: teesRes.data ?? [],
-    activeRoundIds: open.map(r => r.round_id),
-    livePlayerIds: open.flatMap(r => (r.live_player_locks ?? []).map(l => l.player_id)),
+    activeRoundIds: presence.activeRoundIds,
+    livePlayerIds: presence.livePlayerIds,
     legacyTeamScoring,
   })
 
