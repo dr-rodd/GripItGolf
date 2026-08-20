@@ -160,6 +160,31 @@ section('The organiser area stands behind the one PIN')
     'timestamps wait for the reader\'s own clock rather than hydrating UTC')
 }
 
+// ─── The field never sees how the sausage is made ──────────────
+
+section('An event hides Trip Setup from the field')
+{
+  const bar = read('app/components/TabBar.tsx')
+  ok(bar.includes("isEvent ? ITEMS.filter(i => i.key !== 'settings') : ITEMS"),
+    'an event\'s tab bar drops Trip Setup')
+  ok(bar.includes("isEvent ? 'grid-cols-4' : 'grid-cols-5'"),
+    'and the grid narrows to match')
+
+  const layout = read('app/trip/[tripCode]/layout.tsx')
+  ok(layout.includes('isEvent={isEvent(kind)}'),
+    'the layout decides, being the one place that knows before first paint')
+  ok(layout.includes("select('kind')") && layout.includes('cache('),
+    'off one cached column — the layout stays as light as its note demands')
+
+  const organiser = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
+  ok(/href=\{`\/trip\/\$\{tripCode\}\/setup`\}/.test(organiser),
+    'the organiser area is the one door left into setup')
+
+  const setup = read('app/trip/[tripCode]/setup/page.tsx')
+  ok(setup.includes("title: 'Organisers only'"),
+    'and setup\'s own gate speaks to the organiser on an event')
+}
+
 // ─── Creation seals the kind and the PIN ───────────────────────
 
 section('A tournament is created as one, with its PIN')

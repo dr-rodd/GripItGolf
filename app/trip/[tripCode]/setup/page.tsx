@@ -7,6 +7,7 @@ import { fromItemRow } from '@/lib/itinerarySync'
 import TripSetupClient from './TripSetupClient'
 import PasscodeGate from './PasscodeGate'
 import { isLocked } from '@/lib/passcode'
+import { isEvent } from '@/lib/eventHub'
 
 export const dynamic = 'force-dynamic'
 
@@ -175,13 +176,20 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
   )
 
   // Locked at creation and never afterwards, so a trip cannot be locked out
-  // from under whoever runs it
+  // from under whoever runs it. An event's gate speaks to the organiser —
+  // "ask your lead player" is a trip sentence, and the field is not meant
+  // to be here at all (the tab bar no longer brings them).
   if (isLocked(trip.settings_passcode_hash)) {
+    const event = isEvent(trip.kind)
     return (
       <PasscodeGate
         tripCode={tripCode}
         tripName={trip.name}
         passcodeHash={trip.settings_passcode_hash as string}
+        {...(event ? {
+          title: 'Organisers only',
+          hint: `Enter the organiser PIN for ${trip.name}.`,
+        } : {})}
       >
         {settings}
       </PasscodeGate>

@@ -472,8 +472,9 @@ export default function CreateTripForm() {
             {Noun} Created!
           </h1>
           <p className="text-ink/65 text-sm mb-10">
-            Share this code with your group to join. Next, choose leaderboard
-            formats and teams in Trip Setup.
+            {isTournament
+              ? 'Share this code with the field to join. Next, choose formats and starts in the organiser area on your Event Hub.'
+              : 'Share this code with your group to join. Next, choose leaderboard formats and teams in Trip Setup.'}
           </p>
 
           <div className="bg-surface border border-bark/25 rounded-2xl px-4 py-8 mb-4">

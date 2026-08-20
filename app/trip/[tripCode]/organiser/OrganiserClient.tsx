@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
@@ -270,6 +271,26 @@ export default function OrganiserClient({
           {startError && (
             <p className="text-rust-deep text-sm mt-3 leading-snug">{startError}</p>
           )}
+        </section>
+
+        {/* ── The rest of the running of the event ──
+            The setup screen holds formats, players, teams and the running
+            order, and an event's field never sees it — the tab bar hides
+            Trip Setup for a tournament, so this is its one door. The PIN
+            that opened this screen has already opened that one: both gates
+            remember the same unlock for the session. */}
+        <section className="mt-10">
+          <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-3">Event settings</h2>
+          <Link
+            href={`/trip/${tripCode}/setup`}
+            className="block bg-surface border border-bark/12 rounded-2xl p-4 press hover:border-bark/25"
+          >
+            <p className="text-ink text-sm font-medium">Formats, players &amp; teams</p>
+            <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
+              Leaderboards, the field, the running order — the setup screen,
+              already unlocked by your PIN.
+            </p>
+          </Link>
         </section>
 
       </div>

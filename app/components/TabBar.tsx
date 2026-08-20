@@ -119,9 +119,21 @@ function Tab({
   )
 }
 
-export default function TabBar({ tripCode }: { tripCode: string }) {
+export default function TabBar({ tripCode, isEvent = false }: {
+  tripCode: string
+  /**
+   * An event's field never sees Trip Setup — the organiser reaches it
+   * through the organiser area, behind the PIN, where the rest of the
+   * running of the event already lives. Four tabs then; the leaderboard
+   * still holds the centre of what remains. Decided by the layout, which
+   * is the one place that knows the kind before the bar first paints.
+   */
+  isEvent?: boolean
+}) {
   const pathname = usePathname() ?? ''
   const base = `/trip/${tripCode}`
+
+  const items = isEvent ? ITEMS.filter(i => i.key !== 'settings') : ITEMS
 
   /**
    * Which tab is lit.
@@ -163,8 +175,8 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label="Trip"
     >
-      <ul className="max-w-lg mx-auto grid grid-cols-5">
-        {ITEMS.map(item => {
+      <ul className={`max-w-lg mx-auto grid ${isEvent ? 'grid-cols-4' : 'grid-cols-5'}`}>
+        {items.map(item => {
           const active = activeKey === item.key
           const Icon = item.icon
           return (
