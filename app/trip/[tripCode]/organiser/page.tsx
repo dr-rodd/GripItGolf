@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
+import { parseBracketSetup, describeSetup } from '@/lib/bracketSetup'
 import BackButton from '@/app/components/BackButton'
 import PasscodeGate from '../setup/PasscodeGate'
 import OrganiserClient from './OrganiserClient'
@@ -60,10 +61,12 @@ export default async function OrganiserPage({ params }: {
     )
   }
 
-  // Everything the two admin jobs need, in one batch. The rounds embed
-  // their course names — one hop, not two — and the golf items carry the
-  // tee times a shotgun start writes to.
-  const [noticesResult, roundsResult, itemsResult] = await Promise.all([
+  // Everything the admin jobs need, in one batch. The rounds embed their
+  // course names — one hop, not two — and the golf items carry the tee
+  // times a shotgun start writes to. The bracket setup rides in its own
+  // query rather than the trip select above, so a database that has not run
+  // migration 047 loses the summary line and nothing else.
+  const [noticesResult, roundsResult, itemsResult, setupResult] = await Promise.all([
     supabase
       .from('event_messages')
       .select('id, body, created_at')
@@ -79,6 +82,11 @@ export default async function OrganiserPage({ params }: {
       .select('id, tee_time')
       .eq('trip_id', trip.id)
       .eq('kind', 'golf'),
+    supabase
+      .from('trips')
+      .select('bracket_setup')
+      .eq('id', trip.id)
+      .single(),
   ])
 
   if (noticesResult.error) console.error('OrganiserPage notices query failed:', noticesResult.error)
@@ -104,12 +112,19 @@ export default async function OrganiserPage({ params }: {
     }
   })
 
+  // Errors swallowed deliberately: pre-migration the column does not exist,
+  // and the card below simply says the bracket is not set up yet.
+  const bracketSetup = parseBracketSetup(
+    (setupResult.data as { bracket_setup?: unknown } | null)?.bracket_setup
+  )
+
   const content = (
     <OrganiserClient
       tripId={trip.id}
       tripCode={tripCode}
       initialNotices={noticesResult.data ?? []}
       initialRounds={rounds}
+      bracketSummary={bracketSetup ? describeSetup(bracketSetup) : null}
     />
   )
 
