@@ -1,4 +1,4 @@
-import CreateTripForm from './CreateTripForm'
+import CreateFlow from './CreateFlow'
 
 /**
  * Static on purpose.
@@ -8,10 +8,12 @@ import CreateTripForm from './CreateTripForm'
  * was a server round trip plus a database query, showing as a gap after the
  * mark has already landed in the header.
  *
- * The form fetches its own courses now. They are not needed until step two,
- * which is a screen and several keystrokes away, so they load while the trip
- * is being named and this page is a fixed shell the browser already holds.
+ * The forms fetch their own courses now. They are not needed until each
+ * wizard's venue step, which is a screen and several keystrokes away, so
+ * they load while the trip is being named and this page is a fixed shell
+ * the browser already holds. CreateFlow decides which form: the trip
+ * wizard, or — through the tournament door — league or match play first.
  */
 export default function CreateTripPage() {
-  return <CreateTripForm />
+  return <CreateFlow />
 }

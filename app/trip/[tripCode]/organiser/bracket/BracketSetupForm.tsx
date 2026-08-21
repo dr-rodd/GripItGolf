@@ -339,10 +339,11 @@ export default function BracketSetupForm({ tripId, tripCode, initialSetup }: {
             )}
             {format === 'league' && (
               <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
-                <p className="text-ink text-sm font-medium">League is coming soon.</p>
+                <p className="text-ink text-sm font-medium">A league is its own event.</p>
                 <p className="text-ink/65 text-[13px] mt-1 leading-snug">
-                  For now a tournament runs as a match play knockout — pick
-                  that to carry on.
+                  Leagues are created whole — venues, dates and field in one
+                  go — from Create an Event → Golf Tournament → League. This
+                  form sets up a knockout; pick match play to carry on.
                 </p>
               </div>
             )}

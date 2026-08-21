@@ -2,7 +2,9 @@ import { supabase } from '@/lib/supabase'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
 import { parseBracketSetup } from '@/lib/bracketSetup'
+import { parseLeagueSetup, describeLeagueSetup } from '@/lib/leagueSetup'
 import BackButton from '@/app/components/BackButton'
+import TripHeader from '@/app/components/TripHeader'
 import PasscodeGate from '../../setup/PasscodeGate'
 import BracketSetupForm from './BracketSetupForm'
 
@@ -68,17 +70,56 @@ export default async function BracketSetupPage({ params }: {
 
   // Dropped rather than repaired if it is not a complete setup — the form
   // would rather start again than trust half an answer.
-  const initialSetup = parseBracketSetup(
-    (setupResult.data as { bracket_setup?: unknown } | null)?.bracket_setup
-  )
+  const setupRaw = (setupResult.data as { bracket_setup?: unknown } | null)?.bracket_setup
+  const initialSetup = parseBracketSetup(setupRaw)
+  const leagueSetup = parseLeagueSetup(setupRaw)
 
-  const content = (
-    <BracketSetupForm
-      tripId={trip.id}
-      tripCode={tripCode}
-      initialSetup={initialSetup}
-    />
-  )
+  let content: React.ReactNode
+
+  if (leagueSetup) {
+    // A league event. Its structure was created whole through the league
+    // door and lives in the same column, so this screen must describe it —
+    // never offer the match play form, whose save would overwrite the
+    // league with a bracket. Day count comes from the rounds, the one copy
+    // of how many days there are.
+    const { count } = await supabase
+      .from('rounds')
+      .select('id', { count: 'exact', head: true })
+      .eq('trip_id', trip.id)
+
+    content = (
+      <main className="min-h-dvh bg-cream has-tabbar page-enter">
+        <TripHeader backTo={`/trip/${tripCode}/organiser`} />
+        <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
+          <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-1">
+            League
+          </h1>
+          <p className="text-ink/65 text-sm mb-6">
+            {describeLeagueSetup(leagueSetup, count || 1)}
+          </p>
+          <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+            <p className="text-ink/65 text-[13px] leading-snug">
+              This event was created as a league — its days, venues and
+              field were set then, and its rounds are on the schedule.
+              Scoring formats within league play are still to come; for now
+              every league plays individual Stableford, added up.
+            </p>
+          </div>
+          <div className="mt-6">
+            <BackButton href={`/trip/${tripCode}/organiser`} label="Organiser" />
+          </div>
+        </div>
+      </main>
+    )
+  } else {
+    content = (
+      <BracketSetupForm
+        tripId={trip.id}
+        tripCode={tripCode}
+        initialSetup={initialSetup}
+      />
+    )
+  }
 
   // The same gate as the organiser page, checking the same hash — and the
   // same fail-open when a row has no hash, rather than locking the

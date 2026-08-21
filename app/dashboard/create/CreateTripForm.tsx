@@ -71,7 +71,7 @@ const readOnServer = () => false
  * a column that has not been added yet — trying again will fail identically.
  * Supabase's message names the column, so it is worth showing.
  */
-function describeError(err: unknown): string {
+export function describeError(err: unknown): string {
   const e = err as { message?: string; hint?: string; details?: string } | null
   const msg = e?.message?.trim()
   if (!msg) return 'Please try again.'
@@ -82,7 +82,7 @@ function describeError(err: unknown): string {
   return msg
 }
 
-function generateCode(): string {
+export function generateCode(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
   return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
 }

@@ -32,8 +32,12 @@ export const TOURNAMENT_FORMATS: {
 }[] = [
   { key: 'match_play', label: 'Match play', built: true,
     hint: 'A knockout bracket — win and go through, lose and go home.' },
+  // `built` here means "buildable from the bracket form". A league exists
+  // now, but it is created whole through its own door — Create an Event →
+  // Golf Tournament → League (lib/leagueSetup.ts) — never assembled here,
+  // where a save would turn an existing event into a knockout.
   { key: 'league', label: 'League', built: false,
-    hint: 'A table over the season. Coming soon.' },
+    hint: 'A table over the days — created as its own event, not set up here.' },
 ]
 
 // ─── Mode ──────────────────────────────────────────────────────
@@ -207,10 +211,11 @@ export type BracketSetup = {
  */
 export function unansweredSetup(draft: Partial<BracketSetup>): string[] {
   if (!draft.format) return ['League or match play']
-  // League stops the form at step one with "coming soon" — everything below
-  // is match play's, and listing its questions against a format that cannot
-  // be built would promise a way forward that does not exist.
-  if (draft.format === 'league') return ['League is not built yet']
+  // League stops the form at step one — a league is created whole through
+  // its own door, and everything below is match play's. Listing the
+  // knockout's questions against a league would promise a way forward that
+  // does not exist on this form.
+  if (draft.format === 'league') return ['A league is created as its own event']
 
   const missing: string[] = []
   if (!draft.mode) missing.push('Strict or relaxed')

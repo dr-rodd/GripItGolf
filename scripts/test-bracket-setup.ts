@@ -99,8 +99,8 @@ section('A deadline is a real date, and the rounds cannot run backwards')
 section('The form cannot finish until every question is answered')
 {
   eq(unansweredSetup({}), ['League or match play'], 'the format comes first')
-  eq(unansweredSetup({ format: 'league' }), ['League is not built yet'],
-    'league is a dead end, not a path with more questions')
+  eq(unansweredSetup({ format: 'league' }), ['A league is created as its own event'],
+    'league is a dead end here — it is created through its own door')
 
   const missing = unansweredSetup({ format: 'match_play' })
   eq(missing, ['Strict or relaxed', 'How big the bracket is', 'How players get in'],
@@ -195,7 +195,7 @@ section('The organiser card says the setup in one line')
 section('Every option the form offers is one the model can read back')
 {
   ok(TOURNAMENT_FORMATS.some(f => f.key === 'league' && !f.built),
-    'league is named and marked unbuilt — the second format the model anticipates')
+    'league is named and marked not-buildable-here — it is created through its own door')
   ok(TOURNAMENT_FORMATS.some(f => f.key === 'match_play' && f.built),
     'match play is named and built')
   eq(BRACKET_MODES.map(m => m.key), ['strict', 'relaxed'], 'the two modes')

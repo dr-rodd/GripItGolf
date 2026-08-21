@@ -41,14 +41,16 @@ const INPUT = [
 ].join(' ')
 
 export default function OrganiserClient({
-  tripId, tripCode, initialNotices, initialRounds, bracketSummary,
+  tripId, tripCode, initialNotices, initialRounds, formatSummary, isLeague,
 }: {
   tripId: string
   tripCode: string
   initialNotices: Notice[]
   initialRounds: RoundInfo[]
-  /** The saved bracket setup in one line, or null when none is saved yet. */
-  bracketSummary: string | null
+  /** The saved tournament format in one line, or null when none is saved yet. */
+  formatSummary: string | null
+  /** A league event — the format card describes rather than invites setup. */
+  isLeague: boolean
 }) {
   // ── Notices ──────────────────────────────────────────────────
   const [notices, setNotices] = useState<Notice[]>(initialNotices)
@@ -275,20 +277,26 @@ export default function OrganiserClient({
           )}
         </section>
 
-        {/* ── The bracket ──
-            The tournament's competition structure — format, mode, field
-            size, qualifying, deadlines — set on its own form, seven answers
-            saved whole (lib/bracketSetup.ts). The PIN that opened this
-            screen has already opened that one. */}
+        {/* ── The format ──
+            The tournament's competition structure, saved whole in
+            trips.bracket_setup. A match play event sets its bracket on the
+            form behind this card — mode, field size, qualifying, deadlines
+            (lib/bracketSetup.ts). A league was created whole through its
+            own door (lib/leagueSetup.ts), so its card describes rather than
+            invites: the screen behind it is a summary, never a form that
+            could overwrite the league with a bracket. The PIN that opened
+            this screen has already opened that one. */}
         <section className="mt-10">
-          <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-3">Bracket</h2>
+          <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-3">Format</h2>
           <Link
             href={`/trip/${tripCode}/organiser/bracket`}
             className="block bg-surface border border-bark/12 rounded-2xl p-4 press hover:border-bark/25"
           >
-            <p className="text-ink text-sm font-medium">Bracket setup</p>
+            <p className="text-ink text-sm font-medium">
+              {isLeague ? 'League' : 'Bracket setup'}
+            </p>
             <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-              {bracketSummary
+              {formatSummary
                 ?? 'Match play knockout — mode, field size, qualifying and round deadlines.'}
             </p>
           </Link>

@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
 import { parseBracketSetup, describeSetup } from '@/lib/bracketSetup'
+import { parseLeagueSetup, describeLeagueSetup } from '@/lib/leagueSetup'
 import BackButton from '@/app/components/BackButton'
 import PasscodeGate from '../setup/PasscodeGate'
 import OrganiserClient from './OrganiserClient'
@@ -113,10 +114,12 @@ export default async function OrganiserPage({ params }: {
   })
 
   // Errors swallowed deliberately: pre-migration the column does not exist,
-  // and the card below simply says the bracket is not set up yet.
-  const bracketSetup = parseBracketSetup(
-    (setupResult.data as { bracket_setup?: unknown } | null)?.bracket_setup
-  )
+  // and the card below simply says the format is not set up yet. The column
+  // holds either format, discriminated by the parsers — a league line for a
+  // league event, a bracket line for a knockout, never a guess.
+  const setupRaw = (setupResult.data as { bracket_setup?: unknown } | null)?.bracket_setup
+  const bracketSetup = parseBracketSetup(setupRaw)
+  const leagueSetup = parseLeagueSetup(setupRaw)
 
   const content = (
     <OrganiserClient
@@ -124,7 +127,12 @@ export default async function OrganiserPage({ params }: {
       tripCode={tripCode}
       initialNotices={noticesResult.data ?? []}
       initialRounds={rounds}
-      bracketSummary={bracketSetup ? describeSetup(bracketSetup) : null}
+      formatSummary={
+        bracketSetup ? describeSetup(bracketSetup)
+        : leagueSetup ? describeLeagueSetup(leagueSetup, rounds.length || 1)
+        : null
+      }
+      isLeague={!!leagueSetup}
     />
   )
 
