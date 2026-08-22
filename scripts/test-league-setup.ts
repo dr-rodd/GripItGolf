@@ -282,6 +282,17 @@ section('The league wizard reuses the proven pieces rather than restating them')
   ok(src.includes('<HandicapField'), 'handicaps from the shared field')
   ok(src.includes('firstDuplicateIndex'), 'and the no-two-same-names rule is the roster\'s')
   ok(src.includes('starterBoards()'), 'the starter board comes from lib/leagueSetup.ts')
+
+  // Leaderboard selection is built into creation — as Trip Setup's own
+  // picker, seeded with the starter, never a second copy of the grid. What
+  // the organiser builds is what creation writes, and no board means no
+  // event.
+  ok(src.includes('<LeaderboardSetup'),
+    'the leaderboard picker is the platform\'s own, embedded whole')
+  ok(src.includes('leaderboards: boards'),
+    'creation writes the boards the organiser built')
+  ok(src.includes('boards.length > 0 && (slots.length'),
+    'and an event cannot be created without at least one board')
   ok(src.includes("kind: 'tournament'"), 'a league is an event')
   ok(src.includes('team_id: null'), 'everyone starts unassigned, as everywhere')
   ok(!src.includes("from('teams')"), 'and no teams are written')

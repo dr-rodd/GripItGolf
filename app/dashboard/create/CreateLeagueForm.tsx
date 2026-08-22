@@ -28,6 +28,8 @@ import {
   type DayBoards, type LeagueSetup, type LeagueSchedule, DAY_BOARDS,
   MAX_LEAGUE_DAYS, WEEKDAY_NAMES, leagueDaysIssue, starterBoards, weeklyDates,
 } from '@/lib/leagueSetup'
+import type { Leaderboard } from '@/lib/leaderboards'
+import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import { describeError, generateCode } from './CreateTripForm'
 
 /**
@@ -156,7 +158,12 @@ export default function CreateLeagueForm({ schedule }: {
     { name: '', handicap: '', gender: 'M' },
   ])
 
-  // Step 4 — how the days relate, and the organiser PIN
+  // Step 4 — the leaderboards, how the days relate, and the organiser PIN.
+  // Seeded with the starter board so a league that never touches the picker
+  // still plays from the moment it exists; the picker itself is the same
+  // LeaderboardSetup Trip Setup runs, so creation can offer exactly the
+  // competitions the platform can score and not one more.
+  const [boards, setBoards] = useState<Leaderboard[]>(() => starterBoards())
   const [dayBoards, setDayBoards] = useState<DayBoards | null>(null)
   const [passcode, setPasscode] = useState('')
   const [passcodeConfirm, setPasscodeConfirm] = useState('')
@@ -236,7 +243,7 @@ export default function CreateLeagueForm({ schedule }: {
     step === 1 ? step1Valid :
     step === 2 ? venuesComplete :
     step === 3 ? !!entry && !duplicateIssue :
-    step === 4 ? (slots.length <= 1 || !!dayBoards) && !passcodeIssue :
+    step === 4 ? boards.length > 0 && (slots.length <= 1 || !!dayBoards) && !passcodeIssue :
     false
   )
 
@@ -317,10 +324,11 @@ export default function CreateLeagueForm({ schedule }: {
     }
 
     // 1. The trip row. Unlike the trip wizard, the boards are written at
-    // creation: a league's format is the point of this form, and the
-    // starter board is what makes day one scoreable without a visit to
-    // setup. `bracket_setup` needs migration 047 — without it the insert
-    // fails and describeError says why in as many words.
+    // creation: a league's competition is the point of this form, and the
+    // boards the organiser built on the last step are what make day one
+    // scoreable without a visit to setup. `bracket_setup` needs migration
+    // 047 — without it the insert fails and describeError says why in as
+    // many words.
     //
     // The dates say the shape: a standalone run carries its ends (one day
     // writes one date to both), a continuous event carries its period, and
@@ -343,7 +351,7 @@ export default function CreateLeagueForm({ schedule }: {
         league: { ...NO_FORMATS.league },
         matchplay: { ...NO_FORMATS.matchplay },
       },
-      leaderboards: starterBoards(),
+      leaderboards: boards,
       bracket_setup: setup,
     }
 
@@ -1024,7 +1032,34 @@ export default function CreateLeagueForm({ schedule }: {
         {/* ── 4 · Finish ── */}
         {step === 4 && (
           <div className="space-y-6">
-            {slots.length > 1 ? (
+            {/* ── The leaderboards ──
+                The same LeaderboardSetup Trip Setup runs, seeded with the
+                starter individual-Stableford board — so creation offers
+                exactly the competitions the platform can score, and an
+                organiser who wants only the default taps nothing. Teams
+                are apportioned after creation on the teams screen, the
+                same as a trip, so a team board here starts unassigned. */}
+            <div>
+              <label className={LABEL}>Leaderboards</label>
+              <p className="text-ink/65 text-[13px] mb-3 leading-snug">
+                What the event plays for. Every league starts on individual
+                Stableford, added up — change it, or add more formats.
+              </p>
+              <LeaderboardSetup
+                boards={boards}
+                playerCount={players.filter(p => p.name.trim()).length}
+                teamCount={0}
+                onChange={setBoards}
+              />
+              {boards.length === 0 && (
+                <p className="text-rust-deep text-[13px] mt-3 leading-snug">
+                  An event needs at least one leaderboard — otherwise what&apos;s
+                  being played for?
+                </p>
+              )}
+            </div>
+
+            {slots.length > 1 && (
               <div>
                 <label className={LABEL}>
                   The leaderboard across the {schedule === 'series' ? 'events' : 'days'}
@@ -1050,14 +1085,6 @@ export default function CreateLeagueForm({ schedule }: {
                     </button>
                   ))}
                 </div>
-              </div>
-            ) : (
-              <div className="bg-surface border border-bark/12 rounded-2xl p-4">
-                <p className="text-ink text-sm font-medium">One day, one leaderboard.</p>
-                <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                  The field scores live and the board settles it — nothing
-                  more elaborate.
-                </p>
               </div>
             )}
 
