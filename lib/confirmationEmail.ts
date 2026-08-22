@@ -75,6 +75,15 @@ export type ConfirmationDetails = {
   /** The full trip URL, built from the creating deploy's own origin. */
   tripUrl: string
   tripCode: string
+  /**
+   * The organiser area's URL — events only, same origin rule as `tripUrl`.
+   * Present, the message grows a clearly-labelled organiser section: the
+   * admin link, and the reminder that the PIN is the one set at creation.
+   * The PIN itself is never in the email — it is hashed on the organiser's
+   * device and the server has never known it (lib/passcode.ts), which is a
+   * posture this email keeps rather than trades away.
+   */
+  adminUrl?: string
 }
 
 export function confirmationHtml(d: ConfirmationDetails): string {
@@ -136,10 +145,28 @@ ${dates ? `
 
           <tr>
             <td align="center" style="font-family:${FONT};font-size:15px;color:#2B2118;padding-bottom:28px;">
-              Trip code: <strong>${escapeHtml(d.tripCode)}</strong>
+              ${d.adminUrl ? 'Event' : 'Trip'} code: <strong>${escapeHtml(d.tripCode)}</strong>
             </td>
           </tr>
-
+${d.adminUrl ? `
+          <tr>
+            <td style="padding:0 12px 28px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#FFFFFF;border:1px solid #E4DFD7;border-radius:12px;">
+                <tr>
+                  <td style="padding:20px 22px;font-family:${FONT};font-size:14px;line-height:1.6;color:#2B2118;">
+                    <strong style="font-size:15px;">You&rsquo;re the organiser — keep this email.</strong><br />
+                    Your admin link opens the organiser area: permissions,
+                    notices, starts and the event&rsquo;s setup.<br />
+                    <a href="${escapeHtml(d.adminUrl)}" style="color:#0A6B3C;font-weight:600;text-decoration:underline;">Open the organiser area</a><br /><br />
+                    <strong>Your organiser PIN</strong> is the one you set
+                    when creating the event. It was never sent to us and
+                    cannot be recovered or changed &mdash; write it down.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+` : ''}
           <tr>
             <td align="center" style="font-family:${FONT};font-size:14px;line-height:1.5;color:#4A3728;padding:0 12px 20px;">
               <strong>Hot tip:</strong> pin the link in your messaging group for easy access.
@@ -175,7 +202,14 @@ export function confirmationText(d: ConfirmationDetails): string {
     "Nice one — that's a serious trip! Share the link with the other players.",
     '',
     `Open your trip: ${d.tripUrl}`,
-    `Trip code: ${d.tripCode}`,
+    `${d.adminUrl ? 'Event' : 'Trip'} code: ${d.tripCode}`,
+    ...(d.adminUrl ? [
+      '',
+      "YOU'RE THE ORGANISER — KEEP THIS EMAIL.",
+      `Your admin link (the organiser area): ${d.adminUrl}`,
+      'Your organiser PIN is the one you set when creating the event.',
+      'It was never sent to us and cannot be recovered or changed — write it down.',
+    ] : []),
     '',
     'Hot tip: pin the link in your messaging group for easy access.',
     '',

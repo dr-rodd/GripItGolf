@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { allowanceCycle } from '@/lib/handicapAllowance'
 import { tripQuotaScale } from '@/lib/leaderboards'
+import { allowsParticipant } from '@/lib/eventPermissions'
 import CourseDashboardClient from '@/app/scoring/[slug]/CourseDashboardClient'
 import TripHeader from '@/app/components/TripHeader'
 import { HEADER_H } from '@/app/components/headerMetrics'
@@ -104,6 +105,14 @@ export default async function TripCoursePage({
         // For the card check on the pick-player screen: a correction re-scores
         // this trip's committed cards on this course, and nothing outside it.
         tripCode={tripCode}
+        // The trip came down as select('*'), so kind and permissions ride
+        // free and fail soft — absent columns simply read as a trip with
+        // open access (lib/eventPermissions.ts).
+        allowScoreEdits={allowsParticipant(
+          (trip as { kind?: unknown }).kind,
+          (trip as { event_permissions?: unknown }).event_permissions,
+          'edit_scores',
+        )}
         allowances={allowances.steps}
         allowanceStart={allowances.startIndex}
         // The live panel only offers its Quota tab when one of this trip's

@@ -30,6 +30,10 @@ import {
 } from '@/lib/leagueSetup'
 import type { Leaderboard } from '@/lib/leaderboards'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
+import {
+  type EventPermissions, defaultPermissions, storedPermissions,
+} from '@/lib/eventPermissions'
+import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import { describeError, generateCode } from './CreateTripForm'
 
 /**
@@ -165,6 +169,9 @@ export default function CreateLeagueForm({ schedule }: {
   // competitions the platform can score and not one more.
   const [boards, setBoards] = useState<Leaderboard[]>(() => starterBoards())
   const [dayBoards, setDayBoards] = useState<DayBoards | null>(null)
+  // How collaborative the event is — all off until the organiser opts in
+  // (lib/eventPermissions.ts, the one registry).
+  const [perms, setPerms] = useState<EventPermissions>(defaultPermissions)
   const [passcode, setPasscode] = useState('')
   const [passcodeConfirm, setPasscodeConfirm] = useState('')
 
@@ -353,6 +360,9 @@ export default function CreateLeagueForm({ schedule }: {
       },
       leaderboards: boards,
       bracket_setup: setup,
+      // Only when a toggle was actually flipped — nothing opened writes
+      // nothing, so creation still lands before migration 049 has run.
+      ...(storedPermissions(perms) ? { event_permissions: perms } : {}),
     }
 
     const leadEmail = normaliseEmail(email)
@@ -1087,6 +1097,19 @@ export default function CreateLeagueForm({ schedule }: {
                 </div>
               </div>
             )}
+
+            {/* ── How collaborative? ──
+                One question, three toggles, all off until the organiser
+                opts in — the registry in lib/eventPermissions.ts is the
+                whole list, and the admin page edits the same answers. */}
+            <div>
+              <label className={LABEL}>How collaborative should this event be?</label>
+              <p className="text-ink/65 text-[13px] mb-3 leading-snug">
+                What the field can do for themselves. Everything starts off —
+                you can change any of these later from the organiser area.
+              </p>
+              <EventPermissionToggles value={perms} onChange={setPerms} />
+            </div>
 
             <div className="pt-2 border-t border-bark/12">
               <div className="bg-surface border border-bark/12 rounded-xl px-4 py-4 mb-3">

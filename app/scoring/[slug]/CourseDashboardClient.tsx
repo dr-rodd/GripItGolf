@@ -124,6 +124,13 @@ interface Props {
    */
   trackStats?: boolean
   /**
+   * Whether the summary screen offers Edit Scorecard. Always true on a
+   * trip; an event answers from its organiser's permissions
+   * (lib/eventPermissions.ts, `edit_scores`). Hole-by-hole scoring is
+   * untouched either way.
+   */
+  allowScoreEdits?: boolean
+  /**
    * The trip this screen belongs to, for the card check on the pick-player
    * screen — it scopes the re-score of committed cards after a correction.
    * The legacy /scoring/[slug] route has no trip and leaves it unset.
@@ -139,7 +146,7 @@ export default function CourseDashboardClient({
   courseName, courseId, players, rounds, holes, tees, roundHandicaps,
   backHref = "/scoring", roundId, stickyTop = 0,
   allowances = [FULL_ALLOWANCE], allowanceStart = 0, quotaScale = null,
-  bottomInset = "0", trackStats = false, tripCode,
+  bottomInset = "0", trackStats = false, tripCode, allowScoreEdits = true,
 }: Props) {
   // The course card, held as state rather than read straight off the props:
   // the card check on the pick-player screen can correct it against a photo
@@ -1006,6 +1013,7 @@ export default function CourseDashboardClient({
           allowances={allowances}
           quotaScale={quotaScale}
           trackStats={trackStats}
+          allowScoreEdits={allowScoreEdits}
           onBack={goBack}
           onLiveRoundChange={r => {
             setScoringLiveRound(r)

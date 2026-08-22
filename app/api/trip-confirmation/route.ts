@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { styledQrPng } from '@/lib/qrPng'
 import { createAdminClient } from '@/lib/supabase-admin'
+import { isEvent } from '@/lib/eventHub'
 import {
   CONFIRMATION_FROM, QR_CID,
   confirmationSubject, confirmationHtml, confirmationText, describeRange,
@@ -70,11 +71,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, reason: 'not-configured' })
   }
 
-  const { data: trip, error: tripErr } = await admin
-    .from('trips')
-    .select('id, name, trip_code, start_date, end_date, lead_email, confirmation_sent_at')
-    .eq('trip_code', tripCode)
-    .single()
+  // The kind rides in its own query, the fail-soft rule as everywhere: on a
+  // database without migration 046 it errors, the error is swallowed, and
+  // the message is simply a trip's — which is all such a database can hold.
+  const [{ data: trip, error: tripErr }, kindResult] = await Promise.all([
+    admin
+      .from('trips')
+      .select('id, name, trip_code, start_date, end_date, lead_email, confirmation_sent_at')
+      .eq('trip_code', tripCode)
+      .single(),
+    admin
+      .from('trips')
+      .select('kind')
+      .eq('trip_code', tripCode)
+      .single(),
+  ])
 
   if (tripErr || !trip) {
     if (tripErr) console.error('trip-confirmation: trip lookup failed:', tripErr)
@@ -109,11 +120,18 @@ export async function POST(req: NextRequest) {
   const origin = host ? `${proto}://${host}` : 'https://greendot.live'
   const tripUrl = `${origin}/trip/${trip.trip_code}`
 
+  // An event's message carries the organiser block: the admin link, and the
+  // reminder that the PIN is the one set at creation. Never the PIN itself —
+  // it is hashed on the organiser's device and this server has never known
+  // it, a posture the email keeps rather than trades away.
+  const event = isEvent(kindResult.data?.kind)
+
   const details = {
     tripName: trip.name as string,
     dates: describeRange(trip.start_date ?? null, trip.end_date ?? null),
     tripUrl,
     tripCode: trip.trip_code as string,
+    ...(event ? { adminUrl: `${tripUrl}/organiser` } : {}),
   }
 
   try {

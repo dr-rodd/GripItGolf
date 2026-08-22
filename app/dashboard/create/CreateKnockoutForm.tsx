@@ -16,6 +16,10 @@ import {
 } from '@/lib/passcode'
 import { parseHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
+import {
+  type EventPermissions, defaultPermissions, storedPermissions,
+} from '@/lib/eventPermissions'
+import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import { describeError, generateCode } from './CreateTripForm'
 
 /**
@@ -64,7 +68,8 @@ export default function CreateKnockoutForm() {
     { name: '', handicap: '', gender: 'M' },
   ])
 
-  // Step 3 — the organiser PIN
+  // Step 3 — how collaborative, and the organiser PIN
+  const [perms, setPerms] = useState<EventPermissions>(defaultPermissions)
   const [passcode, setPasscode] = useState('')
   const [passcodeConfirm, setPasscodeConfirm] = useState('')
 
@@ -154,6 +159,9 @@ export default function CreateKnockoutForm() {
       // it is finishing. Not a complete setup — parseBracketSetup rightly
       // returns null on it — and never claimed to be one.
       bracket_setup: { format: 'match_play', schedule: 'continuous' },
+      // Only when a toggle was actually flipped — nothing opened writes
+      // nothing, so creation still lands before migration 049 has run.
+      ...(storedPermissions(perms) ? { event_permissions: perms } : {}),
     }
 
     const leadEmail = normaliseEmail(email)
@@ -480,9 +488,18 @@ export default function CreateKnockoutForm() {
           </div>
         )}
 
-        {/* ── 3 · The organiser PIN ── */}
+        {/* ── 3 · How collaborative, and the organiser PIN ── */}
         {step === 3 && (
           <div className="space-y-3">
+            <div className="mb-6">
+              <label className={LABEL}>How collaborative should this event be?</label>
+              <p className="text-ink/65 text-[13px] mb-3 leading-snug">
+                What the field can do for themselves. Everything starts off —
+                you can change any of these later from the organiser area.
+              </p>
+              <EventPermissionToggles value={perms} onChange={setPerms} />
+            </div>
+
             <div className="bg-surface border border-bark/12 rounded-xl px-4 py-4">
               <p className="text-ink text-sm font-medium">Organiser PIN</p>
               <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">

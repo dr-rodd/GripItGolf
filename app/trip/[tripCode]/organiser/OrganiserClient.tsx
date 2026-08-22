@@ -8,6 +8,10 @@ import {
   MAX_NOTICE, normalizeNotice, parseStartFormat,
   START_FORMAT_LABEL, type StartFormat,
 } from '@/lib/eventHub'
+import {
+  type EventPermissions, describePermissions,
+} from '@/lib/eventPermissions'
+import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 
 /**
  * What the organiser can actually do, once past the PIN.
@@ -40,8 +44,19 @@ const INPUT = [
   'focus:outline-none focus:border-accent/50 transition-colors',
 ].join(' ')
 
+type Overview = {
+  name: string
+  dates: string | null
+  players: number
+  claimed: number
+  roundCount: number
+  boardCount: number
+  noticeCount: number
+}
+
 export default function OrganiserClient({
   tripId, tripCode, initialNotices, initialRounds, formatSummary, isLeague,
+  initialPermissions, overview,
 }: {
   tripId: string
   tripCode: string
@@ -51,7 +66,36 @@ export default function OrganiserClient({
   formatSummary: string | null
   /** A league event — the format card describes rather than invites setup. */
   isLeague: boolean
+  /** The stored participant permissions, defaults filled (lib/eventPermissions.ts). */
+  initialPermissions: EventPermissions
+  /** The bird's-eye numbers, counted on the server. */
+  overview: Overview
 }) {
+  // ── Participant permissions ──────────────────────────────────
+  // Saved the moment a toggle moves — optimistic, reverting on refusal,
+  // the same manners as every organiser write. The whole map goes each
+  // time: it is one setting, read whole (lib/eventPermissions.ts).
+  const [perms, setPerms] = useState<EventPermissions>(initialPermissions)
+  const [permsError, setPermsError] = useState<string | null>(null)
+
+  async function savePermissions(next: EventPermissions) {
+    const prev = perms
+    setPerms(next)
+    setPermsError(null)
+
+    const { error } = await supabase
+      .from('trips')
+      .update({ event_permissions: next })
+      .eq('id', tripId)
+
+    if (error) {
+      setPerms(prev)
+      setPermsError(/column|schema cache/i.test(error.message ?? '')
+        ? 'Could not save — a database update may not have been applied yet.'
+        : 'Could not save the change — try again')
+    }
+  }
+
   // ── Notices ──────────────────────────────────────────────────
   const [notices, setNotices] = useState<Notice[]>(initialNotices)
   const [draft, setDraft] = useState('')
@@ -149,9 +193,71 @@ export default function OrganiserClient({
         <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-1">
           Organiser
         </h1>
-        <p className="text-ink/65 text-sm mb-8">
-          Notices go straight to the Event Hub. Starts show on the schedule.
+        <p className="text-ink/65 text-sm mb-6">
+          Your event at a glance, and everything you run it with.
         </p>
+
+        {/* ── The event, above the fold ──
+            The bird's-eye card: what this event is and where it stands,
+            before any of the levers. Counted on the server; the code is
+            here because this page is what the admin email links to, and
+            the code is the first thing an organiser passes on. */}
+        <section className="bg-surface border border-bark/12 rounded-2xl p-4 mb-8">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="font-[family-name:var(--font-display)] text-xl text-ink min-w-0">
+              {overview.name}
+            </p>
+            <p className="t-label text-accent-deep tabular-nums flex-shrink-0">{tripCode}</p>
+          </div>
+          {(overview.dates || formatSummary) && (
+            <p className="t-cap text-ink/65 mt-1 leading-snug">
+              {[overview.dates, formatSummary].filter(Boolean).join(' · ')}
+            </p>
+          )}
+          <div className="grid grid-cols-3 gap-2 mt-4">
+            {[
+              {
+                n: `${overview.claimed}/${overview.players}`,
+                label: overview.players === 1 ? 'player in' : 'players in',
+              },
+              {
+                n: String(overview.roundCount),
+                label: overview.roundCount === 1 ? 'round' : 'rounds',
+              },
+              {
+                n: String(overview.boardCount),
+                label: overview.boardCount === 1 ? 'leaderboard' : 'leaderboards',
+              },
+            ].map(s => (
+              <div key={s.label} className="rounded-xl bg-bark/[0.04] px-3 py-3 text-center">
+                <p className="text-ink text-lg font-medium tabular-nums leading-none">{s.n}</p>
+                <p className="t-cap text-ink/65 mt-1.5">{s.label}</p>
+              </div>
+            ))}
+          </div>
+          <p className="t-cap text-ink/65 mt-3 leading-snug">
+            {describePermissions(perms)}
+            {overview.noticeCount > 0 &&
+              ` ${overview.noticeCount} notice${overview.noticeCount === 1 ? '' : 's'} up.`}
+          </p>
+        </section>
+
+        {/* ── Participant permissions ──
+            The same three answers creation asks, editable for the life of
+            the event and saved the moment they move. What they gate is the
+            field's screens — the organiser, holding this page, is never
+            gating themselves. */}
+        <section className="mb-10">
+          <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-1">Participants</h2>
+          <p className="text-ink/65 text-[13px] mb-3 leading-snug">
+            How collaborative this event is. Changes land on the field&apos;s
+            phones straight away.
+          </p>
+          <EventPermissionToggles value={perms} onChange={savePermissions} />
+          {permsError && (
+            <p className="text-rust-deep text-sm mt-3 leading-snug">{permsError}</p>
+          )}
+        </section>
 
         {/* ── Post a notice ── */}
         <section>

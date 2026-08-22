@@ -48,6 +48,7 @@ export default function PlayersClient({
   players,
   confirmed,
   roundIds,
+  canAddPlayers = true,
 }: {
   tripCode: string
   tripId: string
@@ -56,6 +57,13 @@ export default function PlayersClient({
   confirmed: number
   /** Every round on the trip, for a late joiner's handicap snapshots. */
   roundIds: string[]
+  /**
+   * Whether a new name may be added from this screen. Always true on a
+   * trip; an event answers from its organiser's permissions
+   * (lib/eventPermissions.ts, `add_players`). Off, the add form is not
+   * rendered at all — claiming a name the organiser entered stays open.
+   */
+  canAddPlayers?: boolean
 }) {
   const router = useRouter()
   const [claimingId, setClaimingId] = useState<string | null>(null)
@@ -240,6 +248,17 @@ export default function PlayersClient({
         </section>
       )}
 
+      {/* The add form exists only where adding is allowed — on an event
+          whose organiser keeps the roster to themselves, there is nothing
+          to see or reach here, only the quiet line below saying why. */}
+      {!canAddPlayers ? (
+        <section>
+          <p className="text-ink/65 text-[13px] text-center leading-snug">
+            Can&apos;t find your name? The organiser adds the field on this
+            event — ask them to put you on the list.
+          </p>
+        </section>
+      ) : (
       <section>
         <p className="text-ink/65 text-[13px] tracking-[0.2em] uppercase mb-4">
           Can&apos;t find your name? Add yourself below
@@ -289,6 +308,7 @@ export default function PlayersClient({
           </button>
         </form>
       </section>
+      )}
 
     </div>
   )

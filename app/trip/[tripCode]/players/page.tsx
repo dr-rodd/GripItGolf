@@ -4,17 +4,30 @@ import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
 import { sortForClaiming, confirmedCount } from '@/lib/roster'
+import { fetchTripKind } from '../kind'
+import { allowsParticipant } from '@/lib/eventPermissions'
 
 export const dynamic = 'force-dynamic'
 
 export default async function PlayersPage({ params }: { params: Promise<{ tripCode: string }> }) {
   const { tripCode } = await params
 
-  const { data: trip, error: tripError } = await supabase
-    .from('trips')
-    .select('id, name')
-    .eq('trip_code', tripCode)
-    .single()
+  // The kind and the permissions ride alongside the page's own query, each
+  // fail-soft in its own request — an un-migrated database simply reads as
+  // a trip with open access, which is what it can only hold.
+  const [kind, { data: trip, error: tripError }, permsResult] = await Promise.all([
+    fetchTripKind(tripCode),
+    supabase
+      .from('trips')
+      .select('id, name')
+      .eq('trip_code', tripCode)
+      .single(),
+    supabase
+      .from('trips')
+      .select('event_permissions')
+      .eq('trip_code', tripCode)
+      .single(),
+  ])
 
   if (tripError) console.error('players/page trip query failed:', tripError)
 
@@ -94,6 +107,11 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
           players={players}
           confirmed={confirmedCount(players)}
           roundIds={roundIds}
+          canAddPlayers={allowsParticipant(
+            kind,
+            (permsResult.data as { event_permissions?: unknown } | null)?.event_permissions,
+            'add_players',
+          )}
         />
 
         <div className="mt-12">

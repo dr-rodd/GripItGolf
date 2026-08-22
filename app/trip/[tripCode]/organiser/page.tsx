@@ -3,6 +3,9 @@ import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
 import { parseBracketSetup, describeSetup } from '@/lib/bracketSetup'
 import { parseLeagueSetup, describeLeagueSetup } from '@/lib/leagueSetup'
+import { parseEventPermissions } from '@/lib/eventPermissions'
+import { parseLeaderboards } from '@/lib/leaderboards'
+import { describeRange } from '@/lib/confirmationEmail'
 import BackButton from '@/app/components/BackButton'
 import PasscodeGate from '../setup/PasscodeGate'
 import OrganiserClient from './OrganiserClient'
@@ -32,7 +35,7 @@ export default async function OrganiserPage({ params }: {
 
   const { data: trip, error } = await supabase
     .from('trips')
-    .select('id, trip_code, name, kind, settings_passcode_hash')
+    .select('id, trip_code, name, kind, settings_passcode_hash, start_date, end_date, leaderboards')
     .eq('trip_code', tripCode)
     .single()
   if (error) console.error('OrganiserPage trip query failed:', error)
@@ -67,7 +70,10 @@ export default async function OrganiserPage({ params }: {
   // times a shotgun start writes to. The bracket setup rides in its own
   // query rather than the trip select above, so a database that has not run
   // migration 047 loses the summary line and nothing else.
-  const [noticesResult, roundsResult, itemsResult, setupResult] = await Promise.all([
+  const [
+    noticesResult, roundsResult, itemsResult, setupResult,
+    permsResult, playersResult, claimedResult,
+  ] = await Promise.all([
     supabase
       .from('event_messages')
       .select('id, body, created_at')
@@ -88,6 +94,27 @@ export default async function OrganiserPage({ params }: {
       .select('bracket_setup')
       .eq('id', trip.id)
       .single(),
+    // Its own query for the same reason as the setup: pre-migration-049
+    // the column does not exist, this errors, and the toggles simply show
+    // their defaults.
+    supabase
+      .from('trips')
+      .select('event_permissions')
+      .eq('id', trip.id)
+      .single(),
+    // The bird's-eye numbers: who is confirmed, out of how many. A count
+    // in a header, not a body — the scoring path's own rule.
+    supabase
+      .from('players')
+      .select('id', { count: 'exact', head: true })
+      .eq('trip_id', trip.id)
+      .eq('is_composite', false),
+    supabase
+      .from('players')
+      .select('id', { count: 'exact', head: true })
+      .eq('trip_id', trip.id)
+      .eq('is_composite', false)
+      .eq('claimed', true),
   ])
 
   if (noticesResult.error) console.error('OrganiserPage notices query failed:', noticesResult.error)
@@ -121,12 +148,30 @@ export default async function OrganiserPage({ params }: {
   const bracketSetup = parseBracketSetup(setupRaw)
   const leagueSetup = parseLeagueSetup(setupRaw)
 
+  // Errors swallowed for the same reason as the setup's: pre-049 there is
+  // no column, and defaults are exactly what an untouched event means.
+  const permissions = parseEventPermissions(
+    (permsResult.data as { event_permissions?: unknown } | null)?.event_permissions
+  )
+
+  const boards = parseLeaderboards(trip.leaderboards)
+
   const content = (
     <OrganiserClient
       tripId={trip.id}
       tripCode={tripCode}
       initialNotices={noticesResult.data ?? []}
       initialRounds={rounds}
+      initialPermissions={permissions}
+      overview={{
+        name: trip.name as string,
+        dates: describeRange(trip.start_date ?? null, trip.end_date ?? null),
+        players: playersResult.count ?? 0,
+        claimed: claimedResult.count ?? 0,
+        roundCount: rounds.length,
+        boardCount: boards.length,
+        noticeCount: (noticesResult.data ?? []).length,
+      }}
       formatSummary={
         bracketSetup ? describeSetup(bracketSetup)
         : leagueSetup ? describeLeagueSetup(leagueSetup, rounds.length || 1)

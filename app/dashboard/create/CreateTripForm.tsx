@@ -24,6 +24,10 @@ import type { DirectoryCourse } from '@/lib/courseDirectory'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
 import type { Leaderboard } from '@/lib/leaderboards'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
+import {
+  type EventPermissions, defaultPermissions, storedPermissions,
+} from '@/lib/eventPermissions'
+import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -140,6 +144,11 @@ export default function CreateTripForm() {
   // unwritten, and a skipped trip is byte-for-byte the trip creation has
   // always made.
   const [boards, setBoards] = useState<Leaderboard[]>([])
+
+  // Tournaments only — how collaborative the event is, all off until the
+  // organiser opts in (lib/eventPermissions.ts). A trip never asks and
+  // never writes: its open access is the trip's whole way of working.
+  const [perms, setPerms] = useState<EventPermissions>(defaultPermissions)
 
   // Settings lock — can only ever be set here, at creation
   const [lockSettings, setLockSettings] = useState(false)
@@ -286,6 +295,10 @@ export default function CreateTripForm() {
     // 046 has run. A tournament insert does need the column — until the
     // migration lands it fails, and describeError says why in as many words.
     if (isTournament) tripRow.kind = 'tournament'
+
+    // Events only, and only when a toggle was actually flipped — nothing
+    // opened writes nothing, so creation still lands before migration 049.
+    if (isTournament && storedPermissions(perms)) tripRow.event_permissions = perms
 
     // Same reasoning, and the same for anything that is not an address:
     // blank, half-typed or nonsense all mean "not given", and none of them is
@@ -864,6 +877,24 @@ export default function CreateTripForm() {
                 onChange={setBoards}
               />
             </div>
+
+            {/* ── How collaborative? — events only ──
+                A trip is collaborative by nature and is never asked; an
+                event starts organiser-run and opens up only where its
+                organiser says so. The same toggles are editable any time
+                from the organiser area. */}
+            {isTournament && (
+              <div className="mt-8 pt-6 border-t border-bark/12">
+                <p className="text-ink/80 text-[13px] uppercase tracking-wider mb-2">
+                  How collaborative should this event be?
+                </p>
+                <p className="text-ink/65 text-[13px] mb-3 leading-snug">
+                  What the field can do for themselves. Everything starts off —
+                  you can change any of these later from the organiser area.
+                </p>
+                <EventPermissionToggles value={perms} onChange={setPerms} />
+              </div>
+            )}
 
             {/* ── Settings lock ──
                 Only settable here. Once the trip exists, anyone holding the
