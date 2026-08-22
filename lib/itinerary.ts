@@ -54,6 +54,13 @@ export type ItineraryItem = {
   activityName?: string | null
   /** "19:00", same clock as `teeTime`. Null is legitimate, not missing data. */
   activityTime?: string | null
+  /**
+   * When it finishes — activity only, and only alongside a start. Optional:
+   * absent reads as an hour (`DEFAULT_EVENT_MINS`), which is what the day
+   * plan's timescale draws. Column `end_time`, migration 048; golf never
+   * stores one, because its end is the five-hour rule below.
+   */
+  endTime?: string | null
 }
 
 /** The longest an activity's name may be. A tile, not a paragraph. */
@@ -251,6 +258,9 @@ export function describeDuration(mins: number | null | undefined): string {
 export const TEE_INTERVAL_MINS = 10
 export const GOLF_SLOT_MINS = 300
 
+/** What an event without an end time occupies on the timescale: an hour. */
+export const DEFAULT_EVENT_MINS = 60
+
 /** Minutes golf occupies from the *first* tee: the tee spread plus the slot. */
 export function golfSpanMins(teeCount: number | null | undefined): number {
   return Math.max(0, (teeCount ?? 1) - 1) * TEE_INTERVAL_MINS + GOLF_SLOT_MINS
@@ -267,6 +277,82 @@ export function golfUntil(item: Pick<ItineraryItem, 'teeTime' | 'teeCount'>): st
   const end = (start + golfSpanMins(item.teeCount)) % (24 * 60)
   const clock = `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`
   return `until ${describeTime(clock)}`
+}
+
+// ─── The day on a clock ────────────────────────────────────────
+//
+// The Event Hub's day plan drawn against a faint timescale: the window
+// starts at the first entered time and runs to the last thing's end.
+// Everything here is minutes past midnight, and the maths is pure so the
+// screen only has to multiply by pixels.
+
+export type TimelineEntry = {
+  item: ItineraryItem
+  /** Minutes past midnight. */
+  start: number
+  end: number
+  /**
+   * Which column the block draws in. Overlaps are legitimate — dinner
+   * booked while the last groups are still out is a normal day — so an
+   * entry overlapping everything in lane 0 steps right rather than being
+   * refused or reordered. Greedy first-fit over entries sorted by start.
+   */
+  lane: number
+}
+
+export type DayTimeline = {
+  /** The window, minutes past midnight. Start of the first timed thing… */
+  start: number
+  /** …to the end of the last, clamped to midnight. */
+  end: number
+  entries: TimelineEntry[]
+  /** Full hours the window crosses, for the faint rules — [9, 10, …]. */
+  hours: number[]
+  /** Items with no clock — listed under the scale, never invented onto it. */
+  untimed: ItineraryItem[]
+}
+
+/**
+ * One day's items against the clock, or null when nothing has a time —
+ * a day with no clock has no timescale, and renders as the list it always
+ * was. Golf ends on the five-hour rule; an event without an end time
+ * occupies the default hour.
+ */
+export function dayTimeline(dayItems: readonly ItineraryItem[]): DayTimeline | null {
+  const endOfDay = 24 * 60
+  const entries: TimelineEntry[] = []
+  const untimed: ItineraryItem[] = []
+
+  for (const item of dayItems) {
+    const start = minutesInto(
+      item.kind === 'golf' ? item.teeTime : item.kind === 'activity' ? item.activityTime : null,
+    )
+    if (start === null) { untimed.push(item); continue }
+    const span = item.kind === 'golf'
+      ? golfSpanMins(item.teeCount)
+      : (minutesInto(item.endTime) ?? 0) > start
+        ? (minutesInto(item.endTime) as number) - start
+        : DEFAULT_EVENT_MINS
+    entries.push({ item, start, end: Math.min(start + span, endOfDay), lane: 0 })
+  }
+
+  if (entries.length === 0) return null
+
+  entries.sort((a, b) => a.start - b.start || a.end - b.end)
+  const laneEnds: number[] = []
+  for (const e of entries) {
+    let lane = laneEnds.findIndex(end => end <= e.start)
+    if (lane === -1) lane = laneEnds.length
+    e.lane = lane
+    laneEnds[lane] = e.end
+  }
+
+  const start = entries[0].start
+  const end = Math.max(...entries.map(e => e.end))
+  const hours: number[] = []
+  for (let h = Math.ceil(start / 60); h * 60 <= end; h++) hours.push(h)
+
+  return { start, end, entries, hours, untimed }
 }
 
 /** "1:00 pm" from "13:00". Blank if there is no time. */
@@ -311,10 +397,15 @@ export function describeItem(
   if (item.kind === 'activity') {
     // The name is the whole tile. The detail line carries the time where
     // there is one and stays empty where there is not — never "no time",
-    // which would be a tile announcing what it does not know.
+    // which would be a tile announcing what it does not know. An end time
+    // makes it a range; the hour default stays the timescale's business,
+    // because "7:00 pm – 8:00 pm" on a dinner nobody gave an end to would
+    // be the tile inventing a fact.
+    const start = describeTime(item.activityTime)
+    const end = describeTime(item.endTime)
     return {
       title: item.activityName?.trim() || 'Activity',
-      detail: describeTime(item.activityTime),
+      detail: start && end ? `${start} – ${end}` : start,
     }
   }
 
@@ -434,6 +525,15 @@ export function itemError(item: Partial<ItineraryItem> & { kind: ItemKind }): st
     const name = item.activityName?.trim()
     if (!name) return 'Say what it is'
     if (name.length > MAX_ACTIVITY_NAME) return `Keep it under ${MAX_ACTIVITY_NAME} characters`
+    // An end needs a start to be measured from, and it must come after it.
+    // No overnight case: a party running past midnight leaves the end blank
+    // and the hour default carries it — a plan crossing days is two plans.
+    if (item.endTime) {
+      const start = minutesInto(item.activityTime)
+      const end = minutesInto(item.endTime)
+      if (start === null) return 'An end time needs a start time'
+      if (end !== null && end <= start) return 'The end must come after the start'
+    }
     return null
   }
   if (!item.fromPlace?.trim() && !item.toPlace?.trim()) return 'Say where the journey goes'

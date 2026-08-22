@@ -1,8 +1,8 @@
 'use client'
 
 import {
-  type ItineraryItem, itemsForDay, dateForDay, describeDay, describeItem,
-  itemState, tripProgress,
+  type ItineraryItem, type DayTimeline, itemsForDay, dateForDay, describeDay,
+  describeItem, itemState, tripProgress, dayTimeline,
 } from '@/lib/itinerary'
 import Link from 'next/link'
 import { IconFlag, itineraryIcon } from '@/app/components/icons'
@@ -115,8 +115,182 @@ function ActivityRow({
   )
 }
 
+/**
+ * The golf card — the only white surface on the running order, and the only
+ * tap. One copy: the flowing list draws it at its natural height and the
+ * event day plan stretches it over its five-hour block (`stretch`), so the
+ * two can never disagree about what a round looks like.
+ */
+function GolfTile({
+  item, state, title, detailLine, roundNumber, tripCode, stretch = false,
+}: {
+  item: ItineraryItem
+  state: 'past' | 'now' | 'future'
+  title: string
+  detailLine: string
+  roundNumber: number | undefined
+  tripCode: string
+  stretch?: boolean
+}) {
+  const tile = `flex ${stretch ? 'h-full items-start overflow-hidden' : 'items-center'} gap-3 rounded-xl border px-3.5 py-3 transition-opacity duration-200 ${
+    state === 'now'
+      ? 'border-accent/40 bg-accent/[0.07]'
+      : 'border-bark/12 bg-surface'
+  } ${state === 'past' ? 'opacity-50' : ''}`
+
+  const inside = (
+    <>
+      <span
+        className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
+          state === 'now' ? 'text-accent-deep bg-accent/[0.14]' : 'text-bark bg-bark/[0.06]'
+        }`}
+      >
+        <IconFlag size={16} />
+      </span>
+
+      <span className="flex-1 min-w-0">
+        {/* The whole name, wrapping. It was truncated, and these are the
+            longest names on the platform — "Ballyliffin Golf Club --
+            Glashedy Links" — so the card whose job is to name the course
+            was the one place it got cut off. The page scrolls; an ellipsis
+            saves nothing worth what it costs. */}
+        <span
+          className={`block t-card font-medium leading-snug ${
+            state === 'past' ? 'text-ink/80 line-through decoration-ink/25' : 'text-ink'
+          }`}
+        >
+          {title}
+        </span>
+        {detailLine && (
+          <span className="block t-cap text-ink/65 truncate mt-0.5">{detailLine}</span>
+        )}
+      </span>
+
+      {state === 'now' && (
+        <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-accent dot-live" aria-label="Happening now" role="img" />
+      )}
+    </>
+  )
+
+  // A golf item became a round, and a round has a page: the card, the tee
+  // ratings, and what happened on it. An item with no round behind it — a
+  // trip whose itinerary was edited after its rounds were made — stays a
+  // plain tile rather than a link to nowhere.
+  return roundNumber != null ? (
+    <Link href={`/trip/${tripCode}/round/${roundNumber}`} className={`${tile} press`}>
+      {inside}
+    </Link>
+  ) : (
+    <div className={tile}>{inside}</div>
+  )
+}
+
+// ─── The day against the clock ─────────────────────────────────
+
+/** "9 am", "12 pm" — the faint gutter labels. */
+function hourLabel(h: number): string {
+  const hh = h % 24
+  return `${hh % 12 === 0 ? 12 : hh % 12} ${hh < 12 ? 'am' : 'pm'}`
+}
+
+/** Pixels per minute. One hour of dinner is a block you can read. */
+const PX_PER_MIN = 1.1
+
+/**
+ * An event day drawn on a faint timescale — hour rules down the page from
+ * the first entered time to the last thing's end, golf standing on its
+ * five-hour block, and everything scrolling inside a fixed frame when the
+ * day runs longer than the screen wants to give it.
+ *
+ * Overlaps are drawn, not resolved: an activity timed inside the golf
+ * window steps a lane to the right and sits on top of it, which is exactly
+ * the plan the organiser made. The maths (window, lanes, the hour default)
+ * is lib/itinerary.ts's `dayTimeline` — this only multiplies by pixels.
+ */
+function DayPlan({
+  plan, date, now, courseNames, roundNumbers, startLines, tripCode,
+}: {
+  plan: DayTimeline
+  date: string | null
+  now: Date | null
+  courseNames: Record<string, string>
+  roundNumbers: Record<string, number>
+  startLines?: Record<string, string>
+  tripCode: string
+}) {
+  const top = (mins: number) => (mins - plan.start) * PX_PER_MIN
+
+  return (
+    <div className="overflow-y-auto max-h-[26rem] overscroll-contain">
+      <div className="relative" style={{ height: top(plan.end) + 8 }}>
+
+        {plan.hours.map(h => (
+          <div
+            key={h}
+            className="absolute left-0 right-0 flex items-center gap-2 pointer-events-none"
+            style={{ top: top(h * 60) }}
+          >
+            <span className="w-11 flex-shrink-0 t-cap text-ink/50 tabular-nums text-right -translate-y-1/2">
+              {hourLabel(h)}
+            </span>
+            <span className="flex-1 border-t border-bark/12" />
+          </div>
+        ))}
+
+        {plan.entries.map(e => {
+          const state = now ? itemState(e.item, date, now) : 'future'
+          const { title, detail } = describeItem(e.item, courseNames[e.item.courseId ?? ''])
+          const blockHeight = Math.max((e.end - e.start) * PX_PER_MIN, 34)
+
+          return (
+            <div
+              key={e.item.id}
+              className="absolute right-0"
+              style={{
+                top: top(e.start),
+                height: blockHeight,
+                // Past the gutter, then a step right per lane — enough to
+                // read as "on top of", not enough to lose the words.
+                left: `calc(3.25rem + ${e.lane * 1.1}rem)`,
+                zIndex: e.lane + 1,
+              }}
+            >
+              {e.item.kind === 'golf' ? (
+                <GolfTile
+                  item={e.item}
+                  state={state}
+                  title={title}
+                  detailLine={startLines?.[e.item.id] ?? detail}
+                  roundNumber={roundNumbers[e.item.id]}
+                  tripCode={tripCode}
+                  stretch
+                />
+              ) : (
+                <div
+                  className={`h-full flex items-start gap-2 rounded-lg bg-bark/[0.08] px-3 py-1.5 overflow-hidden transition-opacity duration-200 ${
+                    state === 'past' ? 'opacity-50' : ''
+                  }`}
+                >
+                  <span className={`min-w-0 t-card leading-snug truncate text-ink ${
+                    state === 'past' ? 'line-through decoration-ink/25' : ''
+                  }`}>
+                    {title}
+                  </span>
+                  {detail && (
+                    <span className="t-cap flex-shrink-0 text-ink/65">{detail}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function Itinerary({
-  items, startDate, courseNames, days, tripCode, roundNumbers, startLines,
+  items, startDate, courseNames, days, tripCode, roundNumbers, startLines, timescale = false,
 }: {
   items: ItineraryItem[]
   startDate: string | null
@@ -140,6 +314,12 @@ export default function Itinerary({
    * trip passes nothing and every tile reads exactly as before.
    */
   startLines?: Record<string, string>
+  /**
+   * Draw each day against the clock — the Event Hub's day plan. A day whose
+   * items carry no times still renders as the flowing list, and a plain
+   * trip never passes this at all.
+   */
+  timescale?: boolean
 }) {
   const now = useMinute()
 
@@ -196,15 +376,17 @@ export default function Itinerary({
                 {describeDay(date, day)}
               </p>
 
-              <ul className="flex flex-col gap-1.5">
-                {dayItems.map(item => {
+              {(() => {
+                // The flowing row for an item — the plain trip's whole
+                // list, and the event day plan's home for anything without
+                // a clock. An activity is a plan of its own and reads at
+                // the golf tiles' weight; a stay or a journey is context
+                // and stays quiet. Golf is what the trip is for, so it is
+                // still the only thing that gets a white card or a tap.
+                const renderRow = (item: ItineraryItem) => {
                   const state = now ? itemState(item, date, now) : 'future'
                   const { title, detail } = describeItem(item, courseNames[item.courseId ?? ''])
 
-                  // An activity is a plan of its own and reads at the golf
-                  // tiles' weight; a stay or a journey is context and stays
-                  // quiet. Golf is what the trip is for, so it is still the
-                  // only thing that gets a white card or a tap.
                   if (item.kind === 'activity') {
                     return (
                       <ActivityRow key={item.id} item={item} state={state} title={title} detail={detail} />
@@ -216,74 +398,53 @@ export default function Itinerary({
                     )
                   }
 
-                  const Icon = IconFlag
-                  const roundNumber = roundNumbers[item.id]
-                  // An event round with a chosen start says so instead of
-                  // the generic tee-time line.
-                  const detailLine = startLines?.[item.id] ?? detail
+                  return (
+                    <li key={item.id}>
+                      <GolfTile
+                        item={item}
+                        state={state}
+                        title={title}
+                        // An event round with a chosen start says so
+                        // instead of the generic tee-time line.
+                        detailLine={startLines?.[item.id] ?? detail}
+                        roundNumber={roundNumbers[item.id]}
+                        tripCode={tripCode}
+                      />
+                    </li>
+                  )
+                }
 
-                  const tile = `flex items-center gap-3 rounded-xl border px-3.5 py-3 transition-opacity duration-200 ${
-                    state === 'now'
-                      ? 'border-accent/40 bg-accent/[0.07]'
-                      : 'border-bark/12 bg-surface'
-                  } ${state === 'past' ? 'opacity-50' : ''}`
-
-                  const inside = (
+                // An event day with times on it is drawn against the clock;
+                // whatever has no clock keeps its row underneath, never an
+                // invented slot on the scale.
+                const plan = timescale ? dayTimeline(dayItems) : null
+                if (plan) {
+                  return (
                     <>
-                      <span
-                        className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
-                          state === 'now' ? 'text-accent-deep bg-accent/[0.14]' : 'text-bark bg-bark/[0.06]'
-                        }`}
-                      >
-                        <Icon size={16} />
-                      </span>
-
-                      <span className="flex-1 min-w-0">
-                        {/* The whole name, wrapping. It was truncated, and
-                            these are the longest names on the platform —
-                            "Ballyliffin Golf Club -- Glashedy Links" — so
-                            the card whose job is to name the course was the
-                            one place it got cut off. The page scrolls; an
-                            ellipsis saves nothing worth what it costs. */}
-                        <span
-                          className={`block t-card font-medium leading-snug ${
-                            state === 'past' ? 'text-ink/80 line-through decoration-ink/25' : 'text-ink'
-                          }`}
-                        >
-                          {title}
-                        </span>
-                        {detailLine && (
-                          <span className="block t-cap text-ink/65 truncate mt-0.5">{detailLine}</span>
-                        )}
-                      </span>
-
-                      {state === 'now' && (
-                        <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-accent dot-live" aria-label="Happening now" role="img" />
+                      <DayPlan
+                        plan={plan}
+                        date={date}
+                        now={now}
+                        courseNames={courseNames}
+                        roundNumbers={roundNumbers}
+                        startLines={startLines}
+                        tripCode={tripCode}
+                      />
+                      {plan.untimed.length > 0 && (
+                        <ul className="flex flex-col gap-1.5 mt-2">
+                          {plan.untimed.map(renderRow)}
+                        </ul>
                       )}
                     </>
                   )
+                }
 
-                  // A golf item became a round, and a round has a page: the
-                  // card, the tee ratings, and what happened on it. An item
-                  // with no round behind it — a trip whose itinerary was
-                  // edited after its rounds were made — stays a plain tile
-                  // rather than a link to nowhere.
-                  return (
-                    <li key={item.id}>
-                      {roundNumber != null ? (
-                        <Link
-                          href={`/trip/${tripCode}/round/${roundNumber}`}
-                          className={`${tile} press`}
-                        >
-                          {inside}
-                        </Link>
-                      ) : (
-                        <div className={tile}>{inside}</div>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
+                return (
+                  <ul className="flex flex-col gap-1.5">
+                    {dayItems.map(renderRow)}
+                  </ul>
+                )
+              })()}
             </li>
           )
         })}

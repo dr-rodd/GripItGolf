@@ -129,7 +129,7 @@ export default async function TripPage({ params, searchParams }: {
   // that has not run migration 046 has no `kind`, and no kind is a trip.
   const isEvent = isEventKind(trip.kind)
 
-  const [roundsResult, playersResult, itineraryResult, coursesResult, noticesResult] = await Promise.all([
+  const [roundsResult, playersResult, itineraryResult, endTimesResult, coursesResult, noticesResult] = await Promise.all([
     // `itinerary_item_id` is the join that makes a countdown possible: the
     // date lives here and the tee time lives on the itinerary item, and this
     // is the only column tying the two together. `start_format` rides along
@@ -156,6 +156,13 @@ export default async function TripPage({ params, searchParams }: {
       .eq('trip_id', trip.id)
       .order('day_index')
       .order('position'),
+    // End times ride in their own query, never the select above — naming a
+    // column migration 048 adds would fail the whole hub on an un-migrated
+    // database, while failing this costs only the ranges on the day plan.
+    supabase
+      .from('itinerary_items')
+      .select('id, end_time')
+      .eq('trip_id', trip.id),
     // The courses this trip could be playing, in the same breath rather than
     // after — the trip's own, and the platform's.
     //
@@ -216,6 +223,13 @@ export default async function TripPage({ params, searchParams }: {
     from_place: string | null; to_place: string | null; duration_mins: number | null
     activity_name: string | null; activity_time: string | null
   }
+  // Error swallowed deliberately — pre-migration-048 the column does not
+  // exist, the map stays empty, and every item simply has no end time.
+  const endTimes = new Map(
+    ((endTimesResult.data ?? []) as { id: string; end_time: string | null }[])
+      .map(r => [r.id, r.end_time]),
+  )
+
   const itinerary: ItineraryItem[] = ((itineraryResult.data ?? []) as unknown as ItinRow[])
     .map(r => ({
       id: r.id, dayIndex: r.day_index, position: r.position, kind: r.kind,
@@ -223,6 +237,7 @@ export default async function TripPage({ params, searchParams }: {
       stayName: r.stay_name, travelMode: r.travel_mode,
       fromPlace: r.from_place, toPlace: r.to_place, durationMins: r.duration_mins,
       activityName: r.activity_name, activityTime: r.activity_time,
+      ...(endTimes.get(r.id) ? { endTime: endTimes.get(r.id) } : {}),
     }))
 
   // Which round each golf item became, so the up-next card can put the
@@ -423,6 +438,7 @@ export default async function TripPage({ params, searchParams }: {
       tripCode={tripCode}
       roundNumbers={roundNumbers}
       startLines={startLines}
+      timescale={isEvent}
     />
   ) : days.length > 0 ? (
     <ul className="flex flex-col gap-2">

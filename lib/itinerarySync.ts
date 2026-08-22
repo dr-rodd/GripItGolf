@@ -68,6 +68,12 @@ export type ItemRow = {
   duration_mins: number | null
   activity_name: string | null
   activity_time: string | null
+  /**
+   * Optional in the type because it is optional in the write: `toItemRow`
+   * only names it when an end was actually given, so a database that has
+   * not run migration 048 still takes every row without one.
+   */
+  end_time?: string | null
 }
 
 /**
@@ -98,6 +104,11 @@ export function toItemRow(tripId: string, item: ItineraryItem): ItemRow {
     // failed save rather than a wrong tile.
     activity_name: item.kind === 'activity' ? item.activityName?.trim() || null : null,
     activity_time: item.kind === 'activity' ? item.activityTime || null : null,
+    // Named only when set — the same treatment the casual flags get on
+    // rounds — so every write still lands before migration 048 has run.
+    // Clearing needs no key: the builder edits by remove-and-re-add, and a
+    // re-added item without an end simply inserts without the column.
+    ...(item.kind === 'activity' && item.endTime ? { end_time: item.endTime } : {}),
   }
 }
 
@@ -118,6 +129,9 @@ export function fromItemRow(r: Omit<ItemRow, 'trip_id' | 'id'> & { id: string })
     stayName: r.stay_name, travelMode: r.travel_mode,
     fromPlace: r.from_place, toPlace: r.to_place, durationMins: r.duration_mins,
     activityName: r.activity_name, activityTime: r.activity_time,
+    // Absent from a select that predates migration 048 → undefined → the
+    // item simply has no end, which is also what null means.
+    ...(r.end_time ? { endTime: r.end_time } : {}),
   }
 }
 

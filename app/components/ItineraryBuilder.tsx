@@ -268,6 +268,7 @@ export default function ItineraryBuilder({
   const [mins, setMins] = useState('')
   const [activityName, setActivityName] = useState('')
   const [activityTime, setActivityTime] = useState('')
+  const [activityEnd, setActivityEnd] = useState('')
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -325,7 +326,7 @@ export default function ItineraryBuilder({
     setGolfDraft(EMPTY_GOLF_DRAFT)
     setStayName(''); setNights(1)
     setMode('car'); setFromPlace(''); setToPlace(''); setHours(''); setMins('')
-    setActivityName(''); setActivityTime('')
+    setActivityName(''); setActivityTime(''); setActivityEnd('')
     setSheet(kind)
   }
 
@@ -363,6 +364,7 @@ export default function ItineraryBuilder({
         ? {
             id, dayIndex: openDay, kind: 'activity',
             activityName, activityTime: activityTime || null,
+            endTime: activityEnd || null,
           }
         : {
             id, dayIndex: openDay, kind: 'travel', travelMode: mode,
@@ -692,14 +694,20 @@ export default function ItineraryBuilder({
             />
           </div>
 
-          {/* Its own row and full width, for the same reason the tee time is:
-              a native time control sizes itself to its own preference and
-              runs into whatever sits beside it. */}
+          {/* Each on its own row and full width, for the same reason the tee
+              time is: a native time control sizes itself to its own
+              preference and runs into whatever sits beside it. */}
           <div>
-            <label className={FIELD_LABEL} htmlFor="it-activity-time">Time</label>
+            <label className={FIELD_LABEL} htmlFor="it-activity-time">Starts</label>
             <input
               id="it-activity-time" type="time" value={activityTime}
-              onChange={e => setActivityTime(e.target.value)}
+              // Clearing the start takes the end with it — the end field
+              // hides without a start, and a value held in a hidden field
+              // would fail the save for a reason no longer on screen.
+              onChange={e => {
+                setActivityTime(e.target.value)
+                if (!e.target.value) setActivityEnd('')
+              }}
               className={`${FIELD} block min-w-0 max-w-full`}
               style={{
                 WebkitAppearance: 'none',
@@ -710,9 +718,27 @@ export default function ItineraryBuilder({
             />
           </div>
 
+          {activityTime && (
+            <div>
+              <label className={FIELD_LABEL} htmlFor="it-activity-end">Ends (optional)</label>
+              <input
+                id="it-activity-end" type="time" value={activityEnd}
+                onChange={e => setActivityEnd(e.target.value)}
+                className={`${FIELD} block min-w-0 max-w-full`}
+                style={{
+                  WebkitAppearance: 'none',
+                  appearance: 'none',
+                  minWidth: 0,
+                  maxWidth: '100%',
+                }}
+              />
+            </div>
+          )}
+
           <p className="t-cap text-ink/65">
-            Dinner, a boat trip, anything that is not golf. The time is
-            optional — leave it blank if it is not booked yet.
+            Dinner, a boat trip, anything that is not golf. Times are
+            optional — no start means not booked yet, and no end reads as
+            an hour on the day plan.
           </p>
         </Sheet>
       )}

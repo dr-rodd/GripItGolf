@@ -1069,8 +1069,13 @@ section('The itinerary reads at the size a plan deserves')
   // tap, which is the rule holding the list together.
   ok(/kind === 'activity'[\s\S]{0,200}ActivityRow/.test(itin),
     'an activity gets a row of its own')
-  const activityRow = itin.slice(itin.indexOf('function ActivityRow'),
-    itin.indexOf('export default function Itinerary'))
+  // ActivityRow's own body: from its declaration to the next function's.
+  // It used to run to the default export, but the golf tile and the event
+  // day plan live between the two now, and both legitimately carry cards
+  // and taps — the rule being pinned here is ActivityRow's alone.
+  const activityRowStart = itin.indexOf('function ActivityRow')
+  const activityRow = itin.slice(activityRowStart,
+    itin.indexOf('\nfunction ', activityRowStart + 1))
   ok(activityRow.includes('t-card text-ink'), '  …named at card weight')
   ok(!activityRow.includes('<Link') && !/border/.test(activityRow),
     '  …with no card and no tap — those stay golf\'s alone')

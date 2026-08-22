@@ -20,6 +20,7 @@ import {
   addStay, nightsAvailable,
   MAX_TEE_TIMES, MAX_NIGHTS, MAX_ACTIVITY_NAME,
   GOLF_SLOT_MINS, TEE_INTERVAL_MINS, golfSpanMins, golfUntil,
+  DEFAULT_EVENT_MINS, dayTimeline,
 } from '../lib/itinerary'
 import { isTempId, diffItems, toItemRow, touchesLockedGolf } from '../lib/itinerarySync'
 import fs from 'fs'
@@ -279,6 +280,110 @@ section('Golf occupies five hours from the last tee time — the one copy')
   const g: ItineraryItem = { id: 'g', dayIndex: 0, position: 0, kind: 'golf', teeTime: '13:00', teeCount: 1 }
   eq(itemState(g, '2026-07-30', at('2026-07-30T17:59')), 'now', 'still out at 17:59')
   eq(itemState(g, '2026-07-30', at('2026-07-30T18:01')), 'past', 'done at 18:01')
+}
+
+// ─── An activity's end time ────────────────────────────────────
+
+section('An event has a start and an end, and the end may be left unsaid')
+{
+  const act = (patch: Partial<ItineraryItem>): ItineraryItem =>
+    ({ id: 'a', dayIndex: 0, position: 0, kind: 'activity', activityName: 'Dinner', ...patch })
+
+  eq(describeItem(act({ activityTime: '19:00', endTime: '21:00' })).detail,
+    '7:00 pm – 9:00 pm', 'a start and an end read as a range')
+  eq(describeItem(act({ activityTime: '19:00' })).detail, '7:00 pm',
+    'no end, no invented range — the hour default is the timescale\'s business')
+
+  eq(itemError(act({ activityTime: '19:00', endTime: '21:00' })), null, 'a real range passes')
+  ok(itemError(act({ endTime: '21:00' })) !== null, 'an end without a start is refused')
+  ok(itemError(act({ activityTime: '19:00', endTime: '19:00' })) !== null,
+    'so is an end at the start')
+  ok(itemError(act({ activityTime: '19:00', endTime: '18:00' })) !== null,
+    'and one before it — a plan crossing midnight leaves the end blank')
+
+  // The write names the column only when an end was given, so every save
+  // still lands before migration 048 has run — the casual flags' treatment.
+  const withEnd = toItemRow('t', act({ activityTime: '19:00', endTime: '21:00' }))
+  eq((withEnd as { end_time?: string }).end_time, '21:00', 'an end writes its column')
+  ok(!('end_time' in toItemRow('t', act({ activityTime: '19:00' }))),
+    'no end, no column named — pre-migration saves survive')
+  ok(!('end_time' in toItemRow('t', {
+    id: 'g', dayIndex: 0, position: 0, kind: 'golf', courseId: 'c', teeTime: '09:00', teeCount: 1,
+  })), 'golf never writes one — its end is the five-hour rule, derived')
+}
+
+// ─── The day against the clock ─────────────────────────────────
+
+section('The day plan starts at the first entered time and runs to the last end')
+{
+  const golf = (teeTime: string, teeCount = 1): ItineraryItem =>
+    ({ id: `g${teeTime}`, dayIndex: 0, position: 0, kind: 'golf', teeTime, teeCount })
+  const act = (id: string, start: string | null, end: string | null = null): ItineraryItem =>
+    ({ id, dayIndex: 0, position: 1, kind: 'activity', activityName: id, activityTime: start, endTime: end })
+  const bed: ItineraryItem = { id: 'b', dayIndex: 0, position: 2, kind: 'stay', stayName: 'Hotel' }
+
+  eq(dayTimeline([bed]), null, 'a day with no clock has no timescale')
+  eq(dayTimeline([]), null, 'nor does an empty one')
+
+  const plan = dayTimeline([golf('09:30', 6), act('Dinner', '19:00', '21:30'), act('Quiz', null), bed])!
+  eq(plan.start, 9 * 60 + 30, 'the window opens at the first entered time')
+  eq(plan.end, 21 * 60 + 30, 'and runs to the last thing\'s end')
+  eq(plan.untimed.map(i => i.id), ['Quiz', 'b'],
+    'what has no clock is listed, never invented onto the scale')
+  eq(plan.hours[0], 10, 'the hour rules start at the first full hour inside the window')
+  eq(plan.hours.at(-1), 21, 'and end at the last')
+
+  const g = plan.entries.find(e => e.item.kind === 'golf')!
+  eq(g.end - g.start, golfSpanMins(6), 'golf occupies its five-hour block')
+
+  const dinner = plan.entries.find(e => e.item.id === 'Dinner')!
+  eq(dinner.end - dinner.start, 150, 'an entered end is honoured')
+
+  const short = dayTimeline([act('Tea', '15:00')])!
+  eq(short.entries[0].end - short.entries[0].start, DEFAULT_EVENT_MINS,
+    'no end defaults to the hour')
+
+  // Overlaps are drawn, not resolved: dinner inside the golf window steps
+  // a lane right and sits on top — the plan the organiser actually made.
+  const busy = dayTimeline([golf('13:00'), act('Soup', '14:00', '15:00'), act('Late', '20:00')])!
+  eq(busy.entries.find(e => e.item.id === 'Soup')!.lane, 1,
+    'an event inside the golf window takes the next lane')
+  eq(busy.entries.find(e => e.item.id === 'Late')!.lane, 0,
+    'one after it comes back to the first')
+
+  const owl = dayTimeline([act('Party', '23:30')])!
+  eq(owl.entries[0].end, 24 * 60, 'the default hour never runs past midnight')
+}
+
+// ─── Migration 048 agrees with the model ───────────────────────
+
+section('Migration 048 and the end time describe the same table')
+{
+  const sql = fs.readFileSync(
+    'supabase/migrations/20260101000048_itinerary_end_time.sql', 'utf-8')
+
+  ok(/ADD COLUMN IF NOT EXISTS end_time time/.test(sql), 'the column is added, idempotently')
+  ok(/DROP CONSTRAINT IF EXISTS ck_itinerary_shape/.test(sql),
+    'the shape check is replaced by its own name — 027 made that name a promise')
+
+  const shape = sql.slice(sql.indexOf('ADD CONSTRAINT ck_itinerary_shape'))
+  for (const kind of ['golf', 'stay', 'travel']) {
+    const branch = shape.slice(shape.indexOf(`WHEN '${kind}'`))
+      .split('WHEN ').slice(0, 2).join('')
+    ok(/end_time IS NULL/.test(branch), `${kind} cannot carry an end time`)
+  }
+  ok(/WHEN 'activity'[\s\S]*end_time IS NULL OR activity_time IS NOT NULL/.test(shape),
+    'an activity\'s end only ever stands beside a start')
+  ok(/WHEN 'activity'[\s\S]*activity_name IS NOT NULL/.test(shape),
+    'and 027\'s name rule survives the rewrite')
+
+  // The hub reads the column in its own query, so an un-migrated database
+  // costs the ranges and nothing else — the kind read's fail-soft rule.
+  const hub = fs.readFileSync('app/trip/[tripCode]/page.tsx', 'utf-8')
+  const mainSelect = hub.match(/select\('id, day_index[^)]*\)/)?.[0] ?? ''
+  ok(!mainSelect.includes('end_time'),
+    'the hub\'s main itinerary select never names end_time')
+  ok(hub.includes("select('id, end_time')"), 'it rides in its own query')
 }
 
 section('Progress across the trip')
