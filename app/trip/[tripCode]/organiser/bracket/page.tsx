@@ -74,6 +74,16 @@ export default async function BracketSetupPage({ params }: {
   const initialSetup = parseBracketSetup(setupRaw)
   const leagueSetup = parseLeagueSetup(setupRaw)
 
+  // A continuous knockout writes its shape at creation, before the bracket
+  // form has ever been filled — a partial the parser rightly refuses. The
+  // shape is read off the raw object here so the form can carry it through
+  // its save; without this, the first save would quietly turn a summer
+  // knockout back into a standalone one.
+  const initialSchedule =
+    (setupRaw as { schedule?: unknown } | null)?.schedule === 'continuous'
+      ? ('continuous' as const)
+      : null
+
   let content: React.ReactNode
 
   if (leagueSetup) {
@@ -117,6 +127,7 @@ export default async function BracketSetupPage({ params }: {
         tripId={trip.id}
         tripCode={tripCode}
         initialSetup={initialSetup}
+        initialSchedule={initialSchedule}
       />
     )
   }

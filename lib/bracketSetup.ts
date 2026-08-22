@@ -187,6 +187,15 @@ export function deadlinesIssue(
 
 export type BracketSetup = {
   format: TournamentFormat
+  /**
+   * A continuous knockout — an ongoing event occupying a period (the trip's
+   * start and finish dates), its rounds paced by the deadlines rather than
+   * fixed days of golf. Absent means standalone: the event happens at a
+   * single point in time, with its golf on the schedule. Written at
+   * creation by the continuous knockout's own door and carried through
+   * every save of this form, the keep-the-no-op-off rule as ever.
+   */
+  schedule?: 'continuous'
   mode: BracketMode
   size: BracketSize
   entry: PlayerEntry
@@ -267,6 +276,7 @@ export function parseBracketSetup(raw: unknown): BracketSetup | null {
 
   return {
     format: 'match_play',
+    ...(r.schedule === 'continuous' ? { schedule: 'continuous' as const } : {}),
     mode, size, entry,
     // The key stays off the object entirely when there is no qualifier, the
     // way lib/leaderboards.ts keeps every no-op answer off — a setup saved
@@ -286,6 +296,7 @@ export function parseBracketSetup(raw: unknown): BracketSetup | null {
 export function describeSetup(setup: BracketSetup): string {
   const parts = [
     'Match play',
+    ...(setup.schedule === 'continuous' ? ['continuous'] : []),
     setup.mode,
     `up to ${setup.size}`,
   ]

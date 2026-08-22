@@ -165,6 +165,38 @@ section('Storage round-trips whole or not at all')
     deadlines: [...setup.deadlines, '2026-10-06'],
   })
   eq(trimmed?.deadlines.length, 5, 'a spare deadline beyond the rounds is trimmed')
+
+  // The shape in time. A continuous knockout is an ongoing event over a
+  // period; standalone is the absent default, kept off the object.
+  const continuous = { ...setup, schedule: 'continuous' }
+  eq(parseBracketSetup(JSON.parse(JSON.stringify(continuous))),
+    { format: 'match_play', schedule: 'continuous', ...(({ format, ...rest }) => rest)(setup) },
+    'a continuous knockout reads back whole, shape included')
+  const plainShape = parseBracketSetup({ ...setup, schedule: 'sometime' })
+  ok(plainShape !== null && !('schedule' in plainShape!),
+    'an unknown shape is dropped, not guessed at')
+}
+
+section('The shape survives the bracket form')
+{
+  ok(describeSetup({
+    format: 'match_play', schedule: 'continuous', mode: 'relaxed', size: 16,
+    entry: 'self_join',
+    deadlines: ['2026-09-01', '2026-09-08', '2026-09-15', '2026-09-22'],
+    finalized: false,
+  }).includes('continuous'), 'the organiser card says continuous')
+
+  // The continuous door seeds {format, schedule} before the bracket form
+  // has ever been filled — a partial the parser refuses. The page recovers
+  // the shape off the raw object and the form carries it into its save;
+  // without both, the first save would quietly make the event standalone.
+  const page = read('app/trip/[tripCode]/organiser/bracket/page.tsx')
+  ok(page.includes("?.schedule === 'continuous'"),
+    'the page reads the shape off the raw column, parse or no parse')
+  const form = read('app/trip/[tripCode]/organiser/bracket/BracketSetupForm.tsx')
+  ok(form.includes('initialSchedule'), 'and hands it to the form')
+  ok(form.includes('initialSetup?.schedule ?? initialSchedule'),
+    'whose save carries it through, saved setup first')
 }
 
 // ─── Naming ────────────────────────────────────────────────────

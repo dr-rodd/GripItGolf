@@ -12,8 +12,10 @@
 
 import fs from 'fs'
 import {
-  DAY_BOARDS, type LeagueSetup,
+  DAY_BOARDS, LEAGUE_SCHEDULES, type LeagueSetup,
+  MAX_LEAGUE_DAYS, WEEKDAY_NAMES,
   leagueDaysIssue, starterBoards, parseLeagueSetup, describeLeagueSetup,
+  weeklyDates,
 } from '../lib/leagueSetup'
 import { parseBracketSetup } from '../lib/bracketSetup'
 import { parseLeaderboards } from '../lib/leaderboards'
@@ -45,6 +47,42 @@ section('A league day is a round, so the day ceiling is the round ceiling')
   ok(leagueDaysIssue(2.5) !== null, 'half days do not exist')
   ok(leagueDaysIssue(MAX_ROUNDS + 1)!.includes(String(MAX_ROUNDS)),
     'and the refusal names the ceiling — the same number, not a second copy')
+}
+
+// ─── The three shapes in time ──────────────────────────────────
+
+section('Standalone, continuous, series — and each knows its ceiling')
+{
+  eq(LEAGUE_SCHEDULES.map(s => s.key), ['standalone', 'continuous', 'series'],
+    'the three shapes, standalone first')
+
+  eq(leagueDaysIssue(6, 'standalone'), null, 'standalone keeps the trip ceiling')
+  ok(leagueDaysIssue(7, 'standalone') !== null, '  …and refuses past it')
+  eq(leagueDaysIssue(14, 'continuous'), null,
+    'a summer of Wednesdays fits a continuous league')
+  eq(leagueDaysIssue(MAX_LEAGUE_DAYS, 'series'), null, 'a series fits the same ceiling')
+  ok(leagueDaysIssue(MAX_LEAGUE_DAYS + 1, 'continuous') !== null,
+    'which is still a ceiling')
+}
+
+section('Every Wednesday for the summer, as dates')
+{
+  // June–August 2027: the first Wednesday is the 2nd, the last September's
+  // eve — 2026-06 arithmetic is easy to check by hand off a calendar.
+  const dates = weeklyDates('2027-06-01', '2027-08-31', 3)
+  eq(dates[0], '2027-06-02', 'starts at the first Wednesday inside the period')
+  eq(dates.at(-1), '2027-08-25', 'ends at the last one')
+  eq(dates.length, 13, 'a summer holds thirteen of them')
+  ok(dates.every(d => new Date(`${d}T00:00:00Z`).getUTCDay() === 3),
+    'and every one is a Wednesday')
+
+  eq(weeklyDates('2027-06-02', '2027-06-02', 3), ['2027-06-02'],
+    'a one-day period on the right day is one date')
+  eq(weeklyDates('2027-06-03', '2027-06-08', 3), [],
+    'a period skipping the day entirely is empty, not an error')
+  eq(weeklyDates('2027-08-31', '2027-06-01', 3), [], 'backwards dates are empty')
+  eq(weeklyDates('2027-06-01', '2027-08-31', 9), [], 'so is a day that does not exist')
+  eq(WEEKDAY_NAMES[3], 'Wednesday', 'and 3 is Wednesday, Sunday-first — the JS convention')
 }
 
 // ─── The starter board ─────────────────────────────────────────
@@ -112,6 +150,50 @@ section('Storage round-trips whole or not at all')
   })
   ok(badBoards !== null && !('dayBoards' in badBoards!),
     'an unknown day-boards answer is dropped, not guessed at')
+
+  // The shape in time. Standalone is the absent default — every league
+  // stored before the question existed was one.
+  const continuous: LeagueSetup = {
+    format: 'league', schedule: 'continuous', repeatWeekday: 3, entry: 'self_join',
+  }
+  eq(parseLeagueSetup(JSON.parse(JSON.stringify(continuous))), continuous,
+    'a continuous weekly league reads back byte-for-byte')
+  const series = parseLeagueSetup({ format: 'league', schedule: 'series', entry: 'organiser' })
+  eq(series?.schedule, 'series', 'a series knows it is one')
+  const plain = parseLeagueSetup({ format: 'league', entry: 'organiser' })
+  ok(plain !== null && !('schedule' in plain!),
+    'standalone is the absent default, kept off the object')
+  const badShape = parseLeagueSetup({ format: 'league', schedule: 'quantum', entry: 'organiser' })
+  ok(badShape !== null && !('schedule' in badShape!),
+    'an unknown shape is dropped, not guessed at')
+
+  // The repeat is continuous's alone, and a real weekday or nothing.
+  const strayRepeat = parseLeagueSetup({
+    format: 'league', schedule: 'series', repeatWeekday: 3, entry: 'organiser',
+  })
+  ok(strayRepeat !== null && !('repeatWeekday' in strayRepeat!),
+    'a repeat on a series is dropped — there is no period to repeat inside')
+  const badRepeat = parseLeagueSetup({
+    format: 'league', schedule: 'continuous', repeatWeekday: 9, entry: 'organiser',
+  })
+  ok(badRepeat !== null && !('repeatWeekday' in badRepeat!),
+    'a day that does not exist is dropped')
+}
+
+section('The organiser card says the shape')
+{
+  eq(describeLeagueSetup(
+    { format: 'league', schedule: 'continuous', repeatWeekday: 3, entry: 'self_join' }, 13,
+  ).includes('every Wednesday'), true, 'a weekly league says its day')
+  ok(describeLeagueSetup(
+    { format: 'league', schedule: 'continuous', entry: 'organiser' }, 5,
+  ).includes('continuous'), 'a hand-picked continuous league says continuous')
+  ok(describeLeagueSetup(
+    { format: 'league', schedule: 'series', entry: 'organiser' }, 4,
+  ).includes('series'), 'a series says series')
+  ok(!describeLeagueSetup(
+    { format: 'league', entry: 'organiser' }, 3,
+  ).includes('standalone'), 'standalone goes unsaid — it is the plain case')
 }
 
 // ─── The two formats cannot misread each other ─────────────────
@@ -150,16 +232,39 @@ section('The organiser card says the league in one line')
 
 // ─── Wiring ────────────────────────────────────────────────────
 
-section('The tournament door asks the format first')
+section('The tournament door asks the shape, then the format')
 {
   const page = read('app/dashboard/create/page.tsx')
   ok(page.includes('CreateFlow'), 'the create route renders the flow switch')
 
   const flow = read('app/dashboard/create/CreateFlow.tsx')
-  ok(flow.includes('CreateLeagueForm') && flow.includes('CreateTripForm'),
-    'which can reach both forms')
+  ok(flow.includes('CreateLeagueForm') && flow.includes('CreateTripForm')
+    && flow.includes('CreateKnockoutForm'),
+    'which can reach all three forms')
   ok(flow.includes("get('type') === 'tournament'"),
-    'and only asks the question through the tournament door')
+    'and only asks the questions through the tournament door')
+  for (const shape of ['Standalone', 'Continuous', 'Series']) {
+    ok(flow.includes(`>${'\n'}            ${shape}`) || flow.includes(shape),
+      `the shape question offers ${shape}`)
+  }
+  ok(flow.includes('<CreateLeagueForm schedule="series" />'),
+    'a series is a league by nature — the format question is skipped')
+  ok(flow.includes("schedule === 'continuous' && format === 'match_play'"),
+    'a continuous knockout gets its own lean door')
+}
+
+section('The continuous knockout door is lean on purpose')
+{
+  const src = read('app/dashboard/create/CreateKnockoutForm.tsx')
+  ok(src.includes("kind: 'tournament'"), 'a knockout is an event')
+  ok(src.includes("{ format: 'match_play', schedule: 'continuous' }"),
+    'creation seeds the format and shape for the bracket form to finish')
+  ok(!src.includes("from('itinerary_items')") && !src.includes("from('rounds')"),
+    'no itinerary and no rounds — matches happen when players make them happen')
+  ok(src.includes('hashPasscode'), 'the organiser PIN is hashed on the device')
+  ok(src.includes('team_id: null'), 'everyone starts unassigned, as everywhere')
+  ok(!src.includes('service_role') && !src.includes('SERVICE_ROLE'),
+    'no service key anywhere near the browser')
 }
 
 section('The league wizard reuses the proven pieces rather than restating them')
@@ -185,14 +290,20 @@ section('The league wizard reuses the proven pieces rather than restating them')
     'no service key anywhere near the browser')
 
   // A standalone day writes its one date to both ends, so everything
-  // downstream sees a normal one-day event — the tournament wizard's rule.
-  ok(src.includes('multiDay ? endDate : startDate'),
-    'a single day is one date written to both ends')
+  // downstream sees a normal one-day event; a series stores no dates at
+  // all — its days are numbered, not dated.
+  ok(src.includes("schedule === 'standalone' && !multiDay ? startDate"),
+    'a standalone single day is one date written to both ends')
+  ok(src.includes("schedule === 'series' ? ''"),
+    'a series carries no trip dates')
 
   // Same-venue is a form convenience, never a stored fact: with the toggle
-  // on, day one's venue is every day's at write time.
-  ok(src.includes('sameVenue ? venues[0] : venues[i]'),
-    'the same-venue toggle resolves to one venue per day at write time')
+  // on, the first pick is every slot's at write time. A continuous league
+  // keys venues by date, so a date added or removed cannot shuffle courses.
+  ok(src.includes('sameVenue\n      ? venues[0]') || src.includes('sameVenue ? venues[0]'),
+    'the same-venue toggle resolves to one venue per slot at write time')
+  ok(src.includes('dateVenues[slot.date]'),
+    'a continuous league keys its venues by date, not by index')
 }
 
 section('A league event\'s organiser area describes its format, never re-forms it')

@@ -120,10 +120,18 @@ function SetupSummary({ setup }: { setup: BracketSetup }) {
   )
 }
 
-export default function BracketSetupForm({ tripId, tripCode, initialSetup }: {
+export default function BracketSetupForm({
+  tripId, tripCode, initialSetup, initialSchedule = null,
+}: {
   tripId: string
   tripCode: string
   initialSetup: BracketSetup | null
+  /**
+   * The shape written at the event's creation, recovered from the raw
+   * column when no complete setup exists yet — a continuous knockout must
+   * stay continuous through this form's first save.
+   */
+  initialSchedule?: 'continuous' | null
 }) {
   // ── The seven answers, prefilled from a saved-but-open setup ─────────────
   const [format, setFormat] = useState<TournamentFormat | null>(initialSetup?.format ?? null)
@@ -213,8 +221,12 @@ export default function BracketSetupForm({ tripId, tripCode, initialSetup }: {
     setSaving(true)
     setError(null)
 
+    // The shape rides along whole-object like everything else: from the
+    // saved setup when one exists, else from what creation wrote.
+    const schedule = initialSetup?.schedule ?? initialSchedule ?? undefined
     const setup: BracketSetup = {
       format: 'match_play',
+      ...(schedule === 'continuous' ? { schedule } : {}),
       mode, size, entry,
       deadlines: deadlines.slice(0, roundsFor(size)),
       finalized: finalizeNow,

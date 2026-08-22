@@ -434,7 +434,13 @@ export default async function TripPage({ params, searchParams }: {
       items={itinerary}
       startDate={trip.start_date ?? null}
       courseNames={courseMap}
-      days={dayCount(trip.start_date ?? null, trip.end_date ?? null)}
+      // The items decide too, not just the dates: a series event carries no
+      // dates at all — dayCount(null, null) is 1 — but its numbered days
+      // are real and every one must render.
+      days={Math.max(
+        dayCount(trip.start_date ?? null, trip.end_date ?? null),
+        itinerary.reduce((max, i) => Math.max(max, i.dayIndex + 1), 0),
+      )}
       tripCode={tripCode}
       roundNumbers={roundNumbers}
       startLines={startLines}
