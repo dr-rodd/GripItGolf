@@ -240,6 +240,35 @@ export function describeDuration(mins: number | null | undefined): string {
   return `${h} hr ${m}`
 }
 
+// ─── How long golf holds the day ───────────────────────────────
+//
+// Golf occupies five hours from the last tee time — the group off last is
+// what decides when the course gives the day back, and a group goes off
+// every ten minutes. One copy: the hub's dimming (`itemState`) and the
+// single-day builder's "until" line both read it, so the two can never
+// disagree about when a round is over.
+
+export const TEE_INTERVAL_MINS = 10
+export const GOLF_SLOT_MINS = 300
+
+/** Minutes golf occupies from the *first* tee: the tee spread plus the slot. */
+export function golfSpanMins(teeCount: number | null | undefined): number {
+  return Math.max(0, (teeCount ?? 1) - 1) * TEE_INTERVAL_MINS + GOLF_SLOT_MINS
+}
+
+/**
+ * "until 6:00 pm" — when golf hands the day back, or null with no tee time.
+ * Other items' times may sit inside this window freely: dinner booked while
+ * the last groups are still out is a normal day, not a clash to refuse.
+ */
+export function golfUntil(item: Pick<ItineraryItem, 'teeTime' | 'teeCount'>): string | null {
+  const start = minutesInto(item.teeTime)
+  if (start === null) return null
+  const end = (start + golfSpanMins(item.teeCount)) % (24 * 60)
+  const clock = `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`
+  return `until ${describeTime(clock)}`
+}
+
 /** "1:00 pm" from "13:00". Blank if there is no time. */
 export function describeTime(time: string | null | undefined): string {
   if (!time) return ''
@@ -333,11 +362,6 @@ export function itemState(
   if (day > today) return 'future'
   if (day < today) return 'past'
 
-  const minutesInto = (time: string): number | null => {
-    const [hh, mm] = time.split(':').map(Number)
-    return Number.isFinite(hh) ? hh * 60 + (mm || 0) : null
-  }
-
   // An activity that named a time is not under way before it. Dinner at
   // seven should not read as happening at nine in the morning, which is what
   // "today, therefore now" gave. It stays 'now' from its time to the end of
@@ -353,16 +377,20 @@ export function itemState(
   // Today. Without a time of its own the whole day counts as under way.
   if (item.kind !== 'golf' || !item.teeTime) return 'now'
 
-  const [h, m] = item.teeTime.split(':').map(Number)
-  if (!Number.isFinite(h)) return 'now'
+  const start = minutesInto(item.teeTime)
+  if (start === null) return 'now'
 
   const minutesNow = now.getHours() * 60 + now.getMinutes()
-  const start = h * 60 + (m || 0)
-  // A round is roughly four and a half hours, plus a group every ten minutes.
-  const span = 270 + Math.max(0, (item.teeCount ?? 1) - 1) * 10
 
   if (minutesNow < start) return 'future'
-  return minutesNow > start + span ? 'past' : 'now'
+  return minutesNow > start + golfSpanMins(item.teeCount) ? 'past' : 'now'
+}
+
+/** "13:05" as minutes past midnight, or null for anything that is not a clock. */
+function minutesInto(time: string | null | undefined): number | null {
+  if (!time) return null
+  const [hh, mm] = time.split(':').map(Number)
+  return Number.isFinite(hh) ? hh * 60 + (mm || 0) : null
 }
 
 /** The whole trip's progress, for the summary heading. */

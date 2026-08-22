@@ -19,6 +19,7 @@ import {
   describeItem, itemState, tripProgress, itemError,
   addStay, nightsAvailable,
   MAX_TEE_TIMES, MAX_NIGHTS, MAX_ACTIVITY_NAME,
+  GOLF_SLOT_MINS, TEE_INTERVAL_MINS, golfSpanMins, golfUntil,
 } from '../lib/itinerary'
 import { isTempId, diffItems, toItemRow, touchesLockedGolf } from '../lib/itinerarySync'
 import fs from 'fs'
@@ -240,15 +241,44 @@ section('A round is judged by its tee time')
   eq(itemState(round('13:00'), '2026-07-30', at('2026-07-30T19:00')), 'past',
     'and once there has been time to finish')
 
-  // Four and a half hours, plus ten minutes for every group after the first
-  eq(itemState(round('13:00', 1), '2026-07-30', at('2026-07-30T17:45')), 'past',
-    'one group is done by quarter to six')
-  eq(itemState(round('13:00', 6), '2026-07-30', at('2026-07-30T17:45')), 'now',
-    'but six groups are still out there')
+  // Golf occupies five hours from the last tee time, and a group goes off
+  // every ten minutes — so one group off at 13:00 holds the day to 18:00,
+  // and six groups hold it to 18:50.
+  eq(itemState(round('13:00', 1), '2026-07-30', at('2026-07-30T17:45')), 'now',
+    'one group still has the course at quarter to six')
+  eq(itemState(round('13:00', 1), '2026-07-30', at('2026-07-30T18:15')), 'past',
+    'and has given it back by quarter past')
+  eq(itemState(round('13:00', 6), '2026-07-30', at('2026-07-30T18:45')), 'now',
+    'six groups are still out at quarter to seven')
+  eq(itemState(round('13:00', 6), '2026-07-30', at('2026-07-30T18:55')), 'past',
+    'and done five past the last window')
 
   // The day still decides, whatever the clock says
   eq(itemState(round('13:00'), '2026-07-29', at('2026-07-30T09:00')), 'past',
     'yesterday morning is past even at a tee time that has not come round today')
+}
+
+section('Golf occupies five hours from the last tee time — the one copy')
+{
+  eq(GOLF_SLOT_MINS, 300, 'five hours on the course')
+  eq(TEE_INTERVAL_MINS, 10, 'a group every ten minutes')
+  eq(golfSpanMins(1), 300, 'one group holds the day for the slot alone')
+  eq(golfSpanMins(6), 350, 'six groups add fifty minutes of tee spread')
+  eq(golfSpanMins(null), 300, 'no count reads as one group, like everywhere else')
+
+  // The line the single-day builder prints on the golf tile, so an activity
+  // timed inside the window reads as deliberate rather than a clash.
+  eq(golfUntil({ teeTime: '13:00', teeCount: 1 }), 'until 6:00 pm',
+    'one group off at one gives the day back at six')
+  eq(golfUntil({ teeTime: '09:30', teeCount: 6 }), 'until 3:20 pm',
+    'six groups from half nine hold it to twenty past three')
+  eq(golfUntil({ teeTime: null, teeCount: 3 }), null,
+    'no tee time, no window — never an invented clock')
+  // itemState reads the same span, so the tile and the hub's dimming can
+  // never disagree about when a round is over.
+  const g: ItineraryItem = { id: 'g', dayIndex: 0, position: 0, kind: 'golf', teeTime: '13:00', teeCount: 1 }
+  eq(itemState(g, '2026-07-30', at('2026-07-30T17:59')), 'now', 'still out at 17:59')
+  eq(itemState(g, '2026-07-30', at('2026-07-30T18:01')), 'past', 'done at 18:01')
 }
 
 section('Progress across the trip')

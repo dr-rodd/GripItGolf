@@ -14,7 +14,7 @@ import {
   type ItineraryItem, type ItemKind, type TravelMode,
   TRAVEL_MODES, MAX_ACTIVITY_NAME,
   addItem, addStay, removeItem, moveItem, itemsForDay, dayCount, dateForDay,
-  describeDay, describeItem, itemError, nightsAvailable,
+  describeDay, describeItem, itemError, nightsAvailable, golfUntil,
 } from '@/lib/itinerary'
 import {
   IconFlag, IconHome, IconArrowRight, IconFork, IconPlus, IconX,
@@ -61,15 +61,19 @@ const KINDS: ItemKind[] = ['golf', 'stay', 'travel', 'activity']
 // ─── A tile ────────────────────────────────────────────────────
 
 function Tile({
-  item, courseName, onRemove, dragging = false,
+  item, courseName, onRemove, dragging = false, extraDetail,
 }: {
   item: ItineraryItem
   courseName?: string | null
   onRemove?: () => void
   dragging?: boolean
+  /** Appended to the detail line — the single-day golf window uses it. */
+  extraDetail?: string | null
 }) {
   const Icon = KIND_ICON[item.kind]
-  const { title, detail } = describeItem(item, courseName)
+  const lines = describeItem(item, courseName)
+  const { title } = lines
+  const detail = [lines.detail, extraDetail ?? ''].filter(Boolean).join(' · ')
 
   return (
     <div
@@ -110,9 +114,10 @@ function Tile({
  * rule in globals.css something to switch off.
  */
 function SortableTile({
-  item, courseName, onRemove, locked = false,
+  item, courseName, onRemove, locked = false, extraDetail,
 }: {
-  item: ItineraryItem; courseName?: string | null; onRemove: () => void; locked?: boolean
+  item: ItineraryItem; courseName?: string | null; onRemove: () => void
+  locked?: boolean; extraDetail?: string | null
 }) {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
@@ -132,7 +137,12 @@ function SortableTile({
         opacity: isDragging ? 0.35 : 1,
       }}
     >
-      <Tile item={item} courseName={courseName} onRemove={locked ? undefined : onRemove} />
+      <Tile
+        item={item}
+        courseName={courseName}
+        onRemove={locked ? undefined : onRemove}
+        extraDetail={extraDetail}
+      />
     </div>
   )
 }
@@ -154,6 +164,45 @@ const DROP_ANIMATION: DropAnimation = {
 
 // The add sheets and the golf form they share with the scoring screen live
 // in ./ItineraryForms — one form, two openings, or the two drift.
+
+/**
+ * The single-day sheets' first question: what kind of addition this is.
+ *
+ * One Add activity button stands where multi-day has three, so the choice
+ * between dinner, a journey and a bed moves inside the sheet — switching
+ * chips swaps the fields below without closing it. Golf is not here: it has
+ * its own button up in the day, because it is the event and these are the
+ * trimmings.
+ */
+function KindSwitch({ current, onSwitch }: {
+  current: ItemKind
+  onSwitch: (kind: ItemKind) => void
+}) {
+  const kinds: ItemKind[] = ['activity', 'travel', 'stay']
+  return (
+    <div>
+      <label className={FIELD_LABEL}>What are you adding?</label>
+      <div className="grid grid-cols-3 gap-2">
+        {kinds.map(k => {
+          const Icon = KIND_ICON[k]
+          return (
+            <button
+              key={k} type="button" onClick={() => onSwitch(k)}
+              aria-pressed={current === k}
+              className={`flex items-center justify-center gap-1.5 min-h-[48px] rounded-xl border t-label transition-colors duration-150 ${
+                current === k
+                  ? 'border-accent bg-accent/[0.10] text-ink'
+                  : 'border-bark/25 bg-surface text-ink/80'
+              }`}
+            >
+              <Icon size={15} />{KIND_LABEL[k]}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 // ─── Main ──────────────────────────────────────────────────────
 
@@ -193,6 +242,15 @@ export default function ItineraryBuilder({
   trackStats?: boolean
 }) {
   const days = dayCount(startDate, endDate)
+  /**
+   * A single-day event wears a different face on the same model. There is
+   * no "Day 1" — there is only the day — so the day strip goes, golf gets
+   * the big Set Venue button (it is the main event, not one of four equal
+   * add buttons), and everything that is not golf shares one Add activity
+   * button whose sheet asks what kind it is. The items, the drag ordering
+   * and the write path are exactly the multi-day ones.
+   */
+  const singleDay = days === 1
   const locked = useMemo(() => new Set(lockedGolfIds ?? []), [lockedGolfIds])
   const [openDay, setOpenDay] = useState(0)
   const [sheet, setSheet] = useState<ItemKind | null>(null)
@@ -271,6 +329,17 @@ export default function ItineraryBuilder({
     setSheet(kind)
   }
 
+  /**
+   * Flip an open single-day sheet to another kind without closing it. The
+   * drafts were all reset when the sheet opened, so what was typed under
+   * one kind never leaks into another's saved item — `commit` only reads
+   * the fields of whichever kind is showing.
+   */
+  function switchKind(kind: ItemKind) {
+    setError(null)
+    setSheet(kind)
+  }
+
   function commit() {
     if (!sheet) return
     const id = newId()
@@ -342,7 +411,9 @@ export default function ItineraryBuilder({
         )}
 
         {/* Day picker. Horizontal, because a week does not fit vertically
-            above the content it is filtering. */}
+            above the content it is filtering. One day needs no picker —
+            a strip with a single chip saying "Day 1" is furniture. */}
+        {days > 1 && (
         <div className="-mx-4 px-4 overflow-x-auto mb-5">
           <div className="flex gap-2 w-max">
             {Array.from({ length: days }, (_, i) => {
@@ -368,15 +439,29 @@ export default function ItineraryBuilder({
             })}
           </div>
         </div>
+        )}
 
-        <p className="t-h2 text-ink mb-1">{describeDay(dateForDay(startDate, openDay), openDay)}</p>
+        {/* On a single day with no date the fallback would read "Day 1",
+            which is exactly the redundancy dropping the strip removed. */}
+        <p className="t-h2 text-ink mb-1">
+          {singleDay && dateForDay(startDate, openDay) === null
+            ? 'The day'
+            : describeDay(dateForDay(startDate, openDay), openDay)}
+        </p>
         <p className="t-cap text-ink/65 mb-4">
-          {dayItems.length === 0
-            ? 'Nothing yet — add golf, a stay, a journey or an activity below.'
-            : 'Press and hold a tile to move it.'}
+          {singleDay
+            ? (dayItems.length === 0
+              ? 'Golf is the main event — set the venue, then build the day around it.'
+              : 'Press and hold a tile to move it. Times can overlap the golf — dinner booked while the last groups are out is a normal day.')
+            : (dayItems.length === 0
+              ? 'Nothing yet — add golf, a stay, a journey or an activity below.'
+              : 'Press and hold a tile to move it.')}
         </p>
 
-        {/* The day's running order */}
+        {/* The day's running order. On a single day the golf tile also says
+            when the course gives the day back — five hours from the last
+            tee time — so an activity timed inside that window reads as
+            deliberate, not as a clash nobody noticed. */}
         <SortableContext items={dayItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
           <div>
             {dayItems.map(item => (
@@ -386,12 +471,42 @@ export default function ItineraryBuilder({
                 courseName={courseName(item.courseId)}
                 onRemove={() => onChange(removeItem(items, item.id))}
                 locked={locked.has(item.id) && item.kind === 'golf'}
+                extraDetail={singleDay && item.kind === 'golf' ? golfUntil(item) : null}
               />
             ))}
           </div>
         </SortableContext>
 
-        {dayItems.length === 0 && (
+        {/* Golf is the main event of a single day, so its button is not one
+            of four equal squares at the bottom — it is the big move, in the
+            space the day occupies, and it changes its manner once made:
+            Set Venue while there is none, a quiet way to a second round
+            (a 36-hole day is a real day) once there is. */}
+        {singleDay && (
+          dayItems.some(i => i.kind === 'golf') ? (
+            <button
+              type="button"
+              onClick={() => openSheet('golf')}
+              className="w-full py-4 border border-dashed border-bark/25 rounded-xl text-ink/65 t-label hover:border-accent hover:text-ink/80 transition-colors duration-150"
+            >
+              + Add another round
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => openSheet('golf')}
+              className="w-full py-8 bg-accent-deep text-white rounded-2xl hover:bg-accent transition-colors duration-150 flex flex-col items-center gap-2"
+            >
+              <IconFlag size={24} />
+              <span className="text-sm font-bold tracking-[0.2em] uppercase">Set Venue</span>
+              <span className="t-cap text-white/80 normal-case tracking-normal">
+                The course, the tee times — the day starts here
+              </span>
+            </button>
+          )
+        )}
+
+        {!singleDay && dayItems.length === 0 && (
           <div className="border border-dashed border-bark/25 rounded-xl py-10 text-center">
             <p className="t-body text-ink/65">Nothing added yet. Get your golf in!</p>
           </div>
@@ -411,6 +526,22 @@ export default function ItineraryBuilder({
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 10px)' }}
       >
         <div className="max-w-lg mx-auto px-4 pt-3">
+          {/* A single day: golf has its own big button up in the day, so
+              everything else shares one — the sheet it opens asks what kind
+              of addition it is. Multi-day keeps the four ways to fill a
+              day, unchanged. */}
+          {singleDay ? (
+            <button
+              type="button"
+              onClick={() => openSheet('activity')}
+              className="w-full flex items-center justify-center gap-1.5 min-h-[64px] rounded-xl border border-bark/25 bg-surface text-ink hover:border-accent transition-colors duration-150"
+            >
+              <span className="flex items-center gap-1 text-accent">
+                <IconPlus size={14} /><IconFork size={18} />
+              </span>
+              <span className="t-label">Add activity</span>
+            </button>
+          ) : (
           <div className="grid grid-cols-4 gap-2">
             {KINDS.map(kind => {
               const Icon = KIND_ICON[kind]
@@ -429,6 +560,7 @@ export default function ItineraryBuilder({
               )
             })}
           </div>
+          )}
 
           {/* Never disabled by an empty day — a day with nothing planned on
               it is a normal day, not an unfinished one. Only a genuine
@@ -468,6 +600,7 @@ export default function ItineraryBuilder({
 
       {sheet === 'stay' && (
         <Sheet title="Add a stay" onClose={() => setSheet(null)} onAdd={commit} addLabel="Add stay" error={error}>
+          {singleDay && <KindSwitch current="stay" onSwitch={switchKind} />}
           <div>
             <label className={FIELD_LABEL} htmlFor="it-stay">Accommodation</label>
             <input
@@ -497,6 +630,7 @@ export default function ItineraryBuilder({
 
       {sheet === 'travel' && (
         <Sheet title="Add a journey" onClose={() => setSheet(null)} onAdd={commit} addLabel="Add journey" error={error}>
+          {singleDay && <KindSwitch current="travel" onSwitch={switchKind} />}
           <div>
             <label className={FIELD_LABEL}>How</label>
             <div className="grid grid-cols-3 gap-2">
@@ -546,6 +680,7 @@ export default function ItineraryBuilder({
 
       {sheet === 'activity' && (
         <Sheet title="Add an activity" onClose={() => setSheet(null)} onAdd={commit} addLabel="Add activity" error={error}>
+          {singleDay && <KindSwitch current="activity" onSwitch={switchKind} />}
           <div>
             <label className={FIELD_LABEL} htmlFor="it-activity">What is it?</label>
             <input

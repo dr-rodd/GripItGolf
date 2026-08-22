@@ -152,6 +152,41 @@ section('The way forward is pinned under the add buttons')
     'the add buttons are taller, and come first')
 }
 
+// ─── A single day wears a different face ───────────────────────
+
+section('A single-day event has no Day 1 and golf leads it')
+{
+  const b = fs.readFileSync('app/components/ItineraryBuilder.tsx', 'utf-8')
+
+  // One day needs no day picker — a strip with one chip saying "Day 1" is
+  // exactly the redundancy this mode removes.
+  ok(b.includes('const singleDay = days === 1'), 'one day is its own mode')
+  ok(b.includes('{days > 1 && ('), 'and the day strip only exists past one day')
+  ok(b.includes("? 'The day'"),
+    'a dateless single day never falls back to saying Day 1')
+
+  // Golf is the main event: the big Set Venue button lives in the day
+  // itself, not as one of four equal squares at the bottom.
+  ok(b.includes('Set Venue'), 'the big move is Set Venue')
+  ok(b.includes('+ Add another round'),
+    'and once golf is set, a second round stays reachable — a 36-hole day is a real day')
+
+  // Everything else shares one button, and the sheet asks what kind it is.
+  ok(b.includes('function KindSwitch'), 'one sheet, a kind chosen inside it')
+  ok(b.includes('<KindSwitch current="stay"')
+    && b.includes('<KindSwitch current="travel"')
+    && b.includes('<KindSwitch current="activity"'),
+    'all three non-golf sheets carry the switch')
+  ok(b.includes('grid-cols-4'), 'while multi-day keeps its four buttons, unchanged')
+
+  // The golf tile says when the course gives the day back — five hours from
+  // the last tee time — so an activity timed inside the window reads as
+  // deliberate. The rule itself lives in lib/itinerary.ts, one copy.
+  ok(b.includes('golfUntil(item)'), 'the golf tile shows its window')
+  ok(!/\b270\b/.test(b) && !b.includes('* 60 * 5'),
+    '  …and never re-derives the span for itself')
+}
+
 // ─── Teams are settings' business, not creation's ──────────────
 
 section('Creation does not ask about teams')
