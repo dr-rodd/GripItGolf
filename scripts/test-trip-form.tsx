@@ -107,6 +107,17 @@ section('The itinerary replaces the rounds picker')
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
   ok(!/DEFAULT_FORMATS/.test(code), '  …and not with the defaults, which name one')
 
+  // Leaderboards are offered at creation now — the same picker the league
+  // wizard embeds and Trip Setup runs, one grid, one copy — but a trip may
+  // skip them: nothing chosen writes nothing, so a skipped trip is
+  // byte-for-byte the trip this wizard always made, and the phantom-board
+  // rule above still holds for it.
+  ok(src.includes('<LeaderboardSetup'), 'the leaderboard picker is offered at creation')
+  ok(src.includes('if (boards.length > 0) tripRow.leaderboards = boards'),
+    '  …written only when boards were actually built')
+  ok(src.includes('const step3Valid = !passcodeIssue && !duplicateIssue'),
+    '  …and never required — the way forward does not wait on a board')
+
   // A trip with no golf has nothing to score, so it cannot move on. It is a
   // reason rather than a disabled button now — an empty Tuesday should not
   // grey out the way forward, so the check happens once, at the end.

@@ -22,6 +22,8 @@ import HandicapField from '@/app/components/HandicapField'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
+import type { Leaderboard } from '@/lib/leaderboards'
+import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -130,6 +132,14 @@ export default function CreateTripForm() {
   const [players, setPlayers] = useState<PlayerInput[]>([
     { name: '', handicap: '', gender: 'M' },
   ])
+
+  // The leaderboards, offered where the league wizard offers them — the
+  // same LeaderboardSetup Trip Setup runs, never a second copy — but
+  // skippable here: a trip has a Trip Setup to come back to, so starting
+  // empty and deciding later is a normal path, not a failure. Empty stays
+  // unwritten, and a skipped trip is byte-for-byte the trip creation has
+  // always made.
+  const [boards, setBoards] = useState<Leaderboard[]>([])
 
   // Settings lock — can only ever be set here, at creation
   const [lockSettings, setLockSettings] = useState(false)
@@ -266,6 +276,11 @@ export default function CreateTripForm() {
     // Only sent when a passcode was actually set, so a database that has not
     // had that column added yet can still create ordinary trips.
     if (passcodeHash) tripRow.settings_passcode_hash = passcodeHash
+
+    // Only when boards were actually built. Skipped, nothing is written and
+    // the column keeps its empty default — the trip the wizard has always
+    // made, with the competition still Trip Setup's question.
+    if (boards.length > 0) tripRow.leaderboards = boards
 
     // Only for tournaments, so ordinary trips still create before migration
     // 046 has run. A tournament insert does need the column — until the
@@ -825,6 +840,30 @@ export default function CreateTripForm() {
             >
               + Add another player
             </button>
+
+            {/* ── Leaderboards, offered but never demanded ──
+                The same picker the league wizard embeds and Trip Setup
+                runs — one grid, one copy. Skippable on purpose: a trip has
+                a Trip Setup to come back to, and plenty of groups settle
+                the competition at the first tee, not at the kitchen table.
+                Nothing chosen writes nothing, so a skipped trip is exactly
+                the trip this wizard has always made. */}
+            <div className="mt-8 pt-6 border-t border-bark/12">
+              <p className="text-ink/80 text-[13px] uppercase tracking-wider mb-2">
+                Leaderboards (optional)
+              </p>
+              <p className="text-ink/65 text-[13px] mb-3 leading-snug">
+                {isTournament
+                  ? 'What the event plays for. Skip for now and choose later from the organiser area — the bracket has its own setup there too.'
+                  : 'What the trip plays for. Skip for now and choose later in Trip Setup — nothing is decided until you decide it.'}
+              </p>
+              <LeaderboardSetup
+                boards={boards}
+                playerCount={players.filter(p => p.name.trim()).length}
+                teamCount={0}
+                onChange={setBoards}
+              />
+            </div>
 
             {/* ── Settings lock ──
                 Only settable here. Once the trip exists, anyone holding the
