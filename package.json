@@ -8,7 +8,6 @@
     "start": "next start",
     "lint": "eslint",
     "migrate": "tsx scripts/migrate.ts",
-    "seed:hp-series": "tsx scripts/seed-hp-series.ts",
     "test:matchplay": "tsx scripts/test-matchplay.ts",
     "test:matchplay:db": "tsx scripts/test-matchplay-db.ts",
     "test:bracket-layout": "tsx scripts/test-bracket-layout.ts",
