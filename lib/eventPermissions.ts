@@ -30,6 +30,7 @@ export type EventPermissionKey =
   | 'add_courses'
   | 'add_players'
   | 'edit_scores'
+  | 'edit_tee_sheet'
 
 export const EVENT_PERMISSIONS: {
   key: EventPermissionKey
@@ -46,6 +47,9 @@ export const EVENT_PERMISSIONS: {
   { key: 'edit_scores', dflt: false,
     label: 'Participants can edit leaderboard entries',
     hint: 'Let players rework a whole scorecard from the summary screen — hole-by-hole scoring stays open either way.' },
+  { key: 'edit_tee_sheet', dflt: false,
+    label: 'Participants can edit the tee sheet',
+    hint: 'Let the field put names into open slots and take their own out — off, the sheet is read-only and you place everyone.' },
 ]
 
 export type EventPermissions = Record<EventPermissionKey, boolean>

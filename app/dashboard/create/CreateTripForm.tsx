@@ -874,6 +874,7 @@ export default function CreateTripForm() {
                 boards={boards}
                 playerCount={players.filter(p => p.name.trim()).length}
                 teamCount={0}
+                askTeeTeams={isTournament}
                 onChange={setBoards}
               />
             </div>

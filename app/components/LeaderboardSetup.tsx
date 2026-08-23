@@ -6,6 +6,7 @@ import {
   scoringsFor, TEAM_FORMATS, COMBINES, MAX_DISCARD,
   unanswered, isComplete, offersDiscard, offersTieBreak, offersQuotaScale,
   offersCountingScores, countingScoresOf, aggregateFinishOf, offersTeamNames,
+  offersTeeTeams,
   offersAllowance, tripQuotaScale, slotKey, isFormatFree,
   freeScorings, freeTeamFormats,
   hasMatchplay, boardTitle, boardRules,
@@ -734,7 +735,8 @@ function RoundLinks({
 // ─── The cascade ───────────────────────────────────────────────
 
 function Builder({
-  existing, initial, playerCount, teamCount, rounds, onSave, onCancel,
+  existing, initial, playerCount, teamCount, rounds, askTeeTeams = false,
+  onSave, onCancel,
 }: {
   /** What the trip already runs, NOT counting the board being edited. */
   existing: Leaderboard[]
@@ -744,6 +746,8 @@ function Builder({
   teamCount: number
   /** The trip's golf, for linking a bracket round to one of them. */
   rounds: LinkableRound[]
+  /** Events only — ask team boards how they meet the tee sheet. */
+  askTeeTeams?: boolean
   onSave: (lb: Leaderboard) => void
   onCancel: (() => void) | null
 }) {
@@ -953,6 +957,27 @@ function Builder({
         </Question>
       )}
 
+      {/* Events only — a trip has no tee sheet to meet, so `askTeeTeams`
+          arrives false there and the question never renders. Absent is
+          together, because partners almost always play together; only the
+          exception is stored (lib/leaderboards.ts `teeTeams`). */}
+      {askTeeTeams && offersTeeTeams(draft) && (
+        <Question n={next()} title="How do teams meet the tee sheet?">
+          <Choice
+            on={draft.teeTeams !== 'separate'}
+            label="Teams share a tee time"
+            hint="Partners go out together — putting one on the sheet books the team."
+            onClick={() => set({ teeTeams: undefined })}
+          />
+          <Choice
+            on={draft.teeTeams === 'separate'}
+            label="Members can play separately"
+            hint="Teammates may go out in different slots, all feeding the same board."
+            onClick={() => set({ teeTeams: 'separate' })}
+          />
+        </Question>
+      )}
+
       {league && draft.scoring && (draft.audience === 'individual' || draft.teamFormat) && (
         <Question n={next()} title="How do the rounds add up?">
           {COMBINES.map(c => (
@@ -1136,6 +1161,7 @@ function Builder({
 
 export default function LeaderboardSetup({
   boards, playerCount, teamCount, rounds = [], readOnly = false, onChange,
+  askTeeTeams = false,
 }: {
   boards: Leaderboard[]
   /** The field an individual prize table pays out to. */
@@ -1149,6 +1175,12 @@ export default function LeaderboardSetup({
   rounds?: LinkableRound[]
   /** Shown but not changeable — somebody who is not the trip's owner. */
   readOnly?: boolean
+  /**
+   * Ask team boards how they meet the tee sheet — events only, because
+   * only an event has one. A trip never sees the question and never stores
+   * the answer (lib/leaderboards.ts `teeTeams`).
+   */
+  askTeeTeams?: boolean
   onChange: (boards: Leaderboard[]) => void
 }) {
   const [adding, setAdding] = useState(false)
@@ -1201,6 +1233,7 @@ export default function LeaderboardSetup({
             playerCount={playerCount}
             teamCount={teamCount}
             rounds={rounds}
+            askTeeTeams={askTeeTeams}
             onSave={save}
             onCancel={() => setEditingId(null)}
           />
@@ -1248,6 +1281,7 @@ export default function LeaderboardSetup({
           playerCount={playerCount}
           teamCount={teamCount}
           rounds={rounds}
+          askTeeTeams={askTeeTeams}
           onSave={save}
           onCancel={done ? () => setAdding(false) : null}
         />

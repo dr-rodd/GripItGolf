@@ -12,6 +12,10 @@ import {
   type EventPermissions, describePermissions,
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
+import {
+  MIN_TEE_INTERVAL_MINS, MAX_TEE_INTERVAL_MINS,
+  MIN_GROUP_SIZE, MAX_GROUP_SIZE,
+} from '@/lib/teeSheet'
 
 /**
  * What the organiser can actually do, once past the PIN.
@@ -36,6 +40,9 @@ type RoundInfo = {
   itineraryItemId: string | null
   startFormat: string | null
   teeTime: string | null
+  /** The tee sheet's tuning, defaults filled (lib/teeSheet.ts). */
+  teeIntervalMins: number
+  teeGroupSize: number
 }
 
 const INPUT = [
@@ -163,6 +170,36 @@ export default function OrganiserClient({
     if (error) {
       patchRound(round.id, { startFormat: prev })
       setStartError('Could not save the start format — try again')
+    }
+  }
+
+  /**
+   * The tee sheet's tuning, saved as it moves — interval and group size to
+   * the round's own columns (migration 050), the same optimistic manners
+   * as everything else on this screen.
+   */
+  async function saveTeeSetting(
+    round: RoundInfo,
+    patch: { teeIntervalMins?: number; teeGroupSize?: number },
+  ) {
+    const prev = { teeIntervalMins: round.teeIntervalMins, teeGroupSize: round.teeGroupSize }
+    patchRound(round.id, patch)
+    setStartError(null)
+
+    const { error } = await supabase
+      .from('rounds')
+      .update({
+        ...(patch.teeIntervalMins !== undefined ? { tee_interval_mins: patch.teeIntervalMins } : {}),
+        ...(patch.teeGroupSize !== undefined ? { tee_group_size: patch.teeGroupSize } : {}),
+      })
+      .eq('id', round.id)
+      .eq('trip_id', tripId)
+
+    if (error) {
+      patchRound(round.id, prev)
+      setStartError(/column|schema cache/i.test(error.message ?? '')
+        ? 'Could not save — a database update may not have been applied yet.'
+        : 'Could not save the tee sheet setting — try again')
     }
   }
 
@@ -366,11 +403,90 @@ export default function OrganiserClient({
                       </div>
                     )}
 
+                    {/* ── Tee sheet settings ──
+                        The sheet's tuning lives with the choice that makes
+                        it a tee-sheet morning. First group time: the same
+                        time control shotgun uses — one clock, on the
+                        round's itinerary item, where everything reads it. */}
                     {chosen === 'tee_sheet' && (
-                      <p className="text-ink/65 text-[13px] mt-3 leading-snug">
-                        The schedule now says tee sheet. Building the sheet
-                        itself — groups and times — is coming soon.
-                      </p>
+                      <div className="mt-3 space-y-3">
+                        {round.itineraryItemId && (
+                          <div>
+                            <label className="block text-ink/80 text-[13px] uppercase tracking-wider mb-2">
+                              First group
+                            </label>
+                            <input
+                              type="time"
+                              value={round.teeTime ?? ''}
+                              onChange={e => saveTime(round, e.target.value)}
+                              className="block w-full min-w-0 max-w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5 text-ink text-sm focus:outline-none focus:border-accent/50 transition-colors"
+                              style={{
+                                colorScheme: 'dark',
+                                WebkitAppearance: 'none',
+                                appearance: 'none',
+                                minWidth: 0,
+                                maxWidth: '100%',
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="block text-ink/80 text-[13px] uppercase tracking-wider mb-2">
+                            Minutes between groups
+                          </label>
+                          <div className="flex gap-1.5">
+                            {[5, 8, 10, 12, 15, 20].map(m => (
+                              <button
+                                key={m}
+                                type="button"
+                                onClick={() => saveTeeSetting(round, { teeIntervalMins: m })}
+                                aria-pressed={round.teeIntervalMins === m}
+                                className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                                  round.teeIntervalMins === m
+                                    ? 'bg-accent-deep text-white'
+                                    : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
+                                }`}
+                              >
+                                {m}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-ink/80 text-[13px] uppercase tracking-wider mb-2">
+                            Players per group
+                          </label>
+                          <div className="flex gap-1.5">
+                            {Array.from(
+                              { length: MAX_GROUP_SIZE - MIN_GROUP_SIZE + 1 },
+                              (_, i) => MIN_GROUP_SIZE + i,
+                            ).map(n => (
+                              <button
+                                key={n}
+                                type="button"
+                                onClick={() => saveTeeSetting(round, { teeGroupSize: n })}
+                                aria-pressed={round.teeGroupSize === n}
+                                className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                                  round.teeGroupSize === n
+                                    ? 'bg-accent-deep text-white'
+                                    : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
+                                }`}
+                              >
+                                {n}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <Link
+                          href={`/trip/${tripCode}/teesheet`}
+                          className="block t-cap text-accent-deep hover:text-accent transition-colors"
+                        >
+                          Open the tee sheet →
+                        </Link>
+                      </div>
                     )}
                   </li>
                 )

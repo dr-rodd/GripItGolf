@@ -4,6 +4,7 @@ import { isLocked } from '@/lib/passcode'
 import { parseBracketSetup, describeSetup } from '@/lib/bracketSetup'
 import { parseLeagueSetup, describeLeagueSetup } from '@/lib/leagueSetup'
 import { parseEventPermissions } from '@/lib/eventPermissions'
+import { parseInterval, parseGroupSize } from '@/lib/teeSheet'
 import { parseLeaderboards } from '@/lib/leaderboards'
 import { describeRange } from '@/lib/confirmationEmail'
 import BackButton from '@/app/components/BackButton'
@@ -72,7 +73,7 @@ export default async function OrganiserPage({ params }: {
   // migration 047 loses the summary line and nothing else.
   const [
     noticesResult, roundsResult, itemsResult, setupResult,
-    permsResult, playersResult, claimedResult,
+    permsResult, playersResult, claimedResult, teeSettingsResult,
   ] = await Promise.all([
     supabase
       .from('event_messages')
@@ -115,6 +116,12 @@ export default async function OrganiserPage({ params }: {
       .eq('trip_id', trip.id)
       .eq('is_composite', false)
       .eq('claimed', true),
+    // The tee-sheet settings, fail-soft — pre-050 the columns do not exist
+    // and every round reads at its defaults.
+    supabase
+      .from('rounds')
+      .select('id, tee_interval_mins, tee_group_size')
+      .eq('trip_id', trip.id),
   ])
 
   if (noticesResult.error) console.error('OrganiserPage notices query failed:', noticesResult.error)
@@ -128,8 +135,15 @@ export default async function OrganiserPage({ params }: {
     start_format: string | null
     courses: { name: string } | { name: string }[] | null
   }
+  const teeSettings = new Map(
+    ((teeSettingsResult.data ?? []) as {
+      id: string; tee_interval_mins?: unknown; tee_group_size?: unknown
+    }[]).map(r => [r.id, r]),
+  )
+
   const rounds = ((roundsResult.data ?? []) as unknown as RoundRow[]).map(r => {
     const course = Array.isArray(r.courses) ? r.courses[0] : r.courses
+    const tee = teeSettings.get(r.id)
     return {
       id: r.id,
       roundNumber: r.round_number,
@@ -137,6 +151,8 @@ export default async function OrganiserPage({ params }: {
       itineraryItemId: r.itinerary_item_id,
       startFormat: r.start_format,
       teeTime: r.itinerary_item_id ? teeTimes.get(r.itinerary_item_id) ?? null : null,
+      teeIntervalMins: parseInterval(tee?.tee_interval_mins),
+      teeGroupSize: parseGroupSize(tee?.tee_group_size),
     }
   })
 

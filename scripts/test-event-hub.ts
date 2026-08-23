@@ -164,11 +164,14 @@ section('The organiser area stands behind the one PIN')
 
 section('An event hides Trip Setup from the field')
 {
+  // An event drops Trip Setup and gains the tee sheet in its place, so both
+  // bars are five tabs and the grid never changes shape.
   const bar = read('app/components/TabBar.tsx')
-  ok(bar.includes("isEvent ? ITEMS.filter(i => i.key !== 'settings') : ITEMS"),
+  ok(bar.includes("ITEMS.filter(i => i.key !== 'settings')"),
     'an event\'s tab bar drops Trip Setup')
-  ok(bar.includes("isEvent ? 'grid-cols-4' : 'grid-cols-5'"),
-    'and the grid narrows to match')
+  ok(bar.includes("ITEMS.filter(i => i.key !== 'teesheet')"),
+    'and a trip\'s drops the tee sheet — five tabs either way')
+  ok(bar.includes('grid grid-cols-5'), 'on one five-column grid')
 
   const layout = read('app/trip/[tripCode]/layout.tsx')
   ok(layout.includes('isEvent={isEvent(kind)}'),

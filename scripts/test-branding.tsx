@@ -566,10 +566,12 @@ section('The bottom tab bar')
   // the emerald circle around it was tried and retired the same day (the
   // label had to go, then came back and dragged the alignment sideways).
   // Five identical tabs; position does the emphasising.
+  // Six defined, five shown: a trip drops the tee sheet, an event drops
+  // Trip Setup — either bar is five tabs with the leaderboard centred.
   eq(
     (src.match(/label: '([^']+)'/g) ?? []).map(s => s.replace(/label: '|'/g, '')),
-    ['Home', 'Scoring', 'Leaderboard', 'Stats', 'Trip Setup'],
-    'five items, leaderboard centred',
+    ['Home', 'Scoring', 'Leaderboard', 'Stats', 'Trip Setup', 'Tee Sheet'],
+    'six items defined, leaderboard centred in the five shown',
   )
   ok(src.includes('grid-cols-5'), 'the grid matches the count')
   ok(!/emphasis/.test(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')) && !/rounded-full/.test(src),

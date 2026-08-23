@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   IconHome, IconTrophy, IconClipboardList, IconSettings, IconChartBar,
+  IconClock,
 } from './icons'
 
 /**
@@ -41,6 +42,10 @@ const ITEMS = [
   { key: 'leaderboard', label: 'Leaderboard', icon: IconTrophy,        path: (t: string) => `/trip/${t}/leaderboard` },
   { key: 'stats',       label: 'Stats',       icon: IconChartBar,      path: (t: string) => `/trip/${t}/stats` },
   { key: 'settings',    label: 'Trip Setup',  icon: IconSettings,      path: (t: string) => `/trip/${t}/setup` },
+  // Events only, at the right — where Trip Setup stands on a trip. A trip
+  // never shows it: tee times are competition furniture, and the trip bar
+  // is the five tabs it has always been.
+  { key: 'teesheet',    label: 'Tee Sheet',   icon: IconClock,         path: (t: string) => `/trip/${t}/teesheet` },
 ] as const
 
 /**
@@ -133,7 +138,10 @@ export default function TabBar({ tripCode, isEvent = false }: {
   const pathname = usePathname() ?? ''
   const base = `/trip/${tripCode}`
 
-  const items = isEvent ? ITEMS.filter(i => i.key !== 'settings') : ITEMS
+  // An event trades Trip Setup for the tee sheet; a trip keeps its five.
+  const items = isEvent
+    ? ITEMS.filter(i => i.key !== 'settings')
+    : ITEMS.filter(i => i.key !== 'teesheet')
 
   /**
    * Which tab is lit.
@@ -148,6 +156,7 @@ export default function TabBar({ tripCode, isEvent = false }: {
     if (pathname.startsWith(`${base}/leaderboard`)) return 'leaderboard'
     if (pathname.startsWith(`${base}/scoring`)) return 'scoring'
     if (pathname.startsWith(`${base}/stats`)) return 'stats'
+    if (pathname.startsWith(`${base}/teesheet`)) return 'teesheet'
     if (pathname.startsWith(`${base}/setup`) || pathname.startsWith(`${base}/teams`)) return 'settings'
     // Players, matchplay and anything else: no tab claims it rather than a
     // wrong one being lit.
@@ -175,7 +184,7 @@ export default function TabBar({ tripCode, isEvent = false }: {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label="Trip"
     >
-      <ul className={`max-w-lg mx-auto grid ${isEvent ? 'grid-cols-4' : 'grid-cols-5'}`}>
+      <ul className="max-w-lg mx-auto grid grid-cols-5">
         {items.map(item => {
           const active = activeKey === item.key
           const Icon = item.icon

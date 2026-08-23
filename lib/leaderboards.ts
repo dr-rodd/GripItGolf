@@ -156,6 +156,16 @@ export type Leaderboard = {
    * because there the total is that one card.
    */
   overallTie?: OverallTie
+
+  /**
+   * Team boards on an event only — whether teammates occupy one tee-sheet
+   * slot together, or may go out in separate slots contributing to the same
+   * board. Absent means together, because partners almost always play
+   * together; only 'separate' is stored. The tee sheet reads it to decide
+   * whether adding one member books the pair (lib/teeSheet.ts) — a trip,
+   * having no tee sheet, never asks and never stores it.
+   */
+  teeTeams?: 'separate'
 }
 
 export const MAX_DISCARD = 2
@@ -490,6 +500,18 @@ export function offersAllowance(draft: Partial<Leaderboard>): boolean {
   return draft.audience === 'individual' || !!draft.teamFormat
 }
 
+/**
+ * Whether to ask how a team meets the tee sheet.
+ *
+ * Any team board — a league's pairs and a draw's pairings both stand on
+ * tee times — but only where a tee sheet exists to meet, which is an
+ * event: the form passes that context in, because this model deliberately
+ * does not know what kind of trip is asking.
+ */
+export function offersTeeTeams(draft: Partial<Leaderboard>): boolean {
+  return draft.audience === 'team' && !!draft.competition
+}
+
 /** Whether this board needs teams picked before the trip can go live. */
 export function needsTeams(boards: readonly Leaderboard[]): boolean {
   return boards.some(lb => lb.audience === 'team')
@@ -704,6 +726,10 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
     // none, and is on the trip's only sheet — which is what 'main' is.
     if (audience === 'team') {
       lb.teamSet = typeof r.teamSet === 'string' && r.teamSet ? r.teamSet : 'main'
+      // Whether teammates share a tee-sheet slot. Only the non-default is
+      // worth a key: absent means together, which is what every board did
+      // before the sheet could ask.
+      if (r.teeTeams === 'separate') lb.teeTeams = 'separate'
     }
 
     // One draw only, whichever arrives first

@@ -37,8 +37,9 @@ const read = (p: string) => fs.readFileSync(p, 'utf-8')
 
 section('Three seeded permissions, conservative by default')
 {
-  eq(EVENT_PERMISSIONS.map(p => p.key), ['add_courses', 'add_players', 'edit_scores'],
-    'the three seeded keys')
+  eq(EVENT_PERMISSIONS.map(p => p.key),
+    ['add_courses', 'add_players', 'edit_scores', 'edit_tee_sheet'],
+    'the three seeded keys, and the tee sheet — the promised one-line addition')
   ok(EVENT_PERMISSIONS.every(p => p.dflt === false),
     'every default is off — the organiser opts in')
   ok(EVENT_PERMISSIONS.every(p => p.label.startsWith('Participants can')),
@@ -80,7 +81,9 @@ section('Storage reads whole, falls soft, and never nulls')
   eq(parsed.add_courses, false, 'an absent key falls to the default')
   ok(!('mystery' in parsed), 'an unknown key is not carried')
 
-  const full: EventPermissions = { add_courses: true, add_players: false, edit_scores: true }
+  const full: EventPermissions = {
+    add_courses: true, add_players: false, edit_scores: true, edit_tee_sheet: false,
+  }
   eq(parseEventPermissions(JSON.parse(JSON.stringify(full))), full,
     'a full map reads back whole')
 }
@@ -116,8 +119,9 @@ section('The admin card sums it up')
 {
   ok(describePermissions(defaultPermissions()).includes('Organiser-run'),
     'all off reads as organiser-run')
-  ok(describePermissions({ add_courses: true, add_players: true, edit_scores: false })
-    .includes('2 of 3'), 'partial says the count')
+  ok(describePermissions({
+    add_courses: true, add_players: true, edit_scores: false, edit_tee_sheet: false,
+  }).includes('2 of 4'), 'partial says the count')
 }
 
 // ─── Wiring: creation asks ─────────────────────────────────────
