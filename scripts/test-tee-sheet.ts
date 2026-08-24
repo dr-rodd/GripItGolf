@@ -229,8 +229,42 @@ section('The sheet reads fail-soft and writes scoped')
   ok(client.includes('unitMatches(u, search)'), 'filtered by member or team name')
   ok(client.includes("u.players.length <= vacancy"),
     'a team only fits where the whole team fits')
-  ok(client.includes('removePlayers(g.players.map(p => p.id))'),
+  ok(client.includes('removePlayers(i, g.players.map(p => p.id))'),
     'and leaves as one block on a share-a-tee board')
+}
+
+section('A write that does not land says so where it was asked for')
+{
+  // The reported glitch: a name appeared for a moment and went back to the
+  // picker. The write was being refused and the reason rendered at the foot
+  // of the sheet — a scroll away from the tap on any real field, so the
+  // message may as well not have existed.
+  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  ok(/error\?\.slot === i/.test(client), 'the message renders in the slot it belongs to')
+  ok(!/\{error && \(\s*<p className="text-rust-deep text-sm mt-4/.test(client),
+    '  …and no longer only at the foot of the list')
+  ok(client.includes('console.error(`Tee sheet: could not'),
+    'the raw error reaches the console for whoever is diagnosing')
+  ok(/database update has not been applied yet/.test(client),
+    'a missing table is named, never dressed as "try again"')
+  ok(/permission denied\|row-level security/.test(client),
+    'so is a refusal from the database')
+
+  // Truth over a guess: a rejected batch changed nothing, but the same
+  // rejection arrives when another phone got there first.
+  ok(client.includes('async function resyncRound()'),
+    'a failed write asks the database what it actually holds')
+  ok(/playerIds\.every\(id => landed\.has\(id\)\)/.test(client),
+    'a player already on the sheet is not a failure')
+  ok(client.includes('if (!(await resyncRound())) setAssignments(prev)'),
+    'and a read that fails too falls back to putting the row back')
+
+  // Nowhere to save is knowable before the first tap.
+  const page = read('app/trip/[tripCode]/teesheet/page.tsx')
+  ok(page.includes('storageReady={!assignmentsResult.error}'),
+    'the page tells the sheet whether it has anywhere to save')
+  ok(client.includes('!storageReady && ('), 'and the sheet says so up front')
+  ok(client.includes('The sheet cannot save yet'), '  …in words, not a flicker')
 }
 
 section('The organiser is never locked out of their own sheet')

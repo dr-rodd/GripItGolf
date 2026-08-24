@@ -119,6 +119,9 @@ export default async function TeeSheetPage({ params }: {
 
   if (roundsResult.error) console.error('TeeSheetPage rounds query failed:', roundsResult.error)
   if (playersResult.error) console.error('TeeSheetPage players query failed:', playersResult.error)
+  if (assignmentsResult.error) {
+    console.error('TeeSheetPage assignments query failed:', assignmentsResult.error)
+  }
 
   const teeTimes = new Map(
     (itemsResult.data ?? []).map(i => [i.id as string, i.tee_time as string | null]),
@@ -177,6 +180,13 @@ export default async function TeeSheetPage({ params }: {
         }))
       }
       teamOf={teamOf}
+      // Whether the sheet has anywhere to save. The assignments read is
+      // fail-soft, so a missing table (pre-050) shows an empty sheet that
+      // looks perfectly normal until a name is added and the write bounces
+      // — a name appearing for a moment and vanishing, with the reason
+      // rendered somewhere off the bottom of a long sheet. Said plainly at
+      // the top instead.
+      storageReady={!assignmentsResult.error}
       hasTeamBoard={teamBoard !== null}
       teeTeamsSeparate={teamBoard?.teeTeams === 'separate'}
       fieldMayEdit={allowsParticipant(

@@ -47,6 +47,7 @@ type Assignment = { round_id: string; player_id: string; slot_index: number }
 export default function TeeSheetClient({
   tripId, tripCode, rounds, players, initialAssignments,
   teamOf, hasTeamBoard, teeTeamsSeparate, fieldMayEdit, passcodeHash = null,
+  storageReady = true,
 }: {
   tripId: string
   tripCode: string
@@ -62,10 +63,15 @@ export default function TeeSheetClient({
   fieldMayEdit: boolean
   /** For the inline organiser unlock; null when the event has no PIN. */
   passcodeHash?: string | null
+  /** False when the assignments table could not be read — nothing will save. */
+  storageReady?: boolean
 }) {
   const [roundId, setRoundId] = useState<string | null>(rounds[0]?.id ?? null)
   const [assignments, setAssignments] = useState<Assignment[]>(initialAssignments)
-  const [error, setError] = useState<string | null>(null)
+  // The failure and the slot it happened in — a message about a name has to
+  // appear beside that name, not at the foot of a sheet that may be a long
+  // scroll away.
+  const [error, setError] = useState<{ slot: number; message: string } | null>(null)
   const [adding, setAdding] = useState<number | null>(null)
   const [search, setSearch] = useState('')
 
@@ -111,10 +117,46 @@ export default function TeeSheetClient({
   const maxAssigned = roundAssignments.reduce((m, a) => Math.max(m, a.slot_index), -1)
   const count = round ? slotCount(players.length, round.groupSize, maxAssigned) : 0
 
-  function calmError(err: { message?: string } | null, doing: string) {
-    setError(/relation|column|schema cache|does not exist/i.test(err?.message ?? '')
-      ? `Could not ${doing} — a database update may not have been applied yet.`
-      : `Could not ${doing} — try again`)
+  /**
+   * What a rejected write is allowed to say. The raw error goes to the
+   * console for whoever is diagnosing; the screen gets a sentence that
+   * names the cause where the cause is knowable — a sheet that has nowhere
+   * to save reads very differently from a tap that needs repeating, and
+   * "try again" on the first is advice that can never work.
+   */
+  function calmError(slot: number, err: { message?: string; code?: string } | null, doing: string) {
+    console.error(`Tee sheet: could not ${doing}`, err)
+    const message = err?.message ?? ''
+    setError({
+      slot,
+      message: /relation|schema cache|does not exist/i.test(message)
+        ? `Could not ${doing} — the tee sheet's database update has not been applied yet.`
+        : /permission denied|row-level security/i.test(message)
+          ? `Could not ${doing} — the database refused the change.`
+          : `Could not ${doing} — try again`,
+    })
+  }
+
+  /**
+   * What the database actually holds for this round, after a write that did
+   * not go as expected. Truth beats both halves of a guess: a rejected
+   * batch changed nothing, a rejected-looking one may have landed, and
+   * another phone may have moved somebody while this one was typing.
+   * Returns false when even the read fails, so the caller can fall back to
+   * putting its own optimistic rows back.
+   */
+  async function resyncRound(): Promise<Assignment[] | null> {
+    if (!round) return null
+    const { data, error: err } = await supabase
+      .from('tee_assignments')
+      .select('round_id, player_id, slot_index')
+      .eq('trip_id', tripId)
+      .eq('round_id', round.id)
+      .order('created_at')
+    if (err || !data) return null
+    const fresh = data as Assignment[]
+    setAssignments(prev => [...prev.filter(a => a.round_id !== round.id), ...fresh])
+    return fresh
   }
 
   /**
@@ -133,17 +175,25 @@ export default function TeeSheetClient({
     const { error: err } = await supabase
       .from('tee_assignments')
       .insert(next.map(a => ({ trip_id: tripId, ...a })))
+    if (!err) return
 
-    if (err) {
+    // Ask the database rather than assume. Somebody already on the sheet is
+    // the one rejection that is not a failure — another phone got there
+    // first, and the resync shows where they actually stand.
+    const fresh = await resyncRound()
+    if (fresh) {
+      const landed = new Set(fresh.map(a => a.player_id))
+      if (playerIds.every(id => landed.has(id))) return
+    } else {
       const ids = new Set(playerIds)
       setAssignments(prev => prev.filter(a =>
         !(a.round_id === round.id && ids.has(a.player_id))))
-      calmError(err, playerIds.length > 1 ? 'add the team' : 'add the player')
     }
+    calmError(slotIndex, err, playerIds.length > 1 ? 'add the team' : 'add the player')
   }
 
   /** One or several players out — a solo's ✕, or a linked block's. */
-  async function removePlayers(playerIds: string[]) {
+  async function removePlayers(slotIndex: number, playerIds: string[]) {
     if (!round) return
     setError(null)
     const ids = new Set(playerIds)
@@ -159,8 +209,8 @@ export default function TeeSheetClient({
       .in('player_id', playerIds)
 
     if (err) {
-      setAssignments(prev)
-      calmError(err, playerIds.length > 1 ? 'remove the team' : 'remove the player')
+      if (!(await resyncRound())) setAssignments(prev)
+      calmError(slotIndex, err, playerIds.length > 1 ? 'remove the team' : 'remove the player')
     }
   }
 
@@ -184,6 +234,21 @@ export default function TeeSheetClient({
             ? 'Tap an open slot to put a name in it.'
             : 'Who goes off when. The organiser sets the groups.'}
         </p>
+
+        {/* Nowhere to save. Said once, at the top, before anybody spends a
+            minute tapping names that cannot stick — the assignments read
+            failed, so the sheet is empty because the table is missing, not
+            because the field has no times yet. */}
+        {!storageReady && (
+          <div className="bg-rust/[0.06] border border-rust/25 rounded-2xl p-4 mb-4">
+            <p className="text-ink text-sm font-medium">The sheet cannot save yet</p>
+            <p className="text-ink/65 t-cap mt-1 leading-snug">
+              The tee sheet&apos;s database update has not been applied, so a
+              name added here would disappear again. Everything else on the
+              event works as normal.
+            </p>
+          </div>
+        )}
 
         {/* The reported bug, closed: an organiser whose session had not
             passed the PasscodeGate saw a read-only sheet with no way in.
@@ -301,7 +366,7 @@ export default function TeeSheetClient({
                                     {canEdit && !together && (
                                       <button
                                         type="button"
-                                        onClick={() => removePlayers([p.id])}
+                                        onClick={() => removePlayers(i, [p.id])}
                                         aria-label={`Remove ${p.name}`}
                                         className="flex-shrink-0 text-ink/50 hover:text-rust transition-colors p-0.5"
                                       >
@@ -314,7 +379,7 @@ export default function TeeSheetClient({
                               {canEdit && together && (
                                 <button
                                   type="button"
-                                  onClick={() => removePlayers(g.players.map(p => p.id))}
+                                  onClick={() => removePlayers(i, g.players.map(p => p.id))}
                                   aria-label={`Remove ${g.teamName}`}
                                   className="flex-shrink-0 text-ink/50 hover:text-rust transition-colors p-0.5"
                                 >
@@ -330,7 +395,7 @@ export default function TeeSheetClient({
                                   {canEdit && (
                                     <button
                                       type="button"
-                                      onClick={() => removePlayers([p.id])}
+                                      onClick={() => removePlayers(i, [p.id])}
                                       aria-label={`Remove ${p.name}`}
                                       className="flex-shrink-0 text-ink/50 hover:text-rust transition-colors p-0.5"
                                     >
@@ -361,6 +426,14 @@ export default function TeeSheetClient({
                         {clock ?? `Group ${i + 1}`}
                       </span>
                     </div>
+
+                    {/* A refused write says so in the slot it was refused
+                        in. At the foot of the sheet it was a scroll away
+                        from the tap, so a name appearing and vanishing read
+                        as a glitch rather than as a message. */}
+                    {error?.slot === i && (
+                      <p className="text-rust-deep t-cap mt-1.5 leading-snug">{error.message}</p>
+                    )}
 
                     {/* The picker: a filter and the unassigned field, the
                         course-select manner in miniature. Stays open while
@@ -452,10 +525,6 @@ export default function TeeSheetClient({
                 )
               })}
             </ol>
-
-            {error && (
-              <p className="text-rust-deep text-sm mt-4 leading-snug">{error}</p>
-            )}
 
             <p className="t-cap text-ink/65 mt-4 leading-snug">
               {round.intervalMins} minutes between groups, up to{' '}
