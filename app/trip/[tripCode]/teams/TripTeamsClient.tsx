@@ -16,6 +16,7 @@ import {
   sheetChanges, teamsOnSheet, teamFor, membersOf, type Membership,
 } from '@/lib/teamSets'
 import { setTeam, clearMirror } from '@/lib/teamMembers'
+import { IconX } from '@/app/components/icons'
 import { duplicateName, duplicateNameError, isDuplicateNameError } from '@/lib/roster'
 import { failed, why } from '@/lib/writeFailure'
 import {
@@ -59,7 +60,9 @@ interface Placed extends Player { team_id: string | null }
 
 const UNASSIGNED = 'unassigned'
 
-const PRESET_COLORS = [
+// Exported for the join screen, which colours self-made teams from the
+// same twelve — one palette, however a team comes to exist.
+export const PRESET_COLORS = [
   '#DC2626', '#2563EB', '#16A34A', '#9333EA',
   '#EA580C', '#DB2777', '#0D9488', '#0A9D56',
   '#65A30D', '#7C3AED', '#0891B2', '#B45309',
@@ -160,6 +163,7 @@ function DraggablePlayer({
 
 function TeamColumn({
   team, players, totalHandicap, sizeLimit, onRename, onRecolour, onRenamePlayer,
+  unassigned, onAssign,
 }: {
   team: Team
   players: Placed[]
@@ -169,9 +173,17 @@ function TeamColumn({
   onRename: (id: string, name: string) => void
   onRecolour: (id: string, color: string) => void
   onRenamePlayer: (id: string, name: string) => void
+  /** Everyone still without a team on this sheet, for the add-search. */
+  unassigned: Placed[]
+  onAssign: (playerId: string, teamId: string) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: team.id })
   const [showColors, setShowColors] = useState(false)
+  // The versatile way in for big fields: a filtering search beside the
+  // drag — same destination (`onAssign` is the drag's own path), no
+  // wrestling sixty tiles down a long page.
+  const [addingOpen, setAddingOpen] = useState(false)
+  const [query, setQuery] = useState('')
 
   const full = sizeLimit !== null && players.length >= sizeLimit
   const over = sizeLimit !== null && players.length > sizeLimit
@@ -231,13 +243,74 @@ function TeamColumn({
 
       <div className="p-2 space-y-2 flex-1">
         {players.map(p => <DraggablePlayer key={p.id} player={p} onRename={onRenamePlayer} />)}
-        {players.length === 0 && (
+        {players.length === 0 && !addingOpen && (
           <p className="text-ink/50 text-sm text-center py-8 select-none">Drop here</p>
         )}
         {full && !over && (
           <p className="text-ink/50 text-[13px] tracking-wider uppercase text-center pb-2 select-none">
             Full
           </p>
+        )}
+
+        {!full && unassigned.length > 0 && !addingOpen && (
+          <button
+            type="button"
+            onClick={() => { setAddingOpen(true); setQuery('') }}
+            className="w-full py-2 t-cap text-accent-deep hover:text-accent transition-colors"
+          >
+            + Add players
+          </button>
+        )}
+
+        {addingOpen && (
+          <div className="rounded-lg border border-bark/12 bg-cream p-2">
+            <div className="flex items-center gap-2 mb-1.5">
+              <input
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Find a player…"
+                autoFocus
+                className="flex-1 min-w-0 bg-surface border border-bark/12 rounded-lg px-2.5 py-1.5 text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/50 transition-colors"
+              />
+              <button
+                type="button"
+                onClick={() => setAddingOpen(false)}
+                aria-label="Close"
+                className="flex-shrink-0 text-ink/50 hover:text-ink/80 transition-colors p-1"
+              >
+                <IconX size={14} />
+              </button>
+            </div>
+            <ul className="max-h-40 overflow-y-auto">
+              {unassigned
+                .filter(p => p.name.toLowerCase().includes(query.trim().toLowerCase()))
+                .map(p => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onAssign(p.id, team.id)
+                        // The last seat closes the search; otherwise it
+                        // stays open — filling a four is four taps.
+                        if (sizeLimit !== null && players.length + 1 >= sizeLimit) {
+                          setAddingOpen(false)
+                        }
+                      }}
+                      className="w-full text-left px-2 py-1.5 rounded text-ink text-sm hover:bg-bark/[0.06] transition-colors"
+                    >
+                      {p.name}
+                    </button>
+                  </li>
+                ))}
+              {unassigned.filter(p =>
+                p.name.toLowerCase().includes(query.trim().toLowerCase())).length === 0 && (
+                <li className="t-cap text-ink/65 px-2 py-1.5">
+                  Nobody unassigned by that name.
+                </li>
+              )}
+            </ul>
+          </div>
         )}
       </div>
     </div>
@@ -513,22 +586,21 @@ export default function TripTeamsClient({
     setActivePlayer(placed.find(p => p.id === active.id) ?? null)
   }
 
-  async function handleDragEnd({ active, over }: DragEndEvent) {
-    setActivePlayer(null)
-    if (!over || !sheet) return
-
-    const playerId = active.id as string
-    const overId   = over.id as string
-    const targetTeamId = overId === UNASSIGNED ? null : overId
-
+  /**
+   * One player into one team (or out, with null) — the single assign path.
+   * The drag's drop and the add-search's tap both land here, so the cap
+   * refusal and the optimistic write can never disagree between the two.
+   */
+  async function assignPlayer(playerId: string, targetTeamId: string | null) {
+    if (!sheet) return
     const dragged = placed.find(p => p.id === playerId)
     if (!dragged || dragged.team_id === targetTeamId) return
 
-    // A pairs draw is between teams of two, so a third player is not a thing
-    // the bracket can represent. Refuse the drop rather than let it save.
+    // A capped team — a pairing of two, or an event's teams-of-N — cannot
+    // take one more. Refuse here rather than let it save.
     if (targetTeamId && !canJoinTeam(forBoards, targetTeamId, placed)) {
       const team = sheetTeams.find(t => t.id === targetTeamId)
-      flashError(`${team?.name ?? noun.One} already has ${PAIR_SIZE} players`)
+      flashError(`${team?.name ?? noun.One} already has ${sizeLimit ?? PAIR_SIZE} players`)
       return
     }
 
@@ -543,6 +615,13 @@ export default function TripTeamsClient({
       setMemberships(prev)
       flashError(`Could not move ${dragged.name}${why(fail)}`)
     }
+  }
+
+  async function handleDragEnd({ active, over }: DragEndEvent) {
+    setActivePlayer(null)
+    if (!over) return
+    const overId = over.id as string
+    await assignPlayer(active.id as string, overId === UNASSIGNED ? null : overId)
   }
 
   // ── Team count ───────────────────────────────────────────────
@@ -911,6 +990,8 @@ export default function TripTeamsClient({
               onRename={renameTeam}
               onRecolour={recolourTeam}
               onRenamePlayer={renamePlayer}
+              unassigned={unassigned}
+              onAssign={assignPlayer}
             />
           ))}
         </div>

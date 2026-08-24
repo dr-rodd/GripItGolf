@@ -166,7 +166,30 @@ export type Leaderboard = {
    * having no tee sheet, never asks and never stores it.
    */
   teeTeams?: 'separate'
+
+  /**
+   * Team boards on an event only — teams formed by criteria, with the
+   * players choosing their own. Absent means the organiser assigns them,
+   * which is what every board did before the question. With 'self', teams
+   * are made and joined from the teams screen without the PIN, sized by
+   * `teamSize`, and named from their members.
+   */
+  teamPick?: 'self'
+
+  /**
+   * `teamPick: 'self'` only — how many players make a team. Clamped 2–4
+   * when the board's teammates share a tee time (no `teeTeams:
+   * 'separate'`), because a group is at most four; 2–8 when members may
+   * play apart. `lib/teamLimits.ts` `teamSizeLimit` is what enforces it —
+   * the one copy of every team-size cap.
+   */
+  teamSize?: number
 }
+
+/** The size bounds a self-picked team may take — see `teamSize`. */
+export const MIN_TEAM_SIZE = 2
+export const MAX_TEAM_SIZE_TOGETHER = 4
+export const MAX_TEAM_SIZE_SEPARATE = 8
 
 export const MAX_DISCARD = 2
 
@@ -730,6 +753,19 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
       // worth a key: absent means together, which is what every board did
       // before the sheet could ask.
       if (r.teeTeams === 'separate') lb.teeTeams = 'separate'
+
+      // Self-picked teams, and their size. The size only means anything
+      // with the pick, and is clamped to what the tee sheet can seat when
+      // teammates share a slot — a group is at most four.
+      if (r.teamPick === 'self') {
+        lb.teamPick = 'self'
+        const cap = lb.teeTeams === 'separate'
+          ? MAX_TEAM_SIZE_SEPARATE : MAX_TEAM_SIZE_TOGETHER
+        const size = Number(r.teamSize)
+        if (Number.isInteger(size)) {
+          lb.teamSize = Math.min(cap, Math.max(MIN_TEAM_SIZE, size))
+        }
+      }
     }
 
     // One draw only, whichever arrives first

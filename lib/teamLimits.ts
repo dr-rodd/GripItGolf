@@ -29,16 +29,30 @@ export function teamNoun(boards: Boards): TeamNoun {
 
 /**
  * The hard ceiling on team size, or null when there isn't one.
- * Only a pairs draw sets one.
+ *
+ * The one copy of every cap: a pairs draw is two, and an event board whose
+ * teams are picked by criteria carries its own `teamSize`. Where both
+ * somehow apply, the tightest wins — `canJoinTeam`, `oversizedTeams` and
+ * the drag refusal all read this, so a new kind of cap lands here and
+ * everywhere at once.
  */
 export function teamSizeLimit(boards: Boards): number | null {
-  return needsPairings(boards) ? PAIR_SIZE : null
+  const caps: number[] = []
+  if (needsPairings(boards)) caps.push(PAIR_SIZE)
+  for (const b of boards) {
+    if (b.audience === 'team' && b.teamSize) caps.push(b.teamSize)
+  }
+  return caps.length > 0 ? Math.min(...caps) : null
 }
 
 /** The banner shown above team selection when a limit applies. */
 export function teamSizeBanner(boards: Boards): string | null {
-  return needsPairings(boards)
-    ? `Max ${PAIR_SIZE} per pairing — a pairs draw is played between teams of two.`
+  if (needsPairings(boards)) {
+    return `Max ${PAIR_SIZE} per pairing — a pairs draw is played between teams of two.`
+  }
+  const limit = teamSizeLimit(boards)
+  return limit !== null
+    ? `Teams of ${limit} — the size the organiser set for this event.`
     : null
 }
 

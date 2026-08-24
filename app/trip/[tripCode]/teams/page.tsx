@@ -8,9 +8,12 @@ import TripTeamsClient from './TripTeamsClient'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
 import PasscodeGate from '../setup/PasscodeGate'
+import TeamsModeSwitch from './TeamsModeSwitch'
+import TeamJoinClient from './TeamJoinClient'
 import { isLocked } from '@/lib/passcode'
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
+import { linkedPlayerId } from '@/lib/currentPlayer'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +50,7 @@ export default async function TripTeamsPage({
 
   const boards = boardsForTrip(trip)
 
-  const [teamsRes, playersRes, memberships] = await Promise.all([
+  const [teamsRes, playersRes, memberships, viewerPlayerId] = await Promise.all([
     supabase.from('teams')
       .select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
     supabase
@@ -57,6 +60,9 @@ export default async function TripTeamsPage({
       .eq('is_composite', false)
       .order('name'),
     fetchMemberships(trip.id),
+    // Who this device claims to be — the join screen's identity. A stranger
+    // is an ordinary answer, pointed at the players screen.
+    linkedPlayerId(tripCode),
   ])
 
   if (teamsRes.error) console.error('TripTeamsPage teams query failed:', teamsRes.error)
@@ -100,11 +106,51 @@ export default async function TripTeamsPage({
     </div>
   )
 
-  // On a trip, teams are the group's to argue over. On an event they are
-  // the organiser's — the whole screen assigns people to sheets — so it
-  // stands behind the same PIN as the rest of the running of the event.
-  // Unlocking any organiser screen unlocks them all for the session.
+  // On a trip, teams are the group's to argue over — no gate. On an event
+  // they are the organiser's, behind the PIN — unless the team board says
+  // players pick their own, in which case the field gets the join screen
+  // without a PIN in the way (self-picking is the organiser's standing
+  // grant) and the organiser reaches the full editor through the inline
+  // unlock. One PIN, one session memory, whichever door it enters by.
+  const selfPick = boards.some(b => b.audience === 'team' && b.teamPick === 'self')
+
   if (event && isLocked(trip.settings_passcode_hash as string | null)) {
+    if (selfPick) {
+      const join = (
+        <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
+          <TripHeader backTo={`/trip/${tripCode}`} />
+          <div className="bg-cream border-b border-bark/12">
+            <div className="max-w-3xl mx-auto px-4 py-4 text-center">
+              <h1 className="font-[family-name:var(--font-display)] text-lg text-ink tracking-wide">
+                Teams
+              </h1>
+            </div>
+          </div>
+          <div className="max-w-3xl mx-auto px-4 py-6">
+            <TeamJoinClient
+              tripId={trip.id}
+              tripCode={tripCode}
+              boards={boards}
+              teams={teams}
+              players={(playersRes.data ?? []) as {
+                id: string; name: string; handicap: number | null; gender: string
+              }[]}
+              memberships={memberships}
+              viewerPlayerId={viewerPlayerId}
+            />
+          </div>
+        </div>
+      )
+      return (
+        <TeamsModeSwitch
+          tripCode={tripCode}
+          passcodeHash={trip.settings_passcode_hash as string}
+          editor={screen}
+          join={join}
+        />
+      )
+    }
+
     return (
       <PasscodeGate
         tripCode={tripCode}

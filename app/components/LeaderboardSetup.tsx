@@ -6,7 +6,7 @@ import {
   scoringsFor, TEAM_FORMATS, COMBINES, MAX_DISCARD,
   unanswered, isComplete, offersDiscard, offersTieBreak, offersQuotaScale,
   offersCountingScores, countingScoresOf, aggregateFinishOf, offersTeamNames,
-  offersTeeTeams,
+  offersTeeTeams, MIN_TEAM_SIZE, MAX_TEAM_SIZE_TOGETHER, MAX_TEAM_SIZE_SEPARATE,
   offersAllowance, tripQuotaScale, slotKey, isFormatFree,
   freeScorings, freeTeamFormats,
   hasMatchplay, boardTitle, boardRules,
@@ -967,7 +967,12 @@ function Builder({
             on={draft.teeTeams !== 'separate'}
             label="Teams share a tee time"
             hint="Partners go out together — putting one on the sheet books the team."
-            onClick={() => set({ teeTeams: undefined })}
+            // Tightening back to together also tightens the size cap.
+            onClick={() => set({
+              teeTeams: undefined,
+              ...(draft.teamSize && draft.teamSize > MAX_TEAM_SIZE_TOGETHER
+                ? { teamSize: MAX_TEAM_SIZE_TOGETHER } : {}),
+            })}
           />
           <Choice
             on={draft.teeTeams === 'separate'}
@@ -975,6 +980,62 @@ function Builder({
             hint="Teammates may go out in different slots, all feeding the same board."
             onClick={() => set({ teeTeams: 'separate' })}
           />
+        </Question>
+      )}
+
+      {/* Events only, like the tee-teams question above. Absent means the
+          organiser assigns — the teams screen as it has always been. 'self'
+          opens the teams screen to the field: teams of the chosen size,
+          formed and joined without the PIN, named from their members —
+          which is why picking it also seeds hideTeamName, so the board's
+          rows read as the players too. */}
+      {askTeeTeams && offersTeeTeams(draft) && (
+        <Question n={next()} title="How are teams formed?">
+          <Choice
+            on={draft.teamPick !== 'self'}
+            label="You assign them"
+            hint="Pick the teams yourself on the teams screen — count and members are yours."
+            onClick={() => set({ teamPick: undefined, teamSize: undefined })}
+          />
+          <Choice
+            on={draft.teamPick === 'self'}
+            label="Players pick their own"
+            hint="You set the team size; the field forms and joins teams themselves."
+            onClick={() => set({
+              teamPick: 'self',
+              teamSize: draft.teamSize ?? MIN_TEAM_SIZE,
+              hideTeamName: true,
+            })}
+          />
+          {draft.teamPick === 'self' && (
+            <div className="mt-1">
+              <p className="t-cap text-ink/65 mb-2">Players per team</p>
+              <div className="flex gap-1.5">
+                {Array.from(
+                  {
+                    length: (draft.teeTeams === 'separate'
+                      ? MAX_TEAM_SIZE_SEPARATE : MAX_TEAM_SIZE_TOGETHER)
+                      - MIN_TEAM_SIZE + 1,
+                  },
+                  (_, i) => MIN_TEAM_SIZE + i,
+                ).map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => set({ teamSize: n })}
+                    aria-pressed={draft.teamSize === n}
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      draft.teamSize === n
+                        ? 'bg-accent-deep text-white'
+                        : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </Question>
       )}
 

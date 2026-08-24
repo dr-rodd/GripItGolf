@@ -15,7 +15,7 @@ import { type ItineraryItem, golfItems, dateForDay } from '@/lib/itinerary'
 import { toItemRow } from '@/lib/itinerarySync'
 import Toggle from '@/app/components/Toggle'
 import {
-  MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError,
+  MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError, rememberUnlock,
 } from '@/lib/passcode'
 import { parseHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
 import HandicapField from '@/app/components/HandicapField'
@@ -468,6 +468,10 @@ export default function CreateTripForm() {
         keepalive: true,
       }).catch(() => { /* the trip is created; the email is best-effort */ })
     }
+
+    // The device that set a passcode plainly knows it — remember the
+    // unlock, so the creator is not asked for the code they just typed.
+    if (lockOn) rememberUnlock(code)
 
     setResultCode(code)
     setStep('done')

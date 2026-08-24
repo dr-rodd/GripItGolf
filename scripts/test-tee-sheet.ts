@@ -15,7 +15,7 @@ import {
   DEFAULT_TEE_INTERVAL_MINS, MIN_TEE_INTERVAL_MINS, MAX_TEE_INTERVAL_MINS,
   DEFAULT_GROUP_SIZE, MIN_GROUP_SIZE, MAX_GROUP_SIZE, MAX_SLOTS,
   parseInterval, parseGroupSize, slotClock, slotCount, groupSlot, bySlot,
-  sheetStart,
+  sheetStart, pickerUnits, unitMatches,
 } from '../lib/teeSheet'
 import { TEE_INTERVAL_MINS } from '../lib/itinerary'
 import { parseLeaderboards, offersTeeTeams } from '../lib/leaderboards'
@@ -118,6 +118,39 @@ section('Assignments parse defensively')
   eq(sheetStart(null), null, 'no item, no start')
 }
 
+// ─── The picker's stuck-together units ─────────────────────────
+
+section('On a share-a-tee board, a linked team is one card')
+{
+  const teamOf = new Map([
+    ['a', { teamId: 't1', teamName: 'The Lads' }],
+    ['b', { teamId: 't1', teamName: 'The Lads' }],
+    ['d', { teamId: 't2', teamName: 'Late Show' }],
+  ])
+  const field = [
+    { id: 'a', name: 'Aoife K' }, { id: 'b', name: 'Brid M' },
+    { id: 'c', name: 'Cara D' }, { id: 'd', name: 'Dara O' },
+  ]
+
+  const together = pickerUnits(field, teamOf, true)
+  eq(together.map(u => u.kind), ['team', 'team', 'solo'],
+    'teamed players collapse into units; the solo stands alone')
+  const lads = together[0]
+  ok(lads.kind === 'team' && lads.players.map(p => p.id).join() === 'a,b',
+    'the pair is one unit carrying both')
+  ok(together[1].kind === 'team' && (together[1] as { players: unknown[] }).players.length === 1,
+    'a team with one member left is still a unit — the link stays visible')
+
+  const separate = pickerUnits(field, teamOf, false)
+  eq(separate.map(u => u.kind), ['solo', 'solo', 'solo', 'solo'],
+    'members-may-play-apart offers everyone individually')
+
+  ok(unitMatches(lads, 'brid'), 'a unit matches any member\'s name')
+  ok(unitMatches(lads, 'lads'), 'or the team\'s')
+  ok(!unitMatches(lads, 'cara'), 'and not somebody else\'s')
+  ok(unitMatches(lads, '  '), 'a blank filter matches everything')
+}
+
 // ─── The tee-teams answer on a board ───────────────────────────
 
 section('A team board can say how it meets the sheet')
@@ -178,8 +211,10 @@ section('The sheet reads fail-soft and writes scoped')
     'the organiser\'s right is the PIN unlock this device already holds')
   ok(client.includes('useEffect(() => { setUnlocked(hasUnlocked(tripCode)) }'),
     '  …read after mount, because sessionStorage would tear hydration')
-  ok(/insert\(\{ trip_id: tripId, \.\.\.next \}\)/.test(client),
-    'adds carry the trip id')
+  // One batch insert — a single INSERT statement — so a race with another
+  // phone books all of a linked team or none of it, never half.
+  ok(/insert\(next\.map\(a => \(\{ trip_id: tripId, \.\.\.a \}\)\)\)/.test(client),
+    'adds are one batch carrying the trip id')
   ok(/delete\(\)[\s\S]{0,80}\.eq\('trip_id', tripId\)/.test(client),
     'removes are scoped to the trip')
   ok(client.includes('groupSlot(') && client.includes('slotClock('),
@@ -187,6 +222,35 @@ section('The sheet reads fail-soft and writes scoped')
   ok(client.includes('Pick teams'), 'a team board offers the way to its pairings')
   ok(fs.existsSync('app/trip/[tripCode]/teesheet/loading.tsx'),
     'the tab answers instantly — the loading.tsx rule')
+
+  // The linked team through the picker and out again — stuck together
+  // cuts both ways.
+  ok(client.includes('pickerUnits('), 'the picker offers units from the one copy')
+  ok(client.includes('unitMatches(u, search)'), 'filtered by member or team name')
+  ok(client.includes("u.players.length <= vacancy"),
+    'a team only fits where the whole team fits')
+  ok(client.includes('removePlayers(g.players.map(p => p.id))'),
+    'and leaves as one block on a share-a-tee board')
+}
+
+section('The organiser is never locked out of their own sheet')
+{
+  // The reported bug: the creator's device had never passed a PasscodeGate,
+  // so the sheet was read-only with nothing saying why. Two doors now: the
+  // unlock is remembered the moment the PIN is set, and offered inline on
+  // the sheet for any other device.
+  for (const f of [
+    'app/dashboard/create/CreateLeagueForm.tsx',
+    'app/dashboard/create/CreateKnockoutForm.tsx',
+    'app/dashboard/create/CreateTripForm.tsx',
+  ]) {
+    ok(read(f).includes('rememberUnlock('),
+      `${f.split('/').pop()} remembers the unlock at creation`)
+  }
+  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  ok(client.includes('<InlineUnlock'), 'the sheet offers the PIN inline')
+  const page = read('app/trip/[tripCode]/teesheet/page.tsx')
+  ok(page.includes('settings_passcode_hash'), 'with the hash the page already has')
 }
 
 section('The organiser tunes the sheet where the start is chosen')

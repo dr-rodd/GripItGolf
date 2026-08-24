@@ -33,7 +33,7 @@ export default async function TeeSheetPage({ params }: {
     fetchTripKind(tripCode),
     supabase
       .from('trips')
-      .select('id, trip_code, name, leaderboards')
+      .select('id, trip_code, name, leaderboards, settings_passcode_hash')
       .eq('trip_code', tripCode)
       .single(),
   ])
@@ -184,6 +184,7 @@ export default async function TeeSheetPage({ params }: {
         (permsResult.data as { event_permissions?: unknown } | null)?.event_permissions,
         'edit_tee_sheet',
       )}
+      passcodeHash={(trip.settings_passcode_hash as string | null) ?? null}
     />
   )
 }

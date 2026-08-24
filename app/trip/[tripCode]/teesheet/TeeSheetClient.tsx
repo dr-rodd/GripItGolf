@@ -4,11 +4,14 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
+import InlineUnlock from '@/app/components/InlineUnlock'
 import { hasUnlocked } from '@/lib/passcode'
 import { IconPlus, IconX, IconUsers } from '@/app/components/icons'
 import {
   type SlotPlayer, slotClock, slotCount, groupSlot, MAX_GROUP_SIZE,
+  pickerUnits, unitMatches,
 } from '@/lib/teeSheet'
+import { joinNames, firstName } from '@/lib/matchplayEntrants'
 
 /**
  * The tee sheet on a phone: a full day is a long scroll, so every row is
@@ -43,7 +46,7 @@ type Assignment = { round_id: string; player_id: string; slot_index: number }
 
 export default function TeeSheetClient({
   tripId, tripCode, rounds, players, initialAssignments,
-  teamOf, hasTeamBoard, teeTeamsSeparate, fieldMayEdit,
+  teamOf, hasTeamBoard, teeTeamsSeparate, fieldMayEdit, passcodeHash = null,
 }: {
   tripId: string
   tripCode: string
@@ -57,6 +60,8 @@ export default function TeeSheetClient({
   teeTeamsSeparate: boolean
   /** The `edit_tee_sheet` permission — the field's right to edit. */
   fieldMayEdit: boolean
+  /** For the inline organiser unlock; null when the event has no PIN. */
+  passcodeHash?: string | null
 }) {
   const [roundId, setRoundId] = useState<string | null>(rounds[0]?.id ?? null)
   const [assignments, setAssignments] = useState<Assignment[]>(initialAssignments)
@@ -112,45 +117,58 @@ export default function TeeSheetClient({
       : `Could not ${doing} — try again`)
   }
 
-  async function addPlayer(slotIndex: number, playerId: string) {
+  /**
+   * One or several players into a slot — a solo, or a whole linked team.
+   * One batch insert, one INSERT statement, so a race with another phone
+   * books all of a team or none of it, never half.
+   */
+  async function addPlayers(slotIndex: number, playerIds: string[]) {
     if (!round) return
     setError(null)
-    const next: Assignment = { round_id: round.id, player_id: playerId, slot_index: slotIndex }
-    setAssignments(prev => [...prev, next])
+    const next: Assignment[] = playerIds.map(id => ({
+      round_id: round.id, player_id: id, slot_index: slotIndex,
+    }))
+    setAssignments(prev => [...prev, ...next])
 
     const { error: err } = await supabase
       .from('tee_assignments')
-      .insert({ trip_id: tripId, ...next })
+      .insert(next.map(a => ({ trip_id: tripId, ...a })))
 
     if (err) {
+      const ids = new Set(playerIds)
       setAssignments(prev => prev.filter(a =>
-        !(a.round_id === round.id && a.player_id === playerId)))
-      calmError(err, 'add the player')
+        !(a.round_id === round.id && ids.has(a.player_id))))
+      calmError(err, playerIds.length > 1 ? 'add the team' : 'add the player')
     }
   }
 
-  async function removePlayer(playerId: string) {
+  /** One or several players out — a solo's ✕, or a linked block's. */
+  async function removePlayers(playerIds: string[]) {
     if (!round) return
     setError(null)
+    const ids = new Set(playerIds)
     const prev = assignments
     setAssignments(p => p.filter(a =>
-      !(a.round_id === round.id && a.player_id === playerId)))
+      !(a.round_id === round.id && ids.has(a.player_id))))
 
     const { error: err } = await supabase
       .from('tee_assignments')
       .delete()
       .eq('trip_id', tripId)
       .eq('round_id', round.id)
-      .eq('player_id', playerId)
+      .in('player_id', playerIds)
 
     if (err) {
       setAssignments(prev)
-      calmError(err, 'remove the player')
+      calmError(err, playerIds.length > 1 ? 'remove the team' : 'remove the player')
     }
   }
 
-  const filtered = unassigned.filter(p =>
-    p.name.toLowerCase().includes(search.trim().toLowerCase()))
+  // On a board whose teammates share a tee time, the picker offers linked
+  // teams as one stuck-together card and never their members alone.
+  const together = hasTeamBoard && !teeTeamsSeparate
+  const units = pickerUnits(unassigned, teamMap, together)
+    .filter(u => unitMatches(u, search))
 
   return (
     <main className="min-h-dvh bg-cream has-tabbar page-enter">
@@ -161,11 +179,26 @@ export default function TeeSheetClient({
         <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-1">
           Tee Sheet
         </h1>
-        <p className="text-ink/65 text-sm mb-5">
+        <p className="text-ink/65 text-sm mb-2">
           {canEdit
             ? 'Tap an open slot to put a name in it.'
             : 'Who goes off when. The organiser sets the groups.'}
         </p>
+
+        {/* The reported bug, closed: an organiser whose session had not
+            passed the PasscodeGate saw a read-only sheet with no way in.
+            The unlock is offered here, in place — same PIN, same session
+            memory as every other gate. */}
+        {!canEdit && passcodeHash && (
+          <div className="mb-4">
+            <InlineUnlock
+              tripCode={tripCode}
+              passcodeHash={passcodeHash}
+              onUnlocked={() => setUnlocked(true)}
+            />
+          </div>
+        )}
+        {canEdit && <div className="mb-3" /> }
 
         {/* The way to the pairings, when the event has them. Adding a team
             as one — tap a partner, book the pair — arrives with the teams
@@ -247,29 +280,47 @@ export default function TeeSheetClient({
 
                         {groups.map((g, gi) => (
                           g.teamId ? (
+                            /* A linked team is one thing: on a share-a-tee
+                               board its ✕ takes the whole block out, because
+                               stuck together cuts both ways. Separate-play
+                               boards keep the per-name ✕. */
                             <div
                               key={g.teamId}
-                              className={`rounded-lg bg-accent/[0.06] border border-accent/20 px-2 py-1.5 ${
-                                g.players.length === 4
-                                  ? 'grid grid-cols-2 gap-x-3 gap-y-0.5'
-                                  : 'flex flex-wrap items-center gap-x-3 gap-y-0.5'
-                              }`}
+                              className="rounded-lg bg-accent/[0.06] border border-accent/20 px-2 py-1.5 flex items-start gap-1"
                             >
-                              {g.players.map(p => (
-                                <span key={p.id} className="flex items-center gap-1 min-w-0">
-                                  <span className="t-card text-ink truncate">{p.name}</span>
-                                  {canEdit && (
-                                    <button
-                                      type="button"
-                                      onClick={() => removePlayer(p.id)}
-                                      aria-label={`Remove ${p.name}`}
-                                      className="flex-shrink-0 text-ink/50 hover:text-rust transition-colors p-0.5"
-                                    >
-                                      <IconX size={12} />
-                                    </button>
-                                  )}
-                                </span>
-                              ))}
+                              <div
+                                className={`flex-1 min-w-0 ${
+                                  g.players.length === 4
+                                    ? 'grid grid-cols-2 gap-x-3 gap-y-0.5'
+                                    : 'flex flex-wrap items-center gap-x-3 gap-y-0.5'
+                                }`}
+                              >
+                                {g.players.map(p => (
+                                  <span key={p.id} className="flex items-center gap-1 min-w-0">
+                                    <span className="t-card text-ink truncate">{p.name}</span>
+                                    {canEdit && !together && (
+                                      <button
+                                        type="button"
+                                        onClick={() => removePlayers([p.id])}
+                                        aria-label={`Remove ${p.name}`}
+                                        className="flex-shrink-0 text-ink/50 hover:text-rust transition-colors p-0.5"
+                                      >
+                                        <IconX size={12} />
+                                      </button>
+                                    )}
+                                  </span>
+                                ))}
+                              </div>
+                              {canEdit && together && (
+                                <button
+                                  type="button"
+                                  onClick={() => removePlayers(g.players.map(p => p.id))}
+                                  aria-label={`Remove ${g.teamName}`}
+                                  className="flex-shrink-0 text-ink/50 hover:text-rust transition-colors p-0.5"
+                                >
+                                  <IconX size={12} />
+                                </button>
+                              )}
                             </div>
                           ) : (
                             <div key={`solo-${gi}`} className="flex flex-col gap-0.5">
@@ -279,7 +330,7 @@ export default function TeeSheetClient({
                                   {canEdit && (
                                     <button
                                       type="button"
-                                      onClick={() => removePlayer(p.id)}
+                                      onClick={() => removePlayers([p.id])}
                                       aria-label={`Remove ${p.name}`}
                                       className="flex-shrink-0 text-ink/50 hover:text-rust transition-colors p-0.5"
                                     >
@@ -333,34 +384,66 @@ export default function TeeSheetClient({
                             <IconX size={14} />
                           </button>
                         </div>
-                        {filtered.length === 0 ? (
+                        {units.length === 0 ? (
                           <p className="t-cap text-ink/65 px-1 py-1.5">
                             {unassigned.length === 0
                               ? 'Everyone is on the sheet.'
                               : 'Nobody by that name still needs a time.'}
                           </p>
                         ) : (
-                          <ul className="max-h-48 overflow-y-auto">
-                            {filtered.map(p => (
-                              <li key={p.id}>
-                                <button
-                                  type="button"
-                                  disabled={vacancy === 0}
-                                  onClick={() => {
-                                    addPlayer(i, p.id)
-                                    if (vacancy <= 1) setAdding(null)
-                                  }}
-                                  className="w-full text-left px-2 py-2 rounded-lg text-ink text-sm hover:bg-bark/[0.06] transition-colors disabled:opacity-40"
-                                >
-                                  {p.name}
-                                  {teamMap.get(p.id) && (
-                                    <span className="t-cap text-ink/65 ml-2">
-                                      {teamMap.get(p.id)!.teamName}
+                          <ul className="max-h-48 overflow-y-auto space-y-1">
+                            {units.map(u => {
+                              if (u.kind === 'solo') {
+                                const p = u.player
+                                return (
+                                  <li key={p.id}>
+                                    <button
+                                      type="button"
+                                      disabled={vacancy === 0}
+                                      onClick={() => {
+                                        addPlayers(i, [p.id])
+                                        if (vacancy <= 1) setAdding(null)
+                                      }}
+                                      className="w-full text-left px-2 py-2 rounded-lg text-ink text-sm hover:bg-bark/[0.06] transition-colors disabled:opacity-40"
+                                    >
+                                      {p.name}
+                                      {!together && teamMap.get(p.id) && (
+                                        <span className="t-cap text-ink/65 ml-2">
+                                          {teamMap.get(p.id)!.teamName}
+                                        </span>
+                                      )}
+                                    </button>
+                                  </li>
+                                )
+                              }
+
+                              // A linked team, offered as one stuck-together
+                              // card — the same tinted block it becomes in
+                              // the slot. Tapping books everyone in it.
+                              const fits = u.players.length <= vacancy
+                              return (
+                                <li key={u.teamId}>
+                                  <button
+                                    type="button"
+                                    disabled={!fits}
+                                    onClick={() => {
+                                      addPlayers(i, u.players.map(p => p.id))
+                                      if (vacancy - u.players.length <= 0) setAdding(null)
+                                    }}
+                                    className="w-full text-left px-2 py-2 rounded-lg bg-accent/[0.06] border border-accent/20 transition-colors hover:border-accent/40 disabled:opacity-40"
+                                  >
+                                    <span className="block text-ink text-sm">
+                                      {joinNames(u.players.map(p => firstName(p.name)))}
                                     </span>
-                                  )}
-                                </button>
-                              </li>
-                            ))}
+                                    <span className="block t-cap text-ink/65 mt-0.5">
+                                      {fits
+                                        ? `${u.players.length === 2 ? 'Pair' : `Team of ${u.players.length}`} — added together`
+                                        : `Needs ${u.players.length} spots`}
+                                    </span>
+                                  </button>
+                                </li>
+                              )
+                            })}
                           </ul>
                         )}
                       </div>

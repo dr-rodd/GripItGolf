@@ -19,7 +19,7 @@ import {
 } from '@/lib/itinerary'
 import { toItemRow } from '@/lib/itinerarySync'
 import {
-  MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError,
+  MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError, rememberUnlock,
 } from '@/lib/passcode'
 import { parseHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
@@ -499,6 +499,11 @@ export default function CreateLeagueForm({ schedule }: {
         keepalive: true,
       }).catch(() => { /* the event is created; the email is best-effort */ })
     }
+
+    // The device that just set the PIN plainly knows it — remember the
+    // unlock now, so the organiser's own tee sheet and organiser area
+    // are editable without being asked for the code they just typed.
+    rememberUnlock(code)
 
     setResultCode(code)
     setStep('done')

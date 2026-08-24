@@ -142,6 +142,53 @@ export function groupSlot(
   return order
 }
 
+// ─── The add picker's units ────────────────────────────────────
+
+export type PickerUnit =
+  | { kind: 'solo'; player: SlotPlayer }
+  | { kind: 'team'; teamId: string; teamName: string; players: SlotPlayer[] }
+
+/**
+ * What the add-player picker offers, when a slot has room.
+ *
+ * On a board whose teammates share a tee time (`together`), a teamed player
+ * is never offered alone: the team is one stuck-together unit carrying
+ * every member still off this round's sheet, and tapping it books them all.
+ * A team with one member left is still a unit — the link is the point, and
+ * showing it keeps "who am I stuck to" visible. Players with no team, and
+ * every player when members may go out separately, are solos.
+ *
+ * Built on `groupSlot`, the one copy of gathering-by-team, so the picker
+ * and the slots can never group differently.
+ */
+export function pickerUnits(
+  unassigned: readonly SlotPlayer[],
+  teamOf: ReadonlyMap<string, { teamId: string; teamName: string }>,
+  together: boolean,
+): PickerUnit[] {
+  if (!together) {
+    return unassigned.map(player => ({ kind: 'solo', player }))
+  }
+  const out: PickerUnit[] = []
+  for (const g of groupSlot(unassigned, teamOf)) {
+    if (g.teamId) {
+      out.push({ kind: 'team', teamId: g.teamId, teamName: g.teamName!, players: g.players })
+    } else {
+      for (const player of g.players) out.push({ kind: 'solo', player })
+    }
+  }
+  return out
+}
+
+/** Whether a picker unit matches a typed filter — any member, or the team. */
+export function unitMatches(unit: PickerUnit, query: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  if (unit.kind === 'solo') return unit.player.name.toLowerCase().includes(q)
+  return unit.teamName.toLowerCase().includes(q)
+    || unit.players.some(p => p.name.toLowerCase().includes(q))
+}
+
 // ─── Assignments as fetched ────────────────────────────────────
 
 export type TeeAssignment = { player_id: string; slot_index: number }
