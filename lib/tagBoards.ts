@@ -94,6 +94,27 @@ export function tagRoundScore(
 }
 
 /**
+ * Which tag a team's card counts towards, or null when it counts for none.
+ *
+ * A card credits one side or no side. A team whose members carry two tags
+ * — which the tee sheet refuses to make, but which an organiser editing
+ * tags afterwards could leave behind — is skipped rather than credited to
+ * whichever member happened to be first: half a side's score appearing
+ * under the other side is worse than a card that does not count, and the
+ * untagged list on screen already says something is wrong.
+ */
+export function tagOfTeam(
+  memberIds: readonly string[],
+  memberships: readonly Membership[],
+): string | null {
+  if (memberIds.length === 0) return null
+  const tags = new Set(memberIds.map(id => tagOf(memberships, id)))
+  if (tags.size !== 1) return null
+  const [only] = tags
+  return only
+}
+
+/**
  * Which of a tag's players actually counted, in the order they counted.
  *
  * The same selection `tagRoundScore` makes, said in players rather than in

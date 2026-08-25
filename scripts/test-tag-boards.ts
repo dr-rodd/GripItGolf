@@ -17,9 +17,11 @@
 import fs from 'fs'
 import {
   TAG_SET, eventTags, tagOf, untaggedIds, describeTags,
-  tagRoundScore, countingPlayers,
+  tagRoundScore, countingPlayers, tagOfTeam,
 } from '../lib/tagBoards'
-import { MAIN_SET, type Membership, type TeamRow } from '../lib/teamSets'
+import {
+  MAIN_SET, daySheetId, type Membership, type TeamRow,
+} from '../lib/teamSets'
 import {
   type Leaderboard, parseLeaderboards, boardTitle, boardRules, slotKey,
   isTagBoard, tagsInPlay, tagCountOf, unanswered, isComplete,
@@ -426,6 +428,88 @@ section('A tags board scored from real cards')
     const everyone = rows.flatMap(r => r.playerIds)
     eq(everyone.length, 4, 'every tagged player counts once')
     eq(new Set(everyone).size, 4, 'and only once')
+  }
+
+  // ── The day's team cards feeding the tag ──
+  //
+  // The same field, now going out as pairs on the day's own sheet: Alice
+  // with Bob for Europe, Cara with Dan for the USA.
+  section('The day\'s team cards count towards the tag that made them')
+  {
+    const dayTeams = [
+      ...teams,
+      { id: 'pair-eu-r1', name: 'Alice & Bob', color: '#2563EB', team_set: daySheetId('r1') },
+      { id: 'pair-us-r1', name: 'Cara & Dan', color: '#DC2626', team_set: daySheetId('r1') },
+    ]
+    const dayMembers = [
+      ...memberships,
+      { team_id: 'pair-eu-r1', team_set: daySheetId('r1'), player_id: 'p1' },
+      { team_id: 'pair-eu-r1', team_set: daySheetId('r1'), player_id: 'p2' },
+      { team_id: 'pair-us-r1', team_set: daySheetId('r1'), player_id: 'p3' },
+      { team_id: 'pair-us-r1', team_set: daySheetId('r1'), player_id: 'p4' },
+    ]
+    const dayCtx = buildRowContext({
+      players, teams: dayTeams, memberships: dayMembers, holes, rounds,
+      courseByRound: new Map(rounds.map(r => [r.id, 'c1'])),
+      scores, liveScores: [],
+      roundHandicaps: players.flatMap(p =>
+        rounds.map(r => ({ round_id: r.id, player_id: p.id, playing_handicap: p.handicap }))),
+      tees: [], activeRoundIds: [], livePlayerIds: [], legacyTeamScoring: null,
+    } as never)
+
+    // Better ball, best 1 on every hole. Round 1: Europe is Alice's 3 a
+    // hole against Bob's 2, so 54; USA is Dan's 2 against Cara's 1, so 36.
+    // Round 2 has no day teams at all, so it counts nothing.
+    const dayBoard = board({
+      tagMode: 'day_teams', tagCount: undefined,
+      teamFormat: 'better_ball', countingScores: 1,
+    })
+    const rows = buildRows(dayBoard, dayCtx)
+    eq(rows.map(r => [r.name, r.total]), [['Europe', 54], ['USA', 36]],
+      'each pair\'s composite card lands on the tag its players share')
+    eq(rows[0].perRound, { r1: 54, r2: 0 },
+      'a day nobody made teams on counts nothing — a lone card is not a team card')
+    eq(rows[0].playedRounds, ['r1'],
+      'and is not a round the tag played, rather than a nought it scored')
+
+    // Two counting scores is both cards: Europe 54+36, USA 18+36.
+    eq(buildRows(board({
+      tagMode: 'day_teams', tagCount: undefined,
+      teamFormat: 'better_ball', countingScores: 2,
+    }), dayCtx).map(r => r.total), [90, 54],
+      'and the board\'s own team format decides what a team card is')
+  }
+
+  section('A team the tags cannot agree on is skipped, never half-credited')
+  {
+    const mixed = [
+      ...teams,
+      { id: 'mixed-r1', name: 'Alice & Cara', color: '#16A34A', team_set: daySheetId('r1') },
+    ]
+    const mixedMembers = [
+      ...memberships,
+      { team_id: 'mixed-r1', team_set: daySheetId('r1'), player_id: 'p1' },
+      { team_id: 'mixed-r1', team_set: daySheetId('r1'), player_id: 'p3' },
+    ]
+    eq(tagOfTeam(['p1', 'p2'], mixedMembers), 'tag-eu', 'one tag between them is that tag\'s')
+    eq(tagOfTeam(['p1', 'p3'], mixedMembers), null, 'two tags is nobody\'s')
+    eq(tagOfTeam(['p1', 'nobody'], mixedMembers), null, 'and an untagged member is nobody\'s')
+    eq(tagOfTeam([], mixedMembers), null, 'an empty team counts for no one')
+
+    const mixedCtx = buildRowContext({
+      players, teams: mixed, memberships: mixedMembers, holes, rounds,
+      courseByRound: new Map(rounds.map(r => [r.id, 'c1'])),
+      scores, liveScores: [],
+      roundHandicaps: players.flatMap(p =>
+        rounds.map(r => ({ round_id: r.id, player_id: p.id, playing_handicap: p.handicap }))),
+      tees: [], activeRoundIds: [], livePlayerIds: [], legacyTeamScoring: null,
+    } as never)
+    const rows = buildRows(board({
+      tagMode: 'day_teams', tagCount: undefined,
+      teamFormat: 'better_ball', countingScores: 1,
+    }), mixedCtx)
+    eq(rows.map(r => r.total), [0, 0],
+      'a mixed team credits neither side — half a score under the wrong tag is worse than none')
   }
 }
 

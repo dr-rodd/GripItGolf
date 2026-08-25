@@ -313,21 +313,20 @@ export const TAG_MODES: { key: TagMode; label: string; hint: string }[] = [
     hint: 'The tag\'s best cards count each round — you choose how many.' },
   { key: 'all_cards', label: 'Every card counts',
     hint: 'Every player\'s round counts towards their tag.' },
+  { key: 'day_teams', label: 'The day\'s team cards',
+    hint: 'Each team\'s card counts towards the tag its players share.' },
 ]
 
 /**
- * Every mode that can be read back, including the one not offered yet.
+ * Every mode that can be read back.
  *
- * Day teams — a fourball's own card crediting the tag that made it — needs
- * teams formed at the tee sheet before it can score anything, so it is
- * parsed now and offered once that exists. The same two-list shape
- * `ALL_TEAM_FORMATS` keeps, and for the same reason: what the parser
- * understands and what the form offers are different questions.
+ * Kept as its own list because the two questions — what the parser
+ * understands, and what the form offers — are genuinely different, and a
+ * mode retired later has to go on reading back for the events already on
+ * it. `ALL_TEAM_FORMATS` is the same shape for the same reason.
  */
 export const ALL_TAG_MODES: { key: TagMode; label: string; hint: string }[] = [
   ...TAG_MODES,
-  { key: 'day_teams', label: 'The day\'s team cards',
-    hint: 'Each team\'s card counts towards the tag its players share.' },
 ]
 
 /** How many cards count, when the mode counts a few. Absent reads as two. */

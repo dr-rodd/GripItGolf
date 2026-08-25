@@ -17,13 +17,17 @@ import type { Leaderboard } from './leaderboards'
 import { FULL_ALLOWANCE, allowanceOf, allowedHandicap } from './handicapAllowance'
 import { shotsReceived } from './handicap'
 import { quotaPoints, quotaTarget, quotaScaleOf } from './quota'
-import { setOf, sheetForBoard, teamsOnSheet, membersOf, type Membership } from './teamSets'
+import {
+  setOf, sheetForBoard, teamsOnSheet, membersOf, daySheetId, type Membership,
+} from './teamSets'
 import {
   type TeamScoring, type TeamScoreInput, type ScoringBasis,
   DEFAULT_TEAM_SCORING, teamRoundPoints, teamHolePoints,
 } from './teamScoring'
 import { shortNames } from './matchplayEntrants'
-import { TAG_SET, tagRoundScore, countingPlayers } from './tagBoards'
+import {
+  TAG_SET, tagRoundScore, countingPlayers, tagOfTeam,
+} from './tagBoards'
 import { isTagBoard, tagCountOf } from './leaderboards'
 import {
   resolveCustomPoints, totalAfterDiscard, discardedIndices,
@@ -1098,11 +1102,52 @@ function tagRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const tags = teamsOnSheet(ctx.teams, TAG_SET) as RowTeam[]
   const reads = tieBreakOf(lb) === 'countback'
 
+  // Counting the day's team cards is a different unit entirely — a
+  // fourball's composite card rather than the players' own — so it takes
+  // the team machinery, under the format this board carries. The board
+  // always carries one in that mode: the parser refuses it without.
+  const byDayTeams = mode === 'day_teams'
+  const teamFormat = byDayTeams ? teamScoringFor(lb, ctx.legacyTeamScoring) : null
+  const teamInputs = byDayTeams ? teamScoreInputs(ctx, allowanceOf(lb)) : []
+  /** The day teams playing a round, with the tag each one counts for. */
+  const dayTeamsOn = (roundId: string) =>
+    teamsOnSheet(ctx.teams, daySheetId(roundId)).map(t => {
+      const memberIds = membersOf(ctx.memberships, t.id)
+      return { memberIds, tagId: tagOfTeam(memberIds, ctx.memberships) }
+    })
+
   const perTag = tags.map(tag => {
     const memberIds = membersOf(ctx.memberships, tag.id)
     const members = memberIds.map(id => byPlayer.get(id)).filter(Boolean) as typeof perPlayer
 
     const rounds: RoundScore[] = ctx.rounds.map(r => {
+      if (byDayTeams) {
+        // Every team of this tag's that went out, added up. A player in no
+        // team that day simply does not count — the unit is the team card,
+        // and a lone card is not one.
+        const mine = dayTeamsOn(r.id).filter(t => t.tagId === tag.id)
+        const results = mine.map(t =>
+          teamRoundPoints(t.memberIds, r.id, teamInputs, teamFormat!, basis))
+        return {
+          roundId: r.id,
+          score: results.reduce((sum, x) => sum + x.score, 0),
+          // The closing stretches of the same teams' composite cards, so
+          // the countback answers the same question the total did.
+          countback: reads
+            ? SEGMENTS.reduce((acc, seg) => {
+              const sub = teamInputs.filter(s => s.holeNumber >= segmentFrom(seg))
+              acc[seg] = mine.reduce((sum, t) =>
+                sum + teamRoundPoints(t.memberIds, r.id, sub, teamFormat!, basis).score, 0)
+              return acc
+            }, {} as Countback)
+            : undefined,
+          relative: null,
+          live: ctx.resolved.some(s =>
+            s.roundId === r.id && s.live
+            && mine.some(t => t.memberIds.includes(s.playerId))),
+          played: results.some(x => x.played),
+        }
+      }
       // Only cards actually played are candidates. A tag whose third
       // player is not out yet counts its best two of two, not its best two
       // of two-and-a-blank — a missing card is not a nought.
