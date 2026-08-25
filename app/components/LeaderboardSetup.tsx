@@ -739,7 +739,7 @@ function RoundLinks({
 
 function Builder({
   existing, initial, playerCount, teamCount, rounds, askTeeTeams = false,
-  askTags = false, onSave, onCancel,
+  askTags = false, scope, onSave, onCancel,
 }: {
   /** What the trip already runs, NOT counting the board being edited. */
   existing: Leaderboard[]
@@ -753,10 +753,20 @@ function Builder({
   askTeeTeams?: boolean
   /** Events only — offer a board that ranks tags (lib/tagBoards.ts). */
   askTags?: boolean
+  /**
+   * The golf a board made here counts (`Leaderboard.roundIds`), when it is
+   * not the whole event. Seeded onto the draft rather than stamped on
+   * afterwards, and it has to be: the scope is part of what makes two
+   * boards different competitions, so a day's Stableford stamped after the
+   * fact would be refused as a clash with the event's own Stableford while
+   * it was still being made.
+   */
+  scope?: string[]
   onSave: (lb: Leaderboard) => void
   onCancel: (() => void) | null
 }) {
-  const [draft, setDraft] = useState<Partial<Leaderboard>>(initial ?? FRESH)
+  const fresh = scope?.length ? { ...FRESH, roundIds: scope } : FRESH
+  const [draft, setDraft] = useState<Partial<Leaderboard>>(initial ?? fresh)
   const set = (patch: Partial<Leaderboard>) => setDraft(d => ({ ...d, ...patch }))
 
   // A prize table is one row per finisher, and on a team board the finishers
@@ -822,8 +832,10 @@ function Builder({
             hint={a.hint}
             // Who is ranked is the question everything else hangs off, so
             // changing it starts the cascade again. The sheet is not carried
-            // across either — teams are apportioned on the team screen.
-            onClick={() => setDraft({ ...FRESH, audience: a.key })}
+            // across either — teams are apportioned on the team screen. The
+            // scope is, because which golf this board counts is the screen
+            // it is being made on, not an answer inside the cascade.
+            onClick={() => setDraft({ ...fresh, audience: a.key })}
           />
         ))}
         {/* Events only. Tags are the sides a field carries all week while
@@ -838,7 +850,7 @@ function Builder({
             label="Tags"
             hint="Rank the sides players carry all week — whoever they play with on the day."
             onClick={() => setDraft({
-              ...FRESH, audience: 'team', tagMode: TAG_MODES[0].key,
+              ...fresh, audience: 'team', tagMode: TAG_MODES[0].key,
             })}
           />
         )}
@@ -1306,7 +1318,7 @@ function Builder({
 
 export default function LeaderboardSetup({
   boards, playerCount, teamCount, rounds = [], readOnly = false, onChange,
-  askTeeTeams = false, askTags = false,
+  askTeeTeams = false, askTags = false, scope,
 }: {
   boards: Leaderboard[]
   /** The field an individual prize table pays out to. */
@@ -1332,6 +1344,12 @@ export default function LeaderboardSetup({
    * the sides, and this model does not know what kind of trip is asking.
    */
   askTags?: boolean
+  /**
+   * The golf boards made here count, when this screen is about one day
+   * rather than the whole event (lib/leaderboards.ts `roundIds`). Absent
+   * means the whole event, which is every caller but the day editor.
+   */
+  scope?: string[]
   onChange: (boards: Leaderboard[]) => void
 }) {
   const [adding, setAdding] = useState(false)
@@ -1406,6 +1424,7 @@ export default function LeaderboardSetup({
             rounds={rounds}
             askTeeTeams={askTeeTeams}
             askTags={askTags}
+            scope={scope}
             onSave={save}
             onCancel={() => setEditingId(null)}
           />
@@ -1455,6 +1474,7 @@ export default function LeaderboardSetup({
           rounds={rounds}
           askTeeTeams={askTeeTeams}
           askTags={askTags}
+          scope={scope}
           onSave={save}
           onCancel={done ? () => setAdding(false) : null}
         />

@@ -6,6 +6,8 @@ import { tripBoards, isLegacy } from '@/lib/leaderboardsCompat'
 import { parseTeamScoring } from '@/lib/teamScoring'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { liveRoundPresence, type OpenCard } from '@/lib/rowContext'
+import { isEvent } from '@/lib/eventHub'
+import { parseLeagueSetup } from '@/lib/leagueSetup'
 import Poller from '@/app/components/Poller'
 import TripLeaderboardClient from './TripLeaderboardClient'
 import SupportLink from '@/app/components/SupportLink'
@@ -121,6 +123,15 @@ export default async function TripLeaderboardPage({
   const teamScoring = parseTeamScoring(trip.team_scoring)
   const boards = tripBoards(stored, parseFormats(trip.formats), teamScoring)
 
+  // How an event's days relate on the board, and whether this is an event
+  // at all. Both ride in on the `*` above rather than being named, so a
+  // database that has not run migrations 046/047 simply has neither and
+  // reads as the trip it has always been.
+  const event = isEvent((trip as { kind?: unknown }).kind)
+  const dayBoards = event
+    ? parseLeagueSetup((trip as { bracket_setup?: unknown }).bracket_setup)?.dayBoards
+    : undefined
+
   // Derived through the one copy of the rule: a vacant card — open, nobody
   // locked on — puts nothing in play. See liveRoundPresence in rowContext.
   const { activeRoundIds, livePlayerIds } =
@@ -153,6 +164,8 @@ export default async function TripLeaderboardPage({
         liveScores={liveScoresRes.data ?? []}
         roundHandicaps={hcpsRes.data ?? []}
         tees={teesRes.data ?? []}
+        isEvent={event}
+        dayBoards={dayBoards}
       />
 
       {/* Below the board, after everything worth reading */}

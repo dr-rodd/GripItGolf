@@ -15,8 +15,9 @@ import {
   DAY_BOARDS, LEAGUE_SCHEDULES, type LeagueSetup,
   MAX_LEAGUE_DAYS, WEEKDAY_NAMES,
   leagueDaysIssue, starterBoards, parseLeagueSetup, describeLeagueSetup,
-  weeklyDates,
+  weeklyDates, boardGrouping, describeScope,
 } from '../lib/leagueSetup'
+import type { Leaderboard } from '../lib/leaderboards'
 import { parseBracketSetup } from '../lib/bracketSetup'
 import { parseLeaderboards } from '../lib/leaderboards'
 import { MAX_ROUNDS } from '../lib/tripLimits'
@@ -328,6 +329,87 @@ section('A league event\'s organiser area describes its format, never re-forms i
   const organiser = read('app/trip/[tripCode]/organiser/page.tsx')
   ok(organiser.includes('parseLeagueSetup'),
     'the organiser card reads both formats from the one column')
+}
+
+// ─── The days answer finally means something ───────────────────
+
+section('How the days relate decides how the boards are arranged')
+{
+  const overall: Leaderboard = {
+    id: 'lb-all', audience: 'individual', competition: 'league',
+    scoring: 'stableford', combine: 'total',
+  }
+  const day1: Leaderboard = { ...overall, id: 'lb-d1', roundIds: ['r1'] }
+  const day2: Leaderboard = { ...overall, id: 'lb-d2', roundIds: ['r2'] }
+  const all = [overall, day1, day2]
+
+  eq(boardGrouping(all, 'cumulative').overall.map(b => b.id), ['lb-all'],
+    'a running total leads with the whole event')
+  eq(boardGrouping(all, 'cumulative').byDay.map(b => b.id), ['lb-d1', 'lb-d2'],
+    '  …and still shows a day board somebody went to the trouble of making')
+  eq(boardGrouping(all, 'hybrid').overall.map(b => b.id), ['lb-all'],
+    'days-and-overall says the same, explicitly')
+  eq(boardGrouping(all, 'hybrid').byDay.length, 2, '  …with the days after it')
+
+  eq(boardGrouping(all, 'separate').overall, [],
+    'separate days set the overall board aside')
+  eq(boardGrouping(all, 'separate').byDay.map(b => b.id), ['lb-d1', 'lb-d2'],
+    '  …leaving each day its own competition')
+  ok(boardGrouping(all, 'separate').byDay.length
+    + boardGrouping(all, 'separate').overall.length < all.length,
+    '  …set aside, never deleted — the boards are all still in the list passed in')
+
+  eq(boardGrouping([overall], 'separate').overall.map(b => b.id), ['lb-all'],
+    'nothing scoped means nothing to separate from — one board however it answered')
+  eq(boardGrouping(all, undefined).overall.map(b => b.id), ['lb-all'],
+    'and an event that never answered reads as the running total it always was')
+}
+
+section('A day board says which golf it counts')
+{
+  const rounds = [
+    { id: 'r1', roundNumber: 1, courseName: 'Ballyliffin' },
+    { id: 'r2', roundNumber: 2, courseName: 'Portsalon' },
+    { id: 'r3', roundNumber: 3, courseName: 'Ballyliffin' },
+  ]
+  const lb = (roundIds?: string[]): Leaderboard => ({
+    id: 'b', audience: 'individual', competition: 'league',
+    scoring: 'stableford', combine: 'total',
+    ...(roundIds ? { roundIds } : {}),
+  })
+
+  eq(describeScope(lb(), rounds), null,
+    'a board counting the whole event says nothing extra — its title is the truth')
+  eq(describeScope(lb(['r2']), rounds), 'Portsalon', 'one day names its course')
+  eq(describeScope(lb(['r1', 'r2']), rounds), 'Ballyliffin & Portsalon', 'two name both')
+  eq(describeScope(lb(['r1', 'r3']), rounds), 'Days 1, 3',
+    'a venue played twice is said in days — the name alone could not tell them apart')
+  eq(describeScope(lb(['gone']), rounds), null,
+    'and a scope pointing at nothing says nothing rather than inventing a day')
+}
+
+section('The day editor is a door on the organiser page, events only')
+{
+  const page = read('app/trip/[tripCode]/organiser/days/page.tsx')
+  ok(page.includes('isEvent(trip.kind)'), 'a trip is pointed at Trip Setup')
+  ok(page.includes('PasscodeGate'), 'behind the organiser PIN like the rest of the area')
+
+  const client = read('app/trip/[tripCode]/organiser/days/DayBoardsClient.tsx')
+  ok(client.includes('scope={[round.id]}'),
+    'the cascade is told which day it is making a board for')
+  ok(client.includes('<LeaderboardSetup'),
+    'and it is the same cascade, never a second smaller copy')
+
+  const form = read('app/components/LeaderboardSetup.tsx')
+  ok(form.includes('const fresh = scope?.length ? { ...FRESH, roundIds: scope } : FRESH'),
+    'the scope is seeded onto the draft, not stamped on after')
+  ok(form.includes('setDraft({ ...fresh, audience: a.key })'),
+    '  …and survives the cascade being restarted, or a day board would lose its day')
+
+  const organiser = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
+  ok(organiser.includes('/organiser/days'), 'the organiser page carries the door')
+  ok(organiser.includes('rounds.length > 1'),
+    'and only when there is more than one day to tell apart')
 }
 
 // ─── Result ────────────────────────────────────────────────────

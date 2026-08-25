@@ -29,10 +29,12 @@ import { MAX_ROUNDS } from './tripLimits'
 // ─── How a multi-day event's days relate ───────────────────────
 //
 // Asked of a multi-day league only — one day has one board and no question.
-// The choice is presentation the leaderboard screen grows into as league
-// scoring fills out; every league starts on the same board either way (see
-// `starterBoards`), so the answer is stored faithfully now and read more
-// fully later — the same posture as `tee_sheet` and strict mode.
+//
+// It was stored and not read for a while: the answer was recorded
+// faithfully while the leaderboard screen had no way to show a day on its
+// own. `Leaderboard.roundIds` is that way — a board scoped to one round is
+// that day's competition — so the answer is now read, by `boardGrouping`
+// below, which is the only copy of what each of the three means on screen.
 
 export type DayBoards = 'separate' | 'cumulative' | 'hybrid'
 
@@ -170,6 +172,68 @@ export function starterBoards(): Leaderboard[] {
     scoring: 'stableford',
     combine: 'total',
   }]
+}
+
+// ─── How the boards are arranged on screen ─────────────────────
+
+/**
+ * Which boards lead, and which belong to a day.
+ *
+ * The one copy of what `dayBoards` means once there is something to mean:
+ * a board carrying `roundIds` is scoped to particular golf, and on a
+ * multi-day event that is a day's own competition. Everything else counts
+ * the whole event and leads.
+ *
+ * · `cumulative` — the running total is the event, and a day board, if
+ *   somebody made one, still shows. Nothing is hidden: an organiser who
+ *   went to the trouble of scoping a board meant it.
+ * · `hybrid` — the same, said explicitly: overall first, days after.
+ * · `separate` — each day is its own competition, so the overall boards
+ *   are set aside. **Set aside, never deleted**: the answer is a way of
+ *   reading the event and can be changed back, and a board removed on a
+ *   presentation setting would take its prize table with it.
+ *
+ * Pure, and deliberately says nothing about tabs or order on the page
+ * beyond which list a board is in — the screen decides how to draw them.
+ */
+export function boardGrouping(
+  boards: readonly Leaderboard[],
+  dayBoards: DayBoards | undefined,
+): { overall: Leaderboard[]; byDay: Leaderboard[] } {
+  const scoped = boards.filter(b => (b.roundIds?.length ?? 0) > 0)
+  const whole = boards.filter(b => (b.roundIds?.length ?? 0) === 0)
+  // Nothing scoped means nothing to separate from: an event whose days
+  // carry no board of their own has one leaderboard however it answered.
+  if (scoped.length === 0) return { overall: whole, byDay: [] }
+  if (dayBoards === 'separate') return { overall: [], byDay: scoped }
+  return { overall: whole, byDay: scoped }
+}
+
+/**
+ * What a day board is called on screen: its own title, then the golf it
+ * counts. A board counting everything says nothing extra — the title is
+ * already the whole truth about it.
+ *
+ * The course, or the day number when several days share a venue: a
+ * two-round trip to one links needs "Day 1" and "Day 2", and a tour needs
+ * the names. Both are what somebody would say out loud.
+ */
+export function describeScope(
+  lb: Pick<Leaderboard, 'roundIds'>,
+  rounds: readonly { id: string; roundNumber?: number | null; courseName?: string | null }[],
+): string | null {
+  const ids = lb.roundIds ?? []
+  if (ids.length === 0) return null
+  const mine = rounds.filter(r => ids.includes(r.id))
+  if (mine.length === 0) return null
+
+  const names = [...new Set(mine.map(r => r.courseName).filter(Boolean))] as string[]
+  const venuesRepeat = names.length < mine.length
+  if (names.length > 0 && !venuesRepeat) return names.join(' & ')
+
+  const days = mine.map(r => r.roundNumber).filter((n): n is number => !!n)
+  if (days.length === 0) return names[0] ?? null
+  return days.length === 1 ? `Day ${days[0]}` : `Days ${days.join(', ')}`
 }
 
 // ─── Storage ───────────────────────────────────────────────────

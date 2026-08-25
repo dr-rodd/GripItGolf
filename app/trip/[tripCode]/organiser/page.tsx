@@ -187,6 +187,12 @@ export default async function OrganiserPage({ params }: {
 
   const boards = parseLeaderboards(trip.leaderboards)
 
+  // How many days carry a board of their own — a board is a day's when it
+  // is scoped to golf (lib/leaderboards.ts `roundIds`).
+  const dayBoardCount = new Set(
+    boards.flatMap(b => b.roundIds ?? [])
+  ).size
+
   const content = (
     <OrganiserClient
       tripId={trip.id}
@@ -214,6 +220,11 @@ export default async function OrganiserPage({ params }: {
         taggedResult.count ?? 0,
         playersResult.count ?? 0,
       )}
+      dayFormatSummary={
+        dayBoardCount === 0
+          ? 'Every day is scored by the event\'s own rules. Give one its own format — singles today, fourballs tomorrow.'
+          : `${dayBoardCount} of ${rounds.length} days ${dayBoardCount === 1 ? 'has' : 'have'} a format of ${dayBoardCount === 1 ? 'its' : 'their'} own.`
+      }
     />
   )
 

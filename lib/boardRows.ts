@@ -466,7 +466,10 @@ export function teamCardHolePoints(
  */
 export function buildRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   if (lb.competition === 'matchplay') return []
-  const counted = withoutCasualRounds(ctx)
+  // Casual first, then the board's own scope: a casual round does not
+  // count on any board, so a day board pointed at one counts nothing —
+  // which is right, and is what the two filters in this order say.
+  const counted = withOnlyRounds(withoutCasualRounds(ctx), lb.roundIds)
   // A tags board is a team board by audience — every predicate on the
   // platform treats it as one — but its rows are built from whole cards
   // rather than a composite one, so it takes its own shell.
@@ -486,6 +489,38 @@ export function buildRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
 function withoutCasualRounds(ctx: RowContext): RowContext {
   if (!ctx.rounds.some(r => r.casual)) return ctx
   const rounds = ctx.rounds.filter(r => !r.casual)
+  const counted = new Set(rounds.map(r => r.id))
+  return {
+    ...ctx,
+    rounds,
+    resolved: ctx.resolved.filter(s => counted.has(s.roundId)),
+  }
+}
+
+/**
+ * The context narrowed to some rounds — the only copy of that.
+ *
+ * Two callers, and they want the same thing for different reasons. A board
+ * scoped to one day (`roundIds`) is a competition over that day: what it
+ * discards, what its positions pay and where a tie is broken are all
+ * decided inside its own rounds. And the leaderboard's per-course switch
+ * narrows every board at once, so the table reads as that course's own.
+ *
+ * Both are "score this board over these rounds and no others", and both
+ * have to drop the scores as well as the rounds, or a round would vanish
+ * from the columns while its cards went on counting towards the total.
+ *
+ * `undefined` or empty means every round, which is what a board with no
+ * scope stored means — the same absent-is-the-default discipline the rest
+ * of the model keeps.
+ */
+export function withOnlyRounds(
+  ctx: RowContext, roundIds: readonly string[] | undefined,
+): RowContext {
+  if (!roundIds || roundIds.length === 0) return ctx
+  const wanted = new Set(roundIds)
+  const rounds = ctx.rounds.filter(r => wanted.has(r.id))
+  if (rounds.length === ctx.rounds.length) return ctx
   const counted = new Set(rounds.map(r => r.id))
   return {
     ...ctx,

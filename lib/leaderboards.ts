@@ -202,6 +202,24 @@ export type Leaderboard = {
    * round. Absent reads as `DEFAULT_TAG_COUNT`.
    */
   tagCount?: number
+
+  /**
+   * Which rounds this board counts. Absent means every one of them, which
+   * is what every board stored before this existed means — so nothing
+   * already running changes.
+   *
+   * This is what lets one day carry its own format: Day 1 singles
+   * Stableford, Day 2 fourball better ball, each a board scoped to its own
+   * round, with the overall board scoped to none of them and counting the
+   * lot. Round **ids** rather than day numbers, because a day added,
+   * removed or reordered must not silently re-point a board at somebody
+   * else's golf — and because these boards are made after the rounds
+   * exist, in the organiser area, where the ids are to hand.
+   *
+   * An id matching no round simply matches nothing: the board draws no
+   * column for it, which is the honest thing rather than a repair.
+   */
+  roundIds?: string[]
 }
 
 /** The size bounds a self-picked team may take — see `teamSize`. */
@@ -368,7 +386,7 @@ export function describeTagMode(lb: Pick<Partial<Leaderboard>, 'tagMode' | 'tagC
  * Matchplay is not keyed on anything: one draw is a draw, and a second would
  * be a different tournament rather than a second view of this one.
  */
-export function slotKey(lb: Pick<Leaderboard, 'audience' | 'competition' | 'scoring' | 'teamFormat' | 'combine' | 'teamSet' | 'tagMode'>): string {
+export function slotKey(lb: Pick<Leaderboard, 'audience' | 'competition' | 'scoring' | 'teamFormat' | 'combine' | 'teamSet' | 'tagMode' | 'roundIds'>): string {
   if (lb.competition === 'matchplay') return 'matchplay'
   return [
     lb.audience,
@@ -384,6 +402,11 @@ export function slotKey(lb: Pick<Leaderboard, 'audience' | 'competition' | 'scor
     // and would otherwise key the same, yet they rank different things from
     // the same cards — the sides, and the teams. Two tables.
     lb.audience === 'team' && lb.tagMode ? `tag-${lb.tagMode}` : '-',
+    // Stableford over Day 1 and Stableford over Day 2 are two competitions
+    // — the whole point of per-day formats — and Stableford over the week
+    // is a third. Sorted, because which order the days were ticked in is
+    // not part of what the board is.
+    lb.roundIds?.length ? [...lb.roundIds].sort().join('+') : '-',
   ].join(':')
 }
 
@@ -965,6 +988,14 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
       }
     }
 
+    // Which golf this board counts. Stored only when it is a real scope —
+    // an empty list means "every round", which is what absent means, and
+    // two spellings of one answer is one too many.
+    if (competition === 'league') {
+      const scope = roundIdList(r.roundIds)
+      if (scope.length > 0) lb.roundIds = scope
+    }
+
     // One draw only, whichever arrives first
     if (competition === 'matchplay' && hasMatchplay(out)) continue
     // And one of each league
@@ -982,3 +1013,9 @@ const clamp = (v: unknown, lo: number, hi: number) => {
 
 const points = (v: unknown): number[] =>
   Array.isArray(v) ? v.map(n => clamp(n, 0, 100)) : []
+
+/** Round ids as stored: real strings, no repeats, junk dropped. */
+const roundIdList = (v: unknown): string[] =>
+  Array.isArray(v)
+    ? [...new Set(v.filter((x): x is string => typeof x === 'string' && !!x))]
+    : []

@@ -19,7 +19,7 @@ import {
   DEFAULT_TEAM_SCORING, teamHolePoints, teamRoundPoints,
   type TeamScoring, type TeamScoreInput,
 } from '../lib/teamScoring'
-import type { Leaderboard } from '../lib/leaderboards'
+import { type Leaderboard, parseLeaderboards, slotKey } from '../lib/leaderboards'
 import { scoreTone, TONE_PILL } from '../lib/leaderboardStyle'
 import { boardsFromFormats, tripBoards, isLegacy } from '../lib/leaderboardsCompat'
 import { teamScoringFor, teamCardHolePoints, buildRows, orderRowsUndiscarded } from '../lib/boardRows'
@@ -1458,6 +1458,141 @@ section('Two team boards, two sets of teams')
   const legacyBoard: Leaderboard = { ...TEAM('better_ball'), id: 'b-old' }
   ok(render([legacyBoard], opts).includes('Reds'),
     'a board stored before sheets existed is on the main sheet')
+}
+
+// ─── A board scoped to some of the golf ────────────────────────
+
+section('A board can count one day rather than the week')
+{
+  // The fixtures: Alice 54 then 18, Bob 36 then 36, Cara 18 then 54.
+  const whole = rowsFor(SF()).board
+  eq(whole.map(r => [r.name, r.total]),
+    [['Alice', 72], ['Bob', 72], ['Cara', 72]],
+    'counting everything, all three are level on the week')
+
+  const day1: Leaderboard = { ...SF(), id: 'b-d1', roundIds: ['r1'] }
+  const rows = rowsFor(day1).board
+  eq(rows.map(r => [r.name, r.total]),
+    [['Alice', 54], ['Bob', 36], ['Cara', 18]],
+    'scoped to the first day, it is that day\'s competition')
+  eq(rows.map(r => r.place), [1, 2, 3], 'with its own places')
+  eq(rows[0].playedRounds, ['r1'],
+    'and the second day is not a round it counts, rather than a blank column')
+
+  const day2: Leaderboard = { ...SF(), id: 'b-d2', roundIds: ['r2'] }
+  eq(rowsFor(day2).board.map(r => [r.name, r.total]),
+    [['Cara', 54], ['Bob', 36], ['Alice', 18]],
+    'and the other day is a different competition from the same cards')
+
+  // The whole point of the scope: two days, two formats, one event.
+  ok(slotKey(day1) !== slotKey(day2),
+    'two days are two competitions, so both can run at once')
+  ok(slotKey(day1) !== slotKey(SF()),
+    'and neither is the event\'s own board')
+
+  const gone: Leaderboard = { ...SF(), id: 'b-x', roundIds: ['nowhere'] }
+  eq(rowsFor(gone).board, [],
+    'a scope pointing at golf that is not there counts nothing — honestly empty')
+
+  const both: Leaderboard = { ...SF(), id: 'b-b', roundIds: ['r1', 'r2'] }
+  eq(rowsFor(both).board.map(r => r.total), [72, 72, 72],
+    'and naming every round is the same as naming none')
+}
+
+section('Scoping and discarding compose without either being restated')
+{
+  // Over the week, dropping the worst of two rounds leaves each player
+  // their better card: Alice 54, Cara 54, Bob 36.
+  eq(rowsFor(SF(1)).board.map(r => [r.name, r.total]),
+    [['Alice', 54], ['Cara', 54], ['Bob', 36]],
+    'the whole event drops a round as it always did')
+
+  // Scoped to one day there is one card each, and the discard rule already
+  // refuses to leave a player with nothing — so the day stands whole.
+  const day1Drop: Leaderboard = { ...SF(1), id: 'b-d1d', roundIds: ['r1'] }
+  const rows = rowsFor(day1Drop).board
+  eq(rows.map(r => [r.name, r.total]),
+    [['Alice', 54], ['Bob', 36], ['Cara', 18]],
+    'a day board counts its one card — the discard reads the scoped rounds, not the trip\'s')
+  eq(rows.map(r => r.totalAll), [undefined, undefined, undefined],
+    'and with nothing dropped there is no second total to switch to')
+}
+
+section('Stored round scopes read back, and junk does not')
+{
+  const [lb] = parseLeaderboards([{
+    id: 'b', audience: 'individual', competition: 'league',
+    scoring: 'stableford', combine: 'total', roundIds: ['r1', 'r2', 'r1', 7, null, ''],
+  }])
+  eq(lb?.roundIds, ['r1', 'r2'],
+    'real ids only, and no repeats — a round named twice is named once')
+
+  const [empty] = parseLeaderboards([{
+    id: 'b', audience: 'individual', competition: 'league',
+    scoring: 'stableford', combine: 'total', roundIds: [],
+  }])
+  ok(!('roundIds' in (empty ?? {})),
+    'an empty scope is not stored — "every round" has one spelling, absent')
+
+  const [junk] = parseLeaderboards([{
+    id: 'b', audience: 'individual', competition: 'league',
+    scoring: 'stableford', combine: 'total', roundIds: 'r1',
+  }])
+  ok(!('roundIds' in (junk ?? {})), 'and a string is not a list of rounds')
+}
+
+// ─── Overall, or one course ────────────────────────────────────
+
+section('The per-course switch is an event\'s, and a trip never sees it')
+{
+  // The two fixture rounds are on two different courses.
+  const twoCourses = [
+    { id: 'r1', round_number: 1, status: 'completed', courses: { id: 'c1', name: 'Ballyliffin' } },
+    { id: 'r2', round_number: 2, status: 'completed', courses: { id: 'c2', name: 'Portsalon' } },
+  ]
+  const asTrip = render([SF()], { rounds: twoCourses })
+  ok(!asTrip.includes('Overall'),
+    'a trip\'s leaderboard gains no new control — it never asked for one')
+
+  const asEvent = renderToStaticMarkup(
+    React.createElement(TripLeaderboardClient, {
+      tripCode: 'ABC123', boards: [SF()],
+      activeRoundIds: [], livePlayerIds: [], legacyTeamScoring: null,
+      rounds: twoCourses, teams: [], memberships: [], players,
+      holes, scores, liveScores: [], roundHandicaps, isEvent: true,
+    } as never)
+  )
+  ok(asEvent.includes('Overall'), 'an event gets the switch')
+  ok(asEvent.includes('Ballyliffin') && asEvent.includes('Portsalon'),
+    'with a chip per course played')
+
+  // One venue is not a choice, so nothing is drawn.
+  const oneCourse = renderToStaticMarkup(
+    React.createElement(TripLeaderboardClient, {
+      tripCode: 'ABC123', boards: [SF()],
+      activeRoundIds: [], livePlayerIds: [], legacyTeamScoring: null,
+      rounds, teams: [], memberships: [], players,
+      holes, scores, liveScores: [], roundHandicaps, isEvent: true,
+    } as never)
+  )
+  ok(!oneCourse.includes('Overall'),
+    'and an event playing one venue twice has nothing to switch between')
+}
+
+section('Narrowing to a course is the same rule a day board goes through')
+{
+  // `withOnlyRounds` is what both use — pinned here rather than left to
+  // two callers to agree by accident.
+  const src = read('lib/boardRows.ts')
+  ok(src.includes('export function withOnlyRounds'),
+    'one exported copy of narrowing a context to some rounds')
+  ok(/const counted = withOnlyRounds\(withoutCasualRounds\(ctx\), lb\.roundIds\)/.test(src),
+    'a board\'s own scope goes through it, after the casual filter')
+  const client = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  ok(client.includes('withOnlyRounds(rowContext, courseRoundIds)'),
+    'and so does the course switch — not a second filter beside it')
+  ok(client.includes('const [courseId, setCourseId] = useState<string | null>(null)'),
+    'a choice of one, so no tap can leave the page with no golf on it')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

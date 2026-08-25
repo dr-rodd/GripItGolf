@@ -63,7 +63,7 @@ type Overview = {
 
 export default function OrganiserClient({
   tripId, tripCode, initialNotices, initialRounds, formatSummary, isLeague,
-  initialPermissions, overview, tagsSummary,
+  initialPermissions, overview, tagsSummary, dayFormatSummary,
 }: {
   tripId: string
   tripCode: string
@@ -79,6 +79,8 @@ export default function OrganiserClient({
   overview: Overview
   /** The Teams & tags card's one-liner (lib/tagBoards.ts describeTags). */
   tagsSummary: string
+  /** How many days carry a format of their own, said in one line. */
+  dayFormatSummary: string
 }) {
   // ── Participant permissions ──────────────────────────────────
   // Saved the moment a toggle moves — optimistic, reverting on refusal,
@@ -518,6 +520,25 @@ export default function OrganiserClient({
             </p>
           </Link>
         </section>
+
+        {/* ── A format for each day ──
+            The event's own rules count every round; this is where one day
+            gets rules of its own. Only worth a door when there is more
+            than one day to tell apart. */}
+        {rounds.length > 1 && (
+          <section className="mt-10">
+            <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-3">Formats by day</h2>
+            <Link
+              href={`/trip/${tripCode}/organiser/days`}
+              className="block bg-surface border border-bark/12 rounded-2xl p-4 press hover:border-bark/25"
+            >
+              <p className="text-ink text-sm font-medium">Each day&apos;s own format</p>
+              <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
+                {dayFormatSummary}
+              </p>
+            </Link>
+          </section>
+        )}
 
         {/* ── The format ──
             The tournament's competition structure, saved whole in
