@@ -31,6 +31,7 @@ export type EventPermissionKey =
   | 'add_players'
   | 'edit_scores'
   | 'edit_tee_sheet'
+  | 'assign_tag'
 
 export const EVENT_PERMISSIONS: {
   key: EventPermissionKey
@@ -50,6 +51,13 @@ export const EVENT_PERMISSIONS: {
   { key: 'edit_tee_sheet', dflt: false,
     label: 'Participants can edit the tee sheet',
     hint: 'Let the field put names into open slots and take their own out — off, the sheet is read-only and you place everyone.' },
+  // Joining a tag is a different verb from forming a team: a tag board's
+  // `teamPick: 'self'` cousin lets the field CREATE teams on that board's
+  // sheet, while this only lets a claimed player join one of the tags the
+  // organiser has already made (lib/tagBoards.ts). Both stay, deliberately.
+  { key: 'assign_tag', dflt: false,
+    label: 'Participants can pick their own tag',
+    hint: 'Let a claimed player join one of your tags from the teams screen — off, you assign every tag yourself.' },
 ]
 
 export type EventPermissions = Record<EventPermissionKey, boolean>

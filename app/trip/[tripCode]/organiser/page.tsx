@@ -4,6 +4,7 @@ import { isLocked } from '@/lib/passcode'
 import { parseBracketSetup, describeSetup } from '@/lib/bracketSetup'
 import { parseLeagueSetup, describeLeagueSetup } from '@/lib/leagueSetup'
 import { parseEventPermissions } from '@/lib/eventPermissions'
+import { TAG_SET, describeTags } from '@/lib/tagBoards'
 import { parseInterval, parseGroupSize } from '@/lib/teeSheet'
 import { parseLeaderboards } from '@/lib/leaderboards'
 import { describeRange } from '@/lib/confirmationEmail'
@@ -74,6 +75,7 @@ export default async function OrganiserPage({ params }: {
   const [
     noticesResult, roundsResult, itemsResult, setupResult,
     permsResult, playersResult, claimedResult, teeSettingsResult,
+    tagsResult, taggedResult,
   ] = await Promise.all([
     supabase
       .from('event_messages')
@@ -122,6 +124,19 @@ export default async function OrganiserPage({ params }: {
       .from('rounds')
       .select('id, tee_interval_mins, tee_group_size')
       .eq('trip_id', trip.id),
+    // The Teams & tags card's numbers. A tag is a team on the main sheet
+    // (lib/tagBoards.ts), so both are counts in headers against tables
+    // that have existed since migration 023.
+    supabase
+      .from('teams')
+      .select('id', { count: 'exact', head: true })
+      .eq('trip_id', trip.id)
+      .eq('team_set', TAG_SET),
+    supabase
+      .from('team_members')
+      .select('player_id', { count: 'exact', head: true })
+      .eq('trip_id', trip.id)
+      .eq('team_set', TAG_SET),
   ])
 
   if (noticesResult.error) console.error('OrganiserPage notices query failed:', noticesResult.error)
@@ -194,6 +209,11 @@ export default async function OrganiserPage({ params }: {
         : null
       }
       isLeague={!!leagueSetup}
+      tagsSummary={describeTags(
+        tagsResult.count ?? 0,
+        taggedResult.count ?? 0,
+        playersResult.count ?? 0,
+      )}
     />
   )
 

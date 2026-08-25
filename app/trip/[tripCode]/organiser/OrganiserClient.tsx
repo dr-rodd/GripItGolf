@@ -63,7 +63,7 @@ type Overview = {
 
 export default function OrganiserClient({
   tripId, tripCode, initialNotices, initialRounds, formatSummary, isLeague,
-  initialPermissions, overview,
+  initialPermissions, overview, tagsSummary,
 }: {
   tripId: string
   tripCode: string
@@ -77,6 +77,8 @@ export default function OrganiserClient({
   initialPermissions: EventPermissions
   /** The bird's-eye numbers, counted on the server. */
   overview: Overview
+  /** The Teams & tags card's one-liner (lib/tagBoards.ts describeTags). */
+  tagsSummary: string
 }) {
   // ── Participant permissions ──────────────────────────────────
   // Saved the moment a toggle moves — optimistic, reverting on refusal,
@@ -497,6 +499,24 @@ export default function OrganiserClient({
           {startError && (
             <p className="text-rust-deep text-sm mt-3 leading-snug">{startError}</p>
           )}
+        </section>
+
+        {/* ── Teams & tags ──
+            The tags portal: the event-wide sides players carry all week,
+            made and assigned behind this card. Playing teams for a given
+            day stay the tee sheet's business; the tag is the census, and
+            the census lives with the organiser. */}
+        <section className="mt-10">
+          <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-3">Teams &amp; tags</h2>
+          <Link
+            href={`/trip/${tripCode}/organiser/tags`}
+            className="block bg-surface border border-bark/12 rounded-2xl p-4 press hover:border-bark/25"
+          >
+            <p className="text-ink text-sm font-medium">Tags</p>
+            <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
+              {tagsSummary}
+            </p>
+          </Link>
         </section>
 
         {/* ── The format ──

@@ -59,13 +59,11 @@ interface Placed extends Player { team_id: string | null }
 
 const UNASSIGNED = 'unassigned'
 
-// Exported for the join screen, which colours self-made teams from the
-// same twelve — one palette, however a team comes to exist.
-export const PRESET_COLORS = [
-  '#DC2626', '#2563EB', '#16A34A', '#9333EA',
-  '#EA580C', '#DB2777', '#0D9488', '#0A9D56',
-  '#65A30D', '#7C3AED', '#0891B2', '#B45309',
-]
+// The palette lives in lib/teamColors.ts now — the tags portal colours
+// from the same twelve without pulling this whole editor into its bundle.
+// Re-exported so the join screen's import keeps working.
+import { PRESET_COLORS } from '@/lib/teamColors'
+export { PRESET_COLORS }
 
 /**
  * Clear of the tab bar, which is fixed at the bottom of every trip screen.

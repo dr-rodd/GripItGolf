@@ -38,8 +38,8 @@ const read = (p: string) => fs.readFileSync(p, 'utf-8')
 section('Three seeded permissions, conservative by default')
 {
   eq(EVENT_PERMISSIONS.map(p => p.key),
-    ['add_courses', 'add_players', 'edit_scores', 'edit_tee_sheet'],
-    'the three seeded keys, and the tee sheet — the promised one-line addition')
+    ['add_courses', 'add_players', 'edit_scores', 'edit_tee_sheet', 'assign_tag'],
+    'the three seeded keys, then the tee sheet and the tag — each the promised one-line addition')
   ok(EVENT_PERMISSIONS.every(p => p.dflt === false),
     'every default is off — the organiser opts in')
   ok(EVENT_PERMISSIONS.every(p => p.label.startsWith('Participants can')),
@@ -83,6 +83,7 @@ section('Storage reads whole, falls soft, and never nulls')
 
   const full: EventPermissions = {
     add_courses: true, add_players: false, edit_scores: true, edit_tee_sheet: false,
+    assign_tag: true,
   }
   eq(parseEventPermissions(JSON.parse(JSON.stringify(full))), full,
     'a full map reads back whole')
@@ -121,7 +122,8 @@ section('The admin card sums it up')
     'all off reads as organiser-run')
   ok(describePermissions({
     add_courses: true, add_players: true, edit_scores: false, edit_tee_sheet: false,
-  }).includes('2 of 4'), 'partial says the count')
+    assign_tag: false,
+  }).includes('2 of 5'), 'partial says the count')
 }
 
 // ─── Wiring: creation asks ─────────────────────────────────────

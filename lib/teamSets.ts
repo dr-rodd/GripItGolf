@@ -240,8 +240,16 @@ export function teamSheet(t: TeamRow): string {
   return t.team_set || MAIN_SET
 }
 
-/** The teams making up one sheet. */
-export function teamsOnSheet(teams: readonly TeamRow[], teamSet: string): TeamRow[] {
+/**
+ * The teams making up one sheet.
+ *
+ * Generic in the row so a caller holding richer rows — with a colour, say —
+ * gets its own shape back rather than the bare minimum this file needs.
+ */
+export function teamsOnSheet<T extends TeamRow>(
+  teams: readonly T[],
+  teamSet: string,
+): T[] {
   return teams.filter(t => teamSheet(t) === teamSet)
 }
 
