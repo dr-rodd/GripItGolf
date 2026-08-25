@@ -197,7 +197,7 @@ export default function PlayerSettings({
                   <p className="t-cap text-ink/65 mt-0.5">
                     Save space on the leaderboard — your player name doesn&apos;t
                     change, the board just prints this shorter one. Leave it
-                    blank and it shows your first name and initial.
+                    blank and it shows your first name.
                   </p>
                   <div className="flex gap-2 mt-3">
                     <input

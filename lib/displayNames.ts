@@ -1,24 +1,28 @@
-// What a player is called on a leaderboard — the only copy.
+// What a player is called on a leaderboard — the only copy, for every board.
 //
-// The board's name column is the tightest space in the app, and long names
-// scroll (see ScrollingName). Two answers, in order:
+// One rule, everywhere a board prints a person: the trip leaderboard, the
+// in-play panel inside the scoring card, a round summary's result, and the
+// matchplay tiles (whose `shortNames` in lib/matchplayEntrants.ts delegates
+// here now rather than keeping a cousin of its own):
 //
 //   1. **A nickname, chosen by the player themselves** in the preferences
-//      gear on the hub. Their own choice for the tight columns — the stored
-//      player name never changes, and every screen with room (the roster,
-//      the scorecard sheet, the join list) keeps using it.
+//      gear on the hub, wins outright. The stored player name never changes,
+//      and every screen with room (the roster, the scorecard sheet, the join
+//      list) keeps using it.
 //
-//   2. **First name plus the start of the last** — "Ross O". Always the
-//      initial, so the column reads evenly, and on a tie the clashing names
-//      take more of the surname *together*: "Ross O'G" against "Ross O'B",
-//      never "Ross O" against "Ross O'B", which would read as one player
-//      styled two ways.
+//   2. **Otherwise the first name, alone.** No initial for its own sake —
+//      "Ross" is shorter than "Ross O" and just as clear until there are two
+//      Rosses.
 //
-// A cousin, not a copy, of `shortNames` in lib/matchplayEntrants.ts: the
-// bracket writes bare first names ("Ross & Dave") and only reaches for a
-// surname on a clash, because a pairing's tile carries two names and the
-// ampersand is doing the separating. The board always carries the initial.
-// Both grow the same way on ties; they differ on purpose about the start.
+//   3. **A duplicated first name takes the start of the surname**, and the
+//      clashing names grow *together* — "John Smi" against "John Smy", never
+//      "John S" against "John Smy". The prefix respects how surnames are
+//      built: an apostrophe name compacts ("O'Grady" → "OG", "D'Arcy" →
+//      "DA"), and Mc/Mac stay whole ("McDonald" → "Mc", "MacArthur" →
+//      "Mac"), so "John Mc" and "John Mac" read as the names they are and
+//      never as a bare "John M" twice.
+//
+// Identical full names print in full, which is the honest answer.
 //
 // Pure — no I/O. Callers fetch `players.nickname` themselves, fail-soft,
 // because naming the column in a shared select would break the page on a
@@ -37,7 +41,7 @@ export function normalizeNickname(text: string | null | undefined): string | nul
   return cleaned.slice(0, MAX_NICKNAME).trim()
 }
 
-type Named = { id: string; name: string; nickname?: string | null }
+type Named = { name: string; nickname?: string | null }
 
 const firstOf = (n: string) => n.trim().split(/\s+/)[0] ?? n
 const surnameOf = (n: string) => {
@@ -45,43 +49,74 @@ const surnameOf = (n: string) => {
   return parts.length > 1 ? parts.slice(1).join(' ') : ''
 }
 
+/** "O'Grady" → "OGrady": the form a prefix is cut from. */
+const compactOf = (surname: string) => surname.replace(/['’]/g, '')
+
 /**
- * Player id → what the board prints.
+ * The shortest prefix a surname may be cut to. An apostrophe name needs the
+ * letter after the apostrophe ("OG", not "O"), and Mc/Mac are one unit —
+ * cutting inside them leaves an "M" that names nobody.
+ */
+function minTakeOf(surname: string, compact: string): number {
+  if (/^[A-Za-z]['’]/.test(surname)) return Math.min(2, compact.length)
+  if (/^Mac./i.test(compact)) return Math.min(3, compact.length)
+  if (/^Mc/i.test(compact)) return Math.min(2, compact.length)
+  return 1
+}
+
+/**
+ * Display names, in the order the entries arrived.
  *
  * Worked out over the whole field at once, because the default is relative:
- * how much surname "Ross" needs depends on who else is called Ross. A
- * player with a nickname stands outside that question — their default is
- * never shown, so it cannot clash.
+ * whether "Ross" needs any surname at all depends on who else is called
+ * Ross. A player with a nickname stands outside that question — their
+ * default is never shown, so it cannot clash and causes no growth.
  */
-export function boardNames(players: readonly Named[]): Map<string, string> {
-  const out = new Map<string, string>()
-  const defaults: { id: string; first: string; sur: string }[] = []
+export function shortDisplayNames(entries: readonly Named[]): string[] {
+  type D = { i: number; first: string; sur: string; compact: string; minTake: number }
+  const out: string[] = new Array(entries.length)
+  const defaults: D[] = []
 
-  for (const p of players) {
-    const nick = normalizeNickname(p.nickname)
-    if (nick) out.set(p.id, nick)
-    else defaults.push({ id: p.id, first: firstOf(p.name), sur: surnameOf(p.name) })
-  }
+  entries.forEach((e, i) => {
+    const nick = normalizeNickname(e.nickname)
+    if (nick) { out[i] = nick; return }
+    const first = firstOf(e.name)
+    const sur = surnameOf(e.name)
+    const compact = compactOf(sur)
+    defaults.push({ i, first, sur, compact, minTake: minTakeOf(sur, compact) })
+  })
 
-  for (const p of defaults) {
-    // One word is already as short as a name gets.
-    if (!p.sur) { out.set(p.id, p.first); continue }
+  for (const d of defaults) {
+    const rivals = defaults.filter(o =>
+      o !== d && o.first.toLowerCase() === d.first.toLowerCase())
 
-    // Everyone sharing the first name decides together how much surname the
-    // initial has to become: one more letter than the longest run the
-    // surnames share, capped at the surname itself. Identical names simply
-    // print in full, which is the honest answer.
-    let take = 1
-    for (const rival of defaults) {
-      if (rival === p || rival.first.toLowerCase() !== p.first.toLowerCase()) continue
-      const a = p.sur.toLowerCase()
-      const b = rival.sur.toLowerCase()
+    // Alone on the first name — or with no surname to reach for — the first
+    // name is the whole answer.
+    if (rivals.length === 0 || !d.compact) { out[d.i] = d.first; continue }
+
+    // One more letter than the longest run the compact surnames share, never
+    // less than the surname's own natural unit, capped at the surname.
+    let take = d.minTake
+    for (const r of rivals) {
+      const a = d.compact.toLowerCase()
+      const b = r.compact.toLowerCase()
       let common = 0
       while (common < a.length && common < b.length && a[common] === b[common]) common++
-      take = Math.max(take, Math.min(common + 1, p.sur.length))
+      take = Math.max(take, Math.min(common + 1, d.compact.length))
     }
-    out.set(p.id, `${p.first} ${p.sur.slice(0, take)}`)
+    // Grown to the whole surname, print the real one — apostrophe and all.
+    out[d.i] = take >= d.compact.length
+      ? `${d.first} ${d.sur}`
+      : `${d.first} ${d.compact.slice(0, take)}`
   }
 
   return out
+}
+
+/** Player id → what the board prints. The Map shape most screens want. */
+export function boardNames(
+  players: readonly (Named & { id: string })[],
+): Map<string, string> {
+  const names = shortDisplayNames(players)
+  return new Map(players.map((p, i) => [p.id, names[i]]))
 }

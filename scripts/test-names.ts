@@ -49,40 +49,50 @@ section('A typed nickname is cleaned, never trusted raw')
   ok(MAX_NICKNAME <= 12, 'and the limit is short — the point is saving space')
 }
 
-// ─── The default: first name and the start of the last ─────────
+// ─── The default: the first name, alone ────────────────────────
 
-section('Without a nickname the board says first name and initial')
+section('Without a nickname the board says the first name, alone')
 {
-  eq(display(n('Ross Grady')), ['Ross G'], 'one player: first name and one letter')
-  eq(display(n('Dave Smith'), n('Ross Grady')), ['Dave S', 'Ross G'],
-    'the initial is always there, not only on ties')
+  eq(display(n('Ross Grady')), ['Ross'], 'no clash, no initial — shorter still')
+  eq(display(n('Dave Smith'), n('Ross Grady')), ['Dave', 'Ross'],
+    'different first names need nothing more')
   eq(display(n('Madonna')), ['Madonna'], 'a one-word name is already as short as it gets')
-  eq(display(n('Ross van der Berg')), ['Ross v'],
-    'everything after the first word is the surname')
 }
 
-section('Ties take more of the last name, together')
+section('Only a duplicated first name reaches for the surname — together')
 {
   eq(display(n('John Smith'), n('John Murphy')), ['John S', 'John M'],
     'one letter settles most ties')
   eq(display(n('John Smith'), n('John Smyth')), ['John Smi', 'John Smy'],
     'a shared start grows both names until they part ways')
-  eq(display(n('Ross OGrady'), n('Ross OBrien')), ['Ross OG', 'Ross OB'],
-    'grown together, so the clash reads evenly')
   eq(display(n('John Smith'), n('John Smith')), ['John Smith', 'John Smith'],
     'identical names print in full — the honest answer')
   eq(display(n('John Smith'), n('John Murphy'), n('Dave Ryan')),
-    ['John S', 'John M', 'Dave R'],
+    ['John S', 'John M', 'Dave'],
     'a third player outside the clash is untouched by it')
 }
 
-section('A nickname wins, and stands outside the tie question')
+section('Surnames are cut the way they are built')
 {
-  eq(display(n('Ross Grady', 'Big Dog'), n('Dave Smith')), ['Big Dog', 'Dave S'],
+  eq(display(n('Ross O’Grady'), n('Ross O’Brien')), ['Ross OG', 'Ross OB'],
+    'an apostrophe name compacts — OG and OB, never a lone O’')
+  eq(display(n("Ross O'Grady"), n('Ross Grady')), ['Ross OG', 'Ross G'],
+    'straight apostrophes too, and the plain Grady stays a plain G')
+  eq(display(n('John McDonald'), n('John Murphy')), ['John Mc', 'John Mu'],
+    'Mc is one unit — never a bare M naming nobody')
+  eq(display(n('John MacArthur'), n('John McDonald')), ['John Mac', 'John Mc'],
+    'and Mac keeps its three, so the two read as the names they are')
+  eq(display(n('John McDonald'), n('John McArthur')), ['John McD', 'John McA'],
+    'two Mcs grow past the unit until they part ways')
+}
+
+section('A nickname wins, on every board, and stands outside the tie question')
+{
+  eq(display(n('Ross Grady', 'Big Dog'), n('Dave Smith')), ['Big Dog', 'Dave'],
     'the nickname is what prints')
-  eq(display(n('Ross Grady', 'Big Dog'), n('Ross Green')), ['Big Dog', 'Ross G'],
+  eq(display(n('Ross Grady', 'Big Dog'), n('Ross Green')), ['Big Dog', 'Ross'],
     'a nicknamed player causes no growth — their default is never shown')
-  eq(display(n('Ross Grady', '   ')), ['Ross G'],
+  eq(display(n('Ross Grady', '   ')), ['Ross'],
     'a blank nickname is no nickname, so the default stands')
 }
 
@@ -120,6 +130,37 @@ section('The board prints the display name; the sheet keeps the full one')
 
   const sql = read('supabase/migrations/20260101000047_player_nicknames.sql')
   ok(/ADD COLUMN IF NOT EXISTS nickname/.test(sql), 'migration 047 adds the column')
+}
+
+section('Every leaderboard reads the same rule')
+{
+  // The in-play panel is a leaderboard: nicknames merged in by the page
+  // that fetched its roster, printed through the one rule.
+  const panel = read('app/scoring/LiveLeaderboardPanel.tsx')
+  ok(panel.includes('boardNames('), 'the in-play panel asks lib/displayNames')
+  ok(panel.includes('displayNameById.get(player.id) ?? player.name'),
+    '  …and prints the board name, falling back to the real one')
+  const scoringPage = read('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')
+  ok(scoringPage.includes("select('id, nickname')"),
+    'the scoring page fetches nicknames on their own, fail-soft')
+
+  // A round's result is a leaderboard too — and only rows that ARE a
+  // player go through the rule; a team's name is nobody's to shorten.
+  const roundPage = read('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
+  ok(roundPage.includes('nicknamesPromise'), 'the round result gets nicknames off the critical path')
+  ok(roundPage.includes('r.playerIds.length === 1 && r.playerIds[0] === r.id'),
+    '  …and shortens only player rows, never team names')
+
+  // The matchplay tiles delegate rather than keeping a cousin of the rule.
+  const entrants = read('lib/matchplayEntrants.ts')
+  ok(entrants.includes('shortDisplayNames'), 'the bracket names come from the one copy')
+  ok(!/lengthNeeded/.test(entrants), '  …the old cousin of the growth rule is gone')
+  ok(entrants.includes('normalizeNickname(p.nickname) ?? firstName(p.name)'),
+    'a nickname wins on a singles tile')
+  ok(read('app/trip/[tripCode]/matchplay/page.tsx').includes("select('id, nickname')"),
+    'the draw page fetches nicknames fail-soft')
+  ok(read('lib/matchplayStore.ts').includes("select('id, nickname')"),
+    'and so does the store behind the bracket')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

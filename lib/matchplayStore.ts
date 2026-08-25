@@ -160,15 +160,25 @@ export async function fetchEntrants(
    */
   teamSet: string = MAIN_SET,
 ): Promise<Entrant[]> {
-  const { data: players, error: playersError } = await supabase
-    .from('players')
-    .select('id, name, handicap, created_at')
-    .eq('trip_id', tripId)
-    .eq('is_composite', false)
-    .order('created_at')
+  // Nicknames ride in their own fail-soft query — naming the column in the
+  // roster select would fail the whole draw on a database that has not run
+  // migration 047 (lib/displayNames.ts holds the rule).
+  const [{ data: players, error: playersError }, nicknamesRes] = await Promise.all([
+    supabase
+      .from('players')
+      .select('id, name, handicap, created_at')
+      .eq('trip_id', tripId)
+      .eq('is_composite', false)
+      .order('created_at'),
+    supabase.from('players').select('id, nickname').eq('trip_id', tripId),
+  ])
 
   if (playersError) throw new MatchplayError('Could not read the player list. Please try again.')
-  const roster = players ?? []
+  const nickById = new Map(
+    ((nicknamesRes.data ?? []) as { id: string; nickname: string | null }[])
+      .map(r => [r.id, r.nickname]),
+  )
+  const roster = (players ?? []).map(p => ({ ...p, nickname: nickById.get(p.id) ?? null }))
 
   if (kind === 'player') {
     return sortPlayersBySeed(roster).map(playerEntrant)

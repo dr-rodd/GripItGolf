@@ -50,7 +50,7 @@ export default async function MatchplayPage({
   const enabled = hasMatchplay(boards)
   const pairs   = needsPairings(boards)
 
-  const [matchesRes, playersRes, teamsRes, memberships] = await Promise.all([
+  const [matchesRes, playersRes, teamsRes, memberships, nicknamesRes] = await Promise.all([
     supabase
       .from('matchplay_matches')
       .select(
@@ -73,13 +73,23 @@ export default async function MatchplayPage({
       .select('id, name, team_set')
       .eq('trip_id', trip.id),
     fetchMemberships(trip.id),
+    // Leaderboard nicknames, on their own and fail-soft: naming the column
+    // in the players select would fail the draw on a database that has not
+    // run migration 047, and a bracket without nicknames still stands.
+    supabase.from('players').select('id, nickname').eq('trip_id', trip.id),
   ])
 
   if (matchesRes.error) console.error('MatchplayPage matches query failed:', matchesRes.error)
   if (playersRes.error) console.error('MatchplayPage players query failed:', playersRes.error)
   if (teamsRes.error)   console.error('MatchplayPage teams query failed:', teamsRes.error)
 
-  const roster = playersRes.data ?? []
+  const nickById = new Map(
+    ((nicknamesRes.data ?? []) as { id: string; nickname: string | null }[])
+      .map(r => [r.id, r.nickname]),
+  )
+  const roster = (playersRes.data ?? []).map(p => ({
+    ...p, nickname: nickById.get(p.id) ?? null,
+  }))
 
   type RawMatch = Record<string, unknown> & {
     entrant_type?: string | null

@@ -24,6 +24,7 @@ import CasualToggle from './CasualToggle'
 import CourseWeather from '@/app/components/CourseWeather'
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../../kind'
+import { boardNames } from '@/lib/displayNames'
 
 export const dynamic = 'force-dynamic'
 
@@ -97,6 +98,19 @@ export default async function RoundSummaryPage({
   // rejection if it throws before the boundary gets to it. The shape it
   // resolves to is the shape the helper already returns on failure, so the
   // section renders its error line exactly as it would have.
+  // Leaderboard nicknames for the result section, following the podium's own
+  // pattern: started here, not awaited, read inside the Suspense boundary.
+  // Fail-soft twice over — its own query (naming the column in a shared
+  // select would fail the page pre-047) and a catch to an empty list, since
+  // a result without nicknames still stands.
+  // Promise.resolve because the query builder is only PromiseLike — it has
+  // a then and no catch until it becomes a real promise.
+  const nicknamesPromise = Promise.resolve(
+    supabase.from('players').select('id, nickname').eq('trip_id', trip.id),
+  )
+    .then(r => (r.data ?? []) as { id: string; nickname: string | null }[])
+    .catch(() => [] as { id: string; nickname: string | null }[])
+
   const podiumPromise = fetchRoundRows(
     trip.id,
     round.id,
@@ -318,7 +332,7 @@ export default async function RoundSummaryPage({
             rounds that have no result. Promising a shape and being wrong
             about it is worse than promising nothing. */}
         <Suspense fallback={null}>
-          <RoundPodium promise={podiumPromise} tripCode={tripCode} />
+          <RoundPodium promise={podiumPromise} nicknames={nicknamesPromise} tripCode={tripCode} />
         </Suspense>
 
         {/* ── Whether it counts ──
@@ -402,12 +416,13 @@ function Cell({
  * played gets a section.
  */
 async function RoundPodium({
-  promise, tripCode,
+  promise, nicknames, tripCode,
 }: {
   promise: Promise<{ rows: BoardRow[]; error: string | null }>
+  nicknames: Promise<{ id: string; nickname: string | null }[]>
   tripCode: string
 }) {
-  const { rows, error } = await promise
+  const [{ rows, error }, nicknameRows] = await Promise.all([promise, nicknames])
   const top = podium(rows, 3)
   // Nobody has played it. Not an empty state — the section simply is not there.
   const played = rows.length > 0
@@ -417,11 +432,28 @@ async function RoundPodium({
   }
   if (!played) return null
 
+  // The result is a leaderboard, so it prints board names — the one rule in
+  // lib/displayNames.ts. Only rows that ARE a player go through it: on a
+  // team board the row is a team, and a team's name is not a person's to
+  // shorten. The clash set is this round's field, which is who the result
+  // is between.
+  const nickById = new Map(nicknameRows.map(r => [r.id, r.nickname]))
+  const nameById = boardNames(
+    rows
+      .filter(r => r.playerIds.length === 1 && r.playerIds[0] === r.id)
+      .map(r => ({ id: r.id, name: r.name, nickname: nickById.get(r.id) ?? null })),
+  )
+
   return (
     <section>
       <h2 className="t-h2 text-ink mb-3">Result</h2>
       <div className="flex flex-col gap-2">
-        {top.map(place => <PodiumRow key={place.id} place={place} />)}
+        {top.map(place => (
+          <PodiumRow
+            key={place.id}
+            place={{ ...place, name: nameById.get(place.id) ?? place.name }}
+          />
+        ))}
       </div>
       <Link
         href={`/trip/${tripCode}/leaderboard`}
