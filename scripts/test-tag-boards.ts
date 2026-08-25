@@ -25,7 +25,7 @@ import {
 import {
   type Leaderboard, parseLeaderboards, boardTitle, boardRules, slotKey,
   isTagBoard, tagsInPlay, tagCountOf, unanswered, isComplete,
-  offersTeamFormat, offersTagMode, offersTagCount, offersTeeTeams,
+  offersTeamFormat, offersTagMode, offersTagCount, offersTeeTeams, offersCombine,
   offersAllowance, TAG_MODES, ALL_TAG_MODES,
 } from '../lib/leaderboards'
 import { buildRows } from '../lib/boardRows'
@@ -276,6 +276,90 @@ section('A tags board is named for what it ranks')
     .includes('Every player\'s round counts'), 'and every card says so')
   ok(!boardRules(lb).includes('composite card'),
     'never a better-ball sentence — a tag builds no composite')
+}
+
+section('The cascade can never dead-end on a board it will not save')
+{
+  // The bug this pins: the combine question was gated on having a team
+  // format, which a tags board deliberately has none of — so it never
+  // appeared, while `unanswered` went on demanding the answer. Nothing
+  // was on screen, the board could not be saved, and the form could not
+  // say why.
+  //
+  // The invariant is not "everything outstanding is on screen" — a team
+  // board rightly has the combine answer outstanding while it is still
+  // being asked its format. It is that an UNFINISHED board always has
+  // SOMETHING left to tap. A draft with questions owing and no question
+  // showing is a dead end, whatever else is true of it.
+  //
+  // Asserting `isComplete` on a hand-built object cannot catch this,
+  // because a hand-built object skips the form entirely — which is
+  // exactly how this got shipped.
+  const onScreen = (d: Partial<Leaderboard>) =>
+    !d.audience                                   // who is ranked
+    || !d.competition                             // league or matchplay
+    || !d.scoring                                 // how a round is scored
+    || offersTeamFormat(d) && !d.teamFormat
+    || offersTagMode(d) && !d.tagMode
+    || offersCombine(d)                           // how the rounds add up
+
+  function walk(label: string, steps: Partial<Leaderboard>[]) {
+    let draft: Partial<Leaderboard> = {}
+    for (const step of steps) {
+      draft = { ...draft, ...step }
+      if (unanswered(draft).length > 0) {
+        ok(onScreen(draft),
+          `${label}: still unfinished after ${Object.keys(step)[0]}, so something must be on screen`)
+      }
+    }
+    ok(isComplete(draft), `${label}: and the board can actually be saved`)
+  }
+
+  walk('a tags board', [
+    { audience: 'team', tagMode: 'best_cards' },
+    { competition: 'league' },
+    { scoring: 'stableford' },
+    { combine: 'total' },
+  ])
+  walk('a tags board on the day\'s teams', [
+    { audience: 'team', tagMode: 'day_teams' },
+    { competition: 'league' },
+    { scoring: 'stableford' },
+    { teamFormat: 'better_ball' },
+    { combine: 'total' },
+  ])
+  walk('a solo board', [
+    { audience: 'individual' },
+    { competition: 'league' },
+    { scoring: 'stableford' },
+    { combine: 'total' },
+  ])
+  walk('an ordinary team board', [
+    { audience: 'team' },
+    { competition: 'league' },
+    { scoring: 'stableford' },
+    { teamFormat: 'hero' },
+    { combine: 'total' },
+  ])
+
+  // And the gate itself, directly — the line that was wrong.
+  const tag: Partial<Leaderboard> = {
+    audience: 'team', competition: 'league', scoring: 'stableford',
+    tagMode: 'best_cards',
+  }
+  ok(offersCombine(tag), 'a tags board is asked how its rounds add up')
+  ok(!offersCombine({ ...tag, scoring: undefined }),
+    'but not before it knows what a round is scored on')
+  ok(!offersCombine({ audience: 'team', competition: 'league', scoring: 'stableford' }),
+    'and an ordinary team board still waits for its format')
+
+  // One predicate, not the condition written out beside each question —
+  // which is how the second copy came not to know about tags.
+  const form = read('app/components/LeaderboardSetup.tsx')
+  ok(form.includes('{offersCombine(draft) && ('),
+    'the form asks through the predicate rather than its own copy of it')
+  ok(!/draft\.audience === 'individual' \|\| draft\.teamFormat/.test(form),
+    'and no copy of it is left behind in the form')
 }
 
 // ─── The maths ─────────────────────────────────────────────────

@@ -11,7 +11,7 @@ import {
   freeScorings, freeTeamFormats,
   hasMatchplay, boardTitle, boardRules,
   TAG_MODES, MAX_TAG_COUNT, DEFAULT_TAG_COUNT, tagCountOf,
-  isTagBoard, offersTeamFormat, offersTagMode, offersTagCount,
+  isTagBoard, offersTeamFormat, offersTagMode, offersTagCount, offersCombine,
 } from '@/lib/leaderboards'
 import { DEFAULT_TEAM_SCORING, MAX_COUNTING_SCORES, lastHoles } from '@/lib/teamScoring'
 import {
@@ -1135,7 +1135,7 @@ function Builder({
         </Question>
       )}
 
-      {league && draft.scoring && (draft.audience === 'individual' || draft.teamFormat) && (
+      {offersCombine(draft) && (
         <Question n={next()} title="How do the rounds add up?">
           {COMBINES.map(c => (
             <Choice

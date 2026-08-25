@@ -681,12 +681,34 @@ export function tripQuotaScale(boards: readonly Leaderboard[]): QuotaScale {
  * lib/handicapAllowance.ts says why.
  */
 export function offersAllowance(draft: Partial<Leaderboard>): boolean {
+  return knowsWhatItScores(draft)
+}
+
+/**
+ * Has this board said enough about itself to be asked the rest?
+ *
+ * The later questions — how the rounds add up, what allowance it plays off
+ * — all wait on the same thing: the board knowing what one round of it is
+ * worth. A solo board knows that from its scoring; an ordinary team board
+ * needs its format too, because a composite card is not a card until you
+ * say how it is built; **a tags board knows it from its mode**, and has no
+ * team format to wait for.
+ *
+ * One predicate rather than the condition written out at each question,
+ * because it was written out twice and the second copy did not know about
+ * tags: the combine question never appeared for a tags board, while
+ * `unanswered` went on demanding the answer. The board could not be
+ * finished and the form could not say why.
+ */
+export function knowsWhatItScores(draft: Partial<Leaderboard>): boolean {
   if (draft.competition !== 'league' || !draft.scoring) return false
-  // A tags board reads individual cards and adds a few of them up, so a
-  // competition allowance means exactly what it means on a solo board —
-  // and it has no team format to wait for.
-  if (isTagBoard(draft)) return true
+  if (isTagBoard(draft)) return !!draft.tagMode
   return draft.audience === 'individual' || !!draft.teamFormat
+}
+
+/** Whether to ask how the rounds add up. */
+export function offersCombine(draft: Partial<Leaderboard>): boolean {
+  return knowsWhatItScores(draft)
 }
 
 /**
