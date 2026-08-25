@@ -163,6 +163,7 @@ export default function TripSetupClient({
   itinerary,
   lockedGolfItemIds,
   askTeeTeams = false,
+  askTags = false,
 }: {
   trip: Trip
   teams: Team[]
@@ -182,6 +183,8 @@ export default function TripSetupClient({
   lockedGolfItemIds: string[]
   /** Events only — team boards are asked how they meet the tee sheet. */
   askTeeTeams?: boolean
+  /** Events only — offer a board that ranks tags (lib/tagBoards.ts). */
+  askTags?: boolean
 }) {
   // Trip fields
   const [name, setName] = useState(trip.name)
@@ -749,6 +752,7 @@ export default function TripSetupClient({
             rounds={rounds}
             readOnly={!canArrange}
             askTeeTeams={askTeeTeams}
+            askTags={askTags}
             onChange={saveBoards}
           />
           {boards.length > 0 && needsTeams(boards) && teams.length === 0 && (

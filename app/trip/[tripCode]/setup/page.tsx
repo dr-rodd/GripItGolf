@@ -175,6 +175,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       // Team boards on an event are asked how they meet the tee sheet;
       // a trip has no sheet and is never asked (fail-soft over kind).
       askTeeTeams={isEvent(trip.kind)}
+      askTags={isEvent(trip.kind)}
     />
   )
 

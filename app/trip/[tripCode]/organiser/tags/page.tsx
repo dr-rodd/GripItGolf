@@ -4,6 +4,7 @@ import { isLocked } from '@/lib/passcode'
 import { MAIN_SET } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { parseEventPermissions } from '@/lib/eventPermissions'
+import { parseLeaderboards } from '@/lib/leaderboards'
 import BackButton from '@/app/components/BackButton'
 import PasscodeGate from '../../setup/PasscodeGate'
 import TagPortalClient from './TagPortalClient'
@@ -60,7 +61,7 @@ export default async function TagsPage({ params }: {
   // The permissions ride in their own query for the usual fail-soft reason:
   // pre-049 the column does not exist, this errors, and the self-assign
   // toggle simply shows its default.
-  const [teamsRes, playersRes, memberships, permsRes] = await Promise.all([
+  const [teamsRes, playersRes, memberships, permsRes, boardsRes] = await Promise.all([
     supabase
       .from('teams')
       .select('id, name, color, team_set')
@@ -76,6 +77,13 @@ export default async function TagsPage({ params }: {
     supabase
       .from('trips')
       .select('event_permissions')
+      .eq('id', trip.id)
+      .single(),
+    // What the event plays for, so the screen can say whether the tags are
+    // being ranked yet — and offer to make the board that ranks them.
+    supabase
+      .from('trips')
+      .select('leaderboards')
       .eq('id', trip.id)
       .single(),
   ])
@@ -94,6 +102,10 @@ export default async function TagsPage({ params }: {
     (permsRes.data as { event_permissions?: unknown } | null)?.event_permissions
   )
 
+  const boards = parseLeaderboards(
+    (boardsRes.data as { leaderboards?: unknown } | null)?.leaderboards
+  )
+
   const content = (
     <TagPortalClient
       tripId={trip.id}
@@ -102,6 +114,7 @@ export default async function TagsPage({ params }: {
       players={(playersRes.data ?? []) as { id: string; name: string }[]}
       initialMemberships={memberships}
       initialPermissions={permissions}
+      initialBoards={boards}
     />
   )
 

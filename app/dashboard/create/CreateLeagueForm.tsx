@@ -1065,6 +1065,7 @@ export default function CreateLeagueForm({ schedule }: {
                 playerCount={players.filter(p => p.name.trim()).length}
                 teamCount={0}
                 askTeeTeams
+                askTags
                 onChange={setBoards}
               />
               {boards.length === 0 && (

@@ -23,6 +23,8 @@ import {
   DEFAULT_TEAM_SCORING, teamRoundPoints, teamHolePoints,
 } from './teamScoring'
 import { shortNames } from './matchplayEntrants'
+import { TAG_SET, tagRoundScore, countingPlayers } from './tagBoards'
+import { isTagBoard, tagCountOf } from './leaderboards'
 import {
   resolveCustomPoints, totalAfterDiscard, discardedIndices,
 } from './customPoints'
@@ -465,6 +467,10 @@ export function teamCardHolePoints(
 export function buildRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   if (lb.competition === 'matchplay') return []
   const counted = withoutCasualRounds(ctx)
+  // A tags board is a team board by audience — every predicate on the
+  // platform treats it as one — but its rows are built from whole cards
+  // rather than a composite one, so it takes its own shell.
+  if (isTagBoard(lb)) return tagRows(lb, counted)
   return lb.audience === 'team' ? teamRows(lb, counted) : individualRows(lb, counted)
 }
 
@@ -749,7 +755,22 @@ export function orderRowsUndiscarded(lb: Leaderboard, rows: readonly BoardRow[])
 
 // ── Individuals ──
 
-function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
+/**
+ * One player's every round, scored the way this board scores a round.
+ *
+ * Pulled out of `individualRows` because a tags board needs exactly this
+ * and nothing else: a tag's round is a few of its players' rounds added
+ * up, so the cards it selects between have to be the same figures the solo
+ * board would show. Two implementations of "what did this player score
+ * that round" is precisely how a tag total and the solo board beside it
+ * would come to disagree about the same card.
+ *
+ * Players who have not played a hole all trip are dropped, as they always
+ * were — an empty row on a leaderboard is somebody who is not in it.
+ */
+function perPlayerRounds(lb: Leaderboard, ctx: RowContext): {
+  player: RowPlayer; rounds: RoundScore[]; holesPlayed: number; gross: number
+}[] {
   const holeById = new Map(ctx.holes.map(h => [h.id, h]))
   const strokes = lb.scoring === 'strokes'
   const quota = lb.scoring === 'quota'
@@ -854,6 +875,12 @@ function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
 
     return { player: p, rounds, holesPlayed, gross }
   }).filter(r => r.holesPlayed > 0)
+
+  return perPlayer
+}
+
+function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
+  const perPlayer = perPlayerRounds(lb, ctx)
 
   const combined = combineRounds(lb, perPlayer.map(r => ({ id: r.player.id, rounds: r.rounds })),
     ctx.players.length)
@@ -994,6 +1021,114 @@ function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
       isLive: liveFor(memberIds, ctx),
       playerIds: memberIds,
       heroByRound: Object.fromEntries(rounds.map(r => [r.roundId, r.heroPlayerId ?? null])),
+      tieBadgeByRound: c.badges,
+      countbackByRound: cardsForOrdering(lb, ctx, rounds),
+    }
+    return row
+  })
+
+  return sortRows(lb, rows)
+}
+
+// ── Tags ──
+
+/**
+ * The sides, ranked — a tag's round is a few of its players' rounds.
+ *
+ * The shape of a team board's shell, with one difference that is the whole
+ * feature: a tag's round score is built from **whole cards** rather than a
+ * composite one, so the cards it chooses between are exactly the figures
+ * `individualRows` would print for those players. Which few count is
+ * lib/tagBoards.ts's rule, and the only copy of it.
+ *
+ * Everything after that is the pipeline every board shares — `combineRounds`
+ * for the totals and the discard, `sortRows` for the order and the places —
+ * so a tags board inherits the tie rules, the prize tables and the Discard
+ * switch without any of them being written down again. Paying by finishing
+ * position each day is not a mode here for exactly that reason: it is
+ * `combine: 'position'`, and it already works.
+ */
+function tagRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
+  const mode = lb.tagMode!
+  const count = tagCountOf(lb)
+  const basis: ScoringBasis = lb.scoring === 'strokes' ? 'strokes' : 'stableford'
+
+  // Whole cards, scored exactly as the solo board scores them.
+  const perPlayer = perPlayerRounds(lb, ctx)
+  const byPlayer = new Map(perPlayer.map(p => [p.player.id, p]))
+
+  // The tags themselves, on the one sheet they ever live on.
+  const tags = teamsOnSheet(ctx.teams, TAG_SET) as RowTeam[]
+  const reads = tieBreakOf(lb) === 'countback'
+
+  const perTag = tags.map(tag => {
+    const memberIds = membersOf(ctx.memberships, tag.id)
+    const members = memberIds.map(id => byPlayer.get(id)).filter(Boolean) as typeof perPlayer
+
+    const rounds: RoundScore[] = ctx.rounds.map(r => {
+      // Only cards actually played are candidates. A tag whose third
+      // player is not out yet counts its best two of two, not its best two
+      // of two-and-a-blank — a missing card is not a nought.
+      const cards = members
+        .map(m => ({ player: m.player, rs: m.rounds.find(x => x.roundId === r.id) }))
+        .filter(c => c.rs?.played) as { player: RowPlayer; rs: RoundScore }[]
+
+      const counting = countingPlayers(
+        cards.map(c => ({ playerId: c.player.id, score: c.rs.score })),
+        basis, mode, count,
+      )
+      const countingSet = new Set(counting)
+
+      // The countback is the closing stretches of the cards that COUNTED,
+      // not of every card the tag has. What the tag scored over the back
+      // nine is what its counting players scored there — reading the rest
+      // would answer a different question than the total did.
+      const countback = reads
+        ? SEGMENTS.reduce((acc, seg) => {
+          acc[seg] = cards
+            .filter(c => countingSet.has(c.player.id))
+            .reduce((sum, c) => sum + (c.rs.countback?.[seg] ?? 0), 0)
+          return acc
+        }, {} as Countback)
+        : undefined
+
+      return {
+        roundId: r.id,
+        score: tagRoundScore(cards.map(c => c.rs.score), basis, mode, count),
+        countback,
+        // No level to be ahead of: how many cards count decides what level
+        // would even mean, and it changes with the tag's turnout. Green
+        // still says the total can move.
+        relative: null,
+        live: cards.some(c => c.rs.live),
+        played: cards.length > 0,
+      }
+    })
+
+    return { tag, memberIds, rounds }
+  }).filter(t => t.memberIds.length > 0)
+
+  const combined = combineRounds(lb, perTag.map(t => ({ id: t.tag.id, rounds: t.rounds })),
+    tags.length)
+
+  const rows = perTag.map(({ tag, memberIds, rounds }) => {
+    const members = ctx.players.filter(p => memberIds.includes(p.id))
+    const c = combined.get(tag.id)!
+    const row: UnplacedRow = {
+      id: tag.id,
+      // A tag always has the name the organiser gave it, so it is never
+      // named from its members the way a self-made team is.
+      name: tag.name,
+      color: tag.color,
+      subLabel: `${members.length} player${members.length === 1 ? '' : 's'}`,
+      perRound: c.perRound,
+      playedRounds: rounds.filter(r => r.played).map(r => r.roundId),
+      droppedRounds: c.dropped,
+      liveRounds: rounds.filter(r => r.live).map(r => r.roundId),
+      total: c.total,
+      totalAll: c.totalAll,
+      isLive: liveFor(memberIds, ctx),
+      playerIds: memberIds,
       tieBadgeByRound: c.badges,
       countbackByRound: cardsForOrdering(lb, ctx, rounds),
     }

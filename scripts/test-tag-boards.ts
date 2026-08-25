@@ -17,8 +17,17 @@
 import fs from 'fs'
 import {
   TAG_SET, eventTags, tagOf, untaggedIds, describeTags,
+  tagRoundScore, countingPlayers,
 } from '../lib/tagBoards'
 import { MAIN_SET, type Membership, type TeamRow } from '../lib/teamSets'
+import {
+  type Leaderboard, parseLeaderboards, boardTitle, boardRules, slotKey,
+  isTagBoard, tagsInPlay, tagCountOf, unanswered, isComplete,
+  offersTeamFormat, offersTagMode, offersTagCount, offersTeeTeams,
+  offersAllowance, TAG_MODES, ALL_TAG_MODES,
+} from '../lib/leaderboards'
+import { buildRows } from '../lib/boardRows'
+import { buildRowContext } from '../lib/rowContext'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -124,6 +133,302 @@ section('The organiser card says where tagging stands')
   ok(describeTags(2, 1, 1).includes('1 player'), 'a field of one is singular')
 }
 
+// ─── The board that ranks them ─────────────────────────────────
+
+section('A tags board is a team board wearing a mode')
+{
+  const tagBoard: Leaderboard = {
+    id: 'b-tag', audience: 'team', competition: 'league',
+    scoring: 'stableford', combine: 'total', tagMode: 'best_cards',
+  }
+  const teamBoard: Leaderboard = {
+    id: 'b-team', audience: 'team', competition: 'league',
+    scoring: 'stableford', combine: 'total', teamFormat: 'better_ball',
+  }
+  ok(isTagBoard(tagBoard), 'a mode makes it a tags board')
+  ok(!isTagBoard(teamBoard), 'an ordinary team board is not one')
+  ok(!isTagBoard({ audience: 'individual', tagMode: 'best_cards' }),
+    'and a mode on a solo board says nothing — the audience is half the answer')
+
+  ok(tagsInPlay([teamBoard, tagBoard]), 'an event with one is playing for tags')
+  ok(!tagsInPlay([teamBoard]), 'and one without is not')
+  ok(!tagsInPlay([]), 'nor is an event with no boards at all')
+
+  ok(slotKey(tagBoard) !== slotKey({ ...teamBoard, teamSet: 'main' }),
+    'the two are different competitions, though both stand on the main sheet')
+  ok(slotKey(tagBoard) !== slotKey({ ...tagBoard, tagMode: 'all_cards' }),
+    'and two modes are two competitions')
+}
+
+section('The cascade asks a tags board only what it has to answer')
+{
+  const draft: Partial<Leaderboard> = {
+    audience: 'team', competition: 'league', scoring: 'stableford',
+    tagMode: 'best_cards', combine: 'total',
+  }
+  ok(!offersTeamFormat(draft),
+    'a tag counting whole cards has no composite to build, so no format question')
+  ok(offersTagMode(draft), 'it is asked how a tag scores a round')
+  ok(offersTagCount(draft), 'and how many cards count')
+  ok(!offersTagCount({ ...draft, tagMode: 'all_cards' }),
+    'every card counting has no count to ask for')
+  ok(!offersTeeTeams(draft),
+    'a tag is not seated together — that is the tee sheet\'s question')
+  ok(offersAllowance(draft),
+    'but the allowance is asked: a tag reads individual cards like a solo board')
+
+  eq(unanswered(draft), [], 'so the board is complete without a team format')
+  ok(isComplete(draft), 'and can be saved')
+  ok(offersTeamFormat({ ...draft, tagMode: 'day_teams' }),
+    'the day-teams mode does have a real team card, and is asked')
+  eq(unanswered({ ...draft, tagMode: 'day_teams' }), ['How a team\'s players combine'],
+    '  …and cannot be saved without one')
+}
+
+section('Stored tags boards read back, and nonsense does not')
+{
+  const [lb] = parseLeaderboards([{
+    id: 'b-tag', audience: 'team', competition: 'league',
+    scoring: 'stableford', combine: 'total', tagMode: 'best_cards', tagCount: 3,
+  }])
+  eq(lb?.tagMode, 'best_cards', 'the mode reads back')
+  eq(lb?.tagCount, 3, 'and the count')
+  eq(lb?.teamSet, TAG_SET,
+    'pinned to the tag sheet — the one the dots read, never a sheet of its own')
+  ok(!('teamFormat' in (lb ?? {})),
+    'and carries no team format, which would only show up in its title saying nothing true')
+
+  const [dflt] = parseLeaderboards([{
+    id: 'b', audience: 'team', competition: 'league', scoring: 'stableford',
+    combine: 'total', tagMode: 'best_cards', tagCount: 2,
+  }])
+  ok(!('tagCount' in (dflt ?? {})),
+    'the default count is kept off the object, like every other no-op answer')
+  eq(tagCountOf(dflt ?? {}), 2, '  …and reads back as itself')
+
+  const [pinned] = parseLeaderboards([{
+    id: 'b', audience: 'team', competition: 'league', scoring: 'stableford',
+    combine: 'total', tagMode: 'all_cards', teamSet: 'set-4',
+    teamPick: 'self', teamSize: 3, teeTeams: 'separate',
+  }])
+  eq(pinned?.teamSet, TAG_SET, 'a stored sheet cannot move a tags board off the tag sheet')
+  ok(!pinned?.teamPick && !pinned?.teamSize && !pinned?.teeTeams,
+    'and the playing-team answers are left behind rather than gating the wrong thing')
+
+  eq(parseLeaderboards([{
+    id: 'b', audience: 'team', competition: 'league', scoring: 'stableford',
+    combine: 'total', tagMode: 'day_teams',
+  }]), [], 'day teams with no team format has no maths, and is dropped rather than guessed')
+
+  const [junk] = parseLeaderboards([{
+    id: 'b', audience: 'team', competition: 'league', scoring: 'stableford',
+    combine: 'total', tagMode: 'sideways', teamFormat: 'hero',
+  }])
+  ok(!junk?.tagMode, 'an unknown mode is ignored')
+  eq(junk?.teamFormat, 'hero', '  …leaving an ordinary team board, which is what it is')
+
+  const [solo] = parseLeaderboards([{
+    id: 'b', audience: 'individual', competition: 'league',
+    scoring: 'stableford', combine: 'total', tagMode: 'best_cards',
+  }])
+  ok(!solo?.tagMode, 'a mode scribbled on a solo board is ignored, never half-honoured')
+}
+
+section('Every board stored before tags existed reads back byte-for-byte')
+{
+  // The sacred property. Anything that changes here re-scores a live trip.
+  const stored = [
+    { id: 'a', audience: 'individual', competition: 'league', scoring: 'stableford', combine: 'total' },
+    { id: 'b', audience: 'team', competition: 'league', scoring: 'stableford', combine: 'total', teamFormat: 'better_ball' },
+    { id: 'c', audience: 'team', competition: 'league', scoring: 'strokes', combine: 'position', teamFormat: 'hero', customPoints: [10, 6, 4] },
+    { id: 'd', audience: 'individual', competition: 'league', scoring: 'quota', combine: 'total' },
+    { id: 'e', audience: 'team', competition: 'matchplay' },
+  ]
+  const parsed = parseLeaderboards(JSON.parse(JSON.stringify(stored)))
+  eq(parsed.length, 5, 'all five still read')
+  ok(parsed.every(b => !('tagMode' in b) && !('tagCount' in b)),
+    'and not one of them grew a tag key')
+  eq(parsed[1].teamSet, 'main',
+    'an ordinary team board still lands on main when nothing else claims it')
+  eq(parseLeaderboards(JSON.parse(JSON.stringify(stored))), parsed,
+    'and parsing is stable — the same object twice')
+}
+
+section('A tags board is named for what it ranks')
+{
+  const lb: Leaderboard = {
+    id: 'b', audience: 'team', competition: 'league',
+    scoring: 'stableford', combine: 'total', tagMode: 'best_cards', tagCount: 3,
+  }
+  ok(boardTitle(lb).startsWith('Tags'),
+    'named for what it ranks — not "Team better ball", which would read as the week\'s teams')
+  ok(boardTitle(lb) !== boardTitle({ ...lb, tagMode: undefined, teamFormat: 'better_ball' }),
+    'and never the same tab as an ordinary team board on the same cards')
+  ok(boardRules(lb).includes('best 3 cards'),
+    'and the line says how many cards count, which is the whole of what it is')
+  ok(boardRules({ ...lb, tagCount: undefined }).includes('best 2 cards'),
+    'the default says itself rather than staying silent')
+  ok(boardRules({ ...lb, tagCount: 1 }).includes('best card counts'),
+    'one card is singular')
+  ok(boardRules({ ...lb, tagMode: 'all_cards', tagCount: undefined })
+    .includes('Every player\'s round counts'), 'and every card says so')
+  ok(!boardRules(lb).includes('composite card'),
+    'never a better-ball sentence — a tag builds no composite')
+}
+
+// ─── The maths ─────────────────────────────────────────────────
+
+section('Which cards count, and what they add up to')
+{
+  const cards = [12, 40, 31, 8]
+  eq(tagRoundScore(cards, 'stableford', 'best_cards', 2), 71, 'best two on Stableford is the two highest')
+  eq(tagRoundScore(cards, 'strokes', 'best_cards', 2), 20, 'and on strokes the two lowest')
+  eq(tagRoundScore(cards, 'stableford', 'all_cards', 2), 91,
+    'every card counting ignores the count entirely')
+  eq(tagRoundScore([30], 'stableford', 'best_cards', 3), 30,
+    'a tag with one player out counts the one card — a blank is not a nought')
+  eq(tagRoundScore([], 'stableford', 'best_cards', 2), 0, 'and nobody out is nothing')
+  eq(tagRoundScore(cards, 'stableford', 'best_cards', 0), 40,
+    'a count of nothing still counts one, or the board would score no round at all')
+
+  eq(countingPlayers(
+    [{ playerId: 'a', score: 12 }, { playerId: 'b', score: 40 }, { playerId: 'c', score: 31 }],
+    'stableford', 'best_cards', 2), ['b', 'c'], 'and it says who counted, best first')
+  eq(countingPlayers(
+    [{ playerId: 'zed', score: 20 }, { playerId: 'amy', score: 20 }],
+    'stableford', 'best_cards', 1), ['amy'],
+    'a tie is broken by id, so the same round scored twice picks the same player')
+}
+
+// ─── End to end ────────────────────────────────────────────────
+
+section('A tags board scored from real cards')
+{
+  // Two tags of two, two rounds, every hole played. Points per hole are
+  // flat so the totals are obvious: 18 holes × n points.
+  const players = [
+    { id: 'p1', name: 'Alice', handicap: 10, gender: 'M', team_id: 'tag-eu' },
+    { id: 'p2', name: 'Bob', handicap: 14, gender: 'M', team_id: 'tag-eu' },
+    { id: 'p3', name: 'Cara', handicap: 18, gender: 'F', team_id: 'tag-us' },
+    { id: 'p4', name: 'Dan', handicap: 12, gender: 'M', team_id: 'tag-us' },
+  ]
+  const rounds = [
+    { id: 'r1', round_number: 1, status: 'completed', courses: { id: 'c1', name: 'Ballyliffin' } },
+    { id: 'r2', round_number: 2, status: 'completed', courses: { id: 'c1', name: 'Portsalon' } },
+  ]
+  const holes = Array.from({ length: 18 }, (_, i) => ({
+    id: `h${i + 1}`, hole_number: i + 1, par: 4, stroke_index: i + 1, course_id: 'c1',
+  }))
+  const cardOf = (playerId: string, roundId: string, perHole: number) =>
+    holes.map(h => ({
+      player_id: playerId, hole_id: h.id, round_id: roundId,
+      gross_score: 6 - perHole, stableford_points: perHole, no_return: false,
+    }))
+
+  // Round 1 — Europe: Alice 54, Bob 36. USA: Cara 18, Dan 36.
+  // Round 2 — Europe: Alice 18, Bob 36. USA: Cara 54, Dan 36.
+  const scores = [
+    ...cardOf('p1', 'r1', 3), ...cardOf('p2', 'r1', 2),
+    ...cardOf('p3', 'r1', 1), ...cardOf('p4', 'r1', 2),
+    ...cardOf('p1', 'r2', 1), ...cardOf('p2', 'r2', 2),
+    ...cardOf('p3', 'r2', 3), ...cardOf('p4', 'r2', 2),
+  ]
+  const teams = [
+    { id: 'tag-eu', name: 'Europe', color: '#2563EB', team_set: MAIN_SET },
+    { id: 'tag-us', name: 'USA', color: '#DC2626', team_set: MAIN_SET },
+  ]
+  const memberships = players.map(p => ({
+    team_id: p.team_id, team_set: MAIN_SET, player_id: p.id,
+  }))
+
+  const ctx = buildRowContext({
+    players, teams, memberships, holes, rounds,
+    courseByRound: new Map(rounds.map(r => [r.id, 'c1'])),
+    scores,
+    liveScores: [],
+    roundHandicaps: players.flatMap(p =>
+      rounds.map(r => ({ round_id: r.id, player_id: p.id, playing_handicap: p.handicap }))),
+    tees: [],
+    activeRoundIds: [],
+    livePlayerIds: [],
+    legacyTeamScoring: null,
+  } as never)
+
+  function board(over: Partial<Leaderboard> = {}): Leaderboard {
+    return {
+      id: 'b-tag', audience: 'team', competition: 'league',
+      scoring: 'stableford', combine: 'total', tagMode: 'best_cards', ...over,
+    }
+  }
+
+  {
+    // Best 1: Europe 54 + 36 = 90, USA 36 + 54 = 90. Dead level.
+    const rows = buildRows(board({ tagCount: 1 }), ctx)
+    eq(rows.map(r => r.name), ['Europe', 'USA'], 'both tags have a row')
+    eq(rows.map(r => r.total), [90, 90], 'best card each round, added up')
+    eq(rows.map(r => r.place), [1, 1],
+      'level tags share the place — golf\'s ordering, not the row\'s index')
+  }
+
+  {
+    // Best 2 = every card here: Europe 90+54=144, USA 54+90=144.
+    const rows = buildRows(board({ tagCount: 2 }), ctx)
+    eq(rows.map(r => r.total), [144, 144], 'best two of two is both cards')
+    eq(buildRows(board({ tagMode: 'all_cards' }), ctx).map(r => r.total), [144, 144],
+      'and every card counting says the same thing about the same field')
+  }
+
+  {
+    const rows = buildRows(board({ tagCount: 1 }), ctx)
+    eq(rows[0].perRound, { r1: 54, r2: 36 }, 'the round columns are the counting cards')
+    eq(rows[0].playerIds, ['p1', 'p2'], 'a row carries its tag\'s players')
+    eq(rows[0].subLabel, '2 players', 'and says how many, rather than listing them again')
+    eq(rows[0].color, '#2563EB', 'the tag\'s own colour rides on the row')
+  }
+
+  {
+    // Dropping the worst round: Europe keeps 54, USA keeps 54.
+    const rows = buildRows(board({ tagCount: 1, discardWorst: 1 }), ctx)
+    eq(rows.map(r => r.total), [54, 54], 'discard works, inherited from the shared pipeline')
+    eq(rows.map(r => r.totalAll), [90, 90], 'and the all-in total is kept for the switch')
+  }
+
+  {
+    // Paid by position each round — the fourth "mode" that is not a mode.
+    const rows = buildRows(board({
+      tagCount: 1, combine: 'position', customPoints: [10, 6],
+    }), ctx)
+    eq(rows.map(r => r.total), [16, 16],
+      'points by day position needs no mode of its own — combine does it')
+  }
+
+  {
+    // A tag whose second player did not go out. Best 2 of the one card
+    // that exists is that card, not that card plus a nought.
+    const thin = buildRowContext({
+      players, teams, memberships, holes, rounds,
+      courseByRound: new Map(rounds.map(r => [r.id, 'c1'])),
+      scores: [...cardOf('p1', 'r1', 3), ...cardOf('p3', 'r1', 1), ...cardOf('p4', 'r1', 2)],
+      liveScores: [],
+      roundHandicaps: players.flatMap(p =>
+        rounds.map(r => ({ round_id: r.id, player_id: p.id, playing_handicap: p.handicap }))),
+      tees: [], activeRoundIds: [], livePlayerIds: [], legacyTeamScoring: null,
+    } as never)
+    const rows = buildRows(board({ tagCount: 2 }), thin)
+    const eu = rows.find(r => r.name === 'Europe')
+    eq(eu?.total, 54, 'a missing card is missing, never a nought')
+  }
+
+  {
+    // An untagged player belongs to no row, and is not silently binned
+    // into somebody else's.
+    const rows = buildRows(board({ tagCount: 2 }), ctx)
+    const everyone = rows.flatMap(r => r.playerIds)
+    eq(everyone.length, 4, 'every tagged player counts once')
+    eq(new Set(everyone).size, 4, 'and only once')
+  }
+}
+
 // ─── Wiring: the portal ────────────────────────────────────────
 
 section('The portal writes through the one membership writer')
@@ -190,6 +495,38 @@ section('The field only picks its own tag when the organiser says so')
     'and can never make, rename or remove a tag — only join one')
   ok(join.includes('viewerPlayerId'),
     'identity is the claim cookie, personalising and never authorising')
+}
+
+section('The board is offered where boards are made, and only on events')
+{
+  const form = read('app/components/LeaderboardSetup.tsx')
+  ok(form.includes('askTags'), 'the cascade takes the events-only flag')
+  ok(/askTags && \(/.test(form),
+    '  …and a trip is never offered the Tags choice')
+  ok(form.includes('tagMode: TAG_MODES[0].key'),
+    'picking Tags writes a mode straight away — the draft is never a tags board without one')
+  ok(form.includes('isTagBoard(lb)) return { ...lb, teamSet: TAG_SET }'),
+    'saving pins it to the tag sheet rather than allocating a fresh one')
+  ok(form.includes('squatters'),
+    'and an ordinary team board sitting on the tag sheet is moved off, never left sharing')
+
+  const setupPage = read('app/trip/[tripCode]/setup/page.tsx')
+  ok(setupPage.includes('askTags={isEvent(trip.kind)}'),
+    'Trip Setup asks only for an event')
+  const league = read('app/dashboard/create/CreateLeagueForm.tsx')
+  ok(league.includes('askTags'), 'and so does league creation')
+
+  const portal = read('app/trip/[tripCode]/organiser/tags/TagPortalClient.tsx')
+  ok(portal.includes('<LeaderboardSetup'),
+    'the portal offers the same cascade, never a second smaller copy')
+  ok(portal.includes('tagsInPlay(boards)'),
+    'and says whether the tags are ranked yet through the one predicate')
+
+  // A tags board is a league board, so the leaderboard page tabs it like
+  // any other without knowing tags exist.
+  const client = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  ok(client.includes("b.competition === 'league'"),
+    'the leaderboard tabs every league board — a tags board rides in unchanged')
 }
 
 // ─── Trips are untouched ───────────────────────────────────────

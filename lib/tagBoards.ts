@@ -27,6 +27,11 @@ import {
   MAIN_SET, teamsOnSheet, teamFor,
   type Membership, type TeamRow,
 } from './teamSets'
+import { bestOnHole, type ScoringBasis } from './teamScoring'
+// Type-only, and it has to stay that way: lib/teamSets.ts imports values
+// from lib/leaderboards.ts, so a value import here would close the ring.
+// The tag mode registry lives over there for the same reason.
+import type { TagMode } from './leaderboards'
 
 /**
  * The sheet tags live on. An alias of the main sheet, named so a call site
@@ -54,6 +59,62 @@ export function untaggedIds(
   memberships: readonly Membership[],
 ): string[] {
   return playerIds.filter(id => tagOf(memberships, id) === null)
+}
+
+// ─── How a tag's round is built ────────────────────────────────
+//
+// The mode registry itself lives in lib/leaderboards.ts, beside the other
+// board options — and it has to, because lib/teamSets.ts imports that
+// file and this one imports teamSets. Putting it here would close the
+// ring. What lives here is the tag's own rules: the sheet, who carries
+// one, and which cards count.
+
+/**
+ * A tag's score for one round, from its players' cards for that round.
+ *
+ * `cards` is one figure per player who played, already in whatever the
+ * board is scored on — Stableford points, nett strokes, quota. Selecting
+ * the best few is `bestOnHole` from lib/teamScoring.ts: the unit here is a
+ * whole card rather than a hole, but the rule is the identical one — the
+ * best N by the direction the scoring sorts in — and a second sort here is
+ * exactly how the two would come to disagree about which way strokes go.
+ *
+ * Every card counting is the same selection with N at everybody, so the
+ * two modes are one path and cannot drift apart.
+ */
+export function tagRoundScore(
+  cards: readonly number[],
+  basis: ScoringBasis,
+  mode: TagMode,
+  count: number,
+): number {
+  if (cards.length === 0) return 0
+  const take = mode === 'best_cards' ? Math.max(1, count) : cards.length
+  return bestOnHole(cards, basis, take).reduce((sum, v) => sum + v, 0)
+}
+
+/**
+ * Which of a tag's players actually counted, in the order they counted.
+ *
+ * The same selection `tagRoundScore` makes, said in players rather than in
+ * figures — so a countback reads the closing stretches of the cards that
+ * counted, and the row can say who carried the round. Ties are broken by
+ * player id, the way `lib/teamScoring.ts` breaks them when it cuts the
+ * worst card: the same round scored twice must select the same people.
+ */
+export function countingPlayers(
+  cards: readonly { playerId: string; score: number }[],
+  basis: ScoringBasis,
+  mode: TagMode,
+  count: number,
+): string[] {
+  const take = mode === 'best_cards' ? Math.max(1, count) : cards.length
+  return [...cards]
+    .sort((a, b) =>
+      (basis === 'strokes' ? a.score - b.score : b.score - a.score)
+      || (a.playerId < b.playerId ? -1 : a.playerId > b.playerId ? 1 : 0))
+    .slice(0, Math.max(0, take))
+    .map(c => c.playerId)
 }
 
 /**

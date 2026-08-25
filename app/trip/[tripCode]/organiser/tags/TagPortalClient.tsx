@@ -11,6 +11,10 @@ import { setTeam, clearMirror } from '@/lib/teamMembers'
 import {
   EVENT_PERMISSIONS, type EventPermissions,
 } from '@/lib/eventPermissions'
+import {
+  type Leaderboard, boardTitle, boardRules, tagsInPlay,
+} from '@/lib/leaderboards'
+import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 
 /**
  * The tags portal — making tags and giving players theirs.
@@ -37,6 +41,7 @@ const INPUT = [
 
 export default function TagPortalClient({
   tripId, tripCode, initialTeams, players, initialMemberships, initialPermissions,
+  initialBoards,
 }: {
   tripId: string
   tripCode: string
@@ -44,6 +49,8 @@ export default function TagPortalClient({
   players: Player[]
   initialMemberships: Membership[]
   initialPermissions: EventPermissions
+  /** What the event plays for — is anything ranking the tags yet? */
+  initialBoards: Leaderboard[]
 }) {
   const [teams, setTeams] = useState<Team[]>(initialTeams)
   const [memberships, setMemberships] = useState<Membership[]>(initialMemberships)
@@ -171,6 +178,28 @@ export default function TagPortalClient({
       setError(/column|schema cache/i.test(err.message ?? '')
         ? 'Could not save — a database update may not have been applied yet.'
         : 'Could not save the change — try again')
+    }
+  }
+
+  // ── What the tags are played for ─────────────────────────────
+  // Tags with no board ranking them are only coloured dots. The whole
+  // leaderboard cascade is offered here rather than a second, smaller copy
+  // of it — one form, wherever a board is made.
+  const [boards, setBoards] = useState<Leaderboard[]>(initialBoards)
+  const [showBoards, setShowBoards] = useState(false)
+  const ranked = tagsInPlay(boards)
+
+  async function saveBoards(next: Leaderboard[]) {
+    const prev = boards
+    setBoards(next)
+    setError(null)
+    const { error: err } = await supabase
+      .from('trips')
+      .update({ leaderboards: next })
+      .eq('id', tripId)
+    if (err) {
+      setBoards(prev)
+      setError('Could not save the leaderboard — try again')
     }
   }
 
@@ -365,6 +394,60 @@ export default function TagPortalClient({
             Still untagged: {untagged.map(id => nameOf.get(id)).filter(Boolean).join(' · ')}
           </p>
         )}
+
+        {/* ── What the tags play for ──
+            A tag with no board behind it is a coloured dot and nothing
+            more. This is where it becomes a competition — the same
+            cascade Trip Setup uses, never a smaller second copy of it. */}
+        <section className="mt-10">
+          <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-1">
+            What the tags play for
+          </h2>
+          <p className="text-ink/65 text-[13px] mb-3 leading-snug">
+            {ranked
+              ? 'The sides are being ranked. Everything else on the leaderboard is unchanged.'
+              : 'Tags colour the player cards on their own. Add a leaderboard to rank the sides against each other.'}
+          </p>
+
+          {ranked && !showBoards && (
+            <ul className="flex flex-col gap-2 mb-3">
+              {boards.filter(b => b.tagMode).map(b => (
+                <li key={b.id} className="bg-surface border border-bark/12 rounded-2xl p-4">
+                  <p className="text-ink text-sm font-medium">{boardTitle(b)}</p>
+                  <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">{boardRules(b)}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {showBoards ? (
+            <>
+              <LeaderboardSetup
+                boards={boards}
+                playerCount={players.length}
+                teamCount={tags.length}
+                askTeeTeams
+                askTags
+                onChange={saveBoards}
+              />
+              <button
+                type="button"
+                onClick={() => setShowBoards(false)}
+                className="t-cap text-ink/65 hover:text-ink/80 transition-colors mt-3"
+              >
+                Done
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowBoards(true)}
+              className="w-full py-4 border border-dashed border-bark/25 rounded-xl text-ink/65 text-sm hover:border-bark/40 hover:text-ink/80 transition-colors"
+            >
+              {ranked ? 'Change the leaderboards' : '+ Rank the tags'}
+            </button>
+          )}
+        </section>
 
         {error && (
           <p className="text-rust-deep text-sm mt-4 leading-snug">{error}</p>
