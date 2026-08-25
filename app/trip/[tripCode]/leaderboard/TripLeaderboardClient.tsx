@@ -1603,10 +1603,14 @@ export default function TripLeaderboardClient({
     ? sortedRounds.filter(r => activeBoard.roundIds!.includes(r.id))
     : sortedRounds
 
+  // Where the rows would come from, if there were any. A tags board and a
+  // day board are both team boards by audience but are filled in from two
+  // different screens, and "Set teams in Trip Setup" points at neither.
   const emptyMessage =
-    activeBoard.audience === 'team'
-      ? 'Set teams in Trip Setup'
-      : 'No scores yet.'
+    activeBoard.audience !== 'team' ? 'No scores yet.'
+    : activeBoard.tagMode ? 'No tags yet — the sides are set in the organiser area.'
+    : activeBoard.roundIds?.length ? 'No teams for this day yet — they are picked on the tee sheet.'
+    : 'Set teams in Trip Setup'
 
   // A prize table is worth naming — "10 / 5 / 3 a round" is what an organiser
   // recognises their own competition by, where "points by position" is not.

@@ -611,6 +611,10 @@ section('The board is offered where boards are made, and only on events')
   const client = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   ok(client.includes("b.competition === 'league'"),
     'the leaderboard tabs every league board — a tags board rides in unchanged')
+  ok(client.includes('the sides are set in the organiser area'),
+    'and an empty one points at where tags come from, not at Trip Setup')
+  ok(client.includes('picked on the tee sheet'),
+    'while an empty day board points at where its fourballs come from')
 }
 
 // ─── Trips are untouched ───────────────────────────────────────
