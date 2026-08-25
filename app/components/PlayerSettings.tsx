@@ -23,6 +23,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { applyTheme, isDark, rememberTheme } from '@/lib/theme'
+import { MAX_NICKNAME, normalizeNickname } from '@/lib/displayNames'
 import { IconSettings } from './icons'
 import Toggle from './Toggle'
 
@@ -39,6 +40,14 @@ export default function PlayerSettings({
   // sheet, and the sheet is closed until a finger opens it.
   const [dark, setDark] = useState(() => isDark())
   const [saveFailed, setSaveFailed] = useState(false)
+
+  // The leaderboard nickname — the player's own short name for the board's
+  // tight columns. Their stored name never changes; lib/displayNames.ts is
+  // where this wins over the default.
+  const [nickname, setNickname] = useState('')
+  const [savedNickname, setSavedNickname] = useState('')
+  const [nickSaving, setNickSaving] = useState(false)
+  const [nickFailed, setNickFailed] = useState(false)
 
   useEffect(() => {
     // What this player chose, possibly on another phone. The device cookie
@@ -62,8 +71,46 @@ export default function PlayerSettings({
           setDark(saved)
         }
       })
+    // Its own query, not a second column on the one above: naming `nickname`
+    // there would fail the whole read — dark mode included — on a database
+    // that has not run migration 047. Errors are ignored the same way.
+    supabase
+      .from('players')
+      .select('nickname')
+      .eq('id', playerId)
+      .eq('trip_id', tripId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled || error) return
+        const saved = normalizeNickname((data as { nickname?: string | null } | null)?.nickname)
+        if (saved) {
+          setNickname(saved)
+          setSavedNickname(saved)
+        }
+      })
     return () => { cancelled = true }
   }, [tripId, playerId])
+
+  const nickDirty = (normalizeNickname(nickname) ?? '') !== savedNickname
+
+  async function saveNickname() {
+    const next = normalizeNickname(nickname)
+    setNickSaving(true)
+    setNickFailed(false)
+    // null clears — leaving the box empty is how the default comes back.
+    const { error } = await supabase
+      .from('players')
+      .update({ nickname: next })
+      .eq('id', playerId)
+      .eq('trip_id', tripId)
+    setNickSaving(false)
+    if (error) {
+      setNickFailed(true)
+      return
+    }
+    setNickname(next ?? '')
+    setSavedNickname(next ?? '')
+  }
 
   async function handleToggle(next: boolean) {
     // The page first, the network second: the switch must answer the finger.
@@ -143,6 +190,42 @@ export default function PlayerSettings({
                     it anyway.
                   </p>
                 )}
+
+                {/* ── Leaderboard nickname ── */}
+                <div className="mt-5 pt-5 border-t border-bark/12">
+                  <p className="t-label text-ink">Leaderboard nickname</p>
+                  <p className="t-cap text-ink/65 mt-0.5">
+                    Save space on the leaderboard — your player name doesn&apos;t
+                    change, the board just prints this shorter one. Leave it
+                    blank and it shows your first name and initial.
+                  </p>
+                  <div className="flex gap-2 mt-3">
+                    <input
+                      type="text"
+                      value={nickname}
+                      onChange={e => setNickname(e.target.value)}
+                      maxLength={MAX_NICKNAME}
+                      placeholder="e.g. Rossy"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      className="flex-1 min-w-0 bg-surface border border-bark/25 rounded-xl px-4 py-2.5 text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/60 transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={saveNickname}
+                      disabled={nickSaving || !nickDirty}
+                      className="flex-shrink-0 px-4 rounded-xl border border-bark/25 text-ink text-sm tracking-[0.1em] uppercase hover:border-bark/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {nickSaving ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                  {nickFailed && (
+                    <p className="t-cap text-rust-deep mt-2">
+                      Could not save the nickname — try again
+                    </p>
+                  )}
+                </div>
               </div>
 
             </div>

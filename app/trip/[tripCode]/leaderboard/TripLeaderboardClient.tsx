@@ -14,6 +14,7 @@ import {
 } from '@/lib/boardRows'
 import { type Segment } from '@/lib/tiebreak'
 import { buildRowContext, sortRounds } from '@/lib/rowContext'
+import { boardNames } from '@/lib/displayNames'
 import { formatHandicap } from '@/lib/handicap'
 import { type Membership } from '@/lib/teamSets'
 import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundState'
@@ -88,6 +89,12 @@ interface Props {
   roundHandicaps: RoundHcp[]
   /** Ratings only. Read by boards playing off a percentage of the handicap. */
   tees?: TeeRatingRow[]
+  /**
+   * Leaderboard nicknames, fetched fail-soft on their own — naming the
+   * column in the players select would fail the roster on a database that
+   * has not run migration 047, and a board without nicknames still stands.
+   */
+  nicknames?: { id: string; nickname: string | null }[]
 }
 
 // Every scorecard in the app wears the same clothes — see
@@ -912,12 +919,14 @@ function useBoardScroll(scrolls: boolean) {
 const INLINE_ROUNDS = 4
 
 function Board({
-  board, rows: allRows, rounds, playerById, onOpenCard,
+  board, rows: allRows, rounds, playerById, boardNameById, onOpenCard,
 }: {
   board: Leaderboard
   rows: BoardRow[]
   rounds: Round[]
   playerById: Map<string, Player>
+  /** Player id → what the name column prints. Team rows are not in it. */
+  boardNameById: Map<string, string>
   onOpenCard: (row: BoardRow, round: Round) => void
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -1191,7 +1200,7 @@ function Board({
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} />
                       )}
                       <ScrollingName
-                        text={row.name}
+                        text={boardNameById.get(row.id) ?? row.name}
                         className="min-w-0 flex-1"
                         textClassName="font-[family-name:var(--font-display)] font-semibold text-[15px] leading-tight text-ink"
                       />
@@ -1340,7 +1349,7 @@ function MatchplayTab({ tripCode }: { tripCode: string }) {
 export default function TripLeaderboardClient({
   tripCode, boards, activeRoundIds, livePlayerIds, legacyTeamScoring, rounds,
   teams, memberships, players, holes, scores, liveScores, roundHandicaps,
-  tees = [],
+  tees = [], nicknames = [],
 }: Props) {
   // Matchplay has its own route, so it is a button rather than a tab. Every
   // other board is a table, and its own rules travel with it.
@@ -1352,6 +1361,19 @@ export default function TripLeaderboardClient({
   const activeBoard = tabs.find(b => b.id === activeId) ?? tabs[0] ?? null
 
   const playerById = useMemo(() => new Map(players.map(p => [p.id, p])), [players])
+
+  // What the board prints for a player: their own nickname, or first name
+  // plus the start of the last, grown on ties — lib/displayNames.ts is the
+  // one copy of both halves. Team rows are not in the map and keep their
+  // names; so does the scorecard sheet's title, which has the room — the
+  // player's name doesn't change, the tight columns just borrow a shorter
+  // one.
+  const boardNameById = useMemo(() => {
+    const nickById = new Map(nicknames.map(n => [n.id, n.nickname]))
+    return boardNames(players.map(p => ({
+      id: p.id, name: p.name, nickname: nickById.get(p.id) ?? null,
+    })))
+  }, [players, nicknames])
 
   // ── Everything a board is built from ────────────────────────
   //
@@ -1541,6 +1563,7 @@ export default function TripLeaderboardClient({
             rows={currentRows}
             rounds={sortedRounds}
             playerById={playerById}
+            boardNameById={boardNameById}
             onOpenCard={(row, round) => setCard({ row, round })}
           />
         )}

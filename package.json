@@ -18,7 +18,7 @@
     "test:event-permissions": "tsx scripts/test-event-permissions.ts",
     "test:tee-sheet": "tsx scripts/test-tee-sheet.ts",
     "test:team-pick": "tsx scripts/test-team-pick.ts",
-    "test": "npm run test:formats && npm run test:leaderboards && npm run test:quota && npm run test:handicap && npm run test:handicap-allowance && npm run test:setup-flow && npm run test:team-sets && npm run test:matchplay && npm run test:entrants && npm run test:custom-points && npm run test:tiebreak && npm run test:match-decision && npm run test:bracket-layout && npm run test:bracket-render && npm run test:bracket-setup && npm run test:league-setup && npm run test:event-permissions && npm run test:tee-sheet && npm run test:team-pick && npm run test:progress && npm run test:itinerary && npm run test:weather && npm run test:trip-form && npm run test:leaderboard && npm run test:recognition && npm run test:admin && npm run test:admin-pages && npm run test:admin-live && npm run test:support && npm run test:live-scores && npm run test:score-outbox && npm run test:stats && npm run test:scorecard-void && npm run test:scorecard && npm run test:claim && npm run test:hub && npm run test:event-hub && npm run test:golden && npm run test:branding && npm run test:card-check && npm run test:course-directory && npm run test:course-lookup && npm run test:course-import && npm run test:qr-email && npm run test:legacy",
+    "test": "npm run test:formats && npm run test:leaderboards && npm run test:quota && npm run test:handicap && npm run test:handicap-allowance && npm run test:setup-flow && npm run test:team-sets && npm run test:matchplay && npm run test:entrants && npm run test:custom-points && npm run test:tiebreak && npm run test:match-decision && npm run test:bracket-layout && npm run test:bracket-render && npm run test:bracket-setup && npm run test:league-setup && npm run test:event-permissions && npm run test:tee-sheet && npm run test:team-pick && npm run test:progress && npm run test:itinerary && npm run test:weather && npm run test:trip-form && npm run test:leaderboard && npm run test:recognition && npm run test:admin && npm run test:admin-pages && npm run test:admin-live && npm run test:support && npm run test:live-scores && npm run test:score-outbox && npm run test:stats && npm run test:scorecard-void && npm run test:scorecard && npm run test:claim && npm run test:hub && npm run test:event-hub && npm run test:names && npm run test:golden && npm run test:branding && npm run test:card-check && npm run test:course-directory && npm run test:course-lookup && npm run test:course-import && npm run test:qr-email && npm run test:legacy",
     "test:legacy": "tsx scripts/test-legacy-shutdown.ts",
     "test:progress": "tsx scripts/test-matchplay-progress.ts",
     "test:trip-form": "NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder tsx scripts/test-trip-form.tsx",
@@ -58,7 +58,8 @@
     "test:match-decision": "tsx scripts/test-match-decision.ts",
     "test:score-outbox": "tsx scripts/test-score-outbox.ts",
     "test:qr-email": "tsx scripts/test-qr-email.ts",
-    "test:event-hub": "tsx scripts/test-event-hub.ts"
+    "test:event-hub": "tsx scripts/test-event-hub.ts",
+    "test:names": "tsx scripts/test-names.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",

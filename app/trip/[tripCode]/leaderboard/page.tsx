@@ -66,7 +66,7 @@ export default async function TripLeaderboardPage({
   const nilId     = '00000000-0000-0000-0000-000000000000'
 
   const [teamsRes, playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes,
-         memberships] =
+         memberships, nicknamesRes] =
     await Promise.all([
       supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
       supabase.from('players')
@@ -107,6 +107,11 @@ export default async function TripLeaderboardPage({
       // fours and a knockout between pairings, so this cannot be a field on
       // the player — see lib/teamSets.ts.
       fetchMemberships(trip.id),
+      // Leaderboard nicknames, on their own and fail-soft: naming the column
+      // in the players select above would fail the whole roster on a
+      // database that has not run migration 047, and a board without
+      // nicknames still stands.
+      supabase.from('players').select('id, nickname').eq('trip_id', trip.id),
     ])
 
   // What the trip plays for. A stored list wins; a trip created before the
@@ -142,6 +147,7 @@ export default async function TripLeaderboardPage({
         teams={teamsRes.data ?? []}
         memberships={memberships}
         players={playersRes.data ?? []}
+        nicknames={(nicknamesRes.data ?? []) as { id: string; nickname: string | null }[]}
         holes={holesRes.data ?? []}
         scores={scoresRes.data ?? []}
         liveScores={liveScoresRes.data ?? []}
