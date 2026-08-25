@@ -117,6 +117,64 @@ export function countingPlayers(
     .map(c => c.playerId)
 }
 
+// ─── The gate on the tee sheet ─────────────────────────────────
+//
+// When an event is playing for tags, a player with no tag has nothing to
+// play for: their card would be scored and then counted towards nobody.
+// So the sheet refuses them rather than seating somebody whose round
+// quietly does not count — and a team card can only credit one tag, so a
+// team has to be of one.
+//
+// These are tag rules that happen to bite at the tee sheet, so they live
+// here and not in lib/teeSheet.ts, which stays tag-ignorant, or in
+// lib/teamLimits.ts, which stays about size. Honest UI gates in the
+// platform's usual sense: the trip code is still the only access control.
+
+/**
+ * Why these players cannot go on the sheet, or null when they can.
+ *
+ * Only ever refuses an ADD. Somebody already seated who then loses their
+ * tag is left where they stand — evicting a name from a sheet the field
+ * has already read is a worse failure than a card that counts for nobody,
+ * and the organiser can see the untagged list either way.
+ */
+export function tagGateReason(
+  playerIds: readonly string[],
+  memberships: readonly Membership[],
+  nameOf: (id: string) => string | undefined,
+): string | null {
+  const missing = untaggedIds(playerIds, memberships)
+  if (missing.length === 0) return null
+  const names = missing.map(id => nameOf(id) ?? 'That player')
+  const who = names.length === 1
+    ? names[0]
+    : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  return names.length === 1
+    ? `${who} needs a tag before going on the sheet — tags are set in the organiser area.`
+    : `${who} need tags before going on the sheet — tags are set in the organiser area.`
+}
+
+/**
+ * Why these players cannot be one team, or null when they can.
+ *
+ * A team's card counts towards a tag, and a card cannot count towards two
+ * — so a team is of one tag or it is not a team. Untagged is caught by the
+ * gate above before this is ever asked, but it is answered here too rather
+ * than assumed: this is called from the team-forming path, and a rule that
+ * relies on another rule having run is a rule with a hole in it.
+ */
+export function dayTeamTagIssue(
+  memberIds: readonly string[],
+  memberships: readonly Membership[],
+): string | null {
+  if (memberIds.length === 0) return null
+  const tags = new Set(memberIds.map(id => tagOf(memberships, id)))
+  if (tags.has(null)) return 'Everyone in a team needs a tag first.'
+  return tags.size > 1
+    ? 'A team has to be all one tag — its card counts towards that tag.'
+    : null
+}
+
 /**
  * The organiser card's one-line summary — where tagging stands, or an
  * invitation when it has not started.

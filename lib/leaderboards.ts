@@ -705,6 +705,52 @@ export function offersTeeTeams(draft: Partial<Leaderboard>): boolean {
   return draft.audience === 'team' && !!draft.competition && !draft.tagMode
 }
 
+/**
+ * The board that governs one round's own play, if there is one.
+ *
+ * A board scoped to exactly that round (`roundIds`) is that day's
+ * competition — what format the day is played in, and therefore what the
+ * tee sheet is arranging people into. Scoped to exactly it, never merely
+ * including it: a board counting Days 1 and 2 together is not Day 1's
+ * format, it is a competition spanning both.
+ *
+ * The first such board wins. An event with two boards on one day has two
+ * competitions over the same golf, and the day is played once — so the
+ * team one leads, because that is the one with a shape to arrange.
+ */
+export function dayBoardFor(
+  boards: readonly Leaderboard[],
+  roundId: string,
+): Leaderboard | null {
+  const scoped = boards.filter(b =>
+    b.competition === 'league'
+    && b.roundIds?.length === 1
+    && b.roundIds[0] === roundId)
+  return scoped.find(b => b.audience === 'team') ?? scoped[0] ?? null
+}
+
+/**
+ * The board whose teams a round is played in.
+ *
+ * The day's own team board when it has one — its teams are that day's
+ * fourballs, on that day's sheet — and otherwise the event's team board,
+ * whose teams stand for the whole week. This is the one copy of that
+ * order, so the tee sheet, the grouping and the scoring cannot disagree
+ * about whose teams a slot is showing.
+ *
+ * A tags board is never it: a tag is not a playing group, and grouping a
+ * tee sheet by tag would put twelve people in a fourball.
+ */
+export function teamBoardForRound(
+  boards: readonly Leaderboard[],
+  roundId: string,
+): Leaderboard | null {
+  const day = dayBoardFor(boards, roundId)
+  if (day && day.audience === 'team' && !day.tagMode) return day
+  return boards.find(b =>
+    b.audience === 'team' && !b.tagMode && !b.roundIds?.length) ?? null
+}
+
 /** Whether this board needs teams picked before the trip can go live. */
 export function needsTeams(boards: readonly Leaderboard[]): boolean {
   return boards.some(lb => lb.audience === 'team')

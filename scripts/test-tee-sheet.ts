@@ -18,7 +18,14 @@ import {
   sheetStart, pickerUnits, unitMatches,
 } from '../lib/teeSheet'
 import { TEE_INTERVAL_MINS } from '../lib/itinerary'
-import { parseLeaderboards, offersTeeTeams } from '../lib/leaderboards'
+import {
+  type Leaderboard, parseLeaderboards, offersTeeTeams,
+} from '../lib/leaderboards'
+import {
+  MAIN_SET, type Membership, daySheetId, isDaySheet, roundOfDaySheet,
+  sheetForBoard, sheetsInUse, finaliseBlockedReason,
+} from '../lib/teamSets'
+import { tagGateReason, dayTeamTagIssue } from '../lib/tagBoards'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -320,6 +327,122 @@ section('Migration 050 is the columns and the table the model promised')
   ok(/CREATE TABLE IF NOT EXISTS tee_assignments/.test(sql), 'and the assignments table')
   ok(/UNIQUE \(round_id, player_id\)/.test(sql),
     'one slot per player per round, however the taps race')
+}
+
+// ─── The tag gate ──────────────────────────────────────────────
+
+section('An untagged player cannot go on a sheet that is playing for tags')
+{
+  const ms: Membership[] = [
+    { team_id: 'tag-eu', team_set: MAIN_SET, player_id: 'ross' },
+    { team_id: 'tag-us', team_set: MAIN_SET, player_id: 'john' },
+  ]
+  const nameOf = (id: string) => ({ ross: 'Ross', john: 'John', mary: 'Mary', sean: 'Sean' } as Record<string, string>)[id]
+
+  eq(tagGateReason(['ross', 'john'], ms, nameOf), null, 'tagged players go on')
+  const one = tagGateReason(['mary'], ms, nameOf)
+  ok(!!one?.includes('Mary') && one.includes('needs a tag'),
+    'an untagged one is refused by name')
+  ok(!!one?.includes('organiser area'), '  …and told where a tag comes from')
+  const two = tagGateReason(['mary', 'sean'], ms, nameOf)
+  ok(!!two?.includes('Mary and Sean') && two.includes('need tags'),
+    'two are refused together, and the sentence agrees with itself')
+  ok(!/Failed|Please/.test(one ?? ''), 'and it is calm, like every other refusal')
+}
+
+section('A team card counts towards one tag, so a team is of one')
+{
+  const ms: Membership[] = [
+    { team_id: 'tag-eu', team_set: MAIN_SET, player_id: 'ross' },
+    { team_id: 'tag-eu', team_set: MAIN_SET, player_id: 'dave' },
+    { team_id: 'tag-us', team_set: MAIN_SET, player_id: 'john' },
+  ]
+  eq(dayTeamTagIssue(['ross', 'dave'], ms), null, 'one tag between them is a team')
+  ok(!!dayTeamTagIssue(['ross', 'john'], ms)?.includes('all one tag'),
+    'two tags is not — the card could only count towards one')
+  ok(!!dayTeamTagIssue(['ross', 'mary'], ms)?.includes('needs a tag'),
+    'and an untagged member is refused here too, not left to the gate')
+  eq(dayTeamTagIssue([], ms), null, 'an empty team has nothing wrong with it yet')
+}
+
+section('The gate refuses an add, and never evicts')
+{
+  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  ok(/if \(playingForTags\) \{[\s\S]{0,200}tagGateReason/.test(client),
+    'the check runs inside addPlayers, before the write')
+  ok(/tagGateReason[\s\S]{0,200}setError\(\{ slot: slotIndex/.test(client),
+    'and the refusal reads in the slot it was refused in')
+  ok(client.includes('One player still needs a tag')
+    || client.includes('still need a tag'),
+    'with a banner at the top, so the first tap does not discover the rule')
+  ok(!/removePlayers[\s\S]{0,300}tagGateReason/.test(client),
+    'removing is never gated — a name already on the sheet stays put')
+}
+
+// ─── A day's own teams ─────────────────────────────────────────
+
+section('A sheet per round, and it cannot collide with any other')
+{
+  eq(daySheetId('r1'), 'day:r1', 'named for the round it belongs to')
+  ok(isDaySheet(daySheetId('r1')), 'and knows itself')
+  ok(!isDaySheet(MAIN_SET) && !isDaySheet('set-2'),
+    'the week\'s sheets are not day sheets')
+  eq(roundOfDaySheet(daySheetId('abc')), 'abc', 'the round reads back out')
+  eq(roundOfDaySheet('set-3'), null, 'and any other sheet has no round')
+  // The colon is what makes the namespaces disjoint: nextSheetId only ever
+  // returns 'main' or 'set-N'.
+  ok(daySheetId('r1').includes(':'), 'namespaced, so nextSheetId can never mint one')
+}
+
+section('A board scoped to one day plays that day\'s teams')
+{
+  const week: Leaderboard = {
+    id: 'b-week', audience: 'team', competition: 'league',
+    scoring: 'stableford', combine: 'total', teamFormat: 'better_ball',
+    teamSet: 'set-2',
+  }
+  const day: Leaderboard = { ...week, id: 'b-day', roundIds: ['r1'] }
+
+  eq(sheetForBoard(week), 'set-2', 'a board counting the week keeps its own sheet')
+  eq(sheetForBoard(day), daySheetId('r1'),
+    'and a board counting one day reads that day\'s fourballs')
+  eq(sheetForBoard({ ...day, roundIds: ['r1', 'r2'] }), 'set-2',
+    'two days is a competition spanning them, not either day\'s teams')
+
+  const tagBoard: Leaderboard = {
+    id: 'b-tag', audience: 'team', competition: 'league',
+    scoring: 'stableford', combine: 'total', tagMode: 'best_cards',
+    teamSet: 'main', roundIds: ['r1'],
+  }
+  eq(sheetForBoard(tagBoard), 'main',
+    'a tags board is never a day\'s teams, whatever it counts')
+
+  // The one that matters for going live: Tuesday's fourballs are not
+  // something to demand on Sunday.
+  eq(sheetsInUse([week, day]), ['set-2'],
+    'a day sheet is not a sheet the teams screen apportions')
+  eq(finaliseBlockedReason([day], []), null,
+    'so an event whose only team board is a day board can still go live')
+}
+
+section('The day\'s teams are made at the sheet, through the one writer')
+{
+  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  ok(client.includes('setTeam(tripId, id, sheet, team.id)'),
+    'joining a formed team goes through setTeam, like every membership write')
+  ok(client.includes("team_set: sheet"),
+    'and the team row is made on the round\'s own sheet')
+  ok(/dayTeamTagIssue\(ids, memberships\)/.test(client),
+    'a mixed-tag group is refused before the team exists')
+  ok(client.includes('joinNames('),
+    'named from its members — a fourball made on the morning has no other name')
+  ok(client.includes('unformTeam'), 'and it can be broken up again')
+
+  const page = read('app/trip/[tripCode]/teesheet/page.tsx')
+  ok(page.includes('teamBoardForRound(boards, r.id)'),
+    'whose teams a round groups by is asked per round, through the one copy')
+  ok(!/boards\.find\(b => b\.audience === 'team'\)/.test(page),
+    'the old take-the-first-team-board is gone — it silently picked one of two')
 }
 
 // ─── Result ────────────────────────────────────────────────────

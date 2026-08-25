@@ -17,7 +17,7 @@ import type { Leaderboard } from './leaderboards'
 import { FULL_ALLOWANCE, allowanceOf, allowedHandicap } from './handicapAllowance'
 import { shotsReceived } from './handicap'
 import { quotaPoints, quotaTarget, quotaScaleOf } from './quota'
-import { setOf, teamsOnSheet, membersOf, type Membership } from './teamSets'
+import { setOf, sheetForBoard, teamsOnSheet, membersOf, type Membership } from './teamSets'
 import {
   type TeamScoring, type TeamScoreInput, type ScoringBasis,
   DEFAULT_TEAM_SCORING, teamRoundPoints, teamHolePoints,
@@ -991,7 +991,9 @@ function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   // This board's own teams. A trip running a league and a knockout between
   // different sides has two sheets of them, and ranking one board against
   // the other's teams would produce a table of strangers.
-  const sheet = setOf(lb)
+  // Derived, so a board scoped to one day reads that day's fourballs and
+  // a board counting the week reads the week's teams — see sheetForBoard.
+  const sheet = sheetForBoard(lb)
   const teams = teamsOnSheet(ctx.teams, sheet) as RowTeam[]
 
   // A team's back nine is its team score over those holes, worked out under

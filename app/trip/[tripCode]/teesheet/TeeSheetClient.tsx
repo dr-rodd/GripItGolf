@@ -12,6 +12,11 @@ import {
   pickerUnits, unitMatches,
 } from '@/lib/teeSheet'
 import { joinNames, firstName } from '@/lib/matchplayEntrants'
+import {
+  TAG_SET, untaggedIds, tagGateReason, dayTeamTagIssue,
+} from '@/lib/tagBoards'
+import { setTeam } from '@/lib/teamMembers'
+import { PRESET_COLORS } from '@/lib/teamColors'
 
 /**
  * The tee sheet on a phone: a full day is a long scroll, so every row is
@@ -44,9 +49,33 @@ type Round = {
 
 type Assignment = { round_id: string; player_id: string; slot_index: number }
 
+/**
+ * The blocks in a slot that are not yet a team.
+ *
+ * A slot standing as one whole team has one block and no loose names;
+ * anything else — nobody teamed, or two of four teamed and two not — still
+ * has a group to make. That is the difference between offering "make this
+ * group a team" and offering to break the one that is there.
+ */
+const untidyGroups = (groups: { teamId: string | null }[]) =>
+  groups.filter(g => g.teamId === null)
+
+/** What a round's slots are grouped by, and whether it makes its own teams. */
+type RoundTeams = {
+  teamOf: Record<string, { teamId: string; teamName: string }>
+  /** The sheet those teams stand on (lib/teamSets.ts `sheetForBoard`). */
+  sheet: string
+  /** A sheet belonging to this round alone — its teams are made here. */
+  isDay: boolean
+  teeTeamsSeparate: boolean
+  /** The size the day's board asks for, when it asks for one. */
+  teamSize: number | null
+}
+
 export default function TeeSheetClient({
   tripId, tripCode, rounds, players, initialAssignments,
-  teamOf, hasTeamBoard, teeTeamsSeparate, fieldMayEdit, passcodeHash = null,
+  roundTeams, tagOf, playingForTags = false,
+  hasTeamBoard, fieldMayEdit, passcodeHash = null,
   storageReady = true,
 }: {
   tripId: string
@@ -54,11 +83,17 @@ export default function TeeSheetClient({
   rounds: Round[]
   players: { id: string; name: string }[]
   initialAssignments: Assignment[]
-  /** Player id → their team on the event's team board, for the grouping. */
-  teamOf: Record<string, { teamId: string; teamName: string }>
+  /**
+   * Per round, whose teams its slots group by. A day with its own team
+   * board plays that day's fourballs; a day without plays the event's
+   * teams for the week — `teamBoardForRound` decides, on the server.
+   */
+  roundTeams: Record<string, RoundTeams>
+  /** Player id → the tag they carry, for the gate and the block's colour. */
+  tagOf: Record<string, { teamId: string; teamName: string; color: string }>
+  /** The event ranks tags, so a player without one cannot go on the sheet. */
+  playingForTags?: boolean
   hasTeamBoard: boolean
-  /** The board's tee-teams answer — members may go out in separate slots. */
-  teeTeamsSeparate: boolean
   /** The `edit_tee_sheet` permission — the field's right to edit. */
   fieldMayEdit: boolean
   /** For the inline organiser unlock; null when the event has no PIN. */
@@ -83,9 +118,31 @@ export default function TeeSheetClient({
 
   const round = rounds.find(r => r.id === roundId) ?? null
   const nameOf = useMemo(() => new Map(players.map(p => [p.id, p.name])), [players])
+
+  /**
+   * This round's teams, kept in state because a day's are made here.
+   *
+   * The server sends every round's grouping; forming a team on the morning
+   * has to show at once rather than after a refresh, so the map this
+   * screen draws from is its own from then on.
+   */
+  const [teamsByRound, setTeamsByRound] = useState(roundTeams)
+  const roundTeamInfo = roundId ? teamsByRound[roundId] ?? null : null
   const teamMap = useMemo(
-    () => new Map(Object.entries(teamOf)),
-    [teamOf],
+    () => new Map(Object.entries(roundTeamInfo?.teamOf ?? {})),
+    [roundTeamInfo],
+  )
+
+  // The tags, for the gate and for what a formed team is named and coloured.
+  const memberships = useMemo(
+    () => Object.entries(tagOf).map(([player_id, t]) => ({
+      team_id: t.teamId, team_set: TAG_SET, player_id,
+    })),
+    [tagOf],
+  )
+  const untagged = useMemo(
+    () => (playingForTags ? untaggedIds(players.map(p => p.id), memberships) : []),
+    [playingForTags, players, memberships],
   )
 
   // This round's slots, in assignment order within each.
@@ -167,6 +224,19 @@ export default function TeeSheetClient({
   async function addPlayers(slotIndex: number, playerIds: string[]) {
     if (!round) return
     setError(null)
+
+    // The tag gate, checked before the write rather than after — the same
+    // manners as `canJoinTeam` refusing a drag. A card that counts towards
+    // nobody is worse than a name that would not go in, and the refusal
+    // reads in the slot it was refused in.
+    if (playingForTags) {
+      const refusal = tagGateReason(playerIds, memberships, id => nameOf.get(id))
+      if (refusal) {
+        setError({ slot: slotIndex, message: refusal })
+        return
+      }
+    }
+
     const next: Assignment[] = playerIds.map(id => ({
       round_id: round.id, player_id: id, slot_index: slotIndex,
     }))
@@ -214,9 +284,98 @@ export default function TeeSheetClient({
     }
   }
 
+  /**
+   * A slot's players made into this day's team.
+   *
+   * The teams themselves are ordinary `teams` rows on the round's own
+   * sheet (`day:<roundId>`), so `membersOf`, the scoring path and this
+   * screen's own grouping all read them without knowing they were made on
+   * a Tuesday morning. A player already in a team for this day leaves it
+   * by joining the new one — the database's UNIQUE(player_id, team_set)
+   * is the rule, and `setTeam` is the one writer of it.
+   *
+   * Named from its members, like a self-picked team: a fourball made on
+   * the morning has no name anybody gave it. Coloured by the tag they
+   * share when there is one, so the block reads as that side's group.
+   */
+  async function formTeam(slotIndex: number, slotPlayers: SlotPlayer[]) {
+    if (!round || !roundTeamInfo?.isDay || slotPlayers.length < 2) return
+    setError(null)
+    const ids = slotPlayers.map(p => p.id)
+
+    // A team's card counts towards one tag, so a team is of one tag.
+    if (playingForTags) {
+      const issue = dayTeamTagIssue(ids, memberships)
+      if (issue) { setError({ slot: slotIndex, message: issue }); return }
+    }
+
+    const sheet = roundTeamInfo.sheet
+    const name = joinNames(slotPlayers.map(p => firstName(p.name)))
+    const color = tagOf[ids[0]]?.color
+      ?? PRESET_COLORS[slotIndex % PRESET_COLORS.length]
+
+    const { data: made, error: err } = await supabase
+      .from('teams')
+      .insert({ trip_id: tripId, team_set: sheet, name, color })
+      .select('id, name')
+      .single()
+    if (err || !made) {
+      calmError(slotIndex, err, 'make the team')
+      return
+    }
+
+    const team = made as { id: string; name: string }
+    for (const id of ids) {
+      const failure = await setTeam(tripId, id, sheet, team.id)
+      if (failure) {
+        calmError(slotIndex, failure.error as { message?: string; code?: string }, 'make the team')
+        return
+      }
+    }
+
+    // Draw it at once: the grouping this screen reads is its own from
+    // here, and a team that only appears after a refresh reads as a tap
+    // that did nothing.
+    setTeamsByRound(prev => ({
+      ...prev,
+      [round.id]: {
+        ...roundTeamInfo,
+        teamOf: {
+          ...roundTeamInfo.teamOf,
+          ...Object.fromEntries(ids.map(id =>
+            [id, { teamId: team.id, teamName: team.name }])),
+        },
+      },
+    }))
+  }
+
+  /** This day's team broken up again — the members go back to loose names. */
+  async function unformTeam(slotIndex: number, memberIds: string[]) {
+    if (!round || !roundTeamInfo?.isDay) return
+    setError(null)
+    const sheet = roundTeamInfo.sheet
+
+    for (const id of memberIds) {
+      const failure = await setTeam(tripId, id, sheet, null)
+      if (failure) {
+        calmError(slotIndex, failure.error as { message?: string; code?: string }, 'break up the team')
+        return
+      }
+    }
+    setTeamsByRound(prev => {
+      const rest = { ...(prev[round.id]?.teamOf ?? {}) }
+      for (const id of memberIds) delete rest[id]
+      return { ...prev, [round.id]: { ...roundTeamInfo, teamOf: rest } }
+    })
+  }
+
   // On a board whose teammates share a tee time, the picker offers linked
-  // teams as one stuck-together card and never their members alone.
-  const together = hasTeamBoard && !teeTeamsSeparate
+  // teams as one stuck-together card and never their members alone. A day
+  // that makes its own teams never does: nobody is linked to anybody until
+  // the groups are on the sheet, which is the whole point of picking them
+  // here.
+  const teeTeamsSeparate = roundTeamInfo?.teeTeamsSeparate ?? false
+  const together = hasTeamBoard && !teeTeamsSeparate && !roundTeamInfo?.isDay
   const units = pickerUnits(unassigned, teamMap, together)
     .filter(u => unitMatches(u, search))
 
@@ -247,6 +406,31 @@ export default function TeeSheetClient({
               name added here would disappear again. Everything else on the
               event works as normal.
             </p>
+          </div>
+        )}
+
+        {/* Tags are in play and somebody has not got one. Said at the top,
+            for the same reason the storage warning is: a name refused at
+            the moment it is tapped, with the reason in a slot somebody has
+            scrolled past, reads as the sheet being broken. */}
+        {untagged.length > 0 && (
+          <div className="bg-rust/[0.06] border border-rust/25 rounded-2xl p-4 mb-4">
+            <p className="text-ink text-sm font-medium">
+              {untagged.length === 1
+                ? 'One player still needs a tag'
+                : `${untagged.length} players still need a tag`}
+            </p>
+            <p className="text-ink/65 t-cap mt-1 leading-snug">
+              This event ranks the tags, so a card belongs to one:{' '}
+              {untagged.map(id => nameOf.get(id)).filter(Boolean).join(' · ')}
+              {' '}cannot go on the sheet until tagged.
+            </p>
+            <Link
+              href={`/trip/${tripCode}/organiser/tags`}
+              className="inline-block mt-2 t-cap text-accent-deep hover:text-accent transition-colors"
+            >
+              Set tags →
+            </Link>
           </div>
         )}
 
@@ -417,6 +601,31 @@ export default function TeeSheetClient({
                             <IconPlus size={12} />
                             Add player{vacancy > 1 ? ` · ${vacancy} open` : ''}
                           </button>
+                        )}
+
+                        {/* A day that plays its own teams makes them here.
+                            The group standing in the slot is the team —
+                            the fourball that is about to go out — so the
+                            control is one tap rather than a picker. */}
+                        {canEdit && roundTeamInfo?.isDay && slotPlayers.length >= 2 && (
+                          untidyGroups(groups).length > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => formTeam(i, slotPlayers)}
+                              className="self-start flex items-center gap-1 t-cap text-accent-deep hover:text-accent transition-colors py-0.5"
+                            >
+                              <IconUsers size={12} />
+                              Make this group a team
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => unformTeam(i, slotPlayers.map(p => p.id))}
+                              className="self-start t-cap text-ink/50 hover:text-ink/80 transition-colors py-0.5"
+                            >
+                              Break the team up
+                            </button>
+                          )
                         )}
                       </div>
 

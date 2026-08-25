@@ -1,9 +1,13 @@
 import { supabase } from '@/lib/supabase'
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
-import { parseLeaderboards } from '@/lib/leaderboards'
+import {
+  parseLeaderboards, teamBoardForRound, tagsInPlay,
+} from '@/lib/leaderboards'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { parseInterval, parseGroupSize } from '@/lib/teeSheet'
+import { sheetForBoard, isDaySheet } from '@/lib/teamSets'
+import { TAG_SET } from '@/lib/tagBoards'
 import BackButton from '@/app/components/BackButton'
 import TeeSheetClient from './TeeSheetClient'
 
@@ -64,12 +68,17 @@ export default async function TeeSheetPage({ params }: {
     )
   }
 
-  // The one team board an event runs, if any — its sheet is whose teams
-  // the slots group by, and its tee-teams answer is how partners meet the
-  // sheet (adding-as-one lands with that answer's machinery).
+  // Whose teams a slot is showing is now a per-round question: a day with
+  // its own team board plays that day's fourballs, and a day without plays
+  // the event's teams for the week. `teamBoardForRound` is the one copy of
+  // that order — this page used to take the first team board it found,
+  // which on an event running two of them silently picked one.
+  //
+  // The teams and memberships are fetched for the whole trip either way,
+  // so the client can group any round without a second trip to the server.
   const boards = parseLeaderboards(trip.leaderboards)
-  const teamBoard = boards.find(b => b.audience === 'team') ?? null
-  const teamSet = teamBoard?.teamSet ?? 'main'
+  const anyTeamBoard = boards.some(b => b.audience === 'team' && !b.tagMode)
+  const playingForTags = tagsInPlay(boards)
 
   const [
     roundsResult, itemsResult, playersResult, settingsResult,
@@ -109,10 +118,14 @@ export default async function TeeSheetPage({ params }: {
       .select('event_permissions')
       .eq('id', trip.id)
       .single(),
-    teamBoard
-      ? supabase.from('teams').select('id, name, team_set').eq('trip_id', trip.id)
+    // Every sheet's teams and memberships — the week's, each day's, and
+    // the tags. Fetched whenever any of the three could be in play, so a
+    // round can be grouped, a team formed and the tag gate answered
+    // without a second trip.
+    anyTeamBoard || playingForTags
+      ? supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id)
       : Promise.resolve({ data: null, error: null }),
-    teamBoard
+    anyTeamBoard || playingForTags
       ? supabase.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id)
       : Promise.resolve({ data: null, error: null }),
   ])
@@ -149,21 +162,67 @@ export default async function TeeSheetPage({ params }: {
     }
   })
 
-  // Which team each player stands in, on the board's own sheet — for the
-  // grouping the slots draw. A record rather than a Map: this crosses the
-  // server/client line.
-  const teamNames = new Map(
-    ((teamsResult.data ?? []) as { id: string; name: string; team_set: string | null }[])
-      .filter(t => (t.team_set ?? 'main') === teamSet)
-      .map(t => [t.id, t.name]),
-  )
-  const teamOf: Record<string, { teamId: string; teamName: string }> = {}
-  for (const m of (membersResult.data ?? []) as {
+  const allTeams = (teamsResult.data ?? []) as {
+    id: string; name: string; color: string; team_set: string | null
+  }[]
+  const memberships = ((membersResult.data ?? []) as {
     team_id: string; team_set: string; player_id: string
-  }[]) {
-    if (m.team_set !== teamSet) continue
-    const name = teamNames.get(m.team_id)
-    if (name) teamOf[m.player_id] = { teamId: m.team_id, teamName: name }
+  }[]).map(m => ({ team_id: m.team_id, team_set: m.team_set, player_id: m.player_id }))
+
+  /** Which team each player stands in, on one sheet. */
+  const teamsOn = (sheet: string) => {
+    const names = new Map(
+      allTeams.filter(t => (t.team_set ?? 'main') === sheet).map(t => [t.id, t.name]),
+    )
+    const out: Record<string, { teamId: string; teamName: string }> = {}
+    for (const m of memberships) {
+      if (m.team_set !== sheet) continue
+      const name = names.get(m.team_id)
+      if (name) out[m.player_id] = { teamId: m.team_id, teamName: name }
+    }
+    return out
+  }
+
+  // Per round: whose teams its slots group by, and whether that day's
+  // teams are its own to make. A record rather than a Map — this crosses
+  // the server/client line.
+  const roundTeams: Record<string, {
+    teamOf: Record<string, { teamId: string; teamName: string }>
+    sheet: string
+    isDay: boolean
+    teeTeamsSeparate: boolean
+    teamSize: number | null
+  }> = {}
+  for (const r of rounds) {
+    const board = teamBoardForRound(boards, r.id)
+    if (!board) continue
+    const sheet = sheetForBoard(board)
+    roundTeams[r.id] = {
+      teamOf: teamsOn(sheet),
+      sheet,
+      isDay: isDaySheet(sheet),
+      teeTeamsSeparate: board.teeTeams === 'separate',
+      teamSize: board.teamSize ?? null,
+    }
+  }
+
+  // The tags, for the gate and for colouring a day team the side that made
+  // it. Read off the one sheet tags ever live on.
+  const tagOfPlayer: Record<string, { teamId: string; teamName: string; color: string }> = {}
+  if (playingForTags) {
+    const tagRows = new Map(
+      allTeams.filter(t => (t.team_set ?? 'main') === TAG_SET)
+        .map(t => [t.id, { name: t.name, color: t.color }]),
+    )
+    for (const m of memberships) {
+      if (m.team_set !== TAG_SET) continue
+      const tag = tagRows.get(m.team_id)
+      if (tag) {
+        tagOfPlayer[m.player_id] = {
+          teamId: m.team_id, teamName: tag.name, color: tag.color,
+        }
+      }
+    }
   }
 
   return (
@@ -179,7 +238,9 @@ export default async function TeeSheetPage({ params }: {
           round_id: a.round_id, player_id: a.player_id, slot_index: a.slot_index,
         }))
       }
-      teamOf={teamOf}
+      roundTeams={roundTeams}
+      tagOf={tagOfPlayer}
+      playingForTags={playingForTags}
       // Whether the sheet has anywhere to save. The assignments read is
       // fail-soft, so a missing table (pre-050) shows an empty sheet that
       // looks perfectly normal until a name is added and the write bounces
@@ -187,8 +248,7 @@ export default async function TeeSheetPage({ params }: {
       // rendered somewhere off the bottom of a long sheet. Said plainly at
       // the top instead.
       storageReady={!assignmentsResult.error}
-      hasTeamBoard={teamBoard !== null}
-      teeTeamsSeparate={teamBoard?.teeTeams === 'separate'}
+      hasTeamBoard={anyTeamBoard}
       fieldMayEdit={allowsParticipant(
         kind,
         (permsResult.data as { event_permissions?: unknown } | null)?.event_permissions,
