@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
   teamNoun, teamSizeLimit, oversizedTeams, canJoinTeam,
@@ -34,6 +35,7 @@ import {
 import HandicapField from '@/app/components/HandicapField'
 import { duplicateName, duplicateNameError, isDuplicateNameError } from '@/lib/roster'
 import { syncRoundHandicaps } from '@/lib/roundHandicaps'
+import { rescheduleRounds } from '@/lib/itineraryStore'
 import { normalizeDescription, MAX_TRIP_DESCRIPTION } from '@/lib/tripLimits'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -186,6 +188,8 @@ export default function TripSetupClient({
   /** Events only — offer a board that ranks tags (lib/tagBoards.ts). */
   askTags?: boolean
 }) {
+  const router = useRouter()
+
   // Trip fields
   const [name, setName] = useState(trip.name)
   const [description, setDescription] = useState(trip.description ?? '')
@@ -294,6 +298,23 @@ export default function TripSetupClient({
     if (!(await saveTrip({ start_date: nextStart || null, end_date: nextEnd || null }))) {
       setStartDate(prev.s)
       setEndDate(prev.e)
+      return
+    }
+    // The rounds follow the trip. A golf item holds a day *index*, so the
+    // itinerary re-dates itself the moment the start date moves — but
+    // `rounds.scheduled_date` is stored, and stayed where it was. The
+    // countdown, the up-next card, the round summary and the weather all
+    // read that column, so a trip moved a week later went on counting down
+    // to the old Thursday under an itinerary showing the new one.
+    //
+    // Only when the start date is what moved: the end date sets how many
+    // days there are, not which date each one is, and re-dating on it would
+    // be a write that changes nothing. Then a refresh, because every one of
+    // those screens is server-rendered from the dates just written.
+    if (nextStart !== prev.s) {
+      const result = await rescheduleRounds(trip.id, nextStart || null)
+      if (!result.ok) flashError(result.error)
+      router.refresh()
     }
   }
 

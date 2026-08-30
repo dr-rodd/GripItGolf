@@ -147,6 +147,11 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         id: trip.id,
         trip_code: tripCode,
         name: trip.name,
+        // What the lead player wrote about the trip. It was missing here
+        // while Trip Settings rendered a box for it, so the drawer opened
+        // blank on a trip that had one — and the only way to edit a
+        // description was to type it again from nothing.
+        description: trip.description ?? null,
         start_date: trip.start_date ?? null,
         end_date: trip.end_date ?? null,
         // Through the compat reader, so a trip set up before the column

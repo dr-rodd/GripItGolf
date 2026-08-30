@@ -22,7 +22,9 @@ import {
   GOLF_SLOT_MINS, TEE_INTERVAL_MINS, golfSpanMins, golfUntil,
   DEFAULT_EVENT_MINS, dayTimeline,
 } from '../lib/itinerary'
-import { isTempId, diffItems, toItemRow, touchesLockedGolf } from '../lib/itinerarySync'
+import {
+  isTempId, diffItems, toItemRow, touchesLockedGolf, roundDateGroups,
+} from '../lib/itinerarySync'
 import fs from 'fs'
 
 let passed = 0, failed = 0
@@ -783,6 +785,79 @@ section('Migration 027 and lib/itinerary.ts describe the same table')
 // write where "should never cross trips" has to be enforced, not assumed —
 // and the score guard must fail *closed*: a count query that errored comes
 // back null, and `?? 0` alone read that as "no scores, go ahead".
+
+section('Moving the trip re-dates its rounds')
+{
+  // A golf item holds a day *index*; a round holds a calendar *date*. The
+  // itinerary re-dates itself the moment the start date moves, because
+  // every day header is `dateForDay(startDate, dayIndex)` — but
+  // `rounds.scheduled_date` is stored, and stayed where it was. Everything
+  // that reads that column (the hub countdown, the up-next card, the round
+  // summary, the weather hour) went on quoting the old dates under an
+  // itinerary showing the new ones.
+  const golf = [
+    { id: 'a', dayIndex: 0 },
+    { id: 'b', dayIndex: 1 },
+    { id: 'c', dayIndex: 1 },
+    { id: 'd', dayIndex: 3 },
+  ]
+
+  eq(roundDateGroups('2026-05-01', golf), [
+    { date: '2026-05-01', itemIds: ['a'] },
+    { date: '2026-05-02', itemIds: ['b', 'c'] },
+    { date: '2026-05-04', itemIds: ['d'] },
+  ], 'each day index becomes its calendar date, grouped so a day is one write')
+
+  eq(roundDateGroups('2026-05-08', golf).map(g => g.date),
+    ['2026-05-08', '2026-05-09', '2026-05-11'],
+    'move the trip a week and every round moves with it')
+
+  // The same arithmetic the day headers use, not a second copy of it.
+  for (const item of golf) {
+    const group = roundDateGroups('2026-05-01', golf).find(g => g.itemIds.includes(item.id))
+    eq(group!.date, dateForDay('2026-05-01', item.dayIndex),
+      `day ${item.dayIndex} agrees with the itinerary's own date`)
+  }
+
+  // A trip whose dates were never set — a series event, by design — has no
+  // day zero to count from. Writing `dateForDay`'s null back would erase
+  // whatever dates those rounds do carry, so nothing is written at all.
+  eq(roundDateGroups(null, golf), [], 'no start date means nothing to re-date')
+  eq(roundDateGroups('', golf), [], 'and a blank one is the same answer')
+
+  // Nothing the database has not seen yet has a round to re-date.
+  eq(roundDateGroups('2026-05-01', [{ id: 'tmp-1', dayIndex: 0 }]), [],
+    'an unsaved item is skipped')
+  eq(roundDateGroups('2026-05-01', [{ id: 'tmp-1', dayIndex: 0 }, { id: 'a', dayIndex: 0 }]),
+    [{ date: '2026-05-01', itemIds: ['a'] }],
+    '  …without taking the saved item beside it down too')
+
+  eq(roundDateGroups('2026-05-01', []), [], 'a trip with no golf writes nothing')
+
+  // And the store is what carries it to the database, scoped by trip like
+  // every other write in there.
+  const store = fs.readFileSync('lib/itineraryStore.ts', 'utf-8')
+  ok(store.includes('export async function rescheduleRounds'),
+    'the store owns the write')
+  const fn = store.slice(store.indexOf('export async function rescheduleRounds'))
+  ok(fn.includes('roundDateGroups'), '  …and asks the pure half what the dates are')
+  ok(fn.includes("eq('kind', 'golf')"),
+    '  …reading the golf from the database rather than a screen that may be stale')
+
+  // Trip Settings is where the dates are edited, so that is where it runs —
+  // and only when the *start* date moved: the end date sets how many days
+  // there are, not which date each one is.
+  const setup = fs.readFileSync('app/trip/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
+  const saveDates = setup.slice(setup.indexOf('async function saveDates'))
+  ok(saveDates.includes('rescheduleRounds(trip.id'),
+    'saving the dates re-dates the rounds')
+  ok(saveDates.slice(0, saveDates.indexOf('rescheduleRounds')).includes('nextStart !== prev.s'),
+    '  …only when the start date is what changed')
+  ok(saveDates.slice(0, saveDates.indexOf('rescheduleRounds')).includes('return'),
+    '  …and never after a save that failed')
+  ok(saveDates.includes('router.refresh()'),
+    '  …then re-reads, because every screen that shows a round date is server-rendered')
+}
 
 section('The itinerary store scopes every write by trip and fails closed')
 {

@@ -13,6 +13,7 @@ import fs from 'fs'
 import DateField from '../app/components/DateField'
 import CreateTripForm from '../app/dashboard/create/CreateTripForm'
 import TripSetupClient from '../app/trip/[tripCode]/setup/TripSetupClient'
+import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime'
 import {
   MIN_ROUNDS, MAX_ROUNDS, roundCountError, isRoundCountValid,
   MAX_TRIP_DESCRIPTION, normalizeDescription,
@@ -37,6 +38,24 @@ function eq(got: unknown, want: unknown, label: string) {
   else { failed++; failures.push(label); console.log(`  FAIL  ${label}\n        got  ${g}\n        want ${w}`) }
 }
 const section = (n: string) => console.log(`\n${n}`)
+
+/**
+ * A server render of a client component that asks for the router.
+ *
+ * Trip Settings calls `router.refresh()` after moving the trip's dates — the
+ * rounds are re-dated in the same breath and every screen that reads them is
+ * server-rendered. `useRouter` throws outside the context Next would provide,
+ * so the tests give it a stub; nothing here navigates, so it only has to
+ * exist. Same shape as the one in test-branding.tsx.
+ */
+const stubRouter = {
+  push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {},
+}
+function renderWithRouter(el: React.ReactElement): string {
+  return renderToStaticMarkup(
+    React.createElement(AppRouterContext.Provider, { value: stubRouter as never }, el)
+  )
+}
 
 // ─── Round limit ───────────────────────────────────────────────
 
@@ -275,7 +294,7 @@ section('Start and end dates share one row')
 
 section('The trip setup page uses the same field')
 {
-  const html = renderToStaticMarkup(
+  const html = renderWithRouter(
     React.createElement(TripSetupClient, {
       trip: {
         id: 't1', trip_code: 'ABC123', name: 'Test Trip',
@@ -314,7 +333,7 @@ section('The trip setup page uses the same field')
 
 section('The gear says what is behind it')
 {
-  const html = renderToStaticMarkup(
+  const html = renderWithRouter(
     React.createElement(TripSetupClient, {
       trip: {
         id: 't1', trip_code: 'ABC123', name: 'Test Trip',
@@ -569,11 +588,34 @@ async function main() {
     ok(setupSrc.includes('MAX_TRIP_DESCRIPTION'),
       'with the same cap on the box')
 
+    // …and the box opens with what is already stored in it. The drawer
+    // rendered a textarea seeded from `trip.description` while the page
+    // building that prop never included the column, so Trip Settings opened
+    // blank on every trip that had a description and the only way to change
+    // one was to type it out again.
+    const setupPage = require('fs').readFileSync('app/trip/[tripCode]/setup/page.tsx', 'utf-8')
+    ok(/description:\s*trip\.description/.test(setupPage),
+      'the setup page hands the stored description down to the settings drawer')
+
     // The hub shows it clamped: three lines, the browser’s own ellipsis,
     // and the paragraph as the tap that opens the rest.
     const hubSrc = require('fs').readFileSync('app/trip/[tripCode]/TripDescription.tsx', 'utf-8')
     ok(hubSrc.includes('line-clamp-3'), 'the hub clamps to three lines')
     ok(hubSrc.includes('aria-expanded'), 'the toggle says which state it is in')
+
+    // Whether it is tappable at all is a measurement, and one taken on
+    // mount alone was wrong often enough to read as a dead tap: the display
+    // face swaps in afterwards, and the paragraph's width can change
+    // without the window's. Both are re-asked.
+    ok(hubSrc.includes('ResizeObserver'),
+      'the clip is re-measured when the paragraph itself resizes')
+    ok(hubSrc.includes('document.fonts'),
+      '  …and again once the display face has loaded')
+    // The paragraph moves from a div into a button the moment it becomes
+    // tappable, so React builds a new node. Held in state, the effect
+    // re-runs on it; held in a ref, the observer watches a detached one.
+    ok(!hubSrc.includes('useRef'),
+      'the paragraph is held in state, so the observer follows it into the button')
     const hubPage = require('fs').readFileSync('app/trip/[tripCode]/page.tsx', 'utf-8')
     ok(hubPage.includes('<TripDescription'), 'the hub renders the description')
     ok(hubPage.indexOf('<TripDescription') > hubPage.indexOf('<TripCountdown'),

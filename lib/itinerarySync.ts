@@ -9,7 +9,7 @@
 //
 // Pure. No I/O — lib/itineraryStore.ts is what actually writes.
 
-import type { ItemKind, ItineraryItem, TravelMode } from './itinerary'
+import { dateForDay, type ItemKind, type ItineraryItem, type TravelMode } from './itinerary'
 
 /** An id `ItineraryBuilder` issued locally. Not yet a real database row. */
 export function isTempId(id: string): boolean {
@@ -166,4 +166,52 @@ export function touchesLockedGolf(
     return was?.kind === 'golf'
       && (was.courseId !== item.courseId || was.dayIndex !== item.dayIndex)
   })
+}
+
+// ─── Re-dating rounds when the trip moves ─────────────────────
+
+/** A calendar date, and every golf item that now falls on it. */
+export type RoundDateGroup = { date: string; itemIds: string[] }
+
+/**
+ * Where every round's `scheduled_date` should now sit, given the trip's
+ * start date and where its golf sits in the running order.
+ *
+ * A day index is an offset, not a date: move the trip's start date and the
+ * itinerary re-dates itself instantly, because every day header is
+ * `dateForDay(startDate, dayIndex)`. `rounds.scheduled_date` is a stored
+ * column and does not follow on its own — so the hub's countdown, the up-next
+ * card and the round summary all went on quoting the old dates while the
+ * itinerary above them showed the new ones. That is the whole of that bug,
+ * and this is the one copy of what the new dates are.
+ *
+ * Grouped by date rather than listed per item, because a `scheduled_date` is
+ * the same value for every round on a day and one write per day beats one per
+ * round on a phone.
+ *
+ * **Nothing to re-date without a start date.** A trip whose dates were never
+ * set — a series event, by design — has no day zero to count from, and
+ * `dateForDay` rightly answers null for every day. Writing that null back
+ * would erase whatever dates those rounds do carry, so this returns nothing
+ * and the caller writes nothing.
+ *
+ * Temp ids are skipped: nothing the database has not seen yet has a round.
+ */
+export function roundDateGroups(
+  startDate: string | null,
+  golf: readonly { id: string; dayIndex: number }[],
+): RoundDateGroup[] {
+  if (!startDate) return []
+
+  const byDate = new Map<string, string[]>()
+  for (const item of golf) {
+    if (isTempId(item.id)) continue
+    const date = dateForDay(startDate, item.dayIndex)
+    if (!date) continue
+    byDate.set(date, [...(byDate.get(date) ?? []), item.id])
+  }
+
+  return [...byDate.entries()]
+    .map(([date, itemIds]) => ({ date, itemIds }))
+    .sort((a, b) => a.date.localeCompare(b.date))
 }
