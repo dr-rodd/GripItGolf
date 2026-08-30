@@ -2,21 +2,16 @@
 // from real greendot.live screenshots supplied by Big Dog. Run with
 // `npm run intro:shots`; output lands in public/intro/.
 //
-// Shape: 360x700, no tab bar — the intro shows these full-bleed with the
-// user's REAL tab bar as the footer, object-fit cover anchored to the
-// top. Two hard layout rules, learned from real phones:
-//
-//   · Safari's chrome makes the visible height as little as ~520 artboard
-//     units, so everything that matters sits above y=515 and the last
-//     stretch is sacrificial padding.
-//   · Every feature the intro RINGS must sit in the top band (ending by
-//     y=228) or the low band (starting after y=334) — the bubble parks on
-//     the other side of the ring, and a mid-artboard ring leaves it
-//     nowhere to stand on a short viewport. The gaps this forces in the
-//     middle of some screens are deliberate.
+// Shape: 360x728 including each page's OWN tab bar (below TAB_TOP), the
+// described tab lit — the intro shows the whole artboard as a floating
+// card, so nothing is cropped and no viewport band rules apply any
+// more. Two things still hold: content stays above TAB_TOP, and
+// ART_W/ART_H in SiteIntro.tsx must match W/H here, since the card's
+// aspect and its `focus` ring coordinates are these units.
 import { writeFileSync, mkdirSync } from 'fs'
 
-const W = 360, H = 700
+const W = 360, H = 728
+const TAB_TOP = 664
 const CREAM = '#F6F4F0', SURF = '#FFFFFF', INK = '#2B2118', BARK = '#4A3728'
 const ACC = '#0A9D56', DEEP = '#0A6B3C'
 const BORDER = 'rgba(74,55,40,0.14)', MUT = 'rgba(43,33,24,0.55)', MUT2 = 'rgba(43,33,24,0.75)'
@@ -50,11 +45,51 @@ const backBtn = (x, y) =>
   `<rect x="${x}" y="${y}" width="34" height="34" rx="10" fill="${SURF}" stroke="${BORDER}"/>` +
   `<path d="M${x + 21} ${y + 10} L${x + 14} ${y + 17} L${x + 21} ${y + 24}" stroke="${BARK}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`
 
-const wrap = body =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">` +
-  `<rect width="${W}" height="${H}" fill="${CREAM}"/>${body}</svg>`
+// ── The tab bar every card carries — five tabs, the described one lit,
+//    mirroring the real bar in app/components/TabBar.tsx. ──
+function icon(key, cx, cy, c) {
+  const s = `stroke="${c}" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"`
+  switch (key) {
+    case 'home':
+      return `<path d="M${cx - 8} ${cy + 2} L${cx} ${cy - 7} L${cx + 8} ${cy + 2} M${cx - 5.5} ${cy} V${cy + 8} H${cx + 5.5} V${cy}" ${s}/>`
+    case 'scoring':
+      return `<rect x="${cx - 6.5}" y="${cy - 8}" width="13" height="16" rx="2.5" ${s}/>` +
+        `<rect x="${cx - 3}" y="${cy - 10}" width="6" height="4" rx="1.5" fill="${c}"/>` +
+        `<path d="M${cx - 3} ${cy} H${cx + 3} M${cx - 3} ${cy + 4} H${cx + 3}" ${s}/>`
+    case 'leaderboard':
+      return `<path d="M${cx - 6} ${cy - 8} H${cx + 6} V${cy - 3} A6 6 0 0 1 ${cx - 6} ${cy - 3} Z M${cx} ${cy + 3} V${cy + 6} M${cx - 4} ${cy + 7} H${cx + 4}" ${s}/>`
+    case 'stats':
+      return `<path d="M${cx - 7} ${cy + 8} V${cy + 1} M${cx} ${cy + 8} V${cy - 7} M${cx + 7} ${cy + 8} V${cy - 2}" stroke="${c}" stroke-width="3" stroke-linecap="round" fill="none"/>`
+    case 'settings':
+      return `<circle cx="${cx}" cy="${cy}" r="3" ${s}/>` +
+        `<circle cx="${cx}" cy="${cy}" r="7" stroke="${c}" stroke-width="1.7" fill="none" stroke-dasharray="2.6 2.3"/>`
+  }
+  return ''
+}
+function tabbar(active) {
+  const tabs = [
+    ['home', 'Home', 38],
+    ['scoring', 'Scoring', 109],
+    ['leaderboard', 'Leaderboard', 180],
+    ['stats', 'Stats', 251],
+    ['settings', 'Trip Setup', 322],
+  ]
+  let out = `<rect x="0" y="${TAB_TOP}" width="${W}" height="${H - TAB_TOP}" fill="${SURF}"/>` +
+    `<line x1="0" y1="${TAB_TOP}" x2="${W}" y2="${TAB_TOP}" stroke="${BORDER}"/>`
+  for (const [key, label, cx] of tabs) {
+    const on = key === active
+    if (on) out += `<circle cx="${cx}" cy="${TAB_TOP + 26}" r="17" fill="${TINT}"/>`
+    out += icon(key, cx, TAB_TOP + 26, on ? DEEP : MUT)
+    out += t(cx, TAB_TOP + 56, 8.5, on ? DEEP : MUT, label, { f: SANS, a: 'middle', w: on ? 700 : 400 })
+  }
+  return out
+}
 
-// ── 1. Trip hub — rings: itinerary heading (low band), golf card (low) ──
+const wrap = (body, tab) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">` +
+  `<rect width="${W}" height="${H}" fill="${CREAM}"/>${body}${tabbar(tab)}</svg>`
+
+// ── 1. Trip hub — rings: the itinerary heading and a golf card. ──
 const hub = wrap(
   header('green dot') +
   `<rect x="70" y="58" width="110" height="30" rx="15" fill="${SURF}" stroke="${BARK}" stroke-opacity="0.4"/>` +
@@ -78,11 +113,11 @@ const hub = wrap(
   t(60, 468, 14, INK, 'Carne Golf Links -- Wild Atlantic…', { w: 700 }) +
   t(60, 488, 11.5, MUT2, '2 tee times from 1:00 pm') +
   t(16, 550, 12, INK, 'FRIDAY, 21 AUGUST', { f: SANS, w: 700, ls: 1.6 }),
-)
+ 'home')
 
-// ── 2. Scoring: choose a round — ring: Round 1 (top band). No emerald
-//      border of its own: the intro's ring is the only box, so the live
-//      dot and the "In play" line carry the in-play state here. ──
+// ── 2. Scoring: choose a round — ring: Round 1. No emerald border of
+//      its own: the intro's ring is the only box, so the live dot and
+//      the "In play" line carry the in-play state here. ──
 function roundCard(y, n, course, place, live = false) {
   return card(16, y, 328, 74) +
     t(32, y + 24, 10.5, MUT, `ROUND ${n}`, { f: SANS, ls: 2 }) +
@@ -100,10 +135,10 @@ const scoring = wrap(
   roundCard(272, 3, 'County Sligo Golf Club -- Colt…', 'Rosses Point, Sligo, Ireland') +
   roundCard(360, 4, 'Ballyliffin Golf Club -- Old Links', 'Ballyliffin, Donegal, Ireland') +
   roundCard(448, 5, 'Portsalon Golf Club', 'Portsalon, Donegal, Ireland'),
-)
+ 'scoring')
 
 // ── 3. Scoring: the scorecard — rings: Jack's block and his playing-
-//      handicap line, both in the low band. Ernie sits mid, unringed. ──
+//      handicap line. Ernie sits above, unringed. ──
 function playerBlock(y, dotC, name, hcp, ph, ninety) {
   return `<rect x="16" y="${y}" width="328" height="46" rx="6" fill="${TINT}" stroke="${DEEP}" stroke-opacity="0.5"/>` +
     `<circle cx="34" cy="${y + 23}" r="4.5" fill="${dotC}"/>` +
@@ -131,10 +166,10 @@ const scorecard = wrap(
   t(16, 174, 11, MUT, 'SELECT PLAYERS (1–4)', { f: SANS, ls: 2 }) +
   playerBlock(190, '#C0392B', 'Ernie', 10, 11, 10) +
   playerBlock(348, ACC, 'Jack', 3, 4, 3),
-)
+ 'scoring')
 
-// ── 4. Leaderboard — rings: the board tabs and the description card,
-//      both in the top band; the table below is scenery. ──
+// ── 4. Leaderboard — rings: the board tabs and the description card;
+//      the table below is scenery. ──
 const rows = [
   ['1', 'Ross', 32, 29, 33, 30, 124], ['2', 'Dave', 26, 33, 33, 29, 121],
   ['3', 'Jeff', 32, 32, 24, 32, 120], ['3', 'Mark', 27, 29, 31, 33, 120],
@@ -168,9 +203,9 @@ const leaderboard = wrap(
   [1, 2, 3, 4].map((n, j) => t(158 + j * 46, 254, 10.5, MUT, String(n), { f: SANS, a: 'middle' })).join('') +
   t(340, 254, 10.5, MUT, 'TOT', { f: SANS, a: 'end', ls: 1 }) +
   table,
-)
+ 'leaderboard')
 
-// ── 5. Matchplay bracket — ring: the live tie, in the low band. ──
+// ── 5. Matchplay bracket — ring: the live tie. ──
 function tie(x, y, w, top, topScore, bottom, botScore, opts = {}) {
   const h = 86
   const mid = y + h / 2
@@ -205,10 +240,10 @@ const matchplay = wrap(
   tie(16, 572, 176, 'Rory', 0, 'Jack', 3, { seedTop: '3', seedBot: '6' }) +
   elbow(192, 513, 216, 564) + elbow(192, 615, 216, 564) +
   tie(216, 521, 128, 'Tiger', 8, 'To be decided', null, { tbd: true }),
-)
+ 'leaderboard')
 
-// ── 6. Stats hub — rings: the player chips (top band) and the strokes-
-//      gained panel (low band). ──
+// ── 6. Stats hub — rings: the player chips and the strokes-gained
+//      panel. ──
 const statRow = (y, label, val, valC = INK) =>
   t(32, y, 11, MUT, label, { f: SANS, ls: 1.6 }) +
   t(328, y, 15, valC, String(val), { w: 700, a: 'end' }) +
@@ -244,10 +279,9 @@ const stats = wrap(
   t(308, 412, 12, MUT2, 'Net', { a: 'middle' }) +
   statRow(448, 'TO THE GREEN', 5, DEEP) +
   statRow(484, 'PUTTING', 2, DEEP),
-)
+ 'stats')
 
-// ── 7. Trip setup — rings: Trip Settings (top band) and the Stableford
-//      card (low band). ──
+// ── 7. Trip setup — rings: Trip Settings and the Stableford card. ──
 const setup = wrap(
   header('settings') +
   card(16, 58, 328, 66) +
@@ -273,7 +307,7 @@ const setup = wrap(
   t(44, 520, 17, INK, 'Team better ball', { w: 700 }) +
   t(44, 542, 11, MUT2, "A composite card: the team's best score on") +
   t(44, 557, 11, MUT2, 'every hole, and everyone counts on the last 3.'),
-)
+ 'settings')
 
 mkdirSync('public/intro', { recursive: true })
 const files = { hub, scoring, scorecard, leaderboard, matchplay, stats, setup }
