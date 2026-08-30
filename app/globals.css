@@ -364,7 +364,19 @@ html.dark .only-light { display: none; }
    breach of "emerald is never a large fill": here the dot is the
    subject, not decoration. Nothing else inherits the exception. */
 .intro-veil { background-color: var(--color-cream); }
-.intro-dot { background-color: #0A9D56; color: #F6F4F0; }
+/* The sweep itself. The shadows are its edge: a soft dark cast above the
+   arc so the tile visibly floats off the sheet, and a thin cream light
+   caught along the inside of the rim — the shaded, textured edge of Big
+   Dog's reference, not a flat cut-out. */
+.intro-dot {
+  background-color: #0A9D56;
+  color: #F6F4F0;
+  box-shadow:
+    0 -16px 48px rgba(43, 33, 24, 0.26),
+    0 -3px 12px rgba(43, 33, 24, 0.14),
+    inset 0 3px 0 rgba(246, 244, 240, 0.25),
+    inset 0 10px 22px rgba(246, 244, 240, 0.1);
+}
 /* The floating example card — openly a miniature of an app screen,
    framed and lifted well off the sheet so it reads as an illustration,
    never as the page itself. */

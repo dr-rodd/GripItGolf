@@ -58,8 +58,11 @@ const PUTT = 'cubic-bezier(0.16, 1, 0.3, 1)'
     instant it appears reads as an ad, not a welcome. */
 const BIRTH_DELAY_MS = 600
 /** One continuous bloom, logo dot to resting sweep. A single transition
-    on a single curve — a staged swell was tried and read as a stutter. */
-const BIRTH_MS = 900
+    on a single curve — a staged swell was tried and read as a stutter —
+    and deliberately long and gentle: the putt curve's fast start read as
+    an explosion here, so the birth gets its own slow-in slow-out. */
+const BIRTH_MS = 1500
+const BIRTH_EASE = 'cubic-bezier(0.45, 0.05, 0.22, 1)'
 const EXIT_MS = 500 // back into the logo
 const TEXT_DELAY_MS = 180 // the sweep lands, then speaks
 const TEXT_IN_MS = 220
@@ -267,12 +270,12 @@ function placed(p: { x: number; y: number }, s: number, D: number) {
  */
 function layoutOf(vw: number, vh: number) {
   const drop = Math.min(70, Math.round(Math.min(vw, 520) * 0.17))
-  const reserve = clamp(Math.round(vh * 0.28), 170, 235)
-  const edgeY = vh - reserve - drop - 18
-  const SAFE_TOP = 68
-  let cardH = Math.min((edgeY - SAFE_TOP) / 0.84, Math.round(vh * 0.66))
+  const reserve = clamp(Math.round(vh * 0.25), 158, 180)
+  const edgeY = vh - reserve - drop - 14
+  const SAFE_TOP = 64
+  let cardH = Math.min((edgeY - SAFE_TOP) / 0.88, Math.round(vh * 0.72))
   let cardW = cardH * (ART_W / ART_H)
-  const maxW = Math.min(vw * 0.72, 300)
+  const maxW = Math.min(vw * 0.78, 320)
   if (cardW > maxW) {
     cardW = maxW
     cardH = cardW * (ART_H / ART_W)
@@ -290,7 +293,7 @@ function layoutOf(vw: number, vh: number) {
       k: cardW / ART_W,
     },
     disc: { c: { x: cx, y: edgeY + R }, R },
-    textTop: edgeY + drop + 16,
+    textTop: edgeY + drop + 14,
   }
 }
 
@@ -456,7 +459,7 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
         setVeilOn(true)
         setDiscStyle({
           transform: placed(L.disc.c, 1, D),
-          transition: `transform ${BIRTH_MS}ms ${PUTT}`,
+          transition: `transform ${BIRTH_MS}ms ${BIRTH_EASE}`,
         })
         later(BIRTH_MS, () => {
           phase.current = 'run'
@@ -707,12 +710,14 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
         )}
       </div>
 
-      {/* Always on offer, from the first frame, dependent on nothing. */}
+      {/* Always on offer, from the first frame, dependent on nothing —
+          and dressed as the site's own cream card so it reads as a
+          button, not a whisper. */}
       <button
         type="button"
         onClick={e => { e.stopPropagation(); finish() }}
-        className="press absolute right-4 z-10 t-label uppercase tracking-[0.18em] text-ink/70 hover:text-ink px-3 py-2"
-        style={{ top: 'calc(env(safe-area-inset-top) + 12px)' }}
+        className="press absolute right-4 z-10 rounded-full bg-surface border border-bark/15 shadow-md t-label uppercase tracking-[0.14em] text-ink px-4 py-2.5"
+        style={{ top: 'calc(env(safe-area-inset-top) + 10px)' }}
       >
         Skip intro
       </button>
