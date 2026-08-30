@@ -27,6 +27,8 @@ import { readFileSync } from 'fs'
 import {
   shotsReceived, formatHandicap, parseHandicap, HANDICAP_INPUT,
   isPlusHandicap, PLUS_HANDICAP_WARNING,
+  isHandicapPending, readHandicapField, pendingInCard, pendingCardReason,
+  HANDICAP_PENDING_LABEL,
 } from '../lib/handicap'
 
 let passed = 0, failed = 0
@@ -258,6 +260,131 @@ function asSql(playingHandicap: number, strokeIndex: number): number {
     return -(Math.trunc(given / 18) + (strokeIndex >= 19 - (given % 18) ? 1 : 0))
   }
   return Math.trunc(hcp / 18) + (strokeIndex <= hcp % 18 ? 1 : 0)
+}
+
+section('A handicap nobody has given yet is pending, and pending is not scratch')
+{
+  // This is the whole point of the rule. The creation form has always let a
+  // handicap box be left empty, and an empty one was written as
+  // `parseHandicap(text) ?? 0` — so the player the lead player was least
+  // sure about was entered as the best handicap on the trip. Zero is a real
+  // answer and nothing downstream can tell it from one somebody meant.
+  ok(isHandicapPending(null), 'null is pending')
+  ok(isHandicapPending(undefined), 'and so is a column that is not there yet')
+  ok(!isHandicapPending(0), 'scratch is NOT pending — that is the bug this replaces')
+  ok(!isHandicapPending(-1), 'nor is a plus handicap, which is also a real answer')
+  ok(!isHandicapPending(14.2), 'nor an ordinary one')
+
+  // Blank and wrong are two different instructions. A field that saves as it
+  // is left cannot treat them alike, or every backspace through the last
+  // digit would wipe the stored figure.
+  eq(readHandicapField('14.2'), 14.2, 'a handicap reads as itself')
+  eq(readHandicapField('+1'), -1, '  …and a plus one is still negative')
+  eq(readHandicapField(''), null, 'cleared on purpose is pending')
+  eq(readHandicapField('   '), null, '  …spaces included')
+  eq(readHandicapField(null), null, '  …and nothing at all')
+  eq(readHandicapField('abc'), undefined, 'a stray letter is a keystroke, not an answer')
+  eq(readHandicapField('1.'), undefined, '  …and so is a half-typed decimal')
+  eq(readHandicapField('+'), undefined, '  …or a sign on its own')
+
+  // Every screen says it the same way. "—", "TBC" and "not set" were three
+  // ways of saying it before anything said it deliberately, and the hub's
+  // roster already uses the bare word "Pending" for an unclaimed *name* two
+  // rows above — hence the HCP.
+  ok(HANDICAP_PENDING_LABEL.includes('pending'), 'there is one phrase for it')
+  ok(/HCP/.test(HANDICAP_PENDING_LABEL),
+    '  …carrying its HCP, because "Pending" alone already means unclaimed')
+}
+
+section('A pending player cannot be put on a scorecard')
+{
+  const ross = { name: 'Ross', handicap: 14.2 }
+  const dave = { name: 'Dave', handicap: null }
+  const anne = { name: 'Anne', handicap: undefined }
+  const scratch = { name: 'Pat', handicap: 0 }
+
+  eq(pendingInCard([ross, scratch]), [], 'a card of rated players is fine')
+  eq(pendingInCard([ross, dave]), ['Dave'], 'and one without a handicap is named')
+  eq(pendingInCard([dave, ross, anne]), ['Dave', 'Anne'], 'as are two')
+  eq(pendingInCard([]), [], 'an empty card asks nothing')
+  eq(pendingInCard([scratch]), [],
+    'scratch plays — it is a handicap, not an absence')
+
+  // Named rather than counted: on a fourball the group needs to know who.
+  eq(pendingCardReason([]), null, 'nothing missing, nothing said')
+  ok(pendingCardReason(['Dave'])!.startsWith('Dave has'), 'one player, singular')
+  ok(pendingCardReason(['Dave', 'Anne'])!.startsWith('Dave and Anne have'),
+    'two are joined and plural')
+  ok(pendingCardReason(['Dave', 'Anne', 'Pat'])!.startsWith('Dave, Anne and Pat have'),
+    'three read as a list')
+  ok(/join screen|Trip Setup/.test(pendingCardReason(['Dave'])!),
+    'and it says where to fix it, not just that it is broken')
+
+  // The picker is where it bites, and it bites structurally: a pending
+  // player is filtered out of `playerSetups` as well as greying the button,
+  // so nothing downstream — the locks, the snapshot write, the card — can
+  // be handed one even if the button were somehow pressed.
+  const flow = readFileSync('app/scoring/LiveScoringFlow.tsx', 'utf-8')
+  ok(/pendingReason === null/.test(flow), 'Start Round waits on every handicap')
+  ok(/\{pendingReason && \(/.test(flow), '  …and says which player it is waiting on')
+  const setups = flow.slice(flow.indexOf('const playerSetups'), flow.indexOf('const canStart'))
+  ok(setups.includes('isHandicapPending'),
+    'a pending player never becomes a player setup')
+
+  // And the one thing that must never come back.
+  const resolve = flow.slice(flow.indexOf('export function resolveCourseHandicap'))
+  ok(!/player\.handicap \?\? 0/.test(flow),
+    'nothing anywhere falls back to scoring a pending player off scratch')
+  ok(resolve.includes('handicap: number'),
+    '  …and resolveCourseHandicap only ever takes a real one')
+}
+
+section('Where a pending handicap is written and shown')
+{
+  // Creation writes null rather than nought — the original sin.
+  const create = readFileSync('app/dashboard/create/CreateTripForm.tsx', 'utf-8')
+  ok(create.includes('handicap: parseHandicap(p.handicap),'),
+    'creation stores a blank handicap as blank')
+  ok(!/handicap: parseHandicap\(p\.handicap\) \?\? 0/.test(create),
+    '  …never as scratch, which is what it did')
+  ok(create.includes('ratedPlayers'),
+    'and a pending player gets no round_handicaps row')
+
+  // `playing_handicap` is NOT NULL, so the row is absent rather than null —
+  // which is exactly what the Stableford trigger reads to leave a card
+  // unscored instead of scoring it off a guess.
+  const trigger = readFileSync('supabase/migrations/20260101000024_plus_handicaps.sql', 'utf-8')
+  ok(/v_playing_handicap IS NULL/.test(trigger),
+    'the trigger already returns early with no handicap snapshot')
+
+  // The migration drops the NOT NULL and the DEFAULT 0, and backfills
+  // nothing: a 0 already stored is somebody's real scratch handicap.
+  const migration = readFileSync('supabase/migrations/20260101000051_pending_handicap.sql', 'utf-8')
+  ok(/ALTER COLUMN handicap DROP NOT NULL/.test(migration), 'handicap may be null')
+  ok(/ALTER COLUMN handicap DROP DEFAULT/.test(migration),
+    '  …and no longer defaults to scratch')
+  ok(!/UPDATE players/.test(migration),
+    '  …and nothing already stored is rewritten')
+
+  // Shown as pending on the trip dash and in the roster, through the one
+  // label rather than a dash each screen invented for itself.
+  for (const f of [
+    'app/trip/[tripCode]/page.tsx',
+    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
+    'app/scoring/LiveScoringFlow.tsx',
+  ]) {
+    const src = readFileSync(f, 'utf-8')
+    ok(src.includes('HANDICAP_PENDING_LABEL'),
+      `${f.split('/').pop()} says pending in the shared words`)
+  }
+
+  // And the organiser can actually leave it blank in both places they type
+  // one — a required field is what forced the guess in the first place.
+  const setup = readFileSync('app/trip/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
+  ok(setup.includes('disabled={busy || !newName.trim()}'),
+    'Add player waits on a name, not on a handicap')
+  ok(/readHandicapField\(newHandicap\)/.test(setup),
+    '  …and reads the box knowing blank is an answer')
 }
 
 section('The Postgres trigger gives the same answer as the app')

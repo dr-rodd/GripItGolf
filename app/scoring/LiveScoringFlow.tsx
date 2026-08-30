@@ -6,7 +6,10 @@ import { mergeSaved, anyScored, type Fairway } from "@/lib/liveScores"
 import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
 import { type QuotaScale } from "@/lib/quota"
 import { exactCourseHandicap, courseHandicap, teesForPlayer, type TeeRating } from "@/lib/courseHandicap"
-import { shotsReceived, formatHandicap } from "@/lib/handicap"
+import {
+  shotsReceived, formatHandicap, isHandicapPending, pendingInCard,
+  pendingCardReason, HANDICAP_PENDING_LABEL,
+} from "@/lib/handicap"
 import { voidScorecard as voidScorecardData } from "@/lib/scorecardVoid"
 import { type ScoreRow } from "@/lib/scoreOutbox"
 import { scoreOutbox } from "./outbox"
@@ -25,7 +28,8 @@ import {
 // ─── Types ────────────────────────────────────────────────
 
 interface Player {
-  id: string; name: string; role: string; handicap: number
+  /** Null = pending: nobody has given it yet. See lib/handicap.ts. */
+  id: string; name: string; role: string; handicap: number | null
   gender: string; is_composite: boolean
   teams: { name: string; color: string } | null
 }
@@ -251,7 +255,10 @@ function effectiveSI(hole: Hole, gender: string) {
  */
 export function resolveCourseHandicap(
   existingHcp: RoundHandicap | undefined,
-  player: Pick<Player, 'id' | 'handicap'>,
+  // A handicap, never a pending one: there is nothing to resolve without an
+  // index, and `playerSetups` has already filtered those out — which is what
+  // keeps the refusal structural rather than a `?? 0` hiding in here.
+  player: { id: string; handicap: number },
   // Only the ratings matter here, so a bare set of them is enough — which is
   // also what lets this be driven without inventing a whole tee row.
   tee: TeeRating | undefined,
@@ -532,10 +539,15 @@ export default function LiveScoringFlow({
   // Revisit during multi-tenant rework.
   const playerSetups: PlayerSetup[] = selectedPlayerIds
     .filter(id => playerTeeIds[id])
-    .map(id => {
-      const player = players.find(p => p.id === id)!
-      const tee = tees.find(t => t.id === playerTeeIds[id])!
-      const existingHcp = effectiveRoundHandicaps.find(rh => rh.round_id === roundId && rh.player_id === id)
+    .map(id => players.find(p => p.id === id)!)
+    // A pending player never becomes a setup. There is no index to build a
+    // course handicap from, `canStart` has already refused the card, and
+    // stopping them here means nothing downstream — the locks, the snapshot
+    // write, the card itself — can ever be handed one.
+    .filter((p): p is Player & { handicap: number } => !isHandicapPending(p.handicap))
+    .map(player => {
+      const tee = tees.find(t => t.id === playerTeeIds[player.id])!
+      const existingHcp = effectiveRoundHandicaps.find(rh => rh.round_id === roundId && rh.player_id === player.id)
       const exactHcp = resolveCourseHandicap(existingHcp, player, tee, `round=${roundId}`)
       return {
         player, tee, exactHcp,
@@ -548,9 +560,20 @@ export default function LiveScoringFlow({
   // confirmed — and scoring writes rows keyed by hole id, so without a card
   // there is nothing to score against. The card check on this screen is the
   // way in, not a nicety.
+  // Who on this card has no handicap to be scored off. A pending player is
+  // refused here rather than scored off scratch — lib/handicap.ts says why,
+  // and this is the only place that asks.
+  const pendingNames = pendingInCard(
+    selectedPlayerIds
+      .map(id => players.find(p => p.id === id))
+      .filter((p): p is Player => Boolean(p))
+  )
+  const pendingReason = pendingCardReason(pendingNames)
+
   const canStart = selectedPlayerIds.length >= 1 &&
     selectedPlayerIds.every(id => !!playerTeeIds[id]) &&
-    courseHoles.length > 0
+    courseHoles.length > 0 &&
+    pendingReason === null
 
   // Fetch players locked in other scorecards for this round (active OR finalised)
   // so they are hidden from the player picker. Finalised players must not be
@@ -1230,10 +1253,14 @@ export default function LiveScoringFlow({
             // The same figure the card will use, off the same tee, through
             // the same function. These two screens used to work it out two
             // different ways and disagree by several shots.
-            const exactHcp = selectedTee
-              ? exactCourseHandicap(player.handicap, selectedTee)
+            // A pending player has no index, so there is no course handicap
+            // to show — the row says `HCP pending` and Start Round is inert.
+            const hcpIndex = isHandicapPending(player.handicap) ? null : player.handicap as number
+            const exactHcp = selectedTee && hcpIndex !== null
+              ? exactCourseHandicap(hcpIndex, selectedTee)
               : null
-            const playingHcp = selectedTee ? courseHandicap(player.handicap, selectedTee) : null
+            const playingHcp = selectedTee && hcpIndex !== null
+              ? courseHandicap(hcpIndex, selectedTee) : null
 
             return (
               <div key={player.id}>
@@ -1251,7 +1278,11 @@ export default function LiveScoringFlow({
                     )}
                     <span>{player.name}</span>
                   </div>
-                  <span className="text-sm opacity-50">HCP {formatHandicap(player.handicap)}</span>
+                  <span className="text-sm opacity-50">
+                    {isHandicapPending(player.handicap)
+                      ? HANDICAP_PENDING_LABEL
+                      : `HCP ${formatHandicap(player.handicap as number)}`}
+                  </span>
                 </button>
 
                 {/* Tee selector — only for selected players */}
@@ -1331,6 +1362,15 @@ export default function LiveScoringFlow({
         >
           Start Round →
         </button>
+
+        {/* A greyed button with no reason is the worst of both — the group
+            is standing on the tee working out what it wants. This names the
+            player and where to fix it. */}
+        {pendingReason && (
+          <p className="text-ink/65 text-sm text-center leading-snug -mt-2">
+            {pendingReason}
+          </p>
+        )}
 
         <button onClick={() => setCloseConfirm(true)} className="text-center text-ink/50 text-sm tracking-widest uppercase hover:text-rust transition-colors">
           Close Live Round

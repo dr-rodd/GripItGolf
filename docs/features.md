@@ -99,6 +99,14 @@ Four things it holds:
 - **A handicap is required to go on**, the same bar "Add yourself" sets — a player with none is scored off nothing. The plus sign is queried through `PLUS_HANDICAP_WARNING` as everywhere else, and only when it is a change.
 - **A failure is said in the sheet.** The screen's error line is down in the add-yourself form, behind the scrim; reported there, a Confirm that failed would look like a Confirm that did nothing.
 
+**A pending handicap is what the sheet is usually for.** The organiser may leave a handicap blank when they are not sure of it — creation, "Add player" and the roster row editor all take an empty box — and blank stores as NULL, which means *pending*: nobody has given it yet. It is **not** scratch. Until migration 051 the column was `NOT NULL DEFAULT 0` and the creation form wrote `parseHandicap(text) ?? 0`, so the one player the lead player was least sure about was entered as the best handicap on the trip, in a number nothing downstream could question. `lib/handicap.ts` is the only copy of the rule; `HANDICAP_PENDING_LABEL` is the only phrase for it, and it carries its HCP because the bare word "Pending" already means *unclaimed* on the hub's roster.
+
+A pending player is listed, joins, holds a team place and reads every screen. Three things follow:
+
+- **No `round_handicaps` row.** `playing_handicap` is NOT NULL and there is nothing honest to put in it — and that absence is exactly what the Stableford trigger already reads to leave a card unscored rather than score it off a guess.
+- **They cannot be put on a scorecard.** `pendingInCard` / `pendingCardReason` grey Start Round and name who is missing one and where to fix it, and `playerSetups` filters them out as well, so the locks, the snapshot write and the card itself can never be handed one. Refusing beats the alternatives: a card that runs and leaves the points blank strands somebody on the leaderboard with no total halfway through a round nobody can undo.
+- **Clearing a handicap deletes no snapshots.** The rows that exist are what already-played rounds were scored off — history, not a current setting.
+
 **Events do not ask** (`askHandicap={!isEvent(kind)}`). An organiser entered that field deliberately, often off a club list, and whether the field may revise it on the way in is their decision rather than this screen's — so a claim on an event is one tap, exactly as it always was. A second device never asks either, on either kind: that question has already been answered.
 
 Tapping a confirmed name asks nothing first. Somebody opening the trip on a tablet after joining on their phone taps their own name and means it, and a mis-tap costs one tap of "Not you?" on the screen it lands on.

@@ -12,6 +12,7 @@ import { cookies } from 'next/headers'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { INTRO_COOKIE } from '@/lib/intro'
 import SiteIntro from '@/app/components/SiteIntro'
+import { isHandicapPending, HANDICAP_PENDING_LABEL } from '@/lib/handicap'
 import { isConfirmed, confirmedCount as countConfirmed } from '@/lib/roster'
 import { ROUND_TILE } from '@/lib/roundState'
 import { fetchPlacing, fetchTripStats } from '@/lib/hubStanding'
@@ -722,7 +723,17 @@ function PlayersPanel({
                   {confirmed ? 'Confirmed' : 'Pending'}
                 </span>
               </span>
-              {p.handicap != null && (
+              {/* The handicap, or the fact that nobody has given one yet.
+                  Two different pendings sit on this tile — the label above
+                  is about the *name* being unclaimed — so this one carries
+                  its HCP, in the roster's quiet ink rather than the accent
+                  the real figure gets: it is a thing outstanding, not a
+                  score. See `HANDICAP_PENDING_LABEL`. */}
+              {isHandicapPending(p.handicap) ? (
+                <span className="text-ink/50 text-[13px] tracking-wider uppercase leading-none flex-shrink-0">
+                  {HANDICAP_PENDING_LABEL}
+                </span>
+              ) : (
                 <span className="font-[family-name:var(--font-display)] text-accent text-base leading-none flex-shrink-0">
                   {p.handicap}
                 </span>

@@ -479,9 +479,20 @@ section('Handicap inputs bring up a keypad')
   ok(/onClick=\{\(\) => set\([\s\S]*?, true\)\}/.test(field),
     'and commits on its own rather than relying on the blur it causes')
 
-  // A plus handicap has to survive being typed
+  // A plus handicap has to survive being typed. Trip Setup reads its boxes
+  // through `readHandicapField` now — blank there is a saved answer, not a
+  // half-typed one — and that is `parseHandicap` with the empty case split
+  // out, so the rule is the same rule one level down. What must never come
+  // back is `parseFloat`, which reads "+1" as 1 and stores a plus handicap
+  // as an ordinary one.
   const setup = require('fs').readFileSync(files[1], 'utf-8')
-  ok(setup.includes('parseHandicap('), 'a handicap is read with parseHandicap, not parseFloat')
+  ok(setup.includes('readHandicapField(') || setup.includes('parseHandicap('),
+    'a handicap is read with parseHandicap, not parseFloat')
+  ok(!setup.includes('parseFloat('), '  …and parseFloat is nowhere near one')
+  const handicapLib = require('fs').readFileSync('lib/handicap.ts', 'utf-8')
+  const reader = handicapLib.slice(handicapLib.indexOf('export function readHandicapField'))
+  ok(reader.includes('parseHandicap(text)'),
+    '  …because readHandicapField is parseHandicap underneath')
   ok(!/parseFloat\((newHandicap|e\.target\.value)\)/.test(setup),
     '  …because parseFloat("+1") is 1, and stores a plus one as an ordinary one')
 }

@@ -115,6 +115,97 @@ export function isPlusHandicap(h: number | null | undefined): boolean {
   return h != null && h < 0
 }
 
+// ─── A handicap nobody has given yet ──────────────────────────
+
+/**
+ * Whether this handicap is **pending** — nobody has said what it is.
+ *
+ * Null, and null only. **Pending is not scratch**, and the whole reason this
+ * has a name is that for a long time it was: the creation form let a
+ * handicap box be left empty and wrote `parseHandicap(text) ?? 0`, so the
+ * one player the lead player was least sure about was entered as the best
+ * handicap on the trip. Zero is a real answer, it looks like a real answer,
+ * and nothing downstream can tell it apart from one somebody meant.
+ *
+ * So a blank is stored as NULL (migration 051) and read through here. A
+ * pending player is listed, joins, holds a team place and reads every screen
+ * — they simply cannot be put on a scorecard until the figure exists, and
+ * the person who knows it is asked for it as they claim their name.
+ */
+export function isHandicapPending(h: number | null | undefined): boolean {
+  return h == null
+}
+
+/**
+ * What a screen prints where a handicap would go.
+ *
+ * One phrase, so the hub, the roster and the picker cannot each invent
+ * their own — "—", "TBC" and "not set" were three ways of saying it before
+ * anything said it deliberately. Short because it sits in a number's column
+ * on a phone, and prefixed because "Pending" alone already means *unclaimed*
+ * on the hub's roster, two rows above.
+ */
+export const HANDICAP_PENDING_LABEL = 'HCP pending'
+
+/**
+ * The names on this card that have no handicap yet.
+ *
+ * **The one copy of "this player cannot be scored".** A card is opened, a
+ * tee is picked and a course handicap is worked out from the player's index
+ * — and a pending player has no index, so there is nothing to work it out
+ * from. Every earlier answer to that was a silent `?? 0`, which is how a
+ * pending handicap would arrive at the leaderboard as a scratch round.
+ *
+ * So the scoring screen refuses instead, by name: Start Round stays inert
+ * and the line above it says who is missing one and where to fix it. The
+ * fix is one tap on the join screen — claiming a name asks for the handicap
+ * — or the organiser typing it into Trip Setup.
+ *
+ * Refusing is better than the alternatives here. Letting the card run and
+ * leaving the points blank puts somebody on a leaderboard with no total and
+ * no explanation, halfway through a round nobody can undo; scoring them off
+ * scratch is the bug this whole thing exists to remove.
+ */
+export function pendingInCard<T extends { name: string; handicap: number | null | undefined }>(
+  players: readonly T[],
+): string[] {
+  return players.filter(p => isHandicapPending(p.handicap)).map(p => p.name)
+}
+
+/**
+ * "Ross has no handicap yet" / "Ross and Dave have no handicap yet" — what
+ * the picker says above an inert Start Round, or null when nothing is
+ * missing. Named rather than counted: on a fourball the group knows who.
+ */
+export function pendingCardReason(names: readonly string[]): string | null {
+  if (names.length === 0) return null
+  const who = names.length === 1
+    ? names[0]
+    : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  const verb = names.length === 1 ? 'has' : 'have'
+  return `${who} ${verb} no handicap yet. Set it on the join screen or in Trip Setup before starting this card.`
+}
+
+/**
+ * What a handicap box means when it is read back.
+ *
+ *   a number    that handicap
+ *   null        left blank — pending, and meant
+ *   undefined   typed, but not a handicap: a half-finished "1." or a stray
+ *               letter, which is a keystroke rather than an answer
+ *
+ * The middle and the last are the distinction this exists for. Both come
+ * back as null from `parseHandicap`, which is right for a form that refuses
+ * to submit and wrong for a field that saves as it is left: "cleared it on
+ * purpose" and "mid-typing" cannot be the same instruction, or every
+ * backspace through the last digit would wipe the stored figure.
+ */
+export function readHandicapField(raw: string | null | undefined): number | null | undefined {
+  const text = String(raw ?? '').trim()
+  if (!text) return null
+  return parseHandicap(text) ?? undefined
+}
+
 /**
  * What the keyboard should offer.
  *

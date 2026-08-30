@@ -17,7 +17,10 @@ import Toggle from '@/app/components/Toggle'
 import {
   MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError, rememberUnlock,
 } from '@/lib/passcode'
-import { parseHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
+import {
+  parseHandicap, isPlusHandicap, isHandicapPending, PLUS_HANDICAP_WARNING,
+  HANDICAP_PENDING_LABEL,
+} from '@/lib/handicap'
 import HandicapField from '@/app/components/HandicapField'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
@@ -338,7 +341,11 @@ export default function CreateTripForm() {
     const firstIsOrganiser = !isTournament || organiserPlaying
 
     const validPlayers = players.filter(p => p.name.trim())
-    let playerRows: { id: string; handicap: number; is_lead?: boolean }[] = []
+    // `handicap` is nullable now: a box left empty is a handicap nobody has
+    // given yet, not scratch — see `isHandicapPending`. It used to be
+    // `?? 0`, which turned the one player the organiser was least sure
+    // about into the best handicap on the trip.
+    let playerRows: { id: string; handicap: number | null; is_lead?: boolean }[] = []
     if (validPlayers.length > 0) {
       const { data: insertedPlayers, error: playersErr } = await supabase
         .from('players')
@@ -346,7 +353,7 @@ export default function CreateTripForm() {
           validPlayers.map((p, i) => ({
             trip_id: tripId,
             name: p.name.trim(),
-            handicap: parseHandicap(p.handicap) ?? 0,
+            handicap: parseHandicap(p.handicap),
             gender: p.gender,
             role: 'player',
             is_lead: firstIsOrganiser && i === 0,
@@ -432,12 +439,19 @@ export default function CreateTripForm() {
     // 4. Round handicaps — one row per player per round
     // WHS formula: PH = HI × Slope/113 + (CR − Par). With no tee data yet,
     // slope=113 and CR=Par cancel out, leaving PH = HI rounded to nearest integer.
-    if (playerRows.length > 0) {
+    //
+    // A pending player gets no row at all. `playing_handicap` is NOT NULL and
+    // there is nothing honest to put in it — and that absence is what the
+    // Stableford trigger already reads to leave a card unscored rather than
+    // score it off a guess. The row arrives through `syncRoundHandicaps` the
+    // moment somebody says what the handicap is.
+    const ratedPlayers = playerRows.filter(p => !isHandicapPending(p.handicap))
+    if (ratedPlayers.length > 0) {
       const hcpRows = insertedRounds.flatMap(round =>
-        playerRows.map(player => ({
+        ratedPlayers.map(player => ({
           round_id: round.id,
           player_id: player.id,
-          playing_handicap: Math.round(player.handicap ?? 0),
+          playing_handicap: Math.round(player.handicap as number),
         }))
       )
       const { error: hcpErr } = await supabase.from('round_handicaps').insert(hcpRows)
@@ -826,7 +840,7 @@ export default function CreateTripForm() {
                     <HandicapField
                       value={player.handicap}
                       onChange={v => updatePlayer(i, { handicap: v })}
-                      placeholder="Handicap"
+                      placeholder="Handicap (or leave blank)"
                       rowClassName="flex-1 min-w-0"
                       className={`${INPUT} flex-1 min-w-0`}
                     />
@@ -846,6 +860,19 @@ export default function CreateTripForm() {
                       ))}
                     </div>
                   </div>
+
+                  {/* Said on the one card where the doubt actually arises,
+                      not once at the top of a list of eight. A blank box
+                      used to be stored as scratch — the player the lead
+                      player was least sure about became the best handicap
+                      on the trip — so what it means now is spelled out
+                      where it is being left blank. */}
+                  {isHandicapPending(parseHandicap(player.handicap)) && (
+                    <p className="text-ink/65 text-[13px] mt-2 leading-snug">
+                      Not sure? Leave it blank — it shows as {HANDICAP_PENDING_LABEL} until
+                      they set it when they claim their name.
+                    </p>
+                  )}
 
                 </div>
               </div>

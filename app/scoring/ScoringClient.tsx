@@ -10,7 +10,8 @@ import BackButton from "@/app/components/BackButton"
 // ─── Types (mirrors server data shapes) ──────────────────
 
 interface Player {
-  id: string; name: string; role: string; handicap: number
+  /** Null = pending: nobody has given it yet. See lib/handicap.ts. */
+  id: string; name: string; role: string; handicap: number | null
   gender: string; is_composite: boolean
   teams: { name: string; color: string } | null
 }

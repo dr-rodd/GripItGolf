@@ -30,7 +30,8 @@ import {
 import { setTeam } from '@/lib/teamMembers'
 import { why } from '@/lib/writeFailure'
 import {
-  parseHandicap, formatHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING,
+  formatHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING,
+  isHandicapPending, readHandicapField, HANDICAP_PENDING_LABEL,
 } from '@/lib/handicap'
 import HandicapField from '@/app/components/HandicapField'
 import { duplicateName, duplicateNameError, isDuplicateNameError } from '@/lib/roster'
@@ -340,9 +341,17 @@ export default function TripSetupClient({
 
   async function addPlayer() {
     const trimmed = newName.trim()
-    const hcp = parseHandicap(newHandicap)
-    if (!trimmed || hcp === null) {
-      flashError('Enter a name and handicap first')
+    // Blank is an answer here: a handicap nobody knows yet is pending, not
+    // scratch. Only the name is required. `undefined` means the box holds
+    // something that is not a handicap at all, which is a typo rather than
+    // a decision — see `readHandicapField`.
+    const hcp = readHandicapField(newHandicap)
+    if (!trimmed) {
+      flashError('Enter a name first')
+      return
+    }
+    if (hcp === undefined) {
+      flashError('That handicap does not read as a number — clear it to leave it pending')
       return
     }
     // Asked before the write, and only for the one value that means the
@@ -427,6 +436,13 @@ export default function TripSetupClient({
     // Keep the handicap snapshot used for scoring in step with edits. The
     // same call the join screen makes for a player who adds themselves after
     // the rounds already exist — see `lib/roundHandicaps.ts`.
+    //
+    // A handicap cleared back to pending writes no snapshot and **deletes
+    // none either**. The rows that exist are what the rounds already played
+    // were scored off, and that is history rather than a current setting —
+    // rewriting it would change a card somebody signed. Nothing unplayed
+    // reads them, because a pending player cannot be put on a scorecard at
+    // all (`pendingInCard`), and setting a handicap again writes them fresh.
     if (patch.handicap != null && rounds.length > 0) {
       const hcpErr = await syncRoundHandicaps(
         rounds.map(r => r.id), id, patch.handicap as number,
@@ -903,9 +919,15 @@ export default function TripSetupClient({
                       {player.is_lead && (
                         <span className="text-ink/65 text-[13px] tracking-widest uppercase flex-shrink-0">Lead</span>
                       )}
-                      <span className="t-num text-ink/80 text-sm flex-shrink-0">
-                        {player.handicap == null ? '—' : formatHandicap(player.handicap)}
-                      </span>
+                      {isHandicapPending(player.handicap) ? (
+                        <span className="text-ink/50 text-[13px] tracking-wider uppercase flex-shrink-0">
+                          {HANDICAP_PENDING_LABEL}
+                        </span>
+                      ) : (
+                        <span className="t-num text-ink/80 text-sm flex-shrink-0">
+                          {formatHandicap(player.handicap as number)}
+                        </span>
+                      )}
                       {canEdit && (
                         <>
                           <button
@@ -958,8 +980,13 @@ export default function TripSetupClient({
                         <HandicapField
                           defaultValue={player.handicap == null ? '' : formatHandicap(player.handicap)}
                           onCommit={text => {
-                            const v = parseHandicap(text)
-                            if (v === null || v === player.handicap) return
+                            // Three answers, not two — see `readHandicapField`.
+                            // Cleared on purpose is a save (the handicap
+                            // becomes pending); mid-typing is not, or every
+                            // backspace through the last digit would wipe
+                            // the stored figure.
+                            const v = readHandicapField(text)
+                            if (v === undefined || v === player.handicap) return
                             // Once, on the change that introduces it. The
                             // blur that follows the sign button commits the
                             // same value, which this guard has already
@@ -967,7 +994,7 @@ export default function TripSetupClient({
                             if (isPlusHandicap(v) && !window.confirm(PLUS_HANDICAP_WARNING)) return
                             updatePlayer(player.id, { handicap: v })
                           }}
-                          placeholder="HCP"
+                          placeholder="HCP — or blank"
                           disabled={locked}
                           rowClassName="flex-1 min-w-0"
                           className={`${INPUT} flex-1 min-w-0`}
@@ -1065,7 +1092,7 @@ export default function TripSetupClient({
                     <HandicapField
                       value={newHandicap}
                       onChange={setNewHandicap}
-                      placeholder="Handicap"
+                      placeholder="Handicap — or blank"
                       rowClassName="flex-1 min-w-0"
                       className={`${INPUT} flex-1 min-w-0`}
                     />
@@ -1102,7 +1129,7 @@ export default function TripSetupClient({
                   ))}
                   <button
                     onClick={addPlayer}
-                    disabled={busy || !newName.trim() || !newHandicap}
+                    disabled={busy || !newName.trim()}
                     className="w-full py-3.5 border border-accent/40 text-accent rounded-xl text-sm tracking-wider uppercase hover:bg-accent/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     + Add player

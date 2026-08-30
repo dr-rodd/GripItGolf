@@ -33,8 +33,12 @@ interface Player {
   id: string
   name: string
   gender: string
-  /** Handicap index. Needed to rebuild a course handicap under an allowance. */
-  handicap?: number
+  /**
+   * Handicap index. Needed to rebuild a course handicap under an allowance.
+   * Null when it is pending — nobody has given one yet — and every read of
+   * it here is already guarded, because it has always been optional.
+   */
+  handicap?: number | null
   /**
    * Leaderboard nickname, merged in by the page that fetched the roster —
    * fail-soft and in its own query, per lib/displayNames.ts. This panel is
