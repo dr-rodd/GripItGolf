@@ -85,8 +85,21 @@ A **"Not you?"** control clears the cookie and lands on the player list: a phone
 
 | Tapping | Does |
 |---|---|
-| an unconfirmed name | sets `claimed = true`, writes the cookie, back to the hub |
+| an unconfirmed name | asks the handicap, then sets `claimed = true`, writes the cookie, back to the hub |
 | a confirmed name | writes the cookie **and nothing else**, on the tap |
+
+### The handicap check
+
+**A first claim stops to confirm the handicap.** The roster is the lead player's recollection of everybody's, and claiming is the one moment the person it belongs to is holding the phone — so `HandicapCheck` (in `PlayersClient.tsx`) opens a bottom sheet with the stored figure already in the box. Confirm takes it as it stands; it is a figure to agree with, not a form to fill in.
+
+Four things it holds:
+
+- **The claim and the correction are one `update`.** There is no state where a phone is claimed at a handicap it disagreed with. A corrected figure then goes to `round_handicaps` through `syncRoundHandicaps` — the same call settings and "Add yourself" make — *before* they are sent on, because a handicap corrected on the roster and wrong on every card is the exact failure the sheet exists to prevent.
+- **An unchanged figure writes nothing extra.** `onConfirm` passes null when the typed value is the stored one, so the ordinary path is one column and no snapshots.
+- **A handicap is required to go on**, the same bar "Add yourself" sets — a player with none is scored off nothing. The plus sign is queried through `PLUS_HANDICAP_WARNING` as everywhere else, and only when it is a change.
+- **A failure is said in the sheet.** The screen's error line is down in the add-yourself form, behind the scrim; reported there, a Confirm that failed would look like a Confirm that did nothing.
+
+**Events do not ask** (`askHandicap={!isEvent(kind)}`). An organiser entered that field deliberately, often off a club list, and whether the field may revise it on the way in is their decision rather than this screen's — so a claim on an event is one tap, exactly as it always was. A second device never asks either, on either kind: that question has already been answered.
 
 Tapping a confirmed name asks nothing first. Somebody opening the trip on a tablet after joining on their phone taps their own name and means it, and a mis-tap costs one tap of "Not you?" on the screen it lands on.
 

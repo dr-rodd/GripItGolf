@@ -6,6 +6,7 @@ import TripHeader from '@/app/components/TripHeader'
 import { sortForClaiming, confirmedCount } from '@/lib/roster'
 import { fetchTripKind } from '../kind'
 import { allowsParticipant } from '@/lib/eventPermissions'
+import { isEvent } from '@/lib/eventHub'
 
 export const dynamic = 'force-dynamic'
 
@@ -112,6 +113,12 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
             (permsResult.data as { event_permissions?: unknown } | null)?.event_permissions,
             'add_players',
           )}
+          // A trip's roster is the lead player's recollection of everybody's
+          // handicap, so claiming a name stops to check it. An event's is
+          // the organiser's own entry — often off a club list — and the
+          // field revising it on the way in is their call to make, not this
+          // screen's, so an event claims in one tap as before.
+          askHandicap={!isEvent(kind)}
         />
 
         <div className="mt-12">
