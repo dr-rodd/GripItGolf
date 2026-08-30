@@ -5,6 +5,9 @@ import { parseLeaderboards } from '@/lib/leaderboards'
 import { tripBoards, isLegacy } from '@/lib/leaderboardsCompat'
 import { parseTeamScoring } from '@/lib/teamScoring'
 import { fetchMemberships } from '@/lib/teamMembers'
+import { liveRoundPresence, type OpenCard } from '@/lib/rowContext'
+import { isEvent } from '@/lib/eventHub'
+import { parseLeagueSetup } from '@/lib/leagueSetup'
 import Poller from '@/app/components/Poller'
 import TripLeaderboardClient from './TripLeaderboardClient'
 import SupportLink from '@/app/components/SupportLink'
@@ -65,7 +68,7 @@ export default async function TripLeaderboardPage({
   const nilId     = '00000000-0000-0000-0000-000000000000'
 
   const [teamsRes, playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes,
-         memberships] =
+         memberships, nicknamesRes] =
     await Promise.all([
       supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
       supabase.from('players')
@@ -106,6 +109,11 @@ export default async function TripLeaderboardPage({
       // fours and a knockout between pairings, so this cannot be a field on
       // the player — see lib/teamSets.ts.
       fetchMemberships(trip.id),
+      // Leaderboard nicknames, on their own and fail-soft: naming the column
+      // in the players select above would fail the whole roster on a
+      // database that has not run migration 047, and a board without
+      // nicknames still stands.
+      supabase.from('players').select('id, nickname').eq('trip_id', trip.id),
     ])
 
   // What the trip plays for. A stored list wins; a trip created before the
@@ -115,15 +123,19 @@ export default async function TripLeaderboardPage({
   const teamScoring = parseTeamScoring(trip.team_scoring)
   const boards = tripBoards(stored, parseFormats(trip.formats), teamScoring)
 
-  type OpenRound = {
-    round_id: string
-    live_player_locks: { player_id: string }[] | null
-  }
-  const openRounds = (openRes.data ?? []) as unknown as OpenRound[]
-  const activeRoundIds = [...new Set(openRounds.map(r => r.round_id))]
-  const livePlayerIds = [...new Set(
-    openRounds.flatMap(r => (r.live_player_locks ?? []).map(l => l.player_id))
-  )]
+  // How an event's days relate on the board, and whether this is an event
+  // at all. Both ride in on the `*` above rather than being named, so a
+  // database that has not run migrations 046/047 simply has neither and
+  // reads as the trip it has always been.
+  const event = isEvent((trip as { kind?: unknown }).kind)
+  const dayBoards = event
+    ? parseLeagueSetup((trip as { bracket_setup?: unknown }).bracket_setup)?.dayBoards
+    : undefined
+
+  // Derived through the one copy of the rule: a vacant card — open, nobody
+  // locked on — puts nothing in play. See liveRoundPresence in rowContext.
+  const { activeRoundIds, livePlayerIds } =
+    liveRoundPresence((openRes.data ?? []) as unknown as OpenCard[])
   const hasActiveRound =
     activeRoundIds.length > 0 || rounds.some(r => r.status === 'active')
 
@@ -146,11 +158,14 @@ export default async function TripLeaderboardPage({
         teams={teamsRes.data ?? []}
         memberships={memberships}
         players={playersRes.data ?? []}
+        nicknames={(nicknamesRes.data ?? []) as { id: string; nickname: string | null }[]}
         holes={holesRes.data ?? []}
         scores={scoresRes.data ?? []}
         liveScores={liveScoresRes.data ?? []}
         roundHandicaps={hcpsRes.data ?? []}
         tees={teesRes.data ?? []}
+        isEvent={event}
+        dayBoards={dayBoards}
       />
 
       {/* Below the board, after everything worth reading */}

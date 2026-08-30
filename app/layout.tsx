@@ -37,12 +37,12 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://greendot.live"),
   title: "green dot.",
   description:
-    "Your handicap is the best 8 of your last 20. Live scoring, leaderboards and matchplay for your golf trip.",
+    "Live scoring and leaderboards for your event. Golf trips, tournaments — and more to come.",
   openGraph: {
     siteName: "Green Dot",
     title: "green dot.",
     description:
-      "Your handicap is the best 8 of your last 20. Live scoring, leaderboards and matchplay for your golf trip.",
+      "Live scoring and leaderboards for your event. Golf trips, tournaments — and more to come.",
     type: "website",
     images: "/og-image.png",
   },

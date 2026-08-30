@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
   teamNoun, teamSizeLimit, oversizedTeams, canJoinTeam,
@@ -34,6 +35,7 @@ import {
 import HandicapField from '@/app/components/HandicapField'
 import { duplicateName, duplicateNameError, isDuplicateNameError } from '@/lib/roster'
 import { syncRoundHandicaps } from '@/lib/roundHandicaps'
+import { rescheduleRounds } from '@/lib/itineraryStore'
 import { normalizeDescription, MAX_TRIP_DESCRIPTION } from '@/lib/tripLimits'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -162,6 +164,8 @@ export default function TripSetupClient({
   rounds,
   itinerary,
   lockedGolfItemIds,
+  askTeeTeams = false,
+  askTags = false,
 }: {
   trip: Trip
   teams: Team[]
@@ -179,7 +183,13 @@ export default function TripSetupClient({
    * journeys are unaffected either way.
    */
   lockedGolfItemIds: string[]
+  /** Events only — team boards are asked how they meet the tee sheet. */
+  askTeeTeams?: boolean
+  /** Events only — offer a board that ranks tags (lib/tagBoards.ts). */
+  askTags?: boolean
 }) {
+  const router = useRouter()
+
   // Trip fields
   const [name, setName] = useState(trip.name)
   const [description, setDescription] = useState(trip.description ?? '')
@@ -288,6 +298,23 @@ export default function TripSetupClient({
     if (!(await saveTrip({ start_date: nextStart || null, end_date: nextEnd || null }))) {
       setStartDate(prev.s)
       setEndDate(prev.e)
+      return
+    }
+    // The rounds follow the trip. A golf item holds a day *index*, so the
+    // itinerary re-dates itself the moment the start date moves — but
+    // `rounds.scheduled_date` is stored, and stayed where it was. The
+    // countdown, the up-next card, the round summary and the weather all
+    // read that column, so a trip moved a week later went on counting down
+    // to the old Thursday under an itinerary showing the new one.
+    //
+    // Only when the start date is what moved: the end date sets how many
+    // days there are, not which date each one is, and re-dating on it would
+    // be a write that changes nothing. Then a refresh, because every one of
+    // those screens is server-rendered from the dates just written.
+    if (nextStart !== prev.s) {
+      const result = await rescheduleRounds(trip.id, nextStart || null)
+      if (!result.ok) flashError(result.error)
+      router.refresh()
     }
   }
 
@@ -706,6 +733,7 @@ export default function TripSetupClient({
       {itineraryOpen && (
         <ItineraryEditor
           tripId={trip.id}
+          tripName={trip.name}
           startDate={startDate || null}
           endDate={endDate || null}
           initialItems={itinerary}
@@ -744,6 +772,8 @@ export default function TripSetupClient({
             teamCount={teams.length}
             rounds={rounds}
             readOnly={!canArrange}
+            askTeeTeams={askTeeTeams}
+            askTags={askTags}
             onChange={saveBoards}
           />
           {boards.length > 0 && needsTeams(boards) && teams.length === 0 && (
@@ -1115,6 +1145,19 @@ export default function TripSetupClient({
             players={asMembers(playerIds, memberships, drawSheet)}
           />
         )}
+
+        {/* The trip on paper. Quiet and last: it matters most once the trip
+            is over — save the PDF, keep the record — which is also the first
+            step of retiring an old trip. Everyone may look; it writes
+            nothing. */}
+        <div className="text-center">
+          <Link
+            href={`/trip/${trip.trip_code}/export`}
+            className="inline-block px-4 py-2.5 t-label text-ink/65 hover:text-ink"
+          >
+            Export trip (PDF)
+          </Link>
+        </div>
 
         {/* Error toast */}
         {error && (

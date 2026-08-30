@@ -16,7 +16,7 @@ import {
   sheetChanges, teamsOnSheet, teamFor, membersOf, type Membership,
 } from '@/lib/teamSets'
 import { setTeam, clearMirror } from '@/lib/teamMembers'
-import { duplicateName, duplicateNameError, isDuplicateNameError } from '@/lib/roster'
+import { IconX } from '@/app/components/icons'
 import { failed, why } from '@/lib/writeFailure'
 import {
   teamNoun, teamSizeLimit, teamSizeBanner, teamCountOptions, canJoinTeam,
@@ -24,7 +24,7 @@ import {
 } from '@/lib/teamLimits'
 import { anyPointsOutOfStep, TEAM_POINTS_MISMATCH } from '@/lib/customPoints'
 import { Card, Badge, buttonClass } from '@/app/components/ui'
-import { IconCheck, IconChevronDown, IconPencil, IconUsers } from '@/app/components/icons'
+import { IconCheck, IconChevronDown, IconUsers } from '@/app/components/icons'
 
 /**
  * Team selection — apportioning teams to the leaderboards that need them.
@@ -59,11 +59,11 @@ interface Placed extends Player { team_id: string | null }
 
 const UNASSIGNED = 'unassigned'
 
-const PRESET_COLORS = [
-  '#DC2626', '#2563EB', '#16A34A', '#9333EA',
-  '#EA580C', '#DB2777', '#0D9488', '#0A9D56',
-  '#65A30D', '#7C3AED', '#0891B2', '#B45309',
-]
+// The palette lives in lib/teamColors.ts now — the tags portal colours
+// from the same twelve without pulling this whole editor into its bundle.
+// Re-exported so the join screen's import keeps working.
+import { PRESET_COLORS } from '@/lib/teamColors'
+export { PRESET_COLORS }
 
 /**
  * Clear of the tab bar, which is fixed at the bottom of every trip screen.
@@ -74,51 +74,25 @@ const ABOVE_TABBAR = `calc(${TABBAR_SPACE} + 1rem)`
 // ─── Player tile ───────────────────────────────────────────────
 
 function PlayerTile({
-  player, faded = false, onRename,
+  player, faded = false,
 }: {
   player: Placed
   faded?: boolean
-  /** Absent on the drag preview, where a tap means nothing. */
-  onRename?: (id: string, name: string) => void
 }) {
-  /**
-   * The name is a tap target when renaming is on offer. The stopPropagation
-   * trio is what keeps a tap a tap: the drag sensors listen on the tile's
-   * wrapper, and without it a finger aiming for the pencil starts a drag
-   * instead on the slower phones.
-   */
-  const stop = (e: React.SyntheticEvent) => e.stopPropagation()
-  const ask = () => {
-    const next = window.prompt('Player name — shorter reads better on the leaderboard', player.name)
-    const name = next?.trim()
-    if (name && name !== player.name && onRename) onRename(player.id, name)
-  }
+  // The name used to be a tap-to-rename here — a prompt suggesting shorter
+  // names for the leaderboard, writing over the player's real name. That
+  // job belongs to the player now: the leaderboard nickname in their own
+  // preferences (PlayerSettings), with lib/displayNames.ts holding the
+  // default. Team selection just moves people about.
   return (
     <div
       className={`border border-bark/12 rounded-lg px-3 py-2.5 flex items-center justify-between gap-2 bg-surface transition-opacity ${
         faded ? 'opacity-25' : 'opacity-100'
       }`}
     >
-      {onRename ? (
-        <button
-          type="button"
-          onPointerDown={stop}
-          onMouseDown={stop}
-          onTouchStart={stop}
-          onClick={e => { stop(e); ask() }}
-          className="flex-1 min-w-0 flex items-center gap-1.5 text-left"
-          aria-label={`Edit ${player.name}'s name`}
-        >
-          <span className="text-ink text-sm font-medium leading-tight min-w-0 truncate">
-            {player.name}
-          </span>
-          <span className="flex-shrink-0 text-ink/50"><IconPencil size={12} /></span>
-        </button>
-      ) : (
-        <span className="text-ink text-sm font-medium leading-tight flex-1 min-w-0 truncate">
-          {player.name}
-        </span>
-      )}
+      <span className="text-ink text-sm font-medium leading-tight flex-1 min-w-0 truncate">
+        {player.name}
+      </span>
       <span
         className={`text-[13px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
           player.gender === 'F'
@@ -137,12 +111,7 @@ function PlayerTile({
   )
 }
 
-function DraggablePlayer({
-  player, onRename,
-}: {
-  player: Placed
-  onRename?: (id: string, name: string) => void
-}) {
+function DraggablePlayer({ player }: { player: Placed }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: player.id })
   return (
     <div
@@ -151,7 +120,7 @@ function DraggablePlayer({
       {...attributes}
       className="touch-none cursor-grab active:cursor-grabbing"
     >
-      <PlayerTile player={player} faded={isDragging} onRename={onRename} />
+      <PlayerTile player={player} faded={isDragging} />
     </div>
   )
 }
@@ -159,7 +128,8 @@ function DraggablePlayer({
 // ─── Drop zones ────────────────────────────────────────────────
 
 function TeamColumn({
-  team, players, totalHandicap, sizeLimit, onRename, onRecolour, onRenamePlayer,
+  team, players, totalHandicap, sizeLimit, onRename, onRecolour,
+  unassigned, onAssign,
 }: {
   team: Team
   players: Placed[]
@@ -168,10 +138,17 @@ function TeamColumn({
   sizeLimit: number | null
   onRename: (id: string, name: string) => void
   onRecolour: (id: string, color: string) => void
-  onRenamePlayer: (id: string, name: string) => void
+  /** Everyone still without a team on this sheet, for the add-search. */
+  unassigned: Placed[]
+  onAssign: (playerId: string, teamId: string) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: team.id })
   const [showColors, setShowColors] = useState(false)
+  // The versatile way in for big fields: a filtering search beside the
+  // drag — same destination (`onAssign` is the drag's own path), no
+  // wrestling sixty tiles down a long page.
+  const [addingOpen, setAddingOpen] = useState(false)
+  const [query, setQuery] = useState('')
 
   const full = sizeLimit !== null && players.length >= sizeLimit
   const over = sizeLimit !== null && players.length > sizeLimit
@@ -230,8 +207,8 @@ function TeamColumn({
       )}
 
       <div className="p-2 space-y-2 flex-1">
-        {players.map(p => <DraggablePlayer key={p.id} player={p} onRename={onRenamePlayer} />)}
-        {players.length === 0 && (
+        {players.map(p => <DraggablePlayer key={p.id} player={p} />)}
+        {players.length === 0 && !addingOpen && (
           <p className="text-ink/50 text-sm text-center py-8 select-none">Drop here</p>
         )}
         {full && !over && (
@@ -239,17 +216,73 @@ function TeamColumn({
             Full
           </p>
         )}
+
+        {!full && unassigned.length > 0 && !addingOpen && (
+          <button
+            type="button"
+            onClick={() => { setAddingOpen(true); setQuery('') }}
+            className="w-full py-2 t-cap text-accent-deep hover:text-accent transition-colors"
+          >
+            + Add players
+          </button>
+        )}
+
+        {addingOpen && (
+          <div className="rounded-lg border border-bark/12 bg-cream p-2">
+            <div className="flex items-center gap-2 mb-1.5">
+              <input
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Find a player…"
+                autoFocus
+                className="flex-1 min-w-0 bg-surface border border-bark/12 rounded-lg px-2.5 py-1.5 text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/50 transition-colors"
+              />
+              <button
+                type="button"
+                onClick={() => setAddingOpen(false)}
+                aria-label="Close"
+                className="flex-shrink-0 text-ink/50 hover:text-ink/80 transition-colors p-1"
+              >
+                <IconX size={14} />
+              </button>
+            </div>
+            <ul className="max-h-40 overflow-y-auto">
+              {unassigned
+                .filter(p => p.name.toLowerCase().includes(query.trim().toLowerCase()))
+                .map(p => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onAssign(p.id, team.id)
+                        // The last seat closes the search; otherwise it
+                        // stays open — filling a four is four taps.
+                        if (sizeLimit !== null && players.length + 1 >= sizeLimit) {
+                          setAddingOpen(false)
+                        }
+                      }}
+                      className="w-full text-left px-2 py-1.5 rounded text-ink text-sm hover:bg-bark/[0.06] transition-colors"
+                    >
+                      {p.name}
+                    </button>
+                  </li>
+                ))}
+              {unassigned.filter(p =>
+                p.name.toLowerCase().includes(query.trim().toLowerCase())).length === 0 && (
+                <li className="t-cap text-ink/65 px-2 py-1.5">
+                  Nobody unassigned by that name.
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-function UnassignedZone({
-  players, onRenamePlayer,
-}: {
-  players: Placed[]
-  onRenamePlayer: (id: string, name: string) => void
-}) {
+function UnassignedZone({ players }: { players: Placed[] }) {
   const { setNodeRef, isOver } = useDroppable({ id: UNASSIGNED })
   return (
     <div
@@ -265,7 +298,7 @@ function UnassignedZone({
         <span className="text-ink/50 text-[13px] tabular-nums">{players.length}</span>
       </div>
       <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 min-h-[72px]">
-        {players.map(p => <DraggablePlayer key={p.id} player={p} onRename={onRenamePlayer} />)}
+        {players.map(p => <DraggablePlayer key={p.id} player={p} />)}
         {players.length === 0 && (
           <p className="text-ink/50 text-sm py-4 col-span-full text-center select-none">
             Everyone&apos;s in
@@ -513,22 +546,21 @@ export default function TripTeamsClient({
     setActivePlayer(placed.find(p => p.id === active.id) ?? null)
   }
 
-  async function handleDragEnd({ active, over }: DragEndEvent) {
-    setActivePlayer(null)
-    if (!over || !sheet) return
-
-    const playerId = active.id as string
-    const overId   = over.id as string
-    const targetTeamId = overId === UNASSIGNED ? null : overId
-
+  /**
+   * One player into one team (or out, with null) — the single assign path.
+   * The drag's drop and the add-search's tap both land here, so the cap
+   * refusal and the optimistic write can never disagree between the two.
+   */
+  async function assignPlayer(playerId: string, targetTeamId: string | null) {
+    if (!sheet) return
     const dragged = placed.find(p => p.id === playerId)
     if (!dragged || dragged.team_id === targetTeamId) return
 
-    // A pairs draw is between teams of two, so a third player is not a thing
-    // the bracket can represent. Refuse the drop rather than let it save.
+    // A capped team — a pairing of two, or an event's teams-of-N — cannot
+    // take one more. Refuse here rather than let it save.
     if (targetTeamId && !canJoinTeam(forBoards, targetTeamId, placed)) {
       const team = sheetTeams.find(t => t.id === targetTeamId)
-      flashError(`${team?.name ?? noun.One} already has ${PAIR_SIZE} players`)
+      flashError(`${team?.name ?? noun.One} already has ${sizeLimit ?? PAIR_SIZE} players`)
       return
     }
 
@@ -543,6 +575,13 @@ export default function TripTeamsClient({
       setMemberships(prev)
       flashError(`Could not move ${dragged.name}${why(fail)}`)
     }
+  }
+
+  async function handleDragEnd({ active, over }: DragEndEvent) {
+    setActivePlayer(null)
+    if (!over) return
+    const overId = over.id as string
+    await assignPlayer(active.id as string, overId === UNASSIGNED ? null : overId)
   }
 
   // ── Team count ───────────────────────────────────────────────
@@ -633,34 +672,11 @@ export default function TripTeamsClient({
     if (err) { setTeams(prev); flashError(`Could not change colour${why(failed('team recolour', err))}`) }
   }
 
-  /**
-   * Renaming a player, from the tile their name sits on.
-   *
-   * Safe mid-trip: scores and the claim cookie are keyed by player id, so a
-   * name is only ever a label. The no-two-same-names rule is the roster's —
-   * checked here first for a calm message, and `uq_players_trip_name`
-   * catches the race two phones can still make.
-   */
-  async function renamePlayer(id: string, name: string) {
-    if (duplicateName(name, players, id)) {
-      flashError(duplicateNameError(name))
-      return
-    }
-    const prev = players
-    setPlayers(ps => ps.map(p => (p.id === id ? { ...p, name } : p)))
-    const { error: err } = await supabase
-      .from('players').update({ name }).eq('id', id).eq('trip_id', tripId)
-    if (err) {
-      setPlayers(prev)
-      flashError(isDuplicateNameError(err)
-        ? duplicateNameError(name)
-        : `Could not rename${why(failed('player rename', err))}`)
-      return
-    }
-    // The hub, the boards and the scoring screen all print this name off the
-    // server, so they are told now rather than on the next confirm.
-    await revalidateTrip(tripCode)
-  }
+  // Player renaming used to live here too, on the tile a name sits on. It
+  // edited the real `players.name` in the name of leaderboard space, which
+  // is the wrong lever: the board's short name is the player's own
+  // leaderboard nickname now (PlayerSettings + lib/displayNames.ts), and a
+  // wrong *name* is fixed where names are managed — Trip Setup's players.
 
   // ── Auto-balance ─────────────────────────────────────────────
   // Snake draft by handicap so team totals land close together. At two per
@@ -894,11 +910,9 @@ export default function TripTeamsClient({
 
         <p className="text-ink/65 text-[13px] text-center">
           Drag players between {noun.many}. On a phone, press and hold briefly first.
-          <br />
-          Tap a name to edit it — shorter names read better on the leaderboard.
         </p>
 
-        <UnassignedZone players={unassigned} onRenamePlayer={renamePlayer} />
+        <UnassignedZone players={unassigned} />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {sheetTeams.map(team => (
@@ -910,7 +924,8 @@ export default function TripTeamsClient({
               sizeLimit={sizeLimit}
               onRename={renameTeam}
               onRecolour={recolourTeam}
-              onRenamePlayer={renamePlayer}
+              unassigned={unassigned}
+              onAssign={assignPlayer}
             />
           ))}
         </div>

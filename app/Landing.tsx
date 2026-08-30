@@ -1,8 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
 import { HERO_SPACE } from '@/app/components/headerMetrics'
 import { buttonClass } from '@/app/components/ui'
@@ -10,15 +10,22 @@ import { buttonClass } from '@/app/components/ui'
 /**
  * The entry screen, and the way out of it.
  *
- * The wordmark is the page. Below it, one sentence saying what to do, and
- * the two things you can do. Nothing else — no feature list, no marketing.
+ * The wordmark is the page. Below it, one sentence saying what the platform
+ * is, and the two things you can do: type the event code you were given, or
+ * create an event of your own. Nothing else — no feature list, no marketing.
+ *
+ * The code goes straight in here rather than behind a Join button: the most
+ * common visitor is somebody holding a six-character code from a group chat,
+ * and a screen between them and typing it was a screen for its own sake.
+ * `/join` survives for shared links, which arrive carrying `?code=`.
  *
  * ── Leaving ────────────────────────────────────────────────────
  *
- * Tapping either button does not simply navigate. The buttons fade, the mark
- * collapses out of the middle of the page and into the header bar, and only
- * once it has landed does the next screen arrive — fading up underneath, so
- * the whole thing reads as one movement rather than as a page swap.
+ * Leaving does not simply navigate. The content fades, the mark collapses
+ * out of the middle of the page and into the header bar, and only once it
+ * has landed does the next screen arrive — fading up underneath, so the
+ * whole thing reads as one movement rather than as a page swap. A joined
+ * code takes the same road once it has been checked.
  *
  * The collapse used to be driven by scrolling this page. Moving it onto the
  * tap is what makes it controllable: an animation on a timer runs at the
@@ -27,7 +34,7 @@ import { buttonClass } from '@/app/components/ui'
  * movement where it means something — you are leaving, and the mark going
  * up to the bar is where it lives on the screen you are going to.
  *
- * Both destinations are prefetched, so the pause after the animation is as
+ * The create path is prefetched, so the pause after the animation is as
  * near to nothing as it can be.
  */
 
@@ -62,6 +69,11 @@ export default function Landing() {
   const frame = useRef<number | null>(null)
   const going = useRef(false)
 
+  // The code being typed, and the check it goes through before departure.
+  const [code, setCode] = useState('')
+  const [checking, setChecking] = useState(false)
+  const [error, setError] = useState('')
+
   const leaving = elapsed !== null
   const wobble = elapsed === null ? 0 : Math.min(1, elapsed / WOBBLE_MS)
   const progress = elapsed === null
@@ -69,6 +81,7 @@ export default function Landing() {
     : smooth(Math.max(0, Math.min(1, (elapsed - WOBBLE_MS) / TRAVEL_MS)))
 
   useEffect(() => {
+    router.prefetch('/golf')
     router.prefetch('/dashboard/create')
     router.prefetch('/join')
   }, [router])
@@ -77,41 +90,83 @@ export default function Landing() {
     if (frame.current !== null) cancelAnimationFrame(frame.current)
   }, [])
 
+  /** Run the collapse, then go. Every way off this page comes through here. */
+  function depart(href: string) {
+    // A second tap while the first is running would start a second
+    // animation over the top of it
+    if (going.current) return
+    going.current = true
+
+    // Asked for less motion: go straight there, no collapse, no fade
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      router.push(href)
+      return
+    }
+
+    setElapsed(0)
+
+    // The clock comes from the frame itself rather than from a reading
+    // taken beforehand, so the first frame is t=0 however long the browser
+    // took to schedule it.
+    const total = WOBBLE_MS + TRAVEL_MS
+    let start = 0
+    const step = (now: number) => {
+      if (start === 0) start = now
+      const t = now - start
+      setElapsed(t)
+      if (t < total) {
+        frame.current = requestAnimationFrame(step)
+      } else {
+        frame.current = null
+        router.push(href)
+      }
+    }
+    frame.current = requestAnimationFrame(step)
+  }
+
   function leave(href: string) {
     return (e: React.MouseEvent) => {
       // A modified click still does what it always does — open in a new tab
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
       e.preventDefault()
-      // A second tap while the first is running would start a second
-      // animation over the top of it
-      if (going.current) return
-      going.current = true
+      depart(href)
+    }
+  }
 
-      // Asked for less motion: go straight there, no collapse, no fade
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        router.push(href)
+  /**
+   * The code is checked before the mark moves: a wrong one gets its answer
+   * here, on the screen it was typed on, rather than after an animation
+   * that promised it was right.
+   */
+  async function handleJoin(e: React.FormEvent) {
+    e.preventDefault()
+    if (checking || going.current) return
+    setError('')
+    setChecking(true)
+
+    const entered = code.toUpperCase().trim()
+    try {
+      // Imported when asked for rather than at the top of the file: this
+      // page renders without Supabase configured (the tests do exactly
+      // that), and nothing else on it needs a database.
+      const { supabase } = await import('@/lib/supabase')
+      const { data } = await supabase
+        .from('trips')
+        .select('trip_code')
+        .eq('trip_code', entered)
+        .single()
+
+      if (!data) {
+        setError('Event not found — check the code and try again')
+        setChecking(false)
         return
       }
 
-      setElapsed(0)
-
-      // The clock comes from the frame itself rather than from a reading
-      // taken beforehand, so the first frame is t=0 however long the browser
-      // took to schedule it.
-      const total = WOBBLE_MS + TRAVEL_MS
-      let start = 0
-      const step = (now: number) => {
-        if (start === 0) start = now
-        const t = now - start
-        setElapsed(t)
-        if (t < total) {
-          frame.current = requestAnimationFrame(step)
-        } else {
-          frame.current = null
-          router.push(href)
-        }
-      }
-      frame.current = requestAnimationFrame(step)
+      setChecking(false)
+      depart(`/trip/${data.trip_code}`)
+    } catch {
+      setError('Could not check the code — try again')
+      setChecking(false)
     }
   }
 
@@ -138,30 +193,56 @@ export default function Landing() {
       >
         <div className="w-full max-w-sm flex flex-col items-center">
 
-          {/* One line saying what to do next. The buttons sit directly below,
-              so it can point at them without naming them twice. */}
+          {/* One line saying what the platform is. The controls sit directly
+              below, so it can point at them without naming them twice. */}
           <p className="t-body text-ink/80 text-center text-balance max-w-[20rem]">
-            Live scoring, leaderboards and matchplay for your golf trip.
+            Live scoring and leaderboards for your event.
           </p>
 
-          <div className="w-full flex flex-col gap-3 mt-10">
-            {/* Still real links: they prefetch, they survive a long press,
-                and without JavaScript they simply navigate. */}
-            <Link
-              href="/dashboard/create"
-              onClick={leave('/dashboard/create')}
+          {/* Holding a code is the common case, so the box for it is the
+              first thing under the sentence — no screen in between. */}
+          <form onSubmit={handleJoin} className="w-full flex flex-col gap-3 mt-10">
+            <input
+              type="text"
+              value={code}
+              onChange={(e) => { setCode(e.target.value.toUpperCase()); setError('') }}
+              maxLength={6}
+              placeholder="EVENT CODE"
+              aria-label="Event code"
+              className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-xl tracking-[0.4em] uppercase text-center placeholder:text-ink/50 placeholder:text-base placeholder:tracking-[0.25em] focus:outline-none focus:border-accent/60 transition-colors"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+
+            {error && (
+              <p className="text-rust-deep text-sm text-center leading-snug">{error}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={checking || code.trim().length < 6}
               className={buttonClass('primary')}
             >
-              Create a trip
-            </Link>
-            <Link
-              href="/join"
-              onClick={leave('/join')}
-              className={buttonClass('secondary')}
-            >
-              Join a trip
-            </Link>
+              {checking ? 'Checking…' : 'Join Event'}
+            </button>
+          </form>
+
+          <div className="w-full flex items-center gap-3 my-6" aria-hidden="true">
+            <span className="h-px flex-1 bg-bark/12" />
+            <span className="t-cap text-ink/50 uppercase tracking-[0.18em]">or</span>
+            <span className="h-px flex-1 bg-bark/12" />
           </div>
+
+          {/* Still a real link: it prefetches, it survives a long press,
+              and without JavaScript it simply navigates. */}
+          <Link
+            href="/golf"
+            onClick={leave('/golf')}
+            className={buttonClass('secondary')}
+          >
+            Create an Event
+          </Link>
 
           {/* Set as a quotation rather than as a sentence: the words sit on
               their own and the name steps out from under them, down and to

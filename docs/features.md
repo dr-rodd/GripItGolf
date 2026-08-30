@@ -85,8 +85,21 @@ A **"Not you?"** control clears the cookie and lands on the player list: a phone
 
 | Tapping | Does |
 |---|---|
-| an unconfirmed name | sets `claimed = true`, writes the cookie, back to the hub |
+| an unconfirmed name | asks the handicap, then sets `claimed = true`, writes the cookie, back to the hub |
 | a confirmed name | writes the cookie **and nothing else**, on the tap |
+
+### The handicap check
+
+**A first claim stops to confirm the handicap.** The roster is the lead player's recollection of everybody's, and claiming is the one moment the person it belongs to is holding the phone — so `HandicapCheck` (in `PlayersClient.tsx`) opens a bottom sheet with the stored figure already in the box. Confirm takes it as it stands; it is a figure to agree with, not a form to fill in.
+
+Four things it holds:
+
+- **The claim and the correction are one `update`.** There is no state where a phone is claimed at a handicap it disagreed with. A corrected figure then goes to `round_handicaps` through `syncRoundHandicaps` — the same call settings and "Add yourself" make — *before* they are sent on, because a handicap corrected on the roster and wrong on every card is the exact failure the sheet exists to prevent.
+- **An unchanged figure writes nothing extra.** `onConfirm` passes null when the typed value is the stored one, so the ordinary path is one column and no snapshots.
+- **A handicap is required to go on**, the same bar "Add yourself" sets — a player with none is scored off nothing. The plus sign is queried through `PLUS_HANDICAP_WARNING` as everywhere else, and only when it is a change.
+- **A failure is said in the sheet.** The screen's error line is down in the add-yourself form, behind the scrim; reported there, a Confirm that failed would look like a Confirm that did nothing.
+
+**Events do not ask** (`askHandicap={!isEvent(kind)}`). An organiser entered that field deliberately, often off a club list, and whether the field may revise it on the way in is their decision rather than this screen's — so a claim on an event is one tap, exactly as it always was. A second device never asks either, on either kind: that question has already been answered.
 
 Tapping a confirmed name asks nothing first. Somebody opening the trip on a tablet after joining on their phone taps their own name and means it, and a mis-tap costs one tap of "Not you?" on the screen it lands on.
 
@@ -223,6 +236,28 @@ There used to be a `setup_status` of `draft` or `live`, flipped by a **Finalise 
 **A device that is not the owner cannot select "Owner only".** There is no way to hand the flag to another device, so that tap would lock the screen — including the control itself — with nothing anywhere able to undo it. The option is disabled, not just discouraged.
 
 The flag's fragility is the known weakness: clear the browser storage, or open the trip on a new phone, and the owner is an ordinary player. With `everyone` that costs nothing. With `owner` it is a one-way door, which is why nothing can walk through it by accident. Real ownership needs auth.
+
+## Exporting a trip, and retiring an old one
+
+`/trip/[code]/export` renders the trip as one printable document — itinerary, players and teams, every league board with per-round columns (discards struck through), and round-by-round results off the trip's main board — behind a quiet **Export trip (PDF)** link at the foot of Trip Setup. Checkboxes choose which sections go in; **Save as PDF** is the browser's own print dialog, so there is no PDF library and no second rendering path — what is on screen is what lands on paper. Only signed cards print: the page passes `activeRoundIds` empty into the same `buildRowContext` + `buildRows` the leaderboard uses, so an export taken mid-round shows committed scores and nothing live. Two things around it hold this up: the tab bar is `print:hidden`, and `@media print` in `globals.css` re-points the dark palette back to daylight — paper is always light, whatever mode the phone is in.
+
+**The process for a legacy trip** — a trip that is over and will not be looked at again — is export first, delete second, in that order and never the reverse:
+
+1. Open the trip's **Trip Setup → Export trip (PDF)**, tick everything, save the PDF, and open it to check it holds what you expect. The PDF is about to be the only copy.
+2. Delete the trip in `/admin` (trips section — search by name or code, delete asks twice). That removes every row the trip owns: rounds, scores, handicap snapshots, itinerary, teams, matchplay. Platform courses stay — they belong to everyone.
+3. If in doubt, don't. A trip costs nothing to keep, and **North West 26 is real history, never to be deleted**. Deletion is for test trips and abandoned duplicates.
+
+There is deliberately no "archive" flag: a kept trip simply stays, readable at its code, and the export exists so keeping the database row is a choice rather than a hostage situation.
+
+## Deleting a round — the guards
+
+A live trip's round lost its committed scores while a different trip was meant to be the target (August 2026) — the culprit turned out to be the scoring dashboard's course-scoped void, since fixed and pinned by `test:legacy`; `docs/gotchas-and-debt.md` has the full story. The itinerary editor was hardened in the same investigation, and stays hardened: removing a round happens in exactly one place — deleting its golf item in the itinerary editor and saving — and that path has three independent defences, pinned by `test:itinerary`:
+
+- **The editor names its trip** in the header, and a save that removes golf opens a confirm listing each round against the trip's name — Day and course — with its own **Remove and save** button. Save itself goes inert while the confirm is open, so a double-tap cannot fall through.
+- **Every write the store makes is scoped by `trip_id`** as well as by id (`lib/itineraryStore.ts`). Ids are unique, so this should never matter — which is why it is there: a delete is the one write where "should never cross trips" is enforced, not assumed.
+- **The score guard fails closed.** `removeRounds` refuses to delete when its score/live-count queries error, where it used to read a failed count as zero and proceed. Deleting a round cascades its scores and handicap snapshots, so the guard may only pass on a real answer of zero.
+
+If a round is deleted wrongly despite all that, the recovery path is the Supabase dashboard's backups (database → backups; point-in-time restore where the plan has it) — the app keeps no tombstones.
 
 ## The trip hub
 

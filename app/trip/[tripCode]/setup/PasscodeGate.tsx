@@ -12,12 +12,20 @@ import { verifyPasscode, rememberUnlock, hasUnlocked, MAX_PASSCODE } from '@/lib
  * security boundary, and should be replaced by real ownership when auth lands.
  */
 export default function PasscodeGate({
-  tripCode, tripName, passcodeHash, children,
+  tripCode, tripName, passcodeHash, children, title, hint,
 }: {
   tripCode: string
   tripName: string
   passcodeHash: string
   children: React.ReactNode
+  /**
+   * What the locked screen calls itself. The defaults are Trip Setup's; the
+   * organiser area hands in its own words and the same lock does the work —
+   * one gate, one sessionStorage memory, so unlocking either unlocks both,
+   * which is the point of one PIN.
+   */
+  title?: string
+  hint?: string
 }) {
   // sessionStorage is browser-only, so it is read through an external store
   // rather than an effect: the server renders locked, and the client corrects
@@ -63,10 +71,10 @@ export default function PasscodeGate({
         </div>
 
         <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink leading-tight mb-2">
-          Settings are locked
+          {title ?? 'Settings are locked'}
         </h1>
         <p className="text-ink/65 text-sm mb-8 leading-relaxed">
-          {tripName} was set up with a passcode. Ask your lead player!
+          {hint ?? `${tripName} was set up with a passcode. Ask your lead player!`}
         </p>
 
         <form onSubmit={submit} className="flex flex-col gap-3">

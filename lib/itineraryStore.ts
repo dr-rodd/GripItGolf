@@ -13,11 +13,14 @@
 
 import { supabase } from '@/lib/supabase'
 import { golfItems, dateForDay, type ItineraryItem } from './itinerary'
-import { diffItems, toItemRow, touchesLockedGolf, isTempId } from './itinerarySync'
+import {
+  diffItems, toItemRow, touchesLockedGolf, isTempId, roundDateGroups,
+} from './itinerarySync'
 
 export type SaveResult = { ok: true } | { ok: false; error: string }
 
 const FAIL = 'Could not save the itinerary — try again.'
+const RESCHEDULE_FAIL = 'Dates saved, but the rounds kept their old ones — try again.'
 
 /**
  * Save an edited itinerary, and reconcile rounds if golf changed.
@@ -51,7 +54,15 @@ export async function saveItinerary({
   const diff = diffItems(before, after)
 
   if (diff.toDelete.length > 0) {
-    const { error } = await supabase.from('itinerary_items').delete().in('id', diff.toDelete)
+    // Scoped by trip as well as by id. The ids alone are unique, so this
+    // should never matter — which is exactly why it is here: a delete is the
+    // one write where "should never" is not enough, and a stale screen or a
+    // mixed-up `before` list must not be able to reach into another trip.
+    const { error } = await supabase
+      .from('itinerary_items')
+      .delete()
+      .eq('trip_id', tripId)
+      .in('id', diff.toDelete)
     if (error) return { ok: false, error: FAIL }
   }
 
@@ -115,6 +126,7 @@ export async function saveItinerary({
           ? { casual: item.casual ?? false, casual_stats: item.casualStats ?? false }
           : {}),
       })
+      .eq('trip_id', tripId)
       .eq('itinerary_item_id', item.id)
     if (error) return { ok: false, error: 'Could not update a round — try again.' }
   }
@@ -151,11 +163,23 @@ async function removeRounds(tripId: string, itemIds: string[]): Promise<SaveResu
     supabase.from('scores').select('id', { count: 'exact', head: true }).in('round_id', roundIds),
     supabase.from('live_rounds').select('id', { count: 'exact', head: true }).in('round_id', roundIds),
   ])
+  // Fail closed. A count that *errored* comes back null, and `?? 0` alone
+  // read that as "no scores — go ahead": the one guard between a flaky
+  // connection and deleting a played round, defaulting open. Deleting a
+  // round cascades its scores and handicap snapshots with it, so this check
+  // may only pass on a real answer of zero.
+  if (scoresRes.error || liveRes.error) {
+    return { ok: false, error: 'Could not remove a round — try again.' }
+  }
   if ((scoresRes.count ?? 0) > 0 || (liveRes.count ?? 0) > 0) {
     return { ok: false, error: 'A round already has scores recorded — it cannot be removed.' }
   }
 
-  const { error } = await supabase.from('rounds').delete().in('id', roundIds)
+  const { error } = await supabase
+    .from('rounds')
+    .delete()
+    .eq('trip_id', tripId)
+    .in('id', roundIds)
   return error ? { ok: false, error: 'Could not remove a round — try again.' } : { ok: true }
 }
 
@@ -211,6 +235,54 @@ async function addRounds(
     )
     const { error: hcpError } = await supabase.from('round_handicaps').insert(rows)
     if (hcpError) return { ok: false, error: 'Round created, but handicaps failed to save.' }
+  }
+
+  return { ok: true }
+}
+
+/**
+ * Re-date every round after the trip's own dates moved.
+ *
+ * A golf item holds a day *index*; a round holds a calendar *date*. Saving a
+ * new start date in Trip Settings moves the first and left the second where
+ * it was, so the itinerary showed the new dates while everything that reads
+ * `rounds.scheduled_date` — the hub countdown, the up-next card, the round
+ * summary, the weather hour — went on quoting the old ones.
+ *
+ * The golf is read here rather than passed in. The caller has a list of
+ * items on screen, but it is the list the page was rendered with, and a
+ * round added from another phone in the meantime would be left behind on a
+ * date nobody can see any more. This is a rare write on a settings screen —
+ * one extra query is worth not guessing.
+ *
+ * **Played rounds are re-dated too.** The date is a label, not data: if the
+ * trip moved, it moved, and a round left behind would disagree with the day
+ * header printed directly above it. The locked-golf rule is about a course
+ * or a day changing under real scores, which is not what this is.
+ *
+ * `roundDateGroups` decides what the dates are, including answering with
+ * nothing when the trip has no start date to count from.
+ */
+export async function rescheduleRounds(
+  tripId: string,
+  startDate: string | null,
+): Promise<SaveResult> {
+  const { data, error } = await supabase
+    .from('itinerary_items')
+    .select('id, day_index')
+    .eq('trip_id', tripId)
+    .eq('kind', 'golf')
+  if (error) return { ok: false, error: RESCHEDULE_FAIL }
+
+  const golf = (data ?? []).map(r => ({ id: r.id as string, dayIndex: r.day_index as number }))
+
+  for (const { date, itemIds } of roundDateGroups(startDate, golf)) {
+    const { error: err } = await supabase
+      .from('rounds')
+      .update({ scheduled_date: date })
+      .eq('trip_id', tripId)
+      .in('itinerary_item_id', itemIds)
+    if (err) return { ok: false, error: RESCHEDULE_FAIL }
   }
 
   return { ok: true }

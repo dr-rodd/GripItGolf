@@ -1069,8 +1069,13 @@ section('The itinerary reads at the size a plan deserves')
   // tap, which is the rule holding the list together.
   ok(/kind === 'activity'[\s\S]{0,200}ActivityRow/.test(itin),
     'an activity gets a row of its own')
-  const activityRow = itin.slice(itin.indexOf('function ActivityRow'),
-    itin.indexOf('export default function Itinerary'))
+  // ActivityRow's own body: from its declaration to the next function's.
+  // It used to run to the default export, but the golf tile and the event
+  // day plan live between the two now, and both legitimately carry cards
+  // and taps — the rule being pinned here is ActivityRow's alone.
+  const activityRowStart = itin.indexOf('function ActivityRow')
+  const activityRow = itin.slice(activityRowStart,
+    itin.indexOf('\nfunction ', activityRowStart + 1))
   ok(activityRow.includes('t-card text-ink'), '  …named at card weight')
   ok(!activityRow.includes('<Link') && !/border/.test(activityRow),
     '  …with no card and no tap — those stay golf\'s alone')
@@ -1109,7 +1114,10 @@ section('The hub is the sections it should be, and nothing else')
   const hubCode = code('app/trip/[tripCode]/page.tsx')
 
   ok(hub.includes('SectionStack'), 'the collapsible sections are one shared component')
-  ok(hub.includes("initial=\"itinerary\""), 'and the itinerary is the one open on arrival')
+  // A trip opens on the itinerary; an event with notices posted opens on
+  // them — the organiser's line to the field is the hub's news.
+  ok(hub.includes("initial={isEvent && notices.length > 0 ? 'notices' : 'itinerary'}"),
+    'and the itinerary is the one open on arrival, unless an event has news')
 
   for (const title of ['Your Itinerary', 'Travel & Accommodation', 'Players']) {
     ok(hub.includes(`'${title}'`) || hub.includes(`"${title}"`), `there is a ${title} section`)
@@ -1140,8 +1148,8 @@ section('The hub is the sections it should be, and nothing else')
     '  …and on a card having actually recorded something')
   ok(hub.indexOf("key: 'itinerary'") < hub.indexOf("key: 'stats'"),
     'and it is added after the three sections that were always there')
-  ok(/initial="itinerary"/.test(hub),
-    '  …so the hub still opens on the itinerary either way')
+  ok(/initial=\{isEvent && notices\.length > 0 \? 'notices' : 'itinerary'\}/.test(hub),
+    '  …so a trip still opens on the itinerary either way')
 
   // Nothing personal is fetched for a phone the trip does not recognise, and
   // the stats are inside that same gate rather than beside it.

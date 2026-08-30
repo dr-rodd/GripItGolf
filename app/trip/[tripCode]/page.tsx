@@ -24,6 +24,8 @@ import { firstTeeTarget } from '@/lib/upNext'
 // "13–16 August" — one copy, shared with the confirmation email.
 import { describeRange } from '@/lib/confirmationEmail'
 import { SectionStack } from '@/app/components/Section'
+import { isEvent as isEventKind, parseStartFormat, describeStart } from '@/lib/eventHub'
+import NoticesPanel, { type Notice } from './NoticesPanel'
 import TripCountdown from './TripCountdown'
 import TripDescription from './TripDescription'
 import StatusBlock from './StatusBlock'
@@ -123,13 +125,20 @@ export default async function TripPage({ params, searchParams }: {
     )
   }
 
-  const [roundsResult, playersResult, itineraryResult, coursesResult] = await Promise.all([
+  // An event wears this screen as the Event Hub. Read fail-soft: a database
+  // that has not run migration 046 has no `kind`, and no kind is a trip.
+  const isEvent = isEventKind(trip.kind)
+
+  const [roundsResult, playersResult, itineraryResult, endTimesResult, coursesResult, noticesResult] = await Promise.all([
     // `itinerary_item_id` is the join that makes a countdown possible: the
     // date lives here and the tee time lives on the itinerary item, and this
-    // is the only column tying the two together.
+    // is the only column tying the two together. `start_format` rides along
+    // for the Event Hub's schedule; selecting a column migration 046 adds
+    // would fail the whole query on an un-migrated database, but a trip
+    // cannot be an event there either, so it is only asked for when it is.
     supabase
       .from('rounds')
-      .select('round_number, course_id, scheduled_date, itinerary_item_id')
+      .select(`round_number, course_id, scheduled_date, itinerary_item_id${isEvent ? ', start_format' : ''}`)
       .eq('trip_id', trip.id)
       .order('round_number'),
     supabase
@@ -147,6 +156,13 @@ export default async function TripPage({ params, searchParams }: {
       .eq('trip_id', trip.id)
       .order('day_index')
       .order('position'),
+    // End times ride in their own query, never the select above — naming a
+    // column migration 048 adds would fail the whole hub on an un-migrated
+    // database, while failing this costs only the ranges on the day plan.
+    supabase
+      .from('itinerary_items')
+      .select('id, end_time')
+      .eq('trip_id', trip.id),
     // The courses this trip could be playing, in the same breath rather than
     // after — the trip's own, and the platform's.
     //
@@ -172,15 +188,33 @@ export default async function TripPage({ params, searchParams }: {
     // trip does not play are never looked up.
     supabase.from('courses').select('id, name')
       .or(`trip_id.eq.${trip.id},trip_id.is.null`),
+    // The organiser's notices — events only, newest first. The same
+    // conditional-promise shape the stats fetch uses, so the batch stays
+    // one Promise.all whichever kind this is.
+    isEvent
+      ? supabase
+          .from('event_messages')
+          .select('id, body, created_at')
+          .eq('trip_id', trip.id)
+          .order('created_at', { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
   ])
 
   if (roundsResult.error) console.error('TripPage rounds query failed:', roundsResult.error)
   if (itineraryResult.error) console.error('TripPage itinerary query failed:', itineraryResult.error)
   if (playersResult.error) console.error('TripPage players query failed:', playersResult.error)
   if (coursesResult.error) console.error('TripPage courses query failed:', coursesResult.error)
+  if (noticesResult.error) console.error('TripPage notices query failed:', noticesResult.error)
 
-  const rounds  = roundsResult.data ?? []
+  type RoundRow = {
+    round_number: number; course_id: string; scheduled_date: string | null
+    itinerary_item_id: string | null
+    /** Only selected for events; absent on a trip's query. */
+    start_format?: string | null
+  }
+  const rounds  = (roundsResult.data ?? []) as unknown as RoundRow[]
   const players = playersResult.data ?? []
+  const notices = (noticesResult.data ?? []) as Notice[]
 
   type ItinRow = {
     id: string; day_index: number; position: number; kind: ItemKind
@@ -189,6 +223,13 @@ export default async function TripPage({ params, searchParams }: {
     from_place: string | null; to_place: string | null; duration_mins: number | null
     activity_name: string | null; activity_time: string | null
   }
+  // Error swallowed deliberately — pre-migration-048 the column does not
+  // exist, the map stays empty, and every item simply has no end time.
+  const endTimes = new Map(
+    ((endTimesResult.data ?? []) as { id: string; end_time: string | null }[])
+      .map(r => [r.id, r.end_time]),
+  )
+
   const itinerary: ItineraryItem[] = ((itineraryResult.data ?? []) as unknown as ItinRow[])
     .map(r => ({
       id: r.id, dayIndex: r.day_index, position: r.position, kind: r.kind,
@@ -196,6 +237,7 @@ export default async function TripPage({ params, searchParams }: {
       stayName: r.stay_name, travelMode: r.travel_mode,
       fromPlace: r.from_place, toPlace: r.to_place, durationMins: r.duration_mins,
       activityName: r.activity_name, activityTime: r.activity_time,
+      ...(endTimes.get(r.id) ? { endTime: endTimes.get(r.id) } : {}),
     }))
 
   // Which round each golf item became, so the up-next card can put the
@@ -215,6 +257,19 @@ export default async function TripPage({ params, searchParams }: {
 
   // Courses for both the rounds list and the itinerary's golf tiles
   const courseMap = Object.fromEntries((coursesResult.data ?? []).map(c => [c.id, c.name]))
+
+  // An event round with a chosen start format writes its own line onto the
+  // schedule's golf tile — "Shotgun start 9:30 am", "Tee sheet". The format
+  // is the round's, the time is the itinerary item's, and lib/eventHub is
+  // where the two become one sentence.
+  const teeTimeByItem = new Map(itinerary.map(i => [i.id, i.teeTime ?? null]))
+  const startLines: Record<string, string> = {}
+  for (const r of rounds) {
+    const format = parseStartFormat(r.start_format)
+    if (!format || !r.itinerary_item_id) continue
+    const line = describeStart(format, teeTimeByItem.get(r.itinerary_item_id))
+    if (line) startLines[r.itinerary_item_id] = line
+  }
 
   // Grouped by the day they are played, so a two-round day reads as one day
   // with two courses rather than as two unrelated entries. Only reached by a
@@ -379,9 +434,17 @@ export default async function TripPage({ params, searchParams }: {
       items={itinerary}
       startDate={trip.start_date ?? null}
       courseNames={courseMap}
-      days={dayCount(trip.start_date ?? null, trip.end_date ?? null)}
+      // The items decide too, not just the dates: a series event carries no
+      // dates at all — dayCount(null, null) is 1 — but its numbered days
+      // are real and every one must render.
+      days={Math.max(
+        dayCount(trip.start_date ?? null, trip.end_date ?? null),
+        itinerary.reduce((max, i) => Math.max(max, i.dayIndex + 1), 0),
+      )}
       tripCode={tripCode}
       roundNumbers={roundNumbers}
+      startLines={startLines}
+      timescale={isEvent}
     />
   ) : days.length > 0 ? (
     <ul className="flex flex-col gap-2">
@@ -516,23 +579,37 @@ export default async function TripPage({ params, searchParams }: {
             than as the start of something new. */}
         <div className="mt-6">
         <SectionStack
-          initial="itinerary"
+          initial={isEvent && notices.length > 0 ? 'notices' : 'itinerary'}
           sections={[
+            /* Notices lead an event: the organiser's line to the field is
+               the hub's news, and it opens first once there is any. A trip
+               has no organiser and no section. */
+            ...(isEvent ? [{
+              key: 'notices',
+              title: 'Notices',
+              meta: notices.length > 0 ? `${notices.length}` : undefined,
+              content: <NoticesPanel notices={notices} tripCode={tripCode} />,
+            }] : []),
             {
               key: 'itinerary',
               /* "Your Itinerary", not "Itinerary" — the hub is the one screen
                  read by a player rather than by the leader, and this is the
                  plan they are on rather than a plan on file. The setup
                  editor's heading stays plain: there it is the trip's
-                 itinerary being built, not anybody's own. */
-              title: 'Your Itinerary',
+                 itinerary being built, not anybody's own. An event's is the
+                 Schedule — a standalone day has no itinerary in any sense a
+                 traveller would recognise. */
+              title: isEvent ? 'Schedule' : 'Your Itinerary',
               content: itinerarySection,
             },
-            {
+            /* A standalone event has no travel to speak of, so the heading
+               only appears when somebody actually planned a stay or a
+               journey — which a multi-day event still might. */
+            ...(!isEvent || itinerary.some(i => i.kind === 'stay' || i.kind === 'travel') ? [{
               key: 'travel',
               title: 'Travel & Accommodation',
               content: <TravelStays items={itinerary} startDate={trip.start_date ?? null} />,
-            },
+            }] : []),
             {
               key: 'players',
               title: 'Players',
@@ -541,6 +618,7 @@ export default async function TripPage({ params, searchParams }: {
                 players={players}
                 pendingCount={pendingCount}
                 tripCode={tripCode}
+                noun={isEvent ? 'event' : 'trip'}
               />,
             },
             /* Stats, last, and only when there is something behind the
@@ -594,16 +672,18 @@ export default async function TripPage({ params, searchParams }: {
  * otherwise.
  */
 function PlayersPanel({
-  players, pendingCount, tripCode,
+  players, pendingCount, tripCode, noun,
 }: {
   players: { id: string; name: string; handicap: number | null; claimed?: boolean | null }[]
   pendingCount: number
   tripCode: string
+  /** "trip" or "event" — the hub knows which it is wearing. */
+  noun: 'trip' | 'event'
 }) {
   if (players.length === 0) {
     return (
       <p className="t-cap text-ink/65 text-center py-2">
-        Nobody has joined this trip yet.
+        Nobody has joined this {noun} yet.
       </p>
     )
   }

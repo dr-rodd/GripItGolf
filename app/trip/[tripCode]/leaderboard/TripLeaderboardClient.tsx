@@ -10,10 +10,14 @@ import {
 import {
   type BoardRow, type ResolvedScore, type RowContext,
   buildRows, scoresForBoard, boardHandicapFor, effectivePar, effectiveSI,
-  orderRowsUndiscarded, teamCardHolePoints,
+  orderRowsUndiscarded, teamCardHolePoints, withOnlyRounds,
 } from '@/lib/boardRows'
+import {
+  type DayBoards, boardGrouping, describeScope,
+} from '@/lib/leagueSetup'
 import { type Segment } from '@/lib/tiebreak'
 import { buildRowContext, sortRounds } from '@/lib/rowContext'
+import { boardNames } from '@/lib/displayNames'
 import { formatHandicap } from '@/lib/handicap'
 import { type Membership } from '@/lib/teamSets'
 import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundState'
@@ -88,6 +92,24 @@ interface Props {
   roundHandicaps: RoundHcp[]
   /** Ratings only. Read by boards playing off a percentage of the handicap. */
   tees?: TeeRatingRow[]
+  /**
+   * Leaderboard nicknames, fetched fail-soft on their own — naming the
+   * column in the players select would fail the roster on a database that
+   * has not run migration 047, and a board without nicknames still stands.
+   */
+  nicknames?: { id: string; nickname: string | null }[]
+  /**
+   * An event, not a trip — the per-course switch is offered on an event's
+   * board only. A trip's leaderboard is the trip's, and a new control on
+   * it would be answering a question nobody asked.
+   */
+  isEvent?: boolean
+  /**
+   * How the event's days relate on the board, from its league setup. Read
+   * fail-soft by the page; absent reads as the running total every board
+   * has always been (lib/leagueSetup.ts `boardGrouping`).
+   */
+  dayBoards?: DayBoards
 }
 
 // Every scorecard in the app wears the same clothes — see
@@ -912,12 +934,14 @@ function useBoardScroll(scrolls: boolean) {
 const INLINE_ROUNDS = 4
 
 function Board({
-  board, rows: allRows, rounds, playerById, onOpenCard,
+  board, rows: allRows, rounds, playerById, boardNameById, onOpenCard,
 }: {
   board: Leaderboard
   rows: BoardRow[]
   rounds: Round[]
   playerById: Map<string, Player>
+  /** Player id → what the name column prints. Team rows are not in it. */
+  boardNameById: Map<string, string>
   onOpenCard: (row: BoardRow, round: Round) => void
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -1191,7 +1215,7 @@ function Board({
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} />
                       )}
                       <ScrollingName
-                        text={row.name}
+                        text={boardNameById.get(row.id) ?? row.name}
                         className="min-w-0 flex-1"
                         textClassName="font-[family-name:var(--font-display)] font-semibold text-[15px] leading-tight text-ink"
                       />
@@ -1340,18 +1364,69 @@ function MatchplayTab({ tripCode }: { tripCode: string }) {
 export default function TripLeaderboardClient({
   tripCode, boards, activeRoundIds, livePlayerIds, legacyTeamScoring, rounds,
   teams, memberships, players, holes, scores, liveScores, roundHandicaps,
-  tees = [],
+  tees = [], nicknames = [], isEvent = false, dayBoards,
 }: Props) {
   // Matchplay has its own route, so it is a button rather than a tab. Every
   // other board is a table, and its own rules travel with it.
-  const tabs = useMemo(() => boards.filter(b => b.competition === 'league'), [boards])
+  //
+  // The order is the event's answer to how its days relate: overall boards
+  // lead, day boards follow, and a `separate` event sets the overall ones
+  // aside. `boardGrouping` is the one copy of what that answer means —
+  // this only lays out what it returns.
+  const tabs = useMemo(() => {
+    const league = boards.filter(b => b.competition === 'league')
+    const { overall, byDay } = boardGrouping(league, dayBoards)
+    return [...overall, ...byDay]
+  }, [boards, dayBoards])
   const [activeId, setActiveId] = useState<string>(tabs[0]?.id ?? '')
+
+  // ── One course, or the lot ──────────────────────────────────
+  //
+  // A choice of one — an id, or null for everything — rather than a set of
+  // ticks, so no tap can leave the page with no golf on it and nothing has
+  // to guard against that. The stats page's Courses view is the same
+  // pattern; its Players view is deliberately not, because "everything
+  // except the round where putting went badly" is a different question.
+  //
+  // Events only: a trip's leaderboard is the trip's, and a switch on it
+  // would be a new control on a screen that never asked for one.
+  const [courseId, setCourseId] = useState<string | null>(null)
+  const courses = useMemo(() => {
+    const out: { id: string; name: string }[] = []
+    for (const r of rounds) {
+      const c = r.courses
+      if (c?.id && !out.some(x => x.id === c.id)) out.push({ id: c.id, name: c.name })
+    }
+    return out
+  }, [rounds])
+  // Nothing to switch between on a single-course event, so nothing is drawn.
+  const showCourses = isEvent && courses.length > 1
+  const shownCourse = showCourses ? courseId : null
+  const courseRoundIds = useMemo(
+    () => (shownCourse
+      ? rounds.filter(r => r.courses?.id === shownCourse).map(r => r.id)
+      : undefined),
+    [shownCourse, rounds],
+  )
   const [card, setCard] = useState<{ row: BoardRow; round: Round } | null>(null)
 
   // A board can be removed in settings while this page is open
   const activeBoard = tabs.find(b => b.id === activeId) ?? tabs[0] ?? null
 
   const playerById = useMemo(() => new Map(players.map(p => [p.id, p])), [players])
+
+  // What the board prints for a player: their own nickname, or first name
+  // plus the start of the last, grown on ties — lib/displayNames.ts is the
+  // one copy of both halves. Team rows are not in the map and keep their
+  // names; so does the scorecard sheet's title, which has the room — the
+  // player's name doesn't change, the tight columns just borrow a shorter
+  // one.
+  const boardNameById = useMemo(() => {
+    const nickById = new Map(nicknames.map(n => [n.id, n.nickname]))
+    return boardNames(players.map(p => ({
+      id: p.id, name: p.name, nickname: nickById.get(p.id) ?? null,
+    })))
+  }, [players, nicknames])
 
   // ── Everything a board is built from ────────────────────────
   //
@@ -1378,9 +1453,12 @@ export default function TripLeaderboardClient({
   // Casual rounds are left out here for the same reason `buildRows` leaves
   // them out of every total: a round the board is not counting gets no
   // column, rather than a column of blanks under every name.
+  // Narrowed with the rows, and by the same answer, or the table would
+  // draw a column for golf its totals were no longer counting.
   const sortedRounds = useMemo(
-    () => sortRounds(rounds.filter(r => r.casual !== true)),
-    [rounds],
+    () => sortRounds(rounds.filter(r =>
+      r.casual !== true && (!courseRoundIds || courseRoundIds.includes(r.id)))),
+    [rounds, courseRoundIds],
   )
 
   // A round counts as in play when a scorecard is actually open on it, not
@@ -1401,9 +1479,19 @@ export default function TripLeaderboardClient({
    */
   const inPlay = livePlayerIds.length > 0
 
+  // Every board read over the course being shown. The narrowing is the
+  // same `withOnlyRounds` a board's own `roundIds` goes through inside
+  // `buildRows` — one copy of "score this over these rounds and no others"
+  // — and the two compose: a day board on another course narrows to
+  // nothing and honestly shows nothing.
+  const shownContext = useMemo(
+    () => withOnlyRounds(rowContext, courseRoundIds),
+    [rowContext, courseRoundIds],
+  )
+
   const rowsByBoard = useMemo(
-    () => new Map(tabs.map(b => [b.id, buildRows(b, rowContext)])),
-    [tabs, rowContext]
+    () => new Map(tabs.map(b => [b.id, buildRows(b, shownContext)])),
+    [tabs, shownContext]
   )
 
   // What the scorecard sheet shows when a row is opened: the same cards the
@@ -1441,22 +1529,57 @@ export default function TripLeaderboardClient({
   // own on the bar at the bottom of every trip screen, so a second way in
   // from this one page was a chip that said what the bar already said — and
   // it was the only thing forcing this strip to exist on a one-board trip.
+  /** A day board says which golf it counts; a whole-event board does not. */
+  const scopeOf = (t: Leaderboard) => describeScope(t, rounds.map(r => ({
+    id: r.id, roundNumber: r.round_number, courseName: r.courses?.name ?? null,
+  })))
+
   const strip = (tabs.length > 1 || showMatchplay) && (
     <div className="flex gap-1.5 mb-4 overflow-x-auto -mx-1 px-1 pb-1">
-      {tabs.map(t => (
+      {tabs.map(t => {
+        const scope = scopeOf(t)
+        return (
+          <button
+            key={t.id}
+            onClick={() => setActiveId(t.id)}
+            className={`flex-shrink-0 px-4 py-2.5 t-label transition-colors duration-150 rounded-xl border ${
+              activeBoard?.id === t.id
+                ? 'bg-accent-deep text-white font-bold border-accent-deep'
+                : 'bg-surface border-bark/12 text-ink/65 hover:text-ink/80'
+            }`}
+          >
+            {scope ? `${scope} · ${boardTitle(t)}` : boardTitle(t)}
+          </button>
+        )
+      })}
+      {showMatchplay && <MatchplayTab tripCode={tripCode} />}
+    </div>
+  )
+
+  /**
+   * Overall, or one course.
+   *
+   * A switch rather than the stats page's Courses dropdown: there the
+   * control has round counts to report and a panel to report them in, here
+   * it is two or three names and the page already speaks in chips — the
+   * board strip above it and the Discard switch below are both this shape.
+   */
+  const courseStrip = showCourses && (
+    <div className="flex gap-1.5 mb-4 overflow-x-auto -mx-1 px-1 pb-1">
+      {[{ id: null as string | null, name: 'Overall' }, ...courses].map(c => (
         <button
-          key={t.id}
-          onClick={() => setActiveId(t.id)}
-          className={`flex-shrink-0 px-4 py-2.5 t-label transition-colors duration-150 rounded-xl border ${
-            activeBoard?.id === t.id
-              ? 'bg-accent-deep text-white font-bold border-accent-deep'
+          key={c.id ?? 'all'}
+          onClick={() => setCourseId(c.id)}
+          aria-pressed={shownCourse === c.id}
+          className={`flex-shrink-0 px-4 py-2 t-cap transition-colors duration-150 rounded-lg border ${
+            shownCourse === c.id
+              ? 'bg-accent/[0.12] border-accent/40 text-ink'
               : 'bg-surface border-bark/12 text-ink/65 hover:text-ink/80'
           }`}
         >
-          {boardTitle(t)}
+          {c.name}
         </button>
       ))}
-      {showMatchplay && <MatchplayTab tripCode={tripCode} />}
     </div>
   )
 
@@ -1473,10 +1596,21 @@ export default function TripLeaderboardClient({
 
   const currentRows = rowsByBoard.get(activeBoard.id) ?? []
 
+  // The columns are the board's own golf, not the trip's. A board scoped
+  // to one day draws that day and nothing else — a column of blanks under
+  // every name is a column saying the board counts something it does not.
+  const boardRounds = activeBoard.roundIds?.length
+    ? sortedRounds.filter(r => activeBoard.roundIds!.includes(r.id))
+    : sortedRounds
+
+  // Where the rows would come from, if there were any. A tags board and a
+  // day board are both team boards by audience but are filled in from two
+  // different screens, and "Set teams in Trip Setup" points at neither.
   const emptyMessage =
-    activeBoard.audience === 'team'
-      ? 'Set teams in Trip Setup'
-      : 'No scores yet.'
+    activeBoard.audience !== 'team' ? 'No scores yet.'
+    : activeBoard.tagMode ? 'No tags yet — the sides are set in the organiser area.'
+    : activeBoard.roundIds?.length ? 'No teams for this day yet — they are picked on the tee sheet.'
+    : 'Set teams in Trip Setup'
 
   // A prize table is worth naming — "10 / 5 / 3 a round" is what an organiser
   // recognises their own competition by, where "points by position" is not.
@@ -1498,6 +1632,8 @@ export default function TripLeaderboardClient({
     <div className="max-w-lg mx-auto px-4 py-6">
 
       {strip}
+
+      {courseStrip}
 
       {/* Title card — only worth the space once there is more than one board */}
       {tabs.length > 1 ? (
@@ -1539,13 +1675,14 @@ export default function TripLeaderboardClient({
             key={activeBoard.id}
             board={activeBoard}
             rows={currentRows}
-            rounds={sortedRounds}
+            rounds={boardRounds}
             playerById={playerById}
+            boardNameById={boardNameById}
             onOpenCard={(row, round) => setCard({ row, round })}
           />
         )}
 
-      {sortedRounds.length > INLINE_ROUNDS && currentRows.length > 0 && (
+      {boardRounds.length > INLINE_ROUNDS && currentRows.length > 0 && (
         <p className="text-ink/65 text-[13px] mt-3 text-center">
           Swipe to switch round.
         </p>

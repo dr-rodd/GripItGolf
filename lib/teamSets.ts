@@ -52,7 +52,11 @@ export function sheetsInUse(boards: readonly Leaderboard[]): string[] {
   const out: string[] = []
   for (const lb of boards) {
     if (lb.audience !== 'team') continue
-    const s = setOf(lb)
+    const s = sheetForBoard(lb)
+    // A day's teams are made on the morning, at the tee sheet — they are
+    // not a sheet this screen apportions, and demanding them before the
+    // event can go live would be demanding Tuesday's fourballs on Sunday.
+    if (isDaySheet(s)) continue
     if (!out.includes(s)) out.push(s)
   }
   return out
@@ -71,6 +75,36 @@ export function nextSheetId(boards: readonly Leaderboard[]): string {
     const id = `set-${n}`
     if (!used.has(id)) return id
   }
+}
+
+// ─── A sheet for one day ───────────────────────────────────────
+//
+// The teams a group plays in can change with the day: a fourball with new
+// partners every morning, while the tag each player carries stays put all
+// week. That is a sheet per round — `day:<roundId>` — and the database
+// already makes it work: UNIQUE(player_id, team_set) is one team per
+// player per day, and `membersOf` and the whole scoring path take a sheet
+// without caring which one.
+//
+// Named rather than numbered, and namespaced with a colon, so a day sheet
+// can never collide with `main` or with `nextSheetId`'s `set-N`. The round
+// id is in the name so the sheet says what it is for without a lookup.
+
+const DAY_PREFIX = 'day:'
+
+/** The sheet holding the teams played on one round. */
+export function daySheetId(roundId: string): string {
+  return `${DAY_PREFIX}${roundId}`
+}
+
+/** Is this a sheet belonging to one round rather than to the whole trip? */
+export function isDaySheet(teamSet: string): boolean {
+  return teamSet.startsWith(DAY_PREFIX)
+}
+
+/** Which round a day sheet belongs to, or null for any other sheet. */
+export function roundOfDaySheet(teamSet: string): string | null {
+  return isDaySheet(teamSet) ? teamSet.slice(DAY_PREFIX.length) || null : null
 }
 
 /** Every board that ranks teams, in list order. */
@@ -235,13 +269,41 @@ export type Membership = {
 
 export type TeamRow = { id: string; name: string; team_set?: string | null }
 
+/**
+ * The sheet a board's teams stand on — derived, never stored twice.
+ *
+ * A team board scoped to exactly one round is that day's competition, so
+ * its teams are that day's: the fourballs made on the morning, on the
+ * round's own sheet. Everything else plays the sheet it was given.
+ *
+ * Derived rather than written onto the board because the two would drift:
+ * a board's scope can be changed, and a stored sheet would then be
+ * pointing at the teams of a day it no longer counts.
+ */
+export function sheetForBoard(
+  lb: Pick<Leaderboard, 'teamSet' | 'roundIds' | 'audience' | 'tagMode'>,
+): string {
+  if (lb.audience === 'team' && !lb.tagMode && lb.roundIds?.length === 1) {
+    return daySheetId(lb.roundIds[0])
+  }
+  return setOf(lb)
+}
+
 /** Which sheet a team is on. A team row from before sheets existed is main. */
 export function teamSheet(t: TeamRow): string {
   return t.team_set || MAIN_SET
 }
 
-/** The teams making up one sheet. */
-export function teamsOnSheet(teams: readonly TeamRow[], teamSet: string): TeamRow[] {
+/**
+ * The teams making up one sheet.
+ *
+ * Generic in the row so a caller holding richer rows — with a colour, say —
+ * gets its own shape back rather than the bare minimum this file needs.
+ */
+export function teamsOnSheet<T extends TeamRow>(
+  teams: readonly T[],
+  teamSet: string,
+): T[] {
   return teams.filter(t => teamSheet(t) === teamSet)
 }
 

@@ -55,8 +55,8 @@ function uiFiles(): string[] {
       else if (/\.tsx?$/.test(e.name)) out.push(p)
     }
   }
-  for (const d of ['app/trip', 'app/components', 'app/join', 'app/dashboard', 'app/admin']) walk(d)
-  out.push('app/page.tsx', 'app/layout.tsx', 'app/Landing.tsx')
+  for (const d of ['app/trip', 'app/components', 'app/join', 'app/dashboard', 'app/admin', 'app/golf']) walk(d)
+  out.push('app/page.tsx', 'app/layout.tsx', 'app/Landing.tsx', 'app/[code]/page.tsx')
   return out
 }
 
@@ -566,10 +566,12 @@ section('The bottom tab bar')
   // the emerald circle around it was tried and retired the same day (the
   // label had to go, then came back and dragged the alignment sideways).
   // Five identical tabs; position does the emphasising.
+  // Six defined, five shown: a trip drops the tee sheet, an event drops
+  // Trip Setup — either bar is five tabs with the leaderboard centred.
   eq(
     (src.match(/label: '([^']+)'/g) ?? []).map(s => s.replace(/label: '|'/g, '')),
-    ['Home', 'Scoring', 'Leaderboard', 'Stats', 'Trip Setup'],
-    'five items, leaderboard centred',
+    ['Home', 'Scoring', 'Leaderboard', 'Stats', 'Trip Setup', 'Tee Sheet'],
+    'six items defined, leaderboard centred in the five shown',
   )
   ok(src.includes('grid-cols-5'), 'the grid matches the count')
   ok(!/emphasis/.test(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')) && !/rounded-full/.test(src),
@@ -1384,7 +1386,7 @@ section('The screens before a trip wear the same header')
   // The mark lands in the bar on the way off the landing page. If the screen
   // it lands on did not have it there, the collapse would be explaining a
   // move to somewhere the mark does not end up.
-  for (const f of ['app/join/JoinForm.tsx', 'app/dashboard/create/CreateTripForm.tsx']) {
+  for (const f of ['app/join/JoinForm.tsx', 'app/dashboard/create/CreateTripForm.tsx', 'app/golf/page.tsx']) {
     const src = read(f)
     const name = f.split('/').pop()
     ok(src.includes('<TripHeader backTo="/" />'),
@@ -1544,7 +1546,6 @@ section('A full-screen overlay covers the tab bar, never ties with it')
   // that is meant to be blocking the screen.
   for (const f of [
     'app/trip/[tripCode]/setup/ItineraryEditor.tsx',
-    'app/components/SettingsModal.tsx',
     'app/components/PlayerSettings.tsx',
   ]) {
     const src = read(f)
@@ -1775,16 +1776,21 @@ section('Landing page')
   ok(/#0a9d56/i.test(home), '  …closed by the emerald dot')
   ok(!home.includes('<h1'), 'and is not restated as a heading beneath itself')
 
-  // One line underneath saying what the app is. It used to go on to tell you
-  // to tap the buttons below it; the copy review cut that half — the two
-  // buttons sit directly under it and name themselves.
-  ok(/Live scoring, leaderboards and matchplay/i.test(home),
-    'one line says what the app is for')
-  ok(home.includes('/dashboard/create'), 'Create a trip is one of the two')
-  ok(home.includes('/join'), 'Join a trip is the other')
-  ok(/Create a trip/i.test(home) && /Join a trip/i.test(home), 'both are named plainly')
+  // One line underneath saying what the platform is. The enterprise is
+  // Green Dot Live now: leaderboards for any event, golf first — so the
+  // line stopped naming golf.
+  ok(/Live scoring and leaderboards for your event/i.test(home),
+    'one line says what the platform is for')
 
-  // One primary action: creating. Joining is secondary.
+  // The event code goes straight in on the front page — no screen between a
+  // person holding a code and typing it. /join survives for shared links.
+  ok(home.includes('maxLength="6"'), 'the event code is typed straight into the page')
+  ok(/Join Event/i.test(home), 'and joined from it')
+  ok(home.includes('/golf'), 'creating goes through the golf doorway')
+  ok(/Create an Event/i.test(home), 'named plainly')
+
+  // One primary action: joining, which is the box directly above it.
+  // Creating is secondary.
   // Counted as elements, not substrings: "hover:bg-accent-deep" contains
   // "bg-accent" and would double every button.
   // Either green counts: a solid emerald fill is a solid emerald fill
@@ -1801,11 +1807,27 @@ section('Landing page')
   ok(!home.includes('GripItGolf'), 'and the old name is gone')
 }
 
+// ─── The short link ────────────────────────────────────────────
+
+section('A bare code is an address')
+{
+  // greendot.live/GX7K2P. A route rather than a config redirect, because a
+  // config redirect runs before the filesystem and would swallow any future
+  // six-letter page — "tennis" is exactly code-shaped.
+  const short = read('app/[code]/page.tsx')
+  ok(/\^\[A-Za-z0-9\]\{6\}\$/.test(short), 'only a code shape earns a lookup')
+  ok(short.includes('code.toUpperCase()'), 'a typed lowercase code still finds its event')
+  ok(short.includes('redirect(`/trip/${data.trip_code}`)'),
+    'and lands on the hub, which stays the one canonical address')
+  ok(short.includes('notFound()'), 'anything else is a plain 404')
+  ok(/Event not found/.test(short), 'a code nobody owns gets the calm answer, not a 404')
+}
+
 // ─── Everywhere else ───────────────────────────────────────────
 
 section('The old branding is gone')
 {
-  eq(SITE.name, 'Green Dot Golf', 'the site config still names the app')
+  eq(SITE.name, 'Green Dot Live', 'the site config names the enterprise')
 
   const layout = read('app/layout.tsx')
   ok(layout.includes('green dot.'), 'the browser tab carries the wordmark')
@@ -1898,7 +1920,7 @@ section('Nothing has to be finalised before it can be played')
   const picker = read('app/trip/[tripCode]/scoring/page.tsx')
   ok(/\(rounds \?\? \[\]\)\.length === 0 &&/.test(picker),
     'the round picker answers for a trip with no rounds')
-  ok(picker.includes('No rounds set up for this trip yet'),
+  ok(picker.includes("No rounds set up for this {event ? 'event' : 'trip'} yet"),
     '  …in words, which is the only lock left on scoring')
 
   const status = stripComments(read('lib/tripStatus.ts'))

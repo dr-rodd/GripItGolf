@@ -7,6 +7,16 @@ import BackButton from '@/app/components/BackButton'
 import TripTeamsClient from './TripTeamsClient'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
+import PasscodeGate from '../setup/PasscodeGate'
+import TeamsModeSwitch from './TeamsModeSwitch'
+import TeamJoinClient from './TeamJoinClient'
+import TagJoinClient from './TagJoinClient'
+import { isLocked } from '@/lib/passcode'
+import { isEvent } from '@/lib/eventHub'
+import { parseEventPermissions } from '@/lib/eventPermissions'
+import { eventTags } from '@/lib/tagBoards'
+import { fetchTripKind } from '../kind'
+import { linkedPlayerId } from '@/lib/currentPlayer'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,18 +36,24 @@ export default async function TripTeamsPage({
 }) {
   const { tripCode } = await params
 
-  const { data: trip, error: tripError } = await supabase
-    .from('trips')
-    .select('id, trip_code, name, formats, leaderboards, team_scoring')
-    .eq('trip_code', tripCode)
-    .single()
+  // The kind alongside, not inside: a named `kind` would fail this select
+  // on an un-migrated database — the note on fetchTripKind.
+  const [kind, { data: trip, error: tripError }] = await Promise.all([
+    fetchTripKind(tripCode),
+    supabase
+      .from('trips')
+      .select('id, trip_code, name, formats, leaderboards, team_scoring, settings_passcode_hash')
+      .eq('trip_code', tripCode)
+      .single(),
+  ])
+  const event = isEvent(kind)
 
   if (tripError) console.error('TripTeamsPage trip query failed:', tripError)
   if (!trip) notFound()
 
   const boards = boardsForTrip(trip)
 
-  const [teamsRes, playersRes, memberships] = await Promise.all([
+  const [teamsRes, playersRes, memberships, viewerPlayerId, permsRes] = await Promise.all([
     supabase.from('teams')
       .select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
     supabase
@@ -47,6 +63,16 @@ export default async function TripTeamsPage({
       .eq('is_composite', false)
       .order('name'),
     fetchMemberships(trip.id),
+    // Who this device claims to be — the join screen's identity. A stranger
+    // is an ordinary answer, pointed at the players screen.
+    linkedPlayerId(tripCode),
+    // Its own query, never the main select: pre-049 the column does not
+    // exist, this errors, and self-assign simply reads at its default off.
+    supabase
+      .from('trips')
+      .select('event_permissions')
+      .eq('id', trip.id)
+      .single(),
   ])
 
   if (teamsRes.error) console.error('TripTeamsPage teams query failed:', teamsRes.error)
@@ -59,7 +85,7 @@ export default async function TripTeamsPage({
     team_set: (t.team_set as string | null) ?? MAIN_SET,
   }))
 
-  return (
+  const screen = (
     <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
       <TripHeader backTo={`/trip/${tripCode}`} />
       <div className="bg-cream border-b border-bark/12">
@@ -89,4 +115,89 @@ export default async function TripTeamsPage({
       <SupportLink className="px-4 pb-12" />
     </div>
   )
+
+  // On a trip, teams are the group's to argue over — no gate. On an event
+  // they are the organiser's, behind the PIN — unless the field has been
+  // given something to do for itself, in which case it gets the join
+  // screen without a PIN in the way and the organiser reaches the full
+  // editor through the inline unlock. One PIN, one session memory,
+  // whichever door it enters by.
+  //
+  // Two standing grants, and they are different verbs. A team board's
+  // `teamPick: 'self'` lets the field FORM teams on that board's sheet;
+  // `assign_tag` lets a claimed player JOIN one of the organiser's tags
+  // (lib/tagBoards.ts). Either one opens the join face; both showing is
+  // simply both jobs on one screen, tag first because it is the one that
+  // lasts the week.
+  const selfPick = boards.some(b => b.audience === 'team' && b.teamPick === 'self')
+  const tags = eventTags(teams)
+  const mayPickTag = event
+    && tags.length > 0
+    && parseEventPermissions(
+      (permsRes.data as { event_permissions?: unknown } | null)?.event_permissions
+    ).assign_tag
+
+  if (event && isLocked(trip.settings_passcode_hash as string | null)) {
+    if (selfPick || mayPickTag) {
+      const join = (
+        <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
+          <TripHeader backTo={`/trip/${tripCode}`} />
+          <div className="bg-cream border-b border-bark/12">
+            <div className="max-w-3xl mx-auto px-4 py-4 text-center">
+              <h1 className="font-[family-name:var(--font-display)] text-lg text-ink tracking-wide">
+                Teams
+              </h1>
+            </div>
+          </div>
+          <div className="max-w-3xl mx-auto px-4 py-6 flex flex-col gap-8">
+            {mayPickTag && (
+              <TagJoinClient
+                tripId={trip.id}
+                tripCode={tripCode}
+                tags={tags}
+                players={(playersRes.data ?? []) as { id: string; name: string }[]}
+                memberships={memberships}
+                viewerPlayerId={viewerPlayerId}
+              />
+            )}
+            {selfPick && (
+              <TeamJoinClient
+                tripId={trip.id}
+                tripCode={tripCode}
+                boards={boards}
+                teams={teams}
+                players={(playersRes.data ?? []) as {
+                  id: string; name: string; handicap: number | null; gender: string
+                }[]}
+                memberships={memberships}
+                viewerPlayerId={viewerPlayerId}
+              />
+            )}
+          </div>
+        </div>
+      )
+      return (
+        <TeamsModeSwitch
+          tripCode={tripCode}
+          passcodeHash={trip.settings_passcode_hash as string}
+          editor={screen}
+          join={join}
+        />
+      )
+    }
+
+    return (
+      <PasscodeGate
+        tripCode={tripCode}
+        tripName={trip.name}
+        passcodeHash={trip.settings_passcode_hash as string}
+        title="Organisers only"
+        hint={`Enter the organiser PIN for ${trip.name}.`}
+      >
+        {screen}
+      </PasscodeGate>
+    )
+  }
+
+  return screen
 }

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   IconHome, IconTrophy, IconClipboardList, IconSettings, IconChartBar,
+  IconClock,
 } from './icons'
 
 /**
@@ -41,6 +42,10 @@ const ITEMS = [
   { key: 'leaderboard', label: 'Leaderboard', icon: IconTrophy,        path: (t: string) => `/trip/${t}/leaderboard` },
   { key: 'stats',       label: 'Stats',       icon: IconChartBar,      path: (t: string) => `/trip/${t}/stats` },
   { key: 'settings',    label: 'Trip Setup',  icon: IconSettings,      path: (t: string) => `/trip/${t}/setup` },
+  // Events only, at the right — where Trip Setup stands on a trip. A trip
+  // never shows it: tee times are competition furniture, and the trip bar
+  // is the five tabs it has always been.
+  { key: 'teesheet',    label: 'Tee Sheet',   icon: IconClock,         path: (t: string) => `/trip/${t}/teesheet` },
 ] as const
 
 /**
@@ -111,9 +116,24 @@ function Tab({
   )
 }
 
-export default function TabBar({ tripCode }: { tripCode: string }) {
+export default function TabBar({ tripCode, isEvent = false }: {
+  tripCode: string
+  /**
+   * An event's field never sees Trip Setup — the organiser reaches it
+   * through the organiser area, behind the PIN, where the rest of the
+   * running of the event already lives. Four tabs then; the leaderboard
+   * still holds the centre of what remains. Decided by the layout, which
+   * is the one place that knows the kind before the bar first paints.
+   */
+  isEvent?: boolean
+}) {
   const pathname = usePathname() ?? ''
   const base = `/trip/${tripCode}`
+
+  // An event trades Trip Setup for the tee sheet; a trip keeps its five.
+  const items = isEvent
+    ? ITEMS.filter(i => i.key !== 'settings')
+    : ITEMS.filter(i => i.key !== 'teesheet')
 
   /**
    * Which tab is lit.
@@ -128,6 +148,7 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
     if (pathname.startsWith(`${base}/leaderboard`)) return 'leaderboard'
     if (pathname.startsWith(`${base}/scoring`)) return 'scoring'
     if (pathname.startsWith(`${base}/stats`)) return 'stats'
+    if (pathname.startsWith(`${base}/teesheet`)) return 'teesheet'
     if (pathname.startsWith(`${base}/setup`) || pathname.startsWith(`${base}/teams`)) return 'settings'
     // Players, matchplay and anything else: no tab claims it rather than a
     // wrong one being lit.
@@ -136,7 +157,10 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-bark/12"
+      // print:hidden — navigation has no business on paper. The export page
+      // is what makes this real: it prints the trip to PDF, and the bar was
+      // otherwise pinned across the bottom of every page of it.
+      className="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-bark/12 print:hidden"
       // The bar occupies exactly what it shows: its height plus the home
       // indicator's inset, and not a pixel of paint beyond the viewport.
       //
@@ -153,7 +177,7 @@ export default function TabBar({ tripCode }: { tripCode: string }) {
       aria-label="Trip"
     >
       <ul className="max-w-lg mx-auto grid grid-cols-5">
-        {ITEMS.map(item => {
+        {items.map(item => {
           const active = activeKey === item.key
           const Icon = item.icon
           return (

@@ -124,6 +124,13 @@ interface Props {
    */
   trackStats?: boolean
   /**
+   * Whether the summary screen offers Edit Scorecard. Always true on a
+   * trip; an event answers from its organiser's permissions
+   * (lib/eventPermissions.ts, `edit_scores`). Hole-by-hole scoring is
+   * untouched either way.
+   */
+  allowScoreEdits?: boolean
+  /**
    * The trip this screen belongs to, for the card check on the pick-player
    * screen — it scopes the re-score of committed cards after a correction.
    * The legacy /scoring/[slug] route has no trip and leaves it unset.
@@ -139,7 +146,7 @@ export default function CourseDashboardClient({
   courseName, courseId, players, rounds, holes, tees, roundHandicaps,
   backHref = "/scoring", roundId, stickyTop = 0,
   allowances = [FULL_ALLOWANCE], allowanceStart = 0, quotaScale = null,
-  bottomInset = "0", trackStats = false, tripCode,
+  bottomInset = "0", trackStats = false, tripCode, allowScoreEdits = true,
 }: Props) {
   // The course card, held as state rather than read straight off the props:
   // the card check on the pick-player screen can correct it against a photo
@@ -419,49 +426,36 @@ export default function CourseDashboardClient({
     setSettingsWorking(true)
     setSettingsError(null)
     try {
-      const { data: allRounds, error: fetchErr } = await supabase
+      // This round's cards, each voided through the one void path — never
+      // the course's. It used to collect every live round ever opened on
+      // this course — across every trip that ever played it, closed and
+      // finalised cards included — pool their players, and delete committed
+      // scores and handicap snapshots for the lot. That is how a different
+      // trip's round lost its data (August 2026): two trips shared a course,
+      // and a void pressed on one erased the other's signed cards. The
+      // round id is the boundary a void must never cross, and a screen that
+      // does not know its round has nothing it may void.
+      if (!roundId) {
+        setSettingsError("Could not tell which round this is — open scoring from the trip and try again.")
+        return
+      }
+      const { data: cards, error: fetchErr } = await supabase
         .from("live_rounds")
         .select("id, round_id")
-        .eq("course_id", courseId)
-
+        .eq("round_id", roundId)
       if (fetchErr) throw fetchErr
 
-      const lrIds = (allRounds ?? []).map(r => r.id as string)
-      const rIds  = [...new Set((allRounds ?? []).map(r => r.round_id as string))]
-
-      if (lrIds.length > 0) {
-        // Collect player IDs from locks so we can remove their committed scores
-        const { data: lockData } = await supabase
-          .from("live_player_locks")
-          .select("player_id")
-          .in("live_round_id", lrIds)
-        const playerIds = [...new Set((lockData ?? []).map((l: any) => l.player_id as string))]
-
-        // Delete committed scores and handicaps from official tables (finalised scorecards)
-        if (playerIds.length > 0 && rIds.length > 0) {
-          const scoreDeletes = rIds.flatMap(rid => [
-            supabase.from("scores").delete().eq("round_id", rid).in("player_id", playerIds),
-            supabase.from("round_handicaps").delete().eq("round_id", rid).in("player_id", playerIds),
-          ])
-          await Promise.all(scoreDeletes)
+      for (const card of cards ?? []) {
+        const failure = await voidScorecardData(card.id as string, card.round_id as string)
+        if (failure) {
+          setSettingsError(`Could not void a scorecard${why(failure)}`)
+          return
         }
-
-        // Delete live data
-        await Promise.all([
-          supabase.from("live_player_locks").delete().in("live_round_id", lrIds),
-          rIds.length > 0 ? supabase.from("live_scores").delete().in("round_id", rIds) : Promise.resolve(),
-        ])
-
-        const { error: deleteErr } = await supabase
-          .from("live_rounds")
-          .delete()
-          .in("id", lrIds)
-        if (deleteErr) throw deleteErr
       }
 
       setSettingsVoidSession(false)
-    } catch (e: any) {
-      setSettingsError(e?.message ?? "Could not void that card — try again")
+    } catch {
+      setSettingsError("Could not void the round's scorecards — try again.")
     } finally {
       setSettingsWorking(false)
       fetchScorecards()
@@ -966,7 +960,16 @@ export default function CourseDashboardClient({
                     </button>
                   ) : (
                     <div className="border border-rust/40 bg-rust/[0.08] rounded-xl px-4 py-4 space-y-3">
-                      <p className="text-ink/80 text-base">This will delete all scorecards, scores, and player locks for {courseName}. This cannot be undone.</p>
+                      {/* Named to what it actually does: this round, on this
+                          trip — never the course, which is shared. The old
+                          wording promised the course and the old code
+                          delivered it, across every trip that played here. */}
+                      <p className="text-ink/80 text-base">
+                        This voids every scorecard on{' '}
+                        {courseRoundsForFlow[0]
+                          ? `Round ${courseRoundsForFlow[0].round_number} — ${courseName}`
+                          : courseName} and erases their scores. This cannot be undone.
+                      </p>
                       <div className="flex gap-2">
                         <button
                           onClick={() => setSettingsVoidSession(false)}
@@ -1010,6 +1013,7 @@ export default function CourseDashboardClient({
           allowances={allowances}
           quotaScale={quotaScale}
           trackStats={trackStats}
+          allowScoreEdits={allowScoreEdits}
           onBack={goBack}
           onLiveRoundChange={r => {
             setScoringLiveRound(r)

@@ -156,7 +156,76 @@ export type Leaderboard = {
    * because there the total is that one card.
    */
   overallTie?: OverallTie
+
+  /**
+   * Team boards on an event only — whether teammates occupy one tee-sheet
+   * slot together, or may go out in separate slots contributing to the same
+   * board. Absent means together, because partners almost always play
+   * together; only 'separate' is stored. The tee sheet reads it to decide
+   * whether adding one member books the pair (lib/teeSheet.ts) — a trip,
+   * having no tee sheet, never asks and never stores it.
+   */
+  teeTeams?: 'separate'
+
+  /**
+   * Team boards on an event only — teams formed by criteria, with the
+   * players choosing their own. Absent means the organiser assigns them,
+   * which is what every board did before the question. With 'self', teams
+   * are made and joined from the teams screen without the PIN, sized by
+   * `teamSize`, and named from their members.
+   */
+  teamPick?: 'self'
+
+  /**
+   * `teamPick: 'self'` only — how many players make a team. Clamped 2–4
+   * when the board's teammates share a tee time (no `teeTeams:
+   * 'separate'`), because a group is at most four; 2–8 when members may
+   * play apart. `lib/teamLimits.ts` `teamSizeLimit` is what enforces it —
+   * the one copy of every team-size cap.
+   */
+  teamSize?: number
+
+  /**
+   * Events only — this board ranks TAGS, and this is how a tag's score for
+   * a round is built from its players' cards.
+   *
+   * A tag is the side a player carries all week while the fourballs change
+   * daily (lib/tagBoards.ts). Its board is a team board wearing this: the
+   * teams it ranks are the tags, on the main sheet, and only the round
+   * score is built differently. Absent means an ordinary team board, which
+   * is every board ever stored — so nothing already running changes.
+   */
+  tagMode?: TagMode
+
+  /**
+   * `tagMode: 'best_cards'` only — how many of the tag's cards count each
+   * round. Absent reads as `DEFAULT_TAG_COUNT`.
+   */
+  tagCount?: number
+
+  /**
+   * Which rounds this board counts. Absent means every one of them, which
+   * is what every board stored before this existed means — so nothing
+   * already running changes.
+   *
+   * This is what lets one day carry its own format: Day 1 singles
+   * Stableford, Day 2 fourball better ball, each a board scoped to its own
+   * round, with the overall board scoped to none of them and counting the
+   * lot. Round **ids** rather than day numbers, because a day added,
+   * removed or reordered must not silently re-point a board at somebody
+   * else's golf — and because these boards are made after the rounds
+   * exist, in the organiser area, where the ids are to hand.
+   *
+   * An id matching no round simply matches nothing: the board draws no
+   * column for it, which is the honest thing rather than a repair.
+   */
+  roundIds?: string[]
 }
+
+/** The size bounds a self-picked team may take — see `teamSize`. */
+export const MIN_TEAM_SIZE = 2
+export const MAX_TEAM_SIZE_TOGETHER = 4
+export const MAX_TEAM_SIZE_SEPARATE = 8
 
 export const MAX_DISCARD = 2
 
@@ -214,6 +283,95 @@ export const COMBINES: { key: Combine; label: string; hint: string }[] = [
     hint: 'You decide what winning a round is worth.' },
 ]
 
+// ─── Tags ──────────────────────────────────────────────────────
+//
+// A tags board is a team board wearing a `tagMode`. Not a third audience:
+// every predicate on the platform that matters — `needsTeams`,
+// `sheetsInUse`, `finaliseBlockedReason`, the sorting, the tabs — switches
+// on `audience === 'team'` and already does the right thing for a tag, and
+// a new audience would mean auditing all of them for a value they have
+// never seen. What the mode changes is only how the round score is built.
+//
+// The registry lives here beside the other board options, and the tag's
+// own rules — which sheet it lives on, who carries one, how the counting
+// cards are chosen — live in lib/tagBoards.ts. That split is not taste:
+// tagBoards has to read team membership, this file is read BY teamSets,
+// and putting the registry there closes the ring.
+//
+// Note what is NOT a mode: paying by finishing position each day. That is
+// `combine: 'position'`, which every league board has always had, with the
+// tie rules and the prize table intact. A mode for it would be a second
+// copy of maths that already works.
+
+/** How a tag's score for one round is built from its players' cards. */
+export type TagMode = 'best_cards' | 'all_cards' | 'day_teams'
+
+export const TAG_MODES: { key: TagMode; label: string; hint: string }[] = [
+  // Hints carry a full stop: `boardRules` joins them into the line under a
+  // saved board's title, the same contract every other registry here keeps.
+  { key: 'best_cards', label: 'Best few cards each round',
+    hint: 'The tag\'s best cards count each round — you choose how many.' },
+  { key: 'all_cards', label: 'Every card counts',
+    hint: 'Every player\'s round counts towards their tag.' },
+  { key: 'day_teams', label: 'The day\'s team cards',
+    hint: 'Each team\'s card counts towards the tag its players share.' },
+]
+
+/**
+ * Every mode that can be read back.
+ *
+ * Kept as its own list because the two questions — what the parser
+ * understands, and what the form offers — are genuinely different, and a
+ * mode retired later has to go on reading back for the events already on
+ * it. `ALL_TEAM_FORMATS` is the same shape for the same reason.
+ */
+export const ALL_TAG_MODES: { key: TagMode; label: string; hint: string }[] = [
+  ...TAG_MODES,
+]
+
+/** How many cards count, when the mode counts a few. Absent reads as two. */
+export const DEFAULT_TAG_COUNT = 2
+export const MAX_TAG_COUNT = 8
+
+/**
+ * Is this board ranking tags?
+ *
+ * Takes a partial so the settings form can ask it of a draft mid-cascade,
+ * the way every `offersX` predicate does.
+ */
+export function isTagBoard(lb: Partial<Pick<Leaderboard, 'audience' | 'tagMode'>>): boolean {
+  return lb.audience === 'team' && !!lb.tagMode
+}
+
+/**
+ * Is this event playing for tags at all?
+ *
+ * Asked of the boards, not of the tags: an organiser part-way through
+ * making tags has not yet decided anything is played for them, and a gate
+ * that slammed shut on the first tag created would be refusing the tee
+ * sheet to a field whose event does not rank tags. A board is the moment a
+ * tag starts to mean something.
+ */
+export function tagsInPlay(boards: readonly Leaderboard[]): boolean {
+  return boards.some(isTagBoard)
+}
+
+/** How many of a tag's cards count. Absent reads as the default. */
+export function tagCountOf(lb: Pick<Partial<Leaderboard>, 'tagCount'>): number {
+  return lb.tagCount ?? DEFAULT_TAG_COUNT
+}
+
+/** The line saying how a tag's score is built — `boardRules` uses it. */
+export function describeTagMode(lb: Pick<Partial<Leaderboard>, 'tagMode' | 'tagCount'>): string {
+  if (lb.tagMode === 'best_cards') {
+    const n = tagCountOf(lb)
+    return n === 1
+      ? 'The tag\'s best card counts each round.'
+      : `The tag's best ${n} cards count each round.`
+  }
+  return ALL_TAG_MODES.find(m => m.key === lb.tagMode)?.hint ?? ''
+}
+
 // ─── Which boards can exist ────────────────────────────────────
 
 /**
@@ -227,7 +385,7 @@ export const COMBINES: { key: Combine; label: string; hint: string }[] = [
  * Matchplay is not keyed on anything: one draw is a draw, and a second would
  * be a different tournament rather than a second view of this one.
  */
-export function slotKey(lb: Pick<Leaderboard, 'audience' | 'competition' | 'scoring' | 'teamFormat' | 'combine' | 'teamSet'>): string {
+export function slotKey(lb: Pick<Leaderboard, 'audience' | 'competition' | 'scoring' | 'teamFormat' | 'combine' | 'teamSet' | 'tagMode' | 'roundIds'>): string {
   if (lb.competition === 'matchplay') return 'matchplay'
   return [
     lb.audience,
@@ -239,13 +397,22 @@ export function slotKey(lb: Pick<Leaderboard, 'audience' | 'competition' | 'scor
     // better ball between the fours and better ball between the pairings are
     // two tables, not one shown twice.
     lb.audience === 'team' ? lb.teamSet || 'main' : '-',
+    // A tags board and an ordinary team board both stand on the main sheet
+    // and would otherwise key the same, yet they rank different things from
+    // the same cards — the sides, and the teams. Two tables.
+    lb.audience === 'team' && lb.tagMode ? `tag-${lb.tagMode}` : '-',
+    // Stableford over Day 1 and Stableford over Day 2 are two competitions
+    // — the whole point of per-day formats — and Stableford over the week
+    // is a third. Sorted, because which order the days were ticked in is
+    // not part of what the board is.
+    lb.roundIds?.length ? [...lb.roundIds].sort().join('+') : '-',
   ].join(':')
 }
 
 /** Is this competition still free, given what the trip already runs? */
 export function isSlotFree(
   existing: readonly Leaderboard[],
-  candidate: Pick<Leaderboard, 'audience' | 'competition' | 'scoring' | 'teamFormat' | 'combine' | 'teamSet'>,
+  candidate: Parameters<typeof slotKey>[0],
 ): boolean {
   const key = slotKey(candidate)
   return !existing.some(lb => slotKey(lb) === key)
@@ -357,7 +524,9 @@ export function unanswered(draft: Partial<Leaderboard>): string[] {
 
   const missing: string[] = []
   if (!draft.scoring) missing.push('How a round is scored')
-  if (draft.audience === 'team' && !draft.teamFormat) {
+  // A tag counting whole cards combines nothing hole by hole, so the team
+  // format is not a question it has — see `offersTeamFormat`.
+  if (draft.audience === 'team' && offersTeamFormat(draft) && !draft.teamFormat) {
     missing.push('How a team\'s players combine')
   }
   if (!draft.combine) missing.push('How the rounds add up')
@@ -408,6 +577,32 @@ export function offersTieBreak(draft: Partial<Leaderboard>): boolean {
  */
 export function offersQuotaScale(draft: Partial<Leaderboard>): boolean {
   return draft.competition === 'league' && draft.scoring === 'quota'
+}
+
+/**
+ * Whether to ask how a team's players combine.
+ *
+ * Every ordinary team board — and the one tags mode that really does score
+ * a team's card. A tag counting whole cards has no composite to build: its
+ * unit is the round somebody went round in, so asking how the holes
+ * combine would be asking about maths the board never does.
+ */
+export function offersTeamFormat(draft: Partial<Leaderboard>): boolean {
+  if (draft.competition !== 'league' || draft.audience !== 'team') return false
+  return !draft.tagMode || draft.tagMode === 'day_teams'
+}
+
+/**
+ * Whether to ask how a tag's round score is built. Only a tags board, and
+ * only once it knows what it is scoring.
+ */
+export function offersTagMode(draft: Partial<Leaderboard>): boolean {
+  return draft.competition === 'league' && isTagBoard(draft) && !!draft.scoring
+}
+
+/** Whether to ask how many of a tag's cards count. Only the mode that counts a few. */
+export function offersTagCount(draft: Partial<Leaderboard>): boolean {
+  return offersTagMode(draft) && draft.tagMode === 'best_cards'
 }
 
 /**
@@ -486,8 +681,95 @@ export function tripQuotaScale(boards: readonly Leaderboard[]): QuotaScale {
  * lib/handicapAllowance.ts says why.
  */
 export function offersAllowance(draft: Partial<Leaderboard>): boolean {
+  return knowsWhatItScores(draft)
+}
+
+/**
+ * Has this board said enough about itself to be asked the rest?
+ *
+ * The later questions — how the rounds add up, what allowance it plays off
+ * — all wait on the same thing: the board knowing what one round of it is
+ * worth. A solo board knows that from its scoring; an ordinary team board
+ * needs its format too, because a composite card is not a card until you
+ * say how it is built; **a tags board knows it from its mode**, and has no
+ * team format to wait for.
+ *
+ * One predicate rather than the condition written out at each question,
+ * because it was written out twice and the second copy did not know about
+ * tags: the combine question never appeared for a tags board, while
+ * `unanswered` went on demanding the answer. The board could not be
+ * finished and the form could not say why.
+ */
+export function knowsWhatItScores(draft: Partial<Leaderboard>): boolean {
   if (draft.competition !== 'league' || !draft.scoring) return false
+  if (isTagBoard(draft)) return !!draft.tagMode
   return draft.audience === 'individual' || !!draft.teamFormat
+}
+
+/** Whether to ask how the rounds add up. */
+export function offersCombine(draft: Partial<Leaderboard>): boolean {
+  return knowsWhatItScores(draft)
+}
+
+/**
+ * Whether to ask how a team meets the tee sheet.
+ *
+ * Any team board — a league's pairs and a draw's pairings both stand on
+ * tee times — but only where a tee sheet exists to meet, which is an
+ * event: the form passes that context in, because this model deliberately
+ * does not know what kind of trip is asking.
+ */
+export function offersTeeTeams(draft: Partial<Leaderboard>): boolean {
+  // Not a tags board: a tag is not seated together and is not formed by
+  // its members. Its players meet the tee sheet in whatever teams the day
+  // puts them in, which is the tee sheet's own question, not the board's.
+  return draft.audience === 'team' && !!draft.competition && !draft.tagMode
+}
+
+/**
+ * The board that governs one round's own play, if there is one.
+ *
+ * A board scoped to exactly that round (`roundIds`) is that day's
+ * competition — what format the day is played in, and therefore what the
+ * tee sheet is arranging people into. Scoped to exactly it, never merely
+ * including it: a board counting Days 1 and 2 together is not Day 1's
+ * format, it is a competition spanning both.
+ *
+ * The first such board wins. An event with two boards on one day has two
+ * competitions over the same golf, and the day is played once — so the
+ * team one leads, because that is the one with a shape to arrange.
+ */
+export function dayBoardFor(
+  boards: readonly Leaderboard[],
+  roundId: string,
+): Leaderboard | null {
+  const scoped = boards.filter(b =>
+    b.competition === 'league'
+    && b.roundIds?.length === 1
+    && b.roundIds[0] === roundId)
+  return scoped.find(b => b.audience === 'team') ?? scoped[0] ?? null
+}
+
+/**
+ * The board whose teams a round is played in.
+ *
+ * The day's own team board when it has one — its teams are that day's
+ * fourballs, on that day's sheet — and otherwise the event's team board,
+ * whose teams stand for the whole week. This is the one copy of that
+ * order, so the tee sheet, the grouping and the scoring cannot disagree
+ * about whose teams a slot is showing.
+ *
+ * A tags board is never it: a tag is not a playing group, and grouping a
+ * tee sheet by tag would put twelve people in a fourball.
+ */
+export function teamBoardForRound(
+  boards: readonly Leaderboard[],
+  roundId: string,
+): Leaderboard | null {
+  const day = dayBoardFor(boards, roundId)
+  if (day && day.audience === 'team' && !day.tagMode) return day
+  return boards.find(b =>
+    b.audience === 'team' && !b.tagMode && !b.roundIds?.length) ?? null
 }
 
 /** Whether this board needs teams picked before the trip can go live. */
@@ -512,7 +794,13 @@ export function boardTitle(lb: Leaderboard): string {
   }
   const scoring = SCORINGS.find(s => s.key === lb.scoring)?.label ?? 'League'
   const format = ALL_TEAM_FORMATS.find(f => f.key === lb.teamFormat)?.label ?? 'Team'
-  const base = lb.audience === 'individual' ? scoring : `Team ${format.toLowerCase()}`
+  // A tags board is named for what it ranks, then how. "Team better ball"
+  // beside it would be two tabs both reading as teams, when one of them is
+  // the sides. The scoring rather than the mode, because a tag reads whole
+  // individual cards — the same thing a solo board is named after.
+  const base = isTagBoard(lb) ? `Tags — ${scoring}`
+    : lb.audience === 'individual' ? scoring
+    : `Team ${format.toLowerCase()}`
   // The same scoring totalled and paid by position are two boards, so the tab
   // has to tell them apart — an order of merit and a daily prize would
   // otherwise sit side by side under one name.
@@ -529,7 +817,10 @@ export function boardRules(lb: Leaderboard): string {
   }
 
   const parts: string[] = []
-  if (lb.audience === 'team') {
+  // A tags board says how a tag's score is built — the count included,
+  // because how many cards count is the whole of what the board is.
+  if (isTagBoard(lb)) parts.push(describeTagMode(lb))
+  if (lb.audience === 'team' && lb.teamFormat) {
     // Better ball states its count and its finish rather than its hint — how
     // many scores make the composite card is the whole of what the format is.
     parts.push(lb.teamFormat === 'better_ball'
@@ -674,22 +965,46 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
       }
 
       if (audience === 'team') {
-        const teamFormat = ALL_TEAM_FORMATS.find(f => f.key === r.teamFormat)?.key
-        if (!teamFormat) continue
-        lb.teamFormat = teamFormat
+        // A tags board first, because it changes what else is required of
+        // one. Read only here — on a team league board — so `tagMode`
+        // scribbled onto a draw or an individual board is ignored rather
+        // than half-honoured.
+        const tagMode = ALL_TAG_MODES.find(m => m.key === r.tagMode)?.key
+        if (tagMode) {
+          lb.tagMode = tagMode
+          // Only the mode that counts a few carries a count, and it is kept
+          // off when it is the default — the same rule `countingScores`
+          // keeps, for the same reason.
+          if (tagMode === 'best_cards' && Number.isFinite(Number(r.tagCount))) {
+            const n = clamp(r.tagCount, 1, MAX_TAG_COUNT)
+            if (n !== DEFAULT_TAG_COUNT) lb.tagCount = n
+          }
+        }
+
+        // A tag counting whole cards has no composite card to build, so it
+        // needs no team format and carries none — one stored on such a
+        // board would only turn up in its title saying something untrue.
+        // The day-teams mode does have a real team card, and an ordinary
+        // team board has always needed one: without a format there is no
+        // maths, so it is dropped rather than guessed at.
+        if (!tagMode || tagMode === 'day_teams') {
+          const teamFormat = ALL_TEAM_FORMATS.find(f => f.key === r.teamFormat)?.key
+          if (!teamFormat) continue
+          lb.teamFormat = teamFormat
+        }
 
         // Only better ball counts scores on a hole, and kept off the object
         // when it is the default — absent reads as 2, so a board stored
         // before the question existed is byte-for-byte what it always was
         // and is scored the way it always was.
-        if (teamFormat === 'better_ball' && Number.isFinite(Number(r.countingScores))) {
+        if (lb.teamFormat === 'better_ball' && Number.isFinite(Number(r.countingScores))) {
           const counting = clamp(r.countingScores, 1, MAX_COUNTING_SCORES)
           if (counting !== DEFAULT_TEAM_SCORING.countingScores) lb.countingScores = counting
         }
 
         // The grandstand finish is better ball's too, and kept off when it is
         // off — no board had one before the question existed.
-        if (teamFormat === 'better_ball' && Number.isFinite(Number(r.aggregateFinish))) {
+        if (lb.teamFormat === 'better_ball' && Number.isFinite(Number(r.aggregateFinish))) {
           const finish = clamp(r.aggregateFinish, 0, 18)
           if (finish > 0) lb.aggregateFinish = finish
         }
@@ -703,7 +1018,49 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
     // Which teams it is played by. A board stored before sheets existed has
     // none, and is on the trip's only sheet — which is what 'main' is.
     if (audience === 'team') {
-      lb.teamSet = typeof r.teamSet === 'string' && r.teamSet ? r.teamSet : 'main'
+      // A tags board is pinned to the tag sheet, whatever it was stored
+      // with. The sheet is not a choice there: it is the one every
+      // coloured dot on the platform already reads, and a tags board
+      // pointed anywhere else would rank teams nobody had tagged.
+      // 'main' spelled out, as it already is on the line below: this file
+      // cannot import lib/tagBoards.ts's `TAG_SET` without closing the
+      // ring through lib/teamSets.ts, and that file's own `MAIN_SET` is
+      // the same string by construction.
+      lb.teamSet = lb.tagMode ? 'main'
+        : typeof r.teamSet === 'string' && r.teamSet ? r.teamSet : 'main'
+
+      // The tee-sheet and self-pick questions belong to a playing team, not
+      // to a tag. A tag is not seated together and is not formed by its
+      // members — it is the organiser's grouping, joined at most through
+      // the `assign_tag` permission — so those answers are left behind
+      // rather than carried where they would gate the wrong thing.
+      if (!lb.tagMode) {
+        // Whether teammates share a tee-sheet slot. Only the non-default is
+        // worth a key: absent means together, which is what every board did
+        // before the sheet could ask.
+        if (r.teeTeams === 'separate') lb.teeTeams = 'separate'
+
+        // Self-picked teams, and their size. The size only means anything
+        // with the pick, and is clamped to what the tee sheet can seat when
+        // teammates share a slot — a group is at most four.
+        if (r.teamPick === 'self') {
+          lb.teamPick = 'self'
+          const cap = lb.teeTeams === 'separate'
+            ? MAX_TEAM_SIZE_SEPARATE : MAX_TEAM_SIZE_TOGETHER
+          const size = Number(r.teamSize)
+          if (Number.isInteger(size)) {
+            lb.teamSize = Math.min(cap, Math.max(MIN_TEAM_SIZE, size))
+          }
+        }
+      }
+    }
+
+    // Which golf this board counts. Stored only when it is a real scope —
+    // an empty list means "every round", which is what absent means, and
+    // two spellings of one answer is one too many.
+    if (competition === 'league') {
+      const scope = roundIdList(r.roundIds)
+      if (scope.length > 0) lb.roundIds = scope
     }
 
     // One draw only, whichever arrives first
@@ -723,3 +1080,9 @@ const clamp = (v: unknown, lo: number, hi: number) => {
 
 const points = (v: unknown): number[] =>
   Array.isArray(v) ? v.map(n => clamp(n, 0, 100)) : []
+
+/** Round ids as stored: real strings, no repeats, junk dropped. */
+const roundIdList = (v: unknown): string[] =>
+  Array.isArray(v)
+    ? [...new Set(v.filter((x): x is string => typeof x === 'string' && !!x))]
+    : []

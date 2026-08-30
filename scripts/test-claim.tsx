@@ -230,11 +230,20 @@ section('Linking a device changes nothing about who is confirmed')
   // And it happens on the tap. There is nothing in between: no dialog, no
   // second button, no state holding a player waiting on a yes. A mis-tap is
   // undone by "Not you?" on the screen it lands on.
+  //
+  // This is about the LINK path only, and it was written as a check against
+  // the whole file back when nothing on the screen asked anything. A first
+  // claim does now — it stops to confirm the handicap, see the section below
+  // — so what is pinned here is that the second-device path did not inherit
+  // it: somebody who has already answered that question is not asked twice.
   const tap = client.slice(client.indexOf('function handleTap'), client.indexOf('async function handleAdd'))
   ok(/isConfirmed\(player\)\)?\s*handleLink\(player\)/.test(tap),
     'a confirmed name links straight away')
-  ok(!/useState[^\n]*linkTarget|linkTarget/.test(client), '  …with nothing held back for a confirmation step')
-  ok(!client.includes('role="dialog"'), '  …and no dialog in the way')
+  const linkFn = client.slice(client.indexOf('function handleLink'), client.indexOf('function handleTap'))
+  ok(!linkFn.includes('setChecking') && !linkFn.includes('HandicapCheck'),
+    '  …with nothing held back for a confirmation step')
+  ok(linkFn.includes('linkDevice(player.id)'),
+    '  …and no dialog in the way — it links and goes')
 
   // "Not you?" reassigns a handset. The player it forgets stays confirmed.
   // It lives on the status block now — the card it used to sit on was
@@ -339,6 +348,64 @@ section('Confirmed and pending are visibly different')
 }
 
 // ─── Late joiners ──────────────────────────────────────────
+
+section('Claiming a name stops to check the handicap')
+{
+  const client = code('app/trip/[tripCode]/players/PlayersClient.tsx')
+
+  // The roster is the lead player's recollection of everybody's handicap.
+  // Claiming is the one moment the right person is holding the phone, so
+  // that is where it is put to them — with the stored figure already in the
+  // box, so agreeing with it costs one tap.
+  const tap = client.slice(client.indexOf('function handleTap'), client.indexOf('async function handleAdd'))
+  ok(tap.includes('setChecking(player)'),
+    'an unclaimed name opens the handicap sheet rather than claiming outright')
+  ok(!/else\s+handleClaim\(player\)\s*$/m.test(tap),
+    '  …so nothing is written before they have answered')
+  ok(client.includes('role="dialog"') && client.includes('aria-modal'),
+    'the sheet says it is one')
+  ok(client.includes('formatHandicap(stored)'),
+    'the stored handicap is already in the box')
+
+  // Confirm and correct are the same write. A phone that is claimed at a
+  // handicap it disagreed with is the state this exists to prevent, so
+  // there is no window in which one has landed and the other has not.
+  const claim = client.slice(client.indexOf('async function handleClaim'), client.indexOf('function handleTap'))
+  ok(/update\(\{\s*claimed: true,\s*\.\.\.\(handicap !== null/.test(claim),
+    'the claim and the correction are one update')
+  ok(claim.includes('syncRoundHandicaps'),
+    'a corrected handicap reaches the rounds through the shared call')
+  ok(claim.indexOf('syncRoundHandicaps') < claim.indexOf('linkDevice'),
+    '  …before they are sent on, so a failure is seen rather than discovered on the course')
+  ok(/handicap !== null/.test(claim),
+    'an unchanged handicap writes no second column and touches no snapshot')
+
+  // The plus sign is the one value that means the opposite of what it looks
+  // like, and it is asked about before it is written — as everywhere else.
+  ok(client.includes('PLUS_HANDICAP_WARNING'), 'a plus handicap is queried first')
+
+  // A failure is said in the sheet. The screen's own error line is down in
+  // the add-yourself form, behind the scrim — reported there, a Confirm that
+  // failed would look like a Confirm that did nothing.
+  const sheet = client.slice(client.indexOf('function HandicapCheck'), client.indexOf('export default function PlayersClient'))
+  ok(sheet.includes('{error}'), 'a failed claim says so inside the sheet')
+
+  // A handicap is required to go on: a player scored off nothing is the
+  // thing this is for. Same bar the add-yourself form already sets.
+  ok(/disabled=\{busy \|\| typed === null\}/.test(client),
+    'Confirm is inert until there is a handicap to confirm')
+
+  // Events are untouched. The organiser entered that field deliberately,
+  // and the field revising it on the way in is their call, not this
+  // screen's — so a claim there is one tap, exactly as it always was.
+  ok(client.includes('askHandicap = true'),
+    'a trip asks by default')
+  ok(/else if \(askHandicap\) setChecking/.test(client) && /else handleClaim\(player, null\)/.test(client),
+    '  …and a screen that does not ask claims straight through')
+  const page = code('app/trip/[tripCode]/players/page.tsx')
+  ok(/askHandicap=\{!isEvent\(kind\)\}/.test(page),
+    'the page asks on a trip and not on an event')
+}
 
 section('A player who joins late gets their round handicaps')
 {

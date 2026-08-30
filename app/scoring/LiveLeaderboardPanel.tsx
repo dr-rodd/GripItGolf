@@ -6,6 +6,7 @@ import BackButton from "@/app/components/BackButton"
 import ScoreShape from "@/app/components/ScoreShape"
 import { scoreTone, TONE_PILL } from "@/lib/leaderboardStyle"
 import { shotsReceived } from "@/lib/boardRows"
+import { boardNames } from "@/lib/displayNames"
 import { type Countback, countbackOf, compareCountback } from "@/lib/tiebreak"
 import { type QuotaScale, quotaPoints, quotaTarget } from "@/lib/quota"
 import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
@@ -34,6 +35,12 @@ interface Player {
   gender: string
   /** Handicap index. Needed to rebuild a course handicap under an allowance. */
   handicap?: number
+  /**
+   * Leaderboard nickname, merged in by the page that fetched the roster —
+   * fail-soft and in its own query, per lib/displayNames.ts. This panel is
+   * a leaderboard, so it prints board names like every other one.
+   */
+  nickname?: string | null
   teams: { name: string; color: string } | null
 }
 
@@ -336,6 +343,14 @@ export default function LiveLeaderboardPanel({
   const courseHoles = holes
     .filter(h => h.course_id === liveRound.course_id)
     .sort((a, b) => a.hole_number - b.hole_number)
+
+  // What this board prints for a player — the one rule every leaderboard
+  // reads (lib/displayNames.ts): their own nickname, else first name,
+  // grown only when first names clash. Worked out over the whole roster so
+  // the clash set matches the trip leaderboard's.
+  const displayNameById = boardNames(
+    players.map(p => ({ id: p.id, name: p.name, nickname: p.nickname ?? null })),
+  )
 
   /**
    * The handicap to show for a player, and the tee it came off.
@@ -749,7 +764,9 @@ export default function LiveLeaderboardPanel({
                     )}
                     {/* No live dot here: the Thru column already says F or a
                         hole count, and a dot beside it would say it twice. */}
-                    <span className="t-card text-ink truncate">{player.name}</span>
+                    <span className="t-card text-ink truncate">
+                      {displayNameById.get(player.id) ?? player.name}
+                    </span>
                   </div>
 
                   {/* Col 3: relative score pill */}

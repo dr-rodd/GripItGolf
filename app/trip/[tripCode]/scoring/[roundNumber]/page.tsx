@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { allowanceCycle } from '@/lib/handicapAllowance'
 import { tripQuotaScale } from '@/lib/leaderboards'
+import { allowsParticipant } from '@/lib/eventPermissions'
 import CourseDashboardClient from '@/app/scoring/[slug]/CourseDashboardClient'
 import TripHeader from '@/app/components/TripHeader'
 import { HEADER_H } from '@/app/components/headerMetrics'
@@ -49,7 +50,7 @@ export default async function TripCoursePage({
 
   const courseId = (thisRound.courses as any).id as string
 
-  const [playersRes, holesRes, teesRes, hcpsRes] = await Promise.all([
+  const [playersRes, holesRes, teesRes, hcpsRes, nicknamesRes] = await Promise.all([
     supabase
       .from('players')
       .select('id, name, role, handicap, gender, is_composite, teams(name, color)')
@@ -79,7 +80,21 @@ export default async function TripCoursePage({
       .from('round_handicaps')
       .select('round_id, player_id, playing_handicap, tee_id')
       .eq('round_id', thisRound.id),
+    // Leaderboard nicknames for the in-play panel, on their own and
+    // fail-soft: naming the column in the players select would fail this
+    // whole screen on a database that has not run migration 047.
+    supabase.from('players').select('id, nickname').eq('trip_id', trip.id),
   ])
+
+  // Merged in code, never in the select — the panel reads `player.nickname`
+  // and pre-047 it is simply null everywhere.
+  const nickById = new Map(
+    ((nicknamesRes.data ?? []) as { id: string; nickname: string | null }[])
+      .map(r => [r.id, r.nickname]),
+  )
+  const players = (playersRes.data ?? []).map(p => ({
+    ...p, nickname: nickById.get(p.id) ?? null,
+  }))
 
   return (
     // The mark is the way back from a scorecard, and the bar is the way
@@ -94,7 +109,7 @@ export default async function TripCoursePage({
       <CourseDashboardClient
         courseName={(thisRound.courses as any).name}
         courseId={courseId}
-        players={(playersRes.data ?? []) as any}
+        players={players as any}
         rounds={(allRounds ?? []) as any}
         holes={(holesRes.data ?? []) as any}
         tees={(teesRes.data ?? []) as any}
@@ -104,6 +119,14 @@ export default async function TripCoursePage({
         // For the card check on the pick-player screen: a correction re-scores
         // this trip's committed cards on this course, and nothing outside it.
         tripCode={tripCode}
+        // The trip came down as select('*'), so kind and permissions ride
+        // free and fail soft — absent columns simply read as a trip with
+        // open access (lib/eventPermissions.ts).
+        allowScoreEdits={allowsParticipant(
+          (trip as { kind?: unknown }).kind,
+          (trip as { event_permissions?: unknown }).event_permissions,
+          'edit_scores',
+        )}
         allowances={allowances.steps}
         allowanceStart={allowances.startIndex}
         // The live panel only offers its Quota tab when one of this trip's

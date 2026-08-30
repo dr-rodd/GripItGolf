@@ -9,7 +9,7 @@
 //
 // Pure. No I/O — lib/itineraryStore.ts is what actually writes.
 
-import type { ItemKind, ItineraryItem, TravelMode } from './itinerary'
+import { dateForDay, type ItemKind, type ItineraryItem, type TravelMode } from './itinerary'
 
 /** An id `ItineraryBuilder` issued locally. Not yet a real database row. */
 export function isTempId(id: string): boolean {
@@ -68,6 +68,12 @@ export type ItemRow = {
   duration_mins: number | null
   activity_name: string | null
   activity_time: string | null
+  /**
+   * Optional in the type because it is optional in the write: `toItemRow`
+   * only names it when an end was actually given, so a database that has
+   * not run migration 048 still takes every row without one.
+   */
+  end_time?: string | null
 }
 
 /**
@@ -98,6 +104,11 @@ export function toItemRow(tripId: string, item: ItineraryItem): ItemRow {
     // failed save rather than a wrong tile.
     activity_name: item.kind === 'activity' ? item.activityName?.trim() || null : null,
     activity_time: item.kind === 'activity' ? item.activityTime || null : null,
+    // Named only when set — the same treatment the casual flags get on
+    // rounds — so every write still lands before migration 048 has run.
+    // Clearing needs no key: the builder edits by remove-and-re-add, and a
+    // re-added item without an end simply inserts without the column.
+    ...(item.kind === 'activity' && item.endTime ? { end_time: item.endTime } : {}),
   }
 }
 
@@ -118,6 +129,9 @@ export function fromItemRow(r: Omit<ItemRow, 'trip_id' | 'id'> & { id: string })
     stayName: r.stay_name, travelMode: r.travel_mode,
     fromPlace: r.from_place, toPlace: r.to_place, durationMins: r.duration_mins,
     activityName: r.activity_name, activityTime: r.activity_time,
+    // Absent from a select that predates migration 048 → undefined → the
+    // item simply has no end, which is also what null means.
+    ...(r.end_time ? { endTime: r.end_time } : {}),
   }
 }
 
@@ -152,4 +166,52 @@ export function touchesLockedGolf(
     return was?.kind === 'golf'
       && (was.courseId !== item.courseId || was.dayIndex !== item.dayIndex)
   })
+}
+
+// ─── Re-dating rounds when the trip moves ─────────────────────
+
+/** A calendar date, and every golf item that now falls on it. */
+export type RoundDateGroup = { date: string; itemIds: string[] }
+
+/**
+ * Where every round's `scheduled_date` should now sit, given the trip's
+ * start date and where its golf sits in the running order.
+ *
+ * A day index is an offset, not a date: move the trip's start date and the
+ * itinerary re-dates itself instantly, because every day header is
+ * `dateForDay(startDate, dayIndex)`. `rounds.scheduled_date` is a stored
+ * column and does not follow on its own — so the hub's countdown, the up-next
+ * card and the round summary all went on quoting the old dates while the
+ * itinerary above them showed the new ones. That is the whole of that bug,
+ * and this is the one copy of what the new dates are.
+ *
+ * Grouped by date rather than listed per item, because a `scheduled_date` is
+ * the same value for every round on a day and one write per day beats one per
+ * round on a phone.
+ *
+ * **Nothing to re-date without a start date.** A trip whose dates were never
+ * set — a series event, by design — has no day zero to count from, and
+ * `dateForDay` rightly answers null for every day. Writing that null back
+ * would erase whatever dates those rounds do carry, so this returns nothing
+ * and the caller writes nothing.
+ *
+ * Temp ids are skipped: nothing the database has not seen yet has a round.
+ */
+export function roundDateGroups(
+  startDate: string | null,
+  golf: readonly { id: string; dayIndex: number }[],
+): RoundDateGroup[] {
+  if (!startDate) return []
+
+  const byDate = new Map<string, string[]>()
+  for (const item of golf) {
+    if (isTempId(item.id)) continue
+    const date = dateForDay(startDate, item.dayIndex)
+    if (!date) continue
+    byDate.set(date, [...(byDate.get(date) ?? []), item.id])
+  }
+
+  return [...byDate.entries()]
+    .map(([date, itemIds]) => ({ date, itemIds }))
+    .sort((a, b) => a.date.localeCompare(b.date))
 }

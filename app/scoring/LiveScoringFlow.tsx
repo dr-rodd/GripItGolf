@@ -162,6 +162,14 @@ interface Props {
    * swaps to the new numbers without a reload.
    */
   onCourseDataUpdated?: (holes: Hole[], tees: Tee[]) => void
+  /**
+   * Whether the summary screen offers Edit Scorecard. An event whose
+   * organiser keeps score edits to themselves passes false and the button
+   * is simply not there (lib/eventPermissions.ts); hole-by-hole entry and
+   * committing are untouched, because scoring the round is what the field
+   * is here to do.
+   */
+  allowScoreEdits?: boolean
 }
 
 type LiveStep = "activate" | "setup" | "holes" | "summary" | "committed" | "resuming"
@@ -453,6 +461,7 @@ export default function LiveScoringFlow({
   trackStats = false,
   tripCode,
   onCourseDataUpdated,
+  allowScoreEdits = true,
 }: Props) {
   const [liveRound, setLiveRound] = useState<ActiveLiveRound | null>(activeLiveRound)
   const [step, setStep] = useState<LiveStep>(
@@ -1886,14 +1895,18 @@ export default function LiveScoringFlow({
 
         {error && <p className="text-rust-deep text-base text-center">{error}</p>}
 
-        {/* Actions */}
+        {/* Actions. Edit Scorecard exists only where the organiser allows
+            it — on an event that keeps edits organiser-side there is
+            nothing to see or reach, and Commit keeps the whole row. */}
         <div className="flex gap-3 pt-1">
+          {allowScoreEdits && (
           <button
             onClick={() => enterEditMode(selectedId)}
             className="flex-1 py-4 border border-bark/12 text-ink/80 text-base tracking-[0.15em] uppercase hover:border-bark/25 transition-colors rounded-xl"
           >
             Edit Scorecard
           </button>
+          )}
           <button
             onClick={handleCommit}
             disabled={saving}

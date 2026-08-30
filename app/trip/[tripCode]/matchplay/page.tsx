@@ -7,7 +7,7 @@ import { MAIN_SET, setOf, teamsOnSheet, membersOf } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { playerEntrant, pairEntrant, type Entrant } from '@/lib/matchplayEntrants'
 import { parseTeamScoring } from '@/lib/teamScoring'
-import { buildRowContext } from '@/lib/rowContext'
+import { buildRowContext, liveRoundPresence, type OpenCard } from '@/lib/rowContext'
 import { readBracket, type MatchReading } from '@/lib/matchResults'
 import { type QuotaScale } from '@/lib/quota'
 import BackButton from '@/app/components/BackButton'
@@ -50,7 +50,7 @@ export default async function MatchplayPage({
   const enabled = hasMatchplay(boards)
   const pairs   = needsPairings(boards)
 
-  const [matchesRes, playersRes, teamsRes, memberships] = await Promise.all([
+  const [matchesRes, playersRes, teamsRes, memberships, nicknamesRes] = await Promise.all([
     supabase
       .from('matchplay_matches')
       .select(
@@ -73,13 +73,23 @@ export default async function MatchplayPage({
       .select('id, name, team_set')
       .eq('trip_id', trip.id),
     fetchMemberships(trip.id),
+    // Leaderboard nicknames, on their own and fail-soft: naming the column
+    // in the players select would fail the draw on a database that has not
+    // run migration 047, and a bracket without nicknames still stands.
+    supabase.from('players').select('id, nickname').eq('trip_id', trip.id),
   ])
 
   if (matchesRes.error) console.error('MatchplayPage matches query failed:', matchesRes.error)
   if (playersRes.error) console.error('MatchplayPage players query failed:', playersRes.error)
   if (teamsRes.error)   console.error('MatchplayPage teams query failed:', teamsRes.error)
 
-  const roster = playersRes.data ?? []
+  const nickById = new Map(
+    ((nicknamesRes.data ?? []) as { id: string; nickname: string | null }[])
+      .map(r => [r.id, r.nickname]),
+  )
+  const roster = (playersRes.data ?? []).map(p => ({
+    ...p, nickname: nickById.get(p.id) ?? null,
+  }))
 
   type RawMatch = Record<string, unknown> & {
     entrant_type?: string | null
@@ -228,8 +238,10 @@ async function readLinkedRounds(
       supabase.from('tees')
         .select('id, slope, course_rating, par')
         .in('course_id', courseIds.length > 0 ? courseIds : [nilId]),
+      // Locks embedded: a vacant card puts nothing in play — the rule is
+      // liveRoundPresence's, in lib/rowContext.ts, same as every reader.
       supabase.from('live_rounds')
-        .select('round_id')
+        .select('round_id, live_player_locks(player_id)')
         .eq('status', 'active')
         .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
     ])
@@ -245,7 +257,8 @@ async function readLinkedRounds(
     liveScores: (liveScoresRes.data ?? []) as never,
     roundHandicaps: (hcpsRes.data ?? []) as never,
     tees: (teesRes.data ?? []) as never,
-    activeRoundIds: (openRes.data ?? []).map(r => r.round_id as string),
+    activeRoundIds:
+      liveRoundPresence((openRes.data ?? []) as unknown as OpenCard[]).activeRoundIds,
     livePlayerIds: [],
     // A knockout is never scored on the old single team setting — it reads
     // cards hole by hole, not a team format. Passing the trip's would be

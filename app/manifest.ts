@@ -23,7 +23,7 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Green Dot Golf",
+    name: "Green Dot Live",
     short_name: "green dot.",
     description:
       "Your handicap is the best 8 of your last 20. Live scoring, leaderboards and matchplay for your golf trip.",

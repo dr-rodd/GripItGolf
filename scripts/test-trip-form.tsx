@@ -13,6 +13,7 @@ import fs from 'fs'
 import DateField from '../app/components/DateField'
 import CreateTripForm from '../app/dashboard/create/CreateTripForm'
 import TripSetupClient from '../app/trip/[tripCode]/setup/TripSetupClient'
+import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime'
 import {
   MIN_ROUNDS, MAX_ROUNDS, roundCountError, isRoundCountValid,
   MAX_TRIP_DESCRIPTION, normalizeDescription,
@@ -37,6 +38,24 @@ function eq(got: unknown, want: unknown, label: string) {
   else { failed++; failures.push(label); console.log(`  FAIL  ${label}\n        got  ${g}\n        want ${w}`) }
 }
 const section = (n: string) => console.log(`\n${n}`)
+
+/**
+ * A server render of a client component that asks for the router.
+ *
+ * Trip Settings calls `router.refresh()` after moving the trip's dates — the
+ * rounds are re-dated in the same breath and every screen that reads them is
+ * server-rendered. `useRouter` throws outside the context Next would provide,
+ * so the tests give it a stub; nothing here navigates, so it only has to
+ * exist. Same shape as the one in test-branding.tsx.
+ */
+const stubRouter = {
+  push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {},
+}
+function renderWithRouter(el: React.ReactElement): string {
+  return renderToStaticMarkup(
+    React.createElement(AppRouterContext.Provider, { value: stubRouter as never }, el)
+  )
+}
 
 // ─── Round limit ───────────────────────────────────────────────
 
@@ -107,6 +126,17 @@ section('The itinerary replaces the rounds picker')
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
   ok(!/DEFAULT_FORMATS/.test(code), '  …and not with the defaults, which name one')
 
+  // Leaderboards are offered at creation now — the same picker the league
+  // wizard embeds and Trip Setup runs, one grid, one copy — but a trip may
+  // skip them: nothing chosen writes nothing, so a skipped trip is
+  // byte-for-byte the trip this wizard always made, and the phantom-board
+  // rule above still holds for it.
+  ok(src.includes('<LeaderboardSetup'), 'the leaderboard picker is offered at creation')
+  ok(src.includes('if (boards.length > 0) tripRow.leaderboards = boards'),
+    '  …written only when boards were actually built')
+  ok(src.includes('const step3Valid = !passcodeIssue && !duplicateIssue'),
+    '  …and never required — the way forward does not wait on a board')
+
   // A trip with no golf has nothing to score, so it cannot move on. It is a
   // reason rather than a disabled button now — an empty Tuesday should not
   // grey out the way forward, so the check happens once, at the end.
@@ -150,6 +180,41 @@ section('The way forward is pinned under the add buttons')
   // The add buttons carry the extra height, and sit above it
   ok(b.indexOf('min-h-[64px]') < b.indexOf('min-h-[52px]'),
     'the add buttons are taller, and come first')
+}
+
+// ─── A single day wears a different face ───────────────────────
+
+section('A single-day event has no Day 1 and golf leads it')
+{
+  const b = fs.readFileSync('app/components/ItineraryBuilder.tsx', 'utf-8')
+
+  // One day needs no day picker — a strip with one chip saying "Day 1" is
+  // exactly the redundancy this mode removes.
+  ok(b.includes('const singleDay = days === 1'), 'one day is its own mode')
+  ok(b.includes('{days > 1 && ('), 'and the day strip only exists past one day')
+  ok(b.includes("? 'The day'"),
+    'a dateless single day never falls back to saying Day 1')
+
+  // Golf is the main event: the big Set Venue button lives in the day
+  // itself, not as one of four equal squares at the bottom.
+  ok(b.includes('Set Venue'), 'the big move is Set Venue')
+  ok(b.includes('+ Add another round'),
+    'and once golf is set, a second round stays reachable — a 36-hole day is a real day')
+
+  // Everything else shares one button, and the sheet asks what kind it is.
+  ok(b.includes('function KindSwitch'), 'one sheet, a kind chosen inside it')
+  ok(b.includes('<KindSwitch current="stay"')
+    && b.includes('<KindSwitch current="travel"')
+    && b.includes('<KindSwitch current="activity"'),
+    'all three non-golf sheets carry the switch')
+  ok(b.includes('grid-cols-4'), 'while multi-day keeps its four buttons, unchanged')
+
+  // The golf tile says when the course gives the day back — five hours from
+  // the last tee time — so an activity timed inside the window reads as
+  // deliberate. The rule itself lives in lib/itinerary.ts, one copy.
+  ok(b.includes('golfUntil(item)'), 'the golf tile shows its window')
+  ok(!/\b270\b/.test(b) && !b.includes('* 60 * 5'),
+    '  …and never re-derives the span for itself')
 }
 
 // ─── Teams are settings' business, not creation's ──────────────
@@ -229,7 +294,7 @@ section('Start and end dates share one row')
 
 section('The trip setup page uses the same field')
 {
-  const html = renderToStaticMarkup(
+  const html = renderWithRouter(
     React.createElement(TripSetupClient, {
       trip: {
         id: 't1', trip_code: 'ABC123', name: 'Test Trip',
@@ -268,7 +333,7 @@ section('The trip setup page uses the same field')
 
 section('The gear says what is behind it')
 {
-  const html = renderToStaticMarkup(
+  const html = renderWithRouter(
     React.createElement(TripSetupClient, {
       trip: {
         id: 't1', trip_code: 'ABC123', name: 'Test Trip',
@@ -472,8 +537,10 @@ async function main() {
     // The lock sits on step 4, so it is not in step 1's markup
     const source = require('fs').readFileSync(
       'app/dashboard/create/CreateTripForm.tsx', 'utf-8')
-    ok(source.includes('Lock trip settings'), 'the option is on the form')
-    ok(source.includes('label="Lock trip settings"'), 'as a labelled switch')
+    // The wording follows the door the wizard was opened through — "Lock
+    // trip settings" on a trip, "Lock event settings" on a tournament.
+    ok(source.includes('Lock {noun} settings'), 'the option is on the form')
+    ok(source.includes('label={`Lock ${noun} settings`}'), 'as a labelled switch')
     ok(source.includes('tripRow.settings_passcode_hash = passcodeHash'),
       'and the hash is stored on the trip')
     // Sent only when a passcode exists: a database that has not had that
@@ -521,11 +588,34 @@ async function main() {
     ok(setupSrc.includes('MAX_TRIP_DESCRIPTION'),
       'with the same cap on the box')
 
+    // …and the box opens with what is already stored in it. The drawer
+    // rendered a textarea seeded from `trip.description` while the page
+    // building that prop never included the column, so Trip Settings opened
+    // blank on every trip that had a description and the only way to change
+    // one was to type it out again.
+    const setupPage = require('fs').readFileSync('app/trip/[tripCode]/setup/page.tsx', 'utf-8')
+    ok(/description:\s*trip\.description/.test(setupPage),
+      'the setup page hands the stored description down to the settings drawer')
+
     // The hub shows it clamped: three lines, the browser’s own ellipsis,
     // and the paragraph as the tap that opens the rest.
     const hubSrc = require('fs').readFileSync('app/trip/[tripCode]/TripDescription.tsx', 'utf-8')
     ok(hubSrc.includes('line-clamp-3'), 'the hub clamps to three lines')
     ok(hubSrc.includes('aria-expanded'), 'the toggle says which state it is in')
+
+    // Whether it is tappable at all is a measurement, and one taken on
+    // mount alone was wrong often enough to read as a dead tap: the display
+    // face swaps in afterwards, and the paragraph's width can change
+    // without the window's. Both are re-asked.
+    ok(hubSrc.includes('ResizeObserver'),
+      'the clip is re-measured when the paragraph itself resizes')
+    ok(hubSrc.includes('document.fonts'),
+      '  …and again once the display face has loaded')
+    // The paragraph moves from a div into a button the moment it becomes
+    // tappable, so React builds a new node. Held in state, the effect
+    // re-runs on it; held in a ref, the observer watches a detached one.
+    ok(!hubSrc.includes('useRef'),
+      'the paragraph is held in state, so the observer follows it into the button')
     const hubPage = require('fs').readFileSync('app/trip/[tripCode]/page.tsx', 'utf-8')
     ok(hubPage.includes('<TripDescription'), 'the hub renders the description')
     ok(hubPage.indexOf('<TripDescription') > hubPage.indexOf('<TripCountdown'),

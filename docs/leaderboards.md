@@ -339,6 +339,35 @@ Team **size** rules are read off the boards in the current selection, never off 
 
 The screen stays open once the trip is live. It has to — a player who joins halfway has to land somewhere, and their cards go with them.
 
+### Tags, and a sheet for each day
+
+An event has two levels of grouping and they are different things. A **tag** is the side a player carries all week — Europe and USA, the four club sides — set once and never changing. A **team** is the playing group on the day: the fourball, the pair, picked at the tee sheet and different every morning. An event may use one, the other, or both.
+
+Both are sheets, which is why neither needed a migration:
+
+- **A tag is a team on the `main` sheet.** `TAG_SET = MAIN_SET` in `lib/tagBoards.ts`, and that is a decision rather than a convenience: `main` is the sheet `players.team_id` mirrors, so every coloured dot the platform already draws — the live scoring roster's join, the join screens — shows the tag with no query changed, and `UNIQUE(player_id, team_set)` is already the one-tag-per-player rule.
+- **A day's teams are teams on `day:<roundId>`** (`daySheetId`). A new partner every morning is a row on a different sheet, and the tag on `main` sits untouched underneath.
+
+**A board's sheet is derived from its scope, never stored twice** (`sheetForBoard`): a team board counting exactly one round plays that day's teams; anything else plays the sheet it was given. Stored, the two would drift — a board whose days changed would be pointing at the teams of a day it no longer counts. Day sheets are kept out of `sheetsInUse`, so finalising an event never demands Tuesday's fourballs on Sunday.
+
+**The tags board** is a team board wearing a `tagMode`, pinned to `main`, not a third audience — every predicate that matters switches on `audience === 'team'` and already does the right thing. Three modes: the tag's best few cards each round, every card, or the day's team cards (`tagOfTeam` decides whose card it is, and returns null for a mixed team rather than crediting whoever was first). **Paying by finishing position each day is not a fourth mode** — it is `combine: 'position'`, which every league board has always had.
+
+**The tee-sheet gate.** When a tags board exists, a player with no tag has nothing to play for, so the sheet refuses to seat them (`tagGateReason`, checked before the write, said in the slot it was refused in, with a banner at the top first). A team's card counts towards one tag, so a team is of one (`dayTeamTagIssue`). The gate only ever refuses an **add** — somebody already seated who then loses their tag is left where they stand, because evicting a name the field has already read is the worse failure.
+
+`assign_tag` (the permission) lets a claimed player **join** one of the organiser's tags. It is a different verb from a board's `teamPick: 'self'`, which lets the field **form** teams. Both exist, deliberately.
+
+### Which golf a board counts
+
+`Leaderboard.roundIds` — absent means every round, which is what every board stored before it means, so nothing already running changed. Present, the board is that golf's competition: what it discards, what its positions pay and where a tie is broken are all decided inside its own rounds.
+
+Round **ids**, not day numbers: a day added or reordered must not silently re-point a board at somebody else's golf. A stale id matches nothing and the board draws no column for it, which is the honest answer rather than a repair.
+
+This is what lets a day carry its own format — Day 1 singles Stableford, Day 2 fourball better ball, each scoped to its round, with the event's own board scoped to nothing and counting the lot. Edited at `/trip/[code]/organiser/days`, where the scope is **seeded onto the draft** rather than stamped on after saving: the scope is part of `slotKey`, so a day's Stableford stamped afterwards would be refused as a clash with the event's own while it was still being made.
+
+`withOnlyRounds` in `lib/boardRows.ts` is the only copy of narrowing a context to some rounds — modelled on `withoutCasualRounds` beside it, and applied after it, so a day board pointed at a casual round honestly counts nothing. **Both callers go through it**: a board's own scope inside `buildRows`, and the leaderboard's per-course switch (events only, a choice of one course or `null` for the lot, the stats page's Courses-view pattern). Two filters agreeing by accident is how the columns and the totals come to disagree about which round the table is showing.
+
+And it is what finally makes **`dayBoards`** mean something. The answer — separate days / one running total / days and overall — was stored faithfully and read by nothing while the screen had no way to show a day on its own. `boardGrouping` in `lib/leagueSetup.ts` is the one copy of what the three do; `separate` sets the overall boards **aside, never deletes them**, because it is a way of reading the event and can be changed back.
+
 ### Who appears on which board
 
 - **Players own their scores, not teams.** Scores are keyed by `player_id`; a team row is computed from *current* membership. Move a player between teams mid-trip and their scores go with them — no re-entry, no migration. Team points are a pure function of member scores under the trip's rules (`lib/teamScoring.ts`).
@@ -364,3 +393,5 @@ Team sizes are deliberately **not** fixed for a team league — a team can have 
 This supersedes Donegal Masters rule 6 ("best-2-of-3") for trip pages — best-2 is now just the `better_ball` default, not a hard rule. The legacy DM leaderboard still hard-codes best-2.
 
 **Future:** Skins, Nassau, Best Ball, Scramble, bracketed (rather than round-robin) matchplay.
+
+The per-day board editor makes a board for one round at a time; a format spanning some-but-not-all rounds is expressible in the model (`roundIds` takes a list) and has no screen yet.

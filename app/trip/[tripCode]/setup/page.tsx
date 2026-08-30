@@ -7,6 +7,7 @@ import { fromItemRow } from '@/lib/itinerarySync'
 import TripSetupClient from './TripSetupClient'
 import PasscodeGate from './PasscodeGate'
 import { isLocked } from '@/lib/passcode'
+import { isEvent } from '@/lib/eventHub'
 
 export const dynamic = 'force-dynamic'
 
@@ -146,6 +147,11 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         id: trip.id,
         trip_code: tripCode,
         name: trip.name,
+        // What the lead player wrote about the trip. It was missing here
+        // while Trip Settings rendered a box for it, so the drawer opened
+        // blank on a trip that had one — and the only way to edit a
+        // description was to type it again from nothing.
+        description: trip.description ?? null,
         start_date: trip.start_date ?? null,
         end_date: trip.end_date ?? null,
         // Through the compat reader, so a trip set up before the column
@@ -171,17 +177,28 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       }))}
       itinerary={itinerary}
       lockedGolfItemIds={lockedGolfItemIds}
+      // Team boards on an event are asked how they meet the tee sheet;
+      // a trip has no sheet and is never asked (fail-soft over kind).
+      askTeeTeams={isEvent(trip.kind)}
+      askTags={isEvent(trip.kind)}
     />
   )
 
   // Locked at creation and never afterwards, so a trip cannot be locked out
-  // from under whoever runs it
+  // from under whoever runs it. An event's gate speaks to the organiser —
+  // "ask your lead player" is a trip sentence, and the field is not meant
+  // to be here at all (the tab bar no longer brings them).
   if (isLocked(trip.settings_passcode_hash)) {
+    const event = isEvent(trip.kind)
     return (
       <PasscodeGate
         tripCode={tripCode}
         tripName={trip.name}
         passcodeHash={trip.settings_passcode_hash as string}
+        {...(event ? {
+          title: 'Organisers only',
+          hint: `Enter the organiser PIN for ${trip.name}.`,
+        } : {})}
       >
         {settings}
       </PasscodeGate>

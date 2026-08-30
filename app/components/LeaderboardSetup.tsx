@@ -6,9 +6,12 @@ import {
   scoringsFor, TEAM_FORMATS, COMBINES, MAX_DISCARD,
   unanswered, isComplete, offersDiscard, offersTieBreak, offersQuotaScale,
   offersCountingScores, countingScoresOf, aggregateFinishOf, offersTeamNames,
+  offersTeeTeams, MIN_TEAM_SIZE, MAX_TEAM_SIZE_TOGETHER, MAX_TEAM_SIZE_SEPARATE,
   offersAllowance, tripQuotaScale, slotKey, isFormatFree,
   freeScorings, freeTeamFormats,
   hasMatchplay, boardTitle, boardRules,
+  TAG_MODES, MAX_TAG_COUNT, DEFAULT_TAG_COUNT, tagCountOf,
+  isTagBoard, offersTeamFormat, offersTagMode, offersTagCount, offersCombine,
 } from '@/lib/leaderboards'
 import { DEFAULT_TEAM_SCORING, MAX_COUNTING_SCORES, lastHoles } from '@/lib/teamScoring'
 import {
@@ -24,7 +27,8 @@ import {
   type QuotaScale, QUOTA_SCALES, DEFAULT_QUOTA_SCALE, quotaScaleOf, quotaScaleLabel,
 } from '@/lib/quota'
 import { previewBracket } from '@/lib/matchplay'
-import { nextSheetId } from '@/lib/teamSets'
+import { nextSheetId, setOf, withSheet } from '@/lib/teamSets'
+import { TAG_SET } from '@/lib/tagBoards'
 import { defaultCustomPoints, editableRows, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
 import { IconTrophy, IconPlus, IconMinus, IconX, IconCheck, IconSettings } from './icons'
 import { Card, Badge, buttonClass, FIELD, FIELD_LABEL } from './ui'
@@ -734,7 +738,8 @@ function RoundLinks({
 // ─── The cascade ───────────────────────────────────────────────
 
 function Builder({
-  existing, initial, playerCount, teamCount, rounds, onSave, onCancel,
+  existing, initial, playerCount, teamCount, rounds, askTeeTeams = false,
+  askTags = false, scope, onSave, onCancel,
 }: {
   /** What the trip already runs, NOT counting the board being edited. */
   existing: Leaderboard[]
@@ -744,10 +749,24 @@ function Builder({
   teamCount: number
   /** The trip's golf, for linking a bracket round to one of them. */
   rounds: LinkableRound[]
+  /** Events only — ask team boards how they meet the tee sheet. */
+  askTeeTeams?: boolean
+  /** Events only — offer a board that ranks tags (lib/tagBoards.ts). */
+  askTags?: boolean
+  /**
+   * The golf a board made here counts (`Leaderboard.roundIds`), when it is
+   * not the whole event. Seeded onto the draft rather than stamped on
+   * afterwards, and it has to be: the scope is part of what makes two
+   * boards different competitions, so a day's Stableford stamped after the
+   * fact would be refused as a clash with the event's own Stableford while
+   * it was still being made.
+   */
+  scope?: string[]
   onSave: (lb: Leaderboard) => void
   onCancel: (() => void) | null
 }) {
-  const [draft, setDraft] = useState<Partial<Leaderboard>>(initial ?? FRESH)
+  const fresh = scope?.length ? { ...FRESH, roundIds: scope } : FRESH
+  const [draft, setDraft] = useState<Partial<Leaderboard>>(initial ?? fresh)
   const set = (patch: Partial<Leaderboard>) => setDraft(d => ({ ...d, ...patch }))
 
   // A prize table is one row per finisher, and on a team board the finishers
@@ -801,22 +820,40 @@ function Builder({
         </p>
       </div>
 
-      <Question n={next()} title="Is this a solo or team leaderboard?">
+      <Question n={next()} title="Who is being ranked?">
         {([
           { key: 'individual' as Audience, label: 'Solo', hint: 'Every player ranked on their own card.' },
           { key: 'team' as Audience, label: 'Teams', hint: 'Add players to teams, and the teams are ranked against each other' },
         ]).map(a => (
           <Choice
             key={a.key}
-            on={draft.audience === a.key}
+            on={draft.audience === a.key && !draft.tagMode}
             label={a.label}
             hint={a.hint}
             // Who is ranked is the question everything else hangs off, so
             // changing it starts the cascade again. The sheet is not carried
-            // across either — teams are apportioned on the team screen.
-            onClick={() => setDraft({ ...FRESH, audience: a.key })}
+            // across either — teams are apportioned on the team screen. The
+            // scope is, because which golf this board counts is the screen
+            // it is being made on, not an answer inside the cascade.
+            onClick={() => setDraft({ ...fresh, audience: a.key })}
           />
         ))}
+        {/* Events only. Tags are the sides a field carries all week while
+            the fourballs change daily, and a trip has no organiser to set
+            them — the same context `askTeeTeams` carries, for the same
+            reason: this model does not know what kind of trip is asking.
+            Picking it writes a mode straight away, so the draft is never a
+            tags board that has not said how it scores. */}
+        {askTags && (
+          <Choice
+            on={isTagBoard(draft)}
+            label="Tags"
+            hint="Rank the sides players carry all week — whoever they play with on the day."
+            onClick={() => setDraft({
+              ...fresh, audience: 'team', tagMode: TAG_MODES[0].key,
+            })}
+          />
+        )}
       </Question>
 
       {draft.audience && (
@@ -853,7 +890,13 @@ function Builder({
               on={draft.scoring === s.key}
               label={s.label}
               hint={s.hint}
-              taken={!freeScorings(existing, draft.audience!).includes(s.key)}
+              // A tags board is a fresh axis on the grid `freeScorings`
+              // walks, so it is asked of the candidate directly — through
+              // the same `isFormatFree`, never a second rule about what
+              // makes two boards one.
+              taken={isTagBoard(draft)
+                ? !isFormatFree(existing, { ...draft, scoring: s.key } as Leaderboard)
+                : !freeScorings(existing, draft.audience!).includes(s.key)}
               onClick={() => set({ scoring: s.key })}
             />
           ))}
@@ -882,7 +925,64 @@ function Builder({
         </Question>
       )}
 
-      {draft.audience === 'team' && league && draft.scoring && (
+      {/* A tags board's own question, sitting where a team board is asked
+          how its players combine — because it is the same question asked
+          of a side: what makes the tag's score for the day. */}
+      {offersTagMode(draft) && (
+        <Question n={next()} title="How does a tag score a round?">
+          {TAG_MODES.map(m => (
+            <Choice
+              key={m.key}
+              on={draft.tagMode === m.key}
+              label={m.label}
+              hint={m.hint}
+              // Asked of the candidate rather than through `freeScorings`:
+              // the board grid describes ordinary boards, and a tag is a
+              // fresh axis on it. `isFormatFree` is still the one copy of
+              // what makes two boards the same competition.
+              taken={!isFormatFree(existing, { ...draft, tagMode: m.key } as Leaderboard)}
+              // The count belongs to the mode that counts a few. Carried
+              // across, it would sit on a board no longer being asked.
+              onClick={() => set({
+                tagMode: m.key,
+                ...(m.key === 'best_cards' ? {} : { tagCount: undefined }),
+              })}
+            />
+          ))}
+        </Question>
+      )}
+
+      {offersTagCount(draft) && (
+        <Question n={next()} title="How many cards count each round?">
+          <div className="flex flex-wrap gap-1.5">
+            {Array.from({ length: MAX_TAG_COUNT }, (_, i) => i + 1).map(n => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => set({
+                  // Not stored when it is the default, so a board that
+                  // leaves this alone reads back as the object it was.
+                  tagCount: n === DEFAULT_TAG_COUNT ? undefined : n,
+                })}
+                aria-pressed={tagCountOf(draft) === n}
+                className={`w-11 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  tagCountOf(draft) === n
+                    ? 'bg-accent-deep text-white'
+                    : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+          <p className="t-cap text-ink/65 leading-snug">
+            A tag with fewer players out than this counts everyone who
+            played — a card nobody handed in is not a nought.
+          </p>
+        </Question>
+      )}
+
+      {offersTeamFormat(draft) && draft.scoring && (
         <Question n={next()} title="How do a team's players combine?">
           {TEAM_FORMATS.map(f => (
             <Choice
@@ -953,7 +1053,89 @@ function Builder({
         </Question>
       )}
 
-      {league && draft.scoring && (draft.audience === 'individual' || draft.teamFormat) && (
+      {/* Events only — a trip has no tee sheet to meet, so `askTeeTeams`
+          arrives false there and the question never renders. Absent is
+          together, because partners almost always play together; only the
+          exception is stored (lib/leaderboards.ts `teeTeams`). */}
+      {askTeeTeams && offersTeeTeams(draft) && (
+        <Question n={next()} title="How do teams meet the tee sheet?">
+          <Choice
+            on={draft.teeTeams !== 'separate'}
+            label="Teams share a tee time"
+            hint="Partners go out together — putting one on the sheet books the team."
+            // Tightening back to together also tightens the size cap.
+            onClick={() => set({
+              teeTeams: undefined,
+              ...(draft.teamSize && draft.teamSize > MAX_TEAM_SIZE_TOGETHER
+                ? { teamSize: MAX_TEAM_SIZE_TOGETHER } : {}),
+            })}
+          />
+          <Choice
+            on={draft.teeTeams === 'separate'}
+            label="Members can play separately"
+            hint="Teammates may go out in different slots, all feeding the same board."
+            onClick={() => set({ teeTeams: 'separate' })}
+          />
+        </Question>
+      )}
+
+      {/* Events only, like the tee-teams question above. Absent means the
+          organiser assigns — the teams screen as it has always been. 'self'
+          opens the teams screen to the field: teams of the chosen size,
+          formed and joined without the PIN, named from their members —
+          which is why picking it also seeds hideTeamName, so the board's
+          rows read as the players too. */}
+      {askTeeTeams && offersTeeTeams(draft) && (
+        <Question n={next()} title="How are teams formed?">
+          <Choice
+            on={draft.teamPick !== 'self'}
+            label="You assign them"
+            hint="Pick the teams yourself on the teams screen — count and members are yours."
+            onClick={() => set({ teamPick: undefined, teamSize: undefined })}
+          />
+          <Choice
+            on={draft.teamPick === 'self'}
+            label="Players pick their own"
+            hint="You set the team size; the field forms and joins teams themselves."
+            onClick={() => set({
+              teamPick: 'self',
+              teamSize: draft.teamSize ?? MIN_TEAM_SIZE,
+              hideTeamName: true,
+            })}
+          />
+          {draft.teamPick === 'self' && (
+            <div className="mt-1">
+              <p className="t-cap text-ink/65 mb-2">Players per team</p>
+              <div className="flex gap-1.5">
+                {Array.from(
+                  {
+                    length: (draft.teeTeams === 'separate'
+                      ? MAX_TEAM_SIZE_SEPARATE : MAX_TEAM_SIZE_TOGETHER)
+                      - MIN_TEAM_SIZE + 1,
+                  },
+                  (_, i) => MIN_TEAM_SIZE + i,
+                ).map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => set({ teamSize: n })}
+                    aria-pressed={draft.teamSize === n}
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      draft.teamSize === n
+                        ? 'bg-accent-deep text-white'
+                        : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </Question>
+      )}
+
+      {offersCombine(draft) && (
         <Question n={next()} title="How do the rounds add up?">
           {COMBINES.map(c => (
             <Choice
@@ -1136,6 +1318,7 @@ function Builder({
 
 export default function LeaderboardSetup({
   boards, playerCount, teamCount, rounds = [], readOnly = false, onChange,
+  askTeeTeams = false, askTags = false, scope,
 }: {
   boards: Leaderboard[]
   /** The field an individual prize table pays out to. */
@@ -1149,6 +1332,24 @@ export default function LeaderboardSetup({
   rounds?: LinkableRound[]
   /** Shown but not changeable — somebody who is not the trip's owner. */
   readOnly?: boolean
+  /**
+   * Ask team boards how they meet the tee sheet — events only, because
+   * only an event has one. A trip never sees the question and never stores
+   * the answer (lib/leaderboards.ts `teeTeams`).
+   */
+  askTeeTeams?: boolean
+  /**
+   * Offer a board that ranks tags — events only, for the same reason and
+   * with the same shape as `askTeeTeams`: a trip has no organiser to make
+   * the sides, and this model does not know what kind of trip is asking.
+   */
+  askTags?: boolean
+  /**
+   * The golf boards made here count, when this screen is about one day
+   * rather than the whole event (lib/leaderboards.ts `roundIds`). Absent
+   * means the whole event, which is every caller but the day editor.
+   */
+  scope?: string[]
   onChange: (boards: Leaderboard[]) => void
 }) {
   const [adding, setAdding] = useState(false)
@@ -1175,16 +1376,36 @@ export default function LeaderboardSetup({
       delete rest.teamSet
       return rest
     }
-    if (was?.audience === 'team' && was.teamSet) return { ...lb, teamSet: was.teamSet }
+    // A tags board is not given a sheet, it is pinned to one: the tags are
+    // the teams on the tag sheet, which is the sheet every coloured dot on
+    // the platform already reads (lib/tagBoards.ts).
+    if (isTagBoard(lb)) return { ...lb, teamSet: TAG_SET }
+    if (was?.audience === 'team' && was.teamSet && was.teamSet !== TAG_SET) {
+      return { ...lb, teamSet: was.teamSet }
+    }
     return { ...lb, teamSet: nextSheetId(boards.filter(b => b.id !== lb.id)) }
   }
 
   function save(lb: Leaderboard) {
     const was = boards.find(b => b.id === lb.id) ?? null
     const next = placed(lb, was)
-    onChange(was
+    let rest = was
       ? boards.map(b => (b.id === next.id ? next : b))
-      : [...boards, next])
+      : [...boards, next]
+
+    // The tag sheet belongs to the tags. An ordinary team board that took
+    // it before the tags board existed is moved off rather than left
+    // sharing — sharing would silently make the sides into the week's
+    // playing teams, which is the one thing tags exist not to be.
+    if (isTagBoard(next)) {
+      const squatters = rest
+        .filter(b => b.id !== next.id && b.audience === 'team'
+          && !isTagBoard(b) && setOf(b) === TAG_SET)
+        .map(b => b.id)
+      if (squatters.length > 0) rest = withSheet(rest, squatters, nextSheetId(rest))
+    }
+
+    onChange(rest)
     setAdding(false)
     setEditingId(null)
   }
@@ -1201,6 +1422,9 @@ export default function LeaderboardSetup({
             playerCount={playerCount}
             teamCount={teamCount}
             rounds={rounds}
+            askTeeTeams={askTeeTeams}
+            askTags={askTags}
+            scope={scope}
             onSave={save}
             onCancel={() => setEditingId(null)}
           />
@@ -1248,6 +1472,9 @@ export default function LeaderboardSetup({
           playerCount={playerCount}
           teamCount={teamCount}
           rounds={rounds}
+          askTeeTeams={askTeeTeams}
+          askTags={askTags}
+          scope={scope}
           onSave={save}
           onCancel={done ? () => setAdding(false) : null}
         />

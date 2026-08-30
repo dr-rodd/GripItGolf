@@ -152,6 +152,13 @@ export const IconFlag = (p: IconProps) => (
   </Svg>
 )
 
+export const IconClock = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
+    <path d="M12 7v5l3 3" />
+  </Svg>
+)
+
 export const IconCalendar = (p: IconProps) => (
   <Svg {...p}>
     <path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z" />

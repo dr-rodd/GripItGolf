@@ -19,8 +19,12 @@ import {
   describeItem, itemState, tripProgress, itemError,
   addStay, nightsAvailable,
   MAX_TEE_TIMES, MAX_NIGHTS, MAX_ACTIVITY_NAME,
+  GOLF_SLOT_MINS, TEE_INTERVAL_MINS, golfSpanMins, golfUntil,
+  DEFAULT_EVENT_MINS, dayTimeline,
 } from '../lib/itinerary'
-import { isTempId, diffItems, toItemRow, touchesLockedGolf } from '../lib/itinerarySync'
+import {
+  isTempId, diffItems, toItemRow, touchesLockedGolf, roundDateGroups,
+} from '../lib/itinerarySync'
 import fs from 'fs'
 
 let passed = 0, failed = 0
@@ -240,15 +244,148 @@ section('A round is judged by its tee time')
   eq(itemState(round('13:00'), '2026-07-30', at('2026-07-30T19:00')), 'past',
     'and once there has been time to finish')
 
-  // Four and a half hours, plus ten minutes for every group after the first
-  eq(itemState(round('13:00', 1), '2026-07-30', at('2026-07-30T17:45')), 'past',
-    'one group is done by quarter to six')
-  eq(itemState(round('13:00', 6), '2026-07-30', at('2026-07-30T17:45')), 'now',
-    'but six groups are still out there')
+  // Golf occupies five hours from the last tee time, and a group goes off
+  // every ten minutes — so one group off at 13:00 holds the day to 18:00,
+  // and six groups hold it to 18:50.
+  eq(itemState(round('13:00', 1), '2026-07-30', at('2026-07-30T17:45')), 'now',
+    'one group still has the course at quarter to six')
+  eq(itemState(round('13:00', 1), '2026-07-30', at('2026-07-30T18:15')), 'past',
+    'and has given it back by quarter past')
+  eq(itemState(round('13:00', 6), '2026-07-30', at('2026-07-30T18:45')), 'now',
+    'six groups are still out at quarter to seven')
+  eq(itemState(round('13:00', 6), '2026-07-30', at('2026-07-30T18:55')), 'past',
+    'and done five past the last window')
 
   // The day still decides, whatever the clock says
   eq(itemState(round('13:00'), '2026-07-29', at('2026-07-30T09:00')), 'past',
     'yesterday morning is past even at a tee time that has not come round today')
+}
+
+section('Golf occupies five hours from the last tee time — the one copy')
+{
+  eq(GOLF_SLOT_MINS, 300, 'five hours on the course')
+  eq(TEE_INTERVAL_MINS, 10, 'a group every ten minutes')
+  eq(golfSpanMins(1), 300, 'one group holds the day for the slot alone')
+  eq(golfSpanMins(6), 350, 'six groups add fifty minutes of tee spread')
+  eq(golfSpanMins(null), 300, 'no count reads as one group, like everywhere else')
+
+  // The line the single-day builder prints on the golf tile, so an activity
+  // timed inside the window reads as deliberate rather than a clash.
+  eq(golfUntil({ teeTime: '13:00', teeCount: 1 }), 'until 6:00 pm',
+    'one group off at one gives the day back at six')
+  eq(golfUntil({ teeTime: '09:30', teeCount: 6 }), 'until 3:20 pm',
+    'six groups from half nine hold it to twenty past three')
+  eq(golfUntil({ teeTime: null, teeCount: 3 }), null,
+    'no tee time, no window — never an invented clock')
+  // itemState reads the same span, so the tile and the hub's dimming can
+  // never disagree about when a round is over.
+  const g: ItineraryItem = { id: 'g', dayIndex: 0, position: 0, kind: 'golf', teeTime: '13:00', teeCount: 1 }
+  eq(itemState(g, '2026-07-30', at('2026-07-30T17:59')), 'now', 'still out at 17:59')
+  eq(itemState(g, '2026-07-30', at('2026-07-30T18:01')), 'past', 'done at 18:01')
+}
+
+// ─── An activity's end time ────────────────────────────────────
+
+section('An event has a start and an end, and the end may be left unsaid')
+{
+  const act = (patch: Partial<ItineraryItem>): ItineraryItem =>
+    ({ id: 'a', dayIndex: 0, position: 0, kind: 'activity', activityName: 'Dinner', ...patch })
+
+  eq(describeItem(act({ activityTime: '19:00', endTime: '21:00' })).detail,
+    '7:00 pm – 9:00 pm', 'a start and an end read as a range')
+  eq(describeItem(act({ activityTime: '19:00' })).detail, '7:00 pm',
+    'no end, no invented range — the hour default is the timescale\'s business')
+
+  eq(itemError(act({ activityTime: '19:00', endTime: '21:00' })), null, 'a real range passes')
+  ok(itemError(act({ endTime: '21:00' })) !== null, 'an end without a start is refused')
+  ok(itemError(act({ activityTime: '19:00', endTime: '19:00' })) !== null,
+    'so is an end at the start')
+  ok(itemError(act({ activityTime: '19:00', endTime: '18:00' })) !== null,
+    'and one before it — a plan crossing midnight leaves the end blank')
+
+  // The write names the column only when an end was given, so every save
+  // still lands before migration 048 has run — the casual flags' treatment.
+  const withEnd = toItemRow('t', act({ activityTime: '19:00', endTime: '21:00' }))
+  eq((withEnd as { end_time?: string }).end_time, '21:00', 'an end writes its column')
+  ok(!('end_time' in toItemRow('t', act({ activityTime: '19:00' }))),
+    'no end, no column named — pre-migration saves survive')
+  ok(!('end_time' in toItemRow('t', {
+    id: 'g', dayIndex: 0, position: 0, kind: 'golf', courseId: 'c', teeTime: '09:00', teeCount: 1,
+  })), 'golf never writes one — its end is the five-hour rule, derived')
+}
+
+// ─── The day against the clock ─────────────────────────────────
+
+section('The day plan starts at the first entered time and runs to the last end')
+{
+  const golf = (teeTime: string, teeCount = 1): ItineraryItem =>
+    ({ id: `g${teeTime}`, dayIndex: 0, position: 0, kind: 'golf', teeTime, teeCount })
+  const act = (id: string, start: string | null, end: string | null = null): ItineraryItem =>
+    ({ id, dayIndex: 0, position: 1, kind: 'activity', activityName: id, activityTime: start, endTime: end })
+  const bed: ItineraryItem = { id: 'b', dayIndex: 0, position: 2, kind: 'stay', stayName: 'Hotel' }
+
+  eq(dayTimeline([bed]), null, 'a day with no clock has no timescale')
+  eq(dayTimeline([]), null, 'nor does an empty one')
+
+  const plan = dayTimeline([golf('09:30', 6), act('Dinner', '19:00', '21:30'), act('Quiz', null), bed])!
+  eq(plan.start, 9 * 60 + 30, 'the window opens at the first entered time')
+  eq(plan.end, 21 * 60 + 30, 'and runs to the last thing\'s end')
+  eq(plan.untimed.map(i => i.id), ['Quiz', 'b'],
+    'what has no clock is listed, never invented onto the scale')
+  eq(plan.hours[0], 10, 'the hour rules start at the first full hour inside the window')
+  eq(plan.hours.at(-1), 21, 'and end at the last')
+
+  const g = plan.entries.find(e => e.item.kind === 'golf')!
+  eq(g.end - g.start, golfSpanMins(6), 'golf occupies its five-hour block')
+
+  const dinner = plan.entries.find(e => e.item.id === 'Dinner')!
+  eq(dinner.end - dinner.start, 150, 'an entered end is honoured')
+
+  const short = dayTimeline([act('Tea', '15:00')])!
+  eq(short.entries[0].end - short.entries[0].start, DEFAULT_EVENT_MINS,
+    'no end defaults to the hour')
+
+  // Overlaps are drawn, not resolved: dinner inside the golf window steps
+  // a lane right and sits on top — the plan the organiser actually made.
+  const busy = dayTimeline([golf('13:00'), act('Soup', '14:00', '15:00'), act('Late', '20:00')])!
+  eq(busy.entries.find(e => e.item.id === 'Soup')!.lane, 1,
+    'an event inside the golf window takes the next lane')
+  eq(busy.entries.find(e => e.item.id === 'Late')!.lane, 0,
+    'one after it comes back to the first')
+
+  const owl = dayTimeline([act('Party', '23:30')])!
+  eq(owl.entries[0].end, 24 * 60, 'the default hour never runs past midnight')
+}
+
+// ─── Migration 048 agrees with the model ───────────────────────
+
+section('Migration 048 and the end time describe the same table')
+{
+  const sql = fs.readFileSync(
+    'supabase/migrations/20260101000048_itinerary_end_time.sql', 'utf-8')
+
+  ok(/ADD COLUMN IF NOT EXISTS end_time time/.test(sql), 'the column is added, idempotently')
+  ok(/DROP CONSTRAINT IF EXISTS ck_itinerary_shape/.test(sql),
+    'the shape check is replaced by its own name — 027 made that name a promise')
+
+  const shape = sql.slice(sql.indexOf('ADD CONSTRAINT ck_itinerary_shape'))
+  for (const kind of ['golf', 'stay', 'travel']) {
+    const branch = shape.slice(shape.indexOf(`WHEN '${kind}'`))
+      .split('WHEN ').slice(0, 2).join('')
+    ok(/end_time IS NULL/.test(branch), `${kind} cannot carry an end time`)
+  }
+  ok(/WHEN 'activity'[\s\S]*end_time IS NULL OR activity_time IS NOT NULL/.test(shape),
+    'an activity\'s end only ever stands beside a start')
+  ok(/WHEN 'activity'[\s\S]*activity_name IS NOT NULL/.test(shape),
+    'and 027\'s name rule survives the rewrite')
+
+  // The hub reads the column in its own query, so an un-migrated database
+  // costs the ranges and nothing else — the kind read's fail-soft rule.
+  const hub = fs.readFileSync('app/trip/[tripCode]/page.tsx', 'utf-8')
+  const mainSelect = hub.match(/select\('id, day_index[^)]*\)/)?.[0] ?? ''
+  ok(!mainSelect.includes('end_time'),
+    'the hub\'s main itinerary select never names end_time')
+  ok(hub.includes("select('id, end_time')"), 'it rides in its own query')
 }
 
 section('Progress across the trip')
@@ -638,6 +775,124 @@ section('Migration 027 and lib/itinerary.ts describe the same table')
   const portal = fs.readFileSync('app/trip/[tripCode]/scoring/page.tsx', 'utf-8')
   ok(!portal.includes('itinerary_items'),
     'and the Scoring tab itself no longer fetches an itinerary it does not draw')
+}
+
+// ─── Deleting a round is the write that must not miss ──────────
+//
+// A round was deleted out of a live trip while a different trip was being
+// edited (August 2026). Every mutation the store makes is therefore pinned
+// to carry the trip id — ids alone are unique, but a delete is the one
+// write where "should never cross trips" has to be enforced, not assumed —
+// and the score guard must fail *closed*: a count query that errored comes
+// back null, and `?? 0` alone read that as "no scores, go ahead".
+
+section('Moving the trip re-dates its rounds')
+{
+  // A golf item holds a day *index*; a round holds a calendar *date*. The
+  // itinerary re-dates itself the moment the start date moves, because
+  // every day header is `dateForDay(startDate, dayIndex)` — but
+  // `rounds.scheduled_date` is stored, and stayed where it was. Everything
+  // that reads that column (the hub countdown, the up-next card, the round
+  // summary, the weather hour) went on quoting the old dates under an
+  // itinerary showing the new ones.
+  const golf = [
+    { id: 'a', dayIndex: 0 },
+    { id: 'b', dayIndex: 1 },
+    { id: 'c', dayIndex: 1 },
+    { id: 'd', dayIndex: 3 },
+  ]
+
+  eq(roundDateGroups('2026-05-01', golf), [
+    { date: '2026-05-01', itemIds: ['a'] },
+    { date: '2026-05-02', itemIds: ['b', 'c'] },
+    { date: '2026-05-04', itemIds: ['d'] },
+  ], 'each day index becomes its calendar date, grouped so a day is one write')
+
+  eq(roundDateGroups('2026-05-08', golf).map(g => g.date),
+    ['2026-05-08', '2026-05-09', '2026-05-11'],
+    'move the trip a week and every round moves with it')
+
+  // The same arithmetic the day headers use, not a second copy of it.
+  for (const item of golf) {
+    const group = roundDateGroups('2026-05-01', golf).find(g => g.itemIds.includes(item.id))
+    eq(group!.date, dateForDay('2026-05-01', item.dayIndex),
+      `day ${item.dayIndex} agrees with the itinerary's own date`)
+  }
+
+  // A trip whose dates were never set — a series event, by design — has no
+  // day zero to count from. Writing `dateForDay`'s null back would erase
+  // whatever dates those rounds do carry, so nothing is written at all.
+  eq(roundDateGroups(null, golf), [], 'no start date means nothing to re-date')
+  eq(roundDateGroups('', golf), [], 'and a blank one is the same answer')
+
+  // Nothing the database has not seen yet has a round to re-date.
+  eq(roundDateGroups('2026-05-01', [{ id: 'tmp-1', dayIndex: 0 }]), [],
+    'an unsaved item is skipped')
+  eq(roundDateGroups('2026-05-01', [{ id: 'tmp-1', dayIndex: 0 }, { id: 'a', dayIndex: 0 }]),
+    [{ date: '2026-05-01', itemIds: ['a'] }],
+    '  …without taking the saved item beside it down too')
+
+  eq(roundDateGroups('2026-05-01', []), [], 'a trip with no golf writes nothing')
+
+  // And the store is what carries it to the database, scoped by trip like
+  // every other write in there.
+  const store = fs.readFileSync('lib/itineraryStore.ts', 'utf-8')
+  ok(store.includes('export async function rescheduleRounds'),
+    'the store owns the write')
+  const fn = store.slice(store.indexOf('export async function rescheduleRounds'))
+  ok(fn.includes('roundDateGroups'), '  …and asks the pure half what the dates are')
+  ok(fn.includes("eq('kind', 'golf')"),
+    '  …reading the golf from the database rather than a screen that may be stale')
+
+  // Trip Settings is where the dates are edited, so that is where it runs —
+  // and only when the *start* date moved: the end date sets how many days
+  // there are, not which date each one is.
+  const setup = fs.readFileSync('app/trip/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
+  const saveDates = setup.slice(setup.indexOf('async function saveDates'))
+  ok(saveDates.includes('rescheduleRounds(trip.id'),
+    'saving the dates re-dates the rounds')
+  ok(saveDates.slice(0, saveDates.indexOf('rescheduleRounds')).includes('nextStart !== prev.s'),
+    '  …only when the start date is what changed')
+  ok(saveDates.slice(0, saveDates.indexOf('rescheduleRounds')).includes('return'),
+    '  …and never after a save that failed')
+  ok(saveDates.includes('router.refresh()'),
+    '  …then re-reads, because every screen that shows a round date is server-rendered')
+}
+
+section('The itinerary store scopes every write by trip and fails closed')
+{
+  const store = fs.readFileSync('lib/itineraryStore.ts', 'utf-8')
+
+  const removeFn = store.slice(store.indexOf('async function removeRounds'))
+  ok(removeFn.includes('scoresRes.error || liveRes.error'),
+    'a failed score-count query refuses the delete rather than reading as zero')
+  ok(removeFn.indexOf('scoresRes.error || liveRes.error') < removeFn.indexOf(".delete()"),
+    '  …and the refusal comes before the delete, not after')
+
+  // Every delete and every rounds update the store makes names the trip.
+  const mutations = store.split('\n').reduce<number[]>((at, line, i) =>
+    /\.delete\(\)|\.update\(/.test(line) ? [...at, i] : at, [])
+  const lines = store.split('\n')
+  ok(mutations.length >= 3, 'the store still has its three mutations to pin')
+  for (const at of mutations) {
+    // The window runs to the statement's own error check, so a scoping
+    // clause has to be part of *this* chain to count.
+    const end = lines.findIndex((l, i) => i > at && l.includes('error'))
+    const window = lines.slice(at, end === -1 ? at + 6 : end + 1).join('\n')
+    ok(window.includes("eq('trip_id', tripId)"),
+      `the mutation at itineraryStore line ${at + 1} is scoped to the trip`)
+  }
+
+  // And the editor never deletes on one tap: a save that drops golf opens a
+  // confirm that names the trip and each round, with its own button — Save
+  // itself goes inert while it is open, so a double-tap cannot fall through.
+  const editor = fs.readFileSync('app/trip/[tripCode]/setup/ItineraryEditor.tsx', 'utf-8')
+  ok(editor.includes('removedGolf.length > 0') && editor.includes('setConfirmOpen(true)'),
+    'a save that removes golf opens the confirm instead of writing')
+  ok(editor.includes('|| confirmOpen'),
+    '  …and Save is disabled while the confirm is open')
+  ok(editor.includes('from {tripName}'),
+    '  …which says which trip the rounds would come off')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

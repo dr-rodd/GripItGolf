@@ -359,3 +359,44 @@ DNS says nothing about where the database is. It is one look at the Supabase das
 and if the answer is Europe, `"regions": ["dub1"]` in `vercel.json`. **Do not set it on
 a guess** — pointing the functions away from the database is the same mistake in
 reverse.
+
+## A round's scores were erased out of the wrong trip
+
+August 2026, just after the first live trip: round 1's **data** vanished from a live
+trip — committed scores and handicap snapshots gone, the round row itself intact —
+while round 1 of a *different* trip was the one being cleared. First diagnosis blamed
+the itinerary editor and hardened it (worth doing anyway — see below), but the round
+surviving ruled that path out: deleting a round cascades the row away too.
+
+The real culprit was the scoring dashboard's **"Clear All Live Data"**
+(`voidLiveSession` in `CourseDashboardClient`), a Donegal-era function that scoped to
+the **course**: it collected every `live_rounds` row ever opened on that course — no
+status filter, no trip filter, closed and finalised cards included — pooled every
+player id off their locks, and deleted `scores` and `round_handicaps` for the cartesian
+product. A course is a **shared platform row**: two trips that played the same course
+were one button apart, and voiding on one erased the other's signed cards. The confirm
+even said so — "…for {courseName}" — and nobody read it as cross-trip because the
+single-trip app it was written in had no other trip to cross into.
+
+The fix (`test:legacy` pins it): `voidLiveSession` now requires its `roundId`, voids
+that round's cards one by one through `lib/scorecardVoid` — the one void path, scoped
+to each card's own players — and the dashboard no longer owns any `scores` or
+`round_handicaps` delete of its own. The confirm names the round. At the same time the
+whole legacy island was shut: `/scoring`, `/scoring/[slug]`, `/score-entry`,
+`/leaderboard`, `/leaderboard/individual`, `/live`, `/teams`, `/tee-times` and
+`/scorecard/[playerId]` — single-trip screens that read and wrote the whole database
+and were reachable only by old bookmarks — all redirect to `/`, and the platform-wide
+reset modal (`SettingsModal`, "Reset All Scores" = every score in the database,
+password in the client bundle) is deleted outright.
+
+Three rules fell out of it, for any future destructive path: **the round id is the
+boundary a void must never cross** (a course is shared; a trip's rounds are its own);
+**a guard that can't get its answer must refuse, never default open** (the itinerary
+editor's score-count guard read a failed query as zero); and **a destructive confirm
+must name what it is about to destroy and whose it is** — "are you sure?" confirms the
+tap, not the target.
+
+Recovery for anything already lost is the Supabase dashboard's backups; the app keeps
+no tombstones. And the deeper debt is unchanged from the RLS section above: with no
+auth, any browser holding the anon key can write to any trip's rows — these guards
+raise the cost of an *accident*, not of an attack.
