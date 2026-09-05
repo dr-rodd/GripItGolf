@@ -1841,7 +1841,6 @@ section('The old branding is gone')
   // the day the project was generated — the one piece of somebody else's
   // branding still shipping.
   ok(fs.existsSync('app/icon.svg'), 'there is a tab icon')
-  ok(!fs.existsSync('app/favicon.ico'), '  …and the starter triangle is gone')
 
   const icon = read('app/icon.svg')
   ok(/<circle/.test(icon), 'it is the dot, which is the half of the mark that reads at 16px')
@@ -1851,6 +1850,22 @@ section('The old branding is gone')
   const accent = css.match(/--gd-accent:\s*(#[0-9A-Fa-f]{6})/)?.[1] ?? ''
   ok(accent !== '' && icon.toUpperCase().includes(accent.toUpperCase()),
     `and it is the palette's own emerald (${accent})`)
+
+  // /favicon.ico as well. Deleting the starter's triangle left that address a
+  // 404 — and it is the address Chrome, bookmark bars and old crawlers ask at
+  // by convention, so a client that never reads the <link> kept whatever it
+  // had cached, which for early visitors was the triangle. The ICO is the
+  // same dot, verified by its pixels: classic 32-bit ICO entries store BGRA,
+  // so the palette emerald appears as the byte run 56 9D 0A.
+  ok(fs.existsSync('app/favicon.ico'), 'favicon.ico answers instead of 404ing')
+  const ico = fs.readFileSync('app/favicon.ico')
+  ok(ico[0] === 0 && ico[1] === 0 && ico[2] === 1 && ico[3] === 0,
+    '  …as a real ICO')
+  const accentBGR = Buffer.from(
+    [accent.slice(5, 7), accent.slice(3, 5), accent.slice(1, 3)].map((h) => parseInt(h, 16)),
+  )
+  ok(accent !== '' && ico.includes(accentBGR),
+    '  …drawn in the palette emerald, not the starter triangle')
   ok(!/rect|fill="#F6F4F0"/i.test(icon),
     'on nothing, so it does not show as a pale tile in dark browser chrome')
 }
