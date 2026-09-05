@@ -37,6 +37,8 @@ export default function TripHeader({
   progress,
   wobble,
   action,
+  pinned = true,
+  lineOffsetY = 0,
 }: {
   /**
    * Where tapping the mark goes — the trip hub from inside a trip, the
@@ -63,6 +65,33 @@ export default function TripHeader({
    * its own settings.
    */
   action?: React.ReactNode
+  /**
+   * Whether the bar holds the top of the screen as the page scrolls.
+   *
+   * True everywhere but the landing page. There the mark stands *below* the
+   * bar rather than in it, so a pinned header holds a 145px mark over open
+   * page — and once the event code box made the front page taller than a
+   * phone screen, the sentence and the form scrolled up through the
+   * letterforms. Unpinned, the mark scrolls with everything else and nothing
+   * can pass behind it.
+   *
+   * A backdrop under the mark would have hidden the overlap without moving
+   * anything, and was tried. It hides more than the overlap: the code box
+   * scrolls under it too — and on a phone the keyboard's own scroll puts it
+   * there, so tapping the box could slide it behind an invisible sheet.
+   */
+  pinned?: boolean
+  /**
+   * Where the mark comes to rest, shifted down the page by this many px.
+   *
+   * For the landing page's departure while the page is scrolled. The bar sits
+   * at the top of the *document* there rather than the top of the screen, so
+   * without this the mark would collapse to a point above the viewport and
+   * the whole animation would happen off screen. Handed the scroll position
+   * as the tap lands, it collapses to the top of the screen instead — which
+   * is exactly where the next page's bar draws it.
+   */
+  lineOffsetY?: number
 }) {
   // A named page has no stacked form to collapse out of, and the word is a
   // label rather than a brand moment — so it is always settled.
@@ -95,11 +124,14 @@ export default function TripHeader({
     rowWidth > 0 ? (rowWidth - HERO_W) / 2 : 0,
     HERO_TOP,
   ]
-  const lineOrigin: [number, number] = [LINE_INSET, (HEADER_H - lineH) / 2]
+  const lineOrigin: [number, number] = [
+    LINE_INSET,
+    (HEADER_H - lineH) / 2 + lineOffsetY,
+  ]
 
   return (
     <header
-      className="sticky top-0 z-30"
+      className={`${pinned ? 'sticky' : 'relative'} top-0 z-30`}
       style={{
         height: HEADER_H,
         // The bar itself only appears once the mark has arrived, so an

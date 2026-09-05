@@ -69,6 +69,16 @@ export default function Landing() {
   const frame = useRef<number | null>(null)
   const going = useRef(false)
 
+  /**
+   * How far down the page the mark should land, read once as the tap lands.
+   *
+   * The header is not pinned here, so the bar it collapses into is at the top
+   * of the document, not the top of the screen. Read at departure rather than
+   * followed: the mark must travel to one fixed place, and a target that
+   * moved with the scroll would be a target that moved mid-flight.
+   */
+  const [landsAt, setLandsAt] = useState(0)
+
   // The code being typed, and the check it goes through before departure.
   const [code, setCode] = useState('')
   const [checking, setChecking] = useState(false)
@@ -103,6 +113,8 @@ export default function Landing() {
       return
     }
 
+    // Where the top of the screen is, before anything moves.
+    setLandsAt(window.scrollY)
     setElapsed(0)
 
     // The clock comes from the frame itself rather than from a reading
@@ -174,8 +186,19 @@ export default function Landing() {
     <main className="min-h-dvh bg-cream page-enter">
 
       {/* No trip to go back to yet, so the mark is not a link. It stands
-          full size until a tap sends it up into the bar. */}
-      <TripHeader progress={progress} wobble={wobble} />
+          full size until a tap sends it up into the bar.
+
+          Unpinned here alone: the mark stands below the bar rather than in
+          it, so pinning held it over the page while the sentence and the form
+          scrolled up through the letterforms. It scrolls with them now, and
+          `landsAt` is what still lets it collapse onto the screen the finger
+          is looking at. */}
+      <TripHeader
+        progress={progress}
+        wobble={wobble}
+        pinned={false}
+        lineOffsetY={landsAt}
+      />
 
       {/* The room the mark occupies. It does not close as the mark leaves:
           the content below is on its way out too, and moving it up while it

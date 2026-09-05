@@ -88,6 +88,8 @@ The supplied stacked file has a cream background baked in, a shade off our own. 
 
 `app/components/TripHeader.tsx` — the mark at the top of every screen past the landing page, and the way back: `backTo` is the trip hub from inside a trip, and `/` from the screens that come before one. 52px, `HEADER_H` in `headerMetrics.ts` so the leaderboard's own sticky column row can clear it.
 
+It pins by default and everywhere but one: the landing page passes `pinned={false}`, for the reason under *Leaving the landing page* below.
+
 **The mark itself is sized by `LINE_W`, not by the bar's height.** `HEADER_H` is the right height for the bar; the mark inside it wants to be bigger than that alone implies, or the bar reads as mostly whitespace. `LINE_W` (132) sets the line mark's width, and its height follows the artwork's own ratio — every named-page title (`TitleMark`) sizes off that same derived height, so bumping one bumps all of them together.
 
 **A row that pins under the header does not have to be the row you scrolled past.** The stats hub's choosers — Players/Courses, the player chips, the course picker — used to pin as a block, holding roughly a third of a phone screen above every figure on the page. They now scroll away, and a single line pins in their place: the player from the left where the chips sat, the course from the right, meeting in the middle, so the movement says *these are those rows folded up* rather than *here is a new thing*. Tapping it scrolls back; nothing else on it is tappable, because a bar that both scrolls the page and holds a control is a bar where half the taps do the wrong thing.
@@ -147,7 +149,13 @@ A timed animation runs at the speed it was written to run at. One driven by a fi
 
 The create wizard keeps a **step**-back on steps 2 and 3, which is a different thing from site navigation: the mark goes home, that goes to the answers you just gave. Losing a half-filled form to a logo would be a poor trade for one fewer button.
 
-`useScrollProgress` and `HeroPin` are gone with the scroll version, along with `TRAVEL` and `RELEASE_AT`. The landing page no longer scrolls at all.
+`useScrollProgress` and `HeroPin` are gone with the scroll version, along with `TRAVEL` and `RELEASE_AT`. Nothing on the page reacts to a scroll any more.
+
+**The landing page is the one screen whose header does not pin** (`pinned={false}`). It used to be true that it did not scroll at all, and while that held, a pinned header cost nothing. It stopped holding when the event code box moved onto the front page: the page now runs ~80px past a 390×664 phone, and because the mark stands *below* the bar rather than in it — `HERO_TOP` is measured from the bar's own top edge — pinning held 145px of wordmark over open page. The sentence and the form scrolled up *through* the letterforms. Unpinned, the mark goes up the screen with everything else and nothing can pass behind it.
+
+A cream backdrop under the mark was the other way to do it, and was tried: invisible on a cream page, it would have hidden the overlap without moving anything. It hides more than the overlap. The code box scrolls under it too — and on a phone the keyboard's own scroll-into-view puts it there, so tapping the box could slide it behind a sheet nobody can see. Anything that hides content to protect the logo has that failure in it somewhere.
+
+**What unpinning costs is the collapse's target**, and `lineOffsetY` is what pays it. The bar the mark flies into is now at the top of the *document*, not the top of the screen, so leaving from a scrolled page would run the whole animation above the fold. The landing page reads `window.scrollY` as the tap lands (`landsAt`) and hands it over as that offset, so the mark collapses to the top of the screen the finger is actually looking at — which is exactly where the next page draws its own bar. Read once at departure, never followed: a target that moved with the scroll would be a target that moved mid-flight.
 
 ### Navigation
 

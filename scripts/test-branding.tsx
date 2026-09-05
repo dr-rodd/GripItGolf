@@ -740,7 +740,8 @@ section('The mark is the header, and the way back')
   // them — see the comment at the top of headerMetrics.ts.
   const metrics = read('app/components/headerMetrics.ts')
 
-  ok(src.includes('sticky top-0'), 'it sticks to the top')
+  ok(src.includes("pinned ? 'sticky' : 'relative'"), 'it sticks to the top')
+  ok(/pinned = true/.test(src), '  …unless a screen says otherwise, which only the landing page does')
   ok(metrics.includes('HEADER_H = 52'), 'at a known height')
   ok(src.includes('href={backTo}'), 'and tapping it goes wherever it was pointed')
   ok(src.includes("backTo === '/' ? 'Back to the start' : 'Back to the trip'"),
@@ -803,6 +804,19 @@ section('The collapse happens on leaving the landing page, and nowhere else')
   // Nothing on the page reacts to scrolling any more
   ok(!/addEventListener\(\s*'scroll'/.test(landing + src), 'nothing listens for a scroll')
   ok(!landing.includes('HeroPin'), 'and nothing has to be held still while it happens')
+
+  // The mark stands *below* the bar here rather than in it, so a pinned
+  // header holds 145px of wordmark over open page. The front page outgrew a
+  // phone screen when the event code box moved onto it, and the sentence and
+  // the form then scrolled up through the letterforms. Unpinned, the mark
+  // goes up the screen with them and nothing can pass behind it.
+  ok(/<TripHeader[\s\S]{0,160}pinned=\{false\}/.test(landing),
+    'the mark scrolls away with the page rather than standing over it')
+  // Which leaves the bar at the top of the document rather than the top of
+  // the screen — so a departure from a scrolled page needs telling where the
+  // screen currently is, or the whole collapse happens above the fold.
+  ok(/lineOffsetY=\{landsAt\}/.test(landing) && landing.includes('setLandsAt(window.scrollY)'),
+    '  …and still collapses onto the screen the finger is looking at')
 
   // The frame loop is cleaned up, and a second tap cannot start a second one
   ok(landing.includes('cancelAnimationFrame'), 'the frame loop is torn down on unmount')
