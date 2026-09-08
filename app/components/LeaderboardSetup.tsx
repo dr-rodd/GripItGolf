@@ -751,7 +751,10 @@ function Builder({
   rounds: LinkableRound[]
   /** Events only — ask team boards how they meet the tee sheet. */
   askTeeTeams?: boolean
-  /** Events only — offer a board that ranks tags (lib/tagBoards.ts). */
+  /**
+   * Events only — ask a team board which grouping it ranks: the teams
+   * playing together, or the event's sides (lib/tagBoards.ts).
+   */
   askTags?: boolean
   /**
    * The golf a board made here counts (`Leaderboard.roundIds`), when it is
@@ -822,12 +825,21 @@ function Builder({
 
       <Question n={next()} title="Who is being ranked?">
         {([
-          { key: 'individual' as Audience, label: 'Solo', hint: 'Every player ranked on their own card.' },
-          { key: 'team' as Audience, label: 'Teams', hint: 'Add players to teams, and the teams are ranked against each other' },
+          { key: 'individual' as Audience, label: 'Solo',
+            hint: 'Every player ranked on their own card.' },
+          { key: 'team' as Audience, label: 'Teams',
+            // On an event "teams" covers both groupings — the pairs and
+            // fourballs, and the sides — because the next question is what
+            // splits them. A trip has only the one kind and says so.
+            hint: askTags
+              ? 'Cards counted in groups, and the groups ranked against each other.'
+              : 'Players are put into teams, and the teams are ranked against each other.' },
         ]).map(a => (
           <Choice
             key={a.key}
-            on={draft.audience === a.key && !draft.tagMode}
+            // A tags board IS a team board, so Teams lights for one — the
+            // grouping question below is what says which kind it is.
+            on={draft.audience === a.key}
             label={a.label}
             hint={a.hint}
             // Who is ranked is the question everything else hangs off, so
@@ -835,26 +847,55 @@ function Builder({
             // across either — teams are apportioned on the team screen. The
             // scope is, because which golf this board counts is the screen
             // it is being made on, not an answer inside the cascade.
-            onClick={() => setDraft({ ...fresh, audience: a.key })}
+            //
+            // Tapping the answer already chosen changes nothing: on an event
+            // that tap would silently drop the grouping answer underneath it.
+            onClick={() => {
+              if (draft.audience === a.key) return
+              setDraft({ ...fresh, audience: a.key })
+            }}
           />
         ))}
-        {/* Events only. Tags are the sides a field carries all week while
-            the fourballs change daily, and a trip has no organiser to set
-            them — the same context `askTeeTeams` carries, for the same
-            reason: this model does not know what kind of trip is asking.
-            Picking it writes a mode straight away, so the draft is never a
-            tags board that has not said how it scores. */}
-        {askTags && (
+      </Question>
+
+      {/* Events only, and asked *of* a team board rather than beside it.
+          A side is a team — a `teams` row on the main sheet
+          (lib/tagBoards.ts) — so offering it as a third answer up there
+          made an organiser choose between two things that are additive:
+          an event can rank its sides and its playing teams at once, a
+          board each. A trip is never asked, having no organiser to make
+          sides — the same context `askTeeTeams` carries, for the same
+          reason: this model does not know what kind of trip is asking.
+
+          Picking the sides writes a mode straight away, so the draft is
+          never a tags board that has not said how it scores. */}
+      {askTags && draft.audience === 'team' && (
+        <Question n={next()} title="Which teams are being ranked?">
+          <Choice
+            on={!draft.tagMode}
+            label="The teams playing together"
+            hint="Pairs and fourballs — set on the teams screen or the tee sheet, and free to change from round to round."
+            onClick={() => {
+              if (!draft.tagMode) return
+              setDraft({ ...fresh, audience: 'team' })
+            }}
+          />
           <Choice
             on={isTagBoard(draft)}
-            label="Tags"
-            hint="Rank the sides players carry all week — whoever they play with on the day."
-            onClick={() => setDraft({
-              ...fresh, audience: 'team', tagMode: TAG_MODES[0].key,
-            })}
+            label="The event's sides — its tags"
+            hint="Europe and USA, the club sides. A player keeps their side for the whole event, whoever they play alongside on the day. Sides are made in the organiser area, under Tags."
+            onClick={() => {
+              // Already on the sides: re-tapping must not throw away the
+              // mode and the scoring underneath it.
+              if (isTagBoard(draft)) return
+              setDraft({ ...fresh, audience: 'team', tagMode: TAG_MODES[0].key })
+            }}
           />
-        )}
-      </Question>
+          <p className="t-cap text-ink/65 leading-snug">
+            Not one or the other — an event can run a board for each.
+          </p>
+        </Question>
+      )}
 
       {draft.audience && (
         <Question n={next()} title="Pick the format.">
@@ -925,11 +966,11 @@ function Builder({
         </Question>
       )}
 
-      {/* A tags board's own question, sitting where a team board is asked
+      {/* A sides board's own question, sitting where a team board is asked
           how its players combine — because it is the same question asked
-          of a side: what makes the tag's score for the day. */}
+          of a side: what makes its score for the day. */}
       {offersTagMode(draft) && (
-        <Question n={next()} title="How does a tag score a round?">
+        <Question n={next()} title="How does a side score a round?">
           {TAG_MODES.map(m => (
             <Choice
               key={m.key}
@@ -976,7 +1017,7 @@ function Builder({
             ))}
           </div>
           <p className="t-cap text-ink/65 leading-snug">
-            A tag with fewer players out than this counts everyone who
+            A side with fewer players out than this counts everyone who
             played — a card nobody handed in is not a nought.
           </p>
         </Question>
@@ -1339,9 +1380,10 @@ export default function LeaderboardSetup({
    */
   askTeeTeams?: boolean
   /**
-   * Offer a board that ranks tags — events only, for the same reason and
-   * with the same shape as `askTeeTeams`: a trip has no organiser to make
-   * the sides, and this model does not know what kind of trip is asking.
+   * Ask a team board whether it ranks the playing teams or the event's
+   * sides — events only, for the same reason and with the same shape as
+   * `askTeeTeams`: a trip has no organiser to make the sides, and this
+   * model does not know what kind of trip is asking.
    */
   askTags?: boolean
   /**

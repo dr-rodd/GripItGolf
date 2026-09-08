@@ -273,7 +273,7 @@ section('A tags board is named for what it ranks')
   ok(boardRules({ ...lb, tagCount: 1 }).includes('best card counts'),
     'one card is singular')
   ok(boardRules({ ...lb, tagMode: 'all_cards', tagCount: undefined })
-    .includes('Every player\'s round counts'), 'and every card says so')
+    .includes('Every player\'s card counts'), 'and every card says so')
   ok(!boardRules(lb).includes('composite card'),
     'never a better-ball sentence — a tag builds no composite')
 }
@@ -669,10 +669,15 @@ section('The board is offered where boards are made, and only on events')
 {
   const form = read('app/components/LeaderboardSetup.tsx')
   ok(form.includes('askTags'), 'the cascade takes the events-only flag')
-  ok(/askTags && \(/.test(form),
-    '  …and a trip is never offered the Tags choice')
+  // Sides are not a third audience on screen either: they are asked OF a
+  // team board, because a side IS a team and an event can rank both at
+  // once. A trip, having no sides, is never asked the question at all.
+  ok(form.includes("askTags && draft.audience === 'team' && ("),
+    '  …and a trip is never asked which grouping a team board ranks')
+  ok(!/label="Tags"/.test(form),
+    'sides are never offered beside Solo and Teams, as a rival to them')
   ok(form.includes('tagMode: TAG_MODES[0].key'),
-    'picking Tags writes a mode straight away — the draft is never a tags board without one')
+    'picking the sides writes a mode straight away — the draft is never a tags board without one')
   ok(form.includes('isTagBoard(lb)) return { ...lb, teamSet: TAG_SET }'),
     'saving pins it to the tag sheet rather than allocating a fresh one')
   ok(form.includes('squatters'),

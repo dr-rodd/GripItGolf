@@ -73,8 +73,8 @@ export default function TagJoinClient({
       <div>
         <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-1">Your tag</h2>
         <p className="text-ink/65 text-sm leading-snug">
-          The side you play for all week — it stays with you whoever you
-          are out with on the day.
+          The side you play for — it stays with you for the whole event,
+          whoever you are out with on the day.
         </p>
       </div>
 

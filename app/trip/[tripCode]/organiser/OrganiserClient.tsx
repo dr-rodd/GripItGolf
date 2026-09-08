@@ -504,7 +504,7 @@ export default function OrganiserClient({
         </section>
 
         {/* ── Teams & tags ──
-            The tags portal: the event-wide sides players carry all week,
+            The tags portal: the sides players carry for the whole event,
             made and assigned behind this card. Playing teams for a given
             day stay the tee sheet's business; the tag is the census, and
             the census lives with the organiser. */}

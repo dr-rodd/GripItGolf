@@ -205,7 +205,7 @@ export function describeTags(
   taggedCount: number,
   playerCount: number,
 ): string {
-  if (tagCount === 0) return 'No tags yet — the event-wide sides players carry all week.'
+  if (tagCount === 0) return 'No tags yet — the sides players carry for the whole event.'
   const tags = `${tagCount} tag${tagCount === 1 ? '' : 's'}`
   if (playerCount === 0) return `${tags} · nobody on the roster yet.`
   return `${tags} · ${taggedCount} of ${playerCount} player${playerCount === 1 ? '' : 's'} tagged.`

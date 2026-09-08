@@ -117,17 +117,23 @@ export type LeagueSetup = {
 export const MAX_LEAGUE_DAYS = 30
 
 /**
- * Why a league cannot run this many days, or null when it can. One round a
- * day is what a league day is; the standalone ceiling is the platform's
- * round ceiling — the same number, not a second copy of it.
+ * Why a league cannot play this many days, or null when it can.
+ *
+ * `days` is the PLAYING days — the days that carry a round — never the
+ * span the event sits across: a standalone run may hold a rest day, and a
+ * continuous league is nothing but a period with a few days picked inside
+ * it. The standalone ceiling is the platform's round ceiling, the same
+ * number and not a second copy of it.
  */
 export function leagueDaysIssue(days: number, schedule: LeagueSchedule = 'standalone'): string | null {
   if (!Number.isInteger(days) || days < 1) {
-    return 'An event needs at least one day.'
+    return 'An event needs at least one playing day.'
   }
   const cap = schedule === 'standalone' ? MAX_ROUNDS : MAX_LEAGUE_DAYS
   if (days > cap) {
-    return `An event can run at most ${cap} days — bring it in to continue.`
+    return schedule === 'standalone'
+      ? `An event can play at most ${cap} rounds — turn a day off to continue.`
+      : `An event can run at most ${cap} days — bring it in to continue.`
   }
   return null
 }
@@ -262,7 +268,7 @@ export function parseLeagueSetup(raw: unknown): LeagueSetup | null {
     format: 'league',
     ...(schedule ? { schedule } : {}),
     // The repeat is continuous's alone — a series has no period to repeat
-    // inside, and a standalone run is already every day.
+    // inside, and a standalone run names its playing days outright.
     ...(schedule === 'continuous' && Number.isInteger(weekday) && weekday >= 0 && weekday <= 6
       ? { repeatWeekday: weekday } : {}),
     entry,

@@ -136,6 +136,13 @@ export default function CreateLeagueForm({ schedule }: {
   const [endDate, setEndDate] = useState('')
   const [email, setEmail] = useState('')
 
+  // Standalone multi-day — the days of the run that nobody plays, by
+  // index into the run. A run of days is not a promise of golf on every
+  // one of them: a travel day, a rest day in the middle of a long weekend.
+  // Empty is every day playing, which is what every standalone event
+  // created before this question existed was.
+  const [restDays, setRestDays] = useState<number[]>([])
+
   // Continuous — the playing days inside the period: every week on one
   // day, or picked by hand.
   const [repeatOn, setRepeatOn] = useState(false)
@@ -185,6 +192,15 @@ export default function CreateLeagueForm({ schedule }: {
   const datesBackwards = !!(startDate && endDate && endDate < startDate)
   const periodSet = !!(startDate && endDate && !datesBackwards)
 
+  // The standalone run's length in days — how many days the event spans,
+  // which is no longer the same question as how many rounds it plays.
+  // A run longer than a continuous league's ceiling is the wrong shape
+  // rather than a bigger one, and is said so on screen.
+  const runLength = schedule === 'standalone' && multiDay && periodSet
+    ? dayCount(startDate, endDate)
+    : 1
+  const runTooLong = runLength > MAX_LEAGUE_DAYS
+
   // A continuous league's playing days: every week on one day, or picked
   // by hand — deduped and sorted either way, because the running order is
   // the order the days happen, not the order they were typed.
@@ -198,17 +214,18 @@ export default function CreateLeagueForm({ schedule }: {
 
   /**
    * The playing slots — what a round will be made from, whatever the
-   * shape. Standalone: the run's consecutive days. Continuous: the picked
-   * dates, each at its calendar offset inside the period so `dateForDay`
-   * keeps telling the truth about it. Series: numbered events, no dates.
+   * shape. Standalone: the days of the run that are being played, each at
+   * its own offset, so a rest day in the middle leaves the days either
+   * side on their true dates. Continuous: the picked dates, each at its
+   * calendar offset inside the period so `dateForDay` keeps telling the
+   * truth about it. Series: numbered events, no dates.
    * The rounds are the one copy of this after creation.
    */
   const slots: { dayIndex: number; date: string | null }[] =
     schedule === 'standalone'
-      ? Array.from(
-          { length: multiDay ? dayCount(startDate || null, endDate || null) : 1 },
-          (_, i) => ({ dayIndex: i, date: dateForDay(startDate || null, i) }),
-        )
+      ? Array.from({ length: multiDay ? runLength : 1 }, (_, i) => i)
+          .filter(i => !restDays.includes(i))
+          .map(i => ({ dayIndex: i, date: dateForDay(startDate || null, i) }))
       : schedule === 'continuous'
         ? playDates.map(d => ({
             dayIndex: (dayNumber(d)! - dayNumber(startDate)!) / 86_400_000,
@@ -239,7 +256,7 @@ export default function CreateLeagueForm({ schedule }: {
     name.trim().length > 0 &&
     (schedule === 'standalone'
       ? multiDay !== null && (multiDay
-          ? !!startDate && !!endDate && !datesBackwards && !daysIssue
+          ? !!startDate && !!endDate && !datesBackwards && !runTooLong && !daysIssue
           : !!startDate)
       : schedule === 'continuous'
         ? periodSet && !manualOutside && slots.length > 0 && !daysIssue
@@ -640,13 +657,13 @@ export default function CreateLeagueForm({ schedule }: {
                       { key: 'multi', label: 'Multi-day' },
                     ] as const}
                     chosen={multiDay === null ? null : multiDay ? 'multi' : 'single'}
-                    onChoose={k => setMultiDay(k === 'multi')}
+                    onChoose={k => { setMultiDay(k === 'multi'); setRestDays([]) }}
                   />
                   <p className="text-ink/65 text-[13px] mt-2 leading-snug">
                     {multiDay === null
                       ? 'One day, one venue, one leaderboard — or a run of days, each with its own.'
                       : multiDay
-                        ? 'Each day gets its own venue next, and you’ll choose how the days relate on the leaderboard.'
+                        ? 'Say which of the days are played, give each one a venue next, and choose how they relate on the leaderboard.'
                         : 'Deliberately simple: one venue, one date, one leaderboard, live scoring.'}
                   </p>
                 </div>
@@ -655,19 +672,83 @@ export default function CreateLeagueForm({ schedule }: {
                   multiDay ? (
                     <div>
                       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-                        <DateField label="First day" value={startDate} onChange={setStartDate} />
-                        <DateField label="Last day"  value={endDate}   onChange={setEndDate} />
+                        {/* Moving either end re-numbers the days, so the
+                            days turned off are cleared with it: index 2 of
+                            the old run is a different date in the new one,
+                            and a rest day silently landing on the wrong
+                            day is worse than asking again. */}
+                        <DateField
+                          label="First day"
+                          value={startDate}
+                          onChange={v => { setStartDate(v); setRestDays([]) }}
+                        />
+                        <DateField
+                          label="Last day"
+                          value={endDate}
+                          onChange={v => { setEndDate(v); setRestDays([]) }}
+                        />
                       </div>
                       {datesBackwards && (
                         <p className="text-rust-deep text-[13px] mt-2 leading-snug">
                           The last day cannot come before the first.
                         </p>
                       )}
-                      {!datesBackwards && startDate && endDate && (
+                      {runTooLong && (
+                        <p className="text-rust-deep text-[13px] mt-2 leading-snug">
+                          That is a long run for one event — an event spread
+                          over a period like that is a continuous one, with
+                          its playing days picked inside it.
+                        </p>
+                      )}
+
+                      {/* Which of the run's days are actually played.
+                          A run of days was taken as a round a day, which is
+                          a presumption: the middle Saturday of a long
+                          weekend may be nobody's golf. Every day starts on,
+                          so an event that does play every day is made
+                          exactly as it always was. */}
+                      {!datesBackwards && !runTooLong && periodSet && runLength > 1 && (
+                        <div className="mt-4">
+                          <label className={LABEL}>Playing days</label>
+                          <p className="text-ink/65 text-[13px] mb-2 leading-snug">
+                            Turn off any day nobody tees off — a travel day, a
+                            rest day. The event still runs from the first date
+                            to the last.
+                          </p>
+                          <div className="space-y-2">
+                            {Array.from({ length: runLength }, (_, i) => i).map(i => {
+                              const label = describeDay(dateForDay(startDate, i), i)
+                              const on = !restDays.includes(i)
+                              return (
+                                <div
+                                  key={i}
+                                  className="flex items-center justify-between gap-4 bg-surface border border-bark/12 rounded-2xl px-4 py-3"
+                                >
+                                  <p className={`text-sm min-w-0 truncate ${on ? 'text-ink' : 'text-ink/65'}`}>
+                                    {label}
+                                  </p>
+                                  <Toggle
+                                    checked={on}
+                                    onChange={v => setRestDays(prev =>
+                                      v ? prev.filter(d => d !== i) : [...prev, i])}
+                                    label={`Golf on ${label}`}
+                                  />
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {!datesBackwards && !runTooLong && startDate && endDate && (
                         daysIssue
                           ? <p className="text-rust-deep text-[13px] mt-2 leading-snug">{daysIssue}</p>
                           : <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                              {slots.length === 1 ? 'One day.' : `${slots.length} days, one round each.`}
+                              {slots.length === runLength
+                                ? slots.length === 1
+                                  ? 'One day, one round.'
+                                  : `${slots.length} days, a round each.`
+                                : `${slots.length} round${slots.length === 1 ? '' : 's'} across ${runLength} days.`}
                             </p>
                       )}
                     </div>

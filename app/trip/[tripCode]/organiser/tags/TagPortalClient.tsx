@@ -212,9 +212,10 @@ export default function TagPortalClient({
           Tags
         </h1>
         <p className="text-ink/65 text-sm mb-6 leading-snug">
-          The event-wide sides players carry all week — their tag follows
-          them whoever they play with on the day. Tags colour every player
-          card and feed any leaderboard that ranks the sides.
+          A side each player carries for the whole event — Europe and USA,
+          the club sides. It follows them whoever they play alongside on the
+          day, colours their player card everywhere, and feeds any
+          leaderboard that ranks the sides.
         </p>
 
         {/* ── Self-assign ── */}

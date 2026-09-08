@@ -341,7 +341,7 @@ The screen stays open once the trip is live. It has to — a player who joins ha
 
 ### Tags, and a sheet for each day
 
-An event has two levels of grouping and they are different things. A **tag** is the side a player carries all week — Europe and USA, the four club sides — set once and never changing. A **team** is the playing group on the day: the fourball, the pair, picked at the tee sheet and different every morning. An event may use one, the other, or both.
+An event has two levels of grouping and they are different things. A **tag** is the side a player carries for the whole event — Europe and USA, the four club sides — set once and never changing. A **team** is the playing group on the day: the fourball, the pair, picked at the tee sheet and different every morning. An event may use one, the other, or both, and the two are **additive rather than alternative**: a sides board and a playing-teams board run side by side on the same cards.
 
 Both are sheets, which is why neither needed a migration:
 
@@ -350,7 +350,9 @@ Both are sheets, which is why neither needed a migration:
 
 **A board's sheet is derived from its scope, never stored twice** (`sheetForBoard`): a team board counting exactly one round plays that day's teams; anything else plays the sheet it was given. Stored, the two would drift — a board whose days changed would be pointing at the teams of a day it no longer counts. Day sheets are kept out of `sheetsInUse`, so finalising an event never demands Tuesday's fourballs on Sunday.
 
-**The tags board** is a team board wearing a `tagMode`, pinned to `main`, not a third audience — every predicate that matters switches on `audience === 'team'` and already does the right thing. Three modes: the tag's best few cards each round, every card, or the day's team cards (`tagOfTeam` decides whose card it is, and returns null for a mixed team rather than crediting whoever was first). **Paying by finishing position each day is not a fourth mode** — it is `combine: 'position'`, which every league board has always had.
+**The tags board** is a team board wearing a `tagMode`, pinned to `main`, not a third audience — every predicate that matters switches on `audience === 'team'` and already does the right thing. Three modes: the side's best few cards each round, every card, or the day's team cards (`tagOfTeam` decides whose card it is, and returns null for a mixed team rather than crediting whoever was first). **Paying by finishing position each day is not a fourth mode** — it is `combine: 'position'`, which every league board has always had.
+
+**And the form asks it that way too.** The cascade offers Solo and Teams, and then — on an event only (`askTags`) — asks a team board *which* teams: the ones playing together, or the event's sides. Offered as a third answer beside Solo and Teams, as it first was, it read as a choice between a side and a fourball when a side *is* a team and an event can rank both. On screen the word is **sides**, with "tags" named once so the organiser area's Tags portal is recognisable; `TAG_MODES` and `describeTagMode` say "side" too, because those hints are read on a saved board's own line with the portal nowhere in sight.
 
 **The tee-sheet gate.** When a tags board exists, a player with no tag has nothing to play for, so the sheet refuses to seat them (`tagGateReason`, checked before the write, said in the slot it was refused in, with a banner at the top first). A team's card counts towards one tag, so a team is of one (`dayTeamTagIssue`). The gate only ever refuses an **add** — somebody already seated who then loses their tag is left where they stand, because evicting a name the field has already read is the worse failure.
 

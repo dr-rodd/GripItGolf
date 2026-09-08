@@ -189,10 +189,10 @@ export type Leaderboard = {
    * Events only — this board ranks TAGS, and this is how a tag's score for
    * a round is built from its players' cards.
    *
-   * A tag is the side a player carries all week while the fourballs change
-   * daily (lib/tagBoards.ts). Its board is a team board wearing this: the
-   * teams it ranks are the tags, on the main sheet, and only the round
-   * score is built differently. Absent means an ordinary team board, which
+   * A tag is the side a player carries for the whole event while the
+   * fourballs change from round to round (lib/tagBoards.ts). Its board is
+   * a team board wearing this: the teams it ranks are the tags, on the
+   * main sheet, and only the round score is built differently. Absent means an ordinary team board, which
    * is every board ever stored — so nothing already running changes.
    */
   tagMode?: TagMode
@@ -309,12 +309,16 @@ export type TagMode = 'best_cards' | 'all_cards' | 'day_teams'
 export const TAG_MODES: { key: TagMode; label: string; hint: string }[] = [
   // Hints carry a full stop: `boardRules` joins them into the line under a
   // saved board's title, the same contract every other registry here keeps.
-  { key: 'best_cards', label: 'Best few cards each round',
-    hint: 'The tag\'s best cards count each round — you choose how many.' },
+  // Said in sides rather than in tags: "tag" is what the platform calls
+  // the row, "side" is what a golfer calls the thing — and these hints are
+  // read on a saved board's own line, where nobody has the portal open to
+  // remind them which is which.
+  { key: 'best_cards', label: 'Best cards only',
+    hint: 'Only the side\'s best cards count each round — you choose how many.' },
   { key: 'all_cards', label: 'Every card counts',
-    hint: 'Every player\'s round counts towards their tag.' },
+    hint: 'Every player\'s card counts towards their side.' },
   { key: 'day_teams', label: 'The day\'s team cards',
-    hint: 'Each team\'s card counts towards the tag its players share.' },
+    hint: 'Each pair or fourball\'s card counts for the side its players share.' },
 ]
 
 /**
@@ -366,8 +370,8 @@ export function describeTagMode(lb: Pick<Partial<Leaderboard>, 'tagMode' | 'tagC
   if (lb.tagMode === 'best_cards') {
     const n = tagCountOf(lb)
     return n === 1
-      ? 'The tag\'s best card counts each round.'
-      : `The tag's best ${n} cards count each round.`
+      ? 'The side\'s best card counts each round.'
+      : `The side's best ${n} cards count each round.`
   }
   return ALL_TAG_MODES.find(m => m.key === lb.tagMode)?.hint ?? ''
 }
