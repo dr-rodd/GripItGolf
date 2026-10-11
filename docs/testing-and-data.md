@@ -20,6 +20,7 @@ Every suite is a plain `tsx` script under `scripts/`, run by `npm test`. No fram
 | `test:match-decision` | Deciding a knockout from the cards — the seven methods, the two shapes they fall into, the matchplay handicap difference, quota on both scales, a pairing as one card, and that auto-apply only fills an empty match |
 | `test:bracket-layout` | Column geometry and connectors, including the slide that centres the Final |
 | `test:bracket-render` | The bracket component at every size, singles and pairs |
+| `test:run-challenge` | Green Dot Run: how a run earns points (inclusive minimum, activities, the daily limit on the day), the stored setup read back whole and fail-soft, its own permission registry kept apart from golf's, the creation checks, and the wiring — the sport chooser, the `?type=run` door, insertion order, every golf door handing a run challenge to `/run/`, and an email that says challenge without changing golf's |
 | `test:progress` | Recording and correcting winners, and the cascade |
 | `test:itinerary` | The running order — golf, stay, travel and activity items, the rounds they generate, diffing an edit back into writes, and migration 027 agreeing with the model |
 | `test:trip-form` | Trip creation |

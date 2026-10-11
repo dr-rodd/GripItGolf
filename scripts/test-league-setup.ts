@@ -242,7 +242,10 @@ section('The tournament door asks the shape, then the format')
   ok(flow.includes('CreateLeagueForm') && flow.includes('CreateTripForm')
     && flow.includes('CreateKnockoutForm'),
     'which can reach all three forms')
-  ok(flow.includes("get('type') === 'tournament'"),
+  // The ?type read names three doors now — trip, tournament, run — and only
+  // the tournament door falls through to the shape and format questions.
+  ok(flow.includes("t === 'tournament' || t === 'run'") &&
+     flow.includes("if (type !== 'tournament') return <CreateTripForm />"),
     'and only asks the questions through the tournament door')
   for (const shape of ['Standalone', 'Continuous', 'Series']) {
     ok(flow.includes(`>${'\n'}            ${shape}`) || flow.includes(shape),

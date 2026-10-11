@@ -181,6 +181,11 @@ section('A run challenge\'s field joins itself by default')
   eq(parseRunPermissions({ create_teams: true, add_courses: true, log_runs: 'yes' }),
     { join_self: true, create_teams: true, log_runs: true },
     'a run key is honoured; a golf key and a non-boolean are not')
+  eq(parseRunPermissions({ add_players: true, edit_scores: true, assign_tag: true }), defaultRunPermissions(),
+    'golf keys switched on leave every run permission at its default')
+  eq(parseRunPermissions({ create_teams: 'yes', join_self: false }).create_teams, false,
+    'a non-boolean never switches a run permission on')
+  eq(parseRunPermissions({ join_self: false }).join_self, false, 'and a real false switches one off')
   eq(parseEventPermissions({ join_self: false, create_teams: true }), defaultPermissions(),
     'and golf\'s parser never reads a run key — the two share a column, not a meaning')
   eq(storedRunPermissions(defaultRunPermissions()), null, 'nothing changed writes nothing')
