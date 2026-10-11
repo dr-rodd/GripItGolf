@@ -91,7 +91,7 @@ export default function Landing() {
     : smooth(Math.max(0, Math.min(1, (elapsed - WOBBLE_MS) / TRAVEL_MS)))
 
   useEffect(() => {
-    router.prefetch('/golf')
+    router.prefetch('/create')
     router.prefetch('/dashboard/create')
     router.prefetch('/join')
   }, [router])
@@ -260,8 +260,8 @@ export default function Landing() {
           {/* Still a real link: it prefetches, it survives a long press,
               and without JavaScript it simply navigates. */}
           <Link
-            href="/golf"
-            onClick={leave('/golf')}
+            href="/create"
+            onClick={leave('/create')}
             className={buttonClass('secondary')}
           >
             Create an Event

@@ -55,7 +55,7 @@ function uiFiles(): string[] {
       else if (/\.tsx?$/.test(e.name)) out.push(p)
     }
   }
-  for (const d of ['app/trip', 'app/components', 'app/join', 'app/dashboard', 'app/admin', 'app/golf']) walk(d)
+  for (const d of ['app/trip', 'app/components', 'app/join', 'app/dashboard', 'app/admin', 'app/golf', 'app/create', 'app/run']) walk(d)
   out.push('app/page.tsx', 'app/layout.tsx', 'app/Landing.tsx', 'app/[code]/page.tsx')
   return out
 }
@@ -1360,7 +1360,7 @@ section('The destinations are prefetchable whole')
   // server round trip — which lands after the animation has finished and
   // reads as a gap. Measured before this was fixed: 480ms on join, 314ms on
   // create, and create still had a database query in front of it.
-  for (const f of ['app/join/page.tsx', 'app/dashboard/create/page.tsx']) {
+  for (const f of ['app/join/page.tsx', 'app/dashboard/create/page.tsx', 'app/create/page.tsx']) {
     const src = read(f)
     const name = f.split('/').slice(-2).join('/')
     ok(!src.includes('force-dynamic'), `${name} is not forced dynamic`)
@@ -1389,8 +1389,9 @@ section('The destinations are prefetchable whole')
   // Prefetched on the landing page, or none of the above helps
   const landing = read('app/Landing.tsx')
   ok(landing.includes("router.prefetch('/dashboard/create')") &&
-     landing.includes("router.prefetch('/join')"),
-    'both are prefetched while the landing page sits there')
+     landing.includes("router.prefetch('/join')") &&
+     landing.includes("router.prefetch('/create')"),
+    'all three are prefetched while the landing page sits there')
 }
 
 // ─── One header, everywhere ────────────────────────────────────
@@ -1400,7 +1401,7 @@ section('The screens before a trip wear the same header')
   // The mark lands in the bar on the way off the landing page. If the screen
   // it lands on did not have it there, the collapse would be explaining a
   // move to somewhere the mark does not end up.
-  for (const f of ['app/join/JoinForm.tsx', 'app/dashboard/create/CreateTripForm.tsx', 'app/golf/page.tsx']) {
+  for (const f of ['app/join/JoinForm.tsx', 'app/dashboard/create/CreateTripForm.tsx', 'app/golf/page.tsx', 'app/create/page.tsx']) {
     const src = read(f)
     const name = f.split('/').pop()
     ok(src.includes('<TripHeader backTo="/" />'),
@@ -1800,7 +1801,12 @@ section('Landing page')
   // person holding a code and typing it. /join survives for shared links.
   ok(home.includes('maxLength="6"'), 'the event code is typed straight into the page')
   ok(/Join Event/i.test(home), 'and joined from it')
-  ok(home.includes('/golf'), 'creating goes through the golf doorway')
+  // Creating asks which sport first — golf's doorway and running's door
+  // both sit behind /create, so a new sport is a card there, not a change here.
+  ok(home.includes('/create'), 'creating goes through the sport chooser')
+  ok(read('app/create/page.tsx').includes('href="/golf"') &&
+     read('app/create/page.tsx').includes('/dashboard/create?type=run'),
+    '  …which offers golf\'s doorway and running\'s door')
   ok(/Create an Event/i.test(home), 'named plainly')
 
   // One primary action: joining, which is the box directly above it.

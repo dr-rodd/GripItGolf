@@ -60,9 +60,11 @@ section('Adding a fourth permission is one line, structurally')
   eq(Object.keys(defaultPermissions()), EVENT_PERMISSIONS.map(p => p.key),
     'and the default map is exactly the registry, in order')
 
+  // The toggles render whichever registry they are handed — golf's unless
+  // told otherwise (a run challenge hands in its own, lib/runChallenge.ts).
   const toggles = read('app/components/EventPermissionToggles.tsx')
-  ok(toggles.includes('EVENT_PERMISSIONS.map(p =>'),
-    'the toggles render the registry — a new permission appears untouched')
+  ok(toggles.includes('registry = EVENT_PERMISSIONS') && toggles.includes('registry.map(p =>'),
+    'the toggles render the registry — golf\'s by default — so a new permission appears untouched')
 }
 
 // ─── Reading what is stored ────────────────────────────────────

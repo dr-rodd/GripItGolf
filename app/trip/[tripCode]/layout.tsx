@@ -1,5 +1,7 @@
+import { redirect } from 'next/navigation'
 import TabBar from '@/app/components/TabBar'
 import { isEvent } from '@/lib/eventHub'
+import { isRunChallenge } from '@/lib/runChallenge'
 import { fetchTripKind } from './kind'
 
 /**
@@ -25,6 +27,12 @@ import { fetchTripKind } from './kind'
  * runs in parallel with the page's own queries on the render they share,
  * and the layout persists across tab navigations, so a tab press inside
  * the trip never re-pays it. Nothing heavier belongs here.
+ *
+ * The same answer sends a Green Dot Run challenge home to `/run/[code]`.
+ * Every way into an event — the landing page's code box, `/join`, the bare
+ * short link, an old shared link — arrives here first, so this is the one
+ * place that has to know; and no golf screen ever renders for a run
+ * challenge, whichever page under `/trip/` was asked for.
  */
 
 export default async function TripLayout({
@@ -36,6 +44,7 @@ export default async function TripLayout({
 }) {
   const { tripCode } = await params
   const kind = await fetchTripKind(tripCode)
+  if (isRunChallenge(kind)) redirect(`/run/${tripCode}`)
 
   return (
     <>

@@ -7,6 +7,7 @@ import type { LeagueSchedule } from '@/lib/leagueSetup'
 import CreateTripForm from './CreateTripForm'
 import CreateLeagueForm from './CreateLeagueForm'
 import CreateKnockoutForm from './CreateKnockoutForm'
+import CreateRunForm from './CreateRunForm'
 
 /**
  * Which form the create route shows.
@@ -27,6 +28,9 @@ import CreateKnockoutForm from './CreateKnockoutForm'
  *                 A league by nature — the days feed leaderboards — so the
  *                 format question is not asked.
  *
+ * A run challenge (`?type=run`, from the sport chooser at /create) is a
+ * different sport altogether and goes straight to its own wizard.
+ *
  * The `?type` read is the same hydration trick the wizard itself uses: the
  * server has no URL, so it renders the trip form and the browser corrects
  * on arrival — which keeps this route static, and a dynamic route cannot
@@ -34,9 +38,12 @@ import CreateKnockoutForm from './CreateKnockoutForm'
  */
 
 const subscribe = () => () => {}
-const readTournament = () =>
-  new URLSearchParams(window.location.search).get('type') === 'tournament'
-const readOnServer = () => false
+type CreateType = 'trip' | 'tournament' | 'run'
+const readType = (): CreateType => {
+  const t = new URLSearchParams(window.location.search).get('type')
+  return t === 'tournament' || t === 'run' ? t : 'trip'
+}
+const readOnServer = (): CreateType => 'trip'
 
 const CARD = [
   'block w-full text-left bg-surface border border-bark/12 rounded-2xl p-5',
@@ -71,11 +78,12 @@ function Chooser({ title, sub, onBack, children }: {
 }
 
 export default function CreateFlow() {
-  const isTournament = useSyncExternalStore(subscribe, readTournament, readOnServer)
+  const type = useSyncExternalStore(subscribe, readType, readOnServer)
   const [schedule, setSchedule] = useState<LeagueSchedule | null>(null)
   const [format, setFormat] = useState<'match_play' | 'league' | null>(null)
 
-  if (!isTournament) return <CreateTripForm />
+  if (type === 'run') return <CreateRunForm />
+  if (type !== 'tournament') return <CreateTripForm />
 
   // A series is a league by nature, so picking it skips the format question.
   if (schedule === 'series') return <CreateLeagueForm schedule="series" />

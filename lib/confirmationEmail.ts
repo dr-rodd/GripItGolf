@@ -32,8 +32,10 @@ export const QR_CID = 'trip-qr'
 /** Where the logo lives for inboxes — production, whoever sent the mail. */
 const LOGO_URL = 'https://greendot.live/email-logo.png'
 
-export function confirmationSubject(tripName: string): string {
-  return `${tripName} is booked on Green Dot`
+export function confirmationSubject(tripName: string, sport?: 'run'): string {
+  return sport === 'run'
+    ? `${tripName} is set up on Green Dot`
+    : `${tripName} is booked on Green Dot`
 }
 
 /** "13–16 August", the month said once when it is one month. */
@@ -84,12 +86,51 @@ export type ConfirmationDetails = {
    * posture this email keeps rather than trades away.
    */
   adminUrl?: string
+  /**
+   * A Green Dot Run challenge (lib/runChallenge.ts). Changes the words, never
+   * the shape: the same link, QR, code and organiser block, said about a
+   * challenge rather than a trip. Absent is golf, byte for byte as before.
+   */
+  sport?: 'run'
+}
+
+/**
+ * The words that change between a golf message and a run challenge's. One
+ * table, so the HTML and the text version cannot drift into saying two
+ * different things.
+ */
+function wordsFor(d: ConfirmationDetails) {
+  if (d.sport === 'run') {
+    return {
+      intro: 'Nice one — the challenge is set. Share the link so everyone can join a team.',
+      open: 'Open the challenge',
+      thing: 'challenge',
+      codeLabel: 'Challenge code',
+      admin: 'Your admin link opens the organiser area: teams, permissions and the points rules.',
+      adminText: 'Your admin link (the organiser area)',
+      created: 'when creating the challenge',
+      signOff: 'Lace up — let’s go 🏃',
+      signOffText: "Lace up — let's go 🏃",
+    }
+  }
+  return {
+    intro: 'Nice one — that’s a serious trip! Share the link with the other players.',
+    open: 'Open your trip',
+    thing: 'trip',
+    codeLabel: d.adminUrl ? 'Event code' : 'Trip code',
+    admin: 'Your admin link opens the organiser area: permissions, notices, starts and the event’s setup.',
+    adminText: 'Your admin link (the organiser area)',
+    created: 'when creating the event',
+    signOff: 'Let’s go — launch ’em&nbsp;🏌️',
+    signOffText: "Let's go — launch 'em 🏌️",
+  }
 }
 
 export function confirmationHtml(d: ConfirmationDetails): string {
   const name = escapeHtml(d.tripName)
   const dates = d.dates ? escapeHtml(d.dates) : null
   const url = escapeHtml(d.tripUrl)
+  const w = wordsFor(d)
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -119,21 +160,21 @@ ${dates ? `
 ` : ''}
           <tr>
             <td align="center" style="font-family:${FONT};font-size:16px;line-height:1.5;color:#2B2118;padding:14px 12px 0;">
-              Nice one — that&rsquo;s a serious trip! Share the link with the other players.
+              ${w.intro.replace(/’/g, '&rsquo;')}
             </td>
           </tr>
 
           <tr>
             <td align="center" style="padding:20px 0 32px;">
               <a href="${url}" style="display:inline-block;background-color:#0A6B3C;color:#FFFFFF;font-family:${FONT};font-size:16px;font-weight:600;text-decoration:none;padding:14px 40px;border-radius:12px;">
-                Open your trip
+                ${w.open}
               </a>
             </td>
           </tr>
 
           <tr>
             <td align="center" style="padding-bottom:10px;">
-              <img src="cid:${QR_CID}" width="200" height="200" alt="QR code that opens the trip" style="display:block;border:0;" />
+              <img src="cid:${QR_CID}" width="200" height="200" alt="QR code that opens the ${w.thing}" style="display:block;border:0;" />
             </td>
           </tr>
 
@@ -145,7 +186,7 @@ ${dates ? `
 
           <tr>
             <td align="center" style="font-family:${FONT};font-size:15px;color:#2B2118;padding-bottom:28px;">
-              ${d.adminUrl ? 'Event' : 'Trip'} code: <strong>${escapeHtml(d.tripCode)}</strong>
+              ${w.codeLabel}: <strong>${escapeHtml(d.tripCode)}</strong>
             </td>
           </tr>
 ${d.adminUrl ? `
@@ -155,11 +196,10 @@ ${d.adminUrl ? `
                 <tr>
                   <td style="padding:20px 22px;font-family:${FONT};font-size:14px;line-height:1.6;color:#2B2118;">
                     <strong style="font-size:15px;">You&rsquo;re the organiser — keep this email.</strong><br />
-                    Your admin link opens the organiser area: permissions,
-                    notices, starts and the event&rsquo;s setup.<br />
+                    ${w.admin.replace(/’/g, '&rsquo;')}<br />
                     <a href="${escapeHtml(d.adminUrl)}" style="color:#0A6B3C;font-weight:600;text-decoration:underline;">Open the organiser area</a><br /><br />
                     <strong>Your organiser PIN</strong> is the one you set
-                    when creating the event. It was never sent to us and
+                    ${w.created}. It was never sent to us and
                     cannot be recovered or changed &mdash; write it down.
                   </td>
                 </tr>
@@ -175,13 +215,13 @@ ${d.adminUrl ? `
 
           <tr>
             <td align="center" style="font-family:${FONT};font-size:16px;font-weight:600;color:#2B2118;padding-bottom:36px;">
-              Let&rsquo;s go — launch &rsquo;em&nbsp;🏌️
+              ${w.signOff.replace(/’/g, '&rsquo;')}
             </td>
           </tr>
 
           <tr>
             <td align="center" style="font-family:${FONT};font-size:12px;line-height:1.5;color:#8A7B6E;">
-              Sent by Green Dot because this address was given when the trip was created.
+              Sent by Green Dot because this address was given when the ${w.thing} was created.
             </td>
           </tr>
 
@@ -195,26 +235,27 @@ ${d.adminUrl ? `
 
 /** The same message for clients that show text — and for spam filters. */
 export function confirmationText(d: ConfirmationDetails): string {
+  const w = wordsFor(d)
   return [
     d.tripName,
     d.dates,
     '',
-    "Nice one — that's a serious trip! Share the link with the other players.",
+    w.intro.replace(/’/g, "'"),
     '',
-    `Open your trip: ${d.tripUrl}`,
-    `${d.adminUrl ? 'Event' : 'Trip'} code: ${d.tripCode}`,
+    `${w.open}: ${d.tripUrl}`,
+    `${w.codeLabel}: ${d.tripCode}`,
     ...(d.adminUrl ? [
       '',
       "YOU'RE THE ORGANISER — KEEP THIS EMAIL.",
-      `Your admin link (the organiser area): ${d.adminUrl}`,
-      'Your organiser PIN is the one you set when creating the event.',
+      `${w.adminText}: ${d.adminUrl}`,
+      `Your organiser PIN is the one you set ${w.created}.`,
       'It was never sent to us and cannot be recovered or changed — write it down.',
     ] : []),
     '',
     'Hot tip: pin the link in your messaging group for easy access.',
     '',
-    "Let's go — launch 'em 🏌️",
+    w.signOffText,
     '',
-    'Sent by Green Dot because this address was given when the trip was created.',
+    `Sent by Green Dot because this address was given when the ${w.thing} was created.`,
   ].filter(line => line !== null).join('\n')
 }

@@ -3,6 +3,7 @@ import { Resend } from 'resend'
 import { styledQrPng } from '@/lib/qrPng'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { isEvent } from '@/lib/eventHub'
+import { isRunChallenge } from '@/lib/runChallenge'
 import {
   CONFIRMATION_FROM, QR_CID,
   confirmationSubject, confirmationHtml, confirmationText, describeRange,
@@ -118,13 +119,17 @@ export async function POST(req: NextRequest) {
   const proto = req.headers.get('x-forwarded-proto') ?? 'https'
   const host = req.headers.get('host')
   const origin = host ? `${proto}://${host}` : 'https://greendot.live'
-  const tripUrl = `${origin}/trip/${trip.trip_code}`
+
+  // A run challenge lives under /run/, with its own organiser area and its
+  // own words; it is organiser-run like any event, so it gets the block too.
+  const run = isRunChallenge(kindResult.data?.kind)
+  const tripUrl = `${origin}/${run ? 'run' : 'trip'}/${trip.trip_code}`
 
   // An event's message carries the organiser block: the admin link, and the
   // reminder that the PIN is the one set at creation. Never the PIN itself —
   // it is hashed on the organiser's device and this server has never known
   // it, a posture the email keeps rather than trades away.
-  const event = isEvent(kindResult.data?.kind)
+  const event = isEvent(kindResult.data?.kind) || run
 
   const details = {
     tripName: trip.name as string,
@@ -132,6 +137,7 @@ export async function POST(req: NextRequest) {
     tripUrl,
     tripCode: trip.trip_code as string,
     ...(event ? { adminUrl: `${tripUrl}/organiser` } : {}),
+    ...(run ? { sport: 'run' as const } : {}),
   }
 
   try {
@@ -144,7 +150,7 @@ export async function POST(req: NextRequest) {
     const send = resend.emails.send({
       from: CONFIRMATION_FROM,
       to: trip.lead_email,
-      subject: confirmationSubject(details.tripName),
+      subject: confirmationSubject(details.tripName, details.sport),
       html: confirmationHtml(details),
       text: confirmationText(details),
       attachments: [{ filename: 'trip-qr.png', content: qrPng, contentId: QR_CID }],

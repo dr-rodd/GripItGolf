@@ -2,7 +2,7 @@
 
 import Toggle from './Toggle'
 import {
-  type EventPermissions, EVENT_PERMISSIONS,
+  type EventPermissionKey, EVENT_PERMISSIONS,
 } from '@/lib/eventPermissions'
 
 /**
@@ -12,20 +12,27 @@ import {
  * component; the framing line is the caller's, because creation asks a
  * question ("how collaborative?") and the admin page states a section.
  *
+ * Golf's registry by default. A run challenge hands in its own
+ * (`RUN_PERMISSIONS`, lib/runChallenge.ts) — a different sport's field does
+ * different things for itself, but the question looks the same.
+ *
  * Controlled and pure: the caller holds the map and decides what a change
  * means — creation keeps it in form state, the admin page saves it on the
  * spot.
  */
-export default function EventPermissionToggles({
+export default function EventPermissionToggles<K extends string = EventPermissionKey>({
   value, onChange, disabled = false,
+  registry = EVENT_PERMISSIONS as unknown as { key: K; label: string; hint: string }[],
 }: {
-  value: EventPermissions
-  onChange: (next: EventPermissions) => void
+  value: Record<K, boolean>
+  // The map's keys decide K; the callback and the registry follow them.
+  onChange: (next: NoInfer<Record<K, boolean>>) => void
   disabled?: boolean
+  registry?: NoInfer<{ key: K; label: string; hint: string }[]>
 }) {
   return (
     <div className="space-y-2">
-      {EVENT_PERMISSIONS.map(p => (
+      {registry.map(p => (
         <div
           key={p.key}
           className="flex items-start justify-between gap-4 bg-surface border border-bark/12 rounded-2xl p-4"
