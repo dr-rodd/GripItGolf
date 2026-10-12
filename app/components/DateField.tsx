@@ -16,13 +16,16 @@
  * Both fixes live here so every date field on the site behaves the same.
  */
 export default function DateField({
-  label, value, onChange, disabled, className = '',
+  label, value, onChange, disabled, className = '', min, max,
 }: {
   label?: string
   value: string
   onChange: (value: string) => void
   disabled?: boolean
   className?: string
+  /** The earliest and latest days the picker offers, YYYY-MM-DD. */
+  min?: string
+  max?: string
 }) {
   return (
     <div className={`min-w-0 ${className}`}>
@@ -36,6 +39,8 @@ export default function DateField({
         value={value}
         onChange={e => onChange(e.target.value)}
         disabled={disabled}
+        min={min}
+        max={max}
         className={[
           'block w-full min-w-0 max-w-full',
           'bg-surface border border-bark/12 rounded-xl px-4 py-3.5',

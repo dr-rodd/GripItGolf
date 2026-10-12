@@ -31,7 +31,7 @@ export default async function RunOrganiserPage({ params }: {
 
   if (!challenge) {
     return (
-      <main className="min-h-dvh flex flex-col items-center justify-center bg-cream px-6">
+      <main className="min-h-dvh has-tabbar flex flex-col items-center justify-center bg-cream px-6">
         <p className="font-[family-name:var(--font-display)] text-2xl text-ink mb-3">
           Challenge not found
         </p>

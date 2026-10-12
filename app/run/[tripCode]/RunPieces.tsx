@@ -1,3 +1,4 @@
+import BackButton from '@/app/components/BackButton'
 import {
   type RunSetup, describeRules, describeTeamScore,
 } from '@/lib/runChallenge'
@@ -72,5 +73,27 @@ export function RulesSummary({ setup }: { setup: RunSetup }) {
 export function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <h2 className="t-cap uppercase tracking-[0.12em] text-ink/65 mb-2.5">{children}</h2>
+  )
+}
+
+/** The calm page a code nobody owns gets — every run route's one copy. */
+export function ChallengeNotFound() {
+  return (
+    <main className="min-h-dvh has-tabbar flex flex-col items-center justify-center bg-cream px-6">
+      <p className="font-[family-name:var(--font-display)] text-2xl text-ink mb-3">
+        Challenge not found
+      </p>
+      <p className="text-ink/65 text-sm mb-8">Check the code and try again.</p>
+      <BackButton href="/" label="Home" />
+    </main>
+  )
+}
+
+/** A quiet notice card — a missing database update, a closed door. */
+export function Notice({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
+      <p className="text-ink/80 text-sm leading-snug">{children}</p>
+    </div>
   )
 }

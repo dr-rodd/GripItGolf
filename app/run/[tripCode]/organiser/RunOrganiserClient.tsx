@@ -7,17 +7,18 @@ import TripHeader from '@/app/components/TripHeader'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import { RUN_PERMISSIONS, type RunPermissions } from '@/lib/runChallenge'
 import type { RunChallenge } from '../data'
-import { RulesSummary, SectionTitle } from '../RunPieces'
+import { SectionTitle } from '../RunPieces'
 import RunTeamsEditor from './RunTeamsEditor'
+import RunRulesEditor from './RunRulesEditor'
 
 /**
  * The organiser area's body, once the PIN is in.
  *
  * Permissions save the moment a toggle moves — the whole run map, written
  * over `trips.event_permissions` — and roll back with a calm line if the
- * write is refused. Teams are edited here in full (RunTeamsEditor). The
- * rules are shown as they stand; changing them arrives with the
- * leaderboard, and the page says so rather than pretending.
+ * write is refused. Teams are edited here in full (RunTeamsEditor), and so
+ * are the points rules (RunRulesEditor) — a saved change re-counts every
+ * run on every board, because points are never stored.
  */
 export default function RunOrganiserClient({ challenge, dates, progress }: {
   challenge: RunChallenge
@@ -48,7 +49,7 @@ export default function RunOrganiserClient({ challenge, dates, progress }: {
   }
 
   return (
-    <main className="min-h-dvh bg-cream">
+    <main className="min-h-dvh bg-cream has-tabbar">
       <TripHeader backTo={`/run/${challenge.code}`} />
 
       <div className="max-w-lg mx-auto px-4 pt-8 pb-16 page-enter space-y-8">
@@ -118,13 +119,10 @@ export default function RunOrganiserClient({ challenge, dates, progress }: {
           />
         </section>
 
-        {/* ── The rules, as they stand ── */}
+        {/* ── The points rules — change them, and every board re-counts ── */}
         <section>
           <SectionTitle>How points work</SectionTitle>
-          <RulesSummary setup={challenge.setup} />
-          <p className="text-ink/65 text-[13px] mt-3 leading-snug">
-            Changing the rules arrives with the leaderboard.
-          </p>
+          <RunRulesEditor tripId={challenge.id} setup={challenge.setup} />
         </section>
       </div>
     </main>

@@ -526,6 +526,168 @@ export function joinChoices(
   return { closed: false, claim, addSelf, startTeam: perms.create_teams, nothing: !claim && !addSelf }
 }
 
+// ─── Logging a run ─────────────────────────────────────────────
+//
+// A run typed in by hand: an activity the challenge counts, the day it was
+// run, how far, and (optionally) how long. The form checks it as it is
+// typed and the server route checks it again before it is saved — both
+// through `runEntryIssue`, so the two can never disagree about what is
+// allowed.
+
+/** The longest single run that can be typed in. Ultras aside, this is a typo. */
+export const MAX_RUN_KM = 100
+/** The longest time a run can take, in minutes — a day. */
+export const MAX_RUN_MINUTES = 24 * 60
+
+export type RunEntry = {
+  activity: RunActivity
+  /** The day it was run, YYYY-MM-DD. */
+  date: string
+  km: number
+  /** How long it took, or null when not given. */
+  minutes: number | null
+}
+
+/** Two decimal places for a distance — ten metres is as fine as anyone types. */
+export function roundKm(km: number): number {
+  return Math.round(km * 100) / 100
+}
+
+/** A day number plus n days, as YYYY-MM-DD. */
+export function addDays(date: string, n: number): string {
+  const d = dayNumber(date)
+  if (d === null) return date
+  return new Date((d + n) * 86_400_000).toISOString().slice(0, 10)
+}
+
+/**
+ * Read a run off a request body. Shape only — numbers are numbers, the
+ * activity is one we know, the date looks like a date — or null. Whether
+ * the run is allowed is `runEntryIssue`'s question.
+ */
+export function parseRunEntry(raw: unknown): RunEntry | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const r = raw as Record<string, unknown>
+  const activity = RUN_ACTIVITIES.find(a => a.key === r.activity)?.key
+  const date = typeof r.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date) ? r.date : null
+  const km = typeof r.km === 'number' ? r.km : typeof r.km === 'string' ? Number(r.km) : NaN
+  const minRaw = r.minutes
+  const minutes = minRaw === null || minRaw === undefined || minRaw === ''
+    ? null
+    : typeof minRaw === 'number' ? minRaw : Number(minRaw)
+  if (!activity || !date || !Number.isFinite(km)) return null
+  if (minutes !== null && !Number.isFinite(minutes)) return null
+  return { activity, date, km: roundKm(km), minutes: minutes === null ? null : Math.round(minutes) }
+}
+
+/**
+ * Why this run cannot be saved, or null when it can.
+ *
+ * `latest` is the last day a run can be logged for — today, as the person
+ * logging sees it. The server passes a day beyond its own today, because a
+ * phone in a timezone ahead of the server's is already on tomorrow.
+ */
+export function runEntryIssue(
+  e: RunEntry,
+  ctx: { start: string | null; end: string | null; latest: string; activities: RunActivity[] },
+): string | null {
+  if (!ctx.activities.includes(e.activity)) return 'That activity does not count in this challenge.'
+  const day = dayNumber(e.date)
+  if (day === null) return 'Pick the day you ran.'
+  const start = ctx.start ? dayNumber(ctx.start) : null
+  const end = ctx.end ? dayNumber(ctx.end) : null
+  const latest = dayNumber(ctx.latest)
+  if (start !== null && day < start) return 'That day is before the challenge started.'
+  if (end !== null && day > end) return 'That day is after the challenge finished.'
+  if (latest !== null && day > latest) return 'That day has not happened yet.'
+  if (!(e.km > 0)) return 'Add how far you went.'
+  if (e.km > MAX_RUN_KM) return `A single run can be up to ${MAX_RUN_KM} km.`
+  if (e.minutes !== null && (e.minutes < 1 || e.minutes > MAX_RUN_MINUTES)) {
+    return 'The time should be between a minute and a day.'
+  }
+  return null
+}
+
+/** "5:30 /km" — the pace of a run with a time, or null without one. */
+export function describePace(km: number, minutes: number | null): string | null {
+  if (minutes === null || !(km > 0)) return null
+  const secsPerKm = Math.round((minutes * 60) / km)
+  const m = Math.floor(secsPerKm / 60)
+  const s = secsPerKm % 60
+  return `${m}:${String(s).padStart(2, '0')} /km`
+}
+
+/** "1h 05m" or "42m" — a run's time as a person writes it. */
+export function describeDuration(minutes: number | null): string | null {
+  if (minutes === null) return null
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`
+}
+
+// ─── Editing the rules ─────────────────────────────────────────
+//
+// The points rules as a form holds them — numbers as typed, so a box can be
+// half-finished without the rules jumping about — and the one translation
+// back into rules. Creation and the organiser area both edit through this,
+// so the two forms can never read the same box two ways.
+
+export type RulesDraft = {
+  perKm: string
+  perRun: string
+  minKm: string
+  capOn: boolean
+  cap: string
+  activities: RunActivity[]
+  teamScore: TeamScore
+}
+
+/** A draft holding exactly what a stored setup says. */
+export function draftFromSetup(setup: RunSetup): RulesDraft {
+  const r = setup.rules
+  const team = setup.boards.find(b => b.audience === 'team')
+  return {
+    perKm: formatPoints(r.pointsPerKm),
+    perRun: formatPoints(r.pointsPerRun),
+    minKm: formatPoints(r.minKm),
+    capOn: r.dailyCap !== null,
+    cap: r.dailyCap !== null ? formatPoints(r.dailyCap) : '20',
+    activities: [...r.activities],
+    teamScore: team?.teamScore ?? 'average',
+  }
+}
+
+/** The rules a draft says, clamped like anything read from storage. */
+export function rulesFromDraft(d: RulesDraft): RunRules {
+  return parseRules({
+    pointsPerKm: d.perKm,
+    pointsPerRun: d.perRun,
+    minKm: d.minKm,
+    dailyCap: d.capOn ? d.cap : null,
+    activities: d.activities,
+  })
+}
+
+/** Why a draft cannot be saved, or null. */
+export function draftIssue(d: RulesDraft): string | null {
+  const issue = rulesIssue(rulesFromDraft(d))
+  if (issue) return issue
+  if (d.capOn && !(Number(d.cap) >= MIN_DAILY_CAP)) return 'Set the daily limit, or switch it off.'
+  return null
+}
+
+/**
+ * A setup with these rules and this team comparison, keeping every board
+ * already there — a sub-leaderboard added later must not be lost to a
+ * rules edit. Only team boards take the comparison.
+ */
+export function setupWithDraft(setup: RunSetup, d: RulesDraft): RunSetup {
+  return {
+    rules: rulesFromDraft(d),
+    boards: setup.boards.map(b => b.audience === 'team' ? { ...b, teamScore: d.teamScore } : b),
+  }
+}
+
 /**
  * A creation failure, told plainly. The two that mean "migration 052 has
  * not been run" — the kind check refusing 'run', or the setup column not

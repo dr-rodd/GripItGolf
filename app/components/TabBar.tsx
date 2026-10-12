@@ -7,6 +7,7 @@ import {
   IconHome, IconTrophy, IconClipboardList, IconSettings, IconChartBar,
   IconClock,
 } from './icons'
+import { RUN_TABS, runActiveKey } from './runTabs'
 
 /**
  * The bottom tab bar — the primary navigation for the whole app.
@@ -34,6 +35,11 @@ import {
  *
  * Deliberately not rendered on the scoring screens themselves — see the note
  * on `hide` below.
+ *
+ * **A run challenge draws this same bar** (`sport="run"`, from
+ * `app/run/[tripCode]/layout.tsx`) with its own five destinations from
+ * runTabs.ts — Home, Add, Leaderboard, Stats, Settings — so the two sports
+ * share one bar rather than two that drift.
  */
 
 const ITEMS = [
@@ -68,7 +74,7 @@ function Tab({
 }: {
   label: string
   active: boolean
-  Icon: (typeof ITEMS)[number]['icon']
+  Icon: (typeof ITEMS)[number]['icon'] | (typeof RUN_TABS)[number]['icon']
 }) {
   const { pending } = useLinkStatus()
 
@@ -116,7 +122,7 @@ function Tab({
   )
 }
 
-export default function TabBar({ tripCode, isEvent = false }: {
+export default function TabBar({ tripCode, isEvent = false, sport = 'golf' }: {
   tripCode: string
   /**
    * An event's field never sees Trip Setup — the organiser reaches it
@@ -126,14 +132,18 @@ export default function TabBar({ tripCode, isEvent = false }: {
    * is the one place that knows the kind before the bar first paints.
    */
   isEvent?: boolean
+  /** A run challenge's bar: running's five tabs, under /run/. */
+  sport?: 'golf' | 'run'
 }) {
   const pathname = usePathname() ?? ''
   const base = `/trip/${tripCode}`
 
   // An event trades Trip Setup for the tee sheet; a trip keeps its five.
-  const items = isEvent
-    ? ITEMS.filter(i => i.key !== 'settings')
-    : ITEMS.filter(i => i.key !== 'teesheet')
+  // A run challenge has its own five.
+  const items: readonly { key: string; label: string; icon: typeof IconHome; path: (t: string) => string }[] =
+    sport === 'run' ? RUN_TABS
+      : isEvent ? ITEMS.filter(i => i.key !== 'settings')
+      : ITEMS.filter(i => i.key !== 'teesheet')
 
   /**
    * Which tab is lit.
@@ -143,7 +153,7 @@ export default function TabBar({ tripCode, isEvent = false }: {
    * screen in the app. The rest match their own subtree, so a round inside
    * Scoring keeps Scoring lit.
    */
-  const activeKey = (() => {
+  const activeKey = sport === 'run' ? runActiveKey(pathname, tripCode) : (() => {
     if (pathname === base || pathname === `${base}/`) return 'home'
     if (pathname.startsWith(`${base}/leaderboard`)) return 'leaderboard'
     if (pathname.startsWith(`${base}/scoring`)) return 'scoring'
@@ -174,7 +184,7 @@ export default function TabBar({ tripCode, isEvent = false }: {
       // content — see the html comment in globals.css. A bar that flickers
       // short of the edge for a frame or two is a smaller cost than either.
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
-      aria-label="Trip"
+      aria-label={sport === 'run' ? 'Challenge' : 'Trip'}
     >
       <ul className="max-w-lg mx-auto grid grid-cols-5">
         {items.map(item => {

@@ -1,13 +1,15 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
-import BackButton from '@/app/components/BackButton'
 import { describeRange } from '@/lib/confirmationEmail'
 import { todayString } from '@/lib/tripStatus'
 import { currentPlayer } from '@/lib/currentPlayer'
-import { isRunChallenge, describeProgress, challengeFinished } from '@/lib/runChallenge'
+import { isRunChallenge, describeProgress, challengeFinished, formatPoints } from '@/lib/runChallenge'
+import { ordinal } from '@/lib/runBoards'
 import { fetchRunChallenge, rosterOf } from './data'
-import { TeamsList, RulesSummary, SectionTitle } from './RunPieces'
+import { fetchRuns } from './runs'
+import { standingsOf } from './standings'
+import { TeamsList, RulesSummary, SectionTitle, ChallengeNotFound } from './RunPieces'
 import RunShare from './RunShare'
 
 export const dynamic = 'force-dynamic'
@@ -16,11 +18,11 @@ export const dynamic = 'force-dynamic'
  * A run challenge's home — the address the code, the email and the share
  * link all lead to.
  *
- * What the challenge is, when, the code to pass round, the teams and who is
- * on them, and how runs earn points — and, for whoever holds this phone,
- * either the way in (Join the challenge) or where they stand (the team they
- * run for). Logging runs and the leaderboard are the stages that follow, and
- * the page says so rather than offering buttons that go nowhere.
+ * What the challenge is, when, who is leading, the code to pass round, the
+ * teams and how runs earn points — and, for whoever holds this phone,
+ * either the way in (Join the challenge) or where they stand (their team,
+ * points and place). Standings come through lib/runBoards.ts, the same as
+ * the leaderboard's, read on the server from runs the browser never sees.
  *
  * Personalised from the cookie, so anything that changes it must
  * `router.refresh()` before coming back here (lib/currentPlayer.ts).
@@ -35,17 +37,7 @@ export default async function RunHubPage({ params }: {
   const { tripCode } = await params
   const challenge = await fetchRunChallenge(tripCode)
 
-  if (!challenge) {
-    return (
-      <main className="min-h-dvh flex flex-col items-center justify-center bg-cream px-6">
-        <p className="font-[family-name:var(--font-display)] text-2xl text-ink mb-3">
-          Challenge not found
-        </p>
-        <p className="text-ink/65 text-sm mb-8">Check the code and try again.</p>
-        <BackButton href="/" label="Home" />
-      </main>
-    )
-  }
+  if (!challenge) return <ChallengeNotFound />
   if (!isRunChallenge(challenge.kind)) redirect(`/trip/${challenge.code}`)
 
   const today = todayString(new Date())
@@ -53,12 +45,18 @@ export default async function RunHubPage({ params }: {
   const progress = describeProgress(challenge.startDate, challenge.endDate, today)
   const roster = rosterOf(challenge)
   const runners = roster.length
-  const viewer = await currentPlayer(challenge.code, roster)
+  const [viewer, read] = await Promise.all([
+    currentPlayer(challenge.code, roster),
+    fetchRuns(challenge.id),
+  ])
   const viewerTeam = challenge.teams.find(t => t.id === viewer?.teamId) ?? null
   const finished = challengeFinished(challenge.endDate, today)
+  const standings = read.ready ? standingsOf(challenge, read.runs) : null
+  const me = standings?.individuals.find(l => l.playerId === viewer?.id) ?? null
+  const anyRuns = read.runs.length > 0
 
   return (
-    <main className="min-h-dvh bg-cream">
+    <main className="min-h-dvh bg-cream has-tabbar">
       <TripHeader backTo="/" />
 
       <div className="max-w-lg mx-auto px-4 pt-8 pb-16 page-enter space-y-8">
@@ -91,6 +89,13 @@ export default async function RunHubPage({ params }: {
                 'No team yet — ask the organiser to put you on one.'
               )}
             </p>
+            {me && (
+              <p className="text-ink/80 text-sm mt-1">
+                {me.runs > 0
+                  ? `${formatPoints(me.points)} pts · ${ordinal(me.place)} of ${runners}`
+                  : 'No runs yet — log your first on the Add tab.'}
+              </p>
+            )}
             <Link
               href={`/run/${challenge.code}/join`}
               className="inline-block t-cap text-accent-deep hover:text-accent transition-colors mt-3"
@@ -107,6 +112,39 @@ export default async function RunHubPage({ params }: {
           </Link>
         ) : null}
 
+        {/* Who is leading — a glance, with the full board a tap away. */}
+        {standings && anyRuns && (
+          <section>
+            <SectionTitle>Leading</SectionTitle>
+            <div className="bg-surface border border-bark/12 rounded-2xl p-4 space-y-3">
+              {standings.individuals.slice(0, 3).filter(l => l.points > 0).map(l => (
+                <div key={l.playerId} className="flex items-center gap-3">
+                  <span className="t-cap text-ink/65 tabular-nums w-6">{l.place}</span>
+                  <span className="text-ink text-sm flex-1 min-w-0 truncate">{l.display}</span>
+                  <span className="font-[family-name:var(--font-display)] text-lg font-semibold tabular-nums text-ink">
+                    {formatPoints(l.points)}
+                  </span>
+                </div>
+              ))}
+              {standings.teams[0] && standings.teams[0].score > 0 && (
+                <p className="text-ink/80 text-[13px] pt-3 border-t border-bark/12 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: standings.teams[0].color }} aria-hidden="true" />
+                  {standings.teams[0].name} lead the teams
+                  {standings.teamScore === 'average'
+                    ? ` · ${formatPoints(standings.teams[0].average)} per runner`
+                    : ` · ${formatPoints(standings.teams[0].total)} pts`}
+                </p>
+              )}
+            </div>
+            <Link
+              href={`/run/${challenge.code}/leaderboard`}
+              className="inline-block t-cap text-accent-deep hover:text-accent transition-colors mt-2.5"
+            >
+              Full leaderboard →
+            </Link>
+          </section>
+        )}
+
         <RunShare code={challenge.code} name={challenge.name} />
 
         <section>
@@ -121,21 +159,6 @@ export default async function RunHubPage({ params }: {
           <RulesSummary setup={challenge.setup} />
         </section>
 
-        <div className="px-4 py-3.5 bg-accent/[0.08] border border-accent/30 rounded-xl">
-          <p className="text-ink text-sm font-medium">Coming next</p>
-          <p className="text-ink/80 text-[13px] mt-0.5 leading-snug">
-            Logging runs by hand or from Strava, and the leaderboard.
-          </p>
-        </div>
-
-        <div className="text-center">
-          <Link
-            href={`/run/${challenge.code}/organiser`}
-            className="t-cap text-accent-deep hover:text-accent transition-colors"
-          >
-            Organiser area →
-          </Link>
-        </div>
       </div>
     </main>
   )

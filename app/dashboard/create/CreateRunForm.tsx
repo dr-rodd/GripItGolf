@@ -16,14 +16,13 @@ import {
 import { PRESET_COLORS } from '@/lib/teamColors'
 import { MAIN_SET } from '@/lib/teamSets'
 import { setTeam } from '@/lib/teamMembers'
+import RunRulesFields from '@/app/components/RunRulesFields'
 import {
-  RUN_KIND, RUN_ACTIVITIES, RUN_PERMISSIONS, TEAM_SCORES,
-  MAX_TEAM_NAME, MAX_RUN_TEAMS, MAX_POINTS, MAX_MIN_KM, MAX_DAILY_CAP,
-  type RunActivity, type RunPermissions, type TeamScore,
-  defaultRules, parseRules, rulesIssue, describeRules, exampleLine,
-  defaultBoards, defaultRunPermissions, storedRunPermissions,
+  RUN_KIND, RUN_PERMISSIONS, MAX_TEAM_NAME, MAX_RUN_TEAMS,
+  type RunPermissions, type RulesDraft,
+  defaultRules, defaultBoards, draftFromSetup, rulesFromDraft, draftIssue,
+  defaultRunPermissions, storedRunPermissions,
   challengeDatesIssue, teamNamesIssue, migrationMissing, MIGRATION_MISSING_MESSAGE,
-  formatPoints,
 } from '@/lib/runChallenge'
 import { describeError, generateCode } from './CreateTripForm'
 
@@ -63,39 +62,6 @@ const LABEL = 'block text-ink/80 text-[13px] uppercase tracking-wider mb-2'
 
 const STEP_LABELS = ['Challenge', 'Teams', 'Points', 'Finish']
 
-/** A number field keeps what was typed; the rules read it through parseRules. */
-const numeric = (v: string) => v.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1')
-
-function NumberRow({ label, hint, value, onChange, unit, max }: {
-  label: string
-  hint: string
-  value: string
-  onChange: (v: string) => void
-  unit: string
-  max: number
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 bg-surface border border-bark/12 rounded-2xl p-4">
-      <div className="min-w-0">
-        <p className="text-ink text-sm font-medium">{label}</p>
-        <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">{hint}</p>
-      </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <input
-          type="text"
-          inputMode="decimal"
-          value={value}
-          onChange={e => onChange(numeric(e.target.value))}
-          maxLength={String(max).length + 2}
-          aria-label={label}
-          className="w-20 bg-cream border border-bark/12 rounded-lg px-3 py-2 text-ink text-right tabular-nums focus:outline-none focus:border-accent/50 transition-colors"
-        />
-        <span className="text-ink/65 text-[13px] w-10">{unit}</span>
-      </div>
-    </div>
-  )
-}
-
 export default function CreateRunForm() {
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 'done'>(1)
 
@@ -112,14 +78,9 @@ export default function CreateRunForm() {
   const [organiserTeam, setOrganiserTeam] = useState<number | null>(null)
 
   // Step 3 — how a run earns points. Kept as typed; read through parseRules.
-  const start = defaultRules()
-  const [perKm, setPerKm] = useState(String(start.pointsPerKm))
-  const [perRun, setPerRun] = useState(String(start.pointsPerRun))
-  const [minKm, setMinKm] = useState(String(start.minKm))
-  const [capOn, setCapOn] = useState(false)
-  const [cap, setCap] = useState('20')
-  const [activities, setActivities] = useState<RunActivity[]>(start.activities)
-  const [teamScore, setTeamScore] = useState<TeamScore>('average')
+  const [draft, setDraft] = useState<RulesDraft>(
+    () => draftFromSetup({ rules: defaultRules(), boards: defaultBoards() }),
+  )
 
   // Step 4 — how collaborative, and the organiser PIN
   const [perms, setPerms] = useState<RunPermissions>(defaultRunPermissions)
@@ -147,15 +108,8 @@ export default function CreateRunForm() {
     : !pickedTeam ? 'Pick the team you\'re running for.'
     : null
 
-  const rules = parseRules({
-    pointsPerKm: perKm,
-    pointsPerRun: perRun,
-    minKm,
-    dailyCap: capOn ? cap : null,
-    activities,
-  })
-  const capIssue = capOn && !(Number(cap) >= 1) ? 'Set the daily limit, or switch it off.' : null
-  const pointsIssue = rulesIssue(rules) ?? capIssue
+  const rules = rulesFromDraft(draft)
+  const pointsIssue = draftIssue(draft)
 
   const passcodeIssue =
     passcodeError(passcode) ??
@@ -188,11 +142,6 @@ export default function CreateRunForm() {
     setOrganiserTeam(prev =>
       prev === null || prev === i ? null : prev > i ? prev - 1 : prev)
   }
-  function toggleActivity(key: RunActivity) {
-    setActivities(prev => prev.includes(key)
-      ? prev.filter(a => a !== key)
-      : RUN_ACTIVITIES.map(a => a.key).filter(k => k === key || prev.includes(k)))
-  }
 
   async function handleSubmit() {
     setSubmitting(true)
@@ -219,7 +168,7 @@ export default function CreateRunForm() {
       end_date: endDate,
       kind: RUN_KIND,
       settings_passcode_hash: passcodeHash,
-      run_setup: { rules, boards: defaultBoards(teamScore) },
+      run_setup: { rules, boards: defaultBoards(draft.teamScore) },
       ...(storedRunPermissions(perms) ? { event_permissions: perms } : {}),
     }
     const leadEmail = normaliseEmail(email)
@@ -576,113 +525,7 @@ export default function CreateRunForm() {
               organiser area — the leaderboard re-counts itself.
             </p>
 
-            <NumberRow
-              label="Points per km"
-              hint="For every kilometre of a run that counts."
-              value={perKm} onChange={setPerKm} unit="pts" max={MAX_POINTS}
-            />
-            <NumberRow
-              label="Points per run"
-              hint="For the run itself — turning up is worth something."
-              value={perRun} onChange={setPerRun} unit="pts" max={MAX_POINTS}
-            />
-            <NumberRow
-              label="Shortest run that counts"
-              hint="Anything shorter earns nothing."
-              value={minKm} onChange={setMinKm} unit="km" max={MAX_MIN_KM}
-            />
-
-            <div className="bg-surface border border-bark/12 rounded-2xl p-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="text-ink text-sm font-medium">Daily limit</p>
-                  <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                    The most points one person can earn in a day — keeps it a
-                    challenge rather than an ultramarathon.
-                  </p>
-                </div>
-                <Toggle checked={capOn} onChange={setCapOn} label="Limit points per day" />
-              </div>
-              {capOn && (
-                <div className="flex items-center justify-end gap-2 mt-3">
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={cap}
-                    onChange={e => setCap(numeric(e.target.value))}
-                    maxLength={String(MAX_DAILY_CAP).length + 2}
-                    aria-label="Most points a day"
-                    className="w-20 bg-cream border border-bark/12 rounded-lg px-3 py-2 text-ink text-right tabular-nums focus:outline-none focus:border-accent/50 transition-colors"
-                  />
-                  <span className="text-ink/65 text-[13px] w-10">pts</span>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-surface border border-bark/12 rounded-2xl p-4">
-              <p className="text-ink text-sm font-medium">What counts</p>
-              <p className="text-ink/65 text-[13px] mt-0.5 mb-3 leading-snug">
-                Which activities earn points.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {RUN_ACTIVITIES.map(a => (
-                  <button
-                    key={a.key}
-                    onClick={() => toggleActivity(a.key)}
-                    aria-pressed={activities.includes(a.key)}
-                    className={`px-3 py-2 rounded-xl text-sm transition-colors ${
-                      activities.includes(a.key)
-                        ? 'bg-accent-deep text-white'
-                        : 'bg-cream border border-bark/12 text-ink/80 hover:border-bark/25'
-                    }`}
-                  >
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-surface border border-bark/12 rounded-2xl p-4">
-              <p className="text-ink text-sm font-medium">How teams are compared</p>
-              <div className="space-y-2 mt-3">
-                {TEAM_SCORES.map(s => (
-                  <button
-                    key={s.key}
-                    onClick={() => setTeamScore(s.key)}
-                    aria-pressed={teamScore === s.key}
-                    className={`w-full text-left rounded-xl px-4 py-3 border transition-colors ${
-                      teamScore === s.key
-                        ? 'border-accent/60 bg-accent/[0.08]'
-                        : 'border-bark/12 bg-cream hover:border-bark/25'
-                    }`}
-                  >
-                    <p className="text-ink text-sm font-medium">{s.label}</p>
-                    <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">{s.hint}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* What the numbers add up to, said back in words. */}
-            <div className="px-4 py-3.5 bg-accent/[0.08] border border-accent/30 rounded-xl">
-              {pointsIssue ? (
-                <p className="text-rust-deep text-sm leading-snug">{pointsIssue}</p>
-              ) : (
-                <>
-                  <p className="text-ink text-sm font-medium">{exampleLine(rules)}</p>
-                  <ul className="mt-1.5 space-y-0.5">
-                    {describeRules(rules).map(line => (
-                      <li key={line} className="text-ink/80 text-[13px] leading-snug">{line}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </div>
-            {rules.pointsPerKm === MAX_POINTS || rules.pointsPerRun === MAX_POINTS ? (
-              <p className="text-ink/65 text-[13px] leading-snug">
-                Points top out at {formatPoints(MAX_POINTS)} per km or per run.
-              </p>
-            ) : null}
+            <RunRulesFields draft={draft} onChange={setDraft} />
           </div>
         )}
 
