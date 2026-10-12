@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase-admin'
+import { stravaConfig } from '@/lib/strava'
 import { RUN_ACTIVITIES, type RunActivity } from '@/lib/runChallenge'
 import type { BoardRun } from '@/lib/runBoards'
 
@@ -22,6 +23,8 @@ export type StoredRun = BoardRun & {
   source: 'manual' | 'strava'
   minutes: number | null
   createdAt: string
+  /** What recorded a Strava run, when Strava said (migration 054). */
+  deviceName: string | null
 }
 
 export type RunsRead =
@@ -38,12 +41,17 @@ export async function fetchRuns(tripId: string): Promise<RunsRead> {
     return { ready: false, runs: [], reason: 'unavailable' }
   }
 
-  const { data, error } = await admin
+  // device_name arrived with migration 054; until it runs, read without it
+  // rather than lose the whole board to one missing column.
+  const read = (cols: string) => admin
     .from('runs')
-    .select('id, player_id, source, activity, run_date, distance_m, moving_s, created_at')
+    .select(cols)
     .eq('trip_id', tripId)
     .order('run_date', { ascending: false })
     .order('created_at', { ascending: false })
+  const BASE = 'id, player_id, source, activity, run_date, distance_m, moving_s, created_at'
+  let { data, error } = await read(`${BASE}, device_name`)
+  if (error && /device_name/i.test(error.message ?? '')) ({ data, error } = await read(BASE))
 
   if (error) {
     const missing = /runs|relation|schema cache/i.test(error.message ?? '')
@@ -53,8 +61,8 @@ export async function fetchRuns(tripId: string): Promise<RunsRead> {
 
   return {
     ready: true,
-    runs: (data ?? [])
-      .filter(r => KNOWN.has(r.activity))
+    runs: ((data ?? []) as unknown as Record<string, unknown>[])
+      .filter(r => KNOWN.has(String(r.activity)))
       .map(r => ({
         id: r.id as string,
         playerId: r.player_id as string,
@@ -64,6 +72,7 @@ export async function fetchRuns(tripId: string): Promise<RunsRead> {
         distanceM: r.distance_m as number,
         minutes: typeof r.moving_s === 'number' ? Math.round(r.moving_s / 60) : null,
         createdAt: r.created_at as string,
+        deviceName: typeof r.device_name === 'string' ? r.device_name : null,
       })),
   }
 }
@@ -73,4 +82,29 @@ export function runsUnavailableMessage(reason: 'migration' | 'unavailable'): str
   return reason === 'migration'
     ? 'Runs need a database update that has not been applied yet (migration 053).'
     : 'Runs could not be loaded just now — try again in a moment.'
+}
+
+export type StravaStatus =
+  | { state: 'off' }                       // Strava not set up on this site
+  | { state: 'unready' }                   // migration 054 not applied yet
+  | { state: 'disconnected' }
+  | { state: 'connected'; lastSyncedAt: string | null }
+
+/**
+ * Whether this runner's Strava is connected in this challenge — read on the
+ * server, because the links table is closed to the browser (migration 054).
+ * Nothing about the connection beyond that leaves here; never a token.
+ */
+export async function fetchStravaStatus(tripId: string, playerId: string | null): Promise<StravaStatus> {
+  if (!stravaConfig()) return { state: 'off' }
+  if (!playerId) return { state: 'disconnected' }
+  let admin
+  try { admin = createAdminClient() } catch { return { state: 'off' } }
+  const { data, error } = await admin.from('strava_links')
+    .select('last_synced_at')
+    .eq('player_id', playerId)
+    .eq('trip_id', tripId)
+    .maybeSingle()
+  if (error) return { state: 'unready' }
+  return data ? { state: 'connected', lastSyncedAt: data.last_synced_at ?? null } : { state: 'disconnected' }
 }

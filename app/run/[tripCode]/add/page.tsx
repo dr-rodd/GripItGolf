@@ -5,26 +5,31 @@ import { currentPlayer } from '@/lib/currentPlayer'
 import { isRunChallenge, runPoints, formatPoints } from '@/lib/runChallenge'
 import { ordinal, formatKm } from '@/lib/runBoards'
 import { fetchRunChallenge, rosterOf } from '../data'
-import { fetchRuns, runsUnavailableMessage } from '../runs'
+import { outcomeMessage, isGarmin } from '@/lib/strava'
+import { fetchRuns, runsUnavailableMessage, fetchStravaStatus } from '../runs'
 import { standingsOf } from '../standings'
 import { ChallengeNotFound, Notice } from '../RunPieces'
+import StravaCard from '../StravaCard'
 import RunAddClient from './RunAddClient'
 
 export const dynamic = 'force-dynamic'
 
 /**
  * The Add tab — where a runner logs a run, sees their own runs, and (in the
- * next stage) connects Strava.
+ * where Strava is connected, checked and disconnected (StravaCard). Strava's
+ * callback sends the runner back here with `?strava=<outcome>`, said as a
+ * sentence on the card.
  *
  * Personalised from the player cookie: a phone that has not joined is sent
  * to join first, because a run has to belong to somebody on a team. The
  * runs are read on the server (the table is closed to the browser) and
  * only this runner's are sent to the phone.
  */
-export default async function RunAddPage({ params }: {
+export default async function RunAddPage({ params, searchParams }: {
   params: Promise<{ tripCode: string }>
+  searchParams: Promise<{ strava?: string }>
 }) {
-  const { tripCode } = await params
+  const [{ tripCode }, { strava }] = await Promise.all([params, searchParams])
   const challenge = await fetchRunChallenge(tripCode)
   if (!challenge) return <ChallengeNotFound />
   if (!isRunChallenge(challenge.kind)) redirect(`/trip/${challenge.code}`)
@@ -34,6 +39,7 @@ export default async function RunAddPage({ params }: {
     fetchRuns(challenge.id),
     currentPlayer(challenge.code, roster),
   ])
+  const stravaStatus = await fetchStravaStatus(challenge.id, viewer?.id ?? null)
 
   const mine = viewer ? read.runs.filter(r => r.playerId === viewer.id) : []
   const me = viewer ? standingsOf(challenge, read.runs).individuals.find(l => l.playerId === viewer.id) : null
@@ -76,6 +82,12 @@ export default async function RunAddPage({ params }: {
                 </p>
               </div>
             )}
+            <StravaCard
+              code={challenge.code}
+              status={stravaStatus}
+              joined={!!viewer}
+              outcome={outcomeMessage(strava)}
+            />
             <RunAddClient
               code={challenge.code}
               rules={challenge.setup.rules}
@@ -90,6 +102,7 @@ export default async function RunAddPage({ params }: {
                 minutes: r.minutes,
                 source: r.source,
                 points: runPoints({ km: r.distanceM / 1000, activity: r.activity }, challenge.setup.rules),
+                garmin: isGarmin(r.deviceName),
               }))}
             />
           </>

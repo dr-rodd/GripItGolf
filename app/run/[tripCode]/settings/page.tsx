@@ -4,6 +4,8 @@ import TripHeader from '@/app/components/TripHeader'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { isRunChallenge } from '@/lib/runChallenge'
 import { fetchRunChallenge, rosterOf } from '../data'
+import { fetchStravaStatus } from '../runs'
+import StravaCard from '../StravaCard'
 import { ChallengeNotFound, SectionTitle } from '../RunPieces'
 import RunShare from '../RunShare'
 
@@ -12,9 +14,9 @@ export const dynamic = 'force-dynamic'
 /**
  * The Settings tab — the runner's own, with the door to the organiser's.
  *
- * Three things: who this phone is (and switching it), Strava (its place,
- * ahead of the stage that connects it), and the organiser area for whoever
- * holds the PIN. The PIN asks at that door, not at this tab, so a runner
+ * Who this phone is (and switching it), Strava (connect, check, disconnect —
+ * the same card as the Add tab), and the organiser area for whoever holds
+ * the PIN. The PIN asks at that door, not at this tab, so a runner
  * opening Settings is never met by a lock.
  */
 export default async function RunSettingsPage({ params }: {
@@ -26,6 +28,7 @@ export default async function RunSettingsPage({ params }: {
   if (!isRunChallenge(challenge.kind)) redirect(`/trip/${challenge.code}/setup`)
 
   const viewer = await currentPlayer(challenge.code, rosterOf(challenge))
+  const stravaStatus = await fetchStravaStatus(challenge.id, viewer?.id ?? null)
   const team = challenge.teams.find(t => t.id === viewer?.teamId) ?? null
 
   return (
@@ -68,13 +71,7 @@ export default async function RunSettingsPage({ params }: {
 
         <section>
           <SectionTitle>Strava</SectionTitle>
-          <div className="bg-surface border border-bark/12 rounded-2xl p-4 flex items-start justify-between gap-4">
-            <p className="text-ink/65 text-[13px] leading-snug min-w-0">
-              Connecting Strava — and disconnecting it — will live here and on the
-              Add tab. Coming in the next update.
-            </p>
-            <span className="t-cap uppercase tracking-[0.12em] text-ink/65 flex-shrink-0">Soon</span>
-          </div>
+          <StravaCard code={challenge.code} status={stravaStatus} joined={!!viewer} />
         </section>
 
         <section>

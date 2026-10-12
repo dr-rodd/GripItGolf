@@ -19,6 +19,12 @@
  * runs become totals and places (lib/runBoards.ts), the five-tab bar, the
  * rules editor shared by setup and the organiser, and the Strava-shaped
  * rule that only totals about other people ever leave the server.
+ *
+ * Stage 4 adds Strava: every decision in lib/strava.ts (the signed state,
+ * which activities become runs, what a sync adds and removes, what a webhook
+ * event asks), and the rules around the network half — tokens closed to
+ * the browser, consent before connecting, a refused refresh never deleting
+ * anyone, and only two doors to forgetting an athlete.
  */
 
 import fs from 'fs'
@@ -30,6 +36,11 @@ import RunTeamsEditor from '../app/run/[tripCode]/organiser/RunTeamsEditor'
 import RunBoardClient from '../app/run/[tripCode]/leaderboard/RunBoardClient'
 import RunAddClient from '../app/run/[tripCode]/add/RunAddClient'
 import { RUN_TABS, runActiveKey } from '../app/components/runTabs'
+import StravaCard from '../app/run/[tripCode]/StravaCard'
+import {
+  stravaConfig, scopeGranted, authorizeUrl, signState, verifyState, runFromActivity,
+  planSync, webhookAction, tokenNeedsRefresh, afterEpoch, outcomeMessage, isGarmin,
+} from '../lib/strava'
 import {
   runnerTotals, placesFor, individualBoard, teamBoard, ordinal, inWindow, type BoardRun,
 } from '../lib/runBoards'
@@ -676,15 +687,17 @@ section('Runs live on the server: closed table, one writer, totals out')
   const walk = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e =>
     e.isDirectory() ? walk(`${dir}/${e.name}`) : /\.tsx?$/.test(e.name) ? [`${dir}/${e.name}`] : [])
   const touching = [...walk('app'), ...walk('lib')].filter(f => read(f).includes(".from('runs')"))
-  eq(touching.sort(), ['app/api/run/runs/route.ts', 'app/run/[tripCode]/runs.ts'],
-    'only the runs route and the server reader touch the table')
+  eq(touching.sort(), ['app/api/run/runs/route.ts', 'app/run/[tripCode]/runs.ts', 'lib/stravaApi.ts'],
+    'only the runs route, the server reader and the Strava sync touch the table')
   ok(touching.every(f => !read(f).trimStart().startsWith("'use client'")), 'neither runs in the browser')
   ok(read('app/run/[tripCode]/runs.ts').includes('createAdminClient()'), 'the reader is on the service role')
 
   const route = stripComments(read('app/api/run/runs/route.ts'))
   ok(route.includes('if (!perms.log_runs)'), 'the route refuses typed runs when the organiser switched them off')
-  ok(route.includes('playerCookieName(trip.trip_code)') && route.includes(".eq('trip_id', trip.id)"),
-    'a run belongs to the runner this phone joined as, on this challenge\'s roster')
+  const runner = stripComments(read('app/api/run/runner.ts'))
+  ok(route.includes('cookieRunner(admin, loaded.trip)') && runner.includes('playerCookieName(trip.trip_code)') &&
+     runner.includes(".eq('id', playerId).eq('trip_id', tripId)"),
+    'a run belongs to the runner this phone joined as, on this challenge\'s roster (the shared runner.ts)')
   ok(route.includes('runEntryIssue(entry,') && route.includes('latest: addDays(todayString(new Date()), 1)'),
     'and passes the same check as the form, with a day\'s grace for timezones ahead')
   const del = route.slice(route.indexOf('export async function DELETE'))
@@ -744,7 +757,173 @@ section('The boards draw what they were handed')
     'log_runs off: no form, and it says why')
   ok(add.includes('5 km run') && add.includes('· Strava'), 'the runner\'s own runs are listed, Strava ones marked')
   ok((add.match(/aria-label="Delete/g) ?? []).length === 1, 'only a typed-in run can be deleted from here')
-  ok(add.includes('Connect Strava'), 'Strava has its place on the Add tab, ahead of time')
+  ok(read('app/run/[tripCode]/add/page.tsx').includes('<StravaCard'), 'Strava has its card on the Add tab')
+}
+
+// ─── Stage 4: Strava ───────────────────────────────────────────
+
+section('Strava is set up by three keys, and asks only for shared activities')
+{
+  const cfg = stravaConfig({ STRAVA_CLIENT_ID: ' 12345 ', STRAVA_CLIENT_SECRET: 'sek', STRAVA_VERIFY_TOKEN: 'phrase' })
+  eq(cfg, { clientId: '12345', clientSecret: 'sek', verifyToken: 'phrase' }, 'the three keys, trimmed')
+  eq(stravaConfig({ STRAVA_CLIENT_ID: '1', STRAVA_CLIENT_SECRET: 'x' }), null, 'any one missing is no Strava at all')
+  ok(scopeGranted('read,activity:read'), 'activities shared: granted')
+  ok(scopeGranted('read,activity:read_all'), 'all activities also covers it')
+  ok(!scopeGranted('read') && !scopeGranted(null), 'the activities box unticked: not granted')
+  const url = new URL(authorizeUrl(cfg!, 'https://greendot.live/api/run/strava/callback', 'st'))
+  eq(url.origin + url.pathname, 'https://www.strava.com/oauth/authorize', 'Strava\'s own authorise page')
+  eq(url.searchParams.get('scope'), 'activity:read', 'asking for activities the runner shares — never "Only you" ones')
+  eq(url.searchParams.get('redirect_uri'), 'https://greendot.live/api/run/strava/callback', 'back to our callback')
+  eq([url.searchParams.get('client_id'), url.searchParams.get('response_type'), url.searchParams.get('state')],
+    ['12345', 'code', 'st'], 'with our client, a code, and the state')
+}
+
+section('The state carries challenge and runner through Strava, untampered')
+{
+  const secret = 'client-secret'
+  const now = 1_800_000_000_000
+  const st = signState({ tripCode: 'GX7K2P', playerId: 'p-1', expires: now + 60_000 }, secret)
+  eq(verifyState(st, secret, now), { tripCode: 'GX7K2P', playerId: 'p-1', expires: now + 60_000 }, 'ours, in time: read back')
+  eq(verifyState(st, 'other-secret', now), null, 'signed with another secret: refused')
+  eq(verifyState(st, secret, now + 120_000), null, 'expired: refused')
+  const [body, sig] = st.split('.')
+  const forged = Buffer.from(JSON.stringify({ t: 'GX7K2P', p: 'someone-else', e: now + 60_000 })).toString('base64url')
+  eq(verifyState(`${forged}.${sig}`, secret, now), null, 'a body swapped for another runner: refused')
+  eq(verifyState(`${body}.${sig.slice(0, -2)}xx`, secret, now), null, 'an altered signature: refused')
+  eq(verifyState('junk', secret, now), null, 'junk: refused')
+  eq(verifyState(null, secret, now), null, 'nothing: refused')
+}
+
+section('Strava activities become runs — the ones we keep, as we keep them')
+{
+  const base = { id: 9001, sport_type: 'Run', start_date_local: '2026-11-03T07:15:00Z', distance: 5012.4, moving_time: 1601 }
+  eq(runFromActivity(base), {
+    strava_activity_id: 9001, activity: 'run', run_date: '2026-11-03', distance_m: 5012, moving_s: 1601, device_name: null,
+  }, 'a run: its local day, metres, seconds')
+  eq(runFromActivity({ ...base, sport_type: 'VirtualRun' })?.activity, 'treadmill', 'a virtual run is a treadmill run')
+  eq(runFromActivity({ ...base, sport_type: 'Walk' })?.activity, 'walk', 'walks are kept — the boards decide if they count')
+  eq(runFromActivity({ ...base, sport_type: 'Ride' }), null, 'a ride is not kept')
+  eq(runFromActivity({ ...base, sport_type: undefined, type: 'TrailRun' })?.activity, 'trail_run', 'the older type field is read when the newer is missing')
+  eq(runFromActivity({ ...base, distance: 0 }), null, 'no distance, no run')
+  eq(runFromActivity({ ...base, start_date_local: 'soon' }), null, 'no date, no run')
+  eq(runFromActivity({ ...base, moving_time: 0 })?.moving_s, null, 'no time is no time, not zero')
+  eq(runFromActivity({ ...base, device_name: ' Garmin Forerunner 265 ' })?.device_name, 'Garmin Forerunner 265', 'the device, trimmed')
+  eq(runFromActivity({ ...base, external_id: 'garmin_ping_123.fit' })?.device_name, 'Garmin', 'a Garmin upload is known by its file')
+  ok(isGarmin('Garmin Forerunner 265') && !isGarmin('Apple Watch') && !isGarmin(null), 'Garmin credit only for Garmin')
+  eq(afterEpoch('2026-11-01'), Date.UTC(2026, 9, 31) / 1000, 'asking Strava from the day before the start, for timezones ahead')
+}
+
+section('A sync writes what is in the challenge and removes what Strava no longer has')
+{
+  const window = { start: '2026-11-01', end: '2026-11-30' }
+  const act = (id: number, date: string, sport = 'Run') =>
+    ({ id, sport_type: sport, start_date_local: `${date}T08:00:00Z`, distance: 5000, moving_time: 1500 })
+  const plan = planSync(
+    [act(1, '2026-11-02'), act(2, '2026-10-30'), act(3, '2026-11-05', 'Ride'), act(4, '2026-11-30')],
+    [1, 5, 3],
+    window,
+  )
+  eq(plan.upserts.map(r => r.strava_activity_id), [1, 4], 'only mappable activities inside the challenge are written')
+  eq(plan.deleteIds, [5, 3], 'a run Strava no longer lists goes, and one re-typed as a ride goes too')
+  eq(planSync([], [], window), { upserts: [], deleteIds: [] }, 'nothing in, nothing out')
+}
+
+section('Webhook events mean exactly what they say')
+{
+  eq(webhookAction({ object_type: 'activity', aspect_type: 'create', object_id: 7, owner_id: 42 }),
+    { kind: 'refresh-activity', athleteId: 42, activityId: 7 }, 'a new activity is read')
+  eq(webhookAction({ object_type: 'activity', aspect_type: 'update', object_id: 7, owner_id: 42, updates: { title: 'x' } }).kind,
+    'refresh-activity', 'an edit is re-read — it may have changed type, distance or privacy')
+  eq(webhookAction({ object_type: 'activity', aspect_type: 'delete', object_id: 7, owner_id: 42 }),
+    { kind: 'delete-activity', athleteId: 42, activityId: 7 }, 'a deleted one is removed')
+  eq(webhookAction({ object_type: 'athlete', aspect_type: 'update', object_id: 42, owner_id: 42, updates: { authorized: 'false' } }),
+    { kind: 'deauthorize', athleteId: 42 }, 'revoking access on Strava forgets the athlete')
+  eq(webhookAction({ object_type: 'athlete', aspect_type: 'update', owner_id: 42, updates: { weight: '70' } }).kind,
+    'ignore', 'any other athlete change is ignored')
+  eq(webhookAction({ object_type: 'activity', aspect_type: 'create', object_id: 7 }).kind, 'ignore', 'no owner, nothing to do')
+  eq(webhookAction('junk').kind, 'ignore', 'junk is ignored')
+  const now = Date.parse('2026-11-01T12:00:00Z')
+  ok(!tokenNeedsRefresh('2026-11-01T12:10:00Z', now), 'ten minutes left: the token is used')
+  ok(tokenNeedsRefresh('2026-11-01T12:02:00Z', now), 'two minutes left: refreshed first')
+  ok(tokenNeedsRefresh(Math.floor(now / 1000) - 60, now), 'Strava\'s epoch seconds, expired: refreshed')
+  ok(outcomeMessage('connected')?.ok === true && outcomeMessage('taken')?.ok === false && outcomeMessage('nope') === null,
+    'every way back from Strava has its sentence, and an unknown word has none')
+}
+
+section('Tokens never leave the server, and only two doors forget anybody')
+{
+  const sql = read('supabase/migrations/20260101000054_strava.sql')
+  ok(sql.includes('ALTER TABLE strava_athletes ENABLE ROW LEVEL SECURITY') &&
+     sql.includes('ALTER TABLE strava_links ENABLE ROW LEVEL SECURITY'), 'both Strava tables have RLS on')
+  ok(!/CREATE POLICY/i.test(sql), 'and no policy — the browser cannot read a token, not even its own')
+  ok(sql.includes('UNIQUE (trip_id, athlete_id)'), 'one Strava account feeds one runner per challenge')
+  ok(sql.includes('ADD COLUMN IF NOT EXISTS device_name'), 'runs learn what recorded them, for the Garmin credit')
+
+  const walk = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e =>
+    e.isDirectory() ? walk(`${dir}/${e.name}`) : /\.tsx?$/.test(e.name) ? [`${dir}/${e.name}`] : [])
+  const all = [...walk('app'), ...walk('lib')]
+  eq(all.filter(f => read(f).includes(".from('strava_athletes')")), ['lib/stravaApi.ts'],
+    'the token table is read and written in one file')
+  const clients = all.filter(f => read(f).trimStart().startsWith("'use client'"))
+  eq(clients.filter(f => /strava_(athletes|links)|access_token|refresh_token|lib\/strava'/.test(read(f))), [],
+    'no browser component touches a Strava table, a token, or the signing code')
+
+  const api = stripComments(read('lib/stravaApi.ts'))
+  eq((api.match(/forgetAthlete\(admin/g) ?? []).length, 2,
+    'an athlete is forgotten from exactly two places: their revoke on Strava, and their own Disconnect')
+  ok(api.includes("if (action.kind === 'deauthorize') {") && api.includes('await forgetAthlete(admin, cfg, action.athleteId, { revoke: false })'),
+    '  …the first is the deauthorisation webhook')
+  ok(api.includes("if (!count) await forgetAthlete(admin, cfg, Number(link.athlete_id), { revoke: true })"),
+    '  …the second is Disconnect, once the account feeds nothing else')
+  const refresh = api.slice(api.indexOf('async function refreshTokens'), api.indexOf('export async function saveTokens'))
+  ok(!/revoked|forget|delete/i.test(refresh), 'a refused refresh is a retry, never a reason to delete — a wrong key must not wipe the boards')
+}
+
+section('The routes keep their promises')
+{
+  const connect = stripComments(read('app/api/run/strava/connect/route.ts'))
+  ok(connect.includes("searchParams.get('consent') !== '1'"), 'no connecting without the consent box ticked')
+  ok(connect.includes('cookieRunner(admin, loaded.trip)'), 'and only for a runner this phone joined as')
+
+  const cb = stripComments(read('app/api/run/strava/callback/route.ts'))
+  const iVerify = cb.indexOf('verifyState(')
+  ok(iVerify > -1 && iVerify < cb.indexOf('exchangeCode('), 'the callback trusts nothing before the state checks out')
+  ok(cb.includes("if (!scopeGranted(params.get('scope'))) return back('scope')"), 'an unticked activities box is said, not ignored')
+  ok(cb.includes("if (taken) return back('taken')"), 'a Strava account already feeding another name is refused')
+  ok(cb.includes('consented_at: new Date().toISOString()'), 'the consent is stored with the link')
+  ok(cb.includes('ensureSubscription(cfg, `${origin}/api/run/strava/webhook`)'),
+    'the first connect sets up Strava\'s webhook — nobody has to by hand')
+
+  const hook = stripComments(read('app/api/run/strava/webhook/route.ts'))
+  ok(hook.includes("p.get('hub.verify_token') !== cfg.verifyToken"), 'the webhook confirms only with our verify token')
+  ok(hook.includes('after(async () => {'), 'and answers Strava at once, doing the work after')
+
+  const sync = stripComments(read('app/api/run/strava/sync/route.ts'))
+  ok(sync.includes("req.headers.get('authorization') !== `Bearer ${secret}`"), 'the nightly sync runs only for the cron')
+  const limit = Number(sync.match(/NIGHTLY_LIMIT = (\d+)/)?.[1] ?? 999)
+  ok(limit > 0 && limit < 100, `and reads at most ${limit} connections a night, inside Strava's 100 per 15 minutes`)
+  ok(!sync.includes('ensureSubscription'), 'it never sets up the webhook — the cron calls the vercel.app address')
+  ok(JSON.parse(read('vercel.json')).crons.some((c: { path: string }) => c.path === '/api/run/strava/sync'),
+    'and it is scheduled')
+}
+
+section('The Strava card, in each of its states')
+{
+  const off = draw(<StravaCard code="GX7K2P" status={{ state: 'off' }} joined={true} />)
+  ok(off.includes('not set up for this site yet'), 'not set up: said, with typed runs still working')
+  const fresh = draw(<StravaCard code="GX7K2P" status={{ state: 'disconnected' }} joined={true} />)
+  ok(fresh.includes('type="checkbox"') && fresh.includes('appear on this') && fresh.includes('leaderboard'),
+    'not connected: the consent box, saying exactly what is shared')
+  ok(fresh.includes('Connect with Strava') && fresh.includes('aria-disabled="true"') && !fresh.includes('href="/api/run/strava/connect'),
+    'and Connect is dead until it is ticked')
+  const stranger = draw(<StravaCard code="GX7K2P" status={{ state: 'disconnected' }} joined={false} />)
+  ok(stranger.includes('Join the challenge first') && !stranger.includes('type="checkbox"'), 'a phone not joined is told to join first')
+  const on = draw(<StravaCard code="GX7K2P" status={{ state: 'connected', lastSyncedAt: null }} joined={true} />)
+  ok(on.includes('Strava connected') && on.includes('Check for new runs') && on.includes('Disconnect'),
+    'connected: check now, or disconnect')
+  ok(read('app/run/[tripCode]/add/page.tsx').includes('garmin: isGarmin(r.deviceName)') &&
+     read('app/run/[tripCode]/add/RunAddClient.tsx').includes('Recorded on Garmin'),
+    'a Garmin run is credited in the runner\'s own list')
 }
 
 // ─── Done ──────────────────────────────────────────────────────

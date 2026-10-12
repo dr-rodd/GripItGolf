@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase-admin'
-import { playerCookieName, readPlayerId } from '@/lib/playerCookie'
 import { todayString } from '@/lib/tripStatus'
-import {
-  isRunChallenge, parseRunSetup, parseRunPermissions,
-  parseRunEntry, runEntryIssue, addDays,
-} from '@/lib/runChallenge'
+import { parseRunEntry, runEntryIssue, addDays } from '@/lib/runChallenge'
+import { loadChallenge, cookieRunner } from '../runner'
 
 /**
  * Saving and deleting a typed-in run — the only writer of `runs` from a
- * person (Strava's import will be the other, on the server).
+ * person; Strava's sync (lib/stravaApi.ts) is the other, on the server.
  *
  * The table is closed to the browser (migration 053), so this route is
  * where every rule is enforced before anything is written:
@@ -35,66 +31,23 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-const CODE = /^[A-Z0-9]{6}$/
-
-type Trip = {
-  id: string
-  trip_code: string
-  start_date: string | null
-  end_date: string | null
-}
-
 function fail(message: string, status = 400) {
   return NextResponse.json({ ok: false, message }, { status })
 }
 
 /** The challenge, its setup and permissions, and the runner this phone is. */
 async function context(tripCodeRaw: unknown) {
-  const tripCode = String(tripCodeRaw ?? '').toUpperCase().trim()
-  if (!CODE.test(tripCode)) return { error: fail('That challenge code does not look right.') }
-
   let admin
   try {
     admin = createAdminClient()
   } catch {
     return { error: fail('Runs cannot be saved just now — try again later.', 503) }
   }
-
-  const [tripRes, extrasRes] = await Promise.all([
-    admin.from('trips')
-      .select('id, trip_code, start_date, end_date')
-      .eq('trip_code', tripCode)
-      .single(),
-    admin.from('trips')
-      .select('kind, run_setup, event_permissions')
-      .eq('trip_code', tripCode)
-      .single(),
-  ])
-  const trip = tripRes.data as Trip | null
-  const extras = extrasRes.data as { kind?: unknown; run_setup?: unknown; event_permissions?: unknown } | null
-  if (!trip || !extras || !isRunChallenge(extras.kind)) {
-    return { error: fail('That challenge could not be found.', 404) }
-  }
-
-  const jar = await cookies()
-  const playerId = readPlayerId(jar.get(playerCookieName(trip.trip_code))?.value)
+  const loaded = await loadChallenge(admin, tripCodeRaw)
+  if (!loaded) return { error: fail('That challenge could not be found.', 404) }
+  const playerId = await cookieRunner(admin, loaded.trip)
   if (!playerId) return { error: fail('Join the challenge first, then log your runs.', 403) }
-
-  const { data: player } = await admin
-    .from('players')
-    .select('id')
-    .eq('id', playerId)
-    .eq('trip_id', trip.id)
-    .maybeSingle()
-  if (!player) return { error: fail('Join the challenge first, then log your runs.', 403) }
-
-  return {
-    admin,
-    trip,
-    playerId,
-    setup: parseRunSetup(extras.run_setup),
-    perms: parseRunPermissions(extras.event_permissions),
-  }
+  return { admin, playerId, ...loaded }
 }
 
 export async function POST(req: NextRequest) {

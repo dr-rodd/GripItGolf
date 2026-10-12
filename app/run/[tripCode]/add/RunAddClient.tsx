@@ -12,8 +12,8 @@ import {
 import { formatKm } from '@/lib/runBoards'
 
 /**
- * The Add tab's body: Strava's place, the log-a-run form, and this runner's
- * own runs.
+ * The Add tab's body: the log-a-run form, and this runner's own runs.
+ * Strava sits above it, in the page's own StravaCard.
  *
  * The form checks a run as it is typed through `runEntryIssue` — the same
  * function the server route runs before it saves — so the button is only
@@ -37,6 +37,8 @@ export type MyRun = {
   minutes: number | null
   source: 'manual' | 'strava'
   points: number
+  /** Recorded on a Garmin — Strava's terms ask that it is credited. */
+  garmin?: boolean
 }
 
 const INPUT = [
@@ -144,18 +146,6 @@ export default function RunAddClient({
 
   return (
     <div className="space-y-8">
-
-      {/* ── Strava: its place, ahead of time ── */}
-      <div className="bg-surface border border-bark/12 rounded-2xl p-4 flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-ink text-sm font-medium">Connect Strava</p>
-          <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-            Your runs will arrive by themselves once Strava is connected. Coming
-            in the next update.
-          </p>
-        </div>
-        <span className="t-cap uppercase tracking-[0.12em] text-ink/65 flex-shrink-0">Soon</span>
-      </div>
 
       {/* ── Log a run ── */}
       {!logRuns ? (
@@ -287,6 +277,9 @@ export default function RunAddClient({
                     <span className="block text-ink/65 text-[13px]">
                       {dayLabel(r.date)}{extra ? ` · ${extra}` : ''}
                     </span>
+                    {r.garmin && (
+                      <span className="block text-ink/65 text-[13px]">Recorded on Garmin</span>
+                    )}
                   </span>
                   <span className="font-[family-name:var(--font-display)] text-lg font-semibold tabular-nums text-ink flex-shrink-0">
                     {formatPoints(r.points)}
