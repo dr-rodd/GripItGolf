@@ -41,7 +41,16 @@ holds it, mutation-tested.
 | `/dashboard/create?type=run` | The four-step wizard: challenge, teams, points, finish (permissions + PIN) |
 | `/run/[code]` | The challenge's home |
 | `/run/[code]/join` | Joining: who you are, then which team |
+| `/run/[code]/add` | The Add tab: log a run, your own runs, Strava's place |
+| `/run/[code]/leaderboard` | The leaderboard — a tab per board in the setup |
+| `/run/[code]/stats` | Named, marked coming soon |
+| `/run/[code]/settings` | Who this phone is, Strava's place, the door to the organiser area |
 | `/run/[code]/organiser` | The organiser area, behind the PIN |
+| `/api/run/runs` | The one writer of typed-in runs (POST, DELETE) |
+
+Every `/run/[code]` page sits under one layout that draws golf's own tab bar
+with running's five tabs — Home, Add, Leaderboard (centre), Stats, Settings
+(`app/components/runTabs.ts`, `TabBar sport="run"`).
 
 `/run/` is its own route tree so that **no golf screen changes for it** —
 which matters because a deploy lands on every phone at once if a golf trip
@@ -72,10 +81,21 @@ Each stage is tested on greendot.live before the next starts.
    the team alone. The organiser area edits teams in full — add, rename,
    remove once empty; add, rename, move, remove runners — each change one
    write filtered on the challenge, then `router.refresh()`.
-3. **Runs and the leaderboard** — a `runs` table, **server-written only**
-   (RLS read policy, no write policy — the posture migration 040 gave
-   courses), typed-in runs when `log_runs` is on, and the individual and
-   team boards.
+3. **Runs and the leaderboard** — built. A `runs` table (migration 053)
+   **closed to the browser both ways** — RLS on, no policies — stricter than
+   the plan's read policy, because closing reads too is what guarantees a
+   runner's runs only leave the database as totals. One writer
+   (`/api/run/runs`: `log_runs`, the runner this phone joined as,
+   `runEntryIssue` with a day's timezone grace; a runner deletes only their
+   own typed-in runs) and one reader (`app/run/[tripCode]/runs.ts`, service
+   role). `lib/runBoards.ts` turns runs into boards — the challenge's days
+   only, the daily limit on the day, golf's shared places, teams on average
+   (everyone counts) or total. The organiser can change the points rules,
+   through the same `RunRulesFields` setup uses; every board re-counts. Not
+   yet: the organiser removing somebody else's run — the PIN is a soft lock
+   whose hash anyone can read, so a server check on it would be theatre; it
+   arrives with real organiser identity or as a soft-lock action like the
+   rest.
 4. **Strava** — connect with a consent tick, backfill since the start date,
    Strava's webhook for new, edited and deleted runs, disconnect. Tokens in a
    table the browser cannot read at all (RLS, no policies).
