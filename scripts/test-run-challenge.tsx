@@ -453,7 +453,7 @@ section('A join writes in order, and never finishes without a team')
   const iPlayer = join.indexOf(".from('players')")
   const iMember = join.indexOf('setTeam(tripId, playerId, MAIN_SET, teamId)')
   ok(iTeam > -1 && iTeam < iPlayer && iPlayer < iMember, 'a new team, then the runner, then the membership')
-  ok(join.includes('finish(playerId)') && join.lastIndexOf('finish(playerId)') > iMember,
+  ok(join.includes('finish(playerId)') && join.indexOf('finish(playerId)') > iMember,
     'the phone is linked only after the team is set')
   ok(join.includes("from('teams').delete().eq('id', createdTeam).eq('trip_id', tripId)"),
     'a team started for a join that failed is taken away again')

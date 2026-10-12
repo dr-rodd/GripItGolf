@@ -40,6 +40,7 @@ holds it, mutation-tested.
 | `/create` | Which sport — Golf or Running |
 | `/dashboard/create?type=run` | The four-step wizard: challenge, teams, points, finish (permissions + PIN) |
 | `/run/[code]` | The challenge's home |
+| `/run/[code]/join` | Joining: who you are, then which team |
 | `/run/[code]/organiser` | The organiser area, behind the PIN |
 
 `/run/` is its own route tree so that **no golf screen changes for it** —
@@ -62,10 +63,15 @@ Each stage is tested on greendot.live before the next starts.
 
 1. **Create** — built. The sport chooser, the wizard, the email, the hub and
    a read-only organiser area (permissions save on the spot).
-2. **Join and teams** — enter the code, claim or add a name, pick a team
-   (or start one, if `create_teams` is on). Nobody finishes joining without
-   a team. The organiser (or anyone with the PIN) moves people and renames
-   teams.
+2. **Join and teams** — built. Enter the code, claim a name the organiser
+   added (or one already joined on another phone, which only links this
+   one) or add your own (`join_self`), then pick a team — or start one
+   (`create_teams`). Nobody finishes joining without a team: a join writes
+   new team → runner → membership (`setTeam`) and links the phone only
+   after the team is set; a failed membership keeps the runner and retries
+   the team alone. The organiser area edits teams in full — add, rename,
+   remove once empty; add, rename, move, remove runners — each change one
+   write filtered on the challenge, then `router.refresh()`.
 3. **Runs and the leaderboard** — a `runs` table, **server-written only**
    (RLS read policy, no write policy — the posture migration 040 gave
    courses), typed-in runs when `log_runs` is on, and the individual and
