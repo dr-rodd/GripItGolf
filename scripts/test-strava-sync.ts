@@ -261,6 +261,12 @@ const fresh = (): Fake => ({ activities: [], one: {}, refresh: 200, refreshRefus
     strava.refreshRefuses = 'Application'   // our key is wrong, not their access
     await handleWebhook(fakeAdmin(db), cfg, { kind: 'deauthorize', athleteId: 42 })
     eq(ids(db), before, 'nor does one we cannot check because our own key is refused')
+
+    db = world()
+    strava = fresh()
+    strava.athlete = 500   // Strava having a bad moment
+    await handleWebhook(fakeAdmin(db), cfg, { kind: 'deauthorize', athleteId: 42 })
+    eq(ids(db), before, 'nor one that arrives while Strava is down — only a 401 from Strava confirms it')
   }
 
   section('Revoking on Strava, once Strava confirms it, forgets the athlete everywhere')

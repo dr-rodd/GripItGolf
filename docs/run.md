@@ -96,9 +96,35 @@ Each stage is tested on greendot.live before the next starts.
    whose hash anyone can read, so a server check on it would be theatre; it
    arrives with real organiser identity or as a soft-lock action like the
    rest.
-4. **Strava** — connect with a consent tick, backfill since the start date,
-   Strava's webhook for new, edited and deleted runs, disconnect. Tokens in a
-   table the browser cannot read at all (RLS, no policies).
+4. **Strava** — built. The runner ticks consent (their totals on this
+   challenge's board; their runs only to them) and taps Connect:
+   `/api/run/strava/connect` → Strava's authorise page (`activity:read`) with
+   an HMAC-signed `state` naming challenge and runner → the callback checks
+   the state, the granted scope, and that the Strava account feeds no other
+   name here (`UNIQUE (trip_id, athlete_id)`), stores tokens in
+   `strava_athletes`, links the runner in `strava_links` with the consent
+   time (migration 054, both closed to the browser), pulls in their runs
+   since the start, and sets up Strava's webhook if it is missing.
+   The webhook answers at once and works after (`after()`). **It is
+   unsigned**, so every activity event — deletes included — re-reads the
+   activity with the athlete's own token, and a revoke is acted on only
+   when Strava confirms it (stored token refused as unauthorised, or the
+   refresh token refused *by name*). A nightly cron (`/api/run/strava/sync`,
+   60 connections, inside Strava's 100 reads per 15 minutes) catches what was
+   missed; the runner has Check for new runs and Disconnect on the Add tab
+   and in Settings. A refused refresh is only ever a retry — a regenerated
+   secret not yet in Vercel looks exactly like that, and must not wipe the
+   boards. Garmin-recorded runs say so in the runner's own list
+   (`runs.device_name`).
+
+   **Before Strava's review:** the Connect button is ours, not Strava's
+   official artwork (it could not be downloaded from the build) — drop the
+   asset into `public/` and swap it in `StravaCard`. Two policy questions to
+   put to Strava in the review: their reported 7-day cap on caching raw
+   activity data (the nightly sync re-reads everything stored, but runs are
+   kept for the challenge), and whether totals derived from Garmin-recorded
+   runs need a Garmin credit on the shared board as well as the runner's
+   own list.
 5. **Sub-leaderboards** — a date window ("Week 2") or an activity filter on a
    board.
 
