@@ -873,6 +873,8 @@ section('Tokens never leave the server, and only two doors forget anybody')
     'an athlete is forgotten from exactly two places: their revoke on Strava, and their own Disconnect')
   ok(api.includes("if (action.kind === 'deauthorize') {") && api.includes('await forgetAthlete(admin, cfg, action.athleteId, { revoke: false })'),
     '  …the first is the deauthorisation webhook')
+  ok(api.includes('if (await revocationConfirmed(admin, cfg, action.athleteId)) {'),
+    '  …acted on only once Strava confirms it — the webhook is unsigned, so an event is a claim')
   ok(api.includes("if (!count) await forgetAthlete(admin, cfg, Number(link.athlete_id), { revoke: true })"),
     '  …the second is Disconnect, once the account feeds nothing else')
   const refresh = api.slice(api.indexOf('async function refreshTokens'), api.indexOf('export async function saveTokens'))

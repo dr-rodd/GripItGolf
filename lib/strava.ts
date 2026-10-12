@@ -198,10 +198,13 @@ export type WebhookAction =
   | { kind: 'ignore' }
 
 /**
- * What a Strava webhook event asks for. A new or edited activity is
- * re-read (an edit can change its type, its distance, or make it private);
- * a deleted one is removed; an athlete whose `authorized` went false has
- * revoked access, and everything of theirs goes.
+ * What a Strava webhook event claims. A new, edited or deleted activity is
+ * re-read from Strava — an edit can change its type, its distance or make
+ * it private, and a delete is believed only once Strava agrees it is gone;
+ * an athlete whose `authorized` went false claims to have revoked access,
+ * which is confirmed with Strava before anything of theirs goes. Strava
+ * does not sign its webhook, so these are claims, not instructions
+ * (lib/stravaApi.ts `handleWebhook`).
  */
 export function webhookAction(raw: unknown): WebhookAction {
   if (!raw || typeof raw !== 'object') return { kind: 'ignore' }

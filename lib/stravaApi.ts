@@ -55,11 +55,20 @@ export async function exchangeCode(cfg: StravaConfig, code: string): Promise<Tok
  * deauthorisation webhook, or by the runner pressing Disconnect — those are
  * the only two doors to forgetting anyone.
  */
-async function refreshTokens(cfg: StravaConfig, refresh: string): Promise<Omit<TokenSet, 'athleteId'> | null> {
+async function refreshTokens(
+  cfg: StravaConfig, refresh: string,
+): Promise<Omit<TokenSet, 'athleteId'> | 'refresh-token-invalid' | null> {
   const res = await post('https://www.strava.com/oauth/token', {
     client_id: cfg.clientId, client_secret: cfg.clientSecret, refresh_token: refresh, grant_type: 'refresh_token',
   }).catch(() => null)
-  if (!res?.ok) { console.error('strava refresh failed:', res?.status); return null }
+  if (!res?.ok) {
+    console.error('strava refresh failed:', res?.status)
+    // Strava names which field it refused. Only a refused *refresh token* —
+    // never a refused client — says this one runner's connection is dead,
+    // and only the deauthorisation check below ever acts on it.
+    const body = await res?.json().catch(() => null) as { errors?: { resource?: string }[] } | null
+    return body?.errors?.some(e => e.resource === 'RefreshToken') ? 'refresh-token-invalid' : null
+  }
   const j = await res.json() as { access_token?: string; refresh_token?: string; expires_at?: number }
   if (!j.access_token || !j.refresh_token || !j.expires_at) return null
   return { access: j.access_token, refresh: j.refresh_token, expiresAt: j.expires_at }
@@ -93,9 +102,35 @@ export async function accessToken(
   if (!data) return null
   if (!tokenNeedsRefresh(data.expires_at, Date.now())) return data.access_token
   const fresh = await refreshTokens(cfg, data.refresh_token)
-  if (!fresh) return null
+  if (!fresh || fresh === 'refresh-token-invalid') return null
   await saveTokens(admin, { athleteId, ...fresh })
   return fresh.access
+}
+
+/**
+ * Has this athlete really revoked access? Asked before acting on a
+ * deauthorisation event, because Strava does not sign its webhook and a
+ * forged "revoked" would otherwise erase a runner. Yes only when Strava
+ * itself says so: the stored token refused as unauthorised, or the refresh
+ * token refused by name. A wrong client secret, a timeout or Strava having a
+ * bad day all answer no — the data stays.
+ */
+export async function revocationConfirmed(admin: SupabaseClient, cfg: StravaConfig, athleteId: number): Promise<boolean> {
+  const { data } = await admin.from('strava_athletes')
+    .select('access_token, refresh_token, expires_at')
+    .eq('athlete_id', athleteId)
+    .maybeSingle()
+  if (!data) return false
+  let token: string = data.access_token
+  if (tokenNeedsRefresh(data.expires_at, Date.now())) {
+    const fresh = await refreshTokens(cfg, data.refresh_token)
+    if (fresh === 'refresh-token-invalid') return true
+    if (!fresh) return false
+    await saveTokens(admin, { athleteId, ...fresh })
+    token = fresh.access
+  }
+  const { status } = await getJson('/athlete', token)
+  return status === 401
 }
 
 /** A GET to Strava. A dropped connection is status 0, never a throw. */
@@ -213,11 +248,25 @@ export async function disconnectRunner(admin: SupabaseClient, cfg: StravaConfig,
   if (!count) await forgetAthlete(admin, cfg, Number(link.athlete_id), { revoke: true })
 }
 
-/** Carry out what a webhook event asks (lib/strava.ts decided what that is). */
+/**
+ * Carry out what a webhook event asks (lib/strava.ts decided what that is).
+ *
+ * **Strava does not sign its webhook**, so an event is a hint, never an
+ * instruction: anyone can post one to our address. So a deauthorisation is
+ * acted on only once Strava confirms it (`revocationConfirmed`), and every
+ * activity event — create, update *and delete* — is answered by asking
+ * Strava for the activity with the athlete's own token: what Strava says
+ * is what the boards get. A forged delete of a run that still exists
+ * re-reads it and keeps it.
+ */
 export async function handleWebhook(admin: SupabaseClient, cfg: StravaConfig, action: WebhookAction) {
   if (action.kind === 'ignore') return
   if (action.kind === 'deauthorize') {
-    await forgetAthlete(admin, cfg, action.athleteId, { revoke: false })
+    if (await revocationConfirmed(admin, cfg, action.athleteId)) {
+      await forgetAthlete(admin, cfg, action.athleteId, { revoke: false })
+    } else {
+      console.error('strava: deauthorisation for', action.athleteId, 'not confirmed by Strava — left alone')
+    }
     return
   }
 
@@ -225,16 +274,8 @@ export async function handleWebhook(admin: SupabaseClient, cfg: StravaConfig, ac
     .select('player_id, trip_id, athlete_id').eq('athlete_id', action.athleteId)
   if (!links || links.length === 0) return
 
-  if (action.kind === 'delete-activity') {
-    await admin.from('runs').delete()
-      .in('player_id', links.map(l => l.player_id))
-      .eq('source', 'strava')
-      .eq('strava_activity_id', action.activityId)
-    return
-  }
-
-  // A new or edited activity: read it once, then write or remove it in
-  // every challenge this athlete feeds.
+  // Any activity event: read it once, then write or remove it in every
+  // challenge this athlete feeds.
   const token = await accessToken(admin, cfg, action.athleteId)
   if (!token) return
   const { status, body } = await getJson<StravaActivity>(`/activities/${action.activityId}`, token)

@@ -95,7 +95,16 @@ function fakeAdmin(db: Db) {
 
 // ─── A Strava that answers the four endpoints ──────────────────
 
-type Fake = { activities: Row[]; one: Record<number, { status: number; body?: Row }>; refresh: number; calls: string[] }
+type Fake = {
+  activities: Row[]
+  one: Record<number, { status: number; body?: Row }>
+  refresh: number
+  /** Which field Strava names when it refuses a refresh: the client, or the runner's token. */
+  refreshRefuses: 'Application' | 'RefreshToken'
+  /** What GET /athlete answers — 401 once a runner has really revoked access. */
+  athlete: number
+  calls: string[]
+}
 let strava: Fake
 const realFetch = globalThis.fetch
 globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -106,10 +115,11 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   if (url.includes('/oauth/token')) {
     return strava.refresh === 200
       ? json(200, { access_token: 'new-access', refresh_token: 'new-refresh', expires_at: Math.floor(Date.now() / 1000) + 21600 })
-      : json(strava.refresh, { message: 'Bad Request' })
+      : json(strava.refresh, { message: 'Bad Request', errors: [{ resource: strava.refreshRefuses, field: 'x', code: 'invalid' }] })
   }
   if (url.includes('/oauth/deauthorize')) return json(200, {})
   if (url.includes('/athlete/activities')) return json(200, strava.activities)
+  if (/\/athlete$/.test(url)) return json(strava.athlete, { id: 42 })
   const m = url.match(/\/activities\/(\d+)$/)
   if (m) {
     const r = strava.one[Number(m[1])] ?? { status: 404 }
@@ -150,7 +160,7 @@ function world(): Db {
   }
 }
 const ids = (db: Db) => db.runs.map(r => r.id).sort()
-const fresh = (): Fake => ({ activities: [], one: {}, refresh: 200, calls: [] })
+const fresh = (): Fake => ({ activities: [], one: {}, refresh: 200, refreshRefuses: 'Application', athlete: 200, calls: [] })
 
 ;(async () => {
   section('A sync writes the challenge\'s runs and removes only what it looked for')
@@ -228,10 +238,44 @@ const fresh = (): Fake => ({ activities: [], one: {}, refresh: 200, calls: [] })
     ok(!db.runs.some(r => r.strava_activity_id === 100), 'a run re-typed as a ride leaves the boards')
   }
 
-  section('Revoking on Strava forgets the athlete everywhere')
+  section('Forged webhook events cannot erase anybody')
   {
-    const db = world()
+    let db = world()
     strava = fresh()
+    strava.one[100] = { status: 200, body: act(100, '2026-11-03') }
+    await handleWebhook(fakeAdmin(db), cfg, { kind: 'delete-activity', athleteId: 42, activityId: 100 })
+    ok(db.runs.filter(r => r.strava_activity_id === 100).length === 2,
+      'a "deleted" event for a run Strava still has keeps it — the delete is checked, not believed')
+
+    db = world()
+    strava = fresh()   // the runner's token still works: GET /athlete answers 200
+    const before = ids(db)
+    await handleWebhook(fakeAdmin(db), cfg, { kind: 'deauthorize', athleteId: 42 })
+    eq(ids(db), before, 'a "revoked" event Strava does not confirm erases nothing')
+    eq(db.strava_athletes.length, 2, '  …and forgets nobody')
+
+    db = world()
+    db.strava_athletes[0].expires_at = new Date(Date.now() - 60_000).toISOString()
+    strava = fresh()
+    strava.refresh = 401
+    strava.refreshRefuses = 'Application'   // our key is wrong, not their access
+    await handleWebhook(fakeAdmin(db), cfg, { kind: 'deauthorize', athleteId: 42 })
+    eq(ids(db), before, 'nor does one we cannot check because our own key is refused')
+  }
+
+  section('Revoking on Strava, once Strava confirms it, forgets the athlete everywhere')
+  {
+    let db = world()
+    strava = fresh()
+    strava.refreshRefuses = 'RefreshToken'
+    db.strava_athletes[0].expires_at = new Date(Date.now() - 60_000).toISOString()
+    strava.refresh = 400
+    await handleWebhook(fakeAdmin(db), cfg, { kind: 'deauthorize', athleteId: 42 })
+    eq(ids(db), ['m1', 's3'], 'confirmed by Strava refusing their refresh token by name: their Strava runs go')
+
+    db = world()
+    strava = fresh()
+    strava.athlete = 401
     await handleWebhook(fakeAdmin(db), cfg, { kind: 'deauthorize', athleteId: 42 })
     eq(ids(db), ['m1', 's3'], 'every Strava run of theirs, in every challenge, is gone; typed-in runs stay')
     eq(db.strava_athletes.map(a => a.athlete_id), [77], 'their tokens are gone')

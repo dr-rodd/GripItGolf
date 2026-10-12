@@ -17,9 +17,11 @@ import { handleWebhook } from '@/lib/stravaApi'
  * the run in every challenge that athlete feeds, or forgetting the athlete
  * entirely. What an event means is lib/strava.ts's `webhookAction`.
  *
- * Nothing in an event is trusted beyond its ids: the activity itself is
- * always re-read from Strava with the athlete's own token, so a forged
- * event can at most cause a re-read of the truth.
+ * Strava does not sign its webhook, so nothing in an event is trusted
+ * beyond its ids: every activity event — a delete included — is answered by
+ * re-reading the activity from Strava with the athlete's own token, and a
+ * deauthorisation is acted on only once Strava confirms it. A forged event
+ * can at most cause a re-read of the truth (lib/stravaApi.ts).
  */
 
 export const dynamic = 'force-dynamic'
