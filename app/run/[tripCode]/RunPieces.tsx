@@ -9,10 +9,13 @@ import type { RunTeam, RunMember } from './data'
  * and another way on the other. Plain components, no state.
  */
 
-export function TeamsList({ teams, unassigned }: {
+export function TeamsList({ teams, unassigned, viewerId = null }: {
   teams: RunTeam[]
   unassigned: RunMember[]
+  /** The runner holding this phone, named as "you" in their team. */
+  viewerId?: string | null
 }) {
+  const named = (m: RunMember) => m.id === viewerId ? `${m.name} (you)` : m.name
   return (
     <div className="space-y-2">
       {teams.map(t => (
@@ -30,7 +33,7 @@ export function TeamsList({ teams, unassigned }: {
           </div>
           <p className="text-ink/65 text-[13px] mt-1.5 leading-snug pl-[1.375rem]">
             {t.members.length > 0
-              ? t.members.map(m => m.name).join(', ')
+              ? t.members.map(named).join(', ')
               : 'Nobody yet.'}
           </p>
         </div>
@@ -40,7 +43,7 @@ export function TeamsList({ teams, unassigned }: {
         <div className="bg-surface border border-rust/30 rounded-2xl p-4">
           <p className="text-rust-deep text-sm font-medium">No team yet</p>
           <p className="text-ink/65 text-[13px] mt-1 leading-snug">
-            {unassigned.map(m => m.name).join(', ')}
+            {unassigned.map(named).join(', ')}
           </p>
         </div>
       )}

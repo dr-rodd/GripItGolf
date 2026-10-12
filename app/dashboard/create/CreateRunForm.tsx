@@ -328,8 +328,9 @@ export default function CreateRunForm() {
             Challenge Created!
           </h1>
           <p className="text-ink/65 text-sm mb-10">
-            Share this code with everyone taking part. Joining, run logging
-            and the leaderboard arrive in the next update.
+            Share this code with everyone taking part — they join with it
+            and pick their team. Run logging and the leaderboard arrive in
+            the next update.
           </p>
 
           <div className="bg-surface border border-bark/25 rounded-2xl px-4 py-8 mb-4">

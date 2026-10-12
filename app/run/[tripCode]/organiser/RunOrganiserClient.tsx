@@ -7,15 +7,17 @@ import TripHeader from '@/app/components/TripHeader'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import { RUN_PERMISSIONS, type RunPermissions } from '@/lib/runChallenge'
 import type { RunChallenge } from '../data'
-import { TeamsList, RulesSummary, SectionTitle } from '../RunPieces'
+import { RulesSummary, SectionTitle } from '../RunPieces'
+import RunTeamsEditor from './RunTeamsEditor'
 
 /**
  * The organiser area's body, once the PIN is in.
  *
  * Permissions save the moment a toggle moves — the whole run map, written
  * over `trips.event_permissions` — and roll back with a calm line if the
- * write is refused. Teams and rules are shown as they stand; changing them
- * is the next stage's work, and the page says so rather than pretending.
+ * write is refused. Teams are edited here in full (RunTeamsEditor). The
+ * rules are shown as they stand; changing them arrives with the
+ * leaderboard, and the page says so rather than pretending.
  */
 export default function RunOrganiserClient({ challenge, dates, progress }: {
   challenge: RunChallenge
@@ -102,14 +104,18 @@ export default function RunOrganiserClient({ challenge, dates, progress }: {
           )}
         </section>
 
-        {/* ── The teams, as they stand ── */}
+        {/* ── The teams: add, rename, move people, remove ── */}
         <section>
           <SectionTitle>Teams</SectionTitle>
-          <TeamsList teams={challenge.teams} unassigned={challenge.unassigned} />
-          <p className="text-ink/65 text-[13px] mt-3 leading-snug">
-            Adding, renaming and moving people between teams arrives in the
-            next update.
+          <p className="text-ink/65 text-[13px] mb-3 leading-snug">
+            Tap a runner to rename, move or remove them. A team can be
+            removed once it is empty.
           </p>
+          <RunTeamsEditor
+            tripId={challenge.id}
+            teams={challenge.teams}
+            unassigned={challenge.unassigned}
+          />
         </section>
 
         {/* ── The rules, as they stand ── */}

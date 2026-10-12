@@ -35,6 +35,9 @@
 //
 // Pure. No I/O.
 
+import { PRESET_COLORS } from './teamColors'
+import { nameKey } from './roster'
+
 /** The value `trips.kind` holds for a run challenge. */
 export const RUN_KIND = 'run'
 
@@ -426,6 +429,101 @@ export function teamNamesIssue(names: string[]): string | null {
     seen.add(k)
   }
   return null
+}
+
+// ─── Joining, and the teams after creation ─────────────────────
+//
+// Everyone runs for a team. A runner joins with the code: claims a name the
+// organiser added, or adds their own (when `join_self` is on), and picks a
+// team — or starts one, when `create_teams` is on. Nobody finishes joining
+// without a team. After that, moving people between teams is the
+// organiser's (or anyone holding the PIN).
+
+/** The longest name a runner can give. */
+export const MAX_RUNNER_NAME = 60
+
+/**
+ * Why this runner's name will not do, or null. `roster` is everyone already
+ * in the challenge; `exceptId` is the runner being renamed, so keeping a
+ * name unchanged is not a clash with itself. Names are compared the way the
+ * database's unique index compares them (lib/roster.ts's `nameKey`), so
+ * whatever passes here is refused there only by a race.
+ */
+export function runnerNameIssue(
+  name: string,
+  roster: { id?: string; name: string }[],
+  exceptId?: string | null,
+): string | null {
+  const n = name.trim()
+  if (!n) return 'Add a name.'
+  if (n.length > MAX_RUNNER_NAME) return `Names can be up to ${MAX_RUNNER_NAME} characters.`
+  const key = nameKey(n)
+  if (roster.some(p => p.id !== exceptId && nameKey(p.name) === key)) {
+    return `${n} is already in this challenge.`
+  }
+  return null
+}
+
+/**
+ * Why this one team name will not do, or null — a team being added (no
+ * `exceptId`) or renamed. Adding is also held to the team ceiling.
+ */
+export function teamNameIssue(
+  name: string,
+  teams: { id: string; name: string }[],
+  exceptId?: string | null,
+): string | null {
+  const n = name.trim()
+  if (!n) return 'Give the team a name.'
+  if (n.length > MAX_TEAM_NAME) return `Team names can be up to ${MAX_TEAM_NAME} characters.`
+  const key = teamKey(n)
+  if (teams.some(t => t.id !== exceptId && teamKey(t.name) === key)) {
+    return `There's already a team called ${n}.`
+  }
+  if (!exceptId && teams.length >= MAX_RUN_TEAMS) {
+    return `A challenge can have up to ${MAX_RUN_TEAMS} teams.`
+  }
+  return null
+}
+
+/** The colour a new team takes: the next in the palette, by count. */
+export function nextTeamColor(teamCount: number): string {
+  return PRESET_COLORS[((teamCount % PRESET_COLORS.length) + PRESET_COLORS.length) % PRESET_COLORS.length]
+}
+
+/**
+ * Whether a team can be removed: only an empty one. Everyone runs for a
+ * team, so deleting one with runners in it would leave them on none — move
+ * them first.
+ */
+export function canRemoveTeam(memberCount: number): boolean {
+  return memberCount === 0
+}
+
+/** Is the challenge over? The finish day itself still counts. */
+export function challengeFinished(end: string | null | undefined, today: string): boolean {
+  if (!end) return false
+  const b = dayNumber(end)
+  const t = dayNumber(today)
+  return b !== null && t !== null && t > b
+}
+
+/**
+ * What the join screen can offer, from the permissions and the roster:
+ * claiming a name the organiser added, adding a new one, starting a team.
+ * `closed` when the challenge has finished — a finished challenge takes no
+ * new runners — and `nothing` when there is no way in at all, so the screen
+ * can say who to ask rather than showing an empty page.
+ */
+export function joinChoices(
+  perms: RunPermissions,
+  roster: { claimed: boolean }[],
+  finished: boolean,
+): { closed: boolean; claim: boolean; addSelf: boolean; startTeam: boolean; nothing: boolean } {
+  if (finished) return { closed: true, claim: false, addSelf: false, startTeam: false, nothing: false }
+  const claim = roster.length > 0
+  const addSelf = perms.join_self
+  return { closed: false, claim, addSelf, startTeam: perms.create_teams, nothing: !claim && !addSelf }
 }
 
 /**

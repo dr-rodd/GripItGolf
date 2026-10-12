@@ -9,9 +9,20 @@
  * in the platform's order through the shared team writer, every golf door
  * hands a run challenge to /run/, and the email says "challenge" without
  * ever changing a golf message.
+ *
+ * Stage 2 adds joining: the name and team rules, what the join screen may
+ * offer (drawn, not just asserted), the order a join writes in, and the
+ * organiser's team editor — every write scoped to its challenge, and no
+ * team removable while somebody still runs for it.
  */
 
 import fs from 'fs'
+import React from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime'
+import RunJoinClient from '../app/run/[tripCode]/join/RunJoinClient'
+import RunTeamsEditor from '../app/run/[tripCode]/organiser/RunTeamsEditor'
+import { PRESET_COLORS } from '../lib/teamColors'
 import {
   RUN_KIND, isRunChallenge, RUN_ACTIVITIES, activityFromStrava,
   defaultRules, parseRules, rulesIssue, runPoints, dayPoints,
@@ -20,6 +31,8 @@ import {
   RUN_PERMISSIONS, defaultRunPermissions, parseRunPermissions, storedRunPermissions,
   challengeDatesIssue, teamNamesIssue, describeProgress,
   migrationMissing, MAX_POINTS, MAX_RUN_TEAMS,
+  runnerNameIssue, teamNameIssue, nextTeamColor, canRemoveTeam,
+  challengeFinished, joinChoices, MAX_RUNNER_NAME, MAX_TEAM_NAME,
   type RunRules,
 } from '../lib/runChallenge'
 import { parseEventPermissions, defaultPermissions } from '../lib/eventPermissions'
@@ -332,6 +345,175 @@ section('Migration 052 is the two changes the model promised')
   ok(sql.includes('ADD COLUMN IF NOT EXISTS run_setup jsonb'), 'run_setup is one nullable jsonb column')
   ok(sql.includes('BEGIN;') && sql.includes('COMMIT;'), 'in one transaction')
   ok(!/DROP TABLE|DELETE FROM|UPDATE trips/i.test(sql), 'touching no existing row')
+}
+
+// ─── Stage 2: joining and teams ────────────────────────────────
+
+/** A client screen that asks for the router, drawn on the server. */
+const stubRouter = { push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {} }
+const draw = (el: React.ReactElement) =>
+  renderToStaticMarkup(React.createElement(AppRouterContext.Provider, { value: stubRouter as never }, el))
+
+section('A runner\'s name is checked the way the database checks it')
+{
+  const roster = [{ id: 'a', name: 'Ross O\'Grady' }, { id: 'b', name: 'Dave' }]
+  eq(runnerNameIssue('Aoife', roster), null, 'a new name is fine')
+  ok(runnerNameIssue('  dave ', roster)?.includes('already in this challenge') === true,
+    'a taken name is refused, case and outer spaces aside')
+  eq(runnerNameIssue('Dave', roster, 'b'), null, 'keeping your own name is not a clash')
+  ok(runnerNameIssue('   ', roster) !== null, 'a blank name is refused')
+  ok(runnerNameIssue('x'.repeat(MAX_RUNNER_NAME + 1), roster) !== null, 'and an over-long one')
+}
+
+section('A team name is checked on its own, for adding or renaming')
+{
+  const teams = [{ id: 't1', name: 'Sales' }, { id: 't2', name: 'Ops' }]
+  eq(teamNameIssue('Engineering', teams), null, 'a new team is fine')
+  ok(teamNameIssue(' sales ', teams)?.includes('already a team') === true, 'a taken name is refused')
+  eq(teamNameIssue('Sales', teams, 't1'), null, 'renaming a team to its own name is fine')
+  ok(teamNameIssue('Ops', teams, 't1') !== null, 'renaming onto another team\'s name is not')
+  ok(teamNameIssue('', teams) !== null, 'a blank name is refused')
+  ok(teamNameIssue('x'.repeat(MAX_TEAM_NAME + 1), teams) !== null, 'an over-long one too')
+  const full = Array.from({ length: MAX_RUN_TEAMS }, (_, i) => ({ id: `t${i}`, name: `T${i}` }))
+  ok(teamNameIssue('One more', full) !== null, 'adding past the ceiling is refused')
+  eq(teamNameIssue('T0 renamed', full, 't0'), null, 'but renaming at the ceiling is fine')
+}
+
+section('New teams take the next colour, and only empty teams can go')
+{
+  eq(nextTeamColor(0), PRESET_COLORS[0], 'the first team takes the first colour')
+  eq(nextTeamColor(2), PRESET_COLORS[2], 'the third the third')
+  eq(nextTeamColor(PRESET_COLORS.length), PRESET_COLORS[0], 'and the palette wraps round')
+  ok(canRemoveTeam(0), 'an empty team can be removed')
+  ok(!canRemoveTeam(1), 'a team with a runner cannot — everyone runs for a team')
+}
+
+section('Joining closes when the challenge finishes, and only then')
+{
+  ok(!challengeFinished('2026-11-30', '2026-11-30'), 'the finish day itself is still open')
+  ok(challengeFinished('2026-11-30', '2026-12-01'), 'the day after, it is finished')
+  ok(!challengeFinished(null, '2026-12-01'), 'no finish date is never finished')
+}
+
+section('What the join screen may offer')
+{
+  const perms = defaultRunPermissions()
+  const someone = [{ claimed: false }]
+  eq(joinChoices(perms, someone, false),
+    { closed: false, claim: true, addSelf: true, startTeam: false, nothing: false },
+    'by default: claim a name or add your own; starting a team is off')
+  eq(joinChoices({ ...perms, create_teams: true }, someone, false).startTeam, true,
+    'starting a team only when the organiser allows it')
+  eq(joinChoices({ ...perms, join_self: false }, someone, false).addSelf, false,
+    'join_self off: no adding yourself')
+  eq(joinChoices({ ...perms, join_self: false }, [], false).nothing, true,
+    'join_self off and nobody added: there is no way in, and the screen says who to ask')
+  eq(joinChoices(perms, someone, true),
+    { closed: true, claim: false, addSelf: false, startTeam: false, nothing: false },
+    'a finished challenge offers nothing at all')
+}
+
+section('The join screen draws exactly what it was offered')
+{
+  const teams = [{ id: 't1', name: 'Sales', color: '#DC2626', count: 1 }]
+  const roster = [
+    { id: 'p1', name: 'Ross', claimed: true, isLead: true, teamId: 't1' },
+    { id: 'p2', name: 'Aoife', claimed: false, isLead: false, teamId: null },
+  ]
+  const props = { tripId: 'trip', code: 'GX7K2P', name: 'Autumn Run', roster, teams, viewerId: null }
+  const open = draw(<RunJoinClient {...props} choices={joinChoices(defaultRunPermissions(), roster, false)} />)
+  ok(open.includes('Find your name') && open.includes('Aoife') && open.includes('Ross'),
+    'the roster is listed to claim')
+  ok(open.includes('Joined') && open.includes('No team yet'), 'with who has joined and who has no team')
+  ok(open.includes('New here?') && open.includes('placeholder="Your name"'), 'and the add-yourself form')
+
+  const shut = draw(<RunJoinClient {...props}
+    choices={joinChoices({ ...defaultRunPermissions(), join_self: false }, roster, false)} />)
+  ok(!shut.includes('placeholder="Your name"'), 'join_self off: no add-yourself form at all')
+  ok(shut.includes('Ask the organiser to add it'), 'and it says who to ask')
+
+  const none = draw(<RunJoinClient {...props} roster={[]}
+    choices={joinChoices({ ...defaultRunPermissions(), join_self: false }, [], false)} />)
+  ok(none.includes('Joining by yourself is switched off'), 'no way in is said, not left blank')
+
+  const done = draw(<RunJoinClient {...props} choices={joinChoices(defaultRunPermissions(), roster, true)} />)
+  ok(done.includes('joining is closed') && !done.includes('Find your name'), 'a finished challenge is closed')
+
+  const me = draw(<RunJoinClient {...props} viewerId="p1"
+    choices={joinChoices(defaultRunPermissions(), roster, false)} />)
+  ok(me.includes('This phone is Ross') && me.includes('Ross (this phone)'),
+    'a phone already joined is told so, and can switch')
+}
+
+section('A join writes in order, and never finishes without a team')
+{
+  const src = stripComments(read('app/run/[tripCode]/join/RunJoinClient.tsx'))
+  const join = src.slice(src.indexOf('async function join()'), src.indexOf('// ── Render ──'))
+  const iTeam = join.indexOf(".from('teams')")
+  const iPlayer = join.indexOf(".from('players')")
+  const iMember = join.indexOf('setTeam(tripId, playerId, MAIN_SET, teamId)')
+  ok(iTeam > -1 && iTeam < iPlayer && iPlayer < iMember, 'a new team, then the runner, then the membership')
+  ok(join.includes('finish(playerId)') && join.lastIndexOf('finish(playerId)') > iMember,
+    'the phone is linked only after the team is set')
+  ok(join.includes("from('teams').delete().eq('id', createdTeam).eq('trip_id', tripId)"),
+    'a team started for a join that failed is taken away again')
+  ok(join.includes("setWho({ kind: 'claim'"),
+    'a membership that failed keeps the runner and retries the team only — nobody is created twice')
+
+  const finish = src.slice(src.indexOf('function finish('), src.indexOf('// ── Step 1 · who ──'))
+  const iRemember = finish.indexOf('rememberPlayer(code, playerId)')
+  const iRefresh = finish.indexOf('router.refresh()')
+  const iPush = finish.indexOf('router.push(`/run/${code}`)')
+  ok(iRemember > -1 && iRemember < iRefresh && iRefresh < iPush,
+    'linking the phone refreshes before it navigates, so the home page is not stale')
+
+  const tap = src.slice(src.indexOf('async function tapName('), src.indexOf('const newNameIssue'))
+  ok(tap.includes('if (!entry.teamId)') && tap.includes("setStep('team')"),
+    'claiming a name with no team goes to the team step first')
+
+  const page = read('app/run/[tripCode]/join/page.tsx')
+  ok(page.includes('joinChoices(') && page.includes('challengeFinished('),
+    'the page decides what is offered through the one rule')
+}
+
+section('The organiser\'s team editor')
+{
+  const team = (id: string, name: string, members: { id: string; name: string; claimed: boolean }[]) =>
+    ({ id, name, color: '#2563EB', members: members.map(m => ({ ...m, isLead: false })) })
+  const html = draw(<RunTeamsEditor tripId="trip" unassigned={[]} teams={[
+    team('t1', 'Sales', [{ id: 'p1', name: 'Ross', claimed: true }, { id: 'p2', name: 'Aoife', claimed: false }]),
+    team('t2', 'Ops', []),
+  ]} />)
+  ok(html.includes('Joined') && html.includes('Not joined yet'), 'it shows who has joined and who has not')
+  ok(html.includes('+ Add a runner') && html.includes('+ Add a team'), 'runners and teams can be added')
+
+  const orphan = draw(<RunTeamsEditor tripId="trip" teams={[team('t1', 'Sales', [])]}
+    unassigned={[{ id: 'p9', name: 'Lost', claimed: true, isLead: false }]} />)
+  ok(orphan.includes('No team yet') && orphan.includes('Lost'), 'a runner on no team is shown, not lost')
+
+  const src = stripComments(read('app/run/[tripCode]/organiser/RunTeamsEditor.tsx'))
+  const writes = src.split('await supabase').slice(1).map(w => w.slice(0, 260))
+  const scopedWrites = writes.filter(w => /\.(update|delete)\(/.test(w))
+  ok(scopedWrites.length >= 4 && scopedWrites.every(w => w.includes(".eq('trip_id', tripId)")),
+    `every update and delete is filtered on the challenge as well as the row (${scopedWrites.length})`)
+  ok(writes.filter(w => w.includes('.insert(')).every(w => w.includes('trip_id: tripId')),
+    'and every insert carries it')
+  ok(src.includes('if (!canRemoveTeam(team.members.length))'), 'a team with runners is refused removal')
+  ok((src.match(/setTeam\(tripId, /g) ?? []).length === 2,
+    'moving and adding runners both go through the one membership writer')
+  ok(src.includes('startTransition(() => router.refresh())'), 'and the screen re-reads what was saved')
+  const body = src.slice(src.indexOf('export default function RunTeamsEditor(') + 40)
+  ok(!/function [A-Z]\w*\(\{/.test(body),
+    'no component is declared inside the editor (a rename box would lose focus every keystroke)')
+}
+
+section('The home page offers the way in, then says where you stand')
+{
+  const hub = read('app/run/[tripCode]/page.tsx')
+  ok(hub.includes('currentPlayer(challenge.code, roster)'), 'it reads who this phone is from the roster')
+  ok(hub.includes('Join the challenge') && hub.includes('!finished ?'), 'a stranger is offered Join, until it finishes')
+  ok(hub.includes('Running for {viewerTeam.name}') && hub.includes('Not you?'),
+    'a runner sees their team, with a way to switch')
 }
 
 // ─── Done ──────────────────────────────────────────────────────

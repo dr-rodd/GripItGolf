@@ -121,3 +121,13 @@ export async function fetchRunChallenge(tripCode: string): Promise<RunChallenge 
       .map(toMember),
   }
 }
+
+export type RunRosterEntry = RunMember & { teamId: string | null }
+
+/** Everyone in the challenge, flat, each with the team they run for (or none). */
+export function rosterOf(c: RunChallenge): RunRosterEntry[] {
+  return [
+    ...c.teams.flatMap(t => t.members.map(m => ({ ...m, teamId: t.id }))),
+    ...c.unassigned.map(m => ({ ...m, teamId: null })),
+  ]
+}
