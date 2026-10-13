@@ -48,7 +48,7 @@ export default function PrivacyPage() {
           {SITE.name} (greendot.live) runs live scoring and leaderboards for events — golf trips
           and tournaments, team running challenges, and more sports to come. This notice covers
           all of them.
-          {SITE.controller ? ` Green Dot is run by ${SITE.controller}, the controller of your data.` : ''}{' '}
+          {SITE.controller ? ` Green Dot is run by ${SITE.controller}, who is responsible for your data (its “controller”, in data protection law).` : ''}{' '}
           For anything about your data, write to {mail}.
         </p>
       </LegalSection>

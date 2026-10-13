@@ -189,8 +189,11 @@ tokens stayed because another challenge still uses them.
 The support address is `SITE.supportEmail` (support@greendot.live); the
 privacy notice imports the three retention constants rather than typing
 them, so it cannot promise one thing while the job does another.
-`SITE.controller` is the legal name and address GDPR wants on the notice —
-unset until the owner supplies it.
+`SITE.controller` is the name both pages give as the person running Green
+Dot — Ross O’Grady, name only: GDPR wants the controller's identity and
+contact details, and the support address is the contact. No postal address
+by decision; if Green Dot ever charges, a business address service would
+cover the e-commerce rule without a home address.
 
 ## Strava — the rules that shape the design
 

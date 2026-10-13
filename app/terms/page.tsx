@@ -101,8 +101,9 @@ export default function TermsPage() {
 
       <LegalSection title="Changes and contact">
         <p>
-          We may change these terms; the date at the top changes with them. These terms are
-          governed by the law of Ireland. Questions to{' '}
+          {SITE.controller ? `Green Dot is run by ${SITE.controller}. ` : ''}We may change these
+          terms; the date at the top changes with them. These terms are governed by the law of
+          Ireland. Questions to{' '}
           <a href={`mailto:${SITE.supportEmail}`} className={LEGAL_LINK}>{SITE.supportEmail}</a>.
         </p>
       </LegalSection>

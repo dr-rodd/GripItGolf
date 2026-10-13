@@ -24,10 +24,13 @@ export const SITE = {
   supportEmail: "support@greendot.live",
 
   /**
-   * Who runs Green Dot Live, as the privacy notice must name them (GDPR
-   * Art. 13: the controller's identity and contact details) — a legal name
-   * and a postal address. Unset, the notice names the service and the
-   * support address alone, which is the gap to close before Strava's review.
+   * Who runs Green Dot Live, as the privacy notice and terms name them
+   * (GDPR Art. 13: the controller's identity and contact details). **A name
+   * and no postal address, by the owner's decision** — the contact detail is
+   * `supportEmail`, which the law accepts. Should Green Dot ever charge for
+   * anything, Irish e-commerce rules want a geographic address on the site;
+   * a business or virtual address service would do, never a home address.
+   * Null would drop the sentence from both pages.
    */
-  controller: null as string | null,
+  controller: "Ross O’Grady" as string | null,
 }

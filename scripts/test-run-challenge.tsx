@@ -1174,6 +1174,8 @@ section('The privacy notice and the terms — one for the whole site — say wha
      privacy.includes(`${FINAL_GRACE_DAYS} days after its finish`), 'retention, from the constants the code runs on')
   ok(privacy.includes('artificial-intelligence'), 'no Strava data into AI (§5.3)')
   ok(privacy.includes('dataprotection.ie'), 'where to complain')
+  ok(!!SITE.controller && privacy.includes(`run by ${(SITE.controller ?? '').replace(/’/g, "'")}`), 'who runs Green Dot is named (Art. 13)')
+  ok(!/\d/.test(SITE.controller ?? ''), '  …by name alone — no address, by decision')
   const src = stripComments(read('app/privacy/page.tsx'))
   ok(!/\b(7|25|seven|twenty-five) days\b/.test(src), 'no retention figure typed by hand, to drift from the code')
 
@@ -1183,6 +1185,7 @@ section('The privacy notice and the terms — one for the whole site — say wha
     'the terms disclaim every warranty on behalf of third parties (§9.2)')
   ok(terms.includes('consequential, special, punitive or indirect damages'), '  …and exclude them from those damages')
   ok(terms.includes('more sports to come') && terms.includes('Golf courses'), 'the terms are the whole site\'s, golf included')
+  ok(terms.includes(`Green Dot is run by ${SITE.controller}`), '  …and say who runs it')
 
   // Site-wide: golf in full, and room for what comes next.
   ok(privacy.includes("An event's code is its key"), 'the notice says plainly that the code is the only lock')
