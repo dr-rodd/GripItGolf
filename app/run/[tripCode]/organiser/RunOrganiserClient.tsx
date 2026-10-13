@@ -5,11 +5,12 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
-import { RUN_PERMISSIONS, type RunPermissions } from '@/lib/runChallenge'
+import { RUN_PERMISSIONS, type RunPermissions, describeDay } from '@/lib/runChallenge'
 import type { RunChallenge } from '../data'
 import { SectionTitle } from '../RunPieces'
 import RunTeamsEditor from './RunTeamsEditor'
 import RunRulesEditor from './RunRulesEditor'
+import RunDatesEditor from './RunDatesEditor'
 
 /**
  * The organiser area's body, once the PIN is in.
@@ -18,7 +19,8 @@ import RunRulesEditor from './RunRulesEditor'
  * over `trips.event_permissions` — and roll back with a calm line if the
  * write is refused. Teams are edited here in full (RunTeamsEditor), and so
  * are the points rules (RunRulesEditor) — a saved change re-counts every
- * run on every board, because points are never stored.
+ * run on every board, because points are never stored — and the dates
+ * (RunDatesEditor), until the challenge is final.
  */
 export default function RunOrganiserClient({ challenge, dates, progress }: {
   challenge: RunChallenge
@@ -91,6 +93,25 @@ export default function RunOrganiserClient({ challenge, dates, progress }: {
             Open the challenge →
           </Link>
         </div>
+
+        {/* ── The dates — extend, or move, until the result is frozen ── */}
+        <section>
+          <SectionTitle>Dates</SectionTitle>
+          {challenge.final ? (
+            <p className="text-ink/65 text-[13px] leading-snug">
+              Final — the standings were frozen on {describeDay(challenge.final.frozenOn)}, so the
+              dates can no longer change.
+            </p>
+          ) : (
+            <>
+              <p className="text-ink/65 text-[13px] mb-3 leading-snug">
+                Late runs count for three days after the finish; then the standings freeze and
+                every Strava connection ends. Extending the finish moves all of that with it.
+              </p>
+              <RunDatesEditor tripId={challenge.id} start={challenge.startDate} end={challenge.endDate} />
+            </>
+          )}
+        </section>
 
         {/* ── What the field may do ── */}
         <section>

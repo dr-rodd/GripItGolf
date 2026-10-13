@@ -2,12 +2,14 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
 import { currentPlayer } from '@/lib/currentPlayer'
-import { isRunChallenge } from '@/lib/runChallenge'
+import { isRunChallenge, closesOn } from '@/lib/runChallenge'
+import { todayString } from '@/lib/tripStatus'
 import { fetchRunChallenge, rosterOf } from '../data'
 import { fetchStravaStatus } from '../runs'
 import StravaCard from '../StravaCard'
 import { ChallengeNotFound, SectionTitle } from '../RunPieces'
 import RunShare from '../RunShare'
+import HelpAndPrivacy from './HelpAndPrivacy'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,8 +17,9 @@ export const dynamic = 'force-dynamic'
  * The Settings tab — the runner's own, with the door to the organiser's.
  *
  * Who this phone is (and switching it), Strava (connect, check, disconnect —
- * the same card as the Add tab), and the organiser area for whoever holds
- * the PIN. The PIN asks at that door, not at this tab, so a runner
+ * the same card as the Add tab), the organiser area for whoever holds the
+ * PIN, and help & privacy: the support address, the privacy notice and
+ * terms, and leaving with every trace deleted. The PIN asks at that door, not at this tab, so a runner
  * opening Settings is never met by a lock.
  */
 export default async function RunSettingsPage({ params }: {
@@ -30,6 +33,8 @@ export default async function RunSettingsPage({ params }: {
   const viewer = await currentPlayer(challenge.code, rosterOf(challenge))
   const stravaStatus = await fetchStravaStatus(challenge.id, viewer?.id ?? null)
   const team = challenge.teams.find(t => t.id === viewer?.teamId) ?? null
+  const closed = !!challenge.final
+    || (!!challenge.endDate && todayString(new Date()) > closesOn(challenge.endDate))
 
   return (
     <main className="min-h-dvh bg-cream has-tabbar">
@@ -69,10 +74,18 @@ export default async function RunSettingsPage({ params }: {
           </div>
         </section>
 
-        <section>
-          <SectionTitle>Strava</SectionTitle>
-          <StravaCard code={challenge.code} status={stravaStatus} joined={!!viewer} />
-        </section>
+        {!challenge.final && (
+          <section>
+            <SectionTitle>Strava</SectionTitle>
+            <StravaCard
+              code={challenge.code}
+              status={stravaStatus}
+              joined={!!viewer}
+              end={challenge.endDate}
+              closed={closed}
+            />
+          </section>
+        )}
 
         <section>
           <SectionTitle>The challenge</SectionTitle>
@@ -88,11 +101,16 @@ export default async function RunSettingsPage({ params }: {
             <span className="min-w-0">
               <span className="block text-ink text-sm font-medium">Organiser area</span>
               <span className="block text-ink/65 text-[13px] mt-0.5 leading-snug">
-                Teams, permissions and the points rules. Asks for the organiser PIN.
+                Dates, teams, permissions and the points rules. Asks for the organiser PIN.
               </span>
             </span>
             <span className="text-accent-deep flex-shrink-0" aria-hidden="true">→</span>
           </Link>
+        </section>
+
+        <section>
+          <SectionTitle>Help &amp; privacy</SectionTitle>
+          <HelpAndPrivacy code={challenge.code} joinedAs={viewer?.name ?? null} />
         </section>
       </div>
     </main>

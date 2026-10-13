@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { stravaConfig, authorizeUrl, signState, STATE_TTL_MS } from '@/lib/strava'
+import { closesOn } from '@/lib/runChallenge'
+import { todayString } from '@/lib/tripStatus'
 import { loadChallenge, cookieRunner, originOf, TRIP_CODE } from '../../runner'
 
 /**
@@ -34,6 +36,8 @@ export async function GET(req: NextRequest) {
 
   const loaded = await loadChallenge(admin, code)
   if (!loaded) return NextResponse.redirect(`${origin}/`)
+  // The connection lasts for the challenge — none starts after it has closed.
+  if (loaded.trip.end_date && todayString(new Date()) > closesOn(loaded.trip.end_date)) return back('closed')
   const playerId = await cookieRunner(admin, loaded.trip)
   if (!playerId) return NextResponse.redirect(`${origin}/run/${loaded.trip.trip_code}/join`)
 

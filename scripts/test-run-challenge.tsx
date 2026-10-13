@@ -25,6 +25,13 @@
  * event asks), and the rules around the network half — tokens closed to
  * the browser, consent before connecting, a refused refresh never deleting
  * anyone, and only two doors to forgetting an athlete.
+ *
+ * Then Strava's API Policy, built in: a challenge's shape in time (live,
+ * closing, final) and what a final one keeps (team standings, frozen); the
+ * seven-day copy and the dead-connection clean-up; every closed door; the
+ * consent saying all §2.1 asks; View on Strava and the Garmin credit; the
+ * runner deleting everything themselves; the organiser extending; and the
+ * privacy notice and terms saying what the policy requires.
  */
 
 import fs from 'fs'
@@ -37,12 +44,20 @@ import RunBoardClient from '../app/run/[tripCode]/leaderboard/RunBoardClient'
 import RunAddClient from '../app/run/[tripCode]/add/RunAddClient'
 import { RUN_TABS, runActiveKey } from '../app/components/runTabs'
 import StravaCard from '../app/run/[tripCode]/StravaCard'
+import HelpAndPrivacy from '../app/run/[tripCode]/settings/HelpAndPrivacy'
+import RunDatesEditor from '../app/run/[tripCode]/organiser/RunDatesEditor'
+import PrivacyPage from '../app/privacy/page'
+import TermsPage from '../app/terms/page'
+import { SITE } from '../config/site'
+import { activityUrl, STRAVA_APPS_URL } from '../lib/stravaLinks'
 import {
   stravaConfig, scopeGranted, authorizeUrl, signState, verifyState, runFromActivity,
   planSync, webhookAction, tokenNeedsRefresh, afterEpoch, outcomeMessage, isGarmin,
+  cacheCutoff, deadCutoff, STRAVA_CACHE_DAYS, DEAD_CONNECTION_DAYS, disconnectedMessage,
 } from '../lib/strava'
 import {
   runnerTotals, placesFor, individualBoard, teamBoard, ordinal, inWindow, type BoardRun,
+  freezeResults, parseFinalResults,
 } from '../lib/runBoards'
 import { PRESET_COLORS } from '../lib/teamColors'
 import {
@@ -57,6 +72,7 @@ import {
   challengeFinished, joinChoices, MAX_RUNNER_NAME, MAX_TEAM_NAME,
   parseRunEntry, runEntryIssue, addDays, describePace, describeDuration, roundKm, MAX_RUN_KM,
   draftFromSetup, rulesFromDraft, draftIssue, setupWithDraft,
+  FINAL_GRACE_DAYS, closesOn, challengePhase, dueForFinal, describeDay,
   type RunRules,
 } from '../lib/runChallenge'
 import { parseEventPermissions, defaultPermissions } from '../lib/eventPermissions'
@@ -687,8 +703,8 @@ section('Runs live on the server: closed table, one writer, totals out')
   const walk = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e =>
     e.isDirectory() ? walk(`${dir}/${e.name}`) : /\.tsx?$/.test(e.name) ? [`${dir}/${e.name}`] : [])
   const touching = [...walk('app'), ...walk('lib')].filter(f => read(f).includes(".from('runs')"))
-  eq(touching.sort(), ['app/api/run/runs/route.ts', 'app/run/[tripCode]/runs.ts', 'lib/stravaApi.ts'],
-    'only the runs route, the server reader and the Strava sync touch the table')
+  eq(touching.sort(), ['app/api/run/finalise.ts', 'app/api/run/runs/route.ts', 'app/run/[tripCode]/runs.ts', 'lib/stravaApi.ts'],
+    'only the runs route, the server reader, the Strava sync and the challenge close touch the table')
   ok(touching.every(f => !read(f).trimStart().startsWith("'use client'")), 'neither runs in the browser')
   ok(read('app/run/[tripCode]/runs.ts').includes('createAdminClient()'), 'the reader is on the service role')
 
@@ -869,14 +885,20 @@ section('Tokens never leave the server, and only two doors forget anybody')
     'no browser component touches a Strava table, a token, or the signing code')
 
   const api = stripComments(read('lib/stravaApi.ts'))
-  eq((api.match(/forgetAthlete\(admin/g) ?? []).length, 2,
-    'an athlete is forgotten from exactly two places: their revoke on Strava, and their own Disconnect')
+  eq((api.match(/forgetAthlete\(admin/g) ?? []).length, 4,
+    'an athlete is forgotten from exactly four places: their revoke on Strava, their own Disconnect, a connection dead for 25 days, and their challenge closing')
   ok(api.includes("if (action.kind === 'deauthorize') {") && api.includes('await forgetAthlete(admin, cfg, action.athleteId, { revoke: false })'),
     '  …the first is the deauthorisation webhook')
   ok(api.includes('if (await revocationConfirmed(admin, cfg, action.athleteId)) {'),
     '  …acted on only once Strava confirms it — the webhook is unsigned, so an event is a claim')
-  ok(api.includes("if (!count) await forgetAthlete(admin, cfg, Number(link.athlete_id), { revoke: true })"),
+  ok(api.includes('if (count) return { tokensKept: true }\n  await forgetAthlete(admin, cfg, Number(link.athlete_id), { revoke: true })'),
     '  …the second is Disconnect, once the account feeds nothing else')
+  const dead = api.slice(api.indexOf('export async function purgeDeadConnections'), api.indexOf('export async function endChallengeLinks'))
+  ok(dead.includes(".lt('last_ok_at', deadCutoff(now))") && dead.includes('forgetAthlete(admin, cfg, Number(a.athlete_id), { revoke: false })'),
+    '  …the third acts on a connection silent for DEAD_CONNECTION_DAYS, and on nothing sooner')
+  const end = api.slice(api.indexOf('export async function endChallengeLinks'), api.indexOf('export async function ensureSubscription'))
+  ok(end.includes('if (!count) await forgetAthlete(admin, cfg, athleteId, { revoke: true })'),
+    '  …the fourth is the challenge closing, for an account that then feeds nothing')
   const refresh = api.slice(api.indexOf('async function refreshTokens'), api.indexOf('export async function saveTokens'))
   ok(!/revoked|forget|delete/i.test(refresh), 'a refused refresh is a retry, never a reason to delete — a wrong key must not wipe the boards')
 }
@@ -911,21 +933,253 @@ section('The routes keep their promises')
 
 section('The Strava card, in each of its states')
 {
-  const off = draw(<StravaCard code="GX7K2P" status={{ state: 'off' }} joined={true} />)
+  const off = draw(<StravaCard code="GX7K2P" status={{ state: 'off' }} joined={true} end="2026-11-30" />)
   ok(off.includes('not set up for this site yet'), 'not set up: said, with typed runs still working')
-  const fresh = draw(<StravaCard code="GX7K2P" status={{ state: 'disconnected' }} joined={true} />)
-  ok(fresh.includes('type="checkbox"') && fresh.includes('appear on this') && fresh.includes('leaderboard'),
-    'not connected: the consent box, saying exactly what is shared')
+  const fresh = draw(<StravaCard code="GX7K2P" status={{ state: 'disconnected' }} joined={true} end="2026-11-30" />)
+  ok(fresh.includes('type="checkbox"') && fresh.includes('show my totals on its leaderboard'),
+    'not connected: the consent box, saying what is shared')
   ok(fresh.includes('Connect with Strava') && fresh.includes('aria-disabled="true"') && !fresh.includes('href="/api/run/strava/connect'),
     'and Connect is dead until it is ticked')
-  const stranger = draw(<StravaCard code="GX7K2P" status={{ state: 'disconnected' }} joined={false} />)
+  const stranger = draw(<StravaCard code="GX7K2P" status={{ state: 'disconnected' }} joined={false} end="2026-11-30" />)
   ok(stranger.includes('Join the challenge first') && !stranger.includes('type="checkbox"'), 'a phone not joined is told to join first')
-  const on = draw(<StravaCard code="GX7K2P" status={{ state: 'connected', lastSyncedAt: null }} joined={true} />)
+  const on = draw(<StravaCard code="GX7K2P" status={{ state: 'connected', lastSyncedAt: null }} joined={true} end="2026-11-30" />)
   ok(on.includes('Strava connected') && on.includes('Check for new runs') && on.includes('Disconnect'),
     'connected: check now, or disconnect')
-  ok(read('app/run/[tripCode]/add/page.tsx').includes('garmin: isGarmin(r.deviceName)') &&
-     read('app/run/[tripCode]/add/RunAddClient.tsx').includes('Recorded on Garmin'),
-    'a Garmin run is credited in the runner\'s own list')
+  ok(read('app/run/[tripCode]/add/page.tsx').includes('garmin: isGarmin(r.deviceName) ? r.deviceName : null'),
+    'a Garmin run carries its device to the runner\'s own list')
+}
+
+// ─── Strava's API Policy, built in ─────────────────────────────
+
+section('A challenge has a shape in time, and closes three days after its finish')
+{
+  eq(FINAL_GRACE_DAYS, 3, 'three days for late uploads — the number every screen\'s wording says')
+  eq(closesOn('2026-11-30'), '2026-12-03', 'a November challenge closes on 3 December')
+  eq(closesOn('2026-02-27'), '2026-03-02', 'across a month end')
+  eq(challengePhase('2026-11-01', '2026-11-30', '2026-10-31', false), 'upcoming', 'before the start: upcoming')
+  eq(challengePhase('2026-11-01', '2026-11-30', '2026-11-01', false), 'live', 'the first day is live')
+  eq(challengePhase('2026-11-01', '2026-11-30', '2026-11-30', false), 'live', 'and so is the last')
+  eq(challengePhase('2026-11-01', '2026-11-30', '2026-12-01', false), 'closing', 'the day after: closing')
+  eq(challengePhase('2026-11-01', '2026-11-30', '2026-12-09', false), 'closing', 'still closing until it is frozen')
+  eq(challengePhase('2026-11-01', '2026-11-30', '2026-11-15', true), 'final', 'frozen is final, whatever the date')
+  ok(!dueForFinal('2026-11-30', '2026-12-03', false), 'not frozen on the closing day itself — late runs still count')
+  ok(dueForFinal('2026-11-30', '2026-12-04', false), 'frozen the day after')
+  ok(!dueForFinal('2026-11-30', '2026-12-04', true), 'never twice')
+  ok(!dueForFinal(null, '2027-01-01', false), 'no finish, nothing to freeze')
+  eq(describeDay('2026-12-03'), 'Thu 3 Dec', 'a day reads as a runner reads it')
+  const fin = stripComments(read('app/api/run/finalise.ts'))
+  ok(fin.includes(".lt('end_date', addDays(today, -FINAL_GRACE_DAYS))") && fin.includes(".is('run_results', null)"),
+    'the nightly close asks the database the same question dueForFinal answers')
+}
+
+section('A final challenge keeps its team standings, and nobody\'s runs')
+{
+  const teams = teamBoard(
+    [{ id: 't1', name: 'Hares', color: '#0a9d56', memberIds: ['a', 'b'] },
+     { id: 't2', name: 'Tortoises', color: '#b5533c', memberIds: ['c'] }],
+    runnerTotals([
+      { playerId: 'a', activity: 'run', date: '2026-11-02', distanceM: 10000 },
+      { playerId: 'c', activity: 'run', date: '2026-11-03', distanceM: 5000 },
+    ], rules(), { start: '2026-11-01', end: '2026-11-30' }),
+    'average',
+  )
+  const frozen = freezeResults(teams, 'average', '2026-12-04', true, true)
+  eq(frozen.teams.map(t => [t.name, t.place, t.score]), [['Tortoises', 1, 7], ['Hares', 2, 6]],
+    'the team standings exactly as the board had them')
+  ok(!JSON.stringify(frozen).includes('teamId') && !JSON.stringify(frozen).includes('memberIds') &&
+     !/"a"|"b"|"c"/.test(JSON.stringify(frozen)), 'and no runner in them — not even an id')
+  eq(parseFinalResults(JSON.parse(JSON.stringify(frozen))), frozen, 'it reads back whole from the column')
+  eq(parseFinalResults(null), null, 'no column, or nothing in it: not final')
+  eq(parseFinalResults({ teams: [] }), null, 'junk is not final either')
+  eq(parseFinalResults({ frozenOn: '2026-12-04', teams: [{ name: 'X' }] })?.teams[0],
+    { name: 'X', color: '#4A3728', members: 0, total: 0, average: 0, score: 0, km: 0, place: 1 },
+    'a damaged team reads fail-soft')
+  const fin = stripComments(read('app/api/run/finalise.ts'))
+  const iWrite = fin.indexOf('.update({ run_results: results })')
+  ok(iWrite > -1 && iWrite < fin.indexOf('endChallengeLinks(admin, cfg'), 'the standings are frozen before anything is deleted')
+  ok(fin.includes("if (writeErr) { console.error('finalise: could not freeze', code, writeErr); failed.push(code); continue }"),
+    'and a freeze that failed deletes nothing')
+  ok(fin.includes(".from('runs').delete().eq('trip_id', trip.id).eq('source', 'strava')"),
+    'with Strava switched off since, its runs still go — nothing of Strava\'s outlives the challenge')
+  ok(/const FREEZE_INCLUDES_STRAVA = (true|false)/.test(fin), 'whether Strava runs count in the frozen total is one switch')
+  const sql = read('supabase/migrations/20260101000055_strava_retention.sql')
+  ok(sql.includes('ADD COLUMN IF NOT EXISTS run_results jsonb') && sql.includes('ADD COLUMN IF NOT EXISTS refreshed_at') &&
+     sql.includes('ADD COLUMN IF NOT EXISTS last_ok_at'), 'migration 055 adds the three columns, re-pastable')
+  ok(read('app/run/[tripCode]/data.ts').includes(".select('run_results')"), 'and the challenge reads its result in its own query, fail-soft')
+}
+
+section('Strava\'s copy is short-lived')
+{
+  eq(STRAVA_CACHE_DAYS, 7, 'a stored copy is at most seven days old (§6.2)')
+  ok(DEAD_CONNECTION_DAYS < 30 && DEAD_CONNECTION_DAYS >= 14, 'a silent connection goes inside §7.4\'s thirty days, and not in a hurry')
+  const now = Date.parse('2026-11-20T03:30:00Z')
+  eq(cacheCutoff(now), '2026-11-13T03:30:00.000Z', 'the cache cutoff is seven days back to the minute')
+  eq(deadCutoff(now), '2026-10-26T03:30:00.000Z', 'the dead cutoff twenty-five')
+  const act = (id: number, date: string) =>
+    ({ id, sport_type: 'Run', start_date_local: `${date}T08:00:00Z`, distance: 5000, moving_time: 1500 })
+  const window = { start: '2026-11-01', end: '2026-11-30' }
+  eq(planSync([act(1, '2026-11-02')], [1, 2], window, false).deleteIds, [],
+    'a list cut short at the page cap removes nothing — the missing run may be on the page not read')
+  eq(planSync([act(1, '2026-11-02')], [1, 2], window, false).upserts.length, 1, '  …but still writes what it read')
+  const api = stripComments(read('lib/stravaApi.ts'))
+  ok(api.includes('page <= SYNC_PAGES') && api.includes('if (body.length < PAGE_SIZE) return { activities, complete: true }'),
+    'a sync pages through the activities, and knows when it reached the end')
+  ok((api.match(/refreshed_at: (now|new Date\(\)\.toISOString\(\))/g) ?? []).length === 2,
+    'both Strava writes — the sync and the webhook — stamp when Strava last confirmed the run')
+  const syncAll = stripComments(read('app/api/run/strava/sync/route.ts'))
+  const sync = syncAll.slice(syncAll.indexOf('export async function GET'))
+  const iFinal = sync.indexOf('finaliseDueChallenges(admin'), iPurge = sync.indexOf('purgeExpiredRuns(admin'),
+    iCfg = sync.indexOf('if (!cfg)'), iDead = sync.indexOf('purgeDeadConnections(admin')
+  ok(iFinal > -1 && iFinal < iPurge && iPurge < iCfg && iCfg < iDead,
+    'the nightly job closes challenges and clears expired copies first — even with Strava switched off — then the dead connections')
+}
+
+section('A closed challenge takes no new runs and no new connections')
+{
+  const route = stripComments(read('app/api/run/runs/route.ts'))
+  const post = route.slice(route.indexOf('export async function POST'), route.indexOf('export async function DELETE'))
+  ok(/today(String\(new Date\(\)\))? > closesOn\(/.test(post), 'the runs route refuses a run once the challenge has closed')
+  const connect = stripComments(read('app/api/run/strava/connect/route.ts'))
+  ok(connect.includes("> closesOn(loaded.trip.end_date)) return back('closed')"), 'and the connect route a connection')
+  ok(outcomeMessage('closed')?.text.includes('closed') === true, '  …saying why')
+  const add = draw(<RunAddClient code="GX7K2P" rules={defaultRules()} start="2026-11-01" end="2026-11-30"
+    logRuns={true} closed={true} myRuns={[]} />)
+  ok(add.includes('runs can no longer be added') && !add.includes('Save run'), 'the Add tab offers no form once closed')
+  const finalAdd = draw(<RunAddClient code="GX7K2P" rules={defaultRules()} start="2026-11-01" end="2026-11-30"
+    logRuns={true} closed={true} final={{ stravaRemoved: true }} myRuns={[]} />)
+  ok(finalAdd.includes('is final') && finalAdd.includes('Strava runs have been deleted'), 'and once final says what happened to Strava\'s runs')
+}
+
+section('The consent says everything Strava asks before anybody agrees (§2.1)')
+{
+  const card = draw(<StravaCard code="GX7K2P" status={{ state: 'disconnected' }} joined={true} end="2026-11-30" />)
+  const text = card.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+  ok(text.includes('type, date, distance and moving time') && text.includes('device'), '(i) what is kept')
+  ok(text.includes('read from Strava automatically') && text.includes('Only You'), '(ii) how it is collected, and what never is')
+  ok(text.includes('totals only') && text.includes('shown only to you'), 'who sees what')
+  ok(text.includes('For this challenge only') && text.includes('Thu 3 Dec') && text.includes('extends it'),
+    'the connection lasts for the challenge — the close date said, with room to extend')
+  ok(text.includes('team’s final total stays') || text.includes("team's final total stays") || text.includes('team&#x27;s final total stays'),
+    'and what stays when it ends')
+  ok(text.includes('Disconnect here') && card.includes(`href="${STRAVA_APPS_URL}"`), '(iii) how to withdraw — here, or on Strava')
+  ok(text.includes('Leave and delete my data') && card.includes(`mailto:${SITE.supportEmail}`), '(iv) how to have it deleted')
+  ok(text.includes('We confirm when it is done'), '(v) that the deletion is confirmed')
+  ok(card.includes('href="/privacy"'), 'and the privacy notice is a tap away')
+  const iList = card.indexOf('What is kept'), iBox = card.indexOf('type="checkbox"')
+  ok(iList > -1 && iList < iBox, 'all of it before the box, not after')
+
+  const on = draw(<StravaCard code="GX7K2P" status={{ state: 'connected', lastSyncedAt: null }} joined={true} end="2026-11-30" />)
+  ok(on.includes('Manage on Strava') && on.includes(`href="${STRAVA_APPS_URL}"`), 'connected: managed on Strava too (§2.4)')
+  ok(on.includes('The connection ends on') && on.includes('Thu 3 Dec'), '  …and says when it ends')
+  const closedOn = draw(<StravaCard code="GX7K2P" status={{ state: 'connected', lastSyncedAt: null }} joined={true} end="2026-11-30" closed={true} />)
+  ok(!closedOn.includes('Check for new runs') && closedOn.includes('Disconnect') && closedOn.includes('has closed'),
+    'closed: nothing to check, but Disconnect is always there')
+  const closedOff = draw(<StravaCard code="GX7K2P" status={{ state: 'disconnected' }} joined={true} end="2026-11-30" closed={true} />)
+  ok(!closedOff.includes('type="checkbox"') && closedOff.includes('can no longer be connected'), 'and nothing new connects')
+
+  ok(disconnectedMessage(false).includes('permanently deleted from Green Dot'), 'Disconnect answers in writing with what went')
+  ok(disconnectedMessage(true).includes('still feeds another Green Dot challenge'),
+    '  …and never claims the tokens went when another challenge still uses them')
+  const disc = stripComments(read('app/api/run/strava/disconnect/route.ts'))
+  ok(disc.includes('message: disconnectedMessage(tokensKept)'), '  …the route sends that sentence')
+}
+
+section('A runner\'s own runs link to Strava, and Garmin is credited')
+{
+  const add = draw(<RunAddClient code="GX7K2P" rules={defaultRules()} start="2026-11-01" end="2026-11-30"
+    logRuns={true} myRuns={[
+      { id: 'r1', date: '2026-11-02', activity: 'run', km: 5, minutes: 30, source: 'manual', points: 7 },
+      { id: 'r2', date: '2026-11-03', activity: 'run', km: 8, minutes: null, source: 'strava', points: 10,
+        stravaId: 98765, garmin: 'Garmin Forerunner 265' },
+    ]} />)
+  eq(activityUrl(98765), 'https://www.strava.com/activities/98765', 'the link is Strava\'s own activity page')
+  ok(add.includes(`href="${activityUrl(98765)}"`) && add.includes('View on Strava'), 'a Strava run says View on Strava')
+  eq((add.match(/View on Strava/g) ?? []).length, 1, '  …and a typed-in run does not')
+  ok(add.includes('Recorded on Garmin Forerunner 265'), 'a Garmin run names its device')
+
+  const board = draw(<RunBoardClient anyRuns={true} garmin={true} boards={[
+    { id: 'i', kind: 'individual', title: 'Runners', rule: '', rows: [] }]} />)
+  ok(board.includes('Includes activities recorded on Garmin devices'), 'a board built partly from Garmin runs says so (§4.4)')
+  const plain = draw(<RunBoardClient anyRuns={true} boards={[
+    { id: 'i', kind: 'individual', title: 'Runners', rule: '', rows: [] }]} />)
+  ok(!plain.includes('Garmin'), '  …and one without says nothing')
+  const page = stripComments(read('app/run/[tripCode]/leaderboard/page.tsx'))
+  ok(page.includes("read.runs.some(r => r.source === 'strava' && isGarmin(r.deviceName))") && page.includes('? final.garmin'),
+    'the credit is decided from the runs counted — or, once final, kept with the frozen result')
+  ok(read('app/api/run/finalise.ts').includes('freezeResults(s.teams, s.teamScore, today, hadStrava, garmin)'),
+    '  …which the close records')
+}
+
+section('The leaderboard, once final, is the frozen result')
+{
+  const page = stripComments(read('app/run/[tripCode]/leaderboard/page.tsx'))
+  ok(page.includes('rows: final.teams.map('), 'the team board is the frozen one')
+  ok(page.includes("...(final.stravaRemoved ? [] : live.filter(b => b.kind === 'individual'))"),
+    'and the runners board stays only if no Strava run was ever part of it')
+  const hub = stripComments(read('app/run/[tripCode]/page.tsx'))
+  ok(hub.includes('Final standings') && hub.includes('{!final && standings && anyRuns && ('),
+    'the home page shows the final standings in place of the live ones')
+  ok(hub.includes('me && !final?.stravaRemoved'), '  …and no personal total re-told without its Strava runs')
+}
+
+section('A runner can delete everything themselves, and is told when it is done (§2.5)')
+{
+  const route = stripComments(read('app/api/run/me/delete/route.ts'))
+  ok(route.includes('cookieRunner(admin, loaded.trip)'), 'only the runner this phone joined as')
+  const iStrava = route.indexOf('disconnectRunner(admin, cfg, playerId, loaded.trip.id)')
+  const iPlayer = route.indexOf(".from('players').delete().eq('id', playerId).eq('trip_id', loaded.trip.id)")
+  ok(iStrava > -1 && iStrava < iPlayer, 'Strava first — tokens revoked while the link still names them — then the runner, in this challenge only')
+  ok(route.includes('permanently deleted'), 'and the answer is the written confirmation')
+  const sql053 = read('supabase/migrations/20260101000053_runs.sql')
+  const sql054 = read('supabase/migrations/20260101000054_strava.sql')
+  ok(sql053.includes('REFERENCES players(id) ON DELETE CASCADE') && /player_id\s+uuid[^,]*REFERENCES players\(id\)\s+ON DELETE CASCADE/.test(sql054),
+    'deleting the runner takes their runs and their Strava link with them')
+
+  const help = draw(<HelpAndPrivacy code="GX7K2P" joinedAs="Aoife" />)
+  ok(help.includes('Leave and delete my data') && help.includes(`mailto:${SITE.supportEmail}`) &&
+     help.includes('href="/privacy"') && help.includes('href="/terms"'),
+    'Settings carries the support address, the notice, the terms and the button')
+  ok(!draw(<HelpAndPrivacy code="GX7K2P" joinedAs={null} />).includes('Leave and delete'), 'a phone not joined has nothing to delete')
+  const client = stripComments(read('app/run/[tripCode]/settings/HelpAndPrivacy.tsx'))
+  const iForget = client.indexOf('forgetPlayer(code)'), iRefresh = client.indexOf('router.refresh()')
+  ok(iForget > -1 && iForget < iRefresh, 'then the cookie goes before the page re-reads (lib/currentPlayer.ts)')
+  eq(SITE.supportEmail, 'support@greendot.live', 'the one support address')
+}
+
+section('The organiser can extend the challenge until it is final')
+{
+  const ed = draw(<RunDatesEditor tripId="T1" start="2026-11-01" end="2026-11-30" />)
+  ok(ed.includes('value="2026-11-01"') && ed.includes('value="2026-11-30"') && ed.includes('Save dates'), 'the dates, ready to move')
+  const src = stripComments(read('app/run/[tripCode]/organiser/RunDatesEditor.tsx'))
+  ok(src.includes('challengeDatesIssue(from, to)'), 'checked the way creation checks them')
+  ok(src.includes(".update({ start_date: from, end_date: to })\n      .eq('id', tripId)"), 'one write, filtered on the challenge')
+  ok(src.includes('dueForFinal(to, todayString(new Date()), false) && !window.confirm('),
+    'a finish that has already closed is asked about first — it freezes the standings overnight')
+  const org = stripComments(read('app/run/[tripCode]/organiser/RunOrganiserClient.tsx'))
+  ok(org.includes('{challenge.final ? (') && org.indexOf('{challenge.final ? (') < org.indexOf('<RunDatesEditor'),
+    'and once final the dates are said, not offered')
+}
+
+section('The privacy notice and the terms say what Strava\'s policy requires')
+{
+  const privacy = draw(<PrivacyPage />).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').replace(/&#x27;|’/g, "'")
+  ok(privacy.includes(SITE.supportEmail), 'a contact (§2.4)')
+  ok(['Vercel', 'Supabase', 'Resend', 'Anthropic'].every(n => privacy.includes(n)), 'who else handles the data (§7.7)')
+  ok(privacy.includes('Strava may monitor and collect usage data'), 'the usage-data statement Strava asks for (§6.5)')
+  ok(privacy.includes("Strava's governs"), 'Strava\'s own policy governs Strava data (§7.3)')
+  ok(privacy.includes(`${STRAVA_CACHE_DAYS} days`) && privacy.includes(`${DEAD_CONNECTION_DAYS} days`) &&
+     privacy.includes(`${FINAL_GRACE_DAYS} days after its finish`), 'retention, from the constants the code runs on')
+  ok(privacy.includes('artificial-intelligence'), 'no Strava data into AI (§5.3)')
+  ok(privacy.includes('dataprotection.ie'), 'where to complain')
+  const src = stripComments(read('app/privacy/page.tsx'))
+  ok(!/\b(7|25|seven|twenty-five) days\b/.test(src), 'no retention figure typed by hand, to drift from the code')
+
+  const terms = draw(<TermsPage />).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+  ok(['merchantability', 'fitness for a particular purpose', 'non-infringement'].every(w => terms.includes(w)) &&
+     terms.includes('On behalf of every third-party service provider, all warranties are disclaimed'),
+    'the terms disclaim every warranty on behalf of third parties (§9.2)')
+  ok(terms.includes('consequential, special, punitive or indirect damages'), '  …and exclude them from those damages')
+  ok(read('app/create/page.tsx').includes('href="/privacy"'), 'and both are linked where an event begins')
 }
 
 // ─── Done ──────────────────────────────────────────────────────

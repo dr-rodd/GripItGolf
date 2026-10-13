@@ -19,9 +19,9 @@ export const dynamic = 'force-dynamic'
  * anyone the organiser shares it with is an admin too. The same honesty
  * applies — a soft lock, not a security boundary (lib/passcode.ts).
  *
- * The overview, the participant permissions (saved on the spot), the team
- * editor — add, rename and remove teams; add, rename, move and remove
- * runners — and the points rules as they stand.
+ * The overview, the dates (extend until final), the participant
+ * permissions (saved on the spot), the team editor — add, rename and remove
+ * teams; add, rename, move and remove runners — and the points rules.
  */
 export default async function RunOrganiserPage({ params }: {
   params: Promise<{ tripCode: string }>

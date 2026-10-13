@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
-import { todayString } from '@/lib/tripStatus'
 import { stravaConfig } from '@/lib/strava'
-import { syncLink } from '@/lib/stravaApi'
-import { addDays } from '@/lib/runChallenge'
+import { syncLink, purgeExpiredRuns, purgeDeadConnections } from '@/lib/stravaApi'
 import { loadChallenge, cookieRunner } from '../../runner'
+import { finaliseDueChallenges } from '../../finalise'
 
 /**
  * Re-reading Strava, two ways.
@@ -13,11 +12,22 @@ import { loadChallenge, cookieRunner } from '../../runner'
  * their connection in this challenge, for the moment a run has not arrived
  * by webhook yet.
  *
- * **GET — the nightly sync**, run by Vercel's cron with CRON_SECRET, like
- * /api/cleanup. The webhook does the real work; this is the safety net for
- * an event that never arrived, and the regular refresh of what is stored.
- * It takes the connections synced longest ago first, in challenges that
- * are on or finished within the last week, and stops at `NIGHTLY_LIMIT` —
+ * **GET — the nightly job**, run by Vercel's cron with CRON_SECRET, like
+ * /api/cleanup. Four things, in this order, each the guarantee for a rule
+ * of Strava's API Policy:
+ *
+ *   1. close every run challenge past its grace days — freeze its team
+ *      standings, then end its Strava links and delete its Strava runs
+ *      (app/api/run/finalise.ts). Runs whether or not Strava is set up:
+ *      a typed-in-only challenge gets its frozen result too;
+ *   2. delete every Strava run not confirmed within seven days (§6.2);
+ *   3. forget every connection dead for 25 days (§7.4's thirty);
+ *   4. re-read connections, oldest first — the safety net for a webhook
+ *      event that never arrived, and the refresh that keeps every stored
+ *      copy inside its seven days.
+ * It takes every connection still standing — closing a challenge ends its
+ * links, so none outlives its challenge — synced longest ago first, and
+ * stops at `NIGHTLY_LIMIT` —
  * Strava allows an app 100 reads every 15 minutes, and a run of the job
  * must stay well inside that.
  *
@@ -64,20 +74,21 @@ export async function GET(req: NextRequest) {
   if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'unauthorised' }, { status: 401 })
   }
-  const cfg = stravaConfig()
-  if (!cfg) return NextResponse.json({ ok: true, skipped: 'strava not configured' })
-
   let admin
   try { admin = createAdminClient() } catch {
     return NextResponse.json({ ok: false, error: 'admin client unavailable' }, { status: 500 })
   }
+  const cfg = stravaConfig()
+  const now = new Date()
 
-  // Challenges still on, or finished within the last week — a late edit on
-  // Strava to a run on the final day still reaches the board.
-  const weekAgo = addDays(todayString(new Date()), -7)
+  const closed = await finaliseDueChallenges(admin, cfg, now)
+  const expired = await purgeExpiredRuns(admin, now.getTime())
+  if (!cfg) return NextResponse.json({ ok: true, closed, expired, skipped: 'strava not configured' })
+  const forgotten = await purgeDeadConnections(admin, cfg, now.getTime())
+
+  // Every live link — closing a challenge has already ended its links.
   const { data: links, error } = await admin.from('strava_links')
-    .select('player_id, trip_id, athlete_id, last_synced_at, trips!inner(end_date)')
-    .or(`end_date.is.null,end_date.gte.${weekAgo}`, { referencedTable: 'trips' })
+    .select('player_id, trip_id, athlete_id, last_synced_at')
     .order('last_synced_at', { ascending: true, nullsFirst: true })
     .limit(NIGHTLY_LIMIT)
   if (error) {
@@ -94,5 +105,5 @@ export async function GET(req: NextRequest) {
     if (written === null) failed++
     else synced++
   }
-  return NextResponse.json({ ok: true, synced, failed })
+  return NextResponse.json({ ok: true, closed, expired, forgotten, synced, failed })
 }

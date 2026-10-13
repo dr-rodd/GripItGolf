@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
-import { stravaConfig } from '@/lib/strava'
+import { stravaConfig, disconnectedMessage } from '@/lib/strava'
 import { disconnectRunner } from '@/lib/stravaApi'
 import { loadChallenge, cookieRunner } from '../../runner'
 
@@ -29,11 +29,13 @@ export async function POST(req: NextRequest) {
   const playerId = await cookieRunner(admin, loaded.trip)
   if (!playerId) return NextResponse.json({ ok: false, message: 'Join the challenge first.' }, { status: 403 })
 
+  let tokensKept: boolean
   try {
-    await disconnectRunner(admin, cfg, playerId, loaded.trip.id)
+    ({ tokensKept } = await disconnectRunner(admin, cfg, playerId, loaded.trip.id))
   } catch (e) {
     console.error('strava disconnect failed:', e)
     return NextResponse.json({ ok: false, message: 'Could not disconnect Strava — try again.' }, { status: 500 })
   }
-  return NextResponse.json({ ok: true })
+  // The written confirmation Strava's API Policy (§2.1, §2.5) asks for.
+  return NextResponse.json({ ok: true, message: disconnectedMessage(tokensKept) })
 }

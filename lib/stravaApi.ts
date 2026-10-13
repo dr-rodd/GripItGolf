@@ -10,18 +10,23 @@
 //
 // Strava's limits for an app on the standard tier are 100 reads every 15
 // minutes and 1,000 a day, so reads are spent carefully: one page of
-// activities per runner per sync (a hundred runs — a month of a keen
-// runner), one read per webhook event, and the nightly sync capped.
+// activities per runner per sync for almost everybody (a hundred
+// activities; more pages only for the few past that), one read per webhook
+// event, and the nightly sync capped.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isRunChallenge } from './runChallenge'
 import {
   type StravaConfig, type StravaActivity, type WebhookAction,
   runFromActivity, inChallenge, afterEpoch, planSync, tokenNeedsRefresh,
+  cacheCutoff, deadCutoff,
 } from './strava'
 
 const API = 'https://www.strava.com/api/v3'
 const TIMEOUT_MS = 8_000
+const PAGE_SIZE = 100
+/** Pages read per sync at most — three hundred activities since the start. */
+const SYNC_PAGES = 3
 
 type TokenSet = { athleteId: number; access: string; refresh: string; expiresAt: number; scope?: string }
 
@@ -83,6 +88,8 @@ export async function saveTokens(admin: SupabaseClient, t: TokenSet, scope?: str
     expires_at: new Date(t.expiresAt * 1000).toISOString(),
     ...(scope ? { scope } : {}),
     updated_at: new Date().toISOString(),
+    // A swap or refresh Strava answered is the connection working.
+    last_ok_at: new Date().toISOString(),
   })
   if (error) throw new Error(`could not save Strava tokens: ${error.message}`)
 }
@@ -146,11 +153,24 @@ async function getJson<T>(path: string, token: string): Promise<{ status: number
   }
 }
 
-/** One page of the athlete's activities since `after` — a hundred is a month for most. */
-async function listActivities(token: string, after: number): Promise<StravaActivity[] | null> {
-  const { status, body } = await getJson<StravaActivity[]>(`/athlete/activities?after=${after}&per_page=100&page=1`, token)
-  if (!body) { console.error('strava list failed:', status); return null }
-  return body
+/**
+ * The athlete's activities since `after`, a page of a hundred at a time —
+ * oldest first, because that is how Strava answers an `after`. Every
+ * activity counts towards a page, rides and swims too, so a keen athlete
+ * passes a hundred inside a long challenge: reading page one alone dropped
+ * their newest runs, and the sync then removed them as though deleted.
+ * Capped at SYNC_PAGES reads; `complete` says whether the list reached the
+ * end, and an incomplete one is never used to remove anything.
+ */
+async function listActivities(token: string, after: number): Promise<{ activities: StravaActivity[]; complete: boolean } | null> {
+  const activities: StravaActivity[] = []
+  for (let page = 1; page <= SYNC_PAGES; page++) {
+    const { status, body } = await getJson<StravaActivity[]>(`/athlete/activities?after=${after}&per_page=${PAGE_SIZE}&page=${page}`, token)
+    if (!body) { console.error('strava list failed:', status); return null }
+    activities.push(...body)
+    if (body.length < PAGE_SIZE) return { activities, complete: true }
+  }
+  return { activities, complete: false }
 }
 
 // ─── The challenge side ────────────────────────────────────────
@@ -178,8 +198,8 @@ export async function syncLink(admin: SupabaseClient, cfg: StravaConfig, link: L
   const token = await accessToken(admin, cfg, link.athlete_id)
   if (!token) return null
 
-  const fetched = await listActivities(token, afterEpoch(window.start))
-  if (!fetched) return null
+  const listed = await listActivities(token, afterEpoch(window.start))
+  if (!listed) return null
 
   const { data: stored } = await admin.from('runs')
     .select('strava_activity_id, run_date')
@@ -190,10 +210,12 @@ export async function syncLink(admin: SupabaseClient, cfg: StravaConfig, link: L
     .filter(r => inChallenge(String(r.run_date), window.start, window.end))
     .map(r => Number(r.strava_activity_id))
 
-  const plan = planSync(fetched, storedInWindow, window)
+  const now = new Date().toISOString()
+  await markWorking(admin, link.athlete_id, now)
+  const plan = planSync(listed.activities, storedInWindow, window, listed.complete)
   if (plan.upserts.length > 0) {
     const { error } = await admin.from('runs').upsert(
-      plan.upserts.map(r => ({ ...r, trip_id: link.trip_id, player_id: link.player_id, source: 'strava' })),
+      plan.upserts.map(r => ({ ...r, trip_id: link.trip_id, player_id: link.player_id, source: 'strava', refreshed_at: now })),
       { onConflict: 'trip_id,strava_activity_id' },
     )
     if (error) { console.error('strava upsert failed:', error); return null }
@@ -235,17 +257,23 @@ export async function forgetAthlete(
 /**
  * Disconnect one runner in one challenge: their Strava runs there go, the
  * link goes, and if that Strava account feeds nothing else here the tokens
- * go too and Strava is told.
+ * go too and Strava is told. Answers whether Green Dot still holds the
+ * account's tokens afterwards — true only when another challenge uses them
+ * — so the confirmation can say exactly what was deleted.
  */
-export async function disconnectRunner(admin: SupabaseClient, cfg: StravaConfig, playerId: string, tripId: string) {
+export async function disconnectRunner(
+  admin: SupabaseClient, cfg: StravaConfig, playerId: string, tripId: string,
+): Promise<{ tokensKept: boolean }> {
   const { data: link } = await admin.from('strava_links')
     .select('athlete_id').eq('player_id', playerId).eq('trip_id', tripId).maybeSingle()
   await admin.from('runs').delete().eq('trip_id', tripId).eq('player_id', playerId).eq('source', 'strava')
   await admin.from('strava_links').delete().eq('player_id', playerId).eq('trip_id', tripId)
-  if (!link) return
+  if (!link) return { tokensKept: false }
   const { count } = await admin.from('strava_links')
     .select('player_id', { count: 'exact', head: true }).eq('athlete_id', link.athlete_id)
-  if (!count) await forgetAthlete(admin, cfg, Number(link.athlete_id), { revoke: true })
+  if (count) return { tokensKept: true }
+  await forgetAthlete(admin, cfg, Number(link.athlete_id), { revoke: true })
+  return { tokensKept: false }
 }
 
 /**
@@ -283,6 +311,7 @@ export async function handleWebhook(admin: SupabaseClient, cfg: StravaConfig, ac
   // different: the activity is gone or made private, and should not be on
   // any board, so it falls through to removal below.
   if (!body && status !== 404 && status !== 403) return
+  await markWorking(admin, action.athleteId, new Date().toISOString())
   const row = body ? runFromActivity(body) : null
 
   for (const link of links) {
@@ -290,7 +319,7 @@ export async function handleWebhook(admin: SupabaseClient, cfg: StravaConfig, ac
     if (!window) continue
     if (row && inChallenge(row.run_date, window.start, window.end)) {
       await admin.from('runs').upsert(
-        { ...row, trip_id: link.trip_id, player_id: link.player_id, source: 'strava' },
+        { ...row, trip_id: link.trip_id, player_id: link.player_id, source: 'strava', refreshed_at: new Date().toISOString() },
         { onConflict: 'trip_id,strava_activity_id' },
       )
     } else {
@@ -298,6 +327,65 @@ export async function handleWebhook(admin: SupabaseClient, cfg: StravaConfig, ac
         .eq('trip_id', link.trip_id).eq('player_id', link.player_id)
         .eq('source', 'strava').eq('strava_activity_id', action.activityId)
     }
+  }
+}
+
+/** Strava answered with this athlete's token: the connection works. */
+async function markWorking(admin: SupabaseClient, athleteId: number, at: string) {
+  await admin.from('strava_athletes').update({ last_ok_at: at }).eq('athlete_id', athleteId)
+}
+
+// ─── What the nightly job clears ───────────────────────────────
+
+/**
+ * Delete every Strava run Strava has not confirmed within seven days —
+ * Strava's API Policy §6.2 keeps a stored copy to seven days, and this is
+ * what guarantees it whatever else fails: a sync that stopped, a link that
+ * broke, a challenge nobody refreshed. Typed-in runs are not Strava's and
+ * are never touched. Returns how many went.
+ */
+export async function purgeExpiredRuns(admin: SupabaseClient, now: number): Promise<number> {
+  const { data, error } = await admin.from('runs')
+    .delete()
+    .eq('source', 'strava')
+    .lt('refreshed_at', cacheCutoff(now))
+    .select('id')
+  if (error) { console.error('strava purge failed:', error); return 0 }
+  return data?.length ?? 0
+}
+
+/**
+ * Forget every connection that has not worked for DEAD_CONNECTION_DAYS —
+ * a runner who revoked access without Strava's event reaching us, or
+ * deleted their Strava account, is erased inside §7.4's thirty days.
+ * The third door to forgetting somebody, and the only one that acts on
+ * silence; it never acts sooner than 25 days, so a passing failure (a
+ * wrong key, an outage) costs nobody their place.
+ */
+export async function purgeDeadConnections(admin: SupabaseClient, cfg: StravaConfig, now: number): Promise<number> {
+  const { data, error } = await admin.from('strava_athletes')
+    .select('athlete_id')
+    .lt('last_ok_at', deadCutoff(now))
+  if (error) { console.error('strava dead-connection check failed:', error); return 0 }
+  for (const a of data ?? []) await forgetAthlete(admin, cfg, Number(a.athlete_id), { revoke: false })
+  return data?.length ?? 0
+}
+
+/**
+ * End every Strava link to a challenge that has become final: its Strava
+ * runs go, its links go, and any Strava account that now feeds nothing is
+ * forgotten and Strava told to revoke. The connection lasted for the
+ * challenge; this is the challenge ending. (The frozen team result is
+ * written before this runs — app/api/run/finalise.ts.)
+ */
+export async function endChallengeLinks(admin: SupabaseClient, cfg: StravaConfig, tripId: string) {
+  const { data: links } = await admin.from('strava_links').select('athlete_id').eq('trip_id', tripId)
+  await admin.from('runs').delete().eq('trip_id', tripId).eq('source', 'strava')
+  await admin.from('strava_links').delete().eq('trip_id', tripId)
+  for (const athleteId of new Set((links ?? []).map(l => Number(l.athlete_id)))) {
+    const { count } = await admin.from('strava_links')
+      .select('player_id', { count: 'exact', head: true }).eq('athlete_id', athleteId)
+    if (!count) await forgetAthlete(admin, cfg, athleteId, { revoke: true })
   }
 }
 

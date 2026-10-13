@@ -406,6 +406,22 @@ export function describeProgress(
   return `Day ${t - a + 1} of ${b - a + 1}`
 }
 
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * A day as a runner reads it: "Mon 30 Nov". Spelt out by hand rather than
+ * by `toLocaleDateString`, whose punctuation depends on the ICU data of
+ * whatever renders it — Node's says "Mon, 30 Nov" — so a client component
+ * drawn on the server and then in the browser could disagree with itself.
+ */
+export function describeDay(date: string): string {
+  const [y, m, d] = date.split('-').map(Number)
+  const day = new Date(Date.UTC(y, m - 1, d))
+  if (Number.isNaN(day.getTime())) return date
+  return `${WEEKDAYS[day.getUTCDay()]} ${day.getUTCDate()} ${MONTHS[day.getUTCMonth()]}`
+}
+
 function teamKey(name: string): string {
   return name.trim().replace(/\s+/g, ' ').toLowerCase()
 }
@@ -686,6 +702,51 @@ export function setupWithDraft(setup: RunSetup, d: RulesDraft): RunSetup {
     rules: rulesFromDraft(d),
     boards: setup.boards.map(b => b.audience === 'team' ? { ...b, teamScore: d.teamScore } : b),
   }
+}
+
+// ─── When a challenge closes ───────────────────────────────────
+//
+// A Strava connection lasts for the challenge, not for ever (Strava's API
+// Policy keeps a stored copy of anyone's runs to seven days and to the
+// purpose it was given for). So a challenge has a shape in time:
+//
+//   upcoming  before the start
+//   live      start to finish — runs count, Strava keeps them arriving
+//   closing   the finish has passed; for FINAL_GRACE_DAYS late uploads and
+//             edits still reach the board, and the organiser can still
+//             extend the finish
+//   final     the team standings are frozen, every Strava run in it is
+//             deleted and every Strava link to it ended — the frozen team
+//             result is what stays
+//
+// Extending the finish is allowed until the challenge is final, and moves
+// everything with it.
+
+/** Days after the finish during which late runs still arrive. */
+export const FINAL_GRACE_DAYS = 3
+
+/** The day after which a challenge finished on `end` is frozen. */
+export function closesOn(end: string): string {
+  return addDays(end, FINAL_GRACE_DAYS)
+}
+
+export type ChallengePhase = 'upcoming' | 'live' | 'closing' | 'final'
+
+export function challengePhase(
+  start: string | null | undefined,
+  end: string | null | undefined,
+  today: string,
+  finalised: boolean,
+): ChallengePhase {
+  if (finalised) return 'final'
+  if (end && today > end) return 'closing'
+  if (start && today < start) return 'upcoming'
+  return 'live'
+}
+
+/** Is it time to freeze this challenge? Past its grace days and not frozen yet. */
+export function dueForFinal(end: string | null | undefined, today: string, finalised: boolean): boolean {
+  return !finalised && !!end && today > closesOn(end)
 }
 
 /**

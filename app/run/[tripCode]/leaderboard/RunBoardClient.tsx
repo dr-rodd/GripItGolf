@@ -53,9 +53,11 @@ const SCORE = 'font-[family-name:var(--font-display)] text-xl font-semibold tabu
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-export default function RunBoardClient({ boards, anyRuns }: {
+export default function RunBoardClient({ boards, anyRuns, garmin = false }: {
   boards: BoardView[]
   anyRuns: boolean
+  /** Some counted runs were recorded on Garmin — Strava's terms ask for the credit. */
+  garmin?: boolean
 }) {
   const [activeId, setActiveId] = useState(boards[0]?.id ?? '')
   const board = boards.find(b => b.id === activeId) ?? boards[0]
@@ -146,6 +148,12 @@ export default function RunBoardClient({ boards, anyRuns }: {
       {!anyRuns && board.rows.length > 0 && (
         <p className="text-ink/65 text-[13px] leading-snug mt-3 text-center">
           No runs yet — log the first on the Add tab.
+        </p>
+      )}
+
+      {garmin && (
+        <p className="text-ink/65 text-[13px] leading-snug mt-3 text-center">
+          Includes activities recorded on Garmin devices.
         </p>
       )}
     </div>

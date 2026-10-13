@@ -25,6 +25,8 @@ export type StoredRun = BoardRun & {
   createdAt: string
   /** What recorded a Strava run, when Strava said (migration 054). */
   deviceName: string | null
+  /** Strava's own id for a Strava run — its "View on Strava" link. */
+  stravaId: number | null
 }
 
 export type RunsRead =
@@ -49,7 +51,7 @@ export async function fetchRuns(tripId: string): Promise<RunsRead> {
     .eq('trip_id', tripId)
     .order('run_date', { ascending: false })
     .order('created_at', { ascending: false })
-  const BASE = 'id, player_id, source, activity, run_date, distance_m, moving_s, created_at'
+  const BASE = 'id, player_id, source, activity, run_date, distance_m, moving_s, created_at, strava_activity_id'
   let { data, error } = await read(`${BASE}, device_name`)
   if (error && /device_name/i.test(error.message ?? '')) ({ data, error } = await read(BASE))
 
@@ -73,6 +75,8 @@ export async function fetchRuns(tripId: string): Promise<RunsRead> {
         minutes: typeof r.moving_s === 'number' ? Math.round(r.moving_s / 60) : null,
         createdAt: r.created_at as string,
         deviceName: typeof r.device_name === 'string' ? r.device_name : null,
+        stravaId: r.strava_activity_id === null || r.strava_activity_id === undefined
+          ? null : Number(r.strava_activity_id),
       })),
   }
 }

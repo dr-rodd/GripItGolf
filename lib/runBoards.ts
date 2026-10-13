@@ -186,3 +186,62 @@ export function ordinal(n: number): string {
 export function formatKm(km: number): string {
   return `${round1(km)} km`
 }
+
+// ─── Frozen final results ──────────────────────────────────────
+//
+// What a run challenge keeps once it is final: the team standings as they
+// stood, and nothing about any one runner. Taken in the same breath as the
+// challenge's Strava runs are deleted (app/api/run/finalise.ts), so the
+// leaderboard can go on saying who won after the runs that decided it are
+// gone.
+
+export type FinalTeam = Pick<TeamLine, 'name' | 'color' | 'members' | 'total' | 'average' | 'score' | 'km' | 'place'>
+
+export type FinalResults = {
+  /** YYYY-MM-DD — the day the standings were frozen. */
+  frozenOn: string
+  teamScore: TeamScore
+  teams: FinalTeam[]
+  /** Strava runs were part of the challenge, and were deleted at the freeze. */
+  stravaRemoved: boolean
+  /** Some of what was frozen was recorded on Garmin — the credit stays with it. */
+  garmin: boolean
+}
+
+export function freezeResults(
+  teams: TeamLine[], teamScore: TeamScore, frozenOn: string, stravaRemoved: boolean, garmin = false,
+): FinalResults {
+  return {
+    frozenOn,
+    teamScore,
+    stravaRemoved,
+    garmin,
+    teams: teams.map(t => ({
+      name: t.name, color: t.color, members: t.members,
+      total: t.total, average: t.average, score: t.score, km: t.km, place: t.place,
+    })),
+  }
+}
+
+/** Read `trips.run_results` — whole, or null when there is none (or it is junk). */
+export function parseFinalResults(raw: unknown): FinalResults | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const r = raw as Record<string, unknown>
+  if (typeof r.frozenOn !== 'string' || !Array.isArray(r.teams)) return null
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  const teams = r.teams
+    .filter((t): t is Record<string, unknown> => !!t && typeof t === 'object' && typeof (t as Record<string, unknown>).name === 'string')
+    .map(t => ({
+      name: String(t.name),
+      color: typeof t.color === 'string' ? t.color : '#4A3728',
+      members: num(t.members), total: num(t.total), average: num(t.average),
+      score: num(t.score), km: num(t.km), place: num(t.place) || 1,
+    }))
+  return {
+    frozenOn: r.frozenOn,
+    teamScore: r.teamScore === 'total' ? 'total' : 'average',
+    stravaRemoved: r.stravaRemoved === true,
+    garmin: r.garmin === true,
+    teams,
+  }
+}

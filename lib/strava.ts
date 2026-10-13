@@ -175,16 +175,20 @@ export function afterEpoch(start: string): number {
  * activity inside the challenge) and the stored Strava runs to remove
  * (ones Strava no longer lists — deleted, made private, re-typed into
  * something we do not keep). Only runs inside the window are judged, so a
- * sync can never remove a run it did not look for.
+ * sync can never remove a run it did not look for — and a list that did
+ * not reach the end (`complete: false`, the page cap hit) removes nothing,
+ * because a run missing from it may simply be on the page not read.
  */
 export function planSync(
   fetched: StravaActivity[],
   storedIds: number[],
   window: { start: string | null; end: string | null },
+  complete = true,
 ): { upserts: StravaRunRow[]; deleteIds: number[] } {
   const upserts = fetched
     .map(runFromActivity)
     .filter((r): r is StravaRunRow => !!r && inChallenge(r.run_date, window.start, window.end))
+  if (!complete) return { upserts, deleteIds: [] }
   const keep = new Set(upserts.map(r => r.strava_activity_id))
   return { upserts, deleteIds: storedIds.filter(id => !keep.has(id)) }
 }
@@ -226,14 +230,49 @@ export function webhookAction(raw: unknown): WebhookAction {
   return { kind: 'ignore' }
 }
 
+// ─── How long anything of Strava's may stay ────────────────────
+
+/** Strava's API Policy §6.2: a stored copy is at most seven days old. */
+export const STRAVA_CACHE_DAYS = 7
+/**
+ * A connection that has not worked for this long is treated as revoked and
+ * forgotten — inside §7.4's thirty days, even if Strava's revoke event never
+ * arrived. Below thirty so a nightly job that misses a night still lands in
+ * time.
+ */
+export const DEAD_CONNECTION_DAYS = 25
+
+const DAY_MS = 86_400_000
+
+/** Strava runs last confirmed before this moment are past the cache limit. */
+export function cacheCutoff(now: number): string {
+  return new Date(now - STRAVA_CACHE_DAYS * DAY_MS).toISOString()
+}
+
+/** Connections last working before this moment are forgotten. */
+export function deadCutoff(now: number): string {
+  return new Date(now - DEAD_CONNECTION_DAYS * DAY_MS).toISOString()
+}
+
 /** A token that runs out within five minutes is treated as already out. */
 export function tokenNeedsRefresh(expiresAt: string | number, now: number): boolean {
   const t = typeof expiresAt === 'number' ? expiresAt * 1000 : Date.parse(expiresAt)
   return !Number.isFinite(t) || t - now < 5 * 60 * 1000
 }
 
+/**
+ * What a runner is told after Disconnect — in writing, as Strava's API
+ * Policy asks (§2.1, §2.5). The tokens stay only when the same Strava
+ * account still feeds another challenge here, and the sentence says so.
+ */
+export function disconnectedMessage(tokensKept: boolean): string {
+  return tokensKept
+    ? 'Strava disconnected — your Strava runs in this challenge have been permanently deleted. Your Strava account still feeds another Green Dot challenge; disconnect it there too to remove it completely.'
+    : 'Strava disconnected — your Strava runs and connection details have been permanently deleted from Green Dot.'
+}
+
 /** Where the callback sends a runner back to, with what happened. */
-export type ConnectOutcome = 'connected' | 'denied' | 'scope' | 'taken' | 'expired' | 'error' | 'unavailable'
+export type ConnectOutcome = 'connected' | 'denied' | 'scope' | 'taken' | 'expired' | 'closed' | 'error' | 'unavailable'
 
 export function outcomeMessage(o: string | null | undefined): { ok: boolean; text: string } | null {
   switch (o) {
@@ -243,6 +282,7 @@ export function outcomeMessage(o: string | null | undefined): { ok: boolean; tex
     case 'taken': return { ok: false, text: 'That Strava account already feeds another name in this challenge.' }
     case 'expired': return { ok: false, text: 'That took a little long — tap Connect to try again.' }
     case 'unavailable': return { ok: false, text: 'Strava is not set up for this site yet.' }
+    case 'closed': return { ok: false, text: 'This challenge has closed — Strava can no longer be connected to it.' }
     case 'error': return { ok: false, text: 'Could not connect Strava — try again.' }
     default: return null
   }

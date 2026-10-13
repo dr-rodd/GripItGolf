@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { todayString } from '@/lib/tripStatus'
-import { parseRunEntry, runEntryIssue, addDays } from '@/lib/runChallenge'
+import { parseRunEntry, runEntryIssue, addDays, closesOn } from '@/lib/runChallenge'
 import { loadChallenge, cookieRunner } from '../runner'
 
 /**
@@ -64,6 +64,11 @@ export async function POST(req: NextRequest) {
 
   if (!perms.log_runs) {
     return fail('Runs come from Strava in this challenge — typing them in is switched off.', 403)
+  }
+  // Closed: the grace days after the finish are over and the result is
+  // frozen (or about to be) — nothing more can change it.
+  if (trip.end_date && todayString(new Date()) > closesOn(trip.end_date)) {
+    return fail('This challenge is final — runs can no longer be added.', 403)
   }
 
   const entry = parseRunEntry(body)

@@ -5,6 +5,7 @@ import {
   type RunSetup, type RunPermissions,
   parseRunSetup, parseRunPermissions,
 } from '@/lib/runChallenge'
+import { type FinalResults, parseFinalResults } from '@/lib/runBoards'
 
 /**
  * A run challenge, as both its pages need it — the hub and the organiser
@@ -35,10 +36,12 @@ export type RunChallenge = {
   teams: RunTeam[]
   /** Players on no team — should be nobody; shown so nobody vanishes. */
   unassigned: RunMember[]
+  /** The frozen final team standings, once the challenge has closed (migration 055). */
+  final: FinalResults | null
 }
 
 export async function fetchRunChallenge(tripCode: string): Promise<RunChallenge | null> {
-  const [kind, tripRes, extrasRes] = await Promise.all([
+  const [kind, tripRes, extrasRes, finalRes] = await Promise.all([
     fetchTripKind(tripCode),
     supabase
       .from('trips')
@@ -48,6 +51,13 @@ export async function fetchRunChallenge(tripCode: string): Promise<RunChallenge 
     supabase
       .from('trips')
       .select('run_setup, event_permissions')
+      .eq('trip_code', tripCode)
+      .single(),
+    // Its own query: before migration 055 the column does not exist, and
+    // naming it above would take the whole challenge down with it.
+    supabase
+      .from('trips')
+      .select('run_results')
       .eq('trip_code', tripCode)
       .single(),
   ])
@@ -115,6 +125,7 @@ export async function fetchRunChallenge(tripCode: string): Promise<RunChallenge 
     passcodeHash: trip.settings_passcode_hash ?? null,
     setup: parseRunSetup(extras.run_setup),
     perms: parseRunPermissions(extras.event_permissions),
+    final: parseFinalResults((finalRes.data as { run_results?: unknown } | null)?.run_results),
     teams,
     unassigned: members
       .filter(m => !m.teamId || !teamIds.has(m.teamId))

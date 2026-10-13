@@ -4,7 +4,9 @@ import TripHeader from '@/app/components/TripHeader'
 import { describeRange } from '@/lib/confirmationEmail'
 import { todayString } from '@/lib/tripStatus'
 import { currentPlayer } from '@/lib/currentPlayer'
-import { isRunChallenge, describeProgress, challengeFinished, formatPoints } from '@/lib/runChallenge'
+import {
+  isRunChallenge, describeProgress, challengeFinished, formatPoints, challengePhase, closesOn, describeDay,
+} from '@/lib/runChallenge'
 import { ordinal } from '@/lib/runBoards'
 import { fetchRunChallenge, rosterOf } from './data'
 import { fetchRuns } from './runs'
@@ -26,6 +28,10 @@ export const dynamic = 'force-dynamic'
  *
  * Personalised from the cookie, so anything that changes it must
  * `router.refresh()` before coming back here (lib/currentPlayer.ts).
+ *
+ * Once the finish has passed it says how long late runs still count; once
+ * final, the frozen team standings take the place of the live ones, since
+ * the Strava runs behind the live ones have been deleted.
  *
  * Golf trips are sent to their own hub — this route only ever renders a
  * run challenge — and `/trip/[code]` sends run challenges here, so either
@@ -54,6 +60,8 @@ export default async function RunHubPage({ params }: {
   const standings = read.ready ? standingsOf(challenge, read.runs) : null
   const me = standings?.individuals.find(l => l.playerId === viewer?.id) ?? null
   const anyRuns = read.runs.length > 0
+  const final = challenge.final
+  const phase = challengePhase(challenge.startDate, challenge.endDate, today, !!final)
 
   return (
     <main className="min-h-dvh bg-cream has-tabbar">
@@ -67,8 +75,14 @@ export default async function RunHubPage({ params }: {
             {challenge.name}
           </h1>
           <p className="text-ink/65 text-sm mt-1.5">
-            {[dates, progress].filter(Boolean).join(' · ')}
+            {[dates, final ? 'Final' : progress].filter(Boolean).join(' · ')}
           </p>
+          {phase === 'closing' && challenge.endDate && (
+            <p className="text-ink/65 text-[13px] mt-1 leading-snug">
+              Late runs still count until {describeDay(closesOn(challenge.endDate))}, when the
+              standings are frozen.
+            </p>
+          )}
         </div>
 
         {/* Who this phone is — or the way in. */}
@@ -89,7 +103,8 @@ export default async function RunHubPage({ params }: {
                 'No team yet — ask the organiser to put you on one.'
               )}
             </p>
-            {me && (
+            {/* Not once the Strava runs behind it are gone — it would be wrong. */}
+            {me && !final?.stravaRemoved && (
               <p className="text-ink/80 text-sm mt-1">
                 {me.runs > 0
                   ? `${formatPoints(me.points)} pts · ${ordinal(me.place)} of ${runners}`
@@ -112,8 +127,37 @@ export default async function RunHubPage({ params }: {
           </Link>
         ) : null}
 
+        {/* Final: the frozen team standings, the result that stays. */}
+        {final && final.teams.length > 0 && (
+          <section>
+            <SectionTitle>Final standings</SectionTitle>
+            <div className="bg-surface border border-bark/12 rounded-2xl p-4 space-y-3">
+              {final.teams.map((t, i) => (
+                <div key={`${t.name}-${i}`} className="flex items-center gap-3">
+                  <span className="t-cap text-ink/65 tabular-nums w-6">{t.place}</span>
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} aria-hidden="true" />
+                  <span className="text-ink text-sm flex-1 min-w-0 truncate">{t.name}</span>
+                  <span className="font-[family-name:var(--font-display)] text-lg font-semibold tabular-nums text-ink">
+                    {formatPoints(t.score)}
+                  </span>
+                </div>
+              ))}
+              <p className="text-ink/65 text-[13px] pt-3 border-t border-bark/12 leading-snug">
+                {final.teamScore === 'average' ? 'Average points per runner. ' : 'Total points. '}
+                Frozen on {describeDay(final.frozenOn)}.
+              </p>
+            </div>
+            <Link
+              href={`/run/${challenge.code}/leaderboard`}
+              className="inline-block t-cap text-accent-deep hover:text-accent transition-colors mt-2.5"
+            >
+              Full leaderboard →
+            </Link>
+          </section>
+        )}
+
         {/* Who is leading — a glance, with the full board a tap away. */}
-        {standings && anyRuns && (
+        {!final && standings && anyRuns && (
           <section>
             <SectionTitle>Leading</SectionTitle>
             <div className="bg-surface border border-bark/12 rounded-2xl p-4 space-y-3">

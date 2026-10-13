@@ -7,9 +7,10 @@ import { todayString } from '@/lib/tripStatus'
 import {
   RUN_ACTIVITIES, MAX_RUN_KM,
   type RunActivity, type RunRules,
-  runPoints, runEntryIssue, roundKm, formatPoints, describePace, describeDuration,
+  runPoints, runEntryIssue, roundKm, formatPoints, describePace, describeDuration, describeDay,
 } from '@/lib/runChallenge'
 import { formatKm } from '@/lib/runBoards'
+import { activityUrl } from '@/lib/stravaLinks'
 
 /**
  * The Add tab's body: the log-a-run form, and this runner's own runs.
@@ -37,8 +38,14 @@ export type MyRun = {
   minutes: number | null
   source: 'manual' | 'strava'
   points: number
-  /** Recorded on a Garmin — Strava's terms ask that it is credited. */
-  garmin?: boolean
+  /**
+   * The Garmin that recorded it ("Garmin Forerunner 265"), or null — Strava's
+   * API Policy (§4.4) asks that Garmin-sourced data credits Garmin, and
+   * Garmin's guidelines name the device.
+   */
+  garmin?: string | null
+  /** Strava's id for a Strava run — its "View on Strava" link (API Policy §2.4). */
+  stravaId?: number | null
 }
 
 const INPUT = [
@@ -54,21 +61,18 @@ const serverToday = () => ''
 
 const numeric = (v: string) => v.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1')
 
-function dayLabel(date: string): string {
-  const [y, m, d] = date.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-IE', {
-    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
-  })
-}
-
 export default function RunAddClient({
-  code, rules, start, end, logRuns, myRuns,
+  code, rules, start, end, logRuns, closed = false, final = null, myRuns,
 }: {
   code: string
   rules: RunRules
   start: string | null
   end: string | null
   logRuns: boolean
+  /** Past the last day for late runs: the server refuses new ones. */
+  closed?: boolean
+  /** Frozen — and whether its Strava runs were deleted at the freeze. */
+  final?: { stravaRemoved: boolean } | null
   myRuns: MyRun[]
 }) {
   const router = useRouter()
@@ -125,7 +129,7 @@ export default function RunAddClient({
   }
 
   async function remove(run: MyRun) {
-    if (!window.confirm(`Delete your ${formatKm(run.km)} from ${dayLabel(run.date)}?`)) return
+    if (!window.confirm(`Delete your ${formatKm(run.km)} from ${describeDay(run.date)}?`)) return
     setError(null)
     try {
       const res = await fetch('/api/run/runs', {
@@ -148,7 +152,16 @@ export default function RunAddClient({
     <div className="space-y-8">
 
       {/* ── Log a run ── */}
-      {!logRuns ? (
+      {closed ? (
+        <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
+          <p className="text-ink/80 text-sm leading-snug">
+            {final
+              ? `This challenge is final — runs can no longer be added. The final team standings are on the leaderboard${
+                final.stravaRemoved ? ', and its Strava runs have been deleted, as agreed when they were connected' : ''}.`
+              : 'This challenge has closed — runs can no longer be added. Its final standings are frozen overnight.'}
+          </p>
+        </div>
+      ) : !logRuns ? (
         <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
           <p className="text-ink/80 text-sm leading-snug">
             Runs come from Strava in this challenge — typing them in is switched off.
@@ -157,7 +170,7 @@ export default function RunAddClient({
       ) : notStarted ? (
         <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
           <p className="text-ink/80 text-sm leading-snug">
-            The challenge starts on {start ? dayLabel(start) : 'its start date'} — log your
+            The challenge starts on {start ? describeDay(start) : 'its start date'} — log your
             runs from then.
           </p>
         </div>
@@ -275,11 +288,21 @@ export default function RunAddClient({
                       {r.source === 'strava' && <span className="text-ink/65 font-normal"> · Strava</span>}
                     </span>
                     <span className="block text-ink/65 text-[13px]">
-                      {dayLabel(r.date)}{extra ? ` · ${extra}` : ''}
+                      {describeDay(r.date)}{extra ? ` · ${extra}` : ''}
                     </span>
                     {r.garmin && (
-                      <span className="block text-ink/65 text-[13px]">Recorded on Garmin</span>
+                      <span className="block text-ink/65 text-[13px]">Recorded on {r.garmin}</span>
                     )}
+                    {r.source === 'strava' && r.stravaId ? (
+                      <a
+                        href={activityUrl(r.stravaId)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block text-ink text-[13px] font-medium underline underline-offset-2 hover:text-accent-deep transition-colors mt-0.5"
+                      >
+                        View on Strava
+                      </a>
+                    ) : null}
                   </span>
                   <span className="font-[family-name:var(--font-display)] text-lg font-semibold tabular-nums text-ink flex-shrink-0">
                     {formatPoints(r.points)}
@@ -288,7 +311,7 @@ export default function RunAddClient({
                     <button
                       type="button"
                       onClick={() => remove(r)}
-                      aria-label={`Delete ${formatKm(r.km)} from ${dayLabel(r.date)}`}
+                      aria-label={`Delete ${formatKm(r.km)} from ${describeDay(r.date)}`}
                       className="text-ink/65 hover:text-rust-deep transition-colors p-1 flex-shrink-0"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">

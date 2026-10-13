@@ -14,10 +14,16 @@
  * nothing; Disconnect takes only that runner's Strava runs in that
  * challenge, keeps their typed-in runs, and forgets the tokens only when the
  * account feeds nothing else; revoking on Strava forgets everything.
+ *
+ * And the retention rules Strava's API Policy sets: every Strava write
+ * stamps when Strava confirmed it, a copy older than seven days goes, a
+ * connection silent for 25 days is forgotten, a long list is paged and an
+ * incomplete one removes nothing, and a challenge closing ends its links.
  */
 
 import {
   syncLink, handleWebhook, disconnectRunner, accessToken,
+  purgeExpiredRuns, purgeDeadConnections, endChallengeLinks,
 } from '../lib/stravaApi'
 import type { StravaConfig } from '../lib/strava'
 
@@ -57,7 +63,16 @@ function fakeAdmin(db: Db) {
       const rows = () => db[table].filter(r => filters.every(f => f(r)))
       const run = () => {
         if (op === 'update') { for (const r of rows()) Object.assign(r, payload); return { data: null, error: null } }
-        if (op === 'delete') { const gone = rows(); db[table] = db[table].filter(r => !gone.includes(r)); return { data: gone, error: null } }
+        if (op === 'delete') {
+          const gone = rows()
+          db[table] = db[table].filter(r => !gone.includes(r))
+          // migration 054: strava_links.athlete_id … ON DELETE CASCADE
+          if (table === 'strava_athletes') {
+            const ids = gone.map(r => r.athlete_id)
+            db.strava_links = (db.strava_links ?? []).filter(l => !ids.includes(l.athlete_id))
+          }
+          return { data: gone, error: null }
+        }
         if (op === 'upsert') {
           for (const p of ([] as Row[]).concat(payload as Row | Row[])) {
             const hit = db[table].find(r => conflict.every(k => r[k] === p[k]))
@@ -75,6 +90,8 @@ function fakeAdmin(db: Db) {
         eq(col: string, v: unknown) { filters.push(r => r[col] === v); return chain },
         neq(col: string, v: unknown) { filters.push(r => r[col] !== v); return chain },
         in(col: string, vs: unknown[]) { filters.push(r => vs.includes(r[col])); return chain },
+        // Postgres: NULL < x is not true, so a row with no value never matches.
+        lt(col: string, v: string) { filters.push(r => r[col] != null && String(r[col]) < v); return chain },
         order() { return chain },
         limit() { return chain },
         update(p: Row) { op = 'update'; payload = p; return chain },
@@ -118,7 +135,11 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
       : json(strava.refresh, { message: 'Bad Request', errors: [{ resource: strava.refreshRefuses, field: 'x', code: 'invalid' }] })
   }
   if (url.includes('/oauth/deauthorize')) return json(200, {})
-  if (url.includes('/athlete/activities')) return json(200, strava.activities)
+  if (url.includes('/athlete/activities')) {
+    const q = new URL(url).searchParams
+    const per = Number(q.get('per_page') ?? 30), page = Number(q.get('page') ?? 1)
+    return json(200, strava.activities.slice((page - 1) * per, page * per))
+  }
   if (/\/athlete$/.test(url)) return json(strava.athlete, { id: 42 })
   const m = url.match(/\/activities\/(\d+)$/)
   if (m) {
@@ -303,6 +324,95 @@ const fresh = (): Fake => ({ activities: [], one: {}, refresh: 200, refreshRefus
     await disconnectRunner(fakeAdmin(db), cfg, 'P9', 'T2')
     eq(db.strava_athletes.map(a => a.athlete_id), [77], 'disconnecting the last link forgets the tokens')
     ok(strava.calls.some(c => c === 'POST https://www.strava.com/oauth/deauthorize'), '  …and tells Strava to revoke')
+  }
+
+  section('Every Strava write says when Strava confirmed it, and the connection that it works')
+  {
+    const db = world()
+    strava = fresh()
+    strava.activities = [act(100, '2026-11-03')]
+    const before = Date.now()
+    await syncLink(fakeAdmin(db), cfg, { player_id: 'P1', trip_id: 'T1', athlete_id: 42 })
+    const stamped = db.runs.find(r => r.trip_id === 'T1' && r.strava_activity_id === 100)?.refreshed_at as string
+    ok(!!stamped && Date.parse(stamped) >= before - 1000, 'a synced run is stamped with when Strava last confirmed it')
+    ok(!!db.strava_athletes[0].last_ok_at, 'and the connection with when it last worked')
+    ok(db.runs.find(r => r.id === 'm1')?.refreshed_at === undefined, 'a typed-in run is never stamped — it is not Strava\'s')
+
+    const db2 = world()
+    strava = fresh()
+    strava.one[105] = { status: 200, body: act(105, '2026-11-08') }
+    await handleWebhook(fakeAdmin(db2), cfg, { kind: 'refresh-activity', athleteId: 42, activityId: 105 })
+    ok(db2.runs.filter(r => r.strava_activity_id === 105).every(r => !!r.refreshed_at), 'a webhook write is stamped too')
+  }
+
+  section('A long list is read to the end, and a list cut short removes nothing')
+  {
+    const many = (n: number) => Array.from({ length: n }, (_, i) => act(1000 + i, '2026-11-10'))
+    let db = world()
+    strava = fresh()
+    strava.activities = [...many(149), act(100, '2026-11-03')]
+    eq(await syncLink(fakeAdmin(db), cfg, { player_id: 'P1', trip_id: 'T1', athlete_id: 42 }), 150,
+      'a hundred and fifty activities: both pages read, every run written')
+    ok(db.runs.some(r => r.strava_activity_id === 100), 'the run on the second page is kept, not taken for deleted')
+    ok(!db.runs.some(r => r.strava_activity_id === 101), 'and a run Strava really no longer lists still goes')
+    eq(strava.calls.filter(c => c.includes('/athlete/activities')).length, 2, '  …in two reads')
+
+    db = world()
+    strava = fresh()
+    strava.activities = many(400)
+    await syncLink(fakeAdmin(db), cfg, { player_id: 'P1', trip_id: 'T1', athlete_id: 42 })
+    eq(strava.calls.filter(c => c.includes('/athlete/activities')).length, 3, 'past the cap, it stops at three reads')
+    ok(db.runs.some(r => r.strava_activity_id === 101), '  …and, not having seen the end, removes nothing')
+  }
+
+  section('A copy older than seven days goes, and nothing else')
+  {
+    const db = world()
+    const now = Date.parse('2026-11-20T03:30:00Z')
+    const ago = (days: number) => new Date(now - days * 86_400_000).toISOString()
+    db.runs.find(r => r.id === 's1')!.refreshed_at = ago(8)
+    db.runs.find(r => r.id === 's2')!.refreshed_at = ago(6)
+    db.runs.find(r => r.id === 's9')!.refreshed_at = ago(7.01)
+    db.runs.find(r => r.id === 's3')!.refreshed_at = null      // never stamped: left for the backfill to date
+    db.runs.find(r => r.id === 'm1')!.refreshed_at = ago(30)   // a typed-in run is never Strava's to expire
+    eq(await purgeExpiredRuns(fakeAdmin(db), now), 2, 'two Strava runs past seven days')
+    eq(ids(db), ['m1', 's2', 's3'], 'the fresh one, the typed-in one and an unstamped one stay')
+  }
+
+  section('A connection silent for 25 days is forgotten, quietly')
+  {
+    const db = world()
+    const now = Date.parse('2026-11-30T03:30:00Z')
+    db.strava_athletes[0].last_ok_at = new Date(now - 26 * 86_400_000).toISOString()
+    db.strava_athletes[1].last_ok_at = new Date(now - 24 * 86_400_000).toISOString()
+    strava = fresh()
+    eq(await purgeDeadConnections(fakeAdmin(db), cfg, now), 1, 'one connection past 25 days')
+    eq(db.strava_athletes.map(a => a.athlete_id), [77], 'its tokens go; the one at 24 days stays')
+    eq(ids(db), ['m1', 's3'], 'every Strava run it fed goes, in every challenge; typed-in runs stay')
+    ok(!db.strava_links.some(l => l.athlete_id === 42), 'and its links')
+    ok(!strava.calls.some(c => c.includes('deauthorize')), 'without asking Strava — a dead connection cannot be asked anything')
+  }
+
+  section('A challenge closing ends its links, and only its links')
+  {
+    const db = world()
+    strava = fresh()
+    await endChallengeLinks(fakeAdmin(db), cfg, 'T1')
+    eq(ids(db), ['m1', 's9'], 'its Strava runs go; typed-in runs and the other challenge stay')
+    ok(!db.strava_links.some(l => l.trip_id === 'T1') && db.strava_links.some(l => l.trip_id === 'T2'),
+      'its links go; the other challenge\'s stay')
+    eq(db.strava_athletes.map(a => a.athlete_id), [42], 'an account that fed only this challenge is forgotten')
+    eq(strava.calls.filter(c => c === 'POST https://www.strava.com/oauth/deauthorize').length, 1,
+      '  …and Strava told, once — the account still feeding another challenge is not')
+  }
+
+  section('Disconnect says what it deleted')
+  {
+    const db = world()
+    strava = fresh()
+    eq(await disconnectRunner(fakeAdmin(db), cfg, 'P1', 'T1'), { tokensKept: true }, 'tokens kept while another challenge uses them')
+    eq(await disconnectRunner(fakeAdmin(db), cfg, 'P9', 'T2'), { tokensKept: false }, 'forgotten with the last link')
+    eq(await disconnectRunner(fakeAdmin(db), cfg, 'P9', 'T2'), { tokensKept: false }, 'and nothing held for a runner never connected')
   }
 
   globalThis.fetch = realFetch
