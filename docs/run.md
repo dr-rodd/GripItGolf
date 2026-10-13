@@ -121,10 +121,14 @@ Each stage is tested on greendot.live before the next starts.
    (`runs.device_name`).
 
    **Then Strava's API Policy, built in** (migration 055) — see "A
-   challenge's life" below. **Before Strava's review:** the Connect button
-   is ours, not Strava's official artwork (it could not be downloaded from
-   the build) — drop the asset into `public/` and swap it in `StravaCard`,
-   and check Garmin's own brand guidelines against our credit wording.
+   challenge's life" below. **Strava's "Powered by Strava" logo** (their API
+   logo pack, unaltered, in `public/strava/` — orange for light, white for
+   dark, `PoweredByStrava`) ends every Strava card and sits under any board
+   counting Strava runs, a frozen one included. **Before Strava's review:**
+   the Connect button is still ours — the logo pack holds no button; drop
+   Strava's separate "Connect with Strava" button pack's file into
+   `public/strava/` and swap it in `StravaCard` — and check Garmin's own
+   brand guidelines against our credit wording.
 5. **Sub-leaderboards** — a date window ("Week 2") or an activity filter on a
    board.
 
