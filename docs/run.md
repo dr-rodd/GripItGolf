@@ -47,6 +47,9 @@ holds it, mutation-tested.
 | `/run/[code]/settings` | Who this phone is, Strava's place, the door to the organiser area |
 | `/run/[code]/organiser` | The organiser area, behind the PIN |
 | `/api/run/runs` | The one writer of typed-in runs (POST, DELETE) |
+| `/api/run/me/delete` | Leave and delete my data — the runner this phone joined as, everything, confirmed in writing |
+| `/api/run/strava/*` | connect, callback, webhook, disconnect, sync (POST: the runner's check; GET: the nightly job) |
+| `/privacy`, `/terms` | The privacy notice and terms — every sport, static |
 
 Every `/run/[code]` page sits under one layout that draws golf's own tab bar
 with running's five tabs — Home, Add, Leaderboard (centre), Stats, Settings
@@ -117,49 +120,176 @@ Each stage is tested on greendot.live before the next starts.
    boards. Garmin-recorded runs say so in the runner's own list
    (`runs.device_name`).
 
-   **Before Strava's review:** the Connect button is ours, not Strava's
-   official artwork (it could not be downloaded from the build) — drop the
-   asset into `public/` and swap it in `StravaCard`. Two policy questions to
-   put to Strava in the review: their reported 7-day cap on caching raw
-   activity data (the nightly sync re-reads everything stored, but runs are
-   kept for the challenge), and whether totals derived from Garmin-recorded
-   runs need a Garmin credit on the shared board as well as the runner's
-   own list.
+   **Then Strava's API Policy, built in** (migration 055) — see "A
+   challenge's life" below. **Before Strava's review:** the Connect button
+   is ours, not Strava's official artwork (it could not be downloaded from
+   the build) — drop the asset into `public/` and swap it in `StravaCard`,
+   and check Garmin's own brand guidelines against our credit wording.
 5. **Sub-leaderboards** — a date window ("Week 2") or an activity filter on a
    board.
 
+## A challenge's life, and Strava's limits
+
+Strava's API Policy keeps an app's copy of anybody's data short-lived and
+tied to its purpose, so **a Strava connection lasts for its challenge, not
+for ever** — the consent says so, with room for the organiser to extend.
+`lib/runChallenge.ts` holds the shape (`challengePhase`):
+
+| Phase | When | What happens |
+|---|---|---|
+| upcoming | before the start | Joining and connecting are open |
+| live | start to finish | Runs count; Strava keeps them arriving |
+| closing | the `FINAL_GRACE_DAYS` (3) after the finish | Late uploads still count; the organiser can still extend (`RunDatesEditor`) |
+| final | the night after `closesOn(end)` | Team standings frozen into `trips.run_results`; then every Strava run deleted and every link ended (forgetting accounts that feed nothing else, with Strava told) |
+
+**What a final challenge keeps is the team standings only** — names,
+colours, places, scores; no runner, not even an id (`freezeResults`). The
+board shows them from then on; the runners board survives only if no Strava
+run was ever part of it, because re-telling it from typed-in runs alone
+would be a race nobody ran, and the same goes for a runner's own total on
+the hub and Add tab. Whether a total derived from Strava runs may be kept at
+all is a question for Strava (below): `FREEZE_INCLUDES_STRAVA` in
+`app/api/run/finalise.ts` is the one line that changes if they say no.
+
+The freeze is written before anything is deleted, and a failed freeze
+deletes nothing — the next night tries again. Past `closesOn` the runs route
+and the connect route refuse, on the same test.
+
+**Before that, three limits** run every night whatever else fails
+(`/api/run/strava/sync` GET, in this order):
+
+- **Seven days (§6.2).** Every Strava write stamps `runs.refreshed_at`;
+  any Strava run not re-confirmed within `STRAVA_CACHE_DAYS` is deleted.
+  The nightly re-read keeps live ones fresh, so in practice it only bites
+  when syncing has stopped — which is exactly when it must.
+- **Gone on Strava (§6.3, 48 hours).** The webhook removes it at once; the
+  nightly re-read catches any event that never came.
+- **Thirty days after revoking (§7.4).** A confirmed revoke forgets at once.
+  A connection that has not worked (`strava_athletes.last_ok_at`) for
+  `DEAD_CONNECTION_DAYS` (25) is treated as revoked and forgotten — the
+  only door that acts on silence, and never sooner than 25 days, so a wrong
+  key or an outage costs nobody their place.
+
+A sync pages through activities (three pages, 300, at most); **a list cut
+short removes nothing**, because a run missing from it may be on the page
+not read — that run is then kept fresh by its webhook or expires.
+
+**Four doors forget an athlete**, and `test:run-challenge` counts them:
+the confirmed revoke, Disconnect, the dead connection, the challenge
+closing. **A runner deletes everything themselves** from Settings (`/api/run/me/delete`):
+Strava first, while the link still names the tokens, then the player row,
+which cascades to their runs, team place and link. The answer is the
+written confirmation §2.5 asks for; so is Disconnect's, which says when the
+tokens stayed because another challenge still uses them.
+
+The support address is `SITE.supportEmail` (support@greendot.live); the
+privacy notice imports the three retention constants rather than typing
+them, so it cannot promise one thing while the job does another.
+`SITE.controller` is the legal name and address GDPR wants on the notice —
+unset until the owner supplies it.
+
 ## Strava — the rules that shape the design
 
-Researched October 2026 from secondary sources (Strava's own pages were not
-reachable from the build container) — **re-check before stage 4**.
+Read from Strava's API Agreement and API Policy themselves (pasted in,
+October 2026 — strava.com cannot be reached from the build container).
 
-- **Display.** Strava's API agreement says an app may show a user's Strava
-  data **only to that user**. A leaderboard shows one runner's runs to their
-  colleagues — exactly what that restricts. A clause in their policy (§6.1)
-  appears to exempt apps under 9,999 athletes, but it conflicts with the
-  main rule (§2.3) and Strava has not said which wins. One reported case:
-  Strava required another app (Wandrer) to have users opt in before
-  appearing on a leaderboard — a sign an opt-in leaderboard can pass review.
-- **Capacity.** A new Strava app serves 1 athlete; the owner can raise it to
-  10 without review; beyond that needs Strava's review. Since June 2026 the
-  account owning the app also needs a paid Strava subscription.
-- **Data handling.** Raw data cached at most 7 days; a user's data deleted
-  within 30 days of them disconnecting; **no Strava data into any AI tool**
-  (Policy §5.3 as reported) — which includes pasting it into Claude.
+- **Display (§2.3 vs §6.1).** §2.3 says a user's Strava data may be shown
+  only to that user. §6.1 exempts apps with up to 9,999 athletes from that,
+  and §5.13 forbids showing it to others *without prior express consent* —
+  which is what the consent tick collects. Green Dot sits in that tier, but
+  the two clauses pull against each other: **get Strava's written yes before
+  a real challenge.**
+- **Capacity.** A new app serves 1 athlete; the owner can raise it to 10;
+  beyond that needs Strava's review. The account owning the app needs a paid
+  Strava subscription.
+- **Consent (§2.1).** Before any data: what is collected, how, how to
+  withdraw, how to ask for deletion, and that deletion is confirmed.
+  `StravaCard` says all five, before the box, with the privacy notice linked.
+- **Retention (§6.2, §6.3, §7.4).** Seven days, 48 hours, thirty days —
+  built in, above.
+- **Deletion and access (§2.2, §2.5).** A runner sees every run held for them
+  on the Add tab, and deletes everything from Settings.
+- **Support and links (§2.4).** A support address; View on Strava on every
+  Strava run; Manage on Strava on the connected card.
+- **Garmin (§4.4).** Information derived from Garmin data credits Garmin: the
+  device on the runner's own run, and a line under any board counting one —
+  carried into the frozen result.
+- **Privacy policy and terms (§7.3, §6.5, §7.7, §9.2).** `/privacy` carries
+  the usage-data statement, the subprocessors and Strava's policy governing
+  Strava data; `/terms` the third-party warranty disclaimer, in full. Both
+  want a qualified read before review.
+- **No AI (§5.3).** No Strava data into any AI tool — including pasting it
+  into Claude to debug.
 
-What the design does about it:
+What the design does about the rest: boards show points and totals only,
+never maps, routes or titles; a runner's runs are shown only to them; the
+scope is `activity:read`, so Only You runs never arrive; typed-in runs mean
+a challenge works before — or without — Strava's approval.
 
-- Boards show **points and totals only** — never maps, routes or run titles.
-- A **consent tick** at connect: "my run totals appear on this challenge's
-  leaderboard".
-- A runner's own run list is shown **only to them**.
-- **Disconnecting removes their Strava runs** from the challenge.
-- Typed-in runs (stage 3) mean a challenge works before — or without —
-  Strava's approval, and for colleagues who don't use Strava.
-- The scope asked for is `activity:read`, so a run marked "Only you" on
-  Strava stays off the board.
+### Questions for Strava, and the email
 
-Before stage 4, the owner creates the Strava API app (callback domain
-`greendot.live`), adds its keys to Vercel, and applies for review describing
-the team leaderboard plainly. Strava cannot be reached from the build
-container, so Strava testing happens on greendot.live with real accounts.
+Open, and in the email below: **§2.3 vs §6.1** (the consented board at our
+tier); **§5.4**, "may not combine Strava Data with other customer data" —
+our boards add Strava runs to typed-in ones, the sharpest question; **the
+frozen team total** kept after the Strava runs are deleted (§5.5, §6.4);
+and **§5.2**, the overlap with Strava's own club challenges.
+
+```
+To: developers@strava.com
+Subject: Use-case confirmation — Green Dot (Client ID: [your ID])
+
+Hello,
+
+Green Dot (greendot.live) runs team running challenges for workplaces
+and clubs: a few weeks or months, runs earn points by the organiser's
+rules, and teams are compared on a shared leaderboard. We are under 10
+athletes today and would like to confirm our design before applying to
+grow.
+
+How it works with Strava:
+- Each runner connects their own account. Before connecting they see
+  what is kept (type, date, distance, moving time and device of each
+  run, walk or hike), how, who sees it, how long, how to withdraw and
+  how to delete, and must tick an explicit consent.
+- Others in that one challenge see the runner's totals only — points,
+  distance, number of runs. Individual activities are shown only to the
+  runner, with a "View on Strava" link. Scope is activity:read.
+- A connection lasts for its challenge. Three days after the finish we
+  freeze the team standings, delete every Strava activity in the
+  challenge and deauthorise any account that feeds nothing else.
+- Every stored activity is re-confirmed nightly and deleted if not
+  confirmed within 7 days; deletions on Strava are removed by webhook
+  (checked with Strava first); a revoked or dead connection is erased
+  within 30 days. Runners can disconnect, or delete all their data
+  themselves, and are told in writing when it is done.
+- Strava data is stored server-side only and never used with AI tools.
+  Our privacy notice is at greendot.live/privacy and terms at
+  greendot.live/terms; support is support@greendot.live.
+
+Could you confirm in writing:
+1. That showing these consented totals to the other members of the
+   same challenge is permitted (Policy §2.3, §5.13, §6.1)?
+2. That adding a runner's Strava activities to runs they type in by
+   hand, to make one challenge total, is not "combining Strava Data
+   with other customer data" under §5.4?
+3. That, once the Strava activities are deleted at a challenge's end,
+   we may keep the frozen team totals (team names and scores, no
+   individual data) as the challenge's result (§5.5, §6.4)?
+4. Whether you see any overlap with Strava's own club challenges that
+   concerns you (§5.2)? Runners can also log runs by hand, organisers
+   set their own scoring, and teams of different sizes are compared on
+   average per member.
+
+Thank you,
+[Your name]
+```
+
+### For the owner, as the business
+
+- **§4.6** — no announcement or marketing post mentioning Strava without
+  Strava's written consent.
+- **§5.8** — no charging for the Strava part; Green Dot's own features are
+  fine to charge for.
+- **§8.3** — a security breach goes to legal@strava.com within 24 hours.
+- **Stats** — Strava data may feed a runner's own stats, never team analysis
+  (§5.4).

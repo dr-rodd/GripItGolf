@@ -962,6 +962,7 @@ section('A challenge has a shape in time, and closes three days after its finish
   eq(challengePhase('2026-11-01', '2026-11-30', '2026-12-01', false), 'closing', 'the day after: closing')
   eq(challengePhase('2026-11-01', '2026-11-30', '2026-12-09', false), 'closing', 'still closing until it is frozen')
   eq(challengePhase('2026-11-01', '2026-11-30', '2026-11-15', true), 'final', 'frozen is final, whatever the date')
+  eq(challengePhase(null, null, '2026-11-15', true), 'final', '  …and whatever the dates')
   ok(!dueForFinal('2026-11-30', '2026-12-03', false), 'not frozen on the closing day itself — late runs still count')
   ok(dueForFinal('2026-11-30', '2026-12-04', false), 'frozen the day after')
   ok(!dueForFinal('2026-11-30', '2026-12-04', true), 'never twice')
@@ -1088,7 +1089,7 @@ section('A runner\'s own runs link to Strava, and Garmin is credited')
 {
   const add = draw(<RunAddClient code="GX7K2P" rules={defaultRules()} start="2026-11-01" end="2026-11-30"
     logRuns={true} myRuns={[
-      { id: 'r1', date: '2026-11-02', activity: 'run', km: 5, minutes: 30, source: 'manual', points: 7 },
+      { id: 'r1', date: '2026-11-02', activity: 'run', km: 5, minutes: 30, source: 'manual', points: 7, stravaId: null },
       { id: 'r2', date: '2026-11-03', activity: 'run', km: 8, minutes: null, source: 'strava', points: 10,
         stravaId: 98765, garmin: 'Garmin Forerunner 265' },
     ]} />)
