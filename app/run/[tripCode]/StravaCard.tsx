@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { SITE } from '@/config/site'
 import { closesOn, describeDay } from '@/lib/runChallenge'
 import { STRAVA_APPS_URL } from '@/lib/stravaLinks'
+import PoweredByStrava from '@/app/components/PoweredByStrava'
 import type { StravaStatus } from './runs'
 
 /**
@@ -29,10 +30,12 @@ import type { StravaStatus } from './runs'
  * Closed (past the challenge's last day for late runs): nothing new can be
  * connected, and a connection still standing says it is about to end.
  *
- * The button is ours, not Strava's artwork: the official "Connect with
- * Strava" asset could not be fetched from the build, and Strava's brand
- * guidelines want theirs used unaltered if it is used at all. Dropping the
- * asset in is a one-line change once it is in public/ (docs/run.md).
+ * Every state that carries Strava ends with Strava's own "Powered by
+ * Strava" logo (PoweredByStrava, the files as Strava supplied them). The
+ * Connect button is still ours: the logo pack holds the logos, not the
+ * official "Connect with Strava" button, which comes in Strava's separate
+ * button pack and is a one-line swap once it is in public/strava/
+ * (docs/run.md).
  */
 
 function since(iso: string | null): string {
@@ -158,8 +161,9 @@ export default function StravaCard({ code, status, joined, outcome, end, closed 
             {busy === 'disconnect' ? 'Disconnecting…' : 'Disconnect'}
           </button>
         </div>
-        <div className="mt-3">
+        <div className="mt-3 flex items-center justify-between gap-3">
           <ManageOnStrava />
+          <PoweredByStrava />
         </div>
         {note}
       </div>
@@ -174,6 +178,7 @@ export default function StravaCard({ code, status, joined, outcome, end, closed 
           This challenge has closed — Strava can no longer be connected to it.
         </p>
         {note}
+        <PoweredByStrava className="mt-3" />
       </div>
     )
   }
@@ -259,6 +264,9 @@ export default function StravaCard({ code, status, joined, outcome, end, closed 
         <p className="text-ink/80 text-[13px] mt-3 leading-snug">Join the challenge first, then connect.</p>
       )}
       {note}
+      <div className="mt-4 flex justify-center">
+        <PoweredByStrava />
+      </div>
     </div>
   )
 }

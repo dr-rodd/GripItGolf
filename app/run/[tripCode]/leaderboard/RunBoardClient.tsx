@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { formatPoints } from '@/lib/runChallenge'
 import { formatKm } from '@/lib/runBoards'
+import PoweredByStrava from '@/app/components/PoweredByStrava'
 
 /**
  * The run leaderboard's boards, one at a time — golf's board, in golf's
@@ -53,11 +54,13 @@ const SCORE = 'font-[family-name:var(--font-display)] text-xl font-semibold tabu
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-export default function RunBoardClient({ boards, anyRuns, garmin = false }: {
+export default function RunBoardClient({ boards, anyRuns, garmin = false, strava = false }: {
   boards: BoardView[]
   anyRuns: boolean
   /** Some counted runs were recorded on Garmin — Strava's terms ask for the credit. */
   garmin?: boolean
+  /** Some counted runs came from Strava — the board carries Strava's logo. */
+  strava?: boolean
 }) {
   const [activeId, setActiveId] = useState(boards[0]?.id ?? '')
   const board = boards.find(b => b.id === activeId) ?? boards[0]
@@ -155,6 +158,12 @@ export default function RunBoardClient({ boards, anyRuns, garmin = false }: {
         <p className="text-ink/65 text-[13px] leading-snug mt-3 text-center">
           Includes activities recorded on Garmin devices.
         </p>
+      )}
+
+      {strava && (
+        <div className="mt-4 flex justify-center">
+          <PoweredByStrava />
+        </div>
       )}
     </div>
   )

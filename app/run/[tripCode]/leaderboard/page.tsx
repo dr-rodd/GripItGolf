@@ -88,6 +88,8 @@ export default async function RunLeaderboardPage({ params }: {
   const garmin = final
     ? final.garmin
     : read.runs.some(r => r.source === 'strava' && isGarmin(r.deviceName))
+  // A frozen result built partly from Strava runs still came from Strava.
+  const strava = final ? final.stravaRemoved : read.runs.some(r => r.source === 'strava')
 
   return (
     <main className="min-h-dvh bg-cream has-tabbar">
@@ -105,7 +107,7 @@ export default async function RunLeaderboardPage({ params }: {
           </div>
         )}
         {final || read.ready
-          ? <RunBoardClient boards={boards} anyRuns={!!final || read.runs.length > 0} garmin={garmin} />
+          ? <RunBoardClient boards={boards} anyRuns={!!final || read.runs.length > 0} garmin={garmin} strava={strava} />
           : <Notice>{runsUnavailableMessage(read.reason)}</Notice>}
       </div>
     </main>

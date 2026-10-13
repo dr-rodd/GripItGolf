@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import TripHeader from '@/app/components/TripHeader'
+import LegalLinks from '@/app/components/LegalLinks'
 
 /**
  * The golf doorway — what Create an Event opens onto.
@@ -77,6 +78,8 @@ export default function GolfPage() {
               </p>
             </div>
           </div>
+
+          <LegalLinks className="mt-10" />
 
         </div>
       </div>

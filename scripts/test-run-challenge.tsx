@@ -48,6 +48,8 @@ import HelpAndPrivacy from '../app/run/[tripCode]/settings/HelpAndPrivacy'
 import RunDatesEditor from '../app/run/[tripCode]/organiser/RunDatesEditor'
 import PrivacyPage from '../app/privacy/page'
 import TermsPage from '../app/terms/page'
+import LegalLinks from '../app/components/LegalLinks'
+import PoweredByStrava from '../app/components/PoweredByStrava'
 import { SITE } from '../config/site'
 import { activityUrl, STRAVA_APPS_URL } from '../lib/stravaLinks'
 import {
@@ -1161,7 +1163,7 @@ section('The organiser can extend the challenge until it is final')
     'and once final the dates are said, not offered')
 }
 
-section('The privacy notice and the terms say what Strava\'s policy requires')
+section('The privacy notice and the terms — one for the whole site — say what Strava\'s policy requires')
 {
   const privacy = draw(<PrivacyPage />).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').replace(/&#x27;|’/g, "'")
   ok(privacy.includes(SITE.supportEmail), 'a contact (§2.4)')
@@ -1180,7 +1182,58 @@ section('The privacy notice and the terms say what Strava\'s policy requires')
      terms.includes('On behalf of every third-party service provider, all warranties are disclaimed'),
     'the terms disclaim every warranty on behalf of third parties (§9.2)')
   ok(terms.includes('consequential, special, punitive or indirect damages'), '  …and exclude them from those damages')
-  ok(read('app/create/page.tsx').includes('href="/privacy"'), 'and both are linked where an event begins')
+  ok(terms.includes('more sports to come') && terms.includes('Golf courses'), 'the terms are the whole site\'s, golf included')
+
+  // Site-wide: golf in full, and room for what comes next.
+  ok(privacy.includes("An event's code is its key"), 'the notice says plainly that the code is the only lock')
+  ok(['Handicaps', "ladies' card", 'Scores', 'Putts and fairways', 'Scorecard photos', 'Norwegian Meteorological Institute']
+    .every(w => privacy.includes(w)), 'golf is covered in full: handicaps, the card, scores, stats, the card check, weather')
+  ok(privacy.includes("organiser's email address") && privacy.includes('itinerary'), 'and what every event holds, whatever its sport')
+  ok(privacy.includes('What is kept on your phone') && privacy.includes('not yet sent'),
+    'every cookie and stored setting is named — the score outbox included')
+  ok(privacy.includes('Each new kind of event is added to this notice before it opens'), 'a new sport is a new section, written first')
+  ok(privacy.includes('Trip Setup') && privacy.includes('Leave and delete my data'), 'each sport says how its people correct or delete')
+
+  // Linked from every front door, through the one component.
+  const links = draw(<LegalLinks />)
+  ok(links.includes('href="/privacy"') && links.includes('href="/terms"'), 'the links line points at both')
+  for (const door of ['app/Landing.tsx', 'app/join/JoinForm.tsx', 'app/golf/page.tsx', 'app/create/page.tsx',
+    'app/trip/[tripCode]/page.tsx', 'app/run/[tripCode]/page.tsx']) {
+    const src = stripComments(read(door))
+    ok(src.includes("import LegalLinks from '@/app/components/LegalLinks'") && src.includes('<LegalLinks'),
+      `  …carried by ${door}`)
+  }
+}
+
+section('Strava\'s own logo, unaltered, wherever Strava data is shown')
+{
+  for (const f of ['public/strava/powered-by-strava.svg', 'public/strava/powered-by-strava-white.svg']) {
+    ok(fs.existsSync(f), `${f} is Strava's file`)
+    const svg = fs.existsSync(f) ? read(f) : ''
+    ok(!/<script|\son[a-z]+=|href=|<foreignObject/i.test(svg), '  …and carries nothing but drawing')
+  }
+  ok(read('public/strava/powered-by-strava.svg').includes('fill="#FC5200"'), 'the orange is Strava\'s, as supplied')
+  const logo = draw(<PoweredByStrava />)
+  ok(logo.includes('/strava/powered-by-strava.svg') && logo.includes('class="only-light"') &&
+     logo.includes('/strava/powered-by-strava-white.svg') && logo.includes('class="only-dark"'),
+    'one file per theme — the orange version\'s black words vanish on the dark palette')
+  ok((logo.match(/alt="Powered by Strava"/g) ?? []).length === 2, 'each with its alt')
+
+  const states = [
+    draw(<StravaCard code="GX7K2P" status={{ state: 'disconnected' }} joined={true} end="2026-11-30" />),
+    draw(<StravaCard code="GX7K2P" status={{ state: 'connected', lastSyncedAt: null }} joined={true} end="2026-11-30" />),
+    draw(<StravaCard code="GX7K2P" status={{ state: 'disconnected' }} joined={true} end="2026-11-30" closed={true} />),
+  ]
+  ok(states.every(h => h.includes('Powered by Strava')), 'every Strava card carries it')
+  ok(!draw(<StravaCard code="GX7K2P" status={{ state: 'off' }} joined={true} end="2026-11-30" />).includes('Powered by Strava'),
+    '  …but not the card that says Strava is not set up')
+  const board = (strava: boolean) => draw(<RunBoardClient anyRuns={true} strava={strava} boards={[
+    { id: 'i', kind: 'individual', title: 'Runners', rule: '', rows: [] }]} />)
+  ok(board(true).includes('Powered by Strava') && !board(false).includes('Powered by Strava'),
+    'a board carries it when it counts Strava runs, and only then')
+  ok(stripComments(read('app/run/[tripCode]/leaderboard/page.tsx'))
+    .includes("const strava = final ? final.stravaRemoved : read.runs.some(r => r.source === 'strava')"),
+    '  …a frozen result built from Strava runs included')
 }
 
 // ─── Done ──────────────────────────────────────────────────────

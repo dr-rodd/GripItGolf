@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
 import { HERO_SPACE } from '@/app/components/headerMetrics'
 import { buttonClass } from '@/app/components/ui'
+import LegalLinks from '@/app/components/LegalLinks'
 
 /**
  * The entry screen, and the way out of it.
@@ -281,6 +282,8 @@ export default function Landing() {
               &ndash; Erwin Schr&ouml;dinger
             </figcaption>
           </figure>
+
+          <LegalLinks className="mt-12" />
         </div>
       </div>
     </main>

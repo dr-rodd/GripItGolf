@@ -4,6 +4,7 @@ import { useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
+import LegalLinks from '@/app/components/LegalLinks'
 
 /**
  * The code a shared link carries, if any.
@@ -94,6 +95,8 @@ export default function JoinForm() {
             {loading ? 'Checking…' : 'Join Event'}
           </button>
         </form>
+
+        <LegalLinks className="mt-10" />
 
         </div>
       </div>

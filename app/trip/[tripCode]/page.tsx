@@ -38,6 +38,7 @@ import Itinerary from './Itinerary'
 import { type ItemKind, type ItineraryItem, dayCount } from '@/lib/itinerary'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
+import LegalLinks from '@/app/components/LegalLinks'
 import ShareTrip from './ShareTrip'
 
 export const dynamic = 'force-dynamic'
@@ -651,9 +652,11 @@ export default async function TripPage({ params, searchParams }: {
 
       <SupportLink className="px-6 pb-8" />
 
-      <div className="px-6 pb-10 flex justify-center">
+      <div className="px-6 pb-6 flex justify-center">
         <BackButton href="/" label="All trips" />
       </div>
+
+      <LegalLinks className="px-6 pb-10" />
 
       {/* A newcomer's guided lap — over everything, pointing at the tab
           bar, gone for good once skipped or finished. */}

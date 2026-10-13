@@ -7,7 +7,9 @@ import { LegalPage, LegalSection, LEGAL_LINK } from '@/app/components/LegalPage'
 export const metadata: Metadata = { title: `Terms — ${SITE.name}` }
 
 /**
- * The terms of use — every sport, one page.
+ * The terms of use — one for the whole site, every sport and every one
+ * still to come; a sport with rules of its own gets a section, as running
+ * has.
  *
  * Mostly plain statements of how the site already works (the event code is
  * the only lock; an organiser answers for who they add). One clause is
@@ -27,8 +29,9 @@ export default function TermsPage() {
     <LegalPage title="Terms of use" updated={UPDATED}>
       <LegalSection title="Using Green Dot">
         <p>
-          {SITE.name} (greendot.live) is free live scoring and leaderboards for golf trips, golf
-          tournaments and team running challenges. By using it you agree to these terms and to our{' '}
+          {SITE.name} (greendot.live) is free live scoring and leaderboards for events — golf trips
+          and tournaments, team running challenges, and more sports to come. By using it you agree
+          to these terms and to our{' '}
           <Link href="/privacy" className={LEGAL_LINK}>privacy notice</Link>.
         </p>
         <p>
@@ -46,6 +49,15 @@ export default function TermsPage() {
           should have their agreement to appear in it. Don&apos;t enter anything unlawful, offensive
           or someone else&apos;s private information, and don&apos;t try to break, overload or get
           round how the site works. We may remove content or events that do.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="Golf courses">
+        <p>
+          Courses are shared by everyone on Green Dot: anybody can add one, and its holes and
+          ratings come from the club&apos;s published card, from research, or from a photo of the
+          card. Add only what is accurate, and check anything that decides a result against the
+          club&apos;s own card.
         </p>
       </LegalSection>
 

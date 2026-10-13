@@ -13,6 +13,7 @@ import { fetchRuns } from './runs'
 import { standingsOf } from './standings'
 import { TeamsList, RulesSummary, SectionTitle, ChallengeNotFound } from './RunPieces'
 import RunShare from './RunShare'
+import LegalLinks from '@/app/components/LegalLinks'
 
 export const dynamic = 'force-dynamic'
 
@@ -202,6 +203,8 @@ export default async function RunHubPage({ params }: {
           <SectionTitle>How points work</SectionTitle>
           <RulesSummary setup={challenge.setup} />
         </section>
+
+        <LegalLinks />
 
       </div>
     </main>

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import TripHeader from '@/app/components/TripHeader'
+import LegalLinks from '@/app/components/LegalLinks'
 
 /**
  * Create an Event — which sport.
@@ -59,11 +60,7 @@ export default function CreatePage() {
             </Link>
           </div>
 
-          <p className="text-ink/65 text-[13px] mt-10 text-center">
-            <Link href="/privacy" className="hover:text-ink/80 transition-colors">Privacy</Link>
-            <span aria-hidden="true"> · </span>
-            <Link href="/terms" className="hover:text-ink/80 transition-colors">Terms</Link>
-          </p>
+          <LegalLinks className="mt-10" />
 
         </div>
       </div>
