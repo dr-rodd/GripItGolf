@@ -183,11 +183,13 @@ export default function PrivacyPage() {
       </LegalSection>
 
       <LegalSection title="Who else handles it">
-        <p>Only the services that run the site, each bound to protect it:</p>
+        <p>Only the services that run the site and its support email, each bound to protect it:</p>
         <ul className="list-disc pl-5 space-y-1.5">
           <li><B>Vercel</B> — hosts the site and runs its server code.</li>
           <li><B>Supabase</B> — the database everything is stored in.</li>
-          <li><B>Resend</B> — sends the confirmation email.</li>
+          <li><B>Resend</B> — sends the confirmation email, and replies from {SITE.supportEmail}.</li>
+          <li><B>ImprovMX</B> — receives email sent to {SITE.supportEmail} and passes it on.</li>
+          <li><B>Google</B> — Gmail is where email to {SITE.supportEmail} is read and answered.</li>
           <li><B>Anthropic</B> — reads golf scorecard photos for the card check. No Strava data ever goes here.</li>
           <li><B>Strava</B> — the source of Strava runs, for runners who connect.</li>
         </ul>

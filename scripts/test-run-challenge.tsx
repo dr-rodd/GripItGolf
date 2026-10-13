@@ -1167,7 +1167,8 @@ section('The privacy notice and the terms — one for the whole site — say wha
 {
   const privacy = draw(<PrivacyPage />).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').replace(/&#x27;|’/g, "'")
   ok(privacy.includes(SITE.supportEmail), 'a contact (§2.4)')
-  ok(['Vercel', 'Supabase', 'Resend', 'Anthropic'].every(n => privacy.includes(n)), 'who else handles the data (§7.7)')
+  ok(['Vercel', 'Supabase', 'Resend', 'Anthropic', 'ImprovMX', 'Gmail'].every(n => privacy.includes(n)),
+    'who else handles the data (§7.7) — the support mailbox\'s services included')
   ok(privacy.includes('Strava may monitor and collect usage data'), 'the usage-data statement Strava asks for (§6.5)')
   ok(privacy.includes("Strava's governs"), 'Strava\'s own policy governs Strava data (§7.3)')
   ok(privacy.includes(`${STRAVA_CACHE_DAYS} days`) && privacy.includes(`${DEAD_CONNECTION_DAYS} days`) &&
