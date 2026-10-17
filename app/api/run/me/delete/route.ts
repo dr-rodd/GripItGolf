@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { stravaConfig } from '@/lib/strava'
 import { disconnectRunner } from '@/lib/stravaApi'
 import { loadChallenge, cookieRunner } from '../../runner'
+import { forgetBoardCopy } from '@/app/run/[tripCode]/runs'
 
 /**
  * "Leave this challenge and delete my data" — the runner's own button, in
@@ -43,6 +44,8 @@ export async function POST(req: NextRequest) {
     console.error('run: delete-my-data failed:', e)
     return NextResponse.json({ ok: false, message: 'Could not delete your data — try again, or write to us.' }, { status: 500 })
   }
+  // Off everybody's board now, not when the boards' copy next refreshes.
+  forgetBoardCopy(loaded.trip.id)
   return NextResponse.json({
     ok: true,
     message: 'Done — your name, your team place, your runs and any Strava connection have been permanently deleted from this challenge.'

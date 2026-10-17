@@ -55,8 +55,9 @@ import { activityUrl, STRAVA_APPS_URL } from '../lib/stravaLinks'
 import {
   stravaConfig, scopeGranted, authorizeUrl, signState, verifyState, runFromActivity,
   planSync, webhookAction, tokenNeedsRefresh, afterEpoch, outcomeMessage, isGarmin,
-  cacheCutoff, deadCutoff, STRAVA_CACHE_DAYS, DEAD_CONNECTION_DAYS, disconnectedMessage,
+  cacheCutoff, deadCutoff, STRAVA_CACHE_DAYS, DEAD_CONNECTION_DAYS, disconnectedMessage, GARMIN_LIKE,
 } from '../lib/strava'
+import { BOARD_CACHE_SECONDS, BOARD_MAX_AGE_MS, runsCacheTag } from '../app/run/[tripCode]/runs'
 import {
   runnerTotals, placesFor, individualBoard, teamBoard, ordinal, inWindow, type BoardRun,
   freezeResults, parseFinalResults,
@@ -725,7 +726,10 @@ section('Runs live on the server: closed table, one writer, totals out')
   // What reaches a phone about other people is totals.
   const board = read('app/run/[tripCode]/leaderboard/RunBoardClient.tsx')
   ok(!/distanceM|run_date|\.date\b/.test(stripComments(board)), 'the leaderboard component is handed no runs')
-  ok(read('app/run/[tripCode]/add/page.tsx').includes('read.runs.filter(r => r.playerId === viewer.id)'),
+  // `mine` is read by player in the database itself (runs.ts), so nobody
+  // else's runs are ever in the list to begin with.
+  ok(read('app/run/[tripCode]/add/page.tsx').includes('const mine = read.mine')
+      && read('app/run/[tripCode]/runs.ts').includes("q.eq('player_id', playerId)"),
     'the Add tab sends a runner their own runs and nobody else\'s')
 }
 
@@ -1107,7 +1111,7 @@ section('A runner\'s own runs link to Strava, and Garmin is credited')
     { id: 'i', kind: 'individual', title: 'Runners', rule: '', rows: [] }]} />)
   ok(!plain.includes('Garmin'), '  …and one without says nothing')
   const page = stripComments(read('app/run/[tripCode]/leaderboard/page.tsx'))
-  ok(page.includes("read.runs.some(r => r.source === 'strava' && isGarmin(r.deviceName))") && page.includes('? final.garmin'),
+  ok(page.includes('const garmin = final ? final.garmin : read.garmin'),
     'the credit is decided from the runs counted — or, once final, kept with the frozen result')
   ok(read('app/api/run/finalise.ts').includes('freezeResults(s.teams, s.teamScore, today, hadStrava, garmin)'),
     '  …which the close records')
@@ -1238,6 +1242,49 @@ section('Strava\'s own logo, unaltered, wherever Strava data is shown')
   ok(stripComments(read('app/run/[tripCode]/leaderboard/page.tsx'))
     .includes("const strava = final ? final.stravaRemoved : read.runs.some(r => r.source === 'strava')"),
     '  …a frozen result built from Strava runs included')
+}
+
+section('The boards read four columns a run, and keep them a few minutes')
+{
+  const runs = stripComments(read('app/run/[tripCode]/runs.ts'))
+  ok(runs.includes(".select('id, player_id, source, activity, run_date, distance_m', { count: 'exact' })"),
+    'a board asks for the run, whose it is, what, when, how far and from where — nothing else')
+  ok(BOARD_CACHE_SECONDS > 0 && BOARD_CACHE_SECONDS <= 300, 'the copy is refreshed every five minutes at most')
+  ok(BOARD_MAX_AGE_MS >= BOARD_CACHE_SECONDS * 1000 && BOARD_MAX_AGE_MS <= 10 * 60_000,
+    'and no copy older than ten minutes is ever shown')
+  ok(BOARD_MAX_AGE_MS < 48 * 3600_000 && BOARD_MAX_AGE_MS < STRAVA_CACHE_DAYS * 86_400_000,
+    '  …far inside Strava\'s 48 hours to delete (§6.3) and seven days to keep (§6.2)')
+  ok(draw(<PrivacyPage />).includes(`for at most ${BOARD_MAX_AGE_MS / 60_000} minutes`),
+    'and the privacy notice says so, with the figure read from the code')
+  ok(/throw new ReadFailed/.test(runs) && /e instanceof ReadFailed/.test(runs),
+    'a failed read is thrown out of the cached function, so a failure is never what gets kept')
+  ok(runs.includes('Date.now() - copy.at <= BOARD_MAX_AGE_MS'), 'a copy past its age is not shown — the database is read')
+  eq(runsCacheTag('T1'), 'runs:T1', 'each challenge\'s copy is its own')
+  ok(runs.includes('revalidateTag(runsCacheTag(tripId), { expire: 0 })'),
+    'dropping the copy expires it outright — the next look waits for the database, never shows the old copy once more')
+
+  for (const p of ['app/run/[tripCode]/page.tsx', 'app/run/[tripCode]/add/page.tsx', 'app/run/[tripCode]/leaderboard/page.tsx']) {
+    const src = stripComments(read(p))
+    ok(src.includes('fetchBoardRuns(challenge.id, viewer?.id ?? null)') && !src.includes('fetchRuns('),
+      `${p.replace('app/run/[tripCode]', '…')} reads the board's runs, with the viewer's laid over fresh`)
+  }
+  const finalise = stripComments(read('app/api/run/finalise.ts'))
+  ok(finalise.includes('fetchRuns(') && !finalise.includes('fetchBoardRuns('),
+    'the final result reads whole runs straight from the database, never the copy')
+
+  for (const p of ['app/api/run/strava/disconnect/route.ts', 'app/api/run/me/delete/route.ts']) {
+    const src = stripComments(read(p))
+    const at = src.indexOf('forgetBoardCopy(loaded.trip.id)')
+    ok(at !== -1 && at > src.indexOf('disconnectRunner('),
+      `${p.split('/').slice(-2, -1)[0]}: the copy is dropped once the data is gone, so it leaves everybody's board at once`)
+  }
+
+  // The board asks the database whether any Strava run came off a Garmin;
+  // that pattern and isGarmin must be the same word, case-blind.
+  const likeToRegex = new RegExp(`^${GARMIN_LIKE.split('%').join('.*')}$`, 'i')
+  for (const device of ['Garmin Forerunner 265', 'garmin edge 540', 'GARMIN', 'Wahoo ELEMNT', 'iPhone', '']) {
+    eq(likeToRegex.test(device), isGarmin(device), `"${device}": the database and the app agree on whether it is a Garmin`)
+  }
 }
 
 // ─── Done ──────────────────────────────────────────────────────

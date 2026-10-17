@@ -26,6 +26,7 @@ import {
   purgeExpiredRuns, purgeDeadConnections, endChallengeLinks,
 } from '../lib/stravaApi'
 import type { StravaConfig } from '../lib/strava'
+import { fetchBoardRuns, withViewerRuns } from '../app/run/[tripCode]/runs'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -50,6 +51,9 @@ const KEYS: Record<string, string[]> = {
   strava_links: ['player_id'],
 }
 
+/** When set, a runs read scoped to one runner fails — a dropped connection mid-page. */
+let failRunnerReads = false
+
 function fakeAdmin(db: Db) {
   return {
     from(table: string) {
@@ -59,6 +63,9 @@ function fakeAdmin(db: Db) {
       let payload: Row | Row[] | null = null
       let conflict: string[] = KEYS[table] ?? ['id']
       let countOnly = false
+      let counted = false
+      let span: [number, number] | null = null
+      let byRunner = false
 
       const rows = () => db[table].filter(r => filters.every(f => f(r)))
       const run = () => {
@@ -81,13 +88,33 @@ function fakeAdmin(db: Db) {
           }
           return { data: null, error: null }
         }
+        if (failRunnerReads && table === 'runs' && byRunner) {
+          return { data: null, count: null, error: { message: 'connection reset' } }
+        }
         const found = rows()
-        return countOnly ? { data: null, count: found.length, error: null } : { data: found, error: null }
+        if (countOnly) return { data: null, count: found.length, error: null }
+        // A ranged read stops at 1,000 rows, as PostgREST's default Max rows does.
+        const data = span ? found.slice(span[0], Math.min(span[1] + 1, span[0] + 1000)) : found
+        return counted ? { data, count: found.length, error: null } : { data, error: null }
       }
 
       const chain: Record<string, unknown> = {
-        select(_cols?: string, opts?: { count?: string; head?: boolean }) { if (opts?.head) countOnly = true; return chain },
-        eq(col: string, v: unknown) { filters.push(r => r[col] === v); return chain },
+        select(_cols?: string, opts?: { count?: string; head?: boolean }) {
+          if (opts?.head) countOnly = true
+          if (opts?.count) counted = true
+          return chain
+        },
+        range(from: number, to: number) { span = [from, to]; return chain },
+        ilike(col: string, pattern: string) {
+          const re = new RegExp(`^${pattern.split('%').map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 'i')
+          filters.push(r => re.test(String(r[col] ?? '')))
+          return chain
+        },
+        eq(col: string, v: unknown) {
+          if (col === 'player_id') byRunner = true
+          filters.push(r => r[col] === v)
+          return chain
+        },
         neq(col: string, v: unknown) { filters.push(r => r[col] !== v); return chain },
         in(col: string, vs: unknown[]) { filters.push(r => vs.includes(r[col])); return chain },
         // Postgres: NULL < x is not true, so a row with no value never matches.
@@ -413,6 +440,67 @@ const fresh = (): Fake => ({ activities: [], one: {}, refresh: 200, refreshRefus
     eq(await disconnectRunner(fakeAdmin(db), cfg, 'P1', 'T1'), { tokensKept: true }, 'tokens kept while another challenge uses them')
     eq(await disconnectRunner(fakeAdmin(db), cfg, 'P9', 'T2'), { tokensKept: false }, 'forgotten with the last link')
     eq(await disconnectRunner(fakeAdmin(db), cfg, 'P9', 'T2'), { tokensKept: false }, 'and nothing held for a runner never connected')
+  }
+
+  section('The run board: everybody\'s runs, the viewer\'s fresh, and the Garmin credit')
+  {
+    const run = (id: string, trip: string, player: string, extra: Row = {}): Row => ({
+      id, trip_id: trip, player_id: player, source: 'manual', activity: 'run',
+      run_date: '2026-11-02', distance_m: 5000, moving_s: 1500,
+      created_at: '2026-11-02T08:00:00Z', strava_activity_id: null, device_name: null, ...extra,
+    })
+    const db: Db = {
+      runs: [
+        run('a1', 'T1', 'P1'),
+        run('b1', 'T1', 'P2', { source: 'strava', strava_activity_id: 9, device_name: 'Garmin Forerunner 265' }),
+        run('c1', 'T1', 'P3', { source: 'strava', strava_activity_id: 10, device_name: 'iPhone' }),
+        run('x1', 'T2', 'P9', { source: 'strava', strava_activity_id: 11, device_name: 'Wahoo' }),
+        // A kind this release does not know (a later one might store it): no board counts it.
+        run('k1', 'T1', 'P3', { activity: 'kayak' }),
+      ],
+    }
+    // No Next.js cache in a script, so this is the read the cache would keep.
+    const read = await fetchBoardRuns('T1', 'P1', fakeAdmin(db))
+    ok(read.ready, 'the board reads')
+    eq(read.runs.map(r => r.playerId).sort(), ['P1', 'P2', 'P3'], "this challenge's runs, and only this challenge's")
+    ok(read.runs.every(r => Object.keys(r).sort().join() === 'activity,date,distanceM,playerId,source'),
+      'a board run carries only the five things a board reads — no device, no Strava id, no times')
+    eq(read.mine.map(r => r.id), ['a1'], "the viewer's own runs come back whole, for their list")
+    eq(read.runs.filter(r => r.source === 'strava').map(r => r.playerId).sort(), ['P2', 'P3'],
+      'a Strava run says so on the board — what puts Strava\'s logo under it')
+    ok(read.garmin, 'one Garmin-recorded Strava run earns the board its credit line')
+
+    const other = await fetchBoardRuns('T2', null, fakeAdmin(db))
+    ok(other.ready && !other.garmin, 'a Wahoo is not a Garmin')
+    eq(other.mine, [], 'nobody looking, nobody\'s list')
+
+    failRunnerReads = true
+    const broken = await fetchBoardRuns('T1', 'P1', fakeAdmin(db))
+    failRunnerReads = false
+    ok(!broken.ready && broken.runs.length === 0,
+      'the viewer\'s own runs failing to read fails the board, rather than showing it without them')
+
+    // 2,500 runs, read past the cap the fake keeps as Supabase does.
+    const big: Db = { runs: Array.from({ length: 2500 }, (_, i) => run(`r${i}`, 'T3', i % 2 ? 'P1' : 'P2')) }
+    const all = await fetchBoardRuns('T3', 'P1', fakeAdmin(big))
+    eq(all.runs.length, 2500, '2,500 runs reach the board, not 1,000')
+    eq(all.mine.length, 1250, 'and all 1,250 of the viewer\'s reach their list')
+  }
+
+  section('The viewer\'s runs laid over the server\'s copy')
+  {
+    const r = (playerId: string, distanceM: number) =>
+      ({ playerId, source: 'manual' as const, activity: 'run' as const, date: '2026-11-02', distanceM })
+    const stored = (playerId: string, distanceM: number) => ({
+      ...r(playerId, distanceM), id: `${playerId}${distanceM}`, minutes: null, createdAt: '', deviceName: null, stravaId: null,
+    })
+    const copy = [r('P1', 5000), r('P2', 8000)]
+    eq(withViewerRuns(copy, null, []), copy, 'nobody looking: the copy as it is')
+    eq(withViewerRuns(copy, 'P1', [stored('P1', 5000), stored('P1', 3000)]).filter(x => x.playerId === 'P1').length, 2,
+      'a run the viewer has just logged is on their board before the copy knows of it')
+    eq(withViewerRuns(copy, 'P1', []).map(x => x.playerId), ['P2'],
+      'a run the viewer has just removed, or a Disconnect, is gone from their board at once')
+    eq(withViewerRuns(copy, 'P1', []).find(x => x.playerId === 'P2'), r('P2', 8000), 'and nobody else\'s run is touched')
   }
 
   globalThis.fetch = realFetch

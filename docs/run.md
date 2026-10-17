@@ -174,6 +174,25 @@ and the connect route refuse, on the same test.
   only door that acts on silence, and never sooner than 25 days, so a wrong
   key or an outage costs nobody their place.
 
+**The boards' copy (`app/run/[tripCode]/runs.ts`).** The hub, Add tab and
+leaderboard read four columns a run (whose, what, when, how far, plus the
+source), not whole rows, and keep a challenge's runs in Next's server cache
+for `BOARD_CACHE_SECONDS` (five minutes): a busy board is a few database
+reads an hour instead of one per look, which is what keeps a big challenge
+inside Supabase's free data allowance. The viewer's own runs are read fresh
+and laid over the copy (`withViewerRuns`), so whoever logs or removes a run,
+or disconnects, sees it at once; everybody else within minutes. **No copy
+older than `BOARD_MAX_AGE_MS` (ten minutes) is ever shown** — past it the
+look reads the database — so a deleted Strava run leaves every board well
+inside §6.3's 48 hours and no copy approaches §6.2's seven days; the privacy
+notice imports that figure too. Disconnect and Leave-and-delete drop the copy
+outright (`forgetBoardCopy`, `revalidateTag(…, { expire: 0 })`) so a runner
+taking their data away leaves everybody's board at once. A failed read is
+thrown out of the cached function so a failure is never what gets kept. The
+Garmin credit is a header-only count (`GARMIN_LIKE`, `isGarmin`'s word as a
+pattern), not a device read per run. **The freeze never uses the copy** —
+`fetchRuns` reads whole rows straight from the database.
+
 A sync pages through activities (three pages, 300, at most); **a list cut
 short removes nothing**, because a run missing from it may be on the page
 not read — that run is then kept fresh by its webhook or expires.
@@ -187,7 +206,7 @@ written confirmation §2.5 asks for; so is Disconnect's, which says when the
 tokens stayed because another challenge still uses them.
 
 The support address is `SITE.supportEmail` (support@greendot.live); the
-privacy notice imports the three retention constants rather than typing
+privacy notice imports the retention constants rather than typing
 them, so it cannot promise one thing while the job does another.
 `SITE.controller` is the name both pages give as the person running Green
 Dot — Ross O’Grady, name only: GDPR wants the controller's identity and

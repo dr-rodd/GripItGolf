@@ -9,7 +9,7 @@ import {
 } from '@/lib/runChallenge'
 import { ordinal } from '@/lib/runBoards'
 import { fetchRunChallenge, rosterOf } from './data'
-import { fetchRuns } from './runs'
+import { fetchBoardRuns } from './runs'
 import { standingsOf } from './standings'
 import { TeamsList, RulesSummary, SectionTitle, ChallengeNotFound } from './RunPieces'
 import RunShare from './RunShare'
@@ -52,10 +52,10 @@ export default async function RunHubPage({ params }: {
   const progress = describeProgress(challenge.startDate, challenge.endDate, today)
   const roster = rosterOf(challenge)
   const runners = roster.length
-  const [viewer, read] = await Promise.all([
-    currentPlayer(challenge.code, roster),
-    fetchRuns(challenge.id),
-  ])
+  // The viewer first — the cookie alone, no database — so their own runs are
+  // read fresh over the server's few-minutes copy of everybody's (./runs.ts).
+  const viewer = await currentPlayer(challenge.code, roster)
+  const read = await fetchBoardRuns(challenge.id, viewer?.id ?? null)
   const viewerTeam = challenge.teams.find(t => t.id === viewer?.teamId) ?? null
   const finished = challengeFinished(challenge.endDate, today)
   const standings = read.ready ? standingsOf(challenge, read.runs) : null

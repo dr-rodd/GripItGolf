@@ -7,7 +7,7 @@ import { todayString } from '@/lib/tripStatus'
 import { ordinal, formatKm } from '@/lib/runBoards'
 import { fetchRunChallenge, rosterOf } from '../data'
 import { outcomeMessage, isGarmin } from '@/lib/strava'
-import { fetchRuns, runsUnavailableMessage, fetchStravaStatus } from '../runs'
+import { fetchBoardRuns, runsUnavailableMessage, fetchStravaStatus } from '../runs'
 import { standingsOf } from '../standings'
 import { ChallengeNotFound, Notice } from '../RunPieces'
 import StravaCard from '../StravaCard'
@@ -36,18 +36,22 @@ export default async function RunAddPage({ params, searchParams }: {
   if (!isRunChallenge(challenge.kind)) redirect(`/trip/${challenge.code}`)
 
   const roster = rosterOf(challenge)
-  const [read, viewer] = await Promise.all([
-    fetchRuns(challenge.id),
-    currentPlayer(challenge.code, roster),
+  // The viewer first — the cookie alone, no database — so their own runs are
+  // read fresh: the list below is theirs, whole, and their total moves the
+  // moment they log a run, whatever the server's copy of everybody else's
+  // says (../runs.ts).
+  const viewer = await currentPlayer(challenge.code, roster)
+  const [read, stravaStatus] = await Promise.all([
+    fetchBoardRuns(challenge.id, viewer?.id ?? null),
+    fetchStravaStatus(challenge.id, viewer?.id ?? null),
   ])
-  const stravaStatus = await fetchStravaStatus(challenge.id, viewer?.id ?? null)
 
   // Past the last day for late runs — or frozen — nothing new comes in:
   // the runs route and the connect route refuse on the same test.
   const today = todayString(new Date())
   const closed = !!challenge.final || (!!challenge.endDate && today > closesOn(challenge.endDate))
 
-  const mine = viewer ? read.runs.filter(r => r.playerId === viewer.id) : []
+  const mine = read.mine
   const me = viewer ? standingsOf(challenge, read.runs).individuals.find(l => l.playerId === viewer.id) : null
 
   return (

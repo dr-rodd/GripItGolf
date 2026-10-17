@@ -2,9 +2,8 @@ import { redirect } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { isRunChallenge, describeRules, describeTeamScore, describeDay } from '@/lib/runChallenge'
-import { isGarmin } from '@/lib/strava'
 import { fetchRunChallenge, rosterOf } from '../data'
-import { fetchRuns, runsUnavailableMessage } from '../runs'
+import { fetchBoardRuns, runsUnavailableMessage } from '../runs'
 import { standingsOf } from '../standings'
 import { ChallengeNotFound, Notice } from '../RunPieces'
 import RunBoardClient, { type BoardView } from './RunBoardClient'
@@ -40,10 +39,10 @@ export default async function RunLeaderboardPage({ params }: {
   if (!challenge) return <ChallengeNotFound />
   if (!isRunChallenge(challenge.kind)) redirect(`/trip/${challenge.code}/leaderboard`)
 
-  const [read, viewer] = await Promise.all([
-    fetchRuns(challenge.id),
-    currentPlayer(challenge.code, rosterOf(challenge)),
-  ])
+  // Who is looking first — the cookie alone, no database — so their own runs
+  // can be read fresh over the server's few-minutes copy (../runs.ts).
+  const viewer = await currentPlayer(challenge.code, rosterOf(challenge))
+  const read = await fetchBoardRuns(challenge.id, viewer?.id ?? null)
 
   const s = standingsOf(challenge, read.runs)
   const colorOf = new Map(challenge.teams.map(t => [t.id, t.color]))
@@ -85,9 +84,7 @@ export default async function RunLeaderboardPage({ params }: {
         ...(final.stravaRemoved ? [] : live.filter(b => b.kind === 'individual')),
       ]
     : live
-  const garmin = final
-    ? final.garmin
-    : read.runs.some(r => r.source === 'strava' && isGarmin(r.deviceName))
+  const garmin = final ? final.garmin : read.garmin
   // A frozen result built partly from Strava runs still came from Strava.
   const strava = final ? final.stravaRemoved : read.runs.some(r => r.source === 'strava')
 

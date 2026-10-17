@@ -156,6 +156,13 @@ export function isGarmin(deviceName: string | null | undefined): boolean {
   return /garmin/i.test(deviceName ?? '')
 }
 
+/**
+ * `isGarmin` as a Postgres `ilike` pattern — the same word, case-blind — for
+ * the run board, which asks the database *whether* any Strava run came off
+ * a Garmin rather than fetching every run's device to find out.
+ */
+export const GARMIN_LIKE = '%garmin%'
+
 /** Inside the challenge's days — the same bounds the boards apply. */
 export function inChallenge(date: string, start: string | null, end: string | null): boolean {
   return (!start || date >= start) && (!end || date <= end)

@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { stravaConfig, disconnectedMessage } from '@/lib/strava'
 import { disconnectRunner } from '@/lib/stravaApi'
 import { loadChallenge, cookieRunner } from '../../runner'
+import { forgetBoardCopy } from '@/app/run/[tripCode]/runs'
 
 /**
  * Disconnect Strava — the runner's own button, on the Add tab or Settings.
@@ -36,6 +37,8 @@ export async function POST(req: NextRequest) {
     console.error('strava disconnect failed:', e)
     return NextResponse.json({ ok: false, message: 'Could not disconnect Strava — try again.' }, { status: 500 })
   }
+  // Off everybody's board now, not when the boards' copy next refreshes.
+  forgetBoardCopy(loaded.trip.id)
   // The written confirmation Strava's API Policy (§2.1, §2.5) asks for.
   return NextResponse.json({ ok: true, message: disconnectedMessage(tokensKept) })
 }

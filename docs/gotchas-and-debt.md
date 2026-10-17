@@ -434,3 +434,18 @@ the public key can pull in one request.
 
 For a yes-or-no per round, **count, never fetch** (`roundsWithScores`, the
 Scoring tab's way) — and a count that fails answers *locked*.
+
+### …and the other half: what the free plan meters
+
+Paging made the reads correct; it did nothing for their size, and **data sent
+out of Supabase is what its free plan meters** (5 GB a month at the time of
+writing). Every run screen used to read every whole run in the challenge on
+every look — a 200-runner month reaches ~6,000 runs, ~2 MB a look, which is
+several times the allowance at a few hundred looks a day. So the run boards
+read four columns a run and keep a five-minute server copy (`docs/run.md`,
+"The boards' copy"): a busy board is a few reads an hour. Golf is deliberately
+left uncached — phones write scores straight to Supabase, so the server cannot
+know when a live board is stale, and a golf trip's reads are small. Revisit
+only for a 100-plus-player tournament. Check **Supabase → Usage → Egress**
+after a big event; whether Supabase meters compressed bytes is not documented,
+so measured beats estimated.

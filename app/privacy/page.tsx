@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { SITE } from '@/config/site'
 import { STRAVA_CACHE_DAYS, DEAD_CONNECTION_DAYS } from '@/lib/strava'
 import { FINAL_GRACE_DAYS } from '@/lib/runChallenge'
+import { BOARD_MAX_AGE_MS } from '@/app/run/[tripCode]/runs'
 import { STRAVA_APPS_URL } from '@/lib/stravaLinks'
 import { LegalPage, LegalSection, LEGAL_LINK } from '@/app/components/LegalPage'
 
@@ -35,7 +36,7 @@ export const metadata: Metadata = { title: `Privacy — ${SITE.name}` }
  * Strava's review — docs/run.md.
  */
 
-const UPDATED = '13 October 2026'
+const UPDATED = '17 October 2026'
 
 const B = ({ children }: { children: React.ReactNode }) => <strong className="text-ink">{children}</strong>
 
@@ -185,7 +186,10 @@ export default function PrivacyPage() {
       <LegalSection title="Who else handles it">
         <p>Only the services that run the site and its support email, each bound to protect it:</p>
         <ul className="list-disc pl-5 space-y-1.5">
-          <li><B>Vercel</B> — hosts the site and runs its server code.</li>
+          <li>
+            <B>Vercel</B> — hosts the site and runs its server code. To keep a running leaderboard
+            quick, it holds a copy of that challenge&apos;s runs for at most {BOARD_MAX_AGE_MS / 60_000} minutes.
+          </li>
           <li><B>Supabase</B> — the database everything is stored in.</li>
           <li><B>Resend</B> — sends the confirmation email, and replies from {SITE.supportEmail}.</li>
           <li><B>ImprovMX</B> — receives email sent to {SITE.supportEmail} and passes it on.</li>
