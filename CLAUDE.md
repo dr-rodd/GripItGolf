@@ -61,6 +61,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | Doc | Open it for |
 |---|---|
 | `docs/design-system.md` | Colours, type, the wordmark, header, landing animation, scoring symbols, motion |
+| `docs/design-brief.md` | The background pasted into Claude.ai for design sessions, and the hand-off spec its decisions come back in. Keep its facts in step with the design system |
 | `docs/schema-and-scoring.md` | Table structure, the Stableford trigger, WHS handicap formula, player states, tee data |
 | `docs/leaderboards.md` | Leaderboard model, legacy `formats` compatibility, custom points, matchplay draws, team scoring modes |
 | `docs/features.md` | Admin overview, lead player email, returning-player cookie, support link, itinerary, trip lifecycle |
