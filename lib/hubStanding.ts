@@ -24,8 +24,9 @@ import {
 } from './standing'
 import {
   buildRowContext, liveRoundPresence,
-  type OpenCard, type ScoreRow, type LiveScoreRow,
+  type OpenCard, type ScoreRow, type LiveScoreRow, type HandicapRow,
 } from './rowContext'
+import { readScores, readLiveScores, readRoundHandicaps } from './scoreReads'
 
 export type PlacingResult = {
   placing: Placing | null
@@ -110,10 +111,12 @@ async function simplePlacing(
     .map(r => r.id as string)
   if (roundIds.length === 0) return NONE
 
-  const { data, error } = await supabase
-    .from('scores')
-    .select('player_id, round_id, stableford_points')
-    .in('round_id', roundIds)
+  // Read whole, past Supabase's 1,000-row cap — lib/scoreReads.ts. The
+  // hole rides along because it is a third of what makes a score row unique,
+  // which is what lets a read in pages drop a row it was handed twice.
+  const { data, error } = await readScores<{
+    player_id: string; round_id: string; hole_id: string; stableford_points: number | null
+  }>(supabase, 'player_id, round_id, hole_id, stableford_points', roundIds)
 
   if (error) {
     console.error('fetchPlacing scores query failed:', error)
@@ -282,15 +285,13 @@ export async function fetchTripContext(
       supabase.from('holes')
         .select('id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies')
         .in('course_id', someCourses).order('hole_number'),
-      supabase.from('scores')
-        .select('player_id, round_id, hole_id, gross_score, stableford_points, no_return' + statCols)
-        .in('round_id', roundIds),
-      supabase.from('live_scores')
-        .select('player_id, round_id, hole_number, gross_score, stableford_points' + statCols)
-        .in('round_id', roundIds),
-      supabase.from('round_handicaps')
-        .select('round_id, player_id, playing_handicap, tee_id')
-        .in('round_id', roundIds),
+      // The three that grow with every hole, read whole — lib/scoreReads.ts.
+      readScores<ScoreRow>(supabase,
+        'player_id, round_id, hole_id, gross_score, stableford_points, no_return' + statCols, roundIds),
+      readLiveScores<LiveScoreRow>(supabase,
+        'player_id, round_id, hole_number, gross_score, stableford_points' + statCols, roundIds),
+      readRoundHandicaps<HandicapRow>(supabase,
+        'round_id, player_id, playing_handicap, tee_id', roundIds),
       supabase.from('tees')
         .select('id, slope, course_rating, par').in('course_id', someCourses),
       // The names of those courses, in the same breath as their tees and
@@ -337,11 +338,8 @@ export async function fetchTripContext(
       casual_stats: r.casual_stats === true,
     })),
     courseByRound: new Map(roundRows.map(r => [r.id as string, r.course_id as string])),
-    // Cast because the column list is now built rather than written out, and
-    // supabase-js types a result by parsing the literal it was given. Same
-    // treatment `holes` and the open rounds already get in this function.
-    scores: (scoresRes.data ?? []) as unknown as ScoreRow[],
-    liveScores: (liveScoresRes.data ?? []) as unknown as LiveScoreRow[],
+    scores: scoresRes.data ?? [],
+    liveScores: liveScoresRes.data ?? [],
     roundHandicaps: hcpsRes.data ?? [],
     tees: teesRes.data ?? [],
     activeRoundIds: presence.activeRoundIds,

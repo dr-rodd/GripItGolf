@@ -9,7 +9,8 @@ import { liveRoundPresence, type OpenCard } from '@/lib/rowContext'
 import { isEvent } from '@/lib/eventHub'
 import { parseLeagueSetup } from '@/lib/leagueSetup'
 import Poller from '@/app/components/Poller'
-import TripLeaderboardClient from './TripLeaderboardClient'
+import { readScores, readLiveScores, readRoundHandicaps } from '@/lib/scoreReads'
+import TripLeaderboardClient, { type Score, type LiveScore, type RoundHcp } from './TripLeaderboardClient'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
 
@@ -78,19 +79,21 @@ export default async function TripLeaderboardPage({
         .select('id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies')
         .in('course_id', courseIds.length > 0 ? courseIds : [nilId])
         .order('hole_number'),
-      supabase.from('scores')
-        .select('player_id, hole_id, gross_score, stableford_points, no_return, round_id')
-        .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
+      // Every score, however many — lib/scoreReads.ts reads past Supabase's
+      // 1,000-row cap, which a trip of fourteen playing four rounds reaches.
+      readScores<Score>(supabase,
+        'player_id, hole_id, gross_score, stableford_points, no_return, round_id',
+        roundIds.length > 0 ? roundIds : [nilId]),
       // In-progress scores — merged client-side so the board moves during play
-      supabase.from('live_scores')
-        .select('player_id, round_id, hole_number, gross_score, stableford_points')
-        .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
+      readLiveScores<LiveScore>(supabase,
+        'player_id, round_id, hole_number, gross_score, stableford_points',
+        roundIds.length > 0 ? roundIds : [nilId]),
       // `tee_id` comes with them: a board playing off a percentage needs the
       // course handicap before it was rounded, and that can only be worked out
       // again from the tee it was played off.
-      supabase.from('round_handicaps')
-        .select('round_id, player_id, playing_handicap, tee_id')
-        .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
+      readRoundHandicaps<RoundHcp>(supabase,
+        'round_id, player_id, playing_handicap, tee_id',
+        roundIds.length > 0 ? roundIds : [nilId]),
       // The ratings behind those tees, so the unrounded course handicap can be
       // rebuilt. Only a board playing off a percentage reads it.
       supabase.from('tees')

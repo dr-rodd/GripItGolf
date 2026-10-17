@@ -14,6 +14,7 @@ import { exactCourseHandicap } from "@/lib/courseHandicap"
 import { formatHandicap } from "@/lib/handicap"
 import { CHROME } from "./scoringHeaderMetrics"
 import { usePoll } from "./usePoll"
+import { readLiveScores } from "@/lib/scoreReads"
 import {
   SC_SF, SC_NUM, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL,
   SC_MUTED, SC_DARK, scRow, scPoints, teeDot,
@@ -73,6 +74,7 @@ interface Tee {
 
 interface LiveScoreRow {
   player_id: string
+  round_id: string
   hole_number: number
   gross_score: number | null
   stableford_points: number | null
@@ -400,10 +402,12 @@ export default function LiveLeaderboardPanel({
 
   const fetchScores = useCallback(async () => {
     const [scoresRes, liveRoundsRes, hcpsRes] = await Promise.all([
-      supabase
-        .from("live_scores")
-        .select("player_id, hole_number, gross_score, stableford_points")
-        .eq("round_id", liveRound.round_id),
+      // Read whole: a single round of more than fifty-five players passes
+      // Supabase's 1,000-row cap, and the groups past it would simply not be
+      // on this board — lib/scoreReads.ts.
+      readLiveScores<LiveScoreRow>(supabase,
+        "player_id, round_id, hole_number, gross_score, stableford_points",
+        [liveRound.round_id]),
       supabase
         .from("live_rounds")
         .select("id, status")

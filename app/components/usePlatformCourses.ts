@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
+import { readAllRows } from '@/lib/allRows'
 
 /**
  * The platform course list, fetched in the browser by whoever needs to pick
@@ -49,15 +50,18 @@ export function usePlatformCourses(enabled = true) {
   useEffect(() => {
     if (!enabled) return
     let live = true
-    supabase
-      .from('courses')
-      .select('*')
-      .is('trip_id', null)
-      .order('name')
+    // Read whole: a catalogue past 1,000 courses would otherwise lose
+    // whatever sorts last in the alphabet, with nothing to say so.
+    readAllRows<DirectoryCourse>(
+      () => supabase.from('courses').select('*', { count: 'exact' })
+        .is('trip_id', null)
+        .order('name').order('id'),
+      c => c.id,
+    )
       .then(({ data, error }) => {
         if (!live) return
         if (error) console.error('usePlatformCourses query failed:', error)
-        setCourses((data ?? []) as DirectoryCourse[])
+        setCourses(data ?? [])
         setLoaded(true)
       })
     return () => { live = false }

@@ -42,9 +42,9 @@ type Hole   = {
   id: string; hole_number: number; par: number; stroke_index: number; course_id: string
   par_ladies?: number | null; stroke_index_ladies?: number | null
 }
-type Score      = { player_id: string; hole_id: string; gross_score: number | null; stableford_points: number; no_return: boolean; round_id: string }
-type LiveScore  = { player_id: string; round_id: string; hole_number: number; gross_score: number | null; stableford_points: number | null }
-type RoundHcp   = {
+export type Score      = { player_id: string; hole_id: string; gross_score: number | null; stableford_points: number; no_return: boolean; round_id: string }
+export type LiveScore  = { player_id: string; round_id: string; hole_number: number; gross_score: number | null; stableford_points: number | null }
+export type RoundHcp   = {
   round_id: string; player_id: string; playing_handicap: number
   /** The tee it was played off, where the session recorded one. */
   tee_id?: string | null

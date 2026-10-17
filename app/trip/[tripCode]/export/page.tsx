@@ -5,7 +5,8 @@ import { parseLeaderboards, boardTitle, boardRules } from '@/lib/leaderboards'
 import { tripBoards, isLegacy } from '@/lib/leaderboardsCompat'
 import { parseTeamScoring } from '@/lib/teamScoring'
 import { fetchMemberships } from '@/lib/teamMembers'
-import { buildRowContext } from '@/lib/rowContext'
+import { buildRowContext, type ScoreRow, type HandicapRow } from '@/lib/rowContext'
+import { readScores, readRoundHandicaps } from '@/lib/scoreReads'
 import { buildRows } from '@/lib/boardRows'
 import {
   dayCount, dateForDay, describeDay, describeItem, itemsForDay,
@@ -74,12 +75,14 @@ export default async function TripExportPage({
         .select('id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies')
         .in('course_id', courseIds.length > 0 ? courseIds : [nilId])
         .order('hole_number'),
-      supabase.from('scores')
-        .select('player_id, hole_id, gross_score, stableford_points, no_return, round_id')
-        .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
-      supabase.from('round_handicaps')
-        .select('round_id, player_id, playing_handicap, tee_id')
-        .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
+      // Read whole, past Supabase's 1,000-row cap — lib/scoreReads.ts. A
+      // trip on paper missing a round is the worst place to lose one.
+      readScores<ScoreRow>(supabase,
+        'player_id, hole_id, gross_score, stableford_points, no_return, round_id',
+        roundIds.length > 0 ? roundIds : [nilId]),
+      readRoundHandicaps<HandicapRow>(supabase,
+        'round_id, player_id, playing_handicap, tee_id',
+        roundIds.length > 0 ? roundIds : [nilId]),
       supabase.from('tees')
         .select('id, slope, course_rating, par')
         .in('course_id', courseIds.length > 0 ? courseIds : [nilId]),

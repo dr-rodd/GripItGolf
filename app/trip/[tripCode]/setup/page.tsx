@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import BackButton from '@/app/components/BackButton'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { fetchMemberships } from '@/lib/teamMembers'
+import { roundsWithScores } from '@/lib/scoreReads'
 import type { ItemKind, ItineraryItem, TravelMode } from '@/lib/itinerary'
 import { fromItemRow } from '@/lib/itinerarySync'
 import TripSetupClient from './TripSetupClient'
@@ -125,18 +126,23 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
   // check is against the scores themselves — a trip has no draft and no
   // live, and everything else on this screen stays editable for as long as
   // the trip does.
+  //
+  // Counted per round rather than read: this used to fetch every score's
+  // round_id to build a set of a few ids, and past Supabase's 1,000-row cap
+  // the set could miss a played round and offer its course up for changing.
   const roundIds = rounds.map(r => r.id)
-  const [scoredRes, liveRes] = roundIds.length > 0
+  const [scored, liveRes] = roundIds.length > 0
     ? await Promise.all([
-        supabase.from('scores').select('round_id').in('round_id', roundIds),
+        roundsWithScores(supabase, roundIds),
         supabase.from('live_rounds').select('round_id').in('round_id', roundIds),
       ])
-    : [{ data: [], error: null }, { data: [], error: null }]
-  if (scoredRes.error) console.error('TripSetupPage scores query failed:', scoredRes.error)
+    : [{ data: new Set<string>(), error: null }, { data: [], error: null }]
+  if (scored.error) console.error('TripSetupPage scores count failed:', scored.error)
   if (liveRes.error) console.error('TripSetupPage live rounds query failed:', liveRes.error)
-  const lockedRoundIds = new Set(
-    [...(scoredRes.data ?? []), ...(liveRes.data ?? [])].map(r => r.round_id as string)
-  )
+  const lockedRoundIds = new Set([
+    ...scored.data,
+    ...(liveRes.data ?? []).map(r => r.round_id as string),
+  ])
   const lockedGolfItemIds = rounds
     .filter(r => lockedRoundIds.has(r.id) && r.itinerary_item_id)
     .map(r => r.itinerary_item_id as string)

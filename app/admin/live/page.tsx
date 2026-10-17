@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase-admin'
+import { readAllRows } from '@/lib/allRows'
 import {
   summariseCards, orderCards, type CardSummary,
 } from '@/lib/adminLive'
@@ -59,16 +60,34 @@ export default async function AdminLivePage() {
   const db = createAdminClient()
   const now = new Date()
 
+  // Whole tables, read in pages (lib/allRows.ts) — the same three the nightly
+  // cleanup reads, and past 1,000 rows a single select would drop cards and
+  // activity from this screen without a word.
   const [cardsRes, locksRes, activityRes] = await Promise.all([
-    db.from('live_rounds').select('id, round_id, course_id, status, activated_at, closed_at'),
-    db.from('live_player_locks').select('live_round_id, player_id'),
-    db.from('live_scores').select('player_id, round_id, submitted_at'),
+    readAllRows<LiveRoundRow>(
+      () => db.from('live_rounds')
+        .select('id, round_id, course_id, status, activated_at, closed_at', { count: 'exact' })
+        .order('id'),
+      c => c.id,
+    ),
+    readAllRows<{ live_round_id: string; player_id: string }>(
+      () => db.from('live_player_locks')
+        .select('live_round_id, player_id', { count: 'exact' })
+        .order('live_round_id').order('player_id'),
+      l => `${l.live_round_id}|${l.player_id}`,
+    ),
+    readAllRows<{ player_id: string; round_id: string; hole_number: number; submitted_at: string }>(
+      () => db.from('live_scores')
+        .select('player_id, round_id, hole_number, submitted_at', { count: 'exact' })
+        .order('player_id').order('round_id').order('hole_number'),
+      a => `${a.player_id}|${a.round_id}|${a.hole_number}`,
+    ),
   ])
 
   const readError = [cardsRes, locksRes, activityRes].find(r => r.error)?.error
   if (readError) console.error('AdminLivePage read failed:', readError)
 
-  const allRows = (cardsRes.data ?? []) as LiveRoundRow[]
+  const allRows = cardsRes.data ?? []
   const rows = allRows.filter(r =>
     r.status !== 'closed'
     || (r.closed_at !== null
@@ -78,9 +97,9 @@ export default async function AdminLivePage() {
   const cards: LiveCard[] = rows.map(r => ({
     id: r.id, roundId: r.round_id, status: r.status, activatedAt: r.activated_at,
   }))
-  const locks: CardLock[] = ((locksRes.data ?? []) as { live_round_id: string; player_id: string }[])
+  const locks: CardLock[] = (locksRes.data ?? [])
     .map(l => ({ liveRoundId: l.live_round_id, playerId: l.player_id }))
-  const activity: ScoreActivity[] = ((activityRes.data ?? []) as { player_id: string; round_id: string; submitted_at: string }[])
+  const activity: ScoreActivity[] = (activityRes.data ?? [])
     .map(a => ({ playerId: a.player_id, roundId: a.round_id, submittedAt: a.submitted_at }))
 
   const summaries = orderCards(summariseCards(cards, locks, activity, now))

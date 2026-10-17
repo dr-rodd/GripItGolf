@@ -5,6 +5,7 @@ import {
   parseLeaderboards, teamBoardForRound, tagsInPlay,
 } from '@/lib/leaderboards'
 import { allowsParticipant } from '@/lib/eventPermissions'
+import { readAllRows } from '@/lib/allRows'
 import { parseInterval, parseGroupSize } from '@/lib/teeSheet'
 import { sheetForBoard, isDaySheet } from '@/lib/teamSets'
 import { TAG_SET } from '@/lib/tagBoards'
@@ -108,11 +109,17 @@ export default async function TeeSheetPage({ params }: {
       .eq('trip_id', trip.id),
     // The assignments, fail-soft the same way — pre-050 the sheet is empty
     // and the first write says calmly what is missing.
-    supabase
-      .from('tee_assignments')
-      .select('round_id, player_id, slot_index, created_at')
-      .eq('trip_id', trip.id)
-      .order('created_at'),
+    // Read whole: one row per player per round, so a long league with a
+    // sheet passes Supabase's 1,000-row cap, and a seat past it would look
+    // empty (lib/allRows.ts). UNIQUE (round_id, player_id) ends the order.
+    readAllRows<{ round_id: string; player_id: string; slot_index: number; created_at: string }>(
+      () => supabase
+        .from('tee_assignments')
+        .select('round_id, player_id, slot_index, created_at', { count: 'exact' })
+        .eq('trip_id', trip.id)
+        .order('created_at').order('round_id').order('player_id'),
+      a => `${a.round_id}|${a.player_id}`,
+    ),
     supabase
       .from('trips')
       .select('event_permissions')

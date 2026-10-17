@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { stravaConfig } from '@/lib/strava'
 import { RUN_ACTIVITIES, type RunActivity } from '@/lib/runChallenge'
 import type { BoardRun } from '@/lib/runBoards'
+import { readAllRows } from '@/lib/allRows'
 
 /**
  * A challenge's runs, read on the server — the only reader there is.
@@ -45,12 +46,21 @@ export async function fetchRuns(tripId: string): Promise<RunsRead> {
 
   // device_name arrived with migration 054; until it runs, read without it
   // rather than lose the whole board to one missing column.
-  const read = (cols: string) => admin
-    .from('runs')
-    .select(cols)
-    .eq('trip_id', tripId)
-    .order('run_date', { ascending: false })
-    .order('created_at', { ascending: false })
+  //
+  // Read whole, in pages (lib/allRows.ts). A single select stops at 1,000 —
+  // thirty runners running daily for a month — and newest first, so it was
+  // the *oldest* runs that went: totals stalling while people kept running,
+  // and a frozen final result missing the first weeks. `id` ends the order
+  // so it is total, which is what lets pages neither overlap nor skip.
+  const read = (cols: string) => readAllRows<Record<string, unknown>>(
+    () => admin.from('runs')
+      .select(cols, { count: 'exact' })
+      .eq('trip_id', tripId)
+      .order('run_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false }),
+    r => String(r.id),
+  )
   const BASE = 'id, player_id, source, activity, run_date, distance_m, moving_s, created_at, strava_activity_id'
   let { data, error } = await read(`${BASE}, device_name`)
   if (error && /device_name/i.test(error.message ?? '')) ({ data, error } = await read(BASE))
@@ -63,7 +73,7 @@ export async function fetchRuns(tripId: string): Promise<RunsRead> {
 
   return {
     ready: true,
-    runs: ((data ?? []) as unknown as Record<string, unknown>[])
+    runs: (data ?? [])
       .filter(r => KNOWN.has(String(r.activity)))
       .map(r => ({
         id: r.id as string,

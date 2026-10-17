@@ -16,6 +16,7 @@ import {
   removePlayerFromScorecard as removePlayerData,
 } from "@/lib/scorecardVoid"
 import { why } from "@/lib/writeFailure"
+import { readLiveScores } from "@/lib/scoreReads"
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -237,15 +238,16 @@ export default function CourseDashboardClient({
         .from("live_player_locks")
         .select("live_round_id, player_id")
         .in("live_round_id", liveRoundIds),
-      supabase
-        .from("live_scores")
-        .select("player_id, round_id, hole_number")
-        .in("round_id", roundIds)
-        .not("gross_score", "is", null),
+      // Read whole — a field of more than fifty-five passes Supabase's
+      // 1,000-row cap, and a group past it would show as not yet started
+      // (lib/scoreReads.ts). The empty holes are dropped here rather than in
+      // the query, so the read stays the one shared shape.
+      readLiveScores<{ player_id: string; round_id: string; hole_number: number; gross_score: number | null }>(
+        supabase, "player_id, round_id, hole_number, gross_score", roundIds),
     ])
 
     const locks  = locksRes.data  ?? []
-    const scores = scoresRes.data ?? []
+    const scores = (scoresRes.data ?? []).filter(s => s.gross_score !== null)
 
     const cards: ScorecardInfo[] = (liveRoundsData as any[]).map(lr => {
       const playerIds = locks

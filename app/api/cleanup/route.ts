@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-admin"
+import { readAllRows } from "@/lib/allRows"
 import {
   cardsToClose, deadScoreKeys, activityKey,
   type LiveCard, type CardLock, type ScoreActivity,
@@ -62,15 +63,34 @@ export async function GET(req: NextRequest) {
   // Every card, not just the active ones: step 2 has to know about the
   // finalised ones too, because those are what keep their rows reachable.
   //
-  // The whole table each time, across every trip. That is what these three
-  // are at this scale — a few thousand rows between them — and a job that
-  // reads the lot once a night is simpler than one that pages. If it ever
-  // stops being true, the filter to add is on round, not on time: a row's
-  // age is not what decides whether it is reachable.
+  // The whole table each time, across every trip, read in pages
+  // (lib/allRows.ts). This said "a few thousand rows between them" and read
+  // each in one select — which Supabase stops at 1,000 without a word, and a
+  // finalised card keeps its rows for good, so `live_scores` passes that
+  // after a single trip. Truncated, the activity read is the dangerous one:
+  // a card being played whose holes fell past the cut looks untouched, and
+  // step 1 closes it mid-round. If whole tables ever stop being sensible,
+  // the filter to add is on round, not on time: a row's age is not what
+  // decides whether it is reachable.
   const [cardsRes, locksRes, activityRes] = await Promise.all([
-    supabaseAdmin.from("live_rounds").select("id, round_id, status, activated_at"),
-    supabaseAdmin.from("live_player_locks").select("live_round_id, player_id"),
-    supabaseAdmin.from("live_scores").select("player_id, round_id, submitted_at"),
+    readAllRows<{ id: string; round_id: string; status: string; activated_at: string }>(
+      () => supabaseAdmin.from("live_rounds")
+        .select("id, round_id, status, activated_at", { count: "exact" })
+        .order("id"),
+      c => c.id,
+    ),
+    readAllRows<{ live_round_id: string; player_id: string }>(
+      () => supabaseAdmin.from("live_player_locks")
+        .select("live_round_id, player_id", { count: "exact" })
+        .order("live_round_id").order("player_id"),
+      l => `${l.live_round_id}|${l.player_id}`,
+    ),
+    readAllRows<{ player_id: string; round_id: string; hole_number: number; submitted_at: string }>(
+      () => supabaseAdmin.from("live_scores")
+        .select("player_id, round_id, hole_number, submitted_at", { count: "exact" })
+        .order("player_id").order("round_id").order("hole_number"),
+      a => `${a.player_id}|${a.round_id}|${a.hole_number}`,
+    ),
   ])
 
   // A partial read would close cards that are being played on, and delete
@@ -85,19 +105,19 @@ export async function GET(req: NextRequest) {
   }
 
   const cards: LiveCard[] = (cardsRes.data ?? []).map(c => ({
-    id: c.id as string,
-    roundId: c.round_id as string,
-    status: c.status as string,
-    activatedAt: c.activated_at as string,
+    id: c.id,
+    roundId: c.round_id,
+    status: c.status,
+    activatedAt: c.activated_at,
   }))
   const locks: CardLock[] = (locksRes.data ?? []).map(l => ({
-    liveRoundId: l.live_round_id as string,
-    playerId: l.player_id as string,
+    liveRoundId: l.live_round_id,
+    playerId: l.player_id,
   }))
   const activity: ScoreActivity[] = (activityRes.data ?? []).map(a => ({
-    playerId: a.player_id as string,
-    roundId: a.round_id as string,
-    submittedAt: a.submitted_at as string,
+    playerId: a.player_id,
+    roundId: a.round_id,
+    submittedAt: a.submitted_at,
   }))
 
   // ── 1. Cards nobody came back to ──

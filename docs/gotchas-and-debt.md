@@ -400,3 +400,37 @@ Recovery for anything already lost is the Supabase dashboard's backups; the app 
 no tombstones. And the deeper debt is unchanged from the RLS section above: with no
 auth, any browser holding the anon key can write to any trip's rows — these guards
 raise the cost of an *accident*, not of an attack.
+
+## Supabase stops a select at 1,000 rows and says nothing
+
+PostgREST returns at most the project's **Max rows** (Project Settings → API;
+1,000 by default) and treats the rest as if it did not exist: no error, no flag,
+`data` is simply shorter. The admin courses page knew (it passes an explicit
+`.limit`), but the reads that mattered did not, and each failed differently:
+
+- **Golf boards** — `scores`, `live_scores` and `round_handicaps` across a trip's
+  rounds, under the leaderboard, the hub, stats, a round summary, match play and
+  the export. One row per player per hole, so the cap arrives at about fifty-six
+  player-rounds: fourteen players over four rounds. No order, so whichever rows
+  sorted last went — often most of a round.
+- **Trip Setup's played-round lock** read every score's `round_id` to build a
+  set; a missed round would have offered its course up for changing under real
+  scores.
+- **Run boards** read newest first, so it was the *oldest* runs that went — totals
+  stalling while people kept running, and the frozen final result short.
+- **The nightly scorecard cleanup** read three whole tables across every trip.
+  A finalised card keeps its `live_scores` for good, so that table passes 1,000
+  after one trip — and truncated activity makes a card being played look
+  untouched, which is exactly what the cleanup closes.
+
+The fix is `lib/allRows.ts` (`readAllRows`): the first page asks for the exact
+count as well, so an event under 1,000 rows costs the one request it always did;
+over, the remaining pages go out together. Any failed page fails the read; the
+order must end on unique columns; a count that moves mid-read gets the read taken
+again once. `lib/scoreReads.ts` holds the three golf tables' orders and keys, and
+`test:all-rows` fails if a new trip-wide read of them goes round it. **Leave Max
+rows at 1,000** — the code no longer depends on it, and it caps what anyone holding
+the public key can pull in one request.
+
+For a yes-or-no per round, **count, never fetch** (`roundsWithScores`, the
+Scoring tab's way) — and a count that fails answers *locked*.

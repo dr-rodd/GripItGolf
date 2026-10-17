@@ -7,7 +7,11 @@ import { MAIN_SET, setOf, teamsOnSheet, membersOf } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { playerEntrant, pairEntrant, type Entrant } from '@/lib/matchplayEntrants'
 import { parseTeamScoring } from '@/lib/teamScoring'
-import { buildRowContext, liveRoundPresence, type OpenCard } from '@/lib/rowContext'
+import {
+  buildRowContext, liveRoundPresence,
+  type OpenCard, type ScoreRow, type LiveScoreRow, type HandicapRow,
+} from '@/lib/rowContext'
+import { readScores, readLiveScores, readRoundHandicaps } from '@/lib/scoreReads'
 import { readBracket, type MatchReading } from '@/lib/matchResults'
 import { type QuotaScale } from '@/lib/quota'
 import BackButton from '@/app/components/BackButton'
@@ -226,15 +230,16 @@ async function readLinkedRounds(
       supabase.from('holes')
         .select('id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies')
         .in('course_id', courseIds.length > 0 ? courseIds : [nilId]),
-      supabase.from('scores')
-        .select('player_id, hole_id, gross_score, stableford_points, no_return, round_id')
-        .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
-      supabase.from('live_scores')
-        .select('player_id, round_id, hole_number, gross_score, stableford_points')
-        .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
-      supabase.from('round_handicaps')
-        .select('round_id, player_id, playing_handicap, tee_id')
-        .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
+      // Read whole, past Supabase's 1,000-row cap — lib/scoreReads.ts.
+      readScores<ScoreRow>(supabase,
+        'player_id, hole_id, gross_score, stableford_points, no_return, round_id',
+        roundIds.length > 0 ? roundIds : [nilId]),
+      readLiveScores<LiveScoreRow>(supabase,
+        'player_id, round_id, hole_number, gross_score, stableford_points',
+        roundIds.length > 0 ? roundIds : [nilId]),
+      readRoundHandicaps<HandicapRow>(supabase,
+        'round_id, player_id, playing_handicap, tee_id',
+        roundIds.length > 0 ? roundIds : [nilId]),
       supabase.from('tees')
         .select('id, slope, course_rating, par')
         .in('course_id', courseIds.length > 0 ? courseIds : [nilId]),
@@ -253,9 +258,9 @@ async function readLinkedRounds(
     holes: (holesRes.data ?? []) as never,
     rounds: (rounds ?? []) as never,
     courseByRound: new Map((rounds ?? []).map(r => [r.id as string, r.course_id as string])),
-    scores: (scoresRes.data ?? []) as never,
-    liveScores: (liveScoresRes.data ?? []) as never,
-    roundHandicaps: (hcpsRes.data ?? []) as never,
+    scores: scoresRes.data ?? [],
+    liveScores: liveScoresRes.data ?? [],
+    roundHandicaps: hcpsRes.data ?? [],
     tees: (teesRes.data ?? []) as never,
     activeRoundIds:
       liveRoundPresence((openRes.data ?? []) as unknown as OpenCard[]).activeRoundIds,

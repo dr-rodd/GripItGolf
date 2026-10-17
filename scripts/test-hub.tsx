@@ -391,9 +391,11 @@ section('A score is scoped through its round, because that is the only way it ca
   eq(offenders, [], 'no round-scoped table is queried by trip_id')
 
   const hub = code('lib/hubStanding.ts')
-  ok(/from\('rounds'\)[\s\S]*?from\('scores'\)/.test(hub),
+  // The scores are read whole, through lib/scoreReads.ts, which scopes by
+  // round itself (test:all-rows holds that half).
+  ok(/from\('rounds'\)[\s\S]*?readScores</.test(hub),
     'the cheap path asks for the trip\'s rounds first')
-  ok(/\.in\('round_id', roundIds\)/.test(hub),
+  ok(/readScores<[\s\S]*?\(supabase, '[^']*', roundIds\)/.test(hub),
     '  …then for the scores on them')
 }
 
