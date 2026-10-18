@@ -30,8 +30,8 @@ import { previewBracket } from '@/lib/matchplay'
 import { nextSheetId, setOf, withSheet } from '@/lib/teamSets'
 import { TAG_SET } from '@/lib/tagBoards'
 import { defaultCustomPoints, editableRows, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
-import { IconTrophy, IconPlus, IconMinus, IconX, IconCheck, IconSettings } from './icons'
-import { Card, FIELD, FIELD_LABEL, Pill, buttonClass, chipClass } from './ui'
+import { IconCheck, IconMinus, IconPencil, IconPlus, IconSettings, IconTrophy, IconX } from './icons'
+import { Card, FIELD, FIELD_LABEL, IconButton, ListGroup, Pill, SectionHeader, buttonClass, chipClass } from './ui'
 import { courseLabel } from '@/lib/courseDirectory'
 
 /**
@@ -1349,7 +1349,7 @@ function Builder({
 
 export default function LeaderboardSetup({
   boards, playerCount, teamCount, rounds = [], readOnly = false, onChange,
-  askTeeTeams = false, askTags = false, scope,
+  askTeeTeams = false, askTags = false, scope, title, hint,
 }: {
   boards: Leaderboard[]
   /** The field an individual prize table pays out to. */
@@ -1382,6 +1382,14 @@ export default function LeaderboardSetup({
    * means the whole event, which is every caller but the day editor.
    */
   scope?: string[]
+  /**
+   * A section heading of its own, with the Add button at its right — Trip
+   * Setup's "Leaderboards" (refresh plan, 4.2). Absent where the boards are
+   * one step of something larger, the creation wizards, which keep the card
+   * at the foot that offers another.
+   */
+  title?: string
+  hint?: string
   onChange: (boards: Leaderboard[]) => void
 }) {
   const [adding, setAdding] = useState(false)
@@ -1442,59 +1450,85 @@ export default function LeaderboardSetup({
     setEditingId(null)
   }
 
+  // The boards as runs of rows, with the one being edited opened in its own
+  // place: one list card for the boards around it, never a card in a card.
+  type Segment =
+    | { kind: 'rows'; items: { lb: Leaderboard; i: number }[] }
+    | { kind: 'edit'; lb: Leaderboard }
+  const segments: Segment[] = []
+  boards.forEach((lb, i) => {
+    if (editingId === lb.id) { segments.push({ kind: 'edit', lb }); return }
+    const last = segments[segments.length - 1]
+    if (last?.kind === 'rows') last.items.push({ lb, i })
+    else segments.push({ kind: 'rows', items: [{ lb, i }] })
+  })
+
   return (
     <div className="flex flex-col gap-4">
 
-      {boards.map((lb, i) => (
-        editingId === lb.id ? (
-          <Builder
-            key={lb.id ?? slotKey(lb)}
-            existing={others}
-            initial={lb}
-            playerCount={playerCount}
-            teamCount={teamCount}
-            rounds={rounds}
-            askTeeTeams={askTeeTeams}
-            askTags={askTags}
-            scope={scope}
-            onSave={save}
-            onCancel={() => setEditingId(null)}
-          />
-        ) : (
-          <Card key={lb.id ?? slotKey(lb)} className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
+      {title && (
+        <SectionHeader
+          hint={hint}
+          action={!readOnly && done && !adding && !editing ? (
+            <button type="button" onClick={() => setAdding(true)} className={buttonClass('secondary', false, true)}>
+              <IconPlus size={16} />
+              Add
+            </button>
+          ) : undefined}
+        >
+          {title}
+        </SectionHeader>
+      )}
+
+      {segments.map(seg => seg.kind === 'edit' ? (
+        <Builder
+          key={seg.lb.id ?? slotKey(seg.lb)}
+          existing={others}
+          initial={seg.lb}
+          playerCount={playerCount}
+          teamCount={teamCount}
+          rounds={rounds}
+          askTeeTeams={askTeeTeams}
+          askTags={askTags}
+          scope={scope}
+          onSave={save}
+          onCancel={() => setEditingId(null)}
+        />
+      ) : (
+        <ListGroup key={seg.items[0].lb.id ?? slotKey(seg.items[0].lb)}>
+          {seg.items.map(({ lb, i }) => (
+            <div key={lb.id ?? slotKey(lb)} className="flex items-start gap-2 pl-4 pr-1.5 py-3.5">
+              <div className="flex-1 min-w-0 pt-0.5">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="t-h2 text-ink">{boardTitle(lb)}</span>
+                  <span className="t-card text-ink">{boardTitle(lb)}</span>
                   {i === 0 && <Pill tone="win">Primary</Pill>}
                 </div>
-                <p className="t-cap text-ink/65 mt-1 leading-snug">{boardFacts(lb).join(' · ')}</p>
+                <p className="t-cap text-ink/65 mt-1">{boardFacts(lb).join(' · ')}</p>
               </div>
               {/* A board is a way of reading the cards, not a place the cards
                   live, so changing one is safe at any point in the trip. */}
               {!readOnly && (
                 <div className="flex-shrink-0 flex items-center">
-                  <button
-                    type="button"
+                  <IconButton
+                    dense
+                    label={`Change ${boardTitle(lb)}`}
                     onClick={() => { setAdding(false); setEditingId(lb.id) }}
-                    aria-label={`Change ${boardTitle(lb)}`}
-                    className="w-9 h-9 flex items-center justify-center text-ink/50 hover:text-accent-deep transition-colors duration-150"
                   >
-                    <IconSettings size={16} />
-                  </button>
-                  <button
-                    type="button"
+                    <IconPencil size={20} />
+                  </IconButton>
+                  <IconButton
+                    dense
+                    label={`Remove ${boardTitle(lb)}`}
                     onClick={() => onChange(boards.filter(b => b.id !== lb.id))}
-                    aria-label={`Remove ${boardTitle(lb)}`}
-                    className="w-9 h-9 flex items-center justify-center text-ink/50 hover:text-rust transition-colors duration-150"
+                    className="hover:text-rust-deep"
                   >
-                    <IconX size={16} />
-                  </button>
+                    <IconX size={20} />
+                  </IconButton>
                 </div>
               )}
             </div>
-          </Card>
-        )
+          ))}
+        </ListGroup>
       ))}
 
       {!readOnly && !editing && (!done || adding) && (
@@ -1513,8 +1547,9 @@ export default function LeaderboardSetup({
       )}
 
       {/* Offered from the start so it is clear more is possible, but not
-          usable until the trip has something to play for. */}
-      {!readOnly && !adding && !editing && (
+          usable until the trip has something to play for. Where the boards
+          have a heading of their own, its Add button is the offer. */}
+      {!title && !readOnly && !adding && !editing && (
         <Card className={`p-5 ${done ? '' : 'opacity-55'}`}>
           <div className="flex items-start gap-3">
             <span className={`flex-shrink-0 mt-0.5 ${done ? 'text-accent-deep' : 'text-ink/50'}`}>

@@ -146,7 +146,7 @@ export default async function TripPage({ params, searchParams }: {
       .order('round_number'),
     supabase
       .from('players')
-      .select('id, name, handicap, claimed, team_id')
+      .select('id, name, handicap, claimed, team_id, is_lead')
       .eq('trip_id', trip.id)
       // A composite is a synthetic scorecard, not a person.
       .eq('is_composite', false)
@@ -217,6 +217,7 @@ export default async function TripPage({ params, searchParams }: {
   }
   const rounds  = (roundsResult.data ?? []) as unknown as RoundRow[]
   const players = playersResult.data ?? []
+  const leadName = players.find(p => p.is_lead === true)?.name.split(' ')[0] ?? null
   const notices = (noticesResult.data ?? []) as Notice[]
 
   type ItinRow = {
@@ -492,7 +493,10 @@ export default async function TripPage({ params, searchParams }: {
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
 
         {/* ── Trip name, dates, and what it is played for ── */}
-        <div className="flex flex-col items-center text-center pt-2 pb-7">
+        {/* Left-aligned, the one hero every hub shares (refresh plan, 4.1):
+            the name and its dot, when it runs, who runs it, and the way to
+            hand it on. */}
+        <div className="flex flex-col items-start text-left pt-2 pb-7">
           <h1 className="t-h1 text-ink text-balance" style={{ fontSize: 'clamp(26px, 8vw, 34px)' }}>
             {trip.name}<span className="t-title-dot" aria-hidden="true" />
           </h1>
@@ -502,7 +506,16 @@ export default async function TripPage({ params, searchParams }: {
               dates are the second thing anybody wants off this screen after
               its name. */}
           {dateRange && (
-            <p className="t-card text-ink mt-2.5">{dateRange}</p>
+            <p className="text-[17px] font-semibold leading-snug text-ink/80 mt-2.5">{dateRange}</p>
+          )}
+
+          {/* Who runs it, by first name. A trip's lead player; an event's
+              organiser only when they are playing — not playing, there is
+              no player row for them and nothing to say. */}
+          {leadName && (
+            <p className="text-[17px] leading-snug text-ink/80 mt-1">
+              {isEvent ? 'Organised by' : 'Led by'} {leadName}
+            </p>
           )}
 
           {/* And how long until it. Inside the title rather than below it:
@@ -595,14 +608,13 @@ export default async function TripPage({ params, searchParams }: {
             }] : []),
             {
               key: 'itinerary',
-              /* "Your Itinerary", not "Itinerary" — the hub is the one screen
-                 read by a player rather than by the leader, and this is the
-                 plan they are on rather than a plan on file. The setup
-                 editor's heading stays plain: there it is the trip's
-                 itinerary being built, not anybody's own. An event's is the
+              /* "Itinerary" — it was "Your Itinerary", for the player
+                 reading it rather than the leader filing it; the refresh
+                 (plan 4.1) settled on the plain noun, with the progress
+                 ("10 of 10 done") beside it saying whose trip it is. An event's is the
                  Schedule — a standalone day has no itinerary in any sense a
                  traveller would recognise. */
-              title: isEvent ? 'Schedule' : 'Your Itinerary',
+              title: isEvent ? 'Schedule' : 'Itinerary',
               content: itinerarySection,
             },
             /* A standalone event has no travel to speak of, so the heading

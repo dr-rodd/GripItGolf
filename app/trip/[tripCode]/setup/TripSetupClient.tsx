@@ -38,7 +38,7 @@ import { duplicateName, duplicateNameError, isDuplicateNameError } from '@/lib/r
 import { syncRoundHandicaps } from '@/lib/roundHandicaps'
 import { rescheduleRounds } from '@/lib/itineraryStore'
 import { normalizeDescription, MAX_TRIP_DESCRIPTION } from '@/lib/tripLimits'
-import { FIELD, FIELD_LABEL, Pill, buttonClass, cardClass, chipClass } from '@/app/components/ui'
+import { FIELD, FIELD_LABEL, ListGroup, Pill, SectionHeader, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -83,7 +83,6 @@ type RoundInfo = {
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-const SECTION = `${cardClass()} p-5`
 
 /**
  * Which team a player is in, on one sheet.
@@ -546,10 +545,10 @@ export default function TripSetupClient({
         <button
           type="button"
           onClick={() => setDetailsOpen(true)}
-          className={`w-full flex items-center gap-3 px-4 py-3.5 hover:border-bark/25 transition-colors duration-150 text-left ${cardClass()}`}
+          className={`w-full flex items-center gap-3 px-4 py-3.5 text-left ${cardClass('raised', true)}`}
         >
-          <span className="flex-shrink-0 w-9 h-9 rounded-lg bg-bark/[0.06] flex items-center justify-center text-bark">
-            <IconSettings size={16} />
+          <span className="flex-shrink-0 w-10 h-10 rounded-tile bg-tint flex items-center justify-center text-bark">
+            <IconSettings size={20} />
           </span>
           <span className="flex-1 min-w-0">
             <span className="block t-card text-ink">Trip Settings</span>
@@ -557,12 +556,12 @@ export default function TripSetupClient({
                 about the scorecard, at which point the line was quietly
                 untrue. The pointer downwards is the part that earns its keep
                 — it is what stops somebody hunting in here for the boards. */}
-            <span className="block t-cap text-ink/65 mt-0.5 leading-snug">
-              Name, dates, itinerary and stats — leaderboards are below
+            <span className="block t-cap text-ink/65 mt-0.5">
+              Name, dates, itinerary, stats
             </span>
           </span>
           <span className="flex-shrink-0 text-ink/50">
-            <IconChevronRight size={16} />
+            <IconChevronRight size={20} />
           </span>
         </button>
       </div>
@@ -748,7 +747,7 @@ export default function TripSetupClient({
         />
       )}
 
-      <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
+      <div className="max-w-lg mx-auto px-4 pt-7 space-y-7">
 
         {viewOnly && (
           <div className={`px-4 py-3.5 ${cardClass()}`}>
@@ -765,12 +764,10 @@ export default function TripSetupClient({
             board is a way of reading cards rather than a place they live.
             Changing one re-reads what is already in; nobody re-enters a
             score. */}
-        <section className={SECTION}>
-          <p className="t-label text-accent-deep mb-1">Leaderboards</p>
-          <p className="t-cap text-ink/65 mb-3 leading-snug">
-            Choose your Competition Leaderboards. Add as many formats as you like.
-          </p>
+        <section>
           <LeaderboardSetup
+            title="Leaderboards"
+            hint="Add as many as you like."
             boards={boards}
             playerCount={players.length}
             teamCount={teams.length}
@@ -801,15 +798,12 @@ export default function TripSetupClient({
             scoring, discard, the prize table, the draw format, team scoring.
             Every one of those is a leaderboard card above now. */}
         {allTeamBoards.length > 0 && (
-          <section className={SECTION}>
-            <p className="t-label text-accent-deep mb-1">
+          <section>
+            <SectionHeader hint="Different boards can have different teams." className="mb-4">
               {groupNoun.Many}
-            </p>
-            <p className="t-body text-ink/80 mb-4">
-              Pick your teams! You can pick different teams for different boards.
-            </p>
+            </SectionHeader>
 
-            <div className="space-y-2 mb-4">
+            <ListGroup className="mb-4">
               {allTeamBoards.map(lb => {
                 const onSheet    = teamsOnSheet(teams, setOf(lb))
                 const members    = asMembers(playerIds, memberships, setOf(lb))
@@ -820,12 +814,10 @@ export default function TripSetupClient({
                 return (
                   <div
                     key={lb.id}
-                    className={`px-3 py-3 border rounded-xl ${
-                      oversize.length > 0 ? 'border-rust/50 bg-rust/10' : 'border-bark/12 bg-surface'
-                    }`}
+                    className={`px-4 py-3.5 ${oversize.length > 0 ? 'bg-rust/10' : ''}`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className="text-ink text-sm flex-1 min-w-0 truncate">
+                      <span className="text-[17px] font-medium text-ink flex-1 min-w-0 truncate">
                         {boardTitle(lb)}
                       </span>
                       <span className={`text-[13px] flex-shrink-0 ${
@@ -851,7 +843,7 @@ export default function TripSetupClient({
                   </div>
                 )
               })}
-            </div>
+            </ListGroup>
 
             {/* The size rules belong where the picking happens — scoped to
                 the boards a sheet is actually being picked for — not restated
@@ -876,13 +868,17 @@ export default function TripSetupClient({
         )}
 
           {/* ── Players ── */}
-          <section className={SECTION}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="t-card text-ink">Players</h2>
-              <span className="text-ink/65 text-[13px]">{players.length}</span>
-            </div>
+          <section>
+            <SectionHeader
+              className="mb-4"
+              action={<span className="t-cap text-ink/65 tabular-nums">{players.length}</span>}
+            >
+              Players
+            </SectionHeader>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
+              {players.length > 0 && (
+              <ListGroup>
               {players.map(player => {
                 // `canEdit` is the permission; `locked` is that plus a write
                 // in flight. The row opens on the first and its fields go
@@ -891,7 +887,7 @@ export default function TripSetupClient({
                 // save, which reads as the row flinching.
                 const editing = editingId === player.id && canEdit
                 return (
-                <div key={player.id} className={`p-4 ${cardClass()}`}>
+                <div key={player.id} className="p-4">
 
                   {/* ── Closed: the two facts, and the way in ──
                       A player is read far more often than edited. This row
@@ -1055,6 +1051,8 @@ export default function TripSetupClient({
                 </div>
                 )
               })}
+              </ListGroup>
+              )}
 
               {players.length === 0 && (
                 <p className="text-ink/65 text-sm text-center py-2">
@@ -1064,7 +1062,7 @@ export default function TripSetupClient({
 
               {/* Add player */}
               {!locked && (
-                <div className="border border-dashed border-bark/25 rounded-xl p-4 space-y-3">
+                <div className={`${cardClass('flat')} p-4 space-y-3`}>
                   <input
                     type="text"
                     value={newName}

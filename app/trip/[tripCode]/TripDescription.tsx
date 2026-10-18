@@ -66,7 +66,7 @@ export default function TripDescription({ text }: { text: string | null | undefi
   const paragraph = (
     <p
       ref={setPara}
-      className={`t-body text-ink/80 whitespace-pre-line text-center ${expanded ? '' : 'line-clamp-3'}`}
+      className={`t-body text-ink/80 whitespace-pre-line ${expanded ? '' : 'line-clamp-3'}`}
     >
       {body}
     </p>

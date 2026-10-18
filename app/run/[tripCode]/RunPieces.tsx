@@ -71,9 +71,10 @@ export function RulesSummary({ setup }: { setup: RunSetup }) {
   )
 }
 
+/** A section's heading — t-h2, bigger than anything inside it (refresh plan, 4.2). */
 export function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="t-label text-ink/80 mb-2.5">{children}</h2>
+    <h2 className="t-h2 text-ink mb-3">{children}</h2>
   )
 }
 

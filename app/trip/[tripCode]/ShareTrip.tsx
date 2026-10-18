@@ -68,7 +68,7 @@ export default function ShareTrip({
   }
 
   return (
-    <div className="relative inline-flex items-center justify-center gap-5">
+    <div className="relative inline-flex items-center gap-5">
       <button type="button" onClick={share} className={buttonClass('secondary', false)}>
         <IconShare size={18} className="text-accent-deep" />
         Share trip
@@ -90,7 +90,7 @@ export default function ShareTrip({
           visually it is only ever a moment. */}
       <span
         aria-live="polite"
-        className={`absolute top-full left-1/2 -translate-x-1/2 mt-1.5 whitespace-nowrap t-cap text-ink/65 transition-opacity duration-300 ease-out pointer-events-none ${
+        className={`absolute top-full left-0 mt-1.5 whitespace-nowrap t-cap text-ink/65 transition-opacity duration-300 ease-out pointer-events-none ${
           copied ? 'opacity-100' : 'opacity-0'
         }`}
       >

@@ -116,8 +116,8 @@ section('The hub is the Event Hub only for a tournament')
     'notices are fetched scoped to the trip')
   ok(/\.\.\.\(isEvent \? \[\{\s*key: 'notices'/.test(hub),
     'and the Notices section exists only on an event')
-  ok(hub.includes("isEvent ? 'Schedule' : 'Your Itinerary'"),
-    'an event has a Schedule where a trip has Your Itinerary')
+  ok(hub.includes("isEvent ? 'Schedule' : 'Itinerary'"),
+    'an event has a Schedule where a trip has its Itinerary')
   ok(hub.includes('startLines={startLines}'),
     'the start lines reach the schedule tiles')
 

@@ -109,7 +109,7 @@ export default function TripCountdown({
         {!mounted ? (
           <div className="h-[40px]" />
         ) : timeLeft ? (
-          <div className="flex items-baseline justify-center gap-3.5 mt-4 tabular-nums">
+          <div className="flex items-baseline gap-3.5 mt-4 tabular-nums">
             {[
               { unit: 'd', value: timeLeft.days },
               { unit: 'h', value: timeLeft.hours },

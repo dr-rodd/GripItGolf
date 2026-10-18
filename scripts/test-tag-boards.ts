@@ -638,7 +638,7 @@ section('The organiser dashboard carries the door')
 {
   const client = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
   ok(client.includes('/organiser/tags'), 'a card links to the portal')
-  ok(client.includes('Teams &amp; tags'), 'under the amalgamated heading')
+  ok(client.includes('label="Teams and tags"'), 'under the amalgamated heading, a row in the organiser\'s list')
   ok(client.includes('{tagsSummary}'), 'showing where tagging stands')
 
   const page = read('app/trip/[tripCode]/organiser/page.tsx')

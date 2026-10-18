@@ -12,9 +12,7 @@ import {
   type EventPermissions, describePermissions,
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
-import {
-  ChoiceChips, FIELD, FIELD_LABEL, buttonClass, cardClass, iconButtonClass,
-} from '@/app/components/ui'
+import { ChoiceChips, FIELD, FIELD_LABEL, ListGroup, ListRow, SectionHeader, buttonClass, cardClass, iconButtonClass } from '@/app/components/ui'
 import {
   MIN_TEE_INTERVAL_MINS, MAX_TEE_INTERVAL_MINS,
   MIN_GROUP_SIZE, MAX_GROUP_SIZE,
@@ -470,86 +468,34 @@ export default function OrganiserClient({
           )}
         </section>
 
-        {/* ── Teams & tags ──
-            The tags portal: the sides players carry for the whole event,
-            made and assigned behind this card. Playing teams for a given
-            day stay the tee sheet's business; the tag is the census, and
-            the census lives with the organiser. */}
-        <section className="mt-10">
-          <h2 className="t-h2 text-ink mb-3">Teams &amp; tags</h2>
-          <Link
-            href={`/trip/${tripCode}/organiser/tags`}
-            className={`block ${cardClass('raised', true)} p-4`}
-          >
-            <p className="text-ink text-sm font-medium">Tags</p>
-            <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-              {tagsSummary}
-            </p>
-          </Link>
-        </section>
-
-        {/* ── A format for each day ──
-            The event's own rules count every round; this is where one day
-            gets rules of its own. Only worth a door when there is more
-            than one day to tell apart. */}
-        {rounds.length > 1 && (
-          <section className="mt-10">
-            <h2 className="t-h2 text-ink mb-3">Formats by day</h2>
-            <Link
-              href={`/trip/${tripCode}/organiser/days`}
-              className={`block ${cardClass('raised', true)} p-4`}
-            >
-              <p className="text-ink text-sm font-medium">Each day&apos;s own format</p>
-              <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                {dayFormatSummary}
-              </p>
-            </Link>
-          </section>
-        )}
-
-        {/* ── The format ──
-            The tournament's competition structure, saved whole in
-            trips.bracket_setup. A match play event sets its bracket on the
-            form behind this card — mode, field size, qualifying, deadlines
-            (lib/bracketSetup.ts). A league was created whole through its
-            own door (lib/leagueSetup.ts), so its card describes rather than
-            invites: the screen behind it is a summary, never a form that
-            could overwrite the league with a bracket. The PIN that opened
-            this screen has already opened that one. */}
-        <section className="mt-10">
-          <h2 className="t-h2 text-ink mb-3">Format</h2>
-          <Link
-            href={`/trip/${tripCode}/organiser/bracket`}
-            className={`block ${cardClass('raised', true)} p-4`}
-          >
-            <p className="text-ink text-sm font-medium">
-              {isLeague ? 'League' : 'Bracket setup'}
-            </p>
-            <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-              {formatSummary
-                ?? 'Match play knockout — mode, field size, qualifying and round deadlines.'}
-            </p>
-          </Link>
-        </section>
-
         {/* ── The rest of the running of the event ──
-            The setup screen holds formats, players, teams and the running
-            order, and an event's field never sees it — the tab bar hides
-            Trip Setup for a tournament, so this is its one door. The PIN
-            that opened this screen has already opened that one: both gates
-            remember the same unlock for the session. */}
+            One list, one row each (refresh plan, 4.2): the tags portal (the
+            sides players carry all event), a format for each day (only
+            worth a door when there is more than one day), the format — a
+            match play bracket's setup, or a league's summary, never a form
+            that could overwrite the league with a bracket — and the setup
+            screen, which the field never sees on an event: the tab bar
+            hides Trip Setup for a tournament, so this is its one door. The
+            PIN that opened this screen has already opened every one of
+            them. */}
         <section className="mt-10">
-          <h2 className="t-h2 text-ink mb-3">Event settings</h2>
-          <Link
-            href={`/trip/${tripCode}/setup`}
-            className={`block ${cardClass('raised', true)} p-4`}
-          >
-            <p className="text-ink text-sm font-medium">Formats, players &amp; teams</p>
-            <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-              Leaderboards, the field, the running order — the setup screen,
-              already unlocked by your PIN.
-            </p>
-          </Link>
+          <SectionHeader className="mb-4">Running the event</SectionHeader>
+          <ListGroup>
+            <ListRow href={`/trip/${tripCode}/organiser/tags`} label="Teams and tags" hint={tagsSummary} />
+            {rounds.length > 1 && (
+              <ListRow href={`/trip/${tripCode}/organiser/days`} label="Each day’s own format" hint={dayFormatSummary} />
+            )}
+            <ListRow
+              href={`/trip/${tripCode}/organiser/bracket`}
+              label={isLeague ? 'League' : 'Bracket setup'}
+              hint={formatSummary ?? 'Mode, field size, qualifying and round deadlines.'}
+            />
+            <ListRow
+              href={`/trip/${tripCode}/setup`}
+              label="Formats, players and teams"
+              hint="Leaderboards, the field, the running order."
+            />
+          </ListGroup>
         </section>
 
       </div>

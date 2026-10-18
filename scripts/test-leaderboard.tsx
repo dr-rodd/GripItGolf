@@ -461,12 +461,12 @@ section('The round tiles a tapped row drops out')
   ok(/line-clamp-2/.test(hero), 'and the note runs to a second line before it is cut')
   ok(!/t-cap[^"]*truncate/.test(hero), 'rather than being clipped on the first')
 
-  // The countback, in words, directly above View
+  // The countback, in words, directly above the tile's chevron
   const back9 = tiles({ tieBadge: 9, tieBadgeRoundId: 'r1' })
   ok(back9.includes('Back 9'), 'a round the back nine settled says so')
   ok(back9.includes('title="Tie broken on the back 9"'), 'and says what that means')
-  ok(back9.indexOf('Back 9') < back9.indexOf('View'),
-    'in the space above View, which is the only part of the tile always free')
+  ok(back9.indexOf('Back 9') > -1 && back9.indexOf('Back 9') < back9.lastIndexOf('<svg'),
+    'in the space above the chevron, which is the only part of the tile always free')
 
   // Per round, on a board that pays by position
   ok(tiles({ tieBadgeByRound: { r1: 6 } }).includes('Back 6'),
@@ -1356,9 +1356,10 @@ section('A board told to hide the team name is the players')
   eq(hidden?.name, 'Alice, Bob, Cara', 'hidden, the row reads as the players themselves')
   ok(!hidden?.subLabel, 'and nothing underneath repeats them')
 
-  // On screen too — the board shows the players and never prints the team
+  // On screen too — the board shows the players, stacked one to a line with
+  // the third and beyond as "+1" (refresh plan, 4.6), and never the team
   const html = render([{ ...TEAM('better_ball'), hideTeamName: true }], opts)
-  ok(html.includes('Alice, Bob, Cara'), 'the rendered row is the players')
+  ok(html.includes('>Alice<') && html.includes('>Bob +1<'), 'the rendered row is the players, stacked')
   ok(!html.includes('Reds'), 'and the team name is nowhere on it')
 }
 

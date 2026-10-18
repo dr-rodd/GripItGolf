@@ -5,9 +5,10 @@ import {
   describeItem, itemState, tripProgress, dayTimeline,
 } from '@/lib/itinerary'
 import Link from 'next/link'
-import { IconFlag, itineraryIcon } from '@/app/components/icons'
+import { IconChevronRight, IconFlag, itineraryIcon } from '@/app/components/icons'
 import { useMinute } from '@/app/components/useMinute'
 import CourseName from '@/app/components/CourseName'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * The trip's running order on the hub, dimming as it happens.
@@ -133,20 +134,23 @@ function GolfTile({
   tripCode: string
   stretch?: boolean
 }) {
-  const tile = `flex ${stretch ? 'h-full items-start overflow-hidden' : 'items-center'} gap-3 rounded-xl border px-3.5 py-3 transition-opacity duration-200 ${
+  // A raised card like every card that opens something; on the day, the
+  // emerald wash with a deep edge. Golf is still the only thing in the list
+  // that gets a card at all.
+  const tile = `flex ${stretch ? 'h-full items-start overflow-hidden' : 'items-center'} gap-3 px-3.5 py-3 transition-opacity duration-200 ${
     state === 'now'
-      ? 'border-accent/40 bg-accent/[0.07]'
-      : 'border-bark/12 bg-surface'
+      ? 'rounded-card border border-accent-deep/40 bg-accent-tint'
+      : cardClass()
   } ${state === 'past' ? 'opacity-50' : ''}`
 
   const inside = (
     <>
       <span
-        className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
-          state === 'now' ? 'text-accent-deep bg-accent/[0.14]' : 'text-bark bg-bark/[0.06]'
+        className={`flex-shrink-0 w-10 h-10 rounded-tile flex items-center justify-center ${
+          state === 'now' ? 'text-accent-deep bg-surface' : 'text-bark bg-tint'
         }`}
       >
-        <IconFlag size={16} />
+        <IconFlag size={18} />
       </span>
 
       <span className="flex-1 min-w-0">
@@ -169,6 +173,9 @@ function GolfTile({
 
       {state === 'now' && (
         <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-accent dot-live" aria-label="Happening now" role="img" />
+      )}
+      {state !== 'now' && roundNumber != null && !stretch && (
+        <span className="flex-shrink-0 text-ink/50" aria-hidden="true"><IconChevronRight size={20} /></span>
       )}
     </>
   )
@@ -328,25 +335,15 @@ export default function Itinerary({
 
   const progress = now ? tripProgress(items, startDate, now) : null
 
-  // The tap hint is only true when there is something to tap: a golf item
-  // with a round behind it. A trip whose items never became rounds would be
-  // promising a page that is not there.
-  const anyCourseCard = items.some(i => i.kind === 'golf' && roundNumbers[i.id] != null)
-
   return (
     <section className="w-full">
       {/* The heading is the collapsible's own now — this carried one of its
           own before, and two headings over one list is one too many. What
-          sits under it: the one thing the cards can do that nothing on them
-          says (open), and the only figure here that changes during the trip
-          (how much of it is done). */}
-      {(anyCourseCard || (progress && progress.done > 0)) && (
-        <div className="flex items-baseline justify-between gap-3 mb-3">
-          {anyCourseCard ? (
-            <p className="t-cap text-ink/65 leading-snug">
-              Tap a course card for current weather and course details.
-            </p>
-          ) : <span />}
+          sits under it is the only figure here that changes during the trip:
+          how much of it is done. A line telling you to tap a course card went
+          (refresh plan, 4.1) — a card that opens says so with its chevron. */}
+      {progress && progress.done > 0 && (
+        <div className="flex items-baseline justify-end gap-3 mb-3">
           {progress && progress.done > 0 && (
             <p className="t-cap text-ink/65 tabular-nums flex-shrink-0">
               {progress.done} of {progress.total} done

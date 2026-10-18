@@ -1082,14 +1082,13 @@ section('The itinerary reads at the size a plan deserves')
   ok(!activityRow.includes('<Link') && !/border/.test(activityRow),
     '  …with no card and no tap — those stay golf\'s alone')
 
-  // The one thing the cards can do that nothing on them says: open. Said
-  // once, over the list, and only when something actually opens — a trip
-  // whose items never became rounds would be promising a page that is not
-  // there.
-  ok(itin.includes('Tap a course card for current weather and course details.'),
-    'the list says the cards open')
-  ok(/anyCourseCard \?/.test(itin) && /roundNumbers\[i\.id\] != null/.test(itin),
-    '  …and only when one of them actually does')
+  // A card that opens says so with its own chevron — and only when there
+  // is a round behind it to open. The line over the list saying "tap a
+  // course card" went with the refresh (plan 4.1): it said what the
+  // chevron says.
+  ok(!itin.includes('Tap a course card'), 'no instructions over the list')
+  ok(/state !== 'now' && roundNumber != null && !stretch && \([\s\S]{0,120}IconChevronRight/.test(itin),
+    '  …a golf card that opens carries a chevron instead')
 }
 
 section('Up next is set as the headline of the hub')
@@ -1120,7 +1119,7 @@ section('The hub is the sections it should be, and nothing else')
   ok(hub.includes("initial={isEvent && notices.length > 0 ? 'notices' : 'itinerary'}"),
     'and the itinerary is the one open on arrival, unless an event has news')
 
-  for (const title of ['Your Itinerary', 'Travel & Accommodation', 'Players']) {
+  for (const title of ['Itinerary', 'Travel & Accommodation', 'Players']) {
     ok(hub.includes(`'${title}'`) || hub.includes(`"${title}"`), `there is a ${title} section`)
   }
 
@@ -1271,8 +1270,11 @@ section('The countdown is brown, and quiet')
   // after the name, and were 13px UI type at 65% ink — the treatment this
   // app gives to asides.
   const hub = read('app/trip/[tripCode]/page.tsx')
-  ok(/className="t-card text-ink mt-2\.5">\{dateRange\}/.test(hub),
-    'the dates read at card size in full ink')
+  // 17px semibold at 80% — the hero's second line in the refresh (4.1).
+  ok(/className="text-\[17px\] font-semibold leading-snug text-ink\/80 mt-2\.5">\{dateRange\}/.test(hub),
+    'the dates read at body size, semibold, never as a caption')
+  ok(/flex flex-col items-start text-left pt-2 pb-7/.test(hub), 'and the hero is left-aligned')
+  ok(/\{isEvent \? 'Organised by' : 'Led by'\} \{leadName\}/.test(hub), 'with who runs it under the dates')
 
   // What the trip plays for was printed under them. It is settings written
   // on the hub — the leaderboard names its own boards.

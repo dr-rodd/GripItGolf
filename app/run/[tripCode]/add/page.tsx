@@ -61,10 +61,10 @@ export default async function RunAddPage({ params, searchParams }: {
       <div className="max-w-lg mx-auto px-4 pt-8 pb-16 page-enter space-y-6">
 
         {!viewer ? (
-          <div className="text-center">
-            <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-2">Log a run</h1>
-            <p className="text-ink/65 text-sm mb-8">
-              Join the challenge first — a run has to belong to somebody on a team.
+          <div>
+            <h1 className="t-h1 text-ink mb-2">Log a run</h1>
+            <p className="text-[17px] leading-snug text-ink/65 mb-8">
+              Join the challenge first. A run belongs to someone on a team.
             </p>
             <Link
               href={`/run/${challenge.code}/join`}

@@ -71,12 +71,14 @@ export default async function RunHubPage({ params }: {
 
       <div className="max-w-lg mx-auto px-4 pt-8 pb-16 page-enter space-y-8">
 
+        {/* The hero every hub shares (refresh plan, 4.1): left-aligned, the
+            name closed by the dot, when it runs. The sport's label above it
+            went — the tab bar and the page already say what this is. */}
         <div>
-          <p className="t-label text-accent-deep mb-1.5">Green Dot Run</p>
-          <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink leading-tight">
-            {challenge.name}
+          <h1 className="t-h1 text-ink text-balance">
+            {challenge.name}<span className="t-title-dot" aria-hidden="true" />
           </h1>
-          <p className="text-ink/65 text-sm mt-1.5">
+          <p className="text-[17px] font-semibold leading-snug text-ink/80 mt-2.5">
             {[dates, final ? 'Final' : progress].filter(Boolean).join(' · ')}
           </p>
           {phase === 'closing' && challenge.endDate && (
@@ -89,36 +91,57 @@ export default async function RunHubPage({ params }: {
 
         {/* Who this phone is — or the way in. */}
         {viewer ? (
-          <div className={`p-5 ${cardClass()}`}>
-            <p className="text-ink text-base font-medium">You&apos;re in, {viewer.name}.</p>
-            <p className="text-ink/80 text-sm mt-1 flex items-center gap-2">
-              {viewerTeam ? (
-                <>
-                  <span
-                    className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: viewerTeam.color }}
-                    aria-hidden="true"
-                  />
-                  Running for {viewerTeam.name}
-                </>
-              ) : (
-                'No team yet — ask the organiser to put you on one.'
-              )}
-            </p>
+          // The same status card the golf hub has: who, which team, and
+          // where they stand — one card, its rows divided.
+          <div className={`${cardClass()} divide-y divide-line`}>
+            <div className="flex items-baseline justify-between gap-3 px-4 py-3.5">
+              <p className="t-card text-ink min-w-0 truncate">{viewer.name}</p>
+              <Link
+                href={`/run/${challenge.code}/join`}
+                className="flex-shrink-0 t-label text-accent-deep hover:text-accent transition-colors"
+              >
+                Not you?
+              </Link>
+            </div>
+            <div className="flex items-center gap-3 px-4 py-3.5">
+              <span className="flex-shrink-0 w-10 h-10 rounded-tile bg-tint flex items-center justify-center" aria-hidden="true">
+                <span
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: viewerTeam?.color ?? 'transparent' }}
+                />
+              </span>
+              <div className="min-w-0">
+                {viewerTeam ? (
+                  <p className="text-[17px] font-medium leading-snug text-ink">Running for {viewerTeam.name}</p>
+                ) : (
+                  <>
+                    <p className="text-[17px] font-medium leading-snug text-ink">No team yet</p>
+                    <p className="t-cap text-ink/65 mt-0.5">Ask the organiser to put you on one.</p>
+                  </>
+                )}
+              </div>
+            </div>
             {/* Not once the Strava runs behind it are gone — it would be wrong. */}
             {me && !final?.stravaRemoved && (
-              <p className="text-ink/80 text-sm mt-1">
-                {me.runs > 0
-                  ? `${formatPoints(me.points)} pts · ${ordinal(me.place)} of ${runners}`
-                  : 'No runs yet — log your first on the Add tab.'}
-              </p>
+              <div className="flex items-center justify-between gap-3 px-4 py-3.5" aria-label="Standing">
+                {me.runs > 0 ? (
+                  <p className="flex items-baseline gap-2 min-w-0">
+                    <span className="font-serif font-bold text-[30px] leading-none text-ink tabular-nums">
+                      {ordinal(me.place)}
+                    </span>
+                    <span className="t-cap text-ink/65">of {runners} · {formatPoints(me.points)} pts</span>
+                  </p>
+                ) : (
+                  <p className="t-cap text-ink/65">No runs yet. Log your first on the Add tab.</p>
+                )}
+                <Link
+                  href={`/run/${challenge.code}/leaderboard`}
+                  className="flex-shrink-0 t-label text-accent-deep hover:text-accent transition-colors"
+                >
+                  Leaderboard →
+                </Link>
+              </div>
             )}
-            <Link
-              href={`/run/${challenge.code}/join`}
-              className="inline-block t-cap text-accent-deep hover:text-accent transition-colors mt-3"
-            >
-              Not you?
-            </Link>
           </div>
         ) : !finished ? (
           <Link

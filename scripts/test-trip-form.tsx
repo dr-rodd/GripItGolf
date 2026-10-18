@@ -352,8 +352,9 @@ section('The gear says what is behind it')
     } as never)
   )
 
-  ok(/leaderboards are below/i.test(html),
-    'the row draws the line between the trip and the golf')
+  // The row names what is behind it, in four words (refresh plan, 4.2).
+  ok(/Name, dates, itinerary, stats/.test(html),
+    'the row says what the trip settings hold')
   ok(!/non-golf/i.test(html),
     '  …without claiming nothing behind it touches the golf, which it now does')
 

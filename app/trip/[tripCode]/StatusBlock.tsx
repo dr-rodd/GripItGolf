@@ -139,7 +139,7 @@ export default function StatusBlock({
       {/* ── Up next ──
           Golf links through to its round summary; a stay or a journey has
           no page to open and stays plain. */}
-      <div className="mt-3.5 pt-3.5 border-t border-bark/[0.08]">
+      <div className="mt-3.5 pt-3.5 border-t border-line">
         {next ? (
           nextRoundNumber != null ? (
             <Link
@@ -178,12 +178,27 @@ export default function StatusBlock({
           Omitted rather than zeroed. "0 points, last of 12" before a ball is
           struck is a worse thing to read than nothing at all. */}
       {(player.placing || player.nextMatch) && (
-        <div className="mt-3.5 pt-3.5 border-t border-bark/[0.08] flex flex-col gap-1">
+        <div className="mt-3.5 pt-3.5 border-t border-line flex flex-col gap-1">
           {player.placing && (
-            <p className="t-cap text-ink/80">
-              <span className="text-ink/65">Standing </span>
-              <span className="font-serif t-num text-accent-deep">{player.placing}</span>
-            </p>
+            // The place is the number worth reading, so it is the big one —
+            // in the serif, like every standing — with the field size beside
+            // it and the board a tap away (refresh plan, 4.1).
+            <div className="flex items-center justify-between gap-3" aria-label="Standing">
+              <p className="flex items-baseline gap-2 min-w-0">
+                <span className="font-serif font-bold text-[30px] leading-none text-ink tabular-nums">
+                  {player.placing.split(' of ')[0]}
+                </span>
+                {player.placing.includes(' of ') && (
+                  <span className="t-cap text-ink/65">of {player.placing.split(' of ')[1]}</span>
+                )}
+              </p>
+              <Link
+                href={`/trip/${tripCode}/leaderboard`}
+                className="flex-shrink-0 t-label text-accent-deep hover:text-accent transition-colors duration-150"
+              >
+                Leaderboard →
+              </Link>
+            </div>
           )}
           {player.nextMatch && (
             <p className="t-cap text-ink/80">{player.nextMatch}</p>
@@ -208,7 +223,7 @@ function UpNextLines({
 
   return (
     <div className="flex items-start gap-3">
-      <span className="flex-shrink-0 w-10 h-10 rounded-xl bg-accent/[0.12] text-accent-deep flex items-center justify-center">
+      <span className="flex-shrink-0 w-10 h-10 rounded-tile bg-accent-tint text-accent-deep flex items-center justify-center">
         {itemIcon(next.item, 18)}
       </span>
 
@@ -268,12 +283,12 @@ function UpNextLines({
 function TripOver() {
   return (
     <div className="flex items-center gap-3">
-      <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-bark/[0.06] text-bark flex items-center justify-center">
-        <IconFlag size={16} />
+      <span className="flex-shrink-0 w-10 h-10 rounded-tile bg-tint text-bark flex items-center justify-center">
+        <IconFlag size={18} />
       </span>
       <div className="min-w-0">
-        <p className="t-cap text-ink/65">That&apos;s the trip</p>
-        <p className="t-cap text-ink/65 mt-0.5">Every round is in. The leaderboard is final.</p>
+        <p className="text-[17px] font-medium leading-snug text-ink">Trip complete</p>
+        <p className="t-cap text-ink/65 mt-0.5">All rounds in. Standings are final.</p>
       </div>
     </div>
   )
@@ -310,8 +325,8 @@ function ClaimSpot({ tripCode }: { tripCode: string }) {
         href={`/trip/${tripCode}/players`}
         className={`flex items-center gap-3 w-full px-4 py-4 ${cardClass('raised', true)}`}
       >
-        <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent/[0.12] text-accent-deep flex items-center justify-center">
-          <IconUsers size={16} />
+        <span className="flex-shrink-0 w-10 h-10 rounded-tile bg-accent-tint text-accent-deep flex items-center justify-center">
+          <IconUsers size={18} />
         </span>
         <span className="flex-1 min-w-0 t-card text-ink">Claim your spot</span>
         <IconArrowRight size={18} className="flex-shrink-0 text-accent-deep" />

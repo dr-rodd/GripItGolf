@@ -370,7 +370,7 @@ section('Names and numbers on a board ask for the serif by name')
   ok(!/const (NAME|SCORE) = 'font-\[family-name:var\(--font-display\)\]/.test(read(RUN)),
     '  …whose names and scores inherit it')
   has('app/run/[tripCode]/page.tsx', /className="font-serif flex items-center gap-3"/, 'the run hub\'s standings')
-  has('app/trip/[tripCode]/StatusBlock.tsx', /className="font-serif t-num text-accent-deep">\{player\.placing\}/,
+  has('app/trip/[tripCode]/StatusBlock.tsx', /className="font-serif font-bold text-\[30px\][^"]*">\s*\{player\.placing/,
     'the hub\'s standing')
   has('app/trip/[tripCode]/round/[roundNumber]/page.tsx', /className=\{`font-serif flex items-center gap-3 px-4 py-3/,
     'a round\'s podium')
