@@ -145,9 +145,9 @@ export default async function MatchplayPage({
     : []
 
   return (
-    <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
+    <div className="min-h-dvh paper has-tabbar page-enter text-ink">
       <TripHeader backTo={`/trip/${tripCode}`} />
-      <div className="bg-cream border-b border-bark/12">
+      <div className="paper border-b border-bark/12">
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
           <BackButton href={`/trip/${tripCode}/leaderboard`} />
           <h1 className="font-[family-name:var(--font-display)] text-xl sm:text-2xl text-ink tracking-wide truncate px-2">

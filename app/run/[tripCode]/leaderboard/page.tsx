@@ -89,7 +89,7 @@ export default async function RunLeaderboardPage({ params }: {
   const strava = final ? final.stravaRemoved : read.runs.some(r => r.source === 'strava')
 
   return (
-    <main className="min-h-dvh bg-cream has-tabbar">
+    <main className="min-h-dvh paper has-tabbar">
       <TripHeader backTo={`/run/${challenge.code}`} title="leaderboard" />
       <div className="max-w-lg mx-auto px-4 pt-6 pb-16 page-enter">
         {final && (

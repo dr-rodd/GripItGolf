@@ -103,7 +103,7 @@ export function GainedByRoundChart({ bars, hint }: {
       </p>
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        className="w-full h-auto"
+        className="w-full h-auto font-serif"
         role="img"
         aria-label={`${hint}: ${bars.map(b => `${b.label} ${formatGained(b.value)}`).join(', ')}`}
       >
@@ -242,7 +242,7 @@ export function PentagonChart({ axes, hint }: {
       </p>
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        className="w-full h-auto"
+        className="w-full h-auto font-serif"
         role="img"
         aria-label={`Strokes gained a round: ${axes.map(a => `${a.label} ${formatGained(a.value)}`).join(', ')}`}
       >
@@ -362,7 +362,7 @@ export function DifficultyProfileChart({ holes }: { holes: ProfileBar[] }) {
       )}
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        className="w-full h-auto"
+        className="w-full h-auto font-serif"
         role="img"
         aria-label="Average score to par by hole, in course order"
       >

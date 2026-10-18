@@ -47,10 +47,12 @@ export type BoardView =
   | { id: string; kind: 'individual'; title: string; rule: string; rows: RunnerRowView[] }
   | { id: string; kind: 'team'; title: string; rule: string; byAverage: boolean; rows: TeamRowView[] }
 
-const ROW = 'flex items-center gap-3 px-3 py-2.5 text-left'
-const NAME = 'font-[family-name:var(--font-display)] font-semibold text-[15px] leading-tight text-ink truncate'
+// A row is the serif by name — the names and numbers on a board are the one
+// place it is the point; the headings and tabs around it are sans.
+const ROW = 'font-serif flex items-center gap-3 px-3 py-2.5 text-left'
+const NAME = 'font-semibold text-[15px] leading-tight text-ink truncate'
 const SUB = 'text-ink/65 text-[13px] leading-snug truncate'
-const SCORE = 'font-[family-name:var(--font-display)] text-xl font-semibold tabular-nums text-ink flex-shrink-0'
+const SCORE = 'text-xl font-semibold tabular-nums text-ink flex-shrink-0'
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
@@ -111,7 +113,7 @@ export default function RunBoardClient({ boards, anyRuns, garmin = false, strava
             key={r.id}
             className={`${ROW} ${i < board.rows.length - 1 ? 'border-b border-bark/12' : ''} ${r.isViewer ? 'bg-accent/[0.06]' : ''}`}
           >
-            <span className="t-cap text-ink/65 tabular-nums w-6">{r.place}</span>
+            <span className="text-[15px] leading-[1.45] text-ink/65 tabular-nums w-6">{r.place}</span>
             <span className="flex-1 min-w-0">
               <span className="flex items-center gap-1.5">
                 {r.color && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} aria-hidden="true" />}
@@ -130,7 +132,7 @@ export default function RunBoardClient({ boards, anyRuns, garmin = false, strava
             key={r.id}
             className={`${ROW} ${i < board.rows.length - 1 ? 'border-b border-bark/12' : ''} ${r.isViewer ? 'bg-accent/[0.06]' : ''}`}
           >
-            <span className="t-cap text-ink/65 tabular-nums w-6">{r.place}</span>
+            <span className="text-[15px] leading-[1.45] text-ink/65 tabular-nums w-6">{r.place}</span>
             <span className="flex-1 min-w-0">
               <span className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} aria-hidden="true" />

@@ -191,7 +191,7 @@ export default async function RoundSummaryPage({
   const directions = mapsUrl([course?.name, course?.location].filter(Boolean).join(', '))
 
   return (
-    <main className="min-h-dvh bg-cream has-tabbar page-enter">
+    <main className="min-h-dvh paper has-tabbar page-enter">
       <TripHeader backTo={`/trip/${tripCode}`} />
 
       {/* The way back, top left, where a phone puts one.
@@ -469,12 +469,12 @@ async function RoundPodium({
 /** One place on the podium. Name, score, and where that puts them. */
 function PodiumRow({ place }: { place: PodiumPlace }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-bark/12 bg-surface">
-      <span className="w-8 flex-shrink-0 t-cap text-ink/50 tabular-nums">
+    <div className="font-serif flex items-center gap-3 px-4 py-3 rounded-xl border border-bark/12 bg-surface">
+      <span className="w-8 flex-shrink-0 text-[15px] leading-[1.45] text-ink/50 tabular-nums">
         {ordinal(place.position)}
       </span>
       <span className="flex-1 min-w-0 text-ink text-sm truncate">{place.name}</span>
-      <span className="font-[family-name:var(--font-display)] text-accent-deep text-base leading-none tabular-nums flex-shrink-0">
+      <span className="text-accent-deep text-base leading-none tabular-nums flex-shrink-0">
         {place.total}
       </span>
     </div>

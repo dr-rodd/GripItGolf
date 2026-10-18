@@ -571,7 +571,7 @@ function CondensedBar({
 }) {
   return (
     <div
-      className={`fixed left-0 right-0 z-30 bg-cream border-b border-bark/12 transition-[opacity,transform] duration-200 ease-out ${
+      className={`fixed left-0 right-0 z-30 paper border-b border-bark/12 transition-[opacity,transform] duration-200 ease-out ${
         show ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'
       }`}
       style={{ top: HEADER_H }}
@@ -793,7 +793,7 @@ function Course({ rows, title }: {
               <th className="text-right font-normal py-2">GIR</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="font-serif">
             {rows.map(r => (
               <tr
                 key={r.holeNumber}

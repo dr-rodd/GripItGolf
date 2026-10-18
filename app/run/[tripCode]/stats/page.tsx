@@ -19,7 +19,7 @@ export default async function RunStatsPage({ params }: {
   if (!isRunChallenge(challenge.kind)) redirect(`/trip/${challenge.code}/stats`)
 
   return (
-    <main className="min-h-dvh bg-cream has-tabbar">
+    <main className="min-h-dvh paper has-tabbar">
       <TripHeader backTo={`/run/${challenge.code}`} title="statsHub" />
       <div className="max-w-lg mx-auto px-4 pt-10 pb-16 page-enter text-center">
         <p className="t-cap uppercase tracking-[0.12em] text-ink/65 mb-3">Coming soon</p>

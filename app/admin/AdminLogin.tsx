@@ -15,7 +15,7 @@ export default function AdminLogin() {
   const [state, formAction, pending] = useActionState(login, { error: null })
 
   return (
-    <main className="min-h-dvh flex flex-col items-center justify-center bg-cream px-6 py-16">
+    <main className="min-h-dvh flex flex-col items-center justify-center paper px-6 py-16">
       <Wordmark width={150} className="mb-8" />
 
       <h1 className="font-[family-name:var(--font-display)] text-ink text-2xl mb-2">

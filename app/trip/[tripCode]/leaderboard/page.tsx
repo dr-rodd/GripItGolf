@@ -143,7 +143,7 @@ export default async function TripLeaderboardPage({
     activeRoundIds.length > 0 || rounds.some(r => r.status === 'active')
 
   return (
-    <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
+    <div className="min-h-dvh paper has-tabbar page-enter text-ink">
       {/* The trip's own name used to sit in a band under this, which cost a
           fixed slice of the screen on the one page that is all table. The
           header names the page, and you arrived here from the trip. */}

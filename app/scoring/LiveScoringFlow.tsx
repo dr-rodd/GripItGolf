@@ -1549,7 +1549,7 @@ export default function LiveScoringFlow({
 
           {/* Sub-header */}
           <div
-            className="sticky z-10 bg-cream border-b border-bark/12 px-4 py-3 flex items-center justify-between"
+            className="sticky z-10 paper border-b border-bark/12 px-4 py-3 flex items-center justify-between"
             style={{ top: CHROME }}
           >
             <BackButton onClick={() => setEditingPlayerId(null)} dense />
@@ -1705,7 +1705,7 @@ export default function LiveScoringFlow({
           </div>
 
           {/* Sticky save */}
-          <div className="sticky bottom-0 bg-cream border-t border-bark/12 px-4 py-4 max-w-lg mx-auto w-full">
+          <div className="sticky bottom-0 paper border-t border-bark/12 px-4 py-4 max-w-lg mx-auto w-full">
             <button
               onClick={saveEditDraft}
               disabled={editSaving}

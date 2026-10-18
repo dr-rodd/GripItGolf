@@ -265,7 +265,7 @@ export default function CreateRunForm() {
 
   if (step === 'done') {
     return (
-      <div className="min-h-dvh bg-cream flex flex-col items-center justify-center px-6">
+      <div className="min-h-dvh paper flex flex-col items-center justify-center px-6">
         <div className="w-full max-w-xs text-center">
           <div className="w-16 h-16 rounded-full bg-accent/20 border border-accent/40 flex items-center justify-center mx-auto mb-8">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0A9D56" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -326,7 +326,7 @@ export default function CreateRunForm() {
   const stepNum = step as 1 | 2 | 3 | 4
 
   return (
-    <div className="min-h-dvh bg-cream text-ink">
+    <div className="min-h-dvh paper text-ink">
       <TripHeader backTo="/create" />
 
       <div className="page-enter">

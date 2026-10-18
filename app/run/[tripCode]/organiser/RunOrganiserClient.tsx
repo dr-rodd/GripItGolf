@@ -51,7 +51,7 @@ export default function RunOrganiserClient({ challenge, dates, progress }: {
   }
 
   return (
-    <main className="min-h-dvh bg-cream has-tabbar">
+    <main className="min-h-dvh paper has-tabbar">
       <TripHeader backTo={`/run/${challenge.code}`} />
 
       <div className="max-w-lg mx-auto px-4 pt-8 pb-16 page-enter space-y-8">

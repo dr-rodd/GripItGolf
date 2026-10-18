@@ -380,7 +380,7 @@ export default function TeeSheetClient({
     .filter(u => unitMatches(u, search))
 
   return (
-    <main className="min-h-dvh bg-cream has-tabbar page-enter">
+    <main className="min-h-dvh paper has-tabbar page-enter">
       <TripHeader backTo={`/trip/${tripCode}`} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">

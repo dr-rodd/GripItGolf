@@ -180,7 +180,7 @@ export default function StatusBlock({
           {player.placing && (
             <p className="t-cap text-ink/80">
               <span className="text-ink/50 uppercase tracking-[0.12em]">Standing </span>
-              <span className="t-num text-accent-deep">{player.placing}</span>
+              <span className="font-serif t-num text-accent-deep">{player.placing}</span>
             </p>
           )}
           {player.nextMatch && (

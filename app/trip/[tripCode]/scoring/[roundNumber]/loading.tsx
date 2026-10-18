@@ -21,7 +21,7 @@ import TripHeader from '@/app/components/TripHeader'
  */
 export default function ScorecardLoading() {
   return (
-    <div className="min-h-dvh bg-cream text-ink">
+    <div className="min-h-dvh paper text-ink">
       <TripHeader title="scoring" />
 
       <div

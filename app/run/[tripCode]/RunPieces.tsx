@@ -79,7 +79,7 @@ export function SectionTitle({ children }: { children: React.ReactNode }) {
 /** The calm page a code nobody owns gets — every run route's one copy. */
 export function ChallengeNotFound() {
   return (
-    <main className="min-h-dvh has-tabbar flex flex-col items-center justify-center bg-cream px-6">
+    <main className="min-h-dvh has-tabbar flex flex-col items-center justify-center paper px-6">
       <p className="font-[family-name:var(--font-display)] text-2xl text-ink mb-3">
         Challenge not found
       </p>

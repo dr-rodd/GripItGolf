@@ -55,7 +55,7 @@ export default async function RunAddPage({ params, searchParams }: {
   const me = viewer ? standingsOf(challenge, read.runs).individuals.find(l => l.playerId === viewer.id) : null
 
   return (
-    <main className="min-h-dvh bg-cream has-tabbar">
+    <main className="min-h-dvh paper has-tabbar">
       <TripHeader backTo={`/run/${challenge.code}`} />
       <div className="max-w-lg mx-auto px-4 pt-8 pb-16 page-enter space-y-6">
 
@@ -86,7 +86,7 @@ export default async function RunAddPage({ params, searchParams }: {
                       : 'No runs yet'}
                   </p>
                 </div>
-                <p className="font-[family-name:var(--font-display)] text-3xl font-semibold tabular-nums text-ink">
+                <p className="font-serif text-3xl font-semibold tabular-nums text-ink">
                   {formatPoints(me.points)}
                   <span className="text-ink/65 text-sm font-normal ml-1">pts</span>
                 </p>

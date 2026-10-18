@@ -61,7 +61,7 @@ export default async function StatsPage({
   const cover = coverage(stats)
 
   return (
-    <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
+    <div className="min-h-dvh paper has-tabbar page-enter text-ink">
       <TripHeader backTo={`/trip/${tripCode}`} title="statsHub" />
 
       {/* No page-title row: the header's "stats hub." artwork is the title,

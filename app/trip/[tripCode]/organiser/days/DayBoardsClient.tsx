@@ -62,7 +62,7 @@ export default function DayBoardsClient({
   const dayLine = DAY_BOARDS.find(d => d.key === dayBoards)
 
   return (
-    <main className="min-h-dvh bg-cream has-tabbar page-enter">
+    <main className="min-h-dvh paper has-tabbar page-enter">
       <TripHeader backTo={`/trip/${tripCode}/organiser`} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">

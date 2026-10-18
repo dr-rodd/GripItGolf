@@ -117,7 +117,7 @@ export default async function TripCoursePortalPage({
   const scoredRounds = new Set(played.filter(r => r.scored).map(r => r.id))
 
   return (
-    <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
+    <div className="min-h-dvh paper has-tabbar page-enter text-ink">
 
       <TripHeader backTo={`/trip/${tripCode}`} title="scoring" />
 

@@ -55,7 +55,7 @@ The same tokens with night values — not a second design system. `html.dark` re
 
 ### Type
 
-Three families, one job each, never mixed. Schibsted Grotesk 700 (headlines — it replaced Clash Display in October 2026, `docs/refresh-plan.md` D4), Bespoke Serif (body and all dense data), Archivo (buttons, labels, form fields). Use the scale classes — `t-h1` (30) `t-h2` (21) `t-card` (16) `t-body` (17) `t-data` (15) `t-label` (13) `t-cap` (13) — rather than ad-hoc sizes.
+Three families, one job each, never mixed. Schibsted Grotesk 700 (headlines — it replaced Clash Display in October 2026, `docs/refresh-plan.md` D4), Bespoke Serif (the names and numbers on boards, scorecards, standings and stats — asked for by name with `font-serif` or `t-data`, never inherited), Archivo (every other word: body, labels, buttons, fields; `body` is sans since the October 2026 refresh). Use the scale classes — `t-h1` (30) `t-h2` (21) `t-card` (16) `t-body` (17) `t-data` (15) `t-label` (13) `t-cap` (13) — rather than ad-hoc sizes.
 
 **Nothing is smaller than 13px in the scale, or 12px anywhere.** This is read one-handed, outdoors, in daylight, often by someone whose reading glasses are in the car. The old scale bottomed out at 11px and Tailwind's `text-xs` (12px) was scattered across 92 places; both are gone and `test:branding` enforces the floor, including on hand-written `text-[Npx]`.
 

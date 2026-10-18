@@ -306,7 +306,7 @@ function Splits({ splits }: { splits: PlayerStats['splits'] }) {
               <th className="text-right font-normal py-2">Putts</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="font-serif">
             {splits.map(row => (
               <tr key={row.par} className="border-t border-bark/[0.08]">
                 <td className="py-2.5 t-num text-ink">{row.par}</td>
@@ -350,7 +350,7 @@ function Rounds({ stats, playerId, rounds, courseFor, courseName }: {
               <th className="text-right font-normal py-2">Putts</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="font-serif">
             {played.map(({ round, mine }) => {
               const line = statsFor(mine, playerId)!
               const course = courseName.get(courseFor.get(round.id) ?? '')

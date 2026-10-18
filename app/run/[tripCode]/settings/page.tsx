@@ -37,7 +37,7 @@ export default async function RunSettingsPage({ params }: {
     || (!!challenge.endDate && todayString(new Date()) > closesOn(challenge.endDate))
 
   return (
-    <main className="min-h-dvh bg-cream has-tabbar">
+    <main className="min-h-dvh paper has-tabbar">
       <TripHeader backTo={`/run/${challenge.code}`} title="settings" />
       <div className="max-w-lg mx-auto px-4 pt-6 pb-16 page-enter space-y-8">
 

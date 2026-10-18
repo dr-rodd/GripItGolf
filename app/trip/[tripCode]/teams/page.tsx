@@ -86,9 +86,9 @@ export default async function TripTeamsPage({
   }))
 
   const screen = (
-    <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
+    <div className="min-h-dvh paper has-tabbar page-enter text-ink">
       <TripHeader backTo={`/trip/${tripCode}`} />
-      <div className="bg-cream border-b border-bark/12">
+      <div className="paper border-b border-bark/12">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <BackButton href={`/trip/${tripCode}/setup`} />
           <div className="min-w-0 text-center">
@@ -140,9 +140,9 @@ export default async function TripTeamsPage({
   if (event && isLocked(trip.settings_passcode_hash as string | null)) {
     if (selfPick || mayPickTag) {
       const join = (
-        <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
+        <div className="min-h-dvh paper has-tabbar page-enter text-ink">
           <TripHeader backTo={`/trip/${tripCode}`} />
-          <div className="bg-cream border-b border-bark/12">
+          <div className="paper border-b border-bark/12">
             <div className="max-w-3xl mx-auto px-4 py-4 text-center">
               <h1 className="font-[family-name:var(--font-display)] text-lg text-ink tracking-wide">
                 Teams

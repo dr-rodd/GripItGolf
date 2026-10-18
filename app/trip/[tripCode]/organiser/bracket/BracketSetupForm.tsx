@@ -154,7 +154,7 @@ export default function BracketSetupForm({
   // ── A finalised setup is read, not edited ────────────────────────────────
   if (initialSetup?.finalized && !saved) {
     return (
-      <main className="min-h-dvh bg-cream has-tabbar page-enter">
+      <main className="min-h-dvh paper has-tabbar page-enter">
         <TripHeader backTo={`/trip/${tripCode}/organiser`} />
         <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
           <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-1">
@@ -277,7 +277,7 @@ export default function BracketSetupForm({
   // ── Done ─────────────────────────────────────────────────────────────────
   if (step === 'done' && saved) {
     return (
-      <main className="min-h-dvh bg-cream has-tabbar page-enter">
+      <main className="min-h-dvh paper has-tabbar page-enter">
         <TripHeader backTo={`/trip/${tripCode}/organiser`} />
         <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
           <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-1">
@@ -305,7 +305,7 @@ export default function BracketSetupForm({
   const roundNames = size ? bracketRoundNames(size) : []
 
   return (
-    <main className="min-h-dvh bg-cream has-tabbar">
+    <main className="min-h-dvh paper has-tabbar">
       <TripHeader backTo={`/trip/${tripCode}/organiser`} />
 
       <div className="page-enter">

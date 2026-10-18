@@ -525,7 +525,7 @@ export default function CourseDashboardClient({
     // board's column headings, the score-entry card's height — can pin itself
     // to the real one for the view on screen.
     <div
-      className="bg-cream text-ink"
+      className="paper text-ink"
       style={{
         [CHROME_VAR]: `${chrome}px`,
         // A full `100dvh` here, with a 52px site header already above it, made
@@ -557,7 +557,7 @@ export default function CourseDashboardClient({
           otherwise butting straight up against. */}
       <div
         ref={headerRef}
-        className="border-b border-bark/12 sticky z-20 bg-cream"
+        className="border-b border-bark/12 sticky z-20 paper"
         style={{ top: stickyTop }}
       >
         <div className="max-w-lg mx-auto px-4 py-4 flex items-center">

@@ -752,13 +752,13 @@ export default function LiveLeaderboardPanel({
                   // nothing to restart. See `flashes` above.
                   key={`${player.id}-${flashes[player.id] ?? 0}`}
                   onClick={() => setExpandedPlayerId(isExpanded ? null : player.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 text-left active:bg-bark/[0.04] transition-colors ${
+                  className={`font-serif w-full flex items-center gap-3 px-3 py-2 text-left active:bg-bark/[0.04] transition-colors ${
                     flashes[player.id] ? "score-flash " : ""
                   }${!isLast || isExpanded ? "border-b border-bark/12" : ""}`}
                 >
 
                   {/* Col 1: position */}
-                  <span className="t-cap text-ink/65 tabular-nums w-6 flex-shrink-0">
+                  <span className="text-[15px] leading-[1.45] text-ink/65 tabular-nums w-6 flex-shrink-0">
                     {positions[idx]}
                   </span>
 
@@ -772,7 +772,7 @@ export default function LiveLeaderboardPanel({
                     )}
                     {/* No live dot here: the Thru column already says F or a
                         hole count, and a dot beside it would say it twice. */}
-                    <span className="t-card text-ink truncate">
+                    <span className="font-semibold text-[17px] leading-[1.3] text-ink truncate">
                       {displayNameById.get(player.id) ?? player.name}
                     </span>
                   </div>

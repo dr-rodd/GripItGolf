@@ -30,7 +30,7 @@ export default async function RunJoinPage({ params }: {
 
   if (!challenge) {
     return (
-      <main className="min-h-dvh has-tabbar flex flex-col items-center justify-center bg-cream px-6">
+      <main className="min-h-dvh has-tabbar flex flex-col items-center justify-center paper px-6">
         <p className="font-[family-name:var(--font-display)] text-2xl text-ink mb-3">
           Challenge not found
         </p>
@@ -50,7 +50,7 @@ export default async function RunJoinPage({ params }: {
   )
 
   return (
-    <main className="min-h-dvh bg-cream has-tabbar">
+    <main className="min-h-dvh paper has-tabbar">
       <TripHeader backTo={`/run/${challenge.code}`} />
       <div className="max-w-lg mx-auto px-4 pt-8 pb-16 page-enter">
         <RunJoinClient

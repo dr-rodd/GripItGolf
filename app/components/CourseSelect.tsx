@@ -134,7 +134,7 @@ export default function CourseSelect({
   return (
     <>
       {trigger}
-      <div className="fixed inset-0 z-[60] flex flex-col bg-cream sheet-up">
+      <div className="fixed inset-0 z-[60] flex flex-col paper sheet-up">
         {/* ── Header — always pinned, like the stats page's own ── */}
         <div className="flex-shrink-0 border-b border-bark/12">
           <div className="max-w-lg mx-auto w-full px-4 pt-4 pb-3 flex items-center justify-between">

@@ -18,11 +18,11 @@ import TripHeader from '@/app/components/TripHeader'
  */
 export default function MatchplayLoading() {
   return (
-    <div className="min-h-dvh bg-cream has-tabbar text-ink">
+    <div className="min-h-dvh paper has-tabbar text-ink">
       <TripHeader />
 
       {/* The title bar, which every state of this page draws */}
-      <div className="bg-cream border-b border-bark/12">
+      <div className="paper border-b border-bark/12">
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-center">
           <div className="skeleton h-6 w-32" />
         </div>

@@ -60,7 +60,7 @@ export default function PasscodeGate({
   if (unlocked) return <>{children}</>
 
   return (
-    <main className="min-h-dvh bg-cream flex flex-col items-center justify-center px-6">
+    <main className="min-h-dvh paper flex flex-col items-center justify-center px-6">
       <div className="w-full max-w-xs text-center">
         <div className="w-14 h-14 rounded-full border border-accent/40 bg-accent/10 flex items-center justify-center mx-auto mb-6">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0A9D56"

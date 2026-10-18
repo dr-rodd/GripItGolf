@@ -41,7 +41,7 @@ export default async function StatsGuidePage({
   const { tripCode } = await params
 
   return (
-    <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
+    <div className="min-h-dvh paper has-tabbar page-enter text-ink">
       <TripHeader backTo={`/trip/${tripCode}/stats`} title="statsHub" />
 
       <div className="max-w-lg mx-auto px-4 py-6">

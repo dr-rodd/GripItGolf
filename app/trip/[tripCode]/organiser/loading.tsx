@@ -10,7 +10,7 @@ import TripHeader from '@/app/components/TripHeader'
  */
 export default function OrganiserLoading() {
   return (
-    <div className="min-h-dvh bg-cream has-tabbar">
+    <div className="min-h-dvh paper has-tabbar">
       <TripHeader />
       <div
         className="max-w-lg mx-auto px-4 pt-4"

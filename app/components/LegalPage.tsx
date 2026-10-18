@@ -15,7 +15,7 @@ export function LegalPage({ title, updated, children }: {
   children: ReactNode
 }) {
   return (
-    <main className="min-h-dvh bg-cream">
+    <main className="min-h-dvh paper">
       <TripHeader backTo="/" />
       <article className="max-w-lg mx-auto px-4 pt-8 pb-20 page-enter">
         <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink leading-tight">{title}</h1>

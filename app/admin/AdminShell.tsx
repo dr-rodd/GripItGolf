@@ -27,7 +27,7 @@ export default function AdminShell({
   children: React.ReactNode
 }) {
   return (
-    <main className="min-h-dvh bg-cream text-ink">
+    <main className="min-h-dvh paper text-ink">
       <div className="border-b border-bark/12">
         <div className="max-w-4xl mx-auto px-4 pt-5 flex items-center justify-between gap-4">
           <div className="min-w-0">

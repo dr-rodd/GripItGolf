@@ -30,7 +30,7 @@ import TripHeader from '@/app/components/TripHeader'
  */
 export default function TripLoading() {
   return (
-    <div className="min-h-dvh bg-cream has-tabbar text-ink">
+    <div className="min-h-dvh paper has-tabbar text-ink">
       {/* No `backTo`: the link is an invisible overlay on the bar, so leaving
           it out looks identical and only costs a tap target for the second
           this is on screen. `loading.tsx` is handed no params, so there is no

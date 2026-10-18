@@ -21,7 +21,7 @@ import TripHeader from '@/app/components/TripHeader'
  */
 export default function RoundSummaryLoading() {
   return (
-    <main className="min-h-dvh bg-cream has-tabbar">
+    <main className="min-h-dvh paper has-tabbar">
       <TripHeader />
 
       <div

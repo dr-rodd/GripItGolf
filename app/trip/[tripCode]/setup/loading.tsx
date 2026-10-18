@@ -14,7 +14,7 @@ import TripHeader from '@/app/components/TripHeader'
  */
 export default function SetupLoading() {
   return (
-    <div className="min-h-dvh bg-cream has-tabbar text-ink">
+    <div className="min-h-dvh paper has-tabbar text-ink">
       <TripHeader title="settings" />
 
       <div

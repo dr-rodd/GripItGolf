@@ -47,7 +47,7 @@ export default function StatsPanel({
                   Vs your handicap
                 </span>
                 <div className="flex items-baseline gap-2 mt-0.5">
-                  <span className={`font-[family-name:var(--font-display)] text-3xl t-num ${tone}`}>
+                  <span className={`font-serif text-3xl t-num ${tone}`}>
                     {formatGained(vs)}
                   </span>
                   <span className="t-cap text-ink/65">

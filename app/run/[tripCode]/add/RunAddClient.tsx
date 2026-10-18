@@ -304,7 +304,7 @@ export default function RunAddClient({
                       </a>
                     ) : null}
                   </span>
-                  <span className="font-[family-name:var(--font-display)] text-lg font-semibold tabular-nums text-ink flex-shrink-0">
+                  <span className="font-serif text-lg font-semibold tabular-nums text-ink flex-shrink-0">
                     {formatPoints(r.points)}
                   </span>
                   {r.source === 'manual' && (

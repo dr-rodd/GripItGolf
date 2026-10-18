@@ -184,7 +184,7 @@ export default async function TripExportPage({
   })).filter(d => d.lines.length > 0)
 
   return (
-    <div className="min-h-dvh bg-cream has-tabbar page-enter text-ink">
+    <div className="min-h-dvh paper has-tabbar page-enter text-ink">
       {/* The mark, not a page title — the title artworks are hand-drawn and
           this page's name is on the document itself, one line down. */}
       <div className="print:hidden">

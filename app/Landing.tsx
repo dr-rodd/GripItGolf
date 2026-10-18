@@ -184,7 +184,7 @@ export default function Landing() {
   }
 
   return (
-    <main className="min-h-dvh bg-cream page-enter">
+    <main className="min-h-dvh paper page-enter">
 
       {/* No trip to go back to yet, so the mark is not a link. It stands
           full size until a tap sends it up into the bar.

@@ -71,8 +71,10 @@ a six-character event code is the way in.
   action per screen.
 - **Dark mode** is the same eight tokens with night values (warm browns, never
   black or grey) — not a second design.
-- **Type.** Schibsted Grotesk 700 for headlines, Bespoke Serif for body and dense data,
-  Archivo for buttons/labels/fields. Scale 30 / 21 / 17 / 16 / 15 / 13.
+- **Type.** Schibsted Grotesk 700 for titles, Archivo for every other word
+  (body, labels, buttons, fields), Bespoke Serif only for the names and
+  numbers on boards, scorecards and standings. Scale 32 / 23 / 18 / 17 / 16 /
+  15 / 13 (`t-eyebrow`, table column headings only).
   **Nothing smaller than 13px.** Text never below 3:1 contrast; the tests
   compute real contrast in both themes.
 - **Shapes.** White cards on cream with thin bark borders. Touch targets at

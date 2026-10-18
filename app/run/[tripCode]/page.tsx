@@ -65,7 +65,7 @@ export default async function RunHubPage({ params }: {
   const phase = challengePhase(challenge.startDate, challenge.endDate, today, !!final)
 
   return (
-    <main className="min-h-dvh bg-cream has-tabbar">
+    <main className="min-h-dvh paper has-tabbar">
       <TripHeader backTo="/" />
 
       <div className="max-w-lg mx-auto px-4 pt-8 pb-16 page-enter space-y-8">
@@ -134,11 +134,11 @@ export default async function RunHubPage({ params }: {
             <SectionTitle>Final standings</SectionTitle>
             <div className="bg-surface border border-bark/12 rounded-2xl p-4 space-y-3">
               {final.teams.map((t, i) => (
-                <div key={`${t.name}-${i}`} className="flex items-center gap-3">
-                  <span className="t-cap text-ink/65 tabular-nums w-6">{t.place}</span>
+                <div key={`${t.name}-${i}`} className="font-serif flex items-center gap-3">
+                  <span className="text-[15px] leading-[1.45] text-ink/65 tabular-nums w-6">{t.place}</span>
                   <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} aria-hidden="true" />
                   <span className="text-ink text-sm flex-1 min-w-0 truncate">{t.name}</span>
-                  <span className="font-[family-name:var(--font-display)] text-lg font-semibold tabular-nums text-ink">
+                  <span className="text-lg font-semibold tabular-nums text-ink">
                     {formatPoints(t.score)}
                   </span>
                 </div>
@@ -163,10 +163,10 @@ export default async function RunHubPage({ params }: {
             <SectionTitle>Leading</SectionTitle>
             <div className="bg-surface border border-bark/12 rounded-2xl p-4 space-y-3">
               {standings.individuals.slice(0, 3).filter(l => l.points > 0).map(l => (
-                <div key={l.playerId} className="flex items-center gap-3">
-                  <span className="t-cap text-ink/65 tabular-nums w-6">{l.place}</span>
+                <div key={l.playerId} className="font-serif flex items-center gap-3">
+                  <span className="text-[15px] leading-[1.45] text-ink/65 tabular-nums w-6">{l.place}</span>
                   <span className="text-ink text-sm flex-1 min-w-0 truncate">{l.display}</span>
-                  <span className="font-[family-name:var(--font-display)] text-lg font-semibold tabular-nums text-ink">
+                  <span className="text-lg font-semibold tabular-nums text-ink">
                     {formatPoints(l.points)}
                   </span>
                 </div>

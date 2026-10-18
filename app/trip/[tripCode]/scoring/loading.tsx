@@ -15,7 +15,7 @@ import TripHeader from '@/app/components/TripHeader'
  */
 export default function ScoringLoading() {
   return (
-    <div className="min-h-dvh bg-cream has-tabbar text-ink">
+    <div className="min-h-dvh paper has-tabbar text-ink">
       <TripHeader title="scoring" />
 
       <div

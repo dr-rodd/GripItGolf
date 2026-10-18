@@ -57,7 +57,7 @@ function Chooser({ title, sub, onBack, children }: {
   children: React.ReactNode
 }) {
   return (
-    <main className="min-h-dvh bg-cream">
+    <main className="min-h-dvh paper">
       <TripHeader backTo="/golf" />
       <div className="flex flex-col items-center px-6 py-12 page-enter">
         <div className="w-full max-w-sm">

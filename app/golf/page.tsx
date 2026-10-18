@@ -26,7 +26,7 @@ const CARD = [
 
 export default function GolfPage() {
   return (
-    <main className="min-h-dvh bg-cream">
+    <main className="min-h-dvh paper">
 
       {/* The mark, exactly where it arrives from the landing page — and the
           way back there, so this screen needs no back button of its own. */}

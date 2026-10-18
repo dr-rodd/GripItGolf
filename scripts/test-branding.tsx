@@ -257,8 +257,10 @@ section('Three fonts, one job each')
   }
   ok(!/clash/i.test(stripComments(css) + stripComments(layout)),
     'Clash Display is gone, from the stacks and from the CDN request')
-  ok(css.includes("'Bespoke Serif'"), 'Bespoke Serif is the body and data face')
-  ok(css.includes('--font-archivo'), 'Archivo is the UI face')
+  ok(css.includes("'Bespoke Serif'"), 'Bespoke Serif is the data face')
+  ok(css.includes('--font-archivo'), 'Archivo is the UI and body face')
+  ok(/\nbody \{[^}]*font-family: var\(--font-ui\)/.test(stripComments(css)),
+    'the body is sans — the serif is asked for by name, never inherited')
 
   // Fontshare is a third party; a slow or blocked CDN must not change the
   // page's texture, so every family names a fallback of the same kind.
@@ -273,9 +275,16 @@ section('Three fonts, one job each')
   eq(uiFiles().filter(f => /font-playfair|font-caveat|font-crimson/.test(read(f))), [],
     'no trace of the previous typefaces')
 
-  for (const level of ['t-h1', 't-h2', 't-card', 't-body', 't-data', 't-label', 't-cap']) {
+  for (const level of ['t-h1', 't-h2', 't-card', 't-body', 't-data', 't-label', 't-cap', 't-eyebrow']) {
     ok(css.includes(`.${level}`), `${level} is in the scale`)
   }
+  // Which family each step is: titles Schibsted, data the serif, every
+  // other word Archivo.
+  const family = (level: string) =>
+    css.match(new RegExp(`\\.${level}\\s*\\{[^}]*font-family:\\s*var\\((--font-[\\w-]+)\\)`))?.[1]
+  for (const level of ['t-h1', 't-h2', 't-card']) eq(family(level), '--font-display', `${level} is a title`)
+  for (const level of ['t-body', 't-label', 't-cap', 't-eyebrow']) eq(family(level), '--font-ui', `${level} is Archivo`)
+  eq(family('t-data'), '--font-serif', 't-data is the serif')
 
   // Numbers in a table must not jitter as they change
   ok(/\.t-data, \.t-num \{[^}]*tabular-nums/.test(css), 'table numerals are tabular')
@@ -333,6 +342,94 @@ section('The fonts resolve, not just appear in the stylesheet')
     }
   }
   ok(refs >= 2, 'and the display and UI stacks both do refer to a next/font variable')
+}
+
+section('Names and numbers on a board ask for the serif by name')
+{
+  // Until October 2026 every board was in Bespoke Serif by inheritance —
+  // the body was the serif, and the display face its names asked for never
+  // resolved. The body is sans now, so each place where the serif is the
+  // point names it. A board losing it would quietly turn sans; these pins
+  // are where that would show first. The before/after was checked element
+  // by element against the pre-refresh build: no name or number moved.
+  const has = (f: string, re: RegExp, label: string) => ok(re.test(read(f)), label)
+  const LB = 'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx'
+  has(LB, /className=\{`font-serif flex items-center \$\{GAP\}/, 'the trip leaderboard: each row')
+  ok(!/textClassName="font-\[family-name:var\(--font-display\)\]/.test(read(LB)),
+    '  …and its names inherit it rather than asking for the title face')
+  has(LB, /font-serif text-xl font-bold tabular-nums/, '  …and a round tile\'s score')
+  has('app/scoring/LiveLeaderboardPanel.tsx', /className=\{`font-serif w-full flex items-center/,
+    'the in-play board inside the scoring card')
+  has('app/components/ScoreShape.tsx', /font-\[family-name:var\(--font-serif\)\]/, 'the score shapes')
+  has('app/components/scorecardStyle.ts', /SC_SF = \{ fontFamily: 'var\(--font-serif\)' \}/, 'the scorecards')
+  const RUN = 'app/run/[tripCode]/leaderboard/RunBoardClient.tsx'
+  has(RUN, /const ROW = 'font-serif /, 'the run leaderboard')
+  ok(!/const (NAME|SCORE) = 'font-\[family-name:var\(--font-display\)\]/.test(read(RUN)),
+    '  …whose names and scores inherit it')
+  has('app/run/[tripCode]/page.tsx', /className="font-serif flex items-center gap-3"/, 'the run hub\'s standings')
+  has('app/trip/[tripCode]/StatusBlock.tsx', /className="font-serif t-num text-accent-deep">\{player\.placing\}/,
+    'the hub\'s standing')
+  has('app/trip/[tripCode]/round/[roundNumber]/page.tsx', /className="font-serif flex items-center gap-3 px-4 py-3/,
+    'a round\'s podium')
+  has('app/trip/[tripCode]/StatsPanel.tsx', /font-serif text-3xl t-num/, 'the hub\'s stats headline')
+  has('app/trip/[tripCode]/stats/StatsClient.tsx', /<tbody className="font-serif">/, 'the stats tables')
+  ok((read('app/trip/[tripCode]/stats/charts.tsx').match(/h-auto font-serif/g) ?? []).length === 3,
+    '  …and all three charts')
+
+  // `font-serif` is a Tailwind utility, in a layer; the t-* scale classes
+  // are not, so they win whatever the order. A place number cannot be
+  // `t-cap font-serif` — it takes t-cap's size and the serif instead.
+  for (const f of [LB, RUN, 'app/scoring/LiveLeaderboardPanel.tsx']) {
+    ok(!/font-serif[^"`]*\bt-(cap|label|card|body)\b|\bt-(cap|label|card|body)\b[^"`]*font-serif/.test(read(f)),
+      `${f.split('/').pop()} never pairs the serif with a t-* class that would overrule it`)
+  }
+}
+
+section('Depth, texture and the named mixes are tokens')
+{
+  // Named once, so nobody retypes an opacity: line, line-strong, tint, the
+  // disabled pair and accent-tint. Each a var() like the palette, for the
+  // same reason — a literal is folded at build time and cannot follow the
+  // theme.
+  for (const name of ['line', 'line-strong', 'tint', 'disabled-bg', 'disabled-fg', 'accent-tint']) {
+    ok(new RegExp(`--color-${name}:\\s*var\\(--gd-${name}\\)`).test(css), `${name} is a token`)
+    ok(new RegExp(`--gd-${name}:\\s*color-mix\\(in srgb, var\\(--gd-(bark|ink|accent)\\)`).test(css),
+      `  …mixed from the palette, so it follows the theme`)
+  }
+
+  // Elevation: four named levels, each with a night value
+  const dark = css.slice(css.indexOf('html.dark {'), css.indexOf('}', css.indexOf('html.dark {')))
+  for (const level of ['raised', 'floating', 'cta']) {
+    ok(new RegExp(`--shadow-${level}:\\s*var\\(--gd-shadow-${level}\\)`).test(css), `shadow-${level} is a token`)
+    ok(dark.includes(`--gd-shadow-${level}:`), `  …with its own night value`)
+  }
+  ok(/--gd-shadow-raised:[^;]*rgba\(74, 55, 40/.test(css), 'shadows on cream are warm bark, never black')
+
+  // Bigger things rounder
+  const r = (n: string) => Number(css.match(new RegExp(`--radius-${n}:\\s*(\\d+)px`))?.[1] ?? 0)
+  eq([r('card'), r('button'), r('field'), r('tile'), r('sheet')], [20, 16, 14, 12, 24],
+    'radius: card 20, button 16, field 14, tile 12, sheet 24')
+
+  // The grain: paper, not cards, never fixed, never printed
+  const code = stripComments(css)
+  ok(/\nbody \{[^}]*background-image: var\(--gd-grain\)/.test(code), 'the page has its grain')
+  ok(/--gd-grain: url\("data:image\/svg\+xml,[^"]*feTurbulence[^"]*fractalNoise/.test(css),
+    '  …fractal noise, a texture and not a gradient')
+  ok(dark.includes('--gd-grain:'), '  …in tan at night')
+  ok(!/background-attachment:\s*fixed/.test(code), '  …never fixed, which repaints on every iPhone scroll')
+  ok(/@media print \{[\s\S]*body \{ background-image: none; \}/.test(code), '  …and never on paper')
+  // The body, and `paper` — the same surface for whatever stands in for
+  // the page and would otherwise paint flat cream over the grain: a
+  // screen's wrapper, a sticky bar, a sheet. Nothing else names the grain.
+  eq((code.match(/var\(--gd-grain\)/g) ?? []).length, 2, '  …named by the body and by paper, nothing else')
+  ok(/@utility paper \{[^}]*background-color: var\(--color-cream\);[^}]*background-image: var\(--gd-grain\)/.test(code),
+    '  …paper is cream with the grain')
+  const pages = uiFiles().filter(f => /className="[^"]*min-h-dvh[^"]*"/.test(read(f)))
+  eq(pages.filter(f => /className="[^"]*\bmin-h-dvh\b[^"]*(?<![\w/-])bg-cream(?![\w/-])[^"]*"|className="[^"]*(?<![\w/-])bg-cream(?![\w/-])[^"]*\bmin-h-dvh\b[^"]*"/.test(read(f))), [],
+    '  …and a full-height screen is paper, never flat cream that hides it')
+  // A card is never paper. (Fields and insets inside one keep a flat bg-cream.)
+  eq(uiFiles().filter(f => /className="[^"]*\bbg-surface\b[^"]*\bpaper\b|className="[^"]*\bpaper\b[^"]*\bbg-surface\b/.test(read(f))), [],
+    '  …and nothing is both a card and paper')
 }
 
 // ─── Readability ───────────────────────────────────────────────
@@ -571,11 +668,11 @@ section('Type is big enough to read')
 {
   // The scale itself
   const sizes: Record<string, number> = {}
-  for (const m of css.matchAll(/\.(t-h1|t-h2|t-card|t-body|t-data|t-label|t-cap)\s*\{[^}]*font-size:\s*(\d+)px/g)) {
+  for (const m of css.matchAll(/\.(t-h1|t-h2|t-card|t-body|t-data|t-label|t-cap|t-eyebrow)\s*\{[^}]*font-size:\s*(\d+)px/g)) {
     sizes[m[1]] = Number(m[2])
   }
   eq(Object.keys(sizes).sort(),
-    ['t-body', 't-cap', 't-card', 't-data', 't-h1', 't-h2', 't-label'],
+    ['t-body', 't-cap', 't-card', 't-data', 't-eyebrow', 't-h1', 't-h2', 't-label'],
     'every step of the scale has a size')
 
   for (const [name, px] of Object.entries(sizes)) {
@@ -1359,6 +1456,12 @@ section('Motion is calm, and can be switched off')
   ok(looping.every(d => d >= 900 && d <= 2000),
     `each repeat is a slow breath, 900ms to 2s (${looping.join('ms, ')}ms)`)
 
+  // One curve for the app: the putt curve, quick off the face with a long
+  // settle and never past the hole. Promoted from the intro (refresh plan,
+  // 3.5); `--gd-ease`, and `ease-putt` as a utility.
+  ok(/--gd-ease: cubic-bezier\(0\.16, 1, 0\.3, 1\)/.test(css), 'the putt curve is a token')
+  ok(/--ease-putt: var\(--gd-ease\)/.test(css), '  …and a utility')
+
   ok(css.includes('.page-enter'), 'pages fade in')
   ok(/\.page-enter \{ animation: gdFade 200ms ease-out/.test(css), 'over 200ms, ease-out')
 
@@ -1943,7 +2046,7 @@ section('Landing page')
     .filter(m => /(?:^| )bg-accent(-deep)?(?![-\w/])/.test(m[1]))
   eq(emeraldFills.length, 1, 'exactly one emerald button on the screen')
 
-  ok(home.includes('bg-cream'), 'on the cream page')
+  ok(/class="[^"]*\bpaper\b/.test(home), 'on the cream page, grain and all')
   // A Schrödinger quotation was swept off this page with the rest of the old
   // branding, and this line guarded that. The copy review put one back on
   // purpose, so what is guarded now is the old *name* — the fact of a
@@ -2203,7 +2306,7 @@ section('A pinned header holds still, and holds its own background')
       const cls = m[1]
       // `bottom-` bars float over content on purpose and are styled inline.
       if (/\bbottom-/.test(cls) || /\bz-30\b/.test(cls)) continue
-      ok(/\bbg-/.test(cls) || /\$\{SC_STICKY\}/.test(cls),
+      ok(/\bbg-|\bpaper\b/.test(cls) || /\$\{SC_STICKY\}/.test(cls),
         `${f.split('/').pop()}: a sticky row names its own background`)
     }
   }

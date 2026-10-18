@@ -34,7 +34,7 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
 
   if (!trip) {
     return (
-      <main className="min-h-dvh flex flex-col items-center justify-center bg-cream px-6">
+      <main className="min-h-dvh flex flex-col items-center justify-center paper px-6">
         <p className="font-[family-name:var(--font-display)] text-2xl text-ink mb-3">Trip not found</p>
         <BackButton href="/" label="Home" />
       </main>
@@ -80,7 +80,7 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
   const roundIds = (roundsResult.data ?? []).map(r => r.id as string)
 
   return (
-    <main className="min-h-dvh bg-cream has-tabbar page-enter">
+    <main className="min-h-dvh paper has-tabbar page-enter">
       <TripHeader backTo={`/trip/${tripCode}`} />
 
       <div className="max-w-md mx-auto px-6 py-10">

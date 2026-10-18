@@ -46,6 +46,49 @@
   --font-serif:   'Bespoke Serif', Georgia, 'Times New Roman', serif;
   --font-ui:      var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
 
+  /* ── Named mixes ──
+     The opacities every screen kept retyping — a hairline here at /12, a
+     field border there at /20 — given one name each, so a card's edge is
+     the same edge everywhere and the dark theme can nudge a strength
+     without touching a call site. Each points at a property in the
+     palette blocks below, for the same reason the eight tokens above do. */
+  --color-line:        var(--gd-line);         /* card hairlines, dividers */
+  --color-line-strong: var(--gd-line-strong);  /* field and chip borders */
+  --color-tint:        var(--gd-tint);         /* flat surfaces, segmented track, icon tiles */
+  --color-disabled-bg: var(--gd-disabled-bg);  /* a button that is not ready yet */
+  --color-disabled-fg: var(--gd-disabled-fg);  /* …and its words; contrast-exempt, disabled: only */
+  --color-accent-tint: var(--gd-accent-tint);  /* status pills, a selected wash */
+
+  /* ── Elevation: four levels and no others ──
+     Flat is a tint and no shadow. Raised is every card, list group,
+     secondary button and unselected chip: white, a hairline, and a warm
+     shadow just under it. Floating is a sheet, a card being dragged, and
+     the tab bar's upward edge. The primary button has its own, tinted
+     with the green it sits on. The hairline stays on raised cards: a
+     shadow nearly vanishes in direct sunlight, and the line is what still
+     separates card from page outdoors. */
+  --shadow-raised:      var(--gd-shadow-raised);
+  --shadow-floating:    var(--gd-shadow-floating);
+  --shadow-floating-up: var(--gd-shadow-floating-up);
+  --shadow-cta:         var(--gd-shadow-cta);
+  --shadow-cta-pressed: var(--gd-shadow-cta-pressed);
+
+  /* ── Radius ──
+     Bigger things are rounder: a card 20, a button 16, a field 14, a
+     small tile 12. Chips, pills and toggles are fully round; a sheet's
+     top corners are 24. */
+  --radius-card:   20px;
+  --radius-button: 16px;
+  --radius-field:  14px;
+  --radius-tile:   12px;
+  --radius-sheet:  24px;
+
+  /* ── The putt curve ──
+     Quick off the face with a long settle: snappy, never past the hole.
+     Promoted from the intro to the whole app (refresh plan, 3.5) — the
+     `ease-putt` utility, and `--gd-ease` for hand-written transitions. */
+  --ease-putt: var(--gd-ease);
+
   /* ── Tailwind's own small end, raised ──
      The scale below is the design system, but a few hundred call sites
      across the app reach for `text-sm` and `text-xs` instead, and those
@@ -75,6 +118,34 @@
 
   --gd-rust:      #B5533C;
   --gd-rust-deep: #8A3E2C;
+
+  /* The named mixes, worked out from the palette on the element where the
+     palette is declared — so under html.dark they read the night values
+     with nothing restated. The dark block below moves only the strengths
+     that need a nudge at night. */
+  --gd-line:        color-mix(in srgb, var(--gd-bark) 10%, transparent);
+  --gd-line-strong: color-mix(in srgb, var(--gd-bark) 18%, transparent);
+  --gd-tint:        color-mix(in srgb, var(--gd-bark) 6%, transparent);
+  --gd-disabled-bg: color-mix(in srgb, var(--gd-bark) 10%, transparent);
+  --gd-disabled-fg: color-mix(in srgb, var(--gd-ink) 45%, transparent);
+  --gd-accent-tint: color-mix(in srgb, var(--gd-accent) 14%, transparent);
+
+  /* Warm shadows, in bark rather than black — a black shadow on cream
+     reads as dirt. */
+  --gd-shadow-raised:        0 1px 2px rgba(74, 55, 40, .06), 0 8px 20px -10px rgba(74, 55, 40, .20);
+  --gd-shadow-floating:      0 2px 6px rgba(74, 55, 40, .08), 0 20px 40px -16px rgba(74, 55, 40, .30);
+  --gd-shadow-floating-up:   0 -10px 24px -16px rgba(74, 55, 40, .30);
+  --gd-shadow-cta:           0 1px 2px rgba(10, 107, 60, .20), 0 10px 20px -10px rgba(10, 107, 60, .60);
+  --gd-shadow-cta-pressed:   0 1px 2px rgba(10, 107, 60, .20);
+
+  /* The putt curve: cubic-bezier(0.16, 1, 0.3, 1). */
+  --gd-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* The paper's grain — fractal noise in bark, about 5% strong, tiled at
+     160px. A texture, not a gradient. On the body only: never on a card,
+     which is smooth white lifted off it, and never fixed, which costs an
+     iPhone a repaint on every scroll. */
+  --gd-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .29 0 0 0 0 .216 0 0 0 0 .157 .5 0 0 0 -.2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
 }
 
 /* ── Dark mode ──
@@ -109,6 +180,25 @@ html.dark {
 
   --gd-rust:      #D9765B;
   --gd-rust-deep: #E0937D;
+
+  /* A touch stronger at night, where a light line on a dark page reads
+     fainter than the same strength the other way round. */
+  --gd-line-strong: color-mix(in srgb, var(--gd-bark) 20%, transparent);
+  --gd-tint:        color-mix(in srgb, var(--gd-bark) 7%, transparent);
+  --gd-disabled-bg: color-mix(in srgb, var(--gd-bark) 12%, transparent);
+  --gd-accent-tint: color-mix(in srgb, var(--gd-accent) 16%, transparent);
+
+  /* Night shadows are black, with a 1px highlight along the top edge —
+     a dark card is lifted by its lit edge more than by its shadow. */
+  --gd-shadow-raised:      inset 0 1px 0 rgba(242, 235, 226, .05), 0 10px 24px -12px rgba(0, 0, 0, .70);
+  --gd-shadow-floating:    inset 0 1px 0 rgba(242, 235, 226, .06), 0 24px 48px -16px rgba(0, 0, 0, .80);
+  --gd-shadow-floating-up: 0 -10px 24px -16px rgba(0, 0, 0, .80);
+  --gd-shadow-cta:         inset 0 1px 0 rgba(255, 255, 255, .12), 0 10px 20px -10px rgba(0, 0, 0, .70);
+  --gd-shadow-cta-pressed: inset 0 1px 0 rgba(255, 255, 255, .12);
+
+  /* The grain in tan. Gentler than by day: light specks on a dark page
+     read stronger than dark specks on a light one. */
+  --gd-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .851 0 0 0 0 .776 0 0 0 0 .698 .26 0 0 0 -.09'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
 }
 
 /* Paper is always daylight. The trip export prints to PDF, and a phone in
@@ -128,7 +218,14 @@ html.dark {
 
     --gd-rust:      #B5533C;
     --gd-rust-deep: #8A3E2C;
+
+    --gd-line-strong: color-mix(in srgb, var(--gd-bark) 18%, transparent);
+    --gd-tint:        color-mix(in srgb, var(--gd-bark) 6%, transparent);
+    --gd-disabled-bg: color-mix(in srgb, var(--gd-bark) 10%, transparent);
+    --gd-accent-tint: color-mix(in srgb, var(--gd-accent) 14%, transparent);
   }
+  /* No grain on paper — it prints as a grey wash. */
+  body { background-image: none; }
 }
 
 html {
@@ -155,9 +252,28 @@ html {
      the accepted cost, and it is the smaller one. */
 }
 
-body {
-  font-family: var(--font-serif);
+/* The page is paper: cream with its grain. The body carries it, and so
+   does anything that stands in for the page — a screen's full-height
+   wrapper, a sticky bar, a sheet — because each of those paints its own
+   cream over the body and would otherwise hide the grain it sits on.
+   `paper` is that surface. A card is never paper; neither is a field or an
+   inset inside one, which stay a flat `bg-cream`. */
+@utility paper {
   background-color: var(--color-cream);
+  background-image: var(--gd-grain);
+}
+
+/* Sans is the default; the serif is opt-in. Archivo carries every word
+   that is not a title — body, labels, buttons, fields — and Bespoke Serif
+   is asked for by name where it is the point: the names and numbers on a
+   board, a scorecard, a standing (`font-serif`, `t-data`). The body was
+   the serif until the October 2026 refresh, which is how the boards came
+   to be in it; they say so for themselves now, so this flip left them as
+   they were. */
+body {
+  font-family: var(--font-ui);
+  background-color: var(--color-cream);
+  background-image: var(--gd-grain);
   color: var(--color-ink);
 }
 
@@ -192,10 +308,16 @@ body {
 
 .t-h2    { font-family: var(--font-display); font-weight: 700; font-size: 23px; line-height: 1.2; letter-spacing: -0.01em; }
 .t-card  { font-family: var(--font-display); font-weight: 700; font-size: 18px; line-height: 1.25; }
-.t-body  { font-family: var(--font-serif);   font-weight: 400; font-size: 17px; line-height: 1.6; }
+.t-body  { font-family: var(--font-ui);      font-weight: 400; font-size: 17px; line-height: 1.5; }
 .t-data  { font-family: var(--font-serif);   font-weight: 400; font-size: 16px; line-height: 1.4; }
 .t-label { font-family: var(--font-ui);      font-weight: 600; font-size: 15px; line-height: 1.3; }
-.t-cap   { font-family: var(--font-ui);      font-weight: 400; font-size: 15px; line-height: 1.45; }
+.t-cap   { font-family: var(--font-ui);      font-weight: 400; font-size: 15px; line-height: 1.4; }
+
+/* The one place capitals are spaced: a table's column headings (NAME · 1 ·
+   2 · TOT), where a short word over a narrow column needs the help. Nowhere
+   else — spaced serif capitals on every label were most of what made the
+   old screens read as generated. */
+.t-eyebrow { font-family: var(--font-ui); font-weight: 600; font-size: 13px; line-height: 1.3; letter-spacing: 0.04em; text-transform: uppercase; }
 
 /* The green dot as a full stop, closing a title the way it closes the
    wordmark.
