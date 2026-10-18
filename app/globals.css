@@ -319,6 +319,12 @@ body {
    old screens read as generated. */
 .t-eyebrow { font-family: var(--font-ui); font-weight: 600; font-size: 13px; line-height: 1.3; letter-spacing: 0.04em; text-transform: uppercase; }
 
+/* An event's code, shown as text — on a share card, in the organiser's
+   overview. The code and the field it is typed into are the other place
+   capitals are spaced: Archivo 600 at 0.12em, in ink. No size, so it takes
+   whatever size the place it sits in gives it. */
+.t-code { font-family: var(--font-ui); font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
+
 /* The green dot as a full stop, closing a title the way it closes the
    wordmark.
 

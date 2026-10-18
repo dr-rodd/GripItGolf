@@ -19,6 +19,7 @@ import React from 'react'
 import fs from 'fs'
 import ScoreShape, { NoReturnShape } from '../app/components/ScoreShape'
 import { ScorecardSheet } from '../app/trip/[tripCode]/leaderboard/TripLeaderboardClient'
+import { cardClass } from '../app/components/ui'
 import { roundTone, ROUND_TILE, ROUND_NOTE } from '../lib/roundState'
 import { shotsReceived } from '../lib/handicap'
 
@@ -174,7 +175,7 @@ section('The column headings stay above the board')
   // straight onto whoever was leading.
   const board = src.slice(src.indexOf('function Board('), src.indexOf('* The draw, as a chip'))
 
-  ok(/<div className="bg-surface border border-bark\/12 rounded-2xl">/.test(board),
+  ok(/<div className=\{cardClass\(\)\}>/.test(board),
     'the board card is found')
 
   // Read the class attributes rather than the source. This used to be one
@@ -182,7 +183,7 @@ section('The column headings stay above the board')
   // no overflow was enough to fail it — prose about a rule is not a breach
   // of it.
   const classAttrs = [...board.matchAll(/className="([^"]*)"/g)].map(m => m[1])
-  ok(classAttrs.some(c => /\brounded-2xl\b/.test(c)), 'the card rounds its corners')
+  ok(/\brounded-card\b/.test(cardClass()), 'the card rounds its corners')
   ok(!classAttrs.some(c => /rounded-2xl/.test(c) && /overflow/.test(c)),
     'and does not scroll or clip on its own, which would break the sticky offset')
 

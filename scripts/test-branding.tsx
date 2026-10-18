@@ -372,7 +372,7 @@ section('Names and numbers on a board ask for the serif by name')
   has('app/run/[tripCode]/page.tsx', /className="font-serif flex items-center gap-3"/, 'the run hub\'s standings')
   has('app/trip/[tripCode]/StatusBlock.tsx', /className="font-serif t-num text-accent-deep">\{player\.placing\}/,
     'the hub\'s standing')
-  has('app/trip/[tripCode]/round/[roundNumber]/page.tsx', /className="font-serif flex items-center gap-3 px-4 py-3/,
+  has('app/trip/[tripCode]/round/[roundNumber]/page.tsx', /className=\{`font-serif flex items-center gap-3 px-4 py-3/,
     'a round\'s podium')
   has('app/trip/[tripCode]/StatsPanel.tsx', /font-serif text-3xl t-num/, 'the hub\'s stats headline')
   has('app/trip/[tripCode]/stats/StatsClient.tsx', /<tbody className="font-serif">/, 'the stats tables')
@@ -1577,6 +1577,58 @@ section('Motion is calm, and can be switched off')
 
   // "Prefer skeleton loading states over spinners"
   ok(css.includes('.skeleton'), 'skeletons exist to be preferred')
+}
+
+section('No spaced capitals')
+{
+  // 317 uppercase utilities and ten different letter-spacings, most of them
+  // in Bespoke Serif by accident, were most of what made a screen read as
+  // generated: "CHALLENGE NAME", "STEP 1 OF 4 — CHALLENGE", "CONTINUE"
+  // (docs/refresh-plan.md, 2.2). Labels and buttons are sentence case now.
+  //
+  // Capitals are spaced in exactly two places, both named in the stylesheet
+  // rather than written at a call site: a table's column headings
+  // (`t-eyebrow`) and an event's code — typed into its field (`field-code`)
+  // or shown as text (`t-code`).
+  // One more is allowed by name: the terms' warranty disclaimer, set in
+  // capitals because a legal disclaimer is made conspicuous that way.
+  const UPPERCASE_ALLOWED = ['app/terms/page.tsx']
+  eq(uiFiles().filter(f => !UPPERCASE_ALLOWED.includes(f) && /(?<![\w:-])uppercase(?![\w-])/.test(stripComments(read(f)))), [],
+    'no uppercase is written at a call site')
+  eq(uiFiles().filter(f => /(?<![\w:-])tracking-(?!normal\b)[\w[\].]+/.test(stripComments(read(f)))), [],
+    'and no letter-spacing either')
+  ok(/\.t-eyebrow \{[^}]*letter-spacing: 0\.04em;[^}]*text-transform: uppercase/.test(css),
+    'the column heading carries its own, at 0.04em')
+  ok(/\.field\.field-code \{[^}]*letter-spacing: 0\.12em;[^}]*text-transform: uppercase/.test(css),
+    'and so does the code field, at 0.12em')
+  ok(/\.t-code \{[^}]*letter-spacing: 0\.12em;[^}]*text-transform: uppercase/.test(css),
+    'and a code shown as text, at the same 0.12em')
+  eq(uiFiles().filter(f => /\bEyebrow\b/.test(stripComments(read(f)))), [],
+    'the old Eyebrow component, a spaced-capital label, is gone')
+}
+
+section('Shadows are the four named levels')
+{
+  // Raised, floating, the primary's own, and that primary pressed — every
+  // other shadow was ad hoc (`shadow-xl` on a toast, `shadow-lg shadow-bark/20`
+  // on a dragged tile) and each one drifted from the last. Flat is no shadow.
+  const NAMED = /^shadow-(raised|floating|floating-up|cta|cta-pressed|none)$/
+  const stray: string[] = []
+  for (const f of uiFiles()) {
+    for (const m of stripComments(read(f)).matchAll(/(?<![\w:/-])(?:[a-z]+:)*(shadow(?:-[\w[\]().,/#%-]+)?)(?![\w-])/g)) {
+      const cls = m[1]
+      if (!NAMED.test(cls)) stray.push(`${f.split('/').pop()}: ${cls}`)
+    }
+  }
+  eq(stray, [], 'no shadow utility but the named ones')
+  eq(uiFiles().filter(f => /boxShadow\s*:/.test(stripComments(read(f)))), [],
+    'and none written inline')
+  // In the stylesheet, a box-shadow belongs to the press (which takes one
+  // away) or to the intro, a documented exception with its own motion.
+  const rules = [...stripComments(css).matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(m => /box-shadow\s*:/.test(m[2])).map(m => m[1].trim())
+  eq(rules.filter(sel => !/^\.intro-|^\.press/.test(sel)), [],
+    'the stylesheet casts shadows only for the press and the intro')
 }
 
 section('No glows')

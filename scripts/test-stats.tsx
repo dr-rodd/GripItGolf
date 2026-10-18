@@ -1217,7 +1217,7 @@ section('The lab reads the derivation and does none of its own')
   //
   // The first choice is who or where; the field is category boxes in the
   // one-player idiom, not the cramped five-column table it replaced.
-  ok(/\['players', 'Players'\], \['courses', 'Courses'\]/.test(client),
+  ok(/\{ value: 'players', label: 'Players' \}, \{ value: 'courses', label: 'Courses' \}/.test(client),
     'the first choice on the page is players or courses')
   ok(/'everyone'/.test(client) && />[\s]*Everyone[\s]*</.test(read('app/trip/[tripCode]/stats/StatsClient.tsx')),
     'the field is a chip at the head of the player list')

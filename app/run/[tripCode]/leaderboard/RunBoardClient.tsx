@@ -87,9 +87,9 @@ export default function RunBoardClient({ boards, anyRuns, garmin = false, strava
       {/* ── The board ── */}
       <div className={`overflow-hidden ${cardClass()}`}>
         <div className="flex items-center gap-3 px-3 py-2 border-b border-bark/12">
-          <span className="t-cap text-ink/65 w-6">Pos</span>
-          <span className="t-cap text-ink/65 flex-1">{board.kind === 'team' ? 'Team' : 'Runner'}</span>
-          <span className="t-cap text-ink/65">
+          <span className="t-eyebrow text-ink/65 w-6">Pos</span>
+          <span className="t-eyebrow text-ink/65 flex-1">{board.kind === 'team' ? 'Team' : 'Runner'}</span>
+          <span className="t-eyebrow text-ink/65">
             {board.kind === 'team' && board.byAverage ? 'Avg pts' : 'Pts'}
           </span>
         </div>

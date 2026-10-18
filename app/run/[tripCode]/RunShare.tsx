@@ -27,7 +27,7 @@ export default function RunShare({ code, name }: { code: string; name: string })
   return (
     <div className={`p-5 text-center ${cardClass()}`}>
       <p className="t-label text-ink/80 mb-3">Challenge code</p>
-      <p className="font-[family-name:var(--font-display)] text-[clamp(2rem,10vw,2.75rem)] leading-none text-accent-deep font-bold tracking-[0.12em] tabular-nums mb-4">
+      <p className="t-code text-[40px] leading-none text-ink mb-4">
         {code}
       </p>
       <button type="button" onClick={share} className={buttonClass('secondary')}>

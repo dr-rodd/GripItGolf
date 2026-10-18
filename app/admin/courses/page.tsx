@@ -4,7 +4,7 @@ import {
   countyOf, filterCourses, type DirectoryCourse,
 } from '@/lib/courseDirectory'
 import { cardState, CARD_STATE_LABEL, CARD_STATE_TONE, type CardState } from '@/lib/courseCard'
-import { FIELD, Pill, cardClass } from '@/app/components/ui'
+import { FIELD, Pill, cardClass, chipClass } from '@/app/components/ui'
 import { requireAdmin } from '../adminGate'
 import AdminLogin from '../AdminLogin'
 import AdminShell from '../AdminShell'
@@ -138,11 +138,7 @@ export default async function AdminCoursesPage({
               key={f.key || 'all'}
               href={href}
               aria-current={active ? 'true' : undefined}
-              className={`px-3 py-1.5 border rounded-full text-sm tracking-wider uppercase transition-colors ${
-                active
-                  ? 'border-accent text-accent-deep bg-accent/[0.08]'
-                  : 'border-bark/12 text-ink/65 hover:border-bark/25'
-              }`}
+              className={chipClass(active)}
             >
               {f.label} <span className="tabular-nums opacity-70">{count}</span>
             </Link>

@@ -168,7 +168,7 @@ section('The way forward is pinned under the add buttons')
   // Continue walks the days, and only becomes the way out on the last one
   ok(b.includes('Proceed to Add Players'),
     'the last day offers the way out of the itinerary')
-  ok(/Continue to Day \$\{openDay \+ 2\}/.test(b),
+  ok(/Continue to day \$\{openDay \+ 2\}/.test(b),
     'and every other day continues to the next one')
   ok(b.includes('lastDay ? onContinue() : setOpenDay(d => d + 1)'),
     'so the button walks the trip rather than leaving it early')
@@ -177,8 +177,10 @@ section('The way forward is pinned under the add buttons')
   ok(b.includes('disabled={lastDay && !!blockedReason}'),
     'and is never disabled by a day with nothing planned on it')
 
-  // The add buttons carry the extra height, and sit above it
-  ok(b.indexOf('min-h-[64px]') < b.indexOf('min-h-[52px]'),
+  // The add buttons carry the extra height, and sit above it: 64px, against
+  // the shared button's 56 the way forward is drawn with.
+  ok(b.indexOf('min-h-[64px]') > -1 &&
+    b.indexOf('min-h-[64px]') < b.indexOf("buttonClass(lastDay ? 'primary' : 'secondary')"),
     'the add buttons are taller, and come first')
 }
 
@@ -268,7 +270,11 @@ section('Date fields cannot overflow')
   // Dark scheme, or the picker text is invisible on this background
   ok(html.includes('color-scheme:dark'), 'the picker renders light-on-dark')
 
-  ok(html.includes('disabled'), 'a disabled state is supported')
+  // The field's own disabled look lives with the field (`.field:disabled`),
+  // so the markup only has to pass the attribute through.
+  ok(/disabled=\{disabled\}/.test(fs.readFileSync('app/components/DateField.tsx', 'utf-8')) &&
+    /\.field:disabled \{/.test(fs.readFileSync('app/globals.css', 'utf-8')),
+    'a disabled state is supported')
 }
 
 section('Start and end dates share one row')
@@ -413,9 +419,9 @@ section('Toggle knob is positioned, not translated')
   ok(off.includes('left:4px'), 'at rest it sits inside the left edge of the track')
   ok(on.includes('left:24px'), 'switched on it sits inside the right edge')
 
-  // 48 wide, 20 knob, 4 inset → travel is 48-20-4 = 24, and it stays inside
-  ok(off.includes('width:48px') && off.includes('height:28px'), 'the track has a fixed size')
-  ok(off.includes('width:20px') && off.includes('height:20px'), 'so does the knob')
+  // 52 wide, 24 knob, 4 inset → travel is 52-24-4 = 24, and it stays inside
+  ok(off.includes('width:52px') && off.includes('height:32px'), 'the track has a fixed size')
+  ok(off.includes('width:24px') && off.includes('height:24px'), 'so does the knob')
   ok(off.includes('top:4px'), 'and it is centred vertically')
 
   ok(on.includes('aria-checked="true"'), 'it reports its state to assistive tech')
@@ -682,7 +688,9 @@ async function main() {
       'the code no longer uses trailing letter-spacing at a fixed huge size')
     ok(source.includes("resultCode.split('')"),
       'it is laid out character by character')
-    ok(source.includes('clamp('),
+    // The one style for a code shown big lives with the parts (CODE_CHAR).
+    ok(source.includes('className={CODE_CHAR}') &&
+      /CODE_CHAR = '[^']*clamp\(/.test(fs.readFileSync('app/components/ui.tsx', 'utf-8')),
       'and scales with the viewport rather than a fixed size')
   }
 

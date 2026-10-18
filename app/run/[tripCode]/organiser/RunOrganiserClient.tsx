@@ -77,7 +77,7 @@ export default function RunOrganiserClient({ challenge, dates, progress }: {
             </div>
             <div>
               <dt className="t-cap text-ink/65">Code</dt>
-              <dd className="text-ink text-sm mt-0.5 tracking-[0.12em] font-medium">{challenge.code}</dd>
+              <dd className="t-code text-ink text-sm mt-0.5">{challenge.code}</dd>
             </div>
             <div>
               <dt className="t-cap text-ink/65">Field</dt>

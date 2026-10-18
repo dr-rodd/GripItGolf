@@ -246,7 +246,7 @@ section('A device nobody has claimed is told what to do')
   // In the hub's own card, not a component from somewhere else. Emphasis
   // here is position — first thing under the title — and the emerald box it
   // used to be read as pasted in next to a page of cream cards.
-  ok(claim.includes('bg-surface') && claim.includes('border-bark/12'),
+  ok(claim.includes("cardClass('raised', true)"),
     '  …drawn as a cream card like everything else on the hub')
   ok(!claim.includes('border-2 border-accent'), '  …not an outlined emerald block')
 

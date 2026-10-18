@@ -571,7 +571,7 @@ export default function TripSetupClient({
         <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={() => setDetailsOpen(false)}>
           <div className="absolute inset-0 bg-ink/40 page-enter" />
           <div
-            className="relative paper rounded-t-2xl max-h-[88vh] overflow-y-auto sheet-up"
+            className="relative paper rounded-t-sheet shadow-floating-up max-h-[88vh] overflow-y-auto sheet-up"
             style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
             onClick={e => e.stopPropagation()}
           >

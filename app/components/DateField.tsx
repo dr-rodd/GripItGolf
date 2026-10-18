@@ -1,5 +1,6 @@
-import { FIELD, FIELD_LABEL } from '@/app/components/ui'
 'use client'
+
+import { FIELD, FIELD_LABEL } from './ui'
 
 /**
  * A date input that stays inside its container.

@@ -59,7 +59,7 @@ export default async function SharePage({ params }: { params: Promise<{ tripCode
             the accent so an eye across a table finds the six characters. */}
         <p className="t-card text-ink/80 mt-6">
           or enter code{' '}
-          <span className="t-num text-accent-deep tracking-[0.12em]">{tripCode}</span>
+          <span className="t-code text-ink">{tripCode}</span>
         </p>
 
         <div className="mt-8">

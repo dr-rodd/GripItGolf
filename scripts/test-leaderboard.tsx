@@ -192,6 +192,9 @@ const F = (league: Partial<TripFormats['league']>, rest: Record<string, unknown>
 
 // ─── Tabs follow the boards that exist ─────────────────────────
 
+// The Discard control is a switch (Toggle), named for what it does.
+const DISCARD_SWITCH = 'aria-label="Drop the worst round, as this board scores it"'
+
 section('Tabs')
 {
   const one = render([SF()])
@@ -230,10 +233,10 @@ section('Stableford')
     'a discarding board still opens with nothing struck through')
   eq((dropped.match(/>72</g) ?? []).length, 3,
     '  …and every round counting, so all three still total 72')
-  ok(dropped.includes('>Discard<') && dropped.includes('Showing every round'),
+  ok(dropped.includes(DISCARD_SWITCH) && dropped.includes('Showing every round'),
     '  …with the switch offering the rule, and saying which way it is set')
 
-  ok(!plain.includes('>Discard<'),
+  ok(!plain.includes(DISCARD_SWITCH),
     'a board that drops nothing has no switch to offer')
 
   // Drop the worst: Alice keeps 54, Bob keeps 36, Cara keeps 54 — so Bob
@@ -293,11 +296,11 @@ section('Two boards on one trip can discard differently')
   // The switch is the tell, now that the strike-through only appears once it
   // is tapped: a board offers it exactly when its own rule took a round away.
   const sfKeeps = render([SF(0), ST(1)])
-  ok(!sfKeeps.includes('>Discard<'),
+  ok(!sfKeeps.includes(DISCARD_SWITCH),
     'the Stableford board keeps every card, though the Strokes board beside it drops one')
 
   const stDrops = render([ST(1), SF(0)])
-  ok(stDrops.includes('>Discard<'),
+  ok(stDrops.includes(DISCARD_SWITCH),
     'and the Strokes board drops one, though the Stableford board beside it keeps every card')
 
   // And they disagree about the totals themselves, which is the substance
@@ -480,7 +483,7 @@ section('Custom points with the worst round dropped')
   const html = render([CU([10, 5, 1], 1)])
   ok(!html.includes('line-through'), 'the board opens with every award counting')
   ok(html.includes('>11<'), '  …so the two winners total eleven, not ten')
-  ok(html.includes('>Discard<'), '  …and the switch is there to drop the weaker round')
+  ok(html.includes(DISCARD_SWITCH), '  …and the switch is there to drop the weaker round')
 
   const cu = rowsFor(CU([10, 5, 1], 1))
   eq(cu.board.map(r => `${r.name} ${r.total}`), ['Alice 10', 'Cara 10', 'Bob 5'],
@@ -493,7 +496,7 @@ section('Custom points with the worst round dropped')
 
 section('Title card appears once more than one board is running')
 {
-  const CARD = 'bg-surface border border-bark/12 rounded-2xl px-4 py-3 mb-3'
+  const CARD = 'px-4 py-3 mb-3 bg-surface border border-line shadow-raised rounded-card'
 
   const single = render([SF()])
   ok(!single.includes(CARD), 'a lone board gets no title card, just its rule line')
@@ -682,8 +685,12 @@ section('The live dot belongs to a player, not to the trip')
 section('Matchplay')
 {
   /** The one row of chips at the top: league boards, then the draw. */
-  const stripOf = (html: string) =>
-    html.split('overflow-x-auto -mx-1 px-1 pb-1')[1]?.split('</div>')[0] ?? ''
+  // The row the board switch (a Segmented) and the draw's chip share.
+  const stripOf = (html: string) => {
+    const rest = html.split('flex items-center gap-2 mb-4">')[1] ?? ''
+    const end = rest.search(/<\/a><\/div>|<\/div><\/div>/)
+    return end < 0 ? rest : rest.slice(0, end + 10)
+  }
 
   // A draw is one of the things the trip is playing for, so it sits on the
   // same line as the boards rather than in a card of its own above them.
@@ -1251,7 +1258,7 @@ section('An old trip is read as the boards its flags described')
   // It renders, which is the thing that actually matters to an existing trip
   const html = render(F({ stableford: true, strokes: true, discardWorst: 1 }))
   ok(html.includes('Alice'), 'an old trip still gets its board')
-  ok(html.includes('>Discard<'), 'with its discard rule still there to be applied')
+  ok(html.includes(DISCARD_SWITCH), 'with its discard rule still there to be applied')
 }
 
 section('An old team trip keeps the options the new model does not ask for')

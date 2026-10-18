@@ -1062,7 +1062,7 @@ section('The itinerary reads at the size a plan deserves')
 
   // A day is the unit the list is read in — "what's Friday?" — so it heads
   // its items at label weight in full ink, not as a caption.
-  ok(/t-label uppercase[^"]*text-ink mb-2/.test(itin),
+  ok(/"t-label text-ink mb-2"/.test(itin),
     'a day heading is a heading, not a caption')
 
   // An activity is a plan with a name and a time, and it reads at the golf

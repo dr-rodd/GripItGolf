@@ -1091,7 +1091,7 @@ function Board({
   // headings exactly HEADER_H down the card and parking them on top of
   // whoever is leading. The corners round without it.
   return (
-    <div className={`${cardClass()}`}>
+    <div className={cardClass()}>
 
       {/* ── The discard switch ──
           Above the headings and inside the card, because it changes what
@@ -1126,7 +1126,7 @@ function Board({
         // hard 0 here would slide the column headings under the mark.
         style={{ top: HEADER_H }}
         // Above the rows' own pinned columns, which carry z-10 of their own.
-        className="sticky z-20 bg-surface border-b border-bark/12 rounded-t-2xl"
+        className="sticky z-20 bg-surface border-b border-line rounded-t-card"
       >
         <div
           ref={head}
@@ -1314,7 +1314,7 @@ function Board({
           the table. It holds nothing and is hidden from a screen reader for
           the same reason. */}
       <div
-        className="h-3 rounded-b-2xl border-t border-bark/25 bg-bark/[0.04]"
+        className="h-3 rounded-b-card border-t border-line bg-tint"
         aria-hidden="true"
       />
     </div>
@@ -1530,7 +1530,10 @@ export default function TripLeaderboardClient({
   // somewhere rather than as one more segment.
   const strip = (tabs.length > 1 || showMatchplay) && (
     <div className="flex items-center gap-2 mb-4">
-      {tabs.length > 1 && (
+      {/* Even one board shows here when a draw sits beside it: the row is
+          then a choice between that board and the draw, and the board's
+          name is the half of it that would otherwise go unsaid. */}
+      {tabs.length > 0 && (
         <Segmented
           label="Which leaderboard"
           className="flex-1 min-w-0"
