@@ -104,7 +104,7 @@ export default function TagJoinClient({
             <li
               key={tag.id}
               className={`p-4 ${cardClass()} ${
-                mine ? 'border-accent/40' : 'border-bark/12'
+                mine ? 'border-accent/40' : 'border-line'
               }`}
             >
               <div className="flex items-start justify-between gap-3">
@@ -130,7 +130,7 @@ export default function TagJoinClient({
                       type="button"
                       onClick={() => pick(null)}
                       disabled={busy}
-                      className="flex-shrink-0 px-4 py-2 rounded-lg border border-bark/25 text-ink/80 text-sm hover:border-bark/40 transition-colors disabled:opacity-40"
+                      className="flex-shrink-0 px-4 py-2 rounded-lg border border-line-strong text-ink/80 text-sm hover:border-bark/40 transition-colors disabled:opacity-40"
                     >
                       Leave
                     </button>

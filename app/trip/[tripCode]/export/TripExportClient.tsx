@@ -139,7 +139,7 @@ export default function TripExportClient({
       {/* ── The document ── */}
 
       <header className="mb-8">
-        <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink">{tripName}</h1>
+        <h1 className="t-h1 text-ink">{tripName}</h1>
         <p className="t-cap text-ink/65 mt-1">
           {dateRange(startDate, endDate)}
           {dateRange(startDate, endDate) ? ' · ' : ''}Trip code {tripCode}
@@ -172,14 +172,14 @@ export default function TripExportClient({
           <h2 className="t-h2 text-ink mb-3">Players</h2>
           <table className="w-full text-[14px]">
             <thead>
-              <tr className="text-left t-cap text-ink/65 border-b border-bark/12">
+              <tr className="text-left t-cap text-ink/65 border-b border-line">
                 <th className="py-1.5 font-normal">Name</th>
                 <th className="py-1.5 font-normal text-right">Handicap</th>
               </tr>
             </thead>
             <tbody>
               {players.map(p => (
-                <tr key={p.name} className="border-b border-bark/[0.06]">
+                <tr key={p.name} className="border-b border-line">
                   <td className="py-1.5 text-ink">{p.name}</td>
                   <td className="py-1.5 text-right tabular-nums text-ink">
                     {p.handicap ?? '—'}
@@ -209,7 +209,7 @@ export default function TripExportClient({
           <div className="overflow-x-auto">
             <table className="w-full text-[14px]">
               <thead>
-                <tr className="text-left t-cap text-ink/65 border-b border-bark/12">
+                <tr className="text-left t-cap text-ink/65 border-b border-line">
                   <th className="py-1.5 pr-2 font-normal">Pos</th>
                   <th className="py-1.5 pr-2 font-normal">Name</th>
                   {counted.map(r => (
@@ -222,7 +222,7 @@ export default function TripExportClient({
               </thead>
               <tbody>
                 {board.rows.map(row => (
-                  <tr key={row.name} className="border-b border-bark/[0.06]">
+                  <tr key={row.name} className="border-b border-line">
                     <td className="py-1.5 pr-2 tabular-nums text-ink/80">{row.place}</td>
                     <td className="py-1.5 pr-2 text-ink">
                       {row.name}
@@ -273,7 +273,7 @@ export default function TripExportClient({
                   <table className="w-full text-[14px]">
                     <tbody>
                       {results.map(row => (
-                        <tr key={row.name} className="border-b border-bark/[0.06]">
+                        <tr key={row.name} className="border-b border-line">
                           <td className="py-1 pr-2 w-8 tabular-nums text-ink/80">{row.place}</td>
                           <td className="py-1 pr-2 text-ink">{row.name}</td>
                           <td className="py-1 text-right tabular-nums text-ink">{row.score}</td>
@@ -288,7 +288,7 @@ export default function TripExportClient({
         </section>
       )}
 
-      <footer className="pt-2 border-t border-bark/12">
+      <footer className="pt-2 border-t border-line">
         {/* suppressHydrationWarning: the server and the phone can disagree
             about what day it is around midnight, and the date is decoration. */}
         <p className="t-cap text-ink/65" suppressHydrationWarning>

@@ -78,7 +78,7 @@ function Chips<K extends string>({ options, chosen, onChoose }: {
 /** The saved setup, said back — the done screen and the finalised view. */
 function SetupSummary({ setup }: { setup: BracketSetup }) {
   const names = bracketRoundNames(setup.size)
-  const row = 'flex items-baseline justify-between gap-4 py-2.5 border-b border-bark/12 last:border-b-0'
+  const row = 'flex items-baseline justify-between gap-4 py-2.5 border-b border-line last:border-b-0'
   return (
     <div className={`px-4 py-1.5 ${cardClass()}`}>
       <div className={row}>
@@ -164,7 +164,7 @@ export default function BracketSetupForm({
       <main className="min-h-dvh paper has-tabbar page-enter">
         <TripHeader backTo={`/trip/${tripCode}/organiser`} />
         <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
-          <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-1">
+          <h1 className="t-h1 text-ink mb-1">
             Bracket setup
           </h1>
           <p className="text-ink/65 text-sm mb-6">
@@ -287,7 +287,7 @@ export default function BracketSetupForm({
       <main className="min-h-dvh paper has-tabbar page-enter">
         <TripHeader backTo={`/trip/${tripCode}/organiser`} />
         <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
-          <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-1">
+          <h1 className="t-h1 text-ink mb-1">
             {saved.finalized ? 'Bracket finalised' : 'Bracket setup saved'}
           </h1>
           <p className="text-ink/65 text-sm mb-6">

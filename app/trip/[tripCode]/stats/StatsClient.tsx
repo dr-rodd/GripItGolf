@@ -262,7 +262,7 @@ export default function StatsClient({
           the whole page — three rows of chooser above every figure you came
           to read. What pins instead is the one line they collapse into,
           below. */}
-      <div ref={controls} className="-mx-4 px-4 pb-3 border-b border-bark/12 mb-4">
+      <div ref={controls} className="-mx-4 px-4 pb-3 border-b border-line mb-4">
         {/* The first choice on the page: who, or where. */}
         <Segmented
           label="Players or courses"
@@ -370,19 +370,13 @@ export default function StatsClient({
             />
           ) : (
             <>
-              <div className="flex gap-1.5 mt-2 overflow-x-auto -mx-1 px-1 pb-1">
-                {SG_COMPONENTS.map(([key, label]) => (
-                  <button key={key} type="button" aria-pressed={trendKey === key}
-                    onClick={() => setTrendKey(key)}
-                    className={`flex-shrink-0 px-3 py-1.5 t-cap rounded-xl border transition-colors duration-150 ${
-                      trendKey === key
-                        ? 'border-accent bg-accent/[0.12] text-accent-deep'
-                        : 'border-bark/12 text-ink/50 hover:border-bark/25'
-                    }`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <Segmented
+                className="mt-2"
+                label="Which part of the game"
+                value={trendKey}
+                onChange={setTrendKey}
+                options={SG_COMPONENTS.map(([value, label]) => ({ value, label }))}
+              />
               {/* The bars that used to sit inside the Strokes gained panel,
                   promoted here whole — above-and-below-the-line reads better
                   than a line joining the points, and the panel's chart was
@@ -474,7 +468,7 @@ function AdvancedSettings({ mode, onMode }: {
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="mt-6 border-t border-bark/12 pt-3">
+    <div className="mt-6 border-t border-line pt-3">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -498,22 +492,13 @@ function AdvancedSettings({ mode, onMode }: {
             How the net figures divide your handicap between the green and
             everything before it. Splits only — no total moves.
           </p>
-          <div className="flex gap-1.5 mt-2" role="group" aria-label="Putting share">
-            {([
-              ['fixed', 'A fifth'],
-              ['by-par', 'By par'],
-            ] as const).map(([m, label]) => (
-              <button key={m} type="button" aria-pressed={mode === m}
-                onClick={() => onMode(m)}
-                className={`px-3.5 py-2 t-cap rounded-xl border transition-colors duration-150 ${
-                  mode === m
-                    ? 'border-accent bg-accent/[0.12] text-accent-deep font-semibold'
-                    : 'border-bark/12 text-ink/65 hover:border-bark/25'
-                }`}>
-                {label}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            className="mt-2"
+            label="Putting share"
+            value={mode}
+            onChange={onMode}
+            options={[{ value: 'fixed', label: 'A fifth' }, { value: 'by-par', label: 'By par' }]}
+          />
           <p className="t-cap text-ink/50 leading-snug mt-2">
             {mode === 'fixed'
               ? 'A fifth, whatever the par — measured scoring says the gap between handicaps lives mostly in the long game.'
@@ -555,7 +540,7 @@ function CondensedBar({
 }) {
   return (
     <div
-      className={`fixed left-0 right-0 z-30 paper border-b border-bark/12 transition-[opacity,transform] duration-200 ease-out ${
+      className={`fixed left-0 right-0 z-30 paper border-b border-line transition-[opacity,transform] duration-200 ease-out ${
         show ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'
       }`}
       style={{ top: HEADER_H }}
@@ -687,7 +672,7 @@ function CoursePicker({
             role="listbox"
             aria-label="Courses"
             aria-multiselectable={onAll ? true : undefined}
-            className="border-t border-bark/12"
+            className="border-t border-line"
           >
             {onAll && (
               <li>
@@ -697,8 +682,8 @@ function CoursePicker({
                   aria-selected={allOn}
                   tabIndex={open ? 0 : -1}
                   onClick={onAll}
-                  className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b border-bark/[0.08] transition-colors duration-150 ${
-                    allOn ? 'bg-accent/[0.06]' : 'active:bg-bark/[0.04]'
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b border-line transition-colors duration-150 ${
+                    allOn ? 'bg-accent/[0.06]' : 'active:bg-tint'
                   }`}
                 >
                   <span className={`flex-1 min-w-0 truncate t-cap ${
@@ -724,8 +709,8 @@ function CoursePicker({
                     aria-selected={on}
                     tabIndex={open ? 0 : -1}
                     onClick={() => onPick(id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b border-bark/[0.08] last:border-b-0 transition-colors duration-150 ${
-                      on ? 'bg-accent/[0.06]' : 'active:bg-bark/[0.04]'
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b border-line last:border-b-0 transition-colors duration-150 ${
+                      on ? 'bg-accent/[0.06]' : 'active:bg-tint'
                     }`}
                   >
                     <span className={`flex-1 min-w-0 truncate t-cap ${
@@ -781,7 +766,7 @@ function Course({ rows, title }: {
             {rows.map(r => (
               <tr
                 key={r.holeNumber}
-                className={`border-t border-bark/[0.08] ${r.settled ? '' : 'text-ink/50'}`}
+                className={`border-t border-line ${r.settled ? '' : 'text-ink/50'}`}
               >
                 <td className="py-2.5 whitespace-nowrap">
                   <span className="t-num">{r.holeNumber}</span>

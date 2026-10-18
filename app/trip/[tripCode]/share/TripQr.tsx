@@ -75,7 +75,7 @@ export default function TripQr({ tripCode }: { tripCode: string }) {
 
   return (
     <div
-      className="mx-auto rounded-2xl border border-bark/12 p-5"
+      className="mx-auto rounded-2xl border border-line p-5"
       style={{
         width: 'min(70vw, 340px)',
         backgroundColor: '#FFFFFF',

@@ -43,7 +43,7 @@ export default function StatsPanel({
             const tone = Math.round(vs * 10) === 0 ? 'text-ink'
               : vs > 0 ? 'text-accent-deep' : 'text-rust-deep'
             return (
-              <div className="pt-3 pb-2.5 border-b border-bark/[0.08]">
+              <div className="pt-3 pb-2.5 border-b border-line">
                 <span className="t-cap text-ink/65">
                   Vs your handicap
                 </span>
@@ -116,7 +116,7 @@ function Figure({ label, value, note, tone = 'ink' }: {
     : tone === 'rust' ? 'text-rust-deep'
     : 'text-ink'
   return (
-    <div className="flex items-baseline justify-between gap-3 py-3 border-b border-bark/[0.08] last:border-b-0">
+    <div className="flex items-baseline justify-between gap-3 py-3 border-b border-line last:border-b-0">
       <span className="t-cap text-ink/65">{label}</span>
       <span className="flex items-baseline gap-2 min-w-0">
         {note && <span className="t-cap text-ink/50 truncate">{note}</span>}

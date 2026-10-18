@@ -31,7 +31,7 @@ import { nextSheetId, setOf, withSheet } from '@/lib/teamSets'
 import { TAG_SET } from '@/lib/tagBoards'
 import { defaultCustomPoints, editableRows, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
 import { IconCheck, IconMinus, IconPencil, IconPlus, IconSettings, IconTrophy, IconX } from './icons'
-import { Card, FIELD, FIELD_LABEL, IconButton, ListGroup, Pill, SectionHeader, buttonClass, chipClass } from './ui'
+import { Card, FIELD, FIELD_LABEL, IconButton, ListGroup, Pill, SectionHeader, buttonClass, cardClass, chipClass, optionClass } from './ui'
 import { courseLabel } from '@/lib/courseDirectory'
 
 /**
@@ -80,9 +80,6 @@ const roundLabel = (r: LinkableRound) =>
   [r.roundNumber ? `Round ${r.roundNumber}` : 'Round', r.courseName ? courseLabel(r.courseName) : r.courseName]
     .filter(Boolean).join(' — ')
 
-const CHOICE =
-  'w-full text-left px-4 py-3.5 rounded-xl border transition-colors duration-150 ' +
-  'disabled:opacity-40 disabled:cursor-not-allowed'
 
 function Choice({
   on, label, hint, taken = false, disabled = false, onClick,
@@ -99,9 +96,8 @@ function Choice({
       type="button"
       onClick={onClick}
       disabled={disabled || taken}
-      className={`${CHOICE} ${
-        on ? 'border-accent bg-accent/[0.08]' : 'border-bark/25 bg-surface hover:border-bark/40'
-      }`}
+      aria-pressed={on}
+      className={`${optionClass(on)} disabled:opacity-40 disabled:cursor-not-allowed`}
     >
       <span className="flex items-start justify-between gap-3">
         <span className="min-w-0">
@@ -137,7 +133,7 @@ function ordinal(n: number): string {
 
 /** The two steppers under the prize table. Square, and a full tap target. */
 const STEP =
-  'w-11 h-11 flex-shrink-0 grid place-items-center rounded-xl border border-bark/25 '
+  'w-11 h-11 flex-shrink-0 grid place-items-center rounded-xl border border-line-strong '
   + 'bg-surface transition-colors duration-150'
 
 /**
@@ -635,7 +631,7 @@ function RoundLinks({
   }
 
   return (
-    <div className="border-t border-bark/12 pt-4 mt-1">
+    <div className="border-t border-line pt-4 mt-1">
       <p className="t-label text-ink/80 mb-1">Decide matches from the cards?</p>
       <p className="t-cap text-ink/65 mb-3 leading-snug">
         Link a bracket round to a round of golf and the winners come off the
@@ -660,9 +656,7 @@ function RoundLinks({
             return (
               <div
                 key={bracketRound}
-                className={`rounded-xl border px-3 py-3 ${
-                  link ? 'border-accent/40 bg-accent/[0.05]' : 'border-bark/25 bg-surface'
-                }`}
+                className={`px-3 py-3 ${cardClass(link ? 'chosen' : 'raised')}`}
               >
                 <p className="t-card text-ink mb-2">{name}</p>
 
@@ -1211,11 +1205,8 @@ function Builder({
                 key={n}
                 type="button"
                 onClick={() => set({ discardWorst: n })}
-                className={`min-h-[48px] rounded-xl border t-label transition-colors duration-150 ${
-                  (draft.discardWorst ?? 0) === n
-                    ? 'border-accent bg-accent/[0.08] text-ink'
-                    : 'border-bark/25 bg-surface text-ink/80'
-                }`}
+                aria-pressed={(draft.discardWorst ?? 0) === n}
+                className={`${chipClass((draft.discardWorst ?? 0) === n)} w-full`}
               >
                 {n === 0 ? 'Keep all' : `Drop ${n}`}
               </button>

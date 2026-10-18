@@ -145,7 +145,7 @@ export default function MatchplayPanel({
           className={`px-4 py-4 rounded-xl mb-3 border ${
             played > 0
               ? 'border-rust/50 bg-rust/10'
-              : 'border-bark/12 bg-surface'
+              : 'border-line bg-surface'
           }`}
         >
           {played > 0 ? (

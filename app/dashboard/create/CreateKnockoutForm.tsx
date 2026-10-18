@@ -247,7 +247,7 @@ export default function CreateKnockoutForm() {
             </svg>
           </div>
 
-          <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-2">
+          <h1 className="t-h1 text-ink mb-2">
             Event Created!
           </h1>
           <p className="text-ink/65 text-sm mb-10">
@@ -441,7 +441,7 @@ export default function CreateKnockoutForm() {
                     onChange={e => updatePlayer(i, { name: e.target.value })}
                     placeholder="Full name"
                     className={i === duplicateIndex
-                      ? FIELD.replace('border-bark/12', 'border-rust/60')
+                      ? FIELD.replace('border-line', 'border-rust/60')
                       : FIELD}
                   />
                   {i === duplicateIndex && (
@@ -476,7 +476,7 @@ export default function CreateKnockoutForm() {
 
             <button
               onClick={addPlayer}
-              className="w-full py-4 border border-dashed border-bark/25 rounded-xl text-ink/65 text-sm hover:border-bark/25 hover:text-ink/80 transition-colors"
+              className="w-full py-4 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:border-line-strong hover:text-ink/80 transition-colors"
             >
               + Add another player
             </button>

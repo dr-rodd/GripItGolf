@@ -19,7 +19,7 @@ import {
 import {
   IconFlag, IconHome, IconArrowRight, IconFork, IconPlus, IconX,
 } from './icons'
-import { FIELD, FIELD_LABEL, Pill, buttonClass, cardClass } from './ui'
+import { FIELD, FIELD_LABEL, Pill, buttonClass, cardClass, chipClass, optionClass } from './ui'
 import {
   Sheet, Stepper, GolfFields, golfDraftFields, EMPTY_GOLF_DRAFT, type GolfDraft,
 } from './ItineraryForms'
@@ -78,10 +78,10 @@ function Tile({
   return (
     <div
       className={`flex items-center gap-3 px-3 py-3 ${cardClass()} ${
-        dragging ? 'border-accent/50' : 'border-bark/12'
+        dragging ? 'border-accent/50' : 'border-line'
       }`}
     >
-      <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-bark/[0.06] flex items-center justify-center text-bark">
+      <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-tint flex items-center justify-center text-bark">
         <Icon size={17} />
       </span>
       <span className="flex-1 min-w-0">
@@ -189,11 +189,7 @@ function KindSwitch({ current, onSwitch }: {
             <button
               key={k} type="button" onClick={() => onSwitch(k)}
               aria-pressed={current === k}
-              className={`flex items-center justify-center gap-1.5 min-h-[48px] rounded-xl border t-label transition-colors duration-150 ${
-                current === k
-                  ? 'border-accent bg-accent/[0.10] text-ink'
-                  : 'border-bark/25 bg-surface text-ink/80'
-              }`}
+              className={`${chipClass(current === k, true)} w-full`}
             >
               <Icon size={15} />{KIND_LABEL[k]}
             </button>
@@ -416,7 +412,7 @@ export default function ItineraryBuilder({
             above the content it is filtering. One day needs no picker —
             a strip with a single chip saying "Day 1" is furniture. */}
         {days > 1 && (
-        <div className="-mx-4 px-4 overflow-x-auto mb-5">
+        <div className="-mx-4 px-4 -mt-2 pt-2 pb-2 mb-3 overflow-x-auto">
           <div className="flex gap-2 w-max">
             {Array.from({ length: days }, (_, i) => {
               const count = itemsForDay(items, i).length
@@ -426,11 +422,7 @@ export default function ItineraryBuilder({
                   key={i}
                   type="button"
                   onClick={() => setOpenDay(i)}
-                  className={`flex-shrink-0 px-3 py-2 rounded-xl border transition-colors duration-150 ${
-                    active
-                      ? 'border-accent bg-accent/[0.10] text-ink'
-                      : 'border-bark/12 bg-surface text-ink/80 hover:border-bark/25'
-                  }`}
+                  className={optionClass(active, 'tile')}
                 >
                   <span className="block t-label">Day {i + 1}</span>
                   <span className="block t-cap text-ink/65 mt-0.5">
@@ -489,7 +481,7 @@ export default function ItineraryBuilder({
             <button
               type="button"
               onClick={() => openSheet('golf')}
-              className="w-full py-4 border border-dashed border-bark/25 rounded-xl text-ink/65 t-label hover:border-accent hover:text-ink/80 transition-colors duration-150"
+              className="w-full py-4 border border-dashed border-line-strong rounded-xl text-ink/65 t-label hover:border-accent hover:text-ink/80 transition-colors duration-150"
             >
               + Add another round
             </button>
@@ -509,7 +501,7 @@ export default function ItineraryBuilder({
         )}
 
         {!singleDay && dayItems.length === 0 && (
-          <div className="border border-dashed border-bark/25 rounded-xl py-10 text-center">
+          <div className="border border-dashed border-line-strong rounded-xl py-10 text-center">
             <p className="t-body text-ink/65">Nothing added yet. Get your golf in!</p>
           </div>
         )}
@@ -524,7 +516,7 @@ export default function ItineraryBuilder({
           guide supports they still clear the tap-target minimum, and a
           second row would push the way out of the day below the fold. */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-30 bg-cream/95 backdrop-blur-sm border-t border-bark/12"
+        className="fixed bottom-0 left-0 right-0 z-30 bg-cream/95 backdrop-blur-sm border-t border-line"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 10px)' }}
       >
         <div className="max-w-lg mx-auto px-4 pt-3">
@@ -635,11 +627,8 @@ export default function ItineraryBuilder({
               {TRAVEL_MODES.map(m => (
                 <button
                   key={m} type="button" onClick={() => setMode(m)}
-                  className={`min-h-[48px] rounded-xl border t-label capitalize transition-colors duration-150 ${
-                    mode === m
-                      ? 'border-accent bg-accent/[0.10] text-ink'
-                      : 'border-bark/25 bg-surface text-ink/80'
-                  }`}
+                  aria-pressed={mode === m}
+                  className={`${chipClass(mode === m)} w-full capitalize`}
                 >
                   {m}
                 </button>

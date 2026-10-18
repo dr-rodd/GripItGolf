@@ -574,7 +574,7 @@ export default function TripSetupClient({
             style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
             onClick={e => e.stopPropagation()}
           >
-            <div className="sticky top-0 paper px-4 pt-4 pb-3 flex items-center justify-between border-b border-bark/12">
+            <div className="sticky top-0 paper px-4 pt-4 pb-3 flex items-center justify-between border-b border-line">
               <h2 className="t-h2 text-ink">Trip Settings</h2>
               <button
                 type="button"
@@ -621,14 +621,14 @@ export default function TripSetupClient({
                   take it off.
                 </p>
               </div>
-              <div className="pt-2 border-t border-bark/12">
+              <div className="pt-2 border-t border-line">
                 <button
                   type="button"
                   disabled={locked}
                   onClick={() => { setDetailsOpen(false); setItineraryOpen(true) }}
                   className="w-full flex items-center gap-3 py-3.5 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <span className="flex-shrink-0 w-9 h-9 rounded-lg bg-bark/[0.06] flex items-center justify-center text-bark">
+                  <span className="flex-shrink-0 w-9 h-9 rounded-lg bg-tint flex items-center justify-center text-bark">
                     <IconFlag size={16} />
                   </span>
                   <span className="flex-1 min-w-0 text-left">
@@ -646,7 +646,7 @@ export default function TripSetupClient({
                   about the golf: it decides who may open any of this, which
                   makes it the same kind of question as what the trip is
                   called and when it runs. */}
-              <div className="pt-4 border-t border-bark/12">
+              <div className="pt-4 border-t border-line">
                 <label className={FIELD_LABEL}>Who can edit</label>
                 <p className="t-cap text-ink/65 mb-3 leading-snug">
                   Who can change this trip&apos;s players, teams, format and dates.
@@ -702,7 +702,7 @@ export default function TripSetupClient({
                   leaderboards: it does not change what the trip is playing
                   for, and no board reads it. It changes what the scorecard
                   asks for, which is a fact about how this trip is run. */}
-              <div className="pt-4 border-t border-bark/12">
+              <div className="pt-4 border-t border-line">
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
                     <label className={FIELD_LABEL}>Track stats</label>

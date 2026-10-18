@@ -88,11 +88,11 @@ export default async function TripTeamsPage({
   const screen = (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
       <TripHeader backTo={`/trip/${tripCode}`} />
-      <div className="paper border-b border-bark/12">
+      <div className="paper border-b border-line">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <BackButton href={`/trip/${tripCode}/setup`} />
           <div className="min-w-0 text-center">
-            <h1 className="font-[family-name:var(--font-display)] text-lg text-ink">
+            <h1 className="t-card text-ink">
               Teams
             </h1>
           </div>
@@ -142,9 +142,9 @@ export default async function TripTeamsPage({
       const join = (
         <div className="min-h-dvh paper has-tabbar page-enter text-ink">
           <TripHeader backTo={`/trip/${tripCode}`} />
-          <div className="paper border-b border-bark/12">
+          <div className="paper border-b border-line">
             <div className="max-w-3xl mx-auto px-4 py-4 text-center">
-              <h1 className="font-[family-name:var(--font-display)] text-lg text-ink">
+              <h1 className="t-card text-ink">
                 Teams
               </h1>
             </div>

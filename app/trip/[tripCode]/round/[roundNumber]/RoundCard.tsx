@@ -87,7 +87,7 @@ function Row({
   className?: string
 }) {
   const base = `py-2 text-center text-[13px] tabular-nums ${className}`
-  const border = last ? '' : 'border-b border-bark/[0.08]'
+  const border = last ? '' : 'border-b border-line'
   return (
     <>
       {cells.map((c, i) => (

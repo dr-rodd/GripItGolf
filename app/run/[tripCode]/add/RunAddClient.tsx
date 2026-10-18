@@ -170,7 +170,7 @@ export default function RunAddClient({
         </div>
       ) : (
         <form onSubmit={save} className="space-y-5">
-          <h2 className="font-[family-name:var(--font-display)] text-2xl text-ink">Log a run</h2>
+          <h2 className="t-h2 text-ink">Log a run</h2>
 
           {counted.length > 1 && (
             <div>
@@ -271,7 +271,7 @@ export default function RunAddClient({
               const label = RUN_ACTIVITIES.find(a => a.key === r.activity)?.label ?? 'Run'
               const extra = [describeDuration(r.minutes), describePace(r.km, r.minutes)].filter(Boolean).join(' · ')
               return (
-                <li key={r.id} className={`flex items-center gap-3 px-4 py-3 ${i < myRuns.length - 1 ? 'border-b border-bark/12' : ''}`}>
+                <li key={r.id} className={`flex items-center gap-3 px-4 py-3 ${i < myRuns.length - 1 ? 'border-b border-line' : ''}`}>
                   <span className="flex-1 min-w-0">
                     <span className="block text-ink text-sm font-medium">
                       {formatKm(r.km)} {label.toLowerCase()}

@@ -154,7 +154,7 @@ export default function StravaCard({ code, status, joined, outcome, end, closed 
               type="button"
               onClick={() => call('sync')}
               disabled={!!busy}
-              className="px-3 py-2 rounded-lg text-sm font-medium border border-bark/25 text-ink/80 hover:border-bark/40 transition-colors disabled:opacity-40"
+              className="px-3 py-2 rounded-lg text-sm font-medium border border-line-strong text-ink/80 hover:border-bark/40 transition-colors disabled:opacity-40"
             >
               {busy === 'sync' ? 'Checking…' : 'Check for new runs'}
             </button>

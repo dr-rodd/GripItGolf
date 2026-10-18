@@ -6,7 +6,7 @@ import {
   type RunActivity, type RulesDraft,
   rulesFromDraft, draftIssue, describeRules, exampleLine, formatPoints,
 } from '@/lib/runChallenge'
-import { cardClass, chipClass } from './ui'
+import { cardClass, chipClass, optionClass } from './ui'
 
 /**
  * A run challenge's points rules, as a form — the one copy. Challenge setup
@@ -24,7 +24,7 @@ import { cardClass, chipClass } from './ui'
 /** A number field keeps what was typed; the rules read it through parseRules. */
 const numeric = (v: string) => v.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1')
 
-const SMALL_INPUT = 'w-20 bg-cream border border-bark/12 rounded-lg px-3 py-2 text-ink text-right tabular-nums focus:outline-none focus:border-accent/50 transition-colors'
+const SMALL_INPUT = 'w-20 bg-cream border border-line rounded-lg px-3 py-2 text-ink text-right tabular-nums focus:outline-none focus:border-accent/50 transition-colors'
 
 function NumberRow({ label, hint, value, onChange, unit, max }: {
   label: string
@@ -150,11 +150,7 @@ export default function RunRulesFields({ draft, onChange, askTeams = true }: {
                 type="button"
                 onClick={() => set({ teamScore: s.key })}
                 aria-pressed={draft.teamScore === s.key}
-                className={`w-full text-left rounded-xl px-4 py-3 border transition-colors ${
-                  draft.teamScore === s.key
-                    ? 'border-accent/60 bg-accent/[0.08]'
-                    : 'border-bark/12 bg-cream hover:border-bark/25'
-                }`}
+                className={optionClass(draft.teamScore === s.key)}
               >
                 <p className="text-ink text-sm font-medium">{s.label}</p>
                 <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">{s.hint}</p>

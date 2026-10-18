@@ -205,7 +205,7 @@ export default function TagPortalClient({
       <TripHeader backTo={`/trip/${tripCode}/organiser`} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
-        <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-1">
+        <h1 className="t-h1 text-ink mb-1">
           Tags
         </h1>
         <p className="text-ink/65 text-sm mb-6 leading-snug">
@@ -249,7 +249,7 @@ export default function TagPortalClient({
                     type="button"
                     onClick={() => setColorFor(colorFor === tag.id ? null : tag.id)}
                     aria-label={`Change the colour of ${tag.name}`}
-                    className="w-4 h-4 rounded-full flex-shrink-0 border border-bark/12"
+                    className="w-4 h-4 rounded-full flex-shrink-0 border border-line"
                     style={{ backgroundColor: tag.color }}
                   />
                   <input
@@ -293,7 +293,7 @@ export default function TagPortalClient({
                 {memberIds.length > 0 ? (
                   <ul className="flex flex-col gap-1 mt-3">
                     {memberIds.map(id => (
-                      <li key={id} className="flex items-center justify-between gap-2 rounded-lg bg-bark/[0.04] px-3 py-2">
+                      <li key={id} className="flex items-center justify-between gap-2 rounded-lg bg-tint px-3 py-2">
                         <span className="text-ink text-sm truncate">{nameOf.get(id) ?? '—'}</span>
                         <button
                           type="button"
@@ -328,7 +328,7 @@ export default function TagPortalClient({
                             <button
                               type="button"
                               onClick={() => assign(p.id, tag.id)}
-                              className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-bark/[0.04] transition-colors"
+                              className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-tint transition-colors"
                             >
                               <span className="text-ink text-sm truncate flex-1">{p.name}</span>
                               {currentTag && (
@@ -440,7 +440,7 @@ export default function TagPortalClient({
             <button
               type="button"
               onClick={() => setShowBoards(true)}
-              className="w-full py-4 border border-dashed border-bark/25 rounded-xl text-ink/65 text-sm hover:border-bark/40 hover:text-ink/80 transition-colors"
+              className="w-full py-4 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:border-bark/40 hover:text-ink/80 transition-colors"
             >
               {ranked ? 'Change the leaderboards' : '+ Rank the tags'}
             </button>

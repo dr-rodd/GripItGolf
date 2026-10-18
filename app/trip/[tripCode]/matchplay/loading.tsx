@@ -22,7 +22,7 @@ export default function MatchplayLoading() {
       <TripHeader />
 
       {/* The title bar, which every state of this page draws */}
-      <div className="paper border-b border-bark/12">
+      <div className="paper border-b border-line">
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-center">
           <div className="skeleton h-6 w-32" />
         </div>

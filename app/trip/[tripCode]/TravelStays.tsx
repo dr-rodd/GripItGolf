@@ -85,7 +85,7 @@ export default function TravelStays({
           </p>
           {stays.map(run => (
             <div key={`${run.name}-${run.fromDay}`} className="flex flex-col items-center text-center gap-2">
-              <span className="w-11 h-11 rounded-xl bg-bark/[0.06] text-bark flex items-center justify-center">
+              <span className="w-11 h-11 rounded-xl bg-tint text-bark flex items-center justify-center">
                 <StayIcon size={22} />
               </span>
               <Place name={run.name} />
@@ -105,7 +105,7 @@ export default function TravelStays({
             const day = describeDay(dateForDay(startDate, leg.dayIndex), leg.dayIndex)
             return (
               <div key={leg.id} className="flex flex-col items-center text-center gap-2">
-                <span className="w-11 h-11 rounded-xl bg-bark/[0.06] text-bark flex items-center justify-center">
+                <span className="w-11 h-11 rounded-xl bg-tint text-bark flex items-center justify-center">
                   <Icon size={22} />
                 </span>
                 {/* The destination is the part worth a map. Where you are

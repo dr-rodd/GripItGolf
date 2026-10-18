@@ -19,7 +19,7 @@ export default function AdminLogin() {
     <main className="min-h-dvh flex flex-col items-center justify-center paper px-6 py-16">
       <Wordmark width={150} className="mb-8" />
 
-      <h1 className="font-[family-name:var(--font-display)] text-ink text-2xl mb-2">
+      <h1 className="t-h1 text-ink mb-2">
         Admin
       </h1>
       <p className="text-ink/65 text-sm mb-10">Platform overview</p>

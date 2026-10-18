@@ -539,7 +539,7 @@ export default function CreateLeagueForm({ schedule }: {
             </svg>
           </div>
 
-          <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-2">
+          <h1 className="t-h1 text-ink mb-2">
             League Created!
           </h1>
           <p className="text-ink/65 text-sm mb-10">
@@ -832,7 +832,7 @@ export default function CreateLeagueForm({ schedule }: {
                         <button
                           onClick={() => setManualDates(prev => [...prev, ''])}
                           disabled={manualDates.length >= MAX_LEAGUE_DAYS}
-                          className="w-full mt-2 py-3 border border-dashed border-bark/25 rounded-xl text-ink/65 text-sm hover:border-bark/25 hover:text-ink/80 transition-colors disabled:opacity-40"
+                          className="w-full mt-2 py-3 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:border-line-strong hover:text-ink/80 transition-colors disabled:opacity-40"
                         >
                           + Add a day
                         </button>
@@ -965,7 +965,7 @@ export default function CreateLeagueForm({ schedule }: {
                 <button
                   onClick={() => setSeriesCount(n => Math.min(n + 1, MAX_LEAGUE_DAYS))}
                   disabled={seriesCount >= MAX_LEAGUE_DAYS}
-                  className="flex-1 py-3 border border-dashed border-bark/25 rounded-xl text-ink/65 text-sm hover:border-bark/25 hover:text-ink/80 transition-colors disabled:opacity-40"
+                  className="flex-1 py-3 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:border-line-strong hover:text-ink/80 transition-colors disabled:opacity-40"
                 >
                   + Add another event
                 </button>
@@ -975,7 +975,7 @@ export default function CreateLeagueForm({ schedule }: {
                       setSeriesCount(n => n - 1)
                       setVenues(prev => prev.slice(0, seriesCount - 1))
                     }}
-                    className="flex-shrink-0 px-4 py-3 border border-bark/25 rounded-xl text-ink/65 text-sm hover:text-ink/80 transition-colors"
+                    className="flex-shrink-0 px-4 py-3 border border-line-strong rounded-xl text-ink/65 text-sm hover:text-ink/80 transition-colors"
                   >
                     Remove last
                   </button>
@@ -1065,7 +1065,7 @@ export default function CreateLeagueForm({ schedule }: {
                     onChange={e => updatePlayer(i, { name: e.target.value })}
                     placeholder="Full name"
                     className={i === duplicateIndex
-                      ? FIELD.replace('border-bark/12', 'border-rust/60')
+                      ? FIELD.replace('border-line', 'border-rust/60')
                       : FIELD}
                   />
                   {i === duplicateIndex && (
@@ -1100,7 +1100,7 @@ export default function CreateLeagueForm({ schedule }: {
 
             <button
               onClick={addPlayer}
-              className="w-full py-4 border border-dashed border-bark/25 rounded-xl text-ink/65 text-sm hover:border-bark/25 hover:text-ink/80 transition-colors"
+              className="w-full py-4 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:border-line-strong hover:text-ink/80 transition-colors"
             >
               + Add another player
             </button>
@@ -1177,7 +1177,7 @@ export default function CreateLeagueForm({ schedule }: {
               <EventPermissionToggles value={perms} onChange={setPerms} />
             </div>
 
-            <div className="pt-2 border-t border-bark/12">
+            <div className="pt-2 border-t border-line">
               <div className={`px-4 py-4 mb-3 ${cardClass()}`}>
                 <p className="text-ink text-sm font-medium">Organiser PIN</p>
                 <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">

@@ -157,7 +157,7 @@ export default async function AdminLivePage() {
       )}
 
       {summaries.length === 0 ? (
-        <div className="border border-bark/12 rounded-xl py-16 text-center">
+        <div className="border border-line rounded-xl py-16 text-center">
           <p className="text-ink/65 text-sm">No scorecards open. All quiet.</p>
         </div>
       ) : (
@@ -173,7 +173,7 @@ export default async function AdminLivePage() {
               <div key={s.id} className={`px-4 py-4 ${cardClass()}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-[family-name:var(--font-display)] text-base leading-tight">
+                    <p className="t-card">
                       {trip?.name ?? 'Unknown trip'}
                       {round && <span className="text-ink/65"> · Round {round.round_number}</span>}
                     </p>

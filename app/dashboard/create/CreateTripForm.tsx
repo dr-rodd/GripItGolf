@@ -511,7 +511,7 @@ export default function CreateTripForm() {
             </svg>
           </div>
 
-          <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-2">
+          <h1 className="t-h1 text-ink mb-2">
             {Noun} Created!
           </h1>
           <p className="text-ink/65 text-sm mb-10">
@@ -811,7 +811,7 @@ export default function CreateTripForm() {
                     // Swapped, not appended: two border-colour classes in one
                     // string leaves which one wins up to stylesheet order.
                     className={i === duplicateIndex
-                      ? FIELD.replace('border-bark/12', 'border-rust/60')
+                      ? FIELD.replace('border-line', 'border-rust/60')
                       : FIELD}
                   />
                   {i === duplicateIndex && (
@@ -857,7 +857,7 @@ export default function CreateTripForm() {
 
             <button
               onClick={addPlayer}
-              className="w-full py-4 border border-dashed border-bark/25 rounded-xl text-ink/65 text-sm hover:border-bark/25 hover:text-ink/80 transition-colors"
+              className="w-full py-4 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:border-line-strong hover:text-ink/80 transition-colors"
             >
               + Add another player
             </button>
@@ -869,7 +869,7 @@ export default function CreateTripForm() {
                 the competition at the first tee, not at the kitchen table.
                 Nothing chosen writes nothing, so a skipped trip is exactly
                 the trip this wizard has always made. */}
-            <div className="mt-8 pt-6 border-t border-bark/12">
+            <div className="mt-8 pt-6 border-t border-line">
               <p className="t-label text-ink/80 mb-2">
                 Leaderboards (optional)
               </p>
@@ -893,7 +893,7 @@ export default function CreateTripForm() {
                 organiser says so. The same toggles are editable any time
                 from the organiser area. */}
             {isTournament && (
-              <div className="mt-8 pt-6 border-t border-bark/12">
+              <div className="mt-8 pt-6 border-t border-line">
                 <p className="t-label text-ink/80 mb-2">
                   How collaborative should this event be?
                 </p>
@@ -913,7 +913,7 @@ export default function CreateTripForm() {
                 organiser gets into the admin side of the Event Hub from any
                 phone (and it locks Trip Setup with the same code), so a
                 tournament without one would have no organiser side at all. */}
-            <div className="mt-8 pt-6 border-t border-bark/12">
+            <div className="mt-8 pt-6 border-t border-line">
               {isTournament ? (
                 <div className={`${cardClass()} px-4 py-4`}>
                   <p className="text-ink text-sm font-medium">Organiser PIN</p>

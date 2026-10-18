@@ -103,7 +103,7 @@ function PlayerTile({
         {player.gender}
       </span>
       <span className="border border-accent/50 bg-accent/10 px-2 py-0.5 rounded flex-shrink-0">
-        <span className="font-[family-name:var(--font-display)] text-accent text-base leading-none">
+        <span className="font-serif font-bold text-accent-deep text-base leading-none tabular-nums">
           {player.handicap ?? 0}
         </span>
       </span>
@@ -163,13 +163,13 @@ function TeamColumn({
             ? 'border-2 border-rust/60 bg-rust/5'
             : over
               ? 'border border-rust/50 bg-surface'
-              : 'border border-bark/12 bg-surface'
+              : 'border border-line bg-surface'
       }`}
     >
-      <div className="px-3 py-3 border-b border-bark/12 flex items-center gap-2">
+      <div className="px-3 py-3 border-b border-line flex items-center gap-2">
         <button
           onClick={() => setShowColors(v => !v)}
-          className="w-4 h-4 rounded-full flex-shrink-0 ring-offset-2 ring-offset-surface hover:ring-2 hover:ring-bark/25 transition-all"
+          className="w-4 h-4 rounded-full flex-shrink-0 ring-offset-2 ring-offset-surface hover:ring-2 hover:ring-line-strong transition-all"
           style={{ backgroundColor: team.color }}
           aria-label={`Change ${team.name} colour`}
         />
@@ -191,7 +191,7 @@ function TeamColumn({
       </div>
 
       {showColors && (
-        <div className="px-3 py-2.5 border-b border-bark/12 flex gap-2 flex-wrap">
+        <div className="px-3 py-2.5 border-b border-line flex gap-2 flex-wrap">
           {PRESET_COLORS.map(color => (
             <button
               key={color}
@@ -228,7 +228,7 @@ function TeamColumn({
         )}
 
         {addingOpen && (
-          <div className="rounded-lg border border-bark/12 bg-cream p-2">
+          <div className="rounded-lg border border-line bg-cream p-2">
             <div className="flex items-center gap-2 mb-1.5">
               <input
                 type="text"
@@ -262,7 +262,7 @@ function TeamColumn({
                           setAddingOpen(false)
                         }
                       }}
-                      className="w-full text-left px-2 py-1.5 rounded text-ink text-sm hover:bg-bark/[0.06] transition-colors"
+                      className="w-full text-left px-2 py-1.5 rounded text-ink text-sm hover:bg-tint transition-colors"
                     >
                       {p.name}
                     </button>
@@ -290,10 +290,10 @@ function UnassignedZone({ players }: { players: Placed[] }) {
       className={`rounded-xl overflow-hidden transition-all duration-150 ${
         isOver
           ? 'border-2 border-accent/60 bg-accent/5'
-          : 'border border-bark/12 bg-surface'
+          : 'border border-line bg-surface'
       }`}
     >
-      <div className="px-4 py-3 border-b border-bark/12 flex items-center justify-between">
+      <div className="px-4 py-3 border-b border-line flex items-center justify-between">
         <span className="t-label text-ink/65">Unassigned</span>
         <span className="text-ink/50 text-[13px] tabular-nums">{players.length}</span>
       </div>
@@ -336,9 +336,7 @@ function BoardTile({
   const nameOf = (id: string) => players.find(p => p.id === id)?.name ?? ''
 
   return (
-    <Card className={`overflow-hidden transition-colors duration-150 ${
-      selected ? 'border-accent bg-accent/[0.06]' : ''
-    }`}>
+    <Card variant={selected ? 'chosen' : 'raised'} className="overflow-hidden transition-colors duration-150">
       <button
         type="button"
         onClick={onTap}
@@ -387,7 +385,7 @@ function BoardTile({
           {teams.map(t => {
             const names = membersOf(memberships, t.id).map(nameOf).filter(Boolean)
             return (
-              <div key={t.id} className="flex items-start gap-3 px-3 py-2.5 border border-bark/12 rounded-xl">
+              <div key={t.id} className="flex items-start gap-3 px-3 py-2.5 border border-line rounded-xl">
                 <span className="mt-1 w-3 h-3 rounded-full flex-shrink-0"
                   style={{ backgroundColor: t.color }} />
                 <span className="min-w-0 flex-1">
@@ -856,7 +854,7 @@ className="fixed left-1/2 -translate-x-1/2 max-w-[92vw] px-5 py-3 bg-surface bor
 
         {/* Another board with no teams can be played by these ones */}
         {couldJoin.length > 0 && (
-          <div className="border border-bark/12 rounded-xl p-4">
+          <div className="border border-line rounded-xl p-4">
             <p className="t-label text-ink/80 mb-2">Play these {noun.many} for another leaderboard too?</p>
             <div className="space-y-2">
               {couldJoin.map(lb => (
@@ -864,7 +862,7 @@ className="fixed left-1/2 -translate-x-1/2 max-w-[92vw] px-5 py-3 bg-surface bor
                   key={lb.id}
                   type="button"
                   onClick={() => setSelected(s => [...s, lb.id])}
-                  className="w-full text-left px-3 py-2.5 border border-bark/25 rounded-xl hover:border-bark/40 transition-colors duration-150"
+                  className="w-full text-left px-3 py-2.5 border border-line-strong rounded-xl hover:border-bark/40 transition-colors duration-150"
                 >
                   <span className="block t-card text-ink">{boardTitle(lb)}</span>
                   <span className="block t-cap text-ink/65 mt-0.5 leading-snug">{boardFacts(lb).join(' · ')}</span>

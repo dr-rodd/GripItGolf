@@ -228,6 +228,21 @@ export function describeRules(rules: RunRules): string[] {
 }
 
 /**
+ * The rules as a board's facts — "1 point per km · 2 points a run · 1 km
+ * minimum". A board reminds; the sentences above are the form's, which
+ * explains (refresh plan, 4.5 and 4.9). What counts is left to the
+ * sentences: a list of activities is not a fact that fits on a line.
+ */
+export function ruleFacts(rules: RunRules): string[] {
+  const facts: string[] = []
+  if (rules.pointsPerKm > 0) facts.push(`${plural(rules.pointsPerKm, 'point', 'points')} per km`)
+  if (rules.pointsPerRun > 0) facts.push(`${plural(rules.pointsPerRun, 'point', 'points')} a run`)
+  if (rules.minKm > 0) facts.push(`${formatPoints(rules.minKm)} km minimum`)
+  if (rules.dailyCap !== null) facts.push(`Up to ${plural(rules.dailyCap, 'point', 'points')} a day`)
+  return facts
+}
+
+/**
  * A worked example for the form — what a 5 km run earns under these rules,
  * so the numbers being typed mean something before anyone has run.
  */
@@ -300,11 +315,16 @@ export function parseRunSetup(raw: unknown): RunSetup {
   return { rules: parseRules(r.rules), boards: parseBoards(r.boards) }
 }
 
-/** How a team board ranks, in words. */
+/** How a team board ranks, in words — the home page's rules card. */
 export function describeTeamScore(score: TeamScore | undefined): string {
   return score === 'total'
     ? 'Teams are ranked on their total.'
     : 'Teams are ranked on their average per member.'
+}
+
+/** The same, as a board's fact. Absent is average. */
+export function teamScoreFact(score: TeamScore | undefined): string {
+  return score === 'total' ? 'Team total' : 'Average per runner'
 }
 
 // ─── Permissions ───────────────────────────────────────────────

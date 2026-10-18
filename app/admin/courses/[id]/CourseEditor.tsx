@@ -78,7 +78,7 @@ function IdentityForm({ course }: { course: { id: string; name: string; county: 
 
   return (
     <section className={`px-4 py-4 ${cardClass()}`}>
-      <h2 className="font-[family-name:var(--font-display)] text-base mb-3">Course</h2>
+      <h2 className="t-card mb-3">Course</h2>
       <form action={formAction} className="flex flex-col gap-4">
         <div>
           <label htmlFor="course-name" className={FIELD_LABEL}>Name</label>
@@ -155,7 +155,7 @@ function TeeRow({ courseId, tee }: { courseId: string; tee: Tee }) {
     saveTee.bind(null, courseId, tee.id), IDLE,
   )
   return (
-    <form action={formAction} className="border-t border-bark/12 pt-3 flex flex-col gap-2">
+    <form action={formAction} className="border-t border-line pt-3 flex flex-col gap-2">
       <TeeFields
         draft={{
           name: tee.name,
@@ -182,7 +182,7 @@ function AddTeeForm({ courseId }: { courseId: string }) {
     )
   }
   return (
-    <form action={formAction} className="border-t border-bark/12 pt-3 flex flex-col gap-2">
+    <form action={formAction} className="border-t border-line pt-3 flex flex-col gap-2">
       <TeeFields draft={emptyTeeDraft()} />
       <SaveRow state={state} pending={pending} label="Add tee" />
     </form>
@@ -192,7 +192,7 @@ function AddTeeForm({ courseId }: { courseId: string }) {
 function TeesSection({ courseId, tees }: { courseId: string; tees: Tee[] }) {
   return (
     <section className={`px-4 py-4 ${cardClass()}`}>
-      <h2 className="font-[family-name:var(--font-display)] text-base mb-1">Tees</h2>
+      <h2 className="t-card mb-1">Tees</h2>
       <p className="text-ink/65 text-[13px] mb-3 leading-snug">
         Slope and rating come off the club&rsquo;s card. The same ranges the
         scorecard check accepts apply here.

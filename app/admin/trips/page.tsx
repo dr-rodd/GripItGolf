@@ -108,7 +108,7 @@ export default async function AdminTripsPage({
       </form>
 
       {trips.length === 0 ? (
-        <div className="border border-bark/12 rounded-xl py-16 text-center">
+        <div className="border border-line rounded-xl py-16 text-center">
           <p className="text-ink/65 text-sm">
             {needle ? `Nothing matches “${q.trim()}”.` : 'No trips yet.'}
           </p>
@@ -117,10 +117,10 @@ export default async function AdminTripsPage({
         <>
           {/* Cards on a phone, a table from sm up. The same data either way —
               this is read on a phone as often as anywhere else. */}
-          <div className="hidden sm:block border border-bark/12 rounded-xl overflow-x-auto">
+          <div className="hidden sm:block border border-line rounded-xl overflow-x-auto">
             <table className="w-full text-sm min-w-[46rem]">
               <thead>
-                <tr className="border-b border-bark/12 text-left">
+                <tr className="border-b border-line text-left">
                   {['Trip', 'Code', 'Created', 'Lead email', 'Players', 'Status'].map(h => (
                     <th key={h} className="px-4 py-3 t-eyebrow text-ink/65">
                       {h}
@@ -133,8 +133,8 @@ export default async function AdminTripsPage({
                 {trips.map(t => {
                   const state = tripState(t, today)
                   return (
-                    <tr key={t.id} className="border-b border-bark/12 last:border-0">
-                      <td className="px-4 py-3 font-[family-name:var(--font-display)] text-base">
+                    <tr key={t.id} className="border-b border-line last:border-0">
+                      <td className="px-4 py-3 t-card">
                         {t.trip_code ? (
                           <Link
                             href={`/trip/${t.trip_code}`}
@@ -177,10 +177,10 @@ export default async function AdminTripsPage({
             {trips.map(t => {
               const state = tripState(t, today)
               return (
-                <div key={t.id} className="border border-bark/12 rounded-xl px-4 py-3.5">
+                <div key={t.id} className="border border-line rounded-xl px-4 py-3.5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-[family-name:var(--font-display)] text-base leading-tight truncate">
+                      <p className="t-card truncate">
                         {t.trip_code ? (
                           <Link href={`/trip/${t.trip_code}`} className="hover:text-accent-deep transition-colors">
                             {t.name}

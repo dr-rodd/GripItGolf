@@ -417,7 +417,7 @@ export function ScorecardSheet({
         {/* Title — never scrolls */}
         <div className="flex-shrink-0 flex items-center justify-between px-4 pt-5 pb-3">
           <div className="min-w-0 flex items-baseline gap-3 flex-wrap">
-            <p className="font-[family-name:var(--font-display)] text-ink text-2xl leading-tight truncate">
+            <p className="t-h2 text-ink truncate">
               {title}
             </p>
             <p className="text-ink/65 text-base truncate">{subtitle}</p>
@@ -1149,7 +1149,7 @@ function Board({
           to the page. Absent entirely on a board that dropped nothing, which
           is most of them. */}
       {discards && (
-        <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-bark/12">
+        <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-line">
           <span className="text-[13px] text-ink/65 leading-snug min-w-0">
             {/* Says what is on screen, not what the board's rule is — the
                 rules line above already states the rule, and "Worst round
@@ -1238,7 +1238,7 @@ function Board({
                 // place it is the point, and the body around it is sans.
                 className={`font-serif flex items-center ${GAP} px-3 py-2 text-left transition-opacity duration-150 active:opacity-70 ${
                   scrolls ? 'w-max min-w-full' : 'w-full'
-                } ${isTeamBoard ? 'min-h-16' : ''} ${!isLast || isExpanded ? 'border-b border-bark/12' : ''}`}
+                } ${isTeamBoard ? 'min-h-16' : ''} ${!isLast || isExpanded ? 'border-b border-line' : ''}`}
               >
                 <span className={pin('l', '-my-2 py-2')}>
                   {/* The place, not the row's index. Two level share one —
@@ -1339,7 +1339,7 @@ function Board({
                 // scroller's own width, which is why it carries a container
                 // type; measuring it in JavaScript would be the same number
                 // arriving a frame later and needing a resize listener.
-                <div className={`board-wide sticky left-0 ${!isLast ? 'border-b border-bark/12' : ''}`}>
+                <div className={`board-wide sticky left-0 ${!isLast ? 'border-b border-line' : ''}`}>
                   <CourseTiles
                     row={row}
                     rounds={rounds}

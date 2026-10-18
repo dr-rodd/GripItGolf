@@ -29,8 +29,8 @@ export default function CreatePage() {
       <div className="flex flex-col items-center px-6 py-12 page-enter">
         <div className="w-full max-w-sm">
 
-          <h1 className="font-[family-name:var(--font-display)] text-4xl text-ink mb-2">
-            Create an Event
+          <h1 className="t-h1 text-ink mb-2">
+            Create an event
           </h1>
           <p className="text-ink/65 text-sm mb-8">
             Which sport?
@@ -38,7 +38,7 @@ export default function CreatePage() {
 
           <div className="flex flex-col gap-3">
             <Link href="/golf" className={CARD}>
-              <p className="font-[family-name:var(--font-display)] text-xl text-ink">
+              <p className="t-card text-ink">
                 Golf
               </p>
               <p className="text-ink/65 text-sm mt-1 leading-snug">
@@ -48,7 +48,7 @@ export default function CreatePage() {
             </Link>
 
             <Link href="/dashboard/create?type=run" className={CARD}>
-              <p className="font-[family-name:var(--font-display)] text-xl text-ink">
+              <p className="t-card text-ink">
                 Running
               </p>
               <p className="text-ink/65 text-sm mt-1 leading-snug">

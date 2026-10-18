@@ -48,8 +48,8 @@ type TeamChoice =
   | { kind: 'existing'; id: string }
   | { kind: 'new' }
 
-const CARD = optionClass(false)
-const CARD_ON = optionClass(true)
+const CARD = optionClass(false, 'row')
+const CARD_ON = optionClass(true, 'row')
 const INPUT = FIELD
 const PRIMARY = buttonClass('primary')
 
@@ -215,7 +215,7 @@ export default function RunJoinClient({
   if (choices.closed) {
     return (
       <div className="text-center">
-        <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-2">{name}</h1>
+        <h1 className="t-h1 text-ink mb-2">{name}</h1>
         <p className="text-ink/65 text-sm mb-8">This challenge has finished — joining is closed.</p>
         <Link href={`/run/${code}`} className="t-cap text-accent-deep hover:text-accent transition-colors">
           Back to the challenge →
@@ -231,7 +231,7 @@ export default function RunJoinClient({
         <div className="mb-4">
           <BackButton onClick={() => { setStep('who'); setError(null) }} />
         </div>
-        <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-1.5">Pick your team</h1>
+        <h1 className="t-h1 text-ink mb-1.5">Pick your team</h1>
         <p className="text-ink/65 text-sm mb-6">You&apos;re running as {runnerName}.</p>
 
         <div className="space-y-2" role="radiogroup" aria-label="Teams">
@@ -243,7 +243,7 @@ export default function RunJoinClient({
                 role="radio"
                 aria-checked={on}
                 onClick={() => setChoice({ kind: 'existing', id: t.id })}
-                className={`${on ? CARD_ON : CARD} flex items-center gap-3`}
+                className={on ? CARD_ON : CARD}
               >
                 <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} aria-hidden="true" />
                 <span className="text-ink text-sm font-medium flex-1 min-w-0 truncate">{t.name}</span>
@@ -255,7 +255,7 @@ export default function RunJoinClient({
           })}
 
           {choices.startTeam && (
-            <div className={`px-4 py-3.5 ${cardClass()} ${choice?.kind === 'new' ? 'border-accent/60 bg-accent/[0.08]' : 'border-bark/12'}`}>
+            <div className={`px-4 py-3.5 ${cardClass(choice?.kind === 'new' ? 'chosen' : 'raised')}`}>
               {choice?.kind === 'new' ? (
                 <>
                   <p className="text-ink text-sm font-medium mb-2">Start a new team</p>
@@ -306,7 +306,7 @@ export default function RunJoinClient({
   const listed = sortForClaiming(roster)
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-1.5">Join {name}</h1>
+      <h1 className="t-h1 text-ink mb-1.5">Join {name}</h1>
       <p className="text-ink/65 text-sm mb-6">
         {viewer
           ? `This phone is ${viewer.name}. Pick a different name to switch.`
@@ -331,7 +331,7 @@ export default function RunJoinClient({
                 key={r.id}
                 onClick={() => tapName(r)}
                 disabled={busy}
-                className={`${CARD} flex items-center gap-3 disabled:opacity-60`}
+                className={`${CARD} disabled:opacity-60`}
               >
                 <span
                   className="w-3 h-3 rounded-full flex-shrink-0"

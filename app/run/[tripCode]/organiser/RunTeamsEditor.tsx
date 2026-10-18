@@ -190,7 +190,7 @@ export default function RunTeamsEditor({ tripId, teams, unassigned }: {
     const key = `runner:${m.id}`
     const isOpen = open === key
     return (
-      <li key={m.id} className="border-t border-bark/12 first:border-t-0">
+      <li key={m.id} className="border-t border-line first:border-t-0">
         <button
           type="button"
           onClick={() => openBox(key, m.name)}
@@ -374,7 +374,7 @@ export default function RunTeamsEditor({ tripId, teams, unassigned }: {
         <button
           type="button"
           onClick={() => openBox('new-team')}
-          className="w-full py-4 border border-dashed border-bark/25 rounded-xl text-ink/65 text-sm hover:text-ink/80 transition-colors"
+          className="w-full py-4 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:text-ink/80 transition-colors"
         >
           + Add a team
         </button>

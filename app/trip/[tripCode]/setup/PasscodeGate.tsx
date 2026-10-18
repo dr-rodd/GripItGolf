@@ -71,7 +71,7 @@ export default function PasscodeGate({
           </svg>
         </div>
 
-        <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink leading-tight mb-2">
+        <h1 className="t-h1 text-ink mb-2">
           {title ?? 'Settings are locked'}
         </h1>
         <p className="text-ink/65 text-sm mb-8 leading-relaxed">

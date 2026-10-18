@@ -42,7 +42,7 @@ export default async function ShortCodePage({ params }: {
   // because a mistyped character is the likely story.
   return (
     <main className="min-h-dvh flex flex-col items-center justify-center paper px-6">
-      <p className="font-[family-name:var(--font-display)] text-2xl text-ink mb-3">
+      <p className="t-h2 text-ink mb-3">
         Event not found
       </p>
       <p className="text-ink/65 text-sm mb-8">

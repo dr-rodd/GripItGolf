@@ -47,7 +47,7 @@ export default async function BracketSetupPage({ params }: {
   if (!trip) {
     return (
       <main className="min-h-dvh flex flex-col items-center justify-center paper px-6">
-        <p className="font-[family-name:var(--font-display)] text-2xl text-ink mb-3">Event not found</p>
+        <p className="t-h2 text-ink mb-3">Event not found</p>
         <p className="text-ink/65 text-sm mb-8">Check the code and try again.</p>
         <BackButton href="/" label="Home" />
       </main>
@@ -57,7 +57,7 @@ export default async function BracketSetupPage({ params }: {
   if (!isEvent(trip.kind)) {
     return (
       <main className="min-h-dvh has-tabbar flex flex-col items-center justify-center paper px-6 text-center">
-        <p className="font-[family-name:var(--font-display)] text-2xl text-ink mb-3">
+        <p className="t-h2 text-ink mb-3">
           This is a trip
         </p>
         <p className="text-ink/65 text-sm mb-8 max-w-[22rem] leading-relaxed">
@@ -102,7 +102,7 @@ export default async function BracketSetupPage({ params }: {
       <main className="min-h-dvh paper has-tabbar page-enter">
         <TripHeader backTo={`/trip/${tripCode}/organiser`} />
         <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
-          <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-1">
+          <h1 className="t-h1 text-ink mb-1">
             League
           </h1>
           <p className="text-ink/65 text-sm mb-6">

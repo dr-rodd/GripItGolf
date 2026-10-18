@@ -46,7 +46,7 @@ export const SC_NUM = 'text-[17px]'
 export const SC_CARD = cardClass()
 
 /** Hairline between holes. Lighter than a card border — 18 of them stack up. */
-export const SC_RULE = 'border-b border-bark/[0.08]'
+export const SC_RULE = 'border-b border-line'
 
 /**
  * Alternating rows, nudged towards the page.
@@ -59,7 +59,7 @@ export const scRow = (holeNumber: number) =>
   holeNumber % 2 === 0 ? 'bg-cream/60' : 'bg-surface'
 
 /** Out and In. A wash of bark, enough to group the nine above it. */
-export const SC_BAND = 'bg-bark/[0.05]'
+export const SC_BAND = 'bg-tint'
 
 /** The total. The same wash, one step up, so the eye lands there last. */
 export const SC_BAND_TOTAL = 'bg-bark/[0.10]'
@@ -74,7 +74,7 @@ export const SC_BAND_TOTAL = 'bg-bark/[0.10]'
  * A tint has nothing behind it once the rows start sliding underneath, and
  * eighteen holes scrolling through the column headings is not a subtle effect.
  */
-export const SC_HEAD = 'bg-bark/[0.05]'
+export const SC_HEAD = 'bg-tint'
 
 /**
  * The backing a pinned header sits on: the card's own white, made explicit.
@@ -123,7 +123,7 @@ export const scPoints = (pts: number | null) =>
 // Shared because a tee has to look the same on the card you score on and the
 // card you read afterwards — they were separate copies in three files.
 
-const TEE_RING = 'ring-1 ring-bark/25'
+const TEE_RING = 'ring-1 ring-line-strong'
 
 export const TEE_DOT: Record<string, string> = {
   Black:     `bg-zinc-800 ${TEE_RING}`,

@@ -26,13 +26,18 @@ import { IconChevronRight } from './icons'
 // **No cards inside cards.** Rows inside a card are a `ListGroup`; a block
 // inside a card that needs setting apart is `flat`.
 
-export type CardVariant = 'raised' | 'flat' | 'floating'
+export type CardVariant = 'raised' | 'flat' | 'floating' | 'chosen'
 
 /**
  * A card's classes, for the places a card has to be some other element — a
  * `<Link>`, a `<button>`, a `<label>`. `pressable` adds the press: shadow
  * off, a little smaller, 120ms. Only on a real button or link, because iOS
  * gives `:active` to nothing else.
+ *
+ * `chosen` is the one card of several that has been picked — the emerald
+ * wash with a deep edge, as a chosen option wears it. A variant rather than
+ * classes laid on top, because a second background or border on a card
+ * resolves in whatever order the stylesheet happens to hold.
  */
 export const cardClass = (variant: CardVariant = 'raised', pressable = false) => {
   const look =
@@ -40,7 +45,9 @@ export const cardClass = (variant: CardVariant = 'raised', pressable = false) =>
       ? 'bg-tint'
       : variant === 'floating'
         ? 'bg-surface border border-line shadow-floating'
-        : 'bg-surface border border-line shadow-raised'
+        : variant === 'chosen'
+          ? 'bg-accent-tint border border-accent-deep'
+          : 'bg-surface border border-line shadow-raised'
   return `${look} rounded-card${pressable ? ' press' : ''}`
 }
 
@@ -278,9 +285,17 @@ export const chipClass = (selected: boolean, compact = false) =>
  * A choice that needs more than a word — a label and a line under it. A
  * raised card; chosen, it takes the emerald wash with a deep-emerald edge.
  * On a real button, so it presses.
+ *
+ * Three shapes, so a caller never adds a second `display` or padding on top
+ * (two of either resolve in whatever order the stylesheet happens to hold):
+ * a full-width card, a full-width row laid out across (a name with its
+ * figures), or a small tile for a strip of them — a trip's days.
  */
-export const optionClass = (selected: boolean) =>
-  'block w-full text-left rounded-card px-4 py-3.5 press border ' +
+export const optionClass = (selected: boolean, shape: 'card' | 'row' | 'tile' = 'card') =>
+  (shape === 'tile'
+    ? 'flex-shrink-0 rounded-tile px-3 py-2'
+    : `${shape === 'row' ? 'flex items-center gap-3' : 'block'} w-full rounded-card px-4 py-3.5`) +
+  ' text-left press border ' +
   (selected
     ? 'bg-accent-tint border-accent-deep'
     : 'bg-surface border-line shadow-raised hover:border-line-strong')

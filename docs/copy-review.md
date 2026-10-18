@@ -118,6 +118,9 @@ bring them into line?
 **L-04 · Footnote under the buttons** · `app/Landing.tsx:167`
 - Now: Your handicap is the best 8 of your last 20 rounds. On the graph, those eight are green dots.
 - New: "Right now that dot is both green and not green. You decide what it becomes" - Erwin Schrödinger
+- **Ross:** live as written. The refresh plan (4.8) flags it as long for a
+  front door: sixteen words plus the name, under the only two buttons
+  that matter. Keep, shorten, or drop?
 
 **L-05 · Site tagline (stored centrally, used for branding)** · `config/site.ts:8`
 - Now: Your handicap is the best 8 of your last 20. Go and get a green dot.

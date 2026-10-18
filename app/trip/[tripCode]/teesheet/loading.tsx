@@ -7,10 +7,10 @@
 export default function Loading() {
   return (
     <main className="min-h-dvh paper has-tabbar">
-      <div className="h-[57px] border-b border-bark/12" />
+      <div className="h-[57px] border-b border-line" />
       <div className="max-w-lg mx-auto px-4 pt-4">
-        <div className="h-9 w-40 rounded-lg bg-bark/[0.06] animate-pulse mb-2" />
-        <div className="h-4 w-64 rounded bg-bark/[0.06] animate-pulse" />
+        <div className="h-9 w-40 rounded-lg bg-tint animate-pulse mb-2" />
+        <div className="h-4 w-64 rounded bg-tint animate-pulse" />
       </div>
     </main>
   )

@@ -228,7 +228,7 @@ export default function OrganiserClient({
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
 
-        <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-1">
+        <h1 className="t-h1 text-ink mb-1">
           Organiser
         </h1>
         <p className="text-ink/65 text-sm mb-6">
@@ -242,7 +242,7 @@ export default function OrganiserClient({
             the code is the first thing an organiser passes on. */}
         <section className={`${cardClass()} p-4 mb-8`}>
           <div className="flex items-baseline justify-between gap-3">
-            <p className="font-[family-name:var(--font-display)] text-xl text-ink min-w-0">
+            <p className="t-card text-ink min-w-0">
               {overview.name}
             </p>
             <p className="t-label text-accent-deep tabular-nums flex-shrink-0">{tripCode}</p>

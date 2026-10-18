@@ -68,7 +68,7 @@ import {
   RUN_KIND, isRunChallenge, RUN_ACTIVITIES, activityFromStrava,
   defaultRules, parseRules, rulesIssue, runPoints, dayPoints,
   describeRules, exampleLine, formatPoints,
-  defaultBoards, parseRunSetup, describeTeamScore,
+  defaultBoards, parseRunSetup, describeTeamScore, teamScoreFact, ruleFacts,
   RUN_PERMISSIONS, defaultRunPermissions, parseRunPermissions, storedRunPermissions,
   challengeDatesIssue, teamNamesIssue, describeProgress,
   migrationMissing, MAX_POINTS, MAX_RUN_TEAMS,
@@ -190,6 +190,11 @@ section('The rules said in words')
     'Counts: Walk.',
   ], 'no run points still says the minimum; a cap is named')
   eq(describeRules(rules({ minKm: 0 }))[1], '2 points for every run.', 'no minimum, no "or more"')
+  // A board's line is facts, not sentences (refresh plan, 4.9)
+  eq(ruleFacts(rules()), ['1 point per km', '2 points a run', '1 km minimum'], 'the defaults, as facts')
+  eq(ruleFacts(rules({ pointsPerRun: 0, dailyCap: 20 })), ['1 point per km', '1 km minimum', 'Up to 20 points a day'],
+    '  …a cap is a fact too')
+  eq(ruleFacts(rules({ minKm: 0, pointsPerKm: 0 })), ['2 points a run'], '  …and nothing is said that is not so')
   eq(exampleLine(rules()), 'A 5 km run earns 7 points.', 'the worked example')
   eq(exampleLine(rules({ dailyCap: 5 })), 'A 5 km run earns 5 points.', 'held to the cap, as a day would be')
   eq(formatPoints(7), '7', 'whole numbers print bare')
@@ -224,6 +229,9 @@ section('Every challenge starts with two boards, and reads them back fail-soft')
   eq(parseRunSetup({ boards: [] }).boards, defaultBoards(), 'no boards at all is the defaults')
   ok(describeTeamScore(undefined).includes('average') && describeTeamScore('total').includes('total'),
     'the comparison said in words, absent reading as average')
+  eq([teamScoreFact(undefined), teamScoreFact('average'), teamScoreFact('total')],
+    ['Average per runner', 'Average per runner', 'Team total'],
+    'the comparison as a board fact, absent reading as average')
 }
 
 // ─── Permissions ───────────────────────────────────────────────

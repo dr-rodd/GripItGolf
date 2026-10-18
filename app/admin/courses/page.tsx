@@ -147,7 +147,7 @@ export default async function AdminCoursesPage({
       </div>
 
       {courses.length === 0 ? (
-        <div className="border border-bark/12 rounded-xl py-16 text-center">
+        <div className="border border-line rounded-xl py-16 text-center">
           <p className="text-ink/65 text-sm">
             {q
               ? `Nothing matches “${q}”${wanted ? ' under that filter' : ''}.`
@@ -164,11 +164,11 @@ export default async function AdminCoursesPage({
               <li key={c.id}>
                 <Link
                   href={`/admin/courses/${c.id}`}
-                  className={`block px-4 py-3.5 hover:border-bark/25 transition-colors ${cardClass()}`}
+                  className={`block px-4 py-3.5 hover:border-line-strong transition-colors ${cardClass()}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-[family-name:var(--font-display)] text-base leading-tight truncate">
+                      <p className="t-card truncate">
                         {c.name}
                       </p>
                       <p className="text-ink/65 text-[13px] mt-0.5">

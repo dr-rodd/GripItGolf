@@ -204,7 +204,7 @@ export default function TeamJoinClient({
             <li
               key={team.id}
               className={`p-4 ${cardClass()} ${
-                mine ? 'border-accent/40' : 'border-bark/12'
+                mine ? 'border-accent/40' : 'border-line'
               }`}
             >
               <div className="flex items-start justify-between gap-3">
@@ -233,7 +233,7 @@ export default function TeamJoinClient({
                       type="button"
                       onClick={leave}
                       disabled={busy}
-                      className="flex-shrink-0 px-4 py-2 rounded-lg border border-bark/25 text-ink/80 text-sm hover:border-bark/40 transition-colors disabled:opacity-40"
+                      className="flex-shrink-0 px-4 py-2 rounded-lg border border-line-strong text-ink/80 text-sm hover:border-bark/40 transition-colors disabled:opacity-40"
                     >
                       Leave
                     </button>
@@ -259,7 +259,7 @@ export default function TeamJoinClient({
           type="button"
           onClick={startTeam}
           disabled={busy}
-          className="w-full py-4 border border-dashed border-bark/25 rounded-xl text-ink/65 text-sm hover:border-bark/25 hover:text-ink/80 transition-colors disabled:opacity-40"
+          className="w-full py-4 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:border-line-strong hover:text-ink/80 transition-colors disabled:opacity-40"
         >
           + Start a {noun.one}
         </button>

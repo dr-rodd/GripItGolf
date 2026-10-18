@@ -167,7 +167,7 @@ export default async function RunHubPage({ params }: {
                   </span>
                 </div>
               ))}
-              <p className="text-ink/65 text-[13px] pt-3 border-t border-bark/12 leading-snug">
+              <p className="text-ink/65 text-[13px] pt-3 border-t border-line leading-snug">
                 {final.teamScore === 'average' ? 'Average points per runner. ' : 'Total points. '}
                 Frozen on {describeDay(final.frozenOn)}.
               </p>
@@ -196,7 +196,7 @@ export default async function RunHubPage({ params }: {
                 </div>
               ))}
               {standings.teams[0] && standings.teams[0].score > 0 && (
-                <p className="text-ink/80 text-[13px] pt-3 border-t border-bark/12 flex items-center gap-1.5">
+                <p className="text-ink/80 text-[13px] pt-3 border-t border-line flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: standings.teams[0].color }} aria-hidden="true" />
                   {standings.teams[0].name} lead the teams
                   {standings.teamScore === 'average'

@@ -123,7 +123,7 @@ function HandicapCheck({
           aria-label={`Confirm ${player.name}'s handicap`}
           className={`w-full max-w-md mx-auto sheet-up ${cardClass()}`}
         >
-          <div className="px-5 py-4 border-b border-bark/12">
+          <div className="px-5 py-4 border-b border-line">
             <h2 className="t-card text-ink">Your handicap</h2>
             <p className="t-cap text-ink/65 mt-0.5">{player.name}</p>
           </div>

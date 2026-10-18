@@ -148,10 +148,10 @@ export default async function MatchplayPage({
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
       <TripHeader backTo={`/trip/${tripCode}`} />
-      <div className="paper border-b border-bark/12">
+      <div className="paper border-b border-line">
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
           <BackButton href={`/trip/${tripCode}/leaderboard`} />
-          <h1 className="font-[family-name:var(--font-display)] text-xl sm:text-2xl text-ink truncate px-2">
+          <h1 className="t-h2 text-ink truncate px-2">
             Matchplay
           </h1>
           <div className="w-11" />
@@ -298,8 +298,8 @@ function EmptyState({
   tripCode: string
 }) {
   return (
-    <div className="border border-bark/12 rounded-sm px-6 py-14 text-center">
-      <p className="font-[family-name:var(--font-display)] text-ink/80 text-lg leading-snug mb-2">
+    <div className="border border-line rounded-sm px-6 py-14 text-center">
+      <p className="t-card text-ink/80 mb-2">
         {title}
       </p>
       <p className="text-ink/65 text-sm leading-relaxed mb-8 max-w-xs mx-auto">{body}</p>

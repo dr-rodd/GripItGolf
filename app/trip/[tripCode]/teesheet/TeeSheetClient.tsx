@@ -17,7 +17,7 @@ import {
 } from '@/lib/tagBoards'
 import { setTeam } from '@/lib/teamMembers'
 import { PRESET_COLORS } from '@/lib/teamColors'
-import { FIELD, cardClass } from '@/app/components/ui'
+import { FIELD, cardClass, optionClass } from '@/app/components/ui'
 import { courseLabel } from '@/lib/courseDirectory'
 
 /**
@@ -387,7 +387,7 @@ export default function TeeSheetClient({
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
 
-        <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-1">
+        <h1 className="t-h1 text-ink mb-1">
           Tee Sheet
         </h1>
         <p className="text-ink/65 text-sm mb-2">
@@ -475,18 +475,14 @@ export default function TeeSheetClient({
 
         {/* One sheet per round; a one-round event skips the chips. */}
         {rounds.length > 1 && (
-          <div className="-mx-4 px-4 overflow-x-auto mb-5">
+          <div className="-mx-4 px-4 -mt-2 pt-2 pb-2 mb-3 overflow-x-auto">
             <div className="flex gap-2 w-max">
               {rounds.map(r => (
                 <button
                   key={r.id}
                   type="button"
                   onClick={() => { setRoundId(r.id); setAdding(null); setSearch('') }}
-                  className={`flex-shrink-0 px-3 py-2 rounded-xl border transition-colors duration-150 ${
-                    r.id === roundId
-                      ? 'border-accent bg-accent/[0.10] text-ink'
-                      : 'border-bark/12 bg-surface text-ink/80 hover:border-bark/25'
-                  }`}
+                  className={optionClass(r.id === roundId, 'tile')}
                 >
                   <span className="block t-label">Round {r.roundNumber}</span>
                   {r.courseName && (
@@ -511,7 +507,7 @@ export default function TeeSheetClient({
               </p>
             )}
 
-            <ol className={`divide-y divide-bark/12 ${cardClass()}`}>
+            <ol className={`divide-y divide-line ${cardClass()}`}>
               {Array.from({ length: count }, (_, i) => {
                 const slotPlayers = slots.get(i) ?? []
                 const vacancy = Math.max(0, round.groupSize - slotPlayers.length)
@@ -650,7 +646,7 @@ export default function TeeSheetClient({
                         course-select manner in miniature. Stays open while
                         the slot still has room, so a fourball is four taps. */}
                     {open && (
-                      <div className="mt-2 rounded-xl border border-bark/12 bg-cream p-2.5">
+                      <div className="mt-2 rounded-xl border border-line bg-cream p-2.5">
                         <div className="flex items-center gap-2 mb-2">
                           <input
                             type="text"
@@ -688,7 +684,7 @@ export default function TeeSheetClient({
                                         addPlayers(i, [p.id])
                                         if (vacancy <= 1) setAdding(null)
                                       }}
-                                      className="w-full text-left px-2 py-2 rounded-lg text-ink text-sm hover:bg-bark/[0.06] transition-colors disabled:opacity-40"
+                                      className="w-full text-left px-2 py-2 rounded-lg text-ink text-sm hover:bg-tint transition-colors disabled:opacity-40"
                                     >
                                       {p.name}
                                       {!together && teamMap.get(p.id) && (

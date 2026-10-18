@@ -233,7 +233,7 @@ section('Scorecards are brown and cream, not green')
   // The bands live in one place now, and all three cards read them from it —
   // they used to be three copies, two of them still Donegal gold.
   const style = read('app/components/scorecardStyle.ts')
-  ok(/SC_BAND\s*=\s*'bg-bark\//.test(style), 'the summary bands are a wash of bark')
+  ok(/SC_BAND\s*=\s*'bg-tint\b/.test(style), 'the summary bands are a wash of bark — the named tint')
   ok(/SC_BAND_TOTAL\s*=\s*'bg-bark\//.test(style), 'and the total is a stronger one')
 
   const bandOf = (name: string) =>

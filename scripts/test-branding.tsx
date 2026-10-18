@@ -24,7 +24,7 @@ import Wordmark from '../app/components/Wordmark'
 import MorphWordmark from '../app/components/MorphWordmark'
 import {
   Pill, LiveDot, EmptyState, buttonClass, cardClass, chipClass, iconButtonClass,
-  Field, FIELD, Segmented, ListGroup, ListRow, IconButton, SectionHeader,
+  Field, FIELD, Segmented, ListGroup, ListRow, IconButton, SectionHeader, optionClass,
 } from '../app/components/ui'
 import { SITE } from '../config/site'
 import WizardShell, { STEP_SLIDE_MS } from '../app/components/WizardShell'
@@ -499,6 +499,29 @@ section('Text is dark enough to read')
     `placeholders clear 3:1 (${contrast(inkAt(ph), CREAM).toFixed(2)}:1 at ${ph})`)
 }
 
+section('Titles come from the scale, hairlines from the mixes')
+{
+  // Seventy-odd titles were set by hand — the display font at whatever size
+  // the screen's author picked, 16 to 36px across eight sizes — so no two
+  // screens' headings agreed. They are t-h1, t-h2 and t-card now. The two
+  // left are numbers rather than titles: the hub countdown and a forecast's
+  // temperature, set in the display face for its numerals.
+  const handSet = uiFiles().filter(f => read(f).includes('font-[family-name:var(--font-display)]'))
+  eq(handSet.sort(), [
+    'app/components/CourseWeather.tsx',
+    'app/trip/[tripCode]/TripCountdown.tsx',
+  ], 'no title is set in the display font by hand')
+
+  // The hairline, the field border and the flat wash each have a name
+  // (docs/refresh-plan.md, 3.2), so nobody retypes an opacity — 140 copies
+  // of border-bark/12 was how "the card border" came to be four values.
+  // (Fills at other strengths — a schedule block, a tee dot — are not
+  // these three, and keep their own figures.)
+  const retyped = /(?<![\w-])(?:(?:border|divide|ring)-bark\/(?:12|25|\[0\.0[68]\])|bg-bark\/(?:12|\[0\.0[456]\]))(?![\w/])/
+  eq(uiFiles().filter(f => retyped.test(read(f))), [],
+    'no hairline, field border or flat wash is a retyped opacity')
+}
+
 section('A label on a coloured fill is dark enough too')
 {
   const ACCENT = [0x0A, 0x9D, 0x56]
@@ -784,7 +807,7 @@ section('The bottom tab bar')
   ok(/paddingBottom: 'env\(safe-area-inset-bottom\)'/.test(src),
     'the bar occupies its height plus the home-indicator inset, exactly')
   ok(src.includes('bg-surface'), 'on white')
-  ok(src.includes('border-t border-bark/12'), 'with a hairline top border')
+  ok(src.includes('border-t border-line'), 'with a hairline top border')
 
   // "Labels must fit on one line — test Leaderboard specifically"
   ok(src.includes('whitespace-nowrap'), 'labels never wrap')
@@ -1429,6 +1452,27 @@ section('The parts kit')
   // Section header: t-h2, one hint, one action
   const sh = renderToStaticMarkup(React.createElement(SectionHeader, { hint: 'Add as many as you like.', children: 'Leaderboards' }))
   ok(sh.includes('t-h2') && sh.includes('t-cap'), 'a section header is a t-h2 with a caption under it')
+
+  // The chosen one: a card, an option and a day tile all wear the same
+  // emerald wash with a deep edge when picked
+  ok(cardClass('chosen').startsWith('bg-accent-tint border border-accent-deep'), 'a chosen card is the wash with a deep edge')
+  for (const shape of ['card', 'row', 'tile'] as const) {
+    ok(optionClass(true, shape).includes('bg-accent-tint border-accent-deep'), `  …as is a chosen ${shape} option`)
+  }
+  // One display and one padding per shape, so nothing has to be laid on top
+  for (const shape of ['card', 'row', 'tile'] as const) {
+    const c = optionClass(false, shape).split(' ')
+    eq(c.filter(x => /^(block|flex|inline-flex|grid)$/.test(x)).length <= 1 && c.filter(x => /^p[xy]-/.test(x)).length === 2, true,
+      `the ${shape} option sets its own shape once`)
+  }
+
+  // Every choice on a form is one of those parts. The hand-made look they
+  // replaced — an emerald edge and a wash typed out at the call site, ten
+  // copies at six strengths — is gone, bar the bracket's tiles, a dense
+  // screen whose decided state is its own.
+  const handMade = /'border-accent(?:\/\d+)? bg-accent\/(?:\[0\.\d+\]|\d+)'/
+  eq(uiFiles().filter(f => handMade.test(read(f))), ['app/trip/[tripCode]/matchplay/MatchplayBracket.tsx'],
+    'no choice wears a hand-made chosen look')
 }
 
 section('Empty states say what to do next')
@@ -1909,9 +1953,10 @@ section('A step slides')
   const slider = stripComments(read('app/components/WizardShell.tsx'))
   ok(/\{leaving && \(\s*<div[\s\S]{0,80}\binert\b[\s\S]{0,40}aria-hidden="true"/.test(slider),
     'the step leaving is inert and hidden from screen readers')
-  ok(/setTimeout\(\(\) => \{\s*setLeaving\(null\)[\s\S]{0,120}\[data-step-title\][\s\S]{0,20}focus\(/.test(slider)
+  ok(/setTimeout\(\(\) => \{\s*setLeaving\(null\)\s*incoming\.current\?\.querySelector<HTMLElement>\('\[data-step-title\]'\)\?\.focus\(/.test(slider)
+      && /ref=\{incoming\}/.test(slider)
       && /\}, STEP_SLIDE_MS\)/.test(slider),
-    'when the slide ends the new question takes the focus')
+    'when the slide ends the new question takes the focus — the incoming one, not the inert one leaving')
   ok(/window\.scrollTo\(\{ top: 0 \}\)/.test(slider), 'and a step is read from its top')
 }
 

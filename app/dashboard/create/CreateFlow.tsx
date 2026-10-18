@@ -64,7 +64,7 @@ function Chooser({ title, sub, onBack, children }: {
               <BackButton onClick={onBack} />
             </div>
           )}
-          <h1 className="font-[family-name:var(--font-display)] text-4xl text-ink mb-2">
+          <h1 className="t-h1 text-ink mb-2">
             {title}
           </h1>
           <p className="text-ink/65 text-sm mb-8">{sub}</p>
@@ -93,9 +93,9 @@ export default function CreateFlow() {
   // ── First question: the shape of the event in time ──
   if (!schedule) {
     return (
-      <Chooser title="Golf Tournament" sub="What shape is the event?">
+      <Chooser title="Golf tournament" sub="What shape is the event?">
         <button onClick={() => setSchedule('standalone')} className={CARD}>
-          <p className="font-[family-name:var(--font-display)] text-xl text-ink">
+          <p className="t-card text-ink">
             Standalone
           </p>
           <p className="text-ink/65 text-sm mt-1 leading-snug">
@@ -104,7 +104,7 @@ export default function CreateFlow() {
         </button>
 
         <button onClick={() => setSchedule('continuous')} className={CARD}>
-          <p className="font-[family-name:var(--font-display)] text-xl text-ink">
+          <p className="t-card text-ink">
             Continuous
           </p>
           <p className="text-ink/65 text-sm mt-1 leading-snug">
@@ -114,7 +114,7 @@ export default function CreateFlow() {
         </button>
 
         <button onClick={() => setSchedule('series')} className={CARD}>
-          <p className="font-[family-name:var(--font-display)] text-xl text-ink">
+          <p className="t-card text-ink">
             Series
           </p>
           <p className="text-ink/65 text-sm mt-1 leading-snug">
@@ -129,12 +129,12 @@ export default function CreateFlow() {
   // ── Second question: the format ──
   return (
     <Chooser
-      title={schedule === 'continuous' ? 'Continuous Event' : 'Standalone Event'}
+      title={schedule === 'continuous' ? 'Continuous event' : 'Standalone event'}
       sub="What kind of competition?"
       onBack={() => setSchedule(null)}
     >
       <button onClick={() => setFormat('league')} className={CARD}>
-        <p className="font-[family-name:var(--font-display)] text-xl text-ink">
+        <p className="t-card text-ink">
           League
         </p>
         <p className="text-ink/65 text-sm mt-1 leading-snug">
@@ -145,8 +145,8 @@ export default function CreateFlow() {
       </button>
 
       <button onClick={() => setFormat('match_play')} className={CARD}>
-        <p className="font-[family-name:var(--font-display)] text-xl text-ink">
-          Match Play
+        <p className="t-card text-ink">
+          Match play
         </p>
         <p className="text-ink/65 text-sm mt-1 leading-snug">
           {schedule === 'continuous'

@@ -1331,9 +1331,9 @@ section('The first section has no rule above it')
   // under whatever the stack follows — on the hub, the player's own card —
   // rather than as the start of the list.
   const src = read('app/components/Section.tsx')
-  ok(/border-t border-bark\/12 first:border-t-0/.test(src),
+  ok(/border-t border-line first:border-t-0/.test(src),
     'the rule is dropped on the first of the stack')
-  ok(/border-t border-bark/.test(src),
+  ok(/border-t border-line\b/.test(src),
     '  …and kept between the rest, which is what it is for')
 }
 

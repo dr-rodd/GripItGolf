@@ -107,7 +107,10 @@ function StepSlider({ stepKey, children }: { stepKey: number; children: React.Re
   // The last render's step, so the one leaving can be drawn as it was.
   const last = useRef<{ key: number; node: React.ReactNode }>({ key: stepKey, node: children })
   const [leaving, setLeaving] = useState<{ key: number; node: React.ReactNode; dir: 'forward' | 'back' } | null>(null)
-  const box = useRef<HTMLDivElement>(null)
+  // The incoming step alone: the one leaving holds a question too, inert,
+  // and is earlier in the document, so a search of the whole box finds it
+  // first and the focus goes nowhere.
+  const incoming = useRef<HTMLDivElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Before paint, so there is never a frame with the new step standing
@@ -123,7 +126,7 @@ function StepSlider({ stepKey, children }: { stepKey: number; children: React.Re
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => {
       setLeaving(null)
-      box.current?.querySelector<HTMLElement>('[data-step-title]')?.focus({ preventScroll: true })
+      incoming.current?.querySelector<HTMLElement>('[data-step-title]')?.focus({ preventScroll: true })
     }, STEP_SLIDE_MS)
   })
 
@@ -131,7 +134,7 @@ function StepSlider({ stepKey, children }: { stepKey: number; children: React.Re
 
   const forward = leaving?.dir !== 'back'
   return (
-    <div ref={box} className="relative overflow-x-clip">
+    <div className="relative overflow-x-clip">
       {leaving && (
         <div
           key={`out-${leaving.key}`}
@@ -142,7 +145,7 @@ function StepSlider({ stepKey, children }: { stepKey: number; children: React.Re
           {leaving.node}
         </div>
       )}
-      <div key={`in-${stepKey}`} className={leaving ? (forward ? 'step-in-forward' : 'step-in-back') : ''}>
+      <div key={`in-${stepKey}`} ref={incoming} className={leaving ? (forward ? 'step-in-forward' : 'step-in-back') : ''}>
         {children}
       </div>
     </div>

@@ -394,7 +394,7 @@ function Cell({
     <span
       className={`px-3 py-2.5 text-sm tabular-nums min-w-0 ${
         right ? 'text-right' : ''
-      } ${rule ? 'border-b border-bark/[0.08]' : ''} ${
+      } ${rule ? 'border-b border-line' : ''} ${
         // Never wrapped. A heading that breaks in two is the other way a
         // column too narrow for its own label goes wrong, and an auto-sized
         // column only reads the label's width correctly if it is one line.

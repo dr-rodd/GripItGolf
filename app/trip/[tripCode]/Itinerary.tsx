@@ -102,7 +102,7 @@ function ActivityRow({
     <li className={`flex items-center gap-3 px-3.5 py-2 transition-opacity duration-200 ${
       state === 'past' ? 'opacity-50' : ''
     }`}>
-      <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-bark/[0.06] text-bark flex items-center justify-center">
+      <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-tint text-bark flex items-center justify-center">
         <Icon size={15} />
       </span>
       <span className={`flex-1 min-w-0 t-card text-ink leading-snug ${
@@ -241,7 +241,7 @@ function DayPlan({
             <span className="w-11 flex-shrink-0 t-cap text-ink/50 tabular-nums text-right -translate-y-1/2">
               {hourLabel(h)}
             </span>
-            <span className="flex-1 border-t border-bark/12" />
+            <span className="flex-1 border-t border-line" />
           </div>
         ))}
 

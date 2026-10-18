@@ -63,7 +63,7 @@ export default function JoinForm() {
       <div className="flex flex-col items-center justify-center px-6 py-12 page-enter">
         <div className="w-full max-w-xs">
 
-        <h1 className="font-[family-name:var(--font-display)] text-4xl text-ink mb-2">
+        <h1 className="t-h1 text-ink mb-2">
           Join an Event
         </h1>
         <p className="text-ink/65 text-sm mb-8">

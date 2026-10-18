@@ -35,7 +35,7 @@ export default async function DayBoardsPage({ params }: {
   if (!trip) {
     return (
       <main className="min-h-dvh flex flex-col items-center justify-center paper px-6">
-        <p className="font-[family-name:var(--font-display)] text-2xl text-ink mb-3">Event not found</p>
+        <p className="t-h2 text-ink mb-3">Event not found</p>
         <p className="text-ink/65 text-sm mb-8">Check the code and try again.</p>
         <BackButton href="/" label="Home" />
       </main>
@@ -45,7 +45,7 @@ export default async function DayBoardsPage({ params }: {
   if (!isEvent(trip.kind)) {
     return (
       <main className="min-h-dvh has-tabbar flex flex-col items-center justify-center paper px-6 text-center">
-        <p className="font-[family-name:var(--font-display)] text-2xl text-ink mb-3">
+        <p className="t-h2 text-ink mb-3">
           This is a trip
         </p>
         <p className="text-ink/65 text-sm mb-8 max-w-[22rem] leading-relaxed">

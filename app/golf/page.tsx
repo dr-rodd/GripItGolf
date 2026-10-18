@@ -33,7 +33,7 @@ export default function GolfPage() {
       <div className="flex flex-col items-center px-6 py-12 page-enter">
         <div className="w-full max-w-sm">
 
-          <h1 className="font-[family-name:var(--font-display)] text-4xl text-ink mb-2">
+          <h1 className="t-h1 text-ink mb-2">
             Golf
           </h1>
           <p className="text-ink/65 text-sm mb-8">
@@ -42,8 +42,8 @@ export default function GolfPage() {
 
           <div className="flex flex-col gap-3">
             <Link href="/dashboard/create" className={CARD}>
-              <p className="font-[family-name:var(--font-display)] text-xl text-ink">
-                Golf Trip
+              <p className="t-card text-ink">
+                Golf trip
               </p>
               <p className="text-ink/65 text-sm mt-1 leading-snug">
                 A few days away with your group — itinerary, live scoring
@@ -52,8 +52,8 @@ export default function GolfPage() {
             </Link>
 
             <Link href="/dashboard/create?type=tournament" className={CARD}>
-              <p className="font-[family-name:var(--font-display)] text-xl text-ink">
-                Golf Tournament
+              <p className="t-card text-ink">
+                Golf tournament
               </p>
               <p className="text-ink/65 text-sm mt-1 leading-snug">
                 A standalone day or a multi-day event, run by an organiser —
@@ -64,7 +64,7 @@ export default function GolfPage() {
             {/* Named before it is built, so nobody taps into a dead end. */}
             <div className={`block p-5 opacity-60 ${cardClass()}`}>
               <div className="flex items-center justify-between gap-3">
-                <p className="font-[family-name:var(--font-display)] text-xl text-ink">
+                <p className="t-card text-ink">
                   Personal usage
                 </p>
                 <Pill className="flex-shrink-0">Coming soon</Pill>

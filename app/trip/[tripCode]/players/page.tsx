@@ -35,7 +35,7 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
   if (!trip) {
     return (
       <main className="min-h-dvh flex flex-col items-center justify-center paper px-6">
-        <p className="font-[family-name:var(--font-display)] text-2xl text-ink mb-3">Trip not found</p>
+        <p className="t-h2 text-ink mb-3">Trip not found</p>
         <BackButton href="/" label="Home" />
       </main>
     )
@@ -91,7 +91,7 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
           <div className="w-3 h-3 rounded-full border-2 border-accent" />
         </div>
 
-        <h1 className="font-[family-name:var(--font-display)] text-4xl sm:text-5xl text-ink leading-tight mb-2">
+        <h1 className="t-h1 text-ink mb-2">
           {trip.name}
         </h1>
         <p className="text-ink/65 text-sm mb-10">Join the trip</p>

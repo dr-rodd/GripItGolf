@@ -132,7 +132,7 @@ export default function CourseSelect({
       {trigger}
       <div className="fixed inset-0 z-[60] flex flex-col paper sheet-up">
         {/* ── Header — always pinned, like the stats page's own ── */}
-        <div className="flex-shrink-0 border-b border-bark/12">
+        <div className="flex-shrink-0 border-b border-line">
           <div className="max-w-lg mx-auto w-full px-4 pt-4 pb-3 flex items-center justify-between">
             <h2 className="t-h2 text-ink">
               {view.kind === 'browse' ? 'Choose a course'
@@ -214,8 +214,8 @@ export default function CourseSelect({
                         role="option"
                         aria-selected={on}
                         onClick={() => { onChange(c.id); close() }}
-                        className={`w-full flex items-start gap-3 px-1 py-3.5 text-left border-b border-bark/[0.08] transition-colors duration-150 ${
-                          on ? 'bg-accent/[0.06]' : 'active:bg-bark/[0.04]'
+                        className={`w-full flex items-start gap-3 px-1 py-3.5 text-left border-b border-line transition-colors duration-150 ${
+                          on ? 'bg-accent/[0.06]' : 'active:bg-tint'
                         }`}
                       >
                         <span className="flex-1 min-w-0">
@@ -588,7 +588,7 @@ function AddCourseForm({
         <button
           type="button"
           onClick={() => setTees(prev => [...prev, emptyTeeDraft(prev.some(t => t.gender === 'F') ? 'M' : prev.length >= 1 ? 'F' : 'M')])}
-          className="w-full mt-3 py-3.5 border border-dashed border-bark/25 rounded-xl text-ink/65 text-sm hover:border-bark/25 hover:text-ink/80 transition-colors"
+          className="w-full mt-3 py-3.5 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:border-line-strong hover:text-ink/80 transition-colors"
         >
           + Add another tee
         </button>

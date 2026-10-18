@@ -72,7 +72,7 @@ export default function HelpAndPrivacy({ code, joinedAs }: {
       </p>
 
       {joinedAs && (
-        <div className="mt-4 pt-4 border-t border-bark/12">
+        <div className="mt-4 pt-4 border-t border-line">
           <button
             type="button"
             onClick={leave}

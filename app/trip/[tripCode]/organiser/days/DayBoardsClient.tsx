@@ -68,7 +68,7 @@ export default function DayBoardsClient({
       <TripHeader backTo={`/trip/${tripCode}/organiser`} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
-        <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-1">
+        <h1 className="t-h1 text-ink mb-1">
           Formats by day
         </h1>
         <p className="text-ink/65 text-sm mb-6 leading-snug">
@@ -124,7 +124,7 @@ export default function DayBoardsClient({
                   {mine.length > 0 ? (
                     <ul className="flex flex-col gap-1 mt-3">
                       {mine.map(b => (
-                        <li key={b.id} className="rounded-lg bg-bark/[0.04] px-3 py-2">
+                        <li key={b.id} className="rounded-lg bg-tint px-3 py-2">
                           <p className="text-ink text-sm">{boardTitle(b)}</p>
                           <p className="t-cap text-ink/65 mt-0.5 leading-snug">{boardFacts(b).join(' · ')}</p>
                         </li>

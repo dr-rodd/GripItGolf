@@ -14,7 +14,7 @@ import { usePlatformCourses } from '@/app/components/usePlatformCourses'
 import {
   Sheet, GolfFields, golfDraftFields, EMPTY_GOLF_DRAFT, type GolfDraft,
 } from '@/app/components/ItineraryForms'
-import { FIELD_LABEL, cardClass } from '@/app/components/ui'
+import { FIELD_LABEL, cardClass, optionClass } from '@/app/components/ui'
 import { IconPlus } from '@/app/components/icons'
 
 /**
@@ -133,7 +133,7 @@ export default function AddRound({
           {days > 1 && (
             <div>
               <label className={FIELD_LABEL}>Day</label>
-              <div className="-mx-4 px-4 overflow-x-auto">
+              <div className="-mx-4 px-4 -my-2 py-2 overflow-x-auto">
                 <div className="flex gap-2 w-max">
                   {Array.from({ length: days }, (_, i) => {
                     const active = i === dayIndex
@@ -142,11 +142,7 @@ export default function AddRound({
                         key={i}
                         type="button"
                         onClick={() => setDayIndex(i)}
-                        className={`flex-shrink-0 px-3 py-2 rounded-xl border transition-colors duration-150 ${
-                          active
-                            ? 'border-accent bg-accent/[0.10] text-ink'
-                            : 'border-bark/12 bg-surface text-ink/80 hover:border-bark/25'
-                        }`}
+                        className={optionClass(active, 'tile')}
                       >
                         <span className="block t-label">Day {i + 1}</span>
                         <span className="block t-cap text-ink/65 mt-0.5">

@@ -59,7 +59,7 @@ export default function RunOrganiserClient({ challenge, dates, progress }: {
 
         <div>
           <p className="t-label text-accent-deep mb-1.5">Organiser area</p>
-          <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink leading-tight">
+          <h1 className="t-h1 text-ink">
             {challenge.name}
           </h1>
         </div>

@@ -8,7 +8,7 @@ import {
 import { isDecidable, pressOutcome } from '@/lib/matchplayProgress'
 import { type MatchReading, pendingResults } from '@/lib/matchResults'
 import { decisionLabel } from '@/lib/matchDecision'
-import { FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
+import { FIELD, FIELD_LABEL, buttonClass, cardClass, optionClass } from '@/app/components/ui'
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -277,7 +277,7 @@ export default function MatchplayBracket({
           onClick={() => animateTo(leftIndex - 1)}
           disabled={atStart}
           aria-label="Previous round"
-          className={`w-11 h-11 flex-shrink-0 flex items-center justify-center text-ink/80 disabled:opacity-25 enabled:hover:text-ink enabled:hover:border-bark/25 enabled:hover:bg-surface transition-colors ${cardClass()}`}
+          className={`w-11 h-11 flex-shrink-0 flex items-center justify-center text-ink/80 disabled:opacity-25 enabled:hover:text-ink enabled:hover:border-line-strong enabled:hover:bg-surface transition-colors ${cardClass()}`}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M15 18l-6-6 6-6" />
@@ -285,7 +285,7 @@ export default function MatchplayBracket({
         </button>
 
         <div className="min-w-0 text-center">
-          <p className="font-[family-name:var(--font-display)] text-ink text-base sm:text-lg leading-tight truncate">
+          <p className="t-card text-ink truncate">
             {header}
           </p>
           {/* Says the link is doing something, on the one screen where it is
@@ -301,7 +301,7 @@ export default function MatchplayBracket({
           onClick={() => animateTo(leftIndex + 1)}
           disabled={atEnd}
           aria-label="Next round"
-          className={`w-11 h-11 flex-shrink-0 flex items-center justify-center text-ink/80 disabled:opacity-25 enabled:hover:text-ink enabled:hover:border-bark/25 enabled:hover:bg-surface transition-colors ${cardClass()}`}
+          className={`w-11 h-11 flex-shrink-0 flex items-center justify-center text-ink/80 disabled:opacity-25 enabled:hover:text-ink enabled:hover:border-line-strong enabled:hover:bg-surface transition-colors ${cardClass()}`}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M9 18l6-6-6-6" />
@@ -569,7 +569,7 @@ function MatchTile({
             ? 'border-accent bg-accent'
             : decided
               ? 'border-accent/50 bg-accent/[0.07]'
-              : 'border-bark/12 bg-surface'
+              : 'border-line bg-surface'
         }`}
         style={{
           height: TILE_H,
@@ -590,7 +590,7 @@ function MatchTile({
           result={match.result}
           playerById={playerById}
         />
-        <div className={`h-px ${isChampion ? 'bg-accent/30' : 'bg-bark/12'}`} />
+        <div className={`h-px ${isChampion ? 'bg-accent/30' : 'bg-line'}`} />
         <Side
           playerId={match.player_b_id}
           isBye={match.player_b_is_bye}
@@ -751,7 +751,7 @@ function DecideSheet({
             <p className="t-cap text-ink/65">
               {match.round_name}
             </p>
-            <p className="font-[family-name:var(--font-display)] text-ink text-xl leading-tight mt-0.5">
+            <p className="t-h2 text-ink mt-0.5">
               {correcting ? 'Change the winner' : 'Who won?'}
             </p>
           </div>
@@ -816,11 +816,8 @@ function DecideSheet({
                   // is how you say "this match was not played after all"
                   ? setPicked(prev => prev === side.id ? null : side.id)
                   : apply(side.id)}
-                className={`w-full flex items-center gap-3 px-4 py-4 rounded-xl border transition-colors disabled:opacity-40 ${
-                  isPicked
-                    ? 'border-accent bg-accent/15'
-                    : 'border-bark/12 bg-surface hover:border-bark/25'
-                }`}
+                aria-pressed={isPicked}
+                className={`${optionClass(isPicked, 'row')} disabled:opacity-40`}
               >
                 <span className="w-5 text-ink/50 text-[13px] tabular-nums text-right flex-shrink-0">
                   {side.seed ?? ''}

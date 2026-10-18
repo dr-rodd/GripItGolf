@@ -162,7 +162,7 @@ export default function PlayerSettings({
           <div className="fixed inset-x-0 bottom-0 z-50 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
             <div className={`w-full max-w-md mx-auto sheet-up ${cardClass()}`}>
 
-              <div className="flex items-center justify-between px-5 py-4 border-b border-bark/12">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-line">
                 <h2 className="t-card text-ink">Your preferences</h2>
                 <button
                   type="button"
@@ -193,7 +193,7 @@ export default function PlayerSettings({
                 )}
 
                 {/* ── Leaderboard nickname ── */}
-                <div className="mt-5 pt-5 border-t border-bark/12">
+                <div className="mt-5 pt-5 border-t border-line">
                   <p className="t-label text-ink">Leaderboard nickname</p>
                   <p className="t-cap text-ink/65 mt-0.5">
                     Save space on the leaderboard — your player name doesn&apos;t

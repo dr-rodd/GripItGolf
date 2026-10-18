@@ -93,7 +93,7 @@ export default async function AdminCoursePage({
 
       {/* The card, read-only. */}
       <section className={`mt-6 px-4 py-4 ${cardClass()}`}>
-        <h2 className="font-[family-name:var(--font-display)] text-base mb-1">The card</h2>
+        <h2 className="t-card mb-1">The card</h2>
         <p className="text-ink/65 text-[13px] mb-3 leading-snug">
           Pars and stroke indexes are corrected with a scorecard photo — the
           check on the pick-player screen — never by hand. A photo is validated
@@ -108,7 +108,7 @@ export default async function AdminCoursePage({
           <div className="overflow-x-auto">
             <table className="text-sm min-w-full">
               <thead>
-                <tr className="border-b border-bark/12 text-left">
+                <tr className="border-b border-line text-left">
                   <th className="pr-3 py-2 t-eyebrow text-ink/65">Hole</th>
                   {holes.map(h => (
                     <th key={h.hole_number} className="px-1.5 py-2 text-center tabular-nums text-ink/65 font-normal">
@@ -143,7 +143,7 @@ function CardRow({
   muted?: boolean
 }) {
   return (
-    <tr className="border-b border-bark/12 last:border-0">
+    <tr className="border-b border-line last:border-0">
       <td className="pr-3 py-1.5 text-[13px] text-ink/65 whitespace-nowrap">{label}</td>
       {values.map((v, i) => (
         <td key={i} className={`px-1.5 py-1.5 text-center tabular-nums ${muted ? 'text-ink/65' : 'text-ink/80'}`}>

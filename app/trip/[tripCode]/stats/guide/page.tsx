@@ -16,7 +16,7 @@ import TripHeader from '@/app/components/TripHeader'
 /** A formula, set apart the way a textbook would. */
 function Maths({ children }: { children: React.ReactNode }) {
   return (
-    <pre className="bg-bark/[0.05] border border-bark/[0.08] rounded-xl px-4 py-3 my-3 overflow-x-auto whitespace-pre text-[13px] leading-relaxed text-ink font-mono">
+    <pre className="bg-tint border border-line rounded-xl px-4 py-3 my-3 overflow-x-auto whitespace-pre text-[13px] leading-relaxed text-ink font-mono">
       {children}
     </pre>
   )

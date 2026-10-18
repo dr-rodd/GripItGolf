@@ -274,7 +274,7 @@ export default function CreateRunForm() {
             </svg>
           </div>
 
-          <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-2">
+          <h1 className="t-h1 text-ink mb-2">
             Challenge Created!
           </h1>
           <p className="text-ink/65 text-sm mb-10">
@@ -447,7 +447,7 @@ export default function CreateRunForm() {
             {teams.length < MAX_RUN_TEAMS && (
               <button
                 onClick={() => setTeams(prev => [...prev, ''])}
-                className="w-full py-4 border border-dashed border-bark/25 rounded-xl text-ink/65 text-sm hover:border-bark/25 hover:text-ink/80 transition-colors"
+                className="w-full py-4 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:border-line-strong hover:text-ink/80 transition-colors"
               >
                 + Add another team
               </button>

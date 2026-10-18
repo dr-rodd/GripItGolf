@@ -29,10 +29,10 @@ export default function AdminShell({
 }) {
   return (
     <main className="min-h-dvh paper text-ink">
-      <div className="border-b border-bark/12">
+      <div className="border-b border-line">
         <div className="max-w-4xl mx-auto px-4 pt-5 flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="font-[family-name:var(--font-display)] text-xl">
+            <h1 className="t-h2">
               Admin
             </h1>
             {subtitle && <p className="text-ink/65 text-[13px] mt-0.5">{subtitle}</p>}

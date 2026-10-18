@@ -18,7 +18,7 @@ import {
 import { ordinal } from '@/lib/playerSummary'
 import type { RowRound } from '@/lib/boardRows'
 import type { Award } from '@/lib/tripAwards'
-import { cardClass } from '@/app/components/ui'
+import { Segmented, cardClass } from '@/app/components/ui'
 
 // ─── Furniture ─────────────────────────────────────────────────
 
@@ -32,7 +32,7 @@ export function Line({ label, value, tone = 'ink' }: {
     : tone === 'rust' ? 'text-rust-deep'
     : 'text-ink'
   return (
-    <div className="flex items-baseline justify-between py-2.5 border-b border-bark/[0.08] last:border-b-0">
+    <div className="flex items-baseline justify-between py-2.5 border-b border-line last:border-b-0">
       <span className="t-cap text-ink/65">{label}</span>
       <span className={`t-data t-num ${colour}`}>{value}</span>
     </div>
@@ -78,23 +78,13 @@ export function BasisToggle({ basis, onBasis }: {
   onBasis: (b: 'gross' | 'net') => void
 }) {
   return (
-    <div className="flex gap-1 flex-shrink-0" role="group" aria-label="Gained basis">
-      {(['gross', 'net'] as const).map(b => (
-        <button
-          key={b}
-          type="button"
-          aria-pressed={basis === b}
-          onClick={() => onBasis(b)}
-          className={`px-3 py-1.5 rounded-xl border t-cap transition-colors duration-150 ${
-            basis === b
-              ? 'border-accent bg-accent/[0.12] text-accent-deep font-semibold'
-              : 'border-bark/12 text-ink/65 hover:border-bark/25'
-          }`}
-        >
-          {b === 'gross' ? 'Gross' : 'Net'}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      className="flex-shrink-0"
+      label="Gained basis"
+      value={basis}
+      onChange={onBasis}
+      options={[{ value: 'gross', label: 'Gross' }, { value: 'net', label: 'Net' }]}
+    />
   )
 }
 
@@ -309,7 +299,7 @@ function Splits({ splits }: { splits: PlayerStats['splits'] }) {
           </thead>
           <tbody className="font-serif">
             {splits.map(row => (
-              <tr key={row.par} className="border-t border-bark/[0.08]">
+              <tr key={row.par} className="border-t border-line">
                 <td className="py-2.5 t-num text-ink">{row.par}</td>
                 <td className="py-2.5 text-right t-num text-ink">{row.holes}</td>
                 <td className="py-2.5 text-right t-num text-ink">
@@ -356,7 +346,7 @@ function Rounds({ stats, playerId, rounds, courseFor, courseName }: {
               const line = statsFor(mine, playerId)!
               const course = courseName.get(courseFor.get(round.id) ?? '')
               return (
-                <tr key={round.id} className="border-t border-bark/[0.08]">
+                <tr key={round.id} className="border-t border-line">
                   <td className="py-2.5 text-ink">
                     <span className="t-num">{round.round_number}</span>
                     {course && <span className="text-ink/50"> · {course}</span>}
@@ -413,7 +403,7 @@ export function RankedBox({ title, hint, rows, meId, aside }: {
       {rows.map((r, i) => (
         <div
           key={r.id}
-          className={`py-2.5 border-b border-bark/[0.08] last:border-b-0 ${
+          className={`py-2.5 border-b border-line last:border-b-0 ${
             r.id === meId ? 'bg-accent/[0.06] -mx-4 px-4' : ''
           }`}
         >
@@ -576,7 +566,7 @@ export function EveryonePanels({
               <section
                 key={a.key}
                 className={`px-4 py-3 mb-3 ${cardClass()} ${
-                  mineToo ? 'border-accent/50' : 'border-bark/12'
+                  mineToo ? 'border-accent/50' : 'border-line'
                 }`}
               >
                 <div className="flex items-baseline justify-between gap-3">

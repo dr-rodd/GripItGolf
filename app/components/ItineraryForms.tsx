@@ -43,7 +43,7 @@ export function Sheet({
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="sticky top-0 paper px-4 pt-4 pb-3 flex items-center justify-between border-b border-bark/12">
+        <div className="sticky top-0 paper px-4 pt-4 pb-3 flex items-center justify-between border-b border-line">
           <h2 className="t-h2 text-ink">{title}</h2>
           <button
             type="button"
@@ -218,7 +218,7 @@ export function GolfFields({
       {/* A casual round — a subgroup's extra game that should not move
           the trip standings. Off is the exception, so the switch reads
           in the positive and starts on. */}
-      <div className="pt-1 border-t border-bark/12">
+      <div className="pt-1 border-t border-line">
         <div className="flex items-center justify-between gap-3 pt-4">
           <span className="text-ink text-sm">Counts on the leaderboard</span>
           <Toggle

@@ -82,11 +82,11 @@ export default function RunBoardClient({ boards, anyRuns, garmin = false, strava
         />
       )}
 
-      <p className="text-ink/65 text-[13px] leading-snug mb-3">{board.rule}</p>
+      {board.rule && <p className="t-cap text-ink/65 mb-3">{board.rule}</p>}
 
       {/* ── The board ── */}
       <div className={`overflow-hidden ${cardClass()}`}>
-        <div className="flex items-center gap-3 px-3 py-2 border-b border-bark/12">
+        <div className="flex items-center gap-3 px-3 py-2 border-b border-line">
           <span className="t-eyebrow text-ink/65 w-6">Pos</span>
           <span className="t-eyebrow text-ink/65 flex-1">{board.kind === 'team' ? 'Team' : 'Runner'}</span>
           <span className="t-eyebrow text-ink/65">
@@ -103,7 +103,7 @@ export default function RunBoardClient({ boards, anyRuns, garmin = false, strava
         {board.kind === 'individual' && board.rows.map((r, i) => (
           <div
             key={r.id}
-            className={`${ROW} ${i < board.rows.length - 1 ? 'border-b border-bark/12' : ''} ${r.isViewer ? 'bg-accent/[0.06]' : ''}`}
+            className={`${ROW} ${i < board.rows.length - 1 ? 'border-b border-line' : ''} ${r.isViewer ? 'bg-accent/[0.06]' : ''}`}
           >
             <span className="text-[15px] leading-[1.45] text-ink/65 tabular-nums w-6">{r.place}</span>
             <span className="flex-1 min-w-0">
@@ -122,7 +122,7 @@ export default function RunBoardClient({ boards, anyRuns, garmin = false, strava
         {board.kind === 'team' && board.rows.map((r, i) => (
           <div
             key={r.id}
-            className={`${ROW} ${i < board.rows.length - 1 ? 'border-b border-bark/12' : ''} ${r.isViewer ? 'bg-accent/[0.06]' : ''}`}
+            className={`${ROW} ${i < board.rows.length - 1 ? 'border-b border-line' : ''} ${r.isViewer ? 'bg-accent/[0.06]' : ''}`}
           >
             <span className="text-[15px] leading-[1.45] text-ink/65 tabular-nums w-6">{r.place}</span>
             <span className="flex-1 min-w-0">

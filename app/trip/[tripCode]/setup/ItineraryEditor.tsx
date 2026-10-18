@@ -128,7 +128,7 @@ export default function ItineraryEditor({
 
   return (
     <div className="fixed inset-0 z-50 paper flex flex-col">
-      <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-bark/12 paper">
+      <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-line paper">
         <button
           type="button"
           onClick={onClose}

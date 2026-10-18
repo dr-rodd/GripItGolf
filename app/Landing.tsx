@@ -253,9 +253,9 @@ export default function Landing() {
           </form>
 
           <div className="w-full flex items-center gap-3 my-6" aria-hidden="true">
-            <span className="h-px flex-1 bg-bark/12" />
+            <span className="h-px flex-1 bg-line" />
             <span className="t-cap text-ink/65">or</span>
-            <span className="h-px flex-1 bg-bark/12" />
+            <span className="h-px flex-1 bg-line" />
           </div>
 
           {/* Still a real link: it prefetches, it survives a long press,
@@ -265,7 +265,7 @@ export default function Landing() {
             onClick={leave('/create')}
             className={buttonClass('secondary')}
           >
-            Create an Event
+            Create an event
           </Link>
 
           {/* Set as a quotation rather than as a sentence: the words sit on

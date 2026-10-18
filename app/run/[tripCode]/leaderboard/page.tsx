@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
 import { currentPlayer } from '@/lib/currentPlayer'
-import { isRunChallenge, describeRules, describeTeamScore, describeDay } from '@/lib/runChallenge'
+import { isRunChallenge, ruleFacts, teamScoreFact, describeDay } from '@/lib/runChallenge'
 import { fetchRunChallenge, rosterOf } from '../data'
 import { fetchBoardRuns, runsUnavailableMessage } from '../runs'
 import { standingsOf } from '../standings'
@@ -46,12 +46,13 @@ export default async function RunLeaderboardPage({ params }: {
 
   const s = standingsOf(challenge, read.runs)
   const colorOf = new Map(challenge.teams.map(t => [t.id, t.color]))
-  const pointsRule = describeRules(challenge.setup.rules).slice(0, 2).join(' ')
+  // A board's line is facts joined by a middle dot, as golf's are.
+  const pointsRule = ruleFacts(challenge.setup.rules).join(' · ')
 
   const live: BoardView[] = challenge.setup.boards.map(b => b.audience === 'team'
     ? {
         id: b.id, kind: 'team', title: 'Teams', byAverage: s.teamScore === 'average',
-        rule: describeTeamScore(s.teamScore),
+        rule: teamScoreFact(s.teamScore),
         rows: s.teams.map(t => ({
           id: t.teamId, place: t.place, name: t.name, color: t.color,
           score: t.score, total: t.total, average: t.average, members: t.members, km: t.km,
@@ -74,7 +75,7 @@ export default async function RunLeaderboardPage({ params }: {
     ? [
         {
           id: 'final', kind: 'team', title: 'Teams', byAverage: final.teamScore === 'average',
-          rule: describeTeamScore(final.teamScore),
+          rule: teamScoreFact(final.teamScore),
           rows: final.teams.map((t, i) => ({
             id: `final-${i}`, place: t.place, name: t.name, color: t.color,
             score: t.score, total: t.total, average: t.average, members: t.members, km: t.km,

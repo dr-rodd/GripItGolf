@@ -18,7 +18,7 @@ export function LegalPage({ title, updated, children }: {
     <main className="min-h-dvh paper">
       <TripHeader backTo="/" />
       <article className="max-w-lg mx-auto px-4 pt-8 pb-20 page-enter">
-        <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink leading-tight">{title}</h1>
+        <h1 className="t-h1 text-ink">{title}</h1>
         <p className="text-ink/65 text-[13px] mt-1.5">Last updated {updated}</p>
         <div className="mt-6 space-y-6">{children}</div>
       </article>
@@ -29,7 +29,7 @@ export function LegalPage({ title, updated, children }: {
 export function LegalSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
-      <h2 className="font-[family-name:var(--font-display)] text-xl text-ink mb-2">{title}</h2>
+      <h2 className="t-h2 text-ink mb-2">{title}</h2>
       <div className="space-y-3 text-ink/80 text-sm leading-relaxed">{children}</div>
     </section>
   )

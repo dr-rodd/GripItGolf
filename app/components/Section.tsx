@@ -56,7 +56,7 @@ export function Section({
        `first:` rather than a prop: the stack renders these as direct
        children of one flex column, so the DOM already knows which is first
        and nothing has to be told. */
-    <section className="border-t border-bark/12 first:border-t-0">
+    <section className="border-t border-line first:border-t-0">
       <h2>
         <button
           type="button"
