@@ -602,7 +602,7 @@ export default function LiveLeaderboardPanel({
           <span className="text-accent-deep text-sm tracking-[0.2em] uppercase">{roundLabel}</span>
         </div>
         {showBackButton && onClose && (
-          <BackButton onClick={onClose} />
+          <BackButton onClick={onClose} dense />
         )}
       </div>
 

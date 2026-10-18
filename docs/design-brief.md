@@ -71,7 +71,7 @@ a six-character event code is the way in.
   action per screen.
 - **Dark mode** is the same eight tokens with night values (warm browns, never
   black or grey) — not a second design.
-- **Type.** Clash Display for headlines, Bespoke Serif for body and dense data,
+- **Type.** Schibsted Grotesk 700 for headlines, Bespoke Serif for body and dense data,
   Archivo for buttons/labels/fields. Scale 30 / 21 / 17 / 16 / 15 / 13.
   **Nothing smaller than 13px.** Text never below 3:1 contrast; the tests
   compute real contrast in both themes.

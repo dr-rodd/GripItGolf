@@ -1,29 +1,52 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo } from "next/font/google";
+import { Archivo, Schibsted_Grotesk } from "next/font/google";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 /**
- * Archivo comes through next/font, so it is self-hosted, preloaded, and
- * immune to a third party being slow. It is the workhorse: buttons, labels,
- * form fields — everything that has to stay legible in bright sunlight.
+ * Archivo and Schibsted Grotesk come through next/font, so they are
+ * self-hosted, preloaded, and immune to a third party being slow.
  *
- * Clash Display and Bespoke Serif are Fontshare fonts, not on Google Fonts,
- * so they load from Fontshare's CDN via the stylesheet below. If that ever
- * fails the page still reads properly: the fallback chain in globals.css puts
- * Archivo behind Clash Display and Georgia behind Bespoke Serif, so the
- * weights and the register survive even when the exact faces do not.
+ * Archivo is the workhorse: buttons, labels, form fields — everything that
+ * has to stay legible in bright sunlight. It loads whole, as the variable
+ * font with its width axis, because the tab bar sets its labels narrower
+ * (`font-stretch: 87.5%`) to fit "Leaderboard" across a 320px phone at 13px.
+ *
+ * Schibsted Grotesk is the title face, at 700 only. Titles are 700
+ * everywhere — heavier turns shouty, lighter goes soft in sunlight — so a
+ * single weight is the rule as well as the smaller download: any title that
+ * asks for another weight is given 700 anyway.
+ *
+ * **Both `.variable` classes go on `<html>`, never `<body>`.** The stacks in
+ * globals.css (`--font-ui`, `--font-display`) are declared on `:root` and
+ * refer to these variables, and a custom property works out its `var()`
+ * where it is declared. With the classes on `<body>`, `--font-archivo` did
+ * not exist yet at `:root`, both stacks came out invalid, and every label,
+ * button and title on the site fell back to the body serif — for the whole
+ * of the site's life until October 2026, because the test only checked that
+ * the stylesheet named the fonts. test:branding now checks where they land.
+ *
+ * Bespoke Serif is a Fontshare font, not on Google Fonts, so it still loads
+ * from Fontshare's CDN via the stylesheet below. If that ever fails the page
+ * still reads properly: the fallback chain in globals.css puts Georgia behind
+ * it, so the register survives even when the exact face does not.
  */
 const archivo = Archivo({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  axes: ["wdth"],
   variable: "--font-archivo",
+  display: "swap",
+});
+
+const schibsted = Schibsted_Grotesk({
+  subsets: ["latin"],
+  weight: "700",
+  variable: "--font-schibsted",
   display: "swap",
 });
 
 const FONTSHARE =
   "https://api.fontshare.com/v2/css?" +
-  "f[]=clash-display@500,600&" +
   "f[]=bespoke-serif@400,500,700&" +
   "display=swap";
 
@@ -80,7 +103,11 @@ export default function RootLayout({
     // suppressHydrationWarning is scoped to this element's own attributes: the
     // theme boot script below adds `class="dark"` before React hydrates, and
     // without it React reports the server/client mismatch on every dark visit.
-    <html lang="en" suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${archivo.variable} ${schibsted.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         {/* Dark mode, before first paint. An inline script rather than a
             cookie read on the server, because cookies() in the root layout
@@ -92,7 +119,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://cdn.fontshare.com" crossOrigin="" />
         <link rel="stylesheet" href={FONTSHARE} />
       </head>
-      <body className={`${archivo.variable} antialiased`}>
+      <body className="antialiased">
         {children}
       </body>
     </html>

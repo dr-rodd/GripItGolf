@@ -35,11 +35,14 @@
 
   /* ── Type ──
      Three families, one job each, never mixed.
-     Clash Display and Bespoke Serif load from Fontshare over the network
-     (see app/layout.tsx). The fallbacks are chosen so a blocked or slow
-     CDN degrades to something of similar weight and colour rather than
-     changing the texture of the whole page. */
-  --font-display: 'Clash Display', var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+     Schibsted Grotesk (titles) and Archivo (every other word) are
+     self-hosted through next/font, whose variables are set on <html> —
+     the element these stacks are declared on, which is the only place a
+     var() inside them can resolve (see app/layout.tsx). Bespoke Serif
+     loads from Fontshare over the network; its fallback is chosen so a
+     blocked or slow CDN degrades to something of similar weight and
+     colour rather than changing the texture of the whole page. */
+  --font-display: var(--font-schibsted), ui-sans-serif, system-ui, sans-serif;
   --font-serif:   'Bespoke Serif', Georgia, 'Times New Roman', serif;
   --font-ui:      var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
 
@@ -178,13 +181,17 @@ body {
 
 /* The three display sizes carry every heading in the app, so they are also
    what makes it read as an app rather than as a page: a heading that only
-   just outranks the paragraph under it reads as a document. Nudged up a step
-   together, keeping the intervals — h1 leads, h2 heads a section, card names
-   a tile, and each is clearly the one above the next. */
-.t-h1    { font-family: var(--font-display); font-weight: 600; font-size: 32px; line-height: 1.15; letter-spacing: -0.01em; }
+   just outranks the paragraph under it reads as a document. h1 leads, h2
+   heads a section, card names a tile, and each is clearly the one above the
+   next.
 
-.t-h2    { font-family: var(--font-display); font-weight: 600; font-size: 23px; line-height: 1.25; }
-.t-card  { font-family: var(--font-display); font-weight: 600; font-size: 17px; line-height: 1.3; }
+   All three are Schibsted Grotesk at 700 — heavier turns shouty, lighter
+   goes soft in sunlight — set a touch tighter as they get bigger, which is
+   what a grotesk wants at display sizes. docs/refresh-plan.md, 3.1. */
+.t-h1    { font-family: var(--font-display); font-weight: 700; font-size: 32px; line-height: 1.1; letter-spacing: -0.02em; }
+
+.t-h2    { font-family: var(--font-display); font-weight: 700; font-size: 23px; line-height: 1.2; letter-spacing: -0.01em; }
+.t-card  { font-family: var(--font-display); font-weight: 700; font-size: 18px; line-height: 1.25; }
 .t-body  { font-family: var(--font-serif);   font-weight: 400; font-size: 17px; line-height: 1.6; }
 .t-data  { font-family: var(--font-serif);   font-weight: 400; font-size: 16px; line-height: 1.4; }
 .t-label { font-family: var(--font-ui);      font-weight: 600; font-size: 15px; line-height: 1.3; }
@@ -195,8 +202,8 @@ body {
 
    A drawn circle rather than the font's own full stop. The mark's dot is
    round, and a display face's period is as likely to be squared off — so
-   the glyph would match on one font and not on the next, and Clash Display
-   comes over a CDN that is allowed to fail. This holds either way.
+   the glyph would match on one font and not on the next, and the title face
+   has already changed once. This holds either way.
 
    The proportions are the mark's own, taken off the artwork's line layout
    (see the numbers in scripts/make-line-logo.ts): the dot is round at about

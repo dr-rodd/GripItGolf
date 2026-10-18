@@ -319,12 +319,15 @@ export default function BracketSetupForm({
             />
           ))}
         </div>
-        <div className="max-w-lg mx-auto px-4 py-2 relative flex items-center justify-center">
-          {stepNum > 1 && (
-            <div className="absolute left-4">
-              <BackButton onClick={goBack} />
-            </div>
-          )}
+        {/* Three cells: the way back, the step, and an empty one to keep the
+            step centred. The button is in the row rather than laid over it,
+            and the row is its 48px — it used to hang out of a shorter one,
+            over the progress bar. The left cell holds its width on step 1,
+            so nothing shifts when the arrow arrives. */}
+        <div className="max-w-lg mx-auto px-4 grid grid-cols-[48px_1fr_48px] min-h-12 items-center">
+          <div>
+            {stepNum > 1 && <BackButton onClick={goBack} />}
+          </div>
           <p className="text-center text-ink/65 text-[13px] tracking-wider uppercase">
             Step {stepNum} of 7 — {STEP_LABELS[stepNum - 1]}
           </p>

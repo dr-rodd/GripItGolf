@@ -4,36 +4,44 @@ import { IconChevronLeft } from "./icons"
 /**
  * The one way back, everywhere.
  *
- * Two shapes, same box: a square when it is only an arrow sitting beside a
- * heading, and a wider pill when it carries a word ("Home", "Trip"). Both are
- * the rounded-xl bordered box used by every other control in the app, so a
- * back control never reads as a stray link or a bare chevron.
+ * A bare chevron, 48px square — no box, no border, no shadow. Two shapes: a
+ * square when it is only the arrow sitting beside a heading, and wider when
+ * it carries a word ("Home", "Trip"). Both are 48px tall, the touch target.
+ *
+ * It was a 44px bordered box, and in the create wizards that box sat
+ * absolutely positioned in a step row about 34px tall — hanging out of the
+ * row top and bottom, over the progress bar and across the row's border.
+ * The rows are 48px grids now with the button in the flow
+ * (docs/refresh-plan.md, 2.4); `test:branding` holds both halves.
+ *
+ * `dense` keeps the old 44px footprint, for the scoring screens' header
+ * rows, whose layout is frozen — 44 is the floor for an icon button inside
+ * a row. Named call sites only; the test lists them.
  */
 
-type Common = { label?: string; className?: string }
+type Common = { label?: string; className?: string; dense?: boolean }
 type Props = Common & (
   | { href: string; onClick?: never }
   | { href?: never; onClick: () => void }
 )
 
 const BASE = [
-  "inline-flex items-center justify-center gap-1 flex-shrink-0",
-  "h-11 rounded-xl border border-bark/12 bg-surface",
-  "text-ink/80 hover:text-ink hover:border-bark/25",
+  "inline-flex items-center justify-center gap-1 flex-shrink-0 rounded-xl",
+  "text-ink/80 hover:text-ink",
   "transition-colors duration-150",
 ].join(" ")
 
-const icon = <IconChevronLeft size={18} />
-
-export default function BackButton({ href, onClick, label, className = "" }: Props) {
+export default function BackButton({ href, onClick, label, className = "", dense = false }: Props) {
+  const box = dense ? "h-11" : "h-12"
   // Square when the arrow speaks for itself; padded out when it has a word to say.
-  const cls = `${BASE} ${label ? "px-4" : "w-11"} ${className}`.trim()
+  const width = label ? "pl-2 pr-3" : dense ? "w-11" : "w-12"
+  const cls = `${BASE} ${box} ${width} ${className}`.trim()
 
   const body = (
     <>
-      {icon}
+      <IconChevronLeft size={24} />
       {label && (
-        <span className="t-label pr-1">{label}</span>
+        <span className="t-label">{label}</span>
       )}
     </>
   )

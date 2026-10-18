@@ -467,8 +467,8 @@ export default function CourseDashboardClient({
   // ─── Header ───────────────────────────────────────────────
 
   const headerLeft = view === "dashboard"
-    ? <BackButton href={backHref} />
-    : <BackButton onClick={goBack} />
+    ? <BackButton href={backHref} dense />
+    : <BackButton onClick={goBack} dense />
 
   // Only the dashboard and score entry have anything to put on the right. The
   // other views reserved an 80px spacer there anyway, which cost the course

@@ -11,7 +11,7 @@
 // - **Tables and inline styles**, because that is the layout engine Gmail
 //   and Outlook actually run. No stylesheet, no classes.
 // - **A system font stack**, never a webfont. The brand arrives through the
-//   colours and the wordmark image, not through Clash Display.
+//   colours and the wordmark image, not through the title face.
 // - **Literal hexes**, necessarily — there is no globals.css in an inbox.
 //   These are the light palette's own values (see docs/design-system.md);
 //   an email does not follow the reader's dark mode and should not try.

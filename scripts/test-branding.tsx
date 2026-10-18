@@ -241,7 +241,22 @@ section('The wordmark is a file, not type')
 
 section('Three fonts, one job each')
 {
-  ok(css.includes("'Clash Display'"), 'Clash Display is the headline face')
+  const layout = read('app/layout.tsx')
+
+  // Schibsted Grotesk replaced Clash Display in October 2026
+  // (docs/refresh-plan.md, D4), in the same deploy that made the title face
+  // render at all — so Clash Display never once appeared on the live site.
+  // Titles are 700 everywhere: heavier turns shouty, lighter goes soft in
+  // sunlight, and the one weight loaded makes that the rule.
+  ok(/import \{[^}]*\bSchibsted_Grotesk\b[^}]*\} from "next\/font\/google"/.test(layout),
+    'Schibsted Grotesk is the headline face, self-hosted through next/font')
+  ok(/--font-display:\s*var\(--font-schibsted\)/.test(css), '  …and leads the display stack')
+  ok(/Schibsted_Grotesk\(\{[^}]*weight: "700"/.test(layout), '  …at 700, the one weight a title uses')
+  for (const level of ['t-h1', 't-h2', 't-card']) {
+    ok(new RegExp(`\\.${level}\\s*\\{[^}]*font-weight: 700`).test(css), `  ${level} is set at 700`)
+  }
+  ok(!/clash/i.test(stripComments(css) + stripComments(layout)),
+    'Clash Display is gone, from the stacks and from the CDN request')
   ok(css.includes("'Bespoke Serif'"), 'Bespoke Serif is the body and data face')
   ok(css.includes('--font-archivo'), 'Archivo is the UI face')
 
@@ -249,8 +264,10 @@ section('Three fonts, one job each')
   // page's texture, so every family names a fallback of the same kind.
   ok(/--font-display:[^;]*sans-serif/.test(css), 'the headline falls back to a sans')
   ok(/--font-serif:[^;]*serif/.test(css), 'the body falls back to a serif')
-  ok(read('app/layout.tsx').includes('api.fontshare.com'), 'and Fontshare is actually loaded')
-  ok(read('app/layout.tsx').includes('preconnect'), 'with a preconnect, since it is off-origin')
+  // Bespoke Serif is the one face still on Fontshare, until it is
+  // self-hosted too (refresh plan, Phase 2) — then these two pins flip.
+  ok(layout.includes('api.fontshare.com'), 'and Fontshare is actually loaded, for Bespoke Serif')
+  ok(layout.includes('preconnect'), 'with a preconnect, since it is off-origin')
 
   // The old faces are gone
   eq(uiFiles().filter(f => /font-playfair|font-caveat|font-crimson/.test(read(f))), [],
@@ -262,6 +279,60 @@ section('Three fonts, one job each')
 
   // Numbers in a table must not jitter as they change
   ok(/\.t-data, \.t-num \{[^}]*tabular-nums/.test(css), 'table numerals are tabular')
+}
+
+section('The fonts resolve, not just appear in the stylesheet')
+{
+  // For the whole of the site's life until October 2026, only the serif
+  // ever rendered. layout.tsx put the next/font variable class on <body>,
+  // while the stacks that use it (--font-ui, --font-display) are declared on
+  // :root. A custom property works out its var() where it is declared, and
+  // at :root --font-archivo did not exist yet — so both stacks came out
+  // invalid, were inherited that way, and every title, label, button and
+  // tab fell back to Bespoke Serif. The section above only asked whether the
+  // stylesheet named the fonts, which it always did. This one asks whether
+  // each name can reach the element it is used on.
+  const layout = stripComments(read('app/layout.tsx'))
+
+  // Every next/font loader the layout imports, google and local alike…
+  const loaders = new Set<string>()
+  for (const m of layout.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']next\/font\/google["']/g)) {
+    for (const n of m[1].split(',')) if (n.trim()) loaders.add(n.trim())
+  }
+  for (const m of layout.matchAll(/import\s+(\w+)\s+from\s*["']next\/font\/local["']/g)) loaders.add(m[1])
+
+  // …and every font it makes with one: `const x = Loader({ … variable: "--font-y" … })`
+  const fonts: { name: string; variable: string }[] = []
+  for (const m of layout.matchAll(/const\s+(\w+)\s*=\s*(\w+)\(\{([\s\S]*?)\}\)/g)) {
+    if (!loaders.has(m[2])) continue
+    const v = m[3].match(/variable:\s*["'](--font-[\w-]+)["']/)?.[1]
+    if (v) fonts.push({ name: m[1], variable: v })
+  }
+  ok(fonts.length >= 2,
+    `the layout loads its fonts through next/font (${fonts.map(f => f.variable).join(', ')})`)
+
+  const tag = (t: string) => layout.match(new RegExp(`<${t}\\b[^>]*>`))?.[0] ?? ''
+  const html = tag('html'), body = tag('body')
+  for (const f of fonts) {
+    ok(html.includes(`${f.name}.variable`), `${f.variable} is set on <html>`)
+    ok(!body.includes(`${f.name}.variable`),
+      '  …and not on <body>, where the stacks declared on :root cannot see it')
+  }
+
+  // Every font stack refers only to variables that exist where it is
+  // declared: one set on <html> by next/font, or another stack on :root.
+  // A typo'd name fails here too, rather than falling back in silence.
+  const code = stripComments(css)
+  const onRoot = new Set([...code.matchAll(/(--font-[\w-]+):/g)].map(m => m[1]))
+  const onHtml = new Set(fonts.map(f => f.variable))
+  let refs = 0
+  for (const m of code.matchAll(/(--font-[\w-]+):\s*([^;]+);/g)) {
+    for (const r of m[2].matchAll(/var\((--font-[\w-]+)/g)) {
+      refs++
+      ok(onHtml.has(r[1]) || onRoot.has(r[1]), `${m[1]} refers to ${r[1]}, which it can see`)
+    }
+  }
+  ok(refs >= 2, 'and the display and UI stacks both do refer to a next/font variable')
 }
 
 // ─── Readability ───────────────────────────────────────────────
@@ -550,10 +621,11 @@ section('Type is big enough to read')
   ok(px('sm') >= 15, `text-sm is retuned to at least 15px (${px('sm')}px)`)
   ok(px('xs') >= 13, `and text-xs to at least 13px (${px('xs')}px)`)
 
-  // The smallest type in the app, and the one place it is justified: four
-  // tab labels across the narrowest phone.
+  // The tab labels were the one exception, at 11px, for five labels across
+  // the narrowest phone. Archivo's width axis buys that room instead now,
+  // so the bar keeps the same floor as everything else.
   const bar = Number(read('app/components/TabBar.tsx').match(/fontSize: (\d+)/)?.[1] ?? 0)
-  ok(bar >= 11, `the tab labels are at least 11px (${bar}px)`)
+  ok(bar >= 13, `the tab labels are at least 13px (${bar}px)`)
 }
 
 // ─── The tab bar ───────────────────────────────────────────────
@@ -615,10 +687,15 @@ section('The bottom tab bar')
 
   // "Labels must fit on one line — test Leaderboard specifically"
   ok(src.includes('whitespace-nowrap'), 'labels never wrap')
-  // 11px, up from 10 with the rest of the small end. Five columns on a
-  // 320px screen leave 64px each; "Leaderboard" is about 62px of that in
-  // Archivo at 11 — the tight one, measured rather than assumed.
-  ok(src.includes('fontSize: 11'), 'at 11px, which still lets Leaderboard fit')
+  // 13px, up from 11, in Archivo at 87.5% width — the narrower cut is what
+  // lets "Leaderboard", the tight one, sit in a fifth of a phone at the
+  // floor size (the measurements are in the note in TabBar.tsx). The width axis has to be loaded for the stretch to do
+  // anything: without it the browser has one width and quietly ignores it.
+  ok(src.includes('fontSize: 13'), 'at 13px, the floor everything else keeps')
+  ok(src.includes("fontStretch: '87.5%'"), '  …set at 87.5% width, which is what lets Leaderboard fit')
+  const archivo = read('app/layout.tsx').match(/Archivo\(\{[\s\S]*?\}\)/)?.[0] ?? ''
+  ok(/axes: \["wdth"\]/.test(archivo), '  …so Archivo loads with its width axis')
+  ok(!/weight:/.test(archivo), '  …as the whole variable font, not a list of static weights')
   ok(src.includes('size={20}'), 'with 20px icons')
 
   ok(src.includes("'text-accent'"), 'the active tab is emerald')
@@ -1443,6 +1520,54 @@ section('The screens before a trip wear the same header')
   // A tap target with only a logo in it has to say where it goes
   ok(read('app/components/TripHeader.tsx').includes("'Back to the start'"),
     'and says so out loud for anyone who cannot see the mark')
+}
+
+section('The way back is a 48px arrow, sitting in its row')
+{
+  // It was a 44px bordered box, and in the create wizards that box was laid
+  // absolutely over a step row about 34px tall — hanging out of it top and
+  // bottom, into the progress bar and across the row's border, and under the
+  // 48px touch target besides (docs/refresh-plan.md, 2.4).
+  const code = stripComments(read('app/components/BackButton.tsx'))
+  ok(/dense \? "h-11" : "h-12"/.test(code) && /dense \? "w-11" : "w-12"/.test(code),
+    'the back button is 48px square')
+  ok(!/\bborder\b|shadow|bg-/.test(code), '  …a bare arrow: no box, no border, no shadow')
+  ok(/IconChevronLeft size=\{24\}/.test(code), '  …with a 24px chevron')
+
+  // 44 is the floor for an icon button inside a row, and only the scoring
+  // screens' header rows take it — their layout is frozen. Named here so a
+  // new dense one is a decision, not a drift.
+  const all: string[] = []
+  const walk = (dir: string) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = `${dir}/${e.name}`
+      if (e.isDirectory()) walk(p)
+      else if (/\.tsx$/.test(e.name)) all.push(p)
+    }
+  }
+  walk('app')
+  eq(all.filter(f => /<BackButton\b[^\n]*\bdense\b/.test(read(f))).sort(), [
+    'app/scoring/LiveLeaderboardPanel.tsx',
+    'app/scoring/LiveScoringFlow.tsx',
+    'app/scoring/[slug]/CourseDashboardClient.tsx',
+  ], '  …and only the scoring headers keep the 44px floor')
+
+  // Nowhere is it laid over a row rather than placed in one
+  eq(all.filter(f => /\babsolute\b[^"]*"[^>]*>\s*(?:\{[^}]*&&\s*\(?\s*)?<BackButton/.test(read(f))), [],
+    'no back button is absolutely positioned over its row')
+
+  // Every wizard's step row: way back, step, and an empty cell to keep the
+  // step centred — with the arrow's cell holding its width on step 1.
+  for (const f of [
+    'app/dashboard/create/CreateTripForm.tsx',
+    'app/dashboard/create/CreateLeagueForm.tsx',
+    'app/dashboard/create/CreateKnockoutForm.tsx',
+    'app/dashboard/create/CreateRunForm.tsx',
+    'app/trip/[tripCode]/organiser/bracket/BracketSetupForm.tsx',
+  ]) {
+    ok(/grid grid-cols-\[48px_1fr_48px\] min-h-12 items-center">\s*<div>\s*\{stepNum > 1 && <BackButton onClick=\{goBack\} \/>\}\s*<\/div>/
+      .test(read(f)), `${f.split('/').pop()} puts the arrow in a 48px step row`)
+  }
 }
 
 // ─── The bar at the bottom ─────────────────────────────────────

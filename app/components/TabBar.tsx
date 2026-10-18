@@ -108,13 +108,17 @@ function Tab({
       } ${pressed ? 'tab-pressed' : ''} ${pending ? 'tab-pending' : ''}`}
     >
       <Icon size={20} />
-      {/* The smallest type in the app, and the one place it is
-          justified: five labels across the narrowest phone. 11px,
-          read at arm's length; "Leaderboard" is the tight one and
-          it is measured, not assumed, to clear its column. */}
+      {/* Five labels at the 13px floor everything else in the app keeps.
+          Archivo's width axis buys the room: at 87.5% "Leaderboard" is
+          66px (69 lit, at 600) against 73 at full width — measured in
+          Chromium, not assumed. A column is 75px from a 375px phone up,
+          so it fits outright; on a 320px screen (an SE, or Display Zoom)
+          it is 64px, and the label, centred and never clipped, borrows a
+          couple of pixels each side from the empty margins beside
+          Scoring and Stats, which are 42px words in the same 64. */}
       <span
         className="font-[family-name:var(--font-ui)] leading-none whitespace-nowrap"
-        style={{ fontSize: 11, fontWeight: lit ? 600 : 400 }}
+        style={{ fontSize: 13, fontStretch: '87.5%', fontWeight: lit ? 600 : 400 }}
       >
         {label}
       </span>

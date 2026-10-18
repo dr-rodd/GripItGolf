@@ -319,6 +319,23 @@ ahead of `confirmed`: a photographed card with nothing to play off still cannot 
 started, and nothing else on the row would ever say so. **The badge names the blocker,
 not the paperwork.**
 
+## Two of the three fonts never rendered, for the site's whole life
+
+Found in October 2026's design session, with a headless browser on greendot.live:
+every title, label, button, field and tab label computed to Bespoke Serif. `layout.tsx`
+put the `next/font` variable class on `<body>`, while `--font-ui` and `--font-display`
+are declared on `:root` and refer to it. A custom property resolves its `var()` on the
+element where it is declared, and at `:root` the variable did not exist yet — so both
+stacks were invalid there, inherited that way, and fell back to the body's serif.
+Clash Display and Archivo had never shown; much of what read as "spaced-out serif
+capitals" on screen was this.
+
+`test:branding` checked that the stylesheet *named* the fonts, never that they could
+*resolve*, which is why it went unnoticed. The variables are on `<html>` now and the
+test reads the layout's `<html>` and `<body>` tags and every stack's `var()` references.
+The general shape is worth remembering: **a check on what the source says is not a
+check on what the browser does** — where the two can disagree, test the mechanism.
+
 ## Two things blocking a faster first paint that code alone cannot fix
 
 Both came out of the round-trip and motion work and neither could be finished from
@@ -327,14 +344,14 @@ load** costs — which is why they were reported rather than half-done.
 
 **The Fontshare stylesheet is the one render-blocking third-party request on every
 page** (`app/layout.tsx`). Archivo comes through `next/font/google`, so it is
-self-hosted, subsetted and immune to somebody else's outage. Clash Display and Bespoke
-Serif do not: they load from `api.fontshare.com` via a `<link rel="stylesheet">` in
-`<head>`, and those are the *display* faces — every heading, every trip name, every
-score. `preconnect` hints are in place and the fallback chain in `globals.css` was
+self-hosted, subsetted and immune to somebody else's outage, and so is Schibsted
+Grotesk, the title face since October 2026. Bespoke Serif does not: it loads from
+`api.fontshare.com` via a `<link rel="stylesheet">` in `<head>`, and it is the face of
+every score. `preconnect` hints are in place and the fallback chain in `globals.css` was
 chosen so a dead CDN degrades gracefully, but the request still blocks the first paint
 of every screen.
 
-The fix is `next/font/local` with the two WOFF2 files committed, which removes the
+The fix is `next/font/local` with the WOFF2 files committed (refresh plan, Phase 2), which removes the
 third party entirely. **Fontshare is blocked by the container's proxy**, so the files
 have to be downloaded by hand and dropped into the repo before the code change is worth
 making. The tempting shortcut — loading the stylesheet non-blocking with

@@ -1552,7 +1552,7 @@ export default function LiveScoringFlow({
             className="sticky z-10 bg-cream border-b border-bark/12 px-4 py-3 flex items-center justify-between"
             style={{ top: CHROME }}
           >
-            <BackButton onClick={() => setEditingPlayerId(null)} />
+            <BackButton onClick={() => setEditingPlayerId(null)} dense />
             {/* The handicap every points figure below is worked out from, so
                 it is on the screen where those figures are being changed. It
                 follows the allowance control in the header above — the same

@@ -242,8 +242,10 @@ function restoreLogoDot() {
 
 /**
  * The typography — Big Dog's pick from the five candidates that were
- * tried on-device: Clash Display titles over Bespoke Serif body, the
- * site's display voice over its reading voice.
+ * tried on-device: display titles over Bespoke Serif body, the site's
+ * display voice over its reading voice. Picked with Clash Display as the
+ * display face; it follows `--font-display`, Schibsted Grotesk since the
+ * October 2026 refresh.
  */
 const TITLE_FONT = 'var(--font-display)'
 const BODY_FONT = 'var(--font-serif)'

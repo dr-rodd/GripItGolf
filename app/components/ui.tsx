@@ -28,7 +28,7 @@ export function Card({
   )
 }
 
-/** A section heading. The label above it is Archivo; the heading is Clash. */
+/** A section heading. The label above it is Archivo; the heading is Schibsted Grotesk. */
 export function SectionTitle({
   children, hint, className = '',
 }: {

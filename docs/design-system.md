@@ -55,15 +55,17 @@ The same tokens with night values — not a second design system. `html.dark` re
 
 ### Type
 
-Three families, one job each, never mixed. Clash Display (headlines), Bespoke Serif (body and all dense data), Archivo (buttons, labels, form fields). Use the scale classes — `t-h1` (30) `t-h2` (21) `t-card` (16) `t-body` (17) `t-data` (15) `t-label` (13) `t-cap` (13) — rather than ad-hoc sizes.
+Three families, one job each, never mixed. Schibsted Grotesk 700 (headlines — it replaced Clash Display in October 2026, `docs/refresh-plan.md` D4), Bespoke Serif (body and all dense data), Archivo (buttons, labels, form fields). Use the scale classes — `t-h1` (30) `t-h2` (21) `t-card` (16) `t-body` (17) `t-data` (15) `t-label` (13) `t-cap` (13) — rather than ad-hoc sizes.
 
 **Nothing is smaller than 13px in the scale, or 12px anywhere.** This is read one-handed, outdoors, in daylight, often by someone whose reading glasses are in the car. The old scale bottomed out at 11px and Tailwind's `text-xs` (12px) was scattered across 92 places; both are gone and `test:branding` enforces the floor, including on hand-written `text-[Npx]`.
 
-Clash Display and Bespoke Serif are **Fontshare** fonts loaded from their CDN in `layout.tsx`; Archivo is self-hosted via `next/font`. The fallback chain degrades to a sans and a serif respectively, so a blocked CDN changes the faces but not the register.
+Schibsted Grotesk and Archivo are self-hosted via `next/font`; Bespoke Serif is a **Fontshare** font loaded from their CDN in `layout.tsx`, with Georgia behind it, so a blocked CDN changes the face but not the register.
+
+**The `next/font` variable classes go on `<html>`, never `<body>`.** The stacks (`--font-ui`, `--font-display`) are declared on `:root` and refer to those variables, and a custom property resolves its `var()` where it is declared. With the classes on `<body>` — as they were until October 2026 — both stacks were invalid at `:root`, and every title, label, button and tab label on the site rendered in Bespoke Serif; Clash Display and Archivo never showed. `test:branding` ("The fonts resolve") now checks where the variables land, not just that the stylesheet names the fonts.
 
 **A title can close with the green dot** — `.t-title-dot`, an oversized emerald full stop set slightly right of the last letter and a touch below the line, the way the dot closes the wordmark. The trip name on the trip hub uses it; the face is `t-h1`, the same as every other title.
 
-It is a **drawn circle, not the font's own period**. The mark's dot is round and a display face's full stop is as likely to be squared off, so the glyph would match on one font and not the next — and Clash Display arrives over a CDN that is allowed to fail. The proportions are the mark's own, measured off the artwork's line layout: round at ~0.38 of the text height, `0.17em` clear of the last letter, sitting on the baseline with a small nudge below it. All in `em`, so it holds at every size a title scales through.
+It is a **drawn circle, not the font's own period**. The mark's dot is round and a display face's full stop is as likely to be squared off, so the glyph would match on one font and not the next — and the title face has already changed once. The proportions are the mark's own, measured off the artwork's line layout: round at ~0.38 of the text height, `0.17em` clear of the last letter, sitting on the baseline with a small nudge below it. All in `em`, so it holds at every size a title scales through.
 
 ### The wordmark
 
@@ -159,7 +161,7 @@ A cream backdrop under the mark was the other way to do it, and was tried: invis
 
 ### Navigation
 
-Bottom tab bar, `app/components/TabBar.tsx` — Home · Scoring · **Leaderboard** · Stats · Trip Setup, scoped to a trip. Five identical tabs; the leaderboard holds the centre, and position is the whole of the emphasis — the emerald circle around it was tried and retired the same day (label dropped, label back, alignment sideways: more trouble than it was worth). All five labels are 11px; "Leaderboard" is the tight one at ~62px of a 64px column on a 320px phone, measured rather than assumed. Fixed to the bottom with `env(safe-area-inset-bottom)` — which is only a real number because the root layout declares `viewport-fit=cover`; without that iOS reports every inset as zero. Pages carrying it add `has-tabbar` for clearance.
+Bottom tab bar, `app/components/TabBar.tsx` — Home · Scoring · **Leaderboard** · Stats · Trip Setup, scoped to a trip. Five identical tabs; the leaderboard holds the centre, and position is the whole of the emphasis — the emerald circle around it was tried and retired the same day (label dropped, label back, alignment sideways: more trouble than it was worth). All five labels are 13px Archivo at `font-stretch: 87.5%` (the width axis is loaded for exactly this); "Leaderboard" is the tight one, measured rather than assumed — see the note in `TabBar.tsx`. Fixed to the bottom with `env(safe-area-inset-bottom)` — which is only a real number because the root layout declares `viewport-fit=cover`; without that iOS reports every inset as zero. Pages carrying it add `has-tabbar` for clearance.
 
 **Three separate things keep it pinned, and they are not interchangeable.** The bar drifting off the bottom edge looked like one bug and was not:
 
