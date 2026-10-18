@@ -424,6 +424,21 @@ html.dark .only-light { display: none; }
 .slide-in-right { animation: gdSlideInRight 260ms ease-out; }
 .slide-in-left  { animation: gdSlideInLeft 260ms ease-out; }
 
+/* A wizard's step arriving (app/components/WizardShell.tsx). Forward, the
+   step leaving drifts a third of the way left and fades while the next one
+   comes in from the right edge; back is the mirror. Both together, on the
+   putt curve, 340ms — the one slide in the app that moves a whole screen,
+   because a wizard is a journey and should feel like going forward. */
+@keyframes gdStepInRight  { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes gdStepOutLeft  { from { transform: none; opacity: 1; } to { transform: translateX(-30%); opacity: 0; } }
+@keyframes gdStepInLeft   { from { transform: translateX(-30%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes gdStepOutRight { from { transform: none; } to { transform: translateX(100%); } }
+@keyframes gdFadeOut { from { opacity: 1; } to { opacity: 0; } }
+.step-in-forward  { animation: gdStepInRight 340ms var(--gd-ease) both; }
+.step-out-forward { animation: gdStepOutLeft 340ms var(--gd-ease) both; }
+.step-in-back     { animation: gdStepInLeft 340ms var(--gd-ease) both; }
+.step-out-back    { animation: gdStepOutRight 340ms var(--gd-ease) both; }
+
 /* A live score changing. The cell flashes emerald and settles — the
    number itself must never jump or bounce, because it is being read. */
 @keyframes gdScoreFlash {
@@ -616,6 +631,11 @@ html.dark .only-light { display: none; }
   /* The press keeps its meaning without the movement, the same way the tab
      does: the element is still tapped, it just does not shrink. */
   .press:active { transform: none; }  /* the shadow still drops */
+  /* A step swaps with a short crossfade and no movement. Important, because
+     the catch-all above would otherwise cut the fade to nothing too — a
+     fade is not motion, and it is what says the step changed. */
+  .step-in-forward, .step-in-back { animation: gdFade 150ms ease-out both !important; }
+  .step-out-forward, .step-out-back { animation: gdFadeOut 150ms ease-out both !important; }
   /* The press keeps its meaning without the movement: the tab still goes
      emerald the moment it is touched, which is the part that answers
      "did that land". Only the scale goes. */

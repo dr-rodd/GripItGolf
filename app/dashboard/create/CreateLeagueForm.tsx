@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import BackButton from '@/app/components/BackButton'
 import TripHeader from '@/app/components/TripHeader'
 import DateField from '@/app/components/DateField'
 import Toggle from '@/app/components/Toggle'
@@ -36,6 +35,7 @@ import {
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import { describeError, generateCode } from './CreateTripForm'
 import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass, optionClass } from '@/app/components/ui'
+import WizardShell from '@/app/components/WizardShell'
 
 /**
  * Creating a league event — the league branch of the tournament door.
@@ -61,7 +61,10 @@ import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass, optio
 
 // ── Styles shared with the trip wizard, by convention not import ─────────
 
-const STEP_LABELS = ['Event details', 'Venues', 'Players', 'Finish']
+/** Each step opens on its question — WizardShell draws it as the step's title. */
+const STEP_TITLES = ['Name your event', 'Where you’re playing', 'Who’s playing', 'Ready to go']
+/** At most one line under the question. */
+const STEP_INTROS: (string | undefined)[] = [undefined, undefined, undefined, undefined]
 
 type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F' }
 
@@ -594,31 +597,26 @@ export default function CreateLeagueForm({ schedule }: {
 
       <div className="page-enter">
 
-      <div className="border-b border-bark/12">
-        <div className="max-w-lg mx-auto px-4 pt-3 pb-1 flex gap-1.5">
-          {STEP_LABELS.map((label, i) => (
-            <div
-              key={label}
-              className={`h-1 flex-1 rounded-full transition-colors ${i < stepNum ? 'bg-accent' : 'bg-bark/[0.06]'}`}
-            />
-          ))}
-        </div>
-        {/* Three cells: the way back, the step, and an empty one to keep the
-            step centred. The button is in the row rather than laid over it,
-            and the row is its 48px — it used to hang out of a shorter one,
-            over the progress bar. The left cell holds its width on step 1,
-            so nothing shifts when the arrow arrives. */}
-        <div className="max-w-lg mx-auto px-4 grid grid-cols-[48px_1fr_48px] min-h-12 items-center">
-          <div>
-            {stepNum > 1 && <BackButton onClick={goBack} />}
-          </div>
-          <p className="text-center t-label text-ink/65">
-            Step {stepNum} of 4 — {STEP_LABELS[stepNum - 1]}
-          </p>
-        </div>
-      </div>
-
-      <div className="max-w-lg mx-auto px-4 py-8">
+      <WizardShell
+        step={stepNum}
+        titles={STEP_TITLES}
+        intro={STEP_INTROS[stepNum - 1]}
+        onBack={goBack}
+        footer={<>
+          <button
+            onClick={goNext}
+            disabled={!canProceed}
+            className={buttonClass('primary')}
+          >
+            {submitting ? 'Creating…' : stepNum === 4 ? 'Create league' : 'Continue'}
+          </button>
+          {stepNum === 3 && (
+            <p className="text-center text-ink/65 text-[13px] mt-3">
+              Players without a name will be skipped
+            </p>
+          )}
+          </>}
+      >
 
         {/* ── 1 · Event details ── */}
         {step === 1 && (
@@ -1233,21 +1231,7 @@ export default function CreateLeagueForm({ schedule }: {
           </div>
         )}
 
-        <div className="mt-8">
-          <button
-            onClick={goNext}
-            disabled={!canProceed}
-            className={buttonClass('primary')}
-          >
-            {submitting ? 'Creating…' : stepNum === 4 ? 'Create league' : 'Continue'}
-          </button>
-          {stepNum === 3 && (
-            <p className="text-center text-ink/65 text-[13px] mt-3">
-              Players without a name will be skipped
-            </p>
-          )}
-        </div>
-      </div>
+      </WizardShell>
 
       </div>
     </div>

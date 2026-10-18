@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import BackButton from '@/app/components/BackButton'
 import TripHeader from '@/app/components/TripHeader'
 import DateField from '@/app/components/DateField'
 import Toggle from '@/app/components/Toggle'
@@ -26,6 +25,7 @@ import {
 } from '@/lib/runChallenge'
 import { describeError, generateCode } from './CreateTripForm'
 import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
+import WizardShell from '@/app/components/WizardShell'
 
 /**
  * Creating a Green Dot Run challenge — an ongoing team running competition.
@@ -53,7 +53,15 @@ import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from
  * them; it never decides what a rule means.
  */
 
-const STEP_LABELS = ['Challenge', 'Teams', 'Points', 'Finish']
+/** Each step opens on its question — WizardShell draws it as the step's title. */
+const STEP_TITLES = ['Name your challenge', 'Pick the teams', 'How runs score', 'Ready to go']
+/** At most one line under the question. */
+const STEP_INTROS: (string | undefined)[] = [
+  undefined,
+  'Everyone runs for a team. Add the ones you know about.',
+  'You can change these later. The board re-counts.',
+  undefined,
+]
 
 export default function CreateRunForm() {
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 'done'>(1)
@@ -324,31 +332,24 @@ export default function CreateRunForm() {
 
       <div className="page-enter">
 
-      <div className="border-b border-bark/12">
-        <div className="max-w-lg mx-auto px-4 pt-3 pb-1 flex gap-1.5">
-          {STEP_LABELS.map((label, i) => (
-            <div
-              key={label}
-              className={`h-1 flex-1 rounded-full transition-colors ${i < stepNum ? 'bg-accent' : 'bg-bark/[0.06]'}`}
-            />
-          ))}
-        </div>
-        {/* Three cells: the way back, the step, and an empty one to keep the
-            step centred. The button is in the row rather than laid over it,
-            and the row is its 48px — it used to hang out of a shorter one,
-            over the progress bar. The left cell holds its width on step 1,
-            so nothing shifts when the arrow arrives. */}
-        <div className="max-w-lg mx-auto px-4 grid grid-cols-[48px_1fr_48px] min-h-12 items-center">
-          <div>
-            {stepNum > 1 && <BackButton onClick={goBack} />}
-          </div>
-          <p className="text-center t-label text-ink/65">
-            Step {stepNum} of 4 — {STEP_LABELS[stepNum - 1]}
-          </p>
-        </div>
-      </div>
-
-      <div className="max-w-lg mx-auto px-4 py-8">
+      <WizardShell
+        step={stepNum}
+        titles={STEP_TITLES}
+        intro={STEP_INTROS[stepNum - 1]}
+        onBack={goBack}
+        footer={<>
+          <button
+            onClick={goNext}
+            disabled={!canProceed}
+            className={buttonClass('primary')}
+          >
+            {submitting ? 'Creating…' : stepNum === 4 ? 'Create challenge' : 'Continue'}
+          </button>
+          {stepNum === 2 && organiserIssue && realTeams.length > 0 && (
+            <p className="text-center text-ink/65 text-[13px] mt-3">{organiserIssue}</p>
+          )}
+          </>}
+      >
 
         {/* ── 1 · The challenge and its period ── */}
         {step === 1 && (
@@ -413,11 +414,6 @@ export default function CreateRunForm() {
         {/* ── 2 · The starting teams ── */}
         {step === 2 && (
           <div className="space-y-4">
-            <p className="text-ink/65 text-sm leading-snug">
-              Everyone runs for a team. Add the ones you know about — you can
-              rename and add more later, and let players start their own on
-              the last step.
-            </p>
 
             {teams.map((team, i) => (
               <div key={i} className="flex items-center gap-2">
@@ -512,10 +508,6 @@ export default function CreateRunForm() {
         {/* ── 3 · How a run earns points ── */}
         {step === 3 && (
           <div className="space-y-3">
-            <p className="text-ink/65 text-sm leading-snug mb-2">
-              How runs turn into points. You can change these later from the
-              organiser area — the leaderboard re-counts itself.
-            </p>
 
             <RunRulesFields draft={draft} onChange={setDraft} />
           </div>
@@ -588,19 +580,7 @@ export default function CreateRunForm() {
           </div>
         )}
 
-        <div className="mt-8">
-          <button
-            onClick={goNext}
-            disabled={!canProceed}
-            className={buttonClass('primary')}
-          >
-            {submitting ? 'Creating…' : stepNum === 4 ? 'Create challenge' : 'Continue'}
-          </button>
-          {stepNum === 2 && organiserIssue && realTeams.length > 0 && (
-            <p className="text-center text-ink/65 text-[13px] mt-3">{organiserIssue}</p>
-          )}
-        </div>
-      </div>
+      </WizardShell>
 
       </div>
     </div>

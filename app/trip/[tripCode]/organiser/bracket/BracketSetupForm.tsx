@@ -15,6 +15,7 @@ import {
   normalizeEventCode, validEventCode, roundsFor,
 } from '@/lib/bracketSetup'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
+import WizardShell from '@/app/components/WizardShell'
 
 /**
  * The bracket setup form — seven answers, one screen each, saved whole.
@@ -30,9 +31,26 @@ import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/com
  * boundary (lib/passcode.ts), and every query filters by trip.
  */
 
-const STEP_LABELS = [
-  'Format', 'Mode', 'Bracket size', 'Player entry',
-  'Qualifying', 'Deadlines', 'Finalise',
+/** Each step opens on its question (refresh plan, 4.3). */
+const STEP_TITLES = [
+  'What kind of tournament?',
+  'Who decides the matches?',
+  'How big can the field grow?',
+  'How does the field get in?',
+  'Is there a qualifier?',
+  'When is each round due?',
+  'Lock it in now?',
+]
+
+/** At most one line under each question. */
+const STEP_INTROS: (string | undefined)[] = [
+  undefined,
+  undefined,
+  'A field that falls short is seated with byes.',
+  undefined,
+  undefined,
+  'The date each round must be finished by. Two rounds can share a day; they can’t run backwards.',
+  'Or leave the event open so players can keep joining.',
 ]
 
 /** The chip row every either/or question on this form is asked with. */
@@ -299,38 +317,27 @@ export default function BracketSetupForm({
 
       <div className="page-enter">
 
-      <div className="border-b border-bark/12">
-        <div className="max-w-lg mx-auto px-4 pt-3 pb-1 flex gap-1.5">
-          {STEP_LABELS.map((label, i) => (
-            <div
-              key={label}
-              className={`h-1 flex-1 rounded-full transition-colors ${i < stepNum ? 'bg-accent' : 'bg-bark/[0.06]'}`}
-            />
-          ))}
-        </div>
-        {/* Three cells: the way back, the step, and an empty one to keep the
-            step centred. The button is in the row rather than laid over it,
-            and the row is its 48px — it used to hang out of a shorter one,
-            over the progress bar. The left cell holds its width on step 1,
-            so nothing shifts when the arrow arrives. */}
-        <div className="max-w-lg mx-auto px-4 grid grid-cols-[48px_1fr_48px] min-h-12 items-center">
-          <div>
-            {stepNum > 1 && <BackButton onClick={goBack} />}
-          </div>
-          <p className="text-center t-label text-ink/65">
-            Step {stepNum} of 7 — {STEP_LABELS[stepNum - 1]}
-          </p>
-        </div>
-      </div>
-
-      <div className="max-w-lg mx-auto px-4 py-8">
+      <WizardShell
+        step={stepNum}
+        titles={STEP_TITLES}
+        intro={STEP_INTROS[stepNum - 1]}
+        onBack={goBack}
+        footer={<>
+          <button
+            onClick={goNext}
+            disabled={!canProceed}
+            className={buttonClass('primary')}
+          >
+            {saving ? 'Saving…' : stepNum === 7
+              ? (finalizeNow ? 'Save and finalise' : 'Save setup')
+              : 'Continue'}
+          </button>
+          </>}
+      >
 
         {/* ── 1 · Format ── */}
         {step === 1 && (
           <div className="space-y-4">
-            <p className="text-ink/65 text-sm">
-              What kind of tournament is this?
-            </p>
             <Chips
               options={TOURNAMENT_FORMATS}
               chosen={format}
@@ -357,9 +364,6 @@ export default function BracketSetupForm({
         {/* ── 2 · Mode ── */}
         {step === 2 && (
           <div className="space-y-4">
-            <p className="text-ink/65 text-sm">
-              Who decides how a match comes about?
-            </p>
             <Chips options={BRACKET_MODES} chosen={mode} onChoose={setMode} />
             {mode && (
               <p className="text-ink/65 text-[13px] leading-snug">
@@ -372,10 +376,6 @@ export default function BracketSetupForm({
         {/* ── 3 · Size ── */}
         {step === 3 && (
           <div className="space-y-4">
-            <p className="text-ink/65 text-sm">
-              How big can the field grow? A field that falls short is seated
-              with byes.
-            </p>
             <div className="grid grid-cols-2 gap-1.5">
               {BRACKET_SIZES.map(s => (
                 <button
@@ -397,9 +397,6 @@ export default function BracketSetupForm({
         {/* ── 4 · Player entry ── */}
         {step === 4 && (
           <div className="space-y-4">
-            <p className="text-ink/65 text-sm">
-              How does the field get in?
-            </p>
             <Chips options={PLAYER_ENTRIES} chosen={entry} onChoose={setEntry} />
             {entry && (
               <p className="text-ink/65 text-[13px] leading-snug">
@@ -485,10 +482,6 @@ export default function BracketSetupForm({
         {/* ── 6 · Deadlines ── */}
         {step === 6 && size && (
           <div className="space-y-4">
-            <p className="text-ink/65 text-sm">
-              The date each round must be finished by. Two rounds can share a
-              day; they can&apos;t run backwards.
-            </p>
             <div className="space-y-3">
               {roundNames.map((name, i) => (
                 <DateField
@@ -508,10 +501,6 @@ export default function BracketSetupForm({
         {/* ── 7 · Finalise ── */}
         {step === 7 && (
           <div className="space-y-4">
-            <p className="text-ink/65 text-sm">
-              Lock the format and bracket structure in now, or leave the
-              event open so players can keep joining?
-            </p>
             <Chips
               options={[
                 { key: 'open', label: 'Leave open' },
@@ -536,18 +525,7 @@ export default function BracketSetupForm({
           </div>
         )}
 
-        <div className="mt-8">
-          <button
-            onClick={goNext}
-            disabled={!canProceed}
-            className={buttonClass('primary')}
-          >
-            {saving ? 'Saving…' : stepNum === 7
-              ? (finalizeNow ? 'Save and finalise' : 'Save setup')
-              : 'Continue'}
-          </button>
-        </div>
-      </div>
+      </WizardShell>
 
       </div>
     </main>

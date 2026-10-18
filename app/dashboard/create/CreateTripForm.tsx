@@ -3,7 +3,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import BackButton from '@/app/components/BackButton'
 import TripHeader from '@/app/components/TripHeader'
 import DateField from '@/app/components/DateField'
 import { roundCountError, normalizeDescription, MAX_TRIP_DESCRIPTION } from '@/lib/tripLimits'
@@ -32,6 +31,7 @@ import {
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import { ChoiceChips, CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
+import WizardShell from '@/app/components/WizardShell'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -43,11 +43,12 @@ type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F' }
 // Teams are not asked for here. Whether a trip even has teams is decided by
 // the leaderboards it runs, and that question lives in trip settings — asking
 // it twice is how the two answers come to disagree.
-const STEP_LABELS = ['Trip details', 'Itinerary', 'Players']
+/** Each step opens on its question — WizardShell draws it as the step's title. */
+const STEP_TITLES = ['Name your trip', 'Plan the itinerary', 'Who’s playing']
+const EVENT_STEP_TITLES = ['Name your event', 'Plan the schedule', 'Who’s playing']
 
 /** Which tees a player plays: the men's card or the ladies'. */
 const GENDER_OPTIONS = [{ value: 'M', label: 'M' }, { value: 'F', label: 'F' }] as const
-const EVENT_STEP_LABELS = ['Event details', 'Itinerary', 'Players']
 
 /**
  * Which door on /golf this form was opened through.
@@ -567,6 +568,8 @@ export default function CreateTripForm() {
   // ── Multi-step form ──────────────────────────────────────────────────────
 
   const stepNum = step as 1 | 2 | 3
+  // At most one line under the step's question.
+  const stepIntro = stepNum === 3 ? `Optional. Players can join later with the ${noun} code.` : undefined
   const isFinalStep = stepNum === 3
   // Step 2 is not here: its own footer decides when the itinerary can be
   // left, and it is the only thing that knows which day is open.
@@ -591,31 +594,26 @@ export default function CreateTripForm() {
           one screen: the mark above goes home, this goes to the answers you
           just gave, and losing a half-filled form to a logo would be a poor
           trade for one fewer button. */}
-      <div className="border-b border-bark/12">
-        <div className="max-w-lg mx-auto px-4 pt-3 pb-1 flex gap-1.5">
-          {[1, 2, 3].map(s => (
-            <div
-              key={s}
-              className={`h-1 flex-1 rounded-full transition-colors ${s <= stepNum ? 'bg-accent' : 'bg-bark/[0.06]'}`}
-            />
-          ))}
-        </div>
-        {/* Three cells: the way back, the step, and an empty one to keep the
-            step centred. The button is in the row rather than laid over it,
-            and the row is its 48px — it used to hang out of a shorter one,
-            over the progress bar. The left cell holds its width on step 1,
-            so nothing shifts when the arrow arrives. */}
-        <div className="max-w-lg mx-auto px-4 grid grid-cols-[48px_1fr_48px] min-h-12 items-center">
-          <div>
-            {stepNum > 1 && <BackButton onClick={goBack} />}
-          </div>
-          <p className="text-center t-label text-ink/65">
-            Step {stepNum} of 3 — {(isTournament ? EVENT_STEP_LABELS : STEP_LABELS)[stepNum - 1]}
-          </p>
-        </div>
-      </div>
-
-      <div className="max-w-lg mx-auto px-4 py-8">
+      <WizardShell
+        step={stepNum}
+        titles={isTournament ? EVENT_STEP_TITLES : STEP_TITLES}
+        intro={stepIntro}
+        onBack={goBack}
+        footer={step !== 2 ? (<>
+            <button
+              onClick={goNext}
+              disabled={!canProceed}
+              className={buttonClass('primary')}
+            >
+              {submitting ? 'Creating…' : isFinalStep ? `Create ${noun}` : 'Continue'}
+            </button>
+            {isFinalStep && (
+              <p className="text-center text-ink/65 text-[13px] mt-3">
+                Players without a name will be skipped
+              </p>
+            )}
+          </>) : undefined}
+      >
 
         {/* ── Step 1: Trip details ──────────────────────────────────── */}
         {step === 1 && (
@@ -756,9 +754,6 @@ export default function CreateTripForm() {
         {/* ── Step 3: Players ──────────────────────────────────────── */}
         {step === 3 && (
           <div className="space-y-4">
-            <p className="text-ink/65 text-sm mb-2">
-              Optional — players can also join later with the {noun} code.
-            </p>
 
             {/* A tournament has an organiser, never a "lead player" — and the
                 organiser may not be playing at all. When they are, their name
@@ -990,23 +985,7 @@ export default function CreateTripForm() {
 
         {/* Primary CTA. Absent on step 2, which pins its own to the bottom
             of the screen beneath the add buttons. */}
-        {step !== 2 && (
-          <div className="mt-8">
-            <button
-              onClick={goNext}
-              disabled={!canProceed}
-              className={buttonClass('primary')}
-            >
-              {submitting ? 'Creating…' : isFinalStep ? `Create ${noun}` : 'Continue'}
-            </button>
-            {isFinalStep && (
-              <p className="text-center text-ink/65 text-[13px] mt-3">
-                Players without a name will be skipped
-              </p>
-            )}
-          </div>
-        )}
-      </div>
+      </WizardShell>
 
       </div>
     </div>

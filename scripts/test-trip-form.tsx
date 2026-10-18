@@ -97,11 +97,13 @@ section('The itinerary replaces the rounds picker')
   ok(!formHtml.includes('Number of rounds'), 'there is no rounds counter any more')
   ok(!/Add (a )?round/.test(formHtml), 'nor an add-a-round control')
 
-  const labels = formHtml.match(/Step \d of 3 — ([^<]+)/)
-  ok(labels !== null, 'the wizard says which step it is on')
+  ok(/Step (<!-- -->)?1(<!-- -->)? of (<!-- -->)?3/.test(formHtml),
+    'the wizard says which step it is on')
+  ok(/<h1[^>]*>Name your trip<\/h1>/.test(formHtml),
+    'and opens the step on its question')
 
   const src = fs.readFileSync('app/dashboard/create/CreateTripForm.tsx', 'utf-8')
-  ok(src.includes("'Trip details', 'Itinerary', 'Players'"),
+  ok(src.includes("'Name your trip', 'Plan the itinerary', 'Who’s playing'"),
     'and step two is the itinerary')
   ok(src.includes('<ItineraryBuilder'), 'which renders the builder')
 
@@ -161,7 +163,7 @@ section('The way forward is pinned under the add buttons')
   // Two buttons fighting for the bottom of the screen was the glitch: the
   // builder pins its own, so the form must not also render one on step two.
   const src = fs.readFileSync('app/dashboard/create/CreateTripForm.tsx', 'utf-8')
-  ok(src.includes('{step !== 2 && ('), 'the form hides its CTA on the itinerary step')
+  ok(src.includes('footer={step !== 2 ? ('), 'the form hides its CTA on the itinerary step')
 
   const b = fs.readFileSync('app/components/ItineraryBuilder.tsx', 'utf-8')
 
@@ -239,9 +241,14 @@ section('Creation does not ask about teams')
   ok(src.includes('const isFinalStep = stepNum === 3'), 'and finishes on the third')
   ok(!/step === 4/.test(src), 'there is no fourth step left behind')
 
-  // The progress bar has to agree with the steps, or it stalls short of full
-  const bar = src.match(/\{\[([\d, ]+)\]\.map\(s =>/)
-  eq(bar?.[1], '1, 2, 3', 'the progress bar has one segment per step')
+  // The progress bar has to agree with the steps, or it stalls short of full.
+  // WizardShell draws one segment per title, so the titles are the count.
+  for (const name of ['STEP_TITLES', 'EVENT_STEP_TITLES']) {
+    const list = src.match(new RegExp(`const ${name} = \\[([^\\]]+)\\]`))
+    eq(list?.[1].split(',').length, 3, `the progress bar has one segment per step (${name})`)
+  }
+  const segments = formHtml.match(/h-1 flex-1 rounded-full/g) ?? []
+  eq(segments.length, 3, 'and the rendered bar has three')
 }
 
 // ─── Date fields stay inside their container ───────────────────

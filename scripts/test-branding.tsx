@@ -27,6 +27,7 @@ import {
   Field, FIELD, Segmented, ListGroup, ListRow, IconButton, SectionHeader,
 } from '../app/components/ui'
 import { SITE } from '../config/site'
+import WizardShell, { STEP_SLIDE_MS } from '../app/components/WizardShell'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -1738,9 +1739,10 @@ section('The screens before a trip wear the same header')
   // The wizard's own step-back is a different thing from site navigation and
   // stays: the mark goes home, this goes to the answers you just gave.
   const create = read('app/dashboard/create/CreateTripForm.tsx')
-  ok(create.includes('<BackButton onClick={goBack} />'),
+  const shell = stripComments(read('app/components/WizardShell.tsx'))
+  ok(/<WizardShell[\s\S]{0,200}onBack=\{goBack\}/.test(create) && shell.includes('<BackButton onClick={onBack} />'),
     'the create wizard keeps a way back one step')
-  ok(/stepNum > 1 &&[\s\S]{0,120}BackButton onClick=\{goBack\}/.test(create),
+  ok(shell.includes('const first = step <= 1') && /inert=\{first\}[\s\S]{0,80}<BackButton onClick=\{onBack\}/.test(shell),
     'shown only where there is a step to go back to')
 
   // Every screen inside a trip points its mark at the trip hub, and nothing
@@ -1803,18 +1805,114 @@ section('The way back is a 48px arrow, sitting in its row')
   eq(all.filter(f => /\babsolute\b[^"]*"[^>]*>\s*(?:\{[^}]*&&\s*\(?\s*)?<BackButton/.test(read(f))), [],
     'no back button is absolutely positioned over its row')
 
-  // Every wizard's step row: way back, step, and an empty cell to keep the
-  // step centred — with the arrow's cell holding its width on step 1.
-  for (const f of [
-    'app/dashboard/create/CreateTripForm.tsx',
-    'app/dashboard/create/CreateLeagueForm.tsx',
-    'app/dashboard/create/CreateKnockoutForm.tsx',
-    'app/dashboard/create/CreateRunForm.tsx',
-    'app/trip/[tripCode]/organiser/bracket/BracketSetupForm.tsx',
-  ]) {
-    ok(/grid grid-cols-\[48px_1fr_48px\] min-h-12 items-center">\s*<div>\s*\{stepNum > 1 && <BackButton onClick=\{goBack\} \/>\}\s*<\/div>/
-      .test(read(f)), `${f.split('/').pop()} puts the arrow in a 48px step row`)
+  // The wizards' step row: way back, step, and an empty cell to keep the
+  // step centred — with the arrow's cell holding its width on step 1. It is
+  // drawn once, by WizardShell, so this is one check rather than five.
+  const shell = stripComments(read('app/components/WizardShell.tsx'))
+  ok(/grid grid-cols-\[48px_1fr_48px\] min-h-\[52px\] items-center">\s*<div\b[\s\S]{0,240}<BackButton onClick=\{onBack\} \/>\s*<\/div>/
+      .test(shell), 'the wizard frame puts the arrow in a 52px step row')
+}
+
+// ─── The wizards ───────────────────────────────────────────────
+
+const WIZARDS = [
+  'app/dashboard/create/CreateTripForm.tsx',
+  'app/dashboard/create/CreateLeagueForm.tsx',
+  'app/dashboard/create/CreateKnockoutForm.tsx',
+  'app/dashboard/create/CreateRunForm.tsx',
+  'app/trip/[tripCode]/organiser/bracket/BracketSetupForm.tsx',
+]
+
+section('Every wizard is one frame')
+{
+  // Five copies of the same header drifted five ways — the back button
+  // hanging out of its row was one copy's bug, then everybody's
+  // (docs/refresh-plan.md, 4.3). The frame is WizardShell's alone now.
+  for (const f of WIZARDS) {
+    const src = stripComments(read(f))
+    const name = f.split('/').pop()
+    ok(/<WizardShell\b/.test(src), `${name} wears WizardShell`)
+    ok(!/Step \{stepNum\} of/.test(src) && !src.includes('grid-cols-[48px_1fr_48px]'),
+      `  …and draws no step row of its own`)
+    ok(!/\.map\(s =>\s*\(?\s*<div[^>]*h-1 flex-1/.test(src), `  …nor a progress bar`)
+    // Each step opens on its question. The labels they replaced
+    // ("Trip details", "Mode") named a screen rather than asking anything.
+    ok(/const (EVENT_)?STEP_TITLES\b/.test(src) && !/STEP_LABELS/.test(src),
+      `  …with a question for every step`)
   }
+
+  type ShellProps = React.ComponentProps<typeof WizardShell>
+  const render = (p: Partial<ShellProps>) => renderToStaticMarkup(
+    React.createElement(WizardShell, {
+      step: 1, titles: ['Name your trip', 'Plan the itinerary', 'Who’s playing'],
+      onBack: () => {}, footer: React.createElement('button', null, 'Continue'),
+      ...p,
+    } as ShellProps, React.createElement('p', null, 'the step'))
+  )
+  const one = render({})
+  const two = render({ step: 2, intro: 'Optional. Players can join later.' })
+
+  eq((one.match(/h-1 flex-1 rounded-full/g) ?? []).length, 3, 'one progress segment a step')
+  eq((two.match(/h-1 flex-1 rounded-full[^"]*bg-accent"/g) ?? []).length, 2,
+    '  …filled up to the step you are on')
+  ok(/<h1[^>]*class="t-h1[^"]*"[^>]*>Name your trip<\/h1>/.test(one),
+    'the step opens on its question, as a page title')
+  ok(/<h1[^>]*tabindex="-1"/.test(one) && /data-step-title/.test(one),
+    '  …which can take the focus when the step arrives')
+  ok(two.includes('Optional. Players can join later.'), '  …with its one line under it')
+  ok(!/<p class="text-\[17px\][^"]*">/.test(one), '  …and nothing where a step has none')
+
+  // On step 1 the arrow is held in place but hidden and out of reach, so
+  // "Step 1 of 3" does not shift when it arrives.
+  ok(/<div class="[^"]*opacity-0 pointer-events-none[^"]*" inert="" aria-hidden="true">/.test(one),
+    'step 1 keeps the arrow’s place, hidden and inert')
+  ok(!/inert=""/.test(two.split('Step ')[0]), '  …and step 2 can use it')
+  ok(/Step (<!-- -->)?2(<!-- -->)? of (<!-- -->)?3/.test(two), 'the row says which step it is')
+
+  // Sticky, not fixed: it rides above the keyboard instead of under it.
+  ok(/class="sticky bottom-0 z-20 paper border-t border-line"/.test(one) && one.includes('Continue'),
+    'the way forward is a bar stuck to the bottom')
+  ok(one.includes('env(safe-area-inset-bottom)'), '  …clear of the home indicator')
+  ok(!render({ footer: undefined }).includes('sticky bottom-0'),
+    '  …and absent where a step pins its own')
+}
+
+section('A step slides')
+{
+  // Forward slides in from the right, back from the left, in the plan's
+  // 340ms on the putt curve — and the component's timer is the same figure,
+  // or the outgoing step would be dropped mid-slide or linger after it.
+  for (const [cls, kf] of [
+    ['step-in-forward', 'gdStepInRight'], ['step-out-forward', 'gdStepOutLeft'],
+    ['step-in-back', 'gdStepInLeft'], ['step-out-back', 'gdStepOutRight'],
+  ]) {
+    ok(new RegExp(`\\.${cls}\\s*\\{\\s*animation: ${kf} ${STEP_SLIDE_MS}ms var\\(--gd-ease\\) both;`).test(css),
+      `.${cls} runs ${kf} for ${STEP_SLIDE_MS}ms on the putt curve`)
+  }
+  eq(STEP_SLIDE_MS, 340, 'the slide is 340ms')
+  ok(/@keyframes gdStepInRight\s*\{\s*from \{ transform: translateX\(100%\); \}/.test(css),
+    'forward comes in from the right')
+  ok(/@keyframes gdStepInLeft\s*\{\s*from \{ transform: translateX\(-30%\); opacity: 0; \}/.test(css),
+    'back comes in from the left')
+
+  // Reduce Motion: a short crossfade, no movement. Marked important, because
+  // the catch-all that zeroes every animation would otherwise zero this too.
+  const reduced = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/g)].map(m => m[1]).join('\n')
+  ok(/\.step-in-forward, \.step-in-back \{ animation: gdFade 150ms ease-out both !important; \}/.test(reduced),
+    'Reduce Motion brings a step in with a 150ms fade')
+  ok(/\.step-out-forward, \.step-out-back \{ animation: gdFadeOut 150ms ease-out both !important; \}/.test(reduced),
+    '  …and takes the old one out the same way')
+  ok(!/gdStep(In|Out)(Left|Right)/.test(reduced), '  …with no slide left in it')
+
+  // The outgoing step is a picture of the last one, not a second live form:
+  // nothing in it may take a tap or the focus while it goes.
+  const slider = stripComments(read('app/components/WizardShell.tsx'))
+  ok(/\{leaving && \(\s*<div[\s\S]{0,80}\binert\b[\s\S]{0,40}aria-hidden="true"/.test(slider),
+    'the step leaving is inert and hidden from screen readers')
+  ok(/setTimeout\(\(\) => \{\s*setLeaving\(null\)[\s\S]{0,120}\[data-step-title\][\s\S]{0,20}focus\(/.test(slider)
+      && /\}, STEP_SLIDE_MS\)/.test(slider),
+    'when the slide ends the new question takes the focus')
+  ok(/window\.scrollTo\(\{ top: 0 \}\)/.test(slider), 'and a step is read from its top')
 }
 
 // ─── The bar at the bottom ─────────────────────────────────────
