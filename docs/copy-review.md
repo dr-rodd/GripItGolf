@@ -16,6 +16,18 @@ Under every item there are two lines:
 get changed. That is the whole instruction Claude Code needs — hand this file
 back and say "implement the filled-in lines in `docs/copy-review.md`".
 
+**The refresh's copy pass (October 2026).** Claude Code went through every
+item against the copy rules in `docs/refresh-plan.md` §3.6. What that left
+on each item:
+
+- **New: …** filled in by the pass is a line a rule decided, and the code
+  already says it. The rule is named after it, in italics.
+- **New: Ross — …** is a judgement call, left for you: the question is on the
+  line. Answer it on the same line.
+- **Today:** under an item means the screen had already changed since this
+  sheet was written; it is what the screen said when the pass began.
+- A blank **New:** still means what it always meant: fine as it is.
+
 Notes:
 
 - `→`, `·`, `—` and `’` in the current text are the real characters used on
@@ -316,6 +328,14 @@ bring them into line?
 
 ---
 
+## §3b — Creating a tournament or a run challenge
+
+Added in the refresh's copy pass (`docs/refresh-plan.md`, Phase 5): screens
+built after this sheet was written. Same shape — **Now** is what the screen
+said before the pass, **New** what it says after.
+
+---
+
 ## §4 — Trip hub (`/trip/{code}`)
 
 **H-01 · Bad code** · `app/trip/[tripCode]/page.tsx:59,60`
@@ -453,6 +473,14 @@ bring them into line?
 **P-13 · Plus-handicap toggle (screen readers)** · `app/components/HandicapField.tsx:83,84`
 - Now: Better than scratch  /  Plus handicap
 - New:
+
+---
+
+## §5b — The hub's other screens (share, preferences, notices)
+
+Added in the refresh's copy pass (`docs/refresh-plan.md`, Phase 5): screens
+built after this sheet was written. Same shape — **Now** is what the screen
+said before the pass, **New** what it says after.
 
 ---
 
@@ -1101,6 +1129,14 @@ settings and is also what a new trip meets first.
 
 ---
 
+## §11b — Stats (`/trip/{code}/stats`)
+
+Added in the refresh's copy pass (`docs/refresh-plan.md`, Phase 5): screens
+built after this sheet was written. Same shape — **Now** is what the screen
+said before the pass, **New** what it says after.
+
+---
+
 ## §12 — Weather, support and shared bits
 
 **W-01 · No location on file** · `app/components/CourseWeather.tsx:106`
@@ -1178,6 +1214,22 @@ settings and is also what a new trip meets first.
 **Z-04 · Failures** · `SettingsModal.tsx:159,292`
 - Now: Failed to void. Try again.  /  Action failed. Try again.
 - New:
+
+---
+
+## §15 — The event organiser's screens (organiser area, tags, days, tee sheet, bracket, export)
+
+Added in the refresh's copy pass (`docs/refresh-plan.md`, Phase 5): screens
+built after this sheet was written. Same shape — **Now** is what the screen
+said before the pass, **New** what it says after.
+
+---
+
+## §16 — Green Dot Run (`/run/{code}`)
+
+Added in the refresh's copy pass (`docs/refresh-plan.md`, Phase 5): screens
+built after this sheet was written. Same shape — **Now** is what the screen
+said before the pass, **New** what it says after.
 
 ---
 
