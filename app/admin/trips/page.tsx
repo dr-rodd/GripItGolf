@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { tripState, todayString } from '@/lib/tripStatus'
-import { Badge } from '@/app/components/ui'
+import { Pill } from '@/app/components/ui'
 import { requireAdmin } from '../adminGate'
 import AdminLogin from '../AdminLogin'
 import AdminShell from '../AdminShell'
@@ -159,9 +159,9 @@ export default async function AdminTripsPage({
                         {playerCount.get(t.id) ?? 0}
                       </td>
                       <td className="px-4 py-3">
-                        <Badge tone={state.open ? 'win' : 'neutral'} live={state.key === 'active'}>
+                        <Pill tone={state.open ? 'win' : 'neutral'} live={state.key === 'active'}>
                           {state.label}
-                        </Badge>
+                        </Pill>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <DeleteTrip tripId={t.id} tripCode={t.trip_code} tripName={t.name} />
@@ -193,9 +193,9 @@ export default async function AdminTripsPage({
                         {t.trip_code ?? 'no code'}
                       </p>
                     </div>
-                    <Badge tone={state.open ? 'win' : 'neutral'} live={state.key === 'active'} className="flex-shrink-0">
+                    <Pill tone={state.open ? 'win' : 'neutral'} live={state.key === 'active'} className="flex-shrink-0">
                       {state.label}
-                    </Badge>
+                    </Pill>
                   </div>
 
                   <div className="mt-3 flex flex-col gap-1 text-[13px]">

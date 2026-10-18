@@ -558,11 +558,17 @@ html.dark .only-light { display: none; }
    that `.press` sets the pace for both, which is why anything carrying it
    should drop its own `transition-*` rather than keep a second answer. */
 .press {
-  transition-property: transform, color, background-color, border-color, opacity;
+  transition-property: transform, color, background-color, border-color, opacity, box-shadow;
   transition-duration: 120ms;
   transition-timing-function: ease-out;
 }
-.press:active { transform: scale(0.97); }
+/* Pressed, a thing goes down under the thumb: it shrinks a little and its
+   shadow goes, as if pushed flat against the page. The primary button
+   keeps a sliver of its own, because a green slab with no edge at all
+   reads as disabled for the instant it is held. */
+.press:active { transform: scale(0.97); box-shadow: none; }
+.press.shadow-cta:active { box-shadow: var(--shadow-cta-pressed); }
+.press:disabled:active { transform: none; }
 
 /* Skeletons, preferred over spinners wherever the layout is known. */
 @keyframes gdSkeleton {
@@ -603,7 +609,7 @@ html.dark .only-light { display: none; }
   }
   /* The press keeps its meaning without the movement, the same way the tab
      does: the element is still tapped, it just does not shrink. */
-  .press:active { transform: none; }
+  .press:active { transform: none; }  /* the shadow still drops */
   /* The press keeps its meaning without the movement: the tab still goes
      emerald the moment it is touched, which is the part that answers
      "did that land". Only the scale goes. */
@@ -795,6 +801,38 @@ input::placeholder, textarea::placeholder {
 html.dark input::placeholder, html.dark textarea::placeholder {
   color: color-mix(in srgb, var(--color-ink) 60%, transparent);
 }
+
+/* The field — `Field` and `FIELD` in app/components/ui.tsx.
+
+   A class rather than utilities, and here rather than in a layer, for the
+   same reason the rule above is: Tailwind's utilities sit in a layer, and
+   anything out here beats them however specific they are. A text size
+   written on an input never landed — the 16px above always won — so the
+   field's 17px has to be said at this level, by a selector that outranks
+   `input`.
+
+   Focus and error are outlines drawn inside the edge rather than a
+   thicker border, so the 1.5px line becomes a 2.5px one without the text
+   inside moving by a pixel. No glow. */
+.field {
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 16px;
+  font-size: 17px;
+  line-height: 1.3;
+  color: var(--color-ink);
+  background-color: var(--color-surface);
+  border: 1.5px solid var(--color-line-strong);
+  border-radius: 14px;
+  outline: 0 solid transparent;
+  outline-offset: -2.5px;
+  transition: outline-color 160ms ease-out, border-color 160ms ease-out;
+}
+textarea.field { padding: 14px 16px; line-height: 1.5; }
+.field:focus { outline: 2.5px solid var(--color-accent); outline-offset: -2.5px; }
+.field[aria-invalid="true"] { outline: 2.5px solid var(--color-rust); outline-offset: -2.5px; }
+.field:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* A date input's intrinsic width overflows a grid column; min-width:0
    on the element itself is what actually stops it. */

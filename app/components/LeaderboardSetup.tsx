@@ -31,7 +31,7 @@ import { nextSheetId, setOf, withSheet } from '@/lib/teamSets'
 import { TAG_SET } from '@/lib/tagBoards'
 import { defaultCustomPoints, editableRows, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
 import { IconTrophy, IconPlus, IconMinus, IconX, IconCheck, IconSettings } from './icons'
-import { Card, Badge, buttonClass, FIELD, FIELD_LABEL } from './ui'
+import { Card, Pill, buttonClass, FIELD, FIELD_LABEL } from './ui'
 
 /**
  * Choosing what a trip plays for.
@@ -108,7 +108,7 @@ function Choice({
           {hint && <span className="block t-cap text-ink/65 mt-1 leading-snug">{hint}</span>}
         </span>
         {taken
-          ? <Badge tone="win">In use</Badge>
+          ? <Pill tone="win">In use</Pill>
           : on && <span className="flex-shrink-0 text-accent mt-0.5"><IconCheck size={16} /></span>}
       </span>
     </button>
@@ -1476,7 +1476,7 @@ export default function LeaderboardSetup({
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="t-h2 text-ink">{boardTitle(lb)}</span>
-                  {i === 0 && <Badge tone="win">Primary</Badge>}
+                  {i === 0 && <Pill tone="win">Primary</Pill>}
                 </div>
                 <p className="t-cap text-ink/65 mt-1 leading-snug">{boardRules(lb)}</p>
               </div>

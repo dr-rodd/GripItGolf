@@ -11,9 +11,9 @@
  * codebase steers clear of on iOS anyway.
  */
 
-const TRACK_W = 48
-const TRACK_H = 28
-const KNOB    = 20
+const TRACK_W = 52
+const TRACK_H = 32
+const KNOB    = 24
 const INSET   = 4
 
 export default function Toggle({
@@ -32,19 +32,21 @@ export default function Toggle({
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative flex-shrink-0 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-        checked ? 'bg-accent' : 'bg-bark/[0.08]'
+      // 52×32: on is the deep emerald, off is bark at 20%. The knob moves on
+      // the putt curve over 160ms — the small-change pace.
+      className={`relative flex-shrink-0 rounded-full transition-colors duration-150 ease-out disabled:opacity-40 disabled:cursor-not-allowed ${
+        checked ? 'bg-accent-deep' : 'bg-bark/20'
       }`}
       style={{ width: TRACK_W, height: TRACK_H }}
     >
       <span
-        className="absolute rounded-full bg-white shadow"
+        className="absolute rounded-full bg-white shadow-raised"
         style={{
           width: KNOB,
           height: KNOB,
           top: (TRACK_H - KNOB) / 2,
           left: checked ? TRACK_W - KNOB - INSET : INSET,
-          transition: 'left 180ms cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: 'left 160ms var(--gd-ease)',
         }}
       />
     </button>

@@ -4,7 +4,7 @@ import {
   countyOf, filterCourses, type DirectoryCourse,
 } from '@/lib/courseDirectory'
 import { cardState, CARD_STATE_LABEL, CARD_STATE_TONE, type CardState } from '@/lib/courseCard'
-import { Badge } from '@/app/components/ui'
+import { Pill } from '@/app/components/ui'
 import { requireAdmin } from '../adminGate'
 import AdminLogin from '../AdminLogin'
 import AdminShell from '../AdminShell'
@@ -183,9 +183,9 @@ export default async function AdminCoursesPage({
                         {holes === 18 ? '18 holes' : holes === 0 ? 'no holes' : `${holes} holes`}
                       </p>
                     </div>
-                    <Badge tone={CARD_STATE_TONE[stateOf(c)]} className="flex-shrink-0">
+                    <Pill tone={CARD_STATE_TONE[stateOf(c)]} className="flex-shrink-0">
                       {CARD_STATE_LABEL[stateOf(c)]}
-                    </Badge>
+                    </Pill>
                   </div>
                 </Link>
               </li>

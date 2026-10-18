@@ -2,7 +2,7 @@
 
 import { useActionState, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { FIELD, FIELD_LABEL, buttonClass, Badge } from '@/app/components/ui'
+import { FIELD, FIELD_LABEL, buttonClass, Pill } from '@/app/components/ui'
 import { IRISH_COUNTIES, emptyTeeDraft } from '@/lib/courseDirectory'
 import {
   cardState, CARD_STATE_LABEL, CARD_STATE_TONE, type CardState,
@@ -254,7 +254,7 @@ function VerifiedToggle({ courseId, state }: { courseId: string; state: CardStat
     <section className="bg-surface border border-bark/12 rounded-2xl px-4 py-4">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <Badge tone={CARD_STATE_TONE[state]}>{CARD_STATE_LABEL[state]}</Badge>
+          <Pill tone={CARD_STATE_TONE[state]}>{CARD_STATE_LABEL[state]}</Pill>
           <p className="text-ink/65 text-[13px] mt-1.5 leading-snug">{said}</p>
         </div>
         {!cardless && (

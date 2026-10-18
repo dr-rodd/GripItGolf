@@ -23,7 +23,7 @@ import {
   PAIR_SIZE,
 } from '@/lib/teamLimits'
 import { anyPointsOutOfStep, TEAM_POINTS_MISMATCH } from '@/lib/customPoints'
-import { Card, Badge, buttonClass } from '@/app/components/ui'
+import { Card, Pill, buttonClass } from '@/app/components/ui'
 import { IconCheck, IconChevronDown, IconUsers } from '@/app/components/icons'
 
 /**
@@ -362,8 +362,8 @@ function BoardTile({
           <span className="flex items-center gap-2 flex-wrap">
             <span className="t-card text-ink">{boardTitle(board)}</span>
             {open
-              ? <Badge>No {noun.many} yet</Badge>
-              : <Badge tone="win">{teams.length} {teams.length === 1 ? noun.one : noun.many}</Badge>}
+              ? <Pill>No {noun.many} yet</Pill>
+              : <Pill tone="win">{teams.length} {teams.length === 1 ? noun.one : noun.many}</Pill>}
           </span>
           <span className="block t-cap text-ink/65 mt-1 leading-snug">{boardRules(board)}</span>
           {!open && (

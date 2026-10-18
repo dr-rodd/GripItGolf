@@ -22,7 +22,10 @@ import Home from '../app/page'
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime'
 import Wordmark from '../app/components/Wordmark'
 import MorphWordmark from '../app/components/MorphWordmark'
-import { Badge, LiveDot, EmptyState, buttonClass } from '../app/components/ui'
+import {
+  Pill, LiveDot, EmptyState, buttonClass, cardClass, chipClass, iconButtonClass,
+  Field, FIELD, Segmented, ListGroup, ListRow, IconButton, SectionHeader,
+} from '../app/components/ui'
 import { SITE } from '../config/site'
 
 let passed = 0, failed = 0
@@ -1317,30 +1320,114 @@ section('One icon set')
 
 // ─── Components ────────────────────────────────────────────────
 
-section('Status badges follow the spec')
+section('Status pills follow the spec')
 {
-  const win = renderToStaticMarkup(React.createElement(Badge, { tone: 'win', children: 'Won' }))
-  const loss = renderToStaticMarkup(React.createElement(Badge, { tone: 'loss', children: 'Lost' }))
-  const neutral = renderToStaticMarkup(React.createElement(Badge, { children: 'Thru 11' }))
+  // Pill replaced Badge in the refresh: sentence case and no tracking — a
+  // pill was 15px spaced capitals, which is most of what made a screen
+  // read as generated (docs/refresh-plan.md, 2.2).
+  const win = renderToStaticMarkup(React.createElement(Pill, { tone: 'win', children: 'Won' }))
+  const loss = renderToStaticMarkup(React.createElement(Pill, { tone: 'loss', children: 'Lost' }))
+  const neutral = renderToStaticMarkup(React.createElement(Pill, { children: 'Thru 11' }))
 
-  ok(win.includes('rounded-full'), 'a badge is a pill')
-  // Background at 22%, text a darker shade of the same hue — never black
-  ok(win.includes('bg-accent/[0.22]') && win.includes('text-accent-deep'), 'win is emerald on emerald')
-  ok(loss.includes('bg-rust/[0.22]') && loss.includes('text-rust-deep'), 'loss is rust on rust')
-  ok(neutral.includes('text-bark'), 'and neutral is bark on bark')
-  ok(!/text-black|text-ink\b/.test(win), 'no black text on a coloured pill')
+  ok(win.includes('rounded-full'), 'a pill is round')
+  ok(/text-\[13px\] font-semibold/.test(win), 'at 13px, semibold')
+  ok(!/uppercase|tracking-/.test(win + loss + neutral), 'in sentence case, with no letter-spacing')
+  // A tint behind, the deep shade of the same hue on it — never black
+  ok(win.includes('bg-accent-tint') && win.includes('text-accent-deep'), 'win is emerald on emerald')
+  ok(loss.includes('bg-rust/[0.14]') && loss.includes('text-rust-deep'), 'loss is rust on rust')
+  ok(neutral.includes('bg-bark/[0.09]') && neutral.includes('text-ink/80'), 'and neutral is ink on a bark wash')
+  ok(!/text-black|text-ink\b(?!\/)/.test(win), 'no black text on a coloured pill')
 
-  const live = renderToStaticMarkup(React.createElement(Badge, { live: true, children: 'In play' }))
-  ok(live.includes('dot-live'), 'a live badge carries the breathing dot')
+  const live = renderToStaticMarkup(React.createElement(Pill, { live: true, children: 'In play' }))
+  ok(live.includes('dot-live'), 'a live pill carries the breathing dot')
+  eq(uiFiles().filter(f => /\bBadge\b(?! is gone)/.test(stripComments(read(f)).replace(/\w+Badge|Badge\w+/g, ''))), [],
+    'and Badge is gone, call sites and all')
 }
 
 section('One primary action per screen')
 {
-  ok(buttonClass('primary').includes('bg-accent'), 'the primary action is emerald')
-  ok(buttonClass('primary').includes('text-white'), 'with white on it, for contrast')
-  ok(!buttonClass('secondary').includes('bg-accent'), 'a secondary action is not')
-  ok(buttonClass('secondary').includes('border-bark/25'), 'it is a bordered surface instead')
-  ok(buttonClass('primary').includes('min-h-[48px]'), 'and every button is a real touch target')
+  const primary = buttonClass('primary'), secondary = buttonClass('secondary')
+  ok(primary.includes('bg-accent-deep'), 'the primary action is the deep emerald')
+  ok(primary.includes('text-white'), 'with white on it, for contrast')
+  ok(primary.includes('shadow-cta'), '  …lifted on its own green shadow')
+  ok(!secondary.includes('bg-accent'), 'a secondary action is not emerald')
+  ok(secondary.includes('bg-surface') && secondary.includes('shadow-raised'), 'it is a raised white surface instead')
+  ok(/\brounded-button\b/.test(primary), 'buttons are 16px round')
+  ok(/w-full min-h-14/.test(primary) && /min-h-12/.test(buttonClass('primary', false)),
+    'full width is 56px tall, inline 48 — a real touch target either way')
+  ok(/text-\[17px\] font-semibold/.test(primary), 'the words are 17px semibold')
+  ok(!/uppercase|tracking-/.test(primary + secondary + buttonClass('quiet') + buttonClass('danger')),
+    '  …in sentence case, with no letter-spacing')
+
+  // Not yet is not broken. A pale green button reads as a fault; a flat
+  // bark wash with dimmed words reads as waiting. The dimmed words are the
+  // one place text may sit under the contrast floor — a disabled control
+  // is exempt, and only ever through `disabled:`.
+  ok(primary.includes('disabled:bg-disabled-bg') && primary.includes('disabled:text-disabled-fg'),
+    'disabled is a bark wash with dimmed words')
+  ok(primary.includes('disabled:shadow-none'), '  …flat, with no shadow')
+  ok(!/disabled:opacity/.test(primary), '  …and never a faded green')
+  eq(uiFiles().filter(f => /(?<!disabled:)\btext-disabled-fg\b|(?<!disabled:)\bbg-disabled-bg\b/.test(stripComments(read(f)))), [],
+    'the disabled pair is only ever reached through disabled:')
+}
+
+section('The parts kit')
+{
+  // Card: three levels and a hairline that stays for sunlight
+  ok(cardClass('raised') === 'bg-surface border border-line shadow-raised rounded-card', 'a raised card: white, hairline, warm shadow, 20px')
+  ok(cardClass('flat') === 'bg-tint rounded-card', 'a flat one is a tint with no edge')
+  ok(cardClass('floating').includes('shadow-floating'), 'a floating one is a sheet')
+  ok(cardClass('raised', true).endsWith(' press'), 'and pressable adds the press')
+
+  // The press: down under the thumb, shadow off; Reduce Motion keeps the drop
+  ok(/\.press:active \{ transform: scale\(0\.97\); box-shadow: none; \}/.test(css), 'pressed, it shrinks to 0.97 and its shadow goes')
+  ok(/\.press \{[^}]*transition-duration: 120ms/.test(css), '  …in 120ms')
+  ok(/\.press\.shadow-cta:active \{ box-shadow: var\(--shadow-cta-pressed\)/.test(css), '  …the primary keeps a sliver of its shadow')
+
+  // The field: 56 tall, 17px, a 1.5px line, focus 2.5px emerald with no glow
+  const field = css.slice(css.indexOf('.field {'), css.indexOf('}', css.indexOf('.field {')))
+  ok(/min-height: 56px/.test(field) && /font-size: 17px/.test(field), 'a field is 56px tall with 17px type')
+  ok(/border: 1\.5px solid var\(--color-line-strong\)/.test(field) && /border-radius: 14px/.test(field),
+    '  …a 1.5px line, 14px round')
+  ok(/\.field:focus \{ outline: 2\.5px solid var\(--color-accent\)/.test(css), '  …2.5px emerald in focus')
+  ok(/\.field\[aria-invalid="true"\] \{ outline: 2\.5px solid var\(--color-rust\)/.test(css), '  …and rust in error')
+  ok(FIELD === 'field', 'FIELD is that class')
+  const f = renderToStaticMarkup(React.createElement(Field, { label: 'Challenge name', error: 'Give it a name', children: React.createElement('input', { className: FIELD }) }))
+  ok(f.includes('t-label') && f.includes('Challenge name'), 'a field is labelled in sentence case')
+  ok(/text-rust-deep/.test(f) && f.indexOf('Give it a name') > f.indexOf('<input'), '  …with its error right under it, in rust')
+
+  // Chip, segmented, toggle
+  ok(/min-h-11/.test(chipClass(false)) && /rounded-full/.test(chipClass(false)), 'a chip is 44px and fully round')
+  ok(chipClass(true).includes('bg-accent-deep text-white'), '  …chosen is deep emerald, white words')
+  ok(chipClass(false).includes('shadow-raised'), '  …not chosen is a raised chip')
+  const seg = renderToStaticMarkup(React.createElement(Segmented, {
+    label: 'Board', value: 'a', onChange: () => {},
+    options: [{ value: 'a', label: 'One' }, { value: 'b', label: 'Two' }],
+  }))
+  ok(seg.includes('bg-tint') && seg.includes('aria-pressed="true"'), 'a segmented control: a tinted track, the choice pressed')
+  ok(/aria-pressed="true"[^>]*bg-surface text-ink shadow-raised/.test(seg), '  …raised out of it')
+  ok(!/bg-accent/.test(seg), '  …and never spending the screen\'s emerald on a switch')
+  const toggle = read('app/components/Toggle.tsx')
+  ok(/TRACK_W = 52/.test(toggle) && /TRACK_H = 32/.test(toggle), 'a toggle is 52 by 32')
+  ok(/checked \? 'bg-accent-deep' : 'bg-bark\/20'/.test(toggle), '  …deep emerald on, bark 20% off')
+
+  // List groups: one card, rows divided, never cards in cards
+  const lg = renderToStaticMarkup(React.createElement(ListGroup, { children: [
+    React.createElement(ListRow, { key: 1, label: 'Players', value: '6', href: '/x' }),
+    React.createElement(ListRow, { key: 2, label: 'Teams', hint: 'Two sides' }),
+  ] }))
+  ok(lg.includes('divide-y divide-line') && (lg.match(/shadow-raised/g) ?? []).length === 1,
+    'a list group is one raised card, its rows divided by hairlines')
+  ok(/min-h-14/.test(lg) && /text-\[17px\] font-medium/.test(lg), '  …rows at least 56px, labels 17/500')
+
+  // Icon buttons: 48, 44 in a dense row, always named
+  ok(iconButtonClass().includes('w-12 h-12') && iconButtonClass(true).includes('w-11 h-11'), 'an icon button is 48px, 44 when dense')
+  const ib = renderToStaticMarkup(React.createElement(IconButton, { label: 'Remove', children: 'x' }))
+  ok(ib.includes('aria-label="Remove"'), '  …and says what it does')
+
+  // Section header: t-h2, one hint, one action
+  const sh = renderToStaticMarkup(React.createElement(SectionHeader, { hint: 'Add as many as you like.', children: 'Leaderboards' }))
+  ok(sh.includes('t-h2') && sh.includes('t-cap'), 'a section header is a t-h2 with a caption under it')
 }
 
 section('Empty states say what to do next')

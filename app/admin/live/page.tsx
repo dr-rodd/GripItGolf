@@ -4,7 +4,7 @@ import {
   summariseCards, orderCards, type CardSummary,
 } from '@/lib/adminLive'
 import type { CardLock, LiveCard, ScoreActivity } from '@/lib/staleLive'
-import { Badge } from '@/app/components/ui'
+import { Pill } from '@/app/components/ui'
 import { requireAdmin } from '../adminGate'
 import AdminLogin from '../AdminLogin'
 import AdminShell from '../AdminShell'
@@ -234,16 +234,16 @@ function Cell({ label, value }: { label: string; value: string }) {
 function StatusBadge({ summary }: { summary: CardSummary }) {
   if (summary.wouldClose !== null) {
     return (
-      <Badge tone="loss" className="flex-shrink-0">
+      <Pill tone="loss" className="flex-shrink-0">
         {summary.wouldClose === 'empty' ? 'Stale — empty' : 'Stale — abandoned'}
-      </Badge>
+      </Pill>
     )
   }
   if (summary.status === 'active') {
-    return <Badge tone="win" live className="flex-shrink-0">In play</Badge>
+    return <Pill tone="win" live className="flex-shrink-0">In play</Pill>
   }
   if (summary.status === 'finalised') {
-    return <Badge tone="neutral" className="flex-shrink-0">Signed</Badge>
+    return <Pill tone="neutral" className="flex-shrink-0">Signed</Pill>
   }
-  return <Badge tone="neutral" className="flex-shrink-0">Closed</Badge>
+  return <Pill tone="neutral" className="flex-shrink-0">Closed</Pill>
 }

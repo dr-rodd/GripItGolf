@@ -19,7 +19,7 @@ import {
 import {
   IconFlag, IconHome, IconArrowRight, IconFork, IconPlus, IconX,
 } from './icons'
-import { FIELD, FIELD_LABEL, Badge } from './ui'
+import { FIELD, FIELD_LABEL, Pill } from './ui'
 import {
   Sheet, Stepper, GolfFields, golfDraftFields, EMPTY_GOLF_DRAFT, type GolfDraft,
 } from './ItineraryForms'
@@ -756,5 +756,5 @@ export default function ItineraryBuilder({
 
 /** The summary badge for a day, reused by the trip hub. */
 export function DayBadge({ count }: { count: number }) {
-  return <Badge>{count === 0 ? 'Nothing planned' : `${count} item${count === 1 ? '' : 's'}`}</Badge>
+  return <Pill>{count === 0 ? 'Nothing planned' : `${count} item${count === 1 ? '' : 's'}`}</Pill>
 }
