@@ -26,6 +26,7 @@ import { applyTheme, isDark, rememberTheme } from '@/lib/theme'
 import { MAX_NICKNAME, normalizeNickname } from '@/lib/displayNames'
 import { IconSettings } from './icons'
 import Toggle from './Toggle'
+import { FIELD, cardClass } from './ui'
 
 export default function PlayerSettings({
   tripId, playerId,
@@ -159,7 +160,7 @@ export default function PlayerSettings({
           />
 
           <div className="fixed inset-x-0 bottom-0 z-50 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
-            <div className="bg-surface border border-bark/12 rounded-2xl w-full max-w-md mx-auto sheet-up">
+            <div className={`w-full max-w-md mx-auto sheet-up ${cardClass()}`}>
 
               <div className="flex items-center justify-between px-5 py-4 border-b border-bark/12">
                 <h2 className="t-card text-ink">Your preferences</h2>
@@ -209,7 +210,7 @@ export default function PlayerSettings({
                       autoComplete="off"
                       autoCorrect="off"
                       spellCheck={false}
-                      className="flex-1 min-w-0 bg-surface border border-bark/25 rounded-xl px-4 py-2.5 text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/60 transition-colors"
+                      className={`${FIELD} field-dense flex-1 min-w-0`}
                     />
                     <button
                       type="button"

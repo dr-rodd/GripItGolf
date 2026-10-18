@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
 import { HERO_SPACE } from '@/app/components/headerMetrics'
-import { buttonClass } from '@/app/components/ui'
+import { FIELD, buttonClass } from '@/app/components/ui'
 import LegalLinks from '@/app/components/LegalLinks'
 
 /**
@@ -233,7 +233,7 @@ export default function Landing() {
               maxLength={6}
               placeholder="EVENT CODE"
               aria-label="Event code"
-              className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-xl tracking-[0.4em] uppercase text-center placeholder:text-ink/50 placeholder:text-base placeholder:tracking-[0.25em] focus:outline-none focus:border-accent/60 transition-colors"
+              className={`${FIELD} field-code`}
               autoComplete="off"
               autoCorrect="off"
               spellCheck={false}

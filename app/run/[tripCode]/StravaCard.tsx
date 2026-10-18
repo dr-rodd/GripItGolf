@@ -9,6 +9,7 @@ import { STRAVA_APPS_URL } from '@/lib/stravaLinks'
 import PoweredByStrava from '@/app/components/PoweredByStrava'
 import ConnectWithStrava from '@/app/components/ConnectWithStrava'
 import type { StravaStatus } from './runs'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * Strava, from the runner's side — on the Add tab and in Settings.
@@ -120,7 +121,7 @@ export default function StravaCard({ code, status, joined, outcome, end, closed 
 
   if (status.state === 'off' || status.state === 'unready') {
     return (
-      <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+      <div className={`p-4 ${cardClass()}`}>
         <p className="text-ink text-sm font-medium">Strava</p>
         <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
           {status.state === 'off'
@@ -134,7 +135,7 @@ export default function StravaCard({ code, status, joined, outcome, end, closed 
 
   if (status.state === 'connected') {
     return (
-      <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+      <div className={`p-4 ${cardClass()}`}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-ink text-sm font-medium">Strava connected</p>
@@ -178,7 +179,7 @@ export default function StravaCard({ code, status, joined, outcome, end, closed 
 
   if (closed) {
     return (
-      <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+      <div className={`p-4 ${cardClass()}`}>
         <p className="text-ink text-sm font-medium">Strava</p>
         <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
           This challenge has closed — Strava can no longer be connected to it.
@@ -191,7 +192,7 @@ export default function StravaCard({ code, status, joined, outcome, end, closed 
 
   // Not connected.
   return (
-    <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+    <div className={`p-4 ${cardClass()}`}>
       <p className="text-ink text-sm font-medium">Connect Strava</p>
       <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
         Your runs arrive by themselves — the ones since the challenge started, and

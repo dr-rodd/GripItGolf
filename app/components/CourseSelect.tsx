@@ -9,7 +9,7 @@ import {
 } from '@/lib/courseDirectory'
 import type { SuggestedTee } from '@/lib/courseLookup'
 import CardCheck from '@/app/scoring/CardCheck'
-import { FIELD, FIELD_LABEL, buttonClass } from './ui'
+import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from './ui'
 import { IconChevronDown, IconX, IconPlus } from './icons'
 
 /**
@@ -533,7 +533,7 @@ function AddCourseForm({
 
         <div className="space-y-3">
           {tees.map((tee, i) => (
-            <div key={i} className="bg-surface border border-bark/12 rounded-2xl p-3 space-y-2.5">
+            <div key={i} className={`p-3 space-y-2.5 ${cardClass()}`}>
               <div className="flex gap-2">
                 <input
                   type="text" value={tee.name}
@@ -548,11 +548,7 @@ function AddCourseForm({
                       key={g} type="button"
                       onClick={() => updateTee(i, { gender: g })}
                       aria-label={g === 'M' ? `Tee ${i + 1}: men's` : `Tee ${i + 1}: ladies`}
-                      className={`w-11 rounded-xl text-sm font-medium transition-colors ${
-                        tee.gender === g
-                          ? 'bg-accent-deep text-white'
-                          : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                      }`}
+                      className={`${chipClass(tee.gender === g)} w-11`}
                     >
                       {g}
                     </button>
@@ -602,7 +598,7 @@ function AddCourseForm({
         </button>
       </div>
 
-      <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
+      <div className={`px-4 py-3.5 ${cardClass()}`}>
         <p className="t-cap text-ink/80 leading-snug">
           The last step is a scorecard: pars and stroke indices only ever come
           from the printed card, so the course stays{' '}

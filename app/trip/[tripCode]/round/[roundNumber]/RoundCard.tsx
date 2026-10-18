@@ -1,4 +1,5 @@
 import { type CardNine, type CourseCard } from '@/lib/courseCard'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * The width of the out/in column, on both nines.
@@ -35,7 +36,7 @@ export default function RoundCard({ card }: { card: CourseCard }) {
       <Nine label="In" nine={card.back} />
 
       {card.ladies && (
-        <p className="t-cap uppercase tracking-[0.18em] text-ink/50 text-center">
+        <p className="t-cap text-ink/65 text-center">
           Ladies card
         </p>
       )}
@@ -47,7 +48,7 @@ function Nine({ label, nine }: { label: string; nine: CardNine }) {
   if (nine.holes.length === 0) return null
 
   return (
-    <div className="rounded-xl border border-bark/12 bg-surface overflow-hidden">
+    <div className={`overflow-hidden ${cardClass()}`}>
       {/* The trailing column is a fixed width, not `auto`. Sized to its
           content it was as wide as the word in it — "Out" being wider than
           "In" — which left the two nines with different hole columns and a

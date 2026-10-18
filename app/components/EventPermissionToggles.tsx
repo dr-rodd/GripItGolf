@@ -4,6 +4,7 @@ import Toggle from './Toggle'
 import {
   type EventPermissionKey, EVENT_PERMISSIONS,
 } from '@/lib/eventPermissions'
+import { cardClass } from './ui'
 
 /**
  * The collaboration question, asked as toggles — one card per permission in
@@ -35,7 +36,7 @@ export default function EventPermissionToggles<K extends string = EventPermissio
       {registry.map(p => (
         <div
           key={p.key}
-          className="flex items-start justify-between gap-4 bg-surface border border-bark/12 rounded-2xl p-4"
+          className={`flex items-start justify-between gap-4 p-4 ${cardClass()}`}
         >
           <div className="min-w-0">
             <p className="text-ink text-sm font-medium">{p.label}</p>

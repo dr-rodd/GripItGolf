@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { buttonClass } from '@/app/components/ui'
+import { FIELD, buttonClass } from '@/app/components/ui'
 import { deleteTripAction, type DeleteTripResult } from './actions'
 
 const IDLE: DeleteTripResult = { error: null, deleted: false }
@@ -58,7 +58,7 @@ export default function DeleteTrip({
         name="confirm"
         autoComplete="off"
         placeholder={token}
-        className="w-full bg-surface border border-bark/25 rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink/50 focus:outline-none focus:border-rust transition-colors"
+        className={`${FIELD} field-dense`}
       />
       <div className="flex gap-2">
         <button type="submit" disabled={pending} className={buttonClass('danger', false)}>

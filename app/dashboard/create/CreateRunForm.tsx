@@ -25,6 +25,7 @@ import {
   challengeDatesIssue, teamNamesIssue, migrationMissing, MIGRATION_MISSING_MESSAGE,
 } from '@/lib/runChallenge'
 import { describeError, generateCode } from './CreateTripForm'
+import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 
 /**
  * Creating a Green Dot Run challenge — an ongoing team running competition.
@@ -51,14 +52,6 @@ import { describeError, generateCode } from './CreateTripForm'
  * The rules themselves are lib/runChallenge.ts — this form only collects
  * them; it never decides what a rule means.
  */
-
-const INPUT = [
-  'w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5',
-  'text-ink placeholder:text-ink/60',
-  'focus:outline-none focus:border-accent/50 transition-colors',
-].join(' ')
-
-const LABEL = 'block text-ink/80 text-[13px] uppercase tracking-wider mb-2'
 
 const STEP_LABELS = ['Challenge', 'Teams', 'Points', 'Finish']
 
@@ -282,7 +275,7 @@ export default function CreateRunForm() {
             the next update.
           </p>
 
-          <div className="bg-surface border border-bark/25 rounded-2xl px-4 py-8 mb-4">
+          <div className={`px-4 py-8 mb-4 ${cardClass()}`}>
             <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-4">Your Challenge Code</p>
             <div className="flex items-center justify-center gap-1 sm:gap-1.5">
               {resultCode.split('').map((ch, i) => (
@@ -296,7 +289,7 @@ export default function CreateRunForm() {
             </div>
           </div>
 
-          <div className="mb-4 px-4 py-3 bg-surface border border-bark/12 rounded-xl">
+          <div className={`mb-4 px-4 py-3 ${cardClass()}`}>
             <p className="text-ink/80 text-[13px] leading-snug">
               Your organiser PIN is set. Keep it safe — it cannot be recovered
               or changed.
@@ -305,14 +298,14 @@ export default function CreateRunForm() {
 
           <button
             onClick={copyCode}
-            className="w-full py-4 rounded-xl border border-bark/25 text-ink text-sm tracking-[0.15em] uppercase hover:border-bark/25 transition-colors mb-3"
+            className={`${buttonClass('secondary')} mb-3`}
           >
             {copied ? '✓ Copied' : 'Copy Code'}
           </button>
 
           <Link
             href={`/run/${resultCode}`}
-            className="block w-full py-4 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors"
+            className={buttonClass('primary')}
           >
             Go to Your Challenge
           </Link>
@@ -349,7 +342,7 @@ export default function CreateRunForm() {
           <div>
             {stepNum > 1 && <BackButton onClick={goBack} />}
           </div>
-          <p className="text-center text-ink/65 text-[13px] tracking-wider uppercase">
+          <p className="text-center t-label text-ink/65">
             Step {stepNum} of 4 — {STEP_LABELS[stepNum - 1]}
           </p>
         </div>
@@ -361,19 +354,19 @@ export default function CreateRunForm() {
         {step === 1 && (
           <div className="space-y-6">
             <div>
-              <label className={LABEL}>Challenge name</label>
+              <label className={FIELD_LABEL}>Challenge name</label>
               <input
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="e.g. Autumn Office Run"
-                className={INPUT}
+                className={FIELD}
                 autoFocus
               />
             </div>
 
             <div>
-              <label className={LABEL}>The period</label>
+              <label className={FIELD_LABEL}>The period</label>
               <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
                 <DateField label="Starts" value={startDate} onChange={setStartDate} />
                 <DateField label="Finishes" value={endDate} onChange={setEndDate} />
@@ -388,7 +381,7 @@ export default function CreateRunForm() {
             </div>
 
             <div>
-              <label className={LABEL} htmlFor="run-email">Email (optional)</label>
+              <label className={FIELD_LABEL} htmlFor="run-email">Email (optional)</label>
               <input
                 id="run-email"
                 type="email"
@@ -401,7 +394,7 @@ export default function CreateRunForm() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className={INPUT}
+                className={FIELD}
               />
               <p className="text-ink/65 text-[13px] mt-2 leading-snug">
                 We&apos;ll send you the challenge details, the share link and
@@ -439,7 +432,7 @@ export default function CreateRunForm() {
                   onChange={e => updateTeam(i, e.target.value)}
                   placeholder={`Team ${i + 1}`}
                   maxLength={MAX_TEAM_NAME}
-                  className={INPUT}
+                  className={FIELD}
                 />
                 {teams.length > 1 && (
                   <button
@@ -468,7 +461,7 @@ export default function CreateRunForm() {
               <p className="text-rust-deep text-[13px] leading-snug">{teamsIssue}</p>
             )}
 
-            <div className="bg-surface border border-bark/12 rounded-2xl p-4 mt-6">
+            <div className={`p-4 mt-6 ${cardClass()}`}>
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <p className="text-ink text-sm font-medium">Are you running?</p>
@@ -492,7 +485,7 @@ export default function CreateRunForm() {
                     value={organiserName}
                     onChange={e => setOrganiserName(e.target.value)}
                     placeholder="Your name"
-                    className={INPUT}
+                    className={FIELD}
                   />
                   {realTeams.length > 0 && (
                     <div>
@@ -502,11 +495,7 @@ export default function CreateRunForm() {
                           <button
                             key={i}
                             onClick={() => setOrganiserTeam(i)}
-                            className={`px-3 py-2 rounded-xl text-sm transition-colors ${
-                              organiserTeam === i
-                                ? 'bg-accent-deep text-white'
-                                : 'bg-cream border border-bark/12 text-ink/80 hover:border-bark/25'
-                            }`}
+                            className={`${chipClass(organiserTeam === i)}`}
                           >
                             {t.trim()}
                           </button>
@@ -536,7 +525,7 @@ export default function CreateRunForm() {
         {step === 4 && (
           <div className="space-y-3">
             <div className="mb-6">
-              <label className={LABEL}>How collaborative should this challenge be?</label>
+              <label className={FIELD_LABEL}>How collaborative should this challenge be?</label>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
                 What participants can do for themselves. You can change any of
                 these later from the organiser area.
@@ -548,7 +537,7 @@ export default function CreateRunForm() {
               />
             </div>
 
-            <div className="bg-surface border border-bark/12 rounded-xl px-4 py-4">
+            <div className={`px-4 py-4 ${cardClass()}`}>
               <p className="text-ink text-sm font-medium">Organiser PIN</p>
               <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
                 Your key to the organiser area — teams, permissions and the
@@ -575,7 +564,7 @@ export default function CreateRunForm() {
               onChange={e => setPasscode(e.target.value.replace(/\D/g, ''))}
               placeholder={`PIN (${MIN_PASSCODE}–${MAX_PASSCODE} digits)`}
               maxLength={MAX_PASSCODE}
-              className={INPUT}
+              className={FIELD}
             />
             <input
               type="password"
@@ -585,7 +574,7 @@ export default function CreateRunForm() {
               onChange={e => setPasscodeConfirm(e.target.value.replace(/\D/g, ''))}
               placeholder="Enter it again"
               maxLength={MAX_PASSCODE}
-              className={INPUT}
+              className={FIELD}
             />
             {passcodeIssue && (passcode || passcodeConfirm) && (
               <p className="text-rust-deep text-[13px] leading-snug">{passcodeIssue}</p>
@@ -603,7 +592,7 @@ export default function CreateRunForm() {
           <button
             onClick={goNext}
             disabled={!canProceed}
-            className="w-full py-5 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className={buttonClass('primary')}
           >
             {submitting ? 'Creating…' : stepNum === 4 ? 'Create Challenge' : 'Continue'}
           </button>

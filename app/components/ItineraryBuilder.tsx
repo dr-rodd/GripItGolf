@@ -19,7 +19,7 @@ import {
 import {
   IconFlag, IconHome, IconArrowRight, IconFork, IconPlus, IconX,
 } from './icons'
-import { FIELD, FIELD_LABEL, Pill } from './ui'
+import { FIELD, FIELD_LABEL, Pill, cardClass } from './ui'
 import {
   Sheet, Stepper, GolfFields, golfDraftFields, EMPTY_GOLF_DRAFT, type GolfDraft,
 } from './ItineraryForms'
@@ -77,7 +77,7 @@ function Tile({
 
   return (
     <div
-      className={`flex items-center gap-3 bg-surface border rounded-xl px-3 py-3 ${
+      className={`flex items-center gap-3 px-3 py-3 ${cardClass()} ${
         dragging ? 'border-accent/50' : 'border-bark/12'
       }`}
     >
@@ -536,7 +536,7 @@ export default function ItineraryBuilder({
             <button
               type="button"
               onClick={() => openSheet('activity')}
-              className="w-full flex items-center justify-center gap-1.5 min-h-[64px] rounded-xl border border-bark/25 bg-surface text-ink hover:border-accent transition-colors duration-150"
+              className={`w-full flex items-center justify-center gap-1.5 min-h-[64px] text-ink hover:border-accent transition-colors duration-150 ${cardClass()}`}
             >
               <span className="flex items-center gap-1 text-accent">
                 <IconPlus size={14} /><IconFork size={18} />
@@ -552,7 +552,7 @@ export default function ItineraryBuilder({
                   key={kind}
                   type="button"
                   onClick={() => openSheet(kind)}
-                  className="flex flex-col items-center justify-center gap-1.5 min-h-[64px] rounded-xl border border-bark/25 bg-surface text-ink hover:border-accent transition-colors duration-150"
+                  className={`flex flex-col items-center justify-center gap-1.5 min-h-[64px] text-ink hover:border-accent transition-colors duration-150 ${cardClass()}`}
                 >
                   <span className="flex items-center gap-1 text-accent">
                     <IconPlus size={14} /><Icon size={18} />

@@ -14,6 +14,7 @@ import { ROUND_TILE } from '@/lib/roundState'
 import {
   isConfirmed, duplicateName, duplicateNameError, isDuplicateNameError,
 } from '@/lib/roster'
+import { FIELD, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 
 type Player = {
   id: string
@@ -120,7 +121,7 @@ function HandicapCheck({
           role="dialog"
           aria-modal="true"
           aria-label={`Confirm ${player.name}'s handicap`}
-          className="bg-surface border border-bark/12 rounded-2xl w-full max-w-md mx-auto sheet-up"
+          className={`w-full max-w-md mx-auto sheet-up ${cardClass()}`}
         >
           <div className="px-5 py-4 border-b border-bark/12">
             <h2 className="t-card text-ink">Your handicap</h2>
@@ -139,7 +140,7 @@ function HandicapCheck({
               onChange={setText}
               placeholder="e.g. 14.2"
               disabled={busy}
-              className="w-full min-w-0 py-4 px-5 bg-cream border border-bark/12 rounded-xl text-ink text-base tabular-nums placeholder:text-ink/50 focus:outline-none focus:border-accent/60 transition-colors"
+              className={`${FIELD} min-w-0 tabular-nums`}
             />
 
             {error && (
@@ -151,7 +152,7 @@ function HandicapCheck({
                 type="button"
                 onClick={onCancel}
                 disabled={busy}
-                className="flex-1 py-4 rounded-xl bg-surface border border-bark/12 text-ink/65 text-sm font-bold tracking-[0.15em] uppercase hover:border-bark/25 transition-colors disabled:opacity-40"
+                className={`flex-1 py-4 text-ink/65 text-sm font-bold tracking-[0.15em] uppercase hover:border-bark/25 transition-colors disabled:opacity-40 ${cardClass()}`}
               >
                 Cancel
               </button>
@@ -400,7 +401,7 @@ export default function PlayersClient({
       {players.length > 0 && (
         <section>
           <div className="flex items-baseline justify-between mb-4">
-            <p className="text-ink/65 text-[13px] tracking-[0.2em] uppercase">
+            <p className="t-label text-ink/65">
               Tap your name
             </p>
             <p className="text-ink/50 text-[13px] tabular-nums">
@@ -459,13 +460,13 @@ export default function PlayersClient({
             onChange={(e) => setAddName(e.target.value)}
             placeholder="Your name"
             required
-            className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/60 transition-colors"
+            className={FIELD}
           />
           <HandicapField
             value={addHandicap}
             onChange={setAddHandicap}
             placeholder="Handicap (e.g. 14.2)"
-            className="w-full min-w-0 py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/60 transition-colors"
+            className={`${FIELD} min-w-0`}
           />
           <div className="flex gap-3">
             {(['M', 'F'] as const).map((g) => (
@@ -473,11 +474,7 @@ export default function PlayersClient({
                 key={g}
                 type="button"
                 onClick={() => setAddGender(g)}
-                className={`flex-1 py-4 rounded-xl text-sm font-bold tracking-[0.15em] uppercase transition-colors ${
-                  addGender === g
-                    ? 'bg-accent-deep text-white'
-                    : 'bg-surface border border-bark/12 text-ink/65 hover:border-accent/40'
-                }`}
+                className={`${chipClass(addGender === g)} flex-1`}
               >
                 {g === 'M' ? 'Male' : 'Female'}
               </button>
@@ -491,7 +488,7 @@ export default function PlayersClient({
           <button
             type="submit"
             disabled={busy || !addName.trim() || !addHandicap}
-            className="w-full py-5 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className={buttonClass('primary')}
           >
             {adding ? 'Adding…' : 'Join Trip'}
           </button>

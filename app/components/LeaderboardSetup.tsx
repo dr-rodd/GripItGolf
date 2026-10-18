@@ -31,7 +31,7 @@ import { nextSheetId, setOf, withSheet } from '@/lib/teamSets'
 import { TAG_SET } from '@/lib/tagBoards'
 import { defaultCustomPoints, editableRows, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
 import { IconTrophy, IconPlus, IconMinus, IconX, IconCheck, IconSettings } from './icons'
-import { Card, Pill, buttonClass, FIELD, FIELD_LABEL } from './ui'
+import { Card, FIELD, FIELD_LABEL, Pill, buttonClass, chipClass } from './ui'
 
 /**
  * Choosing what a trip plays for.
@@ -225,7 +225,7 @@ function PointsTable({
             setBlank(null)
             onChange(defaultCustomPoints(Math.max(fieldSize, 1)))
           }}
-          className="t-cap uppercase tracking-[0.12em] text-accent-deep"
+          className="t-label text-accent-deep"
         >
           Reset
         </button>
@@ -291,11 +291,8 @@ function PointsTable({
 
 // ─── Handicap allowance ────────────────────────────────────────
 
-/** The chips, and the box the keypad answer sits in. Same box as everything. */
-const CHIP =
-  'min-h-[48px] rounded-xl border t-label transition-colors duration-150 tabular-nums'
-const chipClass = (on: boolean) =>
-  `${CHIP} ${on ? 'border-accent bg-accent/[0.08] text-ink' : 'border-bark/25 bg-surface text-ink/80'}`
+// The chips, and the box the keypad answer sits in, are the shared chip
+// (app/components/ui.tsx) — the answer given in deep emerald.
 
 /**
  * What percentage of their course handicap this board is played off.
@@ -1006,11 +1003,7 @@ function Builder({
                   tagCount: n === DEFAULT_TAG_COUNT ? undefined : n,
                 })}
                 aria-pressed={tagCountOf(draft) === n}
-                className={`w-11 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  tagCountOf(draft) === n
-                    ? 'bg-accent-deep text-white'
-                    : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                }`}
+                className={`${chipClass(tagCountOf(draft) === n)} w-11`}
               >
                 {n}
               </button>
@@ -1161,11 +1154,7 @@ function Builder({
                     type="button"
                     onClick={() => set({ teamSize: n })}
                     aria-pressed={draft.teamSize === n}
-                    className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      draft.teamSize === n
-                        ? 'bg-accent-deep text-white'
-                        : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                    }`}
+                    className={`${chipClass(draft.teamSize === n)} flex-1`}
                   >
                     {n}
                   </button>

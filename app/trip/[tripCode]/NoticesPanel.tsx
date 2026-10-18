@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * The organiser's notices, as the Event Hub shows them.
@@ -46,7 +47,7 @@ export default function NoticesPanel({
       ) : (
         <ul className="flex flex-col gap-2">
           {notices.map(n => (
-            <li key={n.id} className="bg-surface border border-bark/12 rounded-xl px-4 py-3">
+            <li key={n.id} className={`px-4 py-3 ${cardClass()}`}>
               {/* The body keeps its line breaks — a notice is written as it
                   should read, and folding it into one paragraph would undo
                   the organiser's own formatting. */}
@@ -63,7 +64,7 @@ export default function NoticesPanel({
           who gets through — the same soft lock Trip Setup wears. */}
       <Link
         href={`/trip/${tripCode}/organiser`}
-        className="block text-center mt-5 t-cap uppercase tracking-[0.18em] text-accent-deep hover:text-accent transition-colors"
+        className="block text-center mt-5 t-label text-accent-deep hover:text-accent transition-colors"
       >
         Organiser area
       </Link>

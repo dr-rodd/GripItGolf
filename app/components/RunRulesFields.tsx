@@ -6,6 +6,7 @@ import {
   type RunActivity, type RulesDraft,
   rulesFromDraft, draftIssue, describeRules, exampleLine, formatPoints,
 } from '@/lib/runChallenge'
+import { cardClass, chipClass } from './ui'
 
 /**
  * A run challenge's points rules, as a form — the one copy. Challenge setup
@@ -34,7 +35,7 @@ function NumberRow({ label, hint, value, onChange, unit, max }: {
   max: number
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 bg-surface border border-bark/12 rounded-2xl p-4">
+    <div className={`flex items-center justify-between gap-4 p-4 ${cardClass()}`}>
       <div className="min-w-0">
         <p className="text-ink text-sm font-medium">{label}</p>
         <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">{hint}</p>
@@ -92,7 +93,7 @@ export default function RunRulesFields({ draft, onChange, askTeams = true }: {
         value={draft.minKm} onChange={v => set({ minKm: v })} unit="km" max={MAX_MIN_KM}
       />
 
-      <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+      <div className={`p-4 ${cardClass()}`}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-ink text-sm font-medium">Daily limit</p>
@@ -119,7 +120,7 @@ export default function RunRulesFields({ draft, onChange, askTeams = true }: {
         )}
       </div>
 
-      <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+      <div className={`p-4 ${cardClass()}`}>
         <p className="text-ink text-sm font-medium">What counts</p>
         <p className="text-ink/65 text-[13px] mt-0.5 mb-3 leading-snug">
           Which activities earn points.
@@ -131,11 +132,7 @@ export default function RunRulesFields({ draft, onChange, askTeams = true }: {
               type="button"
               onClick={() => toggleActivity(a.key)}
               aria-pressed={draft.activities.includes(a.key)}
-              className={`px-3 py-2 rounded-xl text-sm transition-colors ${
-                draft.activities.includes(a.key)
-                  ? 'bg-accent-deep text-white'
-                  : 'bg-cream border border-bark/12 text-ink/80 hover:border-bark/25'
-              }`}
+              className={`${chipClass(draft.activities.includes(a.key))}`}
             >
               {a.label}
             </button>
@@ -144,7 +141,7 @@ export default function RunRulesFields({ draft, onChange, askTeams = true }: {
       </div>
 
       {askTeams && (
-        <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+        <div className={`p-4 ${cardClass()}`}>
           <p className="text-ink text-sm font-medium">How teams are compared</p>
           <div className="space-y-2 mt-3">
             {TEAM_SCORES.map(s => (

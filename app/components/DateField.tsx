@@ -1,3 +1,4 @@
+import { FIELD_LABEL } from '@/app/components/ui'
 'use client'
 
 /**
@@ -30,7 +31,7 @@ export default function DateField({
   return (
     <div className={`min-w-0 ${className}`}>
       {label && (
-        <label className="block text-ink/80 text-[13px] uppercase tracking-wider mb-2">
+        <label className={FIELD_LABEL}>
           {label}
         </label>
       )}

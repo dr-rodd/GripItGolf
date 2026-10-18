@@ -14,6 +14,7 @@ import {
   runnerNameIssue, teamNameIssue, nextTeamColor, joinChoices,
 } from '@/lib/runChallenge'
 import type { RunRosterEntry } from '../data'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * The join screen's two steps: who you are, then which team.
@@ -259,7 +260,7 @@ export default function RunJoinClient({
           })}
 
           {choices.startTeam && (
-            <div className={`bg-surface border rounded-2xl px-4 py-3.5 ${choice?.kind === 'new' ? 'border-accent/60 bg-accent/[0.08]' : 'border-bark/12'}`}>
+            <div className={`px-4 py-3.5 ${cardClass()} ${choice?.kind === 'new' ? 'border-accent/60 bg-accent/[0.08]' : 'border-bark/12'}`}>
               {choice?.kind === 'new' ? (
                 <>
                   <p className="text-ink text-sm font-medium mb-2">Start a new team</p>
@@ -318,7 +319,7 @@ export default function RunJoinClient({
       </p>
 
       {choices.nothing && (
-        <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
+        <div className={`px-4 py-3.5 ${cardClass()}`}>
           <p className="text-ink/80 text-sm leading-snug">
             Joining by yourself is switched off for this challenge. Ask the
             organiser to add your name, then come back and tap it here.
@@ -328,7 +329,7 @@ export default function RunJoinClient({
 
       {choices.claim && (
         <section className="mb-8">
-          <h2 className="t-cap uppercase tracking-[0.12em] text-ink/65 mb-2.5">Find your name</h2>
+          <h2 className="t-label text-ink/80 mb-2.5">Find your name</h2>
           <div className="space-y-2">
             {listed.map(r => (
               <button
@@ -366,7 +367,7 @@ export default function RunJoinClient({
 
       {choices.addSelf && (
         <section>
-          <h2 className="t-cap uppercase tracking-[0.12em] text-ink/65 mb-2.5">
+          <h2 className="t-label text-ink/80 mb-2.5">
             {choices.claim ? 'New here?' : 'Your name'}
           </h2>
           <form onSubmit={continueAsNew} className="space-y-3">

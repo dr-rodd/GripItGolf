@@ -15,6 +15,7 @@ import {
   type Leaderboard, boardTitle, boardRules, tagsInPlay,
 } from '@/lib/leaderboards'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * The tags portal — making tags and giving players theirs.
@@ -220,7 +221,7 @@ export default function TagPortalClient({
 
         {/* ── Self-assign ── */}
         {selfAssign && (
-          <div className="flex items-start justify-between gap-4 bg-surface border border-bark/12 rounded-2xl p-4 mb-6">
+          <div className={`flex items-start justify-between gap-4 p-4 mb-6 ${cardClass()}`}>
             <div className="min-w-0">
               <p className="text-ink text-sm font-medium">{selfAssign.label}</p>
               <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">{selfAssign.hint}</p>
@@ -246,7 +247,7 @@ export default function TagPortalClient({
               : []
 
             return (
-              <li key={tag.id} className="bg-surface border border-bark/12 rounded-2xl p-4">
+              <li key={tag.id} className={`p-4 ${cardClass()}`}>
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
@@ -401,7 +402,7 @@ export default function TagPortalClient({
             more. This is where it becomes a competition — the same
             cascade Trip Setup uses, never a smaller second copy of it. */}
         <section className="mt-10">
-          <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-1">
+          <h2 className="t-h2 text-ink mb-1">
             What the tags play for
           </h2>
           <p className="text-ink/65 text-[13px] mb-3 leading-snug">
@@ -413,7 +414,7 @@ export default function TagPortalClient({
           {ranked && !showBoards && (
             <ul className="flex flex-col gap-2 mb-3">
               {boards.filter(b => b.tagMode).map(b => (
-                <li key={b.id} className="bg-surface border border-bark/12 rounded-2xl p-4">
+                <li key={b.id} className={`p-4 ${cardClass()}`}>
                   <p className="text-ink text-sm font-medium">{boardTitle(b)}</p>
                   <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">{boardRules(b)}</p>
                 </li>

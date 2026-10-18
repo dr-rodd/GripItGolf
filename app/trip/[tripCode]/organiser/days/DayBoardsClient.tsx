@@ -8,6 +8,7 @@ import {
   type Leaderboard, boardTitle, boardRules,
 } from '@/lib/leaderboards'
 import { type DayBoards, DAY_BOARDS, boardGrouping } from '@/lib/leagueSetup'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * A format for each day.
@@ -76,7 +77,7 @@ export default function DayBoardsClient({
         </p>
 
         {dayLine && (
-          <div className="bg-surface border border-bark/12 rounded-2xl p-4 mb-6">
+          <div className={`p-4 mb-6 ${cardClass()}`}>
             <p className="text-ink text-sm font-medium">{dayLine.label}</p>
             <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">{dayLine.hint}</p>
           </div>
@@ -86,12 +87,12 @@ export default function DayBoardsClient({
             beside rather than replaces. */}
         {overall.length > 0 && (
           <section className="mb-8">
-            <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-3">
+            <h2 className="t-h2 text-ink mb-3">
               The whole event
             </h2>
             <ul className="flex flex-col gap-2">
               {overall.map(b => (
-                <li key={b.id} className="bg-surface border border-bark/12 rounded-2xl p-4">
+                <li key={b.id} className={`p-4 ${cardClass()}`}>
                   <p className="text-ink text-sm font-medium">{boardTitle(b)}</p>
                   <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">{boardRules(b)}</p>
                 </li>
@@ -103,7 +104,7 @@ export default function DayBoardsClient({
           </section>
         )}
 
-        <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-3">Each day</h2>
+        <h2 className="t-h2 text-ink mb-3">Each day</h2>
 
         {rounds.length === 0 ? (
           <p className="t-cap text-ink/65 text-center py-2">No rounds yet.</p>
@@ -113,7 +114,7 @@ export default function DayBoardsClient({
               const mine = boardsFor(round.id)
               const open = openFor === round.id
               return (
-                <li key={round.id} className="bg-surface border border-bark/12 rounded-2xl p-4">
+                <li key={round.id} className={`p-4 ${cardClass()}`}>
                   <p className="text-ink text-sm font-medium">
                     Day {round.roundNumber}
                     {round.courseName ? ` — ${round.courseName}` : ''}

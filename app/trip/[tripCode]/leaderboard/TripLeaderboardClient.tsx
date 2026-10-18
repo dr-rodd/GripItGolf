@@ -27,6 +27,7 @@ import {
   SC_CARD, SC_SF, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_HEAD_TIGHT, SC_LABEL,
   SC_MUTED, SC_DARK, SC_NUM, scRow, scPoints,
 } from '@/app/components/scorecardStyle'
+import { cardClass } from '@/app/components/ui'
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -169,7 +170,7 @@ function InPlayBadge() {
   return (
     <span className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/[0.22]">
       <span className="w-1.5 h-1.5 rounded-full bg-accent dot-live" aria-hidden="true" />
-      <span className="t-cap uppercase tracking-[0.12em] text-accent-deep">In play</span>
+      <span className="t-label text-accent-deep">In play</span>
     </span>
   )
 }
@@ -183,7 +184,7 @@ function describeCustomTable(table: number[]): string {
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="bg-surface border border-bark/12 rounded-2xl py-14 text-center">
+    <div className={`py-14 text-center ${cardClass()}`}>
       <p className="t-body text-ink/80 px-6 max-w-[24rem] mx-auto">{message}</p>
     </div>
   )
@@ -1089,7 +1090,7 @@ function Board({
   // headings exactly HEADER_H down the card and parking them on top of
   // whoever is leading. The corners round without it.
   return (
-    <div className="bg-surface border border-bark/12 rounded-2xl">
+    <div className={`${cardClass()}`}>
 
       {/* ── The discard switch ──
           Above the headings and inside the card, because it changes what
@@ -1351,10 +1352,7 @@ function MatchplayTab({ tripCode }: { tripCode: string }) {
   return (
     <Link
       href={`/trip/${tripCode}/matchplay`}
-      className="flex-shrink-0 inline-flex items-center px-4 py-2.5 t-label rounded-xl
-        border bg-surface border-bark/12 text-ink/65
-        hover:text-ink/80 hover:border-accent/50 active:opacity-75
-        transition-colors duration-150"
+      className={`flex-shrink-0 inline-flex items-center px-4 py-2.5 t-label text-ink/65 hover:text-ink/80 hover:border-accent/50 active:opacity-75 transition-colors duration-150 ${cardClass()}`}
     >
       Matchplay
     </Link>
@@ -1639,7 +1637,7 @@ export default function TripLeaderboardClient({
 
       {/* Title card — only worth the space once there is more than one board */}
       {tabs.length > 1 ? (
-        <div className="bg-surface border border-bark/12 rounded-2xl px-4 py-3 mb-3">
+        <div className={`px-4 py-3 mb-3 ${cardClass()}`}>
           <div className="flex items-center justify-between gap-3">
             <p className="font-[family-name:var(--font-display)] text-ink text-base leading-tight">
               {boardTitle(activeBoard)}

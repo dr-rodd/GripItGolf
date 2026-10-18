@@ -17,6 +17,7 @@ import {
 } from '@/lib/tagBoards'
 import { setTeam } from '@/lib/teamMembers'
 import { PRESET_COLORS } from '@/lib/teamColors'
+import { FIELD, cardClass } from '@/app/components/ui'
 
 /**
  * The tee sheet on a phone: a full day is a long scroll, so every row is
@@ -455,7 +456,7 @@ export default function TeeSheetClient({
         {hasTeamBoard && (
           <Link
             href={`/trip/${tripCode}/teams`}
-            className="flex items-center gap-3 bg-surface border border-bark/12 rounded-2xl p-4 mb-5 press hover:border-bark/25"
+            className={`flex items-center gap-3 p-4 mb-5 ${cardClass('raised', true)}`}
           >
             <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent/[0.14] text-accent-deep flex items-center justify-center">
               <IconUsers size={16} />
@@ -509,7 +510,7 @@ export default function TeeSheetClient({
               </p>
             )}
 
-            <ol className="bg-surface border border-bark/12 rounded-2xl divide-y divide-bark/12">
+            <ol className={`divide-y divide-bark/12 ${cardClass()}`}>
               {Array.from({ length: count }, (_, i) => {
                 const slotPlayers = slots.get(i) ?? []
                 const vacancy = Math.max(0, round.groupSize - slotPlayers.length)
@@ -655,7 +656,7 @@ export default function TeeSheetClient({
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                             placeholder="Find a player…"
-                            className="flex-1 min-w-0 bg-surface border border-bark/12 rounded-lg px-3 py-2 text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/50 transition-colors"
+                            className={`${FIELD} field-dense flex-1 min-w-0`}
                           />
                           <button
                             type="button"

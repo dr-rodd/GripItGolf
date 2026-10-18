@@ -25,6 +25,7 @@ import CourseWeather from '@/app/components/CourseWeather'
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../../kind'
 import { boardNames } from '@/lib/displayNames'
+import { cardClass } from '@/app/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -235,7 +236,7 @@ export default async function RoundSummaryPage({
               href={directions}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 mt-4 px-4 py-2.5 rounded-xl border border-bark/12 bg-surface text-ink/80 hover:text-accent-deep hover:border-bark/25 transition-colors duration-150"
+              className={`inline-flex items-center gap-1.5 mt-4 px-4 py-2.5 text-ink/80 hover:text-accent-deep hover:border-bark/25 transition-colors duration-150 ${cardClass()}`}
             >
               <IconMapPin size={15} />
               <span className="t-cap uppercase tracking-[0.15em]">Directions</span>
@@ -290,7 +291,7 @@ export default async function RoundSummaryPage({
                 `auto` is the same decision made by something that can
                 measure. The name column stays `minmax(0,1fr)` so it takes
                 what is left and truncates. */}
-            <div className="rounded-xl border border-bark/12 bg-surface overflow-hidden">
+            <div className={`overflow-hidden ${cardClass()}`}>
               <div className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto]">
 
                 <Cell head>Tee</Cell>
@@ -469,7 +470,7 @@ async function RoundPodium({
 /** One place on the podium. Name, score, and where that puts them. */
 function PodiumRow({ place }: { place: PodiumPlace }) {
   return (
-    <div className="font-serif flex items-center gap-3 px-4 py-3 rounded-xl border border-bark/12 bg-surface">
+    <div className={`font-serif flex items-center gap-3 px-4 py-3 ${cardClass()}`}>
       <span className="w-8 flex-shrink-0 text-[15px] leading-[1.45] text-ink/50 tabular-nums">
         {ordinal(place.position)}
       </span>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
+import { FIELD, buttonClass } from '@/app/components/ui'
 
 /**
  * The code a shared link carries, if any.
@@ -76,7 +77,7 @@ export default function JoinForm() {
             onChange={(e) => setTyped(e.target.value.toUpperCase())}
             maxLength={6}
             placeholder="GX7K2P"
-            className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-xl tracking-[0.4em] uppercase text-center placeholder:text-ink/50 placeholder:tracking-[0.4em] focus:outline-none focus:border-accent/60 transition-colors"
+            className={`${FIELD} field-code`}
             autoFocus
             autoComplete="off"
             autoCorrect="off"
@@ -90,7 +91,7 @@ export default function JoinForm() {
           <button
             type="submit"
             disabled={loading || code.trim().length < 6}
-            className="w-full py-5 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className={buttonClass('primary')}
           >
             {loading ? 'Checking…' : 'Join Event'}
           </button>

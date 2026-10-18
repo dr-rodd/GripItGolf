@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { logout } from './actions'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * The frame around every admin screen: title, the section tabs, sign out.
@@ -39,7 +40,7 @@ export default function AdminShell({
           <form action={logout}>
             <button
               type="submit"
-              className="flex-shrink-0 px-4 h-11 rounded-xl border border-bark/12 bg-surface text-ink/80 text-[13px] tracking-[0.18em] uppercase hover:text-ink hover:border-bark/25 transition-colors"
+              className={`flex-shrink-0 px-4 h-11 text-ink/80 text-[13px] tracking-[0.18em] uppercase hover:text-ink hover:border-bark/25 transition-colors ${cardClass()}`}
             >
               Sign out
             </button>

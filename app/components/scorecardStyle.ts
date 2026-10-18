@@ -21,6 +21,8 @@
 // this app; the bands are bark, because a scorecard that is half accent has
 // no accent at all.
 
+import { cardClass } from './ui'
+
 /** Dense figures — every scorecard number is set in the serif. */
 export const SC_SF = { fontFamily: 'var(--font-serif)' } as const
 
@@ -41,7 +43,7 @@ export const SC_SF = { fontFamily: 'var(--font-serif)' } as const
 export const SC_NUM = 'text-[17px]'
 
 /** The card itself. White, so the score shapes have somewhere to sit. */
-export const SC_CARD = 'bg-surface border border-bark/12 rounded-2xl'
+export const SC_CARD = cardClass()
 
 /** Hairline between holes. Lighter than a card border — 18 of them stack up. */
 export const SC_RULE = 'border-b border-bark/[0.08]'

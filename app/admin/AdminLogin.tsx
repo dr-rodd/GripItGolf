@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { login } from './actions'
 import Wordmark from '@/app/components/Wordmark'
+import { FIELD, buttonClass } from '@/app/components/ui'
 
 /**
  * The password form.
@@ -30,7 +31,7 @@ export default function AdminLogin() {
           autoComplete="current-password"
           autoFocus
           placeholder="Password"
-          className="w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5 text-ink text-center placeholder:text-ink/60 focus:outline-none focus:border-accent/50 transition-colors"
+          className={`${FIELD} text-center`}
         />
 
         {state.error && (
@@ -40,7 +41,7 @@ export default function AdminLogin() {
         <button
           type="submit"
           disabled={pending}
-          className="w-full py-4 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40"
+          className={buttonClass('primary')}
         >
           {pending ? 'Checking…' : 'Enter'}
         </button>

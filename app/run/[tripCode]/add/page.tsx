@@ -12,6 +12,7 @@ import { standingsOf } from '../standings'
 import { ChallengeNotFound, Notice } from '../RunPieces'
 import StravaCard from '../StravaCard'
 import RunAddClient from './RunAddClient'
+import { buttonClass, cardClass } from '@/app/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,7 +68,7 @@ export default async function RunAddPage({ params, searchParams }: {
             </p>
             <Link
               href={`/run/${challenge.code}/join`}
-              className="block w-full py-4 bg-accent-deep text-white text-center text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors"
+              className={buttonClass('primary')}
             >
               Join the challenge
             </Link>
@@ -77,9 +78,9 @@ export default async function RunAddPage({ params, searchParams }: {
         ) : (
           <>
             {me && !challenge.final?.stravaRemoved && (
-              <div className="bg-surface border border-bark/12 rounded-2xl p-5 flex items-center justify-between gap-4">
+              <div className={`p-5 flex items-center justify-between gap-4 ${cardClass()}`}>
                 <div className="min-w-0">
-                  <p className="t-cap uppercase tracking-[0.12em] text-ink/65">Your total</p>
+                  <p className="t-cap text-ink/65">Your total</p>
                   <p className="text-ink/80 text-sm mt-1">
                     {me.runs > 0
                       ? `${formatKm(me.km)} · ${ordinal(me.place)} of ${roster.length}`

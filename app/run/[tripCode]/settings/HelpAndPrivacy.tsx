@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { SITE } from '@/config/site'
 import { forgetPlayer } from '@/lib/playerCookie'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * Settings' Help & privacy card: where to write, the privacy notice and the
@@ -60,7 +61,7 @@ export default function HelpAndPrivacy({ code, joinedAs }: {
   }
 
   return (
-    <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+    <div className={`p-4 ${cardClass()}`}>
       <p className="text-ink/80 text-[13px] leading-snug">
         Questions, or anything about your data: write to{' '}
         <a href={`mailto:${SITE.supportEmail}`} className={LINK}>{SITE.supportEmail}</a>.

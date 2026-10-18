@@ -14,7 +14,7 @@ import { usePlatformCourses } from '@/app/components/usePlatformCourses'
 import {
   Sheet, GolfFields, golfDraftFields, EMPTY_GOLF_DRAFT, type GolfDraft,
 } from '@/app/components/ItineraryForms'
-import { FIELD_LABEL } from '@/app/components/ui'
+import { FIELD_LABEL, cardClass } from '@/app/components/ui'
 import { IconPlus } from '@/app/components/icons'
 
 /**
@@ -112,7 +112,7 @@ export default function AddRound({
       <button
         type="button"
         onClick={openSheet}
-        className="flex-shrink-0 flex items-center gap-2 pl-3.5 pr-4 py-2.5 -mr-1 rounded-2xl bg-surface border border-bark/[0.08] hover:border-accent press"
+        className={`flex-shrink-0 flex items-center gap-2 pl-3.5 pr-4 py-2.5 -mr-1 hover:border-accent ${cardClass('raised', true)}`}
       >
         <span className="text-accent-deep"><IconPlus size={16} /></span>
         <span className="t-label text-ink">Add round</span>

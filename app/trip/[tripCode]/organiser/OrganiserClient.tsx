@@ -13,6 +13,9 @@ import {
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import {
+  ChoiceChips, FIELD, FIELD_LABEL, buttonClass, cardClass, iconButtonClass,
+} from '@/app/components/ui'
+import {
   MIN_TEE_INTERVAL_MINS, MAX_TEE_INTERVAL_MINS,
   MIN_GROUP_SIZE, MAX_GROUP_SIZE,
 } from '@/lib/teeSheet'
@@ -45,11 +48,6 @@ type RoundInfo = {
   teeGroupSize: number
 }
 
-const INPUT = [
-  'w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5',
-  'text-ink placeholder:text-ink/60',
-  'focus:outline-none focus:border-accent/50 transition-colors',
-].join(' ')
 
 type Overview = {
   name: string
@@ -243,7 +241,7 @@ export default function OrganiserClient({
             before any of the levers. Counted on the server; the code is
             here because this page is what the admin email links to, and
             the code is the first thing an organiser passes on. */}
-        <section className="bg-surface border border-bark/12 rounded-2xl p-4 mb-8">
+        <section className={`${cardClass()} p-4 mb-8`}>
           <div className="flex items-baseline justify-between gap-3">
             <p className="font-[family-name:var(--font-display)] text-xl text-ink min-w-0">
               {overview.name}
@@ -270,7 +268,7 @@ export default function OrganiserClient({
                 label: overview.boardCount === 1 ? 'leaderboard' : 'leaderboards',
               },
             ].map(s => (
-              <div key={s.label} className="rounded-xl bg-bark/[0.04] px-3 py-3 text-center">
+              <div key={s.label} className="rounded-tile bg-tint px-3 py-3 text-center">
                 <p className="text-ink text-lg font-medium tabular-nums leading-none">{s.n}</p>
                 <p className="t-cap text-ink/65 mt-1.5">{s.label}</p>
               </div>
@@ -289,7 +287,7 @@ export default function OrganiserClient({
             field's screens — the organiser, holding this page, is never
             gating themselves. */}
         <section className="mb-10">
-          <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-1">Participants</h2>
+          <h2 className="t-h2 text-ink mb-1">Participants</h2>
           <p className="text-ink/65 text-[13px] mb-3 leading-snug">
             How collaborative this event is. Changes land on the field&apos;s
             phones straight away.
@@ -302,7 +300,7 @@ export default function OrganiserClient({
 
         {/* ── Post a notice ── */}
         <section>
-          <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-3">Notices</h2>
+          <h2 className="t-h2 text-ink mb-3">Notices</h2>
 
           <textarea
             value={draft}
@@ -310,14 +308,14 @@ export default function OrganiserClient({
             maxLength={MAX_NOTICE}
             rows={3}
             placeholder="Carts on the path today. Prizegiving at six…"
-            className={`${INPUT} resize-none leading-snug`}
+            className={`${FIELD} resize-none`}
           />
           <button
             onClick={postNotice}
             disabled={posting || !normalizeNotice(draft)}
-            className="w-full mt-3 py-4 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className={`${buttonClass('primary')} mt-3`}
           >
-            {posting ? 'Posting…' : 'Post Notice'}
+            {posting ? 'Posting…' : 'Post notice'}
           </button>
 
           {noticeError && (
@@ -327,13 +325,13 @@ export default function OrganiserClient({
           {notices.length > 0 && (
             <ul className="flex flex-col gap-2 mt-5">
               {notices.map(n => (
-                <li key={n.id} className="flex items-start gap-3 bg-surface border border-bark/12 rounded-xl px-4 py-3">
-                  <p className="flex-1 min-w-0 text-ink text-sm leading-relaxed whitespace-pre-line">
+                <li key={n.id} className={`flex items-start gap-3 ${cardClass()} pl-4 pr-1 py-1`}>
+                  <p className="flex-1 min-w-0 py-2.5 text-ink text-sm leading-relaxed whitespace-pre-line">
                     {n.body}
                   </p>
                   <button
                     onClick={() => removeNotice(n.id)}
-                    className="text-ink/65 hover:text-ink/80 transition-colors p-1 flex-shrink-0"
+                    className={iconButtonClass(true)}
                     aria-label="Take this notice down"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -348,7 +346,7 @@ export default function OrganiserClient({
 
         {/* ── How each round starts ── */}
         <section className="mt-10">
-          <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-1">Starts</h2>
+          <h2 className="t-h2 text-ink mb-1">Starts</h2>
           <p className="text-ink/65 text-[13px] mb-3 leading-snug">
             Shotgun sends the whole field out at once. Tee sheets — groups
             and times — are on the way; choosing one says so on the schedule.
@@ -361,32 +359,22 @@ export default function OrganiserClient({
               {rounds.map(round => {
                 const chosen = parseStartFormat(round.startFormat)
                 return (
-                  <li key={round.id} className="bg-surface border border-bark/12 rounded-2xl p-4">
+                  <li key={round.id} className={`${cardClass()} p-4`}>
                     <p className="text-ink text-sm font-medium mb-3">
                       Round {round.roundNumber}
                       {round.courseName ? ` — ${round.courseName}` : ''}
                     </p>
 
-                    <div className="flex gap-1.5">
-                      {(['shotgun', 'tee_sheet'] as const).map(f => (
-                        <button
-                          key={f}
-                          onClick={() => saveFormat(round, f)}
-                          aria-pressed={chosen === f}
-                          className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors ${
-                            chosen === f
-                              ? 'bg-accent-deep text-white'
-                              : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                          }`}
-                        >
-                          {START_FORMAT_LABEL[f]}
-                        </button>
-                      ))}
-                    </div>
+                    <ChoiceChips
+                      label={`How round ${round.roundNumber} starts`}
+                      value={chosen}
+                      onChange={f => saveFormat(round, f)}
+                      options={(['shotgun', 'tee_sheet'] as const).map(f => ({ value: f, label: START_FORMAT_LABEL[f] }))}
+                    />
 
                     {chosen === 'shotgun' && round.itineraryItemId && (
                       <div className="mt-3">
-                        <label className="block text-ink/80 text-[13px] uppercase tracking-wider mb-2">
+                        <label className={FIELD_LABEL}>
                           Shotgun time
                         </label>
                         {/* The same native-control fixes DateField carries,
@@ -395,7 +383,7 @@ export default function OrganiserClient({
                           type="time"
                           value={round.teeTime ?? ''}
                           onChange={e => saveTime(round, e.target.value)}
-                          className="block w-full min-w-0 max-w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5 text-ink text-sm focus:outline-none focus:border-accent/50 transition-colors"
+                          className={FIELD}
                           style={{
                             colorScheme: 'dark',
                             WebkitAppearance: 'none',
@@ -416,14 +404,14 @@ export default function OrganiserClient({
                       <div className="mt-3 space-y-3">
                         {round.itineraryItemId && (
                           <div>
-                            <label className="block text-ink/80 text-[13px] uppercase tracking-wider mb-2">
+                            <label className={FIELD_LABEL}>
                               First group
                             </label>
                             <input
                               type="time"
                               value={round.teeTime ?? ''}
                               onChange={e => saveTime(round, e.target.value)}
-                              className="block w-full min-w-0 max-w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5 text-ink text-sm focus:outline-none focus:border-accent/50 transition-colors"
+                              className={FIELD}
                               style={{
                                 colorScheme: 'dark',
                                 WebkitAppearance: 'none',
@@ -436,52 +424,30 @@ export default function OrganiserClient({
                         )}
 
                         <div>
-                          <label className="block text-ink/80 text-[13px] uppercase tracking-wider mb-2">
+                          <p className={FIELD_LABEL}>
                             Minutes between groups
-                          </label>
-                          <div className="flex gap-1.5">
-                            {[5, 8, 10, 12, 15, 20].map(m => (
-                              <button
-                                key={m}
-                                type="button"
-                                onClick={() => saveTeeSetting(round, { teeIntervalMins: m })}
-                                aria-pressed={round.teeIntervalMins === m}
-                                className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                                  round.teeIntervalMins === m
-                                    ? 'bg-accent-deep text-white'
-                                    : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                                }`}
-                              >
-                                {m}
-                              </button>
-                            ))}
-                          </div>
+                          </p>
+                          <ChoiceChips
+                            label="Minutes between groups"
+                            value={String(round.teeIntervalMins)}
+                            onChange={m => saveTeeSetting(round, { teeIntervalMins: Number(m) })}
+                            options={[5, 8, 10, 12, 15, 20].map(m => ({ value: String(m), label: m }))}
+                          />
                         </div>
 
                         <div>
-                          <label className="block text-ink/80 text-[13px] uppercase tracking-wider mb-2">
+                          <p className={FIELD_LABEL}>
                             Players per group
-                          </label>
-                          <div className="flex gap-1.5">
-                            {Array.from(
+                          </p>
+                          <ChoiceChips
+                            label="Players per group"
+                            value={String(round.teeGroupSize)}
+                            onChange={n => saveTeeSetting(round, { teeGroupSize: Number(n) })}
+                            options={Array.from(
                               { length: MAX_GROUP_SIZE - MIN_GROUP_SIZE + 1 },
                               (_, i) => MIN_GROUP_SIZE + i,
-                            ).map(n => (
-                              <button
-                                key={n}
-                                type="button"
-                                onClick={() => saveTeeSetting(round, { teeGroupSize: n })}
-                                aria-pressed={round.teeGroupSize === n}
-                                className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                                  round.teeGroupSize === n
-                                    ? 'bg-accent-deep text-white'
-                                    : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                                }`}
-                              >
-                                {n}
-                              </button>
-                            ))}
-                          </div>
+                            ).map(n => ({ value: String(n), label: n }))}
+                          />
                         </div>
 
                         <Link
@@ -509,10 +475,10 @@ export default function OrganiserClient({
             day stay the tee sheet's business; the tag is the census, and
             the census lives with the organiser. */}
         <section className="mt-10">
-          <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-3">Teams &amp; tags</h2>
+          <h2 className="t-h2 text-ink mb-3">Teams &amp; tags</h2>
           <Link
             href={`/trip/${tripCode}/organiser/tags`}
-            className="block bg-surface border border-bark/12 rounded-2xl p-4 press hover:border-bark/25"
+            className={`block ${cardClass('raised', true)} p-4`}
           >
             <p className="text-ink text-sm font-medium">Tags</p>
             <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
@@ -527,10 +493,10 @@ export default function OrganiserClient({
             than one day to tell apart. */}
         {rounds.length > 1 && (
           <section className="mt-10">
-            <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-3">Formats by day</h2>
+            <h2 className="t-h2 text-ink mb-3">Formats by day</h2>
             <Link
               href={`/trip/${tripCode}/organiser/days`}
-              className="block bg-surface border border-bark/12 rounded-2xl p-4 press hover:border-bark/25"
+              className={`block ${cardClass('raised', true)} p-4`}
             >
               <p className="text-ink text-sm font-medium">Each day&apos;s own format</p>
               <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
@@ -550,10 +516,10 @@ export default function OrganiserClient({
             could overwrite the league with a bracket. The PIN that opened
             this screen has already opened that one. */}
         <section className="mt-10">
-          <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-3">Format</h2>
+          <h2 className="t-h2 text-ink mb-3">Format</h2>
           <Link
             href={`/trip/${tripCode}/organiser/bracket`}
-            className="block bg-surface border border-bark/12 rounded-2xl p-4 press hover:border-bark/25"
+            className={`block ${cardClass('raised', true)} p-4`}
           >
             <p className="text-ink text-sm font-medium">
               {isLeague ? 'League' : 'Bracket setup'}
@@ -572,10 +538,10 @@ export default function OrganiserClient({
             that opened this screen has already opened that one: both gates
             remember the same unlock for the session. */}
         <section className="mt-10">
-          <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-3">Event settings</h2>
+          <h2 className="t-h2 text-ink mb-3">Event settings</h2>
           <Link
             href={`/trip/${tripCode}/setup`}
-            className="block bg-surface border border-bark/12 rounded-2xl p-4 press hover:border-bark/25"
+            className={`block ${cardClass('raised', true)} p-4`}
           >
             <p className="text-ink text-sm font-medium">Formats, players &amp; teams</p>
             <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">

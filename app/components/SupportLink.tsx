@@ -1,4 +1,5 @@
 import { donationUrl } from '@/lib/donation'
+import { cardClass } from './ui'
 
 /**
  * A quiet invitation to chip in, for the bottom of a page.
@@ -29,7 +30,7 @@ export default function SupportLink({ className = '' }: { className?: string }) 
         // noopener stops the payment page reaching back into this one;
         // noreferrer keeps our URL out of its logs.
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 h-11 px-4 rounded-xl border border-bark/12 bg-surface text-ink/80 text-[13px] tracking-[0.18em] uppercase hover:text-ink hover:border-accent/40 hover:bg-accent/[0.06] transition-colors"
+        className={`inline-flex items-center gap-2 h-11 px-4 text-ink/80 text-[13px] tracking-[0.18em] uppercase hover:text-ink hover:border-accent/40 hover:bg-accent/[0.06] transition-colors ${cardClass()}`}
       >
         Let&apos;s get those green dots
         <span aria-hidden="true">🟢</span>

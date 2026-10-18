@@ -23,7 +23,7 @@ import {
   PAIR_SIZE,
 } from '@/lib/teamLimits'
 import { anyPointsOutOfStep, TEAM_POINTS_MISMATCH } from '@/lib/customPoints'
-import { Card, Pill, buttonClass } from '@/app/components/ui'
+import { Card, FIELD, FIELD_LABEL, Pill, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import { IconCheck, IconChevronDown, IconUsers } from '@/app/components/icons'
 
 /**
@@ -86,7 +86,7 @@ function PlayerTile({
   // default. Team selection just moves people about.
   return (
     <div
-      className={`border border-bark/12 rounded-lg px-3 py-2.5 flex items-center justify-between gap-2 bg-surface transition-opacity ${
+      className={`px-3 py-2.5 flex items-center justify-between gap-2 transition-opacity ${cardClass()} ${
         faded ? 'opacity-25' : 'opacity-100'
       }`}
     >
@@ -236,7 +236,7 @@ function TeamColumn({
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Find a player…"
                 autoFocus
-                className="flex-1 min-w-0 bg-surface border border-bark/12 rounded-lg px-2.5 py-1.5 text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/50 transition-colors"
+                className={`${FIELD} field-dense flex-1 min-w-0`}
               />
               <button
                 type="button"
@@ -294,7 +294,7 @@ function UnassignedZone({ players }: { players: Placed[] }) {
       }`}
     >
       <div className="px-4 py-3 border-b border-bark/12 flex items-center justify-between">
-        <span className="text-ink/65 text-[13px] tracking-[0.2em] uppercase">Unassigned</span>
+        <span className="t-label text-ink/65">Unassigned</span>
         <span className="text-ink/50 text-[13px] tabular-nums">{players.length}</span>
       </div>
       <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 min-h-[72px]">
@@ -815,7 +815,7 @@ export default function TripTeamsClient({
 
         {error && (
           <div
-            className="fixed left-1/2 -translate-x-1/2 max-w-[92vw] px-5 py-3 bg-surface border border-rust/40 rounded-xl shadow-xl z-50"
+            className={`fixed left-1/2 -translate-x-1/2 max-w-[92vw] px-5 py-3 border-rust/40 shadow-xl z-50 ${cardClass()}`}
             style={{ bottom: ABOVE_TABBAR }}
           >
             <p className="text-rust-deep text-sm">{error}</p>
@@ -834,7 +834,7 @@ export default function TripTeamsClient({
           <button
             type="button"
             onClick={() => { setSheet(null); setSelected([]) }}
-            className="t-cap uppercase tracking-[0.12em] text-accent-deep"
+            className="t-label text-accent-deep"
           >
             ‹ All leaderboards
           </button>
@@ -876,7 +876,7 @@ export default function TripTeamsClient({
 
         {/* Team count */}
         <div>
-          <label className="block text-ink/80 text-[13px] uppercase tracking-wider mb-2">
+          <label className={FIELD_LABEL}>
             Number of {noun.many}
           </label>
           <div className="flex gap-2 flex-wrap">
@@ -885,11 +885,7 @@ export default function TripTeamsClient({
                 key={n}
                 onClick={() => setTeamCount(n)}
                 disabled={busy}
-                className={`flex-1 min-w-[48px] py-3 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
-                  sheetTeams.length === n
-                    ? 'bg-accent-deep text-white'
-                    : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                }`}
+                className={`${chipClass(sheetTeams.length === n)} flex-1 min-w-[48px]`}
               >
                 {n}
               </button>
@@ -958,7 +954,7 @@ export default function TripTeamsClient({
 
       {error && (
         <div
-          className="fixed left-1/2 -translate-x-1/2 max-w-[92vw] px-5 py-3 bg-surface border border-rust/40 rounded-xl shadow-xl z-50"
+          className={`fixed left-1/2 -translate-x-1/2 max-w-[92vw] px-5 py-3 border-rust/40 shadow-xl z-50 ${cardClass()}`}
           style={{ bottom: ABOVE_TABBAR }}
         >
           <p className="text-rust-deep text-sm">{error}</p>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { verifyPasscode, rememberUnlock, MAX_PASSCODE } from '@/lib/passcode'
+import { FIELD } from './ui'
 
 /**
  * The organiser PIN, asked in place rather than as a wall.
@@ -67,7 +68,7 @@ export default function InlineUnlock({
         onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
         placeholder="PIN"
         maxLength={MAX_PASSCODE}
-        className="flex-1 min-w-0 bg-surface border border-bark/12 rounded-lg px-3 py-2 text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/50 transition-colors"
+        className={`${FIELD} field-dense flex-1 min-w-0`}
       />
       <button
         type="submit"

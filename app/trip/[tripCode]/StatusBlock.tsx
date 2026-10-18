@@ -11,6 +11,7 @@ import {
 import { useMinute } from '@/app/components/useMinute'
 import CourseWeather from '@/app/components/CourseWeather'
 import { IconArrowRight, IconFlag, IconHome, IconCar, IconPlane, IconTrain, IconFork, IconUsers } from '@/app/components/icons'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * The top of the trip hub: what this device is, and what happens next.
@@ -110,7 +111,7 @@ export default function StatusBlock({
     : ''
 
   return (
-    <div className="w-full rounded-2xl border border-bark/12 bg-surface px-4 py-4">
+    <div className={`w-full px-4 py-4 ${cardClass()}`}>
 
       {/* ── Greeting. One line, and the way out of it. ── */}
       <div className="flex items-baseline justify-between gap-3">
@@ -179,7 +180,7 @@ export default function StatusBlock({
         <div className="mt-3.5 pt-3.5 border-t border-bark/[0.08] flex flex-col gap-1">
           {player.placing && (
             <p className="t-cap text-ink/80">
-              <span className="text-ink/50 uppercase tracking-[0.12em]">Standing </span>
+              <span className="text-ink/65">Standing </span>
               <span className="font-serif t-num text-accent-deep">{player.placing}</span>
             </p>
           )}
@@ -211,7 +212,7 @@ function UpNextLines({
       </span>
 
       <div className="flex-1 min-w-0">
-        <p className="t-cap uppercase tracking-[0.12em] text-ink/50">Up next</p>
+        <p className="t-cap text-ink/65">Up next</p>
         {/* The headline of the whole hub, set like one. It was `t-card` with
             a truncate — the same weight as a tile in a list, and a course
             name cut off with an ellipsis on the card whose job is to say
@@ -266,7 +267,7 @@ function TripOver() {
         <IconFlag size={16} />
       </span>
       <div className="min-w-0">
-        <p className="t-cap uppercase tracking-[0.12em] text-ink/50">That&apos;s the trip</p>
+        <p className="t-cap text-ink/65">That&apos;s the trip</p>
         <p className="t-cap text-ink/65 mt-0.5">Every round is in. The leaderboard is final.</p>
       </div>
     </div>
@@ -302,7 +303,7 @@ function ClaimSpot({ tripCode }: { tripCode: string }) {
     <div>
       <Link
         href={`/trip/${tripCode}/players`}
-        className="flex items-center gap-3 w-full rounded-2xl border border-bark/12 bg-surface px-4 py-4 press"
+        className={`flex items-center gap-3 w-full px-4 py-4 ${cardClass('raised', true)}`}
       >
         <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent/[0.12] text-accent-deep flex items-center justify-center">
           <IconUsers size={16} />

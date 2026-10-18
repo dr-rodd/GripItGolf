@@ -14,6 +14,7 @@ import {
   bracketRoundNames, describeSize, deadlinesIssue,
   normalizeEventCode, validEventCode, roundsFor,
 } from '@/lib/bracketSetup'
+import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 
 /**
  * The bracket setup form — seven answers, one screen each, saved whole.
@@ -28,14 +29,6 @@ import {
  * write — the PIN in front of this screen is a soft gate, not a security
  * boundary (lib/passcode.ts), and every query filters by trip.
  */
-
-const INPUT = [
-  'w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5',
-  'text-ink placeholder:text-ink/60',
-  'focus:outline-none focus:border-accent/50 transition-colors',
-].join(' ')
-
-const LABEL = 'block text-ink/80 text-[13px] uppercase tracking-wider mb-2'
 
 const STEP_LABELS = [
   'Format', 'Mode', 'Bracket size', 'Player entry',
@@ -55,11 +48,7 @@ function Chips<K extends string>({ options, chosen, onChoose }: {
           key={o.key}
           onClick={() => onChoose(o.key)}
           aria-pressed={chosen === o.key}
-          className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors ${
-            chosen === o.key
-              ? 'bg-accent-deep text-white'
-              : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-          }`}
+          className={`${chipClass(chosen === o.key)} flex-1`}
         >
           {o.label}
         </button>
@@ -73,7 +62,7 @@ function SetupSummary({ setup }: { setup: BracketSetup }) {
   const names = bracketRoundNames(setup.size)
   const row = 'flex items-baseline justify-between gap-4 py-2.5 border-b border-bark/12 last:border-b-0'
   return (
-    <div className="bg-surface border border-bark/12 rounded-2xl px-4 py-1.5">
+    <div className={`px-4 py-1.5 ${cardClass()}`}>
       <div className={row}>
         <span className="text-ink/65 text-[13px]">Format</span>
         <span className="text-ink text-sm text-right">Match play knockout</span>
@@ -328,7 +317,7 @@ export default function BracketSetupForm({
           <div>
             {stepNum > 1 && <BackButton onClick={goBack} />}
           </div>
-          <p className="text-center text-ink/65 text-[13px] tracking-wider uppercase">
+          <p className="text-center t-label text-ink/65">
             Step {stepNum} of 7 — {STEP_LABELS[stepNum - 1]}
           </p>
         </div>
@@ -353,7 +342,7 @@ export default function BracketSetupForm({
               </p>
             )}
             {format === 'league' && (
-              <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
+              <div className={`px-4 py-3.5 ${cardClass()}`}>
                 <p className="text-ink text-sm font-medium">A league is its own event.</p>
                 <p className="text-ink/65 text-[13px] mt-1 leading-snug">
                   Leagues are created whole — venues, dates and field in one
@@ -393,11 +382,7 @@ export default function BracketSetupForm({
                   key={s}
                   onClick={() => chooseSize(s)}
                   aria-pressed={size === s}
-                  className={`py-4 rounded-xl text-sm font-medium transition-colors ${
-                    size === s
-                      ? 'bg-accent-deep text-white'
-                      : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                  }`}
+                  className={`${chipClass(size === s)}`}
                 >
                   {s} players
                 </button>
@@ -439,7 +424,7 @@ export default function BracketSetupForm({
         {/* ── 5 · Qualifying ── */}
         {step === 5 && (
           <div className="space-y-4">
-            <div className="flex items-start justify-between gap-4 bg-surface border border-bark/12 rounded-2xl p-4">
+            <div className={`flex items-start justify-between gap-4 p-4 ${cardClass()}`}>
               <div className="min-w-0">
                 <p className="text-ink text-sm font-medium">Qualifying event</p>
                 <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
@@ -457,7 +442,7 @@ export default function BracketSetupForm({
             {qualifyingOn && (
               <>
                 <div>
-                  <label className={LABEL} htmlFor="qual-code">Qualifying event code</label>
+                  <label className={FIELD_LABEL} htmlFor="qual-code">Qualifying event code</label>
                   <input
                     id="qual-code"
                     type="text"
@@ -468,7 +453,7 @@ export default function BracketSetupForm({
                     autoCapitalize="characters"
                     autoCorrect="off"
                     spellCheck={false}
-                    className={`${INPUT} tracking-[0.3em] uppercase`}
+                    className={`${FIELD} tracking-[0.3em] uppercase`}
                   />
                   <p className="text-ink/65 text-[13px] mt-2 leading-snug">
                     The six-character code of the event whose standings decide
@@ -477,7 +462,7 @@ export default function BracketSetupForm({
                 </div>
 
                 <div>
-                  <label className={LABEL}>How the qualifiers are drawn</label>
+                  <label className={FIELD_LABEL}>How the qualifiers are drawn</label>
                   <Chips options={SEEDINGS} chosen={seeding} onChoose={setSeeding} />
                   {seeding && (
                     <p className="text-ink/65 text-[13px] mt-2 leading-snug">
@@ -555,7 +540,7 @@ export default function BracketSetupForm({
           <button
             onClick={goNext}
             disabled={!canProceed}
-            className="w-full py-5 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className={buttonClass('primary')}
           >
             {saving ? 'Saving…' : stepNum === 7
               ? (finalizeNow ? 'Save & Finalise' : 'Save Setup')

@@ -14,6 +14,7 @@ import { standingsOf } from './standings'
 import { TeamsList, RulesSummary, SectionTitle, ChallengeNotFound } from './RunPieces'
 import RunShare from './RunShare'
 import LegalLinks from '@/app/components/LegalLinks'
+import { buttonClass, cardClass } from '@/app/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,7 +72,7 @@ export default async function RunHubPage({ params }: {
       <div className="max-w-lg mx-auto px-4 pt-8 pb-16 page-enter space-y-8">
 
         <div>
-          <p className="t-cap uppercase tracking-[0.12em] text-accent-deep mb-1.5">Green Dot Run</p>
+          <p className="t-label text-accent-deep mb-1.5">Green Dot Run</p>
           <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink leading-tight">
             {challenge.name}
           </h1>
@@ -88,7 +89,7 @@ export default async function RunHubPage({ params }: {
 
         {/* Who this phone is — or the way in. */}
         {viewer ? (
-          <div className="bg-surface border border-bark/12 rounded-2xl p-5">
+          <div className={`p-5 ${cardClass()}`}>
             <p className="text-ink text-base font-medium">You&apos;re in, {viewer.name}.</p>
             <p className="text-ink/80 text-sm mt-1 flex items-center gap-2">
               {viewerTeam ? (
@@ -122,7 +123,7 @@ export default async function RunHubPage({ params }: {
         ) : !finished ? (
           <Link
             href={`/run/${challenge.code}/join`}
-            className="block w-full py-4 bg-accent-deep text-white text-center text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors"
+            className={buttonClass('primary')}
           >
             Join the challenge
           </Link>
@@ -132,7 +133,7 @@ export default async function RunHubPage({ params }: {
         {final && final.teams.length > 0 && (
           <section>
             <SectionTitle>Final standings</SectionTitle>
-            <div className="bg-surface border border-bark/12 rounded-2xl p-4 space-y-3">
+            <div className={`p-4 space-y-3 ${cardClass()}`}>
               {final.teams.map((t, i) => (
                 <div key={`${t.name}-${i}`} className="font-serif flex items-center gap-3">
                   <span className="text-[15px] leading-[1.45] text-ink/65 tabular-nums w-6">{t.place}</span>
@@ -161,7 +162,7 @@ export default async function RunHubPage({ params }: {
         {!final && standings && anyRuns && (
           <section>
             <SectionTitle>Leading</SectionTitle>
-            <div className="bg-surface border border-bark/12 rounded-2xl p-4 space-y-3">
+            <div className={`p-4 space-y-3 ${cardClass()}`}>
               {standings.individuals.slice(0, 3).filter(l => l.points > 0).map(l => (
                 <div key={l.playerId} className="font-serif flex items-center gap-3">
                   <span className="text-[15px] leading-[1.45] text-ink/65 tabular-nums w-6">{l.place}</span>

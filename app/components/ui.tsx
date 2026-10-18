@@ -265,10 +265,59 @@ export function IconButton({
  * words; not chosen is a raised white chip.
  */
 export const chipClass = (selected: boolean) =>
-  'inline-flex items-center justify-center gap-1.5 min-h-11 px-4 rounded-full t-label press whitespace-nowrap ' +
+  'inline-flex items-center justify-center gap-1.5 min-h-11 px-4 rounded-full t-label tabular-nums press whitespace-nowrap ' +
+  'disabled:bg-disabled-bg disabled:text-disabled-fg disabled:border-transparent disabled:shadow-none disabled:cursor-not-allowed ' +
   (selected
     ? 'bg-accent-deep text-white border border-accent-deep'
     : 'bg-surface text-ink border border-line shadow-raised hover:border-line-strong')
+
+/**
+ * A choice that needs more than a word — a label and a line under it. A
+ * raised card; chosen, it takes the emerald wash with a deep-emerald edge.
+ * On a real button, so it presses.
+ */
+export const optionClass = (selected: boolean) =>
+  'block w-full text-left rounded-card px-4 py-3.5 press border ' +
+  (selected
+    ? 'bg-accent-tint border-accent-deep'
+    : 'bg-surface border-line shadow-raised hover:border-line-strong')
+
+/**
+ * A row of chips answering one question — a form's either/or, a setting's
+ * value. The answer given is the deep emerald. Equal widths by default, so
+ * two or three answers read as a choice between equals; a long list wraps.
+ *
+ * Chips answer; `Segmented` switches what a screen shows. The difference
+ * is what the emerald means: an answer you gave, not a view you are on.
+ */
+export function ChoiceChips<T extends string>({
+  options, value, onChange, label, equal = true, className = '',
+}: {
+  options: readonly { value: T; label: React.ReactNode }[]
+  /** Null when the question has not been answered yet. */
+  value: T | null
+  onChange: (next: T) => void
+  /** The question, read out. */
+  label: string
+  equal?: boolean
+  className?: string
+}) {
+  return (
+    <div role="group" aria-label={label} className={`flex gap-2 ${equal ? '' : 'flex-wrap'} ${className}`.trim()}>
+      {options.map(o => (
+        <button
+          key={o.value}
+          type="button"
+          aria-pressed={o.value === value}
+          onClick={() => onChange(o.value)}
+          className={`${chipClass(o.value === value)} ${equal ? 'flex-1 min-w-0 px-2' : ''}`.trim()}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 /**
  * A segmented control: two to a handful of answers on a tinted track, the
@@ -281,7 +330,8 @@ export function Segmented<T extends string>({
   options, value, onChange, label, className = '',
 }: {
   options: readonly { value: T; label: React.ReactNode }[]
-  value: T
+  /** Null when nothing has been chosen yet — every answer sits in the track. */
+  value: T | null
   onChange: (next: T) => void
   /** What is being chosen, read out. */
   label: string
@@ -384,6 +434,18 @@ export function EmptyState({
     </div>
   )
 }
+
+// ─── The code ──────────────────────────────────────────────────
+
+/**
+ * One character of an event's code, shown big — the confirmation screens
+ * and the share card. Archivo 600 in ink, not emerald: the code is read
+ * and copied, not pressed. Laid out as characters with a gap rather than
+ * letter-spacing, which adds space after the last character too and
+ * pushed the code off the right edge of its box. The code and the field
+ * it is typed into are the one place capitals are spaced.
+ */
+export const CODE_CHAR = 'font-semibold text-[clamp(2rem,11vw,2.5rem)] leading-none text-ink tabular-nums'
 
 // ─── Form furniture ────────────────────────────────────────────
 

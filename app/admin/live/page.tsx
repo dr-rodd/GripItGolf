@@ -4,7 +4,7 @@ import {
   summariseCards, orderCards, type CardSummary,
 } from '@/lib/adminLive'
 import type { CardLock, LiveCard, ScoreActivity } from '@/lib/staleLive'
-import { Pill } from '@/app/components/ui'
+import { Pill, cardClass } from '@/app/components/ui'
 import { requireAdmin } from '../adminGate'
 import AdminLogin from '../AdminLogin'
 import AdminShell from '../AdminShell'
@@ -170,7 +170,7 @@ export default async function AdminLivePage() {
               .map(id => playerName.get(id) ?? 'Unknown')
               .sort((a, b) => a.localeCompare(b))
             return (
-              <div key={s.id} className="bg-surface border border-bark/12 rounded-2xl px-4 py-4">
+              <div key={s.id} className={`px-4 py-4 ${cardClass()}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-[family-name:var(--font-display)] text-base leading-tight">

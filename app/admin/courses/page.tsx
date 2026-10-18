@@ -4,7 +4,7 @@ import {
   countyOf, filterCourses, type DirectoryCourse,
 } from '@/lib/courseDirectory'
 import { cardState, CARD_STATE_LABEL, CARD_STATE_TONE, type CardState } from '@/lib/courseCard'
-import { Pill } from '@/app/components/ui'
+import { FIELD, Pill, cardClass } from '@/app/components/ui'
 import { requireAdmin } from '../adminGate'
 import AdminLogin from '../AdminLogin'
 import AdminShell from '../AdminShell'
@@ -118,7 +118,7 @@ export default async function AdminCoursesPage({
           name="q"
           defaultValue={q}
           placeholder="Search by name or county"
-          className="w-full sm:max-w-sm bg-surface border border-bark/25 rounded-xl px-4 py-3 text-ink placeholder:text-ink/65 focus:outline-none focus:border-accent transition-colors"
+          className={`${FIELD} sm:max-w-sm`}
         />
       </form>
 
@@ -168,7 +168,7 @@ export default async function AdminCoursesPage({
               <li key={c.id}>
                 <Link
                   href={`/admin/courses/${c.id}`}
-                  className="block bg-surface border border-bark/12 rounded-2xl px-4 py-3.5 hover:border-bark/25 transition-colors"
+                  className={`block px-4 py-3.5 hover:border-bark/25 transition-colors ${cardClass()}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">

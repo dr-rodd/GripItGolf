@@ -10,6 +10,7 @@ import { needsPairings, type Leaderboard } from '@/lib/leaderboards'
 import { MAIN_SET, setOf } from '@/lib/teamSets'
 import { pairsBlockedReason, teamNoun } from '@/lib/teamLimits'
 import type { MemberLike, TeamLike } from '@/lib/teamLimits'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * Settings for the matchplay format. Appears when the trip runs a knockout;
@@ -72,7 +73,7 @@ export default function MatchplayPanel({
     }
   }
 
-  const SECTION = 'bg-surface border border-bark/12 rounded-2xl p-5'
+  const SECTION = `${cardClass()} p-5`
 
   if (loading) {
     return (
@@ -98,7 +99,7 @@ export default function MatchplayPanel({
   return (
     <section className={SECTION}>
       <div className="flex items-center justify-between mb-1">
-        <p className="text-ink/65 text-[13px] tracking-widest uppercase">
+        <p className="t-eyebrow text-ink/65">
           {pairs ? 'Pairs Matchplay' : 'Matchplay'}
         </p>
         {exists && (
@@ -114,7 +115,7 @@ export default function MatchplayPanel({
       </p>
 
       {/* Current state */}
-      <div className="px-4 py-3 bg-surface border border-bark/12 rounded-xl mb-4">
+      <div className={`px-4 py-3 mb-4 ${cardClass()}`}>
         {exists ? (
           <>
             <p className="text-ink text-sm">

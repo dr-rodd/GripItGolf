@@ -123,7 +123,7 @@ export default async function TripCoursePortalPage({
 
       <div className="max-w-lg mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-4">
-          <p className="text-ink/65 text-[13px] tracking-[0.2em] uppercase">
+          <p className="t-label text-ink/65">
             Choose a round
           </p>
           {/* The door for the impromptu game — the same golf form the

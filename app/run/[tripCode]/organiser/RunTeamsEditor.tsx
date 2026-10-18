@@ -11,6 +11,7 @@ import {
   runnerNameIssue, teamNameIssue, nextTeamColor, canRemoveTeam,
 } from '@/lib/runChallenge'
 import type { RunTeam, RunMember } from '../data'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * The organiser's teams: everything about who runs for whom, behind the PIN.
@@ -252,7 +253,7 @@ export default function RunTeamsEditor({ tripId, teams, unassigned }: {
         const renaming = open === `team:${team.id}`
         const adding = open === `add:${team.id}`
         return (
-          <div key={team.id} className="bg-surface border border-bark/12 rounded-2xl p-4">
+          <div key={team.id} className={`p-4 ${cardClass()}`}>
             {/* The team itself */}
             {renaming ? (
               <div>
@@ -344,7 +345,7 @@ export default function RunTeamsEditor({ tripId, teams, unassigned }: {
       {/* Nobody should be here — joining needs a team — but a failed write
           could leave somebody, and they are shown rather than vanishing. */}
       {unassigned.length > 0 && (
-        <div className="bg-surface border border-rust/30 rounded-2xl p-4">
+        <div className={`border-rust/30 p-4 ${cardClass()}`}>
           <p className="text-rust-deep text-sm font-medium">No team yet</p>
           <ul className="mt-2">
             {unassigned.map(m => runnerRow(m, null))}
@@ -354,7 +355,7 @@ export default function RunTeamsEditor({ tripId, teams, unassigned }: {
 
       {/* A new team */}
       {open === 'new-team' ? (
-        <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+        <div className={`p-4 ${cardClass()}`}>
           <div className="flex gap-2">
             <input
               type="text"

@@ -7,6 +7,7 @@ import BackButton from '@/app/components/BackButton'
 import TripHeader from '@/app/components/TripHeader'
 import PasscodeGate from '../../setup/PasscodeGate'
 import BracketSetupForm from './BracketSetupForm'
+import { cardClass } from '@/app/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -107,7 +108,7 @@ export default async function BracketSetupPage({ params }: {
           <p className="text-ink/65 text-sm mb-6">
             {describeLeagueSetup(leagueSetup, count || 1)}
           </p>
-          <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+          <div className={`p-4 ${cardClass()}`}>
             <p className="text-ink/65 text-[13px] leading-snug">
               This event was created as a league — its days, venues and
               field were set then, and its rounds are on the schedule.

@@ -2,7 +2,7 @@
 
 import { useActionState, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { FIELD, FIELD_LABEL, buttonClass, Pill } from '@/app/components/ui'
+import { FIELD, FIELD_LABEL, Pill, buttonClass, cardClass } from '@/app/components/ui'
 import { IRISH_COUNTIES, emptyTeeDraft } from '@/lib/courseDirectory'
 import {
   cardState, CARD_STATE_LABEL, CARD_STATE_TONE, type CardState,
@@ -77,7 +77,7 @@ function IdentityForm({ course }: { course: { id: string; name: string; county: 
   )
 
   return (
-    <section className="bg-surface border border-bark/12 rounded-2xl px-4 py-4">
+    <section className={`px-4 py-4 ${cardClass()}`}>
       <h2 className="font-[family-name:var(--font-display)] text-base mb-3">Course</h2>
       <form action={formAction} className="flex flex-col gap-4">
         <div>
@@ -117,34 +117,33 @@ function IdentityForm({ course }: { course: { id: string; name: string; county: 
 
 // ─── Tees ──────────────────────────────────────────────────────
 
-const TEE_FIELD =
-  'w-full bg-surface border border-bark/25 rounded-lg px-2.5 py-2 text-sm ' +
+const TEE_FIELD = `${cardClass()} w-full px-2.5 py-2 text-sm` +
   'text-ink focus:outline-none focus:border-accent transition-colors'
 
 function TeeFields({ draft }: { draft: { name: string; gender: string; par: string; courseRating: string; slope: string } }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
       <div>
-        <label className="block text-[13px] uppercase tracking-[0.12em] text-ink/65 mb-1">Tee</label>
+        <label className="block t-label text-ink/80 mb-1">Tee</label>
         <input name="name" defaultValue={draft.name} placeholder="White" className={TEE_FIELD} />
       </div>
       <div>
-        <label className="block text-[13px] uppercase tracking-[0.12em] text-ink/65 mb-1">Card</label>
+        <label className="block t-label text-ink/80 mb-1">Card</label>
         <select name="gender" defaultValue={draft.gender} className={TEE_FIELD}>
           <option value="M">Men&rsquo;s</option>
           <option value="F">Ladies</option>
         </select>
       </div>
       <div>
-        <label className="block text-[13px] uppercase tracking-[0.12em] text-ink/65 mb-1">Par</label>
+        <label className="block t-label text-ink/80 mb-1">Par</label>
         <input name="par" defaultValue={draft.par} inputMode="numeric" placeholder="72" className={TEE_FIELD} />
       </div>
       <div>
-        <label className="block text-[13px] uppercase tracking-[0.12em] text-ink/65 mb-1">Rating</label>
+        <label className="block t-label text-ink/80 mb-1">Rating</label>
         <input name="courseRating" defaultValue={draft.courseRating} inputMode="decimal" placeholder="71.4" className={TEE_FIELD} />
       </div>
       <div>
-        <label className="block text-[13px] uppercase tracking-[0.12em] text-ink/65 mb-1">Slope</label>
+        <label className="block t-label text-ink/80 mb-1">Slope</label>
         <input name="slope" defaultValue={draft.slope} inputMode="numeric" placeholder="127" className={TEE_FIELD} />
       </div>
     </div>
@@ -192,7 +191,7 @@ function AddTeeForm({ courseId }: { courseId: string }) {
 
 function TeesSection({ courseId, tees }: { courseId: string; tees: Tee[] }) {
   return (
-    <section className="bg-surface border border-bark/12 rounded-2xl px-4 py-4">
+    <section className={`px-4 py-4 ${cardClass()}`}>
       <h2 className="font-[family-name:var(--font-display)] text-base mb-1">Tees</h2>
       <p className="text-ink/65 text-[13px] mb-3 leading-snug">
         Slope and rating come off the club&rsquo;s card. The same ranges the
@@ -251,7 +250,7 @@ function VerifiedToggle({ courseId, state }: { courseId: string; state: CardStat
           + 'photo creates the card and opens it.'
 
   return (
-    <section className="bg-surface border border-bark/12 rounded-2xl px-4 py-4">
+    <section className={`px-4 py-4 ${cardClass()}`}>
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <Pill tone={CARD_STATE_TONE[state]}>{CARD_STATE_LABEL[state]}</Pill>

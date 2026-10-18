@@ -22,7 +22,7 @@ export default async function RunStatsPage({ params }: {
     <main className="min-h-dvh paper has-tabbar">
       <TripHeader backTo={`/run/${challenge.code}`} title="statsHub" />
       <div className="max-w-lg mx-auto px-4 pt-10 pb-16 page-enter text-center">
-        <p className="t-cap uppercase tracking-[0.12em] text-ink/65 mb-3">Coming soon</p>
+        <p className="t-label text-ink/80 mb-3">Coming soon</p>
         <p className="font-[family-name:var(--font-display)] text-2xl text-ink mb-2">
           Your running, in numbers
         </p>

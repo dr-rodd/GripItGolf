@@ -38,6 +38,7 @@ import { duplicateName, duplicateNameError, isDuplicateNameError } from '@/lib/r
 import { syncRoundHandicaps } from '@/lib/roundHandicaps'
 import { rescheduleRounds } from '@/lib/itineraryStore'
 import { normalizeDescription, MAX_TRIP_DESCRIPTION } from '@/lib/tripLimits'
+import { FIELD, FIELD_LABEL, cardClass, chipClass } from '@/app/components/ui'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -82,16 +83,7 @@ type RoundInfo = {
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-const INPUT = [
-  'w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5',
-  'text-ink placeholder:text-ink/60',
-  'focus:outline-none focus:border-accent/50 transition-colors',
-  'disabled:opacity-40 disabled:cursor-not-allowed',
-].join(' ')
-
-const LABEL = 'block text-ink/80 text-[13px] uppercase tracking-wider mb-2'
-
-const SECTION = 'bg-surface border border-bark/12 rounded-2xl p-5'
+const SECTION = `${cardClass()} p-5`
 
 /**
  * Which team a player is in, on one sheet.
@@ -122,7 +114,7 @@ function TeamSelect({
         disabled={disabled}
         aria-label={label ?? `Which ${noun.one}`}
         className={wide
-          ? `${INPUT} appearance-none pr-10`
+          ? `${FIELD} appearance-none pr-10`
           : 'w-full bg-surface border border-bark/12 rounded-lg px-3 py-2.5 text-ink text-sm appearance-none focus:outline-none focus:border-accent/50 disabled:opacity-40'}
       >
         <option value="" className="bg-cream">No {noun.one}</option>
@@ -554,7 +546,7 @@ export default function TripSetupClient({
         <button
           type="button"
           onClick={() => setDetailsOpen(true)}
-          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-bark/12 bg-surface hover:border-bark/25 transition-colors duration-150 text-left"
+          className={`w-full flex items-center gap-3 px-4 py-3.5 hover:border-bark/25 transition-colors duration-150 text-left ${cardClass()}`}
         >
           <span className="flex-shrink-0 w-9 h-9 rounded-lg bg-bark/[0.06] flex items-center justify-center text-bark">
             <IconSettings size={16} />
@@ -597,14 +589,14 @@ export default function TripSetupClient({
 
             <div className="px-4 py-5 space-y-4">
               <div>
-                <label className={LABEL}>Trip name</label>
+                <label className={FIELD_LABEL}>Trip name</label>
                 <input
                   type="text"
                   value={name}
                   onChange={e => setName(e.target.value)}
                   onBlur={saveName}
                   disabled={locked}
-                  className={INPUT}
+                  className={FIELD}
                 />
               </div>
               <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
@@ -614,7 +606,7 @@ export default function TripSetupClient({
                   onChange={v => saveDates(startDate, v)} disabled={locked} />
               </div>
               <div>
-                <label className={LABEL}>About the trip</label>
+                <label className={FIELD_LABEL}>About the trip</label>
                 <textarea
                   value={description}
                   onChange={e => setDescription(e.target.value)}
@@ -623,7 +615,7 @@ export default function TripSetupClient({
                   rows={3}
                   disabled={locked}
                   placeholder="The stakes, the plan, the rules of engagement…"
-                  className={`${INPUT} resize-none leading-snug`}
+                  className={`${FIELD} resize-none leading-snug`}
                 />
                 <p className="t-cap text-ink/65 mt-1.5 leading-snug">
                   Shows on the trip hub, under the countdown. Clear it to
@@ -656,7 +648,7 @@ export default function TripSetupClient({
                   makes it the same kind of question as what the trip is
                   called and when it runs. */}
               <div className="pt-4 border-t border-bark/12">
-                <label className={LABEL}>Who can edit</label>
+                <label className={FIELD_LABEL}>Who can edit</label>
                 <p className="t-cap text-ink/65 mb-3 leading-snug">
                   Who can change this trip&apos;s players, teams, format and dates.
                 </p>
@@ -676,11 +668,7 @@ export default function TripSetupClient({
                         key={o.value}
                         onClick={() => savePermission(o.value)}
                         disabled={locked || wouldLockMeOut}
-                        className={`flex-1 py-3.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                          editPermission === o.value
-                            ? 'bg-accent-deep text-white'
-                            : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                        }`}
+                        className={`${chipClass(editPermission === o.value)} flex-1`}
                       >
                         {o.label}
                       </button>
@@ -718,7 +706,7 @@ export default function TripSetupClient({
               <div className="pt-4 border-t border-bark/12">
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
-                    <label className={LABEL}>Track stats</label>
+                    <label className={FIELD_LABEL}>Track stats</label>
                     <p className="t-cap text-ink/65 leading-snug">
                       Ask for putts and where the tee shot finished on every hole,
                       for everyone on the card.
@@ -763,7 +751,7 @@ export default function TripSetupClient({
       <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
 
         {viewOnly && (
-          <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
+          <div className={`px-4 py-3.5 ${cardClass()}`}>
             <p className="text-ink/65 text-sm">
               Only the lead player can edit this trip. Ask them to make changes.
             </p>
@@ -778,7 +766,7 @@ export default function TripSetupClient({
             Changing one re-reads what is already in; nobody re-enters a
             score. */}
         <section className={SECTION}>
-          <p className="t-label text-accent-deep uppercase tracking-[0.18em] mb-1">Leaderboards</p>
+          <p className="t-label text-accent-deep mb-1">Leaderboards</p>
           <p className="t-cap text-ink/65 mb-3 leading-snug">
             Choose your Competition Leaderboards. Add as many formats as you like.
           </p>
@@ -814,7 +802,7 @@ export default function TripSetupClient({
             Every one of those is a leaderboard card above now. */}
         {allTeamBoards.length > 0 && (
           <section className={SECTION}>
-            <p className="t-label text-accent-deep uppercase tracking-[0.18em] mb-1">
+            <p className="t-label text-accent-deep mb-1">
               {groupNoun.Many}
             </p>
             <p className="t-body text-ink/80 mb-4">
@@ -890,7 +878,7 @@ export default function TripSetupClient({
           {/* ── Players ── */}
           <section className={SECTION}>
             <div className="flex items-center justify-between mb-4">
-              <p className="text-ink/65 text-[13px] tracking-widest uppercase">Players</p>
+              <p className="t-eyebrow text-ink/65">Players</p>
               <span className="text-ink/65 text-[13px]">{players.length}</span>
             </div>
 
@@ -903,7 +891,7 @@ export default function TripSetupClient({
                 // save, which reads as the row flinching.
                 const editing = editingId === player.id && canEdit
                 return (
-                <div key={player.id} className="bg-surface border border-bark/12 rounded-xl p-4">
+                <div key={player.id} className={`p-4 ${cardClass()}`}>
 
                   {/* ── Closed: the two facts, and the way in ──
                       A player is read far more often than edited. This row
@@ -974,7 +962,7 @@ export default function TripSetupClient({
                         }}
                         aria-label="Player name"
                         disabled={locked}
-                        className={INPUT}
+                        className={FIELD}
                       />
                       <div className="flex gap-2">
                         <HandicapField
@@ -997,7 +985,7 @@ export default function TripSetupClient({
                           placeholder="HCP — or blank"
                           disabled={locked}
                           rowClassName="flex-1 min-w-0"
-                          className={`${INPUT} flex-1 min-w-0`}
+                          className={`${FIELD} flex-1 min-w-0`}
                         />
                         <div className="flex gap-1 flex-shrink-0">
                           {(['M', 'F'] as const).map(g => (
@@ -1005,11 +993,7 @@ export default function TripSetupClient({
                               key={g}
                               onClick={() => player.gender !== g && updatePlayer(player.id, { gender: g })}
                               disabled={locked}
-                              className={`w-11 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 ${
-                                player.gender === g
-                                  ? 'bg-accent-deep text-white'
-                                  : 'bg-surface border border-bark/12 text-ink/65'
-                              }`}
+                              className={`${chipClass(player.gender === g)} w-11`}
                             >
                               {g}
                             </button>
@@ -1086,7 +1070,7 @@ export default function TripSetupClient({
                     value={newName}
                     onChange={e => setNewName(e.target.value)}
                     placeholder="Player name"
-                    className={INPUT}
+                    className={FIELD}
                   />
                   <div className="flex gap-2">
                     <HandicapField
@@ -1094,18 +1078,14 @@ export default function TripSetupClient({
                       onChange={setNewHandicap}
                       placeholder="Handicap — or blank"
                       rowClassName="flex-1 min-w-0"
-                      className={`${INPUT} flex-1 min-w-0`}
+                      className={`${FIELD} flex-1 min-w-0`}
                     />
                     <div className="flex gap-1 flex-shrink-0">
                       {(['M', 'F'] as const).map(g => (
                         <button
                           key={g}
                           onClick={() => setNewGender(g)}
-                          className={`w-12 rounded-xl text-sm font-medium transition-colors ${
-                            newGender === g
-                              ? 'bg-accent-deep text-white'
-                              : 'bg-surface border border-bark/12 text-ink/65'
-                          }`}
+                          className={`${chipClass(newGender === g)} w-12`}
                         >
                           {g}
                         </button>
@@ -1188,7 +1168,7 @@ export default function TripSetupClient({
 
         {/* Error toast */}
         {error && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 bg-surface border border-rust/40 rounded-xl shadow-xl z-50">
+          <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 border-rust/40 shadow-xl z-50 ${cardClass()}`}>
             <p className="text-rust-deep text-sm whitespace-nowrap">{error}</p>
           </div>
         )}

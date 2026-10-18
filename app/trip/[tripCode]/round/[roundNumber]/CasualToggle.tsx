@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Toggle from '@/app/components/Toggle'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * Whether this round counts, decided on the round's own page.
@@ -50,7 +51,7 @@ export default function CasualToggle({
   }
 
   return (
-    <section className="rounded-xl border border-bark/12 bg-surface px-4 py-3">
+    <section className={`px-4 py-3 ${cardClass()}`}>
       <div className="flex items-center justify-between gap-3">
         <span className="text-ink text-sm">Counts on the leaderboard</span>
         <Toggle

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { buttonClass } from '@/app/components/ui'
+import { buttonClass, cardClass } from '@/app/components/ui'
 
 /**
  * The challenge code, and the link to send round — copied, or handed to the
@@ -25,8 +25,8 @@ export default function RunShare({ code, name }: { code: string; name: string })
   }
 
   return (
-    <div className="bg-surface border border-bark/12 rounded-2xl p-5 text-center">
-      <p className="t-cap uppercase tracking-[0.12em] text-ink/65 mb-3">Challenge code</p>
+    <div className={`p-5 text-center ${cardClass()}`}>
+      <p className="t-label text-ink/80 mb-3">Challenge code</p>
       <p className="font-[family-name:var(--font-display)] text-[clamp(2rem,10vw,2.75rem)] leading-none text-accent-deep font-bold tracking-[0.12em] tabular-nums mb-4">
         {code}
       </p>

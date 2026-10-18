@@ -40,6 +40,7 @@ import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import LegalLinks from '@/app/components/LegalLinks'
 import ShareTrip from './ShareTrip'
+import { cardClass } from '@/app/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -451,7 +452,7 @@ export default async function TripPage({ params, searchParams }: {
   ) : days.length > 0 ? (
     <ul className="flex flex-col gap-2">
       {days.map((d, i) => (
-        <li key={d.key} className="rounded-xl border border-bark/12 bg-surface px-4 py-3">
+        <li key={d.key} className={`px-4 py-3 ${cardClass()}`}>
           <p className="t-cap uppercase tracking-[0.18em] text-ink/65">
             {d.label ?? `Round ${i + 1}`}
           </p>
@@ -698,11 +699,11 @@ function PlayersPanel({
       <div className="flex items-center gap-4 mb-4">
         <span className="flex items-center gap-1.5">
           <span className={`w-2.5 h-2.5 rounded-sm ${ROUND_TILE.played}`} aria-hidden="true" />
-          <span className="text-ink/65 text-[13px] tracking-wider uppercase">Confirmed</span>
+          <span className="t-label text-ink/65">Confirmed</span>
         </span>
         <span className="flex items-center gap-1.5">
           <span className={`w-2.5 h-2.5 rounded-sm ${ROUND_TILE.empty}`} aria-hidden="true" />
-          <span className="text-ink/65 text-[13px] tracking-wider uppercase">Pending</span>
+          <span className="t-label text-ink/65">Pending</span>
         </span>
       </div>
 
@@ -762,7 +763,7 @@ function PlayersPanel({
           by a device that is nobody yet. */}
       <Link
         href={`/trip/${tripCode}/players`}
-        className="block text-center mt-5 t-cap uppercase tracking-[0.18em] text-accent-deep hover:text-accent transition-colors"
+        className="block text-center mt-5 t-label text-accent-deep hover:text-accent transition-colors"
       >
         Claim your spot
       </Link>

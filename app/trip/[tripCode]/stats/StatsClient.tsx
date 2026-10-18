@@ -18,6 +18,7 @@ import {
   type GainedBar,
 } from './charts'
 import type { RowHole, RowRound } from '@/lib/boardRows'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * The stats hub: an instrument, not a printout.
@@ -361,7 +362,7 @@ export default function StatsClient({
           First under the choosers, before any table — the draw-you-in
           moment. Gross, per round, finalised rounds only. */}
       {view === 'players' && hero && (
-        <div className="bg-surface border border-bark/12 rounded-2xl px-4 pt-3 pb-1 mb-4">
+        <div className={`px-4 pt-3 pb-1 mb-4 ${cardClass()}`}>
           <div className="flex items-center justify-between gap-3">
             <h2 className="t-card text-ink">Skill Profile</h2>
             <div className="flex gap-1 flex-shrink-0" role="group" aria-label="Chart style">
@@ -660,7 +661,7 @@ function CoursePicker({
   const count = ids.filter(id => selected.has(id)).reduce((n, c) => n + rounds(c), 0)
 
   return (
-    <div className="bg-surface border border-bark/12 rounded-xl">
+    <div className={`${cardClass()}`}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -778,13 +779,13 @@ function Course({ rows, title }: {
     return <p className="t-body text-ink/80">Nothing scored on {title} yet.</p>
   }
   return (
-    <section className="bg-surface border border-bark/12 rounded-2xl px-4 py-3 mb-3">
+    <section className={`px-4 py-3 mb-3 ${cardClass()}`}>
       <h2 className="t-card text-ink">{title}</h2>
       <DifficultyProfileChart holes={rows} />
       <div className="overflow-x-auto">
         <table className="w-full t-cap">
           <thead>
-            <tr className="text-ink/50 uppercase tracking-[0.12em]">
+            <tr className="text-ink/65">
               <th className="text-left font-normal py-2">Hole</th>
               <th className="text-right font-normal py-2">Par</th>
               <th className="text-right font-normal py-2">SI</th>

@@ -3,6 +3,7 @@ import {
   type RunSetup, describeRules, describeTeamScore,
 } from '@/lib/runChallenge'
 import type { RunTeam, RunMember } from './data'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * The pieces of a run challenge both its pages print — the hub and the
@@ -20,7 +21,7 @@ export function TeamsList({ teams, unassigned, viewerId = null }: {
   return (
     <div className="space-y-2">
       {teams.map(t => (
-        <div key={t.id} className="bg-surface border border-bark/12 rounded-2xl p-4">
+        <div key={t.id} className={`p-4 ${cardClass()}`}>
           <div className="flex items-center gap-2.5">
             <span
               className="w-3 h-3 rounded-full flex-shrink-0"
@@ -41,7 +42,7 @@ export function TeamsList({ teams, unassigned, viewerId = null }: {
       ))}
 
       {unassigned.length > 0 && (
-        <div className="bg-surface border border-rust/30 rounded-2xl p-4">
+        <div className={`border-rust/30 p-4 ${cardClass()}`}>
           <p className="text-rust-deep text-sm font-medium">No team yet</p>
           <p className="text-ink/65 text-[13px] mt-1 leading-snug">
             {unassigned.map(named).join(', ')}
@@ -55,7 +56,7 @@ export function TeamsList({ teams, unassigned, viewerId = null }: {
 export function RulesSummary({ setup }: { setup: RunSetup }) {
   const teamBoard = setup.boards.find(b => b.audience === 'team')
   return (
-    <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+    <div className={`p-4 ${cardClass()}`}>
       <ul className="space-y-1">
         {describeRules(setup.rules).map(line => (
           <li key={line} className="text-ink/80 text-sm leading-snug">{line}</li>
@@ -72,7 +73,7 @@ export function RulesSummary({ setup }: { setup: RunSetup }) {
 
 export function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="t-cap uppercase tracking-[0.12em] text-ink/65 mb-2.5">{children}</h2>
+    <h2 className="t-label text-ink/80 mb-2.5">{children}</h2>
   )
 }
 
@@ -92,7 +93,7 @@ export function ChallengeNotFound() {
 /** A quiet notice card — a missing database update, a closed door. */
 export function Notice({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
+    <div className={`px-4 py-3.5 ${cardClass()}`}>
       <p className="text-ink/80 text-sm leading-snug">{children}</p>
     </div>
   )

@@ -31,6 +31,7 @@ import {
   type EventPermissions, defaultPermissions, storedPermissions,
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
+import { ChoiceChips, CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -39,18 +40,13 @@ type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F' }
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-const INPUT = [
-  'w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5',
-  'text-ink placeholder:text-ink/60',
-  'focus:outline-none focus:border-accent/50 transition-colors',
-].join(' ')
-
-const LABEL = 'block text-ink/80 text-[13px] uppercase tracking-wider mb-2'
-
 // Teams are not asked for here. Whether a trip even has teams is decided by
 // the leaderboards it runs, and that question lives in trip settings — asking
 // it twice is how the two answers come to disagree.
 const STEP_LABELS = ['Trip details', 'Itinerary', 'Players']
+
+/** Which tees a player plays: the men's card or the ladies'. */
+const GENDER_OPTIONS = [{ value: 'M', label: 'M' }, { value: 'F', label: 'F' }] as const
 const EVENT_STEP_LABELS = ['Event details', 'Itinerary', 'Players']
 
 /**
@@ -523,8 +519,8 @@ export default function CreateTripForm() {
               : 'Share this code with your group to join. Next, choose leaderboard formats and teams in Trip Setup.'}
           </p>
 
-          <div className="bg-surface border border-bark/25 rounded-2xl px-4 py-8 mb-4">
-            <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-4">Your {Noun} Code</p>
+          <div className={`${cardClass()} px-4 py-8 mb-4`}>
+            <p className="t-label text-ink/65 mb-4">Your {noun} code</p>
             {/* Laid out as characters with a gap rather than letter-spacing:
                 tracking adds space after the final character too, which pushed
                 the code off the right edge of the box. */}
@@ -532,7 +528,7 @@ export default function CreateTripForm() {
               {resultCode.split('').map((ch, i) => (
                 <span
                   key={i}
-                  className="font-[family-name:var(--font-display)] text-[clamp(2rem,11vw,3rem)] leading-none text-accent font-bold tabular-nums"
+                  className={CODE_CHAR}
                 >
                   {ch}
                 </span>
@@ -541,7 +537,7 @@ export default function CreateTripForm() {
           </div>
 
           {lockOn && (
-            <div className="mb-4 px-4 py-3 bg-surface border border-bark/12 rounded-xl">
+            <div className={`mb-4 px-4 py-3 ${cardClass('flat')}`}>
               <p className="text-ink/80 text-[13px] leading-snug">
                 {isTournament
                   ? 'Your organiser PIN is set. Keep it safe — it cannot be recovered or changed.'
@@ -552,16 +548,16 @@ export default function CreateTripForm() {
 
           <button
             onClick={copyCode}
-            className="w-full py-4 rounded-xl border border-bark/25 text-ink text-sm tracking-[0.15em] uppercase hover:border-bark/25 transition-colors mb-3"
+            className={`${buttonClass('secondary')} mb-3`}
           >
-            {copied ? '✓ Copied' : 'Copy Code'}
+            {copied ? '✓ Copied' : 'Copy code'}
           </button>
 
           <Link
             href={`/trip/${resultCode}`}
-            className="block w-full py-4 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors"
+            className={buttonClass('primary')}
           >
-            Go to Your {Noun}
+            Go to your {noun}
           </Link>
         </div>
       </div>
@@ -613,7 +609,7 @@ export default function CreateTripForm() {
           <div>
             {stepNum > 1 && <BackButton onClick={goBack} />}
           </div>
-          <p className="text-center text-ink/65 text-[13px] tracking-wider uppercase">
+          <p className="text-center t-label text-ink/65">
             Step {stepNum} of 3 — {(isTournament ? EVENT_STEP_LABELS : STEP_LABELS)[stepNum - 1]}
           </p>
         </div>
@@ -625,13 +621,13 @@ export default function CreateTripForm() {
         {step === 1 && (
           <div className="space-y-6">
             <div>
-              <label className={LABEL}>{Noun} name</label>
+              <label className={FIELD_LABEL}>{Noun} name</label>
               <input
                 type="text"
                 value={tripName}
                 onChange={e => setTripName(e.target.value)}
                 placeholder={isTournament ? 'e.g. Captain’s Prize 2026' : 'e.g. Portugal 2027'}
-                className={INPUT}
+                className={FIELD}
                 autoFocus
               />
             </div>
@@ -642,29 +638,19 @@ export default function CreateTripForm() {
                 one day long. */}
             {isTournament && (
               <div>
-                <label className={LABEL}>Event length</label>
-                <div className="flex gap-1.5">
-                  <button
-                    onClick={() => { setMultiDay(false); setEndDate(startDate) }}
-                    className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors ${
-                      !multiDay
-                        ? 'bg-accent-deep text-white'
-                        : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                    }`}
-                  >
-                    Standalone
-                  </button>
-                  <button
-                    onClick={() => setMultiDay(true)}
-                    className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors ${
-                      multiDay
-                        ? 'bg-accent-deep text-white'
-                        : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                    }`}
-                  >
-                    Multi-day
-                  </button>
-                </div>
+                <label className={FIELD_LABEL}>Event length</label>
+                <ChoiceChips
+                  label="Event length"
+                  value={multiDay ? 'multi' : 'single'}
+                  onChange={v => {
+                    if (v === 'multi') setMultiDay(true)
+                    else { setMultiDay(false); setEndDate(startDate) }
+                  }}
+                  options={[
+                    { value: 'single', label: 'Standalone' },
+                    { value: 'multi', label: 'Multi-day' },
+                  ]}
+                />
               </div>
             )}
 
@@ -689,7 +675,7 @@ export default function CreateTripForm() {
                 it, and it can be written or rewritten later in Trip
                 Settings. */}
             <div>
-              <label className={LABEL} htmlFor="trip-description">About the {noun} (optional)</label>
+              <label className={FIELD_LABEL} htmlFor="trip-description">About the {noun} (optional)</label>
               <textarea
                 id="trip-description"
                 value={description}
@@ -697,7 +683,7 @@ export default function CreateTripForm() {
                 maxLength={MAX_TRIP_DESCRIPTION}
                 rows={3}
                 placeholder="The stakes, the plan, the rules of engagement…"
-                className={`${INPUT} resize-none leading-snug`}
+                className={`${FIELD} resize-none leading-snug`}
               />
               <p className="text-ink/65 text-[13px] mt-2 leading-snug">
                 Shows on the {noun} hub, under the countdown. It can be changed
@@ -709,7 +695,7 @@ export default function CreateTripForm() {
                 nothing blocks on it, and a malformed address is simply not
                 saved rather than standing between anyone and their trip. */}
             <div>
-              <label className={LABEL} htmlFor="lead-email">Email (optional)</label>
+              <label className={FIELD_LABEL} htmlFor="lead-email">Email (optional)</label>
               <input
                 id="lead-email"
                 type="email"
@@ -722,7 +708,7 @@ export default function CreateTripForm() {
                 value={leadEmail}
                 onChange={e => setLeadEmail(e.target.value)}
                 placeholder="you@example.com"
-                className={INPUT}
+                className={FIELD}
               />
               <p className="text-ink/65 text-[13px] mt-2 leading-snug">
                 We&apos;ll send you the {noun} details and share link. Leave it blank
@@ -750,7 +736,7 @@ export default function CreateTripForm() {
                 query failed — the directory always has courses — and the
                 picker still works: its add form does not need the list. */}
             {coursesLoaded && courses.length === 0 && (
-              <div className="p-4 bg-surface border border-bark/12 rounded-xl text-ink/65 text-sm text-center mb-4">
+              <div className={`p-4 ${cardClass('flat')} text-ink/65 text-sm text-center mb-4`}>
                 The course list could not be loaded — a course can still be
                 added by name from the picker.
               </div>
@@ -779,7 +765,7 @@ export default function CreateTripForm() {
                 is simply the first card below, in the list with everyone
                 else's. */}
             {isTournament && (
-              <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+              <div className={`${cardClass()} p-4`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <p className="text-ink text-sm font-medium">Are you playing?</p>
@@ -799,9 +785,9 @@ export default function CreateTripForm() {
             )}
 
             {players.map((player, i) => (
-              <div key={i} className="bg-surface border border-bark/12 rounded-2xl p-4">
+              <div key={i} className={`${cardClass()} p-4`}>
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-ink/65 text-[13px] tracking-widest uppercase">
+                  <span className="t-eyebrow text-ink/65">
                     {i === 0 && !isTournament
                       ? 'Lead player'
                       : i === 0 && organiserPlaying
@@ -830,8 +816,8 @@ export default function CreateTripForm() {
                     // Swapped, not appended: two border-colour classes in one
                     // string leaves which one wins up to stylesheet order.
                     className={i === duplicateIndex
-                      ? INPUT.replace('border-bark/12', 'border-rust/60')
-                      : INPUT}
+                      ? FIELD.replace('border-bark/12', 'border-rust/60')
+                      : FIELD}
                   />
                   {i === duplicateIndex && (
                     <p className="text-rust-deep text-[13px] leading-snug">
@@ -845,23 +831,16 @@ export default function CreateTripForm() {
                       onChange={v => updatePlayer(i, { handicap: v })}
                       placeholder="Handicap (or leave blank)"
                       rowClassName="flex-1 min-w-0"
-                      className={`${INPUT} flex-1 min-w-0`}
+                      className={`${FIELD} flex-1 min-w-0`}
                     />
-                    <div className="flex gap-1.5 flex-shrink-0">
-                      {(['M', 'F'] as const).map(g => (
-                        <button
-                          key={g}
-                          onClick={() => updatePlayer(i, { gender: g })}
-                          className={`w-12 rounded-xl text-sm font-medium transition-colors ${
-                            player.gender === g
-                              ? 'bg-accent-deep text-white'
-                              : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                          }`}
-                        >
-                          {g}
-                        </button>
-                      ))}
-                    </div>
+                    <ChoiceChips
+                      label="Men’s or ladies’ tees"
+                      equal={false}
+                      className="flex-shrink-0 self-center flex-nowrap"
+                      value={player.gender}
+                      onChange={g => updatePlayer(i, { gender: g })}
+                      options={GENDER_OPTIONS}
+                    />
                   </div>
 
                   {/* Said on the one card where the doubt actually arises,
@@ -896,7 +875,7 @@ export default function CreateTripForm() {
                 Nothing chosen writes nothing, so a skipped trip is exactly
                 the trip this wizard has always made. */}
             <div className="mt-8 pt-6 border-t border-bark/12">
-              <p className="text-ink/80 text-[13px] uppercase tracking-wider mb-2">
+              <p className="t-label text-ink/80 mb-2">
                 Leaderboards (optional)
               </p>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
@@ -920,7 +899,7 @@ export default function CreateTripForm() {
                 from the organiser area. */}
             {isTournament && (
               <div className="mt-8 pt-6 border-t border-bark/12">
-                <p className="text-ink/80 text-[13px] uppercase tracking-wider mb-2">
+                <p className="t-label text-ink/80 mb-2">
                   How collaborative should this event be?
                 </p>
                 <p className="text-ink/65 text-[13px] mb-3 leading-snug">
@@ -941,7 +920,7 @@ export default function CreateTripForm() {
                 tournament without one would have no organiser side at all. */}
             <div className="mt-8 pt-6 border-t border-bark/12">
               {isTournament ? (
-                <div className="bg-surface border border-bark/12 rounded-xl px-4 py-4">
+                <div className={`${cardClass()} px-4 py-4`}>
                   <p className="text-ink text-sm font-medium">Organiser PIN</p>
                   <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
                     Your key to the organiser side of the Event Hub — notices,
@@ -949,7 +928,7 @@ export default function CreateTripForm() {
                   </p>
                 </div>
               ) : (
-                <div className="flex items-start justify-between gap-4 bg-surface border border-bark/12 rounded-xl px-4 py-4">
+                <div className={`flex items-start justify-between gap-4 ${cardClass()} px-4 py-4`}>
                   <div className="min-w-0">
                     <p className="text-ink text-sm font-medium">Lock {noun} settings</p>
                     <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
@@ -980,7 +959,7 @@ export default function CreateTripForm() {
                     onChange={e => setPasscode(e.target.value.replace(/\D/g, ''))}
                     placeholder={`${isTournament ? 'PIN' : 'Passcode'} (${MIN_PASSCODE}–${MAX_PASSCODE} digits)`}
                     maxLength={MAX_PASSCODE}
-                    className={INPUT}
+                    className={FIELD}
                   />
                   <input
                     type="password"
@@ -990,7 +969,7 @@ export default function CreateTripForm() {
                     onChange={e => setPasscodeConfirm(e.target.value.replace(/\D/g, ''))}
                     placeholder="Enter it again"
                     maxLength={MAX_PASSCODE}
-                    className={INPUT}
+                    className={FIELD}
                   />
 
                   {passcodeIssue && (passcode || passcodeConfirm) && (
@@ -1016,7 +995,7 @@ export default function CreateTripForm() {
             <button
               onClick={goNext}
               disabled={!canProceed}
-              className="w-full py-5 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className={buttonClass('primary')}
             >
               {submitting ? 'Creating…' : isFinalStep ? `Create ${Noun}` : 'Continue'}
             </button>

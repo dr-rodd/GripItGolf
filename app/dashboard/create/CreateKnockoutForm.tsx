@@ -21,6 +21,7 @@ import {
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import { describeError, generateCode } from './CreateTripForm'
+import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 
 /**
  * Creating a continuous knockout — an ongoing match play event occupying a
@@ -40,14 +41,6 @@ import { describeError, generateCode } from './CreateTripForm'
  * setup, but whose shape it carries into its first real save), and the
  * players. Needs migration 047, like everything the column touches.
  */
-
-const INPUT = [
-  'w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5',
-  'text-ink placeholder:text-ink/60',
-  'focus:outline-none focus:border-accent/50 transition-colors',
-].join(' ')
-
-const LABEL = 'block text-ink/80 text-[13px] uppercase tracking-wider mb-2'
 
 const STEP_LABELS = ['Event details', 'Players', 'Finish']
 
@@ -260,7 +253,7 @@ export default function CreateKnockoutForm() {
             and round deadlines.
           </p>
 
-          <div className="bg-surface border border-bark/25 rounded-2xl px-4 py-8 mb-4">
+          <div className={`px-4 py-8 mb-4 ${cardClass()}`}>
             <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-4">Your Event Code</p>
             <div className="flex items-center justify-center gap-1 sm:gap-1.5">
               {resultCode.split('').map((ch, i) => (
@@ -274,7 +267,7 @@ export default function CreateKnockoutForm() {
             </div>
           </div>
 
-          <div className="mb-4 px-4 py-3 bg-surface border border-bark/12 rounded-xl">
+          <div className={`mb-4 px-4 py-3 ${cardClass()}`}>
             <p className="text-ink/80 text-[13px] leading-snug">
               Your organiser PIN is set. Keep it safe — it cannot be recovered
               or changed.
@@ -283,14 +276,14 @@ export default function CreateKnockoutForm() {
 
           <button
             onClick={copyCode}
-            className="w-full py-4 rounded-xl border border-bark/25 text-ink text-sm tracking-[0.15em] uppercase hover:border-bark/25 transition-colors mb-3"
+            className={`${buttonClass('secondary')} mb-3`}
           >
             {copied ? '✓ Copied' : 'Copy Code'}
           </button>
 
           <Link
             href={`/trip/${resultCode}`}
-            className="block w-full py-4 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors"
+            className={buttonClass('primary')}
           >
             Go to Your Event
           </Link>
@@ -327,7 +320,7 @@ export default function CreateKnockoutForm() {
           <div>
             {stepNum > 1 && <BackButton onClick={goBack} />}
           </div>
-          <p className="text-center text-ink/65 text-[13px] tracking-wider uppercase">
+          <p className="text-center t-label text-ink/65">
             Step {stepNum} of 3 — {STEP_LABELS[stepNum - 1]}
           </p>
         </div>
@@ -339,19 +332,19 @@ export default function CreateKnockoutForm() {
         {step === 1 && (
           <div className="space-y-6">
             <div>
-              <label className={LABEL}>Event name</label>
+              <label className={FIELD_LABEL}>Event name</label>
               <input
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="e.g. Summer Knockout 2027"
-                className={INPUT}
+                className={FIELD}
                 autoFocus
               />
             </div>
 
             <div>
-              <label className={LABEL}>The period</label>
+              <label className={FIELD_LABEL}>The period</label>
               <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
                 <DateField label="Starts" value={startDate} onChange={setStartDate} />
                 <DateField label="Finishes" value={endDate} onChange={setEndDate} />
@@ -370,7 +363,7 @@ export default function CreateKnockoutForm() {
             </div>
 
             <div>
-              <label className={LABEL} htmlFor="ko-email">Email (optional)</label>
+              <label className={FIELD_LABEL} htmlFor="ko-email">Email (optional)</label>
               <input
                 id="ko-email"
                 type="email"
@@ -383,7 +376,7 @@ export default function CreateKnockoutForm() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className={INPUT}
+                className={FIELD}
               />
               <p className="text-ink/65 text-[13px] mt-2 leading-snug">
                 We&apos;ll send you the event details and share link. The event
@@ -401,7 +394,7 @@ export default function CreateKnockoutForm() {
         {/* ── 2 · The field ── */}
         {step === 2 && (
           <div className="space-y-4">
-            <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+            <div className={`p-4 ${cardClass()}`}>
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <p className="text-ink text-sm font-medium">Are you playing?</p>
@@ -425,9 +418,9 @@ export default function CreateKnockoutForm() {
             </p>
 
             {players.map((player, i) => (
-              <div key={i} className="bg-surface border border-bark/12 rounded-2xl p-4">
+              <div key={i} className={`p-4 ${cardClass()}`}>
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-ink/65 text-[13px] tracking-widest uppercase">
+                  <span className="t-eyebrow text-ink/65">
                     {i === 0 && organiserPlaying ? 'Organiser — you' : `Player ${i + 1}`}
                   </span>
                   {i > 0 && (
@@ -450,8 +443,8 @@ export default function CreateKnockoutForm() {
                     onChange={e => updatePlayer(i, { name: e.target.value })}
                     placeholder="Full name"
                     className={i === duplicateIndex
-                      ? INPUT.replace('border-bark/12', 'border-rust/60')
-                      : INPUT}
+                      ? FIELD.replace('border-bark/12', 'border-rust/60')
+                      : FIELD}
                   />
                   {i === duplicateIndex && (
                     <p className="text-rust-deep text-[13px] leading-snug">
@@ -465,18 +458,14 @@ export default function CreateKnockoutForm() {
                       onChange={v => updatePlayer(i, { handicap: v })}
                       placeholder="Handicap"
                       rowClassName="flex-1 min-w-0"
-                      className={`${INPUT} flex-1 min-w-0`}
+                      className={`${FIELD} flex-1 min-w-0`}
                     />
                     <div className="flex gap-1.5 flex-shrink-0">
                       {(['M', 'F'] as const).map(g => (
                         <button
                           key={g}
                           onClick={() => updatePlayer(i, { gender: g })}
-                          className={`w-12 rounded-xl text-sm font-medium transition-colors ${
-                            player.gender === g
-                              ? 'bg-accent-deep text-white'
-                              : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                          }`}
+                          className={`${chipClass(player.gender === g)} w-12`}
                         >
                           {g}
                         </button>
@@ -500,7 +489,7 @@ export default function CreateKnockoutForm() {
         {step === 3 && (
           <div className="space-y-3">
             <div className="mb-6">
-              <label className={LABEL}>How collaborative should this event be?</label>
+              <label className={FIELD_LABEL}>How collaborative should this event be?</label>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
                 What the field can do for themselves. Everything starts off —
                 you can change any of these later from the organiser area.
@@ -508,7 +497,7 @@ export default function CreateKnockoutForm() {
               <EventPermissionToggles value={perms} onChange={setPerms} />
             </div>
 
-            <div className="bg-surface border border-bark/12 rounded-xl px-4 py-4">
+            <div className={`px-4 py-4 ${cardClass()}`}>
               <p className="text-ink text-sm font-medium">Organiser PIN</p>
               <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
                 Your key to the organiser side of the Event Hub — the bracket
@@ -534,7 +523,7 @@ export default function CreateKnockoutForm() {
               onChange={e => setPasscode(e.target.value.replace(/\D/g, ''))}
               placeholder={`PIN (${MIN_PASSCODE}–${MAX_PASSCODE} digits)`}
               maxLength={MAX_PASSCODE}
-              className={INPUT}
+              className={FIELD}
             />
             <input
               type="password"
@@ -544,7 +533,7 @@ export default function CreateKnockoutForm() {
               onChange={e => setPasscodeConfirm(e.target.value.replace(/\D/g, ''))}
               placeholder="Enter it again"
               maxLength={MAX_PASSCODE}
-              className={INPUT}
+              className={FIELD}
             />
             {passcodeIssue && (passcode || passcodeConfirm) && (
               <p className="text-rust-deep text-[13px] leading-snug">{passcodeIssue}</p>
@@ -562,7 +551,7 @@ export default function CreateKnockoutForm() {
           <button
             onClick={goNext}
             disabled={!canProceed}
-            className="w-full py-5 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className={buttonClass('primary')}
           >
             {submitting ? 'Creating…' : stepNum === 3 ? 'Create Event' : 'Continue'}
           </button>

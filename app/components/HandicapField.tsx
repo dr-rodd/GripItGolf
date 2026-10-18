@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { HANDICAP_INPUT } from '@/lib/handicap'
+import { chipClass } from './ui'
 
 /**
  * A handicap, typed on a phone.
@@ -82,11 +83,7 @@ export default function HandicapField({
         aria-pressed={plus}
         aria-label="Better than scratch"
         title="Plus handicap"
-        className={`w-11 flex-shrink-0 rounded-lg text-base font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-          plus
-            ? 'bg-accent-deep text-white'
-            : 'bg-surface border border-bark/12 text-ink/65 hover:border-bark/25'
-        }`}
+        className={`${chipClass(plus)} w-11 flex-shrink-0`}
       >
         +
       </button>

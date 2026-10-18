@@ -3,6 +3,7 @@
 import { useCallback, useState, useSyncExternalStore } from 'react'
 import BackButton from '@/app/components/BackButton'
 import { verifyPasscode, rememberUnlock, hasUnlocked, MAX_PASSCODE } from '@/lib/passcode'
+import { FIELD, buttonClass } from '@/app/components/ui'
 
 /**
  * Stands in front of trip settings when the trip was created with a passcode.
@@ -87,7 +88,7 @@ export default function PasscodeGate({
             placeholder="Passcode"
             maxLength={MAX_PASSCODE}
             autoFocus
-            className="w-full py-4 px-5 bg-surface border border-bark/12 rounded-xl text-ink text-center text-lg tracking-[0.3em] placeholder:tracking-normal placeholder:text-ink/50 focus:outline-none focus:border-accent/60 transition-colors"
+            className={`${FIELD} field-code`}
           />
 
           {error && <p className="text-rust-deep text-sm">{error}</p>}
@@ -95,7 +96,7 @@ export default function PasscodeGate({
           <button
             type="submit"
             disabled={busy || !code}
-            className="w-full py-4 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40"
+            className={buttonClass('primary')}
           >
             {busy ? 'Checking…' : 'Unlock'}
           </button>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { buttonClass } from '@/app/components/ui'
+import { buttonClass, cardClass } from '@/app/components/ui'
 
 /**
  * The document, and the choice of what goes in it.
@@ -107,7 +107,7 @@ export default function TripExportClient({
   return (
     <div className="max-w-lg mx-auto px-4 pt-4 pb-12">
       {/* What goes in — screen only */}
-      <div className="print:hidden mb-6 p-4 rounded-2xl bg-surface border border-bark/[0.08]">
+      <div className={`print:hidden mb-6 p-4 ${cardClass()}`}>
         <p className="t-label text-ink mb-3">What goes in</p>
         <div className="space-y-2.5 mb-4">
           {offered.map(({ key, label }) => (

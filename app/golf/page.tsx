@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * The golf doorway — what Create an Event opens onto.
@@ -64,7 +65,7 @@ export default function GolfPage() {
             </Link>
 
             {/* Named before it is built, so nobody taps into a dead end. */}
-            <div className="block bg-surface border border-bark/12 rounded-2xl p-5 opacity-60">
+            <div className={`block p-5 opacity-60 ${cardClass()}`}>
               <div className="flex items-center justify-between gap-3">
                 <p className="font-[family-name:var(--font-display)] text-xl text-ink">
                   Personal usage

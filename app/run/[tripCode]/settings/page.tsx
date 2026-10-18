@@ -10,6 +10,7 @@ import StravaCard from '../StravaCard'
 import { ChallengeNotFound, SectionTitle } from '../RunPieces'
 import RunShare from '../RunShare'
 import HelpAndPrivacy from './HelpAndPrivacy'
+import { cardClass } from '@/app/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,7 +44,7 @@ export default async function RunSettingsPage({ params }: {
 
         <section>
           <SectionTitle>You</SectionTitle>
-          <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+          <div className={`p-4 ${cardClass()}`}>
             {viewer ? (
               <>
                 <p className="text-ink text-sm font-medium">{viewer.name}</p>
@@ -96,7 +97,7 @@ export default async function RunSettingsPage({ params }: {
           <SectionTitle>Organiser</SectionTitle>
           <Link
             href={`/run/${challenge.code}/organiser`}
-            className="flex items-center justify-between gap-4 bg-surface border border-bark/12 rounded-2xl p-4 press hover:border-bark/25 transition-colors"
+            className={`flex items-center justify-between gap-4 p-4 ${cardClass('raised', true)}`}
           >
             <span className="min-w-0">
               <span className="block text-ink text-sm font-medium">Organiser area</span>

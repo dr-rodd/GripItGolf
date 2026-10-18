@@ -11,6 +11,7 @@ import {
 } from '@/lib/runChallenge'
 import { formatKm } from '@/lib/runBoards'
 import { activityUrl } from '@/lib/stravaLinks'
+import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 
 /**
  * The Add tab's body: the log-a-run form, and this runner's own runs.
@@ -47,13 +48,6 @@ export type MyRun = {
   /** Strava's id for a Strava run — its "View on Strava" link (API Policy §2.4). */
   stravaId?: number | null
 }
-
-const INPUT = [
-  'w-full min-w-0 bg-surface border border-bark/12 rounded-xl px-4 py-3.5',
-  'text-ink placeholder:text-ink/60',
-  'focus:outline-none focus:border-accent/50 transition-colors',
-].join(' ')
-const LABEL = 'block text-ink/80 text-[13px] uppercase tracking-wider mb-2'
 
 const subscribe = () => () => {}
 const readToday = () => todayString(new Date())
@@ -153,7 +147,7 @@ export default function RunAddClient({
 
       {/* ── Log a run ── */}
       {closed ? (
-        <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
+        <div className={`px-4 py-3.5 ${cardClass()}`}>
           <p className="text-ink/80 text-sm leading-snug">
             {final
               ? `This challenge is final — runs can no longer be added. The final team standings are on the leaderboard${
@@ -162,13 +156,13 @@ export default function RunAddClient({
           </p>
         </div>
       ) : !logRuns ? (
-        <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
+        <div className={`px-4 py-3.5 ${cardClass()}`}>
           <p className="text-ink/80 text-sm leading-snug">
             Runs come from Strava in this challenge — typing them in is switched off.
           </p>
         </div>
       ) : notStarted ? (
-        <div className="px-4 py-3.5 bg-surface border border-bark/12 rounded-xl">
+        <div className={`px-4 py-3.5 ${cardClass()}`}>
           <p className="text-ink/80 text-sm leading-snug">
             The challenge starts on {start ? describeDay(start) : 'its start date'} — log your
             runs from then.
@@ -180,7 +174,7 @@ export default function RunAddClient({
 
           {counted.length > 1 && (
             <div>
-              <p className={LABEL}>Activity</p>
+              <p className={FIELD_LABEL}>Activity</p>
               <div className="flex flex-wrap gap-2">
                 {counted.map(a => (
                   <button
@@ -188,11 +182,7 @@ export default function RunAddClient({
                     type="button"
                     onClick={() => setActivity(a.key)}
                     aria-pressed={activity === a.key}
-                    className={`px-3 py-2 rounded-xl text-sm transition-colors ${
-                      activity === a.key
-                        ? 'bg-accent-deep text-white'
-                        : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                    }`}
+                    className={`${chipClass(activity === a.key)}`}
                   >
                     {a.label}
                   </button>
@@ -204,7 +194,7 @@ export default function RunAddClient({
           <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
             <DateField label="Day" value={day} onChange={setDate} min={start ?? undefined} max={latest || undefined} />
             <div className="min-w-0">
-              <label className={LABEL} htmlFor="run-km">Distance (km)</label>
+              <label className={FIELD_LABEL} htmlFor="run-km">Distance (km)</label>
               <input
                 id="run-km"
                 type="text"
@@ -213,26 +203,26 @@ export default function RunAddClient({
                 onChange={e => setKm(numeric(e.target.value))}
                 placeholder="5.0"
                 maxLength={String(MAX_RUN_KM).length + 3}
-                className={INPUT}
+                className={FIELD}
               />
             </div>
           </div>
 
           <div>
-            <p className={LABEL}>Time (optional)</p>
+            <p className={FIELD_LABEL}>Time (optional)</p>
             <div className="flex items-center gap-2">
               <input
                 type="text" inputMode="numeric" value={hours}
                 onChange={e => setHours(e.target.value.replace(/\D/g, '').slice(0, 2))}
                 placeholder="0" aria-label="Hours"
-                className={`${INPUT} w-20 text-center`}
+                className={`${FIELD} w-20 text-center`}
               />
               <span className="text-ink/65 text-sm">h</span>
               <input
                 type="text" inputMode="numeric" value={mins}
                 onChange={e => setMins(e.target.value.replace(/\D/g, '').slice(0, 3))}
                 placeholder="30" aria-label="Minutes"
-                className={`${INPUT} w-20 text-center`}
+                className={`${FIELD} w-20 text-center`}
               />
               <span className="text-ink/65 text-sm">min</span>
             </div>
@@ -263,7 +253,7 @@ export default function RunAddClient({
           <button
             type="submit"
             disabled={busy || !km || !!issue || !today}
-            className="w-full py-4 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className={buttonClass('primary')}
           >
             {busy ? 'Saving…' : saved && !km ? '✓ Saved — log another' : 'Save run'}
           </button>
@@ -272,11 +262,11 @@ export default function RunAddClient({
 
       {/* ── Your runs ── */}
       <section>
-        <h2 className="t-cap uppercase tracking-[0.12em] text-ink/65 mb-2.5">Your runs</h2>
+        <h2 className="t-label text-ink/80 mb-2.5">Your runs</h2>
         {myRuns.length === 0 ? (
           <p className="text-ink/65 text-sm">Nothing logged yet.</p>
         ) : (
-          <ul className="bg-surface border border-bark/12 rounded-2xl overflow-hidden">
+          <ul className={`overflow-hidden ${cardClass()}`}>
             {myRuns.map((r, i) => {
               const label = RUN_ACTIVITIES.find(a => a.key === r.activity)?.label ?? 'Run'
               const extra = [describeDuration(r.minutes), describePace(r.km, r.minutes)].filter(Boolean).join(' · ')

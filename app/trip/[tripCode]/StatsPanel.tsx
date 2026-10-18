@@ -2,6 +2,7 @@ import Link from 'next/link'
 import {
   formatGained, formatRate, formatAverage, type PlayerStats,
 } from '@/lib/holeStats'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * The player's own trip, at a glance, on the hub.
@@ -33,7 +34,7 @@ export default function StatsPanel({
   return (
     <div>
       {mine ? (
-        <div className="rounded-2xl border border-bark/12 bg-surface px-4 py-1">
+        <div className={`px-4 py-1 ${cardClass()}`}>
           {/* The headline. Stableford points against two a hole: level means
               the trip is being played exactly to handicap, and the sign is
               the one every golfer already reads off a board. */}
@@ -43,7 +44,7 @@ export default function StatsPanel({
               : vs > 0 ? 'text-accent-deep' : 'text-rust-deep'
             return (
               <div className="pt-3 pb-2.5 border-b border-bark/[0.08]">
-                <span className="t-cap uppercase tracking-[0.12em] text-ink/50">
+                <span className="t-cap text-ink/65">
                   Vs your handicap
                 </span>
                 <div className="flex items-baseline gap-2 mt-0.5">
@@ -116,7 +117,7 @@ function Figure({ label, value, note, tone = 'ink' }: {
     : 'text-ink'
   return (
     <div className="flex items-baseline justify-between gap-3 py-3 border-b border-bark/[0.08] last:border-b-0">
-      <span className="t-cap uppercase tracking-[0.12em] text-ink/50">{label}</span>
+      <span className="t-cap text-ink/65">{label}</span>
       <span className="flex items-baseline gap-2 min-w-0">
         {note && <span className="t-cap text-ink/50 truncate">{note}</span>}
         <span className={`t-data t-num ${colour}`}>{value}</span>

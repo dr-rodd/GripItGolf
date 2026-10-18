@@ -80,7 +80,7 @@ export default function TravelStays({
 
       {stays.length > 0 && (
         <div className="flex flex-col gap-5">
-          <p className="t-cap uppercase tracking-[0.18em] text-ink/50 text-center">
+          <p className="t-cap text-ink/65 text-center">
             Staying
           </p>
           {stays.map(run => (
@@ -97,7 +97,7 @@ export default function TravelStays({
 
       {legs.length > 0 && (
         <div className="flex flex-col gap-5">
-          <p className="t-cap uppercase tracking-[0.18em] text-ink/50 text-center">
+          <p className="t-cap text-ink/65 text-center">
             Getting there
           </p>
           {legs.map(leg => {

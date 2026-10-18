@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { formatPoints } from '@/lib/runChallenge'
 import { formatKm } from '@/lib/runBoards'
 import PoweredByStrava from '@/app/components/PoweredByStrava'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * The run leaderboard's boards, one at a time — golf's board, in golf's
@@ -93,7 +94,7 @@ export default function RunBoardClient({ boards, anyRuns, garmin = false, strava
       <p className="text-ink/65 text-[13px] leading-snug mb-3">{board.rule}</p>
 
       {/* ── The board ── */}
-      <div className="bg-surface border border-bark/12 rounded-2xl overflow-hidden">
+      <div className={`overflow-hidden ${cardClass()}`}>
         <div className="flex items-center gap-3 px-3 py-2 border-b border-bark/12">
           <span className="t-cap text-ink/65 w-6">Pos</span>
           <span className="t-cap text-ink/65 flex-1">{board.kind === 'team' ? 'Team' : 'Runner'}</span>

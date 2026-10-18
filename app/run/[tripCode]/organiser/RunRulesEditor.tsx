@@ -8,6 +8,7 @@ import {
   type RunSetup, type RulesDraft,
   draftFromSetup, draftIssue, setupWithDraft,
 } from '@/lib/runChallenge'
+import { buttonClass } from '@/app/components/ui'
 
 /**
  * Changing the points rules, in the organiser area — the same fields
@@ -57,7 +58,7 @@ export default function RunRulesEditor({ tripId, setup }: {
           type="button"
           onClick={save}
           disabled={!!issue || unchanged || saving || pending}
-          className="px-5 py-3 bg-accent-deep text-white text-sm font-bold tracking-[0.15em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className={buttonClass('primary', false)}
         >
           {saving ? 'Saving…' : 'Save rules'}
         </button>

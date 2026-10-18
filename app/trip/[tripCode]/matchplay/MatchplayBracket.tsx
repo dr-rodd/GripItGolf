@@ -8,6 +8,7 @@ import {
 import { isDecidable, pressOutcome } from '@/lib/matchplayProgress'
 import { type MatchReading, pendingResults } from '@/lib/matchResults'
 import { decisionLabel } from '@/lib/matchDecision'
+import { FIELD, cardClass } from '@/app/components/ui'
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -276,7 +277,7 @@ export default function MatchplayBracket({
           onClick={() => animateTo(leftIndex - 1)}
           disabled={atStart}
           aria-label="Previous round"
-          className="w-11 h-11 flex-shrink-0 flex items-center justify-center rounded-xl border border-bark/12 bg-surface text-ink/80 disabled:opacity-25 enabled:hover:text-ink enabled:hover:border-bark/25 enabled:hover:bg-surface transition-colors"
+          className={`w-11 h-11 flex-shrink-0 flex items-center justify-center text-ink/80 disabled:opacity-25 enabled:hover:text-ink enabled:hover:border-bark/25 enabled:hover:bg-surface transition-colors ${cardClass()}`}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M15 18l-6-6 6-6" />
@@ -300,7 +301,7 @@ export default function MatchplayBracket({
           onClick={() => animateTo(leftIndex + 1)}
           disabled={atEnd}
           aria-label="Next round"
-          className="w-11 h-11 flex-shrink-0 flex items-center justify-center rounded-xl border border-bark/12 bg-surface text-ink/80 disabled:opacity-25 enabled:hover:text-ink enabled:hover:border-bark/25 enabled:hover:bg-surface transition-colors"
+          className={`w-11 h-11 flex-shrink-0 flex items-center justify-center text-ink/80 disabled:opacity-25 enabled:hover:text-ink enabled:hover:border-bark/25 enabled:hover:bg-surface transition-colors ${cardClass()}`}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M9 18l6-6-6-6" />
@@ -796,7 +797,7 @@ function DecideSheet({
               onChange={e => setMargin(e.target.value)}
               placeholder="e.g. 3&2"
               maxLength={12}
-              className="w-full bg-surface border border-bark/12 rounded-xl px-4 py-3 text-ink text-sm placeholder:text-ink/50 focus:outline-none focus:border-accent/50 transition-colors mb-4"
+              className={`${FIELD} mb-4`}
             />
           </>
         )}

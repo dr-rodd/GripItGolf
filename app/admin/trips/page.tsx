@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { tripState, todayString } from '@/lib/tripStatus'
-import { Pill } from '@/app/components/ui'
+import { FIELD, Pill } from '@/app/components/ui'
 import { requireAdmin } from '../adminGate'
 import AdminLogin from '../AdminLogin'
 import AdminShell from '../AdminShell'
@@ -103,7 +103,7 @@ export default async function AdminTripsPage({
           name="q"
           defaultValue={q}
           placeholder="Search by name, code or email"
-          className="w-full sm:max-w-sm bg-surface border border-bark/25 rounded-xl px-4 py-3 text-ink placeholder:text-ink/65 focus:outline-none focus:border-accent transition-colors"
+          className={`${FIELD} sm:max-w-sm`}
         />
       </form>
 

@@ -11,6 +11,7 @@ import { SectionTitle } from '../RunPieces'
 import RunTeamsEditor from './RunTeamsEditor'
 import RunRulesEditor from './RunRulesEditor'
 import RunDatesEditor from './RunDatesEditor'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * The organiser area's body, once the PIN is in.
@@ -57,14 +58,14 @@ export default function RunOrganiserClient({ challenge, dates, progress }: {
       <div className="max-w-lg mx-auto px-4 pt-8 pb-16 page-enter space-y-8">
 
         <div>
-          <p className="t-cap uppercase tracking-[0.12em] text-accent-deep mb-1.5">Organiser area</p>
+          <p className="t-label text-accent-deep mb-1.5">Organiser area</p>
           <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink leading-tight">
             {challenge.name}
           </h1>
         </div>
 
         {/* ── The bird's-eye view ── */}
-        <div className="bg-surface border border-bark/12 rounded-2xl p-5">
+        <div className={`p-5 ${cardClass()}`}>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
             <div>
               <dt className="t-cap text-ink/65">Dates</dt>

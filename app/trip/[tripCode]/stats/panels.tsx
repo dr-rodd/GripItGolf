@@ -18,6 +18,7 @@ import {
 import { ordinal } from '@/lib/playerSummary'
 import type { RowRound } from '@/lib/boardRows'
 import type { Award } from '@/lib/tripAwards'
+import { cardClass } from '@/app/components/ui'
 
 // ─── Furniture ─────────────────────────────────────────────────
 
@@ -32,7 +33,7 @@ export function Line({ label, value, tone = 'ink' }: {
     : 'text-ink'
   return (
     <div className="flex items-baseline justify-between py-2.5 border-b border-bark/[0.08] last:border-b-0">
-      <span className="t-cap uppercase tracking-[0.12em] text-ink/50">{label}</span>
+      <span className="t-cap text-ink/65">{label}</span>
       <span className={`t-data t-num ${colour}`}>{value}</span>
     </div>
   )
@@ -46,7 +47,7 @@ export function Panel({ title, hint, aside, children }: {
   children: React.ReactNode
 }) {
   return (
-    <section className="bg-surface border border-bark/12 rounded-2xl px-4 py-3 mb-3">
+    <section className={`px-4 py-3 mb-3 ${cardClass()}`}>
       <div className="flex items-center justify-between gap-3">
         <h2 className="t-card text-ink">{title}</h2>
         {aside}
@@ -298,7 +299,7 @@ function Splits({ splits }: { splits: PlayerStats['splits'] }) {
       <div className="overflow-x-auto">
         <table className="w-full t-cap">
           <thead>
-            <tr className="text-ink/50 uppercase tracking-[0.12em]">
+            <tr className="text-ink/65">
               <th className="text-left font-normal py-2">Par</th>
               <th className="text-right font-normal py-2">Holes</th>
               <th className="text-right font-normal py-2 whitespace-nowrap">To par</th>
@@ -343,7 +344,7 @@ function Rounds({ stats, playerId, rounds, courseFor, courseName }: {
       <div className="overflow-x-auto">
         <table className="w-full t-cap">
           <thead>
-            <tr className="text-ink/50 uppercase tracking-[0.12em]">
+            <tr className="text-ink/65">
               <th className="text-left font-normal py-2">Round</th>
               <th className="text-right font-normal py-2">FW</th>
               <th className="text-right font-normal py-2">GIR</th>
@@ -574,7 +575,7 @@ export function EveryonePanels({
             return (
               <section
                 key={a.key}
-                className={`bg-surface border rounded-2xl px-4 py-3 mb-3 ${
+                className={`px-4 py-3 mb-3 ${cardClass()} ${
                   mineToo ? 'border-accent/50' : 'border-bark/12'
                 }`}
               >

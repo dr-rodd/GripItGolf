@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { TAG_SET, tagOf } from '@/lib/tagBoards'
 import { membersOf, type Membership, type TeamRow } from '@/lib/teamSets'
 import { setTeam } from '@/lib/teamMembers'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * Players picking their own tag — the field's side of tags.
@@ -71,7 +72,7 @@ export default function TagJoinClient({
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h2 className="t-label uppercase tracking-[0.15em] text-ink mb-1">Your tag</h2>
+        <h2 className="t-h2 text-ink mb-1">Your tag</h2>
         <p className="text-ink/65 text-sm leading-snug">
           The side you play for — it stays with you for the whole event,
           whoever you are out with on the day.
@@ -79,7 +80,7 @@ export default function TagJoinClient({
       </div>
 
       {!viewer && (
-        <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+        <div className={`p-4 ${cardClass()}`}>
           <p className="text-ink text-sm font-medium">First, say who you are.</p>
           <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
             Claim your name on the players screen, then come back and pick
@@ -102,7 +103,7 @@ export default function TagJoinClient({
           return (
             <li
               key={tag.id}
-              className={`bg-surface border rounded-2xl p-4 ${
+              className={`p-4 ${cardClass()} ${
                 mine ? 'border-accent/40' : 'border-bark/12'
               }`}
             >

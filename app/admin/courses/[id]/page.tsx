@@ -5,6 +5,7 @@ import { requireAdmin } from '../../adminGate'
 import AdminLogin from '../../AdminLogin'
 import AdminShell from '../../AdminShell'
 import CourseEditor from './CourseEditor'
+import { cardClass } from '@/app/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,7 +92,7 @@ export default async function AdminCoursePage({
       </div>
 
       {/* The card, read-only. */}
-      <section className="mt-6 bg-surface border border-bark/12 rounded-2xl px-4 py-4">
+      <section className={`mt-6 px-4 py-4 ${cardClass()}`}>
         <h2 className="font-[family-name:var(--font-display)] text-base mb-1">The card</h2>
         <p className="text-ink/65 text-[13px] mb-3 leading-snug">
           Pars and stroke indexes are corrected with a scorecard photo — the

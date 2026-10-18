@@ -35,6 +35,7 @@ import {
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import { describeError, generateCode } from './CreateTripForm'
+import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass, optionClass } from '@/app/components/ui'
 
 /**
  * Creating a league event — the league branch of the tournament door.
@@ -60,14 +61,6 @@ import { describeError, generateCode } from './CreateTripForm'
 
 // ── Styles shared with the trip wizard, by convention not import ─────────
 
-const INPUT = [
-  'w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5',
-  'text-ink placeholder:text-ink/60',
-  'focus:outline-none focus:border-accent/50 transition-colors',
-].join(' ')
-
-const LABEL = 'block text-ink/80 text-[13px] uppercase tracking-wider mb-2'
-
 const STEP_LABELS = ['Event details', 'Venues', 'Players', 'Finish']
 
 type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F' }
@@ -85,11 +78,7 @@ function Chips<K extends string>({ options, chosen, onChoose }: {
           key={o.key}
           onClick={() => onChoose(o.key)}
           aria-pressed={chosen === o.key}
-          className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors ${
-            chosen === o.key
-              ? 'bg-accent-deep text-white'
-              : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-          }`}
+          className={`${chipClass(chosen === o.key)} flex-1`}
         >
           {o.label}
         </button>
@@ -556,7 +545,7 @@ export default function CreateLeagueForm({ schedule }: {
               : 'Your field is in. The leaderboard and live scoring are ready on your Event Hub.'}
           </p>
 
-          <div className="bg-surface border border-bark/25 rounded-2xl px-4 py-8 mb-4">
+          <div className={`px-4 py-8 mb-4 ${cardClass()}`}>
             <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-4">Your Event Code</p>
             <div className="flex items-center justify-center gap-1 sm:gap-1.5">
               {resultCode.split('').map((ch, i) => (
@@ -570,7 +559,7 @@ export default function CreateLeagueForm({ schedule }: {
             </div>
           </div>
 
-          <div className="mb-4 px-4 py-3 bg-surface border border-bark/12 rounded-xl">
+          <div className={`mb-4 px-4 py-3 ${cardClass()}`}>
             <p className="text-ink/80 text-[13px] leading-snug">
               Your organiser PIN is set. Keep it safe — it cannot be recovered
               or changed.
@@ -579,14 +568,14 @@ export default function CreateLeagueForm({ schedule }: {
 
           <button
             onClick={copyCode}
-            className="w-full py-4 rounded-xl border border-bark/25 text-ink text-sm tracking-[0.15em] uppercase hover:border-bark/25 transition-colors mb-3"
+            className={`${buttonClass('secondary')} mb-3`}
           >
             {copied ? '✓ Copied' : 'Copy Code'}
           </button>
 
           <Link
             href={`/trip/${resultCode}`}
-            className="block w-full py-4 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors"
+            className={buttonClass('primary')}
           >
             Go to Your Event
           </Link>
@@ -623,7 +612,7 @@ export default function CreateLeagueForm({ schedule }: {
           <div>
             {stepNum > 1 && <BackButton onClick={goBack} />}
           </div>
-          <p className="text-center text-ink/65 text-[13px] tracking-wider uppercase">
+          <p className="text-center t-label text-ink/65">
             Step {stepNum} of 4 — {STEP_LABELS[stepNum - 1]}
           </p>
         </div>
@@ -635,13 +624,13 @@ export default function CreateLeagueForm({ schedule }: {
         {step === 1 && (
           <div className="space-y-6">
             <div>
-              <label className={LABEL}>Event name</label>
+              <label className={FIELD_LABEL}>Event name</label>
               <input
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="e.g. Winter League 2026"
-                className={INPUT}
+                className={FIELD}
                 autoFocus
               />
             </div>
@@ -653,7 +642,7 @@ export default function CreateLeagueForm({ schedule }: {
             {schedule === 'standalone' && (
               <>
                 <div>
-                  <label className={LABEL}>Event length</label>
+                  <label className={FIELD_LABEL}>Event length</label>
                   <Chips
                     options={[
                       { key: 'single', label: 'Single day' },
@@ -712,7 +701,7 @@ export default function CreateLeagueForm({ schedule }: {
                           exactly as it always was. */}
                       {!datesBackwards && !runTooLong && periodSet && runLength > 1 && (
                         <div className="mt-4">
-                          <label className={LABEL}>Playing days</label>
+                          <label className={FIELD_LABEL}>Playing days</label>
                           <p className="text-ink/65 text-[13px] mb-2 leading-snug">
                             Turn off any day nobody tees off — a travel day, a
                             rest day. The event still runs from the first date
@@ -725,7 +714,7 @@ export default function CreateLeagueForm({ schedule }: {
                               return (
                                 <div
                                   key={i}
-                                  className="flex items-center justify-between gap-4 bg-surface border border-bark/12 rounded-2xl px-4 py-3"
+                                  className={`flex items-center justify-between gap-4 px-4 py-3 ${cardClass()}`}
                                 >
                                   <p className={`text-sm min-w-0 truncate ${on ? 'text-ink' : 'text-ink/65'}`}>
                                     {label}
@@ -769,7 +758,7 @@ export default function CreateLeagueForm({ schedule }: {
             {schedule === 'continuous' && (
               <>
                 <div>
-                  <label className={LABEL}>The period</label>
+                  <label className={FIELD_LABEL}>The period</label>
                   <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
                     <DateField label="Starts" value={startDate} onChange={setStartDate} />
                     <DateField label="Finishes" value={endDate} onChange={setEndDate} />
@@ -783,7 +772,7 @@ export default function CreateLeagueForm({ schedule }: {
 
                 {periodSet && (
                   <>
-                    <div className="flex items-start justify-between gap-4 bg-surface border border-bark/12 rounded-2xl p-4">
+                    <div className={`flex items-start justify-between gap-4 p-4 ${cardClass()}`}>
                       <div className="min-w-0">
                         <p className="text-ink text-sm font-medium">Repeats weekly</p>
                         <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
@@ -796,7 +785,7 @@ export default function CreateLeagueForm({ schedule }: {
 
                     {repeatOn ? (
                       <div>
-                        <label className={LABEL}>Which day?</label>
+                        <label className={FIELD_LABEL}>Which day?</label>
                         {/* Monday first on screen; stored as the JS 0–6 the
                             repeat keeps. */}
                         <div className="grid grid-cols-7 gap-1">
@@ -805,11 +794,7 @@ export default function CreateLeagueForm({ schedule }: {
                               key={d}
                               onClick={() => setWeekday(d)}
                               aria-pressed={weekday === d}
-                              className={`py-2.5 rounded-lg text-[13px] font-medium transition-colors ${
-                                weekday === d
-                                  ? 'bg-accent-deep text-white'
-                                  : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                              }`}
+                              className={`${chipClass(weekday === d)}`}
                             >
                               {WEEKDAY_NAMES[d].slice(0, 3)}
                             </button>
@@ -827,7 +812,7 @@ export default function CreateLeagueForm({ schedule }: {
                       </div>
                     ) : (
                       <div>
-                        <label className={LABEL}>Playing days</label>
+                        <label className={FIELD_LABEL}>Playing days</label>
                         <div className="space-y-2">
                           {manualDates.map((d, i) => (
                             <div key={i} className="flex items-center gap-2">
@@ -874,7 +859,7 @@ export default function CreateLeagueForm({ schedule }: {
             )}
 
             {schedule === 'series' && (
-              <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+              <div className={`p-4 ${cardClass()}`}>
                 <p className="text-ink text-sm font-medium">A series carries no dates.</p>
                 <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
                   You&apos;ll pick the events and their venues next — they need
@@ -884,7 +869,7 @@ export default function CreateLeagueForm({ schedule }: {
             )}
 
             <div>
-              <label className={LABEL} htmlFor="league-email">Email (optional)</label>
+              <label className={FIELD_LABEL} htmlFor="league-email">Email (optional)</label>
               <input
                 id="league-email"
                 type="email"
@@ -897,7 +882,7 @@ export default function CreateLeagueForm({ schedule }: {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className={INPUT}
+                className={FIELD}
               />
               <p className="text-ink/65 text-[13px] mt-2 leading-snug">
                 We&apos;ll send you the event details and share link. The event
@@ -916,14 +901,14 @@ export default function CreateLeagueForm({ schedule }: {
         {step === 2 && (
           <div className="space-y-5">
             {coursesLoaded && courses.length === 0 && (
-              <div className="p-4 bg-surface border border-bark/12 rounded-xl text-ink/65 text-sm text-center">
+              <div className={`p-4 text-ink/65 text-sm text-center ${cardClass()}`}>
                 The course list could not be loaded — a course can still be
                 added by name from the picker.
               </div>
             )}
 
             {slots.length > 1 && (
-              <div className="flex items-start justify-between gap-4 bg-surface border border-bark/12 rounded-2xl p-4">
+              <div className={`flex items-start justify-between gap-4 p-4 ${cardClass()}`}>
                 <div className="min-w-0">
                   <p className="text-ink text-sm font-medium">
                     Same venue every {schedule === 'series' ? 'event' : 'day'}
@@ -942,7 +927,7 @@ export default function CreateLeagueForm({ schedule }: {
 
             {slots.length === 1 || sameVenue ? (
               <div>
-                <label className={LABEL}>Venue</label>
+                <label className={FIELD_LABEL}>Venue</label>
                 <CourseSelect
                   courses={courses}
                   value={venues[0] ?? ''}
@@ -954,7 +939,7 @@ export default function CreateLeagueForm({ schedule }: {
               <div className="space-y-4">
                 {slots.map((slot, i) => (
                   <div key={slot.date ?? i}>
-                    <label className={LABEL}>
+                    <label className={FIELD_LABEL}>
                       {schedule === 'series'
                         ? `Event ${i + 1}`
                         : describeDay(slot.date, slot.dayIndex)}
@@ -1006,7 +991,7 @@ export default function CreateLeagueForm({ schedule }: {
         {step === 3 && (
           <div className="space-y-4">
             <div>
-              <label className={LABEL}>How does the field get in?</label>
+              <label className={FIELD_LABEL}>How does the field get in?</label>
               <Chips options={PLAYER_ENTRIES} chosen={entry} onChoose={setEntry} />
               {entry && (
                 <p className="text-ink/65 text-[13px] mt-2 leading-snug">
@@ -1016,7 +1001,7 @@ export default function CreateLeagueForm({ schedule }: {
             </div>
 
             {entry === 'self_join' && (
-              <div className="flex items-start justify-between gap-4 bg-surface border border-bark/12 rounded-2xl p-4">
+              <div className={`flex items-start justify-between gap-4 p-4 ${cardClass()}`}>
                 <div className="min-w-0">
                   <p className="text-ink text-sm font-medium">Require approval</p>
                   <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
@@ -1032,7 +1017,7 @@ export default function CreateLeagueForm({ schedule }: {
               </div>
             )}
 
-            <div className="bg-surface border border-bark/12 rounded-2xl p-4">
+            <div className={`p-4 ${cardClass()}`}>
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <p className="text-ink text-sm font-medium">Are you playing?</p>
@@ -1057,9 +1042,9 @@ export default function CreateLeagueForm({ schedule }: {
             </p>
 
             {players.map((player, i) => (
-              <div key={i} className="bg-surface border border-bark/12 rounded-2xl p-4">
+              <div key={i} className={`p-4 ${cardClass()}`}>
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-ink/65 text-[13px] tracking-widest uppercase">
+                  <span className="t-eyebrow text-ink/65">
                     {i === 0 && organiserPlaying ? 'Organiser — you' : `Player ${i + 1}`}
                   </span>
                   {i > 0 && (
@@ -1082,8 +1067,8 @@ export default function CreateLeagueForm({ schedule }: {
                     onChange={e => updatePlayer(i, { name: e.target.value })}
                     placeholder="Full name"
                     className={i === duplicateIndex
-                      ? INPUT.replace('border-bark/12', 'border-rust/60')
-                      : INPUT}
+                      ? FIELD.replace('border-bark/12', 'border-rust/60')
+                      : FIELD}
                   />
                   {i === duplicateIndex && (
                     <p className="text-rust-deep text-[13px] leading-snug">
@@ -1097,18 +1082,14 @@ export default function CreateLeagueForm({ schedule }: {
                       onChange={v => updatePlayer(i, { handicap: v })}
                       placeholder="Handicap"
                       rowClassName="flex-1 min-w-0"
-                      className={`${INPUT} flex-1 min-w-0`}
+                      className={`${FIELD} flex-1 min-w-0`}
                     />
                     <div className="flex gap-1.5 flex-shrink-0">
                       {(['M', 'F'] as const).map(g => (
                         <button
                           key={g}
                           onClick={() => updatePlayer(i, { gender: g })}
-                          className={`w-12 rounded-xl text-sm font-medium transition-colors ${
-                            player.gender === g
-                              ? 'bg-accent-deep text-white'
-                              : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-                          }`}
+                          className={`${chipClass(player.gender === g)} w-12`}
                         >
                           {g}
                         </button>
@@ -1139,7 +1120,7 @@ export default function CreateLeagueForm({ schedule }: {
                 are apportioned after creation on the teams screen, the
                 same as a trip, so a team board here starts unassigned. */}
             <div>
-              <label className={LABEL}>Leaderboards</label>
+              <label className={FIELD_LABEL}>Leaderboards</label>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
                 What the event plays for. Every league starts on individual
                 Stableford, added up — change it, or add more formats.
@@ -1162,7 +1143,7 @@ export default function CreateLeagueForm({ schedule }: {
 
             {slots.length > 1 && (
               <div>
-                <label className={LABEL}>
+                <label className={FIELD_LABEL}>
                   The leaderboard across the {schedule === 'series' ? 'events' : 'days'}
                 </label>
                 <div className="space-y-2">
@@ -1171,16 +1152,12 @@ export default function CreateLeagueForm({ schedule }: {
                       key={d.key}
                       onClick={() => setDayBoards(d.key)}
                       aria-pressed={dayBoards === d.key}
-                      className={`block w-full text-left rounded-2xl p-4 transition-colors ${
-                        dayBoards === d.key
-                          ? 'bg-accent-deep text-white'
-                          : 'bg-surface border border-bark/12 hover:border-bark/25'
-                      }`}
+                      className={optionClass(dayBoards === d.key)}
                     >
-                      <p className={`text-sm font-medium ${dayBoards === d.key ? 'text-white' : 'text-ink'}`}>
+                      <p className="text-[17px] font-medium leading-snug text-ink">
                         {d.label}
                       </p>
-                      <p className={`text-[13px] mt-0.5 leading-snug ${dayBoards === d.key ? 'text-white/80' : 'text-ink/65'}`}>
+                      <p className="t-cap text-ink/65 mt-0.5">
                         {d.hint}
                       </p>
                     </button>
@@ -1194,7 +1171,7 @@ export default function CreateLeagueForm({ schedule }: {
                 opts in — the registry in lib/eventPermissions.ts is the
                 whole list, and the admin page edits the same answers. */}
             <div>
-              <label className={LABEL}>How collaborative should this event be?</label>
+              <label className={FIELD_LABEL}>How collaborative should this event be?</label>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
                 What the field can do for themselves. Everything starts off —
                 you can change any of these later from the organiser area.
@@ -1203,7 +1180,7 @@ export default function CreateLeagueForm({ schedule }: {
             </div>
 
             <div className="pt-2 border-t border-bark/12">
-              <div className="bg-surface border border-bark/12 rounded-xl px-4 py-4 mb-3">
+              <div className={`px-4 py-4 mb-3 ${cardClass()}`}>
                 <p className="text-ink text-sm font-medium">Organiser PIN</p>
                 <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
                   Your key to the organiser side of the Event Hub — notices,
@@ -1230,7 +1207,7 @@ export default function CreateLeagueForm({ schedule }: {
                   onChange={e => setPasscode(e.target.value.replace(/\D/g, ''))}
                   placeholder={`PIN (${MIN_PASSCODE}–${MAX_PASSCODE} digits)`}
                   maxLength={MAX_PASSCODE}
-                  className={INPUT}
+                  className={FIELD}
                 />
                 <input
                   type="password"
@@ -1240,7 +1217,7 @@ export default function CreateLeagueForm({ schedule }: {
                   onChange={e => setPasscodeConfirm(e.target.value.replace(/\D/g, ''))}
                   placeholder="Enter it again"
                   maxLength={MAX_PASSCODE}
-                  className={INPUT}
+                  className={FIELD}
                 />
                 {passcodeIssue && (passcode || passcodeConfirm) && (
                   <p className="text-rust-deep text-[13px] leading-snug">{passcodeIssue}</p>
@@ -1260,7 +1237,7 @@ export default function CreateLeagueForm({ schedule }: {
           <button
             onClick={goNext}
             disabled={!canProceed}
-            className="w-full py-5 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className={buttonClass('primary')}
           >
             {submitting ? 'Creating…' : stepNum === 4 ? 'Create League' : 'Continue'}
           </button>

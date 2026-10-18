@@ -8,6 +8,7 @@ import {
   type WeatherHour,
 } from '@/lib/weather'
 import { weatherIcon, IconArrowUp } from './icons'
+import { cardClass } from './ui'
 
 /**
  * The weather at a course, in two shapes.
@@ -191,7 +192,7 @@ function Slot({ label, hour }: { label: string; hour: WeatherHour | null }) {
   const rain = hour ? describeRain(hour.rainChance) : ''
 
   return (
-    <div className="rounded-xl border border-bark/12 bg-surface px-4 py-4 text-center">
+    <div className={`px-4 py-4 text-center ${cardClass()}`}>
       <p className="t-cap uppercase tracking-[0.14em] text-ink/50">{label}</p>
 
       {!hour ? (
