@@ -1659,10 +1659,15 @@ section('No glows')
   eq((roundState.match(/shadow-\[0_0_/g) ?? []).length, 1, 'which glows once, not everywhere')
   const liveLine = roundState.match(/live:\s*'([^']*)'/)?.[1] ?? ''
   ok(liveLine.includes('shadow-[0_0_'), 'and it is the live state that carries it')
+  // A played round is raised, like any card that opens something — a
+  // named shadow, not a glow. An empty one is flat: no shadow at all.
   for (const dead of ['empty', 'played']) {
     const line = roundState.match(new RegExp(`${dead}:\\s*'([^']*)'`))?.[1] ?? ''
-    ok(!line.includes('shadow'), `a ${dead} round does not glow`)
+    ok(!line.includes('shadow-['), `a ${dead} round does not glow`)
   }
+  ok(/empty:\s*'bg-tint[^']*'/.test(roundState) && !/empty:\s*'[^']*shadow/.test(roundState),
+    'an empty round is flat')
+  ok(/played:\s*'[^']*shadow-raised[^']*'/.test(roundState), 'and a played one is raised')
 
   const dot = renderToStaticMarkup(React.createElement(LiveDot, {}))
   ok(dot.includes('bg-accent'), 'the live dot is solid emerald')

@@ -5,14 +5,17 @@
 // question asked twice — which round, and what has happened on it — so they
 // have to answer it the same way.
 //
-// Three states, and the border carries all three:
+// Three states, and the surface carries all three (refresh plan, 4.4):
 //
-//   empty   nothing scored. The quietest thing on the page; there is
-//           nothing to report, so it reports nothing.
-//   live    a card is open on it now. Emerald, and the one place in the app
-//           that glows — see the note below.
-//   played  scores are in and nothing is open. A hard brown edge: finished,
-//           and finished is a fact rather than an event.
+//   empty   nothing scored. Flat — a tint with no edge and no shadow, the
+//           quietest thing on the page; there is nothing to report, so it
+//           reports nothing but "No scores yet".
+//   live    a card is open on it now. A 2px emerald edge, and the one place
+//           in the app that glows — see the note below.
+//   played  scores are in and nothing is open. A raised card with a
+//           chevron, like every other card that opens something: finished
+//           is a fact rather than an event. It was a heavy 2px brown frame,
+//           which read as an alarm on a screen full of them.
 //
 // **The glow is a deliberate exception.** The style guide has none —
 // "on cream a glow reads as a smudge" — and `test:branding` enforces that
@@ -45,12 +48,12 @@ export function roundTone(hasScores: boolean, isLive: boolean): RoundTone {
  * The border is the whole signal, so it is the only thing that changes.
  */
 export const ROUND_TILE: Record<RoundTone, string> = {
-  // Barely there. A round nobody has played is not news.
-  empty:  'bg-surface border border-bark/[0.08]',
+  // Flat. A round nobody has played is not news.
+  empty:  'bg-tint border border-transparent',
   // The exception. A ring at the accent, and a soft emerald spill under it.
   live:   'bg-surface border-2 border-accent shadow-[0_0_16px_rgba(10,157,86,0.28)]',
-  // Hard brown. Done, and legible as done without being loud.
-  played: 'bg-surface border-2 border-bark/45',
+  // Raised, like any card that opens something. The chevron is the tile's.
+  played: 'bg-surface border border-line shadow-raised',
 }
 
 /** What the tile says under the round number. */

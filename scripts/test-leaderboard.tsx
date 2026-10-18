@@ -500,11 +500,11 @@ section('Title card appears once more than one board is running')
 
   const single = render([SF()])
   ok(!single.includes(CARD), 'a lone board gets no title card, just its rule line')
-  ok(single.includes('greatest achievement'), 'the rule is still stated')
+  ok(single.includes('Stableford · Running total'), 'the rule is still stated, as facts')
 
   const multi = render([SF(), ST()])
   ok(multi.includes(CARD), 'a second board brings the title card in')
-  ok(multi.includes('greatest achievement'), 'with how the board is scored')
+  ok(multi.includes('Stableford · Running total'), 'with how the board is scored')
   // The tab strip also says "Stableford", so the card must be identified by
   // its own markup rather than by the word appearing anywhere
   ok(multi.split(CARD).length === 2, 'exactly one title card, for the active board')

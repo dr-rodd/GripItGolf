@@ -539,7 +539,8 @@ section('What settings says about a board')
     }))
 
   const reduced = setup([TEAM(85)])
-  ok(reduced.includes('85% of course handicap'),
+  // In the board's facts line now — "85% handicap" — rather than a sentence.
+  ok(reduced.includes('85% handicap'),
     'a board carrying a reduction says so on its card, in words')
 
   const full = setup([TEAM()])

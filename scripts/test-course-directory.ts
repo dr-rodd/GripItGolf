@@ -19,6 +19,7 @@ import {
   emptyTeeDraft, teeDraftBlank, teeDraftError, parseTeeDraft, validNewTee,
   IRISH_COUNTIES,
   type DirectoryCourse, type TeeDraft,
+  splitCourseName, courseLabel,
 } from '../lib/courseDirectory'
 import { TEE_COLUMN_RANGE } from '../lib/cardCheck'
 
@@ -185,6 +186,20 @@ section('validNewTee — the wire check refuses what the form refuses')
     'one past the shared slope ceiling is refused')
   ok(validNewTee({ ...good, slope: TEE_COLUMN_RANGE.slope[1] }),
     'the shared slope ceiling itself passes')
+}
+
+// ─── Saying a course's name ────────────────────────────────────
+
+section('A course name splits into club and course, and never prints "--"')
+{
+  eq(splitCourseName('Carne Golf Links -- Wild Atlantic Dunes'),
+    { club: 'Carne Golf Links', course: 'Wild Atlantic Dunes' }, 'the stored separator splits it')
+  eq(splitCourseName('Ballyliffin'), { club: 'Ballyliffin', course: null }, 'a one-course club is all club')
+  eq(courseLabel('Carton House -- OMeara'), 'Carton House · OMeara', 'on one line, joined by a middle dot')
+  eq(courseLabel('Portsalon'), 'Portsalon', '  …and a plain name passes through')
+  eq(splitCourseName(courseLabel('Carne Golf Links -- Wild Atlantic Dunes')).course, 'Wild Atlantic Dunes',
+    'a label splits back the same way')
+  ok(!courseLabel('A -- B').includes('--'), 'the double hyphen is never printed')
 }
 
 // ─── Result ────────────────────────────────────────────────────

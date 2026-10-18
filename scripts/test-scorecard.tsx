@@ -528,14 +528,11 @@ section('A round tile says what has happened on it')
   // open card from the group still out. The open card is what matters.
   eq(roundTone(true, true), 'live', 'and an open card wins over scores already in')
 
-  // All three are the app's white card; only the border changes
-  for (const tone of ['empty', 'live', 'played'] as const) {
-    ok(ROUND_TILE[tone].includes('bg-surface'), `a ${tone} round is a white card`)
-  }
-
-  // Empty is the quietest, played is a hard brown, live is the accent
-  ok(/border-bark\/\[0\.08\]/.test(ROUND_TILE.empty), 'an empty round is barely outlined')
-  ok(ROUND_TILE.played.includes('border-bark/45'), 'a played one is a hard brown edge')
+  // Three surfaces (refresh plan, 4.4): empty is flat, played a raised
+  // white card, live the white card with the emerald edge and its glow.
+  ok(ROUND_TILE.empty.includes('bg-tint') && !ROUND_TILE.empty.includes('shadow'), 'an empty round is flat')
+  ok(ROUND_TILE.played.includes('bg-surface') && ROUND_TILE.played.includes('shadow-raised'), 'a played one is a raised card')
+  ok(ROUND_TILE.live.includes('bg-surface'), 'a live one is a white card too')
   ok(ROUND_TILE.live.includes('border-accent'), 'and a live one is emerald')
   ok(!ROUND_TILE.empty.includes('border-2') , 'with the quiet one the thinnest of the three')
 

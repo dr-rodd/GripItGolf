@@ -21,7 +21,7 @@ import {
   freeScorings, freeTeamFormats, everyBoard,
   unanswered, isComplete, offersDiscard, needsTeams, needsPairings,
   offersCountingScores, countingScoresOf, describeBetterBall, offersTeamNames,
-  boardTitle, boardRules, primary, parseLeaderboards,
+  boardTitle, boardRules, boardFacts, primary, parseLeaderboards,
 } from '../lib/leaderboards'
 import { DEFAULT_FORMATS, parseFormats, matchplayOn } from '../lib/formats'
 import { DEFAULT_TEAM_SCORING, MAX_COUNTING_SCORES } from '../lib/teamScoring'
@@ -241,6 +241,25 @@ section('Boards are titled the way people would say them')
     'and a chosen count is the one named')
   ok(boardRules({ ...teamBB, teamFormat: 'hero' }).includes('carries it'),
     'the other formats keep their own line')
+
+  // The facts line every screen shows instead (refresh plan, 4.5): the same
+  // answers, as facts a phone can take in at a glance.
+  eq(boardFacts(sf), ['Stableford', 'Running total'], 'a plain board is two facts')
+  eq(boardFacts(strokes)[0], 'Strokes', '  …the scoring first')
+  ok(boardFacts(prize).includes('Points by position'), 'a prize board pays by position')
+  eq(boardFacts({ ...sf, discardWorst: 1 }).slice(-1), ['Worst round dropped'], 'the discard, said once')
+  ok(boardFacts({ ...sf, discardWorst: 2 }).includes('Worst 2 rounds dropped'), '  …in the plural where it is plural')
+  ok(boardFacts(teamBB).includes('Best 2 balls'), 'a better-ball board names its count')
+  ok(boardFacts({ ...teamBB, countingScores: 1 }).includes('Best ball'), '  …best 1 is plain best ball')
+  ok(boardFacts({ ...teamBB, aggregateFinish: 3 }).includes('All count on 16–18'), '  …and a grandstand finish says where')
+  ok(boardFacts({ ...sf, handicapAllowance: 90 }).includes('90% handicap'), 'a reduction is named')
+  ok(!boardFacts(sf).some(f => /handicap/.test(f)), '  …and a full handicap is not')
+  ok(boardFacts({ ...prize, tieBreak: 'countback' }).includes('Countback'), 'a countback is named')
+  eq(boardFacts(pairsDraw).slice(0, 2), ['Knockout', 'Pairs'], 'a draw says what it is and between whom')
+  for (const b of [sf, strokes, prize, teamBB, draw, pairsDraw, { ...sf, discardWorst: 1, handicapAllowance: 90 }]) {
+    ok(boardFacts(b).every(f => f.length > 0 && !/[.!]$/.test(f) && f.length <= 28),
+      `${boardTitle(b)}: facts, not sentences`)
+  }
 
   eq(primary([teamBB, sf])?.id, teamBB.id, 'the first board made is the primary')
   eq(primary([]), null, 'and an empty trip has none')

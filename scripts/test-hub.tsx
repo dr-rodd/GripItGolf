@@ -1099,8 +1099,7 @@ section('Up next is set as the headline of the hub')
   // The card whose job is to say where you are going was naming it at tile
   // weight with an ellipsis. Section-heading size now, wrapping — the page
   // scrolls to make the room, the card does not shrink its answer.
-  ok(/t-h2 text-ink[^"]*mt-0\.5[^"]*"[^"]*>\{next\.title\}/.test(status)
-    || /className="t-h2 text-ink[^"]*">\{next\.title\}/.test(status),
+  ok(/className="t-h2 text-ink[^"]*mt-0\.5">[\s\S]{0,160}next\.title/.test(status),
     'the next thing is named at heading size')
   ok(!/t-card text-ink truncate[^"]*"[^"]*>\{next\.title\}/.test(status),
     '  …not at tile weight with an ellipsis')

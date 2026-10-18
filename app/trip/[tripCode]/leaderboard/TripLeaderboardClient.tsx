@@ -31,6 +31,7 @@ import { Pill, Segmented, cardClass, chipClass } from '@/app/components/ui'
 import Toggle from '@/app/components/Toggle'
 import CourseName from '@/app/components/CourseName'
 import { courseLabel, splitCourseName } from '@/lib/courseDirectory'
+import { IconChevronRight } from '@/app/components/icons'
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -604,11 +605,11 @@ export function CourseTiles({
           <button
             key={round.id}
             onClick={() => onTileClick(round)}
-            className={`w-full text-left rounded-2xl press ${ROUND_TILE[tone]}`}
+            className={`w-full text-left rounded-card press ${ROUND_TILE[tone]}`}
           >
             <div className="px-5 py-4 flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <p className="font-[family-name:var(--font-display)] text-ink text-base leading-tight truncate">
+                <p className="t-card text-ink truncate">
                   <CourseName name={round.courses?.name ?? `Round ${round.round_number}`} />
                 </p>
                 {/* Two lines before the ellipsis. "In play — carried by
@@ -629,10 +630,10 @@ export function CourseTiles({
                     {live && rel !== undefined ? formatRelative(rel) : formatScore(pts)}
                   </span>
                 )}
-                {/* The countback sits directly over "View", which is the only
-                    space on this tile that is always free — the note beside
-                    the course name may already be carrying a hero, and the
-                    score is a number that must not be crowded. */}
+                {/* The countback sits directly over the chevron, which is the
+                    only space on this tile that is always free — the note
+                    beside the course name may already be carrying a hero, and
+                    the score is a number that must not be crowded. */}
                 <span className="flex flex-col items-end leading-tight">
                   {settledBy && (
                     <span
@@ -642,7 +643,9 @@ export function CourseTiles({
                       {countbackNote(settledBy)}
                     </span>
                   )}
-                  <span className="text-ink/65 text-sm">View →</span>
+                  {tone !== 'empty' && (
+                    <span className="text-ink/50" aria-hidden="true"><IconChevronRight size={20} /></span>
+                  )}
                 </span>
               </div>
             </div>
@@ -936,6 +939,49 @@ function useBoardScroll(scrolls: boolean) {
 /** Round columns beyond this stop fitting a phone, so they start scrolling. */
 const INLINE_ROUNDS = 4
 
+/**
+ * A team's name on the board, stacked rather than gliding (refresh plan, 4.6).
+ *
+ * A team named from its members shows them one to a line — two lines at
+ * most, a third and beyond as "+1" on the second — in the serif at 17px,
+ * read without waiting for anything to move. A team with a name of its own
+ * ("Europe") shows the name, and its members' first names under it in
+ * caption type. The names are the board's (lib/displayNames.ts), so two
+ * Rosses still come out as two different people. The row grows to 64px to
+ * hold the second line; nothing glides.
+ */
+function TeamName({ row, byPlayers, memberNames }: {
+  row: BoardRow
+  byPlayers: boolean
+  memberNames: string[]
+}) {
+  const names = memberNames.filter(Boolean)
+  const stacked = byPlayers && names.length > 0
+    ? (names.length <= 2 ? names : [names[0], `${names[1]} +${names.length - 2}`])
+    : null
+  const line = 'block truncate font-bold text-[17px] leading-[1.2] text-ink'
+  return (
+    <span className="flex items-start gap-1.5 min-w-0">
+      {row.color && (
+        <span className="w-2 h-2 mt-[7px] rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} />
+      )}
+      <span className="min-w-0 flex-1">
+        {stacked
+          ? stacked.map((n, i) => <span key={i} className={line}>{n}</span>)
+          : (
+            <>
+              <span className={line}>{row.name}</span>
+              {names.length > 0 && (
+                <span className="block truncate t-cap text-ink/65">{names.join(', ')}</span>
+              )}
+            </>
+          )}
+      </span>
+      {row.isLive && <span className="mt-[7px] flex"><LiveDot /></span>}
+    </span>
+  )
+}
+
 function Board({
   board, rows: allRows, rounds, playerById, boardNameById, onOpenCard,
 }: {
@@ -947,6 +993,9 @@ function Board({
   boardNameById: Map<string, string>
   onOpenCard: (row: BoardRow, round: Round) => void
 }) {
+  // A team's row stacks its members' names rather than gliding them — see
+  // TeamName. An individual board keeps the gliding name.
+  const isTeamBoard = board.audience === 'team'
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   /**
@@ -1189,7 +1238,7 @@ function Board({
                 // place it is the point, and the body around it is sans.
                 className={`font-serif flex items-center ${GAP} px-3 py-2 text-left transition-opacity duration-150 active:opacity-70 ${
                   scrolls ? 'w-max min-w-full' : 'w-full'
-                } ${!isLast || isExpanded ? 'border-b border-bark/12' : ''}`}
+                } ${isTeamBoard ? 'min-h-16' : ''} ${!isLast || isExpanded ? 'border-b border-bark/12' : ''}`}
               >
                 <span className={pin('l', '-my-2 py-2')}>
                   {/* The place, not the row's index. Two level share one —
@@ -1204,18 +1253,26 @@ function Board({
                       move. Both lines carry it, because the grey line of
                       first names underneath is usually the longer one. */}
                   <span className={`block min-w-0 ${NAME_W}`}>
-                    <span className="flex items-center gap-1.5">
-                      {row.color && (
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} />
-                      )}
-                      <ScrollingName
-                        text={boardNameById.get(row.id) ?? row.name}
-                        className="min-w-0 flex-1"
-                        textClassName="font-semibold text-[15px] leading-tight text-ink"
+                    {isTeamBoard ? (
+                      <TeamName
+                        row={row}
+                        byPlayers={board.hideTeamName === true}
+                        memberNames={row.playerIds.map(id => boardNameById.get(id) ?? playerById.get(id)?.name ?? '')}
                       />
-                      {row.isLive && <LiveDot />}
-                    </span>
-                    {row.subLabel && (
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        {row.color && (
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} />
+                        )}
+                        <ScrollingName
+                          text={boardNameById.get(row.id) ?? row.name}
+                          className="min-w-0 flex-1"
+                          textClassName="font-semibold text-[15px] leading-tight text-ink"
+                        />
+                        {row.isLive && <LiveDot />}
+                      </span>
+                    )}
+                    {!isTeamBoard && row.subLabel && (
                       <ScrollingName
                         text={row.subLabel}
                         className={`block ${row.color ? 'pl-3.5' : ''}`}

@@ -9,6 +9,7 @@ import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
 import AddRound from './AddRound'
 import CourseName from '@/app/components/CourseName'
+import { IconChevronRight } from '@/app/components/icons'
 
 export const dynamic = 'force-dynamic'
 
@@ -157,13 +158,13 @@ export default async function TripCoursePortalPage({
               <Link
                 key={round.id}
                 href={`/trip/${tripCode}/scoring/${round.round_number}`}
-                className={`flex items-center justify-between w-full px-5 py-4 rounded-2xl press ${ROUND_TILE[tone]}`}
+                className={`flex items-center justify-between w-full px-5 py-4 rounded-card press ${ROUND_TILE[tone]}`}
               >
                 <div className="min-w-0">
                   <p className="t-label text-ink/65 mb-1">
                     Round {round.round_number}
                   </p>
-                  <p className="font-[family-name:var(--font-display)] text-ink text-lg leading-tight truncate">
+                  <p className="t-card text-ink truncate">
                     <CourseName name={course?.name ?? `Round ${round.round_number}`} />
                   </p>
                   <p className={`t-cap mt-1 truncate ${ROUND_NOTE_TONE[tone]}`}>
@@ -179,6 +180,11 @@ export default async function TripCoursePortalPage({
                     className="flex-shrink-0 ml-4 w-1.5 h-1.5 rounded-full bg-accent dot-live"
                     aria-hidden="true"
                   />
+                )}
+                {tone === 'played' && (
+                  <span className="flex-shrink-0 ml-4 text-ink/50" aria-hidden="true">
+                    <IconChevronRight size={20} />
+                  </span>
                 )}
               </Link>
             )
