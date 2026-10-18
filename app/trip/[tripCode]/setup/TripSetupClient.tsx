@@ -38,7 +38,7 @@ import { duplicateName, duplicateNameError, isDuplicateNameError } from '@/lib/r
 import { syncRoundHandicaps } from '@/lib/roundHandicaps'
 import { rescheduleRounds } from '@/lib/itineraryStore'
 import { normalizeDescription, MAX_TRIP_DESCRIPTION } from '@/lib/tripLimits'
-import { FIELD, FIELD_LABEL, cardClass, chipClass } from '@/app/components/ui'
+import { FIELD, FIELD_LABEL, Pill, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -115,7 +115,7 @@ function TeamSelect({
         aria-label={label ?? `Which ${noun.one}`}
         className={wide
           ? `${FIELD} appearance-none pr-10`
-          : 'w-full bg-surface border border-bark/12 rounded-lg px-3 py-2.5 text-ink text-sm appearance-none focus:outline-none focus:border-accent/50 disabled:opacity-40'}
+          : `${FIELD} field-dense appearance-none`}
       >
         <option value="" className="bg-cream">No {noun.one}</option>
         {teams.map(t => {
@@ -859,7 +859,7 @@ export default function TripSetupClient({
             {canArrange && (
               <Link
                 href={`/trip/${trip.trip_code}/teams`}
-                className="block w-full py-3.5 border border-accent/40 text-accent rounded-xl text-sm tracking-wider uppercase text-center hover:bg-accent/10 transition-colors"
+                className={buttonClass('secondary')}
               >
                 {pickedSheets.length > 0
                   ? `Change ${groupNoun.many}`
@@ -878,7 +878,7 @@ export default function TripSetupClient({
           {/* ── Players ── */}
           <section className={SECTION}>
             <div className="flex items-center justify-between mb-4">
-              <p className="t-eyebrow text-ink/65">Players</p>
+              <h2 className="t-card text-ink">Players</h2>
               <span className="text-ink/65 text-[13px]">{players.length}</span>
             </div>
 
@@ -905,10 +905,10 @@ export default function TripSetupClient({
                         {player.name}
                       </span>
                       {player.is_lead && (
-                        <span className="text-ink/65 text-[13px] tracking-widest uppercase flex-shrink-0">Lead</span>
+                        <Pill className="flex-shrink-0">Lead</Pill>
                       )}
                       {isHandicapPending(player.handicap) ? (
-                        <span className="text-ink/50 text-[13px] tracking-wider uppercase flex-shrink-0">
+                        <span className="t-cap text-ink/65 flex-shrink-0">
                           {HANDICAP_PENDING_LABEL}
                         </span>
                       ) : (
@@ -1006,7 +1006,7 @@ export default function TripSetupClient({
                           and there is nothing here to cancel. */}
                       <button
                         onClick={() => setEditingId(null)}
-                        className="self-end px-4 py-2 t-cap uppercase tracking-[0.18em] text-accent-deep hover:text-accent transition-colors"
+                        className={`${buttonClass('quiet', false)} self-end`}
                       >
                         Done
                       </button>
@@ -1110,7 +1110,7 @@ export default function TripSetupClient({
                   <button
                     onClick={addPlayer}
                     disabled={busy || !newName.trim()}
-                    className="w-full py-3.5 border border-accent/40 text-accent rounded-xl text-sm tracking-wider uppercase hover:bg-accent/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className={buttonClass('secondary')}
                   >
                     + Add player
                   </button>
@@ -1168,7 +1168,7 @@ export default function TripSetupClient({
 
         {/* Error toast */}
         {error && (
-          <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 border-rust/40 shadow-xl z-50 ${cardClass()}`}>
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 bg-surface border border-rust/40 rounded-card shadow-floating z-50">
             <p className="text-rust-deep text-sm whitespace-nowrap">{error}</p>
           </div>
         )}

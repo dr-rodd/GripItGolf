@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { formatPoints } from '@/lib/runChallenge'
 import { formatKm } from '@/lib/runBoards'
 import PoweredByStrava from '@/app/components/PoweredByStrava'
-import { cardClass } from '@/app/components/ui'
+import { Segmented, cardClass } from '@/app/components/ui'
 
 /**
  * The run leaderboard's boards, one at a time — golf's board, in golf's
@@ -73,22 +73,13 @@ export default function RunBoardClient({ boards, anyRuns, garmin = false, strava
     <div>
       {/* ── Which board ── */}
       {boards.length > 1 && (
-        <div className="flex gap-1.5 mb-4 overflow-x-auto -mx-1 px-1 pb-1">
-          {boards.map(b => (
-            <button
-              key={b.id}
-              onClick={() => setActiveId(b.id)}
-              aria-pressed={b.id === board.id}
-              className={`flex-shrink-0 px-4 py-2.5 t-label transition-colors duration-150 rounded-xl border ${
-                b.id === board.id
-                  ? 'bg-accent-deep text-white font-bold border-accent-deep'
-                  : 'bg-surface border-bark/12 text-ink/65 hover:text-ink/80'
-              }`}
-            >
-              {b.title}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label="Which leaderboard"
+          className="mb-4"
+          value={board.id}
+          onChange={setActiveId}
+          options={boards.map(b => ({ value: b.id, label: b.title }))}
+        />
       )}
 
       <p className="text-ink/65 text-[13px] leading-snug mb-3">{board.rule}</p>

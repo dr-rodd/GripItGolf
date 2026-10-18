@@ -129,7 +129,7 @@ export default function StatusBlock({
             router.refresh()
             router.push(`/trip/${tripCode}/players`)
           }}
-          className="flex-shrink-0 t-cap uppercase tracking-[0.12em] text-ink/50 hover:text-ink/80 transition-colors duration-150"
+          className="flex-shrink-0 t-label text-accent-deep hover:text-accent transition-colors duration-150"
         >
           Not you?
         </button>

@@ -164,7 +164,7 @@ function Block({
             href={link}
             target="_blank"
             rel="noopener noreferrer"
-            className="t-cap uppercase tracking-[0.15em] text-ink/65 hover:text-accent-deep transition-colors py-2"
+            className="t-label text-accent-deep hover:text-accent transition-colors py-2"
           >
             Full forecast
           </a>
@@ -193,7 +193,7 @@ function Slot({ label, hour }: { label: string; hour: WeatherHour | null }) {
 
   return (
     <div className={`px-4 py-4 text-center ${cardClass()}`}>
-      <p className="t-cap uppercase tracking-[0.14em] text-ink/50">{label}</p>
+      <p className="t-cap text-ink/65">{label}</p>
 
       {!hour ? (
         <p className="t-cap text-ink/50 mt-2 leading-snug">No reading for this hour</p>

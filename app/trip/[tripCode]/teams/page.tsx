@@ -92,7 +92,7 @@ export default async function TripTeamsPage({
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <BackButton href={`/trip/${tripCode}/setup`} />
           <div className="min-w-0 text-center">
-            <h1 className="font-[family-name:var(--font-display)] text-lg text-ink tracking-wide">
+            <h1 className="font-[family-name:var(--font-display)] text-lg text-ink">
               Teams
             </h1>
           </div>
@@ -144,7 +144,7 @@ export default async function TripTeamsPage({
           <TripHeader backTo={`/trip/${tripCode}`} />
           <div className="paper border-b border-bark/12">
             <div className="max-w-3xl mx-auto px-4 py-4 text-center">
-              <h1 className="font-[family-name:var(--font-display)] text-lg text-ink tracking-wide">
+              <h1 className="font-[family-name:var(--font-display)] text-lg text-ink">
                 Teams
               </h1>
             </div>

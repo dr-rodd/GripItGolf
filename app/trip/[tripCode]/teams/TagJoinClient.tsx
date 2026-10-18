@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { TAG_SET, tagOf } from '@/lib/tagBoards'
 import { membersOf, type Membership, type TeamRow } from '@/lib/teamSets'
 import { setTeam } from '@/lib/teamMembers'
-import { cardClass } from '@/app/components/ui'
+import { buttonClass, cardClass } from '@/app/components/ui'
 
 /**
  * Players picking their own tag — the field's side of tags.
@@ -139,7 +139,7 @@ export default function TagJoinClient({
                       type="button"
                       onClick={() => pick(tag.id)}
                       disabled={busy}
-                      className="flex-shrink-0 px-4 py-2 rounded-lg bg-accent-deep text-white text-sm font-medium hover:bg-accent transition-colors disabled:opacity-40"
+                      className={`${buttonClass('primary', false, true)} flex-shrink-0`}
                     >
                       Join
                     </button>

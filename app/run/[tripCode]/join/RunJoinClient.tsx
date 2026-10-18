@@ -14,7 +14,7 @@ import {
   runnerNameIssue, teamNameIssue, nextTeamColor, joinChoices,
 } from '@/lib/runChallenge'
 import type { RunRosterEntry } from '../data'
-import { cardClass } from '@/app/components/ui'
+import { FIELD, buttonClass, cardClass, optionClass } from '@/app/components/ui'
 
 /**
  * The join screen's two steps: who you are, then which team.
@@ -48,15 +48,10 @@ type TeamChoice =
   | { kind: 'existing'; id: string }
   | { kind: 'new' }
 
-const CARD_BASE = 'w-full text-left border rounded-2xl px-4 py-3.5 press transition-colors'
-const CARD = `${CARD_BASE} bg-surface border-bark/12 hover:border-bark/25`
-const CARD_ON = `${CARD_BASE} border-accent/60 bg-accent/[0.08]`
-const INPUT = [
-  'w-full bg-surface border border-bark/12 rounded-xl px-4 py-3.5',
-  'text-ink placeholder:text-ink/60',
-  'focus:outline-none focus:border-accent/50 transition-colors',
-].join(' ')
-const PRIMARY = 'w-full py-4 bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
+const CARD = optionClass(false)
+const CARD_ON = optionClass(true)
+const INPUT = FIELD
+const PRIMARY = buttonClass('primary')
 
 export default function RunJoinClient({
   tripId, code, name, roster, teams, choices, viewerId,

@@ -125,7 +125,7 @@ export default function TripExportClient({
         <button
           type="button"
           onClick={() => window.print()}
-          className={`${buttonClass('primary', true)} py-3 text-[14px]`}
+          className={buttonClass('primary', true)}
         >
           Save as PDF
         </button>

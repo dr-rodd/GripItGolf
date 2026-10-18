@@ -159,7 +159,7 @@ export default async function TripCoursePortalPage({
                 className={`flex items-center justify-between w-full px-5 py-4 rounded-2xl press ${ROUND_TILE[tone]}`}
               >
                 <div className="min-w-0">
-                  <p className="t-cap uppercase tracking-[0.2em] text-ink/65 mb-1">
+                  <p className="t-label text-ink/65 mb-1">
                     Round {round.round_number}
                   </p>
                   <p className="font-[family-name:var(--font-display)] text-ink text-lg leading-tight truncate">

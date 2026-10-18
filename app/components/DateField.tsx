@@ -1,4 +1,4 @@
-import { FIELD_LABEL } from '@/app/components/ui'
+import { FIELD, FIELD_LABEL } from '@/app/components/ui'
 'use client'
 
 /**
@@ -42,13 +42,7 @@ export default function DateField({
         disabled={disabled}
         min={min}
         max={max}
-        className={[
-          'block w-full min-w-0 max-w-full',
-          'bg-surface border border-bark/12 rounded-xl px-4 py-3.5',
-          'text-ink text-sm',
-          'focus:outline-none focus:border-accent/50 transition-colors',
-          'disabled:opacity-40 disabled:cursor-not-allowed',
-        ].join(' ')}
+        className={`${FIELD} min-w-0 max-w-full`}
         style={{
           // Without this the picker's text renders in the system colour,
           // which is invisible against a dark background on iOS

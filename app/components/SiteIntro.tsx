@@ -718,7 +718,7 @@ export default function SiteIntro({ tripName }: { tripName: string }) {
       <button
         type="button"
         onClick={e => { e.stopPropagation(); finish() }}
-        className="press absolute right-4 z-10 rounded-full bg-surface border border-bark/15 shadow-md t-label uppercase tracking-[0.14em] text-ink px-4 py-2.5"
+        className="press absolute right-4 z-10 rounded-full bg-surface border border-line shadow-raised t-label text-ink px-4 py-2.5"
         style={{ top: 'calc(env(safe-area-inset-top) + 10px)' }}
       >
         Skip intro

@@ -1266,7 +1266,7 @@ section('The lab reads the derivation and does none of its own')
 
   // ── The hero is named, floored, and scaled ──
   const charts2 = code('app/trip/[tripCode]/stats/charts.tsx')
-  ok(/Skill Profile/.test(client) && !/shape of your game/i.test(client),
+  ok(/Skill profile/i.test(client) && !/shape of your game/i.test(client),
     'the hero is the Skill Profile, by name')
   ok(/const R_FLOOR = \d/.test(charts2) && /R_FLOOR \+ \(R - R_FLOOR\)/.test(charts2),
     'the pentagon\'s scale floors on a ring, not the centre — no V shapes')

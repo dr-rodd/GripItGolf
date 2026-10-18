@@ -188,6 +188,8 @@ export type ButtonVariant = 'primary' | 'secondary' | 'quiet' | 'danger'
 export const buttonClass = (
   variant: ButtonVariant = 'primary',
   full = true,
+  /** 44px — a button inside a dense row, beside a dense field. */
+  dense = false,
 ) => {
   const look =
     variant === 'primary'
@@ -199,8 +201,9 @@ export const buttonClass = (
           : 'text-accent-deep hover:text-accent disabled:text-disabled-fg'
   const size =
     variant === 'quiet'
-      ? 'min-h-12 px-2'
-      : full ? 'w-full min-h-14 px-5' : 'min-h-12 px-5'
+      ? (dense ? 'min-h-11 px-2' : 'min-h-12 px-2')
+      : dense ? `${full ? 'w-full ' : ''}min-h-11 px-4`
+        : full ? 'w-full min-h-14 px-5' : 'min-h-12 px-5'
   return `${BUTTON_BASE} ${look} ${size}`.trim()
 }
 
@@ -264,8 +267,8 @@ export function IconButton({
  * A chip: 44px tall, fully round. Chosen is the deep emerald with white
  * words; not chosen is a raised white chip.
  */
-export const chipClass = (selected: boolean) =>
-  'inline-flex items-center justify-center gap-1.5 min-h-11 px-4 rounded-full t-label tabular-nums press whitespace-nowrap ' +
+export const chipClass = (selected: boolean, compact = false) =>
+  `inline-flex items-center justify-center gap-1.5 min-h-11 ${compact ? 'px-2' : 'px-4'} rounded-full t-label tabular-nums press whitespace-nowrap ` +
   'disabled:bg-disabled-bg disabled:text-disabled-fg disabled:border-transparent disabled:shadow-none disabled:cursor-not-allowed ' +
   (selected
     ? 'bg-accent-deep text-white border border-accent-deep'
@@ -310,7 +313,7 @@ export function ChoiceChips<T extends string>({
           type="button"
           aria-pressed={o.value === value}
           onClick={() => onChange(o.value)}
-          className={`${chipClass(o.value === value)} ${equal ? 'flex-1 min-w-0 px-2' : ''}`.trim()}
+          className={`${chipClass(o.value === value, equal)} ${equal ? 'flex-1 min-w-0' : ''}`.trim()}
         >
           {o.label}
         </button>

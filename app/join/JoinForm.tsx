@@ -93,7 +93,7 @@ export default function JoinForm() {
             disabled={loading || code.trim().length < 6}
             className={buttonClass('primary')}
           >
-            {loading ? 'Checking…' : 'Join Event'}
+            {loading ? 'Checking…' : 'Join event'}
           </button>
         </form>
 

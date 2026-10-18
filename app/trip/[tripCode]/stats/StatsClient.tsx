@@ -18,7 +18,7 @@ import {
   type GainedBar,
 } from './charts'
 import type { RowHole, RowRound } from '@/lib/boardRows'
-import { cardClass } from '@/app/components/ui'
+import { Segmented, cardClass, chipClass } from '@/app/components/ui'
 
 /**
  * The stats hub: an instrument, not a printout.
@@ -249,12 +249,7 @@ export default function StatsClient({
     : includedIds.length === 1 ? courseName.get(includedIds[0]) ?? 'Course'
     : `${includedIds.length} of ${playedCourseIds.length} courses`
 
-  const chip = (on: boolean) =>
-    `flex-shrink-0 inline-flex items-center px-4 py-2.5 t-label rounded-xl border transition-colors duration-150 ${
-      on
-        ? 'bg-accent-deep text-white font-bold border-accent-deep'
-        : 'bg-surface border-bark/12 text-ink/65 hover:text-ink/80'
-    }`
+  const chip = (on: boolean) => `${chipClass(on)} flex-shrink-0`
 
   return (
     <div>
@@ -265,23 +260,13 @@ export default function StatsClient({
           below. */}
       <div ref={controls} className="-mx-4 px-4 pb-3 border-b border-bark/12 mb-4">
         {/* The first choice on the page: who, or where. */}
-        <div className="flex gap-2 pt-3">
-          {([['players', 'Players'], ['courses', 'Courses']] as const).map(([v, label]) => (
-            <button
-              key={v}
-              type="button"
-              aria-pressed={view === v}
-              onClick={() => setView(v)}
-              className={`flex-1 py-3 rounded-xl t-label transition-colors duration-150 ${
-                view === v
-                  ? 'bg-accent-deep text-white font-bold'
-                  : 'bg-surface border border-bark/12 text-ink/80 hover:border-bark/25'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label="Players or courses"
+          className="mt-3"
+          value={view}
+          onChange={setView}
+          options={[{ value: 'players', label: 'Players' }, { value: 'courses', label: 'Courses' }]}
+        />
 
         {view === 'players' ? (
           <>
@@ -364,20 +349,14 @@ export default function StatsClient({
       {view === 'players' && hero && (
         <div className={`px-4 pt-3 pb-1 mb-4 ${cardClass()}`}>
           <div className="flex items-center justify-between gap-3">
-            <h2 className="t-card text-ink">Skill Profile</h2>
-            <div className="flex gap-1 flex-shrink-0" role="group" aria-label="Chart style">
-              {([['pentagon', 'Shape'], ['trend', 'Trend']] as const).map(([v, label]) => (
-                <button key={v} type="button" aria-pressed={heroView === v}
-                  onClick={() => setHeroView(v)}
-                  className={`px-3 py-1.5 rounded-lg border text-[13px] tracking-wider uppercase transition-colors duration-150 ${
-                    heroView === v
-                      ? 'bg-accent-deep text-white border-accent-deep font-bold'
-                      : 'bg-surface border-bark/12 text-ink/65 hover:text-ink/80'
-                  }`}>
-                  {label}
-                </button>
-              ))}
-            </div>
+            <h2 className="t-card text-ink">Skill profile</h2>
+            <Segmented
+              label="Chart style"
+              className="flex-shrink-0"
+              value={heroView}
+              onChange={setHeroView}
+              options={[{ value: 'pentagon', label: 'Shape' }, { value: 'trend', label: 'Trend' }]}
+            />
           </div>
 
           {heroView === 'pentagon' ? (
@@ -454,7 +433,7 @@ export default function StatsClient({
           panels themselves carry no explainers. */}
       <Link
         href={`/trip/${tripCode}/stats/guide`}
-        className="block text-center mt-6 t-cap uppercase tracking-[0.18em] text-accent-deep hover:text-accent transition-colors"
+        className="block text-center mt-6 t-label text-accent-deep hover:text-accent transition-colors"
       >
         How the numbers work
       </Link>
@@ -498,7 +477,7 @@ function AdvancedSettings({ mode, onMode }: {
         aria-expanded={open}
         className="w-full flex items-center justify-between gap-3 py-1 text-left"
       >
-        <span className="text-[13px] tracking-wider uppercase text-ink/50">
+        <span className="t-label text-ink/80">
           Advanced settings
         </span>
         <span className={`flex-shrink-0 text-ink/50 transition-transform duration-300 ease-out ${
@@ -670,7 +649,7 @@ function CoursePicker({
         className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-opacity duration-150 active:opacity-70"
       >
         <span className="min-w-0 flex-1">
-          <span className="block text-[13px] uppercase tracking-[0.14em] text-ink/50 leading-none">
+          <span className="block t-cap text-ink/65 leading-none">
             Courses
           </span>
           <span className="block t-card text-ink truncate mt-1">{headline}</span>

@@ -372,7 +372,7 @@ export default function Itinerary({
                   was: label weight, full ink. Past days still fade with
                   everything in them, which is emphasis enough about which
                   headings still matter. */}
-              <p className="t-label uppercase tracking-[0.15em] text-ink mb-2">
+              <p className="t-label text-ink mb-2">
                 {describeDay(date, day)}
               </p>
 

@@ -147,7 +147,7 @@ export default function ItineraryEditor({
           type="button"
           onClick={requestSave}
           disabled={saving || !dirty || confirmOpen}
-          className={`${buttonClass('primary', false)} px-5 py-2.5 text-[13px]`}
+          className={buttonClass('primary', false, true)}
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
@@ -175,14 +175,14 @@ export default function ItineraryEditor({
             <button
               type="button"
               onClick={() => setConfirmOpen(false)}
-              className={`${buttonClass('secondary', false)} px-4 py-2 text-[13px]`}
+              className={buttonClass('secondary', false, true)}
             >
               Keep {removedGolf.length === 1 ? 'it' : 'them'}
             </button>
             <button
               type="button"
               onClick={doSave}
-              className={`${buttonClass('danger', false)} px-4 py-2 text-[13px]`}
+              className={buttonClass('danger', false, true)}
             >
               Remove and save
             </button>

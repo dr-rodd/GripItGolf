@@ -15,7 +15,7 @@ import {
   type Leaderboard, boardTitle, boardRules, tagsInPlay,
 } from '@/lib/leaderboards'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
-import { cardClass } from '@/app/components/ui'
+import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
 
 /**
  * The tags portal — making tags and giving players theirs.
@@ -34,11 +34,7 @@ import { cardClass } from '@/app/components/ui'
 type Team = { id: string; name: string; color: string; team_set: string }
 type Player = { id: string; name: string }
 
-const INPUT = [
-  'w-full bg-surface border border-bark/12 rounded-xl px-4 py-3',
-  'text-ink placeholder:text-ink/60 text-sm',
-  'focus:outline-none focus:border-accent/50 transition-colors',
-].join(' ')
+const INPUT = FIELD
 
 export default function TagPortalClient({
   tripId, tripCode, initialTeams, players, initialMemberships, initialPermissions,
@@ -385,7 +381,7 @@ export default function TagPortalClient({
             type="button"
             onClick={addTag}
             disabled={!draftName.trim()}
-            className="flex-shrink-0 px-5 rounded-xl bg-accent-deep text-white text-sm font-medium hover:bg-accent transition-colors disabled:opacity-40"
+            className={`${buttonClass('primary', false)} flex-shrink-0`}
           >
             Add
           </button>

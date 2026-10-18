@@ -10,7 +10,7 @@ import { needsPairings, type Leaderboard } from '@/lib/leaderboards'
 import { MAIN_SET, setOf } from '@/lib/teamSets'
 import { pairsBlockedReason, teamNoun } from '@/lib/teamLimits'
 import type { MemberLike, TeamLike } from '@/lib/teamLimits'
-import { cardClass } from '@/app/components/ui'
+import { Pill, buttonClass, cardClass } from '@/app/components/ui'
 
 /**
  * Settings for the matchplay format. Appears when the trip runs a knockout;
@@ -78,7 +78,7 @@ export default function MatchplayPanel({
   if (loading) {
     return (
       <section className={SECTION}>
-        <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-3">Matchplay</p>
+        <p className="t-card text-ink mb-3">Matchplay</p>
         <p className="text-ink/65 text-sm">Checking…</p>
       </section>
     )
@@ -99,15 +99,10 @@ export default function MatchplayPanel({
   return (
     <section className={SECTION}>
       <div className="flex items-center justify-between mb-1">
-        <p className="t-eyebrow text-ink/65">
-          {pairs ? 'Pairs Matchplay' : 'Matchplay'}
+        <p className="t-card text-ink">
+          {pairs ? 'Pairs matchplay' : 'Matchplay'}
         </p>
-        {exists && (
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent " />
-            <span className="text-accent/80 text-[13px] tracking-wider uppercase">Bracket drawn</span>
-          </span>
-        )}
+        {exists && <Pill tone="win">Bracket drawn</Pill>}
       </div>
       <p className="text-ink/65 text-[13px] mb-4">
         A knockout draw between {pairs ? noun.many : 'players'}. Top seeds are kept
@@ -175,20 +170,16 @@ export default function MatchplayPanel({
             <button
               onClick={() => setConfirming(false)}
               disabled={busy}
-              className="flex-1 py-3.5 border border-bark/25 text-ink/80 rounded-xl text-sm tracking-wider uppercase hover:border-bark/25 transition-colors disabled:opacity-40"
+              className={`${buttonClass('secondary', false)} flex-1`}
             >
               Cancel
             </button>
             <button
               onClick={generate}
               disabled={busy}
-              className={`flex-1 py-3.5 rounded-xl text-sm font-bold tracking-wider uppercase transition-colors disabled:opacity-40 ${
-                played > 0
-                  ? 'bg-rust-deep text-[#1a0f0a] hover:bg-rust-deep'
-                  : 'bg-accent-deep text-white hover:bg-accent'
-              }`}
+              className={`${buttonClass(played > 0 ? 'danger' : 'primary', false)} flex-1`}
             >
-              {busy ? 'Working…' : played > 0 ? 'Erase & Reshuffle' : 'Reshuffle'}
+              {busy ? 'Working…' : played > 0 ? 'Erase and reshuffle' : 'Reshuffle'}
             </button>
           </div>
         </div>
@@ -200,7 +191,7 @@ export default function MatchplayPanel({
           <button
             onClick={() => setConfirming(true)}
             disabled={busy || !!blocked}
-            className="w-full py-3.5 border border-bark/25 text-ink/80 rounded-xl text-sm tracking-wider uppercase hover:border-bark/25 hover:text-ink transition-colors disabled:opacity-40"
+            className={buttonClass('secondary')}
           >
             Reshuffle
           </button>
@@ -208,9 +199,9 @@ export default function MatchplayPanel({
           <button
             onClick={generate}
             disabled={busy || !!blocked}
-            className="w-full py-3.5 bg-accent-deep text-white rounded-xl text-sm font-bold tracking-wider uppercase hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className={buttonClass('primary')}
           >
-            {busy ? 'Drawing…' : 'Create Matchplay'}
+            {busy ? 'Drawing…' : 'Create matchplay'}
           </button>
         )
       )}
@@ -218,7 +209,7 @@ export default function MatchplayPanel({
       {exists && (
         <Link
           href={`/trip/${tripCode}/matchplay`}
-          className="block text-center text-accent/70 text-[13px] tracking-wider uppercase mt-3 hover:text-accent transition-colors"
+          className="block text-center t-label text-accent-deep mt-3 hover:text-accent transition-colors"
         >
           View the draw →
         </Link>

@@ -91,10 +91,9 @@ export function Stepper({
 }) {
   const step = (by: number) => onChange(Math.max(min, Math.min(max, value + by)))
   const btn =
-    'w-14 h-14 flex-shrink-0 rounded-xl border border-bark/25 bg-surface text-ink ' +
-    'flex items-center justify-center text-2xl leading-none ' +
-    'hover:border-bark/40 transition-colors duration-150 ' +
-    'disabled:opacity-30 disabled:cursor-not-allowed'
+    'w-14 h-14 flex-shrink-0 rounded-button border border-line bg-surface shadow-raised text-ink press ' +
+    'flex items-center justify-center text-2xl leading-none hover:border-line-strong ' +
+    'disabled:bg-disabled-bg disabled:text-disabled-fg disabled:border-transparent disabled:shadow-none disabled:cursor-not-allowed'
 
   return (
     <div>

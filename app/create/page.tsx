@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * Create an Event — which sport.
@@ -15,10 +16,7 @@ import LegalLinks from '@/app/components/LegalLinks'
  * so the landing page can prefetch it whole and the arrival costs nothing.
  */
 
-const CARD = [
-  'block bg-surface border border-bark/12 rounded-2xl p-5',
-  'press hover:border-bark/25',
-].join(' ')
+const CARD = `block p-5 ${cardClass('raised', true)}`
 
 export default function CreatePage() {
   return (

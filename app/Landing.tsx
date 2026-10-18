@@ -248,13 +248,13 @@ export default function Landing() {
               disabled={checking || code.trim().length < 6}
               className={buttonClass('primary')}
             >
-              {checking ? 'Checking…' : 'Join Event'}
+              {checking ? 'Checking…' : 'Join event'}
             </button>
           </form>
 
           <div className="w-full flex items-center gap-3 my-6" aria-hidden="true">
             <span className="h-px flex-1 bg-bark/12" />
-            <span className="t-cap text-ink/50 uppercase tracking-[0.18em]">or</span>
+            <span className="t-cap text-ink/65">or</span>
             <span className="h-px flex-1 bg-bark/12" />
           </div>
 

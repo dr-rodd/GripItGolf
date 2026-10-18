@@ -109,7 +109,7 @@ export default async function AdminCoursePage({
             <table className="text-sm min-w-full">
               <thead>
                 <tr className="border-b border-bark/12 text-left">
-                  <th className="pr-3 py-2 text-[13px] tracking-[0.12em] uppercase text-ink/65 font-normal">Hole</th>
+                  <th className="pr-3 py-2 t-eyebrow text-ink/65">Hole</th>
                   {holes.map(h => (
                     <th key={h.hole_number} className="px-1.5 py-2 text-center tabular-nums text-ink/65 font-normal">
                       {h.hole_number}

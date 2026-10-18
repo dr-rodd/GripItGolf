@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { verifyPasscode, rememberUnlock, MAX_PASSCODE } from '@/lib/passcode'
-import { FIELD } from './ui'
+import { FIELD, buttonClass } from './ui'
 
 /**
  * The organiser PIN, asked in place rather than as a wall.
@@ -73,7 +73,7 @@ export default function InlineUnlock({
       <button
         type="submit"
         disabled={busy || code.length === 0}
-        className="flex-shrink-0 px-4 py-2 bg-accent-deep text-white text-sm font-medium rounded-lg hover:bg-accent transition-colors disabled:opacity-40"
+        className={`${buttonClass('primary', false, true)} flex-shrink-0`}
       >
         {busy ? '…' : 'Unlock'}
       </button>

@@ -122,7 +122,7 @@ export default async function AdminTripsPage({
               <thead>
                 <tr className="border-b border-bark/12 text-left">
                   {['Trip', 'Code', 'Created', 'Lead email', 'Players', 'Status'].map(h => (
-                    <th key={h} className="px-4 py-3 text-[13px] tracking-[0.2em] uppercase text-ink/65 font-normal">
+                    <th key={h} className="px-4 py-3 t-eyebrow text-ink/65">
                       {h}
                     </th>
                   ))}

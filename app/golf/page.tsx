@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
-import { cardClass } from '@/app/components/ui'
+import { Pill, cardClass } from '@/app/components/ui'
 
 /**
  * The golf doorway — what Create an Event opens onto.
@@ -20,10 +20,7 @@ import { cardClass } from '@/app/components/ui'
  * landing page can prefetch it whole and the arrival costs nothing.
  */
 
-const CARD = [
-  'block bg-surface border border-bark/12 rounded-2xl p-5',
-  'press hover:border-bark/25',
-].join(' ')
+const CARD = `block p-5 ${cardClass('raised', true)}`
 
 export default function GolfPage() {
   return (
@@ -70,9 +67,7 @@ export default function GolfPage() {
                 <p className="font-[family-name:var(--font-display)] text-xl text-ink">
                   Personal usage
                 </p>
-                <span className="t-cap uppercase tracking-[0.12em] text-ink/65 flex-shrink-0">
-                  Coming soon
-                </span>
+                <Pill className="flex-shrink-0">Coming soon</Pill>
               </div>
               <p className="text-ink/65 text-sm mt-1 leading-snug">
                 Stat tracking for your own rounds — no group required.

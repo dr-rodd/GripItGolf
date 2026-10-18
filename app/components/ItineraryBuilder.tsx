@@ -19,7 +19,7 @@ import {
 import {
   IconFlag, IconHome, IconArrowRight, IconFork, IconPlus, IconX,
 } from './icons'
-import { FIELD, FIELD_LABEL, Pill, cardClass } from './ui'
+import { FIELD, FIELD_LABEL, Pill, buttonClass, cardClass } from './ui'
 import {
   Sheet, Stepper, GolfFields, golfDraftFields, EMPTY_GOLF_DRAFT, type GolfDraft,
 } from './ItineraryForms'
@@ -497,11 +497,11 @@ export default function ItineraryBuilder({
             <button
               type="button"
               onClick={() => openSheet('golf')}
-              className="w-full py-8 bg-accent-deep text-white rounded-2xl hover:bg-accent transition-colors duration-150 flex flex-col items-center gap-2"
+              className={`${buttonClass('primary')} flex-col py-7`}
             >
               <IconFlag size={24} />
-              <span className="text-sm font-bold tracking-[0.2em] uppercase">Set Venue</span>
-              <span className="t-cap text-white/80 normal-case tracking-normal">
+              <span>Set venue</span>
+              <span className="t-cap text-white/80 font-normal">
                 The course, the tee times — the day starts here
               </span>
             </button>
@@ -571,13 +571,9 @@ export default function ItineraryBuilder({
             type="button"
             disabled={lastDay && !!blockedReason}
             onClick={() => (lastDay ? onContinue() : setOpenDay(d => d + 1))}
-            className={`w-full mt-2 min-h-[52px] rounded-xl border t-label transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${
-              lastDay
-                ? 'border-accent bg-accent-deep text-white hover:bg-accent'
-                : 'border-bark/25 bg-surface text-ink hover:border-bark/40'
-            }`}
+            className={`${buttonClass(lastDay ? 'primary' : 'secondary')} mt-2`}
           >
-            {lastDay ? continueLabel : `Continue to Day ${openDay + 2}`}
+            {lastDay ? continueLabel : `Continue to day ${openDay + 2}`}
           </button>
 
           {lastDay && blockedReason && (
@@ -745,7 +741,7 @@ export default function ItineraryBuilder({
 
       <DragOverlay dropAnimation={DROP_ANIMATION}>
         {dragging && (
-          <div className="w-[calc(100vw-2rem)] max-w-lg shadow-lg shadow-bark/20">
+          <div className="w-[calc(100vw-2rem)] max-w-lg shadow-floating rounded-card">
             <Tile item={dragging} courseName={courseName(dragging.courseId)} dragging />
           </div>
         )}

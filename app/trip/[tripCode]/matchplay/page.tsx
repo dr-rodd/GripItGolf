@@ -20,6 +20,7 @@ import TripHeader from '@/app/components/TripHeader'
 import MatchplayBracket, {
   type BracketMatchRow, type BracketEntrantRow,
 } from './MatchplayBracket'
+import { buttonClass } from '@/app/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -150,7 +151,7 @@ export default async function MatchplayPage({
       <div className="paper border-b border-bark/12">
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
           <BackButton href={`/trip/${tripCode}/leaderboard`} />
-          <h1 className="font-[family-name:var(--font-display)] text-xl sm:text-2xl text-ink tracking-wide truncate px-2">
+          <h1 className="font-[family-name:var(--font-display)] text-xl sm:text-2xl text-ink truncate px-2">
             Matchplay
           </h1>
           <div className="w-11" />
@@ -304,7 +305,7 @@ function EmptyState({
       <p className="text-ink/65 text-sm leading-relaxed mb-8 max-w-xs mx-auto">{body}</p>
       <Link
         href={`/trip/${tripCode}/setup`}
-        className="inline-block px-6 py-3.5 border border-accent/40 text-ink/65 rounded-sm text-[13px] tracking-[0.2em] uppercase hover:bg-accent/10 transition-colors"
+        className={buttonClass('secondary', false)}
       >
         Trip Setup
       </Link>

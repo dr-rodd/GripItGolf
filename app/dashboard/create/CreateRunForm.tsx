@@ -25,7 +25,7 @@ import {
   challengeDatesIssue, teamNamesIssue, migrationMissing, MIGRATION_MISSING_MESSAGE,
 } from '@/lib/runChallenge'
 import { describeError, generateCode } from './CreateTripForm'
-import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
+import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 
 /**
  * Creating a Green Dot Run challenge — an ongoing team running competition.
@@ -276,12 +276,12 @@ export default function CreateRunForm() {
           </p>
 
           <div className={`px-4 py-8 mb-4 ${cardClass()}`}>
-            <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-4">Your Challenge Code</p>
+            <p className="t-label text-ink/65 mb-4">Your challenge code</p>
             <div className="flex items-center justify-center gap-1 sm:gap-1.5">
               {resultCode.split('').map((ch, i) => (
                 <span
                   key={i}
-                  className="font-[family-name:var(--font-display)] text-[clamp(2rem,11vw,3rem)] leading-none text-accent font-bold tabular-nums"
+                  className={CODE_CHAR}
                 >
                   {ch}
                 </span>
@@ -300,14 +300,14 @@ export default function CreateRunForm() {
             onClick={copyCode}
             className={`${buttonClass('secondary')} mb-3`}
           >
-            {copied ? '✓ Copied' : 'Copy Code'}
+            {copied ? '✓ Copied' : 'Copy code'}
           </button>
 
           <Link
             href={`/run/${resultCode}`}
             className={buttonClass('primary')}
           >
-            Go to Your Challenge
+            Go to your challenge
           </Link>
         </div>
       </div>
@@ -594,7 +594,7 @@ export default function CreateRunForm() {
             disabled={!canProceed}
             className={buttonClass('primary')}
           >
-            {submitting ? 'Creating…' : stepNum === 4 ? 'Create Challenge' : 'Continue'}
+            {submitting ? 'Creating…' : stepNum === 4 ? 'Create challenge' : 'Continue'}
           </button>
           {stepNum === 2 && organiserIssue && realTeams.length > 0 && (
             <p className="text-center text-ink/65 text-[13px] mt-3">{organiserIssue}</p>

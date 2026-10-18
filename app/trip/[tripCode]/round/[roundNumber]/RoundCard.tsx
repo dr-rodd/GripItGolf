@@ -93,14 +93,14 @@ function Row({
       {cells.map((c, i) => (
         <span
           key={i}
-          className={`${base} ${border} ${head ? 'uppercase tracking-wider' : ''}`}
+          className={`${base} ${border} ${head ? 't-eyebrow' : ''}`}
         >
           {c}
         </span>
       ))}
       <span
-        className={`${base} ${border} bg-bark/[0.04] uppercase tracking-wider ${
-          head ? 'text-ink/65' : 'text-ink/80'
+        className={`${base} ${border} bg-tint ${
+          head ? 't-eyebrow text-ink/65' : 'text-ink/80'
         }`}
       >
         {total}

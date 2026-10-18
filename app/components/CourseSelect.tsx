@@ -43,16 +43,16 @@ type View =
  * The mark on a course whose card has not been photographed yet — on the list
  * rows and on the field they collapse into, from here so the two cannot drift.
  *
- * Deliberately not `Badge`. A filled pill at `t-cap` is 15px, uppercase and
+ * Deliberately not a `Pill`. The old filled pill was 15px, uppercase and
  * tracked, which ran "AWAITING SCORECARD" to some 190px of a 320px phone row
  * and left the course name truncating inside the rest — and a pill that size
  * is the treatment for something happening now, where this is a footnote about
  * paperwork on a course you can still pick. Seventeen of the eighty-eight
  * carry it, so it is a common sight rather than an alarm.
  *
- * Still uppercase and tracked, because unfilled text next to a name has to
- * read as a status and not as part of the name — or as part of the location
- * line under it. 13px because that is the floor `scripts/test-branding.tsx`
+ * Semibold rather than the uppercase it once was (the refresh retired spaced
+ * capitals), because unfilled text next to a name has to read as a status and
+ * not as part of the name — or as part of the location line under it. 13px because that is the floor `scripts/test-branding.tsx`
  * holds for any hand-set size, and this is writing to be read rather than one
  * of the two marks it exempts. Between the shorter words, losing the fill and
  * losing the padding it still comes out at not much over half the width.
@@ -68,7 +68,7 @@ type View =
 function AwaitingCard({ className = '' }: { className?: string }) {
   return (
     <span
-      className={`flex-shrink-0 text-[13px] leading-none uppercase tracking-[0.1em] text-ink/65 whitespace-nowrap ${className}`.trim()}
+      className={`flex-shrink-0 text-[13px] leading-none font-semibold text-ink/65 whitespace-nowrap ${className}`.trim()}
     >
       Awaiting card
     </span>
@@ -105,12 +105,7 @@ export default function CourseSelect({
     setCounty(null)
   }
 
-  const chip = (on: boolean) =>
-    `flex-shrink-0 inline-flex items-center px-3.5 py-2 t-label rounded-xl border transition-colors duration-150 ${
-      on
-        ? 'bg-accent-deep text-white font-bold border-accent-deep'
-        : 'bg-surface border-bark/12 text-ink/65 hover:text-ink/80'
-    }`
+  const chip = (on: boolean) => `${chipClass(on)} flex-shrink-0`
 
   // ── The field the sheet opens from ──
   const trigger = (

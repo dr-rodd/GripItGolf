@@ -8,7 +8,7 @@ import {
 import { isDecidable, pressOutcome } from '@/lib/matchplayProgress'
 import { type MatchReading, pendingResults } from '@/lib/matchResults'
 import { decisionLabel } from '@/lib/matchDecision'
-import { FIELD, cardClass } from '@/app/components/ui'
+import { FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -663,7 +663,7 @@ function Side({
       </span>
 
       {isBye ? (
-        <span className="flex-1 text-[12px] tracking-[0.15em] uppercase text-ink/50">
+        <span className="flex-1 text-[12px] text-ink/50">
           Bye
         </span>
       ) : player ? (
@@ -748,7 +748,7 @@ function DecideSheet({
       >
         <div className="flex items-start justify-between gap-3 mb-1">
           <div className="min-w-0">
-            <p className="text-ink/65 text-[12px] tracking-[0.25em] uppercase">
+            <p className="t-cap text-ink/65">
               {match.round_name}
             </p>
             <p className="font-[family-name:var(--font-display)] text-ink text-xl leading-tight mt-0.5">
@@ -789,7 +789,7 @@ function DecideSheet({
 
         {!voiding && (
           <>
-            <label className="block text-ink/65 text-[12px] tracking-[0.2em] uppercase mt-4 mb-2">
+            <label className={`${FIELD_LABEL} mt-4`}>
               Margin — optional
             </label>
             <input
@@ -830,7 +830,7 @@ function DecideSheet({
                     {player?.name ?? 'Unknown player'}
                   </span>
                   {isCurrent && (
-                    <span className="block text-ink/65 text-[12px] tracking-wider uppercase mt-0.5">
+                    <span className="block t-cap text-ink/65 mt-0.5">
                       {isPicked ? 'Winner — tap to unplay' : 'Was the winner'}
                     </span>
                   )}
@@ -854,7 +854,7 @@ function DecideSheet({
             <button
               onClick={() => apply(picked)}
               disabled={saving}
-              className="w-full mt-4 py-4 bg-rust-deep text-[#1a0f0a] rounded-xl text-sm font-bold tracking-[0.15em] uppercase hover:bg-rust-deep transition-colors disabled:opacity-40"
+              className={`${buttonClass('danger')} mt-4`}
             >
               {saving ? 'Saving…' : 'Confirm'}
             </button>

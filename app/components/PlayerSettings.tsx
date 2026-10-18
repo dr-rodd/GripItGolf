@@ -26,7 +26,7 @@ import { applyTheme, isDark, rememberTheme } from '@/lib/theme'
 import { MAX_NICKNAME, normalizeNickname } from '@/lib/displayNames'
 import { IconSettings } from './icons'
 import Toggle from './Toggle'
-import { FIELD, cardClass } from './ui'
+import { FIELD, buttonClass, cardClass } from './ui'
 
 export default function PlayerSettings({
   tripId, playerId,
@@ -216,7 +216,7 @@ export default function PlayerSettings({
                       type="button"
                       onClick={saveNickname}
                       disabled={nickSaving || !nickDirty}
-                      className="flex-shrink-0 px-4 rounded-xl border border-bark/25 text-ink text-sm tracking-[0.1em] uppercase hover:border-bark/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      className={`${buttonClass('secondary', false, true)} flex-shrink-0`}
                     >
                       {nickSaving ? 'Saving…' : 'Save'}
                     </button>

@@ -787,7 +787,7 @@ export default function CreateTripForm() {
             {players.map((player, i) => (
               <div key={i} className={`${cardClass()} p-4`}>
                 <div className="flex items-center justify-between mb-4">
-                  <span className="t-eyebrow text-ink/65">
+                  <span className="t-label text-ink/80">
                     {i === 0 && !isTournament
                       ? 'Lead player'
                       : i === 0 && organiserPlaying
@@ -997,7 +997,7 @@ export default function CreateTripForm() {
               disabled={!canProceed}
               className={buttonClass('primary')}
             >
-              {submitting ? 'Creating…' : isFinalStep ? `Create ${Noun}` : 'Continue'}
+              {submitting ? 'Creating…' : isFinalStep ? `Create ${noun}` : 'Continue'}
             </button>
             {isFinalStep && (
               <p className="text-center text-ink/65 text-[13px] mt-3">

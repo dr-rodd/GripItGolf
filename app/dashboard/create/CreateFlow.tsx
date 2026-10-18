@@ -8,6 +8,7 @@ import CreateTripForm from './CreateTripForm'
 import CreateLeagueForm from './CreateLeagueForm'
 import CreateKnockoutForm from './CreateKnockoutForm'
 import CreateRunForm from './CreateRunForm'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * Which form the create route shows.
@@ -45,10 +46,7 @@ const readType = (): CreateType => {
 }
 const readOnServer = (): CreateType => 'trip'
 
-const CARD = [
-  'block w-full text-left bg-surface border border-bark/12 rounded-2xl p-5',
-  'press hover:border-bark/25',
-].join(' ')
+const CARD = `block w-full text-left p-5 ${cardClass('raised', true)}`
 
 function Chooser({ title, sub, onBack, children }: {
   title: string

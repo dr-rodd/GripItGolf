@@ -453,7 +453,7 @@ export default async function TripPage({ params, searchParams }: {
     <ul className="flex flex-col gap-2">
       {days.map((d, i) => (
         <li key={d.key} className={`px-4 py-3 ${cardClass()}`}>
-          <p className="t-cap uppercase tracking-[0.18em] text-ink/65">
+          <p className="t-label text-ink/80">
             {d.label ?? `Round ${i + 1}`}
           </p>
           <div className="mt-1.5 flex flex-col gap-0.5">
@@ -720,7 +720,7 @@ function PlayersPanel({
               <span className="flex-1 min-w-0">
                 <span className="block text-ink text-sm truncate">{p.name}</span>
                 <span
-                  className={`block text-[13px] tracking-wider uppercase mt-0.5 ${
+                  className={`block t-cap mt-0.5 ${
                     confirmed ? 'text-ink/80' : 'text-ink/50'
                   }`}
                 >
@@ -734,7 +734,7 @@ function PlayersPanel({
                   the real figure gets: it is a thing outstanding, not a
                   score. See `HANDICAP_PENDING_LABEL`. */}
               {isHandicapPending(p.handicap) ? (
-                <span className="text-ink/50 text-[13px] tracking-wider uppercase leading-none flex-shrink-0">
+                <span className="t-cap text-ink/65 leading-none flex-shrink-0">
                   {HANDICAP_PENDING_LABEL}
                 </span>
               ) : (

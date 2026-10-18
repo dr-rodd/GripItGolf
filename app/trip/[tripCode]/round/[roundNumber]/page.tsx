@@ -25,7 +25,7 @@ import CourseWeather from '@/app/components/CourseWeather'
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../../kind'
 import { boardNames } from '@/lib/displayNames'
-import { cardClass } from '@/app/components/ui'
+import { buttonClass, cardClass } from '@/app/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -215,7 +215,7 @@ export default async function RoundSummaryPage({
 
         {/* ── The course, the day ── */}
         <header className="text-center">
-          <p className="t-cap uppercase tracking-[0.18em] text-ink/50">
+          <p className="t-label text-ink/65">
             Round {round.round_number}{round.casual === true ? ' · casual' : ''}
           </p>
           <h1 className="t-h1 text-ink text-balance mt-1.5" style={{ fontSize: 'clamp(24px, 7vw, 30px)' }}>
@@ -236,10 +236,10 @@ export default async function RoundSummaryPage({
               href={directions}
               target="_blank"
               rel="noopener noreferrer"
-              className={`inline-flex items-center gap-1.5 mt-4 px-4 py-2.5 text-ink/80 hover:text-accent-deep hover:border-bark/25 transition-colors duration-150 ${cardClass()}`}
+              className={`${buttonClass('secondary', false)} mt-4`}
             >
-              <IconMapPin size={15} />
-              <span className="t-cap uppercase tracking-[0.15em]">Directions</span>
+              <IconMapPin size={18} />
+              Directions
             </a>
           )}
         </header>
@@ -355,10 +355,10 @@ export default async function RoundSummaryPage({
         {/* ── Into the card ── */}
         <Link
           href={`/trip/${tripCode}/scoring/${round.round_number}`}
-          className="w-full py-[18px] border-2 border-accent text-accent rounded-xl text-sm tracking-[0.25em] uppercase text-center hover:bg-accent/10 transition-colors flex items-center justify-center gap-2.5"
+          className={buttonClass('primary')}
         >
-          <IconClipboardList size={16} />
-          Live Scoring
+          <IconClipboardList size={20} />
+          Live scoring
         </Link>
       </div>
 
@@ -391,7 +391,7 @@ function Cell({
         // Never wrapped. A heading that breaks in two is the other way a
         // column too narrow for its own label goes wrong, and an auto-sized
         // column only reads the label's width correctly if it is one line.
-        head ? 't-cap uppercase tracking-wider text-ink/50 whitespace-nowrap' : 'text-ink/80'
+        head ? 't-eyebrow text-ink/65 whitespace-nowrap' : 'text-ink/80'
       }`}
     >
       {children}
@@ -458,7 +458,7 @@ async function RoundPodium({
       </div>
       <Link
         href={`/trip/${tripCode}/leaderboard`}
-        className="mt-3 inline-flex items-center gap-1.5 t-cap uppercase tracking-[0.15em] text-ink/65 hover:text-accent-deep transition-colors duration-150"
+        className="mt-3 inline-flex items-center gap-1.5 t-label text-accent-deep hover:text-accent transition-colors duration-150"
       >
         <IconTrophy size={14} />
         Full leaderboard

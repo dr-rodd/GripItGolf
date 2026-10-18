@@ -87,8 +87,7 @@ export const SC_HEAD = 'bg-bark/[0.05]'
 export const SC_STICKY = 'bg-surface'
 
 /** A column heading: small caps, quiet, never smaller than the type floor. */
-export const SC_HEAD_TEXT =
-  'text-[13px] tracking-[0.15em] uppercase font-semibold text-ink/65'
+export const SC_HEAD_TEXT = 't-eyebrow text-ink/65'
 
 /**
  * The same heading in a narrow fixed column.
@@ -97,11 +96,10 @@ export const SC_HEAD_TEXT =
  * card, and the tracking pushed them into each other so the two read as one
  * word. The size is unchanged — 13px is the floor and this is still a label.
  */
-export const SC_HEAD_TIGHT =
-  'text-[13px] uppercase font-semibold text-ink/65'
+export const SC_HEAD_TIGHT = 't-eyebrow text-ink/65'
 
 /** A label above a value in the details strip — "PH", "Tee". */
-export const SC_LABEL = 'text-[13px] tracking-[0.15em] uppercase text-ink/65'
+export const SC_LABEL = 't-eyebrow text-ink/65'
 
 export const SC_MUTED = 'text-ink/65'
 export const SC_DARK  = 'text-ink'

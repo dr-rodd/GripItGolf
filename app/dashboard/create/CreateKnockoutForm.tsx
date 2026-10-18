@@ -21,7 +21,7 @@ import {
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import { describeError, generateCode } from './CreateTripForm'
-import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
+import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 
 /**
  * Creating a continuous knockout — an ongoing match play event occupying a
@@ -254,12 +254,12 @@ export default function CreateKnockoutForm() {
           </p>
 
           <div className={`px-4 py-8 mb-4 ${cardClass()}`}>
-            <p className="text-ink/65 text-[13px] tracking-widest uppercase mb-4">Your Event Code</p>
+            <p className="t-label text-ink/65 mb-4">Your event code</p>
             <div className="flex items-center justify-center gap-1 sm:gap-1.5">
               {resultCode.split('').map((ch, i) => (
                 <span
                   key={i}
-                  className="font-[family-name:var(--font-display)] text-[clamp(2rem,11vw,3rem)] leading-none text-accent font-bold tabular-nums"
+                  className={CODE_CHAR}
                 >
                   {ch}
                 </span>
@@ -278,14 +278,14 @@ export default function CreateKnockoutForm() {
             onClick={copyCode}
             className={`${buttonClass('secondary')} mb-3`}
           >
-            {copied ? '✓ Copied' : 'Copy Code'}
+            {copied ? '✓ Copied' : 'Copy code'}
           </button>
 
           <Link
             href={`/trip/${resultCode}`}
             className={buttonClass('primary')}
           >
-            Go to Your Event
+            Go to your event
           </Link>
         </div>
       </div>
@@ -420,7 +420,7 @@ export default function CreateKnockoutForm() {
             {players.map((player, i) => (
               <div key={i} className={`p-4 ${cardClass()}`}>
                 <div className="flex items-center justify-between mb-4">
-                  <span className="t-eyebrow text-ink/65">
+                  <span className="t-label text-ink/80">
                     {i === 0 && organiserPlaying ? 'Organiser — you' : `Player ${i + 1}`}
                   </span>
                   {i > 0 && (
@@ -553,7 +553,7 @@ export default function CreateKnockoutForm() {
             disabled={!canProceed}
             className={buttonClass('primary')}
           >
-            {submitting ? 'Creating…' : stepNum === 3 ? 'Create Event' : 'Continue'}
+            {submitting ? 'Creating…' : stepNum === 3 ? 'Create event' : 'Continue'}
           </button>
           {stepNum === 2 && (
             <p className="text-center text-ink/65 text-[13px] mt-3">

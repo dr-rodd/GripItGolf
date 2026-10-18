@@ -27,7 +27,8 @@ import {
   SC_CARD, SC_SF, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_HEAD_TIGHT, SC_LABEL,
   SC_MUTED, SC_DARK, SC_NUM, scRow, scPoints,
 } from '@/app/components/scorecardStyle'
-import { cardClass } from '@/app/components/ui'
+import { Segmented, cardClass, chipClass } from '@/app/components/ui'
+import Toggle from '@/app/components/Toggle'
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -362,7 +363,7 @@ export function ScorecardSheet({
 
   const summary = (label: string, hs: Hole[], total = false) => (
     <Row className={`py-2 ${total ? SC_BAND_TOTAL : SC_BAND} ${total ? '' : SC_RULE}`}>
-      <span className={`${HOLE_W} text-[13px] font-bold tracking-widest uppercase text-ink/80`} style={SC_SF}>{label}</span>
+      <span className={`${HOLE_W} t-eyebrow text-ink/80`}>{label}</span>
       <span className={`${PAR_W} ${SC_NUM} font-bold text-ink`} style={SC_SF}>{sumPar(hs, gender)}</span>
       {/* Nine stroke indexes do not add up to anything, so the column holds
           its width and says nothing rather than printing a figure that would
@@ -459,17 +460,17 @@ export function ScorecardSheet({
 
           {/* Column headers */}
           <Row className={`flex-shrink-0 py-1.5 ${SC_RULE} ${SC_HEAD}`}>
-            <span className={`${HOLE_W} ${SC_HEAD_TIGHT}`} style={SC_SF}>Hole</span>
-            <span className={`${PAR_W} ${SC_HEAD_TIGHT}`} style={SC_SF}>Par</span>
-            {showSI && <span className={`${SI_W} ${SC_HEAD_TIGHT}`} style={SC_SF}>SI</span>}
+            <span className={`${HOLE_W} ${SC_HEAD_TIGHT}`}>Hole</span>
+            <span className={`${PAR_W} ${SC_HEAD_TIGHT}`}>Par</span>
+            {showSI && <span className={`${SI_W} ${SC_HEAD_TIGHT}`}>SI</span>}
             <Strip scrolls={scrolls} register={register} onScroll={onScroll}>
               {players.map(p => (
-                <span key={p.id} className={`${CELL} ${SC_HEAD_TEXT}`} style={SC_SF}>
+                <span key={p.id} className={`${CELL} ${SC_HEAD_TEXT}`}>
                   {players.length > 1 ? firstName(p.name).slice(0, 3) : 'Score'}
                 </span>
               ))}
             </Strip>
-            <span className={`${PTS_W} ${SC_HEAD_TEXT}`} style={SC_SF}>Pts</span>
+            <span className={`${PTS_W} ${SC_HEAD_TEXT}`}>Pts</span>
           </Row>
 
           {/* Hole rows — the only vertically scrolling part.
@@ -1108,22 +1109,11 @@ function Board({
               ? 'Worst round set aside'
               : 'Showing every round'}
           </span>
-          <button
-            onClick={() => setDiscarding(v => !v)}
-            aria-pressed={discarding}
-            title={
-              discarding
-                ? 'Showing the competition total — tap to count every round'
-                : 'Tap to drop the worst round, as this board scores it'
-            }
-            className={`flex-shrink-0 px-3 py-1.5 rounded-lg border text-[13px] tracking-wider uppercase transition-colors duration-150 ${
-              discarding
-                ? 'bg-accent-deep text-white border-accent-deep font-bold'
-                : 'bg-surface border-bark/12 text-ink/65 hover:text-ink/80'
-            }`}
-          >
-            Discard
-          </button>
+          <Toggle
+            checked={discarding}
+            onChange={setDiscarding}
+            label="Drop the worst round, as this board scores it"
+          />
         </div>
       )}
 
@@ -1155,17 +1145,17 @@ function Board({
                   need telling. The spacer stays so "Name" still sits over
                   the names. */}
               <span className={POS_W} aria-hidden="true" />
-              <span className={`text-[13px] tracking-widest uppercase text-ink/65 min-w-0 ${NAME_W}`}>Name</span>
+              <span className={`t-eyebrow text-ink/65 min-w-0 ${NAME_W}`}>Name</span>
               {shadeL}
             </span>
             {showRounds && rounds.map(r => (
-              <span key={r.id} className={`${CELL} text-[13px] text-ink/65 tabular-nums`}>
+              <span key={r.id} className={`${CELL} t-eyebrow text-ink/65 tabular-nums`}>
                 {r.round_number}
               </span>
             ))}
             <span className={pin('r', '-my-1.5 py-1.5')}>
               {shadeR}
-              <span className={`block ${TOT_W} text-right text-[13px] tracking-widest uppercase text-ink/65`}>Tot</span>
+              <span className={`block ${TOT_W} text-right t-eyebrow text-ink/65`}>Tot</span>
             </span>
           </div>
         </div>
@@ -1352,7 +1342,7 @@ function MatchplayTab({ tripCode }: { tripCode: string }) {
   return (
     <Link
       href={`/trip/${tripCode}/matchplay`}
-      className={`flex-shrink-0 inline-flex items-center px-4 py-2.5 t-label text-ink/65 hover:text-ink/80 hover:border-accent/50 active:opacity-75 transition-colors duration-150 ${cardClass()}`}
+      className={`${chipClass(false)} flex-shrink-0`}
     >
       Matchplay
     </Link>
@@ -1534,24 +1524,24 @@ export default function TripLeaderboardClient({
     id: r.id, roundNumber: r.round_number, courseName: r.courses?.name ?? null,
   })))
 
+  // Which board: a segmented control, not a row of emerald pills — a
+  // switch of view should not spend the screen's one emerald. Matchplay
+  // has its own page, so it sits beside the switch as a chip that goes
+  // somewhere rather than as one more segment.
   const strip = (tabs.length > 1 || showMatchplay) && (
-    <div className="flex gap-1.5 mb-4 overflow-x-auto -mx-1 px-1 pb-1">
-      {tabs.map(t => {
-        const scope = scopeOf(t)
-        return (
-          <button
-            key={t.id}
-            onClick={() => setActiveId(t.id)}
-            className={`flex-shrink-0 px-4 py-2.5 t-label transition-colors duration-150 rounded-xl border ${
-              activeBoard?.id === t.id
-                ? 'bg-accent-deep text-white font-bold border-accent-deep'
-                : 'bg-surface border-bark/12 text-ink/65 hover:text-ink/80'
-            }`}
-          >
-            {scope ? `${scope} · ${boardTitle(t)}` : boardTitle(t)}
-          </button>
-        )
-      })}
+    <div className="flex items-center gap-2 mb-4">
+      {tabs.length > 1 && (
+        <Segmented
+          label="Which leaderboard"
+          className="flex-1 min-w-0"
+          value={activeBoard?.id ?? null}
+          onChange={setActiveId}
+          options={tabs.map(t => {
+            const scope = scopeOf(t)
+            return { value: t.id, label: scope ? `${scope} · ${boardTitle(t)}` : boardTitle(t) }
+          })}
+        />
+      )}
       {showMatchplay && <MatchplayTab tripCode={tripCode} />}
     </div>
   )
@@ -1565,22 +1555,13 @@ export default function TripLeaderboardClient({
    * board strip above it and the Discard switch below are both this shape.
    */
   const courseStrip = showCourses && (
-    <div className="flex gap-1.5 mb-4 overflow-x-auto -mx-1 px-1 pb-1">
-      {[{ id: null as string | null, name: 'Overall' }, ...courses].map(c => (
-        <button
-          key={c.id ?? 'all'}
-          onClick={() => setCourseId(c.id)}
-          aria-pressed={shownCourse === c.id}
-          className={`flex-shrink-0 px-4 py-2 t-cap transition-colors duration-150 rounded-lg border ${
-            shownCourse === c.id
-              ? 'bg-accent/[0.12] border-accent/40 text-ink'
-              : 'bg-surface border-bark/12 text-ink/65 hover:text-ink/80'
-          }`}
-        >
-          {c.name}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      label="Which course"
+      className="mb-4"
+      value={shownCourse ?? 'all'}
+      onChange={v => setCourseId(v === 'all' ? null : v)}
+      options={[{ value: 'all', label: 'Overall' }, ...courses.map(c => ({ value: c.id, label: c.name }))]}
+    />
   )
 
   // Matchplay lives on its own page, so a matchplay-only trip legitimately

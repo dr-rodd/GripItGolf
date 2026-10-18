@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { logout } from './actions'
-import { cardClass } from '@/app/components/ui'
+import { buttonClass, cardClass } from '@/app/components/ui'
 
 /**
  * The frame around every admin screen: title, the section tabs, sign out.
@@ -32,7 +32,7 @@ export default function AdminShell({
       <div className="border-b border-bark/12">
         <div className="max-w-4xl mx-auto px-4 pt-5 flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="font-[family-name:var(--font-display)] text-xl tracking-wide">
+            <h1 className="font-[family-name:var(--font-display)] text-xl">
               Admin
             </h1>
             {subtitle && <p className="text-ink/65 text-[13px] mt-0.5">{subtitle}</p>}
@@ -40,7 +40,7 @@ export default function AdminShell({
           <form action={logout}>
             <button
               type="submit"
-              className={`flex-shrink-0 px-4 h-11 text-ink/80 text-[13px] tracking-[0.18em] uppercase hover:text-ink hover:border-bark/25 transition-colors ${cardClass()}`}
+              className={`${buttonClass('secondary', false)} flex-shrink-0`}
             >
               Sign out
             </button>
@@ -52,7 +52,7 @@ export default function AdminShell({
             <Link
               key={t.key}
               href={t.href}
-              className={`px-3.5 py-2.5 rounded-t-lg text-[13px] tracking-[0.14em] uppercase border-b-2 transition-colors ${
+              className={`px-3.5 py-2.5 rounded-t-lg t-label border-b-2 transition-colors ${
                 t.key === active
                   ? 'border-accent text-ink'
                   : 'border-transparent text-ink/65 hover:text-ink'

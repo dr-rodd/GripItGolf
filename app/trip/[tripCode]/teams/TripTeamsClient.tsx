@@ -212,7 +212,7 @@ function TeamColumn({
           <p className="text-ink/50 text-sm text-center py-8 select-none">Drop here</p>
         )}
         {full && !over && (
-          <p className="text-ink/50 text-[13px] tracking-wider uppercase text-center pb-2 select-none">
+          <p className="t-cap text-ink/65 text-center pb-2 select-none">
             Full
           </p>
         )}
@@ -815,7 +815,7 @@ export default function TripTeamsClient({
 
         {error && (
           <div
-            className={`fixed left-1/2 -translate-x-1/2 max-w-[92vw] px-5 py-3 border-rust/40 shadow-xl z-50 ${cardClass()}`}
+className="fixed left-1/2 -translate-x-1/2 max-w-[92vw] px-5 py-3 bg-surface border border-rust/40 rounded-card shadow-floating z-50"
             style={{ bottom: ABOVE_TABBAR }}
           >
             <p className="text-rust-deep text-sm">{error}</p>
@@ -898,7 +898,7 @@ export default function TripTeamsClient({
           <button
             onClick={autoBalance}
             disabled={busy}
-            className="w-full py-3.5 border border-accent/40 text-accent rounded-xl text-sm tracking-wider uppercase hover:bg-accent/10 transition-colors disabled:opacity-40"
+            className={buttonClass('secondary')}
           >
             {pairs ? 'Auto-pair high with low' : 'Auto-balance by handicap'}
           </button>
@@ -946,7 +946,7 @@ export default function TripTeamsClient({
 
       <DragOverlay dropAnimation={null}>
         {activePlayer && (
-          <div className="rotate-1 scale-105 shadow-xl shadow-bark/20 w-56">
+          <div className="rotate-1 scale-105 shadow-floating rounded-card w-56">
             <PlayerTile player={activePlayer} />
           </div>
         )}
@@ -954,7 +954,7 @@ export default function TripTeamsClient({
 
       {error && (
         <div
-          className={`fixed left-1/2 -translate-x-1/2 max-w-[92vw] px-5 py-3 border-rust/40 shadow-xl z-50 ${cardClass()}`}
+className="fixed left-1/2 -translate-x-1/2 max-w-[92vw] px-5 py-3 bg-surface border border-rust/40 rounded-card shadow-floating z-50"
           style={{ bottom: ABOVE_TABBAR }}
         >
           <p className="text-rust-deep text-sm">{error}</p>

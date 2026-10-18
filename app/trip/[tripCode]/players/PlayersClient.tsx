@@ -152,7 +152,7 @@ function HandicapCheck({
                 type="button"
                 onClick={onCancel}
                 disabled={busy}
-                className={`flex-1 py-4 text-ink/65 text-sm font-bold tracking-[0.15em] uppercase hover:border-bark/25 transition-colors disabled:opacity-40 ${cardClass()}`}
+                className={`${buttonClass('secondary', false)} flex-1`}
               >
                 Cancel
               </button>
@@ -160,7 +160,7 @@ function HandicapCheck({
                 type="button"
                 onClick={submit}
                 disabled={busy || typed === null}
-                className="flex-[2] py-4 rounded-xl bg-accent-deep text-white text-sm font-bold tracking-[0.2em] uppercase hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className={`${buttonClass('primary', false)} flex-[2]`}
               >
                 {busy ? 'Joining…' : 'Confirm'}
               </button>
@@ -450,7 +450,7 @@ export default function PlayersClient({
         </section>
       ) : (
       <section>
-        <p className="text-ink/65 text-[13px] tracking-[0.2em] uppercase mb-4">
+        <p className="t-label text-ink/80 mb-4">
           Can&apos;t find your name? Add yourself below
         </p>
         <form onSubmit={handleAdd} className="flex flex-col gap-4">
@@ -490,7 +490,7 @@ export default function PlayersClient({
             disabled={busy || !addName.trim() || !addHandicap}
             className={buttonClass('primary')}
           >
-            {adding ? 'Adding…' : 'Join Trip'}
+            {adding ? 'Adding…' : 'Join trip'}
           </button>
         </form>
       </section>

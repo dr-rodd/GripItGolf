@@ -280,9 +280,9 @@ export default function BracketSetupForm({
           <SetupSummary setup={saved} />
           <Link
             href={`/trip/${tripCode}/organiser`}
-            className="block w-full mt-6 py-4 bg-accent-deep text-white text-center text-sm font-bold tracking-[0.2em] uppercase rounded-xl hover:bg-accent transition-colors"
+            className={`${buttonClass('primary')} mt-6`}
           >
-            Back to Organiser
+            Back to the organiser area
           </Link>
         </div>
       </main>
@@ -453,7 +453,7 @@ export default function BracketSetupForm({
                     autoCapitalize="characters"
                     autoCorrect="off"
                     spellCheck={false}
-                    className={`${FIELD} tracking-[0.3em] uppercase`}
+                    className={`${FIELD} field-code`}
                   />
                   <p className="text-ink/65 text-[13px] mt-2 leading-snug">
                     The six-character code of the event whose standings decide
@@ -543,7 +543,7 @@ export default function BracketSetupForm({
             className={buttonClass('primary')}
           >
             {saving ? 'Saving…' : stepNum === 7
-              ? (finalizeNow ? 'Save & Finalise' : 'Save Setup')
+              ? (finalizeNow ? 'Save and finalise' : 'Save setup')
               : 'Continue'}
           </button>
         </div>

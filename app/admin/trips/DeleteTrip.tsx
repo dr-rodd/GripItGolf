@@ -38,7 +38,7 @@ export default function DeleteTrip({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-rust-deep/80 text-[13px] tracking-[0.12em] uppercase hover:text-rust-deep transition-colors"
+        className="t-label text-rust-deep hover:text-rust transition-colors"
       >
         Delete
       </button>

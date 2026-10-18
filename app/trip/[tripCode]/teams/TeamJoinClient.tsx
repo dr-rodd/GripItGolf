@@ -9,7 +9,7 @@ import { type Membership, membersOf, teamSheet } from '@/lib/teamSets'
 import { setTeam } from '@/lib/teamMembers'
 import { joinNames, firstName } from '@/lib/matchplayEntrants'
 import { PRESET_COLORS } from './TripTeamsClient'
-import { cardClass } from '@/app/components/ui'
+import { buttonClass, cardClass } from '@/app/components/ui'
 
 /**
  * Players picking their own teams — the join side of the teams screen.
@@ -242,7 +242,7 @@ export default function TeamJoinClient({
                       type="button"
                       onClick={() => join(team.id)}
                       disabled={busy || full}
-                      className="flex-shrink-0 px-4 py-2 rounded-lg bg-accent-deep text-white text-sm font-medium hover:bg-accent transition-colors disabled:opacity-40"
+                      className={`${buttonClass('primary', false, true)} flex-shrink-0`}
                     >
                       Join
                     </button>

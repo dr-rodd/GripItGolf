@@ -11,7 +11,7 @@ import {
   runnerNameIssue, teamNameIssue, nextTeamColor, canRemoveTeam,
 } from '@/lib/runChallenge'
 import type { RunTeam, RunMember } from '../data'
-import { cardClass } from '@/app/components/ui'
+import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
 
 /**
  * The organiser's teams: everything about who runs for whom, behind the PIN.
@@ -31,15 +31,12 @@ import { cardClass } from '@/app/components/ui'
  * Errors are said in the card where the tap happened, calmly.
  */
 
-const INPUT = [
-  'w-full min-w-0 bg-cream border border-bark/12 rounded-lg px-3 py-2',
-  'text-ink text-sm placeholder:text-ink/60',
-  'focus:outline-none focus:border-accent/50 transition-colors',
-].join(' ')
-const SMALL_BTN = 'flex-shrink-0 px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40'
-const SAVE = `${SMALL_BTN} bg-accent-deep text-white hover:bg-accent`
-const QUIET = `${SMALL_BTN} border border-bark/25 text-ink/80 hover:border-bark/40`
-const DANGER = `${SMALL_BTN} border border-rust/40 text-rust-deep hover:bg-rust/[0.06]`
+// A team's row is dense — a name field and two or three buttons across a
+// phone — so the field and the buttons are the dense sizes: 44px tall.
+const INPUT = `${FIELD} field-dense min-w-0`
+const SAVE = `${buttonClass('primary', false, true)} flex-shrink-0`
+const QUIET = `${buttonClass('secondary', false, true)} flex-shrink-0`
+const DANGER = `${buttonClass('danger', false, true)} flex-shrink-0`
 
 export default function RunTeamsEditor({ tripId, teams, unassigned }: {
   tripId: string

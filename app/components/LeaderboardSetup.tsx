@@ -338,7 +338,7 @@ function AllowancePicker({
         <button
           type="button"
           onClick={() => setCustom(true)}
-          className={`${chipClass(custom)} px-4 flex-shrink-0`}
+          className={`${chipClass(custom)} flex-shrink-0`}
         >
           Something else
         </button>
@@ -427,7 +427,7 @@ function CountingScoresPicker({
       <button
         type="button"
         onClick={() => setCustom(true)}
-        className={`${chipClass(custom)} px-4 self-start`}
+        className={`${chipClass(custom)} self-start`}
       >
         Something else
       </button>
@@ -510,7 +510,7 @@ function GrandstandFinishPicker({
         <button
           type="button"
           onClick={() => { setOn(false); onChange(0) }}
-          className={`${chipClass(!on)} px-5 flex-shrink-0`}
+          className={`${chipClass(!on)} flex-shrink-0`}
         >
           No
         </button>
@@ -521,7 +521,7 @@ function GrandstandFinishPicker({
             const n = Number(text)
             if (Number.isFinite(n) && n >= 1 && n <= 18) onChange(Math.round(n))
           }}
-          className={`${chipClass(on)} px-4 flex-shrink-0`}
+          className={`${chipClass(on)} flex-shrink-0`}
         >
           Yes, the last…
         </button>
