@@ -7,6 +7,7 @@ import { SITE } from '@/config/site'
 import { closesOn, describeDay } from '@/lib/runChallenge'
 import { STRAVA_APPS_URL } from '@/lib/stravaLinks'
 import PoweredByStrava from '@/app/components/PoweredByStrava'
+import ConnectWithStrava from '@/app/components/ConnectWithStrava'
 import type { StravaStatus } from './runs'
 
 /**
@@ -16,8 +17,9 @@ import type { StravaStatus } from './runs'
  * Strava. Strava's API Policy (§2.1) asks that a runner is told — before
  * they agree — what is collected and how, who sees it, how to withdraw, and
  * how to have it deleted, with a confirmation when it is. So the card says
- * all of it in five short lines, links the privacy notice, and the button
- * stays dead until the box is ticked. The connection lasts for the
+ * all of it in five short lines, links the privacy notice, and connecting
+ * needs the box ticked: before it is, the button goes nowhere and says so
+ * under the box. The connection lasts for the
  * challenge only, and the card says when that is: the day it closes, three
  * days after the finish, or later if the organiser extends it. Connecting
  * is a full navigation to our connect route, which hands over to Strava.
@@ -31,11 +33,13 @@ import type { StravaStatus } from './runs'
  * connected, and a connection still standing says it is about to end.
  *
  * Every state that carries Strava ends with Strava's own "Powered by
- * Strava" logo (PoweredByStrava, the files as Strava supplied them). The
- * Connect button is still ours: the logo pack holds the logos, not the
- * official "Connect with Strava" button, which comes in Strava's separate
- * button pack and is a one-line swap once it is in public/strava/
- * (docs/run.md).
+ * Strava" logo (PoweredByStrava), and the button that starts a connection
+ * is Strava's own "Connect with Strava" (ConnectWithStrava) — both the
+ * files as Strava supplied them. Their guidelines allow the button
+ * unaltered or not at all, so it is never greyed out while the box is
+ * unticked: until then it is a plain button that asks for the tick, and
+ * only once ticked is it the link that carries the consent to the connect
+ * route — so the consent can never travel without the tick.
  */
 
 function since(iso: string | null): string {
@@ -73,6 +77,8 @@ export default function StravaCard({ code, status, joined, outcome, end, closed 
 }) {
   const router = useRouter()
   const [consent, setConsent] = useState(false)
+  /** The button was tapped before the box was ticked: ask for the tick. */
+  const [askTick, setAskTick] = useState(false)
   const [busy, setBusy] = useState<'sync' | 'disconnect' | null>(null)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(outcome ?? null)
 
@@ -239,7 +245,7 @@ export default function StravaCard({ code, status, joined, outcome, end, closed 
             <input
               type="checkbox"
               checked={consent}
-              onChange={e => setConsent(e.target.checked)}
+              onChange={e => { setConsent(e.target.checked); setAskTick(false) }}
               className="mt-0.5 w-5 h-5 accent-accent-deep flex-shrink-0"
             />
             <span className="text-ink/80 text-[13px] leading-snug">
@@ -247,18 +253,22 @@ export default function StravaCard({ code, status, joined, outcome, end, closed 
               above, and show my totals on its leaderboard.
             </span>
           </label>
-          <a
-            href={consent ? `/api/run/strava/connect?code=${code}&consent=1` : undefined}
-            aria-disabled={!consent}
-            onClick={e => { if (!consent) e.preventDefault() }}
-            className={`block w-full mt-4 py-3.5 text-center text-sm font-bold tracking-[0.15em] uppercase rounded-xl border transition-colors ${
-              consent
-                ? 'bg-surface border-bark/25 text-ink hover:border-bark/40'
-                : 'bg-surface border-bark/12 text-ink/65 cursor-not-allowed'
-            }`}
-          >
-            Connect with Strava
-          </a>
+          {askTick && (
+            <p className="text-rust-deep text-[13px] mt-2 leading-snug" role="alert">
+              Tick the box above to agree first.
+            </p>
+          )}
+          <div className="mt-4 flex justify-center">
+            {consent ? (
+              <a href={`/api/run/strava/connect?code=${code}&consent=1`} className="press rounded-md">
+                <ConnectWithStrava />
+              </a>
+            ) : (
+              <button type="button" onClick={() => setAskTick(true)} className="press rounded-md">
+                <ConnectWithStrava />
+              </button>
+            )}
+          </div>
         </>
       ) : (
         <p className="text-ink/80 text-[13px] mt-3 leading-snug">Join the challenge first, then connect.</p>

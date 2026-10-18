@@ -50,6 +50,7 @@ import PrivacyPage from '../app/privacy/page'
 import TermsPage from '../app/terms/page'
 import LegalLinks from '../app/components/LegalLinks'
 import PoweredByStrava from '../app/components/PoweredByStrava'
+import ConnectWithStrava from '../app/components/ConnectWithStrava'
 import { SITE } from '../config/site'
 import { activityUrl, STRAVA_APPS_URL } from '../lib/stravaLinks'
 import {
@@ -944,8 +945,13 @@ section('The Strava card, in each of its states')
   const fresh = draw(<StravaCard code="GX7K2P" status={{ state: 'disconnected' }} joined={true} end="2026-11-30" />)
   ok(fresh.includes('type="checkbox"') && fresh.includes('show my totals on its leaderboard'),
     'not connected: the consent box, saying what is shared')
-  ok(fresh.includes('Connect with Strava') && fresh.includes('aria-disabled="true"') && !fresh.includes('href="/api/run/strava/connect'),
-    'and Connect is dead until it is ticked')
+  ok(fresh.includes('alt="Connect with Strava"') && !fresh.includes('href="/api/run/strava/connect'),
+    'and Connect goes nowhere until it is ticked')
+  const card = stripComments(read('app/run/[tripCode]/StravaCard.tsx'))
+  ok(/\{consent \? \(\s*<a href=\{`\/api\/run\/strava\/connect\?code=\$\{code\}&consent=1`\}/.test(card),
+    '  …the link that carries the consent exists only once the box is ticked')
+  ok(card.includes('onClick={() => setAskTick(true)}') && card.includes('Tick the box above to agree first.'),
+    '  …and before that, tapping the button asks for the tick rather than doing nothing')
   const stranger = draw(<StravaCard code="GX7K2P" status={{ state: 'disconnected' }} joined={false} end="2026-11-30" />)
   ok(stranger.includes('Join the challenge first') && !stranger.includes('type="checkbox"'), 'a phone not joined is told to join first')
   const on = draw(<StravaCard code="GX7K2P" status={{ state: 'connected', lastSyncedAt: null }} joined={true} end="2026-11-30" />)
@@ -1221,6 +1227,20 @@ section('Strava\'s own logo, unaltered, wherever Strava data is shown')
     ok(!/<script|\son[a-z]+=|href=|<foreignObject/i.test(svg), '  …and carries nothing but drawing')
   }
   ok(read('public/strava/powered-by-strava.svg').includes('fill="#FC5200"'), 'the orange is Strava\'s, as supplied')
+
+  // The Connect with Strava button, from Strava's button pack, unaltered.
+  const button = fs.existsSync('public/strava/connect-with-strava.svg') ? read('public/strava/connect-with-strava.svg') : ''
+  ok(button.startsWith('<svg width="237" height="48"') && button.includes('fill="#FC5200"'),
+    'the Connect button is Strava\'s own file, at its own 48px height')
+  ok(!/<script|\son[a-z]+=|href=|<foreignObject/i.test(button), '  …and carries nothing but drawing')
+  const connect = draw(<ConnectWithStrava />)
+  ok(connect.includes('/strava/connect-with-strava.svg') && connect.includes('alt="Connect with Strava"')
+      && connect.includes('height="48"') && !/opacity|filter|grayscale/i.test(connect),
+    '  …drawn at 48px, never faded, recoloured or filtered')
+  const unticked = draw(<StravaCard code="GX7K2P" status={{ state: 'disconnected' }} joined={true} end="2026-11-30" />)
+  ok(unticked.includes('/strava/connect-with-strava.svg') && !/opacity|cursor-not-allowed/.test(
+      unticked.slice(unticked.indexOf('connect-with-strava.svg') - 300, unticked.indexOf('connect-with-strava.svg'))),
+    '  …and the card shows it at full strength even before the box is ticked')
   const logo = draw(<PoweredByStrava />)
   ok(logo.includes('/strava/powered-by-strava.svg') && logo.includes('class="only-light"') &&
      logo.includes('/strava/powered-by-strava-white.svg') && logo.includes('class="only-dark"'),

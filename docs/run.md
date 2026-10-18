@@ -124,11 +124,14 @@ Each stage is tested on greendot.live before the next starts.
    challenge's life" below. **Strava's "Powered by Strava" logo** (their API
    logo pack, unaltered, in `public/strava/` — orange for light, white for
    dark, `PoweredByStrava`) ends every Strava card and sits under any board
-   counting Strava runs, a frozen one included. **Before Strava's review:**
-   the Connect button is still ours — the logo pack holds no button; drop
-   Strava's separate "Connect with Strava" button pack's file into
-   `public/strava/` and swap it in `StravaCard` — and check Garmin's own
-   brand guidelines against our credit wording.
+   counting Strava runs, a frozen one included. **The button that starts a
+   connection is Strava's own "Connect with Strava"** (their button pack,
+   the orange file unaltered at its 48px height, `ConnectWithStrava`) — in
+   both themes, and never greyed out: until the consent box is ticked it is
+   a plain button that asks for the tick, and only then the link carrying
+   `consent=1`. The pack's "Compatible with Strava" logos are not used —
+   they are for apps that send data *to* Strava. **Before Strava's review:**
+   check Garmin's own brand guidelines against our credit wording.
 5. **Sub-leaderboards** — a date window ("Week 2") or an activity filter on a
    board.
 
