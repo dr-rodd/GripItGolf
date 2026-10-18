@@ -27,7 +27,7 @@
 import {
   FULL_ALLOWANCE, allowanceOf, clampAllowance, describeAllowance,
 } from './handicapAllowance'
-import { type TieBreak, type OverallTie, TIE_BREAKS, describeTieBreak } from './tiebreak'
+import { type TieBreak, type OverallTie, TIE_BREAKS, describeTieBreak, tieBreakOf } from './tiebreak'
 import { type RoundLink, parseRoundLinks, decisionLabel } from './matchDecision'
 import {
   type QuotaScale, parseQuotaScale, quotaScaleOf, quotaScaleLabel,
@@ -230,14 +230,15 @@ export const MAX_TEAM_SIZE_SEPARATE = 8
 export const MAX_DISCARD = 2
 
 export const SCORINGS: { key: Scoring; label: string; hint: string }[] = [
-  // The hint is not only the hint: `boardRules` joins these into the line
-  // under a saved board's title, so it has to name the scoring as well as
-  // carry the joke. Ends with a stop like every other one, or it runs into
-  // whatever `boardRules` appends next.
+  // The hint is not only the hint: `boardRules` joins these into the
+  // board's prose, so it has to name the scoring. A fact, never a joke —
+  // system copy is not where the trip's humour lives (refresh plan, 3.6).
+  // Ends with a stop like every other one, or it runs into whatever
+  // `boardRules` appends next.
   { key: 'stableford', label: 'Stableford Points',
-    hint: 'Stableford points. Man\'s greatest achievement.' },
+    hint: 'Stableford points, off each player\'s handicap.' },
   { key: 'strokes', label: 'Strokes',
-    hint: 'Simple as.' },
+    hint: 'Fewest strokes wins.' },
   { key: 'quota', label: 'Quota',
     hint: 'Quota points against your own number — 36 minus course handicap.' },
 ]
@@ -847,6 +848,67 @@ export function boardRules(lb: Leaderboard): string {
   const allowance = allowanceOf(lb)
   if (allowance !== FULL_ALLOWANCE) parts.push(`Played off ${describeAllowance(allowance)}.`)
   return parts.filter(Boolean).join(' ')
+}
+
+/**
+ * A board in facts rather than sentences — what every screen shows under a
+ * board's title: "Stableford · Running total · Worst round dropped · 90%
+ * handicap". Joined with a middle dot by whoever draws it.
+ *
+ * The same inputs as `boardRules`, which stays for the places that want the
+ * prose — the printed trip. A screen read on a phone in daylight wanted a
+ * line it could take in at a glance, and four sentences under every board
+ * was most of what made the setup screens read as wordy (refresh plan, 4.5).
+ * Nothing is said that the board does not do: a full allowance, a tie left
+ * standing on a totals board, a single counting card — each is silent here
+ * exactly where `boardRules` is.
+ */
+export function boardFacts(lb: Leaderboard): string[] {
+  if (lb.competition === 'matchplay') {
+    const facts = ['Knockout', lb.audience === 'team' ? 'Pairs' : 'Singles', 'Random draw']
+    const links = lb.roundLinks ?? []
+    if (links.length > 0) {
+      const methods = new Set(links.map(l => l.decidedBy))
+      facts.push(methods.size === 1
+        ? `Decided on ${decisionLabel(links[0].decidedBy).toLowerCase()}`
+        : `${links.length} rounds linked`)
+    }
+    return facts
+  }
+
+  const facts: string[] = []
+  if (isTagBoard(lb)) {
+    if (lb.tagMode === 'best_cards') {
+      const n = tagCountOf(lb)
+      facts.push(n === 1 ? 'Best card counts' : `Best ${n} cards count`)
+    } else {
+      facts.push(ALL_TAG_MODES.find(m => m.key === lb.tagMode)?.label ?? '')
+    }
+  }
+  if (lb.audience === 'team' && lb.teamFormat) {
+    if (lb.teamFormat === 'better_ball') {
+      const n = countingScoresOf(lb)
+      facts.push(n === 1 ? 'Best ball' : `Best ${n} balls`)
+      const finish = aggregateFinishOf(lb)
+      if (finish > 0) facts.push(finish === 1 ? 'All count on the 18th' : `All count on ${19 - finish}–18`)
+    } else {
+      facts.push(ALL_TEAM_FORMATS.find(f => f.key === lb.teamFormat)?.label ?? '')
+    }
+  }
+  facts.push(lb.scoring === 'stableford' ? 'Stableford' : lb.scoring === 'strokes' ? 'Strokes' : 'Quota')
+  if (lb.scoring === 'quota') facts.push(quotaScaleLabel(quotaScaleOf(lb)))
+  facts.push(lb.combine === 'position' ? 'Points by position' : 'Running total')
+  if (lb.discardWorst) {
+    facts.push(lb.discardWorst === 1 ? 'Worst round dropped' : `Worst ${lb.discardWorst} rounds dropped`)
+  }
+  const tie = tieBreakOf(lb)
+  if (tie === 'countback') facts.push('Countback')
+  else if (lb.combine === 'position') {
+    facts.push(tie === 'everybody_wins' ? 'Ties take the better prize' : 'Ties split the prize')
+  }
+  const allowance = allowanceOf(lb)
+  if (allowance !== FULL_ALLOWANCE) facts.push(`${allowance}% handicap`)
+  return facts.filter(Boolean)
 }
 
 /**

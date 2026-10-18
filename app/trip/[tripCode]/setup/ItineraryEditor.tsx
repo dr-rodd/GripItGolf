@@ -8,6 +8,7 @@ import ItineraryBuilder from '@/app/components/ItineraryBuilder'
 import { IconX } from '@/app/components/icons'
 import { buttonClass } from '@/app/components/ui'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
+import { courseLabel } from '@/lib/courseDirectory'
 
 /**
  * Editing the running order after the trip already exists.
@@ -167,7 +168,7 @@ export default function ItineraryEditor({
           <ul className="space-y-0.5">
             {removedGolf.map(item => (
               <li key={item.id} className="t-cap text-ink/80">
-                Day {item.dayIndex + 1} — {courseName(item.courseId)}
+                Day {item.dayIndex + 1} — {courseLabel(courseName(item.courseId))}
               </li>
             ))}
           </ul>

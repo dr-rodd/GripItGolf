@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import {
-  filterCourses, countyList, countyOf, courseNameError, countyError, websiteError,
+  courseLabel, filterCourses, countyList, countyOf, courseNameError, countyError, websiteError,
   emptyTeeDraft, teeDraftBlank, teeDraftError, parseTeeDraft,
   MAX_COURSE_NAME, MAX_LOCATION, MAX_COUNTY, MAX_WEBSITE, IRISH_COUNTIES,
   type DirectoryCourse, type TeeDraft,
@@ -11,6 +11,7 @@ import type { SuggestedTee } from '@/lib/courseLookup'
 import CardCheck from '@/app/scoring/CardCheck'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from './ui'
 import { IconChevronDown, IconX, IconPlus } from './icons'
+import CourseName from './CourseName'
 
 /**
  * Choosing a course, now that the list outgrew a dropdown.
@@ -219,7 +220,7 @@ export default function CourseSelect({
                       >
                         <span className="flex-1 min-w-0">
                           <span className={`block truncate t-card ${on ? 'text-accent-deep font-semibold' : 'text-ink'}`}>
-                            {c.name}
+                            <CourseName name={c.name} />
                           </span>
                           {c.location && (
                             <span className="block truncate t-cap text-ink/65 mt-0.5">{c.location}</span>
@@ -264,7 +265,7 @@ export default function CourseSelect({
             {view.kind === 'created' && (
               <div className="py-5 space-y-4">
                 <p className="t-body text-ink">
-                  ✓ <span className="font-semibold">{view.course.name}</span> is
+                  ✓ <span className="font-semibold">{courseLabel(view.course.name)}</span> is
                   on the list and chosen for this round.
                 </p>
                 <p className="t-cap text-ink/65 leading-snug">

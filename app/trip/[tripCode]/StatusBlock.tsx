@@ -12,6 +12,7 @@ import { useMinute } from '@/app/components/useMinute'
 import CourseWeather from '@/app/components/CourseWeather'
 import { IconArrowRight, IconFlag, IconHome, IconCar, IconPlane, IconTrain, IconFork, IconUsers } from '@/app/components/icons'
 import { cardClass } from '@/app/components/ui'
+import CourseName from '@/app/components/CourseName'
 
 /**
  * The top of the trip hub: what this device is, and what happens next.
@@ -219,7 +220,11 @@ function UpNextLines({
             where you are going. It wraps now, at section-heading size, and
             the page scrolls to make the room rather than the card shrinking
             its own answer. */}
-        <p className="t-h2 text-ink text-balance mt-0.5">{next.title}</p>
+        <p className="t-h2 text-ink text-balance mt-0.5">
+          {next.item.kind === 'golf'
+            ? <CourseName name={next.title} courseClassName="t-card text-ink/80 mt-0.5" />
+            : next.title}
+        </p>
 
         {/* The date, then how many groups go off and when the first one does.
             Never a personal tee time — nothing on the platform records who

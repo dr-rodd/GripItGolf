@@ -26,6 +26,7 @@ import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../../kind'
 import { boardNames } from '@/lib/displayNames'
 import { buttonClass, cardClass } from '@/app/components/ui'
+import { splitCourseName } from '@/lib/courseDirectory'
 
 export const dynamic = 'force-dynamic'
 
@@ -189,7 +190,10 @@ export default async function RoundSummaryPage({
 
   const day = describeDay(round.scheduled_date, item?.day_index ?? 0)
   const groups = describeGroups(item?.tee_count ?? null, describeTime(item?.tee_time))
-  const directions = mapsUrl([course?.name, course?.location].filter(Boolean).join(', '))
+  // The club, not the stored name: "Carne Golf Links -- Wild Atlantic Dunes"
+  // is a page about a course, and a map is looking for a gate.
+  const named = splitCourseName(course?.name ?? 'Course')
+  const directions = mapsUrl([course?.name ? named.club : null, course?.location].filter(Boolean).join(', '))
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
@@ -219,8 +223,11 @@ export default async function RoundSummaryPage({
             Round {round.round_number}{round.casual === true ? ' · casual' : ''}
           </p>
           <h1 className="t-h1 text-ink text-balance mt-1.5" style={{ fontSize: 'clamp(24px, 7vw, 30px)' }}>
-            {course?.name ?? 'Course'}
+            {named.club}
           </h1>
+          {named.course && (
+            <p className="t-card text-ink/80 mt-1">{named.course}</p>
+          )}
           {course?.location && (
             <p className="t-cap text-ink/65 mt-1.5">{course.location}</p>
           )}

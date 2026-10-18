@@ -18,6 +18,7 @@ import {
 import { setTeam } from '@/lib/teamMembers'
 import { PRESET_COLORS } from '@/lib/teamColors'
 import { FIELD, cardClass } from '@/app/components/ui'
+import { courseLabel } from '@/lib/courseDirectory'
 
 /**
  * The tee sheet on a phone: a full day is a long scroll, so every row is
@@ -489,7 +490,7 @@ export default function TeeSheetClient({
                 >
                   <span className="block t-label">Round {r.roundNumber}</span>
                   {r.courseName && (
-                    <span className="block t-cap text-ink/65 mt-0.5">{r.courseName}</span>
+                    <span className="block t-cap text-ink/65 mt-0.5">{courseLabel(r.courseName)}</span>
                   )}
                 </button>
               ))}

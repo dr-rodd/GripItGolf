@@ -8,6 +8,7 @@ import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundS
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
 import AddRound from './AddRound'
+import CourseName from '@/app/components/CourseName'
 
 export const dynamic = 'force-dynamic'
 
@@ -163,7 +164,7 @@ export default async function TripCoursePortalPage({
                     Round {round.round_number}
                   </p>
                   <p className="font-[family-name:var(--font-display)] text-ink text-lg leading-tight truncate">
-                    {course?.name ?? `Round ${round.round_number}`}
+                    <CourseName name={course?.name ?? `Round ${round.round_number}`} />
                   </p>
                   <p className={`t-cap mt-1 truncate ${ROUND_NOTE_TONE[tone]}`}>
                     {course?.location ? `${course.location} · ` : ''}{ROUND_NOTE[tone]}

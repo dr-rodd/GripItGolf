@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { resolveCustomPoints } from '@/lib/customPoints'
 import type { TeamScoring } from '@/lib/teamScoring'
 import {
-  type Leaderboard, boardTitle, boardRules, hasMatchplay,
+  type Leaderboard, boardTitle, boardFacts, hasMatchplay,
 } from '@/lib/leaderboards'
 import {
   type BoardRow, type ResolvedScore, type RowContext,
@@ -27,8 +27,10 @@ import {
   SC_CARD, SC_SF, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_HEAD_TIGHT, SC_LABEL,
   SC_MUTED, SC_DARK, SC_NUM, scRow, scPoints,
 } from '@/app/components/scorecardStyle'
-import { Segmented, cardClass, chipClass } from '@/app/components/ui'
+import { Pill, Segmented, cardClass, chipClass } from '@/app/components/ui'
 import Toggle from '@/app/components/Toggle'
+import CourseName from '@/app/components/CourseName'
+import { courseLabel, splitCourseName } from '@/lib/courseDirectory'
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -168,17 +170,16 @@ function formatRelative(n: number): string {
 
 /** Shown while a scorecard is open somewhere on the trip. */
 function InPlayBadge() {
-  return (
-    <span className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/[0.22]">
-      <span className="w-1.5 h-1.5 rounded-full bg-accent dot-live" aria-hidden="true" />
-      <span className="t-label text-accent-deep">In play</span>
-    </span>
-  )
+  return <Pill tone="win" live className="flex-shrink-0">In play</Pill>
 }
 
-/** "10 / 5 / 3 a round" — the top of the table, enough to recognise it by. */
+/**
+ * "10 / 5 / 3 a round" — the top of the table, enough to recognise it by.
+ * Empty when there is no table: "Points by position" is already one of the
+ * board's facts, and saying it twice is the line saying nothing new.
+ */
 function describeCustomTable(table: number[]): string {
-  if (table.length === 0) return 'Points by finishing position'
+  if (table.length === 0) return ''
   const head = table.slice(0, 3).join(' / ')
   return table.length > 3 ? `${head} … a round` : `${head} a round`
 }
@@ -608,7 +609,7 @@ export function CourseTiles({
             <div className="px-5 py-4 flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <p className="font-[family-name:var(--font-display)] text-ink text-base leading-tight truncate">
-                  {round.courses?.name ?? `Round ${round.round_number}`}
+                  <CourseName name={round.courses?.name ?? `Round ${round.round_number}`} />
                 </p>
                 {/* Two lines before the ellipsis. "In play — carried by
                     Rosaleen" is an ordinary note and it was losing its second
@@ -1563,7 +1564,12 @@ export default function TripLeaderboardClient({
       className="mb-4"
       value={shownCourse ?? 'all'}
       onChange={v => setCourseId(v === 'all' ? null : v)}
-      options={[{ value: 'all', label: 'Overall' }, ...courses.map(c => ({ value: c.id, label: c.name }))]}
+      options={[{ value: 'all', label: 'Overall' }, ...courses.map(c => {
+        // Two courses at one club are told apart by the course; anywhere
+        // else the club is the name.
+        const { club, course } = splitCourseName(c.name)
+        return { value: c.id, label: course ?? club }
+      })]}
     />
   )
 
@@ -1599,13 +1605,14 @@ export default function TripLeaderboardClient({
   // A prize table is worth naming — "10 / 5 / 3 a round" is what an organiser
   // recognises their own competition by, where "points by position" is not.
   const paysByPosition = activeBoard.combine === 'position'
-  const rules: string[] = [boardRules(activeBoard)]
+  const rules: string[] = boardFacts(activeBoard)
   if (paysByPosition) {
     rules.push(describeCustomTable(resolveCustomPoints(
       activeBoard.customPoints ?? [],
       activeBoard.audience === 'team' ? teams.length : players.length,
     )))
   }
+  const factsLine = rules.filter(Boolean).join(' · ')
 
   // Team cards show every member side by side; individual tabs show one column
   const cardPlayers = card
@@ -1623,21 +1630,21 @@ export default function TripLeaderboardClient({
       {tabs.length > 1 ? (
         <div className={`px-4 py-3 mb-3 ${cardClass()}`}>
           <div className="flex items-center justify-between gap-3">
-            <p className="font-[family-name:var(--font-display)] text-ink text-base leading-tight">
+            <p className="t-card text-ink">
               {boardTitle(activeBoard)}
             </p>
             {inPlay && <InPlayBadge />}
           </div>
-          {rules.length > 0 && (
-            <p className="text-ink/65 text-[13px] mt-1 leading-snug">
-              {rules.join(' · ')}
+          {factsLine && (
+            <p className="t-cap text-ink/65 mt-1">
+              {factsLine}
             </p>
           )}
         </div>
       ) : (
         <div className="flex items-center justify-between gap-3 mb-3">
-          <p className="text-ink/65 text-[13px] leading-relaxed min-w-0">
-            {rules.join(' · ')}
+          <p className="t-cap text-ink/65 min-w-0">
+            {factsLine}
           </p>
           {inPlay && <InPlayBadge />}
         </div>
@@ -1675,7 +1682,7 @@ export default function TripLeaderboardClient({
       {card && cardPlayers.length > 0 && (
         <ScorecardSheet
           title={card.row.name}
-          subtitle={card.round.courses?.name ?? `Round ${card.round.round_number}`}
+          subtitle={card.round.courses?.name ? courseLabel(card.round.courses.name) : `Round ${card.round.round_number}`}
           players={cardPlayers}
           round={card.round}
           holes={holes}

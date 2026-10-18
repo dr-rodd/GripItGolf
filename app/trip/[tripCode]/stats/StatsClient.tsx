@@ -19,6 +19,7 @@ import {
 } from './charts'
 import type { RowHole, RowRound } from '@/lib/boardRows'
 import { Segmented, cardClass, chipClass } from '@/app/components/ui'
+import { courseLabel } from '@/lib/courseDirectory'
 
 /**
  * The stats hub: an instrument, not a printout.
@@ -108,7 +109,10 @@ export default function StatsClient({
   }
 
   const nameOf = useMemo(() => new Map(players.map(p => [p.id, p.name])), [players])
-  const courseName = useMemo(() => new Map(courseNames), [courseNames])
+  const courseName = useMemo(
+    () => new Map(courseNames.map(([id, name]) => [id, courseLabel(name)])),
+    [courseNames],
+  )
   const courseFor = useMemo(() => new Map(courseByRound), [courseByRound])
 
   // Courses that actually have play on them, in course-list order.

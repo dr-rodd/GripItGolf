@@ -12,7 +12,7 @@ import {
   EVENT_PERMISSIONS, type EventPermissions,
 } from '@/lib/eventPermissions'
 import {
-  type Leaderboard, boardTitle, boardRules, tagsInPlay,
+  type Leaderboard, boardTitle, boardFacts, tagsInPlay,
 } from '@/lib/leaderboards'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
@@ -412,7 +412,7 @@ export default function TagPortalClient({
               {boards.filter(b => b.tagMode).map(b => (
                 <li key={b.id} className={`p-4 ${cardClass()}`}>
                   <p className="text-ink text-sm font-medium">{boardTitle(b)}</p>
-                  <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">{boardRules(b)}</p>
+                  <p className="t-cap text-ink/65 mt-0.5">{boardFacts(b).join(' · ')}</p>
                 </li>
               ))}
             </ul>

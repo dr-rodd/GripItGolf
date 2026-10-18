@@ -45,6 +45,31 @@ export const IRISH_COUNTIES = [
   'Tyrone', 'Waterford', 'Westmeath', 'Wexford', 'Wicklow',
 ] as const
 
+// ─── Saying a course's name ────────────────────────────────────
+
+/**
+ * A course's name as a club and a course.
+ *
+ * A course at a club with more than one is stored "Carne Golf Links -- Wild
+ * Atlantic Dunes" — the double hyphen is how the research files and the
+ * add-course form keep the two apart, and it printed on screen as written,
+ * truncating mid-name. Tiles show the club on one line and the course on the
+ * next; a line with room for one says `courseLabel`. Reads the label's own
+ * " · " back too, so a name that has been through `courseLabel` once splits
+ * the same way. Never prints a raw "--" (refresh plan, 4.7).
+ */
+export function splitCourseName(name: string): { club: string; course: string | null } {
+  const m = name.match(/^(.*?)\s+(?:--|·)\s+(.+)$/)
+  if (!m) return { club: name.trim(), course: null }
+  return { club: m[1].trim(), course: m[2].trim() || null }
+}
+
+/** The name on one line: "Carne Golf Links · Wild Atlantic Dunes". */
+export function courseLabel(name: string): string {
+  const { club, course } = splitCourseName(name)
+  return course ? `${club} · ${course}` : club
+}
+
 // ─── Searching and filtering ───────────────────────────────────
 
 const fold = (s: string) =>

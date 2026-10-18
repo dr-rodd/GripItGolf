@@ -8,6 +8,8 @@
 // Pure. No I/O, and "now" is always an argument, so the whole thing can be
 // tested without waiting for Tuesday.
 
+import { courseLabel } from './courseDirectory'
+
 export type ItemKind = 'golf' | 'stay' | 'travel' | 'activity'
 export type TravelMode = 'car' | 'flight' | 'train'
 
@@ -383,7 +385,8 @@ export function describeItem(
     const groups = count > 1 ? `${count} tee times` : 'tee time'
     const when = time ? `${groups} from ${time}` : groups
     return {
-      title: courseName ?? 'Golf',
+      // On one line here; a golf tile splits it back into club and course.
+      title: courseName ? courseLabel(courseName) : 'Golf',
       // Named on the tile, because a round the leaderboard will not show
       // is worth knowing about before anyone asks where its column went.
       detail: item.casual ? `${when} · casual` : when,

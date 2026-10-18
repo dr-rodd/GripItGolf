@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { buttonClass, cardClass } from '@/app/components/ui'
+import { courseLabel } from '@/lib/courseDirectory'
 
 /**
  * The document, and the choice of what goes in it.
@@ -264,7 +265,7 @@ export default function TripExportClient({
                 <div key={round.id} className="print-avoid-break">
                   <p className="t-label text-ink mb-1.5">
                     Round {round.number}
-                    {round.courseName && ` — ${round.courseName}`}
+                    {round.courseName && ` — ${courseLabel(round.courseName)}`}
                     {round.date && (
                       <span className="t-cap text-ink/65"> · {longDate(round.date)}</span>
                     )}

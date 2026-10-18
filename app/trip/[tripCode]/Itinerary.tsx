@@ -7,6 +7,7 @@ import {
 import Link from 'next/link'
 import { IconFlag, itineraryIcon } from '@/app/components/icons'
 import { useMinute } from '@/app/components/useMinute'
+import CourseName from '@/app/components/CourseName'
 
 /**
  * The trip's running order on the hub, dimming as it happens.
@@ -159,7 +160,7 @@ function GolfTile({
             state === 'past' ? 'text-ink/80 line-through decoration-ink/25' : 'text-ink'
           }`}
         >
-          {title}
+          <CourseName name={title} />
         </span>
         {detailLine && (
           <span className="block t-cap text-ink/65 truncate mt-0.5">{detailLine}</span>

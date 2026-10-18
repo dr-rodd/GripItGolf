@@ -5,10 +5,11 @@ import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import {
-  type Leaderboard, boardTitle, boardRules,
+  type Leaderboard, boardTitle, boardFacts,
 } from '@/lib/leaderboards'
 import { type DayBoards, DAY_BOARDS, boardGrouping } from '@/lib/leagueSetup'
 import { cardClass } from '@/app/components/ui'
+import { courseLabel } from '@/lib/courseDirectory'
 
 /**
  * A format for each day.
@@ -94,7 +95,7 @@ export default function DayBoardsClient({
               {overall.map(b => (
                 <li key={b.id} className={`p-4 ${cardClass()}`}>
                   <p className="text-ink text-sm font-medium">{boardTitle(b)}</p>
-                  <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">{boardRules(b)}</p>
+                  <p className="t-cap text-ink/65 mt-0.5">{boardFacts(b).join(' · ')}</p>
                 </li>
               ))}
             </ul>
@@ -117,7 +118,7 @@ export default function DayBoardsClient({
                 <li key={round.id} className={`p-4 ${cardClass()}`}>
                   <p className="text-ink text-sm font-medium">
                     Day {round.roundNumber}
-                    {round.courseName ? ` — ${round.courseName}` : ''}
+                    {round.courseName ? ` — ${courseLabel(round.courseName)}` : ''}
                   </p>
 
                   {mine.length > 0 ? (
@@ -125,7 +126,7 @@ export default function DayBoardsClient({
                       {mine.map(b => (
                         <li key={b.id} className="rounded-lg bg-bark/[0.04] px-3 py-2">
                           <p className="text-ink text-sm">{boardTitle(b)}</p>
-                          <p className="t-cap text-ink/65 mt-0.5 leading-snug">{boardRules(b)}</p>
+                          <p className="t-cap text-ink/65 mt-0.5 leading-snug">{boardFacts(b).join(' · ')}</p>
                         </li>
                       ))}
                     </ul>

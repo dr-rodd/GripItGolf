@@ -8,6 +8,7 @@ import CourseDashboardClient from '@/app/scoring/[slug]/CourseDashboardClient'
 import TripHeader from '@/app/components/TripHeader'
 import { HEADER_H } from '@/app/components/headerMetrics'
 import { TABBAR_SPACE } from '@/app/components/tabbarMetrics'
+import { courseLabel } from '@/lib/courseDirectory'
 
 export const dynamic = 'force-dynamic'
 
@@ -107,7 +108,7 @@ export default async function TripCoursePage({
     <div className="min-h-dvh paper page-enter">
       <TripHeader backTo={`/trip/${tripCode}`} title="scoring" />
       <CourseDashboardClient
-        courseName={(thisRound.courses as any).name}
+        courseName={courseLabel((thisRound.courses as any).name)}
         courseId={courseId}
         players={players as any}
         rounds={(allRounds ?? []) as any}

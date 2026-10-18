@@ -9,7 +9,7 @@ import {
 } from '@dnd-kit/core'
 import { supabase } from '@/lib/supabase'
 import { revalidateTrip } from '@/app/actions/revalidate'
-import { boardTitle, boardRules, isSlotFree, type Leaderboard } from '@/lib/leaderboards'
+import { boardTitle, boardFacts, isSlotFree, type Leaderboard } from '@/lib/leaderboards'
 import { TABBAR_SPACE } from '@/app/components/tabbarMetrics'
 import {
   MAIN_SET, setOf, teamBoards, isBoardOpen, sheetForSelection, withSheet,
@@ -365,7 +365,7 @@ function BoardTile({
               ? <Pill>No {noun.many} yet</Pill>
               : <Pill tone="win">{teams.length} {teams.length === 1 ? noun.one : noun.many}</Pill>}
           </span>
-          <span className="block t-cap text-ink/65 mt-1 leading-snug">{boardRules(board)}</span>
+          <span className="block t-cap text-ink/65 mt-1 leading-snug">{boardFacts(board).join(' · ')}</span>
           {!open && (
             <span className="block t-cap text-ink/65 mt-1">
               {placed} player{placed === 1 ? '' : 's'} placed
@@ -867,7 +867,7 @@ className="fixed left-1/2 -translate-x-1/2 max-w-[92vw] px-5 py-3 bg-surface bor
                   className="w-full text-left px-3 py-2.5 border border-bark/25 rounded-xl hover:border-bark/40 transition-colors duration-150"
                 >
                   <span className="block t-card text-ink">{boardTitle(lb)}</span>
-                  <span className="block t-cap text-ink/65 mt-0.5 leading-snug">{boardRules(lb)}</span>
+                  <span className="block t-cap text-ink/65 mt-0.5 leading-snug">{boardFacts(lb).join(' · ')}</span>
                 </button>
               ))}
             </div>

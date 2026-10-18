@@ -19,6 +19,7 @@ import {
   MIN_TEE_INTERVAL_MINS, MAX_TEE_INTERVAL_MINS,
   MIN_GROUP_SIZE, MAX_GROUP_SIZE,
 } from '@/lib/teeSheet'
+import { courseLabel } from '@/lib/courseDirectory'
 
 /**
  * What the organiser can actually do, once past the PIN.
@@ -362,7 +363,7 @@ export default function OrganiserClient({
                   <li key={round.id} className={`${cardClass()} p-4`}>
                     <p className="text-ink text-sm font-medium mb-3">
                       Round {round.roundNumber}
-                      {round.courseName ? ` — ${round.courseName}` : ''}
+                      {round.courseName ? ` — ${courseLabel(round.courseName)}` : ''}
                     </p>
 
                     <ChoiceChips

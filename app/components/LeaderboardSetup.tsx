@@ -9,7 +9,7 @@ import {
   offersTeeTeams, MIN_TEAM_SIZE, MAX_TEAM_SIZE_TOGETHER, MAX_TEAM_SIZE_SEPARATE,
   offersAllowance, tripQuotaScale, slotKey, isFormatFree,
   freeScorings, freeTeamFormats,
-  hasMatchplay, boardTitle, boardRules,
+  hasMatchplay, boardTitle, boardFacts,
   TAG_MODES, MAX_TAG_COUNT, DEFAULT_TAG_COUNT, tagCountOf,
   isTagBoard, offersTeamFormat, offersTagMode, offersTagCount, offersCombine,
 } from '@/lib/leaderboards'
@@ -32,6 +32,7 @@ import { TAG_SET } from '@/lib/tagBoards'
 import { defaultCustomPoints, editableRows, clampPoints, MAX_CUSTOM_POINTS } from '@/lib/customPoints'
 import { IconTrophy, IconPlus, IconMinus, IconX, IconCheck, IconSettings } from './icons'
 import { Card, FIELD, FIELD_LABEL, Pill, buttonClass, chipClass } from './ui'
+import { courseLabel } from '@/lib/courseDirectory'
 
 /**
  * Choosing what a trip plays for.
@@ -76,7 +77,7 @@ export type LinkableRound = {
 }
 
 const roundLabel = (r: LinkableRound) =>
-  [r.roundNumber ? `Round ${r.roundNumber}` : 'Round', r.courseName]
+  [r.roundNumber ? `Round ${r.roundNumber}` : 'Round', r.courseName ? courseLabel(r.courseName) : r.courseName]
     .filter(Boolean).join(' — ')
 
 const CHOICE =
@@ -1467,7 +1468,7 @@ export default function LeaderboardSetup({
                   <span className="t-h2 text-ink">{boardTitle(lb)}</span>
                   {i === 0 && <Pill tone="win">Primary</Pill>}
                 </div>
-                <p className="t-cap text-ink/65 mt-1 leading-snug">{boardRules(lb)}</p>
+                <p className="t-cap text-ink/65 mt-1 leading-snug">{boardFacts(lb).join(' · ')}</p>
               </div>
               {/* A board is a way of reading the cards, not a place the cards
                   live, so changing one is safe at any point in the trip. */}
