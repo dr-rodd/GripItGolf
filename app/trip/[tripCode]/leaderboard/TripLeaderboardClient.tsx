@@ -620,7 +620,7 @@ export function CourseTiles({
               </div>
               <div className="flex-shrink-0 flex items-center gap-3">
                 {hasScores && (
-                  <span className={`font-[family-name:var(--font-display)] text-xl font-bold tabular-nums ${
+                  <span className={`font-serif text-xl font-bold tabular-nums ${
                     live ? 'text-accent-deep' : 'text-ink'
                   }`}>
                     {live && rel !== undefined ? formatRelative(rel) : formatScore(pts)}
@@ -1193,7 +1193,9 @@ function Board({
                 // two ends stayed white. Opacity flattens the row first and
                 // fades the result, so it lands evenly and nothing shows
                 // through the pinned columns while it does.
-                className={`flex items-center ${GAP} px-3 py-2 text-left transition-opacity duration-150 active:opacity-70 ${
+                // The serif, by name: a board's names and numbers are the one
+                // place it is the point, and the body around it is sans.
+                className={`font-serif flex items-center ${GAP} px-3 py-2 text-left transition-opacity duration-150 active:opacity-70 ${
                   scrolls ? 'w-max min-w-full' : 'w-full'
                 } ${!isLast || isExpanded ? 'border-b border-bark/12' : ''}`}
               >
@@ -1201,7 +1203,7 @@ function Board({
                   {/* The place, not the row's index. Two level share one —
                       both are 1st and the next row is 3rd — which is what a
                       board that leaves ties standing is saying. */}
-                  <span className={`t-cap text-ink/65 tabular-nums ${POS_W}`}>{row.place}</span>
+                  <span className={`text-[15px] leading-[1.45] text-ink/65 tabular-nums ${POS_W}`}>{row.place}</span>
 
                   {/* The name, a size down from t-card, and shown in full by
                       moving rather than by truncating — the column fits a
@@ -1217,7 +1219,7 @@ function Board({
                       <ScrollingName
                         text={boardNameById.get(row.id) ?? row.name}
                         className="min-w-0 flex-1"
-                        textClassName="font-[family-name:var(--font-display)] font-semibold text-[15px] leading-tight text-ink"
+                        textClassName="font-semibold text-[15px] leading-tight text-ink"
                       />
                       {row.isLive && <LiveDot />}
                     </span>
