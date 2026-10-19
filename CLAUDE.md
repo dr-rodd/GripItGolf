@@ -402,6 +402,12 @@ know before touching a screen:
   `lib/leaderboards.ts` ("Stableford · Running total · 90% handicap"),
   `ruleFacts` / `teamScoreFact` in `lib/runChallenge.ts`. Course names print
   as club and course (`splitCourseName`, `CourseName`), never a raw `--`.
+- **Two moments move, and only these** (Phase 8): `CountUp` on your run
+  total after a run is logged and on your own round total the first time
+  you see it after signing; `DotBloom`, the one celebration, on the "Scores
+  committed" screen and when a run is logged. Never on a board, a hub
+  standing or in score entry — `test:branding` lists the files allowed to
+  import each. The bloom's 600ms is a named exception, in its own `<style>`.
 - **Copy follows the rules in the style guide's §7.** Three of them (no
   em-dashes, British spelling, no exclamation marks) and Title Case buttons
   (X-04) are open with Ross in `docs/copy-review.md` — don't apply them

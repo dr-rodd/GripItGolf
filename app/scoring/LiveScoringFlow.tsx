@@ -19,6 +19,7 @@ import type { ActiveLiveRound } from "./ScoringClient"
 import LiveLeaderboardPanel from "./LiveLeaderboardPanel"
 import BackButton from "@/app/components/BackButton"
 import CardCheck from "./CardCheck"
+import DotBloom from "@/app/components/DotBloom"
 import ScoreShape, { NoReturnShape } from "@/app/components/ScoreShape"
 import {
   SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL, SC_STICKY,
@@ -1948,7 +1949,8 @@ export default function LiveScoringFlow({
   if (step === "committed") {
     return (
       <div className="flex flex-col items-center justify-center px-6 gap-6 text-center min-h-[calc(100dvh-113px)]">
-        <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center text-accent-deep text-3xl">✓</div>
+        {/* The one celebration: the card is signed (Phase 8, D11). */}
+        <DotBloom />
         <div>
           <h2 className="font-serif text-3xl text-ink mb-2">Scores committed</h2>
           <p className="text-ink/65 text-base">Saved to the official leaderboard.</p>

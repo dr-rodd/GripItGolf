@@ -1,5 +1,6 @@
 'use client'
 
+import DotBloom from '@/app/components/DotBloom'
 import { useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import DateField from '@/app/components/DateField'
@@ -84,6 +85,8 @@ export default function RunAddClient({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  // Bumped on every save, so the bloom replays for each run logged.
+  const [savedCount, setSavedCount] = useState(0)
 
   const day = date || latest
   const kmNum = km ? roundKm(Number(km)) : 0
@@ -114,6 +117,7 @@ export default function RunAddClient({
       setHours('')
       setMins('')
       setSaved(true)
+      setSavedCount(n => n + 1)
       router.refresh()
     } catch {
       setError('Could not save that run — check your connection and try again.')
@@ -247,6 +251,14 @@ export default function RunAddClient({
           {error && (
             <div className="p-4 bg-rust/10 border border-rust/30 rounded-xl">
               <p className="text-rust-deep text-sm">{error}</p>
+            </div>
+          )}
+
+          {/* The one celebration: a run logged (Phase 8, D11). */}
+          {saved && !km && (
+            <div className="flex items-center gap-3" aria-live="polite">
+              <DotBloom key={savedCount} size={40} />
+              <p className="t-label text-ink">Run logged</p>
             </div>
           )}
 

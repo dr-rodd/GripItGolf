@@ -348,7 +348,7 @@ Apply 3.6 across every string on the screens touched so far. Use `docs/copy-revi
 - **Count-up:** only on your total after logging a run, and on the round summary total after signing a card. 400ms, `--gd-ease`, tabular numerals so the width doesn't jump. Never on a live board. Reduce Motion: the final number, at once.
 - **One celebration:** the emerald dot blooms and settles (about 600ms) when a card is signed and when a run is logged. Never during score entry, never on a board, once per action. Reduce Motion: a static tick. This is a new named exception to the 400ms ceiling.
 
-#### Phase 8 scope (written 19 Oct, not built)
+#### Phase 8 scope (written 19 Oct; built 19 Oct with the proposed answers)
 
 Two pieces, four places, one new shared component each. Nothing on a live
 board, in score entry, or on a leaderboard moves.
@@ -396,7 +396,12 @@ board, in score entry, or on a leaderboard moves.
 - Risk is low and contained to two screens, but the commit screen is the
   scoring path — build it between trips, not during one.
 
-**Decisions for Ross before building**
+**Decisions** — Ross: "move forward as you have suggested", so the proposed
+answers stand: once per commit, your own total only (the podium stays
+still), and only these two moments. Built as scoped, except that the round
+summary had no "your total" to count — it gained one, a chosen-card line
+"Your round · 5th of 12" above the podium. The once-only memory is
+localStorage rather than sessionStorage, so a later visit does not replay.
 
 1. Does the bloom also fire for a **team** card signed by one phone for
    four players, or only once per phone? (Proposed: once per commit.)

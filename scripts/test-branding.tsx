@@ -28,6 +28,7 @@ import {
 } from '../app/components/ui'
 import { SITE } from '../config/site'
 import WizardShell, { STEP_SLIDE_MS } from '../app/components/WizardShell'
+import CountUp from '../app/components/CountUp'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -1643,6 +1644,40 @@ section('Motion is calm, and can be switched off')
 
   // "Prefer skeleton loading states over spinners"
   ok(css.includes('.skeleton'), 'skeletons exist to be preferred')
+}
+
+section('One count-up, one celebration, and never on a board')
+{
+  // Phase 8 (D10, D11). Where each may appear is the whole rule: a number
+  // being read on a board never moves, and score entry never celebrates.
+  const users = (name: string) => uiFiles()
+    .filter(f => !f.endsWith(`components/${name}.tsx`))
+    .filter(f => new RegExp(`import ${name} from`).test(read(f))).sort()
+  eq(users('CountUp'), [
+    'app/run/[tripCode]/add/page.tsx',
+    'app/trip/[tripCode]/round/[roundNumber]/page.tsx',
+  ], 'a total counts up in two places: your run total, and your signed round')
+  eq(users('DotBloom'), [
+    'app/run/[tripCode]/add/RunAddClient.tsx',
+    'app/scoring/LiveScoringFlow.tsx',
+  ], 'the dot blooms in two: a run logged, a card signed')
+
+  const cu = stripComments(read('app/components/CountUp.tsx'))
+  ok(cu.includes('export const COUNT_UP_MS = 400'), 'the count takes 400ms — inside the ceiling')
+  ok(/prefers-reduced-motion: reduce/.test(cu) && /reduced\(\)\) \{ setShown\(value\); return \}/.test(cu),
+    '  …and under Reduce Motion the final number is simply there')
+  ok(/className="sr-only">\{show\(value, decimals\)\}/.test(cu), '  …and a screen reader only ever hears the final number')
+  const cuHtml = renderToStaticMarkup(React.createElement(CountUp, { value: 34 }))
+  ok(/aria-hidden="true">34</.test(cuHtml), '  …which is what the server renders, before any script runs')
+
+  const db = read('app/components/DotBloom.tsx')
+  ok(db.includes('export const DOT_BLOOM_MS = 600'),
+    'the bloom is 600ms: a named exception to the 400ms ceiling, like the intro')
+  ok(/@media \(prefers-reduced-motion: no-preference\) \{\s*\.dot-bloom \{ animation:/.test(db),
+    '  …which only runs for a reader who has not asked for less motion')
+  ok(!/cubic-bezier\([^)]*1\.\d/.test(db), '  …and never overshoots')
+  ok(/100% \{ transform: scale\(1\); +background-color: color-mix\(in srgb, var\(--color-accent\) 20%/.test(db),
+    '  …settling on the quiet tinted disc that is its Reduce Motion version')
 }
 
 section('No spaced capitals')

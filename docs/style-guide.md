@@ -261,6 +261,8 @@ and the named rules below say what replaces each.
 | Long name glide | A board name wider than its column | 11s, shared phase | ease-in-out | Drag strip instead |
 | Landing collapse | Create / Join tapped | 340ms shake + 700ms travel | smoothed | Straight there |
 | Site intro | First hub visit | 420–500ms slides; 1.5s birth | putt / slow-in-out | Appears in place |
+| Count-up (`CountUp`) | Your run total after logging a run; your round total, first view after signing | 400ms | putt | The final number |
+| Dot bloom (`DotBloom`) | A card signed; a run logged — once per action | 600ms | putt | The settled tinted disc and tick |
 
 ---
 
@@ -303,7 +305,7 @@ Each is pinned by name in `test:branding`, so it cannot become a precedent.
 | Grain | No gradients, no texture on surfaces | A texture, not a gradient; the page only, capped faint | `--gd-grain` |
 | Tee swatches | No grey; palette only | A blue tee is blue — data, not brand | `scorecardStyle.ts` |
 | Terms disclaimer in capitals | No uppercase | The legal form | `app/terms/page.tsx` |
-| Celebrations (Phase 8) | 400ms ceiling | One bloom when a card is signed or a run is logged | Not built yet |
+| The dot bloom (600ms) | 400ms ceiling | The one celebration, once per card signed or run logged; never in score entry or on a board | `app/components/DotBloom.tsx`, its own `<style>` |
 
 ---
 

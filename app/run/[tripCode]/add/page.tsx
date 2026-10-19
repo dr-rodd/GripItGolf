@@ -1,8 +1,9 @@
+import CountUp from '@/app/components/CountUp'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
 import { currentPlayer } from '@/lib/currentPlayer'
-import { isRunChallenge, runPoints, formatPoints, closesOn } from '@/lib/runChallenge'
+import { isRunChallenge, runPoints, closesOn } from '@/lib/runChallenge'
 import { todayString } from '@/lib/tripStatus'
 import { ordinal, formatKm } from '@/lib/runBoards'
 import { fetchRunChallenge, rosterOf } from '../data'
@@ -88,7 +89,8 @@ export default async function RunAddPage({ params, searchParams }: {
                   </p>
                 </div>
                 <p className="font-serif text-3xl font-semibold tabular-nums text-ink">
-                  {formatPoints(me.points)}
+                  {/* Counts up after a run is logged, never on a board (D10). */}
+                  <CountUp value={me.points} decimals={1} />
                   <span className="text-ink/65 text-sm font-normal ml-1">pts</span>
                 </p>
               </div>

@@ -8,7 +8,8 @@ import { parseLeaderboards } from '@/lib/leaderboards'
 import { parseTeamScoring } from '@/lib/teamScoring'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { fetchRoundRows } from '@/lib/hubStanding'
-import { podium, type PodiumPlace } from '@/lib/standing'
+import { podium, placingFromRows, describePlacing, type PodiumPlace } from '@/lib/standing'
+import CountUp from '@/app/components/CountUp'
 import { courseCard, hasCard } from '@/lib/courseCard'
 import { mapsUrl } from '@/lib/places'
 import { describeGroups } from '@/lib/upNext'
@@ -340,7 +341,7 @@ export default async function RoundSummaryPage({
             rounds that have no result. Promising a shape and being wrong
             about it is worse than promising nothing. */}
         <Suspense fallback={null}>
-          <RoundPodium promise={podiumPromise} nicknames={nicknamesPromise} tripCode={tripCode} />
+          <RoundPodium promise={podiumPromise} nicknames={nicknamesPromise} tripCode={tripCode} meId={me?.id ?? null} roundId={round.id} />
         </Suspense>
 
         {/* ── Whether it counts ──
@@ -424,14 +425,19 @@ function Cell({
  * played gets a section.
  */
 async function RoundPodium({
-  promise, nicknames, tripCode,
+  promise, nicknames, tripCode, meId, roundId,
 }: {
   promise: Promise<{ rows: BoardRow[]; error: string | null }>
   nicknames: Promise<{ id: string; nickname: string | null }[]>
   tripCode: string
+  /** Whoever this phone is — their own total gets a line, and counts up once. */
+  meId: string | null
+  roundId: string
 }) {
   const [{ rows, error }, nicknameRows] = await Promise.all([promise, nicknames])
   const top = podium(rows, 3)
+  // Only a player's own card: on a team board the row is the team's.
+  const mine = meId ? rows.find(r => r.id === meId && r.playerIds.length === 1) ?? null : null
   // Nobody has played it. Not an empty state — the section simply is not there.
   const played = rows.length > 0
 
@@ -455,6 +461,20 @@ async function RoundPodium({
   return (
     <section>
       <h2 className="t-h2 text-ink mb-3">Result</h2>
+      {mine && (
+        // Your own total, counting up the first time this phone sees it after
+        // the card is signed (Phase 8, D10). The podium below stays still.
+        <div className={`flex items-center gap-3 px-4 py-3 mb-2 ${cardClass('chosen')}`}>
+          <span className="flex-1 min-w-0 t-label text-ink">
+            Your round · {describePlacing(placingFromRows([meId as string], rows))}
+          </span>
+          <CountUp
+            value={mine.total}
+            onceKey={`round:${roundId}:${meId}`}
+            className="font-serif text-accent-deep text-xl leading-none flex-shrink-0"
+          />
+        </div>
+      )}
       <div className="flex flex-col gap-2">
         {top.map(place => (
           <PodiumRow
