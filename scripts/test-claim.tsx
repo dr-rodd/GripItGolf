@@ -300,7 +300,7 @@ section('Nothing prefetches a page that has a name in it')
   //
   // The default warms the loading skeleton and the layout and stops there,
   // and a skeleton has nobody's name in it. That is the whole speed benefit
-  // anyway — see docs/design-system.md on arriving.
+  // anyway — see docs/design-history.md on arriving.
   const bar = code('app/components/TabBar.tsx')
   ok(!/\bprefetch\b/.test(bar),
     'the tab bar does not force a full prefetch of a personalised route')

@@ -1,4 +1,11 @@
-# Design system — Green Dot Collective
+# Design history — Green Dot
+
+**The rules are in [`style-guide.md`](style-guide.md).** This file is the
+story behind them: why a thing is the way it is, what was tried and retired,
+and the incidents that made a rule. It was `design-system.md` until the
+October 2026 refresh, and is kept as it was written — figures in it (the type
+sizes, the round tile borders, the shadows) are as they stood at the time.
+Where this file and the style guide disagree, the style guide wins.
 
 ## The name
 
@@ -10,7 +17,7 @@ The dot is part of the supplied wordmark (`public/logo.svg`) and is drawn again 
 
 Forked from Donegal Masters — a single-trip family golf app. This project converts it into a platform where anyone can run their own trip. **Its look is not the target.** The scoring screens were the last of it and have been brought onto the Green Dot system; where the two disagree, this style book wins.
 
-`STYLE_GUIDE.md` is the source of truth; `app/globals.css` is its code. **No file outside globals.css should carry a raw brand hex.** `npm run test:branding` enforces that.
+`docs/style-guide.md` is the source of truth; `app/globals.css` is its code. **No file outside globals.css should carry a raw brand hex.** `npm run test:branding` enforces that.
 
 Mobile first, always. Nearly all real use is a phone, on a course, in daylight.
 
@@ -296,3 +303,45 @@ There are three, for three different jobs, and `app/components/scorecardStyle.ts
 **A team card scrolls past three players.** The member list is capped at a couple of lines and scrolls; the player columns scroll sideways while **Hole / Par and the team's points hold still** — the same synced-strip arrangement the trip board's round columns use, for the same reason (see `docs/leaderboards.md`). `Row` is declared at module level: it wraps the strips, so inside the sheet it would be a new component type every render and React would take the scroll position with it.
 
 **Tee swatches keep their real colours** — a blue tee is blue, they are data not brand. That is the one grey the branding test exempts, by file, so a grey creeping in anywhere else is still caught. `round_handicaps.tee_id` is written when a session *starts*, not only when it is committed: the live leaderboard's card names the tee mid-round, and waiting for the card to be signed is too late for the one screen that exists to be read while playing.
+
+### The October 2026 refresh
+
+A refresh, not a redesign (`docs/refresh-plan.md`): the palette, the wordmark,
+the cream, the score-entry and leaderboard layouts stayed. What it found and
+fixed, in the order it bit:
+
+- **Two of the three fonts had never shown.** The `next/font` classes were on
+  `<body>`, the stacks on `:root`, and a custom property resolves its `var()`
+  where it is declared — so every title, label and button rendered in Bespoke
+  Serif. The test had checked that the stylesheet *named* the fonts. It now
+  checks where the variables land.
+- **Spaced capitals everywhere.** 317 `uppercase` and ~330 tracking utilities
+  at ten values, which, set in a serif by the bug above, were most of what
+  read as machine-made. Two places keep them: table column headings and the
+  code field.
+- **Seventy-three hand-set titles at eight sizes** went onto three classes, and
+  **two hundred retyped hairlines** at four strengths onto three named mixes.
+  Tests now refuse both.
+- **The back button hung out of its row** in all five wizards — a 44px bordered
+  box laid absolutely over a ~34px row. One `WizardShell` now draws every
+  wizard's frame, and the button sits in a 56px row.
+- **The step slide's focus went nowhere** on its first build: the outgoing
+  step, kept on screen for the slide and inert, held a question too and came
+  first in the document, so the focus call found it. The search is now scoped
+  to the incoming step.
+- **The Reduce Motion crossfade was cut to nothing** by the blanket rule that
+  zeroes every animation; the step rules are marked important so the fade a
+  reader asked for survives the one they didn't.
+- **`.field`'s `display: block` beat a `flex` utility** on the course picker's
+  trigger, so the name, its "Awaiting card" badge and the chevron wrapped like
+  text. Unlayered CSS beats Tailwind's layered utilities whatever the
+  specificity — which is also why parts take parameters instead of having
+  classes laid on top. A button dressed as a field now lays out its own row.
+- **iOS top-aligns a date or time value** in its box where a text input is
+  centred for it. A field now centres its line with its own padding.
+- **The grain shipped at twice the strength it has now.** On a phone it read
+  as imitation paper laid over the app rather than a quality of the page;
+  Ross's word was "obvious". It was halved, and a test holds the ceiling.
+- **The tab bar and the wizard header read as cramped** on a phone at 20px
+  icons 4px from their labels and a 52px step row under 12px of air. Icons
+  went to 22 with 6px clear, and the header to 16px over a 56px row.

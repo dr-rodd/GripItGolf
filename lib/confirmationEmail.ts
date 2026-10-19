@@ -13,7 +13,7 @@
 // - **A system font stack**, never a webfont. The brand arrives through the
 //   colours and the wordmark image, not through the title face.
 // - **Literal hexes**, necessarily — there is no globals.css in an inbox.
-//   These are the light palette's own values (see docs/design-system.md);
+//   These are the light palette's own values (see docs/style-guide.md);
 //   an email does not follow the reader's dark mode and should not try.
 // - **The logo is an absolute production URL**, not a data URI (Gmail
 //   strips those) and not an SVG (Gmail won't draw those either) —

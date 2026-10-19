@@ -13,7 +13,7 @@ import TripHeader from '@/app/components/TripHeader'
  * and this stands in until the page lands.
  *
  * It is also what makes prefetch worth anything. A dynamic route cannot be
- * prefetched whole — the note in docs/design-system.md on the landing page's
+ * prefetched whole — the note in docs/design-history.md on the landing page's
  * two static destinations is the same fact from the other end — but the
  * loading state *can* be, because it has no data in it. So the tab bar's
  * links warm this, and arriving costs nothing.

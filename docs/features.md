@@ -304,7 +304,7 @@ Switched on per trip in the Trip Settings drawer, off by default. The full break
 
 The first choice on the page is **Players or Courses**. Players opens on the device's own player (or Everyone, on a phone the trip does not recognise), with every player selectable — stats are no more private than the leaderboard — and a **course picker** under the chips. Courses shows one course at a time: its difficulty profile drawn as the round is walked, then the table ranked hardest-first.
 
-**The choosers scroll away.** They used to pin as a block; a single line pins in their place, naming the player and the course — see the sticky-header section of `docs/design-system.md` for the shape of it and why it is fixed rather than sticky.
+**The choosers scroll away.** They used to pin as a block; a single line pins in their place, naming the player and the course — see the sticky-header section of `docs/design-history.md` for the shape of it and why it is fixed rather than sticky.
 
 **The course picker is an additive dropdown.** It has been round the houses — tick chips, then a choice of one — and landed on toggles in a dropdown, because the real question turned out to be "everything except the course where the putting went wrong", which a choice of one cannot say. Tapping a course toggles it; **All courses** restores everything; the last course standing cannot be switched off; state is exclusions, so a course added mid-trip is in by default. The closed line names the set ("All courses" / one name / "2 of 3 courses"). The Courses view drives the same component as a choice of one, since it reads one card at a time. Picking never closes the list — the figures redraw behind it — and the chevron puts it away. Selected rows wear the green dot.
 

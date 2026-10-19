@@ -1,6 +1,6 @@
 # Green Dot Golf
 
-Multi-trip golf platform: a group leader creates a trip, gets a shareable code, and the group gets live scoring, leaderboards, and teams. Forked from Donegal Masters (single-trip family app) — its scoring code is already in this repo (`app/scoring/`), being generalised with `trip_id` scoping. Its look is not the target: `STYLE_GUIDE.md` + `app/globals.css` are the current design system, no gold, emerald only.
+Multi-trip golf platform: a group leader creates a trip, gets a shareable code, and the group gets live scoring, leaderboards, and teams. Forked from Donegal Masters (single-trip family app) — its scoring code is already in this repo (`app/scoring/`), being generalised with `trip_id` scoping. Its look is not the target: `docs/style-guide.md` + `app/globals.css` are the current design system, no gold, emerald only.
 
 ## Who's building this
 
@@ -60,7 +60,9 @@ Don't read these up front. Open the matching file when the task actually touches
 
 | Doc | Open it for |
 |---|---|
-| `docs/design-system.md` | Colours, type, the wordmark, header, landing animation, scoring symbols, motion |
+| `docs/style-guide.md` | **The rules** for how it looks, moves and talks: tokens, type scale, the parts kit, patterns, every motion with its Reduce Motion version, copy rules, the exceptions register, and which `test:branding` section holds what. Read before any UI change |
+| `docs/design-history.md` | The story behind those rules — the wordmark, the header, the landing collapse, the tab bar, arriving, scoring symbols, the three scorecards, and the October 2026 refresh's incidents. Open when a rule looks odd and you want to know why before changing it |
+| `docs/refresh-plan.md` | The October 2026 refresh: what was wrong, the agreed tokens, the phases and the decisions list (D1–D14) |
 | `docs/design-brief.md` | The background pasted into Claude.ai for design sessions, and the hand-off spec its decisions come back in. Keep its facts in step with the design system |
 | `docs/schema-and-scoring.md` | Table structure, the Stableford trigger, WHS handicap formula, player states, tee data |
 | `docs/leaderboards.md` | Leaderboard model, legacy `formats` compatibility, custom points, matchplay draws, team scoring modes |
@@ -189,11 +191,11 @@ Don't read these up front. Open the matching file when the task actually touches
 | `app/components/Section.tsx` | The collapsible hub sections. One open at a time — the stack owns that, not the section |
 | `app/components/PoweredByStrava.tsx` / `ConnectWithStrava.tsx` | Strava's own logo and Connect button, from their API logo and button packs, **used exactly as supplied** (`public/strava/` — never recoloured, faded or run into our mark). The logo: orange for light, white for dark via `only-light`/`only-dark`, because the orange file's lettering is black; on every Strava card and under any board that counts Strava runs. The button: the orange file in both themes at its 48px height, **never greyed out** — before the consent box is ticked it asks for the tick, and only once ticked is it the link carrying `consent=1` |
 | `app/trip/[tripCode]/layout.tsx` | The bottom bar, drawn **once for the whole trip subtree and never by a page**. A page that renders its own tears the bar off the screen on every navigation, because a component rendered by a page unmounts with it. Pages still carry `has-tabbar` — the page is what scrolls |
-| `app/trip/[tripCode]/**/loading.tsx` | Why a tab feels instant. Without a loading file Next holds the current page, fully painted, until the next one's queries come back — and every trip route is `force-dynamic`, so that was seconds of a screen that gave no sign of having been tapped. It is also the only part of these routes a prefetch can warm. Six of them; `docs/design-system.md` has the split and the rule about not promising a shape |
+| `app/trip/[tripCode]/**/loading.tsx` | Why a tab feels instant. Without a loading file Next holds the current page, fully painted, until the next one's queries come back — and every trip route is `force-dynamic`, so that was seconds of a screen that gave no sign of having been tapped. It is also the only part of these routes a prefetch can warm. Six of them; `docs/design-history.md` (Arriving) has the split and the rule about not promising a shape |
 | `app/components/TabBar.tsx` | The five tabs, identical on purpose — the leaderboard holds the centre and position is the whole emphasis; the emerald circle around it was tried and retired. **An event's field sees four**: Trip Setup is dropped for tournaments (the organiser area is the one door into setup), decided by the layout's cached one-column `kind` read. **A tab lights on `active` *or* `pending`** — `active` comes from the pathname, which does not change until the destination has rendered on the server, so lighting on it alone means the tap looks like nothing for as long as the query takes |
 | `lib/currentPlayer.ts` | Cookie → the player holding this phone, matched against this trip's roster. **Personalises, never authorises**. Read on the server by the hub, the stats page and a round summary — so **anything that changes the cookie must `router.refresh()` before it navigates**, or the router serves back a page it rendered for whoever this device was a moment ago. That is the whole of the "claiming doesn't stick" bug, and the cookie was never the part that was wrong. For the same reason **no link may force a full `prefetch` of those three routes** |
-| `lib/intro.ts` / `app/components/SiteIntro.tsx` | The site intro — the solid sweep, run once per device on the trip hub: after a beat the wordmark's emerald dot swells into one huge solid disc whose curved edge sweeps up across the lower screen like a tile, carrying the cream writing — a title and one paragraph per tap, or per **swipe** (left forward, right back; arrow keys too). Above the sweep, **the page being described floats as a small framed card** — hand-drawn SVG miniatures (`public/intro/`, seven artboards at 360×728 with their own lit tab bar, a few KB each, regenerated by `npm run intro:shots` from `scripts/make-intro-shots.mjs`) — openly an illustration, never pretending to be the real page; cards **slide sideways** between pages and each paragraph rings its feature on the card via artboard-coordinate `focus` regions, plain scaling, no cover-fit maths. Behind everything sits a solid cream sheet — no blur, no see-through — and the disc shrinks home into the logo at the end. Gated by the `gg_intro` cookie — **once per device, not per trip** (hub page checks the jar on the server; skip and finish both write it) — and `?intro` on the hub URL overrides it, for demos and for testing on a phone that has already seen it. The one thing measured at runtime is the logo dot, the `<g fill="#0a9d56">` inside `.gd-mark` — queried fresh on every touch because React re-applies the wordmark's innerHTML once after hydration — and a dot that cannot be found costs the birth its bloom, never the user their screen; the sweep's circle is solved from the live viewport (radius from the wanted edge drop), which is what the full-bleed predecessor got wrong about Safari's chrome. Motion is the putt curve for slides and exit, with the 1.5s birth alone on its own gentler slow-in slow-out, behind a deliberate ~600ms opening pause — a documented exception scoped to the component (Motion, `docs/design-system.md`), which is why its durations and the card-slide keyframes live there (a component `<style>` tag) and not in `globals.css`, where `test:branding`'s ceilings would refuse them. `ART_W`/`ART_H` in the component must match the generator's `W`/`H`. The sheet, sweep, card frame and ring colours live in `globals.css` (`.intro-*`) |
-| `lib/theme.ts` | Dark mode: the `dark` class on `<html>`, the `gg_theme` cookie, and the head script that applies both before first paint — **the only writer of all three**. The toggle is the gear on the trip hub (`PlayerSettings`), **claimed players only**, saved to `players.dark_mode` (migration 044) so it follows them across devices; the cookie is the device-local echo and both database touches fail soft, so the code runs before the migration has. The palette is the same eight tokens re-pointed under `html.dark` — and two build traps hold that up: each `--color-*` token in `globals.css` must stay a `var(--gd-*)` reference (a literal gets folded into every `/65`-style tint at build time), and `package.json` must keep its modern `browserslist` (without it the build strips the `color-mix` the tints compile to). `test:branding` pins both, and the dark palette's contrast — `docs/design-system.md` |
+| `lib/intro.ts` / `app/components/SiteIntro.tsx` | The site intro — the solid sweep, run once per device on the trip hub: after a beat the wordmark's emerald dot swells into one huge solid disc whose curved edge sweeps up across the lower screen like a tile, carrying the cream writing — a title and one paragraph per tap, or per **swipe** (left forward, right back; arrow keys too). Above the sweep, **the page being described floats as a small framed card** — hand-drawn SVG miniatures (`public/intro/`, seven artboards at 360×728 with their own lit tab bar, a few KB each, regenerated by `npm run intro:shots` from `scripts/make-intro-shots.mjs`) — openly an illustration, never pretending to be the real page; cards **slide sideways** between pages and each paragraph rings its feature on the card via artboard-coordinate `focus` regions, plain scaling, no cover-fit maths. Behind everything sits a solid cream sheet — no blur, no see-through — and the disc shrinks home into the logo at the end. Gated by the `gg_intro` cookie — **once per device, not per trip** (hub page checks the jar on the server; skip and finish both write it) — and `?intro` on the hub URL overrides it, for demos and for testing on a phone that has already seen it. The one thing measured at runtime is the logo dot, the `<g fill="#0a9d56">` inside `.gd-mark` — queried fresh on every touch because React re-applies the wordmark's innerHTML once after hydration — and a dot that cannot be found costs the birth its bloom, never the user their screen; the sweep's circle is solved from the live viewport (radius from the wanted edge drop), which is what the full-bleed predecessor got wrong about Safari's chrome. Motion is the putt curve for slides and exit, with the 1.5s birth alone on its own gentler slow-in slow-out, behind a deliberate ~600ms opening pause — a documented exception scoped to the component (the exceptions register in `docs/style-guide.md`), which is why its durations and the card-slide keyframes live there (a component `<style>` tag) and not in `globals.css`, where `test:branding`'s ceilings would refuse them. `ART_W`/`ART_H` in the component must match the generator's `W`/`H`. The sheet, sweep, card frame and ring colours live in `globals.css` (`.intro-*`) |
+| `lib/theme.ts` | Dark mode: the `dark` class on `<html>`, the `gg_theme` cookie, and the head script that applies both before first paint — **the only writer of all three**. The toggle is the gear on the trip hub (`PlayerSettings`), **claimed players only**, saved to `players.dark_mode` (migration 044) so it follows them across devices; the cookie is the device-local echo and both database touches fail soft, so the code runs before the migration has. The palette is the same eight tokens re-pointed under `html.dark` — and two build traps hold that up: each `--color-*` token in `globals.css` must stay a `var(--gd-*)` reference (a literal gets folded into every `/65`-style tint at build time), and `package.json` must keep its modern `browserslist` (without it the build strips the `color-mix` the tints compile to). `test:branding` pins both, and the dark palette's contrast — `docs/style-guide.md` |
 | `lib/cardCheck.ts` | Confirming the course record against a photo of the printed scorecard, from the pick-player screen. **Pure** — types, validation (a stroke index column must be a permutation of 1–18; the ladies card is all or nothing; a misread never reaches a diff), the diff, and the whitelist the apply route checks writes against. `app/api/card-check/` does the I/O: extraction via the Claude API, then apply after the person says yes. **The photo is only ever the challenger** — a card with no ladies row never erases a stored one. Applying re-fires the Stableford trigger on the asking trip's committed scores for that course, so corrected pars re-tell the leaderboard; **the most recent photo wins** — each apply overwrites, nothing merges. Courses are shared platform rows, so a correction is a correction for everyone, which is the point. **A course with no holes gets its card here**: the first trusted photo is offered back whole (`mode: 'create'`), apply inserts the 18 holes and any fully-rated tees, and either path — create, apply, or an exact match — sets `courses.card_verified` |
 | `lib/runChallenge.ts` | **Green Dot Run's rules, the only copy** — the activities (with the Strava `sport_type` each arrives as), the points rules (per km, per run, shortest run that counts — inclusive — daily limit on the *day*, not the run), `parseRunSetup` (whole and fail-soft, never null), the boards (individual, team on average-per-member or total), `RUN_PERMISSIONS`, the creation checks, and joining: runner and team name checks (the database's own comparison), `canRemoveTeam` (only an empty team — everyone runs for one), `challengeFinished` and `joinChoices`, the one copy of what the join screen may offer. Pure; `test:run-challenge` holds it |
 | `lib/runBoards.ts` | **Runs into run leaderboards, the only copy** — totals per runner (the challenge's days only, the daily limit on the *day*), golf's shared places, individuals (everyone, at 0 if they have not run) and teams on average-per-member (everyone counts, runs or not) or total. The leaderboard, the run hub's Leading card and the Add tab's own total all come through it. Pure; `test:run-challenge` holds it, mutation-tested |
@@ -356,6 +358,58 @@ three or four variants in the wild:
 `boardRules` joins the hints into the line under a saved board's title, and
 `label` becomes the board's tab, so a word changed there lands in three places.
 Both need a full stop or the joined line runs on.
+
+## The look (October 2026 refresh)
+
+A refresh, not a redesign — `docs/style-guide.md` is the rule book and
+`docs/refresh-plan.md` the record of what was agreed. What a session needs to
+know before touching a screen:
+
+- **Three fonts, and their variables go on `<html>`.** Schibsted Grotesk 700
+  for titles (`t-h1` 32, `t-h2` 23, `t-card` 18), Archivo for every other
+  word, Bespoke Serif only for names and numbers on boards, cards and
+  standings, asked for by name (`font-serif`, `t-data`). The `next/font`
+  classes on `<body>` once meant two of the three fonts never rendered. No
+  title is set in the display font by hand; nothing is under 13px; no
+  uppercase or letter-spacing except `t-eyebrow` (table column heads) and the
+  code (`t-code`, `.field-code`).
+- **Use the parts, never restyle them from outside.** `app/components/ui.tsx`
+  is the kit — `Card`/`cardClass` (raised, flat, floating, **chosen**),
+  `Button`/`buttonClass`, `IconButton`, `Field`/`FIELD`, `chipClass` (a short
+  answer), `optionClass` (an answer with a line: `card`, `row`, `tile`),
+  `Segmented` (switching a view; never emerald), `Pill`, `SectionHeader`,
+  `ListGroup`/`ListRow`, `EmptyState`. Unlayered CSS (`.field`, `.t-*`) beats
+  Tailwind's layered utilities whatever the specificity, and two utilities for
+  one property resolve in stylesheet order — so a part takes a parameter
+  (`dense`, `compact`, `shape`, `variant`) rather than a class on top.
+  `.field` sets `display` and centres its line with padding (iOS top-aligns a
+  date or time value otherwise); a `button.field` lays out as a row.
+- **Named mixes, never retyped opacities.** `line`, `line-strong`, `tint`,
+  `accent-tint`, `disabled-bg`/`disabled-fg` — `test:branding` refuses
+  `border-bark/12` and its cousins. Four shadows (`shadow-raised`,
+  `-floating`, `-floating-up`, `-cta`); radius by name (`rounded-card` 20,
+  `-button` 16, `-field` 14, `-tile` 12, `-sheet` 24).
+- **The page is paper.** `body` and the `paper` utility carry cream plus
+  `--gd-grain`; a full-page wrapper, sticky bar or sheet uses `paper`, never
+  `bg-cream`, or it paints flat cream over the grain. The grain is capped
+  faint (specks peak near 10% by day, 6% at night) — Ross found it too
+  obvious at twice that, and a test holds the ceiling.
+- **Every create flow wears `WizardShell`** — progress, a 56px row with the
+  way back, the step's question as a `t-h1`, at most one line under it, a
+  sticky Continue bar — and steps slide (340ms, the putt curve; a 150ms fade
+  under Reduce Motion). A wizard never draws its own header.
+- **A board describes itself in facts**, not prose: `boardFacts` in
+  `lib/leaderboards.ts` ("Stableford · Running total · 90% handicap"),
+  `ruleFacts` / `teamScoreFact` in `lib/runChallenge.ts`. Course names print
+  as club and course (`splitCourseName`, `CourseName`), never a raw `--`.
+- **Copy follows the rules in the style guide's §7.** Three of them (no
+  em-dashes, British spelling, no exclamation marks) and Title Case buttons
+  (X-04) are open with Ross in `docs/copy-review.md` — don't apply them
+  wholesale until he answers.
+- **Waiting on Ross:** new default team colours (`refresh-plan.md` 3.2), the
+  "Ross" lines in `copy-review.md`, and self-hosting Bespoke Serif (Fontshare
+  is blocked from the build container — drop the woff2 files into
+  `app/fonts/`).
 
 ## CC Behaviour
 

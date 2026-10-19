@@ -19,7 +19,7 @@ import { readAllRows } from '@/lib/allRows'
  * picker inside them does, and the picker is behind a tap.
  *
  * So it loads where it is used, and only once that component exists. Trip
- * creation already worked this way (`docs/design-system.md:117` — it made
+ * creation already worked this way (`docs/design-history.md`, Leaving the landing page — it made
  * `/dashboard/create` static, which is what lets the landing animation hand
  * over without a gap); this is the same trick applied to the two trip tabs
  * that were still paying for it up front.

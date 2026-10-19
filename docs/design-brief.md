@@ -61,14 +61,22 @@ a six-character event code is the way in.
 
 [Attach current screenshots of each, light and dark, in the Project.]
 
-## The design system today (`docs/design-system.md`, `app/globals.css`)
+## The design system today (`docs/style-guide.md`, `app/globals.css`)
 
 - **Colour.** Cream page `#F6F4F0`, white surfaces, ink `#2B2118` text, every
   neutral is bark `#4A3728` at an opacity (no greys at all), **emerald
-  `#0A9D56` the only accent** (`#0A6B3C` behind button text), rust `#B5533C`
-  for loss only. No gold, ever. **No gradients, no glows** (one deliberate
-  exception: the glow on a round being played right now). One primary emerald
-  action per screen.
+  `#0A9D56` the only accent** (`#0A6B3C` behind button text and for emerald
+  text under 24px), rust `#B5533C` for loss only. No gold, ever. **No
+  gradients, no glows** (one deliberate exception: the glow on a round being
+  played right now). One primary emerald action per screen. The opacities
+  that recur have names — `line` (hairlines), `line-strong` (field and chip
+  borders), `tint` (flat surfaces), `accent-tint` (the chosen wash),
+  `disabled-bg`/`disabled-fg` — and nothing retypes them.
+- **Depth and texture.** The page is paper: cream with a very faint grain
+  (a hint of tooth, not an imitation — it was halved after the first look on a
+  phone). Cards are smooth white, lifted by a hairline and a warm shadow:
+  flat, raised, floating, and the one primary button. Pressed, a card sinks:
+  shadow off, 97%. Radius: cards 20, buttons 16, fields 14, tiles 12.
 - **Dark mode** is the same eight tokens with night values (warm browns, never
   black or grey) — not a second design.
 - **Type.** Schibsted Grotesk 700 for titles, Archivo for every other word
@@ -76,15 +84,23 @@ a six-character event code is the way in.
   numbers on boards, scorecards and standings. Scale 32 / 23 / 18 / 17 / 16 /
   15 / 13 (`t-eyebrow`, table column headings only).
   **Nothing smaller than 13px.** Text never below 3:1 contrast; the tests
-  compute real contrast in both themes.
-- **Shapes.** White cards on cream with thin bark borders. Touch targets at
-  least 48px. Scores use filled shapes, never outlines (birdie a soft emerald
+  compute real contrast in both themes. **No spaced capitals** except table
+  column headings and the event code. Labels and buttons in sentence case.
+  Tab labels 13px Archivo at 87.5% width.
+- **Shapes and parts.** One kit (`app/components/ui.tsx`): cards, buttons,
+  fields, chips (a short answer), options (an answer with a line under it),
+  segmented controls (switching a view), toggles, pills, list groups,
+  section headers, and one wizard frame for every create flow. Touch targets
+  at least 48px. Scores use filled shapes, never outlines (birdie a soft emerald
   disc, bogey a faint bark square). Leaderboard, scoring and bracket screens are
   dense (4–16px spacing); entry screens are generous.
 - **The mark.** The wordmark and its emerald dot are supplied artwork, never
   recoloured or redrawn. Strava's logo is used exactly as supplied.
-- **Motion today.** Ease-out only. Small responses 120–180ms, larger 250–350ms,
-  **nothing that answers a touch over 400ms. No bounce, spring or elastic.**
+- **Motion today.** One curve, the **putt curve** (`cubic-bezier(0.16, 1, 0.3,
+  1)`: quick off the face, a long settle), and ease-out for fades. Small
+  responses 120–160ms, a wizard step slides in 340ms (a soft fade under Reduce
+  Motion), **nothing that answers a touch over 400ms. No bounce, spring or
+  elastic.**
   Pages fade in (200ms). Cards press to 97% on tap (tab bar 94%). A changed live
   score flashes its cell emerald and **never moves, because it is being read.**
   Repeating "breaths" (live dot, skeletons, a tab waiting) run 0.9–2s.
@@ -105,17 +121,17 @@ sake. [In three words, how should it feel? e.g. calm, premium, live.]
 
 ### Open decisions — settle these first
 
-1. **Rows gliding to their new places** when standings change (today: scores
-   never move while someone is reading them).
-2. **Gentle spring-like motion** for sheets and drags, no overshoot (today:
-   banned).
-3. **Depth:** soft shadows and cards that lift, or stay flat with borders?
-   Gradients and glows still out?
-4. **The 400ms ceiling** for motion answering a touch — keep, or relax where?
-5. **Numbers that count up** when a total changes.
-6. **Celebrations** — e.g. reuse the emerald-dot bloom when a round is signed,
-   a team takes the lead, or a challenge goes final. How much, and where never.
-7. **Timing against the new logo** — revamp first, logo first, or together?
+1. **New default team colours** — muted to sit on cream, no emerald, told
+   apart by lightness as well as hue (brick, cobalt, plum, orange, slate, rose,
+   olive, navy are proposed in `refresh-plan.md` 3.2). Existing teams keep
+   theirs.
+2. **The copy questions** marked "Ross" in `docs/copy-review.md` — chiefly
+   X-04 (Title Case buttons like "Start Round"), X-06 (em-dashes), X-08
+   (British spelling), X-09 (register, and the two loud outliers), and the
+   landing page's closing quote.
+3. **Rows gliding to their new places** on a live board — decided no for now
+   (D9); revisit after an event on the new look.
+4. **Re-check the title font** when the new logo lands (D12).
 
 ## Constraints that don't move
 
@@ -153,4 +169,22 @@ How I'll check it on my phone:
 
 ## Decisions so far
 
-[Paste the running list here after each session.]
+From the October 2026 design session (`docs/refresh-plan.md` §8), all built:
+
+| # | Decision |
+|---|---|
+| D1 | Feel: clean, snappy, textured |
+| D2 | Refresh, not redesign: palette, wordmark, cream, score entry layout, leaderboard layout stay |
+| D3 | Fix the font bug first, on its own |
+| D4 | Title font: Schibsted Grotesk 700 (over Bricolage Grotesque and Instrument Sans; Gabarito too round, Clash Display too wide) |
+| D5 | Archivo for all words; Bespoke Serif only for names and numbers on boards, cards and standings |
+| D6 | No spaced capitals except table column headings and code entry |
+| D7 | Depth: flat, raised and floating; hairlines kept for sunlight; grain on the page only; gradients still out; one glow (live round) |
+| D8 | One curve, the putt curve; touch responses ≤400ms; no springs or overshoot |
+| D9 | Rows don't glide on live boards, for now |
+| D10 | Count-up only after logging a run and on a signed round's total; never on a live board (Phase 8) |
+| D11 | One celebration, the dot bloom, when a card is signed or a run logged; never in score entry or on boards (Phase 8) |
+| D12 | Refresh now; re-check the title font when the new logo lands |
+| D13 | Team names on boards stack, one per line, no gliding |
+| D14 | Wizards slide right to left, 340ms, one question per step, sticky Continue |
+| D15 | After the first look on a phone (19 Oct): the grain halved, the tab bar and wizard header given more room |
