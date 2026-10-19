@@ -1070,7 +1070,7 @@ export default function LiveScoringFlow({
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6 py-12">
         <div className="text-center">
-          <h2 className="font-[family-name:var(--font-playfair)] text-2xl text-ink mb-2">Discard Scorecard?</h2>
+          <h2 className="font-[family-name:var(--font-playfair)] text-2xl text-ink mb-2">Discard scorecard?</h2>
           <p className="text-ink/65 text-base">This will void this scorecard and release all players. Every score already entered will be deleted, and be removed from the leaderboard.</p>
         </div>
         <div className="flex gap-3 w-full max-w-xs">
@@ -1235,8 +1235,7 @@ export default function LiveScoringFlow({
             photographed and confirmed above, there is nothing to score. */}
         {courseHoles.length === 0 && (
           <p className="text-rust-deep text-sm leading-snug">
-            This course has no scorecard recorded yet. Photograph the printed
-            card above to set it up — scoring opens the moment it is saved.
+            No scorecard for this course yet. Photograph one above to start scoring.
           </p>
         )}
 
@@ -1967,7 +1966,7 @@ export default function LiveScoringFlow({
       <div className="flex flex-col items-center justify-center px-6 gap-6 text-center min-h-[calc(100dvh-113px)]">
         <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center text-accent-deep text-3xl">✓</div>
         <div>
-          <h2 className="font-[family-name:var(--font-playfair)] text-3xl text-ink mb-2">Scores Committed</h2>
+          <h2 className="font-[family-name:var(--font-playfair)] text-3xl text-ink mb-2">Scores committed</h2>
           <p className="text-ink/65 text-base">Saved to the official leaderboard.</p>
         </div>
         <button
@@ -2141,7 +2140,7 @@ function LivePlayerTile({
 
   const pts = isNR ? 0 : hasScore ? calcStableford(score, effectivePar, effectiveSI, playingHcp) : null
   const { label, color } = isNR
-    ? { label: "No Return", color: "text-rust-deep/70" }
+    ? { label: "No return", color: "text-rust-deep/70" }
     : hasScore ? scoreToPar(score, effectivePar)
     : { label: "", color: "" }
 

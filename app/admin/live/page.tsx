@@ -158,7 +158,7 @@ export default async function AdminLivePage() {
 
       {summaries.length === 0 ? (
         <div className="border border-line rounded-xl py-16 text-center">
-          <p className="text-ink/65 text-sm">No scorecards open. All quiet.</p>
+          <p className="text-ink/65 text-sm">No scorecards open.</p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">

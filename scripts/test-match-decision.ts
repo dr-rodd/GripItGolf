@@ -481,7 +481,7 @@ section('A draw carries its links through storage')
     roundLinks: [{ bracketRound: 1, roundId: 'r1', decidedBy: 'stableford_match' }],
   }])[0]
   eq(linked.roundLinks?.length, 1, 'a linked one keeps its link')
-  ok(/decided on stableford matchplay/.test(boardRules(linked)),
+  ok(/decided on stableford match play/.test(boardRules(linked)),
     'and the line under its title names the method')
 
   const mixed = parseLeaderboards([{

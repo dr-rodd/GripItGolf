@@ -112,10 +112,10 @@ export function bracketShape(playerCount: number): BracketShape {
  */
 export function bracketBlockedReason(playerCount: number): string | null {
   if (playerCount < MIN_PLAYERS) {
-    return `Matchplay needs at least ${MIN_PLAYERS} players. This trip has ${playerCount}.`
+    return `Match play needs at least ${MIN_PLAYERS} players. This trip has ${playerCount}.`
   }
   if (playerCount > MAX_BRACKET) {
-    return `Matchplay currently supports up to ${MAX_BRACKET} players. This trip has ${playerCount}.`
+    return `Match play currently supports up to ${MAX_BRACKET} players. This trip has ${playerCount}.`
   }
   return null
 }
@@ -135,12 +135,12 @@ function assertPlayerCount(playerCount: number) {
   }
   if (playerCount < MIN_PLAYERS) {
     throw new MatchplayError(
-      `A matchplay bracket needs at least ${MIN_PLAYERS} players — this trip has ${playerCount}.`
+      `A match play bracket needs at least ${MIN_PLAYERS} players. This trip has ${playerCount}.`
     )
   }
   if (nextPowerOfTwo(playerCount) > MAX_BRACKET) {
     throw new MatchplayError(
-      `Matchplay currently supports up to ${MAX_BRACKET} players — this trip has ${playerCount}.`
+      `Match play currently supports up to ${MAX_BRACKET} players. This trip has ${playerCount}.`
     )
   }
 }

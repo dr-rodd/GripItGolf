@@ -56,13 +56,13 @@ export const MATCH_DECISIONS: {
   label: string
   hint: string
 }[] = [
-  { key: 'stableford_match', label: 'Stableford matchplay',
+  { key: 'stableford_match', label: 'Stableford match play',
     hint: 'More points on the hole wins the hole.' },
   { key: 'stableford_total', label: 'Total Stableford points',
     hint: 'The higher points total over the round.' },
-  { key: 'strokes_match_gross', label: 'Strokes matchplay — gross',
+  { key: 'strokes_match_gross', label: 'Strokes match play · gross',
     hint: 'Fewer shots on the hole wins the hole. No handicaps.' },
-  { key: 'strokes_match_nett', label: 'Strokes matchplay — nett',
+  { key: 'strokes_match_nett', label: 'Strokes match play · nett',
     hint: 'The same, with the difference in handicaps given on the stroke index.' },
   { key: 'strokes_total_gross', label: 'Total strokes — gross',
     hint: 'The lower gross score over the round.' },
@@ -90,7 +90,7 @@ function legacyScale(v: unknown): QuotaScale | null {
 }
 
 export function decisionLabel(m: MatchDecision): string {
-  return MATCH_DECISIONS.find(d => d.key === m)?.label ?? 'Matchplay'
+  return MATCH_DECISIONS.find(d => d.key === m)?.label ?? 'Match play'
 }
 
 /** Whether this method earns quota points, and so needs a scale. */

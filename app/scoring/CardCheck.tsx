@@ -241,7 +241,7 @@ export default function CardCheck({
       <div className="border border-bark/12 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
         {fileInput}
         <p className="text-ink/65 text-sm leading-snug min-w-0">
-          Check pars, indices and slopes against the printed card before anyone tees off.
+          Check pars, indices and slopes against the printed card before teeing off.
         </p>
         {takePhoto("Confirm card")}
       </div>

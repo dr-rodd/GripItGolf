@@ -1402,7 +1402,7 @@ function MatchplayTab({ tripCode }: { tripCode: string }) {
       href={`/trip/${tripCode}/matchplay`}
       className={`${chipClass(false)} flex-shrink-0`}
     >
-      Matchplay
+      Match play
     </Link>
   )
 }

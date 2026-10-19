@@ -1249,7 +1249,8 @@ settings and is also what a new trip meets first.
 
 **M-01 · Panel heading** · `setup/MatchplayPanel.tsx:101`
 - Now: Matchplay  /  Pairs Matchplay
-- New:
+- Today: Matchplay  /  Pairs matchplay
+- New: Match play  /  Pairs match play *(rule 4)*
 
 **M-02 · What the draw does** · `setup/MatchplayPanel.tsx:111–113`
 - Now: A knockout draw between {players}. Top seeds are kept apart, and byes are handed out when the count isn’t a power of two.
@@ -1277,6 +1278,7 @@ settings and is also what a new trip meets first.
 
 **M-08 · Reshuffle buttons** · `setup/MatchplayPanel.tsx:190`
 - Now: Erase & Reshuffle · Reshuffle · Working…
+- Today: Erase and reshuffle · Reshuffle · Working…
 - New:
 
 **M-09 · Link to the bracket** · `setup/MatchplayPanel.tsx:222`
@@ -1287,11 +1289,11 @@ settings and is also what a new trip meets first.
 
 **M-10 · Matchplay is off** · `matchplay/page.tsx:135,136`
 - Now: Matchplay isn't switched on  /  Turn it on in Trip Setup, then draw the bracket.
-- New:
+- New: Match play isn't switched on  /  Turn it on in Trip Setup, then draw the bracket. *(rule 4)*
 
 **M-11 · No bracket yet** · `matchplay/page.tsx:141,144,145`
 - Now: No bracket has been drawn yet  /  Pick the pairings in Trip Setup, then use Create Matchplay to draw the bracket.  /  Open Trip Setup and use Create Matchplay to draw the bracket.
-- New:
+- New: No bracket has been drawn yet  /  Pick the pairings in Trip Setup, then draw the bracket there.  /  Draw the bracket in Trip Setup. *(rules 1, 4)*
 
 **M-12 · How to use the bracket** · `MatchplayBracket.tsx:301`
 - Now: Swipe to move between rounds · hold a finished match to change it
@@ -1312,6 +1314,23 @@ settings and is also what a new trip meets first.
 **M-16 · Winner controls** · `MatchplayBracket.tsx:714,730`
 - Now: Winner — tap to unplay · Was the winner · Nobody selected — this match goes back to unplayed.
 - New:
+
+**M-17 · Bracket screen heading** · `matchplay/page.tsx`
+- Now: Matchplay
+- New: Match play *(rule 4)*
+
+**M-18 · How a linked round is decided** · `lib/matchDecision.ts` (builder dropdown, bracket round heading, the board's rules line)
+- Now: Stableford matchplay  /  Strokes matchplay — gross  /  Strokes matchplay — nett
+- New: Stableford match play  /  Strokes match play · gross  /  Strokes match play · nett *(rules 4, 2)*
+- **Ross:** "Total strokes — gross" and "— nett" sit in the same list and keep their dash until X-06. Change them to match?
+
+**M-19 · Too few or too many for a draw** · `lib/matchplay.ts` (shown in the Trip Setup panel)
+- Now: Matchplay needs at least {2} players. This trip has {1}.  /  Matchplay currently supports up to {32} players. This trip has {40}.
+- New: Match play needs at least {2} players. This trip has {1}.  /  Match play currently supports up to {32} players. This trip has {40}. *(rule 4 — the generator's own fallback errors match, dash replaced by a full stop)*
+
+**M-20 · Round names** · `lib/matchplay.ts`
+- Now: Round of {16} · Quarter-Final · Semi-Final · Final
+- New: **Ross** — rule 4 gives Quarter-final, Semi-final. Each draw stores its names, so old draws keep the capitals. Change for new draws?
 
 ---
 
@@ -1335,6 +1354,7 @@ settings and is also what a new trip meets first.
 
 **D-05 · A round still being played** · `TripLeaderboardClient.tsx:102,689,930`
 - Now: Card still open · Card still open — against level so far · In play — against level
+- Today: Card still open · Card still open — against level so far · In play
 - New:
 
 **D-06 · Team round carried by one player** · `TripLeaderboardClient.tsx:476,478`
@@ -1347,6 +1367,7 @@ settings and is also what a new trip meets first.
 
 **D-08 · Position-points column header** · `TripLeaderboardClient.tsx:134`
 - Now: Points by finishing position
+- Today: Points by position (in the line under the board's title, from `lib/leaderboards.ts`)
 - New:
 
 **D-09 · Round states** · `lib/roundState.ts:58–60`
@@ -1356,6 +1377,10 @@ settings and is also what a new trip meets first.
 **D-10 · Course card missing** · `TripLeaderboardClient.tsx:390`
 - Now: No hole data for this course.
 - New:
+
+**D-11 · The draw's chip beside the boards** · `TripLeaderboardClient.tsx`
+- Now: Matchplay
+- New: Match play *(rule 4)*
 
 ---
 
@@ -1369,11 +1394,12 @@ settings and is also what a new trip meets first.
 
 **R-02 · No rounds** · `scoring/page.tsx:79`
 - Now: No rounds set up for this trip yet.
+- Today: No rounds set up for this {trip / event} yet.
 - New:
 
 **R-03 · Portal states** · `app/scoring/CoursePortalClient.tsx:122,131,136`
 - Now: Live scoring in progress · All scorecards complete · No active sessions
-- New:
+- New: *(gone — no longer on screen; only the legacy `/scoring` portal in the Appendix uses them)*
 
 ### The round's scorecard list
 
@@ -1415,6 +1441,7 @@ settings and is also what a new trip meets first.
 
 **R-13 · Scoring errors** · `CourseDashboardClient.tsx:282,299,312,396`
 - Now: Failed to start scorecard · Could not void that scorecard{reason} · Could not remove that player{reason} · Void failed — please try again
+- Today: Could not start the scorecard — try again · Could not void that scorecard{reason} · Could not remove that player{reason} · Could not void the round's scorecards — try again.
 - New:
 
 ### Live scoring
@@ -1429,7 +1456,8 @@ settings and is also what a new trip meets first.
 
 **R-16 · Tee picker** · `LiveScoringFlow.tsx:1034,1076`
 - Now: No tees for this course  /  Select a tee to continue
-- New:
+- Today: No tees for this course  /  Select a tee to continue  /  This course has no tees yet — add one in Trip Setup to start the round
+- New: **Ross** — the third line is wrong: Trip Setup cannot add a tee. The card check on this screen can (a photo with printed ratings). Point there instead?
 
 **R-17 · Start / close buttons** · `LiveScoringFlow.tsx:1095,1099`
 - Now: Start Round →  /  Close Live Round
@@ -1437,7 +1465,7 @@ settings and is also what a new trip meets first.
 
 **R-18 · Not saving** · `LiveScoringFlow.tsx:650`
 - Now: Scores will not be saved
-- New:
+- New: *(gone — no longer on screen; the discard screen now says R-21)*
 
 **R-19 · Resume failed** · `LiveScoringFlow.tsx:515,887`
 - Now: Could not load the scores already on this card. Check your connection and try again — …  /  Scorecard could not be loaded
@@ -1457,11 +1485,36 @@ settings and is also what a new trip meets first.
 
 **R-23 · Commit failed** · `LiveScoringFlow.tsx:837`
 - Now: Failed to commit scores
+- Today: Could not save the scores — try again (or the database's own message)
 - New:
 
 **R-24 · In-play panel empty state** · `LiveLeaderboardPanel.tsx:494,495`
 - Now: No scores yet  /  Scores appear as holes are completed
 - New:
+
+**R-25 · Discard heading** · `LiveScoringFlow.tsx`
+- Now: Discard Scorecard?
+- New: Discard scorecard? *(rule 4)*
+
+**R-26 · Committed heading** · `LiveScoringFlow.tsx`
+- Now: Scores Committed
+- New: Scores committed *(rule 4)*
+
+**R-27 · A picked-up hole** · `LiveScoringFlow.tsx`
+- Now: No Return
+- New: No return *(rule 4)*
+
+**R-28 · Course with no card yet** · `LiveScoringFlow.tsx`
+- Now: This course has no scorecard recorded yet. Photograph the printed card above to set it up — scoring opens the moment it is saved.
+- New: No scorecard for this course yet. Photograph one above to start scoring. *(rule 1)*
+
+**R-29 · Card check prompt** · `app/scoring/CardCheck.tsx`
+- Now: Check pars, indices and slopes against the printed card before anyone tees off.
+- New: Check pars, indices and slopes against the printed card before teeing off. *(rule 1)*
+
+**R-30 · Holes still on the phone at commit** · `LiveScoringFlow.tsx`
+- Now: Some holes have not reached the server yet. Move somewhere with signal and press Submit again — the scores are safe on this phone until then.
+- New: **Ross** — the button reads Commit All, not Submit (R-20 says "submit" too). Say "press Commit All again"?
 
 ---
 
@@ -1531,25 +1584,45 @@ said before the pass, **New** what it says after.
 - Now: Admin access is not configured on this deployment.
 - New:
 
+**A-04 · The card, intro** · `admin/courses/[id]/page.tsx`
+- Now: Pars and stroke indexes are corrected with a scorecard photo — the check on the pick-player screen — never by hand. A photo is validated hole by hole; a keyboard is not.
+- New: Read-only. Corrected by a scorecard photo on the pick-player screen. *(rules 1, 5)*
+
+**A-05 · Tees, intro** · `admin/courses/[id]/CourseEditor.tsx`
+- Now: Slope and rating come off the club’s card. The same ranges the scorecard check accepts apply here.
+- New: Slope and rating from the club’s card, in the scorecard check’s ranges. *(rule 1)*
+
+**A-06 · What the card is** · `admin/courses/[id]/CourseEditor.tsx`
+- Now: The course plays now — it has its eighteen holes. Nobody has photographed the card, so the numbers are as researched.  /  No holes recorded, so this course cannot be scored. The first trusted scorecard photo creates the card and opens it.
+- New: Plays on its 18 researched holes. No photo has checked them.  /  Cannot be scored yet. The first trusted scorecard photo creates the holes. *(rules 1, 7)*
+
+**A-07 · A course with holes but no rated tee** · `admin/courses/[id]/CourseEditor.tsx`
+- Now: *(shows A-06's second line, which says a photo creates the holes — it already has them)*
+- New: **Ross** — give "Awaiting ratings" its own line: "Cannot be scored yet. Add a rated tee above."?
+
+**A-08 · No open cards** · `admin/live/page.tsx`
+- Now: No scorecards open. All quiet.
+- New: No scorecards open. *(rule 6)*
+
 ---
 
 ## §14 — Reset tools (`SettingsModal`)
 
 **Z-01 · Reset scores** · `app/components/SettingsModal.tsx:30–33`
 - Now: Reset All Scores · Clears all submitted scores and playing handicaps. Player and team data is preserved. · This will permanently delete all scores and round handicaps. This cannot be undone. · All scores and round handicaps cleared.
-- New:
+- New: *(gone — no longer on screen; `SettingsModal` was removed and `test:legacy` checks it stays gone)*
 
 **Z-02 · Reset teams** · `SettingsModal.tsx:39–41`
 - Now: Removes all team assignments. Players remain but are moved to unassigned. · This will remove all players from their teams. This cannot be undone. · All team assignments cleared.
-- New:
+- New: *(gone — no longer on screen; `SettingsModal` was removed and `test:legacy` checks it stays gone)*
 
 **Z-03 · Live session tools** · `SettingsModal.tsx:145,198,204`
 - Now: Voids this scorecard and removes these players from the live leaderboard. · Active scoring sessions — void to remove from leaderboard · No active live sessions
-- New:
+- New: *(gone — no longer on screen; `SettingsModal` was removed and `test:legacy` checks it stays gone)*
 
 **Z-04 · Failures** · `SettingsModal.tsx:159,292`
 - Now: Failed to void. Try again.  /  Action failed. Try again.
-- New:
+- New: *(gone — no longer on screen; `SettingsModal` was removed and `test:legacy` checks it stays gone)*
 
 ---
 

@@ -152,7 +152,7 @@ export default async function MatchplayPage({
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
           <BackButton href={`/trip/${tripCode}/leaderboard`} />
           <h1 className="t-h2 text-ink truncate px-2">
-            Matchplay
+            Match play
           </h1>
           <div className="w-11" />
         </div>
@@ -161,7 +161,7 @@ export default async function MatchplayPage({
       <div className="max-w-lg mx-auto px-4 py-6">
         {!enabled ? (
           <EmptyState
-            title="Matchplay isn't switched on"
+            title="Match play isn't switched on"
             body="Turn it on in Trip Setup, then draw the bracket."
             tripCode={tripCode}
           />
@@ -170,8 +170,8 @@ export default async function MatchplayPage({
             title="No bracket has been drawn yet"
             body={
               pairs
-                ? 'Pick the pairings in Trip Setup, then use Create Matchplay to draw the bracket.'
-                : 'Open Trip Setup and use Create Matchplay to draw the bracket.'
+                ? 'Pick the pairings in Trip Setup, then draw the bracket there.'
+                : 'Draw the bracket in Trip Setup.'
             }
             tripCode={tripCode}
           />
