@@ -42,3 +42,6 @@ next-env.d.ts
 
 # supabase
 supabase/.temp/
+
+# Agent worktrees made by Claude Code sessions
+.claude/worktrees/
