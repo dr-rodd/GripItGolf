@@ -259,7 +259,7 @@ export type TeamScore = 'average' | 'total'
 
 export const TEAM_SCORES: { key: TeamScore; label: string; hint: string }[] = [
   { key: 'average', label: 'Average per member',
-    hint: 'Fair when teams are different sizes — everyone on the team counts, runs or not.' },
+    hint: 'Fair for uneven teams, counting every member whether they run or not.' },
   { key: 'total', label: 'Team total',
     hint: 'Every point counts — bigger teams have the edge.' },
 ]
@@ -344,13 +344,13 @@ export const RUN_PERMISSIONS: {
 }[] = [
   { key: 'join_self', dflt: true,
     label: 'Participants can join by themselves',
-    hint: 'Anyone with the code can add their name and pick a team — off, they can only claim a name you added.' },
+    hint: 'Anyone with the code can add their name, not only claim one.' },
   { key: 'create_teams', dflt: false,
     label: 'Participants can start a new team',
-    hint: 'Let someone joining start a team of their own — off, they join one of yours.' },
+    hint: 'Someone joining can start a new team, not only join yours.' },
   { key: 'log_runs', dflt: true,
     label: 'Participants can log runs by hand',
-    hint: 'Let players type a run in themselves — off, runs only arrive from a connected Strava account.' },
+    hint: 'Runners can type runs in, not only connect Strava.' },
 ]
 
 export type RunPermissions = Record<RunPermissionKey, boolean>

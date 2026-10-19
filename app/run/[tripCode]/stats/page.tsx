@@ -27,8 +27,7 @@ export default async function RunStatsPage({ params }: {
           Your running, in numbers
         </p>
         <p className="text-ink/65 text-sm leading-relaxed max-w-[22rem] mx-auto">
-          Distance by week, your pace over the challenge, and how your team is
-          tracking. The leaderboard has the standings in the meantime.
+          Distance by week, your pace, and how your team is tracking.
         </p>
       </div>
     </main>

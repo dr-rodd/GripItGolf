@@ -310,14 +310,16 @@ export default function RunJoinClient({
       <p className="text-ink/65 text-sm mb-6">
         {viewer
           ? `This phone is ${viewer.name}. Pick a different name to switch.`
-          : 'Find your name, or add yourself — then pick your team.'}
+          : choices.claim && choices.addSelf ? 'Find your name or add yourself, then pick your team.'
+          : choices.addSelf ? 'Add your name, then pick your team.'
+          : choices.claim ? 'Find your name, then pick your team.'
+          : ''}
       </p>
 
       {choices.nothing && (
         <div className={`px-4 py-3.5 ${cardClass()}`}>
           <p className="text-ink/80 text-sm leading-snug">
-            Joining by yourself is switched off for this challenge. Ask the
-            organiser to add your name, then come back and tap it here.
+            Joining by yourself is switched off. Ask the organiser to add your name.
           </p>
         </div>
       )}
