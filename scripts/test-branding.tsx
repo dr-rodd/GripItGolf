@@ -953,7 +953,7 @@ section('The mark is the header, and the way back')
   ok(/pinned = true/.test(src), '  …unless a screen says otherwise, which only the landing page does')
   ok(metrics.includes('HEADER_H = 52'), 'at a known height')
   ok(src.includes('href={backTo}'), 'and tapping it goes wherever it was pointed')
-  ok(src.includes("backTo === '/' ? 'Back to the start' : 'Back to the trip'"),
+  ok(src.includes("backTo === '/' ? 'Back to the start' : 'Back'"),
     'which is said out loud, since it is only a logo')
   ok(src.includes('<MorphWordmark'), 'the header carries the mark itself')
 

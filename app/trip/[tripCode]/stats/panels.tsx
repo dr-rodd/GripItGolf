@@ -204,7 +204,7 @@ export function PlayerPanels({
 
       <Panel
         title="Approach"
-        hint="Greens found, split by where the tee shot finished — the gap is what a miss costs."
+        hint="Greens found, split by where the tee shot finished."
       >
         <Line label="From the fairway" value={
           a.fromFairway.holes === 0 ? '—'
@@ -284,7 +284,7 @@ function Splits({ splits }: { splits: PlayerStats['splits'] }) {
   return (
     <Panel
       title="By par"
-      hint="The par-3 greens column is the iron play on its own — no fairway is involved in it."
+      hint="On par 3s, the GIR column is iron play alone."
     >
       <div className="overflow-x-auto">
         <table className="w-full t-cap">
@@ -366,10 +366,6 @@ function Rounds({ stats, playerId, rounds, courseFor, courseName }: {
           </tbody>
         </table>
       </div>
-      <p className="t-cap text-ink/65 mt-3 leading-snug">
-        Vs HC is Stableford points against two a hole — level means the round
-        played exactly to handicap.
-      </p>
     </Panel>
   )
 }
@@ -558,7 +554,7 @@ export function EveryonePanels({
           <p className="t-cap text-ink/65 mb-3 leading-snug">
             {tripOver
               ? 'Final honours.'
-              : 'Honours as they stand — these move while the trip is being played.'}
+              : 'Honours as they stand. These can still change.'}
           </p>
           {awards.map(a => {
             const mineToo = meId != null && a.winnerIds.includes(meId)

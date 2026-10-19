@@ -81,7 +81,7 @@ export default function TripDescription({ text }: { text: string | null | undefi
       type="button"
       onClick={() => setExpanded(e => !e)}
       aria-expanded={expanded}
-      aria-label={expanded ? 'Collapse the trip description' : 'Expand the trip description'}
+      aria-label={expanded ? 'Collapse the description' : 'Expand the description'}
       className="mt-3 max-w-[34rem] text-left transition-opacity duration-150 active:opacity-70"
     >
       {paragraph}

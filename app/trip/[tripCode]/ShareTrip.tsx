@@ -27,11 +27,14 @@ export default function ShareTrip({
   tripCode,
   tripName,
   qrLink = true,
+  noun = 'trip',
 }: {
   tripCode: string
   tripName: string
   /** The small link to the QR page. Off on the QR page itself. */
   qrLink?: boolean
+  /** "trip" or "event" — what the button calls the thing being shared. */
+  noun?: 'trip' | 'event'
 }) {
   const [copied, setCopied] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -71,7 +74,7 @@ export default function ShareTrip({
     <div className="relative inline-flex items-center gap-5">
       <button type="button" onClick={share} className={buttonClass('secondary', false)}>
         <IconShare size={18} className="text-accent-deep" />
-        Share trip
+        {noun === 'event' ? 'Share event' : 'Share trip'}
       </button>
 
       {qrLink && (

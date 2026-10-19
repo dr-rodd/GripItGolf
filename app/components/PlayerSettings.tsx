@@ -179,16 +179,15 @@ export default function PlayerSettings({
                   <div>
                     <p className="t-label text-ink">Dark mode</p>
                     <p className="t-cap text-ink/65 mt-0.5">
-                      Easier on the eyes after dark. Saved to your name, so it
-                      follows you to your other devices.
+                      Saved to your name, so it follows you to other devices.
                     </p>
                   </div>
                   <Toggle checked={dark} onChange={handleToggle} label="Dark mode" />
                 </div>
                 {saveFailed && (
                   <p className="t-cap text-rust-deep mt-3">
-                    Could not save that to the trip — this phone will remember
-                    it anyway.
+                    Could not save that to your name — this phone will
+                    remember it anyway.
                   </p>
                 )}
 
@@ -196,9 +195,8 @@ export default function PlayerSettings({
                 <div className="mt-5 pt-5 border-t border-line">
                   <p className="t-label text-ink">Leaderboard nickname</p>
                   <p className="t-cap text-ink/65 mt-0.5">
-                    Save space on the leaderboard — your player name doesn&apos;t
-                    change, the board just prints this shorter one. Leave it
-                    blank and it shows your first name.
+                    Saves space on the board. Your player name doesn&apos;t
+                    change.
                   </p>
                   <div className="flex gap-2 mt-3">
                     <input

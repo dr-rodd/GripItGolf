@@ -89,7 +89,7 @@ export default function StatsPanel({
       {(thin || (mine != null && mine.gained.holes === 0)) && (
         <p className="t-cap text-ink/65 mt-3 leading-snug">
           {mine != null && mine.gained.holes === 0
-            ? 'No hole has had enough cards on it yet to compare against the field.'
+            ? 'Not enough cards on any hole yet to compare against the field.'
             : 'A few holes in. These settle as more cards come in.'}
         </p>
       )}

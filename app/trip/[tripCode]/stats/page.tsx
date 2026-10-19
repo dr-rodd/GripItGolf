@@ -4,6 +4,7 @@ import { fetchTripStats } from '@/lib/hubStanding'
 import { coverage } from '@/lib/holeStats'
 import { tripState, todayString } from '@/lib/tripStatus'
 import { currentPlayer } from '@/lib/currentPlayer'
+import { isEvent } from '@/lib/eventHub'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
 import { EmptyState } from '@/app/components/ui'
@@ -79,7 +80,7 @@ export default async function StatsPage({
             message={
               trip.track_stats
                 ? 'No putts or fairways recorded yet. They start filling in from the next card.'
-                : 'Stats are switched off for this trip. Turn them on in Trip Setup and the scorecard starts asking.'
+                : `Stats are switched off for this ${isEvent(trip.kind) ? 'event' : 'trip'}. Turn them on in Trip Setup and the scorecard starts asking.`
             }
             actionLabel={trip.track_stats ? undefined : 'Trip Setup'}
             actionHref={trip.track_stats ? undefined : `/trip/${tripCode}/setup`}
