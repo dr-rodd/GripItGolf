@@ -41,7 +41,7 @@ import { rememberIntroSeen } from '@/lib/intro'
  * face, long confident deceleration. The durations sit above the 400ms
  * ceiling the design system holds UI motion to — a deliberate,
  * documented exception scoped to this component, noted under Motion in
- * docs/design-system.md. They live here rather than in globals.css so
+ * docs/style-guide.md (exceptions register). They live here rather than in globals.css so
  * the stylesheet's own ceiling (which test:branding enforces) stays
  * intact; the card keyframes live in the component's own <style> tag
  * for the same reason.

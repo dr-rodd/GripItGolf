@@ -185,7 +185,8 @@ export default function CreateKnockoutForm() {
           validPlayers.map((p, i) => ({
             trip_id: trip.id,
             name: p.name.trim(),
-            handicap: parseHandicap(p.handicap) ?? 0,
+            // Blank is pending, never scratch (lib/handicap.ts)
+            handicap: parseHandicap(p.handicap),
             gender: p.gender,
             role: 'player',
             is_lead: organiserPlaying && i === 0,

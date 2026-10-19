@@ -859,7 +859,7 @@ function ScrollingName({
  * scroll container — so a heading row inside the board's scroller would
  * measure that offset from the scroller instead of the viewport and park
  * itself HEADER_H down the card, on top of whoever is leading. That is a bug
- * this app has already shipped once; see docs/design-system.md. `overflow-y:
+ * this app has already shipped once; see docs/design-history.md. `overflow-y:
  * clip` does not get around it either — the element is still a scroll
  * container for x, and that is what sticky binds to.
  *

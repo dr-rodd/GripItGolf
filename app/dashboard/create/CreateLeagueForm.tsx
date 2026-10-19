@@ -20,7 +20,7 @@ import { toItemRow } from '@/lib/itinerarySync'
 import {
   MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError, rememberUnlock,
 } from '@/lib/passcode'
-import { parseHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
+import { parseHandicap, isPlusHandicap, isHandicapPending, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import { type PlayerEntry, PLAYER_ENTRIES } from '@/lib/bracketSetup'
 import {
@@ -394,7 +394,7 @@ export default function CreateLeagueForm({ schedule }: {
     // are playing — an organiser off the card has no player row at all.
     const firstIsOrganiser = organiserPlaying
     const validPlayers = players.filter(p => p.name.trim())
-    let playerRows: { id: string; handicap: number; is_lead?: boolean }[] = []
+    let playerRows: { id: string; handicap: number | null; is_lead?: boolean }[] = []
     if (validPlayers.length > 0) {
       const { data: insertedPlayers, error: playersErr } = await supabase
         .from('players')
@@ -402,7 +402,8 @@ export default function CreateLeagueForm({ schedule }: {
           validPlayers.map((p, i) => ({
             trip_id: tripId,
             name: p.name.trim(),
-            handicap: parseHandicap(p.handicap) ?? 0,
+            // Blank is pending, never scratch (lib/handicap.ts)
+            handicap: parseHandicap(p.handicap),
             gender: p.gender,
             role: 'player',
             is_lead: firstIsOrganiser && i === 0,
@@ -477,13 +478,15 @@ export default function CreateLeagueForm({ schedule }: {
     }
 
     // 4. Handicap snapshots — one row per player per round. The index
-    // stands in until a tee is chosen, exactly as on a trip.
-    if (playerRows.length > 0) {
+    // stands in until a tee is chosen, exactly as on a trip, and a pending
+    // player gets no row at all, as on a trip (CreateTripForm says why).
+    const ratedPlayers = playerRows.filter(p => !isHandicapPending(p.handicap))
+    if (ratedPlayers.length > 0) {
       const hcpRows = insertedRounds.flatMap(round =>
-        playerRows.map(player => ({
+        ratedPlayers.map(player => ({
           round_id: round.id,
           player_id: player.id,
-          playing_handicap: Math.round(player.handicap ?? 0),
+          playing_handicap: Math.round(player.handicap as number),
         }))
       )
       const { error: hcpErr } = await supabase.from('round_handicaps').insert(hcpRows)

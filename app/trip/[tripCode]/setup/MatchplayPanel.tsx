@@ -78,7 +78,7 @@ export default function MatchplayPanel({
   if (loading) {
     return (
       <section className={SECTION}>
-        <p className="t-card text-ink mb-3">Matchplay</p>
+        <p className="t-card text-ink mb-3">Match play</p>
         <p className="text-ink/65 text-sm">Checking…</p>
       </section>
     )
@@ -100,7 +100,7 @@ export default function MatchplayPanel({
     <section className={SECTION}>
       <div className="flex items-center justify-between mb-1">
         <p className="t-card text-ink">
-          {pairs ? 'Pairs matchplay' : 'Matchplay'}
+          {pairs ? 'Pairs match play' : 'Match play'}
         </p>
         {exists && <Pill tone="win">Bracket drawn</Pill>}
       </div>
