@@ -99,7 +99,7 @@ export default function CreateFlow() {
             Standalone
           </p>
           <p className="text-ink/65 text-sm mt-1 leading-snug">
-            A single point in time — one day, or a run of days together.
+            One day, or a run of days together.
           </p>
         </button>
 
@@ -108,8 +108,7 @@ export default function CreateFlow() {
             Continuous
           </p>
           <p className="text-ink/65 text-sm mt-1 leading-snug">
-            An ongoing event over a period, like a summer — a knockout paced
-            by deadlines, or a league on picked days.
+            An ongoing event over a period, like a summer.
           </p>
         </button>
 
@@ -118,8 +117,7 @@ export default function CreateFlow() {
             Series
           </p>
           <p className="text-ink/65 text-sm mt-1 leading-snug">
-            A run of events with no dates fixed — days need not be in a row,
-            and more can be added as you go.
+            A run of events with no fixed dates, added to as you go.
           </p>
         </button>
       </Chooser>
@@ -139,8 +137,8 @@ export default function CreateFlow() {
         </p>
         <p className="text-ink/65 text-sm mt-1 leading-snug">
           {schedule === 'continuous'
-            ? 'A leaderboard over the period — playing days picked by hand, or every week on the same day.'
-            : 'A day, or a run of days, on a leaderboard — live scoring from the first tee.'}
+            ? 'A leaderboard over the period, on picked days or weekly.'
+            : 'Everyone on a leaderboard, live from the first tee.'}
         </p>
       </button>
 
@@ -150,8 +148,8 @@ export default function CreateFlow() {
         </p>
         <p className="text-ink/65 text-sm mt-1 leading-snug">
           {schedule === 'continuous'
-            ? 'An ongoing knockout — rounds shaped by the field, paced by deadlines, with a qualifying event if you want one.'
-            : 'A knockout bracket — win and go through. Create the event here, then set the bracket up from your Event Hub.'}
+            ? 'An ongoing knockout, paced by deadlines, with an optional qualifier.'
+            : 'A knockout bracket, set up from your Event Hub afterwards.'}
         </p>
       </button>
     </Chooser>

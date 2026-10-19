@@ -42,8 +42,7 @@ export default function CreatePage() {
                 Golf
               </p>
               <p className="text-ink/65 text-sm mt-1 leading-snug">
-                A trip away with your group, or a tournament — live scoring
-                and leaderboards.
+                A trip away with your group, or a tournament.
               </p>
             </Link>
 
@@ -52,8 +51,7 @@ export default function CreatePage() {
                 Running
               </p>
               <p className="text-ink/65 text-sm mt-1 leading-snug">
-                A team running challenge over weeks or months — runs earn
-                points, teams climb the leaderboard.
+                Runs earn points for your team over weeks or months.
               </p>
             </Link>
           </div>

@@ -64,7 +64,7 @@ export default function JoinForm() {
         <div className="w-full max-w-xs">
 
         <h1 className="t-h1 text-ink mb-2">
-          Join an Event
+          Join an event
         </h1>
         <p className="text-ink/65 text-sm mb-8">
           Enter the 6-character code you were given.

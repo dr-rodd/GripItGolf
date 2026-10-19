@@ -117,18 +117,22 @@ bring them into line?
 
 **L-01 · Hero line** · `app/Landing.tsx:143`
 - Now: Live scoring, leaderboards and matchplay for your golf trip. Tap below to start one, or to join a trip you have a code for.
+- Today: Live scoring and leaderboards for your event.
 - New: Live scoring, leaderboards and matchplay for your golf trip.
 
 **L-02 · Primary button** · `app/Landing.tsx:155`
 - Now: Create a trip
+- Today: Create an event (the second button now, under the event code box)
 - New:
 
 **L-03 · Secondary button** · `app/Landing.tsx:162`
 - Now: Join a trip
+- Today: Join event (the event code is typed on the landing page itself)
 - New:
 
 **L-04 · Footnote under the buttons** · `app/Landing.tsx:167`
 - Now: Your handicap is the best 8 of your last 20 rounds. On the graph, those eight are green dots.
+- Today: as New, set as a quotation with the name under it
 - New: "Right now that dot is both green and not green. You decide what it becomes" - Erwin Schrödinger
 - **Ross:** live as written. The refresh plan (4.8) flags it as long for a
   front door: sixteen words plus the name, under the only two buttons
@@ -136,14 +140,17 @@ bring them into line?
 
 **L-05 · Site tagline (stored centrally, used for branding)** · `config/site.ts:8`
 - Now: Your handicap is the best 8 of your last 20. Go and get a green dot.
-- New:
+- Today: unchanged in `config/site.ts`, but nothing reads `SITE.tagline`
+- New: *(gone — no longer on screen)*
 
 **L-06 · Browser tab / search-result description** · `app/layout.tsx:32`
 - Now: Live scoring, leaderboards and matchplay for your golf trip.
+- Today: Live scoring and leaderboards for your event. Golf trips, tournaments — and more to come.
 - New:
 
 **L-07 · Browser tab title** · `app/layout.tsx:30`
 - Now: green dot golf.
+- Today: green dot.
 - New:
 
 **L-08 · Header back-link (screen readers)** · `app/components/TripHeader.tsx:109`
@@ -156,18 +163,22 @@ bring them into line?
 
 **J-01 · Heading** · `app/join/JoinForm.tsx:64`
 - Now: Join a Trip
-- New:
+- Today: Join an Event
+- New: Join an event *(rule 4)*
 
 **J-02 · Sub-heading** · `app/join/JoinForm.tsx:67`
 - Now: Enter the 6-character code from your organiser.
+- Today: Enter the 6-character code you were given.
 - New:
 
 **J-03 · Button** · `app/join/JoinForm.tsx:94`
 - Now: Join Trip
+- Today: Join event
 - New:
 
 **J-04 · Wrong code** · `app/join/JoinForm.tsx:44`
 - Now: Trip not found — check your code and try again
+- Today: Event not found — check your code and try again
 - New:
 
 ---
@@ -178,16 +189,19 @@ bring them into line?
 
 **C-01 · Step counter** · `app/dashboard/create/CreateTripForm.tsx:507`
 - Now: Step {n} of 3 — {step name}
+- Today: Step {n} of 3 (the step’s name is now the title under it)
 - New:
 
 **C-02 · The three step names** · `app/dashboard/create/CreateTripForm.tsx:41`
 - Now: Trip details · Itinerary · Players
+- Today: Name your trip · Plan the itinerary · Who’s playing (an event: Name your event · Plan the schedule · Who’s playing)
 - New:
 
 ### Step 1 — Trip details
 
 **C-03 · Trip name label / example** · `CreateTripForm.tsx:518,523`
 - Now: Trip name  /  e.g. Irish Links Tour 2027
+- Today: Trip name  /  e.g. Portugal 2027 (an event: Event name  /  e.g. Captain’s Prize 2026)
 - New:
 
 **C-04 · Email label** · `CreateTripForm.tsx:541`
@@ -196,24 +210,30 @@ bring them into line?
 
 **C-05 · Why we ask for an email** · `CreateTripForm.tsx:556`
 - Now: So we can confirm your trip and keep you updated.
-- New:
+- Today: We’ll send you the trip details and share link. Leave it blank if you would rather not — the trip works either way, and no other player ever sees it.
+- New: We’ll email you the trip details and share link. *(rule 1)*
 
 ### Step 2 — Itinerary
 
 **C-06 · No courses in the database yet** · `CreateTripForm.tsx:580`
 - Now: No platform courses available yet. Add courses with trip_id = NULL to get started.
+- Today: The course list could not be loaded — a course can still be added by name from the picker.
 - New: *(this one is a developer message shown to a player — it should probably say something a golfer can act on)*
 
 **C-07 · Continue button at the foot of the itinerary** · `app/components/ItineraryBuilder.tsx:245`
 - Now: Proceed to Add Players
-- New:
+- Today: Proceed to Add Players
+- New: Continue to players *(rule 4; the days before it already say “Continue to day {n}”)*
 
 **C-08 · Empty day** · `ItineraryBuilder.tsx:449`
 - Now: This day is empty.
+- Today: as New (a multi-day trip; a single day opens on Set venue)
 - New: Nothing added yet. Get your golf in!
+- **Ross:** conflicts with rule 9 (the “!”), keep yours?
 
 **C-09 · Course picker label** · `ItineraryBuilder.tsx:519`
 - Now: Choose a course
+- Today: Course (label)  /  Choose a course (the picker it opens)
 - New:
 
 **C-10 · Tee time label** · `ItineraryBuilder.tsx:536`
@@ -222,6 +242,7 @@ bring them into line?
 
 **C-11 · What extra tee times mean** · `ItineraryBuilder.tsx:560`
 - Now: One round is created for this course. More tee times just means more groups going off.
+- Today: as New, under a stepper labelled Tee times (1 group, 2 groups…)
 - New: How many groups are going out?
 
 **C-12 · Accommodation prompt** · `ItineraryBuilder.tsx:574`
@@ -230,24 +251,30 @@ bring them into line?
 
 **C-13 · Rounds locked because scores exist** · `ItineraryBuilder.tsx:390`
 - Now: Scores already exist on this trip, so rounds are locked. Stays and journeys can still be added, moved or removed.
-- New:
+- Today: Rounds with scores are locked and stay where they are. New golf, stays, journeys and activities can still be added.
+- New: Rounds with scores are locked. Anything new can still be added. *(rule 1)*
 
 **C-14 · Can't continue without golf** · `CreateTripForm.tsx:138`
 - Now: Add at least one round of golf — there is nothing to score without it.
+- Today: as New (an event too)
 - New: Add at least one round of golf — otherwise what's the point?
+- **Ross:** conflicts with rule 3 (the aside), keep yours? CT-19 is the league wizard’s twin.
 
 ### Step 3 — Players and the settings lock
 
 **C-15 · Players are optional** · `CreateTripForm.tsx:599`
 - Now: Optional — players can also join later with the trip code.
+- Today: Optional. Players can join later with the trip code. (the step’s one-line intro)
 - New:
 
 **C-16 · First player's label** · `CreateTripForm.tsx:606`
 - Now: Lead player  /  Player {n}
+- Today: Lead player  /  Player {n} (an event: Organiser — you  /  Player {n})
 - New:
 
 **C-17 · Name and handicap placeholders** · `CreateTripForm.tsx:626,643`
 - Now: Full name  /  Handicap
+- Today: Full name  /  Handicap (or leave blank)
 - New:
 
 **C-18 · Add-player button** · `CreateTripForm.tsx:671`
@@ -260,7 +287,7 @@ bring them into line?
 
 **C-20 · Lock toggle explanation** · `CreateTripForm.tsx:682`
 - Now: Ask for a passcode before anyone can change formats, players or teams
-- New:
+- New: Ask for a passcode before anyone changes formats, players or teams. *(rule 1)*
 
 **C-21 · Lock warning headline** · `CreateTripForm.tsx:692`
 - Now: This can only be set now.
@@ -268,10 +295,13 @@ bring them into line?
 
 **C-22 · Lock warning body** · `CreateTripForm.tsx:695`
 - Now: There is no way to add, change or remove your passcode later — otherwise anyone with your trip code could lock you out of your own trip. Write it down.
+- Today: as New (every event wizard says PIN)
 - New: There is no way to add, change or remove your passcode later — Write it down!
+- **Ross:** conflicts with rule 9 (the “!”), keep yours?
 
 **C-23 · Passcode fields** · `CreateTripForm.tsx:707,717`
 - Now: Passcode (4–8 digits)  /  Enter it again
+- Today: Passcode (4–8 digits)  /  Enter it again (an event: PIN (4–8 digits))
 - New:
 
 **C-24 · Passcodes don't match** · `CreateTripForm.tsx:144`
@@ -280,6 +310,7 @@ bring them into line?
 
 **C-25 · Create button** · `CreateTripForm.tsx:747`
 - Now: Create Trip  /  Creating…
+- Today: Create trip  /  Creating… (an event: Create event)
 - New:
 
 **C-26 · Note under the create button** · `CreateTripForm.tsx:750`
@@ -290,41 +321,218 @@ bring them into line?
 
 **C-27 · Heading** · `CreateTripForm.tsx:411`
 - Now: Trip Created!
-- New:
+- Today: Trip Created! (an event: Event Created!)
+- New: Trip created  /  Event created *(rules 4, 9)*
 
 **C-28 · What to do next** · `CreateTripForm.tsx:414`
 - Now: Share this code with your group to join. Next, choose what you’re playing for in trip settings — leaderboards and teams live there. Finalise the trip when everyone’s ready to play.
+- Today: Share this code with your group to join. Next, choose leaderboard formats and teams in Trip Setup.
 - New: Share this code with your group to join. Next, choose leaderboard formats and teams in trip settings.
 
 **C-29 · Code label** · `CreateTripForm.tsx:421`
 - Now: Your Trip Code
+- Today: Your trip code
 - New:
 
 **C-30 · Passcode reminder** · `CreateTripForm.tsx:439`
 - Now: Settings are locked. Keep your passcode safe — it cannot be recovered or changed.
+- Today: as Now (an event: Your organiser PIN is set. Keep it safe — it cannot be recovered or changed.)
 - New:
 
 **C-31 · Copy button** · `CreateTripForm.tsx:450`
 - Now: Copy Code  /  ✓ Copied
+- Today: Copy code  /  ✓ Copied
 - New:
 
 **C-32 · Go-to-trip button** · `CreateTripForm.tsx:456`
 - Now: Go to Your Trip
+- Today: Go to your trip
 - New:
 
 ### Creation errors
 
 **C-33 · Generic** · `CreateTripForm.tsx:55,58`
 - Now: Please try again.  /  {reason} — a database update may not have been applied yet.
-- New:
+- New: Try again.  /  {reason} — a database update may not have been applied yet. *(X-05: never “Please”)*
 
 **C-34 · Passcode couldn't be set** · `CreateTripForm.tsx:212`
 - Now: Could not set the passcode on this device. Try again, or create the trip without one.
-- New:
+- Today: as Now; an event read “…or create the event without one”, which it cannot be
+- New: As Now for a trip. An event: Could not set the PIN on this device — try again. *(an event cannot exist without its PIN; the league wizard already said this)*
 
 **C-35 · Partial-failure family** · `CreateTripForm.tsx:251,285,326,354,372`
 - Now: Could not create the trip. {reason} · Trip created, but the players failed. {reason} · Trip created, but the itinerary failed. {reason} · Trip created, but the rounds failed. {reason} · Trip created, but the handicaps failed. {reason}
-- New:
+- Today: as Now, and the same family on every event wizard (“Event created, but the players failed.”)
+- New: Could not create the trip. {reason} · Trip created, but the players could not be saved. {reason} · …the itinerary could not be saved… · …the rounds could not be saved… · …the handicaps could not be saved… *(X-05; the same on every wizard)*
+
+### Added since the first review
+
+**C-36 · About the trip, the line under it** · `CreateTripForm.tsx`
+- Now: Shows on the trip hub, under the countdown. It can be changed any time in Trip Settings.
+- New: Shown on the trip hub, and editable in Trip Settings. *(rule 1; an event says Event Hub)*
+
+**C-37 · A handicap left blank** · `CreateTripForm.tsx`
+- Now: Not sure? Leave it blank — it shows as HCP pending until they set it when they claim their name.
+- New: Shows as HCP pending until they set it when claiming their name. *(rules 1, 6: the box already says “or leave blank”)*
+
+**C-38 · Leaderboards (optional), the line under it** · `CreateTripForm.tsx`
+- Now: What the trip plays for. Skip for now and choose later in Trip Setup — nothing is decided until you decide it.
+- New: Skip for now and choose later in Trip Setup. *(rules 1, 6)*
+
+**C-39 · An empty day, the line under its name** · `ItineraryBuilder.tsx`
+- Now: Nothing yet — add golf, a stay, a journey or an activity below.
+- New: Add golf, a stay, a journey or an activity below. *(rule 6: the box under it says nothing is added yet)*
+
+**C-40 · A single day, the line under its name** · `ItineraryBuilder.tsx`
+- Now: Golf is the main event — set the venue, then build the day around it.  /  Press and hold a tile to move it. Times can overlap the golf — dinner booked while the last groups are out is a normal day.
+- New: Set the venue, then build the day around it.  /  Press and hold to move a tile. Times can overlap the golf. *(rule 1)*
+
+**C-41 · A stay of several nights** · `ItineraryBuilder.tsx`
+- Now: Added to each of the next {n} days, so every night has somewhere to sleep on it.
+- New: Added to each of the next {n} days. *(rule 1)*
+
+**C-42 · Adding an activity, the line under the times** · `ItineraryBuilder.tsx`
+- Now: Dinner, a boat trip, anything that is not golf. Times are optional — no start means not booked yet, and no end reads as an hour on the day plan.
+- New: Times are optional. Without an end, it fills an hour. *(rule 1)*
+
+**C-43 · A course just added** · `app/components/CourseSelect.tsx`
+- Now: One thing left: the scorecard. A course is not verified until a photo of its printed card has been read — that is where the pars and stroke indices come from. Photograph one now, upload a picture saved from the club's website, or wait until the day of play: the scoring screen asks for the card before anyone tees off.
+- New: One thing left: the scorecard. Photograph it now or on the day. *(rule 1; the card check below it says why)*
+
+**C-44 · Add a course: county** · `CourseSelect.tsx`
+- Now: The course files under its county on the list — it is how the next group finds it.
+- New: Courses are listed by county, so the next group can find it. *(rule 1)*
+
+**C-45 · Add a course: reading the website** · `CourseSelect.tsx`
+- Now: Read {n} tees from the site — check every figure against the printed card or your golf association app before saving.  /  Found the course, but no ratings on the site — they will be in your golf association app.
+- New: Read {n} tees from the site. Check them against the card before saving.  /  No ratings on the site. Try your golf association app. *(rule 1)*
+
+**C-46 · Add a course: tees** · `CourseSelect.tsx`
+- Now: Both are printed on the scorecard, and your golf association's app (Golf Ireland, England Golf, the USGA GHIN app…) lists them under the course's tees. Optional now — a scorecard photo can supply them later — but handicaps need them before play.
+- New: Your golf association app lists them. Optional now, needed before play. *(rule 1; most Irish cards print SSS, not rating and slope)*
+
+**C-47 · Add a course: the last step** · `CourseSelect.tsx`
+- Now: The last step is a scorecard: pars and stroke indices only ever come from the printed card, so the course stays unverified until a photo of one has been read. You can do that right after saving — or wait until the day, when the scoring screen asks for it.
+- New: A scorecard photo comes next. Until then the course is unverified. *(rules 1, 6: the next screen says when)*
+
+**C-48 · Too many rounds, on the event door** · `lib/tripLimits.ts`
+- Now: A trip can have at most 6 rounds. Reduce it to continue.
+- New: An event can have at most 6 rounds. Reduce it to continue. *(naming: an event, never a trip; a trip unchanged)*
+
+---
+
+## §3b — Creating a tournament or a run challenge (`/create`, `/golf`, `/dashboard/create?type=…`)
+
+Added in the Phase 5 copy pass: screens the first review predates. A **New**
+with a rule beside it is what the screen now says; **Ross** items are unchanged.
+
+### The doors
+
+**CT-01 · Golf card** · `app/create/page.tsx`
+- Now: A trip away with your group, or a tournament — live scoring and leaderboards.
+- New: A trip away with your group, or a tournament. *(rules 1, 6)*
+
+**CT-02 · Running card** · `app/create/page.tsx`
+- Now: A team running challenge over weeks or months — runs earn points, teams climb the leaderboard.
+- New: Runs earn points for your team over weeks or months. *(rule 1)*
+
+**CT-03 · Golf doorway question** · `app/golf/page.tsx`
+- Now: What are you running?
+- New: **Ross** — with Running a sport of its own, “running” here reads as a pun. “What are you organising?”
+
+**CT-04 · Golf trip card** · `app/golf/page.tsx`
+- Now: A few days away with your group — itinerary, live scoring and leaderboards.
+- New: A few days away with your group, itinerary included. *(rules 1, 6)*
+
+**CT-05 · Golf tournament card** · `app/golf/page.tsx`
+- Now: A standalone day or a multi-day event, run by an organiser — who may or may not be playing.
+- New: An event run by an organiser, who may or may not play. *(rule 1; the shape is the next question)*
+
+**CT-06 · The shape of the event** · `app/dashboard/create/CreateFlow.tsx`
+- Now: Standalone: A single point in time — one day, or a run of days together. · Continuous: An ongoing event over a period, like a summer — a knockout paced by deadlines, or a league on picked days. · Series: A run of events with no dates fixed — days need not be in a row, and more can be added as you go.
+- New: One day, or a run of days together. · An ongoing event over a period, like a summer. · A run of events with no fixed dates, added to as you go. *(rules 1, 6)*
+
+**CT-07 · The format** · `CreateFlow.tsx`
+- Now: League: A day, or a run of days, on a leaderboard — live scoring from the first tee.  /  (continuous) A leaderboard over the period — playing days picked by hand, or every week on the same day. · Match play: A knockout bracket — win and go through. Create the event here, then set the bracket up from your Event Hub.  /  (continuous) An ongoing knockout — rounds shaped by the field, paced by deadlines, with a qualifying event if you want one.
+- New: Everyone on a leaderboard, live from the first tee.  /  A leaderboard over the period, on picked days or weekly. · A knockout bracket, set up from your Event Hub afterwards.  /  An ongoing knockout, paced by deadlines, with an optional qualifier. *(rule 1)*
+
+### Every event wizard
+
+**CT-08 · Confirmation headings** · `CreateLeagueForm.tsx`, `CreateKnockoutForm.tsx`, `CreateRunForm.tsx`
+- Now: League Created!  /  Event Created!  /  Challenge Created!
+- New: League created  /  Event created  /  Challenge created *(rules 4, 9; as C-27)*
+
+**CT-09 · Email hint** · league, knockout, run
+- Now: We'll send you the event details and share link. The event works either way, and no player ever sees it.  /  (run) We'll send you the challenge details, the share link and your admin link. The challenge works either way, and no participant ever sees it.
+- New: We’ll email you the event details and share link.  /  We’ll email you the challenge details, share link and admin link. *(rule 1, as C-05)*
+
+**CT-10 · How collaborative, the line under it** · trip wizard (event door), league, knockout, run
+- Now: What the field can do for themselves. Everything starts off — you can change any of these later from the organiser area.  /  (run) What participants can do for themselves. You can change any of these later from the organiser area.
+- New: What the field can do for itself. Editable in the organiser area.  /  What participants can do for themselves. Editable in the organiser area. *(rules 1, 6: the toggles show where they start)*
+
+**CT-11 · Organiser PIN card** · trip wizard (event door), league, knockout, run
+- Now: Your key to the organiser side of the Event Hub — notices, tee times and event settings ask for it. (league: notices, starts and event settings; knockout: the bracket setup, notices and event settings)  /  (run) Your key to the organiser area — teams, permissions and the points rules ask for it. Share it with anyone you want helping you run the challenge.
+- New: Unlocks notices, tee times and settings in the organiser area. (league: notices, starts and settings; knockout: the bracket, notices and settings)  /  Unlocks teams, permissions and points rules. Share it with your helpers. *(rule 1)*
+
+### Match play, a standalone event (the trip wizard's event door)
+
+**CT-12 · Event length** · `CreateTripForm.tsx`
+- Now: Standalone  /  Multi-day
+- New: Single day  /  Multi-day *(“Standalone” was the answer on the screen before and covers both; the league wizard says Single day)*
+
+**CT-13 · Leaderboards (optional), the line under it** · `CreateTripForm.tsx`
+- Now: What the event plays for. Skip for now and choose later from the organiser area — the bracket has its own setup there too.
+- New: Skip for now and choose later in the organiser area. *(rules 1, 6: the format card and the confirmation both point at the bracket)*
+
+### League
+
+**CT-14 · Event length, the line under it** · `CreateLeagueForm.tsx`
+- Now: One day, one venue, one leaderboard — or a run of days, each with its own.  /  Say which of the days are played, give each one a venue next, and choose how they relate on the leaderboard.
+- New: One day at one venue, or a run of days.  /  Pick the playing days here, then a venue for each. *(rule 1)*
+
+**CT-15 · A run too long, playing days, weekly** · `CreateLeagueForm.tsx`
+- Now: That is a long run for one event — an event spread over a period like that is a continuous one, with its playing days picked inside it.  ·  Turn off any day nobody tees off — a travel day, a rest day. The event still runs from the first date to the last.  ·  The same day every week — every Wednesday for the summer, or some such.
+- New: Too long for one run. A period like this is a continuous event.  ·  Turn off travel or rest days. The dates stay as they are.  ·  The same day every week, like every Wednesday. *(rule 1)*
+
+**CT-16 · A series has no dates** · `CreateLeagueForm.tsx`
+- Now: You'll pick the events and their venues next — they need not be in a row, and more can be added as the season goes.
+- New: You’ll pick the events and venues next, and can add more later. *(rule 1)*
+
+**CT-17 · Who's playing** · `CreateLeagueForm.tsx`
+- Now: (require approval) A joined player waits for your nod before they're confirmed in the field.  ·  Add anyone now if you like — everyone else joins with the event code.  /  Add the field — anyone missed can still join later with the event code.
+- New: New players wait for your nod before they’re in the field.  ·  Add anyone now. Everyone else joins with the event code.  /  Add the field. Anyone missed can join later with the event code. *(rule 1)*
+
+**CT-18 · Leaderboards, the line under it** · `CreateLeagueForm.tsx`
+- Now: What the event plays for. Every league starts on individual Stableford, added up — change it, or add more formats.
+- New: Starts on individual Stableford, added up. Change it or add more. *(rules 1, 6)*
+
+**CT-19 · No leaderboard chosen** · `CreateLeagueForm.tsx`
+- Now: An event needs at least one leaderboard — otherwise what's being played for?
+- New: **Ross** — the same voice as C-14 (rule 3). If C-14 is trimmed, this becomes “An event needs at least one leaderboard.”
+
+**CT-20 · How the days relate on the leaderboard** · `lib/leagueSetup.ts` (also the organiser's Days screen)
+- Now: Each day is its own competition — its own leaderboard, no connection between them.  ·  Every day's results feed a single leaderboard for the whole event.  ·  Each day keeps its own leaderboard, and the days also roll up into one overall board.
+- New: Each day has its own leaderboard, with no overall.  ·  *(unchanged)*  ·  Each day has its own leaderboard, plus one overall. *(rule 1; X-02)*
+
+### Continuous knockout
+
+**CT-21 · Confirmation, what next** · `CreateKnockoutForm.tsx`
+- Now: Share this code with the field. Next, set the bracket up in the organiser area on your Event Hub — mode, field size, qualifying and round deadlines.
+- New: Share this code with the field. Next, set up the bracket in the organiser area on your Event Hub. *(rules 1, 6: the bracket screen asks each one)*
+
+**CT-22 · The period, the line under it** · `CreateKnockoutForm.tsx`
+- Now: The event runs across this whole period — matches happen when players make them happen, paced by round deadlines you'll set in the bracket setup.
+- New: Players arrange their own matches, paced by round deadlines you set later. *(rule 1)*
+
+**CT-23 · Who's playing, the line above the cards** · `CreateKnockoutForm.tsx`
+- Now: Optional — how players get in is a bracket setup question, and anyone can join later with the event code.
+- New: Optional. Players can also join later with the event code. *(rule 1, as C-15)*
+
+### Run challenge
+
+**CT-24 · Confirmation, what next** · `CreateRunForm.tsx`
+- Now: Share this code with everyone taking part — they join with it and pick their team. Run logging and the leaderboard arrive in the next update.
+- New: Share this code with everyone taking part. They join with it and pick a team. *(no longer true: run logging and the leaderboard are built)*
 
 ---
 

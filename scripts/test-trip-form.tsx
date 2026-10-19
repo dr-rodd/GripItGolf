@@ -80,6 +80,8 @@ section('Round count limit')
 
   // The limit is policy, so the message should read as a choice, not a fault
   ok(/at most/.test(roundCountError(9)!), 'the wording describes a cap')
+  ok(roundCountError(9, 'event')!.startsWith('An event'),
+    'and the event door says event, never trip')
 }
 
 // ─── The form renders the control ──────────────────────────────
@@ -143,7 +145,7 @@ section('The itinerary replaces the rounds picker')
   // reason rather than a disabled button now — an empty Tuesday should not
   // grey out the way forward, so the check happens once, at the end.
   ok(src.includes('plannedGolf.length === 0'), 'a trip needs at least one round')
-  ok(src.includes('roundCountError(plannedGolf.length)'),
+  ok(src.includes('roundCountError(plannedGolf.length, noun)'),
     'and the cap on rounds still applies, counted from the golf items')
   ok(src.includes('blockedReason={itineraryBlocked}'),
     'with the reason handed to the builder, which owns the button')
@@ -168,7 +170,7 @@ section('The way forward is pinned under the add buttons')
   const b = fs.readFileSync('app/components/ItineraryBuilder.tsx', 'utf-8')
 
   // Continue walks the days, and only becomes the way out on the last one
-  ok(b.includes('Proceed to Add Players'),
+  ok(b.includes("continueLabel = 'Continue to players'"),
     'the last day offers the way out of the itinerary')
   ok(/Continue to day \$\{openDay \+ 2\}/.test(b),
     'and every other day continues to the next one')

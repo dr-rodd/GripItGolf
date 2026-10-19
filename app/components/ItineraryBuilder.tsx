@@ -204,7 +204,7 @@ function KindSwitch({ current, onSwitch }: {
 
 export default function ItineraryBuilder({
   startDate, endDate, courses, items, onChange, onContinue, blockedReason = null,
-  lockedGolfIds, trackStats = false, continueLabel = 'Proceed to Add Players',
+  lockedGolfIds, trackStats = false, continueLabel = 'Continue to players',
 }: {
   startDate: string | null
   endDate: string | null
@@ -218,7 +218,7 @@ export default function ItineraryBuilder({
   /**
    * What the last day's button says. Creation is walking towards the next
    * step of the wizard; the settings editor is walking towards a save, and
-   * "Proceed to Add Players" says something that has already happened.
+   * "Continue to players" says something that has already happened.
    */
   continueLabel?: string
   /**
@@ -402,8 +402,7 @@ export default function ItineraryBuilder({
           <div className="flex items-start gap-3 px-4 py-3 mb-4 bg-accent/10 border border-accent/40 rounded-xl">
             <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0" />
             <p className="text-accent text-[13px] leading-snug">
-              Rounds with scores are locked and stay where they are. New golf,
-              stays, journeys and activities can still be added.
+              Rounds with scores are locked. Anything new can still be added.
             </p>
           </div>
         )}
@@ -445,10 +444,10 @@ export default function ItineraryBuilder({
         <p className="t-cap text-ink/65 mb-4">
           {singleDay
             ? (dayItems.length === 0
-              ? 'Golf is the main event — set the venue, then build the day around it.'
-              : 'Press and hold a tile to move it. Times can overlap the golf — dinner booked while the last groups are out is a normal day.')
+              ? 'Set the venue, then build the day around it.'
+              : 'Press and hold to move a tile. Times can overlap the golf.')
             : (dayItems.length === 0
-              ? 'Nothing yet — add golf, a stay, a journey or an activity below.'
+              ? 'Add golf, a stay, a journey or an activity below.'
               : 'Press and hold a tile to move it.')}
         </p>
 
@@ -612,7 +611,7 @@ export default function ItineraryBuilder({
 
           <p className="t-cap text-ink/65">
             {nights > 1
-              ? `Added to each of the next ${nights} days, so every night has somewhere to sleep on it.`
+              ? `Added to each of the next ${nights} days.`
               : 'Staying more than one night? It will be added to each day.'}
           </p>
         </Sheet>
@@ -721,9 +720,7 @@ export default function ItineraryBuilder({
           )}
 
           <p className="t-cap text-ink/65">
-            Dinner, a boat trip, anything that is not golf. Times are
-            optional — no start means not booked yet, and no end reads as
-            an hour on the day plan.
+            Times are optional. Without an end, it fills an hour.
           </p>
         </Sheet>
       )}

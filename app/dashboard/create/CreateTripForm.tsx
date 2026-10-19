@@ -80,7 +80,7 @@ const readOnServer = () => false
 export function describeError(err: unknown): string {
   const e = err as { message?: string; hint?: string; details?: string } | null
   const msg = e?.message?.trim()
-  if (!msg) return 'Please try again.'
+  if (!msg) return 'Try again.'
   // A missing column means a migration has not been run
   if (/column|schema cache/i.test(msg)) {
     return `${msg} — a database update may not have been applied yet.`
@@ -175,7 +175,7 @@ export default function CreateTripForm() {
   const itineraryBlocked =
     plannedGolf.length === 0
       ? 'Add at least one round of golf — otherwise what\'s the point?'
-      : roundCountError(plannedGolf.length)
+      : roundCountError(plannedGolf.length, noun)
 
   // A tournament always sets one: the PIN is the organiser's key to the
   // Event Hub's admin side (and Trip Setup — one code, one lock). On a trip
@@ -253,7 +253,10 @@ export default function CreateTripForm() {
       try {
         passcodeHash = await hashPasscode(passcode)
       } catch {
-        setError(`Could not set the passcode on this device. Try again, or create the ${noun} without one.`)
+        // An event cannot be made without its PIN, so it is only offered the retry.
+        setError(isTournament
+          ? 'Could not set the PIN on this device — try again.'
+          : 'Could not set the passcode on this device. Try again, or create the trip without one.')
         setSubmitting(false)
         return
       }
@@ -363,7 +366,7 @@ export default function CreateTripForm() {
         .select('id, handicap, is_lead')
 
       if (playersErr || !insertedPlayers) {
-        setError(`${Noun} created, but the players failed. ${describeError(playersErr)}`)
+        setError(`${Noun} created, but the players could not be saved. ${describeError(playersErr)}`)
         setSubmitting(false)
         return
       }
@@ -396,7 +399,7 @@ export default function CreateTripForm() {
       : { data: [], error: null }
 
     if (itinErr) {
-      setError(`${Noun} created, but the itinerary failed. ${describeError(itinErr)}`)
+      setError(`${Noun} created, but the itinerary could not be saved. ${describeError(itinErr)}`)
       setSubmitting(false)
       return
     }
@@ -428,7 +431,7 @@ export default function CreateTripForm() {
       .select('id')
 
     if (roundsErr || !insertedRounds) {
-      setError(`${Noun} created, but the rounds failed. ${describeError(roundsErr)}`)
+      setError(`${Noun} created, but the rounds could not be saved. ${describeError(roundsErr)}`)
       setSubmitting(false)
       return
     }
@@ -453,7 +456,7 @@ export default function CreateTripForm() {
       )
       const { error: hcpErr } = await supabase.from('round_handicaps').insert(hcpRows)
       if (hcpErr) {
-        setError(`${Noun} created, but the handicaps failed. ${describeError(hcpErr)}`)
+        setError(`${Noun} created, but the handicaps could not be saved. ${describeError(hcpErr)}`)
         setSubmitting(false)
         return
       }
@@ -512,7 +515,7 @@ export default function CreateTripForm() {
           </div>
 
           <h1 className="t-h1 text-ink mb-2">
-            {Noun} Created!
+            {Noun} created
           </h1>
           <p className="text-ink/65 text-sm mb-10">
             {isTournament
@@ -645,7 +648,7 @@ export default function CreateTripForm() {
                     else { setMultiDay(false); setEndDate(startDate) }
                   }}
                   options={[
-                    { value: 'single', label: 'Standalone' },
+                    { value: 'single', label: 'Single day' },
                     { value: 'multi', label: 'Multi-day' },
                   ]}
                 />
@@ -684,8 +687,7 @@ export default function CreateTripForm() {
                 className={`${FIELD} resize-none leading-snug`}
               />
               <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                Shows on the {noun} hub, under the countdown. It can be changed
-                any time in Trip Settings.
+                Shown on the {isTournament ? 'Event Hub' : 'trip hub'}, and editable in Trip Settings.
               </p>
             </div>
 
@@ -709,9 +711,7 @@ export default function CreateTripForm() {
                 className={FIELD}
               />
               <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                We&apos;ll send you the {noun} details and share link. Leave it blank
-                if you would rather not — the {noun} works either way, and no other
-                player ever sees it.
+                We&apos;ll email you the {noun} details and share link.
               </p>
               {emailWarning(leadEmail) && (
                 <p className="text-rust/80 text-[13px] mt-2 leading-snug">
@@ -846,8 +846,7 @@ export default function CreateTripForm() {
                       where it is being left blank. */}
                   {isHandicapPending(parseHandicap(player.handicap)) && (
                     <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                      Not sure? Leave it blank — it shows as {HANDICAP_PENDING_LABEL} until
-                      they set it when they claim their name.
+                      Shows as {HANDICAP_PENDING_LABEL} until they set it when claiming their name.
                     </p>
                   )}
 
@@ -875,8 +874,8 @@ export default function CreateTripForm() {
               </p>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
                 {isTournament
-                  ? 'What the event plays for. Skip for now and choose later from the organiser area — the bracket has its own setup there too.'
-                  : 'What the trip plays for. Skip for now and choose later in Trip Setup — nothing is decided until you decide it.'}
+                  ? 'Skip for now and choose later in the organiser area.'
+                  : 'Skip for now and choose later in Trip Setup.'}
               </p>
               <LeaderboardSetup
                 boards={boards}
@@ -898,8 +897,7 @@ export default function CreateTripForm() {
                   How collaborative should this event be?
                 </p>
                 <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-                  What the field can do for themselves. Everything starts off —
-                  you can change any of these later from the organiser area.
+                  What the field can do for itself. Editable in the organiser area.
                 </p>
                 <EventPermissionToggles value={perms} onChange={setPerms} />
               </div>
@@ -918,8 +916,7 @@ export default function CreateTripForm() {
                 <div className={`${cardClass()} px-4 py-4`}>
                   <p className="text-ink text-sm font-medium">Organiser PIN</p>
                   <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                    Your key to the organiser side of the Event Hub — notices,
-                    tee times and event settings ask for it.
+                    Unlocks notices, tee times and settings in the organiser area.
                   </p>
                 </div>
               ) : (
@@ -927,7 +924,7 @@ export default function CreateTripForm() {
                   <div className="min-w-0">
                     <p className="text-ink text-sm font-medium">Lock {noun} settings</p>
                     <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                      Ask for a passcode before anyone can change formats, players or teams
+                      Ask for a passcode before anyone changes formats, players or teams.
                     </p>
                   </div>
                   <Toggle checked={lockSettings} onChange={setLockSettings} label={`Lock ${noun} settings`} />

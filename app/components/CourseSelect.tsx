@@ -269,12 +269,7 @@ export default function CourseSelect({
                   on the list and chosen for this round.
                 </p>
                 <p className="t-cap text-ink/65 leading-snug">
-                  One thing left: the scorecard. A course is not verified until
-                  a photo of its printed card has been read — that is where the
-                  pars and stroke indices come from. Photograph one now, upload
-                  a picture saved from the club&apos;s website, or wait until the
-                  day of play: the scoring screen asks for the card before
-                  anyone tees off.
+                  One thing left: the scorecard. Photograph it now or on the day.
                 </p>
                 <CardCheck
                   courseId={view.course.id}
@@ -375,8 +370,8 @@ function AddCourseForm({
         kind: 'said',
         found: true,
         message: suggested.length > 0
-          ? `Read ${suggested.length} tee${suggested.length === 1 ? '' : 's'} from the site — check every figure against the printed card or your golf association app before saving.`
-          : 'Found the course, but no ratings on the site — they will be in your golf association app.',
+          ? `Read ${suggested.length} tee${suggested.length === 1 ? '' : 's'} from the site. Check them against the card before saving.`
+          : 'No ratings on the site. Try your golf association app.',
       })
     } catch {
       setLookup({ kind: 'said', message: 'Could not read the website — fill the ratings in by hand.', found: false })
@@ -460,8 +455,7 @@ function AddCourseForm({
           {IRISH_COUNTIES.map(c => <option key={c} value={c} />)}
         </datalist>
         <p className="t-cap text-ink/65 mt-2 leading-snug">
-          The course files under its county on the list — it is how the next
-          group finds it.
+          Courses are listed by county, so the next group can find it.
         </p>
       </div>
 
@@ -521,10 +515,7 @@ function AddCourseForm({
       <div>
         <p className={FIELD_LABEL}>Tees — course rating and slope</p>
         <p className="t-cap text-ink/65 mb-3 leading-snug">
-          Both are printed on the scorecard, and your golf association&apos;s
-          app (Golf Ireland, England Golf, the USGA GHIN app…) lists them
-          under the course&apos;s tees. Optional now — a scorecard photo can
-          supply them later — but handicaps need them before play.
+          Your golf association app lists them. Optional now, needed before play.
         </p>
 
         <div className="space-y-3">
@@ -596,11 +587,8 @@ function AddCourseForm({
 
       <div className={`px-4 py-3.5 ${cardClass()}`}>
         <p className="t-cap text-ink/80 leading-snug">
-          The last step is a scorecard: pars and stroke indices only ever come
-          from the printed card, so the course stays{' '}
-          <span className="font-semibold">unverified</span> until a photo of
-          one has been read. You can do that right after saving — or wait
-          until the day, when the scoring screen asks for it.
+          A scorecard photo comes next. Until then the course is{' '}
+          <span className="font-semibold">unverified</span>.
         </p>
       </div>
 

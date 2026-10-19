@@ -46,8 +46,7 @@ export default function GolfPage() {
                 Golf trip
               </p>
               <p className="text-ink/65 text-sm mt-1 leading-snug">
-                A few days away with your group — itinerary, live scoring
-                and leaderboards.
+                A few days away with your group, itinerary included.
               </p>
             </Link>
 
@@ -56,8 +55,7 @@ export default function GolfPage() {
                 Golf tournament
               </p>
               <p className="text-ink/65 text-sm mt-1 leading-snug">
-                A standalone day or a multi-day event, run by an organiser —
-                who may or may not be playing.
+                An event run by an organiser, who may or may not play.
               </p>
             </Link>
 

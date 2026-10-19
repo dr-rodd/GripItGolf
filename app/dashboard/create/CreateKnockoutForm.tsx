@@ -196,7 +196,7 @@ export default function CreateKnockoutForm() {
         .select('id, is_lead')
 
       if (playersErr || !insertedPlayers) {
-        setError(`Event created, but the players failed. ${describeError(playersErr)}`)
+        setError(`Event created, but the players could not be saved. ${describeError(playersErr)}`)
         setSubmitting(false)
         return
       }
@@ -248,12 +248,11 @@ export default function CreateKnockoutForm() {
           </div>
 
           <h1 className="t-h1 text-ink mb-2">
-            Event Created!
+            Event created
           </h1>
           <p className="text-ink/65 text-sm mb-10">
-            Share this code with the field. Next, set the bracket up in the
-            organiser area on your Event Hub — mode, field size, qualifying
-            and round deadlines.
+            Share this code with the field. Next, set up the bracket in the
+            organiser area on your Event Hub.
           </p>
 
           <div className={`px-4 py-8 mb-4 ${cardClass()}`}>
@@ -353,9 +352,8 @@ export default function CreateKnockoutForm() {
                 </p>
               ) : (
                 <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                  The event runs across this whole period — matches happen
-                  when players make them happen, paced by round deadlines
-                  you&apos;ll set in the bracket setup.
+                  Players arrange their own matches, paced by round deadlines
+                  you set later.
                 </p>
               )}
             </div>
@@ -377,8 +375,7 @@ export default function CreateKnockoutForm() {
                 className={FIELD}
               />
               <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                We&apos;ll send you the event details and share link. The event
-                works either way, and no player ever sees it.
+                We&apos;ll email you the event details and share link.
               </p>
               {emailWarning(email) && (
                 <p className="text-rust/80 text-[13px] mt-2 leading-snug">
@@ -411,8 +408,7 @@ export default function CreateKnockoutForm() {
             </div>
 
             <p className="text-ink/65 text-sm">
-              Optional — how players get in is a bracket setup question, and
-              anyone can join later with the event code.
+              Optional. Players can also join later with the event code.
             </p>
 
             {players.map((player, i) => (
@@ -489,8 +485,7 @@ export default function CreateKnockoutForm() {
             <div className="mb-6">
               <label className={FIELD_LABEL}>How collaborative should this event be?</label>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-                What the field can do for themselves. Everything starts off —
-                you can change any of these later from the organiser area.
+                What the field can do for itself. Editable in the organiser area.
               </p>
               <EventPermissionToggles value={perms} onChange={setPerms} />
             </div>
@@ -498,8 +493,7 @@ export default function CreateKnockoutForm() {
             <div className={`px-4 py-4 ${cardClass()}`}>
               <p className="text-ink text-sm font-medium">Organiser PIN</p>
               <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                Your key to the organiser side of the Event Hub — the bracket
-                setup, notices and event settings ask for it.
+                Unlocks the bracket, notices and settings in the organiser area.
               </p>
             </div>
 
