@@ -103,11 +103,14 @@ function Tab({
       // leave the tab held down forever otherwise.
       onPointerCancel={release}
       onPointerLeave={release}
-      className={`flex flex-col items-center justify-center gap-1 h-16 transition-[color,transform] duration-150 ease-out ${
+      className={`flex flex-col items-center justify-center gap-1.5 h-16 transition-[color,transform] duration-150 ease-out ${
         lit ? 'text-accent' : 'text-bark/60 hover:text-bark/80'
       } ${pressed ? 'tab-pressed' : ''} ${pending ? 'tab-pending' : ''}`}
     >
-      <Icon size={20} />
+      {/* 22px with 6px to its label: at 20 and 4 the bar read as cramped on
+          a phone (Ross, 19 Oct). 22 + 6 + 13 still leaves the 64px bar
+          11px of air above and below. */}
+      <Icon size={22} />
       {/* Five labels at the 13px floor everything else in the app keeps.
           Archivo's width axis buys the room: at 87.5% "Leaderboard" is
           66px (69 lit, at 600) against 73 at full width — measured in

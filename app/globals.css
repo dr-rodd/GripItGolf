@@ -141,11 +141,14 @@
   /* The putt curve: cubic-bezier(0.16, 1, 0.3, 1). */
   --gd-ease: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* The paper's grain — fractal noise in bark, about 5% strong, tiled at
-     160px. A texture, not a gradient. On the body only: never on a card,
-     which is smooth white lifted off it, and never fixed, which costs an
-     iPhone a repaint on every scroll. */
-  --gd-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .29 0 0 0 0 .216 0 0 0 0 .157 .5 0 0 0 -.2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+  /* The paper's grain — fractal noise in bark, tiled at 160px. A texture,
+     not a gradient. On the body only: never on a card, which is smooth
+     white lifted off it, and never fixed, which costs an iPhone a repaint
+     on every scroll. A hint of tooth, not an imitation of paper: it shipped
+     at twice this strength and read as a texture laid over the app (Ross,
+     19 Oct), so the alpha row is .22R − .08 — a speck's alpha peaks near
+     10%. test:branding holds the ceiling. */
+  --gd-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .29 0 0 0 0 .216 0 0 0 0 .157 .22 0 0 0 -.08'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
 }
 
 /* ── Dark mode ──
@@ -198,7 +201,7 @@ html.dark {
 
   /* The grain in tan. Gentler than by day: light specks on a dark page
      read stronger than dark specks on a light one. */
-  --gd-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .851 0 0 0 0 .776 0 0 0 0 .698 .26 0 0 0 -.09'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+  --gd-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .851 0 0 0 0 .776 0 0 0 0 .698 .12 0 0 0 -.04'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
 }
 
 /* Paper is always daylight. The trip export prints to PDF, and a phone in
@@ -844,7 +847,11 @@ html.dark input::placeholder, html.dark textarea::placeholder {
   display: block;
   width: 100%;
   min-height: 56px;
-  padding: 0 16px;
+  /* Centred by its padding, not by the browser: iOS sets a date or time
+     input's value at the top of the box, where a text input's is centred
+     for it. 15 + 22 (17px at 1.3) + 15 + the border is the 56. A textarea
+     gets the same breathing room at its top. */
+  padding: 15px 16px;
   font-size: 17px;
   line-height: 1.3;
   color: var(--color-ink);
@@ -863,7 +870,12 @@ textarea.field { padding: 14px 16px; line-height: 1.5; }
 /* A field inside a dense row — a team's column, a tee-sheet slot, an
    inline PIN beside its button. 44px, the floor for anything tapped inside
    a row, and 16px type, the floor below which iOS zooms the page. */
-.field.field-dense { min-height: 44px; padding: 0 12px; font-size: 16px; border-radius: 12px; }
+.field.field-dense { min-height: 44px; padding: 9px 12px; font-size: 16px; border-radius: 12px; }
+
+/* A button dressed as a field — the course picker's trigger — lays its
+   line out in a row: the value, any badge, the chevron. `display` here,
+   because .field's own `block` would beat a flex utility on the element. */
+button.field { display: flex; align-items: center; gap: 12px; text-align: left; }
 
 /* The code field: an event's code, or a PIN, typed in. The one field where
    the capitals are spaced — Archivo 600, 0.12em, larger than a field's

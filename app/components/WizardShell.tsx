@@ -10,7 +10,7 @@ import BackButton from './BackButton'
  * back button hanging out of a row too short for it.
  *
  *   · the progress, one segment a step, filling emerald as you go
- *   · a 52px row: the way back on the left (held in place but hidden and
+ *   · a 56px row: the way back on the left (held in place but hidden and
  *     inert on step 1, so the step label never shifts when it arrives),
  *     "Step 2 of 4" in the middle, and an empty cell keeping it centred
  *   · each step opening on its question as a t-h1 — "Name your challenge" —
@@ -41,7 +41,7 @@ export default function WizardShell({
   return (
     <>
       <div className="border-b border-line">
-        <div className="max-w-lg mx-auto px-4 pt-3 flex gap-1.5" aria-hidden="true">
+        <div className="max-w-lg mx-auto px-4 pt-4 flex gap-1.5" aria-hidden="true">
           {titles.map((t, i) => (
             <div
               key={t}
@@ -53,8 +53,10 @@ export default function WizardShell({
         </div>
         {/* Three cells: the way back, the step, and an empty one to keep the
             step centred. The arrow's cell keeps its width on step 1 — hidden
-            and inert rather than absent — so nothing moves when it arrives. */}
-        <div className="max-w-lg mx-auto px-4 grid grid-cols-[48px_1fr_48px] min-h-[52px] items-center">
+            and inert rather than absent — so nothing moves when it arrives.
+            16px above the progress and a 56px row: at 12 and 52 the header
+            read as cramped on a phone (Ross, 19 Oct). */}
+        <div className="max-w-lg mx-auto px-4 grid grid-cols-[48px_1fr_48px] min-h-14 items-center">
           <div
             className={`transition-opacity duration-200 ease-out motion-reduce:transition-none ${first ? 'opacity-0 pointer-events-none' : ''}`}
             inert={first}

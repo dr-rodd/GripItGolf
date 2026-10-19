@@ -420,6 +420,14 @@ section('Depth, texture and the named mixes are tokens')
   ok(/--gd-grain: url\("data:image\/svg\+xml,[^"]*feTurbulence[^"]*fractalNoise/.test(css),
     '  …fractal noise, a texture and not a gradient')
   ok(dark.includes('--gd-grain:'), '  …in tan at night')
+  // Faint. At twice today's strength it read as fake paper laid over the
+  // app. The alpha row of the colour matrix is slope·R + offset; noise R
+  // tops out near 0.8, so a speck's alpha peaks at about 0.8·slope + offset.
+  const alphaRows = [...css.matchAll(/feColorMatrix values='(?:[\d.-]+ ){15}([\d.]+) 0 0 0 (-?[\d.]+)'/g)]
+    .map(m => 0.8 * Number(m[1]) + Number(m[2]))
+  eq(alphaRows.length, 2, '  …one grain by day, one by night')
+  ok(alphaRows.length === 2 && alphaRows[0] <= 0.1 && alphaRows[1] <= 0.06,
+    `  …a hint of tooth, not an imitation: specks peak at ${alphaRows.map(a => Math.round(a * 100) + '%').join(' and ')}`)
   ok(!/background-attachment:\s*fixed/.test(code), '  …never fixed, which repaints on every iPhone scroll')
   ok(/@media print \{[\s\S]*body \{ background-image: none; \}/.test(code), '  …and never on paper')
   // The body, and `paper` — the same surface for whatever stands in for
@@ -820,7 +828,7 @@ section('The bottom tab bar')
   const archivo = read('app/layout.tsx').match(/Archivo\(\{[\s\S]*?\}\)/)?.[0] ?? ''
   ok(/axes: \["wdth"\]/.test(archivo), '  …so Archivo loads with its width axis')
   ok(!/weight:/.test(archivo), '  …as the whole variable font, not a list of static weights')
-  ok(src.includes('size={20}'), 'with 20px icons')
+  ok(src.includes('size={22}') && src.includes('gap-1.5 h-16'), 'with 22px icons, 6px clear of their labels — 20 and 4 read as cramped')
 
   ok(src.includes("'text-accent'"), 'the active tab is emerald')
   ok(src.includes('text-bark/60'), 'and an inactive one is bark at 60%')
@@ -1411,6 +1419,13 @@ section('The parts kit')
   // The field: 56 tall, 17px, a 1.5px line, focus 2.5px emerald with no glow
   const field = css.slice(css.indexOf('.field {'), css.indexOf('}', css.indexOf('.field {')))
   ok(/min-height: 56px/.test(field) && /font-size: 17px/.test(field), 'a field is 56px tall with 17px type')
+  // Centred by padding: iOS puts a date or time value at the top of its box
+  // (Ross's phone, 19 Oct), where a text input is centred by the browser
+  const pad = field.match(/padding: (\d+)px 16px/)
+  ok(!!pad && 2 * Number(pad[1]) + Math.round(17 * 1.3) + 3 <= 56 && Number(pad[1]) >= 14,
+    '  …its line centred by its own padding, so a date sits where a name does')
+  ok(/button\.field \{ display: flex; align-items: center;/.test(css),
+    '  …and a button dressed as one lays its value, badge and chevron in a row')
   ok(/border: 1\.5px solid var\(--color-line-strong\)/.test(field) && /border-radius: 14px/.test(field),
     '  …a 1.5px line, 14px round')
   ok(/\.field:focus \{ outline: 2\.5px solid var\(--color-accent\)/.test(css), '  …2.5px emerald in focus')
@@ -1853,8 +1868,8 @@ section('The way back is a 48px arrow, sitting in its row')
   // step centred — with the arrow's cell holding its width on step 1. It is
   // drawn once, by WizardShell, so this is one check rather than five.
   const shell = stripComments(read('app/components/WizardShell.tsx'))
-  ok(/grid grid-cols-\[48px_1fr_48px\] min-h-\[52px\] items-center">\s*<div\b[\s\S]{0,240}<BackButton onClick=\{onBack\} \/>\s*<\/div>/
-      .test(shell), 'the wizard frame puts the arrow in a 52px step row')
+  ok(/grid grid-cols-\[48px_1fr_48px\] min-h-14 items-center">\s*<div\b[\s\S]{0,240}<BackButton onClick=\{onBack\} \/>\s*<\/div>/
+      .test(shell), 'the wizard frame puts the arrow in a 56px step row')
 }
 
 // ─── The wizards ───────────────────────────────────────────────
