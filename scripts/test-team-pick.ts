@@ -117,7 +117,7 @@ section('The join screen stands only where the board says players pick')
   ok(join.includes('teamSizeLimit(boards)'), 'room is the one copy of the cap')
   ok(join.includes('joinNames('),
     'a team is named from its members — Ross & Dave')
-  ok(join.includes('Claim your name'),
+  ok(join.includes('Claim your spot'),
     'a stranger is pointed at the players screen, calmly')
   ok(join.includes('PRESET_COLORS'),
     'self-made teams colour from the same twelve as everyone else')

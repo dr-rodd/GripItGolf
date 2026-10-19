@@ -52,7 +52,7 @@ const teamBB: Leaderboard = { id: 'e', audience: 'team', competition: 'league', 
 section('The form cannot be left half-answered')
 {
   eq(unanswered({}), ['Who is being ranked'], 'nothing chosen asks who is playing')
-  eq(unanswered({ audience: 'individual' }), ['League or matchplay'], 'then what they play')
+  eq(unanswered({ audience: 'individual' }), ['League or match play'], 'then what they play')
 
   const solo = { audience: 'individual' as const, competition: 'league' as const }
   eq(unanswered(solo), ['How a round is scored', 'How the rounds add up'],
@@ -223,8 +223,8 @@ section('Boards are titled the way people would say them')
   eq(boardTitle(sf), 'Stableford Points', 'an individual board is named by its scoring')
   eq(boardTitle(strokes), 'Strokes', 'either scoring')
   eq(boardTitle(teamBB), 'Team better ball', 'a team board says team and its format')
-  eq(boardTitle(draw), 'Matchplay', 'a singles draw is just matchplay')
-  eq(boardTitle(pairsDraw), 'Pairs matchplay', 'and a pairs draw says so')
+  eq(boardTitle(draw), 'Match play', 'a singles draw is just match play')
+  eq(boardTitle(pairsDraw), 'Pairs match play', 'and a pairs draw says so')
 
   ok(boardRules(sf).length > 0, 'every board states how it is scored')
   ok(boardRules(sf).includes('running total'), 'and how the rounds add up')

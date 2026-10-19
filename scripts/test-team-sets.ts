@@ -303,7 +303,7 @@ section('A sheet is named after what is played on it')
   eq(sheetSubtitle(boards, 'main', boardTitle), 'Team better ball',
     'the subtitle names the board played on it')
   eq(sheetSubtitle([league('main'), { ...draw('main') }], 'main', boardTitle),
-    'Team better ball · Pairs matchplay',
+    'Team better ball · Pairs match play',
     'and every board when a sheet carries more than one')
 }
 

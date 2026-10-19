@@ -766,8 +766,7 @@ export default function TripTeamsClient({
           No leaderboard on this trip is played by teams yet.
         </p>
         <p className="t-cap text-ink/65 mt-2 leading-snug">
-          Add a team leaderboard in settings, then come back and pick who
-          plays with whom.
+          Add a team leaderboard in Trip Setup first.
         </p>
       </Card>
     )

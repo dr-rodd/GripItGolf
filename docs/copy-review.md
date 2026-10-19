@@ -462,10 +462,12 @@ bring them into line?
 
 **S-01 · Drawer button title** · `TripSetupClient.tsx:482,502`
 - Now: Trip details
+- Today: Trip Settings
 - New:
 
 **S-02 · Drawer button subtitle** · `TripSetupClient.tsx:484`
 - Now: Name, dates, itinerary, who can edit — everything below is the golf
+- Today: Name, dates, itinerary, stats
 - New: The non-golf trip details — Golf related settings are below
 
 **S-03 · Itinerary row subtitle** · `TripSetupClient.tsx:550`
@@ -478,6 +480,7 @@ bring them into line?
 
 **S-05 · Itinerary editor close button** · `setup/ItineraryEditor.tsx:90`
 - Now: Close without saving
+- Today: Close without saving (the ✕ button’s accessible name; no visible text)
 - New:
 
 ### Who can edit
@@ -492,11 +495,11 @@ bring them into line?
 
 **S-08 · The two options** · `TripSetupClient.tsx:570,571`
 - Now: Any player  /  Owner only
-- New:
+- New: Any player  /  Lead player only *(X-01)*
 
 **S-09 · Owner-only, read on the owner's own phone** · `TripSetupClient.tsx:604`
 - Now: Only the device this trip was created on can change it — this one. Nothing changes for you; it is everybody else who can now read this screen but not touch it.
-- New:
+- New: Nothing changes for you; everyone else can only view. *(rule 1)*
 
 **S-10 · Owner-only, read on anyone else's phone** · `TripSetupClient.tsx:605`
 - Now: Only the device this trip was created on can change it.
@@ -504,14 +507,15 @@ bring them into line?
 
 **S-11 · Open to all, read on the owner's phone** · `TripSetupClient.tsx:608`
 - Now: Anyone who opens this screen can change the trip. This is the device it was created on, so "Owner only" would leave it to you.
-- New:
+- New: Anyone can change the trip; “Lead player only” would leave it to you. *(rule 1, X-01)*
 
 **S-12 · Open to all, read on anyone else's phone** · `TripSetupClient.tsx:609`
 - Now: Anyone who opens this screen can change the trip. "Owner only" is set from the device the trip was created on, which is not this one.
-- New:
+- New: Anyone can change the trip; only the lead player’s device can restrict it. *(rule 1, X-01)*
 
 **S-13 · Read-only notice** · `TripSetupClient.tsx:636`
 - Now: Only the trip owner can edit this trip. Ask whoever created it to make changes.
+- Today: Only the lead player can edit this trip. Ask them to make changes.
 - New:
 
 ### Leaderboards section
@@ -522,17 +526,22 @@ bring them into line?
 
 **S-15 · Section blurb** · `TripSetupClient.tsx:651`
 - Now: Safe to change mid-trip. Every card already entered is re-read under the new rules.
+- Today: Add as many as you like.
 - New: Choose your Competition Leaderboards. Add as many formats as you like.
 
 **S-16 · Board needs teams** · `TripSetupClient.tsx:664,665`
 - Now: A pairs draw needs pairings — pick them below.  /  A team board needs teams — pick them below.
+- Today: This leaderboard needs pairings! Pick them below.  /  A team leaderboard needs teams! Pick them below.
 - New: This leaderboard needs pairings! Pick them below  /  A team leaderboard needs teams! — pick them below.
+- **Ross:** conflicts with rule 9 (no "!"), keep yours?
 
 ### Teams section
 
 **S-17 · Section blurb** · `TripSetupClient.tsx:687`
 - Now: Which {teams} play for which leaderboard.
+- Today: Different boards can have different teams.
 - New: Pick your teams! You can pick different teams for different boards.
+- **Ross:** yours carries "!" (rule 9); today’s line is shorter and has none — keep yours?
 
 **S-18 · A board with no teams yet** · `TripSetupClient.tsx:713`
 - Now: No {teams} yet
@@ -558,7 +567,8 @@ bring them into line?
 
 **S-23 · Save errors** · `TripSetupClient.tsx:258,296,325,359,369,406`
 - Now: Could not save — try again · Enter a name and handicap first · Could not add player · Could not save player · Handicap saved but round handicaps failed to update · Could not remove player
-- New:
+- Today: Could not save — try again · Enter a name first · That handicap does not read as a number — clear it to leave it pending · Could not add player · Could not save player · Handicap saved but round handicaps failed to update · Could not remove player
+- New: Could not save — try again · Enter a name first · That handicap does not read as a number — clear it to leave it pending · Could not add player · Could not save player · Handicap saved, but the rounds could not be updated · Could not remove player *(errors are calm: never “failed to”)*
 
 ### Things blocking the trip
 
@@ -569,24 +579,29 @@ bring them into line?
 **S-25 · Draw needs pairings** · `lib/teamSets.ts:137`
 - Now: Your draw is between pairings — pick them first.
 - New: Pick your pairings to see the leaderboard!
+- **Ross:** conflicts with rule 9 (no "!"), keep yours?
 
 **S-26 · Board needs teams** · `lib/teamSets.ts:140,141`
 - Now: The teams for {board name} have not been picked yet.  /  A team leaderboard needs teams — pick them first.
+- Today: The teams for {board name} have not been picked yet.  /  A team leaderboard needs teams! Pick them in Trip Setup.
 - New: The teams for {board name} have not been picked yet.  /  A team leaderboard needs teams! Pick them in trip settings.
+- **Ross:** conflicts with rule 9 (no "!"), keep yours?
 
 **S-27 · Legacy setup blockers (older trips only)** · `lib/tripSetupFlow.ts:25–33`
 - Now: A trip needs someone competing — pick teams or individuals · Switch on a league or a matchplay draw · A league needs a board — pick one, or switch the league off above · Keep at least one competition switched on
-- New:
+- New: *(gone — no longer on screen)*
 
 ### Passcode gate
 
 **S-28 · Heading** · `setup/PasscodeGate.tsx:66`
 - Now: Settings are locked
-- New:
+- New: Trip Setup is locked *(X-03)*
 
 **S-29 · Explanation** · `setup/PasscodeGate.tsx:69`
 - Now: {Trip name} was set up with a passcode. Ask whoever created the trip.
+- Today: {Trip name} was set up with a passcode. Ask your lead player!
 - New: {Trip name} was set up with a passcode. Ask whoever created the trip!
+- **Ross:** conflicts with rule 9 (no "!"), keep yours?
 
 **S-30 · Field and button** · `setup/PasscodeGate.tsx:79,92`
 - Now: Passcode  /  Unlock  /  Checking…
@@ -595,6 +610,32 @@ bring them into line?
 **S-31 · Wrong passcode** · `setup/PasscodeGate.tsx:46`
 - Now: That passcode is not right.
 - New: Incorrect code.
+
+### Newer strings on this screen
+
+**S-32 · Trip description helper** · `TripSetupClient.tsx`
+- Now: Shows on the trip hub, under the countdown. Clear it to take it off.
+- New: Shows on the trip hub, under the countdown. *(rule 1)*
+
+**S-33 · Track stats helper** · `TripSetupClient.tsx`
+- Now: Ask for putts and where the tee shot finished on every hole, for everyone on the card.
+- New: The scorecard asks for putts and where each tee shot finished. *(rule 1)*
+
+**S-34 · Track stats, switched on** · `TripSetupClient.tsx`
+- Now: Two extra taps a hole, and neither one holds up the next hole. Holes already played are not affected — stats start from the next card.
+- New: Starts from the next card; holes already played are unaffected. *(rules 1, 2)*
+
+**S-35 · Teams section footnote** · `TripSetupClient.tsx`
+- Now: {Teams} can be changed at any point, including mid-round. Players own their scores and carry them to whichever {team} they end up in.
+- New: {Teams} can change mid-round; each player keeps their scores. *(rule 1)*
+
+**S-36 · Match play panel, draw button** · `setup/MatchplayPanel.tsx` (the panel's other strings are §9)
+- Now: Create matchplay  /  Drawing…
+- New: Create match play  /  Drawing… *(rule 4)*
+
+**S-37 · Match play panel, after the draw** · `setup/MatchplayPanel.tsx`
+- Now: {Players joining or leaving / Pairings changing} after the draw doesn’t change it. Reshuffle when you want the bracket to match the current {roster / team sheet}.
+- New: Later changes don’t move the draw; reshuffle to match the {roster / team sheet}. *(rules 1, 5)*
 
 ---
 
@@ -632,6 +673,7 @@ settings and is also what a new trip meets first.
 **B-07 · Question** · `LeaderboardSetup.tsx:326`
 - Now: Who is being ranked?
 - New: Is this a solo or team leaderboard?
+- **Ross:** yours was live, then went back to “Who is being ranked?” when sides arrived (CLAUDE.md names it so); keep yours?
 
 **B-08 · Individuals** · `LeaderboardSetup.tsx:328`
 - Now: Individuals — Every player ranked on their own card.
@@ -639,6 +681,7 @@ settings and is also what a new trip meets first.
 
 **B-09 · Teams** · `LeaderboardSetup.tsx:329`
 - Now: Teams — Players grouped, and the teams ranked against each other.
+- Today: Teams — Players are put into teams, and the teams are ranked against each other.  (On an event: Cards counted in groups, and the groups ranked against each other.)
 - New: Teams - Add players to teams, and the teams are ranked against each other
 
 ### Question 2 — what they're playing
@@ -654,10 +697,12 @@ settings and is also what a new trip meets first.
 **B-12 · Matchplay** · `LeaderboardSetup.tsx:357`
 - Now: Matchplay — A knockout draw, generated at random.
 - New: Matchplay — A knockout bracket.
+- **Ross:** label written “Match play” (rule 4); the hint is yours.
 
 **B-13 · Matchplay already taken** · `LeaderboardSetup.tsx:356`
 - Now: This trip already has a draw — only one is possible.
 - New: Only one matchplay bracket can be created at a time.
+- **Ross:** “matchplay” written “match play” (rule 4); otherwise yours.
 
 **B-14 · Matchplay footnote** · `LeaderboardSetup.tsx:468–471`
 - Now: The draw is generated at random once the players are in. A manual draw can come later. Pairings are teams of two, named by their players.
@@ -671,11 +716,15 @@ settings and is also what a new trip meets first.
 
 **B-16 · Stableford** · `lib/leaderboards.ts:89,90`
 - Now: Stableford — Points per hole against your handicap. Highest wins.
+- Today: Stableford Points — Stableford points, off each player’s handicap.
 - New: Stableford Points - Man's greatest achievement
+- **Ross:** “Man’s greatest achievement” conflicts with rule 3, keep yours?
 
 **B-17 · Strokes** · `lib/leaderboards.ts:91,92`
 - Now: Strokes — Nett strokes. Lowest wins.
+- Today: Strokes — Fewest strokes wins.
 - New: Strokes - Simple as. 
+- **Ross:** “Simple as.” conflicts with rule 3, keep yours? (Today’s hint also drops “nett”, which the board is.)
 
 ### Question 4 — how a team combines (team boards only)
 
@@ -685,15 +734,18 @@ settings and is also what a new trip meets first.
 
 **B-19 · Better ball** · `lib/leaderboards.ts:96,97`
 - Now: Better ball — A composite card: the team's best score on every hole.
-- New:
+- Today: Better ball — A composite card from the team’s best scores on every hole — you choose how many count.
+- New: Better ball — A composite card from the team’s best scores on every hole. *(rules 2, 6: the next question asks how many)*
 
 **B-20 · Best card** · `lib/leaderboards.ts:98,99`
 - Now: The best single card in the team that day carries it.
+- Today: Hero — The best single card in the team that day carries it.
 - New:
 
 **B-21 · Cut the dead weight** · `lib/leaderboards.ts:100,101`
 - Now: Cut the dead weight — Everyone counts except the worst card of the day. They are back in next round.
 - New: Cut the dead weight — Everyone counts except the worst card of the day.
+- **Ross:** X-09 — the name is your open question; left as it is.
 
 **B-22 · Aggregate** · `lib/leaderboards.ts:113,114`
 - Now: Aggregate — Every score in the team counts.
@@ -725,7 +777,7 @@ settings and is also what a new trip meets first.
 
 **B-28 · Explanation, field not known** · `LeaderboardSetup.tsx:155`
 - Now: The {teams} are not picked yet, so this is a placeholder — leave it and the table sizes itself to them. Change a figure and it stays changed.
-- New:
+- New: A placeholder until the {teams} are picked; edited figures are kept. *(rules 1, 2)*
 
 **B-29 · Points-table validation** · `lib/customPoints.ts:68,69,71`
 - Now: Points must be numbers. · Points cannot be negative. · The most any position can be worth is {999}.
@@ -743,7 +795,7 @@ settings and is also what a new trip meets first.
 
 **B-32 · Blurb** · `LeaderboardSetup.tsx:446`
 - Now: A bad day stops defining the week.
-- New:
+- New: **Ross** — a flourish rather than a fact (rule 5); cut it, or keep?
 
 ### Handicap allowance
 
@@ -761,15 +813,15 @@ settings and is also what a new trip meets first.
 
 **B-36 · Recommendation** · `LeaderboardSetup.tsx:252,253`
 - Now: {85}% is the standard allowance for this kind of competition.
-- New:
+- New: {85}% is standard for this format. *(rule 1)*
 
 **B-37 · When left off** · `LeaderboardSetup.tsx:255`
 - Now: Leave it off and everyone plays off the full figure.
-- New:
+- New: Off means full course handicaps. *(rule 1)*
 
 **B-38 · When set** · `LeaderboardSetup.tsx:256`
 - Now: Everyone's course handicap is cut to {85}% of it, rounded to the nearest shot. Gross scores are unaffected, and every other leaderboard keeps its own allowance.
-- New:
+- New: Handicaps cut to {85}%, this leaderboard only. *(rule 1)*
 
 **B-39 · How an allowance is written elsewhere** · `lib/handicapAllowance.ts:98,99`
 - Now: Full course handicap  /  {85}% of course handicap
@@ -779,11 +831,11 @@ settings and is also what a new trip meets first.
 
 **B-40 · Outstanding questions** · `LeaderboardSetup.tsx:477` + `lib/leaderboards.ts:258–272`
 - Now: Still to answer: Who is being ranked · League or matchplay · How a round is scored · How a team's players combine · How the rounds add up · What each position is worth
-- New:
+- New: Still to answer: Who is being ranked · League or match play · How a round is scored · How a team’s players combine · How the rounds add up · What each position is worth *(rule 4)*
 
 **B-41 · Duplicate board** · `LeaderboardSetup.tsx:481`
 - Now: This trip already runs that leaderboard. Change an answer — two boards scored the same way would print the same table twice.
-- New:
+- New: This trip already runs that leaderboard; change an answer. *(rules 1, 2)*
 
 **B-42 · Already-in-use badge** · `LeaderboardSetup.tsx:75`
 - Now: In use
@@ -809,7 +861,7 @@ settings and is also what a new trip meets first.
 
 **B-47 · Blurb once it does** · `LeaderboardSetup.tsx:646`
 - Now: A trip can run several events in parallel off the same cards — an order of merit alongside a daily prize, or a knockout between different teams beside a league.
-- New:
+- New: For example, a daily prize beside an order of merit. *(rule 1; an “event” is a tournament now)*
 
 **B-48 · Button** · `LeaderboardSetup.tsx:658`
 - Now: Add a leaderboard
@@ -819,7 +871,9 @@ settings and is also what a new trip meets first.
 
 **B-49 · Board titles** · `lib/leaderboards.ts:326–334`
 - Now: Matchplay · Pairs matchplay · Stableford · Team better ball · {…} prizes
-- New:
+- Today: Matchplay · Pairs matchplay · Stableford Points · Team better ball · {…} prizes · Tags — {Stableford Points}
+- New: Match play · Pairs match play · Stableford Points · Team better ball · {…} prizes · Tags — {Stableford Points} *(rule 4)*
+- **Ross:** a sides board’s tab reads “Tags — Stableford Points”, while CLAUDE.md says sides on screen. “Sides · Stableford Points”?
 
 **B-50 · Matchplay rules line** · `lib/leaderboards.ts:341,342`
 - Now: Knockout between pairings, drawn at random  /  Knockout between players, drawn at random
@@ -829,13 +883,75 @@ settings and is also what a new trip meets first.
 - Now: Worst round dropped. / Worst {2} rounds dropped.  ·  Played off {85% of course handicap}.
 - New:
 
+### Newer strings in the builder
+
+**B-52 · Which teams are ranked (events only): playing teams** · `LeaderboardSetup.tsx`
+- Now: The teams playing together — Pairs and fourballs — set on the teams screen or the tee sheet, and free to change from round to round.
+- New: The teams playing together — Pairs and fourballs, free to change from round to round. *(rules 1, 2)*
+
+**B-53 · Which teams are ranked: the sides (hint under “The event’s sides — its tags”)** · `LeaderboardSetup.tsx`
+- Now: Europe and USA, the club sides. A player keeps their side for the whole event, whoever they play alongside on the day. Sides are made in the organiser area, under Tags.
+- New: A player keeps their side all event, like Europe or USA. *(rule 1)*
+
+**B-54 · Which teams are ranked: footnote** · `LeaderboardSetup.tsx`
+- Now: Not one or the other — an event can run a board for each.
+- New: An event can run a leaderboard for each. *(rules 1, 2)*
+
+**B-55 · Quota scale footnote** · `LeaderboardSetup.tsx`
+- Now: Your quota is 36 minus your course handicap either way — the scale only decides what going under par is worth.
+- New: Either way, your quota is 36 minus your course handicap. *(rules 1, 2)*
+
+**B-56 · How many of a side’s cards count: footnote** · `LeaderboardSetup.tsx`
+- Now: A side with fewer players out than this counts everyone who played — a card nobody handed in is not a nought.
+- New: If fewer of the side play, every card they hand in counts. *(rules 1, 2)*
+
+**B-57 · Better ball scores counting, explained** · `LeaderboardSetup.tsx`
+- Now: Only the team’s best score on each hole goes on the composite card.  /  The team’s best {2} scores on each hole go on the composite card. A count above a team’s size just counts everyone.
+- New: The best score on each hole makes the composite card.  /  The best {2} scores on each hole make the composite card. *(rules 1, 6)*
+
+**B-58 · Grandstand finish, explained** · `LeaderboardSetup.tsx`
+- Now: A grandstand finish: over the closing holes every score in the team counts, so a trailing team can still catch up.  /  Over {the last 3 holes}, every score in the team counts — a trailing team can still catch up.
+- New: A grandstand finish, so a trailing team can still catch up.  /  Every score in the team counts over {the last 3 holes}. *(rules 1, 2, 6)*
+
+**B-59 · How teams are formed (events only): you assign** · `LeaderboardSetup.tsx`
+- Now: You assign them — Pick the teams yourself on the teams screen — count and members are yours.
+- New: You assign them — Pick the teams yourself on the teams screen. *(rules 1, 2)*
+
+**B-60 · Countback: the trip total** · `LeaderboardSetup.tsx`
+- Now: Each round is settled on its own back 9. And the trip total, once the rounds are added up?
+- New: Each round is settled on its back 9. And the trip total? *(rule 1)*
+
+**B-61 · Deciding knockout matches from the cards** · `LeaderboardSetup.tsx`
+- Now: Link a bracket round to a round of golf and the winners come off the scorecards. Leave one unlinked to tap the results in yourself.
+- New: Linked rounds are settled from the scorecards; unlinked ones by hand. *(rule 1)*
+
+**B-62 · …before the field is known** · `LeaderboardSetup.tsx`
+- Now: The rounds of the draw are named once the field is known — add players, or pick the pairings, and come back to this.
+- New: Add players, or pick the pairings, to name the draw’s rounds. *(rules 1, 2)*
+
+**B-63 · …with no golf yet** · `LeaderboardSetup.tsx`
+- Now: This trip has no golf in its itinerary yet. Add a round and it can be linked here.
+- New: Add golf to the itinerary first, then link it here. *(rule 1)*
+
+**B-64 · Sides: best cards only** · `lib/leaderboards.ts`
+- Now: Best cards only — Only the side’s best cards count each round — you choose how many.
+- New: Best cards only — Only the side’s best cards count each round. *(rules 2, 6: the next question asks how many)*
+
+**B-65 · How ties are broken: the answers** · `lib/tiebreak.ts`
+- Now: Tiebreak · Everybody Wins · Even Split
+- New: **Ross** — rule 4 makes them “Everybody wins” and “Even split”; or are they names (`test:tiebreak` pins them as “the way the trip talks about them”)?
+
+**B-66 · Prize table out of step with the field (alerts)** · `lib/customPoints.ts`
+- Now: The amount of teams doesn’t match the Points by Position allocation. Please return to leaderboards settings to confirm.  /  Check the Points by Position leaderboard settings to ensure that player addition hasn’t resulted in disruption to points allocation
+- New: **Ross** — your words, pinned word for word in `test:custom-points`, but “Please” breaks the calm rule. “The prize table no longer matches the number of {teams}. Check it in Trip Setup.”?
+
 ---
 
 ## §8 — Teams (`/trip/{code}/teams`)
 
 **T-01 · No team board exists** · `TripTeamsClient.tsx:657,660`
 - Now: No leaderboard on this trip is played by teams yet.  /  Add a team leaderboard in settings, then come back and pick who plays with whom.
-- New:
+- New: No leaderboard on this trip is played by teams yet.  /  Add a team leaderboard in Trip Setup first. *(rule 1, X-03)*
 
 **T-02 · Pick boards first** · `TripTeamsClient.tsx:675`
 - Now: Pick the leaderboards these teams should play for, then choose the teams. Tick more than one to have them share the same teams.
@@ -843,6 +959,7 @@ settings and is also what a new trip meets first.
 
 **T-03 · Boards already set** · `TripTeamsClient.tsx:677`
 - Now: Tap a leaderboard to see and edit teams.
+- Today: Tap a leaderboard to see its teams, or to change them.
 - New:
 
 **T-04 · Continue button** · `TripTeamsClient.tsx:699`
@@ -867,7 +984,7 @@ settings and is also what a new trip meets first.
 
 **T-09 · Pairs size banner** · `lib/teamLimits.ts:41`
 - Now: Max 2 per pairing — a pairs draw is played between teams of two.
-- New:
+- New: Max 2 per pairing. *(rules 1, 6)*
 
 **T-10 · Pairs draw not ready** · `lib/teamLimits.ts:115,124,128,132`
 - Now: Pick the pairings before drawing the bracket. · {A, B} have more than 2 players. A pairing is two. · {A} is short of a player. · {3} players still have no pairing.
@@ -875,7 +992,18 @@ settings and is also what a new trip meets first.
 
 **T-11 · Save failed** · `lib/writeFailure.ts:6`
 - Now: Could not add teams
+- Today: Could not add {teams} — {the database’s reason} — `TripTeamsClient.tsx`
 - New:
+
+### Newer strings: picking your own team or side (events)
+
+**T-12 · Self-pick, before you have claimed a name** · `teams/TeamJoinClient.tsx`, `teams/TagJoinClient.tsx`
+- Now: First, say who you are.  /  Claim your name on the players screen, then come back and pick your {team / tag}.  /  Claim your name →
+- New: First, say who you are.  /  Claim your spot on the players screen, then pick your {team / side}.  /  Claim your spot → *(rule 1, X-07)*
+
+**T-13 · Joining a side** · `teams/TagJoinClient.tsx`
+- Now: Your tag  /  The side you play for — it stays with you for the whole event, whoever you are out with on the day.  /  Your tag (badge on your own row)
+- New: Your side  /  It stays with you all event, whoever you play with.  /  Your side *(rules 1, 6; sides on screen, per CLAUDE.md)*
 
 ---
 

@@ -72,7 +72,7 @@ export default function PasscodeGate({
         </div>
 
         <h1 className="t-h1 text-ink mb-2">
-          {title ?? 'Settings are locked'}
+          {title ?? 'Trip Setup is locked'}
         </h1>
         <p className="text-ink/65 text-sm mb-8 leading-relaxed">
           {hint ?? `${tripName} was set up with a passcode. Ask your lead player!`}

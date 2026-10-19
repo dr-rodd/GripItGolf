@@ -175,14 +175,13 @@ export default function TeamJoinClient({
         <div className={`p-4 ${cardClass()}`}>
           <p className="text-ink text-sm font-medium">First, say who you are.</p>
           <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-            Claim your name on the players screen, then come back and pick
-            your {noun.one}.
+            Claim your spot on the players screen, then pick your {noun.one}.
           </p>
           <Link
             href={`/trip/${tripCode}/players`}
             className="inline-block mt-3 t-label text-accent-deep hover:text-accent transition-colors"
           >
-            Claim your name →
+            Claim your spot →
           </Link>
         </div>
       )}
