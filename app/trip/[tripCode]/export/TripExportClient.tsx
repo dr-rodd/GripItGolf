@@ -131,8 +131,7 @@ export default function TripExportClient({
           Save as PDF
         </button>
         <p className="t-cap text-ink/65 mt-2">
-          Opens your device’s print window — choose “Save as PDF” there. What
-          you see below is what it saves.
+          Opens your device’s print window; choose “Save as PDF” there.
         </p>
       </div>
 

@@ -222,7 +222,7 @@ export default async function OrganiserPage({ params }: {
       )}
       dayFormatSummary={
         dayBoardCount === 0
-          ? 'Every day is scored by the event\'s own rules. Give one its own format — singles today, fourballs tomorrow.'
+          ? 'No day has its own format yet.'
           : `${dayBoardCount} of ${rounds.length} days ${dayBoardCount === 1 ? 'has' : 'have'} a format of ${dayBoardCount === 1 ? 'its' : 'their'} own.`
       }
     />

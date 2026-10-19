@@ -49,7 +49,7 @@ const STEP_INTROS: (string | undefined)[] = [
   'A field that falls short is seated with byes.',
   undefined,
   undefined,
-  'The date each round must be finished by. Two rounds can share a day; they can’t run backwards.',
+  'Two rounds can share a date, but dates can’t run backwards.',
   'Or leave the event open so players can keep joining.',
 ]
 
@@ -293,7 +293,7 @@ export default function BracketSetupForm({
           <p className="text-ink/65 text-sm mb-6">
             {saved.finalized
               ? 'The format and bracket structure are locked in.'
-              : 'Players can keep joining. Come back here to finalise when the field is set.'}
+              : 'Players can keep joining until you finalise here.'}
           </p>
           <SetupSummary setup={saved} />
           <Link
@@ -352,9 +352,7 @@ export default function BracketSetupForm({
               <div className={`px-4 py-3.5 ${cardClass()}`}>
                 <p className="text-ink text-sm font-medium">A league is its own event.</p>
                 <p className="text-ink/65 text-[13px] mt-1 leading-snug">
-                  Leagues are created whole — venues, dates and field in one
-                  go — from Create an Event → Golf Tournament → League. This
-                  form sets up a knockout; pick match play to carry on.
+                  Start one from Create an event → Golf tournament → League.
                 </p>
               </div>
             )}
@@ -405,14 +403,12 @@ export default function BracketSetupForm({
             )}
             {entry === 'self_join' && (
               <p className="text-ink/65 text-[13px] leading-snug">
-                The link and QR code are on your Event Hub&apos;s share screen,
-                ready to send or hold up.
+                The link and QR code are on your Event Hub&apos;s share screen.
               </p>
             )}
             {mode === 'strict' && (
               <p className="text-ink/65 text-[13px] leading-snug">
-                Either way, in strict mode the match pairings stay yours —
-                this only decides how names get on the roster.
+                In strict mode the pairings stay yours either way.
               </p>
             )}
           </div>
@@ -453,7 +449,7 @@ export default function BracketSetupForm({
                     className={`${FIELD} field-code`}
                   />
                   <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                    The six-character code of the event whose standings decide
+                    The 6-character code of the event whose standings decide
                     who is in.
                   </p>
                 </div>
@@ -472,8 +468,7 @@ export default function BracketSetupForm({
 
             {!qualifyingOn && (
               <p className="text-ink/65 text-[13px] leading-snug">
-                Without one, the draw is among whoever enters — drawn at
-                random when the bracket is made.
+                Without one, whoever enters is drawn at random.
               </p>
             )}
           </div>
@@ -511,10 +506,10 @@ export default function BracketSetupForm({
             />
             <p className="text-ink/65 text-[13px] leading-snug">
               {finalizeNow === null
-                ? 'Open can be finalised any time from this screen; finalised is for keeps.'
+                ? 'Open can be finalised later; finalised is for keeps.'
                 : finalizeNow
-                  ? 'The setup locks when you save — no more joiners, no more changes here.'
-                  : 'Players keep joining until you come back and finalise. Every answer here stays changeable until then.'}
+                  ? 'Saving locks the setup: no more joiners, no more changes.'
+                  : 'Players keep joining and answers stay changeable until you finalise.'}
             </p>
           </div>
         )}

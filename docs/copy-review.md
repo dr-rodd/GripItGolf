@@ -1217,11 +1217,152 @@ said before the pass, **New** what it says after.
 
 ---
 
-## §15 — The event organiser's screens (organiser area, tags, days, tee sheet, bracket, export)
+## §15 — The event organiser's screens (`/trip/{code}/organiser`, tee sheet, export)
 
-Added in the refresh's copy pass (`docs/refresh-plan.md`, Phase 5): screens
-built after this sheet was written. Same shape — **Now** is what the screen
-said before the pass, **New** what it says after.
+New screens, not in the August sheet: the organiser area and its doors
+(Formats by day, Bracket setup / League, Tags), the participant permissions
+the creation doors share, the tee sheet and the export. Already changed where
+a rule decided it; **Ross** marks a question. Paths are under
+`app/trip/[tripCode]/` unless they start with `lib/`. On screen a tag is a
+**side**; "tags" stays only in the portal's name ("Teams and tags" row, the
+"Tags" page) so it is recognisable (CLAUDE.md).
+
+### The organiser area
+
+**EO-01 · Participants intro** · `organiser/OrganiserClient.tsx`
+- Now: How collaborative this event is. Changes land on the field’s phones straight away.
+- New: Changes land on the field’s phones straight away. *(rule 1)*
+
+**EO-02 · Starts intro** · `organiser/OrganiserClient.tsx`
+- Now: Shotgun sends the whole field out at once. Tee sheets — groups and times — are on the way; choosing one says so on the schedule.
+- New: Shotgun sends everyone out together; a tee sheet sends groups in turn. *(rule 1 — and the tee sheet has shipped, so "on the way" was no longer true)*
+
+**EO-03 · "Each day’s own format" row, nothing set yet** · `organiser/page.tsx`
+- Now: Every day is scored by the event's own rules. Give one its own format — singles today, fourballs tomorrow.
+- New: No day has its own format yet. *(rules 1, 5)*
+
+**EO-04 · One screen, two names** · `organiser/OrganiserClient.tsx` + `organiser/days/`
+- Now: Each day’s own format (the row) · Formats by day (the page it opens, and its PIN screen)
+- New: **Ross** — one name for this screen? Both are fine on their own.
+
+### Formats by day (`/organiser/days`)
+
+**EO-05 · Page intro** · `organiser/days/DayBoardsClient.tsx`
+- Now: The event's own rules count every round. Give a day its own format and that day becomes a competition in its own right — singles one day, fourballs the next.
+- New: A day with its own format gets its own leaderboard. *(rule 1; X-02 — "competition" named the object)*
+
+**EO-06 · Where the event's own boards are changed** · `organiser/days/DayBoardsClient.tsx`
+- Now: Changed in Trip Setup, through the organiser area.
+- New: **Ross** — the organiser area's row into Trip Setup is labelled "Formats, players and teams" (hint "Leaderboards, the field, the running order."), so "Trip Setup" names nothing the organiser can see. Call the row Trip Setup, or point this line at the row?
+
+### Bracket setup and League (`/organiser/bracket`)
+
+The step titles (`STEP_TITLES`) and the other step intros pass the rules and
+are left alone.
+
+**EO-07 · A league's summary card** · `organiser/bracket/page.tsx`
+- Now: This event was created as a league — its days, venues and field were set then, and its rounds are on the schedule. Scoring formats within league play are still to come; for now every league plays individual Stableford, added up.
+- New: Days, venues and field were set when the league was created. *(rule 1 — and the second sentence was no longer true: a league picks its leaderboards at creation, and per day)*
+
+**EO-08 · Step 6 intro, deadlines** · `organiser/bracket/BracketSetupForm.tsx` (`STEP_INTROS`)
+- Now: The date each round must be finished by. Two rounds can share a day; they can’t run backwards.
+- New: Two rounds can share a date, but dates can’t run backwards. *(rules 1, 6 — the first sentence restated the title, "When is each round due?")*
+
+**EO-09 · League picked on the bracket form** · `lib/bracketSetup.ts` (hint) + `BracketSetupForm.tsx` (card)
+- Now: A table over the days — created as its own event, not set up here. · A league is its own event. / Leagues are created whole — venues, dates and field in one go — from Create an Event → Golf Tournament → League. This form sets up a knockout; pick match play to carry on.
+- New: A table over the days. · A league is its own event. / Start one from Create an event → Golf tournament → League. *(rules 1, 6 — the hint and the card said it twice; the door names now match their sentence-case buttons)*
+
+**EO-10 · Strict and relaxed** · `lib/bracketSetup.ts`
+- Now: You set who plays whom each round, and where. Players just turn up and enter the result. · Players arrange their own matches, pick their own course, and link their card to the bracket themselves.
+- New: You set who plays whom each round, and where. · Players arrange their own matches and link their cards to the bracket. *(rule 1)*
+
+**EO-11 · Self-join note** · `BracketSetupForm.tsx`
+- Now: The link and QR code are on your Event Hub’s share screen, ready to send or hold up.
+- New: The link and QR code are on your Event Hub’s share screen. *(rule 1)*
+
+**EO-12 · Strict-mode note on the entry step** · `BracketSetupForm.tsx`
+- Now: Either way, in strict mode the match pairings stay yours — this only decides how names get on the roster.
+- New: In strict mode the pairings stay yours either way. *(rule 1)*
+
+**EO-13 · Qualifying event code helper** · `BracketSetupForm.tsx`
+- Now: The six-character code of the event whose standings decide who is in.
+- New: The 6-character code of the event whose standings decide who is in. *(rule 7)*
+
+**EO-14 · No qualifier** · `BracketSetupForm.tsx`
+- Now: Without one, the draw is among whoever enters — drawn at random when the bracket is made.
+- New: Without one, whoever enters is drawn at random. *(rule 1)*
+
+**EO-15 · Step 7, lock it in now? — the three states** · `BracketSetupForm.tsx`
+- Now: Open can be finalised any time from this screen; finalised is for keeps. · The setup locks when you save — no more joiners, no more changes here. · Players keep joining until you come back and finalise. Every answer here stays changeable until then.
+- New: Open can be finalised later; finalised is for keeps. · Saving locks the setup: no more joiners, no more changes. · Players keep joining and answers stay changeable until you finalise. *(rules 1, 2)*
+
+**EO-16 · Saved and still open** · `BracketSetupForm.tsx`
+- Now: Players can keep joining. Come back here to finalise when the field is set.
+- New: Players can keep joining until you finalise here. *(rule 1)*
+
+### Participant permissions (the creation doors and the organiser area)
+
+**EO-17 · Permission hints** · `lib/eventPermissions.ts`
+- Now: Let the field add a course to the platform if theirs is missing. · Let anyone with the code put a new name on the roster — off, they can only claim a name you added. · Let players rework a whole scorecard from the summary screen — hole-by-hole scoring stays open either way. · Let the field put names into open slots and take their own out — off, the sheet is read-only and you place everyone.
+- New: Let the field add a missing course to the platform. · Let anyone with the code put a new name on the roster. · Let players rework a finished scorecard; live scoring stays open either way. · Let the field add and remove names on the sheet. *(rule 1 — the last also says what the sheet does: a field allowed to edit can take any name out, not only its own)*
+
+**EO-18 · Picking a side** · `lib/eventPermissions.ts`
+- Now: Participants can pick their own tag · Let a claimed player join one of your tags from the teams screen — off, you assign every tag yourself.
+- New: Participants can pick their own side · Let claimed players join one of your sides on the teams screen. *(sides; rule 1)*
+
+### Tags (`/organiser/tags`)
+
+**EO-19 · "Teams and tags" row summary** · `lib/tagBoards.ts` (`describeTags`)
+- Now: No tags yet — the sides players carry for the whole event. · {2} tags · nobody on the roster yet. · {2} tags · {9} of {12} players tagged.
+- New: No sides yet · each player keeps one for the whole event. · {2} sides · nobody on the roster yet. · {2} sides · {9} of {12} players assigned. *(sides; rule 2 on the rewritten line)*
+
+**EO-20 · Page intro** · `organiser/tags/TagPortalClient.tsx`
+- Now: A side each player carries for the whole event — Europe and USA, the club sides. It follows them whoever they play alongside on the day, colours their player card everywhere, and feeds any leaderboard that ranks the sides.
+- New: Each player’s side for the whole event, whoever they play with. *(rule 1 — the examples live in the new-side placeholder, the leaderboard in the section below)*
+
+**EO-21 · Tag → side through the portal** · `organiser/tags/TagPortalClient.tsx`
+- Now: Remove this tag? Its players keep their scores and simply carry no tag. · Could not add / rename / remove the tag — try again · Could not take the tag off — try again · Still untagged: {names} · (screen reader) Tag name · Already tagged — tapping moves them
+- New: Remove this side? Its players keep their scores. · Could not add / rename / remove the side — try again · Could not take the player off the side — try again · No side yet: {names} · (screen reader) Side name · Already on a side. Tapping moves them. *(sides)*
+
+**EO-22 · What the sides play for** · `organiser/tags/TagPortalClient.tsx`
+- Now: What the tags play for · The sides are being ranked. Everything else on the leaderboard is unchanged. · Tags colour the player cards on their own. Add a leaderboard to rank the sides against each other. · + Rank the tags
+- New: What the sides play for · The sides are being ranked. · On their own, sides only colour player cards. · + Rank the sides *(sides; rules 1, 6 — the button says what to do)*
+
+### The tee sheet (`/trip/{code}/teesheet`)
+
+**EO-23 · Page title** · `teesheet/TeeSheetClient.tsx`
+- Now: Tee Sheet
+- New: Tee sheet *(rule 4 — the tab label in `app/components/TabBar.tsx` still reads "Tee Sheet")*
+
+**EO-24 · The sheet cannot save yet** · `teesheet/TeeSheetClient.tsx`
+- Now: The tee sheet's database update has not been applied, so a name added here would disappear again. Everything else on the event works as normal.
+- New: Names added here won’t stick until a database update is applied. *(rule 1)*
+
+**EO-25 · Somebody without a side** · `teesheet/TeeSheetClient.tsx`
+- Now: One player still needs a tag / {3} players still need a tag · This event ranks the tags, so a card belongs to one: {names} cannot go on the sheet until tagged. · Set tags →
+- New: One player still needs a side / {3} players still need a side · The event ranks sides, so these cannot go on the sheet yet: {names} · Set sides → *(sides; rule 1)*
+
+**EO-26 · Refused in the slot** · `lib/tagBoards.ts` (`tagGateReason`, `dayTeamTagIssue`)
+- Now: {Mary} needs a tag before going on the sheet — tags are set in the organiser area. · {Mary and Sean} need tags before going on the sheet — tags are set in the organiser area. · Everyone in a team needs a tag first. · A team has to be all one tag — its card counts towards that tag.
+- New: {Mary} needs a side before going on the sheet. Sides are set in the organiser area. · {Mary and Sean} need sides before going on the sheet. Sides are set in the organiser area. · Everyone in a team needs a side first. · A team has to be all one side. Its card counts towards that side. *(sides; rule 2 on the rewritten lines — each still says why)*
+
+**EO-27 · No start time** · `teesheet/TeeSheetClient.tsx`
+- Now: No start time set — groups are numbered until the organiser sets one in the Starts section.
+- New: Groups are numbered until the organiser sets a start time. *(rule 1)*
+
+**EO-28 · Footer** · `teesheet/TeeSheetClient.tsx`
+- Now: {10} minutes between groups, up to {four} a slot — the organiser tunes both in the Starts section.
+- New: {10} minutes between groups · groups of up to {4} *(rules 5, 7)*
+
+### Export (`/trip/{code}/export`)
+
+**EO-29 · Save as PDF helper** · `export/TripExportClient.tsx`
+- Now: Opens your device’s print window — choose “Save as PDF” there. What you see below is what it saves.
+- New: Opens your device’s print window; choose “Save as PDF” there. *(rule 1)*
+
+**EO-30 · The document's header on an event** · `export/TripExportClient.tsx`
+- Now: Trip code {code} · Itinerary
+- New: **Ross** — an event organiser reaches this page through Trip Setup, and the document then says "Trip code" and "Itinerary". Print "Event code" and "Schedule" on an event? (Needs the page to read the kind, so a small code change as well as copy.)
 
 ---
 

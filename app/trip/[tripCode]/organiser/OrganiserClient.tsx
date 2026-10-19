@@ -288,8 +288,7 @@ export default function OrganiserClient({
         <section className="mb-10">
           <h2 className="t-h2 text-ink mb-1">Participants</h2>
           <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-            How collaborative this event is. Changes land on the field&apos;s
-            phones straight away.
+            Changes land on the field&apos;s phones straight away.
           </p>
           <EventPermissionToggles value={perms} onChange={savePermissions} />
           {permsError && (
@@ -347,8 +346,7 @@ export default function OrganiserClient({
         <section className="mt-10">
           <h2 className="t-h2 text-ink mb-1">Starts</h2>
           <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-            Shotgun sends the whole field out at once. Tee sheets — groups
-            and times — are on the way; choosing one says so on the schedule.
+            Shotgun sends everyone out together; a tee sheet sends groups in turn.
           </p>
 
           {rounds.length === 0 ? (

@@ -85,7 +85,7 @@ export default function TagPortalClient({
       })
       .select('id, name, color, team_set')
       .single()
-    if (err || !data) return fail('add the tag')
+    if (err || !data) return fail('add the side')
     setTeams(prev => [...prev, data as Team])
     setDraftName('')
   }
@@ -102,7 +102,7 @@ export default function TagPortalClient({
       .update({ name: trimmed })
       .eq('id', tagId)
       .eq('trip_id', tripId)
-    if (err) { setTeams(prev); fail('rename the tag') }
+    if (err) { setTeams(prev); fail('rename the side') }
   }
 
   async function recolorTag(tagId: string, color: string) {
@@ -120,7 +120,7 @@ export default function TagPortalClient({
 
   async function removeTag(tagId: string) {
     // Deliberate, never one tap — the same rule deleting anything follows.
-    if (!window.confirm('Remove this tag? Its players keep their scores and simply carry no tag.')) return
+    if (!window.confirm('Remove this side? Its players keep their scores.')) return
     setError(null)
     const memberIds = membersOf(memberships, tagId)
 
@@ -129,7 +129,7 @@ export default function TagPortalClient({
       .delete()
       .eq('id', tagId)
       .eq('trip_id', tripId)
-    if (err) return fail('remove the tag')
+    if (err) return fail('remove the side')
 
     // The database cascades the memberships; the players.team_id mirror is
     // ours to clear, exactly as the teams editor does when teams go.
@@ -150,7 +150,7 @@ export default function TagPortalClient({
     const failure = await setTeam(tripId, playerId, TAG_SET, tagId)
     if (failure) {
       setMemberships(prev)
-      fail(tagId ? 'move the player' : 'take the tag off')
+      fail(tagId ? 'move the player' : 'take the player off the side')
     }
   }
 
@@ -209,10 +209,7 @@ export default function TagPortalClient({
           Tags
         </h1>
         <p className="text-ink/65 text-sm mb-6 leading-snug">
-          A side each player carries for the whole event — Europe and USA,
-          the club sides. It follows them whoever they play alongside on the
-          day, colours their player card everywhere, and feeds any
-          leaderboard that ranks the sides.
+          Each player&apos;s side for the whole event, whoever they play with.
         </p>
 
         {/* ── Self-assign ── */}
@@ -258,7 +255,7 @@ export default function TagPortalClient({
                     onKeyDown={e => {
                       if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
                     }}
-                    aria-label="Tag name"
+                    aria-label="Side name"
                     className="flex-1 min-w-0 bg-transparent text-ink text-sm font-medium focus:outline-none focus:border-b focus:border-accent/50"
                   />
                   <button
@@ -335,7 +332,7 @@ export default function TagPortalClient({
                                 <span
                                   className="w-2 h-2 rounded-full flex-shrink-0"
                                   style={{ backgroundColor: colorOf.get(currentTag) }}
-                                  aria-label="Already tagged — tapping moves them"
+                                  aria-label="Already on a side. Tapping moves them."
                                 />
                               )}
                             </button>
@@ -389,7 +386,7 @@ export default function TagPortalClient({
 
         {untagged.length > 0 && tags.length > 0 && (
           <p className="t-cap text-ink/65 mt-4 leading-snug">
-            Still untagged: {untagged.map(id => nameOf.get(id)).filter(Boolean).join(' · ')}
+            No side yet: {untagged.map(id => nameOf.get(id)).filter(Boolean).join(' · ')}
           </p>
         )}
 
@@ -399,12 +396,12 @@ export default function TagPortalClient({
             cascade Trip Setup uses, never a smaller second copy of it. */}
         <section className="mt-10">
           <h2 className="t-h2 text-ink mb-1">
-            What the tags play for
+            What the sides play for
           </h2>
           <p className="text-ink/65 text-[13px] mb-3 leading-snug">
             {ranked
-              ? 'The sides are being ranked. Everything else on the leaderboard is unchanged.'
-              : 'Tags colour the player cards on their own. Add a leaderboard to rank the sides against each other.'}
+              ? 'The sides are being ranked.'
+              : 'On their own, sides only colour player cards.'}
           </p>
 
           {ranked && !showBoards && (
@@ -442,7 +439,7 @@ export default function TagPortalClient({
               onClick={() => setShowBoards(true)}
               className="w-full py-4 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:border-bark/40 hover:text-ink/80 transition-colors"
             >
-              {ranked ? 'Change the leaderboards' : '+ Rank the tags'}
+              {ranked ? 'Change the leaderboards' : '+ Rank the sides'}
             </button>
           )}
         </section>

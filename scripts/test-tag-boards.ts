@@ -124,11 +124,12 @@ section('Who still needs one')
 
 section('The organiser card says where tagging stands')
 {
-  ok(describeTags(0, 0, 12).includes('No tags yet'),
+  // On screen a tag is a side (CLAUDE.md) — the card speaks of sides.
+  ok(describeTags(0, 0, 12).includes('No sides yet'),
     'nothing made yet reads as an invitation, not a count')
-  ok(describeTags(2, 12, 12).includes('2 tags'), 'two tags say two')
-  ok(describeTags(1, 3, 12).includes('1 tag ') || describeTags(1, 3, 12).includes('1 tag·')
-    || /1 tag\b/.test(describeTags(1, 3, 12)), 'one tag is singular')
+  ok(describeTags(2, 12, 12).includes('2 sides'), 'two sides say two')
+  ok(describeTags(1, 3, 12).includes('1 side ') || describeTags(1, 3, 12).includes('1 side·')
+    || /1 side\b/.test(describeTags(1, 3, 12)), 'one side is singular')
   ok(describeTags(2, 9, 12).includes('9 of 12'), 'and how far the tagging has got')
   ok(describeTags(2, 0, 0).includes('nobody on the roster'),
     'an event with tags but no field says so rather than dividing by nothing')

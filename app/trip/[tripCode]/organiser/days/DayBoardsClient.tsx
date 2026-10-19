@@ -72,9 +72,7 @@ export default function DayBoardsClient({
           Formats by day
         </h1>
         <p className="text-ink/65 text-sm mb-6 leading-snug">
-          The event&apos;s own rules count every round. Give a day its own
-          format and that day becomes a competition in its own right —
-          singles one day, fourballs the next.
+          A day with its own format gets its own leaderboard.
         </p>
 
         {dayLine && (
