@@ -53,26 +53,26 @@ export default async function StatsGuidePage({
           anyone who wants it. Nothing here is needed to read the stats.
         </p>
 
-        <Section title="The three yardsticks">
+        <Section title="The 3 yardsticks">
           <p>
-            Every figure measures you against one of three things, and knowing
+            Every figure measures you against one of 3 things, and knowing
             which is half of reading the page.
           </p>
           <p>
             <strong className="text-ink">The course</strong> — your score
             against par. This is the yardstick that can be bad for everybody
-            at once: on a windy day the whole trip can lose to the course.
+            at once: on a windy day the whole field can lose to the course.
             Shown as <em>Against the course</em>.
           </p>
           <p>
             <strong className="text-ink">Your handicap</strong> — Stableford
-            points against two a hole. 36 points a round is playing exactly to
-            your handicap; +3 is three points better than it promised.
+            points against 2 a hole. 36 points a round is playing exactly to
+            your handicap; +3 is 3 points better than it promised.
           </p>
           <p>
             <strong className="text-ink">The field</strong> — everyone against
             everyone on the same holes. These are the strokes gained figures,
-            and they always add up to exactly zero across the trip: a stroke
+            and they always add up to exactly zero across the field: a stroke
             gained by one player is a stroke lost by the rest. So the field
             can be all square while everyone is losing to the course — both
             are true, which is why both are shown.
@@ -81,7 +81,7 @@ export default async function StatsGuidePage({
 
         <Section title="Strokes gained, vs the field">
           <p>
-            Take one hole. Split everyone&apos;s score into two parts that add
+            Take one hole. Split everyone&apos;s score into 2 parts that add
             up to it: shots to reach the green, and putts.
           </p>
           <Maths>{`to green = score − putts
@@ -92,7 +92,7 @@ your gain = (everyone else's average) − (yours)`}</Maths>
             separately for the to-green shots and the putts, and because both
             halves come off the same cards, they add up exactly to your gain
             in total shots. Add every hole together and that is the figure on
-            the page. A hole only counts once at least three other players
+            the page. A hole only counts once at least 3 other players
             have a putt count on it.
           </p>
           <p>
@@ -121,7 +121,7 @@ driving = (hit or not − field's hit rate) × penalty`}</Maths>
             the approach, so the whole hole counts there.
           </p>
           <p>
-            The penalty needs at least four cards on each side of the split
+            The penalty needs at least 4 cards on each side of the split
             to stand; below that, the hole pays no driving figure rather than
             a made-up one. More rounds make it sharper.
           </p>
@@ -133,7 +133,7 @@ driving = (hit or not − field's hit rate) × penalty`}</Maths>
             holes and taken off before the comparison. Not equally: the gap
             between players is wider on hard holes, so the share tilts in a
             straight line across the stroke index — a 9-handicap carries 0.65
-            of a shot on index 1 down to 0.35 on index 18, and the eighteen
+            of a shot on index 1 down to 0.35 on index 18, and the 18
             shares still add to exactly 9.
           </p>
           <Maths>{`share of hole = handicap ÷ 18 + tilt
@@ -151,16 +151,16 @@ net gain vs handicap = expected − actual`}</Maths>
 
         <Section title="Extra shots to the green">
           <p>
-            &quot;Regulation&quot; is reaching the green with two putts left —
-            par minus two shots. This figure is how far behind that schedule
+            &quot;Regulation&quot; is reaching the green with 2 putts left,
+            which is par minus 2 shots. This figure is how far behind that schedule
             your long game runs, on average:
           </p>
           <Maths>{`extra = (shots to green) − (par − 2), averaged per hole`}</Maths>
           <p>
             0.0 is finding greens on schedule every time; +0.5 means half a
             shot a hole given away before the putter comes out. It measures
-            against the course, not the field — so unlike strokes gained, the
-            whole trip can be positive at once, and here positive is bad.
+            against the course, not the field. Unlike strokes gained,
+            everyone can be positive at once, and here positive is bad.
           </p>
         </Section>
 
@@ -177,7 +177,7 @@ net gain vs handicap = expected − actual`}</Maths>
         <Section title="No returns">
           <p>
             A picked-up ball keeps its tee shot: the fairway answer still
-            counts, because losing two balls right is exactly the miss worth
+            counts, because losing 2 balls right is exactly the miss worth
             recording. Everything else about the hole is left out — it is not
             a double, not part of any average, and never a putting stat. Its
             zero points do count against your handicap, the same way the
@@ -187,10 +187,10 @@ net gain vs handicap = expected − actual`}</Maths>
 
         <Section title="When a figure is worth printing">
           <p>
-            A gain off a hole needs three other cards. A hole&apos;s
-            difficulty rank is provisional under eight cards. A left-or-right
-            miss tendency needs four misses with two thirds going the same
-            way. The driving penalty needs four cards each side of the
+            A gain off a hole needs 3 other cards. A hole&apos;s
+            difficulty rank is provisional under 8 cards. A left-or-right
+            miss tendency needs 4 misses with two thirds going the same
+            way. The driving penalty needs 4 cards each side of the
             fairway split. Below any of these, the page shows a dash or says
             nothing — never a guess.
           </p>

@@ -3,6 +3,8 @@ import TripHeader from '@/app/components/TripHeader'
 import BackButton from '@/app/components/BackButton'
 import ShareTrip from '../ShareTrip'
 import TripQr from './TripQr'
+import { fetchTripKind } from '../kind'
+import { isEvent } from '@/lib/eventHub'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,11 +23,17 @@ export const dynamic = 'force-dynamic'
 export default async function SharePage({ params }: { params: Promise<{ tripCode: string }> }) {
   const { tripCode } = await params
 
-  const { data: trip, error } = await supabase
-    .from('trips')
-    .select('id, name')
-    .eq('trip_code', tripCode)
-    .single()
+  // The kind rides alongside, fail-soft in its own request — an event says
+  // event on this screen, and an un-migrated database simply reads as a trip.
+  const [kind, { data: trip, error }] = await Promise.all([
+    fetchTripKind(tripCode),
+    supabase
+      .from('trips')
+      .select('id, name')
+      .eq('trip_code', tripCode)
+      .single(),
+  ])
+  const noun = isEvent(kind) ? 'event' : 'trip'
 
   if (error) console.error('SharePage trip query failed:', error)
 
@@ -49,7 +57,7 @@ export default async function SharePage({ params }: { params: Promise<{ tripCode
           {trip.name}<span className="t-title-dot" aria-hidden="true" />
         </h1>
 
-        <p className="t-cap text-ink/65 mt-2">Scan to join the trip</p>
+        <p className="t-cap text-ink/65 mt-2">Scan to join the {noun}</p>
 
         <div className="mt-6 w-full">
           <TripQr tripCode={tripCode} />
@@ -63,7 +71,7 @@ export default async function SharePage({ params }: { params: Promise<{ tripCode
         </p>
 
         <div className="mt-8">
-          <ShareTrip tripCode={tripCode} tripName={trip.name} qrLink={false} />
+          <ShareTrip tripCode={tripCode} tripName={trip.name} qrLink={false} noun={noun} />
         </div>
 
       </div>

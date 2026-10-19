@@ -280,7 +280,8 @@ export function momentOf(date: string | null, time: string | null | undefined): 
 export function describeCountdown(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return ''
   const mins = Math.floor(ms / 60_000)
-  if (mins < 1) return 'any minute'
+  // "in under a minute" — the card prints its own "in" in front.
+  if (mins < 1) return 'under a minute'
 
   const days = Math.floor(mins / 1440)
   const hours = Math.floor((mins % 1440) / 60)

@@ -77,6 +77,8 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
   if (roundsResult.error) console.error('players/page rounds query failed:', roundsResult.error)
 
   const players = sortForClaiming(playersResult.data ?? [])
+  // What this screen calls the thing being joined.
+  const noun = isEvent(kind) ? 'event' : 'trip'
   const roundIds = (roundsResult.data ?? []).map(r => r.id as string)
 
   return (
@@ -94,11 +96,11 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
         <h1 className="t-h1 text-ink mb-2">
           {trip.name}
         </h1>
-        <p className="text-ink/65 text-sm mb-10">Join the trip</p>
+        <p className="text-ink/65 text-sm mb-10">Join the {noun}</p>
 
         {playersResult.error && (
           <p className="text-accent text-sm mb-6">
-            Could not load players — please refresh the page.
+            Could not load players — refresh to try again.
           </p>
         )}
 
@@ -119,10 +121,11 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
           // field revising it on the way in is their call to make, not this
           // screen's, so an event claims in one tap as before.
           askHandicap={!isEvent(kind)}
+          noun={noun}
         />
 
         <div className="mt-12">
-          <BackButton href={`/trip/${tripCode}`} label="Trip" />
+          <BackButton href={`/trip/${tripCode}`} label={noun === 'event' ? 'Event' : 'Trip'} />
         </div>
 
       </div>

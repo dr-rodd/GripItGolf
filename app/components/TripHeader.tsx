@@ -147,8 +147,10 @@ export default function TripHeader({
         {backTo && (
           <Link
             href={backTo}
-            // Only a logo, so where it goes has to be said out loud
-            aria-label={backTo === '/' ? 'Back to the start' : 'Back to the trip'}
+            // Only a logo, so where it goes has to be said out loud. "Back"
+            // rather than "Back to the trip": this header also leads back to
+            // an organiser area, a challenge, or the create doorway.
+            aria-label={backTo === '/' ? 'Back to the start' : 'Back'}
             className="absolute inset-0 rounded-lg"
             // The tap target is the header bar itself. The mark overflows it
             // while it is still down in the hero, and a link the size of the

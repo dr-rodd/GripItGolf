@@ -110,9 +110,14 @@ export function firstDuplicateIndex(names: string[]): number {
   return -1
 }
 
-/** What to say about it. Plain, and it names the name. */
+/**
+ * What to say about it. Plain, and it names the name.
+ *
+ * "On the list", not "on this trip": the same sentence is said by the event
+ * and knockout creation forms, and an event is never a trip.
+ */
 export function duplicateNameError(name: string): string {
-  return `${name.trim()} is already on this trip. Use a different name.`
+  return `${name.trim()} is already on the list. Use a different name.`
 }
 
 /**

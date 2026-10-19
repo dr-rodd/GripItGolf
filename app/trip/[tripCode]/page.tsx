@@ -369,7 +369,7 @@ export default async function TripPage({ params, searchParams }: {
 
     if (draw.error) {
       console.error('TripPage matchplay query failed:', draw.error)
-      standingError = standingError ?? 'Could not read the matchplay draw.'
+      standingError = standingError ?? 'Could not read the match play draw.'
     }
 
     // The board leading decides what the standing line is. A knockout has no
@@ -545,7 +545,7 @@ export default async function TripPage({ params, searchParams }: {
               player does next. The whole URL travels, so the person on the
               other end taps once instead of typing a code. */}
           <div className="mt-6">
-            <ShareTrip tripCode={tripCode} tripName={trip.name} />
+            <ShareTrip tripCode={tripCode} tripName={trip.name} noun={isEvent ? 'event' : 'trip'} />
           </div>
         </div>
 
@@ -567,6 +567,7 @@ export default async function TripPage({ params, searchParams }: {
           roundDates={roundDates}
           roundNumbers={roundNumbers}
           courseNames={courseMap}
+          noun={isEvent ? 'event' : 'trip'}
         />
 
         {standingError && (
@@ -622,7 +623,7 @@ export default async function TripPage({ params, searchParams }: {
                journey — which a multi-day event still might. */
             ...(!isEvent || itinerary.some(i => i.kind === 'stay' || i.kind === 'travel') ? [{
               key: 'travel',
-              title: 'Travel & Accommodation',
+              title: 'Travel & accommodation',
               content: <TravelStays items={itinerary} startDate={trip.start_date ?? null} />,
             }] : []),
             {
@@ -761,9 +762,8 @@ function PlayersPanel({
 
       {pendingCount > 0 && (
         <p className="text-ink/50 text-[13px] mt-4 leading-relaxed">
-          {pendingCount === 1 ? 'One player has' : `${pendingCount} players have`} still
-          to join. Share the code <span className="text-accent">{tripCode}</span> and
-          they can claim their spot.
+          Share the code <span className="text-accent">{tripCode}</span> with
+          the {pendingCount} {pendingCount === 1 ? 'player' : 'players'} still to join.
         </p>
       )}
 

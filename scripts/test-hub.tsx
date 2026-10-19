@@ -278,7 +278,7 @@ section('Only golf can be counted down to')
   eq(describeCountdown(86_400_000), '1 day', 'one day reads singular')
   eq(describeCountdown(4 * 3_600_000 + 20 * 60_000), '4 hr 20 min', 'hours and minutes')
   eq(describeCountdown(35 * 60_000), '35 min', 'minutes alone')
-  eq(describeCountdown(20_000), 'any minute', 'and under a minute says so')
+  eq(describeCountdown(20_000), 'under a minute', 'and under a minute says so')
   eq(describeCountdown(-5), '', 'a moment already gone has nothing to count')
   eq(describeCountdown(NaN), '', 'and nonsense counts nothing at all')
 }
@@ -1119,7 +1119,7 @@ section('The hub is the sections it should be, and nothing else')
   ok(hub.includes("initial={isEvent && notices.length > 0 ? 'notices' : 'itinerary'}"),
     'and the itinerary is the one open on arrival, unless an event has news')
 
-  for (const title of ['Itinerary', 'Travel & Accommodation', 'Players']) {
+  for (const title of ['Itinerary', 'Travel & accommodation', 'Players']) {
     ok(hub.includes(`'${title}'`) || hub.includes(`"${title}"`), `there is a ${title} section`)
   }
 

@@ -110,7 +110,7 @@ section('The nickname belongs to the player, not to team selection')
   ok(!prefs.includes("select('dark_mode, nickname')"),
     '  …never folded into the dark-mode read, which must survive migration 047 not having run')
   ok(prefs.includes('normalizeNickname'), 'and saves it through the normaliser')
-  ok(/Save space on the leaderboard/.test(prefs), 'the ask says what it is for')
+  ok(/Saves space on the board/.test(prefs), 'the ask says what it is for')
   ok(/player name doesn(&apos;|’|\x27)t\s+change/.test(prefs),
     '  …and promises the real name stays put')
 }

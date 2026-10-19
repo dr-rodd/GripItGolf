@@ -184,7 +184,7 @@ section('A participant\'s screens change to match')
   const playersClient = read('app/trip/[tripCode]/players/PlayersClient.tsx')
   ok(playersClient.includes('{!canAddPlayers ?'),
     'off, the add form is not rendered — nothing to see or reach')
-  ok(playersClient.includes('ask them to put you on the list'),
+  ok(playersClient.includes('Ask the event organiser to add you'),
     'and the screen says why, calmly')
 
   const scoringPage = read('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')

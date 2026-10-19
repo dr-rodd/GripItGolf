@@ -489,8 +489,7 @@ function AdvancedSettings({ mode, onMode }: {
         <div className="pt-2 pb-1">
           <p className="t-cap text-ink/80">Handicap share given to putting</p>
           <p className="t-cap text-ink/50 leading-snug mt-0.5">
-            How the net figures divide your handicap between the green and
-            everything before it. Splits only — no total moves.
+            Moves the net split between putting and the rest, never a total.
           </p>
           <Segmented
             className="mt-2"
@@ -501,8 +500,8 @@ function AdvancedSettings({ mode, onMode }: {
           />
           <p className="t-cap text-ink/50 leading-snug mt-2">
             {mode === 'fixed'
-              ? 'A fifth, whatever the par — measured scoring says the gap between handicaps lives mostly in the long game.'
-              : 'Two shots of par — half on a par 4, two fifths on a par 5. Reads naturally, credits putting generously.'}
+              ? 'A fifth at any par. Handicaps differ mostly in the long game.'
+              : '2 shots of par, so half on a par 4. Generous to putting.'}
           </p>
         </div>
       )}

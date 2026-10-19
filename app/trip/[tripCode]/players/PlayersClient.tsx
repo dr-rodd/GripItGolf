@@ -131,8 +131,8 @@ function HandicapCheck({
           <div className="px-5 py-4 flex flex-col gap-4">
             <p className="t-cap text-ink/65 leading-snug">
               {stored === null
-                ? 'We don’t have a handicap for you yet. Enter it before you go on — every score you make is counted off it.'
-                : 'Every score you make is counted off this. Change it here if it’s out of date.'}
+                ? 'Every score is counted off this, so enter it to go on.'
+                : 'Every score is counted off this, so check it’s up to date.'}
             </p>
 
             <HandicapField
@@ -181,6 +181,7 @@ export default function PlayersClient({
   roundIds,
   canAddPlayers = true,
   askHandicap = true,
+  noun = 'trip',
 }: {
   tripCode: string
   tripId: string
@@ -207,6 +208,8 @@ export default function PlayersClient({
    * one tap, no sheet.
    */
   askHandicap?: boolean
+  /** "trip" or "event" — what the button and messages call it. */
+  noun?: 'trip' | 'event'
 }) {
   const router = useRouter()
   const [claimingId, setClaimingId] = useState<string | null>(null)
@@ -375,7 +378,7 @@ export default function PlayersClient({
     if (hcpErr) {
       setAdding(false)
       setError(
-        'Added you to the trip, but your round handicaps did not save. ' +
+        `Added you to the ${noun}, but your round handicaps did not save. ` +
         'Open Trip Setup and re-enter your handicap before you play.',
       )
       return
@@ -444,8 +447,7 @@ export default function PlayersClient({
       {!canAddPlayers ? (
         <section>
           <p className="text-ink/65 text-[13px] text-center leading-snug">
-            Can&apos;t find your name? The organiser adds the field on this
-            event — ask them to put you on the list.
+            Can&apos;t find your name? Ask the event organiser to add you.
           </p>
         </section>
       ) : (
@@ -490,7 +492,7 @@ export default function PlayersClient({
             disabled={busy || !addName.trim() || !addHandicap}
             className={buttonClass('primary')}
           >
-            {adding ? 'Adding…' : 'Join trip'}
+            {adding ? 'Adding…' : noun === 'event' ? 'Join event' : 'Join trip'}
           </button>
         </form>
       </section>

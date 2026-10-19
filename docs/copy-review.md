@@ -332,7 +332,8 @@ bring them into line?
 
 **H-04 · Countdown prefix** · `StatusBlock.tsx:184`
 - Now: in {2 hr 30 min}
-- New:
+- Today: in {2 hr 30 min} · in any minute (under a minute out)
+- New: in {2 hr 30 min} · in under a minute *(“in any minute” read wrong)*
 
 **H-05 · How groups and tee time are described** · `lib/upNext.ts:220`
 - Now: {3} {groups} from {08:40}
@@ -340,7 +341,8 @@ bring them into line?
 
 **H-06 · Trip finished** · `StatusBlock.tsx:199,200`
 - Now: That’s the trip  /  Every round is in. The leaderboard is final.
-- New:
+- Today: Trip complete  /  All rounds in. Standings are final.
+- New: {Trip / Event} complete  /  All rounds in. Standings are final. *(naming: an event is never a trip)*
 
 **H-07 · Standing label** · `StatusBlock.tsx:139`
 - Now: Standing
@@ -356,7 +358,8 @@ bring them into line?
 
 **H-10 · Section headings** · `page.tsx:371,376,381`
 - Now: Itinerary · Travel & accommodation · Players
-- New:
+- Today: Itinerary (an event: Schedule) · Travel & Accommodation · Players, plus Notices and Stats when shown
+- New: Itinerary · Travel & accommodation · Players *(rule 4)*
 
 **H-11 · Players section counter** · `page.tsx:382`
 - Now: {4} of {8} in
@@ -368,10 +371,12 @@ bring them into line?
 
 **H-13 · No travel or stays** · `TravelStays.tsx:71`
 - Now: No travel or accommodation on the itinerary yet. Add it in trip settings and it shows up here.
+- Today: No travel or accommodation on the itinerary yet. Go to Trip Settings to add your plans.
 - New: No travel or accommodation on the itinerary yet. Go to trip settings to add your plans.
 
 **H-14 · Nobody joined** · `page.tsx:424`
 - Now: Nobody has joined this trip yet.
+- Today: Nobody has joined this {trip / event} yet.
 - New:
 
 **H-15 · Roster legend and row states** · `page.tsx:436,441,461`
@@ -380,23 +385,25 @@ bring them into line?
 
 **H-16 · Still-to-join note** · `page.tsx:476–478`
 - Now: {One player has / 3 players have} still to join. Share the code {GX7K2P} and they can claim their spot.
-- New:
+- New: Share the code {GX7K2P} with the {1 player / 3 players} still to join. *(rules 1, 6, 7: the Claim your spot link sits right under it)*
 
 **H-17 · Link to the join list** · `page.tsx:491`
 - Now: Claim a spot
+- Today: Claim your spot
 - New:
 
 **H-18 · Back link at the foot of the hub** · `page.tsx:397`
 - Now: All trips
-- New:
+- New: **Ross** — it goes to the landing page, not a list of trips, and shows on events too: "Home"?
 
 **H-19 · Tab bar labels** · `app/components/TabBar.tsx:25–28`
 - Now: Home · Leaderboard · Scoring · Settings
+- Today: Home · Scoring · Leaderboard · Stats · Trip Setup (an event: Tee Sheet in place of Trip Setup)
 - New:
 
 **H-20 · Matchplay draw couldn't be read** · `page.tsx:207`
 - Now: Could not read the matchplay draw.
-- New:
+- New: Could not read the match play draw. *(rule 4)*
 
 ---
 
@@ -405,6 +412,8 @@ bring them into line?
 **P-01 · Heading** · `app/trip/[tripCode]/players/page.tsx:84`
 - Now: Who are you?
 - New: Join the trip!
+- Today: {trip name} as the heading, "Join the trip" under it; on an event now "Join the event" *(naming)*
+- **Ross:** conflicts with rule 9 (the "!"); the screen already reads it without — keep yours?
 
 **P-02 · Instruction** · `PlayersClient.tsx:189`
 - Now: Tap your name
@@ -432,27 +441,99 @@ bring them into line?
 
 **P-08 · Invalid entry** · `PlayersClient.tsx:124`
 - Now: Please enter a valid name and handicap
+- Today: Enter a name and a handicap
 - New:
 
 **P-09 · Name already taken** · `PlayersClient.tsx:132,158` + `lib/roster.ts:115`
 - Now: {Ross Grady} is already on this trip. Use a different name. If that is you, tap your name above.
-- New:
+- New: {Ross Grady} is already on the list. Use a different name. If that is you, tap your name above. *(naming: the first two sentences are also said by the event and knockout creation forms)*
 
 **P-10 · Joined but handicaps didn't save** · `PlayersClient.tsx:175,176`
 - Now: Added you to the trip, but your round handicaps did not save.  /  Open trip settings and re-enter your handicap before you play.
-- New:
+- Today: … Open Trip Setup and re-enter your handicap before you play.
+- New: Added you to the {trip / event}, but your round handicaps did not save. Open Trip Setup and re-enter your handicap before you play. *(naming)*
+- **Ross:** an event's field never sees Trip Setup, so on an event the second sentence points nowhere: "Ask the event organiser to re-enter it before you play"?
 
 **P-11 · Couldn't load the list** · `players/page.tsx:87`
 - Now: Could not load players — please refresh the page.
-- New:
+- New: Could not load players — refresh to try again. *(X-05: never "please")*
 
 **P-12 · Plus-handicap warning (also used on create + setup)** · `lib/handicap.ts:103–105`
 - Now: Hold on there Cowboy! Did you mean to select (+) Handicap. This indicates handicaps better than scratch (0)
 - New: *(see X-09 — this is the loudest sentence on the site)*
+- **Ross:** left as it is, pending X-09.
 
 **P-13 · Plus-handicap toggle (screen readers)** · `app/components/HandicapField.tsx:83,84`
 - Now: Better than scratch  /  Plus handicap
 - New:
+
+---
+
+## §5b — The hub's other screens
+
+**HB-01 · Under "Claim your spot"** · `app/trip/[tripCode]/StatusBlock.tsx`
+- Now: Pick your name, or add it if it is not there. This phone then remembers you — your scores, your standing, and what is on next.
+- New: Pick or add your name, and this phone remembers you. *(rule 1)*
+
+**HB-02 · Share button** · `app/trip/[tripCode]/ShareTrip.tsx`
+- Now: Share trip
+- New: Share trip (an event: Share event) *(naming)*
+
+**HB-03 · QR page line** · `app/trip/[tripCode]/share/page.tsx`
+- Now: Scan to join the trip
+- New: Scan to join the {trip / event} *(naming)*
+
+**HB-04 · Expanding the description (screen readers)** · `app/trip/[tripCode]/TripDescription.tsx`
+- Now: Expand the trip description  /  Collapse the trip description
+- New: Expand the description  /  Collapse the description *(naming)*
+
+**HB-05 · Header back link (screen readers)** · `app/components/TripHeader.tsx`
+- Now: Back to the start  /  Back to the trip
+- New: Back to the start  /  Back *(naming: it also leads to an organiser area, a challenge and the create doorway)*
+
+**HB-06 · Dark mode hint** · `app/components/PlayerSettings.tsx`
+- Now: Easier on the eyes after dark. Saved to your name, so it follows you to your other devices.
+- New: Saved to your name, so it follows you to other devices. *(rule 1)*
+
+**HB-07 · Dark mode didn't save** · `app/components/PlayerSettings.tsx`
+- Now: Could not save that to the trip — this phone will remember it anyway.
+- New: Could not save that to your name — this phone will remember it anyway. *(naming; matches HB-06)*
+
+**HB-08 · Leaderboard nickname hint** · `app/components/PlayerSettings.tsx`
+- Now: Save space on the leaderboard — your player name doesn’t change, the board just prints this shorter one. Leave it blank and it shows your first name.
+- New: Saves space on the board. Your player name doesn’t change. *(rules 1, 6)*
+
+**HB-09 · Handicap check, none on file** · `app/trip/[tripCode]/players/PlayersClient.tsx`
+- Now: We don’t have a handicap for you yet. Enter it before you go on — every score you make is counted off it.
+- New: Every score is counted off this, so enter it to go on. *(rule 1)*
+
+**HB-10 · Handicap check, one on file** · `PlayersClient.tsx`
+- Now: Every score you make is counted off this. Change it here if it’s out of date.
+- New: Every score is counted off this, so check it’s up to date. *(rule 1)*
+
+**HB-11 · Event roster closed to the field** · `PlayersClient.tsx`
+- Now: Can't find your name? The organiser adds the field on this event — ask them to put you on the list.
+- New: Can't find your name? Ask the event organiser to add you. *(rule 1)*
+
+**HB-12 · Join button and back link on an event** · `PlayersClient.tsx`, `players/page.tsx`
+- Now: Join trip  /  Trip
+- New: Join trip  /  Trip (an event: Join event  /  Event) *(naming)*
+
+**HB-13 · Intro welcome** · `app/components/SiteIntro.tsx`
+- Now: Bang! Welcome to Green Dot Golf!  /  {Trip name} is going to be one hell of a trip.
+- New: **Ross** — conflicts with rule 3/9 (the joke and the "!"s), keep yours? It also runs on events, which are not trips.
+
+**HB-14 · Intro on an event** · `SiteIntro.tsx`
+- Now: Trip Hub · Trip Setup · The lead player has set up your contests. …
+- New: **Ross** — the tour runs on events too, where the field has no Trip Setup tab and nobody is the lead player. Skip that card and say "Event Hub" there?
+
+**HB-15 · Intro, stats card** · `SiteIntro.tsx`
+- Now: … Which courses and holes tripped you up? There’s nowhere to hide.
+- New: **Ross** — "There’s nowhere to hide" is a joke in system copy (rule 3), keep yours?
+
+**HB-16 · Intro, leaderboard card** · `SiteIntro.tsx`
+- Now: Matchplay or league, teams or solo — check the boards to see where you stand.
+- New: **Ross** — "Match play" is two words (rule 4); not changed, the intro is yours.
 
 ---
 
@@ -1101,6 +1182,58 @@ settings and is also what a new trip meets first.
 
 ---
 
+## §11b — Stats (`/trip/{code}/stats`)
+
+**ST-01 · Hub stats, field comparison not ready** · `app/trip/[tripCode]/StatsPanel.tsx`
+- Now: No hole has had enough cards on it yet to compare against the field.
+- New: Not enough cards on any hole yet to compare against the field. *(rule 1)*
+
+**ST-02 · Approach panel hint** · `app/trip/[tripCode]/stats/panels.tsx`
+- Now: Greens found, split by where the tee shot finished — the gap is what a miss costs.
+- New: Greens found, split by where the tee shot finished. *(rules 1, 6: "A miss costs" is its own line in Off the tee)*
+
+**ST-03 · By par panel hint** · `panels.tsx`
+- Now: The par-3 greens column is the iron play on its own — no fairway is involved in it.
+- New: On par 3s, the GIR column is iron play alone. *(rule 1)*
+
+**ST-04 · Round by round footnote** · `panels.tsx`
+- Now: Vs HC is Stableford points against two a hole — level means the round played exactly to handicap.
+- New: *(cut — the table has no Vs HC column; it explained a column that is not there)*
+
+**ST-05 · Honours, while still open** · `panels.tsx`
+- Now: Honours as they stand — these move while the trip is being played.
+- New: Honours as they stand. These can still change. *(naming: events show it too; rule 2)*
+
+**ST-06 · Advanced setting hint** · `app/trip/[tripCode]/stats/StatsClient.tsx`
+- Now: How the net figures divide your handicap between the green and everything before it. Splits only — no total moves.
+- New: Moves the net split between putting and the rest, never a total. *(rules 1, 6)*
+
+**ST-07 · Putting share: A fifth** · `StatsClient.tsx`
+- Now: A fifth, whatever the par — measured scoring says the gap between handicaps lives mostly in the long game.
+- New: A fifth at any par. Handicaps differ mostly in the long game. *(rule 1)*
+
+**ST-08 · Putting share: By par** · `StatsClient.tsx`
+- Now: Two shots of par — half on a par 4, two fifths on a par 5. Reads naturally, credits putting generously.
+- New: 2 shots of par, so half on a par 4. Generous to putting. *(rules 1, 7)*
+
+**ST-09 · Stats switched off** · `app/trip/[tripCode]/stats/page.tsx`
+- Now: Stats are switched off for this trip. Turn them on in Trip Setup and the scorecard starts asking.
+- New: Stats are switched off for this {trip / event}. Turn them on in Trip Setup and the scorecard starts asking. *(naming)*
+
+**ST-10 · The guide, "trip" for the field** · `app/trip/[tripCode]/stats/guide/page.tsx`
+- Now: the whole trip can lose to the course · add up to exactly zero across the trip · the whole trip can be positive at once
+- New: the whole field can lose to the course · add up to exactly zero across the field · everyone can be positive at once *(naming; the two rewritten sentences lose their em-dash, rule 2)*
+
+**ST-11 · The guide, counts** · `guide/page.tsx`
+- Now: The three yardsticks · one of three things · three points better · two a hole · two parts · three other players · four cards · the eighteen shares · two putts left · par minus two shots · two balls · three other cards · eight cards · four misses · four cards each side
+- New: The 3 yardsticks · one of 3 things · 3 points better · 2 a hole · 2 parts · 3 other players · 4 cards · the 18 shares · 2 putts left · par minus 2 shots · 2 balls · 3 other cards · 8 cards · 4 misses · 4 cards each side *(rule 7; "two thirds" and "half" stay words)*
+
+**ST-12 · The guide's opening paragraph** · `guide/page.tsx`
+- Now: Everything on the stats hub is worked out from two extra answers a hole — how many putts, and which way the tee shot went — plus the score that was already there. This page is the arithmetic, for anyone who wants it. Nothing here is needed to read the stats.
+- New: **Ross** — 45 words for a page intro (rule 1), but it is the manual's lead. Cut to "Worked out from 2 answers a hole: putts, and where the tee shot went," or keep?
+
+---
+
 ## §12 — Weather, support and shared bits
 
 **W-01 · No location on file** · `app/components/CourseWeather.tsx:106`
@@ -1114,6 +1247,7 @@ settings and is also what a new trip meets first.
 **W-03 · Too far ahead** · `CourseWeather.tsx:121`
 - Now: Too far out for a forecast — check back nearer the day.
 - New: Too far out for a forecast — check back nearer to the trip.
+- **Ross:** also shown on an event's round page, where "the trip" is wrong. "Nearer the day" again?
 
 **W-04 · Tee-time label** · `CourseWeather.tsx:134`
 - Now: At the first tee
@@ -1130,10 +1264,11 @@ settings and is also what a new trip meets first.
 **W-07 · Support blurb** · `app/components/SupportLink.tsx:24`
 - Now: Enjoy the app? Support like minded golfers grow the game.
 - New: *(currently switched off — `SUPPORT_ENABLED` in `lib/donation.ts` is false)*
+- **Ross:** if it comes back: "Help like-minded golfers grow the game." ("like minded" needs its hyphen; "Support … grow" doesn't parse)
 
 **W-08 · Support button** · `SupportLink.tsx:34`
 - Now: Let’s get those green dots 🟢
-- New:
+- New: **Ross** — playful for system copy (rule 3). Switched off; if it returns, keep it or "Support Green Dot"?
 
 **W-09 · Round card, ladies tees** · `round/[roundNumber]/RoundCard.tsx:39`
 - Now: Ladies card

@@ -67,6 +67,7 @@ export default function StatusBlock({
   roundDates,
   roundNumbers,
   courseNames,
+  noun = 'trip',
 }: {
   tripCode: string
   /** Null when this device is not linked to anybody on this trip. */
@@ -78,6 +79,8 @@ export default function StatusBlock({
   /** Itinerary item id → round number, for the golf items that have a page. */
   roundNumbers: Record<string, number>
   courseNames: Record<string, string>
+  /** "trip" or "event" — what the finished card calls it. */
+  noun?: 'trip' | 'event'
 }) {
   const router = useRouter()
   const now = useMinute()
@@ -151,7 +154,7 @@ export default function StatusBlock({
           ) : (
             <UpNextLines next={next} countdown={countdown} />
           )
-        ) : <TripOver />}
+        ) : <TripOver noun={noun} />}
 
         {/* What else is booked.
             Outside the <Link> above rather than inside it, which is the
@@ -280,14 +283,16 @@ function UpNextLines({
 }
 
 /** Nothing left on the running order. */
-function TripOver() {
+function TripOver({ noun }: { noun: 'trip' | 'event' }) {
   return (
     <div className="flex items-center gap-3">
       <span className="flex-shrink-0 w-10 h-10 rounded-tile bg-tint text-bark flex items-center justify-center">
         <IconFlag size={18} />
       </span>
       <div className="min-w-0">
-        <p className="text-[17px] font-medium leading-snug text-ink">Trip complete</p>
+        <p className="text-[17px] font-medium leading-snug text-ink">
+          {noun === 'event' ? 'Event complete' : 'Trip complete'}
+        </p>
         <p className="t-cap text-ink/65 mt-0.5">All rounds in. Standings are final.</p>
       </div>
     </div>
@@ -336,8 +341,7 @@ function ClaimSpot({ tripCode }: { tripCode: string }) {
           the size and weight this page gives every other aside, so it reads
           as a note on the card rather than as a second thing to do. */}
       <p className="mt-2.5 px-1 t-cap text-ink/65">
-        Pick your name, or add it if it is not there. This phone then
-        remembers you — your scores, your standing, and what is on next.
+        Pick or add your name, and this phone remembers you.
       </p>
     </div>
   )
