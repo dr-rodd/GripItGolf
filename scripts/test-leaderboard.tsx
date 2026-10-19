@@ -1603,6 +1603,18 @@ section('Narrowing to a course is the same rule a day board goes through')
     'a choice of one, so no tap can leave the page with no golf on it')
 }
 
+section('The board card keeps its rounded corners')
+{
+  // The pinned Name and Total cells in the heading row paint square
+  // backgrounds to the card's edge; unclipped, they sat over the card's top
+  // corners (Ross's phone, 19 Oct). The row clips itself, at the card's 20px
+  // less its 1px border. The card itself must never clip: see above.
+  const client = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  ok(client.includes('className="sticky z-20 bg-surface border-b border-line rounded-t-[19px] overflow-hidden"'),
+    'the heading row is clipped to the card\'s inner corners')
+  ok(client.includes('rounded-b-[19px]'), '  …and the foot matches them')
+}
+
 console.log(`\n${'─'.repeat(56)}`)
 if (failed === 0) console.log(`✓ all ${passed} checks passed`)
 else {

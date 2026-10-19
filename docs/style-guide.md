@@ -57,6 +57,13 @@ gets baked into every opacity utility at build time and no theme can reach it.
 - **Team colours are data**, stored per team, shown as dots. New defaults
   without emerald are proposed (`refresh-plan.md` 3.2) and wait on Ross.
 
+- **Open (Ross, 19 Oct): the title type and its colour don't yet sit
+  with the wordmark.** Titles are Schibsted in ink; the mark is its own
+  lettering in bark. As a stopgap the hub's name (trip and run) is set in
+  `text-bark`, the logo's colour, in both themes. The proper answer —
+  title colour and possibly face, sitewide — is a design-session question,
+  and re-checking the title font against the new logo is already D12.
+
 ### Named mixes
 
 Use the name; never retype the opacity (`test:branding`, "Titles come from the

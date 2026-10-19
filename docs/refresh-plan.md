@@ -348,6 +348,63 @@ Apply 3.6 across every string on the screens touched so far. Use `docs/copy-revi
 - **Count-up:** only on your total after logging a run, and on the round summary total after signing a card. 400ms, `--gd-ease`, tabular numerals so the width doesn't jump. Never on a live board. Reduce Motion: the final number, at once.
 - **One celebration:** the emerald dot blooms and settles (about 600ms) when a card is signed and when a run is logged. Never during score entry, never on a board, once per action. Reduce Motion: a static tick. This is a new named exception to the 400ms ceiling.
 
+#### Phase 8 scope (written 19 Oct, not built)
+
+Two pieces, four places, one new shared component each. Nothing on a live
+board, in score entry, or on a leaderboard moves.
+
+**1. Count-up (`CountUp`, new, `app/components/CountUp.tsx`)**
+
+| Where | Trigger | From → to |
+|---|---|---|
+| Run Add tab, your total (`app/run/[tripCode]/add/RunAddClient.tsx`) | The save succeeds (`setSaved(true)`) | Your total before the run → after it |
+| Round summary, your total (`app/trip/[tripCode]/round/[roundNumber]/page.tsx`) | The first view after your card is signed | 0 → the round's total, once |
+
+- 400ms, `--gd-ease`, `tabular-nums` so the width never jumps; whole numbers
+  only (a decimal run total counts in tenths).
+- Runs once per action. "Once" is remembered per card / per run id in
+  `sessionStorage`, so a refresh or a back-and-forth shows the number still.
+- Reduce Motion: the final number, at once. Screen readers get the final
+  number only (`aria-live` off on the moving text, the real figure in an
+  `sr-only` span).
+- Never on `TripLeaderboardClient`, `LiveLeaderboardPanel`, `RunBoardClient`
+  or a hub standing — `test:branding` gets a grep that holds that.
+
+**2. The dot bloom (`DotBloom`, new, `app/components/DotBloom.tsx`)**
+
+| Where | Trigger |
+|---|---|
+| Scoring: the "Scores committed" screen (`LiveScoringFlow.tsx`, `step === "committed"`) | Replaces today's static ✓ disc |
+| Run Add tab | The save succeeds, beside the count-up |
+
+- An emerald dot swells from 0 to a 64px disc and settles to the 16px dot
+  with a ✓ beside it: about 600ms, putt curve, no overshoot, once per action.
+- The intro's bloom (`SiteIntro`) is the precedent, but it is not reused —
+  that one is a 1.5s full-screen tour; this is a 600ms in-place
+  acknowledgement. Shares the colour token and the curve, nothing else.
+- Reduce Motion: the static ✓ disc that is there today.
+- A **new named exception** to the 400ms ceiling: added to the exceptions
+  register in `docs/style-guide.md` §8 and pinned by name in `test:branding`,
+  scoped to `DotBloom` only, like the intro.
+
+**What it takes**
+
+- 2 new components, 4 call sites, about 150 lines; no schema, no data.
+- Tests: the ceiling exception by name, the "never on a board" grep, Reduce
+  Motion versions present, and the count-up's final value rendered on the
+  server (so a phone without JavaScript still reads the right total).
+- Risk is low and contained to two screens, but the commit screen is the
+  scoring path — build it between trips, not during one.
+
+**Decisions for Ross before building**
+
+1. Does the bloom also fire for a **team** card signed by one phone for
+   four players, or only once per phone? (Proposed: once per commit.)
+2. Count-up on the round summary only for **your own** total, or for the
+   winner's too? (Proposed: your own; the podium stays still.)
+3. Anything else that has earned a celebration — a challenge going final, a
+   knockout won? (D11 says one celebration; proposed: keep it to these two.)
+
 ---
 
 ## 5. Hand-off blocks

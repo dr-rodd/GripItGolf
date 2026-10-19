@@ -132,6 +132,12 @@ sake. [In three words, how should it feel? e.g. calm, premium, live.]
 3. **Rows gliding to their new places** on a live board — decided no for now
    (D9); revisit after an event on the new look.
 4. **Re-check the title font** when the new logo lands (D12).
+5. **Title type and colour against the wordmark.** On a phone the titles
+   (Schibsted, ink) read as a different voice from the mark (its own
+   lettering, bark). Stopgap: the hub's name is bark. Decide the sitewide
+   answer — colour, face, or both — ideally with D12.
+6. **Phase 8** (count-up, dot bloom) is scoped in `refresh-plan.md`, with
+   three questions for Ross before it is built.
 
 ## Constraints that don't move
 

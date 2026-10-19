@@ -497,7 +497,7 @@ export default async function TripPage({ params, searchParams }: {
             the name and its dot, when it runs, who runs it, and the way to
             hand it on. */}
         <div className="flex flex-col items-start text-left pt-2 pb-7">
-          <h1 className="t-h1 text-ink text-balance" style={{ fontSize: 'clamp(26px, 8vw, 34px)' }}>
+          <h1 className="t-h1 text-bark text-balance" style={{ fontSize: 'clamp(26px, 8vw, 34px)' }}>
             {trip.name}<span className="t-title-dot" aria-hidden="true" />
           </h1>
           {/* When it runs, in the display face at reading size rather than

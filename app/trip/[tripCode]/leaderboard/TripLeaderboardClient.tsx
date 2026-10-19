@@ -1176,7 +1176,12 @@ function Board({
         // hard 0 here would slide the column headings under the mark.
         style={{ top: HEADER_H }}
         // Above the rows' own pinned columns, which carry z-10 of their own.
-        className="sticky z-20 bg-surface border-b border-line rounded-t-card"
+        // Clipped to its own corners: the pinned Name and Total cells inside
+        // paint square backgrounds out to the card's edge, which sat over the
+        // card's curve. 19px is the card's 20 inside its 1px border. Clipping
+        // the row is safe where clipping the card is not — sticky binds to
+        // the nearest scrolling *ancestor*, never to itself.
+        className="sticky z-20 bg-surface border-b border-line rounded-t-[19px] overflow-hidden"
       >
         <div
           ref={head}
@@ -1372,7 +1377,7 @@ function Board({
           the table. It holds nothing and is hidden from a screen reader for
           the same reason. */}
       <div
-        className="h-3 rounded-b-card border-t border-line bg-tint"
+        className="h-3 rounded-b-[19px] border-t border-line bg-tint"
         aria-hidden="true"
       />
     </div>

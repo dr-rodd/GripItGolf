@@ -75,7 +75,7 @@ export default async function RunHubPage({ params }: {
             name closed by the dot, when it runs. The sport's label above it
             went — the tab bar and the page already say what this is. */}
         <div>
-          <h1 className="t-h1 text-ink text-balance">
+          <h1 className="t-h1 text-bark text-balance">
             {challenge.name}<span className="t-title-dot" aria-hidden="true" />
           </h1>
           <p className="text-[17px] font-semibold leading-snug text-ink/80 mt-2.5">
