@@ -11,12 +11,13 @@ import { buttonClass, cardClass } from '@/app/components/ui'
  * is added in exactly one place.
  */
 
-export type AdminSection = 'trips' | 'live' | 'courses'
+export type AdminSection = 'trips' | 'live' | 'courses' | 'style'
 
 const TABS: { key: AdminSection; href: string; label: string }[] = [
   { key: 'trips',   href: '/admin/trips',   label: 'Trips' },
   { key: 'live',    href: '/admin/live',    label: 'Live cards' },
   { key: 'courses', href: '/admin/courses', label: 'Courses' },
+  { key: 'style',   href: '/admin/style',   label: 'Style lab' },
 ]
 
 export default function AdminShell({
@@ -40,19 +41,20 @@ export default function AdminShell({
           <form action={logout}>
             <button
               type="submit"
-              className={`${buttonClass('secondary', false)} flex-shrink-0`}
+              className={`${buttonClass('secondary', false)} flex-shrink-0 whitespace-nowrap`}
             >
               Sign out
             </button>
           </form>
         </div>
 
-        <nav className="max-w-4xl mx-auto px-4 mt-4 flex gap-1">
+        {/* Scrolls sideways once four tabs outgrow a narrow phone. */}
+        <nav className="max-w-4xl mx-auto px-4 mt-4 flex gap-1 overflow-x-auto scroll-strip">
           {TABS.map(t => (
             <Link
               key={t.key}
               href={t.href}
-              className={`px-3.5 py-2.5 rounded-t-lg t-label border-b-2 transition-colors ${
+              className={`px-3.5 py-2.5 rounded-t-lg t-label whitespace-nowrap border-b-2 transition-colors ${
                 t.key === active
                   ? 'border-accent text-ink'
                   : 'border-transparent text-ink/65 hover:text-ink'

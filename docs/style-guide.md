@@ -306,6 +306,59 @@ Each is pinned by name in `test:branding`, so it cannot become a precedent.
 | Tee swatches | No grey; palette only | A blue tee is blue — data, not brand | `scorecardStyle.ts` |
 | Terms disclaimer in capitals | No uppercase | The legal form | `app/terms/page.tsx` |
 | The dot bloom (600ms) | 400ms ceiling | The one celebration, once per card signed or run logged; never in score entry or on a board | `app/components/DotBloom.tsx`, its own `<style>` |
+| The style lab | Three fonts; the token values | Ross tries other faces and looks on his own phone. Behind `html[data-…]` attributes no player's phone carries, so the house rules hold for everyone else | `app/style-lab.css` (generated), `lib/styleLab.ts` |
+
+---
+
+## Style lab
+
+`/admin/style` tries other fonts and looks on **one phone**. Six axes — title,
+text and score font, depth, corners, paper grain — each house first. Colour is
+not an axis: every combination would need its own contrast check in both
+themes.
+
+**How it is fenced in.**
+
+- **No attribute means house, byte for byte.** Choosing a house option
+  removes its `data-*` attribute rather than setting it.
+- The setup lives in the `gg_style` cookie and is applied by the head script
+  (`STYLE_BOOT_SCRIPT`, beside the theme's) before first paint. **Never read
+  on the server** — `cookies()` in a layout makes every route dynamic.
+- Every lab rule is in `app/style-lab.css`, generated from `lib/styleLab.ts`,
+  imported after `globals.css`, and is either a `@font-face` or starts
+  `html[data-` / `html.dark[data-`. Nothing lab-related is in `globals.css`
+  or the layout's `next/font` imports, so "Three fonts" still holds.
+- Lab fonts are plain `@font-face` from `public/fonts/lab/<id>/`, never
+  `next/font`: a phone downloads one only when it draws text in it. A
+  player's phone downloads none.
+- The "Lab · N" pill sits in `TripHeader`'s own right-hand slot, so the
+  header never changes height.
+- Text that is measured re-measures when a font changes
+  (`watchFontChanges`): the leaderboard's gliding name, its scroll shade, and
+  the hub description's "more".
+
+`test:branding` ("The style lab is fenced in") holds the fence;
+`test:style-lab` reads every font file with fontkit — woff2, licence beside
+it, the Irish accents and ’ – ·, tabular figures for a score face, the
+weights its role needs — and checks the generated CSS is current.
+
+**Adding a font.** For a Google Font, `npm pack @fontsource-variable/<name>`
+and copy the Latin `wght` woff2 and its `LICENSE` into
+`public/fonts/lab/<id>/` (never a dependency). Add a `LAB_FAMILIES` entry and
+an option on the right axis in `lib/styleLab.ts`, then `npm run fonts:lab`
+and `npm test`. To remove one, delete its folder and entries and regenerate.
+
+**Promoting a setup** ("make this the house style: `title=… text=…`") is a
+real change, never a switch: move the face to `next/font`, update the house
+tokens and the "Three fonts" checks, run the fit checks ("Leaderboard" in the
+tab bar at 320px, the leaderboard name column, wizard titles at 320px), and
+update this guide.
+
+**Known gaps** — parts the depth and corners choices do not reach, because
+they are hand-built rather than on the tokens: anything with a literal radius
+(`rounded-lg`, `rounded-md`, the skeleton's 6px, the bracket's tiles) and any
+shadow outside the four named levels. `rounded-xl`, `rounded-2xl` and the
+named radii follow, and `.field` is pointed at `--radius-field` by the lab.
 
 ---
 
@@ -328,6 +381,7 @@ this file:
 | Wizards | "The way back is a 48px arrow", "Every wizard is one frame", "A step slides" |
 | Motion | "Motion is calm, and can be switched off" |
 | Tab bar | "The bottom tab bar", "The tab bar is on every screen inside a trip" |
+| Style lab | "The style lab is fenced in" (and `test:style-lab` for the fonts) |
 
 Other suites hold their own corners: `test:scorecard` the scoring symbols and
 bands, `test:leaderboard` the board's layout, `test:golden` every character the

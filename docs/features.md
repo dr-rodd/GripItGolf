@@ -2,7 +2,7 @@
 
 ## Admin overview
 
-`/admin` is the owner's back office: three sections under one shell
+`/admin` is the owner's back office: four sections under one shell
 (`app/admin/AdminShell.tsx`), linked from nowhere, `noindex`, reached by
 typing the URL. Every page gates itself with `requireAdmin()`
 (`app/admin/adminGate.ts` — the only reader of the cookie) and every server
@@ -31,6 +31,14 @@ keeps working when row-level security lands.
   ranges, and `card_verified` flippable by hand. The card itself — pars and
   stroke indexes — is shown read-only: the scorecard photo check stays the
   only writer of holes.
+- **Style lab** (`/admin/style`) — other fonts and looks, tried on **this
+  phone only**: title, text and score font, depth, corners and the paper's
+  grain. It reads and writes no data — a tap sets attributes on `<html>` and
+  the `gg_style` cookie on the device, nothing else, and players never see
+  it. Copy setup, a preview link (`/style-preview?s=…`, which changes another
+  phone only once its owner taps) and reset. A "Lab · N" pill in the header
+  says when a phone is wearing a setup. Rules and how to add a font:
+  `docs/style-guide.md`, "Style lab".
 
 The nightly `/api/cleanup` is unchanged and still the automatic path; the
 live cards page is the manual one, for the glitch that cannot wait for 03:00.

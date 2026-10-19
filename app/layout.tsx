@@ -1,7 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Schibsted_Grotesk } from "next/font/google";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
+import { STYLE_BOOT_SCRIPT } from "@/lib/styleLab";
 import "./globals.css";
+// The style lab (/admin/style) — after globals.css so its rules win ties.
+// @font-face and html[data-…] rules only: with no lab attribute on <html>
+// nothing in it applies, and its fonts are downloaded only by a phone that
+// draws text in them. lib/styleLab.ts generates it.
+import "./style-lab.css";
 
 /**
  * Archivo and Schibsted Grotesk come through next/font, so they are
@@ -114,7 +120,10 @@ export default function RootLayout({
             would force every route dynamic — including the landing page,
             whose static-ness the entry animation depends on. The script is
             the only thing that may set the class; see lib/theme.ts. */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+        {/* The style lab's attributes ride in the same script, for the
+            same reason: they must be on <html> before the first paint, and
+            the cookie must never be read on the server. */}
+        <script dangerouslySetInnerHTML={{ __html: `${THEME_BOOT_SCRIPT};${STYLE_BOOT_SCRIPT}` }} />
         <link rel="preconnect" href="https://api.fontshare.com" />
         <link rel="preconnect" href="https://cdn.fontshare.com" crossOrigin="" />
         <link rel="stylesheet" href={FONTSHARE} />

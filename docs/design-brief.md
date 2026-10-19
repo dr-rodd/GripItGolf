@@ -194,3 +194,7 @@ From the October 2026 design session (`docs/refresh-plan.md` §8), all built:
 | D13 | Team names on boards stack, one per line, no gliding |
 | D14 | Wizards slide right to left, 340ms, one question per step, sticky Continue |
 | D15 | After the first look on a phone (19 Oct): the grain halved, the tab bar and wizard header given more room |
+| D18 | Style lab at `/admin/style`: admin only, this phone only, six axes (title, text and score font; depth; corners; grain), no colour |
+| D19 | Lab fonts load lazily through `@font-face` from `public/fonts/lab/`; house fonts stay on `next/font`; nothing lab-related in `globals.css` |
+| D20 | A lab setup becomes the house style only through Claude Code, with tests and fit checks, never a switch |
+| D21 | The "lab is on" indicator is a pill in the existing header, not a banner, so no layout shifts. Clash Display is not offered, having been rejected |

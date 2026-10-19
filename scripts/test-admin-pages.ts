@@ -238,6 +238,22 @@ section('The Donegal Masters settings page stays deleted')
 
 // ─── Result ────────────────────────────────────────────────────
 
+section('The style lab is an admin section like the others')
+{
+  const p = 'app/admin/style/page.tsx'
+  ok(existsSync(p), '/admin/style exists')
+  if (existsSync(p)) {
+    const src = read(p)
+    ok(pages.includes(p), '  …and is one of the pages the gate check above covered')
+    ok(src.includes('requireAdmin()') && src.includes('<AdminLogin />'),
+      '  …gated by requireAdmin(), falling back to the login screen')
+    ok(src.indexOf('requireAdmin()') < src.indexOf('<StyleLab'),
+      '  …before it renders the controls')
+  }
+  ok(read('app/admin/AdminShell.tsx').includes("{ key: 'style',   href: '/admin/style',   label: 'Style lab' }"),
+    'the lab is a tab in the admin shell')
+}
+
 console.log(`\n${'─'.repeat(56)}`)
 if (failed === 0) {
   console.log(`✓ all ${passed} checks passed`)

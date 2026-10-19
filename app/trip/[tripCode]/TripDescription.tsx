@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { watchFontChanges } from '@/lib/styleLab'
 
 /**
  * What the lead player wrote about the trip, under the countdown.
@@ -54,11 +55,11 @@ export default function TripDescription({ text }: { text: string | null | undefi
     observer.observe(para)
 
     // Fonts settle after the first paint, and the swap changes the height
-    // without changing any box this observer watches.
-    let live = true
-    document.fonts?.ready.then(() => { if (live) measure() }).catch(() => {})
+    // without changing any box this observer watches — as does the style
+    // lab trying another text face (lib/styleLab.ts).
+    const unwatch = watchFontChanges(measure)
 
-    return () => { live = false; observer.disconnect() }
+    return () => { unwatch(); observer.disconnect() }
   }, [para, body])
 
   if (!body) return null

@@ -2655,6 +2655,73 @@ section('A pinned header holds still, and holds its own background')
   }
 }
 
+// ─── The style lab ─────────────────────────────────────────────
+
+section('The style lab is fenced in')
+{
+  // /admin/style tries other fonts and looks on one phone (lib/styleLab.ts).
+  // Everything it can change lives in app/style-lab.css, behind attributes
+  // that only a lab phone carries — so the house look, the font checks above
+  // and the landing page's static-ness cannot be touched by it.
+  const lab = read('app/style-lab.css')
+  const labCode = lab.replace(/\/\*[\s\S]*?\*\//g, '')
+  const rules = [...labCode.matchAll(/([^{}]+)\{[^{}]*\}/g)].map(m => m[1].trim())
+  ok(rules.length > 10, `the lab stylesheet has its rules (${rules.length})`)
+  eq(rules.filter(sel => !(sel === '@font-face' || sel.split(/,(?![^(]*\))/).every(p => /^html(\.dark)?\[data-/.test(p.trim())))), [],
+    'every rule is a @font-face or starts html[data- / html.dark[data-')
+
+  for (const attr of ['data-title-font', 'data-text-font', 'data-score-font', 'data-depth', 'data-corners', 'data-grain']) {
+    ok(!css.includes(attr), `globals.css knows nothing of ${attr}`)
+  }
+  ok(!/Lab |style-lab/.test(css), '  …nor of a lab face or the lab file')
+
+  // The cookie is read in the browser, never beside cookies().
+  const SOURCES = ['app', 'lib']
+  const files: string[] = []
+  const walk = (dir: string) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = `${dir}/${e.name}`
+      if (e.isDirectory()) walk(p)
+      else if (/\.tsx?$/.test(e.name)) files.push(p)
+    }
+  }
+  SOURCES.forEach(walk)
+  const naming = files.filter(f => /gg_style|STYLE_COOKIE/.test(read(f)))
+  eq(naming.filter(f => !(f === 'lib/styleLab.ts' || f === 'lib/theme.ts' ||
+                           read(f).trimStart().startsWith("'use client'"))), [],
+    'the lab cookie is named only in lib/styleLab.ts, lib/theme.ts and client components')
+  eq(naming.filter(f => /cookies\(\)/.test(stripComments(read(f)))), [], '  …never next to cookies()')
+  ok(!/next\/headers/.test(read('lib/styleLab.ts')), '  …and the registry imports nothing from the server')
+
+  const layout = read('app/layout.tsx')
+  const g = layout.indexOf('import "./globals.css"'), l = layout.indexOf('import "./style-lab.css"')
+  ok(g >= 0 && l > g, 'style-lab.css is imported after globals.css, so its rules win ties')
+  const loaded = [...stripComments(layout).matchAll(/import\s*\{([^}]*)\}\s*from\s*["']next\/font\/google["']/g)]
+    .flatMap(m => m[1].split(',').map(n => n.trim()).filter(Boolean))
+  eq(loaded.sort(), ['Archivo', 'Schibsted_Grotesk'],
+    'next/font still loads the two house faces and nothing else, so no lab face is preloaded for every player')
+  ok(!/next\/font\/local/.test(layout), '  …locally either')
+  ok(layout.includes('STYLE_BOOT_SCRIPT'), 'the lab setup is applied by the head script, before first paint')
+  // Two IIFEs joined bare read as `(…)()(…)()` — the second calls the first's
+  // undefined result and throws, so the lab never reached a reloaded page.
+  ok(layout.includes('`${THEME_BOOT_SCRIPT};${STYLE_BOOT_SCRIPT}`'),
+    '  …joined to the theme script with a semicolon, or it never runs')
+
+  const preview = read('app/style-preview/page.tsx')
+  ok(!/searchParams/.test(stripComments(preview)), '/style-preview takes no searchParams')
+  ok(!preview.includes('force-dynamic'), '  …and is not forced dynamic')
+  ok(read('app/style-preview/StylePreview.tsx').includes('window.location.search'),
+    '  …it reads the link on the client instead')
+
+  // The pill rides in the header's own slot, absolutely placed, so the bar
+  // keeps its height and nothing below it moves.
+  const header = read('app/components/TripHeader.tsx')
+  ok(header.includes('<LabIndicator />'), 'the "Lab" pill is inside TripHeader')
+  ok(/className="absolute flex items-center[^"]*"[\s\S]{0,300}<LabIndicator \/>/.test(header),
+    '  …in the absolutely placed action slot, not the flow')
+  ok(/style=\{\{\s*height: HEADER_H,/.test(header), '  …and the header is still HEADER_H tall')
+}
+
 console.log(`\n${'─'.repeat(56)}`)
 if (failed === 0) console.log(`✓ all ${passed} checks passed`)
 else {

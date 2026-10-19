@@ -32,6 +32,7 @@ import Toggle from '@/app/components/Toggle'
 import CourseName from '@/app/components/CourseName'
 import { courseLabel, splitCourseName } from '@/lib/courseDirectory'
 import { IconChevronRight } from '@/app/components/icons'
+import { watchFontChanges } from '@/lib/styleLab'
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -826,13 +827,17 @@ function ScrollingName({
     }
 
     measure()
-    if (typeof ResizeObserver === 'undefined') return
+    // A font swap changes the name's width inside a box that keeps its own,
+    // so the observer below may never hear of it: the face settling after
+    // first paint, or the style lab trying another one (lib/styleLab.ts).
+    const unwatch = watchFontChanges(measure)
+    if (typeof ResizeObserver === 'undefined') return unwatch
     // The box for a column that changes width, the track for a name that
     // changes length — a rename lands as neither a resize nor a remount.
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     if (el.firstElementChild) ro.observe(el.firstElementChild)
-    return () => ro.disconnect()
+    return () => { ro.disconnect(); unwatch() }
   }, [text])
 
   return (
@@ -930,7 +935,10 @@ function useBoardScroll(scrolls: boolean) {
     measure(el)
     const onResize = () => measure(el)
     window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    // The columns are as wide as their figures, so a font swap can change
+    // whether anything is hidden without the window changing at all.
+    const unwatch = watchFontChanges(onResize)
+    return () => { window.removeEventListener('resize', onResize); unwatch() }
   }, [measure])
 
   return { head, body, onScroll, moreLeft, moreRight }

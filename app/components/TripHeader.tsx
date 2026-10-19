@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useLayoutEffect, useRef, useState } from 'react'
 import MorphWordmark from './MorphWordmark'
 import TitleMark, { type TitleMarkKey } from './TitleMark'
+import LabIndicator from './LabIndicator'
 import { LINE_BOX } from './wordmarkMorph'
 import {
   HEADER_H, HERO_W, LINE_W, HERO_TOP, LINE_INSET,
@@ -178,16 +179,19 @@ export default function TripHeader({
             <TitleMark name={title} height={lineH} />
           </span>
         )}
-        {action && (
-          <span
-            className="absolute flex items-center"
-            // Above the backTo link (zIndex 1), which is the whole bar —
-            // without this the gear would be a picture of a button.
-            style={{ right: 8, top: 0, height: HEADER_H, zIndex: 2 }}
-          >
-            {action}
-          </span>
-        )}
+        {/* Always rendered, because the style lab's pill sits here too, to
+            the left of the action. Absolutely placed, so neither can change
+            the bar's height or move anything under it; the pill renders
+            nothing on a phone that is not wearing a lab setup. */}
+        <span
+          className="absolute flex items-center gap-1"
+          // Above the backTo link (zIndex 1), which is the whole bar —
+          // without this the gear would be a picture of a button.
+          style={{ right: 8, top: 0, height: HEADER_H, zIndex: 2 }}
+        >
+          <LabIndicator />
+          {action}
+        </span>
       </div>
     </header>
   )
