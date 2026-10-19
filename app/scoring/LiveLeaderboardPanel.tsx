@@ -232,7 +232,7 @@ export function InlineScorecard({
     const scored = rs.some(r => r.gross !== null)
     return (
       <div className={`${grid} px-3 py-2 items-center ${total ? SC_BAND_TOTAL : SC_BAND} ${total ? '' : SC_RULE}`}>
-        <span className="text-[13px] font-bold tracking-widest uppercase text-ink/80" style={SC_SF}>{label}</span>
+        <span className="text-[13px] font-bold text-ink/80" style={SC_SF}>{label}</span>
         <span className={`${SC_NUM} font-bold text-ink`} style={SC_SF}>{sum(rs, r => r.ePar)}</span>
         <span />
         <span className={`text-center ${SC_NUM} font-bold text-ink`} style={SC_SF}>
@@ -599,7 +599,7 @@ export default function LiveLeaderboardPanel({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-accent dot-live" />
-          <span className="text-accent-deep text-sm tracking-[0.2em] uppercase">{roundLabel}</span>
+          <span className="text-accent-deep text-sm ">{roundLabel}</span>
         </div>
         {showBackButton && onClose && (
           <BackButton onClick={onClose} dense />
@@ -621,7 +621,7 @@ export default function LiveLeaderboardPanel({
             className={`flex-1 px-4 py-2.5 t-label rounded-xl border transition-colors duration-150 ${
               mode === m
                 ? "bg-accent-deep text-white font-bold border-accent-deep"
-                : "bg-surface border-bark/12 text-ink/65 hover:text-ink/80"
+                : "bg-surface border-line text-ink/65 hover:text-ink/80"
             }`}
           >
             {m === "stableford" ? "Stableford" : m === "strokes" ? "Strokes" : "Quota"}
@@ -648,7 +648,7 @@ export default function LiveLeaderboardPanel({
           the two modes cannot drift apart visually. */}
       {mode !== "stableford" && (
         <div className="flex justify-end -mt-1">
-          <div className="inline-flex gap-0.5 p-0.5 rounded-lg bg-bark/[0.06]">
+          <div className="inline-flex gap-0.5 p-0.5 rounded-lg bg-tint">
             {(mode === "strokes"
               ? (["nett", "gross"] as const)
               : (["pts", "quota"] as const)
@@ -660,7 +660,7 @@ export default function LiveLeaderboardPanel({
                   onClick={() => mode === "strokes"
                     ? setStrokesView(sv as StrokesView)
                     : setQuotaView(sv as QuotaView)}
-                  className={`px-2.5 py-1.5 rounded-md text-[13px] uppercase tracking-[0.10em] transition-colors duration-150 ${
+                  className={`px-2.5 py-1.5 rounded-md text-[13px] transition-colors duration-150 ${
                     on ? "bg-surface text-ink font-semibold" : "text-ink/65 hover:text-ink/80"
                   }`}
                 >
@@ -672,7 +672,7 @@ export default function LiveLeaderboardPanel({
         </div>
       )}
       {sortedRows.length === 0 ? (
-        <div className="bg-surface border border-bark/12 rounded-2xl px-4 py-14 text-center">
+        <div className="bg-surface border border-line rounded-2xl px-4 py-14 text-center">
           <p className="t-body text-ink/80">No scores yet</p>
           <p className="t-cap text-ink/65 mt-1">Scores appear as holes are completed</p>
         </div>
@@ -680,16 +680,16 @@ export default function LiveLeaderboardPanel({
         // No overflow-hidden: it would make this card its own scrollport and
         // the sticky heading below would measure its offset from the card
         // rather than the viewport. The corners round without it.
-        <div className="bg-surface border border-bark/12 rounded-2xl">
+        <div className="bg-surface border border-line rounded-2xl">
           {/* Column headers — sticky below whatever chrome is above them */}
           <div
             style={{ top: CHROME }}
-            className="sticky z-10 flex items-center gap-3 px-3 py-1.5 bg-surface border-b border-bark/12 rounded-t-2xl"
+            className="sticky z-10 flex items-center gap-3 px-3 py-1.5 bg-surface border-b border-line rounded-t-2xl"
           >
-            <span className="text-[12px] tracking-widest uppercase text-ink/65 w-6 flex-shrink-0">Pos</span>
-            <span className="text-[12px] tracking-widest uppercase text-ink/65 flex-1 min-w-0">Name</span>
-            <span className="text-[12px] tracking-widest uppercase text-ink/65 flex-shrink-0 min-w-[3.5rem] text-center">Score</span>
-            <span className="text-[12px] tracking-widest uppercase text-ink/65 flex-shrink-0 w-9 text-right">Thru</span>
+            <span className="t-eyebrow text-ink/65 w-6 flex-shrink-0">Pos</span>
+            <span className="t-eyebrow text-ink/65 flex-1 min-w-0">Name</span>
+            <span className="t-eyebrow text-ink/65 flex-shrink-0 min-w-[3.5rem] text-center">Score</span>
+            <span className="t-eyebrow text-ink/65 flex-shrink-0 w-9 text-right">Thru</span>
           </div>
 
           {sortedRows.map((row, idx) => {
@@ -752,9 +752,9 @@ export default function LiveLeaderboardPanel({
                   // nothing to restart. See `flashes` above.
                   key={`${player.id}-${flashes[player.id] ?? 0}`}
                   onClick={() => setExpandedPlayerId(isExpanded ? null : player.id)}
-                  className={`font-serif w-full flex items-center gap-3 px-3 py-2 text-left active:bg-bark/[0.04] transition-colors ${
+                  className={`font-serif w-full flex items-center gap-3 px-3 py-2 text-left active:bg-tint transition-colors ${
                     flashes[player.id] ? "score-flash " : ""
-                  }${!isLast || isExpanded ? "border-b border-bark/12" : ""}`}
+                  }${!isLast || isExpanded ? "border-b border-line" : ""}`}
                 >
 
                   {/* Col 1: position */}
@@ -792,7 +792,7 @@ export default function LiveLeaderboardPanel({
                 </button>
 
                 {isExpanded && (
-                  <div className={!isLast ? "border-b border-bark/12" : ""}>
+                  <div className={!isLast ? "border-b border-line" : ""}>
                     <InlineScorecard
                       playingHcp={playingHcp}
                       teeName={teeName}

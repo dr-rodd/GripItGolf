@@ -61,6 +61,12 @@ function uiFiles(): string[] {
   }
   for (const d of ['app/trip', 'app/components', 'app/join', 'app/dashboard', 'app/admin', 'app/golf', 'app/create', 'app/run', 'app/privacy', 'app/terms']) walk(d)
   out.push('app/page.tsx', 'app/layout.tsx', 'app/Landing.tsx', 'app/[code]/page.tsx')
+  // The scoring screens a trip actually uses (refresh plan, Phase 6). The
+  // legacy portal beside them — ScoringClient, CoursePortalClient and the
+  // /scoring page — is Donegal Masters' and on no trip (copy-review.md,
+  // Appendix), so it stays outside the floor.
+  walk('app/scoring/[slug]')
+  out.push('app/scoring/LiveScoringFlow.tsx', 'app/scoring/LiveLeaderboardPanel.tsx', 'app/scoring/CardCheck.tsx')
   return out
 }
 

@@ -229,7 +229,7 @@ export default function CardCheck({
     <button
       type="button"
       onClick={() => inputRef.current?.click()}
-      className="flex items-center gap-2 px-4 py-2.5 border border-accent/40 text-accent-deep text-sm tracking-[0.15em] uppercase hover:bg-accent/10 transition-colors rounded-xl"
+      className="flex items-center gap-2 px-4 py-2.5 border border-accent/40 text-accent-deep text-sm hover:bg-accent/10 transition-colors rounded-xl"
     >
       {camera}
       {label}
@@ -238,7 +238,7 @@ export default function CardCheck({
 
   if (step.kind === "idle") {
     return (
-      <div className="border border-bark/12 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+      <div className="border border-line rounded-xl px-4 py-3 flex items-center justify-between gap-3">
         {fileInput}
         <p className="text-ink/65 text-sm leading-snug min-w-0">
           Check pars, indices and slopes against the printed card before teeing off.
@@ -250,7 +250,7 @@ export default function CardCheck({
 
   if (step.kind === "reading" || step.kind === "applying") {
     return (
-      <div className="border border-bark/12 rounded-xl px-4 py-3 flex items-center gap-3">
+      <div className="border border-line rounded-xl px-4 py-3 flex items-center gap-3">
         <span className="w-2 h-2 rounded-full bg-accent dot-live flex-shrink-0" />
         <p className="text-ink/80 text-sm">
           {step.kind === "reading" ? "Reading the card…" : "Updating the card…"}
@@ -284,7 +284,7 @@ export default function CardCheck({
           <button
             type="button"
             onClick={() => setStep({ kind: "idle" })}
-            className="text-ink/50 text-sm tracking-widest uppercase hover:text-ink/80 transition-colors"
+            className="text-ink/50 text-sm hover:text-ink/80 transition-colors"
           >
             Skip
           </button>
@@ -341,14 +341,14 @@ export default function CardCheck({
           <button
             type="button"
             onClick={() => applyNewCard(newCard)}
-            className="flex-1 py-2.5 bg-accent-deep text-ink text-sm tracking-[0.15em] uppercase hover:bg-accent transition-colors rounded-xl"
+            className="flex-1 py-2.5 bg-accent-deep text-white text-sm hover:bg-accent transition-colors rounded-xl"
           >
             Save this card
           </button>
           <button
             type="button"
             onClick={() => setStep({ kind: "idle" })}
-            className="px-4 py-2.5 text-ink/65 text-sm tracking-[0.15em] uppercase border border-bark/12 hover:border-bark/25 transition-colors rounded-xl"
+            className="px-4 py-2.5 text-ink/65 text-sm border border-line hover:border-line-strong transition-colors rounded-xl"
           >
             Not now
           </button>
@@ -419,14 +419,14 @@ export default function CardCheck({
         <button
           type="button"
           onClick={() => apply(diff)}
-          className="flex-1 py-2.5 bg-accent-deep text-ink text-sm tracking-[0.15em] uppercase hover:bg-accent transition-colors rounded-xl"
+          className="flex-1 py-2.5 bg-accent-deep text-white text-sm hover:bg-accent transition-colors rounded-xl"
         >
           Use the photo&apos;s card
         </button>
         <button
           type="button"
           onClick={() => setStep({ kind: "idle" })}
-          className="px-4 py-2.5 text-ink/65 text-sm tracking-[0.15em] uppercase border border-bark/12 hover:border-bark/25 transition-colors rounded-xl"
+          className="px-4 py-2.5 text-ink/65 text-sm border border-line hover:border-line-strong transition-colors rounded-xl"
         >
           Keep current
         </button>

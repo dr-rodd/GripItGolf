@@ -22,7 +22,7 @@ import CardCheck from "./CardCheck"
 import ScoreShape, { NoReturnShape } from "@/app/components/ScoreShape"
 import {
   SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL, SC_STICKY,
-  scRow, teeDot,
+  scRow, teeDot, TEE_ACTIVE,
 } from "@/app/components/scorecardStyle"
 
 // ─── Types ────────────────────────────────────────────────
@@ -188,22 +188,6 @@ type LiveStep = "activate" | "setup" | "holes" | "summary" | "committed" | "resu
  * ones would otherwise vanish, so every swatch carries a hairline ring and
  * the selected state is set in ink rather than in a tint of its own colour.
  */
-/**
- * The border a selected tee button wears. The swatch itself comes from
- * `teeDot` in components/scorecardStyle.ts — one copy, shared with every
- * scorecard, so the tee you pick and the tee your card names look the same.
- */
-const TEE_ACTIVE: Record<string, string> = {
-  Black:     "border-zinc-700 text-ink",
-  Blue:      "border-blue-500 text-ink",
-  White:     "border-bark/40 text-ink",
-  Red:       "border-red-500 text-ink",
-  Yellow:    "border-yellow-500 text-ink",
-  Sandstone: "border-amber-400 text-ink",
-  Slate:     "border-slate-500 text-ink",
-  Granite:   "border-stone-500 text-ink",
-  Claret:    "border-rose-800 text-ink",
-}
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -289,7 +273,7 @@ function UnsentNote({ count, inline = false }: { count: number; inline?: boolean
   if (count <= 0) return null
   return (
     <div
-      className={`flex items-start gap-2 rounded-xl border border-bark/12 bg-surface px-3 py-2 ${
+      className={`flex items-start gap-2 rounded-xl border border-line bg-surface px-3 py-2 ${
         inline ? '' : 'mx-4 mt-3'
       }`}
     >
@@ -1070,14 +1054,14 @@ export default function LiveScoringFlow({
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6 py-12">
         <div className="text-center">
-          <h2 className="font-[family-name:var(--font-playfair)] text-2xl text-ink mb-2">Discard scorecard?</h2>
+          <h2 className="font-serif text-2xl text-ink mb-2">Discard scorecard?</h2>
           <p className="text-ink/65 text-base">This will void this scorecard and release all players. Every score already entered will be deleted, and be removed from the leaderboard.</p>
         </div>
         <div className="flex gap-3 w-full max-w-xs">
-          <button onClick={() => setCloseConfirm(false)} className="flex-1 py-3 border border-bark/12 text-ink/80 text-base uppercase tracking-wider hover:border-bark/25 transition-colors">
+          <button onClick={() => setCloseConfirm(false)} className="flex-1 py-3 border border-line text-ink/80 text-base hover:border-line-strong transition-colors">
             Cancel
           </button>
-          <button onClick={handleCloseRound} disabled={saving} className="flex-1 py-3 bg-rust border border-rust text-white text-base uppercase tracking-wider hover:bg-rust-deep disabled:opacity-50 transition-colors">
+          <button onClick={handleCloseRound} disabled={saving} className="flex-1 py-3 bg-rust border border-rust text-white text-base hover:bg-rust-deep disabled:opacity-50 transition-colors">
             {saving ? "Voiding…" : "Discard"}
           </button>
         </div>
@@ -1114,13 +1098,13 @@ export default function LiveScoringFlow({
           </div>
           <button
             onClick={() => { setResumeError(null); setStep("resuming") }}
-            className="w-full py-4 bg-accent-deep text-white rounded-xl text-base tracking-[0.2em] uppercase font-bold hover:bg-accent transition-colors"
+            className="w-full py-4 bg-accent-deep text-white rounded-xl text-base font-bold hover:bg-accent transition-colors"
           >
             Try again
           </button>
           <button
             onClick={onBack}
-            className="w-full py-3.5 border border-bark/25 text-ink/80 rounded-xl text-base tracking-wider uppercase hover:border-bark/40 transition-colors"
+            className="w-full py-3.5 border border-line-strong text-ink/80 rounded-xl text-base hover:border-bark/40 transition-colors"
           >
             Back
           </button>
@@ -1129,7 +1113,7 @@ export default function LiveScoringFlow({
     }
     return (
       <div className="flex items-center justify-center min-h-[calc(100dvh-57px)]">
-        <p className="text-ink/50 text-base tracking-wide">Loading scorecard…</p>
+        <p className="text-ink/50 text-base ">Loading scorecard…</p>
       </div>
     )
   }
@@ -1140,12 +1124,12 @@ export default function LiveScoringFlow({
     return (
       <div className="max-w-lg mx-auto w-full px-4 py-8 flex flex-col gap-6">
         <div className="text-center">
-          <p className="text-ink/50 text-sm tracking-[0.2em] uppercase mb-2">No live round active</p>
-          <h2 className="font-[family-name:var(--font-playfair)] text-3xl text-ink">Start Live Round</h2>
+          <p className="text-ink/50 text-sm mb-2">No live round active</p>
+          <h2 className="font-serif text-3xl text-ink">Start Live Round</h2>
         </div>
 
         <div className="flex flex-col gap-2">
-          <label className="text-ink/65 text-sm tracking-[0.15em] uppercase">Select Round</label>
+          <label className="text-ink/65 text-sm ">Select Round</label>
           {availableRounds.length === 0 ? (
             <p className="text-ink/50 text-base">No rounds available. Rounds must be upcoming or active.</p>
           ) : (
@@ -1156,7 +1140,7 @@ export default function LiveScoringFlow({
                 className={`w-full text-left px-4 py-3 border text-base transition-colors
                   ${activatingRoundId === r.id
                     ? "border-accent text-accent-deep bg-accent/15"
-                    : "border-bark/12 text-ink/80 hover:border-bark/25"}`}
+                    : "border-line text-ink/80 hover:border-line-strong"}`}
               >
                 Round {r.round_number} — {r.courses?.name}
                 <span className={`ml-2 text-sm ${r.status === "active" ? "text-accent-deep" : "text-ink/50"}`}>
@@ -1172,10 +1156,10 @@ export default function LiveScoringFlow({
         <button
           onClick={handleActivate}
           disabled={!activatingRoundId || saving || availableRounds.length === 0}
-          className={`w-full py-4 text-base tracking-[0.2em] uppercase transition-colors
+          className={`w-full py-4 text-base transition-colors
             ${activatingRoundId && !saving
-              ? "bg-accent-deep text-ink hover:bg-accent"
-              : "bg-bark/[0.06] text-ink/50 cursor-not-allowed"}`}
+              ? "bg-accent-deep text-white hover:bg-accent"
+              : "bg-tint text-ink/50 cursor-not-allowed"}`}
         >
           {saving ? "Activating…" : "Activate Live Round →"}
         </button>
@@ -1240,7 +1224,7 @@ export default function LiveScoringFlow({
         )}
 
         <div className="flex flex-col gap-3">
-          <label className="text-ink/65 text-sm tracking-[0.15em] uppercase">
+          <label className="text-ink/65 text-sm ">
             Select Players (1–4)
           </label>
 
@@ -1269,7 +1253,7 @@ export default function LiveScoringFlow({
                   className={`w-full flex items-center justify-between px-4 py-3 border text-base transition-colors
                     ${isSelected
                       ? "border-accent text-accent-deep bg-accent/10"
-                      : "border-bark/12 text-ink/80 hover:border-bark/25"}`}
+                      : "border-line text-ink/80 hover:border-line-strong"}`}
                 >
                   <div className="flex items-center gap-2">
                     {player.teams && (
@@ -1292,14 +1276,14 @@ export default function LiveScoringFlow({
                         <span className="text-ink/50 text-sm">No tees for this course</span>
                       ) : (
                         playerCourseTees.map(tee => {
-                          const style = { dot: teeDot(tee.name), active: TEE_ACTIVE[tee.name] ?? "border-bark/25 text-ink/80" }
+                          const style = { dot: teeDot(tee.name), active: TEE_ACTIVE[tee.name] ?? "border-line-strong text-ink/80" }
                           const isActive = selectedTeeId === tee.id
                           return (
                             <button
                               key={tee.id}
                               onClick={() => setTeeForPlayer(player.id, tee.id)}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 border text-sm tracking-wider uppercase transition-colors
-                                ${isActive ? style.active + " bg-bark/[0.04]" : "border-bark/12 text-ink/65 hover:border-bark/25"}`}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 border text-sm transition-colors
+                                ${isActive ? style.active + " bg-tint" : "border-line text-ink/65 hover:border-line-strong"}`}
                             >
                               <span className={`w-2 h-2 rounded-full ${style.dot}`} />
                               {tee.name}
@@ -1356,8 +1340,8 @@ export default function LiveScoringFlow({
             window.scrollTo({ top: 0, behavior: "instant" })
           }}
           disabled={!canStart}
-          className={`w-full py-4 text-base tracking-[0.2em] uppercase transition-colors
-            ${canStart ? "bg-accent-deep text-ink hover:bg-accent" : "bg-bark/[0.06] text-ink/50 cursor-not-allowed"}`}
+          className={`w-full py-4 text-base transition-colors
+            ${canStart ? "bg-accent-deep text-white hover:bg-accent" : "bg-tint text-ink/50 cursor-not-allowed"}`}
         >
           Start Round →
         </button>
@@ -1371,7 +1355,7 @@ export default function LiveScoringFlow({
           </p>
         )}
 
-        <button onClick={() => setCloseConfirm(true)} className="text-center text-ink/50 text-sm tracking-widest uppercase hover:text-rust transition-colors">
+        <button onClick={() => setCloseConfirm(true)} className="text-center text-ink/50 text-sm hover:text-rust transition-colors">
           Close Live Round
         </button>
       </div>
@@ -1548,7 +1532,7 @@ export default function LiveScoringFlow({
 
           {/* Sub-header */}
           <div
-            className="sticky z-10 paper border-b border-bark/12 px-4 py-3 flex items-center justify-between"
+            className="sticky z-10 paper border-b border-line px-4 py-3 flex items-center justify-between"
             style={{ top: CHROME }}
           >
             <BackButton onClick={() => setEditingPlayerId(null)} dense />
@@ -1595,10 +1579,10 @@ export default function LiveScoringFlow({
 
               const ptsBadge =
                 hs.isNR      ? "border-rust/40 bg-rust/[0.12] text-rust-deep/80" :
-                pts === null  ? "border-bark/12 text-ink/50" :
+                pts === null  ? "border-line text-ink/50" :
                 pts >= 3      ? "border-accent bg-accent-deep/15 text-accent-deep" :
-                pts === 2     ? "border-bark/12 bg-bark/[0.04] text-ink" :
-                pts === 1     ? "border-bark/12 bg-transparent text-ink/65" :
+                pts === 2     ? "border-line bg-tint text-ink" :
+                pts === 1     ? "border-line bg-transparent text-ink/65" :
                                 "border-rust/40 bg-rust/10 text-rust"
 
               const stepScore = (delta: number) => {
@@ -1626,20 +1610,20 @@ export default function LiveScoringFlow({
               )
 
               return (
-                <div key={hole.id} className={`bg-surface border rounded-xl ${hs.isNR ? "border-rust/40" : "border-bark/12"}`}>
+                <div key={hole.id} className={`bg-surface border rounded-xl ${hs.isNR ? "border-rust/40" : "border-line"}`}>
                   {/* Hole info row */}
                   <div className="flex items-center justify-between px-4 pt-3 pb-2">
                     <div className="flex items-baseline gap-3">
-                      <span className="font-[family-name:var(--font-playfair)] text-2xl text-ink leading-none w-6">{hole.hole_number}</span>
+                      <span className="font-serif text-2xl text-ink leading-none w-6">{hole.hole_number}</span>
                       <span className="text-ink/65 text-base">Par <span className="text-ink font-semibold">{ePar}</span></span>
                       <span className="text-ink/50 text-sm">SI {eSI}</span>
                     </div>
                     <button
                       onClick={toggleNR}
-                      className={`text-sm tracking-widest uppercase border rounded-xl px-2.5 py-1 transition-colors
+                      className={`text-sm border rounded-xl px-2.5 py-1 transition-colors
                         ${hs.isNR
                           ? "border-rust/50 text-rust-deep bg-rust/10"
-                          : "border-bark/12 text-ink/50 hover:border-rust/40 hover:text-rust-deep/60"}`}
+                          : "border-line text-ink/50 hover:border-rust/40 hover:text-rust-deep/60"}`}
                     >
                       NR
                     </button>
@@ -1649,18 +1633,18 @@ export default function LiveScoringFlow({
                   <div className="flex items-center gap-3 px-4 pb-3">
                     <button
                       onClick={() => stepScore(-1)} disabled={hs.isNR}
-                      className="flex-1 h-16 rounded-xl border border-bark/12 text-ink/80 text-4xl leading-none
+                      className="flex-1 h-16 rounded-xl border border-line text-ink/80 text-4xl leading-none
                         hover:border-accent hover:text-accent-deep active:scale-95 transition-all
                         flex items-center justify-center disabled:opacity-20 disabled:cursor-not-allowed"
                     >−</button>
                     {hs.isNR ? (
-                      <span className="font-[family-name:var(--font-playfair)] text-4xl flex items-center justify-center text-ink/50 w-20 h-16">—</span>
+                      <span className="font-serif text-4xl flex items-center justify-center text-ink/50 w-20 h-16">—</span>
                     ) : (
                       <input
                         type="text" inputMode="numeric" pattern="[0-9]*"
                         value={hs.gross === null ? "" : String(hs.gross)}
                         onChange={onInput}
-                        className={`font-[family-name:var(--font-playfair)] text-4xl text-center bg-transparent
+                        className={`font-serif text-4xl text-center bg-transparent
                           outline-none text-ink caret-accent border rounded-xl transition-colors p-0 w-20 h-16
                           ${hs.gross === null ? "border-accent/50" : "border-accent/15"}`}
                         style={{ lineHeight: "4rem" }}
@@ -1668,13 +1652,13 @@ export default function LiveScoringFlow({
                     )}
                     <button
                       onClick={() => stepScore(1)} disabled={hs.isNR}
-                      className="flex-1 h-16 rounded-xl border border-bark/12 text-ink/80 text-4xl leading-none
+                      className="flex-1 h-16 rounded-xl border border-line text-ink/80 text-4xl leading-none
                         hover:border-accent hover:text-accent-deep active:scale-95 transition-all
                         flex items-center justify-center disabled:opacity-20 disabled:cursor-not-allowed"
                     >+</button>
                     <div className={`flex-shrink-0 flex items-baseline gap-1 px-2.5 py-1.5 rounded-xl border ${ptsBadge}`}>
-                      <span className="text-lg font-bold leading-none font-[family-name:var(--font-playfair)]">{pts ?? "·"}</span>
-                      <span className="text-[10px] opacity-60">pts</span>
+                      <span className="text-lg font-bold leading-none font-serif">{pts ?? "·"}</span>
+                      <span className="text-[13px] opacity-60">pts</span>
                     </div>
                     {label && label !== "NR" && (
                       <span className={`text-sm flex-shrink-0 ${color}`}>{label}</span>
@@ -1704,11 +1688,11 @@ export default function LiveScoringFlow({
           </div>
 
           {/* Sticky save */}
-          <div className="sticky bottom-0 paper border-t border-bark/12 px-4 py-4 max-w-lg mx-auto w-full">
+          <div className="sticky bottom-0 paper border-t border-line px-4 py-4 max-w-lg mx-auto w-full">
             <button
               onClick={saveEditDraft}
               disabled={editSaving}
-              className="w-full py-4 bg-accent-deep text-ink text-base tracking-[0.2em] uppercase font-bold
+              className="w-full py-4 bg-accent-deep text-white text-base font-bold
                 hover:bg-accent disabled:opacity-50 transition-colors rounded-xl"
             >
               {editSaving ? "Saving…" : "Confirm"}
@@ -1740,7 +1724,7 @@ export default function LiveScoringFlow({
                   className={`flex-shrink-0 flex flex-col items-start px-3.5 py-2.5 rounded-xl border transition-colors min-w-[100px]
                     ${isSel
                       ? "border-accent bg-accent/10"
-                      : "border-bark/12 bg-surface hover:border-bark/12"}`}
+                      : "border-line bg-surface hover:border-line"}`}
                 >
                   <div className="flex items-center gap-1.5 mb-1">
                     {player.teams && (
@@ -1826,7 +1810,7 @@ export default function LiveScoringFlow({
           const dark  = "text-ink"
 
           return (
-            <div className="rounded-2xl border border-bark/12 bg-surface relative">
+            <div className="rounded-2xl border border-line bg-surface relative">
 
               {/* Course banner — scrolls with page, does not stick */}
               <div className={`rounded-t-2xl px-4 py-3 ${SC_RULE} ${SC_BAND}`}>
@@ -1888,7 +1872,7 @@ export default function LiveScoringFlow({
 
               {/* Out subtotal — gold fill, bolder text */}
               <div className={`${grid} px-3 py-2.5 items-center ${SC_RULE} ${SC_BAND}`}>
-                <span className="text-sm font-bold tracking-widest uppercase text-ink/80" style={sf}>Out</span>
+                <span className="text-sm font-bold text-ink/80" style={sf}>Out</span>
                 <span className={`text-sm ${muted}`} style={sf}>{front9Yards > 0 ? front9Yards : "—"}</span>
                 <span className={`text-sm font-bold ${dark}`} style={sf}>{front9Par}</span>
                 <span />
@@ -1910,7 +1894,7 @@ export default function LiveScoringFlow({
 
               {/* In subtotal — gold fill, bolder text */}
               <div className={`${grid} px-3 py-2.5 items-center ${SC_RULE} ${SC_BAND}`}>
-                <span className="text-sm font-bold tracking-widest uppercase text-ink/80" style={sf}>In</span>
+                <span className="text-sm font-bold text-ink/80" style={sf}>In</span>
                 <span className={`text-sm ${muted}`} style={sf}>{back9Yards > 0 ? back9Yards : "—"}</span>
                 <span className={`text-sm font-bold ${dark}`} style={sf}>{back9Par}</span>
                 <span />
@@ -1920,12 +1904,12 @@ export default function LiveScoringFlow({
 
               {/* Total — deepest gold, heaviest weight */}
               <div className={`${grid} px-3 py-3 items-center rounded-b-2xl ${SC_BAND_TOTAL}`}>
-                <span className="text-[13px] font-bold tracking-widest uppercase text-ink/80" style={sf}>Tot</span>
+                <span className="text-[13px] font-bold text-ink/80" style={sf}>Tot</span>
                 <span className={`text-sm font-semibold ${muted}`} style={sf}>{totalYards > 0 ? totalYards : "—"}</span>
                 <span className={`text-sm font-bold ${dark}`} style={sf}>{totalPar}</span>
                 <span />
                 <span className={`text-center text-xl font-extrabold ${dark}`} style={sf}>{hasAnyScore && totalGross > 0 ? totalGross : "—"}</span>
-                <span className="text-right text-xl font-extrabold text-ink/80 font-[family-name:var(--font-playfair)]">{totalPts}</span>
+                <span className="text-right text-xl font-extrabold text-ink/80 font-serif">{totalPts}</span>
               </div>
 
             </div>
@@ -1941,7 +1925,7 @@ export default function LiveScoringFlow({
           {allowScoreEdits && (
           <button
             onClick={() => enterEditMode(selectedId)}
-            className="flex-1 py-4 border border-bark/12 text-ink/80 text-base tracking-[0.15em] uppercase hover:border-bark/25 transition-colors rounded-xl"
+            className="flex-1 py-4 border border-line text-ink/80 text-base hover:border-line-strong transition-colors rounded-xl"
           >
             Edit Scorecard
           </button>
@@ -1949,7 +1933,7 @@ export default function LiveScoringFlow({
           <button
             onClick={handleCommit}
             disabled={saving}
-            className="flex-[2] py-4 bg-accent-deep text-ink text-base tracking-[0.2em] uppercase font-bold hover:bg-accent disabled:opacity-50 transition-colors rounded-xl"
+            className="flex-[2] py-4 bg-accent-deep text-white text-base font-bold hover:bg-accent disabled:opacity-50 transition-colors rounded-xl"
           >
             {saving ? "Saving…" : "Commit All"}
           </button>
@@ -1966,16 +1950,16 @@ export default function LiveScoringFlow({
       <div className="flex flex-col items-center justify-center px-6 gap-6 text-center min-h-[calc(100dvh-113px)]">
         <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center text-accent-deep text-3xl">✓</div>
         <div>
-          <h2 className="font-[family-name:var(--font-playfair)] text-3xl text-ink mb-2">Scores committed</h2>
+          <h2 className="font-serif text-3xl text-ink mb-2">Scores committed</h2>
           <p className="text-ink/65 text-base">Saved to the official leaderboard.</p>
         </div>
         <button
           onClick={() => { setSelectedPlayerIds([]); setPlayerTeeIds({}); setScores({}); setHoleIdx(0); setStep("setup") }}
-          className="mt-4 px-8 py-3 border border-accent/50 text-accent-deep text-sm tracking-[0.2em] uppercase hover:bg-accent/10 transition-colors"
+          className="mt-4 px-8 py-3 border border-accent/50 text-accent-deep text-sm hover:bg-accent/10 transition-colors"
         >
           Score Another Player
         </button>
-        <button onClick={() => setCloseConfirm(true)} className="text-ink/50 text-sm tracking-widest uppercase hover:text-rust transition-colors">
+        <button onClick={() => setCloseConfirm(true)} className="text-ink/50 text-sm hover:text-rust transition-colors">
           Close Live Round
         </button>
       </div>
@@ -2084,8 +2068,8 @@ function HoleCard({
       <div className={`flex gap-3${showLeaderboard ? " hidden" : ""}`}>
         <button
           onClick={onBack}
-          className="flex-1 py-4 border border-bark/12 text-ink/65 text-2xl
-            hover:border-bark/25 hover:text-ink/80 active:bg-bark/[0.04] transition-colors rounded-xl"
+          className="flex-1 py-4 border border-line text-ink/65 text-2xl
+            hover:border-line-strong hover:text-ink/80 active:bg-tint transition-colors rounded-xl"
           aria-label="Previous hole"
         >
           ←
@@ -2093,7 +2077,7 @@ function HoleCard({
         <button
           onClick={() => onSubmit(holeScores)}
           disabled={!allHaveGross}
-          className="flex-[2] py-4 bg-accent-deep text-ink text-2xl font-bold
+          className="flex-[2] py-4 bg-accent-deep text-white text-2xl font-bold
             hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed
             active:scale-[0.98] transition-all rounded-xl"
           aria-label="Next hole"
@@ -2146,10 +2130,10 @@ function LivePlayerTile({
 
   const ptsBadge =
     isNR         ? "border-rust/40 bg-rust/[0.12] text-rust-deep/80" :
-    pts === null ? "border-bark/12 text-ink/50" :
+    pts === null ? "border-line text-ink/50" :
     pts >= 3     ? "border-accent bg-accent-deep/15 text-accent-deep" :
-    pts === 2    ? "border-bark/12 bg-bark/[0.04] text-ink" :
-    pts === 1    ? "border-bark/12 bg-transparent text-ink/65" :
+    pts === 2    ? "border-line bg-tint text-ink" :
+    pts === 1    ? "border-line bg-transparent text-ink/65" :
                    "border-rust/40 bg-rust/10 text-rust"
 
   function handleStep(delta: number) {
@@ -2181,7 +2165,7 @@ function LivePlayerTile({
 
   return (
     <div className={`bg-surface border rounded-xl transition-colors
-      ${isNR ? "border-rust/40" : "border-bark/12"}`}>
+      ${isNR ? "border-rust/40" : "border-line"}`}>
 
       {/* Player name header */}
       <div className="flex items-center gap-2 px-4 pt-3 pb-2 border-b border-white/[0.06]">
@@ -2207,10 +2191,10 @@ function LivePlayerTile({
           </div>
           <button
             onClick={onToggleNR}
-            className={`text-sm tracking-widest uppercase border rounded-xl px-3 py-1.5 transition-colors
+            className={`text-sm border rounded-xl px-3 py-1.5 transition-colors
               ${isNR
                 ? "border-rust/50 text-rust-deep bg-rust/10"
-                : "border-bark/12 text-ink/50 hover:border-rust/40 hover:text-rust-deep/60"}`}
+                : "border-line text-ink/50 hover:border-rust/40 hover:text-rust-deep/60"}`}
           >
             NR
           </button>
@@ -2221,14 +2205,14 @@ function LivePlayerTile({
           <button
             onClick={() => handleStep(-1)}
             disabled={isNR}
-            className="flex-1 h-16 rounded-xl border border-bark/12 text-ink/80 text-4xl leading-none
+            className="flex-1 h-16 rounded-xl border border-line text-ink/80 text-4xl leading-none
               hover:border-accent hover:text-accent-deep active:scale-95 transition-all
               flex items-center justify-center disabled:opacity-20 disabled:cursor-not-allowed"
           >
             −
           </button>
           {isNR ? (
-            <span className="font-[family-name:var(--font-playfair)] text-4xl flex items-center justify-center
+            <span className="font-serif text-4xl flex items-center justify-center
               text-ink/50 w-20 h-16">
               —
             </span>
@@ -2239,7 +2223,7 @@ function LivePlayerTile({
               pattern="[0-9]*"
               value={score === null ? "" : String(score)}
               onChange={handleInputChange}
-              className={`font-[family-name:var(--font-playfair)] text-4xl text-center bg-transparent
+              className={`font-serif text-4xl text-center bg-transparent
                 outline-none text-ink caret-accent border rounded-xl transition-colors p-0 w-20 h-16
                 ${score === null ? "border-accent/50" : "border-accent/15"}`}
               style={{ lineHeight: "4rem" }}
@@ -2248,7 +2232,7 @@ function LivePlayerTile({
           <button
             onClick={() => handleStep(1)}
             disabled={isNR}
-            className="flex-1 h-16 rounded-xl border border-bark/12 text-ink/80 text-4xl leading-none
+            className="flex-1 h-16 rounded-xl border border-line text-ink/80 text-4xl leading-none
               hover:border-accent hover:text-accent-deep active:scale-95 transition-all
               flex items-center justify-center disabled:opacity-20 disabled:cursor-not-allowed"
           >
@@ -2262,10 +2246,10 @@ function LivePlayerTile({
             {label || "—"}
           </span>
           <div className={`flex items-baseline gap-1.5 px-3 py-1.5 rounded-xl border ${ptsBadge}`}>
-            <span className="text-2xl font-bold leading-none font-[family-name:var(--font-playfair)]">
+            <span className="text-2xl font-bold leading-none font-serif">
               {pts ?? "·"}
             </span>
-            <span className="text-[10px] opacity-60 leading-none">pts</span>
+            <span className="text-[13px] opacity-60 leading-none">pts</span>
           </div>
         </div>
 
@@ -2286,14 +2270,14 @@ function LivePlayerTile({
           <button
             onClick={() => handleStep(-1)}
             disabled={isNR}
-            className="w-14 h-14 rounded-full border border-bark/12 text-ink/80 text-4xl leading-none
+            className="w-14 h-14 rounded-full border border-line text-ink/80 text-4xl leading-none
               hover:border-accent hover:text-accent-deep active:scale-95 transition-all
               flex items-center justify-center disabled:opacity-20 disabled:cursor-not-allowed"
           >
             −
           </button>
           {isNR ? (
-            <span className="font-[family-name:var(--font-playfair)] text-4xl flex items-center justify-center
+            <span className="font-serif text-4xl flex items-center justify-center
               text-ink/50 w-14 h-14">
               —
             </span>
@@ -2304,7 +2288,7 @@ function LivePlayerTile({
               pattern="[0-9]*"
               value={score === null ? "" : String(score)}
               onChange={handleInputChange}
-              className={`font-[family-name:var(--font-playfair)] text-4xl text-center bg-transparent
+              className={`font-serif text-4xl text-center bg-transparent
                 outline-none text-ink caret-accent border rounded-xl transition-colors p-0 w-14 h-14
                 ${score === null ? "border-accent/50" : "border-accent/15"}`}
               style={{ lineHeight: "3.5rem" }}
@@ -2313,7 +2297,7 @@ function LivePlayerTile({
           <button
             onClick={() => handleStep(1)}
             disabled={isNR}
-            className="w-14 h-14 rounded-full border border-bark/12 text-ink/80 text-4xl leading-none
+            className="w-14 h-14 rounded-full border border-line text-ink/80 text-4xl leading-none
               hover:border-accent hover:text-accent-deep active:scale-95 transition-all
               flex items-center justify-center disabled:opacity-20 disabled:cursor-not-allowed"
           >
@@ -2321,10 +2305,10 @@ function LivePlayerTile({
           </button>
           <button
             onClick={onToggleNR}
-            className={`text-sm tracking-widest uppercase border rounded-xl px-2 py-1.5 flex-shrink-0 transition-colors
+            className={`text-sm border rounded-xl px-2 py-1.5 flex-shrink-0 transition-colors
               ${isNR
                 ? "border-rust/50 text-rust-deep bg-rust/10"
-                : "border-bark/12 text-ink/50 hover:border-rust/40 hover:text-rust-deep/60"}`}
+                : "border-line text-ink/50 hover:border-rust/40 hover:text-rust-deep/60"}`}
           >
             NR
           </button>
@@ -2335,11 +2319,11 @@ function LivePlayerTile({
           ${isNR ? "bg-rust/15 text-rust-deep/70"
             : pts === null ? "bg-transparent text-ink/50"
             : pts >= 3 ? "bg-accent-deep text-ink"
-            : pts === 2 ? "bg-bark/[0.06] text-ink"
-            : pts === 1 ? "bg-bark/[0.04] text-ink/65"
+            : pts === 2 ? "bg-tint text-ink"
+            : pts === 1 ? "bg-tint text-ink/65"
             : "bg-rust/15 text-rust"}`}>
           <span className="text-lg font-bold leading-none">{pts ?? "·"}</span>
-          <span className="text-[10px] opacity-60 leading-none mt-0.5">{pts !== null || isNR ? "pts" : ""}</span>
+          <span className="text-[13px] opacity-60 leading-none mt-0.5">{pts !== null || isNR ? "pts" : ""}</span>
         </div>
 
       </div>
@@ -2409,10 +2393,10 @@ function StatsRow({
     "transition-colors duration-150 touch-manipulation " +
     (on
       ? "border-accent bg-accent/[0.12] text-accent-deep font-semibold"
-      : "border-bark/12 text-ink/65 hover:border-bark/25 active:bg-bark/[0.04]")
+      : "border-line text-ink/65 hover:border-line-strong active:bg-tint")
 
   const stepClass =
-    "w-11 h-12 rounded-xl border border-bark/12 text-ink/80 text-2xl leading-none " +
+    "w-11 h-12 rounded-xl border border-line text-ink/80 text-2xl leading-none " +
     "flex items-center justify-center touch-manipulation transition-colors duration-150 " +
     "hover:border-accent hover:text-accent-deep active:scale-95 " +
     "disabled:opacity-20 disabled:cursor-not-allowed"
@@ -2421,7 +2405,7 @@ function StatsRow({
   // which on a fourball is most of a screen of extra scrolling on a card
   // that already scrolls; this is 73px. Measured, not guessed.
   return (
-    <div className="px-4 pb-3 pt-3 border-t border-bark/[0.08] flex items-center gap-2">
+    <div className="px-4 pb-3 pt-3 border-t border-line flex items-center gap-2">
 
       {showFairway ? (
         // The middle column is wider because its word is longer. Three equal
@@ -2483,7 +2467,7 @@ function StatsRow({
           <span className={`t-data t-num leading-none ${putts == null ? "text-ink/50" : "text-ink"}`}>
             {putts ?? "—"}
           </span>
-          <span className="text-[10px] text-ink/50 leading-none mt-0.5">putts</span>
+          <span className="text-[13px] text-ink/65 leading-none mt-0.5">putts</span>
         </span>
         <button
           type="button"

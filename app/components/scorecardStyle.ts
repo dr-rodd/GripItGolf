@@ -140,3 +140,20 @@ export const TEE_DOT: Record<string, string> = {
 /** A tee's swatch, falling back to a neutral for a colour we do not know. */
 export const teeDot = (name: string | null | undefined) =>
   (name && TEE_DOT[name]) || `bg-bark/25 ${TEE_RING}`
+
+/**
+ * The border a selected tee button wears. The swatch itself comes from
+ * `teeDot` above — one copy, shared with every
+ * scorecard, so the tee you pick and the tee your card names look the same.
+ */
+export const TEE_ACTIVE: Record<string, string> = {
+  Black:     "border-zinc-700 text-ink",
+  Blue:      "border-blue-500 text-ink",
+  White:     "border-bark/40 text-ink",
+  Red:       "border-red-500 text-ink",
+  Yellow:    "border-yellow-500 text-ink",
+  Sandstone: "border-amber-400 text-ink",
+  Slate:     "border-slate-500 text-ink",
+  Granite:   "border-stone-500 text-ink",
+  Claret:    "border-rose-800 text-ink",
+}

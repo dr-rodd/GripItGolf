@@ -278,7 +278,7 @@ section('Scorecards are the same card as everywhere else')
   }
 
   ok(read('app/scoring/LiveScoringFlow.tsx')
-    .includes('rounded-2xl border border-bark/12 bg-surface'),
+    .includes('rounded-2xl border border-line bg-surface'),
     'the scorecard is the same card as a settings section')
 }
 

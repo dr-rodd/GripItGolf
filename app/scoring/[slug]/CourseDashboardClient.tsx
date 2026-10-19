@@ -490,7 +490,7 @@ export default function CourseDashboardClient({
         rounded-xl border tabular-nums text-base font-semibold
         transition-colors duration-150
         ${allowance === FULL_ALLOWANCE
-          ? "border-bark/12 bg-surface text-ink/80 hover:border-bark/25"
+          ? "border-line bg-surface text-ink/80 hover:border-line-strong"
           : "border-accent/50 bg-accent/[0.10] text-accent-deep hover:bg-accent/15"}`}
     >
       {allowance}%
@@ -557,12 +557,12 @@ export default function CourseDashboardClient({
           otherwise butting straight up against. */}
       <div
         ref={headerRef}
-        className="border-b border-bark/12 sticky z-20 paper"
+        className="border-b border-line sticky z-20 paper"
         style={{ top: stickyTop }}
       >
         <div className="max-w-lg mx-auto px-4 py-4 flex items-center">
           {headerLeft}
-          <h1 className="flex-1 min-w-0 ml-3 font-[family-name:var(--font-playfair)] text-2xl text-ink tracking-wide">
+          <h1 className="flex-1 min-w-0 ml-3 font-serif text-2xl text-ink ">
             {courseName}
           </h1>
           {headerRight}
@@ -570,7 +570,7 @@ export default function CourseDashboardClient({
         {view === "scoring" && liveHole && (
           <div className="max-w-lg mx-auto px-4 pb-3">
             <div className="flex items-center gap-3">
-              <span className="font-[family-name:var(--font-playfair)] text-ink text-3xl leading-none w-8 tabular-nums">
+              <span className="font-serif text-ink text-3xl leading-none w-8 tabular-nums">
                 {liveHole.idx + 1}
               </span>
               {/* The hole you are on is wider than the seventeen you are not.
@@ -594,7 +594,7 @@ export default function CourseDashboardClient({
                     <div
                       key={i}
                       className={`h-1 rounded-full transition-all duration-300 ease-out ${
-                        i < liveHole.idx ? "bg-accent/60" : isNow ? "bg-accent" : "bg-bark/[0.06]"
+                        i < liveHole.idx ? "bg-accent/60" : isNow ? "bg-accent" : "bg-tint"
                       }`}
                       style={{ flexGrow: isNow ? 1.6 : 1, flexBasis: 0, minWidth: isNow ? 16 : 0 }}
                     />
@@ -614,7 +614,7 @@ export default function CourseDashboardClient({
                 onClick={() => setShowLiveLeaderboard(false)}
                 className="w-full py-2.5 flex items-center justify-center gap-2.5 border border-accent/25 bg-accent/[0.07] hover:bg-accent/10 transition-colors rounded-xl"
               >
-                <span className="text-accent-deep text-sm tracking-[0.2em] uppercase">← Scorecard</span>
+                <span className="text-accent-deep text-sm ">← Scorecard</span>
               </button>
             ) : (
               <button
@@ -622,7 +622,7 @@ export default function CourseDashboardClient({
                 className="w-full py-2.5 flex items-center justify-center gap-2.5 border border-accent/25 bg-accent/[0.08] hover:bg-accent/15 transition-colors rounded-xl"
               >
                 <span className="w-2 h-2 rounded-full bg-accent dot-live" />
-                <span className="text-accent-deep text-sm tracking-[0.2em] uppercase">Live Leaderboard</span>
+                <span className="text-accent-deep text-sm ">Live Leaderboard</span>
               </button>
             )}
           </div>
@@ -641,18 +641,18 @@ export default function CourseDashboardClient({
               className="w-full py-3 flex items-center justify-center gap-2.5 border border-accent/25 bg-accent/[0.08] hover:bg-accent/15 transition-colors rounded-xl"
             >
               <span className="w-2 h-2 rounded-full bg-accent dot-live" />
-              <span className="text-accent-deep text-sm tracking-[0.2em] uppercase">Live Leaderboard</span>
+              <span className="text-accent-deep text-sm ">Live Leaderboard</span>
             </button>
           )}
 
           {/* Scorecards */}
           <section>
             <div className="flex items-center gap-3 mb-3">
-              <p className="text-ink/50 text-xs tracking-[0.2em] uppercase">
+              <p className="text-ink/50 text-xs ">
                 Scorecards
               </p>
               {scorecards.some(s => !s.finalised && s.playerNames.length > 0) && scorecards.some(s => s.finalised) && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl border border-bark/25 bg-bark/[0.08] text-ink/80 text-xs tracking-wide font-semibold">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl border border-line-strong bg-bark/[0.08] text-ink/80 text-xs font-semibold">
                   Mixed
                 </span>
               )}
@@ -661,7 +661,7 @@ export default function CourseDashboardClient({
             {loading ? (
               <p className="text-ink/50 text-base py-4">Loading…</p>
             ) : scorecards.length === 0 ? (
-              <div className="border border-bark/12 rounded-xl px-4 py-5">
+              <div className="border border-line rounded-xl px-4 py-5">
                 <p className="text-ink/50 text-base">No active scorecards</p>
               </div>
             ) : (
@@ -687,7 +687,7 @@ export default function CourseDashboardClient({
                         className={`w-full text-left border rounded-xl px-4 py-4 transition-colors
                           ${finalised
                             ? "border-accent/30 bg-accent/[0.07]"
-                            : "border-bark/12 hover:border-accent/50 bg-surface hover:bg-surface cursor-pointer"
+                            : "border-line hover:border-accent/50 bg-surface hover:bg-surface cursor-pointer"
                           }`}
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -700,11 +700,11 @@ export default function CourseDashboardClient({
                             </p>
                           </div>
                           {playerNames.length > 0 && (finalised ? (
-                            <span className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border border-accent/40 bg-accent/10 text-accent-deep text-sm font-semibold tracking-wide">
+                            <span className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border border-accent/40 bg-accent/10 text-accent-deep text-sm font-semibold ">
                               ✓ Done
                             </span>
                           ) : (
-                            <span className="flex-shrink-0 text-accent-deep text-sm tracking-wider uppercase pt-0.5">
+                            <span className="flex-shrink-0 text-accent-deep text-sm pt-0.5">
                               Score →
                             </span>
                           ))}
@@ -716,7 +716,7 @@ export default function CourseDashboardClient({
                             {Array.from({ length: 18 }).map((_, i) => (
                               <div
                                 key={i}
-                                className={`flex-1 h-1 rounded-full ${i < holesThrough ? "bg-accent/60" : "bg-bark/[0.06]"}`}
+                                className={`flex-1 h-1 rounded-full ${i < holesThrough ? "bg-accent/60" : "bg-tint"}`}
                               />
                             ))}
                           </div>
@@ -743,7 +743,7 @@ export default function CourseDashboardClient({
             <button
               onClick={startNewScorecard}
               disabled={starting}
-              className="w-full py-4 border border-accent/40 text-accent-deep text-base tracking-[0.2em] uppercase hover:bg-accent/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded-xl"
+              className="w-full py-4 border border-accent/40 text-accent-deep text-base hover:bg-accent/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded-xl"
             >
               {starting ? "Starting…" : "+ Start New Scorecard"}
             </button>
@@ -783,9 +783,9 @@ export default function CourseDashboardClient({
 
                 {/* ── Void Scorecard ── */}
                 <section>
-                  <p className="text-ink/50 text-xs tracking-[0.2em] uppercase mb-3">Void Scorecard</p>
+                  <p className="text-ink/50 text-xs mb-3">Void Scorecard</p>
                   {staffedScorecards.length === 0 ? (
-                    <p className="text-ink/50 text-base border border-bark/12 px-4 py-4 rounded-xl">No scorecards with players</p>
+                    <p className="text-ink/50 text-base border border-line px-4 py-4 rounded-xl">No scorecards with players</p>
                   ) : (
                     <div className="space-y-2">
                       {staffedScorecards.map(s => {
@@ -794,7 +794,7 @@ export default function CourseDashboardClient({
                           <div key={s.liveRound.id}>
                             <div
                               className={`border rounded-xl px-4 py-3 flex items-center justify-between gap-3 transition-colors
-                                ${isConfirming ? "border-rust/40 bg-rust/[0.08]" : "border-bark/12 bg-surface"}`}
+                                ${isConfirming ? "border-rust/40 bg-rust/[0.08]" : "border-line bg-surface"}`}
                             >
                               <div className="min-w-0">
                                 <p className="text-ink/80 text-base truncate">{s.playerNames.join(", ")}</p>
@@ -824,7 +824,7 @@ export default function CourseDashboardClient({
                                 <div className="flex items-center gap-2 flex-shrink-0">
                                   <button
                                     onClick={() => setSettingsVoidId(null)}
-                                    className="px-3 py-1.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-xl"
+                                    className="px-3 py-1.5 text-sm text-ink/65 border border-line hover:border-line-strong transition-colors rounded-xl"
                                   >
                                     Cancel
                                   </button>
@@ -847,22 +847,22 @@ export default function CourseDashboardClient({
 
                 {/* ── Players ── */}
                 <section>
-                  <p className="text-ink/50 text-xs tracking-[0.2em] uppercase mb-3">Players</p>
+                  <p className="text-ink/50 text-xs mb-3">Players</p>
                   {allPlayersList.length === 0 ? (
-                    <p className="text-ink/50 text-base border border-bark/12 px-4 py-4 rounded-xl">No active or finalised players</p>
+                    <p className="text-ink/50 text-base border border-line px-4 py-4 rounded-xl">No active or finalised players</p>
                   ) : (
                     <div className="space-y-2">
                       {/* Active players */}
                       {activePlayersList.length > 0 && (
                         <>
-                          <p className="text-ink/50 text-xs tracking-[0.15em] uppercase pt-1 pb-0.5">Active</p>
+                          <p className="text-ink/50 text-xs pt-1 pb-0.5">Active</p>
                           {activePlayersList.map(({ id, name, liveRoundId, roundId }) => {
                             const isConfirming = playerConfirm?.playerId === id && playerConfirm.type === "remove"
                             return (
                               <div
                                 key={id + liveRoundId}
                                 className={`border rounded-xl px-4 py-3 flex items-center justify-between gap-3 transition-colors
-                                  ${isConfirming ? "border-rust/40 bg-rust/[0.08]" : "border-bark/12 bg-surface"}`}
+                                  ${isConfirming ? "border-rust/40 bg-rust/[0.08]" : "border-line bg-surface"}`}
                               >
                                 <div className="min-w-0">
                                   <p className="text-ink/80 text-base truncate">{name}</p>
@@ -881,7 +881,7 @@ export default function CourseDashboardClient({
                                   <div className="flex items-center gap-2 flex-shrink-0">
                                     <button
                                       onClick={() => setPlayerConfirm(null)}
-                                      className="px-3 py-1.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-xl"
+                                      className="px-3 py-1.5 text-sm text-ink/65 border border-line hover:border-line-strong transition-colors rounded-xl"
                                     >
                                       Cancel
                                     </button>
@@ -902,14 +902,14 @@ export default function CourseDashboardClient({
                       {/* Finalised players */}
                       {finalisedPlayersList.length > 0 && (
                         <>
-                          <p className="text-ink/50 text-xs tracking-[0.15em] uppercase pt-2 pb-0.5">Finalised</p>
+                          <p className="text-ink/50 text-xs pt-2 pb-0.5">Finalised</p>
                           {finalisedPlayersList.map(({ id, name, liveRoundId, roundId }) => {
                             const isConfirming = playerConfirm?.playerId === id && playerConfirm.type === "unfinalise"
                             return (
                               <div
                                 key={id + liveRoundId}
                                 className={`border rounded-xl px-4 py-3 flex items-center justify-between gap-3 transition-colors
-                                  ${isConfirming ? "border-accent/40 bg-accent/[0.07]" : "border-bark/12 bg-surface"}`}
+                                  ${isConfirming ? "border-accent/40 bg-accent/[0.07]" : "border-line bg-surface"}`}
                               >
                                 <div className="min-w-0">
                                   <p className="text-ink/80 text-base truncate">{name}</p>
@@ -928,7 +928,7 @@ export default function CourseDashboardClient({
                                   <div className="flex items-center gap-2 flex-shrink-0">
                                     <button
                                       onClick={() => setPlayerConfirm(null)}
-                                      className="px-3 py-1.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-xl"
+                                      className="px-3 py-1.5 text-sm text-ink/65 border border-line hover:border-line-strong transition-colors rounded-xl"
                                     >
                                       Cancel
                                     </button>
@@ -952,11 +952,11 @@ export default function CourseDashboardClient({
 
                 {/* ── Void Live Session ── */}
                 <section>
-                  <p className="text-ink/50 text-xs tracking-[0.2em] uppercase mb-3">Void Live Session</p>
+                  <p className="text-ink/50 text-xs mb-3">Void Live Session</p>
                   {!settingsVoidSession ? (
                     <button
                       onClick={() => setSettingsVoidSession(true)}
-                      className="w-full py-3 border border-rust/40 text-rust text-base tracking-[0.15em] uppercase hover:border-rust/40 hover:text-rust-deep transition-colors rounded-xl"
+                      className="w-full py-3 border border-rust/40 text-rust text-base hover:border-rust/40 hover:text-rust-deep transition-colors rounded-xl"
                     >
                       Clear All Live Data
                     </button>
@@ -975,14 +975,14 @@ export default function CourseDashboardClient({
                       <div className="flex gap-2">
                         <button
                           onClick={() => setSettingsVoidSession(false)}
-                          className="flex-1 py-2.5 text-sm text-ink/65 border border-bark/12 hover:border-bark/25 transition-colors rounded-xl uppercase tracking-wider"
+                          className="flex-1 py-2.5 text-sm text-ink/65 border border-line hover:border-line-strong transition-colors rounded-xl "
                         >
                           Cancel
                         </button>
                         <button
                           onClick={voidLiveSession}
                           disabled={settingsWorking}
-                          className="flex-1 py-2.5 text-sm text-rust-deep border border-rust/40 hover:border-rust/70 disabled:opacity-50 transition-colors rounded-xl uppercase tracking-wider"
+                          className="flex-1 py-2.5 text-sm text-rust-deep border border-rust/40 hover:border-rust/70 disabled:opacity-50 transition-colors rounded-xl "
                         >
                           {settingsWorking ? "Clearing…" : "Void Session"}
                         </button>
