@@ -398,7 +398,7 @@ section('A linked round says what the cards make of it')
   ok(live.includes('2 up thru 14'), 'a match being played reads as it stands')
   // The method names itself under the round heading, so it is visible at all
   // that the winners are coming off cards
-  ok(live.includes('Stableford matchplay'), 'and the round says how it is being decided')
+  ok(live.includes('Stableford match play'), 'and the round says how it is being decided')
 
   const square = renderLinked(8, [
     reading(first[0].id, {
@@ -420,7 +420,7 @@ section('A linked round says what the cards make of it')
   const plain = render(8)
   ok(!plain.includes('All square') && !plain.includes('Cards disagree'),
     'an unlinked draw is exactly the draw it always was')
-  ok(!plain.includes('Stableford matchplay'), 'and names no method')
+  ok(!plain.includes('Stableford match play'), 'and names no method')
 }
 
 section('Every method can be named under a round heading')

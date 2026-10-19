@@ -95,9 +95,7 @@ export default async function AdminCoursePage({
       <section className={`mt-6 px-4 py-4 ${cardClass()}`}>
         <h2 className="t-card mb-1">The card</h2>
         <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-          Pars and stroke indexes are corrected with a scorecard photo — the
-          check on the pick-player screen — never by hand. A photo is validated
-          hole by hole; a keyboard is not.
+          Read-only. Corrected by a scorecard photo on the pick-player screen.
         </p>
 
         {holes.length === 0 ? (

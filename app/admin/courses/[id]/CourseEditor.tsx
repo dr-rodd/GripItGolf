@@ -194,8 +194,7 @@ function TeesSection({ courseId, tees }: { courseId: string; tees: Tee[] }) {
     <section className={`px-4 py-4 ${cardClass()}`}>
       <h2 className="t-card mb-1">Tees</h2>
       <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-        Slope and rating come off the club&rsquo;s card. The same ranges the
-        scorecard check accepts apply here.
+        Slope and rating from the club&rsquo;s card, in the scorecard check&rsquo;s ranges.
       </p>
       <div className="flex flex-col gap-3">
         {tees.length === 0 && (
@@ -244,10 +243,8 @@ function VerifiedToggle({ courseId, state }: { courseId: string; state: CardStat
     state === 'confirmed'
       ? 'A scorecard photo agreed with these numbers.'
       : state === 'researched'
-        ? 'The course plays now — it has its eighteen holes. Nobody has photographed the '
-          + 'card, so the numbers are as researched.'
-        : 'No holes recorded, so this course cannot be scored. The first trusted scorecard '
-          + 'photo creates the card and opens it.'
+        ? 'Plays on its 18 researched holes. No photo has checked them.'
+        : 'Cannot be scored yet. The first trusted scorecard photo creates the holes.'
 
   return (
     <section className={`px-4 py-4 ${cardClass()}`}>

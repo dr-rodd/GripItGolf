@@ -194,7 +194,7 @@ section('Nothing voids a card any other way')
 section('The confirmation says what it does')
 {
   const flow = read('app/scoring/LiveScoringFlow.tsx')
-  ok(/deleted/.test(flow.slice(flow.indexOf('Discard Scorecard?'), flow.indexOf('Discard Scorecard?') + 700)),
+  ok(/deleted/.test(flow.slice(flow.indexOf('Discard scorecard?'), flow.indexOf('Discard scorecard?') + 700)),
     'discarding says the holes already entered are deleted, not merely unsaved')
 
   const dash = read('app/scoring/[slug]/CourseDashboardClient.tsx')
