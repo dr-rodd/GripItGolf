@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
-import { RUN_PERMISSIONS, type RunPermissions, describeDay } from '@/lib/runChallenge'
+import { RUN_PERMISSIONS, FINAL_GRACE_DAYS, type RunPermissions, describeDay } from '@/lib/runChallenge'
 import type { RunChallenge } from '../data'
 import { SectionTitle } from '../RunPieces'
 import RunTeamsEditor from './RunTeamsEditor'
@@ -100,14 +100,13 @@ export default function RunOrganiserClient({ challenge, dates, progress }: {
           <SectionTitle>Dates</SectionTitle>
           {challenge.final ? (
             <p className="text-ink/65 text-[13px] leading-snug">
-              Final — the standings were frozen on {describeDay(challenge.final.frozenOn)}, so the
-              dates can no longer change.
+              Frozen on {describeDay(challenge.final.frozenOn)}, so the dates can no longer change.
             </p>
           ) : (
             <>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-                Late runs count for three days after the finish; then the standings freeze and
-                every Strava connection ends. Extending the finish moves all of that with it.
+                Late runs count until {FINAL_GRACE_DAYS} days after the finish, when the standings
+                freeze and Strava connections end.
               </p>
               <RunDatesEditor tripId={challenge.id} start={challenge.startDate} end={challenge.endDate} />
             </>
@@ -131,8 +130,7 @@ export default function RunOrganiserClient({ challenge, dates, progress }: {
         <section>
           <SectionTitle>Teams</SectionTitle>
           <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-            Tap a runner to rename, move or remove them. A team can be
-            removed once it is empty.
+            Tap a runner to edit them. Only an empty team can be removed.
           </p>
           <RunTeamsEditor
             tripId={challenge.id}

@@ -1227,9 +1227,109 @@ said before the pass, **New** what it says after.
 
 ## §16 — Green Dot Run (`/run/{code}`)
 
-Added in the refresh's copy pass (`docs/refresh-plan.md`, Phase 5): screens
-built after this sheet was written. Same shape — **Now** is what the screen
-said before the pass, **New** what it says after.
+None of these screens were in the sheet before. Only strings that changed, or
+that need Ross, are listed. The Strava and privacy statements say in writing
+what is kept and deleted (Strava's API Policy, `docs/run.md`), so they were
+left whole and the long ones are asked about below rather than cut.
+
+### The points rules (challenge setup and the organiser area)
+
+**RN-01 · Points per run, hint** · `app/components/RunRulesFields.tsx`
+- Now: For the run itself — turning up is worth something.
+- New: For each run that counts, however far. *(rule 5)*
+
+**RN-02 · Daily limit, hint** · `app/components/RunRulesFields.tsx`
+- Now: The most points one person can earn in a day — keeps it a challenge rather than an ultramarathon.
+- New: The most points one person can earn in a day. *(rule 3)*
+
+**RN-03 · How teams are compared: Average per member, hint** · `lib/runChallenge.ts` (`TEAM_SCORES`)
+- Now: Fair when teams are different sizes — everyone on the team counts, runs or not.
+- New: Fair for uneven teams, counting every member whether they run or not. *(rule 1)*
+
+**RN-04 · Member or runner?** · `lib/runChallenge.ts` (`TEAM_SCORES`, `describeTeamScore`, `teamScoreFact`), `app/run/[tripCode]/page.tsx`
+- Now: Average per member (the rules form) · Teams are ranked on their average per member. (home's rules card)  /  Average per runner (the leaderboard's line) · {2.5} per runner (home's Leading card) · Average points per runner. (home's Final standings)
+- New: **Ross** — one word for the people on a team: member or runner?
+
+### Participant permissions (challenge setup and the organiser area)
+
+**RN-05 · Participants can join by themselves, hint** · `lib/runChallenge.ts` (`RUN_PERMISSIONS`)
+- Now: Anyone with the code can add their name and pick a team — off, they can only claim a name you added.
+- New: Anyone with the code can add their name, not only claim one. *(rule 1)*
+
+**RN-06 · Participants can start a new team, hint** · `lib/runChallenge.ts` (`RUN_PERMISSIONS`)
+- Now: Let someone joining start a team of their own — off, they join one of yours.
+- New: Someone joining can start a new team, not only join yours. *(rule 1)*
+
+**RN-07 · Participants can log runs by hand, hint** · `lib/runChallenge.ts` (`RUN_PERMISSIONS`)
+- Now: Let players type a run in themselves — off, runs only arrive from a connected Strava account.
+- New: Runners can type runs in, not only connect Strava. *(rule 1)*
+
+### Joining (`/run/{code}/join`)
+
+**RN-08 · Sub-heading** · `app/run/[tripCode]/join/RunJoinClient.tsx`
+- Now: Find your name, or add yourself — then pick your team.
+- New: Find your name or add yourself, then pick your team.  /  (adding yourself switched off) Find your name, then pick your team.  /  (no names added yet) Add your name, then pick your team.  /  (no way in) nothing, the notice below says it. *(it offered "add yourself" when that was switched off)*
+
+**RN-09 · No way in** · `app/run/[tripCode]/join/RunJoinClient.tsx`
+- Now: Joining by yourself is switched off for this challenge. Ask the organiser to add your name, then come back and tap it here.
+- New: Joining by yourself is switched off. Ask the organiser to add your name. *(rule 1)*
+
+### Add tab (`/run/{code}/add`)
+
+**RN-10 · Under Your runs** · `app/run/[tripCode]/add/RunAddClient.tsx`
+- Now: Points shown are each run on its own — a daily limit, if the challenge has one, applies on the leaderboard.
+- New: Points are per run, before any daily limit the leaderboard applies. *(rule 1)*
+
+**RN-11 · Once the challenge is final** · `app/run/[tripCode]/add/RunAddClient.tsx`
+- Now: This challenge is final — runs can no longer be added. The final team standings are on the leaderboard, and its Strava runs have been deleted, as agreed when they were connected.
+- New: **Ross** — 32 words; the second half is the written word that the Strava runs were deleted. Keep whole?
+
+### Strava card (Add tab and Settings)
+
+**RN-12 · Not connected, subtitle** · `app/run/[tripCode]/StravaCard.tsx`
+- Now: Your runs arrive by themselves — the ones since the challenge started, and every one after, until it closes.
+- New: **Ross** — 19 words, but it is part of what a runner is told before agreeing (what is collected). Keep?
+
+**RN-13 · The consent list** · `app/run/[tripCode]/StravaCard.tsx`
+- Now: What is kept. … · Who sees it. … · For this challenge only. … {Thu 3 Dec} — three days after the finish, or later if the organiser extends it. … · Stop at any time. … · Delete everything. …
+- New: **Ross** — Strava's API Policy (§2.1) asks for all five, so it is long by requirement and left whole. It also says "three days" in words, where rule 7 and the privacy notice use the figure from the code (`FINAL_GRACE_DAYS`). Change that one word?
+
+**RN-14 · Connected, after the challenge has closed** · `app/run/[tripCode]/StravaCard.tsx`
+- Now: This challenge has closed — no new runs are read. The connection ends, and your Strava runs are deleted, when the final results are frozen overnight.
+- New: **Ross** — 25 words, but it says in writing what is deleted and when. Keep?
+
+### Leaderboard (`/run/{code}/leaderboard`)
+
+**RN-15 · Final notice** · `app/run/[tripCode]/leaderboard/page.tsx`
+- Now: The standings were frozen on {Mon 30 Nov}. The Strava runs behind them have since been deleted, as agreed when they were connected — so the team totals are kept, and each runner's are not.
+- New: **Ross** — 33 words, but it says in writing what was deleted and what was kept. Keep?
+
+### Stats (`/run/{code}/stats`)
+
+**RN-16 · Coming soon** · `app/run/[tripCode]/stats/page.tsx`
+- Now: Distance by week, your pace over the challenge, and how your team is tracking. The leaderboard has the standings in the meantime.
+- New: Distance by week, your pace, and how your team is tracking. *(rule 1)*
+
+### Settings (`/run/{code}/settings`)
+
+**RN-17 · Under Leave and delete my data** · `app/run/[tripCode]/settings/HelpAndPrivacy.tsx`
+- Now: Permanently deletes your name, your place on your team, every run you have logged and any Strava connection, from this challenge. A final team total already frozen stays — it is the team's, not yours.
+- New: **Ross** — 33 words, but it is the written statement of what is deleted and what stays (Strava §2.5). Keep?
+
+### Organiser area (`/run/{code}/organiser`)
+
+**RN-18 · Dates, intro** · `app/run/[tripCode]/organiser/RunOrganiserClient.tsx`
+- Now: Late runs count for three days after the finish; then the standings freeze and every Strava connection ends. Extending the finish moves all of that with it.
+- New: Late runs count until {3} days after the finish, when the standings freeze and Strava connections end. *(rules 1, 7)* — the {3} is `FINAL_GRACE_DAYS` from the code now, not typed.
+- **Ross:** still 17 words; it says when Strava connections end, so it was cut, not gutted. Shorter?
+
+**RN-19 · Dates, once final** · `app/run/[tripCode]/organiser/RunOrganiserClient.tsx`
+- Now: Final — the standings were frozen on {Mon 30 Nov}, so the dates can no longer change.
+- New: Frozen on {Mon 30 Nov}, so the dates can no longer change. *(rule 1)*
+
+**RN-20 · Teams, intro** · `app/run/[tripCode]/organiser/RunOrganiserClient.tsx`
+- Now: Tap a runner to rename, move or remove them. A team can be removed once it is empty.
+- New: Tap a runner to edit them. Only an empty team can be removed. *(rule 1)*
 
 ---
 

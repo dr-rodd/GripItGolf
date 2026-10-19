@@ -316,8 +316,7 @@ export default function RunAddClient({
         )}
         {myRuns.length > 0 && (
           <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-            Points shown are each run on its own — a daily limit, if the challenge has
-            one, applies on the leaderboard.
+            Points are per run, before any daily limit the leaderboard applies.
           </p>
         )}
       </section>

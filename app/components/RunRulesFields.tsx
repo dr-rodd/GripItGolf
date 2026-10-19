@@ -84,7 +84,7 @@ export default function RunRulesFields({ draft, onChange, askTeams = true }: {
       />
       <NumberRow
         label="Points per run"
-        hint="For the run itself — turning up is worth something."
+        hint="For each run that counts, however far."
         value={draft.perRun} onChange={v => set({ perRun: v })} unit="pts" max={MAX_POINTS}
       />
       <NumberRow
@@ -98,8 +98,7 @@ export default function RunRulesFields({ draft, onChange, askTeams = true }: {
           <div className="min-w-0">
             <p className="text-ink text-sm font-medium">Daily limit</p>
             <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-              The most points one person can earn in a day — keeps it a
-              challenge rather than an ultramarathon.
+              The most points one person can earn in a day.
             </p>
           </div>
           <Toggle checked={draft.capOn} onChange={on => set({ capOn: on })} label="Limit points per day" />
