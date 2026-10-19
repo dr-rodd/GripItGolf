@@ -536,14 +536,6 @@ with a rule beside it is what the screen now says; **Ross** items are unchanged.
 
 ---
 
-## §3b — Creating a tournament or a run challenge
-
-Added in the refresh's copy pass (`docs/refresh-plan.md`, Phase 5): screens
-built after this sheet was written. Same shape — **Now** is what the screen
-said before the pass, **New** what it says after.
-
----
-
 ## §4 — Trip hub (`/trip/{code}`)
 
 **H-01 · Bad code** · `app/trip/[tripCode]/page.tsx:59,60`
