@@ -48,7 +48,7 @@ export function teamSizeLimit(boards: Boards): number | null {
 /** The banner shown above team selection when a limit applies. */
 export function teamSizeBanner(boards: Boards): string | null {
   if (needsPairings(boards)) {
-    return `Max ${PAIR_SIZE} per pairing — a pairs draw is played between teams of two.`
+    return `Max ${PAIR_SIZE} per pairing.`
   }
   const limit = teamSizeLimit(boards)
   return limit !== null

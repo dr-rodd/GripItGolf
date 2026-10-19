@@ -201,7 +201,7 @@ export default function MatchplayPanel({
             disabled={busy || !!blocked}
             className={buttonClass('primary')}
           >
-            {busy ? 'Drawing…' : 'Create matchplay'}
+            {busy ? 'Drawing…' : 'Create match play'}
           </button>
         )
       )}
@@ -217,9 +217,8 @@ export default function MatchplayPanel({
 
       {exists && canEdit && (
         <p className="text-ink/50 text-[13px] mt-3 leading-snug">
-          {pairs ? 'Pairings changing' : 'Players joining or leaving'} after the draw
-          doesn&apos;t change it. Reshuffle when you want the bracket to match the
-          current {pairs ? 'team sheet' : 'roster'}.
+          Later changes don&apos;t move the draw; reshuffle to match the{' '}
+          {pairs ? 'team sheet' : 'roster'}.
         </p>
       )}
 

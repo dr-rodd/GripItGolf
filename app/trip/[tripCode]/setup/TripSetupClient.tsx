@@ -438,7 +438,7 @@ export default function TripSetupClient({
       const hcpErr = await syncRoundHandicaps(
         rounds.map(r => r.id), id, patch.handicap as number,
       )
-      if (hcpErr) flashError('Handicap saved but round handicaps failed to update')
+      if (hcpErr) flashError('Handicap saved, but the rounds could not be updated')
     }
   }
 
@@ -617,8 +617,7 @@ export default function TripSetupClient({
                   className={`${FIELD} resize-none leading-snug`}
                 />
                 <p className="t-cap text-ink/65 mt-1.5 leading-snug">
-                  Shows on the trip hub, under the countdown. Clear it to
-                  take it off.
+                  Shows on the trip hub, under the countdown.
                 </p>
               </div>
               <div className="pt-2 border-t border-line">
@@ -654,7 +653,7 @@ export default function TripSetupClient({
                 <div className="flex gap-2">
                   {[
                     { value: 'everyone', label: 'Any player' },
-                    { value: 'owner', label: 'Owner only' },
+                    { value: 'owner', label: 'Lead player only' },
                   ].map(o => {
                     // Owner is a flag on the device the trip was created on, and
                     // there is no way to hand it to another one. A device that
@@ -683,12 +682,12 @@ export default function TripSetupClient({
                 <p className="t-cap text-ink/65 mt-3 leading-snug">
                   {editPermission === 'owner' ? (
                     isOwner
-                      ? 'Only the device this trip was created on can change it — this one. Nothing changes for you; it is everybody else who can now read this screen but not touch it.'
+                      ? 'Nothing changes for you; everyone else can only view.'
                       : 'Only the device this trip was created on can change it.'
                   ) : (
                     isOwner
-                      ? 'Anyone who opens this screen can change the trip. This is the device it was created on, so "Owner only" would leave it to you.'
-                      : 'Anyone who opens this screen can change the trip. "Owner only" is set from the device the trip was created on, which is not this one.'
+                      ? 'Anyone can change the trip; “Lead player only” would leave it to you.'
+                      : 'Anyone can change the trip; only the lead player’s device can restrict it.'
                   )}
                 </p>
               </div>
@@ -707,8 +706,7 @@ export default function TripSetupClient({
                   <div className="flex-1 min-w-0">
                     <label className={FIELD_LABEL}>Track stats</label>
                     <p className="t-cap text-ink/65 leading-snug">
-                      Ask for putts and where the tee shot finished on every hole,
-                      for everyone on the card.
+                      The scorecard asks for putts and where each tee shot finished.
                     </p>
                   </div>
                   <Toggle
@@ -724,7 +722,7 @@ export default function TripSetupClient({
                     scorecard looks unchanged until the next one is started. */}
                 <p className="t-cap text-ink/65 mt-3 leading-snug">
                   {trackStats
-                    ? 'Two extra taps a hole, and neither one holds up the next hole. Holes already played are not affected — stats start from the next card.'
+                    ? 'Starts from the next card; holes already played are unaffected.'
                     : 'Off, so the scorecard asks for a score and nothing else.'}
                 </p>
               </div>
@@ -860,9 +858,7 @@ export default function TripSetupClient({
             )}
 
             <p className="text-ink/65 text-[13px] mt-3 leading-snug">
-              {groupNoun.Many} can be changed at any point, including
-              mid-round. Players own their scores and carry them to whichever{' '}
-              {groupNoun.one} they end up in.
+              {groupNoun.Many} can change mid-round; each player keeps their scores.
             </p>
           </section>
         )}

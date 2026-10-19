@@ -279,7 +279,7 @@ function PointsTable({
           with the figure sitting in it. */}
       {!known && (
         <p className="t-cap text-ink/65 mt-2 leading-snug">
-          {`The ${unit} are not picked yet, so this is a placeholder — leave it and the table sizes itself to them. Change a figure and it stays changed.`}
+          {`A placeholder until the ${unit} are picked; edited figures are kept.`}
         </p>
       )}
     </div>
@@ -374,11 +374,11 @@ function AllowancePicker({
         {suggested === FULL_ALLOWANCE
           ? 'This board is played off the full course handicap.'
           : <>
-              <span className="text-accent-deep">{suggested}% is the standard allowance</span>
-              {' for this kind of competition. '}
+              <span className="text-accent-deep">{suggested}% is standard</span>
+              {' for this format. '}
               {value === FULL_ALLOWANCE
-                ? 'Leave it off and everyone plays off the full figure.'
-                : `Everyone's course handicap is cut to ${value}% of it, rounded to the nearest shot. Gross scores are unaffected, and every other leaderboard keeps its own allowance.`}
+                ? 'Off means full course handicaps.'
+                : `Handicaps cut to ${value}%, this leaderboard only.`}
             </>}
       </p>
     </div>
@@ -477,8 +477,8 @@ function CountingScoresPicker({
 
       <p className="t-cap text-ink/65 leading-snug">
         {value === 1
-          ? 'Only the team\'s best score on each hole goes on the composite card.'
-          : `The team's best ${value} scores on each hole go on the composite card. A count above a team's size just counts everyone.`}
+          ? 'The best score on each hole makes the composite card.'
+          : `The best ${value} scores on each hole make the composite card.`}
       </p>
     </div>
   )
@@ -568,8 +568,8 @@ function GrandstandFinishPicker({
 
       <p className="t-cap text-ink/65 leading-snug">
         {value > 0
-          ? `Over ${lastHoles(value)}, every score in the team counts — a trailing team can still catch up.`
-          : 'A grandstand finish: over the closing holes every score in the team counts, so a trailing team can still catch up.'}
+          ? `Every score in the team counts over ${lastHoles(value)}.`
+          : 'A grandstand finish, so a trailing team can still catch up.'}
       </p>
     </div>
   )
@@ -634,19 +634,16 @@ function RoundLinks({
     <div className="border-t border-line pt-4 mt-1">
       <p className="t-label text-ink/80 mb-1">Decide matches from the cards?</p>
       <p className="t-cap text-ink/65 mb-3 leading-snug">
-        Link a bracket round to a round of golf and the winners come off the
-        scorecards. Leave one unlinked to tap the results in yourself.
+        Linked rounds are settled from the scorecards; unlinked ones by hand.
       </p>
 
       {!shape ? (
         <p className="t-cap text-ink/65 leading-snug">
-          The rounds of the draw are named once the field is known — add
-          players, or pick the pairings, and come back to this.
+          Add players, or pick the pairings, to name the draw&apos;s rounds.
         </p>
       ) : rounds.length === 0 ? (
         <p className="t-cap text-ink/65 leading-snug">
-          This trip has no golf in its itinerary yet. Add a round and it can be
-          linked here.
+          Add golf to the itinerary first, then link it here.
         </p>
       ) : (
         <div className="flex flex-col gap-3">
@@ -866,7 +863,7 @@ function Builder({
           <Choice
             on={!draft.tagMode}
             label="The teams playing together"
-            hint="Pairs and fourballs — set on the teams screen or the tee sheet, and free to change from round to round."
+            hint="Pairs and fourballs, free to change from round to round."
             onClick={() => {
               if (!draft.tagMode) return
               setDraft({ ...fresh, audience: 'team' })
@@ -875,7 +872,7 @@ function Builder({
           <Choice
             on={isTagBoard(draft)}
             label="The event's sides — its tags"
-            hint="Europe and USA, the club sides. A player keeps their side for the whole event, whoever they play alongside on the day. Sides are made in the organiser area, under Tags."
+            hint="A player keeps their side all event, like Europe or USA."
             onClick={() => {
               // Already on the sides: re-tapping must not throw away the
               // mode and the scoring underneath it.
@@ -884,7 +881,7 @@ function Builder({
             }}
           />
           <p className="t-cap text-ink/65 leading-snug">
-            Not one or the other — an event can run a board for each.
+            An event can run a leaderboard for each.
           </p>
         </Question>
       )}
@@ -899,9 +896,9 @@ function Builder({
           />
           <Choice
             on={draft.competition === 'matchplay'}
-            label="Matchplay"
+            label="Match play"
             hint={drawTaken
-              ? 'Only one matchplay bracket can be created at a time.'
+              ? 'Only one match play bracket can be created at a time.'
               : 'A knockout bracket.'}
             taken={drawTaken}
             onClick={() => set({ competition: 'matchplay' })}
@@ -952,8 +949,7 @@ function Builder({
             />
           ))}
           <p className="t-cap text-ink/65 leading-snug">
-            Your quota is 36 minus your course handicap either way — the scale
-            only decides what going under par is worth.
+            Either way, your quota is 36 minus your course handicap.
           </p>
         </Question>
       )}
@@ -1005,8 +1001,7 @@ function Builder({
             ))}
           </div>
           <p className="t-cap text-ink/65 leading-snug">
-            A side with fewer players out than this counts everyone who
-            played — a card nobody handed in is not a nought.
+            If fewer of the side play, every card they hand in counts.
           </p>
         </Question>
       )}
@@ -1119,7 +1114,7 @@ function Builder({
           <Choice
             on={draft.teamPick !== 'self'}
             label="You assign them"
-            hint="Pick the teams yourself on the teams screen — count and members are yours."
+            hint="Pick the teams yourself on the teams screen."
             onClick={() => set({ teamPick: undefined, teamSize: undefined })}
           />
           <Choice
@@ -1240,8 +1235,7 @@ function Builder({
           {tieBreakOf(draft) === 'countback' && (
             <div className="pl-3 border-l-2 border-accent/25 flex flex-col gap-2 mt-1">
               <p className="t-cap text-ink/65 leading-snug">
-                Each round is settled on its own back 9. And the trip total,
-                once the rounds are added up?
+                Each round is settled on its back 9. And the trip total?
               </p>
               {OVERALL_TIES.map(o => (
                 <Choice
@@ -1298,8 +1292,7 @@ function Builder({
 
       {clashes && missing.length === 0 && (
         <p className="t-cap text-rust-deep leading-snug">
-          This trip already runs that leaderboard. Change an answer — two
-          boards scored the same way would print the same table twice.
+          This trip already runs that leaderboard; change an answer.
         </p>
       )}
 
@@ -1551,7 +1544,7 @@ export default function LeaderboardSetup({
               <p className="t-cap text-ink/65 mt-1 leading-snug">
                 {!done
                   ? 'Once your primary leaderboard is set, you can add more.'
-                  : 'A trip can run several events in parallel off the same cards — an order of merit alongside a daily prize, or a knockout between different teams beside a league.'}
+                  : 'For example, a daily prize beside an order of merit.'}
               </p>
             </div>
           </div>

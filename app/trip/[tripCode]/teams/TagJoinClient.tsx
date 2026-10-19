@@ -72,10 +72,9 @@ export default function TagJoinClient({
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h2 className="t-h2 text-ink mb-1">Your tag</h2>
+        <h2 className="t-h2 text-ink mb-1">Your side</h2>
         <p className="text-ink/65 text-sm leading-snug">
-          The side you play for — it stays with you for the whole event,
-          whoever you are out with on the day.
+          It stays with you all event, whoever you play with.
         </p>
       </div>
 
@@ -83,14 +82,13 @@ export default function TagJoinClient({
         <div className={`p-4 ${cardClass()}`}>
           <p className="text-ink text-sm font-medium">First, say who you are.</p>
           <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-            Claim your name on the players screen, then come back and pick
-            your tag.
+            Claim your spot on the players screen, then pick your side.
           </p>
           <Link
             href={`/trip/${tripCode}/players`}
             className="inline-block mt-3 t-label text-accent-deep hover:text-accent transition-colors"
           >
-            Claim your name →
+            Claim your spot →
           </Link>
         </div>
       )}
@@ -115,7 +113,7 @@ export default function TagJoinClient({
                       style={{ backgroundColor: tag.color }}
                     />
                     <span className="truncate">{tag.name}</span>
-                    {mine && <span className="t-cap text-accent-deep flex-shrink-0">Your tag</span>}
+                    {mine && <span className="t-cap text-accent-deep flex-shrink-0">Your side</span>}
                   </p>
                   <p className="t-cap text-ink/65 mt-1 leading-snug">
                     {members.length === 0

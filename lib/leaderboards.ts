@@ -257,7 +257,7 @@ export function scoringsFor(audience: Audience): { key: Scoring; label: string; 
 
 export const TEAM_FORMATS: { key: TeamFormat; label: string; hint: string }[] = [
   { key: 'better_ball', label: 'Better ball',
-    hint: 'A composite card from the team\'s best scores on every hole — you choose how many count.' },
+    hint: 'A composite card from the team\'s best scores on every hole.' },
   { key: 'hero', label: 'Hero',
     hint: 'The best single card in the team that day carries it.' },
   { key: 'cut_dead_weight', label: 'Cut the dead weight',
@@ -315,7 +315,7 @@ export const TAG_MODES: { key: TagMode; label: string; hint: string }[] = [
   // read on a saved board's own line, where nobody has the portal open to
   // remind them which is which.
   { key: 'best_cards', label: 'Best cards only',
-    hint: 'Only the side\'s best cards count each round — you choose how many.' },
+    hint: 'Only the side\'s best cards count each round.' },
   { key: 'all_cards', label: 'Every card counts',
     hint: 'Every player\'s card counts towards their side.' },
   { key: 'day_teams', label: 'The day\'s team cards',
@@ -521,7 +521,7 @@ export function freeTeamFormats(
  */
 export function unanswered(draft: Partial<Leaderboard>): string[] {
   if (!draft.audience) return ['Who is being ranked']
-  if (!draft.competition) return ['League or matchplay']
+  if (!draft.competition) return ['League or match play']
 
   // A draw has nothing else to decide: the bracket is drawn at random and the
   // entrants come from the roster or the pairings.
@@ -792,10 +792,10 @@ export function needsPairings(boards: readonly Leaderboard[]): boolean {
 
 // ─── Naming ────────────────────────────────────────────────────
 
-/** "Team better ball", "Strokes", "Pairs matchplay" — a board's tab. */
+/** "Team better ball", "Strokes", "Pairs match play" — a board's tab. */
 export function boardTitle(lb: Leaderboard): string {
   if (lb.competition === 'matchplay') {
-    return lb.audience === 'team' ? 'Pairs matchplay' : 'Matchplay'
+    return lb.audience === 'team' ? 'Pairs match play' : 'Match play'
   }
   const scoring = SCORINGS.find(s => s.key === lb.scoring)?.label ?? 'League'
   const format = ALL_TEAM_FORMATS.find(f => f.key === lb.teamFormat)?.label ?? 'Team'
