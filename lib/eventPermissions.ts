@@ -41,23 +41,23 @@ export const EVENT_PERMISSIONS: {
 }[] = [
   { key: 'add_courses', dflt: false,
     label: 'Participants can add new courses',
-    hint: 'Let the field add a course to the platform if theirs is missing.' },
+    hint: 'Let the field add a missing course to the platform.' },
   { key: 'add_players', dflt: false,
     label: 'Participants can add new players',
-    hint: 'Let anyone with the code put a new name on the roster — off, they can only claim a name you added.' },
+    hint: 'Let anyone with the code put a new name on the roster.' },
   { key: 'edit_scores', dflt: false,
     label: 'Participants can edit leaderboard entries',
-    hint: 'Let players rework a whole scorecard from the summary screen — hole-by-hole scoring stays open either way.' },
+    hint: 'Let players rework a finished scorecard; live scoring stays open either way.' },
   { key: 'edit_tee_sheet', dflt: false,
     label: 'Participants can edit the tee sheet',
-    hint: 'Let the field put names into open slots and take their own out — off, the sheet is read-only and you place everyone.' },
+    hint: 'Let the field add and remove names on the sheet.' },
   // Joining a tag is a different verb from forming a team: a tag board's
   // `teamPick: 'self'` cousin lets the field CREATE teams on that board's
   // sheet, while this only lets a claimed player join one of the tags the
   // organiser has already made (lib/tagBoards.ts). Both stay, deliberately.
   { key: 'assign_tag', dflt: false,
-    label: 'Participants can pick their own tag',
-    hint: 'Let a claimed player join one of your tags from the teams screen — off, you assign every tag yourself.' },
+    label: 'Participants can pick their own side',
+    hint: 'Let claimed players join one of your sides on the teams screen.' },
 ]
 
 export type EventPermissions = Record<EventPermissionKey, boolean>

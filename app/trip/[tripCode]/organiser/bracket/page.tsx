@@ -110,10 +110,7 @@ export default async function BracketSetupPage({ params }: {
           </p>
           <div className={`p-4 ${cardClass()}`}>
             <p className="text-ink/65 text-[13px] leading-snug">
-              This event was created as a league — its days, venues and
-              field were set then, and its rounds are on the schedule.
-              Scoring formats within league play are still to come; for now
-              every league plays individual Stableford, added up.
+              Days, venues and field were set when the league was created.
             </p>
           </div>
           <div className="mt-6">

@@ -37,7 +37,7 @@ export const TOURNAMENT_FORMATS: {
   // Golf Tournament → League (lib/leagueSetup.ts) — never assembled here,
   // where a save would turn an existing event into a knockout.
   { key: 'league', label: 'League', built: false,
-    hint: 'A table over the days — created as its own event, not set up here.' },
+    hint: 'A table over the days.' },
 ]
 
 // ─── Mode ──────────────────────────────────────────────────────
@@ -55,9 +55,9 @@ export type BracketMode = 'strict' | 'relaxed'
 
 export const BRACKET_MODES: { key: BracketMode; label: string; hint: string }[] = [
   { key: 'strict', label: 'Strict', hint:
-    'You set who plays whom each round, and where. Players just turn up and enter the result.' },
+    'You set who plays whom each round, and where.' },
   { key: 'relaxed', label: 'Relaxed', hint:
-    'Players arrange their own matches, pick their own course, and link their card to the bracket themselves.' },
+    'Players arrange their own matches and link their cards to the bracket.' },
 ]
 
 // ─── Size ──────────────────────────────────────────────────────

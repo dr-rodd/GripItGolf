@@ -8,7 +8,7 @@ import InlineUnlock from '@/app/components/InlineUnlock'
 import { hasUnlocked } from '@/lib/passcode'
 import { IconPlus, IconX, IconUsers } from '@/app/components/icons'
 import {
-  type SlotPlayer, slotClock, slotCount, groupSlot, MAX_GROUP_SIZE,
+  type SlotPlayer, slotClock, slotCount, groupSlot,
   pickerUnits, unitMatches,
 } from '@/lib/teeSheet'
 import { joinNames, firstName } from '@/lib/matchplayEntrants'
@@ -388,7 +388,7 @@ export default function TeeSheetClient({
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
 
         <h1 className="t-h1 text-ink mb-1">
-          Tee Sheet
+          Tee sheet
         </h1>
         <p className="text-ink/65 text-sm mb-2">
           {canEdit
@@ -404,9 +404,7 @@ export default function TeeSheetClient({
           <div className="bg-rust/[0.06] border border-rust/25 rounded-2xl p-4 mb-4">
             <p className="text-ink text-sm font-medium">The sheet cannot save yet</p>
             <p className="text-ink/65 t-cap mt-1 leading-snug">
-              The tee sheet&apos;s database update has not been applied, so a
-              name added here would disappear again. Everything else on the
-              event works as normal.
+              Names added here won&apos;t stick until a database update is applied.
             </p>
           </div>
         )}
@@ -419,19 +417,18 @@ export default function TeeSheetClient({
           <div className="bg-rust/[0.06] border border-rust/25 rounded-2xl p-4 mb-4">
             <p className="text-ink text-sm font-medium">
               {untagged.length === 1
-                ? 'One player still needs a tag'
-                : `${untagged.length} players still need a tag`}
+                ? 'One player still needs a side'
+                : `${untagged.length} players still need a side`}
             </p>
             <p className="text-ink/65 t-cap mt-1 leading-snug">
-              This event ranks the tags, so a card belongs to one:{' '}
+              The event ranks sides, so these cannot go on the sheet yet:{' '}
               {untagged.map(id => nameOf.get(id)).filter(Boolean).join(' · ')}
-              {' '}cannot go on the sheet until tagged.
             </p>
             <Link
               href={`/trip/${tripCode}/organiser/tags`}
               className="inline-block mt-2 t-cap text-accent-deep hover:text-accent transition-colors"
             >
-              Set tags →
+              Set sides →
             </Link>
           </div>
         )}
@@ -502,8 +499,7 @@ export default function TeeSheetClient({
           <>
             {round.startTime === null && (
               <p className="t-cap text-ink/65 mb-3 leading-snug">
-                No start time set — groups are numbered until the organiser
-                sets one in the Starts section.
+                Groups are numbered until the organiser sets a start time.
               </p>
             )}
 
@@ -734,9 +730,7 @@ export default function TeeSheetClient({
             </ol>
 
             <p className="t-cap text-ink/65 mt-4 leading-snug">
-              {round.intervalMins} minutes between groups, up to{' '}
-              {round.groupSize === MAX_GROUP_SIZE ? 'four' : round.groupSize === 3 ? 'three' : 'two'}{' '}
-              a slot — the organiser tunes both in the Starts section.
+              {round.intervalMins} minutes between groups · groups of up to {round.groupSize}
             </p>
           </>
         )}
