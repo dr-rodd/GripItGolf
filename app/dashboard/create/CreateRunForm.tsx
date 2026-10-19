@@ -275,12 +275,11 @@ export default function CreateRunForm() {
           </div>
 
           <h1 className="t-h1 text-ink mb-2">
-            Challenge Created!
+            Challenge created
           </h1>
           <p className="text-ink/65 text-sm mb-10">
-            Share this code with everyone taking part — they join with it
-            and pick their team. Run logging and the leaderboard arrive in
-            the next update.
+            Share this code with everyone taking part. They join with it and
+            pick a team.
           </p>
 
           <div className={`px-4 py-8 mb-4 ${cardClass()}`}>
@@ -398,9 +397,7 @@ export default function CreateRunForm() {
                 className={FIELD}
               />
               <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                We&apos;ll send you the challenge details, the share link and
-                your admin link. The challenge works either way, and no
-                participant ever sees it.
+                We&apos;ll email you the challenge details, share link and admin link.
               </p>
               {emailWarning(email) && (
                 <p className="text-rust/80 text-[13px] mt-2 leading-snug">
@@ -519,8 +516,7 @@ export default function CreateRunForm() {
             <div className="mb-6">
               <label className={FIELD_LABEL}>How collaborative should this challenge be?</label>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-                What participants can do for themselves. You can change any of
-                these later from the organiser area.
+                What participants can do for themselves. Editable in the organiser area.
               </p>
               <EventPermissionToggles
                 registry={RUN_PERMISSIONS}
@@ -532,9 +528,7 @@ export default function CreateRunForm() {
             <div className={`px-4 py-4 ${cardClass()}`}>
               <p className="text-ink text-sm font-medium">Organiser PIN</p>
               <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                Your key to the organiser area — teams, permissions and the
-                points rules ask for it. Share it with anyone you want helping
-                you run the challenge.
+                Unlocks teams, permissions and points rules. Share it with your helpers.
               </p>
             </div>
 

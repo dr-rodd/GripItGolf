@@ -9,18 +9,22 @@
 export const MIN_ROUNDS = 1
 export const MAX_ROUNDS = 6
 
-/** Why this round count is not allowed, or null if it is fine. */
-export function roundCountError(rounds: number): string | null {
+/**
+ * Why this round count is not allowed, or null if it is fine.
+ *
+ * `noun` because the trip wizard is also the tournament's match play door,
+ * and a tournament is an event in every sentence about one.
+ */
+export function roundCountError(rounds: number, noun: 'trip' | 'event' = 'trip'): string | null {
+  const subject = noun === 'event' ? 'An event' : 'A trip'
   if (!Number.isFinite(rounds) || !Number.isInteger(rounds)) {
     return 'Number of rounds must be a whole number.'
   }
   if (rounds < MIN_ROUNDS) {
-    return rounds === 0
-      ? 'A trip needs at least one round.'
-      : 'A trip needs at least one round.'
+    return `${subject} needs at least one round.`
   }
   if (rounds > MAX_ROUNDS) {
-    return `A trip can have at most ${MAX_ROUNDS} rounds. Reduce it to continue.`
+    return `${subject} can have at most ${MAX_ROUNDS} rounds. Reduce it to continue.`
   }
   return null
 }

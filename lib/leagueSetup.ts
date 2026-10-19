@@ -40,11 +40,11 @@ export type DayBoards = 'separate' | 'cumulative' | 'hybrid'
 
 export const DAY_BOARDS: { key: DayBoards; label: string; hint: string }[] = [
   { key: 'separate', label: 'Separate days', hint:
-    'Each day is its own competition — its own leaderboard, no connection between them.' },
+    'Each day has its own leaderboard, with no overall.' },
   { key: 'cumulative', label: 'One running total', hint:
     'Every day\'s results feed a single leaderboard for the whole event.' },
   { key: 'hybrid', label: 'Days and overall', hint:
-    'Each day keeps its own leaderboard, and the days also roll up into one overall board.' },
+    'Each day has its own leaderboard, plus one overall.' },
 ]
 
 // ─── The setup itself ──────────────────────────────────────────

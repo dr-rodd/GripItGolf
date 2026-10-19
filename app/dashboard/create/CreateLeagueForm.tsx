@@ -413,7 +413,7 @@ export default function CreateLeagueForm({ schedule }: {
         .select('id, handicap, is_lead')
 
       if (playersErr || !insertedPlayers) {
-        setError(`Event created, but the players failed. ${describeError(playersErr)}`)
+        setError(`Event created, but the players could not be saved. ${describeError(playersErr)}`)
         setSubmitting(false)
         return
       }
@@ -443,7 +443,7 @@ export default function CreateLeagueForm({ schedule }: {
       .select('id, day_index, position, kind')
 
     if (itinErr) {
-      setError(`Event created, but the schedule failed. ${describeError(itinErr)}`)
+      setError(`Event created, but the schedule could not be saved. ${describeError(itinErr)}`)
       setSubmitting(false)
       return
     }
@@ -471,7 +471,7 @@ export default function CreateLeagueForm({ schedule }: {
       .select('id')
 
     if (roundsErr || !insertedRounds) {
-      setError(`Event created, but the rounds failed. ${describeError(roundsErr)}`)
+      setError(`Event created, but the rounds could not be saved. ${describeError(roundsErr)}`)
       setSubmitting(false)
       return
     }
@@ -488,7 +488,7 @@ export default function CreateLeagueForm({ schedule }: {
       )
       const { error: hcpErr } = await supabase.from('round_handicaps').insert(hcpRows)
       if (hcpErr) {
-        setError(`Event created, but the handicaps failed. ${describeError(hcpErr)}`)
+        setError(`Event created, but the handicaps could not be saved. ${describeError(hcpErr)}`)
         setSubmitting(false)
         return
       }
@@ -540,7 +540,7 @@ export default function CreateLeagueForm({ schedule }: {
           </div>
 
           <h1 className="t-h1 text-ink mb-2">
-            League Created!
+            League created
           </h1>
           <p className="text-ink/65 text-sm mb-10">
             {entry === 'self_join'
@@ -651,9 +651,9 @@ export default function CreateLeagueForm({ schedule }: {
                   />
                   <p className="text-ink/65 text-[13px] mt-2 leading-snug">
                     {multiDay === null
-                      ? 'One day, one venue, one leaderboard — or a run of days, each with its own.'
+                      ? 'One day at one venue, or a run of days.'
                       : multiDay
-                        ? 'Say which of the days are played, give each one a venue next, and choose how they relate on the leaderboard.'
+                        ? 'Pick the playing days here, then a venue for each.'
                         : 'Deliberately simple: one venue, one date, one leaderboard, live scoring.'}
                   </p>
                 </div>
@@ -685,9 +685,8 @@ export default function CreateLeagueForm({ schedule }: {
                       )}
                       {runTooLong && (
                         <p className="text-rust-deep text-[13px] mt-2 leading-snug">
-                          That is a long run for one event — an event spread
-                          over a period like that is a continuous one, with
-                          its playing days picked inside it.
+                          Too long for one run. A period like this is a
+                          continuous event.
                         </p>
                       )}
 
@@ -701,9 +700,7 @@ export default function CreateLeagueForm({ schedule }: {
                         <div className="mt-4">
                           <label className={FIELD_LABEL}>Playing days</label>
                           <p className="text-ink/65 text-[13px] mb-2 leading-snug">
-                            Turn off any day nobody tees off — a travel day, a
-                            rest day. The event still runs from the first date
-                            to the last.
+                            Turn off travel or rest days. The dates stay as they are.
                           </p>
                           <div className="space-y-2">
                             {Array.from({ length: runLength }, (_, i) => i).map(i => {
@@ -774,8 +771,7 @@ export default function CreateLeagueForm({ schedule }: {
                       <div className="min-w-0">
                         <p className="text-ink text-sm font-medium">Repeats weekly</p>
                         <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                          The same day every week — every Wednesday for the
-                          summer, or some such.
+                          The same day every week, like every Wednesday.
                         </p>
                       </div>
                       <Toggle checked={repeatOn} onChange={setRepeatOn} label="Repeats weekly" />
@@ -860,8 +856,7 @@ export default function CreateLeagueForm({ schedule }: {
               <div className={`p-4 ${cardClass()}`}>
                 <p className="text-ink text-sm font-medium">A series carries no dates.</p>
                 <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                  You&apos;ll pick the events and their venues next — they need
-                  not be in a row, and more can be added as the season goes.
+                  You&apos;ll pick the events and venues next, and can add more later.
                 </p>
               </div>
             )}
@@ -883,8 +878,7 @@ export default function CreateLeagueForm({ schedule }: {
                 className={FIELD}
               />
               <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                We&apos;ll send you the event details and share link. The event
-                works either way, and no player ever sees it.
+                We&apos;ll email you the event details and share link.
               </p>
               {emailWarning(email) && (
                 <p className="text-rust/80 text-[13px] mt-2 leading-snug">
@@ -1003,8 +997,7 @@ export default function CreateLeagueForm({ schedule }: {
                 <div className="min-w-0">
                   <p className="text-ink text-sm font-medium">Require approval</p>
                   <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                    A joined player waits for your nod before they&apos;re
-                    confirmed in the field.
+                    New players wait for your nod before they&apos;re in the field.
                   </p>
                 </div>
                 <Toggle
@@ -1035,8 +1028,8 @@ export default function CreateLeagueForm({ schedule }: {
 
             <p className="text-ink/65 text-sm">
               {entry === 'self_join'
-                ? 'Add anyone now if you like — everyone else joins with the event code.'
-                : 'Add the field — anyone missed can still join later with the event code.'}
+                ? 'Add anyone now. Everyone else joins with the event code.'
+                : 'Add the field. Anyone missed can join later with the event code.'}
             </p>
 
             {players.map((player, i) => (
@@ -1120,8 +1113,7 @@ export default function CreateLeagueForm({ schedule }: {
             <div>
               <label className={FIELD_LABEL}>Leaderboards</label>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-                What the event plays for. Every league starts on individual
-                Stableford, added up — change it, or add more formats.
+                Starts on individual Stableford, added up. Change it or add more.
               </p>
               <LeaderboardSetup
                 boards={boards}
@@ -1171,8 +1163,7 @@ export default function CreateLeagueForm({ schedule }: {
             <div>
               <label className={FIELD_LABEL}>How collaborative should this event be?</label>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-                What the field can do for themselves. Everything starts off —
-                you can change any of these later from the organiser area.
+                What the field can do for itself. Editable in the organiser area.
               </p>
               <EventPermissionToggles value={perms} onChange={setPerms} />
             </div>
@@ -1181,8 +1172,7 @@ export default function CreateLeagueForm({ schedule }: {
               <div className={`px-4 py-4 mb-3 ${cardClass()}`}>
                 <p className="text-ink text-sm font-medium">Organiser PIN</p>
                 <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                  Your key to the organiser side of the Event Hub — notices,
-                  starts and event settings ask for it.
+                  Unlocks notices, starts and settings in the organiser area.
                 </p>
               </div>
 
