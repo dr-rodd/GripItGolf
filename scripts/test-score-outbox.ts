@@ -436,7 +436,13 @@ section('Nothing loads on the scoring path that the screen does not draw')
   // The Scoring tab is a list of rounds. It carried three things for a sheet
   // behind a `+` — the platform course catalogue, the whole itinerary and
   // every player's handicap — on every visit, serialised into its HTML.
-  ok(!/itinerary_items/.test(picker), 'the tab fetches no itinerary')
+  // A league is the one exception, and a narrow one: a round still TBC has
+  // no round row, so its golf item is what the tab draws — five columns, a
+  // league's only, in the batch the live cards already wait for.
+  ok(!/activity_name|stay_name|tee_time/.test(picker), 'the tab fetches no itinerary')
+  ok((picker.match(/itinerary_items/g) ?? []).length === 1
+    && /series\n\s*\? supabase\.from\('itinerary_items'\)/.test(picker),
+    '  …beyond a league\'s golf items, and only for a league')
   ok(!/from\('players'\)/.test(picker), 'and no players')
   ok(/usePlatformCourses\(open\)/.test(sheet),
     'and the course catalogue waits for the sheet to be opened')

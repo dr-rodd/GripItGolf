@@ -26,7 +26,7 @@ import { type PlayerEntry, PLAYER_ENTRIES } from './bracketSetup'
 import type { Leaderboard } from './leaderboards'
 import { MAX_ROUNDS } from './tripLimits'
 import { WEEKDAY_NAMES } from './weekdays'
-import { describeDay } from './itinerary'
+import { dateForDay, describeDay } from './itinerary'
 import {
   type GolfIrelandRules, type ScoreSource, SCORE_SOURCES,
   parseGolfIrelandRules, readsGolfIreland,
@@ -79,7 +79,7 @@ export const LEAGUE_SCHEDULES: { key: LeagueSchedule; label: string; hint: strin
   { key: 'continuous', label: 'Continuous', hint:
     'An ongoing event over a period, like a summer — pick the playing days inside it.' },
   { key: 'series', label: 'Series', hint:
-    'Separate events feeding one overall leaderboard — planned ahead, or added as you go.' },
+    'Rounds on separate days feeding one overall league — planned ahead, or ad hoc.' },
 ]
 
 export type LeagueSetup = {
@@ -97,9 +97,9 @@ export type LeagueSetup = {
    */
   repeatWeekday?: number
   /**
-   * Series only — the events recur, so many weeks or months apart, and
-   * were all made at creation. Absent on a series is "as you go": each
-   * event is added on the Scoring tab when it is played.
+   * Series only — the rounds recur, so many weeks or months apart, and
+   * were all made at creation. Absent on a series is "ad hoc": each round
+   * is added on the Scoring tab when it is played.
    */
   repeat?: SeriesRepeat
   /** How the field is assembled — the same two answers the knockout offers. */
@@ -185,19 +185,28 @@ export function weeklyDates(startDate: string, endDate: string, weekday: number)
 
 // ─── A series in time ──────────────────────────────────────────
 //
-// A series is distinct events feeding one overall leaderboard
-// (docs/event-use-cases.md, decided October 2026). Each event carries a
-// date — its round's `scheduled_date`, at its calendar offset from the
-// first event, which is the trip's start date — and the events arrive one
-// of two ways:
+// A series is a **league** of distinct **rounds**, each with its own result,
+// feeding one overall leaderboard (docs/event-use-cases.md, decided October
+// 2026 — "rounds within the league" is Ross's wording, and the screens say
+// it). Each round carries a date — its golf item's day, at its calendar
+// offset from the first round, which is the trip's start date — and the
+// rounds arrive one of two ways:
 //
-// · **As you go** — somebody adds the next event on the Scoring tab when
-//   the group turns up to play. Nothing is stored for it: no `repeat` is
-//   the answer.
-// · **Recurring** — so many events, every so many weeks or months, all
-//   made at creation. The repeat is stored (`LeagueSetup.repeat`) so the
-//   event can say it back; how many there are is the rounds' to say, the
-//   one-copy rule again.
+// · **Ad hoc** — somebody adds the next round on the Scoring tab when the
+//   group turns up to play. Nothing is stored for it: no `repeat` is the
+//   answer.
+// · **Recurring** — so many rounds, every so many weeks or months, all made
+//   at creation. The repeat is stored (`LeagueSetup.repeat`) so the league
+//   can say it back; how many there are is the rounds' to say, the one-copy
+//   rule again.
+//
+// **A round's venue may be TBC.** Then it is a dated golf item with no
+// course and **no `rounds` row**: `rounds.course_id` is NOT NULL, and a
+// round nobody can score is better not existing than existing with a
+// course it is not at. Choosing the venue makes the round. So a TBC round
+// cannot go live by construction — there is nothing to open a card on —
+// and every screen that reads rounds is untouched by the idea. Its number
+// is held for it by its place in date order (`leagueRounds`).
 //
 // A series made before it carried dates is a numbered list with neither
 // trip dates nor a repeat, and still reads as one.
@@ -302,33 +311,102 @@ export function describeRepeat(repeat: SeriesRepeat, first?: string | null): str
 }
 
 /**
- * Why this date cannot be a series' next event, or null when it can.
+ * Why this date cannot be a league's next round, or null when it can.
  *
- * **The next event goes after the last one.** Events are numbered in the
- * order they are added, and every screen calls a round by its number, so a
- * date slipped in between two others would make Event 6 come before Event 5.
- * A series with no events yet takes anything from its first date on.
+ * **The next round goes after the last one.** Rounds are numbered in date
+ * order, and every screen calls a round by its number, so a date slipped in
+ * between two others would make Round 6 come before Round 5. A league with
+ * no rounds yet takes anything from its first date on.
  */
-export function nextEventIssue(date: string, ctx: {
-  /** The first event's date — the trip's start date. */
+export function nextRoundIssue(date: string, ctx: {
+  /** The first round's date — the trip's start date. */
   startDate: string
-  /** Every date the series already has an event on. */
-  eventDates: readonly string[]
+  /** Every date the league already has a round on, TBC ones included. */
+  roundDates: readonly string[]
 }): string | null {
   if (!date || !Number.isFinite(Date.parse(`${date}T00:00:00Z`))) {
-    return 'Pick a date for the event.'
+    return 'Pick a date for the round.'
   }
-  if (ctx.eventDates.length >= MAX_LEAGUE_DAYS) {
-    return `A series can hold at most ${MAX_LEAGUE_DAYS} events.`
+  if (ctx.roundDates.length >= MAX_LEAGUE_DAYS) {
+    return `A league can hold at most ${MAX_LEAGUE_DAYS} rounds.`
   }
-  const last = [...ctx.eventDates].sort().at(-1) ?? null
+  const last = [...ctx.roundDates].sort().at(-1) ?? null
   if (last && date <= last) {
-    return `The last event is on ${describeDay(last, 0)} — the next one goes after it.`
+    return `The last round is on ${describeDay(last, 0)} — the next one goes after it.`
   }
   if (date < ctx.startDate) {
-    return `The series starts on ${describeDay(ctx.startDate, 0)} — the next event goes on or after it.`
+    return `The league starts on ${describeDay(ctx.startDate, 0)} — the next round goes on or after it.`
   }
   return null
+}
+
+// ─── A league's rounds, venue or not ───────────────────────────
+
+/** One round of a dated league, whether or not its venue is known yet. */
+export type LeagueRound = {
+  /** The golf item holding the round's date — '' for a round with none. */
+  itemId: string
+  date: string | null
+  /** The stored round number, or the one a TBC round will take. */
+  number: number
+  /** Null while the venue is TBC: the round is made when one is chosen. */
+  roundId: string | null
+  courseId: string | null
+}
+
+/**
+ * Every round of a dated league in date order — the ones with a venue and
+ * the ones still to be confirmed — numbered.
+ *
+ * A round that exists keeps its own number. A TBC round has no number
+ * stored anywhere, so it is given the one its place in date order says
+ * (the third golf day is Round 3), unless that is somehow taken — a round
+ * removed from the running order leaves gaps — in which case it goes past
+ * the highest. Deterministic, so the Scoring tab, the hub and the write
+ * that finally makes the round all agree on what it is called; the
+ * database's UNIQUE (trip, round number) catches two phones racing to it.
+ *
+ * A round with no golf item (made before the itinerary existed) is kept,
+ * at the end, rather than silently dropped.
+ */
+export function leagueRounds(
+  items: readonly { id: string; dayIndex: number; kind: string; courseId?: string | null }[],
+  rounds: readonly {
+    id: string; roundNumber: number; itineraryItemId: string | null; courseId: string | null
+    scheduledDate?: string | null
+  }[],
+  startDate: string | null,
+): LeagueRound[] {
+  const golf = items.filter(i => i.kind === 'golf').sort((a, b) => a.dayIndex - b.dayIndex)
+  const used = new Set(rounds.map(r => r.roundNumber))
+  const out: LeagueRound[] = golf.map((item, index) => {
+    const round = rounds.find(r => r.itineraryItemId === item.id) ?? null
+    let number = round?.roundNumber ?? index + 1
+    if (!round && used.has(number)) number = Math.max(0, ...used) + 1
+    used.add(number)
+    return {
+      itemId: item.id,
+      date: dateForDay(startDate, item.dayIndex),
+      number,
+      roundId: round?.id ?? null,
+      courseId: round?.courseId ?? item.courseId ?? null,
+    }
+  })
+  for (const r of rounds) {
+    if (golf.some(i => i.id === r.itineraryItemId)) continue
+    out.push({
+      itemId: '', date: r.scheduledDate ?? null, number: r.roundNumber,
+      roundId: r.id, courseId: r.courseId,
+    })
+  }
+  return out
+}
+
+/** The number the next round added to this league takes — the same rule. */
+export function nextRoundNumber(rounds: readonly Pick<LeagueRound, 'number'>[]): number {
+  const used = new Set(rounds.map(r => r.number))
+  const candidate = rounds.length + 1
+  return used.has(candidate) ? Math.max(...used) + 1 : candidate
 }
 
 
@@ -491,13 +569,13 @@ export function describeLeagueSetup(
       : 'continuous')
   } else if (setup.schedule === 'series') {
     parts.push('series')
-    // A dated series says how its events arrive; a numbered one made
+    // A dated series says how its rounds arrive; a numbered one made
     // before series carried dates says nothing it cannot back up.
     if (setup.repeat) parts.push(describeRepeat(setup.repeat, firstDate))
-    else if (firstDate) parts.push('events added as you go')
+    else if (firstDate) parts.push('rounds added ad hoc')
   }
   parts.push(setup.schedule === 'series'
-    ? (days === 1 ? 'one event' : `${days} events`)
+    ? (days === 1 ? 'one round' : `${days} rounds`)
     : (days === 1 ? 'one day' : `${days} days`))
   // Said in the card's own words rather than the form buttons' — "I add the
   // field" is a thing an organiser taps, not a fact a summary states.

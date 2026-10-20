@@ -32,7 +32,8 @@ export type EventPermissionKey =
   | 'edit_scores'
   | 'edit_tee_sheet'
   | 'assign_tag'
-  | 'add_events'
+  | 'add_rounds'
+  | 'set_venues'
 
 export const EVENT_PERMISSIONS: {
   key: EventPermissionKey
@@ -65,12 +66,17 @@ export const EVENT_PERMISSIONS: {
   { key: 'assign_tag', dflt: false,
     label: 'Participants can pick their own side',
     hint: 'Let claimed players join one of your sides on the teams screen.' },
-  // A series' events can arrive as they are played: somebody adds the day's
-  // event on the Scoring tab when the group turns up. The organiser can
-  // always do it with the PIN; this lets the field do it without.
-  { key: 'add_events', dflt: false, seriesOnly: true,
-    label: 'Participants can add the next event',
-    hint: 'Let anyone add the series\' next event on the Scoring tab, without the PIN.' },
+  // A league's rounds can arrive as they are played: somebody adds the
+  // day's round on the Scoring tab when the group turns up. The organiser
+  // can always do it with the PIN; this lets the field do it without.
+  { key: 'add_rounds', dflt: false, seriesOnly: true,
+    label: 'Participants can add the next round',
+    hint: 'Let anyone add the league\'s next round on the Scoring tab, without the PIN.' },
+  // A round may be made with its venue to be confirmed, and it cannot be
+  // played until somebody chooses one — on the Scoring tab or the hub.
+  { key: 'set_venues', dflt: false, seriesOnly: true,
+    label: 'Participants can choose a round\'s venue',
+    hint: 'Let anyone pick a venue still to be confirmed, without the PIN.' },
 ]
 
 /**

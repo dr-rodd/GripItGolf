@@ -183,11 +183,8 @@ export default function AddRound({
  * `saveItinerary` writes from, and an empty `before` against a populated
  * `after` is a request to delete the trip's whole itinerary. So the three
  * cases are kept apart and only `ready` may save.
- *
- * Shared with `AddEvent`, the series' own door, which writes through the
- * same `saveItinerary` and so needs the same `before`.
  */
-export function useSheetData(tripId: string, enabled: boolean) {
+function useSheetData(tripId: string, enabled: boolean) {
   const [items, setItems] = useState<ItineraryItem[] | null>(null)
   const [players, setPlayers] = useState<{ id: string; handicap: number | null }[] | null>(null)
   const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')

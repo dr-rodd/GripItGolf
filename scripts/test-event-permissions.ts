@@ -38,8 +38,8 @@ const read = (p: string) => fs.readFileSync(p, 'utf-8')
 section('Three seeded permissions, conservative by default')
 {
   eq(EVENT_PERMISSIONS.map(p => p.key),
-    ['add_courses', 'add_players', 'edit_scores', 'edit_tee_sheet', 'assign_tag', 'add_events'],
-    'the three seeded keys, then the tee sheet, the tag and a series\' next event — each the promised one-line addition')
+    ['add_courses', 'add_players', 'edit_scores', 'edit_tee_sheet', 'assign_tag', 'add_rounds', 'set_venues'],
+    'the three seeded keys, then the tee sheet, the tag and a league\'s rounds and venues — each the promised one-line addition')
   ok(EVENT_PERMISSIONS.every(p => p.dflt === false),
     'every default is off — the organiser opts in')
   ok(EVENT_PERMISSIONS.every(p => p.label.startsWith('Participants can')),
@@ -85,7 +85,7 @@ section('Storage reads whole, falls soft, and never nulls')
 
   const full: EventPermissions = {
     add_courses: true, add_players: false, edit_scores: true, edit_tee_sheet: false,
-    assign_tag: true, add_events: true,
+    assign_tag: true, add_rounds: true, set_venues: false,
   }
   eq(parseEventPermissions(JSON.parse(JSON.stringify(full))), full,
     'a full map reads back whole')
@@ -124,23 +124,25 @@ section('The admin card sums it up')
     'all off reads as organiser-run')
   const two = {
     add_courses: true, add_players: true, edit_scores: false, edit_tee_sheet: false,
-    assign_tag: false, add_events: false,
+    assign_tag: false, add_rounds: false, set_venues: false,
   }
   ok(describePermissions(two, permissionsFor(false)).includes('2 of 5'),
     'partial says the count, out of what this event is asked')
-  ok(describePermissions(two, permissionsFor(true)).includes('2 of 6'),
+  ok(describePermissions(two, permissionsFor(true)).includes('2 of 7'),
     '  …which on a series includes its own')
 }
 
 section('A series-only permission is asked of a series alone')
 {
-  ok(!permissionsFor(false).some(p => p.key === 'add_events'),
-    'a standalone event is never offered adding the next event')
-  ok(permissionsFor(true).some(p => p.key === 'add_events'),
+  ok(!permissionsFor(false).some(p => p.key === 'add_rounds' || p.key === 'set_venues'),
+    'a standalone event is never offered adding rounds or choosing venues')
+  ok(permissionsFor(true).some(p => p.key === 'add_rounds')
+    && permissionsFor(true).some(p => p.key === 'set_venues'),
     'a series is')
   eq(permissionsFor(true).map(p => p.key), EVENT_PERMISSIONS.map(p => p.key),
     'a series is asked the whole registry, in order')
-  ok(!allowsParticipant('tournament', null, 'add_events'),
+  ok(!allowsParticipant('tournament', null, 'add_rounds')
+    && !allowsParticipant('tournament', null, 'set_venues'),
     'off until the organiser opens it, like every other')
 
   const league = read('app/dashboard/create/CreateLeagueForm.tsx')

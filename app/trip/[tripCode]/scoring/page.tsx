@@ -8,8 +8,8 @@ import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundS
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
 import AddRound from './AddRound'
-import AddEvent from './AddEvent'
-import { parseLeagueSetup } from '@/lib/leagueSetup'
+import { AddLeagueRound, TbcRoundTile, type LeagueDoor } from '../LeagueRounds'
+import { parseLeagueSetup, leagueRounds, nextRoundNumber } from '@/lib/leagueSetup'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { describeShortDate } from '@/lib/itinerary'
 import CourseName from '@/app/components/CourseName'
@@ -40,7 +40,7 @@ export default async function TripCoursePortalPage({
   // column would fail this whole query on an un-migrated database — the
   // note on fetchTripKind — and alongside it costs no round trip. The
   // league setup and the permissions ride alongside for the same reason
-  // (migrations 047 and 049): a series' Add event door needs both, and
+  // (migrations 047 and 049): a league's Add round door needs both, and
   // either failing costs that door and nothing else.
   const [kind, { data: trip, error: tripError }, setupRes, permsRes] = await Promise.all([
     fetchTripKind(tripCode),
@@ -49,7 +49,7 @@ export default async function TripCoursePortalPage({
       // One string, not two joined: supabase-js reads the select as a literal
       // type to work out the row shape, and a `+` between two halves leaves it
       // with nothing to read — every field on `trip` then fails to typecheck.
-      .select('id, name, start_date, end_date, track_stats, rounds(id, round_number, status, scheduled_date, course_id, courses(name, location))')
+      .select('id, name, start_date, end_date, track_stats, rounds(id, round_number, status, scheduled_date, course_id, itinerary_item_id, courses(name, location))')
       .eq('trip_code', tripCode)
       .order('round_number', { referencedTable: 'rounds' })
       .single(),
@@ -71,20 +71,21 @@ export default async function TripCoursePortalPage({
 
   const rounds = (trip.rounds ?? []) as unknown as {
     id: string; round_number: number; status: string
-    scheduled_date: string | null; course_id: string | null
+    scheduled_date: string | null; course_id: string | null; itinerary_item_id: string | null
     courses: { name: string; location: string | null } | null
   }[]
 
-  // A series with dates grows from here: its events are added as they are
-  // played (docs/event-use-cases.md). A series made before series carried
-  // dates has no first event to count from, and keeps the organiser's
-  // running order as its only door.
+  // A league with dates grows from here: its rounds are added as they are
+  // played, and a round left TBC waits here for its venue
+  // (docs/event-use-cases.md). A series made before series carried dates
+  // has no first round to count from, and keeps the organiser's running
+  // order as its only door.
   const setupRow = setupRes.data as { bracket_setup?: unknown; settings_passcode_hash?: string | null } | null
   const series = event
     && parseLeagueSetup(setupRow?.bracket_setup)?.schedule === 'series'
     && !!trip.start_date
   const permsRaw = (permsRes.data as { event_permissions?: unknown } | null)?.event_permissions
-  const lastEvent = rounds.at(-1) ?? null
+
 
   // What has actually happened on each round, rather than what `rounds.status`
   // claims: the status column is set by hand and drifts, and the tile is the
@@ -105,11 +106,51 @@ export default async function TripCoursePortalPage({
   // open, nobody on it — does not make a round "In play", or one stray tap
   // on "start a scorecard" keeps a finished round green until the nightly
   // job closes it. The rule is liveRoundPresence's, in lib/rowContext.ts.
-  const { data: openData, error: openErr } = roundIds.length > 0
-    ? await supabase.from('live_rounds').select('round_id, live_player_locks(player_id)')
-        .eq('status', 'active').in('round_id', roundIds)
-    : { data: [], error: null }
+  //
+  // A league's golf items go out in the same breath — five narrow columns,
+  // and only for a league, which draws a round still TBC from its item
+  // because no round exists for it yet. Every other trip's itinerary stays
+  // where the AddRound sheet fetches it, on the tap.
+  const [{ data: openData, error: openErr }, itemsRes] = await Promise.all([
+    roundIds.length > 0
+      ? supabase.from('live_rounds').select('round_id, live_player_locks(player_id)')
+          .eq('status', 'active').in('round_id', roundIds)
+      : Promise.resolve({ data: [], error: null }),
+    series
+      ? supabase.from('itinerary_items').select('id, day_index, position, kind, course_id')
+          .eq('trip_id', trip.id)
+      : Promise.resolve({ data: [], error: null }),
+  ])
   if (openErr) console.error('TripCoursePortal live rounds query failed:', openErr)
+  if (itemsRes.error) console.error('TripCoursePortal league items query failed:', itemsRes.error)
+  const items = (itemsRes.data ?? []) as {
+    id: string; day_index: number; position: number; kind: string; course_id: string | null
+  }[]
+
+  // Every round in date order, TBC ones included, each with its number —
+  // lib/leagueSetup.ts is the one copy of how a TBC round is numbered.
+  const league = series ? leagueRounds(
+    items.map(i => ({ id: i.id, dayIndex: i.day_index, kind: i.kind, courseId: i.course_id })),
+    rounds.map(r => ({
+      id: r.id, roundNumber: r.round_number, itineraryItemId: r.itinerary_item_id,
+      courseId: r.course_id, scheduledDate: r.scheduled_date,
+    })),
+    trip.start_date ?? null,
+  ) : []
+  const lastVenueId = [...league].reverse().find(r => r.courseId)?.courseId ?? null
+  const door: LeagueDoor | null = series && trip.start_date ? {
+    tripId: trip.id,
+    tripCode,
+    startDate: trip.start_date,
+    passcodeHash: setupRow?.settings_passcode_hash ?? null,
+    fieldMayAddCourses: allowsParticipant(kind, permsRaw, 'add_courses'),
+  } : null
+  const positionsByDay: Record<number, number> = {}
+  for (const i of items) positionsByDay[i.day_index] = (positionsByDay[i.day_index] ?? 0) + 1
+
+  // Real rounds by id, so the league's list can draw each one's own tile.
+  const roundById = new Map(rounds.map(r => [r.id, r]))
+
   const openRounds = new Set(
     liveRoundPresence((openData ?? []) as unknown as OpenCard[]).activeRoundIds,
   )
@@ -155,7 +196,7 @@ export default async function TripCoursePortalPage({
       <div className="max-w-lg mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-4">
           <p className="t-label text-ink/65">
-            {series ? 'Choose an event' : 'Choose a round'}
+            Choose a round
           </p>
           {/* The door for the impromptu game — the same golf form the
               itinerary uses, in a sheet, without a trip through Trip Setup.
@@ -171,33 +212,50 @@ export default async function TripCoursePortalPage({
               trackStats={trip.track_stats === true}
             />
           )}
-          {/* A series' own door — the next event, on the day it is played.
+          {/* A league's own door — the next round, on the day it is played.
               The organiser's with the PIN, the field's when they allow it. */}
-          {series && trip.start_date && (
-            <AddEvent
-              tripId={trip.id}
-              tripCode={tripCode}
-              startDate={trip.start_date}
+          {door && (
+            <AddLeagueRound
+              door={door}
               endDate={trip.end_date ?? null}
-              eventDates={rounds.flatMap(r => (r.scheduled_date ? [r.scheduled_date] : []))}
-              lastVenueId={lastEvent?.course_id ?? null}
-              fieldMayAdd={allowsParticipant(kind, permsRaw, 'add_events')}
-              fieldMayAddCourses={allowsParticipant(kind, permsRaw, 'add_courses')}
-              passcodeHash={setupRow?.settings_passcode_hash ?? null}
+              roundDates={league.flatMap(r => (r.date ? [r.date] : []))}
+              number={nextRoundNumber(league)}
+              positionsByDay={positionsByDay}
+              lastVenueId={lastVenueId}
+              fieldMayAdd={allowsParticipant(kind, permsRaw, 'add_rounds')}
             />
           )}
         </div>
 
-        {(rounds ?? []).length === 0 && (
+        {(series ? league.length === 0 : (rounds ?? []).length === 0) && (
           <p className="text-ink/65 text-sm py-8 text-center">
             {series
-              ? 'No events yet — add the first one above.'
+              ? 'No rounds yet — add the first one above.'
               : `No rounds set up for this ${event ? 'event' : 'trip'} yet.`}
           </p>
         )}
 
         <div className="flex flex-col gap-3">
-          {(rounds ?? []).map(round => {
+          {/* A league lists its rounds in date order, a TBC one in its place
+              and paler; anything else lists its rounds as it always has. */}
+          {(series
+            ? league.map(lr => lr.roundId ? roundById.get(lr.roundId)! : lr)
+            : (rounds ?? [])
+          ).map(entry => {
+            if (!('round_number' in entry)) {
+              return door && entry.date ? (
+                <TbcRoundTile
+                  key={entry.itemId}
+                  door={door}
+                  itemId={entry.itemId}
+                  date={entry.date}
+                  number={entry.number}
+                  lastVenueId={lastVenueId}
+                  fieldMaySetVenue={allowsParticipant(kind, permsRaw, 'set_venues')}
+                />
+              ) : null
+            }
+            const round = entry
             const course = round.courses as unknown as { name: string; location: string | null } | null
             const tone = roundTone(scoredRounds.has(round.id), openRounds.has(round.id))
             return (
@@ -208,8 +266,8 @@ export default async function TripCoursePortalPage({
               >
                 <div className="min-w-0">
                   <p className="t-label text-ink/65 mb-1">
-                    {series
-                      ? `Event ${round.round_number}${round.scheduled_date ? ` · ${describeShortDate(round.scheduled_date)}` : ''}`
+                    {series && round.scheduled_date
+                      ? `Round ${round.round_number} · ${describeShortDate(round.scheduled_date)}`
                       : `Round ${round.round_number}`}
                   </p>
                   <p className="t-card text-ink truncate">

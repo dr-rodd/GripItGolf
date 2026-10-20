@@ -773,8 +773,14 @@ section('Migration 027 and lib/itinerary.ts describe the same table')
   // gets quietly undone: a copy left behind loads on every visit and the
   // check above passes on the other file.
   const portal = fs.readFileSync('app/trip/[tripCode]/scoring/page.tsx', 'utf-8')
-  ok(!portal.includes('itinerary_items'),
+  // A league draws its rounds from their golf items — a round still TBC has
+  // no round row — so the tab reads five narrow columns, for a league only,
+  // in the same batch as its live cards. Never the sheet's whole itinerary.
+  ok(!portal.includes('activity_name') && !portal.includes('fromItemRow'),
     'and the Scoring tab itself no longer fetches an itinerary it does not draw')
+  ok(portal.includes("? supabase.from('itinerary_items').select('id, day_index, position, kind, course_id')")
+    && portal.includes('    series\n'),
+    '  …a league\'s golf items alone, and only for a league')
 }
 
 // ─── Deleting a round is the write that must not miss ──────────

@@ -16,7 +16,8 @@ import {
   MAX_LEAGUE_DAYS, WEEKDAY_NAMES,
   leagueDaysIssue, starterBoards, parseLeagueSetup, describeLeagueSetup,
   weeklyDates, boardGrouping, describeScope,
-  seriesDates, describeRepeat, nextEventIssue, tidyRepeat, MAX_REPEAT_EVERY,
+  seriesDates, describeRepeat, nextRoundIssue, tidyRepeat, MAX_REPEAT_EVERY,
+  leagueRounds, nextRoundNumber,
 } from '../lib/leagueSetup'
 import type { Leaderboard } from '../lib/leaderboards'
 import { parseBracketSetup } from '../lib/bracketSetup'
@@ -134,21 +135,59 @@ section('A repeat says itself the way a club does')
   eq(describeRepeat({ every: 1, unit: 'week' }), 'every week', 'with no date there is no day to name')
 }
 
-section('The next event goes after the last one')
+section('The next round goes after the last one')
 {
-  const ctx = { startDate: '2026-11-04', eventDates: ['2026-11-04', '2026-11-11'] }
-  eq(nextEventIssue('2026-11-18', ctx), null, 'a week on is the next event')
-  ok(!!nextEventIssue('2026-11-11', ctx)?.includes('after'), 'the last event\'s own day is refused')
-  ok(!!nextEventIssue('2026-11-08', ctx)?.includes('11 November'),
-    'an earlier day is refused, naming the last event')
-  ok(nextEventIssue('', ctx) !== null, 'no date is refused')
-  eq(nextEventIssue('2026-11-04', { startDate: '2026-11-04', eventDates: [] }), null,
-    'an empty series takes its first date')
-  ok(nextEventIssue('2026-11-01', { startDate: '2026-11-04', eventDates: [] }) !== null,
+  const ctx = { startDate: '2026-11-04', roundDates: ['2026-11-04', '2026-11-11'] }
+  eq(nextRoundIssue('2026-11-18', ctx), null, 'a week on is the next round')
+  ok(!!nextRoundIssue('2026-11-11', ctx)?.includes('after'), 'the last round\'s own day is refused')
+  ok(!!nextRoundIssue('2026-11-08', ctx)?.includes('11 November'),
+    'an earlier day is refused, naming the last round')
+  ok(nextRoundIssue('', ctx) !== null, 'no date is refused')
+  eq(nextRoundIssue('2026-11-04', { startDate: '2026-11-04', roundDates: [] }), null,
+    'an empty league takes its first date')
+  ok(nextRoundIssue('2026-11-01', { startDate: '2026-11-04', roundDates: [] }) !== null,
     '  …but nothing before it')
-  const full = { startDate: '2026-01-07', eventDates: seriesDates('2026-01-07', { every: 1, unit: 'week' }, MAX_LEAGUE_DAYS) }
-  ok(!!nextEventIssue('2027-06-02', full)?.includes(`${MAX_LEAGUE_DAYS}`),
-    'and a full series says the ceiling')
+  const full = { startDate: '2026-01-07', roundDates: seriesDates('2026-01-07', { every: 1, unit: 'week' }, MAX_LEAGUE_DAYS) }
+  ok(!!nextRoundIssue('2027-06-02', full)?.includes(`${MAX_LEAGUE_DAYS}`),
+    'and a full league says the ceiling')
+}
+
+section('A league\'s rounds, venue or not, in date order and numbered')
+{
+  // Four Wednesdays; the second's venue is TBC — a golf item with no
+  // course and no round row.
+  const items = [
+    { id: 'i1', dayIndex: 0, kind: 'golf', courseId: 'c1' },
+    { id: 'i2', dayIndex: 7, kind: 'golf', courseId: null },
+    { id: 'i3', dayIndex: 14, kind: 'golf', courseId: 'c1' },
+    { id: 'dinner', dayIndex: 14, kind: 'stay', courseId: null },
+    { id: 'i4', dayIndex: 21, kind: 'golf', courseId: 'c2' },
+  ]
+  const rounds = [
+    { id: 'r1', roundNumber: 1, itineraryItemId: 'i1', courseId: 'c1' },
+    { id: 'r3', roundNumber: 3, itineraryItemId: 'i3', courseId: 'c1' },
+    { id: 'r4', roundNumber: 4, itineraryItemId: 'i4', courseId: 'c2' },
+  ]
+  const list = leagueRounds(items, rounds, '2026-11-04')
+  eq(list.map(r => r.number), [1, 2, 3, 4], 'a TBC round holds its place in the numbering')
+  eq(list.map(r => r.roundId), ['r1', null, 'r3', 'r4'], 'and has no round until a venue is chosen')
+  eq(list.map(r => r.date), ['2026-11-04', '2026-11-11', '2026-11-18', '2026-11-25'],
+    'each round is dated by its offset from the first')
+  ok(!list.some(r => r.itemId === 'dinner'), 'only golf is a round')
+  eq(nextRoundNumber(list), 5, 'the next round added is the fifth')
+
+  // A round removed from the running order leaves a gap; a TBC round never
+  // takes a number somebody already has.
+  const gappy = leagueRounds(
+    [{ id: 'a', dayIndex: 0, kind: 'golf' }, { id: 'b', dayIndex: 7, kind: 'golf' }],
+    [{ id: 'r2', roundNumber: 2, itineraryItemId: 'a', courseId: 'c' }],
+    '2026-11-04',
+  )
+  eq(gappy.map(r => r.number), [2, 3], 'a TBC round whose place is taken goes past the highest')
+  eq(nextRoundNumber([{ number: 1 }, { number: 3 }]), 4, 'and the next round never collides')
+
+  const orphan = leagueRounds([], [{ id: 'old', roundNumber: 1, itineraryItemId: null, courseId: 'c', scheduledDate: '2026-01-01' }], '2026-01-01')
+  eq(orphan.map(r => r.roundId), ['old'], 'a round with no golf item is kept, never dropped')
 }
 
 // ─── The starter board ─────────────────────────────────────────
@@ -278,11 +317,11 @@ section('The organiser card says the shape')
     { format: 'league', schedule: 'series', repeat: { every: 1, unit: 'week' }, entry: 'organiser' },
     10, '2026-11-04',
   )
-  ok(recurringLine.includes('every Wednesday') && recurringLine.includes('10 events'),
-    'a recurring series says how often, and counts events rather than days')
+  ok(recurringLine.includes('every Wednesday') && recurringLine.includes('10 rounds'),
+    'a recurring league says how often, and counts rounds rather than days')
   ok(describeLeagueSetup(
     { format: 'league', schedule: 'series', entry: 'organiser' }, 1, '2026-11-04',
-  ).includes('added as you go'), 'a dated series with no repeat is played as it goes')
+  ).includes('added ad hoc'), 'a dated series with no repeat is ad hoc')
   ok(!describeLeagueSetup(
     { format: 'league', entry: 'organiser' }, 3,
   ).includes('standalone'), 'standalone goes unsaid — it is the plain case')
@@ -510,40 +549,68 @@ section('The day editor is a door on the organiser page, events only')
     'and only when there is more than one day to tell apart')
 }
 
-section('A series grows from the Scoring tab, one event at a time')
+section('A league grows from the Scoring tab and the hub, one round at a time')
 {
   const page = read('app/trip/[tripCode]/scoring/page.tsx')
   ok(page.includes("parseLeagueSetup(setupRow?.bracket_setup)?.schedule === 'series'")
     && page.includes('&& !!trip.start_date'),
-    'the door is a dated series\' alone — an undated one keeps the running order')
-  ok(page.includes("allowsParticipant(kind, permsRaw, 'add_events')"),
-    'the field adds events only when the organiser lets it')
+    'the door is a dated league\'s alone — an undated series keeps the running order')
+  ok(page.includes("allowsParticipant(kind, permsRaw, 'add_rounds')"),
+    'the field adds rounds only when the organiser lets it')
+  ok(page.includes("allowsParticipant(kind, permsRaw, 'set_venues')"),
+    'and chooses a TBC venue only when the organiser lets it')
   ok(page.includes("allowsParticipant(kind, permsRaw, 'add_courses')"),
     'and adds a course only with add_courses — the gate the registry promised')
   ok(page.includes(".select('bracket_setup, settings_passcode_hash')")
     && page.includes(".select('event_permissions')"),
     'the setup and permissions ride in their own fail-soft queries, never the main select')
+  ok(page.includes('leagueRounds(') && page.includes('<TbcRoundTile'),
+    'the tab lists the league\'s rounds through the one copy, a TBC one in its place')
+  ok(page.includes('number={nextRoundNumber(league)}'),
+    'a new round takes the number the one rule gives it')
 
-  const add = read('app/trip/[tripCode]/scoring/AddEvent.tsx')
-  ok(add.includes('nextEventIssue(date, { startDate, eventDates })'),
+  const hub = read('app/trip/[tripCode]/page.tsx')
+  ok(hub.includes('leagueRounds(') && hub.includes('<TbcRoundTile'),
+    'the hub lists the same rounds the same way')
+  ok(hub.includes("allowsParticipant(trip.kind, tripRaw.event_permissions, 'set_venues')"),
+    'behind the same permission')
+
+  const doors = read('app/trip/[tripCode]/LeagueRounds.tsx')
+  ok(doors.includes('nextRoundIssue(date, { startDate: door.startDate, roundDates })'),
     'the date is checked by the one copy of the rule')
-  ok(add.includes('saveItinerary({'), 'the event is written the way every round is')
-  ok(add.indexOf(".update({ end_date: date })") < add.indexOf('saveItinerary({'),
-    'the end date moves on before the event is made, never after')
-  ok(add.includes("dataState !== 'ready'"),
-    'a failed fetch stops the save rather than reading as an empty itinerary')
-  ok(add.includes('<InlineUnlock') && add.includes('hasUnlocked(tripCode)'),
+  ok(doors.includes('addLeagueRound({') && doors.includes('confirmLeagueVenue({'),
+    'both doors write through the league\'s own writer')
+  ok(doors.includes('<InlineUnlock') && doors.includes('hasUnlocked(door.tripCode)'),
     'the organiser\'s PIN is asked in place, and remembered')
-  ok(add.includes('allowAdd={organiser || fieldMayAddCourses}'),
+  ok(doors.includes('allowAdd={organiser || door.fieldMayAddCourses}'),
     'the picker hides its add-course door unless the person may use it')
+  ok(doors.includes("failed ? 'Could not load the field"),
+    'a failed fetch of the field stops the save rather than making a round with no handicaps')
+
+  const store = read('lib/leagueRoundStore.ts')
+  ok(!store.includes("from './itineraryStore'"),
+    'not saveItinerary — "last + 1" would hand a TBC round\'s number to somebody else')
+  ok(store.indexOf(".update({ end_date: args.date })") < store.indexOf("from('itinerary_items')"),
+    'the end date moves on before the round is made, never after')
+  ok(store.includes(".is('course_id', null)"),
+    'a TBC venue is claimed only while it is still TBC — two phones cannot both make the round')
+  ok(store.includes('if (!made.made)'),
+    'a round that could not be made leaves no half-made item behind')
+  ok(store.includes('!isHandicapPending(p.handicap)'), 'pending handicaps get no snapshot')
+
+  const wizard = read('app/dashboard/create/CreateLeagueForm.tsx')
+  ok(wizard.includes("useState(schedule === 'series')"), 'a league presumes one venue')
+  ok(wizard.includes("label: 'Ad hoc'"), 'and is planned ad hoc or recurring')
+  ok(wizard.includes('if (!item.courseId) return []'),
+    'a TBC round is made without a round row, its number kept free')
 
   const picker = read('app/components/CourseSelect.tsx')
   ok(picker.includes('allowAdd = true') && picker.includes("view.kind === 'add' && allowAdd"),
     'the picker is open by default everywhere it always was')
 
-  const store = read('lib/itineraryStore.ts')
-  ok(store.includes('players.filter(p => !isHandicapPending(p.handicap))')
-    && !store.includes('Math.round(p.handicap ?? 0)'),
+  const itin = read('lib/itineraryStore.ts')
+  ok(itin.includes('players.filter(p => !isHandicapPending(p.handicap))')
+    && !itin.includes('Math.round(p.handicap ?? 0)'),
     'an added round gives a pending handicap no snapshot — pending is not scratch')
 }
 

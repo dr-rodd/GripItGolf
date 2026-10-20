@@ -59,12 +59,15 @@ import { Stepper } from '@/app/components/ItineraryForms'
  * per day (or one for all, behind a toggle) and one extra question: how the
  * days relate on the leaderboard (lib/leagueSetup.ts `DayBoards`).
  *
- * A series is distinct events with dates (docs/event-use-cases.md): planned
- * as it goes — the first event here, the rest added on the Scoring tab as
- * they are played — or recurring, every so many weeks or months, every
- * event made now (`seriesDates`). Either way the first event's date is the
- * trip's start, and each event sits at its calendar offset from it, the
- * same as a continuous league's days.
+ * A series is a league of rounds on their own dates
+ * (docs/event-use-cases.md): ad hoc — the first round here, the rest added
+ * on the Scoring tab as they are played — or recurring, every so many weeks
+ * or months, every round made now (`seriesDates`). Either way the first
+ * round's date is the trip's start, and each round sits at its calendar
+ * offset from it, the same as a continuous league's days. One venue is
+ * presumed for the lot; turned off, each round picks its own or is left
+ * **to be confirmed** — a dated golf item with no round yet, made when
+ * somebody chooses the venue (lib/leagueSetup.ts says why).
  *
  * What creation writes: the trip row (kind 'tournament', the league setup
  * whole in `bracket_setup`, the starter Stableford board in
@@ -82,14 +85,17 @@ const STEP_INTROS: (string | undefined)[] = [undefined, undefined, undefined, un
 
 type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F' }
 
-/** How a series' events arrive — the first question a series is asked. */
-type SeriesPlan = 'as_you_go' | 'recurring'
+/** How a league's rounds arrive — the first question a series is asked. */
+type SeriesPlan = 'ad_hoc' | 'recurring'
 const SERIES_PLANS: { key: SeriesPlan; label: string; hint: string }[] = [
-  { key: 'as_you_go', label: 'As you go', hint:
-    'Start with the first event here. Each one after is added on the Scoring tab when it’s played.' },
+  { key: 'ad_hoc', label: 'Ad hoc', hint:
+    'Start with the first round here. Each one after is added on the Scoring tab when it’s played.' },
   { key: 'recurring', label: 'Recurring', hint:
-    'A set number of events, every so many weeks or months, all made now.' },
+    'A set number of rounds, every so many weeks or months, all made now.' },
 ]
+
+/** A venue left to be confirmed — a series' round with no course yet. */
+const TBC_VENUE = 'tbc'
 
 /** The chip row every either/or question on this form is asked with. */
 function Chips<K extends string>({ options, chosen, onChoose }: {
@@ -113,12 +119,53 @@ function Chips<K extends string>({ options, chosen, onChoose }: {
   )
 }
 
+/**
+ * A venue, or — on a series — a venue to be confirmed. The course picker
+ * itself is the platform's own; this only adds the switch beside it, and
+ * stores the choice as `TBC_VENUE` in the same slot a course id would sit.
+ */
+function VenuePicker({ courses, value, onChange, onCourseAdded, allowTbc }: {
+  courses: DirectoryCourse[]
+  value: string
+  onChange: (id: string) => void
+  onCourseAdded: (course: DirectoryCourse) => void
+  allowTbc: boolean
+}) {
+  const tbc = value === TBC_VENUE
+  return (
+    <div>
+      {tbc ? (
+        <p className="t-cap text-ink/65 leading-snug">
+          To be confirmed. The round can’t be played until somebody chooses its venue.
+        </p>
+      ) : (
+        <CourseSelect
+          courses={courses}
+          value={value}
+          onChange={onChange}
+          onCourseAdded={onCourseAdded}
+        />
+      )}
+      {allowTbc && (
+        <div className="flex items-center justify-between gap-4 mt-2">
+          <p className="text-ink/65 text-[13px]">Venue to be confirmed</p>
+          <Toggle
+            checked={tbc}
+            onChange={on => onChange(on ? TBC_VENUE : '')}
+            label="Venue to be confirmed"
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function CreateLeagueForm({ schedule }: {
   /**
    * The shape chosen on the tournament door — standalone (a single point
    * in time, one day or a run), continuous (a period with the playing days
-   * picked inside it, by hand or weekly), or series (distinct events, each
-   * on its own date, planned as you go or recurring). Decides which
+   * picked inside it, by hand or weekly), or series (a league of rounds,
+   * each on its own date, ad hoc or recurring). Decides which
    * questions step one asks and what the
    * venues step is a list of; the players, boards and write path are the
    * same underneath whichever it is.
@@ -165,8 +212,8 @@ export default function CreateLeagueForm({ schedule }: {
   const [weekday, setWeekday] = useState<number | null>(null)
   const [manualDates, setManualDates] = useState<string[]>([''])
 
-  // Series — how the events arrive, and for a recurring one how often and
-  // how many. The first event's date is `startDate`.
+  // Series — how the rounds arrive, and for a recurring one how often and
+  // how many. The first round's date is `startDate`.
   const [seriesPlan, setSeriesPlan] = useState<SeriesPlan | null>(null)
   const [repeatEvery, setRepeatEvery] = useState(1)
   const [repeatUnit, setRepeatUnit] = useState<RepeatUnit>('week')
@@ -179,7 +226,9 @@ export default function CreateLeagueForm({ schedule }: {
   // the courses.
   const [venues, setVenues] = useState<string[]>([])
   const [dateVenues, setDateVenues] = useState<Record<string, string>>({})
-  const [sameVenue, setSameVenue] = useState(false)
+  // A league presumes its home course — on until the organiser says
+  // otherwise. Everything else starts off, as it always did.
+  const [sameVenue, setSameVenue] = useState(schedule === 'series')
 
   // Step 3 — the field
   const [entry, setEntry] = useState<PlayerEntry | null>(null)
@@ -306,6 +355,12 @@ export default function CreateLeagueForm({ schedule }: {
         ? periodSet && !manualOutside && slots.length > 0 && !daysIssue
           && (!repeatOn || weekday !== null)
         : !!seriesPlan && !!startDate && slots.length > 0 && !daysIssue)
+
+  /** The course a slot is played at, or null while it is to be confirmed. */
+  const courseOf = (slot: { date: string | null }, i: number) => {
+    const v = venueFor(slot, i)
+    return v === TBC_VENUE ? null : v
+  }
 
   // How the days relate is asked of anything with more than one day — and
   // of every series, whose events are added after creation if they were
@@ -496,7 +551,9 @@ export default function CreateLeagueForm({ schedule }: {
       dayIndex: slot.dayIndex,
       position: 0,
       kind: 'golf',
-      courseId: venueFor(slot, i),
+      // A venue to be confirmed is a golf item with no course — and, below,
+      // no round until somebody chooses one.
+      courseId: courseOf(slot, i),
       teeTime: null,
       teeCount: 1,
     }))
@@ -516,23 +573,26 @@ export default function CreateLeagueForm({ schedule }: {
       (savedItems ?? []).map(r => [`${r.day_index}:${r.position}`, r.id])
     )
 
-    const { data: insertedRounds, error: roundsErr } = await supabase
-      .from('rounds')
-      .insert(
-        items.map((item, i) => {
-          // The slot's own date — every shape has one now.
-          const date = slots[i].date
-          return {
-            trip_id: tripId,
-            course_id: item.courseId,
-            round_number: i + 1,
-            status: 'upcoming',
-            itinerary_item_id: savedBySlot.get(`${item.dayIndex}:${item.position}`) ?? null,
-            ...(date ? { scheduled_date: date } : {}),
-          }
-        })
-      )
-      .select('id')
+    // A round for every slot with a venue, numbered by its place in date
+    // order — so a TBC slot keeps its number free until its round is made
+    // (`leagueRounds` reads it back the same way). Every slot has a venue
+    // on any shape but a series, so there the numbers run 1, 2, 3 as ever.
+    const roundRows = items.flatMap((item, i) => {
+      if (!item.courseId) return []
+      // The slot's own date — every shape has one now.
+      const date = slots[i].date
+      return [{
+        trip_id: tripId,
+        course_id: item.courseId,
+        round_number: i + 1,
+        status: 'upcoming',
+        itinerary_item_id: savedBySlot.get(`${item.dayIndex}:${item.position}`) ?? null,
+        ...(date ? { scheduled_date: date } : {}),
+      }]
+    })
+    const { data: insertedRounds, error: roundsErr } = roundRows.length > 0
+      ? await supabase.from('rounds').insert(roundRows).select('id')
+      : { data: [] as { id: string }[], error: null }
 
     if (roundsErr || !insertedRounds) {
       setError(`Event created, but the rounds could not be saved. ${describeError(roundsErr)}`)
@@ -921,17 +981,17 @@ export default function CreateLeagueForm({ schedule }: {
             {schedule === 'series' && (
               <>
                 <div>
-                  <label className={FIELD_LABEL}>How are the events planned?</label>
+                  <label className={FIELD_LABEL}>How are the rounds planned?</label>
                   <Chips options={SERIES_PLANS} chosen={seriesPlan} onChoose={setSeriesPlan} />
                   <p className="text-ink/65 text-[13px] mt-2 leading-snug">
                     {seriesPlan
                       ? SERIES_PLANS.find(p => p.key === seriesPlan)!.hint
-                      : 'Separate events, each with its own result, feeding one overall leaderboard.'}
+                      : 'Rounds on separate days, each with its own result, feeding one overall league.'}
                   </p>
                 </div>
 
                 {seriesPlan && (
-                  <DateField label="First event" value={startDate} onChange={setStartDate} />
+                  <DateField label="First round" value={startDate} onChange={setStartDate} />
                 )}
 
                 {seriesPlan === 'recurring' && (
@@ -958,11 +1018,11 @@ export default function CreateLeagueForm({ schedule }: {
                     </div>
 
                     <Stepper
-                      label="How many events?"
+                      label="How many rounds?"
                       value={eventCount}
                       min={2}
                       max={MAX_LEAGUE_DAYS}
-                      unit={n => (n === 1 ? 'event' : 'events')}
+                      unit={n => (n === 1 ? 'round' : 'rounds')}
                       onChange={setEventCount}
                     />
                   </>
@@ -972,7 +1032,7 @@ export default function CreateLeagueForm({ schedule }: {
                   daysIssue
                     ? <p className="text-rust-deep text-[13px] leading-snug">{daysIssue}</p>
                     : <p className="text-ink/65 text-[13px] leading-snug">
-                        {slots.length} events, {describeRepeat({ every: repeatEvery, unit: repeatUnit }, startDate)}:{' '}
+                        {slots.length} rounds, {describeRepeat({ every: repeatEvery, unit: repeatUnit }, startDate)}:{' '}
                         {describeDay(slots[0].date, 0)} to {describeDay(slots.at(-1)!.date, 0)}.
                       </p>
                 )}
@@ -1021,10 +1081,12 @@ export default function CreateLeagueForm({ schedule }: {
               <div className={`flex items-start justify-between gap-4 p-4 ${cardClass()}`}>
                 <div className="min-w-0">
                   <p className="text-ink text-sm font-medium">
-                    Same venue every {schedule === 'series' ? 'event' : 'day'}
+                    Same venue every {schedule === 'series' ? 'round' : 'day'}
                   </p>
                   <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                    One course for the whole event — pick it once below.
+                    {schedule === 'series'
+                      ? 'One course for the whole league. Turn off to pick each round’s, or leave some to be confirmed.'
+                      : 'One course for the whole event — pick it once below.'}
                   </p>
                 </div>
                 <Toggle
@@ -1038,15 +1100,16 @@ export default function CreateLeagueForm({ schedule }: {
             {slots.length === 1 || sameVenue ? (
               <div>
                 <label className={FIELD_LABEL}>Venue</label>
-                <CourseSelect
+                <VenuePicker
                   courses={courses}
                   value={venues[0] ?? ''}
                   onChange={id => setVenue(0, id)}
                   onCourseAdded={onCourseAdded}
+                  allowTbc={schedule === 'series'}
                 />
-                {schedule === 'series' && seriesPlan === 'as_you_go' && (
+                {schedule === 'series' && seriesPlan === 'ad_hoc' && (
                   <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                    For the first event. Each event after picks its own venue when it&apos;s added.
+                    For the first round. Each round after is presumed to be here too, and can be changed when it&apos;s added.
                   </p>
                 )}
               </div>
@@ -1056,10 +1119,10 @@ export default function CreateLeagueForm({ schedule }: {
                   <div key={slot.date ?? i}>
                     <label className={FIELD_LABEL}>
                       {schedule === 'series'
-                        ? `Event ${i + 1} · ${describeDay(slot.date, slot.dayIndex)}`
+                        ? `Round ${i + 1} · ${describeDay(slot.date, slot.dayIndex)}`
                         : describeDay(slot.date, slot.dayIndex)}
                     </label>
-                    <CourseSelect
+                    <VenuePicker
                       courses={courses}
                       value={venueFor(slot, i)}
                       onChange={id =>
@@ -1067,6 +1130,7 @@ export default function CreateLeagueForm({ schedule }: {
                           ? setDateVenue(slot.date, id)
                           : setVenue(i, id)}
                       onCourseAdded={onCourseAdded}
+                      allowTbc={schedule === 'series'}
                     />
                   </div>
                 ))}
@@ -1264,7 +1328,7 @@ export default function CreateLeagueForm({ schedule }: {
             {asksDayBoards && (
               <div>
                 <label className={FIELD_LABEL}>
-                  The leaderboard across the {schedule === 'series' ? 'events' : 'days'}
+                  The leaderboard across the {schedule === 'series' ? 'rounds' : 'days'}
                 </label>
                 <div className="space-y-2">
                   {DAY_BOARDS.map(d => (

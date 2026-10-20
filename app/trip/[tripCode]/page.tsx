@@ -43,6 +43,12 @@ import ShareTrip from './ShareTrip'
 import { golfIrelandLinkedIds } from './golfIreland'
 import { LinkedBadge } from '@/app/components/LinkMark'
 import { cardClass } from '@/app/components/ui'
+import { parseLeagueSetup, leagueRounds } from '@/lib/leagueSetup'
+import { allowsParticipant } from '@/lib/eventPermissions'
+import { describeShortDate } from '@/lib/itinerary'
+import { TbcRoundTile, type LeagueDoor } from './LeagueRounds'
+import CourseName from '@/app/components/CourseName'
+import { IconChevronRight } from '@/app/components/icons'
 
 export const dynamic = 'force-dynamic'
 
@@ -143,7 +149,7 @@ export default async function TripPage({ params, searchParams }: {
     // cannot be an event there either, so it is only asked for when it is.
     supabase
       .from('rounds')
-      .select(`round_number, course_id, scheduled_date, itinerary_item_id${isEvent ? ', start_format' : ''}`)
+      .select(`id, round_number, course_id, scheduled_date, itinerary_item_id${isEvent ? ', start_format' : ''}`)
       .eq('trip_id', trip.id)
       .order('round_number'),
     supabase
@@ -216,7 +222,7 @@ export default async function TripPage({ params, searchParams }: {
   if (noticesResult.error) console.error('TripPage notices query failed:', noticesResult.error)
 
   type RoundRow = {
-    round_number: number; course_id: string; scheduled_date: string | null
+    id: string; round_number: number; course_id: string; scheduled_date: string | null
     itinerary_item_id: string | null
     /** Only selected for events; absent on a trip's query. */
     start_format?: string | null
@@ -438,8 +444,86 @@ export default async function TripPage({ params, searchParams }: {
     if (lead?.competition === 'matchplay') placingLine = ''
   }
 
+  // ── A league's rounds, when it has dates ──
+  //
+  // A dated series reads as its rounds rather than as a calendar: each one
+  // with its date and venue, in order, opening its own summary, and a round
+  // whose venue is still to be confirmed paler and asking for one
+  // (docs/event-use-cases.md). The setup, the PIN and the permissions all
+  // ride in on the trip's own `*`, so this costs no query.
+  const tripRaw = trip as { bracket_setup?: unknown; event_permissions?: unknown; settings_passcode_hash?: string | null }
+  const leagueDated = isEvent && !!trip.start_date
+    && parseLeagueSetup(tripRaw.bracket_setup)?.schedule === 'series'
+  const league = leagueDated ? leagueRounds(
+    itinerary.map(i => ({ id: i.id, dayIndex: i.dayIndex, kind: i.kind, courseId: i.courseId ?? null })),
+    rounds.map(r => ({
+      id: r.id, roundNumber: r.round_number, itineraryItemId: r.itinerary_item_id,
+      courseId: r.course_id, scheduledDate: r.scheduled_date,
+    })),
+    trip.start_date ?? null,
+  ) : []
+  const leagueDoor: LeagueDoor | null = leagueDated && trip.start_date ? {
+    tripId: trip.id,
+    tripCode,
+    startDate: trip.start_date,
+    passcodeHash: tripRaw.settings_passcode_hash ?? null,
+    fieldMayAddCourses: allowsParticipant(trip.kind, tripRaw.event_permissions, 'add_courses'),
+  } : null
+  const leagueLastVenue = [...league].reverse().find(r => r.courseId)?.courseId ?? null
+  const otherItems = itinerary.filter(i => i.kind !== 'golf')
+
+  const leagueSection = leagueDoor ? (
+    <div className="flex flex-col gap-3">
+      {league.map(lr => lr.roundId ? (
+        <Link
+          key={lr.roundId}
+          href={`/trip/${tripCode}/round/${lr.number}`}
+          className={`flex items-center justify-between w-full px-5 py-4 rounded-card press ${ROUND_TILE.played}`}
+        >
+          <div className="min-w-0">
+            <p className="t-label text-ink/65 mb-1">
+              Round {lr.number}{lr.date ? ` · ${describeShortDate(lr.date)}` : ''}
+            </p>
+            <p className="t-card text-ink truncate">
+              <CourseName name={(lr.courseId && courseMap[lr.courseId]) || `Round ${lr.number}`} />
+            </p>
+          </div>
+          <span className="flex-shrink-0 ml-4 text-ink/50" aria-hidden="true">
+            <IconChevronRight size={20} />
+          </span>
+        </Link>
+      ) : lr.date ? (
+        <TbcRoundTile
+          key={lr.itemId}
+          door={leagueDoor}
+          itemId={lr.itemId}
+          date={lr.date}
+          number={lr.number}
+          lastVenueId={leagueLastVenue}
+          fieldMaySetVenue={allowsParticipant(trip.kind, tripRaw.event_permissions, 'set_venues')}
+        />
+      ) : null)}
+      {/* Anything else the organiser planned — a dinner, a stay — keeps the
+          schedule it always had, under the rounds. */}
+      {otherItems.length > 0 && (
+        <div className="mt-3">
+          <Itinerary
+            items={otherItems}
+            startDate={trip.start_date ?? null}
+            courseNames={courseMap}
+            days={dayCount(trip.start_date ?? null, trip.end_date ?? null)}
+            tripCode={tripCode}
+            roundNumbers={{}}
+            startLines={{}}
+            timescale
+          />
+        </div>
+      )}
+    </div>
+  ) : null
+
   // ── The itinerary, or the list of rounds a pre-itinerary trip has ──
-  const itinerarySection = itinerary.length > 0 ? (
+  const itinerarySection = leagueSection ?? (itinerary.length > 0 ? (
     <Itinerary
       items={itinerary}
       startDate={trip.start_date ?? null}
@@ -475,7 +559,7 @@ export default async function TripPage({ params, searchParams }: {
     <p className="t-cap text-ink/65 text-center py-2">
       Nothing on the itinerary yet.
     </p>
-  )
+  ))
 
   // The gear in the header's corner — a claimed player's OWN preferences
   // (dark mode, so far), saved to their player row. Not a second door to

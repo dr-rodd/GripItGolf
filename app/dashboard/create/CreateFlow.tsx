@@ -117,7 +117,7 @@ export default function CreateFlow() {
             Series
           </p>
           <p className="text-ink/65 text-sm mt-1 leading-snug">
-            Separate events feeding one overall leaderboard, planned ahead or added as you go.
+            Rounds on separate days feeding one overall league, planned ahead or ad hoc.
           </p>
         </button>
       </Chooser>

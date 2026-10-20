@@ -133,13 +133,26 @@ for that day.
    freely.
 4. **Monthly keeps the weekday** — the second Wednesday, not the 14th.
 
+Second round of answers, the same day:
+
+5. **Words.** Within a league the events are **rounds** ("Round 3"), the
+   whole is the **league**, and the players are **the field**. "As you go"
+   is **Ad hoc**.
+6. **One venue is presumed.** Same venue every round is on by default; off,
+   each round picks its own or is left **TBC**. A TBC round cannot go live
+   or take scores until somebody chooses its venue, on the Scoring tab or
+   the hub, where every upcoming round is listed and a TBC one is paler
+   until it is chosen. Choosing a venue can be the organiser's alone (PIN)
+   or the field's — a permission in the creation form and the organiser
+   area.
+7. **The field on the homepage.** Adding a player happens on the hub's
+   field list, by anyone when `add_players` is on, behind the PIN otherwise.
+8. **The handicap setting per round is the allowance.** A handicap **cut**
+   between rounds is a good idea kept for later, in
+   `docs/pending-concepts.md`.
+
 Still open:
 
-- **The handicap setting per event.** It is a default set for the event and
-  overridden for one day. Assumed to be the handicap **allowance** (90% for
-  a foursomes day, say); confirm before stage 3 builds it, because a
-  handicap **cut** between events (the winner off two shots less next week)
-  is a different thing entirely.
 - **Golf Ireland's cards**: worth asking them whether a card says which
   competition it was played in. If it does, a card can be matched to the
   league's own competition and the mix-up in the story can't happen at all;
@@ -149,27 +162,43 @@ Still open:
 
 Each stage tested on greendot.live before the next, as with Green Dot Run.
 
-1. **Dated series events — built, October 2026, no database change.** The
-   creation wizard asks a series **As you go** or **Recurring**, then the
-   first event's date; recurring adds how often (every 1–12 weeks or
-   months) and how many events, and makes them all (`seriesDates` in
+1. **Dated rounds — built, October 2026, no database change.** The
+   creation wizard asks a series **Ad hoc** or **Recurring**, then the first
+   round's date; recurring adds how often (every 1–12 weeks or months) and
+   how many rounds, and makes them all (`seriesDates` in
    `lib/leagueSetup.ts`; monthly keeps the weekday, and a fifth Wednesday
    carries on as the last). The repeat is stored (`LeagueSetup.repeat`) and
-   the count is the rounds'. The trip runs from the first event to the last,
-   and each event sits at its calendar offset from the first, as a
-   continuous league's days do. On the Scoring tab a dated series has
-   **Add event** (`AddEvent.tsx`): a date after the last event
-   (`nextEventIssue`) and a venue, written through `saveItinerary` like
-   every other round, the trip's end moved on first. The organiser adds
-   with the PIN, asked in place; the field adds when the new series-only
-   permission **`add_events`** is on (`permissionsFor` keeps it off every
-   other event's list). The picker's add-course door reads `add_courses`
-   there (`CourseSelect`'s `allowAdd`), the first participant course
-   surface on an event. Tiles read "Event 3 · Wed 18 Nov". A dateless
-   series made before this keeps its numbered list. On the way: a round
-   added after creation no longer gives a pending handicap a scratch
-   snapshot (`addRounds` in `lib/itineraryStore.ts`).
-2. **Every event's own leaderboard, and events that do not count.** No
+   the count is the rounds'. The trip runs from the first round to the last,
+   each at its calendar offset from the first, as a continuous league's days
+   are. **Same venue every round** is on by default; off, each round picks
+   its own or is left **TBC**.
+
+   **A TBC round is a dated golf item with no course and no `rounds` row**
+   — `rounds.course_id` is NOT NULL, about forty files read a round's
+   course, and a round nobody can score is better not existing than
+   existing at a course it is not at. So it cannot go live by construction,
+   and no screen that reads rounds had to change. Its number is held by its
+   place in date order: `leagueRounds` lists a league's rounds, TBC ones
+   included, numbered, and `nextRoundNumber` gives the next; creation writes
+   `round_number` = date position, leaving a TBC round's number free.
+
+   The Scoring tab and the hub's Schedule both list the league's rounds
+   (`app/trip/[tripCode]/LeagueRounds.tsx`): a TBC round paler and dashed,
+   "Tap to choose the venue" (`TbcRoundTile`), and **Add round** on the
+   Scoring tab — a date after the last round (`nextRoundIssue`), the last
+   venue presumed, or TBC. Both write through `lib/leagueRoundStore.ts`, not
+   `saveItinerary` (whose "last + 1" would hand a held number to somebody
+   else): the trip's end moves on first; a TBC item is claimed only while
+   still TBC, so two phones cannot both make its round; a round that cannot
+   be made leaves no half-made item. Who may: the organiser with the PIN,
+   asked in place, or the field through the series-only permissions
+   **`add_rounds`** and **`set_venues`** (`permissionsFor` keeps them off
+   every other event's list). The picker's add-course door reads
+   `add_courses` there (`CourseSelect`'s `allowAdd`). A dateless series made
+   before this keeps its numbered list. On the way: a round added after
+   creation no longer gives a pending handicap a scratch snapshot
+   (`addRounds` in `lib/itineraryStore.ts`).
+2. **Every round's own leaderboard, and rounds that do not count.** No
    database change: the existing casual flag is reused, and the event's own
    leaderboard reads it the way the round summary already does.
 3. **The gear.** An event's settings, including a player's card that does
