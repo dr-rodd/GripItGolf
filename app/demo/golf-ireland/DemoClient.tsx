@@ -17,8 +17,8 @@ export default function DemoClient() {
           <LinkHeading>Linking to Golf Ireland</LinkHeading>
           <p className="text-ink/65 text-[13px] mt-3 leading-snug">
             A preview of how a league player links their Golf Ireland
-            membership by number, once Golf Ireland allows it. Every name and
-            number in it is invented.
+            membership by number, once Golf Ireland allows it. Try it
+            yourself: any number works, and nothing is sent anywhere.
           </p>
           <p className="text-ink text-sm mt-4">
             A linked player wears the mark{' '}

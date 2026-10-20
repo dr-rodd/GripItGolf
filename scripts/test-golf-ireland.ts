@@ -634,11 +634,13 @@ section('A linked player carries the mark wherever the league names them')
     'and that helper asks nothing before it knows the league reads Golf Ireland')
 }
 
-section('The walkthrough shows linking by membership number, and names nobody real')
+section('The preview plays out linking by membership number, and reads and writes nothing')
 {
   const tour = read('app/components/GolfIrelandTour.tsx')
   ok(/membership number/i.test(tour), 'the number is the way in')
-  ok(/key: 'linked'/.test(tour) && /<LinkedBadge\b/.test(tour), 'and it ends on the mark beside a name')
+  ok(/stage === 'board'/.test(tour) && /<LinkedBadge\b/.test(tour), 'and it ends on the mark beside a name on the board')
+  ok(/stage === 'organiser'/.test(tour), 'with the organiser\'s confirmation on the way')
+  ok(tour.includes('maskMembershipNumber('), 'a typed number is only ever shown back masked')
   ok(!/supabase|fetch\(/.test(tour), 'it reads and writes nothing')
 }
 
