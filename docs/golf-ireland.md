@@ -189,15 +189,20 @@ screen, the hub's Players list and the leaderboard (individual rows),
 each fed by `golfIrelandLinkedIds` in `app/trip/[tripCode]/golfIreland.ts`,
 which asks nothing unless the league reads Golf Ireland.
 
-**The walkthrough** (`app/components/GolfIrelandTour.tsx`) is a mimic of
-linking by membership number, in the intro's manner — six pages, each a
-framed miniature with the part that matters ringed, the words on a
-deep-emerald sweep: your club says yes, type your number, that's you, the
-organiser checks, your rounds arrive, you're linked. Every name and number
-in it is invented and it reads and writes nothing. It opens from the link
-card, the creation form's Golf Ireland card and the organiser's card, and
-on its own at `/demo/golf-ireland` (unlinked, not indexed) — the only way
-to see it until a club has given access. When permission comes, those three are what change, and nothing
+**The preview** (`app/components/GolfIrelandTour.tsx`) is a hands-on mimic
+of linking by membership number, as a full-screen overlay: the real screens
+at full size, in the app's own parts, with one plain line above each saying
+what is happening. The viewer does it themselves — ticks the consent, types
+any number (or taps "Use an example number"), searches, picks themselves,
+switches to the organiser and confirms, watches their rounds arrive (two
+count, two say why not), and lands on the board with the mark beside linked
+names. The "searching" and "reading your rounds" pauses are timers; nothing
+is read or written, and a typed number is only ever shown back masked. (It
+began as a narrated walkthrough on the intro's green sweep; Ross asked for
+the realistic flow instead, without the sweep.) It opens from the link card,
+the creation form's Golf Ireland card and the organiser's card, and on its
+own at `/demo/golf-ireland` (unlinked, not indexed) — the only way to see it
+until a club has given access. When permission comes, those three are what change, and nothing
 else does. `test:golf-ireland` holds that no Golf Ireland image is in
 `public/` or referenced from `app/`, and that the link is drawn, never an
 image. The name "Golf Ireland" does appear in the wording, because the
