@@ -71,6 +71,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `docs/refresh-plan.md` | The October 2026 refresh: what was wrong, the agreed tokens, the phases and the decisions list (D1–D14) |
 | `docs/design-brief.md` | The background pasted into Claude.ai for design sessions, and the hand-off spec its decisions come back in. Keep its facts in step with the design system |
 | `docs/schema-and-scoring.md` | Table structure, the Stableford trigger, WHS handicap formula, player states, tee data |
+| `docs/event-use-cases.md` | How real groups use an event, as Ross's stories, each with what is built, what is new, open questions and a build order. **Decided October 2026: a series is distinct events feeding an overall (dated, unplanned or recurring); continuous is a period with no day leaderboards** — not built yet. Open before any series, continuous or league-shape work |
 | `docs/leaderboards.md` | Leaderboard model, legacy `formats` compatibility, custom points, matchplay draws, team scoring modes |
 | `docs/features.md` | Admin overview, lead player email, returning-player cookie, support link, itinerary, trip lifecycle |
 | `docs/testing-and-data.md` | The test suites, how much checking a change is worth, insertion order, background jobs |
