@@ -19,6 +19,8 @@ import { supabase } from './supabase'
 import { isHandicapPending } from './handicap'
 import { toItemRow } from './itinerarySync'
 import { dayNumber, type ItineraryItem } from './itinerary'
+import { cardKey, cardsOffWith, parseLeagueSetup, tidyCardsOff } from './leagueSetup'
+import { withRoundAllowance } from './handicapAllowance'
 
 type Result = { ok: true } | { ok: false; error: string }
 /** `made` says whether the round row exists, whatever else went wrong. */
@@ -176,4 +178,70 @@ export async function confirmLeagueVenue(args: {
       .eq('id', args.itemId)
   }
   return made.ok ? { ok: true } : { ok: false, error: made.error ?? 'Could not set the venue — try again.' }
+}
+
+// ─── A round's gear ────────────────────────────────────────────
+//
+// Both of these change a value stored whole on the trip — the league setup
+// and the boards — so both read it fresh and merge, never rewrite from what
+// a screen happened to load: a key this code does not know about survives,
+// and a change made on another phone a minute ago is not undone.
+
+/**
+ * Switch one player's card in one round off the league, or back on.
+ * Stored in the league setup (`cardsOff`); the scores are never touched.
+ */
+export async function setCardCounts(args: {
+  tripId: string; roundId: string; playerId: string; counts: boolean
+}): Promise<Result> {
+  const fail: Result = { ok: false, error: 'Could not save the change — try again.' }
+  const { data, error } = await supabase
+    .from('trips')
+    .select('bracket_setup')
+    .eq('id', args.tripId)
+    .single()
+  if (error || !data) return fail
+  const raw = (data as { bracket_setup?: unknown }).bracket_setup
+  // Only ever a league's own setup — never a guess written over something else.
+  if (!parseLeagueSetup(raw) || !raw || typeof raw !== 'object') return fail
+
+  const stored = raw as Record<string, unknown>
+  const next = cardsOffWith(tidyCardsOff(stored.cardsOff), cardKey(args.roundId, args.playerId), !args.counts)
+  const merged: Record<string, unknown> = { ...stored }
+  if (next.length > 0) merged.cardsOff = next
+  else delete merged.cardsOff
+
+  const { error: writeError } = await supabase
+    .from('trips')
+    .update({ bracket_setup: merged })
+    .eq('id', args.tripId)
+  return writeError ? fail : { ok: true }
+}
+
+/**
+ * Set one round's handicap allowance on one board — or clear it, with null,
+ * back to the board's own. Stored on the board (`roundAllowances`).
+ */
+export async function setRoundAllowance(args: {
+  tripId: string; boardId: string; roundId: string; pct: number | null
+}): Promise<Result> {
+  const fail: Result = { ok: false, error: 'Could not save the change — try again.' }
+  const { data, error } = await supabase
+    .from('trips')
+    .select('leaderboards')
+    .eq('id', args.tripId)
+    .single()
+  if (error || !data) return fail
+  const raw = (data as { leaderboards?: unknown }).leaderboards
+  if (!Array.isArray(raw)) return fail
+  const index = raw.findIndex(b => b && typeof b === 'object' && (b as { id?: unknown }).id === args.boardId)
+  if (index === -1) return { ok: false, error: 'That leaderboard has changed — refresh and try again.' }
+
+  const next = [...raw]
+  next[index] = withRoundAllowance(raw[index] as Record<string, unknown>, args.roundId, args.pct)
+  const { error: writeError } = await supabase
+    .from('trips')
+    .update({ leaderboards: next })
+    .eq('id', args.tripId)
+  return writeError ? fail : { ok: true }
 }

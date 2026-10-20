@@ -249,6 +249,11 @@ export type RowContextInput = {
    * commit that claimed to move code and nothing else.
    */
   legacyTeamScoring: TeamScoring | null
+  /**
+   * A league's switched-off cards (`LeagueSetup.cardsOff`), if it has any —
+   * read off the trip by the caller, like everything else here.
+   */
+  cardsOff?: readonly string[]
 }
 
 /**
@@ -303,5 +308,6 @@ export function buildRowContext(input: RowContextInput): RowContext {
     liveRoundIds: new Set(input.activeRoundIds),
     livePlayerIds: new Set(input.livePlayerIds),
     legacyTeamScoring: input.legacyTeamScoring,
+    ...(input.cardsOff?.length ? { cardsOff: new Set(input.cardsOff) } : {}),
   }
 }

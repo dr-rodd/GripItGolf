@@ -42,9 +42,51 @@ export function clampAllowance(v: unknown): number {
   return Math.min(FULL_ALLOWANCE, Math.max(MIN_ALLOWANCE, Math.round(n)))
 }
 
-/** What this board plays off. Absent means all of it. */
-export function allowanceOf(lb: Pick<Leaderboard, 'handicapAllowance'>): number {
+/**
+ * What this board plays off — in a given round, when one is named. A round
+ * with its own allowance on this board (`roundAllowances`, set from the
+ * round's gear on a league) takes that; every other round takes the
+ * board's. Absent means all of it.
+ */
+export function allowanceOf(
+  lb: Pick<Leaderboard, 'handicapAllowance' | 'roundAllowances'>,
+  roundId?: string,
+): number {
+  const own = roundId != null ? lb.roundAllowances?.[roundId] : undefined
+  if (own != null) return clampAllowance(own)
   return lb.handicapAllowance == null ? FULL_ALLOWANCE : clampAllowance(lb.handicapAllowance)
+}
+
+/** The board's allowance as a function of the round — what a reader of cards takes. */
+export function allowanceFor(
+  lb: Pick<Leaderboard, 'handicapAllowance' | 'roundAllowances'>,
+): (roundId: string) => number {
+  return roundId => allowanceOf(lb, roundId)
+}
+
+/**
+ * A stored board with one round's own allowance set — or cleared, with
+ * null, back to the board's. Works on the board as stored, so every key the
+ * parser does not know about rides through untouched; an emptied map leaves
+ * no key behind. Pure.
+ */
+export function withRoundAllowance(
+  board: Record<string, unknown>, roundId: string, pct: number | null,
+): Record<string, unknown> {
+  const raw = board.roundAllowances
+  const map: Record<string, unknown> = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? { ...(raw as Record<string, unknown>) } : {}
+  if (pct == null) delete map[roundId]
+  else map[roundId] = clampAllowance(pct)
+  const next = { ...board }
+  if (Object.keys(map).length > 0) next.roundAllowances = map
+  else delete next.roundAllowances
+  return next
+}
+
+/** Whether any round on this board plays off something other than the board's own. */
+export function variesByRound(lb: Pick<Leaderboard, 'roundAllowances'>): boolean {
+  return Object.keys(lb.roundAllowances ?? {}).length > 0
 }
 
 /**
@@ -120,16 +162,18 @@ export function describeAllowance(allowance: number): string {
  */
 export function allowanceCycle(
   boards: readonly Leaderboard[],
+  /** The round on the card — its own allowances, where a board sets one. */
+  roundId?: string,
 ): { steps: number[]; startIndex: number } {
   const league = boards.filter(b => b.competition === 'league')
-  const steps = [...new Set([FULL_ALLOWANCE, ...league.map(allowanceOf)])]
+  const steps = [...new Set([FULL_ALLOWANCE, ...league.map(b => allowanceOf(b, roundId))])]
     .sort((a, b) => b - a)
 
   // The primary is the first board made, whatever it is. A trip led by a
   // matchplay draw has no allowance to open on, so it opens on the full figure.
   const primary = boards[0]
   const opening = primary && primary.competition === 'league'
-    ? allowanceOf(primary)
+    ? allowanceOf(primary, roundId)
     : FULL_ALLOWANCE
   const startIndex = Math.max(0, steps.indexOf(opening))
 

@@ -127,6 +127,39 @@ export type LeagueSetup = {
    * reads Golf Ireland — the two are written together and read together.
    */
   golfIreland?: GolfIrelandRules
+  /**
+   * Cards that do not count — one player's card in one round, keyed
+   * `${roundId}:${playerId}` (`cardKey`), switched off from the round's gear
+   * on the Scoring tab. A toggle, never permanent: the scores stay, and
+   * taking the key out counts them again. The case it was asked for is a
+   * Golf Ireland card swept in from a different competition on the same
+   * course; any card of the round can be switched off the same way.
+   * Absent, or empty, is every card counting.
+   */
+  cardsOff?: string[]
+}
+
+/** The key a card is switched off by — the one shape `RowContext` keys a player's round by. */
+export const cardKey = (roundId: string, playerId: string) => `${roundId}:${playerId}`
+
+/** The most cards a league keeps switched off — far past any real league. */
+export const MAX_CARDS_OFF = 2000
+
+/**
+ * The switched-off cards a stored setup holds, tidied: well-formed keys,
+ * each once, in order. Never throws and never refuses the league over them.
+ */
+export function tidyCardsOff(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const keys = raw.filter((k): k is string =>
+    typeof k === 'string' && /^[^:\s]+:[^:\s]+$/.test(k))
+  return [...new Set(keys)].sort().slice(0, MAX_CARDS_OFF)
+}
+
+/** The list with one card switched off (or back on) — tidy, whatever it was handed. */
+export function cardsOffWith(list: readonly string[], key: string, off: boolean): string[] {
+  const rest = tidyCardsOff(list).filter(k => k !== key)
+  return off ? tidyCardsOff([...rest, key]) : rest
 }
 
 // ─── Days ──────────────────────────────────────────────────────
@@ -541,6 +574,7 @@ export function parseLeagueSetup(raw: unknown): LeagueSetup | null {
       ? { dayBoards: r.dayBoards as DayBoards } : {}),
     ...(giRules && source && source !== 'live'
       ? { scoreSource: source, golfIreland: giRules } : {}),
+    ...(tidyCardsOff(r.cardsOff).length > 0 ? { cardsOff: tidyCardsOff(r.cardsOff) } : {}),
   }
 }
 

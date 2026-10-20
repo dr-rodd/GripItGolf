@@ -4,8 +4,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { describeShortDate } from '@/lib/itinerary'
-import { nextRoundIssue } from '@/lib/leagueSetup'
-import { addLeagueRound, confirmLeagueVenue } from '@/lib/leagueRoundStore'
+import { cardKey, nextRoundIssue, parseLeagueSetup } from '@/lib/leagueSetup'
+import {
+  addLeagueRound, confirmLeagueVenue, setCardCounts, setRoundAllowance,
+} from '@/lib/leagueRoundStore'
+import { type Leaderboard, boardTitle, offersAllowance, parseLeaderboards } from '@/lib/leaderboards'
+import { ALLOWANCE_PRESETS, allowanceOf } from '@/lib/handicapAllowance'
+import { readLiveScores, readScores } from '@/lib/scoreReads'
 import { hasUnlocked, isLocked } from '@/lib/passcode'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
@@ -14,7 +19,7 @@ import CourseSelect from '@/app/components/CourseSelect'
 import DateField from '@/app/components/DateField'
 import Toggle from '@/app/components/Toggle'
 import InlineUnlock from '@/app/components/InlineUnlock'
-import { FIELD_LABEL, IconButton, cardClass } from '@/app/components/ui'
+import { FIELD_LABEL, IconButton, Segmented, cardClass, chipClass } from '@/app/components/ui'
 import { IconPlus, IconSettings } from '@/app/components/icons'
 
 /**
@@ -341,16 +346,21 @@ export function TbcRoundTile({ door, itemId, date, number, lastVenueId, fieldMay
 
 /**
  * The gear beside a league round on the Scoring tab — that round's own
- * settings (docs/event-use-cases.md, Ross's answer 1). The event's settings
+ * settings (docs/event-use-cases.md, Ross's answer 1). The league's settings
  * live in the organiser area and set the defaults; this manages one round.
+ * Every switch here is a toggle, never permanent: nothing touches a score.
  *
- * So far it holds the one switch stage 2 needs: **whether the round counts
- * towards the league** — rained off, too few players. Off is
- * `rounds.casual`, the flag a trip's casual round already uses, so the
- * overall skips it through the one rule in `buildRows` while its own
- * leaderboard still shows, greyed. Never permanent: the scores are not
- * touched, and switching it back counts them again. Sensitive, so the
- * organiser's, with the PIN asked in place.
+ * **Round** — whether the round counts towards the league (`rounds.casual`,
+ * stage 2: rained off, short of players), and each player's card in it
+ * (`LeagueSetup.cardsOff`, stage 3: a Golf Ireland card swept in from a
+ * different competition, or any card the league should not count). Both
+ * are read in `buildRows` and nowhere else.
+ *
+ * **Rules** — the round's own handicap allowance on each leaderboard
+ * (`Leaderboard.roundAllowances`), the league's being the default. Kept on
+ * its own tab, as Ross asked, so the gear opens uncluttered.
+ *
+ * All of it the organiser's, with the PIN asked in place — sensitive.
  */
 export function RoundSettings({ door, roundId, number, casual }: {
   door: Pick<LeagueDoor, 'tripId' | 'tripCode' | 'passcodeHash'>
@@ -361,39 +371,49 @@ export function RoundSettings({ door, roundId, number, casual }: {
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
+  const [tab, setTab] = useState<'round' | 'rules'>('round')
   const [unlocked, setUnlocked] = useState(false)
   const [counts, setCounts] = useState(!casual)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const { data, reload } = useRoundGear(door.tripId, roundId, open)
 
   const organiser = unlocked || !isLocked(door.passcodeHash)
 
   function openSheet() {
     setUnlocked(hasUnlocked(door.tripCode))
     setCounts(!casual)
+    setTab('round')
     setError(null)
     setOpen(true)
   }
 
-  async function setCounting(next: boolean) {
-    if (!organiser) { setError('Changing a round needs the organiser PIN.'); return }
+  /** One write, the organiser's, then the page re-read from the server. */
+  async function save(write: () => Promise<{ ok: boolean; error?: string }>) {
+    if (!organiser) { setError('Changing a round needs the organiser PIN.'); return false }
     setSaving(true)
     setError(null)
-    setCounts(next)
-    const { error: writeError } = await supabase
-      .from('rounds')
-      .update({ casual: !next })
-      .eq('trip_id', door.tripId)
-      .eq('id', roundId)
+    const result = await write()
     setSaving(false)
-    if (writeError) {
-      console.error('Round counting write failed:', writeError)
-      setCounts(!next)
-      setError('Could not save the change — try again.')
-      return
-    }
-    // The tab, the hub and the board all read the flag on the server.
+    if (!result.ok) { setError(result.error ?? 'Could not save the change — try again.'); return false }
+    reload()
+    // The tab, the hub and the board all read these on the server.
     router.refresh()
+    return true
+  }
+
+  async function setCounting(next: boolean) {
+    setCounts(next)
+    const done = await save(async () => {
+      const { error: writeError } = await supabase
+        .from('rounds')
+        .update({ casual: !next })
+        .eq('trip_id', door.tripId)
+        .eq('id', roundId)
+      if (writeError) console.error('Round counting write failed:', writeError)
+      return writeError ? { ok: false } : { ok: true }
+    })
+    if (!done) setCounts(!next)
   }
 
   return (
@@ -429,23 +449,170 @@ export function RoundSettings({ door, roundId, number, casual }: {
             </div>
           )}
 
-          <div className={`p-4 ${cardClass()}`}>
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-ink text-sm font-medium">Counts towards the league</p>
-              <Toggle
-                checked={counts}
-                onChange={setCounting}
-                label="Counts towards the league"
-              />
+          <Segmented
+            label="Round settings"
+            value={tab}
+            onChange={setTab}
+            options={[{ value: 'round', label: 'Round' }, { value: 'rules', label: 'Rules' }]}
+          />
+
+          {tab === 'round' ? (
+            <>
+              <div className={`p-4 ${cardClass()}`}>
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-ink text-sm font-medium">Counts towards the league</p>
+                  <Toggle checked={counts} onChange={setCounting} label="Counts towards the league" />
+                </div>
+                <p className="text-ink/65 text-[13px] mt-2 leading-snug">
+                  {counts
+                    ? 'Switch off for a round rained off or short of players. Its scores are kept.'
+                    : 'Not counting. Its scores are kept and its own leaderboard shows, greyed; the overall skips it. Switch back any time.'}
+                </p>
+              </div>
+
+              <div>
+                <label className={FIELD_LABEL}>Cards</label>
+                {(data.state === 'idle' || data.state === 'loading') && (
+                  <p className="t-cap text-ink/65">Loading the cards…</p>
+                )}
+                {data.state === 'failed' && <p className="t-cap text-rust-deep">Could not load the cards — try again.</p>}
+                {data.state === 'ready' && data.cards.length === 0 && (
+                  <p className="t-cap text-ink/65">No cards in this round yet.</p>
+                )}
+                {data.state === 'ready' && data.cards.length > 0 && (
+                  <div className="space-y-2">
+                    {data.cards.map(card => {
+                      const on = !data.cardsOff.includes(cardKey(roundId, card.id))
+                      return (
+                        <div key={card.id} className={`flex items-center justify-between gap-4 px-4 py-3 ${cardClass()}`}>
+                          <div className="min-w-0">
+                            <p className={`text-sm truncate ${on ? 'text-ink' : 'text-ink/50'}`}>{card.name}</p>
+                            {!on && <p className="t-cap text-ink/65">Doesn’t count</p>}
+                          </div>
+                          <Toggle
+                            checked={on}
+                            onChange={next => save(() => setCardCounts({
+                              tripId: door.tripId, roundId, playerId: card.id, counts: next,
+                            }))}
+                            label={`${card.name}’s card counts`}
+                          />
+                        </div>
+                      )
+                    })}
+                    <p className="t-cap text-ink/65 leading-snug">
+                      A card switched off is out of every leaderboard, this round’s too. Its scores are kept.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="space-y-4">
+              <p className="t-cap text-ink/65 leading-snug">
+                This round’s handicap allowance on each leaderboard. The league’s own is the default.
+              </p>
+              {data.state === 'ready' && data.boards.length === 0 && (
+                <p className="t-cap text-ink/65">No leaderboard here plays off an allowance.</p>
+              )}
+              {data.state === 'ready' && data.boards.map(board => {
+                const leagueOwn = allowanceOf(board)
+                const own = board.roundAllowances?.[roundId]
+                const choices = [...new Set<number>([...ALLOWANCE_PRESETS, leagueOwn])].sort((a, b) => b - a)
+                return (
+                  <div key={board.id}>
+                    <label className={FIELD_LABEL}>{boardTitle(board)}</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        aria-pressed={own == null}
+                        onClick={() => save(() => setRoundAllowance({
+                          tripId: door.tripId, boardId: board.id, roundId, pct: null,
+                        }))}
+                        className={chipClass(own == null)}
+                      >
+                        League ({leagueOwn}%)
+                      </button>
+                      {choices.filter(pct => pct !== leagueOwn).map(pct => (
+                        <button
+                          key={pct}
+                          type="button"
+                          aria-pressed={own === pct}
+                          onClick={() => save(() => setRoundAllowance({
+                            tripId: door.tripId, boardId: board.id, roundId, pct,
+                          }))}
+                          className={chipClass(own === pct)}
+                        >
+                          {pct}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+              {data.state === 'failed' && <p className="t-cap text-rust-deep">Could not load the leaderboards — try again.</p>}
             </div>
-            <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-              {counts
-                ? 'Switch off for a round rained off or short of players. Its scores are kept.'
-                : 'Not counting. Its scores are kept and its own leaderboard shows, greyed; the overall skips it. Switch back any time.'}
-            </p>
-          </div>
+          )}
         </Sheet>
       )}
     </>
   )
+}
+
+type GearData =
+  | { state: 'idle' | 'loading' | 'failed'; cards: []; cardsOff: []; boards: [] }
+  | {
+      state: 'ready'
+      /** The players with a card in this round — the ones there is anything to switch. */
+      cards: { id: string; name: string }[]
+      cardsOff: string[]
+      /** The league boards a round's allowance means anything on. */
+      boards: Leaderboard[]
+    }
+
+const EMPTY_GEAR: GearData = { state: 'idle', cards: [], cardsOff: [], boards: [] }
+
+/**
+ * What the gear shows, fetched when it opens and again after every write:
+ * who has a card in the round (committed or in play, read whole past the
+ * 1,000-row cap — lib/scoreReads.ts), the switched-off cards and the
+ * boards, as stored now rather than as the page loaded them.
+ */
+function useRoundGear(tripId: string, roundId: string, enabled: boolean) {
+  const [data, setData] = useState<GearData>(EMPTY_GEAR)
+  const [version, setVersion] = useState(0)
+
+  useEffect(() => {
+    if (!enabled) return
+    let live = true
+    Promise.all([
+      supabase.from('trips').select('bracket_setup, leaderboards').eq('id', tripId).single(),
+      supabase.from('players').select('id, name').eq('trip_id', tripId).eq('is_composite', false).order('name'),
+      readScores<{ player_id: string; round_id: string; hole_id: string }>(
+        supabase, 'player_id, round_id, hole_id', [roundId]),
+      readLiveScores<{ player_id: string; round_id: string; hole_number: number }>(
+        supabase, 'player_id, round_id, hole_number', [roundId]),
+    ]).then(([tripRes, playersRes, scoresRes, liveRes]) => {
+      if (!live) return
+      if (tripRes.error || playersRes.error || scoresRes.error || liveRes.error) {
+        console.error('Round gear fetch failed:',
+          tripRes.error ?? playersRes.error ?? scoresRes.error ?? liveRes.error)
+        setData({ state: 'failed', cards: [], cardsOff: [], boards: [] })
+        return
+      }
+      const trip = tripRes.data as { bracket_setup?: unknown; leaderboards?: unknown }
+      const holding = new Set([
+        ...(scoresRes.data ?? []).map(s => s.player_id),
+        ...(liveRes.data ?? []).map(s => s.player_id),
+      ])
+      setData({
+        state: 'ready',
+        cards: (playersRes.data ?? []).filter(p => holding.has(p.id)),
+        cardsOff: parseLeagueSetup(trip.bracket_setup)?.cardsOff ?? [],
+        boards: parseLeaderboards(trip.leaderboards).filter(b => offersAllowance(b)),
+      })
+    })
+    return () => { live = false }
+  }, [tripId, roundId, enabled, version])
+
+  return { data, reload: () => setVersion(v => v + 1) }
 }

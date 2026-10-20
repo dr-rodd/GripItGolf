@@ -1594,7 +1594,7 @@ section('Narrowing to a course is the same rule a day board goes through')
   const src = read('lib/boardRows.ts')
   ok(src.includes('export function withOnlyRounds'),
     'one exported copy of narrowing a context to some rounds')
-  ok(/const counted = withOnlyRounds\(withoutCasualRounds\(ctx\), lb\.roundIds\)/.test(src),
+  ok(/const counted = withOnlyRounds\(withoutCasualRounds\(withoutCardsOff\(ctx\)\), lb\.roundIds\)/.test(src),
     'a board\'s own scope goes through it, after the casual filter')
   const client = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   // A league's round switch narrows through the same call; `base` is the

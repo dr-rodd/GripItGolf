@@ -27,6 +27,22 @@ import {
   type OpenCard, type ScoreRow, type LiveScoreRow, type HandicapRow,
 } from './rowContext'
 import { readScores, readLiveScores, readRoundHandicaps } from './scoreReads'
+import { cardKey, parseLeagueSetup } from './leagueSetup'
+
+/**
+ * A league's switched-off cards (`LeagueSetup.cardsOff`) — read on their
+ * own, fail-soft: a trip has none, a database without migration 047 has no
+ * column, and either way every card counts, which is the right answer.
+ */
+async function fetchCardsOff(tripId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('trips')
+    .select('bracket_setup')
+    .eq('id', tripId)
+    .maybeSingle()
+  if (error) return []
+  return parseLeagueSetup((data as { bracket_setup?: unknown } | null)?.bracket_setup)?.cardsOff ?? []
+}
 
 export type PlacingResult = {
   placing: Placing | null
@@ -92,11 +108,15 @@ async function simplePlacing(
   // `*` rather than `id` alone: the cheap path has to leave casual rounds
   // out, exactly as `buildRows` does on the full path — `test:hub` holds the
   // two against each other. Not named in the column list because migration
-  // 031 is run by hand, and this query serves most trips' hubs.
-  const { data: rounds, error: roundsError } = await supabase
-    .from('rounds')
-    .select('*')
-    .eq('trip_id', tripId)
+  // 031 is run by hand, and this query serves most trips' hubs. A league's
+  // switched-off cards come in the same breath, for the same reason.
+  const [{ data: rounds, error: roundsError }, cardsOff] = await Promise.all([
+    supabase
+      .from('rounds')
+      .select('*')
+      .eq('trip_id', tripId),
+    fetchCardsOff(tripId),
+  ])
 
   if (roundsError) {
     console.error('fetchPlacing rounds query failed:', roundsError)
@@ -123,11 +143,15 @@ async function simplePlacing(
     return { placing: null, error: 'Could not read the scores for your standing.' }
   }
 
-  const scored: SummaryScore[] = (data ?? []).map(s => ({
-    playerId: s.player_id,
-    roundId: s.round_id,
-    points: s.stableford_points ?? 0,
-  }))
+  // A switched-off card is out of the standing as it is out of every board.
+  const off = new Set(cardsOff)
+  const scored: SummaryScore[] = (data ?? [])
+    .filter(s => !off.has(cardKey(s.round_id, s.player_id)))
+    .map(s => ({
+      playerId: s.player_id,
+      roundId: s.round_id,
+      points: s.stableford_points ?? 0,
+    }))
 
   return {
     placing: placingFromStandings(playerId, standings(scored, lead.discardWorst ?? 0)),
@@ -275,7 +299,7 @@ export async function fetchTripContext(
   const someCourses = courseIds.length > 0 ? courseIds : [nil]
 
   const [playersRes, teamsRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, coursesRes,
-         openRes, memberships] =
+         openRes, memberships, cardsOff] =
     await Promise.all([
       supabase.from('players')
         .select('id, name, handicap, gender')
@@ -308,6 +332,7 @@ export async function fetchTripContext(
         .select('round_id, live_player_locks(player_id)')
         .eq('status', 'active').in('round_id', roundIds),
       fetchMemberships(tripId),
+      fetchCardsOff(tripId),
     ])
 
   const failed = [playersRes, teamsRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes,
@@ -345,6 +370,7 @@ export async function fetchTripContext(
     activeRoundIds: presence.activeRoundIds,
     livePlayerIds: presence.livePlayerIds,
     legacyTeamScoring,
+    cardsOff,
   })
 
   return {

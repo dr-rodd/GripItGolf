@@ -220,12 +220,35 @@ Each stage tested on greendot.live before the next, as with Green Dot Run.
    greyed under a line saying it does not count. Never permanent: the scores
    are untouched, and switching back counts them again. The Scoring tab, the
    hub's round list and the round's own page say "Doesn’t count".
-3. **The gear, filled in.** The gear exists (stage 2) and holds the one
-   switch. Still to come in it: a player's card that does not count (a
-   toggle, reversible) — which needs somewhere to be stored, so probably
-   the first new migration (057, with its grants), confirmed before it is
-   written — and the round's overrides of the league's defaults, the
-   handicap allowance among them, in a sub-tab.
+3. **The gear, filled in — built, October 2026, no database change.** The
+   gear beside a round on the Scoring tab opens on **Round** — whether the
+   round counts (stage 2) and **each player's card in it**, a toggle each —
+   with **Rules** on its own tab: **the round's handicap allowance on each
+   leaderboard**, the league's own as the default ("League (95%)", 100, 95,
+   90, 85). All the organiser's, PIN asked in place; nothing touches a score.
+
+   *A card that does not count* is a key `${roundId}:${playerId}` in
+   `LeagueSetup.cardsOff` (`cardKey`, `tidyCardsOff`, `cardsOffWith`). It
+   was going to need migration 057; it did not, because only the creation
+   wizard ever writes a league's setup, and the gear's writer reads it fresh
+   and merges (`setCardCounts` in `lib/leagueRoundStore.ts`) so nothing
+   else in it is lost. `buildRows` drops a switched-off card first
+   (`withoutCardsOff`, beside the round rule), so it is out of every board,
+   the round's own included; the hub's cheap standing filters it too, and
+   the leaderboard, the hub, a round's summary and the export are all
+   handed the list. The in-play panel inside a scorecard does not read it —
+   it is the card in your hand. When Golf Ireland's cards arrive (stage 5)
+   the same key switches one of them off.
+
+   *A round's own allowance* is `Leaderboard.roundAllowances` (round id →
+   percent), read by `allowanceOf(lb, roundId)` wherever a board reads a
+   round's cards — the Stableford, strokes and quota paths, team cards, the
+   scorecard sheet — and by the live card's handicap switch
+   (`allowanceCycle(boards, roundId)`), so the group sees what they are
+   playing off. Never stored reduced, like any allowance. Written by
+   `setRoundAllowance`, merged into the stored board (`withRoundAllowance`);
+   one that only repeats the board's own is dropped on reading. Viewing one
+   round on the leaderboard, its facts line gives that round's allowance.
 4. **The next round appears the day after the previous one**, and the
    Scoring tab as the league's history.
 5. **Golf Ireland cards to rounds, by date and venue**, with stage 3's switch

@@ -14,7 +14,7 @@
 // Pure. No I/O, no React.
 
 import type { Leaderboard } from './leaderboards'
-import { FULL_ALLOWANCE, allowanceOf, allowedHandicap } from './handicapAllowance'
+import { FULL_ALLOWANCE, allowanceFor, allowanceOf, allowedHandicap, variesByRound } from './handicapAllowance'
 import { shotsReceived } from './handicap'
 import { quotaPoints, quotaTarget, quotaScaleOf } from './quota'
 import {
@@ -243,6 +243,12 @@ export type RowContext = {
   /** Rounds with a card open or uncommitted scores against them. */
   liveRoundIds: Set<string>
   /**
+   * A league's cards switched off — one player in one round, keyed like
+   * `hcpFor`. Their scores are dropped in `buildRows`, beside a round that
+   * does not count, and nowhere else. Absent is every card counting.
+   */
+  cardsOff?: ReadonlySet<string>
+  /**
    * Players with a scorecard open right now — a `live_player_locks` row on a
    * session still `active`.
    *
@@ -360,9 +366,11 @@ function boardPoints(
  * a bug report, and the fix is for both to be asking the same question.
  */
 export function scoresForBoard(lb: Leaderboard, ctx: RowContext): ResolvedScore[] {
-  const allowance = allowanceOf(lb)
+  // A round may play off its own allowance on this board (`roundAllowances`),
+  // so the figure is the round's, read per card below.
+  const allowanceAt = allowanceFor(lb)
   const quota = lb.scoring === 'quota'
-  if (allowance === FULL_ALLOWANCE && !quota) return ctx.resolved
+  if (!variesByRound(lb) && allowanceOf(lb) === FULL_ALLOWANCE && !quota) return ctx.resolved
 
   const holeById = new Map(ctx.holes.map(h => [h.id, h]))
   const playerById = new Map(ctx.players.map(p => [p.id, p]))
@@ -383,6 +391,7 @@ export function scoresForBoard(lb: Leaderboard, ctx: RowContext): ResolvedScore[
           : 0,
       }
     }
+    const allowance = allowanceAt(s.roundId)
     const hcp = boardHandicap(ctx, s.roundId, s.playerId, player?.handicap, allowance)
     return { ...s, points: boardPoints(s, holeById.get(s.holeId), gender, hcp, allowance) }
   })
@@ -402,7 +411,7 @@ export function boardHandicapFor(
   const player = ctx.players.find(p => p.id === playerId)
   const key = `${roundId}:${playerId}`
   if (!ctx.exactHcpFor?.has(key) && !ctx.hcpFor.has(key) && player?.handicap == null) return null
-  return boardHandicap(ctx, roundId, playerId, player?.handicap, allowanceOf(lb))
+  return boardHandicap(ctx, roundId, playerId, player?.handicap, allowanceOf(lb, roundId))
 }
 
 // ─── How a team's members combine ──────────────────────────────
@@ -447,7 +456,7 @@ export function teamCardHolePoints(
   const basis: ScoringBasis = lb.scoring === 'strokes' ? 'strokes' : 'stableford'
   return teamHolePoints(
     memberIds, roundId,
-    teamScoreInputs(ctx, allowanceOf(lb)),
+    teamScoreInputs(ctx, allowanceFor(lb)),
     teamScoringFor(lb, ctx.legacyTeamScoring),
     basis,
   )
@@ -473,12 +482,25 @@ export function buildRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   // Casual first, then the board's own scope: a casual round does not
   // count on any board, so a day board pointed at one counts nothing —
   // which is right, and is what the two filters in this order say.
-  const counted = withOnlyRounds(withoutCasualRounds(ctx), lb.roundIds)
+  // A card switched off goes first of all: it is out of every board,
+  // the round's own included.
+  const counted = withOnlyRounds(withoutCasualRounds(withoutCardsOff(ctx)), lb.roundIds)
   // A tags board is a team board by audience — every predicate on the
   // platform treats it as one — but its rows are built from whole cards
   // rather than a composite one, so it takes its own shell.
   if (isTagBoard(lb)) return tagRows(lb, counted)
   return lb.audience === 'team' ? teamRows(lb, counted) : individualRows(lb, counted)
+}
+
+/**
+ * The context with a league's switched-off cards taken out — one player's
+ * scores in one round, for every board at once. The scores stay in the
+ * database untouched; switching the card back on counts them again.
+ */
+function withoutCardsOff(ctx: RowContext): RowContext {
+  if (!ctx.cardsOff || ctx.cardsOff.size === 0) return ctx
+  const off = ctx.cardsOff
+  return { ...ctx, resolved: ctx.resolved.filter(s => !off.has(`${s.roundId}:${s.playerId}`)) }
 }
 
 /**
@@ -813,7 +835,8 @@ function perPlayerRounds(lb: Leaderboard, ctx: RowContext): {
   const holeById = new Map(ctx.holes.map(h => [h.id, h]))
   const strokes = lb.scoring === 'strokes'
   const quota = lb.scoring === 'quota'
-  const allowance = allowanceOf(lb)
+  // The round's own allowance on this board, where it has one.
+  const allowanceAt = allowanceFor(lb)
 
   // The cards are only read for their closing stretches on a board that
   // breaks ties that way. Everywhere else this is four sums a round nobody
@@ -830,6 +853,7 @@ function perPlayerRounds(lb: Leaderboard, ctx: RowContext): {
       const mine = ctx.resolved.filter(s =>
         s.playerId === p.id && s.roundId === r.id && (!strokes || s.gross != null))
       holesPlayed += mine.length
+      const allowance = allowanceAt(r.id)
       const ph = boardHandicap(ctx, r.id, p.id, p.handicap, allowance)
 
       if (quota) {
@@ -990,7 +1014,7 @@ function relatives(lb: Leaderboard, rounds: RoundScore[]): Record<string, number
 function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const scoring = teamScoringFor(lb, ctx.legacyTeamScoring)
   const basis: ScoringBasis = lb.scoring === 'strokes' ? 'strokes' : 'stableford'
-  const inputs = teamScoreInputs(ctx, allowanceOf(lb))
+  const inputs = teamScoreInputs(ctx, allowanceFor(lb))
 
   // This board's own teams. A trip running a league and a knockout between
   // different sides has two sheets of them, and ranking one board against
@@ -1108,7 +1132,7 @@ function tagRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   // always carries one in that mode: the parser refuses it without.
   const byDayTeams = mode === 'day_teams'
   const teamFormat = byDayTeams ? teamScoringFor(lb, ctx.legacyTeamScoring) : null
-  const teamInputs = byDayTeams ? teamScoreInputs(ctx, allowanceOf(lb)) : []
+  const teamInputs = byDayTeams ? teamScoreInputs(ctx, allowanceFor(lb)) : []
   /** The day teams playing a round, with the tag each one counts for. */
   const dayTeamsOn = (roundId: string) =>
     teamsOnSheet(ctx.teams, daySheetId(roundId)).map(t => {
@@ -1232,7 +1256,7 @@ function tagRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
  * board rather than per page: a four-ball at 85% and a singles board at 95%
  * read the same cards and must not read the same numbers off them.
  */
-function teamScoreInputs(ctx: RowContext, allowance: number): TeamScoreInput[] {
+function teamScoreInputs(ctx: RowContext, allowanceAt: (roundId: string) => number): TeamScoreInput[] {
   const holeById = new Map(ctx.holes.map(h => [h.id, h]))
   const genderOf = new Map(ctx.players.map(p => [p.id, p.gender]))
   const handicapOf = new Map(ctx.players.map(p => [p.id, p.handicap]))
@@ -1240,6 +1264,7 @@ function teamScoreInputs(ctx: RowContext, allowance: number): TeamScoreInput[] {
   return ctx.resolved.map(s => {
     const hole = holeById.get(s.holeId)
     const gender = genderOf.get(s.playerId) ?? 'M'
+    const allowance = allowanceAt(s.roundId)
     const ph = boardHandicap(ctx, s.roundId, s.playerId, handicapOf.get(s.playerId), allowance)
     const nett = hole && s.gross != null
       ? s.gross - shotsReceived(ph, effectiveSI(hole, gender))

@@ -1,3 +1,4 @@
+import { parseLeagueSetup } from '@/lib/leagueSetup'
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { parseFormats } from '@/lib/formats'
@@ -117,6 +118,8 @@ export default async function TripExportPage({
     activeRoundIds: [],
     livePlayerIds: [],
     legacyTeamScoring: isLegacy(stored) ? teamScoring : null,
+    // A league's switched-off cards are off paper too. Rides on the `*`.
+    cardsOff: parseLeagueSetup((trip as { bracket_setup?: unknown }).bracket_setup)?.cardsOff,
   })
 
   const exportBoards: ExportBoard[] = boards

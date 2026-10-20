@@ -117,6 +117,17 @@ export type Leaderboard = {
    */
   handicapAllowance?: number
 
+  /**
+   * A round's own allowance on this board, overriding `handicapAllowance`
+   * for that round alone — round id → percent. A league's rounds take the
+   * board's allowance as their default; the round's gear on the Scoring tab
+   * sets one differently (docs/event-use-cases.md, Ross's answer 1). Applied
+   * when the board reads that round's cards, like any allowance, and never
+   * stored reduced. Absent — every board stored before it — is the board's
+   * own allowance for every round.
+   */
+  roundAllowances?: Record<string, number>
+
   /** `combine: 'position'` only — what each finishing place pays. */
   customPoints?: number[]
 
@@ -937,6 +948,25 @@ export function primary(boards: readonly Leaderboard[]): Leaderboard | null {
 // ─── Storage ───────────────────────────────────────────────────
 
 /**
+ * A board's per-round allowances, read the way the board's own is: each
+ * clamped, keyed by a non-empty round id, and any that only repeats the
+ * board's allowance dropped. Null when nothing is left, so the key stays
+ * off the object.
+ */
+function roundAllowancesOf(raw: unknown, boardAllowance: number): Record<string, number> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const out: Record<string, number> = {}
+  for (const [roundId, v] of Object.entries(raw as Record<string, unknown>)) {
+    // Unreadable is dropped, not read as "full": a round's own allowance
+    // that nobody can read is no override at all.
+    if (!roundId.trim() || v == null || !Number.isFinite(Number(v))) continue
+    const pct = clampAllowance(v)
+    if (pct !== boardAllowance) out[roundId] = pct
+  }
+  return Object.keys(out).length > 0 ? out : null
+}
+
+/**
  * Read whatever is stored.
  *
  * Anything unrecognised is dropped rather than repaired: a half-understood
@@ -1007,6 +1037,11 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
 
       const allowance = clampAllowance(r.handicapAllowance)
       if (allowance !== FULL_ALLOWANCE) lb.handicapAllowance = allowance
+      // A round's own allowance, each clamped like the board's. An override
+      // that says what the board already says is dropped — absent and equal
+      // must read alike, or two identical boards would differ in storage.
+      const perRound = roundAllowancesOf(r.roundAllowances, allowance)
+      if (perRound) lb.roundAllowances = perRound
       if (lb.combine === 'position') lb.customPoints = points(r.customPoints)
 
       // Kept off the object when it is the no-op, the same way an allowance

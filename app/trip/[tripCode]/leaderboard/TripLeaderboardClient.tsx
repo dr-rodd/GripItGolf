@@ -17,6 +17,7 @@ import {
 } from '@/lib/leagueSetup'
 import { type Segment } from '@/lib/tiebreak'
 import { buildRowContext, sortRounds } from '@/lib/rowContext'
+import { allowanceOf } from '@/lib/handicapAllowance'
 import { boardNames } from '@/lib/displayNames'
 import { LinkedBadge } from '@/app/components/LinkMark'
 import { formatHandicap } from '@/lib/handicap'
@@ -122,6 +123,8 @@ interface Props {
    * a time, through the round switch, rather than one course at a time.
    */
   series?: boolean
+  /** A league's switched-off cards — out of every board (`withoutCardsOff`). */
+  cardsOff?: string[]
   /**
    * A Golf Ireland league's confirmed links — the mark beside each of
    * those names. Read on the server (app/trip/[tripCode]/golfIreland.ts);
@@ -1440,7 +1443,7 @@ function MatchplayTab({ tripCode }: { tripCode: string }) {
 export default function TripLeaderboardClient({
   tripCode, boards, activeRoundIds, livePlayerIds, legacyTeamScoring, rounds,
   teams, memberships, players, holes, scores, liveScores, roundHandicaps,
-  tees = [], nicknames = [], isEvent = false, dayBoards, linkedIds, series = false,
+  tees = [], nicknames = [], isEvent = false, dayBoards, linkedIds, series = false, cardsOff,
 }: Props) {
   const linked = useMemo(() => new Set(linkedIds ?? []), [linkedIds])
   // Matchplay has its own route, so it is a button rather than a tab. Every
@@ -1542,8 +1545,9 @@ export default function TripLeaderboardClient({
     scores, liveScores, roundHandicaps, tees,
     activeRoundIds, livePlayerIds,
     legacyTeamScoring,
+    cardsOff,
   }), [players, teams, memberships, holes, rounds, scores, liveScores,
-       roundHandicaps, tees, activeRoundIds, livePlayerIds, legacyTeamScoring])
+       roundHandicaps, tees, activeRoundIds, livePlayerIds, legacyTeamScoring, cardsOff])
 
   const resolved = rowContext.resolved
   // The same order the board columns them in, on the fuller row this screen
@@ -1736,7 +1740,11 @@ export default function TripLeaderboardClient({
   // A prize table is worth naming — "10 / 5 / 3 a round" is what an organiser
   // recognises their own competition by, where "points by position" is not.
   const paysByPosition = activeBoard.combine === 'position'
-  const rules: string[] = boardFacts(activeBoard)
+  // On one round, the facts are that round's — its own allowance on this
+  // board where its gear set one (`roundAllowances`).
+  const rules: string[] = boardFacts(shownRound
+    ? { ...activeBoard, handicapAllowance: allowanceOf(activeBoard, shownRound.id) }
+    : activeBoard)
   if (paysByPosition) {
     rules.push(describeCustomTable(resolveCustomPoints(
       activeBoard.customPoints ?? [],

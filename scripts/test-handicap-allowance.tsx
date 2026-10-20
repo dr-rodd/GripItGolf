@@ -22,6 +22,7 @@ import {
   FULL_ALLOWANCE, MIN_ALLOWANCE, ALLOWANCE_PRESETS,
   clampAllowance, allowanceOf, allowedHandicap, suggestedAllowance,
   describeAllowance, allowanceCycle, hasReduction,
+  allowanceFor, variesByRound, withRoundAllowance,
 } from '../lib/handicapAllowance'
 import {
   type Leaderboard, parseLeaderboards, boardRules, offersAllowance,
@@ -311,6 +312,74 @@ section('A team format under a reduction')
   // is both of their scores added, so the round is twice the individual one.
   eq(buildRows(TEAM(), ctx)[0].total, 72, 'the pair off the full handicap')
   eq(buildRows(TEAM(85), ctx)[0].total, 66, 'and off 85%, six points worse between them')
+}
+
+const ST = (allowance?: number): Leaderboard => ({
+  id: 'st', audience: 'individual', competition: 'league',
+  scoring: 'strokes', combine: 'total', handicapAllowance: allowance,
+})
+
+section('A round can play off its own allowance — that round, and only that round')
+{
+  // The same cards, played twice: round one and round two, everybody off 18.
+  const inRound = (roundId: string, playerId: string) =>
+    card(playerId, 5, 2).map(s => ({ ...s, roundId }))
+  const twoRounds: RowContext = {
+    ...ctxOf([
+      ...inRound('r1', 'p1'), ...inRound('r2', 'p1'),
+      ...inRound('r1', 'p2'), ...inRound('r2', 'p2'),
+    ]),
+    rounds: [{ id: 'r1', round_number: 1 }, { id: 'r2', round_number: 2 }],
+    hcpFor: new Map(players.flatMap(p => [[`r1:${p.id}`, 18], [`r2:${p.id}`, 18]] as [string, number][])),
+  }
+
+  eq(buildRows(SF(), twoRounds)[0].total, 72, 'two rounds of 36 off the full handicap')
+  const r2At85: Leaderboard = { ...SF(), roundAllowances: { r2: 85 } }
+  eq(buildRows(r2At85, twoRounds)[0].total, 69,
+    'round two off 85% loses its three shots and round one keeps them — 36 + 33')
+  const r1AtFull: Leaderboard = { ...SF(85), roundAllowances: { r1: 100 } }
+  eq(buildRows(r1AtFull, twoRounds)[0].total, 69,
+    'and the other way round: an 85% board with round one at full')
+  eq(buildRows({ ...TEAM(), roundAllowances: { r2: 85 } }, twoRounds)[0].total, 138,
+    'a team board reads it too — 72 + 66')
+  eq(buildRows({ ...ST(), roundAllowances: { r2: 85 } }, twoRounds)[0].total, 147,
+    'and strokes — nett 72 + 75')
+
+  const read = scoresForBoard(r2At85, twoRounds)
+  eq(read.filter(s => s.roundId === 'r1' && s.playerId === 'p1').reduce((t, s) => t + s.points, 0), 36,
+    'the scorecard sheet reads round one at the board\'s own')
+  eq(read.filter(s => s.roundId === 'r2' && s.playerId === 'p1').reduce((t, s) => t + s.points, 0), 33,
+    '  …and round two at its own')
+
+  eq([allowanceOf(r2At85), allowanceOf(r2At85, 'r1'), allowanceOf(r2At85, 'r2')], [100, 100, 85],
+    'the board\'s own, a round without one, and a round with one')
+  eq(allowanceFor(r2At85)('r2'), 85, 'read as a function of the round, the same')
+  ok(variesByRound(r2At85) && !variesByRound(SF(85)), 'and a board knows whether it varies')
+
+  eq(allowanceCycle([r2At85], 'r2').steps, [100, 85], 'the card for round two offers its 85%')
+  eq(allowanceCycle([r2At85], 'r1').steps, [100], '  …and round one\'s card has nothing to cycle')
+  eq(allowanceCycle([r2At85]).steps, [100], '  …nor a card that names no round')
+}
+
+section('A round\'s allowance is stored on the board, tidily')
+{
+  const stored = parseLeaderboards([{
+    id: 'sf', audience: 'individual', competition: 'league', scoring: 'stableford', combine: 'total',
+    handicapAllowance: 95, roundAllowances: { r1: 85, r2: 95, r3: 5, '': 90, r4: 'ninety' },
+  }])[0]
+  eq(stored.roundAllowances, { r1: 85, r3: MIN_ALLOWANCE },
+    'kept and clamped; one that says the board\'s own, a blank round and junk are dropped')
+  ok(!('roundAllowances' in parseLeaderboards([{
+    id: 'sf', audience: 'individual', competition: 'league', scoring: 'stableford', combine: 'total',
+  }])[0]), 'a board with none reads back byte-for-byte as it always did')
+
+  const board = { id: 'sf', mystery: 'kept', roundAllowances: { r1: 85 } }
+  eq(withRoundAllowance(board, 'r2', 90), { id: 'sf', mystery: 'kept', roundAllowances: { r1: 85, r2: 90 } },
+    'setting one keeps the rest of the board, unknown keys included')
+  eq(withRoundAllowance(board, 'r1', null), { id: 'sf', mystery: 'kept' },
+    'clearing the last one leaves no key behind')
+  eq(withRoundAllowance({ id: 'x' }, 'r1', 140), { id: 'x', roundAllowances: { r1: 100 } },
+    'and a figure past the range is clamped on the way in')
 }
 
 section('A board scores off the real handicap, at every allowance')

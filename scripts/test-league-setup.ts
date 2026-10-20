@@ -18,7 +18,9 @@ import {
   weeklyDates, boardGrouping, describeScope,
   seriesDates, describeRepeat, nextRoundIssue, tidyRepeat, MAX_REPEAT_EVERY,
   leagueRounds, nextRoundNumber,
+  cardKey, tidyCardsOff, cardsOffWith, MAX_CARDS_OFF,
 } from '../lib/leagueSetup'
+import { buildRows, type RowContext, type ResolvedScore } from '../lib/boardRows'
 import type { Leaderboard } from '../lib/leaderboards'
 import { parseBracketSetup } from '../lib/bracketSetup'
 import { parseLeaderboards } from '../lib/leaderboards'
@@ -635,7 +637,7 @@ section('Every round has its own leaderboard; a round can stop counting')
     'the page tells the board it is a league, off the stored shape')
 
   const rows = read('lib/boardRows.ts')
-  ok(rows.includes('withOnlyRounds(withoutCasualRounds(ctx), lb.roundIds)'),
+  ok(rows.includes('withOnlyRounds(withoutCasualRounds(withoutCardsOff(ctx)), lb.roundIds)'),
     'and the overall skips it through the one rule in buildRows, untouched')
 
   const doors = read('app/trip/[tripCode]/LeagueRounds.tsx')
@@ -657,6 +659,87 @@ section('Every round has its own leaderboard; a round can stop counting')
   const summary = read('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
   ok(summary.includes("(event ? ' · doesn’t count' : ' · casual')"),
     'and a round\'s own page says it in an event\'s words')
+}
+
+section('A player\'s card in a round can be switched off, and back on')
+{
+  // Two players, two rounds of nine par-4s, stroke index 1–9, both off 9 —
+  // a gross of 5 is nett 4, two points a hole, 18 a round.
+  const holes = Array.from({ length: 9 }, (_, i) => ({
+    id: `h${i + 1}`, hole_number: i + 1, par: 4, stroke_index: i + 1, course_id: 'c1',
+  }))
+  const players = [
+    { id: 'p1', name: 'Alice', handicap: 9, gender: 'M' },
+    { id: 'p2', name: 'Bob', handicap: 9, gender: 'M' },
+  ]
+  const card = (roundId: string, playerId: string): ResolvedScore[] => holes.map(h => ({
+    playerId, roundId, holeId: h.id, holeNumber: h.hole_number,
+    gross: 5, points: 2, noReturn: false, live: false,
+  }))
+  const ctx = (cardsOff?: string[]): RowContext => ({
+    players, teams: [], memberships: [], holes,
+    rounds: [{ id: 'r1', round_number: 1 }, { id: 'r2', round_number: 2 }],
+    resolved: [...card('r1', 'p1'), ...card('r2', 'p1'), ...card('r1', 'p2'), ...card('r2', 'p2')],
+    hcpFor: new Map(players.flatMap(p => [[`r1:${p.id}`, 9], [`r2:${p.id}`, 9]] as [string, number][])),
+    liveRoundIds: new Set<string>(), livePlayerIds: new Set<string>(), legacyTeamScoring: null,
+    ...(cardsOff ? { cardsOff: new Set(cardsOff) } : {}),
+  })
+  const board = starterBoards()[0]
+  const total = (c: RowContext, id: string) => buildRows(board, c).find(r => r.id === id)!.total
+
+  eq([total(ctx(), 'p1'), total(ctx(), 'p2')], [36, 36], 'every card counting, both on 36')
+  const off = ctx([cardKey('r2', 'p2')])
+  eq([total(off, 'p1'), total(off, 'p2')], [36, 18],
+    'Bob\'s round two switched off — his round one still counts, Alice is untouched')
+  eq(buildRows({ ...board, roundIds: ['r2'] }, off).find(r => r.id === 'p2')?.total ?? 0, 0,
+    'and it is off round two\'s own board too')
+  eq(total(ctx([]), 'p2'), 36, 'an empty list is every card counting')
+
+  eq(cardKey('r1', 'p1'), 'r1:p1', 'a card is keyed the way the board keys a player\'s round')
+  eq(tidyCardsOff(['r2:p1', 'r1:p1', 'r1:p1', 'nonsense', 7, 'a:b:c']), ['r1:p1', 'r2:p1'],
+    'the stored list is tidied: well-formed, once each, in order')
+  eq(tidyCardsOff('r1:p1'), [], 'and anything that is not a list is no list')
+  eq(tidyCardsOff(Array.from({ length: MAX_CARDS_OFF + 5 }, (_, i) => `r${i}:p`)).length, MAX_CARDS_OFF,
+    'with a ceiling far past any real league')
+  eq(cardsOffWith(['r1:p1'], 'r2:p2', true), ['r1:p1', 'r2:p2'], 'switching one off adds it')
+  eq(cardsOffWith(['r1:p1', 'r2:p2'], 'r1:p1', false), ['r2:p2'], 'switching it back on takes it out')
+  eq(cardsOffWith(['r1:p1'], 'r1:p1', true), ['r1:p1'], 'and switching an off card off again changes nothing')
+
+  const withCards = parseLeagueSetup({ format: 'league', entry: 'organiser', schedule: 'series', cardsOff: ['r1:p1', 'bad'] })
+  eq(withCards?.cardsOff, ['r1:p1'], 'the setup carries the tidy list')
+  ok(!('cardsOff' in parseLeagueSetup({ format: 'league', entry: 'organiser', cardsOff: [] })!),
+    '  …and none at all when it is empty, so a league that never used it reads as it always did')
+
+  const rows = read('lib/boardRows.ts')
+  ok(rows.includes('withOnlyRounds(withoutCasualRounds(withoutCardsOff(ctx)), lb.roundIds)'),
+    'buildRows drops a switched-off card first, beside the round rule and nowhere else')
+  const rc = read('lib/rowContext.ts')
+  ok(rc.includes('cardsOff: new Set(input.cardsOff)'), 'the one assembly carries the list')
+
+  const hub = read('lib/hubStanding.ts')
+  ok(hub.includes('fetchCardsOff(tripId)') && hub.includes('.filter(s => !off.has(cardKey(s.round_id, s.player_id)))'),
+    'the hub\'s cheap standing drops it too, so it cannot disagree with the board')
+  ok((hub.match(/fetchCardsOff\(tripId\)/g) ?? []).length === 2,
+    '  …and its full path, both reading it fail-soft in their own batch')
+  ok(read('app/trip/[tripCode]/leaderboard/page.tsx').includes('cardsOff={leagueSetup?.cardsOff}'),
+    'the leaderboard is handed it')
+  ok(read('app/trip/[tripCode]/export/page.tsx').includes('cardsOff: parseLeagueSetup('),
+    'and the export, so paper agrees with the screen')
+
+  const store = read('lib/leagueRoundStore.ts')
+  ok(store.includes('const merged: Record<string, unknown> = { ...stored }'),
+    'the switch merges into the stored setup — a key it does not know about survives')
+  ok(store.includes('if (!parseLeagueSetup(raw)'), '  …and only ever writes over a league\'s own setup')
+  ok(store.includes('withRoundAllowance(raw[index]'),
+    'a round\'s allowance is merged into the stored board the same way')
+
+  const gear = read('app/trip/[tripCode]/LeagueRounds.tsx')
+  ok(gear.includes("{ value: 'round', label: 'Round' }, { value: 'rules', label: 'Rules' }"),
+    'the gear opens on the round, with the rules on their own tab')
+  ok(gear.includes("if (!organiser) { setError('Changing a round needs the organiser PIN.')"),
+    'and every change in it is the organiser\'s')
+  ok(gear.includes("readScores<") && gear.includes("readLiveScores<"),
+    'who has a card is read whole, past the 1,000-row cap')
 }
 
 // ─── Result ────────────────────────────────────────────────────

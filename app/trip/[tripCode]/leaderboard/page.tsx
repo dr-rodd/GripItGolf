@@ -177,6 +177,7 @@ export default async function TripLeaderboardPage({
         isEvent={event}
         dayBoards={dayBoards}
         series={series}
+        cardsOff={leagueSetup?.cardsOff}
         linkedIds={giLinked}
       />
 

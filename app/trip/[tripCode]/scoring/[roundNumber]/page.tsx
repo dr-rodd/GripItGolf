@@ -39,7 +39,6 @@ export default async function TripCoursePage({
   // the number beside a player's name is not one number — see
   // lib/handicapAllowance.ts.
   const boards = boardsForTrip(trip as never)
-  const allowances = allowanceCycle(boards)
 
   const allRounds = (trip.rounds ?? []) as {
     id: string; round_number: number; status: string
@@ -48,6 +47,10 @@ export default async function TripCoursePage({
 
   const thisRound = allRounds.find(r => r.round_number === roundNum)
   if (!thisRound || !(thisRound.courses as any)?.id) notFound()
+
+  // This round's own allowances, where a league's round sets one (its gear
+  // on the Scoring tab) — the card shows what the boards will score it off.
+  const allowances = allowanceCycle(boards, thisRound.id)
 
   const courseId = (thisRound.courses as any).id as string
 
