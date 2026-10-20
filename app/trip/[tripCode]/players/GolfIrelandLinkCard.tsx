@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { LinkHeading } from '@/app/components/LinkMark'
+import GolfIrelandTour from '@/app/components/GolfIrelandTour'
 import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
 
 /**
@@ -29,7 +30,7 @@ type Match = { name: string; masked: string; club: string; pick: string }
 
 const SMALL_BUTTON = 'px-3 py-2 rounded-lg text-sm font-medium border transition-colors disabled:opacity-40'
 
-export default function GolfIrelandLinkCard({ tripCode, status, rulesLine, clubNames, connected }: {
+export default function GolfIrelandLinkCard({ tripCode, status, rulesLine, clubNames, connected, playerName }: {
   tripCode: string
   status: LinkStatus
   /** Which rounds count, in the facts style — lib/golfIreland.ts `describeRules`. */
@@ -38,7 +39,10 @@ export default function GolfIrelandLinkCard({ tripCode, status, rulesLine, clubN
   clubNames: string[]
   /** Are Green Dot's Golf Ireland keys set? Until then every search says so. */
   connected: boolean
+  /** The claimed player's name, for the walkthrough's miniatures. */
+  playerName?: string
 }) {
+  const [tour, setTour] = useState(false)
   const router = useRouter()
   const [consent, setConsent] = useState(false)
   const [query, setQuery] = useState('')
@@ -150,6 +154,14 @@ export default function GolfIrelandLinkCard({ tripCode, status, rulesLine, clubN
         organiser confirms it&apos;s you.
       </p>
       <p className="t-cap text-ink/65 mt-2">Rounds that count: {rulesLine}</p>
+      <button
+        type="button"
+        onClick={() => setTour(true)}
+        className="block t-cap text-accent-deep hover:text-accent transition-colors mt-2"
+      >
+        See how linking works →
+      </button>
+      <GolfIrelandTour open={tour} onClose={() => setTour(false)} name={playerName} club={clubNames[0]} />
       {!connected && (
         <p className="text-ink/80 text-[13px] mt-3 leading-snug">
           Golf Ireland isn&apos;t connected yet. Access has been asked for, and

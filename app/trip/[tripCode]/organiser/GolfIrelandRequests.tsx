@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { LinkHeading, LinkedBadge } from '@/app/components/LinkMark'
+import GolfIrelandTour from '@/app/components/GolfIrelandTour'
 import { cardClass } from '@/app/components/ui'
 
 /**
@@ -32,6 +33,7 @@ export default function GolfIrelandRequests({ tripCode, rulesLine, connected, in
   const [links, setLinks] = useState(initial)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [tour, setTour] = useState(false)
 
   async function decide(l: LinkRequest, decision: 'confirm' | 'refuse') {
     if (busy) return
@@ -65,6 +67,14 @@ export default function GolfIrelandRequests({ tripCode, rulesLine, connected, in
     <section className={`mt-10 p-4 ${cardClass()}`}>
       <LinkHeading>Golf Ireland</LinkHeading>
       <p className="t-cap text-ink/65 mt-3">Rounds that count: {rulesLine}</p>
+      <button
+        type="button"
+        onClick={() => setTour(true)}
+        className="block t-cap text-accent-deep hover:text-accent transition-colors mt-2"
+      >
+        See what players see →
+      </button>
+      <GolfIrelandTour open={tour} onClose={() => setTour(false)} />
       {!connected && (
         <p className="text-ink/80 text-[13px] mt-2 leading-snug">
           Golf Ireland isn&apos;t connected yet. Access has been asked for; players

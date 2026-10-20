@@ -7,6 +7,7 @@ import {
 } from '@/lib/golfIreland'
 import { WEEKDAY_NAMES } from '@/lib/weekdays'
 import { LinkHeading } from './LinkMark'
+import GolfIrelandTour from './GolfIrelandTour'
 import { ChoiceChips, FIELD_LABEL, cardClass, chipClass, optionClass } from './ui'
 
 /**
@@ -33,6 +34,7 @@ export default function GolfIrelandRulesForm({ value, onChange }: {
   onChange: (next: GolfIrelandRules) => void
 }) {
   const [clubs, setClubs] = useState<Club[] | null>(null)
+  const [tour, setTour] = useState(false)
 
   useEffect(() => {
     let live = true
@@ -56,7 +58,17 @@ export default function GolfIrelandRulesForm({ value, onChange }: {
 
   return (
     <div className={`p-4 space-y-5 ${cardClass()}`}>
-      <LinkHeading>Golf Ireland</LinkHeading>
+      <div>
+        <LinkHeading>Golf Ireland</LinkHeading>
+        <button
+          type="button"
+          onClick={() => setTour(true)}
+          className="block t-cap text-accent-deep hover:text-accent transition-colors mt-2"
+        >
+          See how players link →
+        </button>
+        <GolfIrelandTour open={tour} onClose={() => setTour(false)} />
+      </div>
 
       <div>
         <label className={FIELD_LABEL}>Which clubs?</label>

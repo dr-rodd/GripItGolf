@@ -94,3 +94,26 @@ export async function golfIrelandRequests(tripId: string, bracketSetup: unknown)
     return null
   }
 }
+
+/**
+ * The players carrying the mark beside their name: confirmed links whose
+ * club's access stands. No query at all unless the league reads Golf
+ * Ireland, so every other trip and event pays nothing for it; empty on
+ * any failure, which only costs the badges.
+ */
+export async function golfIrelandLinkedIds(tripId: string, bracketSetup: unknown): Promise<string[]> {
+  const setup = parseLeagueSetup(bracketSetup)
+  if (!setup?.golfIreland || !readsGolfIreland(setup.scoreSource)) return []
+  try {
+    const admin = createAdminClient()
+    const [clubs, links] = await Promise.all([
+      loadClubs(admin, setup.golfIreland.clubs),
+      loadLinks(admin, tripId),
+    ])
+    const clubOf = new Map(clubs.map(c => [c.clubId, c]))
+    return links.filter(l => linkReadable(l, clubOf.get(l.clubId))).map(l => l.playerId)
+  } catch (e) {
+    console.error('golfIrelandLinkedIds failed:', e)
+    return []
+  }
+}

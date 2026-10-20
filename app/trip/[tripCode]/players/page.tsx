@@ -132,6 +132,7 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
               rulesLine={gi.rulesLine}
               clubNames={gi.clubNames}
               connected={gi.connected}
+              playerName={me?.name}
             />
           </div>
         )}

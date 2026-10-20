@@ -585,12 +585,14 @@ section('No Golf Ireland branding: a plain link stands in for their logo')
   const named = walk('public').filter(f => /golf[-_ ]?ireland|\bgui\b/i.test(f))
   eq(named, [], 'no Golf Ireland file in public/')
   const mark = read('app/components/LinkMark.tsx')
-  ok(!/<img|src=|data:image|url\(/.test(mark), 'the link is drawn, never an image')
+  ok(!/<img|src=|data:image|url\((?!#)/.test(mark), 'the mark is drawn, never an image')
   ok(!/#[0-9a-f]{3,8}\b/i.test(mark.replace(/\/\*[\s\S]*?\*\//g, '')), 'and in our own colours, never a hex of theirs')
   const screens = [
     'app/components/GolfIrelandRulesForm.tsx',
     'app/trip/[tripCode]/players/GolfIrelandLinkCard.tsx',
     'app/trip/[tripCode]/organiser/GolfIrelandRequests.tsx',
+    'app/components/GolfIrelandTour.tsx',
+    'app/demo/golf-ireland/DemoClient.tsx',
   ]
   for (const f of screens) {
     const src = read(f)
@@ -611,6 +613,33 @@ section('The screens read the links only on the server')
   const clientNaming = walk('app').filter(f => /\.tsx?$/.test(f))
     .filter(f => { const src = read(f); return /^'use client'/.test(src) && /from\('golf_ireland_/.test(src) })
   eq(clientNaming, [], 'no client component queries a Golf Ireland table')
+}
+
+section('A linked player carries the mark wherever the league names them')
+{
+  // The join screen, the hub's Players list and the leaderboard — each
+  // fed from the server's one read of confirmed links, none asking unless
+  // the league reads Golf Ireland.
+  for (const f of [
+    'app/trip/[tripCode]/players/PlayersClient.tsx',
+    'app/trip/[tripCode]/page.tsx',
+    'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
+  ]) ok(/<LinkedBadge\b/.test(read(f)), `${f} shows the mark`)
+  for (const f of ['app/trip/[tripCode]/page.tsx', 'app/trip/[tripCode]/leaderboard/page.tsx']) {
+    ok(read(f).includes('golfIrelandLinkedIds('), `${f} reads the links through the one helper`)
+  }
+  const helper = read('app/trip/[tripCode]/golfIreland.ts')
+  const body = helper.slice(helper.indexOf('export async function golfIrelandLinkedIds'))
+  ok(body.indexOf('readsGolfIreland') >= 0 && body.indexOf('readsGolfIreland') < body.indexOf('createAdminClient'),
+    'and that helper asks nothing before it knows the league reads Golf Ireland')
+}
+
+section('The walkthrough shows linking by membership number, and names nobody real')
+{
+  const tour = read('app/components/GolfIrelandTour.tsx')
+  ok(/membership number/i.test(tour), 'the number is the way in')
+  ok(/key: 'linked'/.test(tour) && /<LinkedBadge\b/.test(tour), 'and it ends on the mark beside a name')
+  ok(!/supabase|fetch\(/.test(tour), 'it reads and writes nothing')
 }
 
 // ─── Result ────────────────────────────────────────────────────

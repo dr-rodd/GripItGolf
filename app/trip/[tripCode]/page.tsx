@@ -40,6 +40,8 @@ import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import LegalLinks from '@/app/components/LegalLinks'
 import ShareTrip from './ShareTrip'
+import { golfIrelandLinkedIds } from './golfIreland'
+import { LinkedBadge } from '@/app/components/LinkMark'
 import { cardClass } from '@/app/components/ui'
 
 export const dynamic = 'force-dynamic'
@@ -132,7 +134,7 @@ export default async function TripPage({ params, searchParams }: {
   // that has not run migration 046 has no `kind`, and no kind is a trip.
   const isEvent = isEventKind(trip.kind)
 
-  const [roundsResult, playersResult, itineraryResult, endTimesResult, coursesResult, noticesResult] = await Promise.all([
+  const [roundsResult, playersResult, itineraryResult, endTimesResult, coursesResult, noticesResult, giLinked] = await Promise.all([
     // `itinerary_item_id` is the join that makes a countdown possible: the
     // date lives here and the tee time lives on the itinerary item, and this
     // is the only column tying the two together. `start_format` rides along
@@ -201,6 +203,10 @@ export default async function TripPage({ params, searchParams }: {
           .eq('trip_id', trip.id)
           .order('created_at', { ascending: false })
       : Promise.resolve({ data: [], error: null }),
+    // A Golf Ireland league's linked players, for the mark beside their
+    // names. Asks nothing unless the league reads Golf Ireland; the setup
+    // rides in on the `*` above, absent on an un-migrated database.
+    golfIrelandLinkedIds(trip.id, (trip as { bracket_setup?: unknown }).bracket_setup),
   ])
 
   if (roundsResult.error) console.error('TripPage rounds query failed:', roundsResult.error)
@@ -635,6 +641,7 @@ export default async function TripPage({ params, searchParams }: {
                 pendingCount={pendingCount}
                 tripCode={tripCode}
                 noun={isEvent ? 'event' : 'trip'}
+                linkedIds={giLinked}
               />,
             },
             /* Stats, last, and only when there is something behind the
@@ -690,9 +697,11 @@ export default async function TripPage({ params, searchParams }: {
  * otherwise.
  */
 function PlayersPanel({
-  players, pendingCount, tripCode, noun,
+  players, pendingCount, tripCode, noun, linkedIds,
 }: {
   players: { id: string; name: string; handicap: number | null; claimed?: boolean | null }[]
+  /** A Golf Ireland league's confirmed links — the mark beside those names. */
+  linkedIds: string[]
   pendingCount: number
   tripCode: string
   /** "trip" or "event" — the hub knows which it is wearing. */
@@ -731,7 +740,10 @@ function PlayersPanel({
               }`}
             >
               <span className="flex-1 min-w-0">
-                <span className="block text-ink text-sm truncate">{p.name}</span>
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-ink text-sm truncate">{p.name}</span>
+                  {linkedIds.includes(p.id) && <LinkedBadge size={16} />}
+                </span>
                 <span
                   className={`block t-cap mt-0.5 ${
                     confirmed ? 'text-ink/80' : 'text-ink/50'

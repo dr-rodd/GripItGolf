@@ -18,6 +18,7 @@ import {
 import { type Segment } from '@/lib/tiebreak'
 import { buildRowContext, sortRounds } from '@/lib/rowContext'
 import { boardNames } from '@/lib/displayNames'
+import { LinkedBadge } from '@/app/components/LinkMark'
 import { formatHandicap } from '@/lib/handicap'
 import { type Membership } from '@/lib/teamSets'
 import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundState'
@@ -116,6 +117,12 @@ interface Props {
    * has always been (lib/leagueSetup.ts `boardGrouping`).
    */
   dayBoards?: DayBoards
+  /**
+   * A Golf Ireland league's confirmed links — the mark beside each of
+   * those names. Read on the server (app/trip/[tripCode]/golfIreland.ts);
+   * empty everywhere else.
+   */
+  linkedIds?: string[]
 }
 
 // Every scorecard in the app wears the same clothes — see
@@ -991,7 +998,7 @@ function TeamName({ row, byPlayers, memberNames }: {
 }
 
 function Board({
-  board, rows: allRows, rounds, playerById, boardNameById, onOpenCard,
+  board, rows: allRows, rounds, playerById, boardNameById, onOpenCard, linked,
 }: {
   board: Leaderboard
   rows: BoardRow[]
@@ -1000,6 +1007,8 @@ function Board({
   /** Player id → what the name column prints. Team rows are not in it. */
   boardNameById: Map<string, string>
   onOpenCard: (row: BoardRow, round: Round) => void
+  /** Players carrying the Golf Ireland mark beside their name. */
+  linked: Set<string>
 }) {
   // A team's row stacks its members' names rather than gliding them — see
   // TeamName. An individual board keeps the gliding name.
@@ -1282,6 +1291,7 @@ function Board({
                           className="min-w-0 flex-1"
                           textClassName="font-semibold text-[15px] leading-tight text-ink"
                         />
+                        {linked.has(row.id) && <LinkedBadge size={15} />}
                         {row.isLive && <LiveDot />}
                       </span>
                     )}
@@ -1425,8 +1435,9 @@ function MatchplayTab({ tripCode }: { tripCode: string }) {
 export default function TripLeaderboardClient({
   tripCode, boards, activeRoundIds, livePlayerIds, legacyTeamScoring, rounds,
   teams, memberships, players, holes, scores, liveScores, roundHandicaps,
-  tees = [], nicknames = [], isEvent = false, dayBoards,
+  tees = [], nicknames = [], isEvent = false, dayBoards, linkedIds,
 }: Props) {
+  const linked = useMemo(() => new Set(linkedIds ?? []), [linkedIds])
   // Matchplay has its own route, so it is a button rather than a tab. Every
   // other board is a table, and its own rules travel with it.
   //
@@ -1740,6 +1751,7 @@ export default function TripLeaderboardClient({
             playerById={playerById}
             boardNameById={boardNameById}
             onOpenCard={(row, round) => setCard({ row, round })}
+            linked={linked}
           />
         )}
 

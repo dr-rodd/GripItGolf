@@ -13,6 +13,7 @@ import { readScores, readLiveScores, readRoundHandicaps } from '@/lib/scoreReads
 import TripLeaderboardClient, { type Score, type LiveScore, type RoundHcp } from './TripLeaderboardClient'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
+import { golfIrelandLinkedIds } from '../golfIreland'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,7 +70,7 @@ export default async function TripLeaderboardPage({
   const nilId     = '00000000-0000-0000-0000-000000000000'
 
   const [teamsRes, playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes,
-         memberships, nicknamesRes] =
+         memberships, nicknamesRes, giLinked] =
     await Promise.all([
       supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
       supabase.from('players')
@@ -117,6 +118,9 @@ export default async function TripLeaderboardPage({
       // database that has not run migration 047, and a board without
       // nicknames still stands.
       supabase.from('players').select('id, nickname').eq('trip_id', trip.id),
+      // A Golf Ireland league's linked players — the mark beside their
+      // names. No query unless the league reads Golf Ireland.
+      golfIrelandLinkedIds(trip.id, (trip as { bracket_setup?: unknown }).bracket_setup),
     ])
 
   // What the trip plays for. A stored list wins; a trip created before the
@@ -169,6 +173,7 @@ export default async function TripLeaderboardPage({
         tees={teesRes.data ?? []}
         isEvent={event}
         dayBoards={dayBoards}
+        linkedIds={giLinked}
       />
 
       {/* Below the board, after everything worth reading */}
