@@ -33,7 +33,7 @@ export function LinkMark({ size = 20, className = '' }: { size?: number; classNa
 }
 
 /**
- * A linked player's badge, beside their name — the link in an emerald
+ * A linked player's badge, beside their name — the link in a deep-emerald
  * disc. Read aloud as "Linked to Golf Ireland", the one thing it means.
  * Shown only for a link the organiser has confirmed.
  */
@@ -43,7 +43,7 @@ export function LinkedBadge({ size = 18, className = '' }: { size?: number; clas
       role="img"
       aria-label="Linked to Golf Ireland"
       title="Linked to Golf Ireland"
-      className={`inline-flex items-center justify-center rounded-full bg-accent text-cream flex-shrink-0 ${className}`}
+      className={`inline-flex items-center justify-center rounded-full bg-accent-deep text-white flex-shrink-0 ${className}`}
       style={{ width: size, height: size }}
     >
       <LinkMark size={Math.round(size * 0.62)} />

@@ -122,7 +122,8 @@ export default function GolfIrelandRulesForm({ value, onChange }: {
           options={[{ value: 'any', label: 'Any day' }, { value: 'chosen', label: 'Chosen days' }]}
           value={anyDay ? 'any' : 'chosen'}
           onChange={v => {
-            const { weekdays: _, ...rest } = value
+            const rest = { ...value }
+            delete rest.weekdays
             onChange(v === 'any' ? rest : { ...rest, weekdays: [] })
           }}
         />
