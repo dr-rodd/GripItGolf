@@ -18,6 +18,7 @@ import {
   MIN_GROUP_SIZE, MAX_GROUP_SIZE,
 } from '@/lib/teeSheet'
 import { courseLabel } from '@/lib/courseDirectory'
+import GolfIrelandRequests, { type LinkRequest } from './GolfIrelandRequests'
 
 /**
  * What the organiser can actually do, once past the PIN.
@@ -60,7 +61,7 @@ type Overview = {
 
 export default function OrganiserClient({
   tripId, tripCode, initialNotices, initialRounds, formatSummary, isLeague,
-  initialPermissions, overview, tagsSummary, dayFormatSummary,
+  initialPermissions, overview, tagsSummary, dayFormatSummary, golfIreland,
 }: {
   tripId: string
   tripCode: string
@@ -78,6 +79,8 @@ export default function OrganiserClient({
   tagsSummary: string
   /** How many days carry a format of their own, said in one line. */
   dayFormatSummary: string
+  /** A league reading Golf Ireland: its rules and its link requests. Absent otherwise. */
+  golfIreland?: { rulesLine: string; connected: boolean; links: LinkRequest[] } | null
 }) {
   // ── Participant permissions ──────────────────────────────────
   // Saved the moment a toggle moves — optimistic, reverting on refusal,
@@ -465,6 +468,15 @@ export default function OrganiserClient({
             <p className="text-rust-deep text-sm mt-3 leading-snug">{startError}</p>
           )}
         </section>
+
+        {golfIreland && (
+          <GolfIrelandRequests
+            tripCode={tripCode}
+            rulesLine={golfIreland.rulesLine}
+            connected={golfIreland.connected}
+            initial={golfIreland.links}
+          />
+        )}
 
         {/* ── The rest of the running of the event ──
             One list, one row each (refresh plan, 4.2): the tags portal (the

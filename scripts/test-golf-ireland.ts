@@ -575,6 +575,44 @@ section('Migration 056 closes its tables to the browser')
   ok(sql.includes('DROP COLUMN IF EXISTS access_token'), 'an earlier per-player paste is brought into line')
 }
 
+section('No Golf Ireland branding: a plain link stands in for their logo')
+{
+  // Agreed October 2026: their logo waits for their written permission,
+  // and every push is live. So nothing of theirs is in the repository, and
+  // the Golf Ireland screens draw our own link (app/components/LinkMark.tsx).
+  const walk = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true })
+    .flatMap(e => e.isDirectory() ? walk(`${dir}/${e.name}`) : [`${dir}/${e.name}`])
+  const named = walk('public').filter(f => /golf[-_ ]?ireland|\bgui\b/i.test(f))
+  eq(named, [], 'no Golf Ireland file in public/')
+  const mark = read('app/components/LinkMark.tsx')
+  ok(!/<img|src=|data:image|url\(/.test(mark), 'the link is drawn, never an image')
+  ok(!/#[0-9a-f]{3,8}\b/i.test(mark.replace(/\/\*[\s\S]*?\*\//g, '')), 'and in our own colours, never a hex of theirs')
+  const screens = [
+    'app/components/GolfIrelandRulesForm.tsx',
+    'app/trip/[tripCode]/players/GolfIrelandLinkCard.tsx',
+    'app/trip/[tripCode]/organiser/GolfIrelandRequests.tsx',
+  ]
+  for (const f of screens) {
+    const src = read(f)
+    ok(src.includes("from '@/app/components/LinkMark'") || src.includes("from './LinkMark'"), `${f} carries the link`)
+    ok(!/<img|<Image\b|\.png|\.svg|\.jpe?g|\.webp/.test(src), `${f} shows no image`)
+  }
+  const referencing = walk('app').filter(f => /\.(tsx?|css)$/.test(f))
+    .filter(f => /golf[-_ ]?ireland[^'"]*\.(png|svg|jpe?g|webp)/i.test(read(f)))
+  eq(referencing, [], 'nothing in app/ points at a Golf Ireland image')
+}
+
+section('The screens read the links only on the server')
+{
+  // The four tables are closed to the browser (migration 056); a client
+  // component naming one would fail on every phone.
+  const walk = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true })
+    .flatMap(e => e.isDirectory() ? walk(`${dir}/${e.name}`) : [`${dir}/${e.name}`])
+  const clientNaming = walk('app').filter(f => /\.tsx?$/.test(f))
+    .filter(f => { const src = read(f); return /^'use client'/.test(src) && /from\('golf_ireland_/.test(src) })
+  eq(clientNaming, [], 'no client component queries a Golf Ireland table')
+}
+
 // ─── Result ────────────────────────────────────────────────────
 
 Promise.all(pending).then(() => {

@@ -33,6 +33,11 @@ import {
   type EventPermissions, defaultPermissions, storedPermissions,
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
+import GolfIrelandRulesForm from '@/app/components/GolfIrelandRulesForm'
+import {
+  type GolfIrelandRules, type ScoreSource, SCORE_SOURCES,
+  defaultRules, parseGolfIrelandRules, readsGolfIreland,
+} from '@/lib/golfIreland'
 import { describeError, generateCode } from './CreateTripForm'
 import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass, optionClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
@@ -173,6 +178,11 @@ export default function CreateLeagueForm({ schedule }: {
   const [perms, setPerms] = useState<EventPermissions>(defaultPermissions)
   const [passcode, setPasscode] = useState('')
   const [passcodeConfirm, setPasscodeConfirm] = useState('')
+  // Where the scores come from — live here, Golf Ireland, or both — and,
+  // when Golf Ireland is a source, which of its cards count
+  // (lib/golfIreland.ts, docs/golf-ireland.md).
+  const [scoreSource, setScoreSource] = useState<ScoreSource>('live')
+  const [giRules, setGiRules] = useState<GolfIrelandRules>(() => defaultRules())
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -244,6 +254,14 @@ export default function CreateLeagueForm({ schedule }: {
     passcodeError(passcode) ??
     (passcode !== passcodeConfirm ? 'The two passcodes do not match.' : null)
 
+  // The rules as they would be stored, or null while something is missing.
+  const giStored = readsGolfIreland(scoreSource) ? parseGolfIrelandRules(giRules) : null
+  const giIssue = !readsGolfIreland(scoreSource) ? null
+    : giRules.clubs.length === 0 ? 'Golf Ireland needs at least one club — pick one above.'
+    : giRules.weekdays?.length === 0 ? 'Tick the days a round may be played on, or choose any day.'
+    : !giStored ? 'Answer each Golf Ireland question above.'
+    : null
+
   const step1Valid =
     name.trim().length > 0 &&
     (schedule === 'standalone'
@@ -259,7 +277,7 @@ export default function CreateLeagueForm({ schedule }: {
     step === 1 ? step1Valid :
     step === 2 ? venuesComplete :
     step === 3 ? !!entry && !duplicateIssue :
-    step === 4 ? boards.length > 0 && (slots.length <= 1 || !!dayBoards) && !passcodeIssue :
+    step === 4 ? boards.length > 0 && (slots.length <= 1 || !!dayBoards) && !passcodeIssue && !giIssue :
     false
   )
 
@@ -337,6 +355,8 @@ export default function CreateLeagueForm({ schedule }: {
       entry: entry!,
       ...(entry === 'self_join' && requireApproval ? { requireApproval: true } : {}),
       ...(slots.length > 1 && dayBoards ? { dayBoards } : {}),
+      // Live is the absent default; the rules ride only with a source that reads them.
+      ...(giStored && scoreSource !== 'live' ? { scoreSource, golfIreland: giStored } : {}),
     }
 
     // 1. The trip row. Unlike the trip wizard, the boards are written at
@@ -1106,6 +1126,39 @@ export default function CreateLeagueForm({ schedule }: {
         {/* ── 4 · Finish ── */}
         {step === 4 && (
           <div className="space-y-6">
+            {/* ── Where the scores come from ──
+                Live on Green Dot, read from Golf Ireland, or both. Golf
+                Ireland asks its own questions, in its own card. */}
+            <div>
+              <label className={FIELD_LABEL}>Where do the scores come from?</label>
+              <div className="space-y-2">
+                {SCORE_SOURCES.map(s => (
+                  <button
+                    key={s.key}
+                    onClick={() => setScoreSource(s.key)}
+                    aria-pressed={scoreSource === s.key}
+                    className={optionClass(scoreSource === s.key)}
+                  >
+                    <p className="text-[17px] font-medium leading-snug text-ink">
+                      {s.label}
+                    </p>
+                    <p className="t-cap text-ink/65 mt-0.5">
+                      {s.hint}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {readsGolfIreland(scoreSource) && (
+              <div>
+                <GolfIrelandRulesForm value={giRules} onChange={setGiRules} />
+                {giIssue && (
+                  <p className="text-rust-deep text-[13px] mt-3 leading-snug">{giIssue}</p>
+                )}
+              </div>
+            )}
+
             {/* ── The leaderboards ──
                 The same LeaderboardSetup Trip Setup runs, seeded with the
                 starter individual-Stableford board — so creation offers

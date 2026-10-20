@@ -11,6 +11,7 @@ import { describeRange } from '@/lib/confirmationEmail'
 import BackButton from '@/app/components/BackButton'
 import PasscodeGate from '../setup/PasscodeGate'
 import OrganiserClient from './OrganiserClient'
+import { golfIrelandRequests } from '../golfIreland'
 
 export const dynamic = 'force-dynamic'
 
@@ -187,6 +188,11 @@ export default async function OrganiserPage({ params }: {
 
   const boards = parseLeaderboards(trip.leaderboards)
 
+  // A league reading Golf Ireland: its link requests, read on the service
+  // role (the link tables are closed to the browser). Null otherwise, or
+  // on any failure — the card is then simply absent.
+  const gi = leagueSetup?.golfIreland ? await golfIrelandRequests(trip.id, setupRaw) : null
+
   // How many days carry a board of their own — a board is a day's when it
   // is scoped to golf (lib/leaderboards.ts `roundIds`).
   const dayBoardCount = new Set(
@@ -220,6 +226,7 @@ export default async function OrganiserPage({ params }: {
         taggedResult.count ?? 0,
         playersResult.count ?? 0,
       )}
+      golfIreland={gi}
       dayFormatSummary={
         dayBoardCount === 0
           ? 'No day has its own format yet.'

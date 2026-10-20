@@ -15,6 +15,7 @@ import {
   isConfirmed, duplicateName, duplicateNameError, isDuplicateNameError,
 } from '@/lib/roster'
 import { FIELD, buttonClass, cardClass, chipClass } from '@/app/components/ui'
+import { LinkedBadge } from '@/app/components/LinkMark'
 
 type Player = {
   id: string
@@ -182,6 +183,7 @@ export default function PlayersClient({
   canAddPlayers = true,
   askHandicap = true,
   noun = 'trip',
+  linkedIds,
 }: {
   tripCode: string
   tripId: string
@@ -210,6 +212,8 @@ export default function PlayersClient({
   askHandicap?: boolean
   /** "trip" or "event" — what the button and messages call it. */
   noun?: 'trip' | 'event'
+  /** A Golf Ireland league's confirmed links — a badge beside each name. */
+  linkedIds?: string[]
 }) {
   const router = useRouter()
   const [claimingId, setClaimingId] = useState<string | null>(null)
@@ -425,7 +429,10 @@ export default function PlayersClient({
                   }`}
                 >
                   <div className="min-w-0">
-                    <p className="text-ink text-sm font-medium truncate">{p.name}</p>
+                    <p className="flex items-center gap-1.5 text-ink text-sm font-medium min-w-0">
+                      <span className="truncate">{p.name}</span>
+                      {linkedIds?.includes(p.id) && <LinkedBadge size={16} />}
+                    </p>
                     <p className={`t-cap mt-0.5 ${isIn ? 'text-ink/80' : 'text-ink/65'}`}>
                       {isIn ? 'Confirmed' : 'Not yet confirmed'}
                       {p.handicap != null && ` · HCP ${formatHandicap(p.handicap)}`}

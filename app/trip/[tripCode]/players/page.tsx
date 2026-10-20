@@ -7,6 +7,9 @@ import { sortForClaiming, confirmedCount } from '@/lib/roster'
 import { fetchTripKind } from '../kind'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { isEvent } from '@/lib/eventHub'
+import { linkedPlayerId } from '@/lib/currentPlayer'
+import { golfIrelandView } from '../golfIreland'
+import GolfIrelandLinkCard from './GolfIrelandLinkCard'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +19,7 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
   // The kind and the permissions ride alongside the page's own query, each
   // fail-soft in its own request — an un-migrated database simply reads as
   // a trip with open access, which is what it can only hold.
-  const [kind, { data: trip, error: tripError }, permsResult] = await Promise.all([
+  const [kind, { data: trip, error: tripError }, permsResult, setupResult, cookieId] = await Promise.all([
     fetchTripKind(tripCode),
     supabase
       .from('trips')
@@ -28,6 +31,14 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
       .select('event_permissions')
       .eq('trip_code', tripCode)
       .single(),
+    // A league's setup, for its Golf Ireland answer — its own query, fail
+    // soft, like the permissions.
+    supabase
+      .from('trips')
+      .select('bracket_setup')
+      .eq('trip_code', tripCode)
+      .single(),
+    linkedPlayerId(tripCode),
   ])
 
   if (tripError) console.error('players/page trip query failed:', tripError)
@@ -81,6 +92,15 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
   const noun = isEvent(kind) ? 'event' : 'trip'
   const roundIds = (roundsResult.data ?? []).map(r => r.id as string)
 
+  // A league reading Golf Ireland: who is linked (the badge), and this
+  // phone's own link card when it has claimed a name here. Null otherwise.
+  const me = players.find(p => p.id === cookieId) ?? null
+  const gi = await golfIrelandView(
+    trip.id,
+    (setupResult.data as { bracket_setup?: unknown } | null)?.bracket_setup,
+    me?.id ?? null,
+  )
+
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
       <TripHeader backTo={`/trip/${tripCode}`} />
@@ -104,7 +124,20 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
           </p>
         )}
 
+        {gi?.mine && (
+          <div className="mb-10">
+            <GolfIrelandLinkCard
+              tripCode={tripCode}
+              status={gi.mine}
+              rulesLine={gi.rulesLine}
+              clubNames={gi.clubNames}
+              connected={gi.connected}
+            />
+          </div>
+        )}
+
         <PlayersClient
+          linkedIds={gi?.linkedIds}
           tripCode={tripCode}
           tripId={trip.id}
           players={players}
