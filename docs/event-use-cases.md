@@ -198,6 +198,13 @@ Each stage tested on greendot.live before the next, as with Green Dot Run.
    before this keeps its numbered list. On the way: a round added after
    creation no longer gives a pending handicap a scratch snapshot
    (`addRounds` in `lib/itineraryStore.ts`).
+   **The Field — built, October 2026.** On an event the hub's Players
+   section is **The Field**, and under the names sits **Add a player**
+   (`app/trip/[tripCode]/AddToField.tsx`): somebody else's name, unclaimed,
+   for its owner to claim — the join screen is still where a player adds
+   themselves. Anyone may when `add_players` is on, the organiser with the
+   PIN asked in place otherwise. A blank handicap is pending; a given one is
+   snapshotted onto every round that exists. A trip's hub is unchanged.
 2. **Every round's own leaderboard, and rounds that do not count.** No
    database change: the existing casual flag is reused, and the event's own
    leaderboard reads it the way the round summary already does.

@@ -225,6 +225,26 @@ section('A participant\'s screens change to match')
 
 // ─── Wiring: the email ─────────────────────────────────────────
 
+section('The field is added to on the hub — by anyone, or behind the PIN')
+{
+  const hub = read('app/trip/[tripCode]/page.tsx')
+  ok(hub.includes("title: isEvent ? 'The Field' : 'Players'"),
+    'an event\'s players are its field; a trip\'s stay its players')
+  ok(hub.includes("fieldMayAdd={allowsParticipant(trip.kind, tripRaw.event_permissions, 'add_players')}"),
+    'adding is the field\'s exactly when add_players says so')
+  ok(hub.includes('add={isEvent ? ('), 'and the door is an event\'s alone — a trip\'s hub is untouched')
+
+  const door = read('app/trip/[tripCode]/AddToField.tsx')
+  ok(door.includes('<InlineUnlock') && door.includes('hasUnlocked(tripCode)'),
+    'otherwise the organiser\'s PIN is asked in place')
+  ok(door.includes('readHandicapField(handicap)') && door.includes('if (hcp !== null)'),
+    'a blank handicap is pending, never scratch, and gets no snapshot')
+  ok(door.includes('syncRoundHandicaps(roundIds, data.id, hcp)'),
+    'a given one is snapshotted onto every round that already exists')
+  ok(door.includes('duplicateName(trimmed, players)') && door.includes('isDuplicateNameError(err)'),
+    'and two people cannot share a name, checked before and refused after')
+}
+
 section('The event email carries the admin link, never the PIN')
 {
   const details = {

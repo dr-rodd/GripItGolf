@@ -47,6 +47,7 @@ import { parseLeagueSetup, leagueRounds } from '@/lib/leagueSetup'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { describeShortDate } from '@/lib/itinerary'
 import { TbcRoundTile, type LeagueDoor } from './LeagueRounds'
+import AddToField from './AddToField'
 import CourseName from '@/app/components/CourseName'
 import { IconChevronRight } from '@/app/components/icons'
 
@@ -478,7 +479,7 @@ export default async function TripPage({ params, searchParams }: {
         <Link
           key={lr.roundId}
           href={`/trip/${tripCode}/round/${lr.number}`}
-          className={`flex items-center justify-between w-full px-5 py-4 rounded-card press ${ROUND_TILE.played}`}
+          className={`flex items-center justify-between w-full px-5 py-4 press ${cardClass('raised', true)}`}
         >
           <div className="min-w-0">
             <p className="t-label text-ink/65 mb-1">
@@ -718,7 +719,9 @@ export default async function TripPage({ params, searchParams }: {
             }] : []),
             {
               key: 'players',
-              title: 'Players',
+              /* An event's players are its field — the word a golf event
+                 uses, and Ross's. A trip's are its players, as ever. */
+              title: isEvent ? 'The Field' : 'Players',
               meta: players.length > 0 ? `${confirmedCount} of ${players.length} in` : undefined,
               content: <PlayersPanel
                 players={players}
@@ -726,6 +729,16 @@ export default async function TripPage({ params, searchParams }: {
                 tripCode={tripCode}
                 noun={isEvent ? 'event' : 'trip'}
                 linkedIds={giLinked}
+                add={isEvent ? (
+                  <AddToField
+                    tripId={trip.id}
+                    tripCode={tripCode}
+                    roundIds={rounds.map(r => r.id)}
+                    players={players}
+                    fieldMayAdd={allowsParticipant(trip.kind, tripRaw.event_permissions, 'add_players')}
+                    passcodeHash={tripRaw.settings_passcode_hash ?? null}
+                  />
+                ) : null}
               />,
             },
             /* Stats, last, and only when there is something behind the
@@ -781,7 +794,7 @@ export default async function TripPage({ params, searchParams }: {
  * otherwise.
  */
 function PlayersPanel({
-  players, pendingCount, tripCode, noun, linkedIds,
+  players, pendingCount, tripCode, noun, linkedIds, add,
 }: {
   players: { id: string; name: string; handicap: number | null; claimed?: boolean | null }[]
   /** A Golf Ireland league's confirmed links — the mark beside those names. */
@@ -790,12 +803,17 @@ function PlayersPanel({
   tripCode: string
   /** "trip" or "event" — the hub knows which it is wearing. */
   noun: 'trip' | 'event'
+  /** An event's door for adding to the field (`AddToField`), or nothing. */
+  add?: React.ReactNode
 }) {
   if (players.length === 0) {
     return (
-      <p className="t-cap text-ink/65 text-center py-2">
-        Nobody has joined this {noun} yet.
-      </p>
+      <div className="max-w-xs mx-auto">
+        <p className="t-cap text-ink/65 text-center py-2">
+          Nobody has joined this {noun} yet.
+        </p>
+        {add}
+      </div>
     )
   }
 
@@ -855,6 +873,8 @@ function PlayersPanel({
           )
         })}
       </div>
+
+      {add}
 
       {pendingCount > 0 && (
         <p className="text-ink/50 text-[13px] mt-4 leading-relaxed">
