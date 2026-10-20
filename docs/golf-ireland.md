@@ -10,7 +10,8 @@ Partner access to Golf Ireland's Clubhouse API was asked for in October
 2026 (the email is at the bottom). Everything here is built on the
 assumption that it is granted, **club by club** (below). Until it is, and
 until their documentation arrives, the one file that would talk to them
-refuses every call, and **no Golf Ireland branding goes on the live site**.
+refuses every call, and **no Golf Ireland branding goes on the live site**:
+the screens are live with a plain chain link where their logo will go.
 
 ## How access is expected to come: club by club
 
@@ -174,7 +175,17 @@ which need one of our rounds and one of our courses.
 ## Branding
 
 **No Golf Ireland branding goes on the live site** (agreed October 2026)
-until Golf Ireland has given written permission to use it. Showing their
+until Golf Ireland has given written permission to use it. **The screens
+went live anyway (October 2026), with a generic chain link in our own
+emerald wherever their logo will sit** — `app/components/LinkMark.tsx`:
+`LinkMark` (the drawn link), `LinkedBadge` (a linked player's badge,
+"Linked to Golf Ireland") and `LinkHeading` (the top of each Golf Ireland
+card). When permission comes, those three are what change, and nothing
+else does. `test:golf-ireland` holds that no Golf Ireland image is in
+`public/` or referenced from `app/`, and that the link is drawn, never an
+image. The name "Golf Ireland" does appear in the wording, because the
+question is about their scores; only the logo, mark and colours are held
+back. Showing their
 logo before then would suggest a partnership that doesn't exist. Every push
 to `master` is live, so the branding stays **out of the repository**: not
 in `public/`, and not behind a switch. Ross holds the zip Golf Ireland
@@ -215,13 +226,26 @@ the next.
    links. Nothing on screen.
 2. **Done, apply by hand.** Migration 056, club-shaped. Safe to run whether
    or not the earlier version was ever run.
-3. The creation form's questions: the clubs, where the scores come from,
-   and the rules. A warning on the venues step when "league venues only"
-   is chosen and a venue is not matched to Golf Ireland yet.
-4. Linking a player, on the screen where they claim their name: consent,
-   the membership search, the request, the organiser's confirmation,
-   unlinking (which deletes their cards). The link also fills in their
-   handicap index.
+3. **Done, live.** The league creation form's last step asks where the
+   scores come from (`SCORE_SOURCES`) and, when Golf Ireland is a source,
+   the rules in their own card (`app/components/GolfIrelandRulesForm.tsx`):
+   the clubs (only those that granted access, from
+   `/api/golf-ireland/clubs`; none yet, and it says so, so a Golf Ireland
+   league cannot be finished until a club has said yes), how a round gets
+   in, holes, days, where. "League venues only" says a venue takes cards
+   once matched; the per-venue warning waits for matching to exist.
+4. **Done, live.** Linking, on a league's join screen
+   (`/trip/[code]/players`, `GolfIrelandLinkCard`) for the player this
+   phone has claimed: consent, the membership search
+   (`/api/golf-ireland/search`, which today always answers that Golf
+   Ireland is not connected yet), "This is me" (`/link`), and Unlink
+   (`/unlink`, deleting their cards). A confirmed player carries the badge
+   beside their name there. The organiser area lists requests to confirm
+   or refuse (`GolfIrelandRequests`, `/confirm` — behind the organiser
+   PIN, the same soft gate as every organiser write). The routes share
+   `app/api/golf-ireland/league.ts`; the pages read the closed tables
+   through `app/trip/[tripCode]/golfIreland.ts`, on the service role,
+   fail-soft. Still to do: filling in the handicap index on confirmation.
 5. Reading the cards: nightly, plus a "Fetch my scores" button and one for
    the organiser. The players-choose list, each card with its reason when
    it does not count. The league board reading Golf Ireland cards beside
@@ -230,8 +254,8 @@ the next.
 6. The privacy notice's Golf Ireland section (written before it opens, as
    `/privacy` promises), the terms, and these docs.
 
-Branding goes on only once Golf Ireland permits it, whichever stage that
-falls in.
+Their logo replaces the link only once Golf Ireland permits it, whichever
+stage that falls in.
 
 Later, separately: course and tee data from Golf Ireland (the email's first
 point), through the same validators the bulk import uses
