@@ -1,20 +1,23 @@
 // Golf Ireland — every decision, none of the network.
 //
 // A league can take its cards from Golf Ireland: players hand their scores
-// in as they always do, link their Golf Ireland account to their name in
-// the league, and Green Dot reads the cards that meet the league's rules.
-// lib/golfIrelandClient.ts is the one file that talks to Golf Ireland; this
-// file decides — what the league's rules are and how they are stored, what
-// a card from Golf Ireland must look like before anything trusts it, which
-// cards count and why the others do not, and what a sync should add and
-// remove. Pure, so every rule is tested against a fake Golf Ireland
-// (`npm run test:golf-ireland`) — the real API is not in our hands yet.
+// in as they always do, find themselves in their club's membership and
+// link that member to their name in the league, and Green Dot reads the
+// cards that meet the league's rules. lib/golfIrelandClient.ts is the one
+// file that talks to Golf Ireland; this file decides — what the league's
+// rules are and how they are stored, what a search may ask and show, when
+// a link may be made and read, what a card from Golf Ireland must look like
+// before anything trusts it, which cards count and why the others do not,
+// and what a sync should add and remove. Pure, so every rule is tested
+// against a fake Golf Ireland (`npm run test:golf-ireland`) — the real API
+// is not in our hands yet.
 //
 // ── What is assumed until Golf Ireland's documentation arrives ──
 //
-//   · Linking is a sign-in on Golf Ireland's own page, handing back an
-//     access token, as Strava does. The trip and player travel through it
-//     in a signed `state` (lib/signedState.ts).
+//   · Access comes club by club, with each club's permission: Green Dot
+//     holds one credential per club and reads that club's members with it.
+//     No player signs in to Golf Ireland. docs/golf-ireland.md.
+//   · A club's members can be searched by surname or membership number.
 //   · A card says when it was played, where, over 9 or 18 holes, and its
 //     gross and Stableford totals with the handicap of the day. Hole-by-
 //     hole scores are welcome and optional: nothing here needs them.
@@ -35,11 +38,24 @@
 //
 // ── What a player's link means ──────────────────────────────────
 //
-//   · Consent is ticked before linking and stored with the link.
+//   · The player ticks consent and picks themselves from a search: a link
+//     requested, not made. The organiser confirms it — they know their
+//     members, and nothing else proves a member is who they say — and
+//     only then is a card read (`linkReadable`).
 //   · Unlinking deletes their imported cards at once (decided October
-//     2026), and their standing re-tells without them.
+//     2026), and their standing re-tells without them. A club withdrawing
+//     does the same for every one of its members.
 
 import { WEEKDAY_NAMES, weekdayOf } from './weekdays'
+
+// Reading numbers out of what Golf Ireland sent — a figure outside sense
+// is null, never clamped.
+const int = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isInteger(v) ? v : null
+const num = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isFinite(v) ? v : null
+const inRange = (v: number | null, lo: number, hi: number) =>
+  v === null ? null : v >= lo && v <= hi ? v : null
 
 // ─── Configuration ─────────────────────────────────────────────
 
@@ -112,6 +128,12 @@ export const COURSE_RULES: { key: CourseRule; label: string; hint: string }[] = 
 ]
 
 export type GolfIrelandRules = {
+  /**
+   * Golf Ireland's ids for the clubs the league draws its members from —
+   * only clubs that have granted Green Dot access are offered. At least
+   * one; ascending, once each.
+   */
+  clubs: string[]
   entry: CardEntry
   holes: HoleRule
   /**
@@ -123,9 +145,13 @@ export type GolfIrelandRules = {
   courses: CourseRule
 }
 
-/** What the form starts on: every 18-hole card, any day, anywhere. */
-export function defaultRules(): GolfIrelandRules {
-  return { entry: 'automatic', holes: 18, courses: 'any' }
+/**
+ * What the form starts on: every 18-hole card, any day, anywhere — the
+ * clubs given, because there is no sensible default for those. A club's
+ * own winter league starts with its one club.
+ */
+export function defaultRules(clubs: readonly string[] = []): GolfIrelandRules {
+  return { clubs: tidyClubs(clubs) ?? [], entry: 'automatic', holes: 18, courses: 'any' }
 }
 
 /**
@@ -137,13 +163,26 @@ export function parseGolfIrelandRules(raw: unknown): GolfIrelandRules | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const r = raw as Record<string, unknown>
 
+  const clubs = tidyClubs(r.clubs)
   const entry = CARD_ENTRIES.find(e => e.key === r.entry)?.key
   const holes = HOLE_RULES.find(h => h.key === r.holes)?.key
   const courses = COURSE_RULES.find(c => c.key === r.courses)?.key
-  if (!entry || holes === undefined || !courses) return null
+  // No club means no member can ever be found, so rules without one are
+  // not rules — dropped, like any other missing answer.
+  if (!clubs || !entry || holes === undefined || !courses) return null
 
   const weekdays = tidyWeekdays(r.weekdays)
-  return { entry, holes, ...(weekdays ? { weekdays } : {}), courses }
+  return { clubs, entry, holes, ...(weekdays ? { weekdays } : {}), courses }
+}
+
+/** Club ids as stored: non-blank strings, trimmed, once each, ascending. Null when none. */
+export function tidyClubs(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null
+  const ids = [...new Set(raw
+    .filter((c): c is string => typeof c === 'string')
+    .map(c => c.trim())
+    .filter(Boolean))].sort()
+  return ids.length > 0 ? ids : null
 }
 
 /**
@@ -176,6 +215,241 @@ export function describeRules(rules: GolfIrelandRules): string {
   return parts.join(' · ')
 }
 
+// ─── Clubs ─────────────────────────────────────────────────────
+//
+// A club is the unit of access: Golf Ireland opens one club's members to
+// Green Dot, with that club's permission. The credential itself is a
+// secret and never leaves the server (lib/golfIrelandClient.ts,
+// `golf_ireland_clubs`); what is decided here is only whether it stands.
+
+export type ClubAccess = {
+  clubId: string
+  name: string
+  /** When the club's permission was recorded. */
+  grantedAt: string
+  /** When the club withdrew it, or null while it stands. */
+  withdrawnAt: string | null
+}
+
+/** Why Green Dot cannot read this club's members, or null when it can. */
+export function clubIssue(club: ClubAccess | null | undefined): string | null {
+  if (!club) return 'That club has not given Green Dot access to its members.'
+  if (club.withdrawnAt) return `${club.name || 'That club'} has withdrawn Green Dot's access to its members.`
+  return null
+}
+
+// ─── Finding yourself in the membership ────────────────────────
+//
+// The search lets a player find *themselves*. It must never become a way
+// to browse a club's members, which is the club's data, not the player's:
+// a search needs a surname or a membership number, answers only close
+// matches, at most a handful, and shows only enough to recognise yourself.
+
+/** A search by surname, or by membership number — nothing looser. */
+export type MemberQuery =
+  | { kind: 'surname'; surname: string }
+  | { kind: 'number'; number: string }
+
+/** The fewest letters a surname search takes. "O" is a browse, not a search. */
+export const MIN_SURNAME_LETTERS = 2
+
+/** The most matches a search shows. More than this asks for the number instead. */
+export const MAX_MEMBER_MATCHES = 5
+
+/**
+ * What a player typed, as a search — or a sentence saying why it is not
+ * one. Anything with five or more digits is a membership number; anything
+ * else is a surname, which needs two letters.
+ */
+export function parseMemberQuery(input: string): MemberQuery | { issue: string } {
+  const typed = input.trim()
+  const compact = typed.replace(/[\s-]/g, '')
+  if (/\d/.test(compact)) {
+    // Golf Ireland's number format is not known yet; up to three letters
+    // then five or more digits covers the shapes seen on Irish cards.
+    return /^[A-Za-z]{0,3}\d{5,}$/.test(compact)
+      ? { kind: 'number', number: compact.toUpperCase() }
+      : { issue: 'A membership number is five digits or more.' }
+  }
+  if (foldName(typed).length < MIN_SURNAME_LETTERS) {
+    return { issue: 'Type your surname, or your membership number.' }
+  }
+  return { kind: 'surname', surname: typed }
+}
+
+/**
+ * A name folded for comparing: case, accents, apostrophes, spaces and
+ * hyphens gone — O'Grady, OGrady, O Grady and Ó Grádaigh's accents all
+ * meet. The stored name is never changed; this is only for matching.
+ */
+export function foldName(name: string): string {
+  return name.normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z]/g, '')
+}
+
+/** A member of a club, as this app holds one — checked, never raw. */
+export type GolfIrelandMember = {
+  memberId: string
+  clubId: string
+  firstName: string
+  surname: string
+  /** Their current handicap index, when Golf Ireland says. */
+  handicapIndex: number | null
+}
+
+/** A member from the client, checked: the member, or null when it cannot be trusted. */
+export function normaliseMember(raw: unknown): GolfIrelandMember | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const r = raw as Record<string, unknown>
+  const str = (v: unknown) => typeof v === 'string' ? v.trim() : ''
+  const memberId = str(r.memberId)
+  const clubId = str(r.clubId)
+  const surname = str(r.surname)
+  if (!memberId || !clubId || !surname) return null
+  return {
+    memberId,
+    clubId,
+    firstName: str(r.firstName),
+    surname,
+    handicapIndex: inRange(num(r.handicapIndex), -10, 54),
+  }
+}
+
+/**
+ * The membership number with all but its last three characters hidden —
+ * enough for somebody to recognise their own, not enough to read anyone
+ * else's.
+ */
+export function maskMembershipNumber(id: string): string {
+  const shown = 3
+  if (id.length <= shown) return '•'.repeat(id.length)
+  return `${'•'.repeat(id.length - shown)}${id.slice(-shown)}`
+}
+
+/** One search result as the browser sees it: a name, a masked number, and a sealed pick. */
+export type MemberMatch = { name: string; masked: string; clubId: string; memberId: string }
+
+/**
+ * What a search may show, from what the club's membership answered.
+ *
+ * Only members of the league's clubs, and only exact matches: the same
+ * surname once folded, or the same membership number. A partial match is
+ * never shown, because "Gr" matching every Grady, Graham and Grant is the
+ * browse this exists to prevent. More than `MAX_MEMBER_MATCHES` shows none
+ * and says so, rather than showing a page of strangers.
+ *
+ * `memberId` is on each match for the server to seal (`MemberPick`) — the
+ * route sends the browser the name, the masked number and the seal, never
+ * the id itself.
+ */
+export function memberMatches(
+  members: readonly GolfIrelandMember[], query: MemberQuery, leagueClubs: readonly string[],
+): { matches: MemberMatch[]; tooMany: boolean } {
+  const want = query.kind === 'surname' ? foldName(query.surname) : query.number
+  const found = members.filter(m => leagueClubs.includes(m.clubId) && (query.kind === 'surname'
+    ? foldName(m.surname) === want
+    : m.memberId.replace(/[\s-]/g, '').toUpperCase() === want))
+  const unique = [...new Map(found.map(m => [`${m.clubId}:${m.memberId}`, m])).values()]
+  if (unique.length > MAX_MEMBER_MATCHES) return { matches: [], tooMany: true }
+  return {
+    matches: unique
+      .map(m => ({
+        name: [m.firstName, m.surname].filter(Boolean).join(' '),
+        masked: maskMembershipNumber(m.memberId),
+        clubId: m.clubId,
+        memberId: m.memberId,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name) || a.masked.localeCompare(b.masked)),
+    tooMany: false,
+  }
+}
+
+/**
+ * A search result the player picked, as it travels through the browser and
+ * back — sealed by the server with its secret (`sealJson` in
+ * lib/signedState.ts), so a player can only ask to link a member the
+ * search actually showed them, in this league, for this player, in time.
+ */
+export type MemberPick = { tripCode: string; playerId: string; clubId: string; memberId: string; expires: number }
+
+/** Ten minutes from the search to the pick. */
+export const MEMBER_PICK_TTL_MS = 10 * 60 * 1000
+
+/** A pick as sealed — short keys, it travels in a request. */
+export function packPick(p: MemberPick): Record<string, string | number> {
+  return { t: p.tripCode, p: p.playerId, c: p.clubId, m: p.memberId, e: p.expires }
+}
+
+/** An opened seal as a pick, if it is one and still in time; null otherwise. */
+export function unpackPick(raw: unknown, now: number): MemberPick | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const r = raw as Record<string, unknown>
+  const s = (v: unknown) => typeof v === 'string' && v.length > 0
+  if (!s(r.t) || !s(r.p) || !s(r.c) || !s(r.m) || typeof r.e !== 'number') return null
+  if (r.e < now) return null
+  return { tripCode: r.t as string, playerId: r.p as string, clubId: r.c as string, memberId: r.m as string, expires: r.e }
+}
+
+// ─── Links ─────────────────────────────────────────────────────
+
+/** A player's link to a member, as stored (`golf_ireland_links`). */
+export type MemberLink = {
+  playerId: string
+  memberId: string
+  clubId: string
+  consentedAt: string
+  /** When the organiser confirmed it; null while it is only requested. */
+  confirmedAt: string | null
+}
+
+/**
+ * Why this player cannot ask to link this member, or null when they can.
+ * One member feeds one player per league, and one player has one member —
+ * the rule the database also holds (UNIQUE on both).
+ */
+export function linkIssue(args: {
+  playerId: string
+  pick: Pick<MemberPick, 'clubId' | 'memberId'>
+  rules: GolfIrelandRules
+  club: ClubAccess | null | undefined
+  links: readonly MemberLink[]
+  consented: boolean
+}): string | null {
+  const { playerId, pick, rules, club, links, consented } = args
+  if (!consented) return 'Tick the box to agree before linking.'
+  if (!rules.clubs.includes(pick.clubId)) return 'That member is not at one of this league\'s clubs.'
+  const clubProblem = clubIssue(club)
+  if (clubProblem) return clubProblem
+  const mine = links.find(l => l.playerId === playerId)
+  if (mine) {
+    return mine.memberId === pick.memberId && mine.clubId === pick.clubId
+      ? 'You have already asked to link this member.'
+      : 'You are linked to another member. Unlink first.'
+  }
+  if (links.some(l => l.memberId === pick.memberId)) {
+    return 'That member is already linked to somebody in this league.'
+  }
+  return null
+}
+
+/**
+ * May this link's cards be read? Only once the organiser has confirmed it,
+ * and only while its club's access stands. A requested link reads nothing.
+ */
+export function linkReadable(link: MemberLink, club: ClubAccess | null | undefined): boolean {
+  return link.confirmedAt !== null && clubIssue(club) === null
+}
+
+/** What a player sees about their own link — "Waiting for the organiser to confirm", and so on. */
+export function describeLink(link: MemberLink | null, club: ClubAccess | null | undefined): string {
+  if (!link) return 'Not linked to Golf Ireland.'
+  const clubProblem = clubIssue(club)
+  if (clubProblem) return clubProblem
+  return link.confirmedAt
+    ? 'Linked. Your Golf Ireland cards are read into the league.'
+    : 'Waiting for the organiser to confirm it is you.'
+}
+
 // ─── A card from Golf Ireland ──────────────────────────────────
 
 /** A Golf Ireland card as this app holds it — checked, never raw. */
@@ -200,13 +474,6 @@ export type GolfIrelandCard = {
 
 /** The highest gross a hole can sensibly carry; a misread past it is refused. */
 export const MAX_HOLE_GROSS = 20
-
-const int = (v: unknown): number | null =>
-  typeof v === 'number' && Number.isInteger(v) ? v : null
-const num = (v: unknown): number | null =>
-  typeof v === 'number' && Number.isFinite(v) ? v : null
-const inRange = (v: number | null, lo: number, hi: number) =>
-  v === null ? null : v >= lo && v <= hi ? v : null
 
 /**
  * A card from the client, checked: the card if it can be trusted, null if

@@ -2,28 +2,35 @@
  * Golf Ireland tests. Run with: npm run test:golf-ireland
  *
  * Golf Ireland's API is not in our hands yet, so everything here runs
- * against a fake that keeps the client's promises. Four halves: the
- * league's stored rules, what a card must be before anything trusts it,
- * which cards count and why the others do not, and what a sync adds and
- * removes — then the wiring that holds it together: the placeholder
- * client refuses rather than guesses, the state signing is one copy shared
- * with Strava, and migration 056 closes its tables to the browser.
+ * against a fake that keeps the client's promises — club by club, the
+ * access model docs/golf-ireland.md assumes. In order: the league's stored
+ * rules, a club's access, finding yourself in the membership without
+ * browsing it, when a link may be asked for and read, what a card must be
+ * before anything trusts it, which cards count and why the others do not,
+ * and what a sync adds and removes — then the wiring that holds it
+ * together: the placeholder client refuses rather than guesses, signing is
+ * one copy shared with Strava, and migration 056 closes its tables to the
+ * browser.
  */
 
 import fs from 'fs'
 import {
   golfIrelandConfig, SCORE_SOURCES, scoresLive, readsGolfIreland,
   defaultRules, parseGolfIrelandRules, tidyWeekdays, describeWeekdays, describeRules,
-  normaliseCard, leagueWindow, cardIssue, planImport, pickIssue,
-  type GolfIrelandRules, type CardContext, type GolfIrelandCard,
+  normaliseCard, leagueWindow, cardIssue, planImport, pickIssue, tidyClubs,
+  clubIssue, parseMemberQuery, foldName, normaliseMember, maskMembershipNumber, memberMatches,
+  packPick, unpackPick, linkIssue, linkReadable, describeLink,
+  MAX_MEMBER_MATCHES, MEMBER_PICK_TTL_MS,
+  type GolfIrelandRules, type CardContext, type GolfIrelandCard, type ClubAccess,
+  type GolfIrelandMember, type MemberLink, type MemberQuery,
 } from '../lib/golfIreland'
 import {
   golfIrelandClient, GolfIrelandNotReady,
-  type GolfIrelandClient, type RawCard,
+  type GolfIrelandClient, type RawCard, type RawMember, type ClubCredential,
 } from '../lib/golfIrelandClient'
 import { parseLeagueSetup, describeLeagueSetup } from '../lib/leagueSetup'
 import { parseBracketSetup } from '../lib/bracketSetup'
-import { signState, verifyState } from '../lib/signedState'
+import { signState, verifyState, sealJson, openJson } from '../lib/signedState'
 import * as strava from '../lib/strava'
 import { weekdayOf } from '../lib/weekdays'
 
@@ -46,29 +53,44 @@ const pending: Promise<unknown>[] = []
 
 // ─── A fake Golf Ireland ───────────────────────────────────────
 //
-// Holds members' cards and pages them, as the real one is assumed to.
-// `brokenPage` makes the second page fail, which is how a list comes back
-// incomplete.
+// Club by club: each club has a credential, a membership and its members'
+// cards, and pages the cards as the real one is assumed to. `brokenPage`
+// makes the second page fail, which is how a list comes back incomplete.
+// A credential only reaches its own club — the same wall the real one is
+// assumed to keep.
 
-function fakeGolfIreland(cards: Record<string, RawCard[]>, opts: { pageSize?: number; brokenPage?: boolean } = {}): GolfIrelandClient {
+type FakeClub = { name: string; active: boolean; members: RawMember[]; cards: Record<string, RawCard[]> }
+
+function fakeGolfIreland(clubs: Record<string, FakeClub>, opts: { pageSize?: number; brokenPage?: boolean } = {}): GolfIrelandClient {
   const pageSize = opts.pageSize ?? 50
+  const reach = (cred: ClubCredential) => {
+    const club = clubs[cred.clubId]
+    if (!club || cred.accessToken !== `key-${cred.clubId}`) throw new Error('401')
+    return club
+  }
   return {
-    authorizeUrl: (redirect, state) => `https://fake.golfireland.test/authorize?r=${encodeURIComponent(redirect)}&state=${state}`,
-    exchangeCode: async code => ({
-      tokens: { accessToken: `at-${code}`, refreshToken: `rt-${code}`, expiresAt: Date.now() + 3_600_000 },
-      member: { memberId: code, name: 'Fake Member', handicapIndex: 12.4 },
-    }),
-    refresh: async rt => ({ accessToken: `at2-${rt}`, refreshToken: rt, expiresAt: Date.now() + 3_600_000 }),
-    cards: async (token, from, to) => {
-      const mine = (cards[token.replace(/^at-/, '')] ?? [])
+    club: async cred => { const c = reach(cred); return { clubId: cred.clubId, name: c.name, active: c.active } },
+    refresh: async cred => ({ ...cred, expiresAt: Date.now() + 3_600_000 }),
+    searchMembers: async (cred, q) => {
+      // Deliberately generous, like a real search box: a prefix on the
+      // surname. What may be *shown* is memberMatches' call, not the API's.
+      const c = reach(cred)
+      return 'number' in q
+        ? c.members.filter(m => String(m.memberId) === q.number)
+        : c.members.filter(m => String(m.surname).toLowerCase().startsWith(q.surname.slice(0, 2).toLowerCase()))
+    },
+    member: async (cred, id) => reach(cred).members.find(m => m.memberId === id) ?? null,
+    cards: async (cred, memberId, from, to) => {
+      const mine = (reach(cred).cards[memberId] ?? [])
         .filter(c => typeof c.playedOn === 'string' && c.playedOn >= from && c.playedOn <= to)
       const pages = Math.ceil(mine.length / pageSize)
       if (opts.brokenPage && pages > 1) return { cards: mine.slice(0, pageSize), complete: false }
       return { cards: mine, complete: true }
     },
-    revoke: async () => {},
   }
 }
+
+const credFor = (clubId: string): ClubCredential => ({ clubId, accessToken: `key-${clubId}`, refreshToken: null, expiresAt: null })
 
 const card = (over: Partial<Record<keyof RawCard, unknown>> = {}): RawCard => ({
   cardId: 'c-1',
@@ -88,7 +110,7 @@ const winter: CardContext = {
   venueCourseIds: ['gi-rosapenna', 'gi-portsalon'],
   source: 'golf_ireland',
 }
-const saturdays18: GolfIrelandRules = { entry: 'automatic', holes: 18, weekdays: [6], courses: 'venues' }
+const saturdays18: GolfIrelandRules = { clubs: ['gi-club-rosapenna'], entry: 'automatic', holes: 18, weekdays: [6], courses: 'venues' }
 
 // ─── Configuration ─────────────────────────────────────────────
 
@@ -118,7 +140,11 @@ section('Three answers to where the scores come from, live first')
 
 section('The rules are read whole or not at all')
 {
-  eq(defaultRules(), { entry: 'automatic', holes: 18, courses: 'any' }, 'the form starts on every 18-hole card, anywhere')
+  eq(defaultRules(['gi-b', 'gi-a', 'gi-b']), { clubs: ['gi-a', 'gi-b'], entry: 'automatic', holes: 18, courses: 'any' },
+    'the form starts on every 18-hole card, anywhere, for the clubs given')
+  eq(parseGolfIrelandRules(defaultRules()), null, 'with no club the rules are not rules — nobody could ever be found')
+  eq(parseGolfIrelandRules({ ...saturdays18, clubs: ['  ', 7] }), null, 'blank and non-string club ids are no clubs')
+  eq(tidyClubs([' gi-b ', 'gi-a', 'gi-a']), ['gi-a', 'gi-b'], 'club ids: trimmed, once each, in order')
   eq(parseGolfIrelandRules(saturdays18), saturdays18, 'complete rules round-trip')
   eq(parseGolfIrelandRules({ ...saturdays18, holes: 'either' })?.holes, 'either', '"either" survives')
   eq(parseGolfIrelandRules({ entry: 'automatic', courses: 'any' }), null, 'no hole rule: dropped, never repaired')
@@ -139,7 +165,7 @@ section('Weekdays are tidied, and none or all seven both mean any day')
   eq(describeWeekdays([0, 6]), 'Sundays and Saturdays', 'two days')
   eq(describeWeekdays([2, 4, 6]), 'Tuesdays, Thursdays and Saturdays', 'three days')
   eq(describeRules(saturdays18), '18 holes · Saturdays · league venues', 'the rules as facts')
-  eq(describeRules({ entry: 'player_picks', holes: 'either', courses: 'any' }),
+  eq(describeRules({ clubs: ['gi-a'], entry: 'player_picks', holes: 'either', courses: 'any' }),
     '9 or 18 holes · any day · any course · players choose', 'and the other answers')
 }
 
@@ -170,6 +196,132 @@ section('A league stores where its scores come from, and the rules with them')
   ok(describeLeagueSetup(gi, 1).endsWith('scores from Golf Ireland'), 'the organiser card says where the scores come from')
   ok(describeLeagueSetup({ ...gi, scoreSource: 'both' }, 1).endsWith('scored here and from Golf Ireland'), 'both, said')
   ok(!describeLeagueSetup(parseLeagueSetup(base)!, 1).includes('Golf Ireland'), 'a live league says nothing about it')
+}
+
+// ─── A club's access ───────────────────────────────────────────
+
+const rosapenna: ClubAccess = { clubId: 'gi-club-rosapenna', name: 'Rosapenna Golf Club', grantedAt: '2026-10-21T10:00:00Z', withdrawnAt: null }
+
+section('A club is the unit of access, and its access stands until it withdraws')
+{
+  eq(clubIssue(rosapenna), null, 'a club that said yes: readable')
+  eq(clubIssue(null), 'That club has not given Green Dot access to its members.', 'a club that never said yes: not')
+  eq(clubIssue({ ...rosapenna, withdrawnAt: '2027-01-05T09:00:00Z' }),
+    'Rosapenna Golf Club has withdrawn Green Dot\'s access to its members.', 'a club that withdrew, named')
+}
+
+// ─── Finding yourself ──────────────────────────────────────────
+
+section('A search is a surname or a membership number, nothing looser')
+{
+  eq(parseMemberQuery("O'Grady"), { kind: 'surname', surname: "O'Grady" }, 'a surname')
+  eq(parseMemberQuery('  1234567 '), { kind: 'number', number: '1234567' }, 'a membership number')
+  eq(parseMemberQuery('ie-1234567'), { kind: 'number', number: 'IE1234567' }, 'a prefixed number, compacted')
+  ok('issue' in parseMemberQuery('O'), 'one letter is a browse, not a search')
+  ok('issue' in parseMemberQuery("O'"), 'nor is one letter and an apostrophe')
+  ok('issue' in parseMemberQuery(''), 'nothing is not a search')
+  ok('issue' in parseMemberQuery('123'), 'three digits is not a membership number')
+  ok('issue' in parseMemberQuery('Grady 12'), 'a name with digits is neither')
+}
+
+section('Names meet however they were typed')
+{
+  eq(foldName("O'Grady"), foldName('OGrady'), "O'Grady and OGrady")
+  eq(foldName('O Grady'), foldName('o’grady'), 'a space and a curly apostrophe')
+  eq(foldName('Ó Gráda'), 'ograda', 'accents')
+  ok(foldName('Mac Giolla') === foldName('MacGiolla'), 'and spaces inside a surname')
+}
+
+const members: RawMember[] = [
+  { memberId: '1000001', clubId: 'gi-club-rosapenna', firstName: 'Ross', surname: "O'Grady", handicapIndex: 14.2 },
+  { memberId: '1000002', clubId: 'gi-club-rosapenna', firstName: 'Dave', surname: 'OGrady', handicapIndex: 9.8 },
+  { memberId: '1000003', clubId: 'gi-club-rosapenna', firstName: 'Mary', surname: 'Grant', handicapIndex: 22 },
+  { memberId: '1000004', clubId: 'gi-club-portsalon', firstName: 'Seán', surname: "O'Grady", handicapIndex: 3 },
+]
+const checked = members.map(normaliseMember).filter((m): m is GolfIrelandMember => m !== null)
+
+section('A member is trusted only once checked')
+{
+  eq(checked.length, 4, 'four sound members')
+  eq(normaliseMember({ memberId: '1', clubId: 'c', surname: '' }), null, 'no surname: refused')
+  eq(normaliseMember({ memberId: '', clubId: 'c', surname: 'X' }), null, 'no id: refused')
+  eq(normaliseMember({ memberId: '1', surname: 'X' }), null, 'no club: refused')
+  eq(normaliseMember({ memberId: '1', clubId: 'c', surname: 'X', handicapIndex: 99 })?.handicapIndex, null,
+    'an absurd index costs the index, not the member')
+}
+
+section('A search shows only exact matches in the league\'s clubs, and only enough to recognise yourself')
+{
+  const q = (t: string) => parseMemberQuery(t) as MemberQuery
+  const found = memberMatches(checked, q("o'grady"), ['gi-club-rosapenna'])
+  eq(found.matches.map(m => m.name), ['Dave OGrady', "Ross O'Grady"],
+    "both spellings of O'Grady at the league's club, sorted")
+  ok(!found.matches.some(m => m.name.includes('Seán')), 'the Portsalon O\'Grady is not at the league\'s club, so not shown')
+  eq(memberMatches(checked, q('Gr'), ['gi-club-rosapenna']).matches, [],
+    'a partial surname never matches — "Gr" finds nobody, not Grant')
+  eq(found.matches.map(m => m.masked), ['••••002', '••••001'], 'the number shows its last three, no more')
+  eq(memberMatches(checked, q('1000003'), ['gi-club-rosapenna']).matches.map(m => m.name), ['Mary Grant'],
+    'a membership number finds its member')
+  eq(memberMatches(checked, q('1000004'), ['gi-club-rosapenna']).matches, [],
+    'a number at another club finds nobody')
+  ok(!JSON.stringify(found.matches).includes('14.2'), 'no handicap in a search result')
+
+  const crowd = Array.from({ length: MAX_MEMBER_MATCHES + 1 }, (_, i) =>
+    normaliseMember({ memberId: `20000${i}`, clubId: 'gi-club-rosapenna', firstName: `M${i}`, surname: 'Murphy' })!)
+  eq(memberMatches(crowd, q('Murphy'), ['gi-club-rosapenna']), { matches: [], tooMany: true },
+    'more than a handful: none shown, and the player is asked for their number instead')
+  eq(memberMatches(crowd.slice(0, MAX_MEMBER_MATCHES), q('Murphy'), ['gi-club-rosapenna']).matches.length, MAX_MEMBER_MATCHES,
+    'exactly the handful: all shown')
+
+  eq(maskMembershipNumber('12'), '••', 'a short id hides everything')
+}
+
+section('A pick is sealed by the server, and only ever the member the search showed')
+{
+  const secret = 'gi-secret', now = Date.now()
+  const pick = { tripCode: 'GX7K2P', playerId: 'p-1', clubId: 'gi-club-rosapenna', memberId: '1000001', expires: now + MEMBER_PICK_TTL_MS }
+  const sealed = sealJson(packPick(pick), secret)
+  eq(unpackPick(openJson(sealed, secret), now), pick, 'sealed, sent, opened: the same pick')
+  eq(openJson(sealed, 'another-secret'), null, 'sealed with another secret: refused')
+  const [body, sig] = sealed.split('.')
+  const forged = Buffer.from(JSON.stringify({ ...packPick(pick), m: '1000002' })).toString('base64url')
+  eq(openJson(`${forged}.${sig}`, secret), null, 'a different member under the same signature: refused')
+  eq(openJson(`${body}.${sig}.x`, secret), null, 'anything appended: refused')
+  eq(unpackPick(openJson(sealed, secret), now + MEMBER_PICK_TTL_MS + 1), null, 'ten minutes on: expired')
+  eq(unpackPick({ t: 'GX7K2P', p: 'p-1', c: 'c', e: now + 1000 }, now), null, 'no member: not a pick')
+}
+
+// ─── Links ─────────────────────────────────────────────────────
+
+section('A link is asked for once, for one member, by one player, with consent')
+{
+  const pick = { clubId: 'gi-club-rosapenna', memberId: '1000001' }
+  const base = { playerId: 'p-1', pick, rules: saturdays18, club: rosapenna, links: [] as MemberLink[], consented: true }
+  eq(linkIssue(base), null, 'consent ticked, the league\'s club, nobody linked: may ask')
+  eq(linkIssue({ ...base, consented: false }), 'Tick the box to agree before linking.', 'no consent: no link')
+  eq(linkIssue({ ...base, pick: { ...pick, clubId: 'gi-club-portsalon' } }),
+    'That member is not at one of this league\'s clubs.', 'another club\'s member')
+  eq(linkIssue({ ...base, club: { ...rosapenna, withdrawnAt: '2027-01-01T00:00:00Z' } }),
+    'Rosapenna Golf Club has withdrawn Green Dot\'s access to its members.', 'a withdrawn club')
+  const mine: MemberLink = { playerId: 'p-1', memberId: '1000001', clubId: 'gi-club-rosapenna', consentedAt: 'x', confirmedAt: null }
+  eq(linkIssue({ ...base, links: [mine] }), 'You have already asked to link this member.', 'the same ask twice')
+  eq(linkIssue({ ...base, pick: { ...pick, memberId: '1000002' }, links: [mine] }),
+    'You are linked to another member. Unlink first.', 'one player, one member')
+  eq(linkIssue({ ...base, playerId: 'p-2', links: [mine] }),
+    'That member is already linked to somebody in this league.', 'one member, one player — nobody\'s cards count twice')
+}
+
+section('A link reads nothing until the organiser confirms it, and nothing once its club withdraws')
+{
+  const asked: MemberLink = { playerId: 'p-1', memberId: '1000001', clubId: 'gi-club-rosapenna', consentedAt: 'x', confirmedAt: null }
+  const confirmed = { ...asked, confirmedAt: '2026-10-22T08:00:00Z' }
+  ok(!linkReadable(asked, rosapenna), 'requested only: no card is read')
+  ok(linkReadable(confirmed, rosapenna), 'confirmed: read')
+  ok(!linkReadable(confirmed, { ...rosapenna, withdrawnAt: '2027-01-01T00:00:00Z' }), 'confirmed, club withdrawn: not read')
+  ok(!linkReadable(confirmed, null), 'no club access at all: not read')
+  eq(describeLink(asked, rosapenna), 'Waiting for the organiser to confirm it is you.', 'what the player sees while waiting')
+  eq(describeLink(confirmed, rosapenna), 'Linked. Your Golf Ireland cards are read into the league.', 'and once confirmed')
+  eq(describeLink(null, rosapenna), 'Not linked to Golf Ireland.', 'and with no link')
 }
 
 // ─── A card ────────────────────────────────────────────────────
@@ -314,30 +466,50 @@ section('Players choose: a sync refreshes what was put forward, and never puts a
 
 // ─── The whole path, against the fake ──────────────────────────
 
-section('Fake Golf Ireland → checked cards → a plan, end to end')
+section('Fake Golf Ireland, club by club → search → link → checked cards → a plan')
 {
-  const raw = {
-    m1: [
-      card({ cardId: 'a', playedOn: '2026-11-07' }),
-      card({ cardId: 'b', playedOn: '2026-11-14', courseId: 'gi-portsalon' }),
-      card({ cardId: 'c', playedOn: '2026-11-21', holesPlayed: 12 }), // a misread
-      card({ cardId: 'd', playedOn: '2026-10-24' }),                 // before the league
-    ],
+  const fake: Record<string, FakeClub> = {
+    'gi-club-rosapenna': {
+      name: 'Rosapenna Golf Club', active: true, members,
+      cards: {
+        '1000001': [
+          card({ cardId: 'a', playedOn: '2026-11-07' }),
+          card({ cardId: 'b', playedOn: '2026-11-14', courseId: 'gi-portsalon' }),
+          card({ cardId: 'c', playedOn: '2026-11-21', holesPlayed: 12 }), // a misread
+          card({ cardId: 'd', playedOn: '2026-10-24' }),                 // before the league
+        ],
+      },
+    },
+    'gi-club-portsalon': { name: 'Portsalon Golf Club', active: false, members: [], cards: {} },
   }
+  const leagueClubs = saturdays18.clubs
+
   const run = async (gi: GolfIrelandClient, stored: { cardId: string }[]) => {
-    const { tokens } = await gi.exchangeCode('m1', 'https://greendot.live/cb')
-    const list = await gi.cards(tokens.accessToken, winter.from!, winter.to!)
+    // The player searches; the API answers generously; memberMatches decides.
+    const raw = await gi.searchMembers(credFor('gi-club-rosapenna'), { surname: "O'Grady" })
+    const shown = memberMatches(raw.map(normaliseMember).filter((m): m is GolfIrelandMember => m !== null),
+      parseMemberQuery("O'Grady") as MemberQuery, leagueClubs)
+    const me = shown.matches.find(m => m.name === "Ross O'Grady")!
+    const link: MemberLink = { playerId: 'p-1', memberId: me.memberId, clubId: me.clubId, consentedAt: 'x', confirmedAt: 'y' }
+    const status = await gi.club(credFor(link.clubId))
+    const club: ClubAccess = { ...rosapenna, withdrawnAt: status.active ? null : 'now' }
+    if (!linkReadable(link, club)) return null
+    const list = await gi.cards(credFor(link.clubId), link.memberId, winter.from!, winter.to!)
     const fetched = list.cards.map(normaliseCard).filter((c): c is GolfIrelandCard => c !== null)
     return planImport({ stored, fetched, rules: saturdays18, ctx: winter, complete: list.complete })
   }
-  pending.push(run(fakeGolfIreland(raw), [{ cardId: 'gone' }]).then(plan => {
-    eq(plan.upsert.map(c => c.cardId), ['a', 'b'],
+  pending.push(run(fakeGolfIreland(fake), [{ cardId: 'gone' }]).then(plan => {
+    eq(plan?.upsert.map(c => c.cardId), ['a', 'b'],
       'the two Saturday venue cards in the window; the misread and the October card never reach the plan')
-    eq(plan.remove, ['gone'], 'and a card no longer listed goes')
+    eq(plan?.remove, ['gone'], 'and a card no longer listed goes')
   }))
-  pending.push(run(fakeGolfIreland(raw, { pageSize: 1, brokenPage: true }), [{ cardId: 'gone' }]).then(plan => {
-    eq(plan.remove, [], 'a page that failed: nothing removed')
+  pending.push(run(fakeGolfIreland(fake, { pageSize: 1, brokenPage: true }), [{ cardId: 'gone' }]).then(plan => {
+    eq(plan?.remove, [], 'a page that failed: nothing removed')
   }))
+  pending.push(fakeGolfIreland(fake).club(credFor('gi-club-portsalon'))
+    .then(st => ok(!st.active, 'a club that withdrew says so — the one answer that ends its access')))
+  pending.push(fakeGolfIreland(fake).cards({ ...credFor('gi-club-portsalon'), accessToken: 'key-gi-club-rosapenna' }, '1000001', '2026-11-01', '2026-11-30')
+    .then(() => ok(false, 'one club\'s key should not reach another club'), () => ok(true, 'one club\'s key never reaches another club\'s members')))
 }
 
 // ─── Wiring ────────────────────────────────────────────────────
@@ -345,20 +517,31 @@ section('Fake Golf Ireland → checked cards → a plan, end to end')
 section('Until Golf Ireland\'s documentation arrives, the client refuses rather than guesses')
 {
   const gi = golfIrelandClient({ clientId: 'id', clientSecret: 's', apiBase: 'https://api.example.ie' })
-  let threw = false
-  try { gi.authorizeUrl('https://greendot.live/cb', 'st') } catch (e) { threw = e instanceof GolfIrelandNotReady }
-  ok(threw, 'the sign-in link refuses with GolfIrelandNotReady')
-  pending.push(gi.cards('t', '2026-11-01', '2026-11-30').then(
-    () => ok(false, 'cards should refuse'),
-    e => ok(e instanceof GolfIrelandNotReady, 'reading cards refuses with GolfIrelandNotReady'),
-  ))
-  ok(!read('lib/golfIrelandClient.ts').includes('fetch('), 'and no request has been guessed at')
+  const cred = credFor('gi-club-rosapenna')
+  const calls: [string, () => Promise<unknown>][] = [
+    ['club', () => gi.club(cred)],
+    ['refresh', () => gi.refresh(cred)],
+    ['searchMembers', () => gi.searchMembers(cred, { surname: 'Grady' })],
+    ['member', () => gi.member(cred, '1')],
+    ['cards', () => gi.cards(cred, '1', '2026-11-01', '2026-11-30')],
+  ]
+  for (const [name, call] of calls) {
+    pending.push(call().then(
+      () => ok(false, `${name} should refuse`),
+      e => ok(e instanceof GolfIrelandNotReady, `${name} refuses with GolfIrelandNotReady`),
+    ))
+  }
+  const client = read('lib/golfIrelandClient.ts')
+  ok(!client.includes('fetch('), 'and no request has been guessed at')
+  ok(!/authorizeUrl|exchangeCode/.test(client), 'no player sign-in: access is the club\'s, not each player\'s')
   ok(!/from ['"]\.\/golfIrelandClient['"]/.test(read('lib/golfIreland.ts')), 'the rules never import the client — they stay pure')
 }
 
-section('The signed state is one copy, shared with Strava')
+section('Signing is one copy, shared with Strava')
 {
   const now = Date.now()
+  ok(signState({ tripCode: 'A', playerId: 'B', expires: 1 }, 's') === sealJson({ t: 'A', p: 'B', e: 1 }, 's'),
+    'Strava\'s state is a seal like any other — the same bytes it always was')
   const st = signState({ tripCode: 'GX7K2P', playerId: 'p-1', expires: now + 60_000 }, 'gi-secret')
   eq(verifyState(st, 'gi-secret', now)?.playerId, 'p-1', 'signed and read back')
   eq(verifyState(st, 'strava-secret', now), null, 'a state signed for one provider is refused by the other')
@@ -377,7 +560,7 @@ section('Weekdays are one copy')
 section('Migration 056 closes its tables to the browser')
 {
   const sql = read('supabase/migrations/20260101000056_golf_ireland.sql')
-  for (const t of ['golf_ireland_members', 'golf_ireland_links', 'golf_ireland_cards']) {
+  for (const t of ['golf_ireland_clubs', 'golf_ireland_members', 'golf_ireland_links', 'golf_ireland_cards']) {
     ok(sql.includes(`ALTER TABLE ${t}`) && new RegExp(`ALTER TABLE ${t}\\s+ENABLE ROW LEVEL SECURITY`).test(sql), `${t}: RLS on`)
   }
   ok(!/CREATE POLICY/i.test(sql), 'and no policy lets anybody in')
@@ -385,6 +568,11 @@ section('Migration 056 closes its tables to the browser')
     'every statement is safe to re-paste')
   ok(sql.includes('CHECK (holes_played IN (9, 18))'), 'the database holds the 9-or-18 rule too')
   ok(sql.includes('gross_total IS NOT NULL OR stableford_points IS NOT NULL'), 'and the nothing-to-score rule')
+  const memberTable = sql.slice(sql.indexOf('CREATE TABLE IF NOT EXISTS golf_ireland_members'), sql.indexOf('CREATE TABLE IF NOT EXISTS golf_ireland_links'))
+  ok(!/token/.test(memberTable), 'a member carries no token — nobody signs in')
+  ok(/club_id\s+text\s+NOT NULL REFERENCES golf_ireland_clubs/.test(memberTable), 'and belongs to a club')
+  ok(/confirmed_at\s+timestamptz,/.test(sql), 'a link records the organiser\'s confirmation, empty while only requested')
+  ok(sql.includes('DROP COLUMN IF EXISTS access_token'), 'an earlier per-player paste is brought into line')
 }
 
 // ─── Result ────────────────────────────────────────────────────

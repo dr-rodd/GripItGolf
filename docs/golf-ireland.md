@@ -67,32 +67,39 @@ member's name. The assumed answer, until Golf Ireland offers better:
 
 | Piece | Where | What it is |
 |---|---|---|
-| The rules | `lib/golfIreland.ts` | Every decision, pure: the score source, the inclusion rules, what a card must be (`normaliseCard`), whether it counts (`cardIssue`), what a sync adds and removes (`planImport`), what a player may put forward (`pickIssue`). **All of it holds under the club model unchanged** |
-| The client | `lib/golfIrelandClient.ts` | The calls Green Dot needs. **A placeholder until the documentation arrives**: every call refuses with `GolfIrelandNotReady`. **Its shape predates the club model** (see below) |
+| The rules | `lib/golfIreland.ts` | Every decision, pure: the score source; the inclusion rules, including the league's clubs (`GolfIrelandRules.clubs`); whether a club's access stands (`clubIssue`); the search (`parseMemberQuery`, `foldName`, `memberMatches`, `maskMembershipNumber`); the sealed pick (`MemberPick`); when a link may be asked for (`linkIssue`) and read (`linkReadable`); what a card must be (`normaliseCard`), whether it counts (`cardIssue`), what a sync adds and removes (`planImport`), what a player may put forward (`pickIssue`) |
+| The client | `lib/golfIrelandClient.ts` | The five calls Green Dot needs, every one on a club's credential: `club`, `refresh`, `searchMembers`, `member`, `cards`. **A placeholder until the documentation arrives**: every call refuses with `GolfIrelandNotReady` |
 | The league's answers | `lib/leagueSetup.ts` | `scoreSource` and `golfIreland` ride on `trips.bracket_setup` with the league's other answers, so the question needs no migration |
-| The tables | migration 056 | `golf_ireland_members`, `golf_ireland_links`, `golf_ireland_cards`, `courses.golf_ireland_id`. All three tables closed to the browser. **Written for per-player sign-in** (see below) |
-| The tests | `npm run test:golf-ireland` | Against a fake Golf Ireland that pages its cards and can fail a page |
+| The tables | migration 056 | `golf_ireland_clubs` (one credential per club, with the record of its yes and any withdrawal), `golf_ireland_members` (linked members, no tokens), `golf_ireland_links` (consent and the organiser's confirmation), `golf_ireland_cards`, `courses.golf_ireland_id`. All four tables closed to the browser |
+| The seal | `lib/signedState.ts` | `sealJson`/`openJson`: a pick travels through the browser signed, so a player can only ask to link a member the search showed them. Strava's `state` is the same seal |
+| The tests | `npm run test:golf-ireland` | Against a fake Golf Ireland that holds clubs, memberships and cards, keeps one club's key out of another club, and can fail a page |
 
-### What the club model changes in what is already built
+### How the club model was built in (October 2026)
 
-Stages 1 and 2 were written assuming each player signs in to Golf Ireland,
-the way Strava works. Under the club model:
+Stages 1 and 2 were first written assuming each player signs in to Golf
+Ireland, the way Strava works, and were then reworked:
 
-- **The rules (`lib/golfIreland.ts`) stand.** Which cards count, the card
-  checks and the sync plan do not care how access was given.
-- **The client changes shape.** Out: the sign-in link, the code exchange
-  and per-player refresh. In: a club credential, `searchMembers(club,
-  query)`, `cards(club, member, from, to)` and a check that the club's
-  access still stands. The signed `state` (`lib/signedState.ts`) stays
-  Strava's; Golf Ireland no longer needs it.
-- **Migration 056 needs revising before anything uses it.**
-  `golf_ireland_members` holds a token per member. Under this model it
-  becomes a plain record (member id, club, name), and a new
-  `golf_ireland_clubs` table holds the one credential per club with when
-  it was granted and withdrawn. `golf_ireland_links` gains when the
-  organiser confirmed the link. **Don't apply 056 yet.** If it has already
-  been applied there's no harm, because nothing reads it, and the revision
-  becomes a migration on top of it.
+- **The card rules stood unchanged.** Which cards count, the card checks
+  and the sync plan never cared how access was given.
+- **The client lost the sign-in**: no sign-in link, no code exchange, no
+  per-player token. Every call now takes a club's credential, and a
+  credential only ever reaches its own club.
+- **Migration 056 was rewritten** for a credential per club, members with
+  no tokens, and links that record the organiser's confirmation. It brings
+  an earlier paste of the old version into line, so it is safe to run
+  either way. It was tested on a local Postgres four ways: fresh, re-pasted,
+  over the old version, and that re-pasted. All four end with the same
+  columns.
+
+### What a search sends to a phone
+
+The server runs the search on the club's credential. It sends the browser
+each match's name, its masked number, and a **sealed pick**: the trip, the
+player, the club and the member, signed with Green Dot's secret and good
+for ten minutes. The member's id itself never reaches the browser. Asking
+to link sends the pick back, and the server opens it, so a player can only
+ask for a member the search actually showed them, in this league, as
+themselves.
 
 ## What the organiser decides, in the league's creation form
 
@@ -204,11 +211,10 @@ Built the way Green Dot Run was: each stage tested on greendot.live before
 the next.
 
 1. **Done.** The rules, the placeholder client and a fake Golf Ireland for
-   the tests. Nothing on screen. The rules hold under the club model; the
-   client's shape gets revised with stage 2.
-2. **Written, but needs revising for the club model: don't apply yet.**
-   Migration 056, reworked to hold a credential per club, members without
-   tokens, and confirmed links.
+   the tests, club by club: card rules, clubs, the search, the sealed pick,
+   links. Nothing on screen.
+2. **Done, apply by hand.** Migration 056, club-shaped. Safe to run whether
+   or not the earlier version was ever run.
 3. The creation form's questions: the clubs, where the scores come from,
    and the rules. A warning on the venues step when "league venues only"
    is chosen and a venue is not matched to Golf Ireland yet.
