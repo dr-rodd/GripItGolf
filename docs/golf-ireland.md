@@ -176,11 +176,28 @@ which need one of our rounds and one of our courses.
 
 **No Golf Ireland branding goes on the live site** (agreed October 2026)
 until Golf Ireland has given written permission to use it. **The screens
-went live anyway (October 2026), with a generic chain link in our own
-emerald wherever their logo will sit** — `app/components/LinkMark.tsx`:
-`LinkMark` (the drawn link), `LinkedBadge` (a linked player's badge,
-"Linked to Golf Ireland") and `LinkHeading` (the top of each Golf Ireland
-card). When permission comes, those three are what change, and nothing
+went live anyway (October 2026), with a stand-in mark wherever their logo
+will sit** — Ross's own drawing of two loose loops passing through each
+other, emerald and grey, traced into `app/components/LinkMark.tsx`
+(Ross's call that it is sufficiently different from their mark; it is
+drawn in our emerald and the neutral bark, never their teal): `LinkMark`
+(the mark), `LinkedBadge` (a linked player's badge, "Linked to Golf
+Ireland") and `LinkHeading` (the top of each Golf Ireland card).
+
+**The badge is beside a confirmed player's name** on the league's join
+screen, the hub's Players list and the leaderboard (individual rows),
+each fed by `golfIrelandLinkedIds` in `app/trip/[tripCode]/golfIreland.ts`,
+which asks nothing unless the league reads Golf Ireland.
+
+**The walkthrough** (`app/components/GolfIrelandTour.tsx`) is a mimic of
+linking by membership number, in the intro's manner — six pages, each a
+framed miniature with the part that matters ringed, the words on a
+deep-emerald sweep: your club says yes, type your number, that's you, the
+organiser checks, your rounds arrive, you're linked. Every name and number
+in it is invented and it reads and writes nothing. It opens from the link
+card, the creation form's Golf Ireland card and the organiser's card, and
+on its own at `/demo/golf-ireland` (unlinked, not indexed) — the only way
+to see it until a club has given access. When permission comes, those three are what change, and nothing
 else does. `test:golf-ireland` holds that no Golf Ireland image is in
 `public/` or referenced from `app/`, and that the link is drawn, never an
 image. The name "Golf Ireland" does appear in the wording, because the

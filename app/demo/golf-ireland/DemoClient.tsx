@@ -20,8 +20,10 @@ export default function DemoClient() {
             membership by number, once Golf Ireland allows it. Every name and
             number in it is invented.
           </p>
-          <p className="flex items-center gap-1.5 text-ink text-sm mt-4">
-            A linked player wears the mark <LinkedBadge size={16} /> beside their name.
+          <p className="text-ink text-sm mt-4">
+            A linked player wears the mark{' '}
+            <LinkedBadge size={16} className="align-text-bottom" />{' '}
+            beside their name.
           </p>
         </div>
         <button type="button" onClick={() => setOpen(true)} className={`${buttonClass('primary')} mt-6`}>
