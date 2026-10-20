@@ -26,6 +26,7 @@ import { type PlayerEntry, PLAYER_ENTRIES } from './bracketSetup'
 import type { Leaderboard } from './leaderboards'
 import { MAX_ROUNDS } from './tripLimits'
 import { WEEKDAY_NAMES } from './weekdays'
+import { describeDay } from './itinerary'
 import {
   type GolfIrelandRules, type ScoreSource, SCORE_SOURCES,
   parseGolfIrelandRules, readsGolfIreland,
@@ -78,7 +79,7 @@ export const LEAGUE_SCHEDULES: { key: LeagueSchedule; label: string; hint: strin
   { key: 'continuous', label: 'Continuous', hint:
     'An ongoing event over a period, like a summer — pick the playing days inside it.' },
   { key: 'series', label: 'Series', hint:
-    'A list of events with no dates — days need not be in a row, and more can be added as you go.' },
+    'Separate events feeding one overall leaderboard — planned ahead, or added as you go.' },
 ]
 
 export type LeagueSetup = {
@@ -95,6 +96,12 @@ export type LeagueSetup = {
    * hub can say back ("Every Wednesday").
    */
   repeatWeekday?: number
+  /**
+   * Series only — the events recur, so many weeks or months apart, and
+   * were all made at creation. Absent on a series is "as you go": each
+   * event is added on the Scoring tab when it is played.
+   */
+  repeat?: SeriesRepeat
   /** How the field is assembled — the same two answers the knockout offers. */
   entry: PlayerEntry
   /**
@@ -175,6 +182,155 @@ export function weeklyDates(startDate: string, endDate: string, weekday: number)
   }
   return out
 }
+
+// ─── A series in time ──────────────────────────────────────────
+//
+// A series is distinct events feeding one overall leaderboard
+// (docs/event-use-cases.md, decided October 2026). Each event carries a
+// date — its round's `scheduled_date`, at its calendar offset from the
+// first event, which is the trip's start date — and the events arrive one
+// of two ways:
+//
+// · **As you go** — somebody adds the next event on the Scoring tab when
+//   the group turns up to play. Nothing is stored for it: no `repeat` is
+//   the answer.
+// · **Recurring** — so many events, every so many weeks or months, all
+//   made at creation. The repeat is stored (`LeagueSetup.repeat`) so the
+//   event can say it back; how many there are is the rounds' to say, the
+//   one-copy rule again.
+//
+// A series made before it carried dates is a numbered list with neither
+// trip dates nor a repeat, and still reads as one.
+
+export type RepeatUnit = 'week' | 'month'
+
+export type SeriesRepeat = {
+  /** Every this many units — 1 is every week, or every month. */
+  every: number
+  unit: RepeatUnit
+}
+
+/** The longest gap a repeat is offered — a quarterly event is every 3 months. */
+export const MAX_REPEAT_EVERY = 12
+
+export const REPEAT_UNITS: { key: RepeatUnit; label: string }[] = [
+  { key: 'week', label: 'Weeks' },
+  { key: 'month', label: 'Months' },
+]
+
+const ORDINALS = ['first', 'second', 'third', 'fourth', 'last'] as const
+
+/** A repeat that can be stored, or null. */
+export function tidyRepeat(raw: unknown): SeriesRepeat | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const r = raw as Record<string, unknown>
+  const every = Number(r.every)
+  const unit = REPEAT_UNITS.find(u => u.key === r.unit)?.key
+  if (!unit || !Number.isInteger(every) || every < 1 || every > MAX_REPEAT_EVERY) return null
+  return { every, unit }
+}
+
+/**
+ * Which of its weekday a date is in its month — 1 to 4, or 5 for the last.
+ * A fifth Wednesday is not in every month, so a series begun on one carries
+ * on as "the last Wednesday", which every month has.
+ */
+function weekOfMonth(day: number): number {
+  return Math.min(5, Math.ceil(day / 7))
+}
+
+/**
+ * The dates of a recurring series, first event first. Weekly is the first
+ * date plus a whole number of weeks. **Monthly keeps the weekday**, the way
+ * a club says it — "the second Wednesday of the month" — not the date: the
+ * 14th falls on a different day every month, and a golf society meets on a
+ * day of the week.
+ *
+ * Empty when the first date or the repeat is malformed. Capped well past
+ * MAX_LEAGUE_DAYS so a typo cannot spin; `leagueDaysIssue` is what refuses
+ * an over-long series.
+ */
+export function seriesDates(first: string, repeat: SeriesRepeat, count: number): string[] {
+  const start = Date.parse(`${first}T00:00:00Z`)
+  if (!Number.isFinite(start) || !tidyRepeat(repeat)) return []
+  if (!Number.isInteger(count) || count < 1) return []
+
+  const DAY = 86_400_000
+  const n = Math.min(count, MAX_LEAGUE_DAYS * 2)
+  const out: string[] = []
+
+  if (repeat.unit === 'week') {
+    for (let k = 0; k < n; k++) {
+      out.push(new Date(start + k * repeat.every * 7 * DAY).toISOString().slice(0, 10))
+    }
+    return out
+  }
+
+  const d0 = new Date(start)
+  const weekday = d0.getUTCDay()
+  const nth = weekOfMonth(d0.getUTCDate())
+  for (let k = 0; k < n; k++) {
+    const y = d0.getUTCFullYear()
+    const m = d0.getUTCMonth() + k * repeat.every
+    const firstOfMonth = new Date(Date.UTC(y, m, 1))
+    const daysInMonth = new Date(Date.UTC(y, m + 1, 0)).getUTCDate()
+    let day = 1 + ((weekday - firstOfMonth.getUTCDay() + 7) % 7) + (nth - 1) * 7
+    while (day > daysInMonth) day -= 7
+    out.push(new Date(Date.UTC(y, m, day)).toISOString().slice(0, 10))
+  }
+  return out
+}
+
+/**
+ * The repeat in words — "every Wednesday", "every 2 weeks on a Wednesday",
+ * "every month on the second Wednesday". Lower case, because it is read
+ * inside a sentence or a summary line. Without a first date there is no
+ * weekday to name, and the gap alone is said.
+ */
+export function describeRepeat(repeat: SeriesRepeat, first?: string | null): string {
+  const t = first ? Date.parse(`${first}T00:00:00Z`) : NaN
+  const date = Number.isFinite(t) ? new Date(t) : null
+  const day = date ? WEEKDAY_NAMES[date.getUTCDay()] : null
+
+  if (repeat.unit === 'week') {
+    if (repeat.every === 1) return day ? `every ${day}` : 'every week'
+    return `every ${repeat.every} weeks${day ? ` on a ${day}` : ''}`
+  }
+  const gap = repeat.every === 1 ? 'every month' : `every ${repeat.every} months`
+  if (!date || !day) return gap
+  return `${gap} on the ${ORDINALS[weekOfMonth(date.getUTCDate()) - 1]} ${day}`
+}
+
+/**
+ * Why this date cannot be a series' next event, or null when it can.
+ *
+ * **The next event goes after the last one.** Events are numbered in the
+ * order they are added, and every screen calls a round by its number, so a
+ * date slipped in between two others would make Event 6 come before Event 5.
+ * A series with no events yet takes anything from its first date on.
+ */
+export function nextEventIssue(date: string, ctx: {
+  /** The first event's date — the trip's start date. */
+  startDate: string
+  /** Every date the series already has an event on. */
+  eventDates: readonly string[]
+}): string | null {
+  if (!date || !Number.isFinite(Date.parse(`${date}T00:00:00Z`))) {
+    return 'Pick a date for the event.'
+  }
+  if (ctx.eventDates.length >= MAX_LEAGUE_DAYS) {
+    return `A series can hold at most ${MAX_LEAGUE_DAYS} events.`
+  }
+  const last = [...ctx.eventDates].sort().at(-1) ?? null
+  if (last && date <= last) {
+    return `The last event is on ${describeDay(last, 0)} — the next one goes after it.`
+  }
+  if (date < ctx.startDate) {
+    return `The series starts on ${describeDay(ctx.startDate, 0)} — the next event goes on or after it.`
+  }
+  return null
+}
+
 
 // ─── The board a league starts on ──────────────────────────────
 
@@ -279,6 +435,7 @@ export function parseLeagueSetup(raw: unknown): LeagueSetup | null {
   const schedule = r.schedule === 'continuous' || r.schedule === 'series'
     ? r.schedule : null
   const weekday = Number(r.repeatWeekday)
+  const repeat = schedule === 'series' ? tidyRepeat(r.repeat) : null
 
   // A source that reads Golf Ireland is only kept with rules that parse.
   // Without them both keys go, and the league reads as scored live — the
@@ -295,6 +452,8 @@ export function parseLeagueSetup(raw: unknown): LeagueSetup | null {
     // inside, and a standalone run names its playing days outright.
     ...(schedule === 'continuous' && Number.isInteger(weekday) && weekday >= 0 && weekday <= 6
       ? { repeatWeekday: weekday } : {}),
+    // And a series' repeat is a series' alone — read off nothing else.
+    ...(repeat ? { repeat } : {}),
     entry,
     // Approval only means anything on a self-join event, and only true is
     // worth a key — the same keep-the-no-op-off rule as everywhere else.
@@ -317,7 +476,12 @@ export function parseLeagueSetup(raw: unknown): LeagueSetup | null {
 /** Sunday-first, the same 0–6 the repeat stores — lib/weekdays.ts holds them. */
 export { WEEKDAY_NAMES }
 
-export function describeLeagueSetup(setup: LeagueSetup, days: number): string {
+export function describeLeagueSetup(
+  setup: LeagueSetup,
+  days: number,
+  /** The first event's date, so a series' repeat can name its weekday. */
+  firstDate?: string | null,
+): string {
   const parts = ['League']
   // The shape is worth a word when it is not the plain one — and a weekly
   // repeat is the better word for a continuous league that has one.
@@ -327,8 +491,14 @@ export function describeLeagueSetup(setup: LeagueSetup, days: number): string {
       : 'continuous')
   } else if (setup.schedule === 'series') {
     parts.push('series')
+    // A dated series says how its events arrive; a numbered one made
+    // before series carried dates says nothing it cannot back up.
+    if (setup.repeat) parts.push(describeRepeat(setup.repeat, firstDate))
+    else if (firstDate) parts.push('events added as you go')
   }
-  parts.push(days === 1 ? 'one day' : `${days} days`)
+  parts.push(setup.schedule === 'series'
+    ? (days === 1 ? 'one event' : `${days} events`)
+    : (days === 1 ? 'one day' : `${days} days`))
   // Said in the card's own words rather than the form buttons' — "I add the
   // field" is a thing an organiser taps, not a fact a summary states.
   const entry = setup.entry === 'organiser'

@@ -217,10 +217,11 @@ export default async function OrganiserPage({ params }: {
       }}
       formatSummary={
         bracketSetup ? describeSetup(bracketSetup)
-        : leagueSetup ? describeLeagueSetup(leagueSetup, rounds.length || 1)
+        : leagueSetup ? describeLeagueSetup(leagueSetup, rounds.length || 1, trip.start_date ?? null)
         : null
       }
       isLeague={!!leagueSetup}
+      series={leagueSetup?.schedule === 'series'}
       tagsSummary={describeTags(
         tagsResult.count ?? 0,
         taggedResult.count ?? 0,

@@ -14,7 +14,7 @@ import fs from 'fs'
 import {
   EVENT_PERMISSIONS, type EventPermissions,
   defaultPermissions, parseEventPermissions, allowsParticipant,
-  storedPermissions, describePermissions,
+  storedPermissions, describePermissions, permissionsFor,
 } from '../lib/eventPermissions'
 import { confirmationHtml, confirmationText } from '../lib/confirmationEmail'
 
@@ -38,8 +38,8 @@ const read = (p: string) => fs.readFileSync(p, 'utf-8')
 section('Three seeded permissions, conservative by default')
 {
   eq(EVENT_PERMISSIONS.map(p => p.key),
-    ['add_courses', 'add_players', 'edit_scores', 'edit_tee_sheet', 'assign_tag'],
-    'the three seeded keys, then the tee sheet and the tag — each the promised one-line addition')
+    ['add_courses', 'add_players', 'edit_scores', 'edit_tee_sheet', 'assign_tag', 'add_events'],
+    'the three seeded keys, then the tee sheet, the tag and a series\' next event — each the promised one-line addition')
   ok(EVENT_PERMISSIONS.every(p => p.dflt === false),
     'every default is off — the organiser opts in')
   ok(EVENT_PERMISSIONS.every(p => p.label.startsWith('Participants can')),
@@ -85,7 +85,7 @@ section('Storage reads whole, falls soft, and never nulls')
 
   const full: EventPermissions = {
     add_courses: true, add_players: false, edit_scores: true, edit_tee_sheet: false,
-    assign_tag: true,
+    assign_tag: true, add_events: true,
   }
   eq(parseEventPermissions(JSON.parse(JSON.stringify(full))), full,
     'a full map reads back whole')
@@ -122,10 +122,35 @@ section('The admin card sums it up')
 {
   ok(describePermissions(defaultPermissions()).includes('Organiser-run'),
     'all off reads as organiser-run')
-  ok(describePermissions({
+  const two = {
     add_courses: true, add_players: true, edit_scores: false, edit_tee_sheet: false,
-    assign_tag: false,
-  }).includes('2 of 5'), 'partial says the count')
+    assign_tag: false, add_events: false,
+  }
+  ok(describePermissions(two, permissionsFor(false)).includes('2 of 5'),
+    'partial says the count, out of what this event is asked')
+  ok(describePermissions(two, permissionsFor(true)).includes('2 of 6'),
+    '  …which on a series includes its own')
+}
+
+section('A series-only permission is asked of a series alone')
+{
+  ok(!permissionsFor(false).some(p => p.key === 'add_events'),
+    'a standalone event is never offered adding the next event')
+  ok(permissionsFor(true).some(p => p.key === 'add_events'),
+    'a series is')
+  eq(permissionsFor(true).map(p => p.key), EVENT_PERMISSIONS.map(p => p.key),
+    'a series is asked the whole registry, in order')
+  ok(!allowsParticipant('tournament', null, 'add_events'),
+    'off until the organiser opens it, like every other')
+
+  const league = read('app/dashboard/create/CreateLeagueForm.tsx')
+  ok(league.includes("registry={permissionsFor(schedule === 'series')}"),
+    'the league wizard asks by its shape')
+  const organiser = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
+  ok(organiser.includes('registry={permRegistry}') && organiser.includes('describePermissions(perms, permRegistry)'),
+    'and the organiser area edits and sums up the same list')
+  ok(read('app/trip/[tripCode]/organiser/page.tsx').includes("series={leagueSetup?.schedule === 'series'}"),
+    'told by the stored shape')
 }
 
 // ─── Wiring: creation asks ─────────────────────────────────────

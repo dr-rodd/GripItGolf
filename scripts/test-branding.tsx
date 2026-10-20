@@ -2526,8 +2526,10 @@ section('Nothing has to be finalised before it can be played')
   const picker = read('app/trip/[tripCode]/scoring/page.tsx')
   ok(/\(rounds \?\? \[\]\)\.length === 0 &&/.test(picker),
     'the round picker answers for a trip with no rounds')
-  ok(picker.includes("No rounds set up for this {event ? 'event' : 'trip'} yet"),
+  ok(picker.includes("No rounds set up for this ${event ? 'event' : 'trip'} yet"),
     '  …in words, which is the only lock left on scoring')
+  ok(picker.includes("'No events yet — add the first one above.'"),
+    '  …and a series, which grows from this screen, says where its first event comes from')
 
   const status = stripComments(read('lib/tripStatus.ts'))
   ok(!/setup_status/.test(status), 'a trip is placed by its dates alone')

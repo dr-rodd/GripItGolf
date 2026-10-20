@@ -8,6 +8,10 @@ import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundS
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
 import AddRound from './AddRound'
+import AddEvent from './AddEvent'
+import { parseLeagueSetup } from '@/lib/leagueSetup'
+import { allowsParticipant } from '@/lib/eventPermissions'
+import { describeShortDate } from '@/lib/itinerary'
 import CourseName from '@/app/components/CourseName'
 import { IconChevronRight } from '@/app/components/icons'
 
@@ -34,18 +38,31 @@ export default async function TripCoursePortalPage({
   // there and in `usePlatformCourses`; it is the same rule three times.
   // The kind rides alongside rather than inside the select: a named `kind`
   // column would fail this whole query on an un-migrated database — the
-  // note on fetchTripKind — and alongside it costs no round trip.
-  const [kind, { data: trip, error: tripError }] = await Promise.all([
+  // note on fetchTripKind — and alongside it costs no round trip. The
+  // league setup and the permissions ride alongside for the same reason
+  // (migrations 047 and 049): a series' Add event door needs both, and
+  // either failing costs that door and nothing else.
+  const [kind, { data: trip, error: tripError }, setupRes, permsRes] = await Promise.all([
     fetchTripKind(tripCode),
     supabase
       .from('trips')
       // One string, not two joined: supabase-js reads the select as a literal
       // type to work out the row shape, and a `+` between two halves leaves it
       // with nothing to read — every field on `trip` then fails to typecheck.
-      .select('id, name, start_date, end_date, track_stats, rounds(id, round_number, status, courses(name, location))')
+      .select('id, name, start_date, end_date, track_stats, rounds(id, round_number, status, scheduled_date, course_id, courses(name, location))')
       .eq('trip_code', tripCode)
       .order('round_number', { referencedTable: 'rounds' })
       .single(),
+    supabase
+      .from('trips')
+      .select('bracket_setup, settings_passcode_hash')
+      .eq('trip_code', tripCode)
+      .maybeSingle(),
+    supabase
+      .from('trips')
+      .select('event_permissions')
+      .eq('trip_code', tripCode)
+      .maybeSingle(),
   ])
   const event = isEvent(kind)
 
@@ -54,8 +71,20 @@ export default async function TripCoursePortalPage({
 
   const rounds = (trip.rounds ?? []) as unknown as {
     id: string; round_number: number; status: string
+    scheduled_date: string | null; course_id: string | null
     courses: { name: string; location: string | null } | null
   }[]
+
+  // A series with dates grows from here: its events are added as they are
+  // played (docs/event-use-cases.md). A series made before series carried
+  // dates has no first event to count from, and keeps the organiser's
+  // running order as its only door.
+  const setupRow = setupRes.data as { bracket_setup?: unknown; settings_passcode_hash?: string | null } | null
+  const series = event
+    && parseLeagueSetup(setupRow?.bracket_setup)?.schedule === 'series'
+    && !!trip.start_date
+  const permsRaw = (permsRes.data as { event_permissions?: unknown } | null)?.event_permissions
+  const lastEvent = rounds.at(-1) ?? null
 
   // What has actually happened on each round, rather than what `rounds.status`
   // claims: the status column is set by hand and drifts, and the tile is the
@@ -126,7 +155,7 @@ export default async function TripCoursePortalPage({
       <div className="max-w-lg mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-4">
           <p className="t-label text-ink/65">
-            Choose a round
+            {series ? 'Choose an event' : 'Choose a round'}
           </p>
           {/* The door for the impromptu game — the same golf form the
               itinerary uses, in a sheet, without a trip through Trip Setup.
@@ -142,11 +171,28 @@ export default async function TripCoursePortalPage({
               trackStats={trip.track_stats === true}
             />
           )}
+          {/* A series' own door — the next event, on the day it is played.
+              The organiser's with the PIN, the field's when they allow it. */}
+          {series && trip.start_date && (
+            <AddEvent
+              tripId={trip.id}
+              tripCode={tripCode}
+              startDate={trip.start_date}
+              endDate={trip.end_date ?? null}
+              eventDates={rounds.flatMap(r => (r.scheduled_date ? [r.scheduled_date] : []))}
+              lastVenueId={lastEvent?.course_id ?? null}
+              fieldMayAdd={allowsParticipant(kind, permsRaw, 'add_events')}
+              fieldMayAddCourses={allowsParticipant(kind, permsRaw, 'add_courses')}
+              passcodeHash={setupRow?.settings_passcode_hash ?? null}
+            />
+          )}
         </div>
 
         {(rounds ?? []).length === 0 && (
           <p className="text-ink/65 text-sm py-8 text-center">
-            No rounds set up for this {event ? 'event' : 'trip'} yet.
+            {series
+              ? 'No events yet — add the first one above.'
+              : `No rounds set up for this ${event ? 'event' : 'trip'} yet.`}
           </p>
         )}
 
@@ -162,7 +208,9 @@ export default async function TripCoursePortalPage({
               >
                 <div className="min-w-0">
                   <p className="t-label text-ink/65 mb-1">
-                    Round {round.round_number}
+                    {series
+                      ? `Event ${round.round_number}${round.scheduled_date ? ` · ${describeShortDate(round.scheduled_date)}` : ''}`
+                      : `Round ${round.round_number}`}
                   </p>
                   <p className="t-card text-ink truncate">
                     <CourseName name={course?.name ?? `Round ${round.round_number}`} />

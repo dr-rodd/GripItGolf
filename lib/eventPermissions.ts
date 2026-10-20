@@ -32,12 +32,19 @@ export type EventPermissionKey =
   | 'edit_scores'
   | 'edit_tee_sheet'
   | 'assign_tag'
+  | 'add_events'
 
 export const EVENT_PERMISSIONS: {
   key: EventPermissionKey
   label: string
   hint: string
   dflt: boolean
+  /**
+   * Only means anything on a series, so only a series is asked it
+   * (`permissionsFor`). Stored and parsed like every other key regardless —
+   * the registry stays one list.
+   */
+  seriesOnly?: true
 }[] = [
   { key: 'add_courses', dflt: false,
     label: 'Participants can add new courses',
@@ -58,7 +65,23 @@ export const EVENT_PERMISSIONS: {
   { key: 'assign_tag', dflt: false,
     label: 'Participants can pick their own side',
     hint: 'Let claimed players join one of your sides on the teams screen.' },
+  // A series' events can arrive as they are played: somebody adds the day's
+  // event on the Scoring tab when the group turns up. The organiser can
+  // always do it with the PIN; this lets the field do it without.
+  { key: 'add_events', dflt: false, seriesOnly: true,
+    label: 'Participants can add the next event',
+    hint: 'Let anyone add the series\' next event on the Scoring tab, without the PIN.' },
 ]
+
+/**
+ * The permissions worth asking about on this event — every one, less those
+ * that only mean something on a series when it is not one. The creation
+ * toggles, the admin page and its summary line all read this, so a series-
+ * only permission is never offered where it would do nothing.
+ */
+export function permissionsFor(series: boolean): typeof EVENT_PERMISSIONS {
+  return EVENT_PERMISSIONS.filter(p => series || !p.seriesOnly)
+}
 
 export type EventPermissions = Record<EventPermissionKey, boolean>
 
@@ -112,9 +135,12 @@ export function storedPermissions(perms: EventPermissions): EventPermissions | n
   return EVENT_PERMISSIONS.some(p => perms[p.key] !== p.dflt) ? perms : null
 }
 
-/** "2 of 3 on" — the admin card's one-line summary. */
-export function describePermissions(perms: EventPermissions): string {
-  const on = EVENT_PERMISSIONS.filter(p => perms[p.key]).length
+/** "2 of 3 on" — the admin card's one-line summary, over what this event is asked. */
+export function describePermissions(
+  perms: EventPermissions,
+  registry: readonly { key: EventPermissionKey }[] = EVENT_PERMISSIONS,
+): string {
+  const on = registry.filter(p => perms[p.key]).length
   if (on === 0) return 'Organiser-run — participants play, you manage.'
-  return `${on} of ${EVENT_PERMISSIONS.length} participant permissions on.`
+  return `${on} of ${registry.length} participant permissions on.`
 }

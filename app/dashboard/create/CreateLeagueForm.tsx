@@ -24,13 +24,14 @@ import { parseHandicap, isPlusHandicap, isHandicapPending, PLUS_HANDICAP_WARNING
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import { type PlayerEntry, PLAYER_ENTRIES } from '@/lib/bracketSetup'
 import {
-  type DayBoards, type LeagueSetup, type LeagueSchedule, DAY_BOARDS,
-  MAX_LEAGUE_DAYS, WEEKDAY_NAMES, leagueDaysIssue, starterBoards, weeklyDates,
+  type DayBoards, type LeagueSetup, type LeagueSchedule, type RepeatUnit, DAY_BOARDS,
+  MAX_LEAGUE_DAYS, MAX_REPEAT_EVERY, REPEAT_UNITS, WEEKDAY_NAMES,
+  describeRepeat, leagueDaysIssue, seriesDates, starterBoards, weeklyDates,
 } from '@/lib/leagueSetup'
 import type { Leaderboard } from '@/lib/leaderboards'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import {
-  type EventPermissions, defaultPermissions, storedPermissions,
+  type EventPermissions, defaultPermissions, permissionsFor, storedPermissions,
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import GolfIrelandRulesForm from '@/app/components/GolfIrelandRulesForm'
@@ -41,6 +42,7 @@ import {
 import { describeError, generateCode } from './CreateTripForm'
 import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass, optionClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
+import { Stepper } from '@/app/components/ItineraryForms'
 
 /**
  * Creating a league event — the league branch of the tournament door.
@@ -57,6 +59,13 @@ import WizardShell from '@/app/components/WizardShell'
  * per day (or one for all, behind a toggle) and one extra question: how the
  * days relate on the leaderboard (lib/leagueSetup.ts `DayBoards`).
  *
+ * A series is distinct events with dates (docs/event-use-cases.md): planned
+ * as it goes — the first event here, the rest added on the Scoring tab as
+ * they are played — or recurring, every so many weeks or months, every
+ * event made now (`seriesDates`). Either way the first event's date is the
+ * trip's start, and each event sits at its calendar offset from it, the
+ * same as a continuous league's days.
+ *
  * What creation writes: the trip row (kind 'tournament', the league setup
  * whole in `bracket_setup`, the starter Stableford board in
  * `leaderboards`), the players, one golf itinerary item per day, the rounds
@@ -72,6 +81,15 @@ const STEP_TITLES = ['Name your event', 'Where you’re playing', 'Who’s playi
 const STEP_INTROS: (string | undefined)[] = [undefined, undefined, undefined, undefined]
 
 type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F' }
+
+/** How a series' events arrive — the first question a series is asked. */
+type SeriesPlan = 'as_you_go' | 'recurring'
+const SERIES_PLANS: { key: SeriesPlan; label: string; hint: string }[] = [
+  { key: 'as_you_go', label: 'As you go', hint:
+    'Start with the first event here. Each one after is added on the Scoring tab when it’s played.' },
+  { key: 'recurring', label: 'Recurring', hint:
+    'A set number of events, every so many weeks or months, all made now.' },
+]
 
 /** The chip row every either/or question on this form is asked with. */
 function Chips<K extends string>({ options, chosen, onChoose }: {
@@ -99,8 +117,9 @@ export default function CreateLeagueForm({ schedule }: {
   /**
    * The shape chosen on the tournament door — standalone (a single point
    * in time, one day or a run), continuous (a period with the playing days
-   * picked inside it, by hand or weekly), or series (a list of events with
-   * no dates at all). Decides which questions step one asks and what the
+   * picked inside it, by hand or weekly), or series (distinct events, each
+   * on its own date, planned as you go or recurring). Decides which
+   * questions step one asks and what the
    * venues step is a list of; the players, boards and write path are the
    * same underneath whichever it is.
    */
@@ -146,14 +165,18 @@ export default function CreateLeagueForm({ schedule }: {
   const [weekday, setWeekday] = useState<number | null>(null)
   const [manualDates, setManualDates] = useState<string[]>([''])
 
-  // Series — how many events the list starts with; more can be added to
-  // the running order later, which is the point of a series.
-  const [seriesCount, setSeriesCount] = useState(1)
+  // Series — how the events arrive, and for a recurring one how often and
+  // how many. The first event's date is `startDate`.
+  const [seriesPlan, setSeriesPlan] = useState<SeriesPlan | null>(null)
+  const [repeatEvery, setRepeatEvery] = useState(1)
+  const [repeatUnit, setRepeatUnit] = useState<RepeatUnit>('week')
+  const [eventCount, setEventCount] = useState(8)
 
-  // Step 2 — venues. `venues[i]` is slot i's course id (day i, or event i
-  // of a series); with the toggle on, the first pick is every slot's and
-  // the rest are ignored. A continuous league keys by date instead, so a
-  // date added or removed in step one cannot silently shuffle the courses.
+  // Step 2 — venues. `venues[i]` is slot i's course id (day i of a
+  // standalone run); with the toggle on, the first pick is every slot's and
+  // the rest are ignored. A continuous league and a series key by date
+  // instead, so a date added or removed in step one cannot silently shuffle
+  // the courses.
   const [venues, setVenues] = useState<string[]>([])
   const [dateVenues, setDateVenues] = useState<Record<string, string>>({})
   const [sameVenue, setSameVenue] = useState(false)
@@ -220,7 +243,8 @@ export default function CreateLeagueForm({ schedule }: {
    * its own offset, so a rest day in the middle leaves the days either
    * side on their true dates. Continuous: the picked dates, each at its
    * calendar offset inside the period so `dateForDay` keeps telling the
-   * truth about it. Series: numbered events, no dates.
+   * truth about it. Series: the first event alone (as you go) or every
+   * recurring date, each at its offset from the first — the same reading.
    * The rounds are the one copy of this after creation.
    */
   const slots: { dayIndex: number; date: string | null }[] =
@@ -233,14 +257,24 @@ export default function CreateLeagueForm({ schedule }: {
             dayIndex: (dayNumber(d)! - dayNumber(startDate)!) / 86_400_000,
             date: d,
           }))
-        : Array.from({ length: seriesCount }, (_, i) => ({ dayIndex: i, date: null }))
+        : !startDate || !seriesPlan
+          ? []
+          : (seriesPlan === 'recurring'
+              ? seriesDates(startDate, { every: repeatEvery, unit: repeatUnit }, eventCount)
+              : [startDate]
+            ).map(d => ({
+              dayIndex: (dayNumber(d)! - dayNumber(startDate)!) / 86_400_000,
+              date: d,
+            }))
 
   const daysIssue = leagueDaysIssue(slots.length, schedule)
 
+  // One slot is asked with the single picker, which writes `venues[0]` —
+  // so one slot reads it back from there, whatever the shape keys by.
   const venueFor = (slot: { date: string | null }, i: number) =>
-    (sameVenue
+    (sameVenue || slots.length === 1
       ? venues[0]
-      : schedule === 'continuous' && slot.date
+      : schedule !== 'standalone' && slot.date
         ? dateVenues[slot.date]
         : venues[i]) ?? ''
   const venuesComplete = slots.length > 0 && slots.every((s, i) => venueFor(s, i) !== '')
@@ -271,13 +305,18 @@ export default function CreateLeagueForm({ schedule }: {
       : schedule === 'continuous'
         ? periodSet && !manualOutside && slots.length > 0 && !daysIssue
           && (!repeatOn || weekday !== null)
-        : !daysIssue)
+        : !!seriesPlan && !!startDate && slots.length > 0 && !daysIssue)
+
+  // How the days relate is asked of anything with more than one day — and
+  // of every series, whose events are added after creation if they were
+  // not all made now: one event today is the start of several.
+  const asksDayBoards = slots.length > 1 || schedule === 'series'
 
   const canProceed = !submitting && (
     step === 1 ? step1Valid :
     step === 2 ? venuesComplete :
     step === 3 ? !!entry && !duplicateIssue :
-    step === 4 ? boards.length > 0 && (slots.length <= 1 || !!dayBoards) && !passcodeIssue && !giIssue :
+    step === 4 ? boards.length > 0 && (!asksDayBoards || !!dayBoards) && !passcodeIssue && !giIssue :
     false
   )
 
@@ -352,9 +391,12 @@ export default function CreateLeagueForm({ schedule }: {
       ...(schedule !== 'standalone' ? { schedule } : {}),
       ...(schedule === 'continuous' && repeatOn && weekday !== null
         ? { repeatWeekday: weekday } : {}),
+      // A recurring series says so; as you go is the absent answer.
+      ...(schedule === 'series' && seriesPlan === 'recurring'
+        ? { repeat: { every: repeatEvery, unit: repeatUnit } } : {}),
       entry: entry!,
       ...(entry === 'self_join' && requireApproval ? { requireApproval: true } : {}),
-      ...(slots.length > 1 && dayBoards ? { dayBoards } : {}),
+      ...(asksDayBoards && dayBoards ? { dayBoards } : {}),
       // Live is the absent default; the rules ride only with a source that reads them.
       ...(giStored && scoreSource !== 'live' ? { scoreSource, golfIreland: giStored } : {}),
     }
@@ -368,9 +410,10 @@ export default function CreateLeagueForm({ schedule }: {
     //
     // The dates say the shape: a standalone run carries its ends (one day
     // writes one date to both), a continuous event carries its period, and
-    // a series carries none — its days are numbered, not dated.
-    const tripStart = schedule === 'series' ? '' : startDate
-    const tripEnd = schedule === 'series' ? ''
+    // a series runs from its first event to its last made so far — adding
+    // the next event on the Scoring tab moves the end on with it.
+    const tripStart = startDate
+    const tripEnd = schedule === 'series' ? (slots.at(-1)?.date ?? startDate)
       : schedule === 'standalone' && !multiDay ? startDate
       : endDate
     const tripRow: Record<string, unknown> = {
@@ -446,8 +489,8 @@ export default function CreateLeagueForm({ schedule }: {
     // 3. One golf item per playing slot, through the shared row mapping —
     // never a second copy of it — and then the rounds those items become.
     // A continuous league's day_index is its calendar offset inside the
-    // period, so the schedule and the countdown keep reading true dates; a
-    // series is simply numbered.
+    // period, and a series' its offset from the first event, so the
+    // schedule and the countdown keep reading true dates.
     const items: ItineraryItem[] = slots.map((slot, i) => ({
       id: `tmp-day-${i}`,
       dayIndex: slot.dayIndex,
@@ -477,7 +520,7 @@ export default function CreateLeagueForm({ schedule }: {
       .from('rounds')
       .insert(
         items.map((item, i) => {
-          // The slot's own date — a series has none and stores none.
+          // The slot's own date — every shape has one now.
           const date = slots[i].date
           return {
             trip_id: tripId,
@@ -658,8 +701,8 @@ export default function CreateLeagueForm({ schedule }: {
 
             {/* ── The shape's own questions ──
                 Standalone asks one day or a run; continuous asks for the
-                period and the playing days inside it; a series asks
-                nothing here — its events are named on the next step. */}
+                period and the playing days inside it; a series asks how
+                its events arrive and when the first one is. */}
             {schedule === 'standalone' && (
               <>
                 <div>
@@ -876,12 +919,64 @@ export default function CreateLeagueForm({ schedule }: {
             )}
 
             {schedule === 'series' && (
-              <div className={`p-4 ${cardClass()}`}>
-                <p className="text-ink text-sm font-medium">A series carries no dates.</p>
-                <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                  You&apos;ll pick the events and venues next, and can add more later.
-                </p>
-              </div>
+              <>
+                <div>
+                  <label className={FIELD_LABEL}>How are the events planned?</label>
+                  <Chips options={SERIES_PLANS} chosen={seriesPlan} onChoose={setSeriesPlan} />
+                  <p className="text-ink/65 text-[13px] mt-2 leading-snug">
+                    {seriesPlan
+                      ? SERIES_PLANS.find(p => p.key === seriesPlan)!.hint
+                      : 'Separate events, each with its own result, feeding one overall leaderboard.'}
+                  </p>
+                </div>
+
+                {seriesPlan && (
+                  <DateField label="First event" value={startDate} onChange={setStartDate} />
+                )}
+
+                {seriesPlan === 'recurring' && (
+                  <>
+                    <div>
+                      <Stepper
+                        label="Repeats every"
+                        value={repeatEvery}
+                        min={1}
+                        max={MAX_REPEAT_EVERY}
+                        unit={n => repeatUnit === 'week'
+                          ? (n === 1 ? 'week' : 'weeks')
+                          : (n === 1 ? 'month' : 'months')}
+                        onChange={setRepeatEvery}
+                      />
+                      <div className="mt-3">
+                        <Chips options={REPEAT_UNITS} chosen={repeatUnit} onChoose={setRepeatUnit} />
+                      </div>
+                      {repeatUnit === 'month' && (
+                        <p className="text-ink/65 text-[13px] mt-2 leading-snug">
+                          On the same weekday each time, like the second Wednesday.
+                        </p>
+                      )}
+                    </div>
+
+                    <Stepper
+                      label="How many events?"
+                      value={eventCount}
+                      min={2}
+                      max={MAX_LEAGUE_DAYS}
+                      unit={n => (n === 1 ? 'event' : 'events')}
+                      onChange={setEventCount}
+                    />
+                  </>
+                )}
+
+                {seriesPlan === 'recurring' && startDate && slots.length > 0 && (
+                  daysIssue
+                    ? <p className="text-rust-deep text-[13px] leading-snug">{daysIssue}</p>
+                    : <p className="text-ink/65 text-[13px] leading-snug">
+                        {slots.length} events, {describeRepeat({ every: repeatEvery, unit: repeatUnit }, startDate)}:{' '}
+                        {describeDay(slots[0].date, 0)} to {describeDay(slots.at(-1)!.date, 0)}.
+                      </p>
+                )}
+              </>
             )}
 
             <div>
@@ -949,6 +1044,11 @@ export default function CreateLeagueForm({ schedule }: {
                   onChange={id => setVenue(0, id)}
                   onCourseAdded={onCourseAdded}
                 />
+                {schedule === 'series' && seriesPlan === 'as_you_go' && (
+                  <p className="text-ink/65 text-[13px] mt-2 leading-snug">
+                    For the first event. Each event after picks its own venue when it&apos;s added.
+                  </p>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
@@ -956,14 +1056,14 @@ export default function CreateLeagueForm({ schedule }: {
                   <div key={slot.date ?? i}>
                     <label className={FIELD_LABEL}>
                       {schedule === 'series'
-                        ? `Event ${i + 1}`
+                        ? `Event ${i + 1} · ${describeDay(slot.date, slot.dayIndex)}`
                         : describeDay(slot.date, slot.dayIndex)}
                     </label>
                     <CourseSelect
                       courses={courses}
                       value={venueFor(slot, i)}
                       onChange={id =>
-                        schedule === 'continuous' && slot.date
+                        schedule !== 'standalone' && slot.date
                           ? setDateVenue(slot.date, id)
                           : setVenue(i, id)}
                       onCourseAdded={onCourseAdded}
@@ -973,32 +1073,6 @@ export default function CreateLeagueForm({ schedule }: {
               </div>
             )}
 
-            {/* A series grows here: its list of events is the thing being
-                built, so the way to lengthen it sits with the venues. More
-                can be added after creation too, from the running order in
-                the organiser's setup. */}
-            {schedule === 'series' && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSeriesCount(n => Math.min(n + 1, MAX_LEAGUE_DAYS))}
-                  disabled={seriesCount >= MAX_LEAGUE_DAYS}
-                  className="flex-1 py-3 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:border-line-strong hover:text-ink/80 transition-colors disabled:opacity-40"
-                >
-                  + Add another event
-                </button>
-                {seriesCount > 1 && (
-                  <button
-                    onClick={() => {
-                      setSeriesCount(n => n - 1)
-                      setVenues(prev => prev.slice(0, seriesCount - 1))
-                    }}
-                    className="flex-shrink-0 px-4 py-3 border border-line-strong rounded-xl text-ink/65 text-sm hover:text-ink/80 transition-colors"
-                  >
-                    Remove last
-                  </button>
-                )}
-              </div>
-            )}
           </div>
         )}
 
@@ -1187,7 +1261,7 @@ export default function CreateLeagueForm({ schedule }: {
               )}
             </div>
 
-            {slots.length > 1 && (
+            {asksDayBoards && (
               <div>
                 <label className={FIELD_LABEL}>
                   The leaderboard across the {schedule === 'series' ? 'events' : 'days'}
@@ -1221,7 +1295,11 @@ export default function CreateLeagueForm({ schedule }: {
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
                 What the field can do for itself. Editable in the organiser area.
               </p>
-              <EventPermissionToggles value={perms} onChange={setPerms} />
+              <EventPermissionToggles
+                value={perms}
+                onChange={setPerms}
+                registry={permissionsFor(schedule === 'series')}
+              />
             </div>
 
             <div className="pt-2 border-t border-line">

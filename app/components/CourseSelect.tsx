@@ -77,7 +77,7 @@ function AwaitingCard({ className = '' }: { className?: string }) {
 }
 
 export default function CourseSelect({
-  courses, value, onChange, onCourseAdded,
+  courses, value, onChange, onCourseAdded, allowAdd = true,
 }: {
   courses: DirectoryCourse[]
   /** The chosen course id, or '' for none yet. */
@@ -88,6 +88,13 @@ export default function CourseSelect({
    * Upsert it by id — the picker itself only reads `courses`.
    */
   onCourseAdded: (course: DirectoryCourse) => void
+  /**
+   * Whether this person may add a course to the platform from here. Open
+   * everywhere it always was; an event's field gets it only through the
+   * `add_courses` permission (lib/eventPermissions.ts), so a picker the
+   * field can reach on an event passes the gate in.
+   */
+  allowAdd?: boolean
 }) {
   const [view, setView] = useState<View>({ kind: 'closed' })
   const [search, setSearch] = useState('')
@@ -185,6 +192,7 @@ export default function CourseSelect({
                   foot of the screen the moment the search is tapped, and the
                   moment you need this button is the moment a search found
                   nothing. */}
+              {allowAdd && (
               <div className="flex items-center justify-between gap-3 mt-2.5">
                 <p className="t-cap text-ink/65">Golf course not listed?</p>
                 <button
@@ -196,6 +204,7 @@ export default function CourseSelect({
                   Add a new course
                 </button>
               </div>
+              )}
             </div>
           )}
         </div>
@@ -244,13 +253,15 @@ export default function CourseSelect({
                 {shown.length === 0 && (
                   <li className="py-10 text-center t-body text-ink/65">
                     No course matches{search.trim() ? ` “${search.trim()}”` : ''} —
-                    add it above and it is there for everyone.
+                    {allowAdd
+                      ? ' add it above and it is there for everyone.'
+                      : ' the organiser can add it.'}
                   </li>
                 )}
               </ul>
             )}
 
-            {view.kind === 'add' && (
+            {view.kind === 'add' && allowAdd && (
               <AddCourseForm
                 existing={courses}
                 prefillName={search.trim()}

@@ -16,6 +16,7 @@ import {
   MAX_LEAGUE_DAYS, WEEKDAY_NAMES,
   leagueDaysIssue, starterBoards, parseLeagueSetup, describeLeagueSetup,
   weeklyDates, boardGrouping, describeScope,
+  seriesDates, describeRepeat, nextEventIssue, tidyRepeat, MAX_REPEAT_EVERY,
 } from '../lib/leagueSetup'
 import type { Leaderboard } from '../lib/leaderboards'
 import { parseBracketSetup } from '../lib/bracketSetup'
@@ -84,6 +85,70 @@ section('Every Wednesday for the summer, as dates')
   eq(weeklyDates('2027-08-31', '2027-06-01', 3), [], 'backwards dates are empty')
   eq(weeklyDates('2027-06-01', '2027-08-31', 9), [], 'so is a day that does not exist')
   eq(WEEKDAY_NAMES[3], 'Wednesday', 'and 3 is Wednesday, Sunday-first — the JS convention')
+}
+
+section('A recurring series, as dates')
+{
+  // Wednesday 4 November 2026 — the first Wednesday of the month.
+  eq(seriesDates('2026-11-04', { every: 1, unit: 'week' }, 3),
+    ['2026-11-04', '2026-11-11', '2026-11-18'], 'weekly is a week apart, first event first')
+  eq(seriesDates('2026-11-04', { every: 2, unit: 'week' }, 3),
+    ['2026-11-04', '2026-11-18', '2026-12-02'], 'fortnightly is two')
+  eq(seriesDates('2026-12-30', { every: 1, unit: 'week' }, 2),
+    ['2026-12-30', '2027-01-06'], 'and crosses the year as a calendar does')
+
+  // Monthly keeps the weekday, not the date: the first Wednesday each time.
+  eq(seriesDates('2026-11-04', { every: 1, unit: 'month' }, 4),
+    ['2026-11-04', '2026-12-02', '2027-01-06', '2027-02-03'],
+    'monthly is the same weekday of the month — the first Wednesday, every month')
+  eq(seriesDates('2026-11-11', { every: 1, unit: 'month' }, 3),
+    ['2026-11-11', '2026-12-09', '2027-01-13'], 'the second Wednesday stays the second')
+  ok(seriesDates('2026-11-11', { every: 1, unit: 'month' }, 12)
+    .every(d => new Date(`${d}T00:00:00Z`).getUTCDay() === 3),
+    'every one of a year of them is a Wednesday')
+  eq(seriesDates('2026-11-04', { every: 3, unit: 'month' }, 3),
+    ['2026-11-04', '2027-02-03', '2027-05-05'], 'quarterly is three months apart')
+
+  // 30 December 2026 is the fifth Wednesday; most months have no fifth, so
+  // the series carries on as the last Wednesday, which every month has.
+  eq(seriesDates('2026-12-30', { every: 1, unit: 'month' }, 3),
+    ['2026-12-30', '2027-01-27', '2027-02-24'], 'a fifth weekday carries on as the last')
+
+  eq(seriesDates('not a date', { every: 1, unit: 'week' }, 3), [], 'a bad first date is empty')
+  eq(seriesDates('2026-11-04', { every: 0, unit: 'week' }, 3), [], 'so is no gap at all')
+  eq(seriesDates('2026-11-04', { every: 1, unit: 'week' }, 0), [], 'and no events')
+  eq(seriesDates('2026-11-04', { every: 1, unit: 'week' }, 1000).length, MAX_LEAGUE_DAYS * 2,
+    'a typo cannot spin — the day ceiling is what refuses a long one')
+  ok(leagueDaysIssue(seriesDates('2026-11-04', { every: 1, unit: 'week' }, MAX_LEAGUE_DAYS + 1).length, 'series') !== null,
+    '  …and it does')
+}
+
+section('A repeat says itself the way a club does')
+{
+  eq(describeRepeat({ every: 1, unit: 'week' }, '2026-11-04'), 'every Wednesday', 'weekly names the day')
+  eq(describeRepeat({ every: 2, unit: 'week' }, '2026-11-04'), 'every 2 weeks on a Wednesday', 'fortnightly too')
+  eq(describeRepeat({ every: 1, unit: 'month' }, '2026-11-11'), 'every month on the second Wednesday',
+    'monthly names which of the weekday it is')
+  eq(describeRepeat({ every: 2, unit: 'month' }, '2026-12-30'), 'every 2 months on the last Wednesday',
+    'a fifth reads as the last, which is what it becomes')
+  eq(describeRepeat({ every: 1, unit: 'week' }), 'every week', 'with no date there is no day to name')
+}
+
+section('The next event goes after the last one')
+{
+  const ctx = { startDate: '2026-11-04', eventDates: ['2026-11-04', '2026-11-11'] }
+  eq(nextEventIssue('2026-11-18', ctx), null, 'a week on is the next event')
+  ok(!!nextEventIssue('2026-11-11', ctx)?.includes('after'), 'the last event\'s own day is refused')
+  ok(!!nextEventIssue('2026-11-08', ctx)?.includes('11 November'),
+    'an earlier day is refused, naming the last event')
+  ok(nextEventIssue('', ctx) !== null, 'no date is refused')
+  eq(nextEventIssue('2026-11-04', { startDate: '2026-11-04', eventDates: [] }), null,
+    'an empty series takes its first date')
+  ok(nextEventIssue('2026-11-01', { startDate: '2026-11-04', eventDates: [] }) !== null,
+    '  …but nothing before it')
+  const full = { startDate: '2026-01-07', eventDates: seriesDates('2026-01-07', { every: 1, unit: 'week' }, MAX_LEAGUE_DAYS) }
+  ok(!!nextEventIssue('2027-06-02', full)?.includes(`${MAX_LEAGUE_DAYS}`),
+    'and a full series says the ceiling')
 }
 
 // ─── The starter board ─────────────────────────────────────────
@@ -168,6 +233,23 @@ section('Storage round-trips whole or not at all')
   ok(badShape !== null && !('schedule' in badShape!),
     'an unknown shape is dropped, not guessed at')
 
+  // A series' repeat survives only on a series, and only whole.
+  const recurring: LeagueSetup = {
+    format: 'league', schedule: 'series', repeat: { every: 2, unit: 'week' }, entry: 'self_join',
+  }
+  eq(parseLeagueSetup(JSON.parse(JSON.stringify(recurring))), recurring,
+    'a recurring series reads back byte-for-byte')
+  const asYouGo = parseLeagueSetup({ format: 'league', schedule: 'series', entry: 'organiser' })
+  ok(asYouGo !== null && !('repeat' in asYouGo!), 'as you go is the absent repeat')
+  const strayOnContinuous = parseLeagueSetup({
+    format: 'league', schedule: 'continuous', repeat: { every: 1, unit: 'week' }, entry: 'organiser',
+  })
+  ok(strayOnContinuous !== null && !('repeat' in strayOnContinuous!),
+    'a series repeat on a continuous league is dropped')
+  eq(tidyRepeat({ every: MAX_REPEAT_EVERY + 1, unit: 'week' }), null, 'a gap past the ceiling is refused')
+  eq(tidyRepeat({ every: 1.5, unit: 'week' }), null, 'so is half a week')
+  eq(tidyRepeat({ every: 1, unit: 'fortnight' }), null, 'and a unit nobody offered')
+
   // The repeat is continuous's alone, and a real weekday or nothing.
   const strayRepeat = parseLeagueSetup({
     format: 'league', schedule: 'series', repeatWeekday: 3, entry: 'organiser',
@@ -192,6 +274,15 @@ section('The organiser card says the shape')
   ok(describeLeagueSetup(
     { format: 'league', schedule: 'series', entry: 'organiser' }, 4,
   ).includes('series'), 'a series says series')
+  const recurringLine = describeLeagueSetup(
+    { format: 'league', schedule: 'series', repeat: { every: 1, unit: 'week' }, entry: 'organiser' },
+    10, '2026-11-04',
+  )
+  ok(recurringLine.includes('every Wednesday') && recurringLine.includes('10 events'),
+    'a recurring series says how often, and counts events rather than days')
+  ok(describeLeagueSetup(
+    { format: 'league', schedule: 'series', entry: 'organiser' }, 1, '2026-11-04',
+  ).includes('added as you go'), 'a dated series with no repeat is played as it goes')
   ok(!describeLeagueSetup(
     { format: 'league', entry: 'organiser' }, 3,
   ).includes('standalone'), 'standalone goes unsaid — it is the plain case')
@@ -295,7 +386,7 @@ section('The league wizard reuses the proven pieces rather than restating them')
     'the leaderboard picker is the platform\'s own, embedded whole')
   ok(src.includes('leaderboards: boards'),
     'creation writes the boards the organiser built')
-  ok(src.includes('boards.length > 0 && (slots.length'),
+  ok(src.includes('boards.length > 0 && (!asksDayBoards'),
     'and an event cannot be created without at least one board')
   ok(src.includes("kind: 'tournament'"), 'a league is an event')
   ok(src.includes('team_id: null'), 'everyone starts unassigned, as everywhere')
@@ -305,18 +396,22 @@ section('The league wizard reuses the proven pieces rather than restating them')
     'no service key anywhere near the browser')
 
   // A standalone day writes its one date to both ends, so everything
-  // downstream sees a normal one-day event; a series stores no dates at
-  // all — its days are numbered, not dated.
+  // downstream sees a normal one-day event; a series runs from its first
+  // event to its last, and the Scoring tab moves the end on as events come.
   ok(src.includes("schedule === 'standalone' && !multiDay ? startDate"),
     'a standalone single day is one date written to both ends')
-  ok(src.includes("schedule === 'series' ? ''"),
-    'a series carries no trip dates')
+  ok(src.includes("schedule === 'series' ? (slots.at(-1)?.date ?? startDate)"),
+    'a series runs from its first event to its last')
+  ok(src.includes('seriesDates(startDate, { every: repeatEvery, unit: repeatUnit }, eventCount)'),
+    'a recurring series makes every event from the one copy of the dates')
+  ok(src.includes("repeat: { every: repeatEvery, unit: repeatUnit }"),
+    'and stores the repeat it was made from')
 
   // Same-venue is a form convenience, never a stored fact: with the toggle
   // on, the first pick is every slot's at write time. A continuous league
   // keys venues by date, so a date added or removed cannot shuffle courses.
-  ok(src.includes('sameVenue\n      ? venues[0]') || src.includes('sameVenue ? venues[0]'),
-    'the same-venue toggle resolves to one venue per slot at write time')
+  ok(src.includes('sameVenue || slots.length === 1\n      ? venues[0]'),
+    'the same-venue toggle — and a lone slot — resolve to one venue at write time')
   ok(src.includes('dateVenues[slot.date]'),
     'a continuous league keys its venues by date, not by index')
 }
@@ -413,6 +508,43 @@ section('The day editor is a door on the organiser page, events only')
   ok(organiser.includes('/organiser/days'), 'the organiser page carries the door')
   ok(organiser.includes('rounds.length > 1'),
     'and only when there is more than one day to tell apart')
+}
+
+section('A series grows from the Scoring tab, one event at a time')
+{
+  const page = read('app/trip/[tripCode]/scoring/page.tsx')
+  ok(page.includes("parseLeagueSetup(setupRow?.bracket_setup)?.schedule === 'series'")
+    && page.includes('&& !!trip.start_date'),
+    'the door is a dated series\' alone — an undated one keeps the running order')
+  ok(page.includes("allowsParticipant(kind, permsRaw, 'add_events')"),
+    'the field adds events only when the organiser lets it')
+  ok(page.includes("allowsParticipant(kind, permsRaw, 'add_courses')"),
+    'and adds a course only with add_courses — the gate the registry promised')
+  ok(page.includes(".select('bracket_setup, settings_passcode_hash')")
+    && page.includes(".select('event_permissions')"),
+    'the setup and permissions ride in their own fail-soft queries, never the main select')
+
+  const add = read('app/trip/[tripCode]/scoring/AddEvent.tsx')
+  ok(add.includes('nextEventIssue(date, { startDate, eventDates })'),
+    'the date is checked by the one copy of the rule')
+  ok(add.includes('saveItinerary({'), 'the event is written the way every round is')
+  ok(add.indexOf(".update({ end_date: date })") < add.indexOf('saveItinerary({'),
+    'the end date moves on before the event is made, never after')
+  ok(add.includes("dataState !== 'ready'"),
+    'a failed fetch stops the save rather than reading as an empty itinerary')
+  ok(add.includes('<InlineUnlock') && add.includes('hasUnlocked(tripCode)'),
+    'the organiser\'s PIN is asked in place, and remembered')
+  ok(add.includes('allowAdd={organiser || fieldMayAddCourses}'),
+    'the picker hides its add-course door unless the person may use it')
+
+  const picker = read('app/components/CourseSelect.tsx')
+  ok(picker.includes('allowAdd = true') && picker.includes("view.kind === 'add' && allowAdd"),
+    'the picker is open by default everywhere it always was')
+
+  const store = read('lib/itineraryStore.ts')
+  ok(store.includes('players.filter(p => !isHandicapPending(p.handicap))')
+    && !store.includes('Math.round(p.handicap ?? 0)'),
+    'an added round gives a pending handicap no snapshot — pending is not scratch')
 }
 
 // ─── Result ────────────────────────────────────────────────────

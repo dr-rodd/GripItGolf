@@ -237,6 +237,19 @@ export function describeDay(date: string | null, dayIndex: number): string {
   })
 }
 
+/**
+ * "Fri 12 Sep" — a date short enough for a chip or a tile's top line, or
+ * null with no date to say. The day of the week leads, because that is how
+ * a group refers to a day of golf.
+ */
+export function describeShortDate(date: string | null | undefined): string | null {
+  const n = dayNumber(date)
+  if (n === null) return null
+  return new Date(n).toLocaleDateString('en-GB', {
+    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
+  })
+}
+
 // ─── Reading an item ───────────────────────────────────────────
 
 /** "4 hr 30" / "45 min" — a duration as anyone would say it. */

@@ -9,7 +9,7 @@ import {
   START_FORMAT_LABEL, type StartFormat,
 } from '@/lib/eventHub'
 import {
-  type EventPermissions, describePermissions,
+  type EventPermissions, describePermissions, permissionsFor,
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import { ChoiceChips, FIELD, FIELD_LABEL, ListGroup, ListRow, SectionHeader, buttonClass, cardClass, iconButtonClass } from '@/app/components/ui'
@@ -62,6 +62,7 @@ type Overview = {
 export default function OrganiserClient({
   tripId, tripCode, initialNotices, initialRounds, formatSummary, isLeague,
   initialPermissions, overview, tagsSummary, dayFormatSummary, golfIreland,
+  series = false,
 }: {
   tripId: string
   tripCode: string
@@ -81,7 +82,11 @@ export default function OrganiserClient({
   dayFormatSummary: string
   /** A league reading Golf Ireland: its rules and its link requests. Absent otherwise. */
   golfIreland?: { rulesLine: string; connected: boolean; links: LinkRequest[] } | null
+  /** A series league — asked the series-only permissions too (`permissionsFor`). */
+  series?: boolean
 }) {
+  const permRegistry = permissionsFor(series)
+
   // ── Participant permissions ──────────────────────────────────
   // Saved the moment a toggle moves — optimistic, reverting on refusal,
   // the same manners as every organiser write. The whole map goes each
@@ -277,7 +282,7 @@ export default function OrganiserClient({
             ))}
           </div>
           <p className="t-cap text-ink/65 mt-3 leading-snug">
-            {describePermissions(perms)}
+            {describePermissions(perms, permRegistry)}
             {overview.noticeCount > 0 &&
               ` ${overview.noticeCount} notice${overview.noticeCount === 1 ? '' : 's'} up.`}
           </p>
@@ -293,7 +298,7 @@ export default function OrganiserClient({
           <p className="text-ink/65 text-[13px] mb-3 leading-snug">
             Changes land on the field&apos;s phones straight away.
           </p>
-          <EventPermissionToggles value={perms} onChange={savePermissions} />
+          <EventPermissionToggles value={perms} onChange={savePermissions} registry={permRegistry} />
           {permsError && (
             <p className="text-rust-deep text-sm mt-3 leading-snug">{permsError}</p>
           )}

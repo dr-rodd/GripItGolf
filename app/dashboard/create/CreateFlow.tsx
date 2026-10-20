@@ -117,7 +117,7 @@ export default function CreateFlow() {
             Series
           </p>
           <p className="text-ink/65 text-sm mt-1 leading-snug">
-            A run of events with no fixed dates, added to as you go.
+            Separate events feeding one overall leaderboard, planned ahead or added as you go.
           </p>
         </button>
       </Chooser>

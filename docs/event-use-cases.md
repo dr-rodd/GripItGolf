@@ -23,12 +23,13 @@ settled what two of the three shapes mean:
   leaderboard for an individual day**: the overall is the only result.
 - **Standalone**: unchanged. One day, or a run of days.
 
-**What this changes from today.** Today a series is a numbered list with no
-dates at all, and "every Wednesday" belongs to continuous, which picks its
+**What this changes.** A series used to be a numbered list with no dates
+at all, and "every Wednesday" belonged to continuous, which picks its
 playing days inside a period. Under the decision above, a set of dated,
 repeating playing days is a series (each Wednesday is its own event), and
-continuous loses its day picker. Nothing has been changed yet: see the
-winter league's build order.
+continuous loses its day picker. **The series half is built** (stage 1,
+below); continuous keeps its day picker until stage 6. No real league had
+been created when this was decided, so nothing live needs carrying over.
 
 ## 1. A winter league (series)
 
@@ -117,44 +118,65 @@ for that day.
 8. **Continuous, redefined**: a period, any qualifying score counts, no day
    leaderboards. Its "every week on one day" option moves to the series.
 
-### Questions for Ross
+### Ross's answers (October 2026)
 
-1. **The handicap for an event.** The note ends "change handicap increment
-   for individual days where…". Is that (a) a different **allowance** on a
-   given day (90% for a foursomes day, say), or (b) a **handicap cut**
-   between events, such as the winner playing off two shots less next week?
-   They are very different to build.
-2. **Who may add the next event and switch things off?** The note says
-   players add the event and players disable days, and the card switch is
-   behind a PIN. Proposed: adding the next event is something the organiser
-   can always do and can let the field do (a new line in the participant
-   permissions, off to start with, like the others); switching an event or
-   a card off is behind the organiser PIN, asked for in place. Right?
-3. **Today's continuous leagues.** Has a real continuous league been made
-   on greendot.live? If one has, it must keep working when continuous loses
-   its day picker.
-4. **"Every N months"**: the same date each month (the 14th) or the same
-   weekday (the second Wednesday)? The second is how clubs usually say it.
-5. **Golf Ireland's cards**: worth asking them whether a card says which
-   competition it was played in. If it does, a card can be matched to the
-   league's own competition and the mix-up in the story can't happen at all;
-   the card switch stays as the backstop.
+1. **Two levels of settings.** The organiser area (the "settings page")
+   governs the whole event and sets the **default rules for each event**.
+   The gear on the Scoring tab manages **one event**: switching a submitted
+   round off — **a toggle, never permanent**, because it may be done by
+   accident — and overriding any of the defaults for that day, the handicap
+   setting among them. The overrides sit in their own sub-tab so the gear
+   stays uncluttered.
+2. **Who may change what is decided in the creation form** (the
+   participant permissions), and the sensitive things sit behind the PIN.
+3. **No real leagues have been created yet**, so continuous can change
+   freely.
+4. **Monthly keeps the weekday** — the second Wednesday, not the 14th.
+
+Still open:
+
+- **The handicap setting per event.** It is a default set for the event and
+  overridden for one day. Assumed to be the handicap **allowance** (90% for
+  a foursomes day, say); confirm before stage 3 builds it, because a
+  handicap **cut** between events (the winner off two shots less next week)
+  is a different thing entirely.
+- **Golf Ireland's cards**: worth asking them whether a card says which
+  competition it was played in. If it does, a card can be matched to the
+  league's own competition and the mix-up in the story can't happen at all;
+  the card switch stays as the backstop.
 
 ### Build order
 
 Each stage tested on greendot.live before the next, as with Green Dot Run.
 
-1. **Dated series events.** The recurring question in the creation wizard,
-   and "Add the next event" on the Scoring tab. Probably no database change:
-   rounds already carry a date, and the event's dates run from its first
-   event to its last. Today's dateless series keep working as they are.
+1. **Dated series events — built, October 2026, no database change.** The
+   creation wizard asks a series **As you go** or **Recurring**, then the
+   first event's date; recurring adds how often (every 1–12 weeks or
+   months) and how many events, and makes them all (`seriesDates` in
+   `lib/leagueSetup.ts`; monthly keeps the weekday, and a fifth Wednesday
+   carries on as the last). The repeat is stored (`LeagueSetup.repeat`) and
+   the count is the rounds'. The trip runs from the first event to the last,
+   and each event sits at its calendar offset from the first, as a
+   continuous league's days do. On the Scoring tab a dated series has
+   **Add event** (`AddEvent.tsx`): a date after the last event
+   (`nextEventIssue`) and a venue, written through `saveItinerary` like
+   every other round, the trip's end moved on first. The organiser adds
+   with the PIN, asked in place; the field adds when the new series-only
+   permission **`add_events`** is on (`permissionsFor` keeps it off every
+   other event's list). The picker's add-course door reads `add_courses`
+   there (`CourseSelect`'s `allowAdd`), the first participant course
+   surface on an event. Tiles read "Event 3 · Wed 18 Nov". A dateless
+   series made before this keeps its numbered list. On the way: a round
+   added after creation no longer gives a pending handicap a scratch
+   snapshot (`addRounds` in `lib/itineraryStore.ts`).
 2. **Every event's own leaderboard, and events that do not count.** No
    database change: the existing casual flag is reused, and the event's own
    leaderboard reads it the way the round summary already does.
 3. **The gear.** An event's settings, including a player's card that does
-   not count. That switch needs somewhere to be stored, so probably the
-   first new migration (057, with its grants), and it is confirmed before
-   it is written. The day's handicap waits on question 1.
+   not count (a toggle, reversible). That switch needs somewhere to be
+   stored, so probably the first new migration (057, with its grants), and
+   it is confirmed before it is written. The day's overrides of the event's
+   defaults sit in a sub-tab; the handicap one waits on the open question.
 4. **The next event appears the day after the previous one**, and the
    Scoring tab as the league's history.
 5. **Golf Ireland cards to events, by date and venue**, with stage 3's switch

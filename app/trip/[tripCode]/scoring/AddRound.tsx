@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
   type ItineraryItem,
-  addItem, dayCount, dateForDay, dayNumber, itemError,
+  addItem, dayCount, dateForDay, dayNumber, describeShortDate, itemError,
 } from '@/lib/itinerary'
 import { fromItemRow, type ItemRow } from '@/lib/itinerarySync'
 import { saveItinerary } from '@/lib/itineraryStore'
@@ -146,7 +146,7 @@ export default function AddRound({
                       >
                         <span className="block t-label">Day {i + 1}</span>
                         <span className="block t-cap text-ink/65 mt-0.5">
-                          {shortDate(dateForDay(startDate, i)) ?? '—'}
+                          {describeShortDate(dateForDay(startDate, i)) ?? '—'}
                         </span>
                       </button>
                     )
@@ -183,8 +183,11 @@ export default function AddRound({
  * `saveItinerary` writes from, and an empty `before` against a populated
  * `after` is a request to delete the trip's whole itinerary. So the three
  * cases are kept apart and only `ready` may save.
+ *
+ * Shared with `AddEvent`, the series' own door, which writes through the
+ * same `saveItinerary` and so needs the same `before`.
  */
-function useSheetData(tripId: string, enabled: boolean) {
+export function useSheetData(tripId: string, enabled: boolean) {
   const [items, setItems] = useState<ItineraryItem[] | null>(null)
   const [players, setPlayers] = useState<{ id: string; handicap: number | null }[] | null>(null)
   const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')
@@ -246,14 +249,4 @@ function todayIndex(startDate: string | null, days: number): number {
   if (today === null) return 0
   const index = Math.round((today - start) / 86_400_000)
   return Math.max(0, Math.min(days - 1, index))
-}
-
-/** "Fri 12 Sep" under a day chip — or null with no dates to say. */
-function shortDate(date: string | null): string | null {
-  if (!date) return null
-  const [y, m, d] = date.split('-').map(Number)
-  if (!y || !m || !d) return null
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-GB', {
-    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
-  })
 }

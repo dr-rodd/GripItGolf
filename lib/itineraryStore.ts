@@ -13,6 +13,7 @@
 
 import { supabase } from '@/lib/supabase'
 import { golfItems, dateForDay, type ItineraryItem } from './itinerary'
+import { isHandicapPending } from './handicap'
 import {
   diffItems, toItemRow, touchesLockedGolf, isTempId, roundDateGroups,
 } from './itinerarySync'
@@ -225,12 +226,17 @@ async function addRounds(
 
   if (error || !newRounds) return { ok: false, error: 'Could not create the new round — try again.' }
 
-  if (players.length > 0) {
+  // A player whose handicap nobody has given yet gets no row at all —
+  // pending is not scratch (lib/handicap.ts). Writing `?? 0` here made the
+  // least-known player the best handicap on every round added after
+  // creation; their row is written when the handicap is set.
+  const rated = players.filter(p => !isHandicapPending(p.handicap))
+  if (rated.length > 0) {
     const rows = newRounds.flatMap(round =>
-      players.map(p => ({
+      rated.map(p => ({
         round_id: round.id,
         player_id: p.id,
-        playing_handicap: Math.round(p.handicap ?? 0),
+        playing_handicap: Math.round(p.handicap as number),
       }))
     )
     const { error: hcpError } = await supabase.from('round_handicaps').insert(rows)
