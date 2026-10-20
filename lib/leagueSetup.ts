@@ -25,11 +25,6 @@
 import { type PlayerEntry, PLAYER_ENTRIES } from './bracketSetup'
 import type { Leaderboard } from './leaderboards'
 import { MAX_ROUNDS } from './tripLimits'
-import { WEEKDAY_NAMES } from './weekdays'
-import {
-  type GolfIrelandRules, type ScoreSource, SCORE_SOURCES,
-  parseGolfIrelandRules, readsGolfIreland,
-} from './golfIreland'
 
 // ─── How a multi-day event's days relate ───────────────────────
 //
@@ -109,17 +104,6 @@ export type LeagueSetup = {
    * single-day event, which has one board and was never asked.
    */
   dayBoards?: DayBoards
-  /**
-   * Where the cards come from — lib/golfIreland.ts holds the answers.
-   * Absent is scored live here, which every league stored before the
-   * question existed was; only the other two are ever stored.
-   */
-  scoreSource?: Exclude<ScoreSource, 'live'>
-  /**
-   * Which Golf Ireland cards count. Present exactly when `scoreSource`
-   * reads Golf Ireland — the two are written together and read together.
-   */
-  golfIreland?: GolfIrelandRules
 }
 
 // ─── Days ──────────────────────────────────────────────────────
@@ -280,14 +264,6 @@ export function parseLeagueSetup(raw: unknown): LeagueSetup | null {
     ? r.schedule : null
   const weekday = Number(r.repeatWeekday)
 
-  // A source that reads Golf Ireland is only kept with rules that parse.
-  // Without them both keys go, and the league reads as scored live — the
-  // whole setup is never refused over them, because a league that parsed
-  // as nothing would be offered the knockout form on its organiser page,
-  // and a save there would overwrite it.
-  const source = SCORE_SOURCES.find(s => s.key === r.scoreSource)?.key
-  const giRules = readsGolfIreland(source) ? parseGolfIrelandRules(r.golfIreland) : null
-
   return {
     format: 'league',
     ...(schedule ? { schedule } : {}),
@@ -302,8 +278,6 @@ export function parseLeagueSetup(raw: unknown): LeagueSetup | null {
       ? { requireApproval: true } : {}),
     ...(DAY_BOARDS.some(d => d.key === r.dayBoards)
       ? { dayBoards: r.dayBoards as DayBoards } : {}),
-    ...(giRules && source && source !== 'live'
-      ? { scoreSource: source, golfIreland: giRules } : {}),
   }
 }
 
@@ -314,8 +288,10 @@ export function parseLeagueSetup(raw: unknown): LeagueSetup | null {
  * themselves (approval on) · days and overall". Days come from the caller's
  * rounds, because the rounds are the one copy of how many there are.
  */
-/** Sunday-first, the same 0–6 the repeat stores — lib/weekdays.ts holds them. */
-export { WEEKDAY_NAMES }
+/** Sunday-first, the same 0–6 the repeat stores. */
+export const WEEKDAY_NAMES = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+]
 
 export function describeLeagueSetup(setup: LeagueSetup, days: number): string {
   const parts = ['League']
@@ -338,7 +314,5 @@ export function describeLeagueSetup(setup: LeagueSetup, days: number): string {
   if (setup.dayBoards) {
     parts.push(DAY_BOARDS.find(d => d.key === setup.dayBoards)!.label.toLowerCase())
   }
-  if (setup.scoreSource === 'golf_ireland') parts.push('scores from Golf Ireland')
-  else if (setup.scoreSource === 'both') parts.push('scored here and from Golf Ireland')
   return parts.join(' · ')
 }
