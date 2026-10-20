@@ -460,7 +460,7 @@ section('Nothing loads on the scoring path that the screen does not draw')
   // by its id. PostgREST joins that in one request; two sequential ones is a
   // whole round trip, which is the expensive unit on a bad connection.
   for (const [name, src] of [['picker', picker], ['round page', roundPage]] as const) {
-    ok(/rounds\(id, round_number, status/.test(src),
+    ok(/rounds\((id, round_number, status|\*, courses)/.test(src),
       `the ${name} embeds its rounds in the trip lookup`)
     ok(!/from\('rounds'\)/.test(src), `  …rather than waiting for a second query`)
   }

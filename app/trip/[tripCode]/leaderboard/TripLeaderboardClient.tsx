@@ -118,6 +118,11 @@ interface Props {
    */
   dayBoards?: DayBoards
   /**
+   * A league of rounds (a series): the board reads overall or one round at
+   * a time, through the round switch, rather than one course at a time.
+   */
+  series?: boolean
+  /**
    * A Golf Ireland league's confirmed links — the mark beside each of
    * those names. Read on the server (app/trip/[tripCode]/golfIreland.ts);
    * empty everywhere else.
@@ -1435,7 +1440,7 @@ function MatchplayTab({ tripCode }: { tripCode: string }) {
 export default function TripLeaderboardClient({
   tripCode, boards, activeRoundIds, livePlayerIds, legacyTeamScoring, rounds,
   teams, memberships, players, holes, scores, liveScores, roundHandicaps,
-  tees = [], nicknames = [], isEvent = false, dayBoards, linkedIds,
+  tees = [], nicknames = [], isEvent = false, dayBoards, linkedIds, series = false,
 }: Props) {
   const linked = useMemo(() => new Set(linkedIds ?? []), [linkedIds])
   // Matchplay has its own route, so it is a button rather than a tab. Every
@@ -1472,13 +1477,34 @@ export default function TripLeaderboardClient({
     return out
   }, [rounds])
   // Nothing to switch between on a single-course event, so nothing is drawn.
-  const showCourses = isEvent && courses.length > 1
+  // A league switches by round instead — below — so it never draws this.
+  const showCourses = isEvent && !series && courses.length > 1
+
+  // ── One round, or the league ────────────────────────────────
+  //
+  // A league is rounds feeding an overall (docs/event-use-cases.md), so its
+  // board reads the overall or one round at a time: each round's own
+  // leaderboard is the league's own boards read over that round alone,
+  // through the same `withOnlyRounds` — worked out here, never stored as a
+  // second board that could disagree. A round that does not count
+  // (`rounds.casual`) is still offered: its own result is shown, greyed,
+  // while the overall goes on skipping it.
+  const [roundChoice, setRoundChoice] = useState<string | null>(null)
+  const roundOptions = useMemo(
+    () => [...rounds].sort((a, b) => a.round_number - b.round_number),
+    [rounds],
+  )
+  const showRounds = isEvent && series && roundOptions.length > 1
+  const shownRound = showRounds ? roundOptions.find(r => r.id === roundChoice) ?? null : null
+
   const shownCourse = showCourses ? courseId : null
   const courseRoundIds = useMemo(
-    () => (shownCourse
-      ? rounds.filter(r => r.courses?.id === shownCourse).map(r => r.id)
-      : undefined),
-    [shownCourse, rounds],
+    () => (shownRound
+      ? [shownRound.id]
+      : shownCourse
+        ? rounds.filter(r => r.courses?.id === shownCourse).map(r => r.id)
+        : undefined),
+    [shownRound, shownCourse, rounds],
   )
   const [card, setCard] = useState<{ row: BoardRow; round: Round } | null>(null)
 
@@ -1529,8 +1555,9 @@ export default function TripLeaderboardClient({
   // draw a column for golf its totals were no longer counting.
   const sortedRounds = useMemo(
     () => sortRounds(rounds.filter(r =>
-      r.casual !== true && (!courseRoundIds || courseRoundIds.includes(r.id)))),
-    [rounds, courseRoundIds],
+      (r.casual !== true || r.id === shownRound?.id)
+      && (!courseRoundIds || courseRoundIds.includes(r.id)))),
+    [rounds, courseRoundIds, shownRound],
   )
 
   // A round counts as in play when a scorecard is actually open on it, not
@@ -1556,10 +1583,19 @@ export default function TripLeaderboardClient({
   // `buildRows` — one copy of "score this over these rounds and no others"
   // — and the two compose: a day board on another course narrows to
   // nothing and honestly shows nothing.
-  const shownContext = useMemo(
-    () => withOnlyRounds(rowContext, courseRoundIds),
-    [rowContext, courseRoundIds],
-  )
+  //
+  // A round that does not count is read with its flag cleared for that one
+  // round, the way a round summary reads its own result (`fetchRoundRows`):
+  // the board shows what was played, the overall still never counts it.
+  const shownContext = useMemo(() => {
+    const base = shownRound?.casual
+      ? {
+          ...rowContext,
+          rounds: rowContext.rounds.map(r => (r.id === shownRound.id ? { ...r, casual: false } : r)),
+        }
+      : rowContext
+    return withOnlyRounds(base, courseRoundIds)
+  }, [rowContext, courseRoundIds, shownRound])
 
   const rowsByBoard = useMemo(
     () => new Map(tabs.map(b => [b.id, buildRows(b, shownContext)])),
@@ -1654,6 +1690,20 @@ export default function TripLeaderboardClient({
     />
   )
 
+  /** Overall, or one round — a league's switch, in the course switch's place. */
+  const roundStrip = showRounds && (
+    <Segmented
+      label="Which round"
+      className="mb-4"
+      value={shownRound?.id ?? 'all'}
+      onChange={v => setRoundChoice(v === 'all' ? null : v)}
+      options={[
+        { value: 'all', label: 'Overall' },
+        ...roundOptions.map(r => ({ value: r.id, label: `Round ${r.round_number}` })),
+      ]}
+    />
+  )
+
   // Matchplay lives on its own page, so a matchplay-only trip legitimately
   // has no table here — the strip above is what it came for.
   if (!activeBoard) {
@@ -1695,6 +1745,19 @@ export default function TripLeaderboardClient({
   }
   const factsLine = rules.filter(Boolean).join(' · ')
 
+  const board = (
+    <Board
+      key={activeBoard.id}
+      board={activeBoard}
+      rows={currentRows}
+      rounds={boardRounds}
+      playerById={playerById}
+      boardNameById={boardNameById}
+      onOpenCard={(row, round) => setCard({ row, round })}
+      linked={linked}
+    />
+  )
+
   // Team cards show every member side by side; individual tabs show one column
   const cardPlayers = card
     ? card.row.playerIds.map(id => playerById.get(id)).filter(Boolean) as Player[]
@@ -1706,6 +1769,16 @@ export default function TripLeaderboardClient({
       {strip}
 
       {courseStrip}
+
+      {roundStrip}
+
+      {/* A round that does not count, said before its board — which is
+          greyed under it, so the result reads as a record, not a standing. */}
+      {shownRound?.casual && (
+        <p className="t-cap text-ink/65 mb-3 leading-snug">
+          Round {shownRound.round_number} doesn’t count towards the league. Its scores are kept and shown here.
+        </p>
+      )}
 
       {/* Title card — only worth the space once there is more than one board */}
       {tabs.length > 1 ? (
@@ -1742,18 +1815,11 @@ export default function TripLeaderboardClient({
 
       {currentRows.length === 0
         ? <EmptyState message={emptyMessage} />
-        : (
-          <Board
-            key={activeBoard.id}
-            board={activeBoard}
-            rows={currentRows}
-            rounds={boardRounds}
-            playerById={playerById}
-            boardNameById={boardNameById}
-            onOpenCard={(row, round) => setCard({ row, round })}
-            linked={linked}
-          />
-        )}
+        : shownRound?.casual
+          // Greyed only here: every other board renders exactly as before,
+          // with nothing wrapped round it.
+          ? <div className="opacity-60">{board}</div>
+          : board}
 
       {boardRounds.length > INLINE_ROUNDS && currentRows.length > 0 && (
         <p className="text-ink/65 text-[13px] mt-3 text-center">

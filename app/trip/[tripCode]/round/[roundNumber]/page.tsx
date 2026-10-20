@@ -221,7 +221,9 @@ export default async function RoundSummaryPage({
         {/* ── The course, the day ── */}
         <header className="text-center">
           <p className="t-label text-ink/65">
-            Round {round.round_number}{round.casual === true ? ' · casual' : ''}
+            {/* An event's round off the overall "doesn't count" — set from the
+                round's gear on the Scoring tab; a trip's is a casual round. */}
+            Round {round.round_number}{round.casual === true ? (event ? ' · doesn’t count' : ' · casual') : ''}
           </p>
           <h1 className="t-h1 text-ink text-balance mt-1.5" style={{ fontSize: 'clamp(24px, 7vw, 30px)' }}>
             {named.club}

@@ -14,8 +14,8 @@ import CourseSelect from '@/app/components/CourseSelect'
 import DateField from '@/app/components/DateField'
 import Toggle from '@/app/components/Toggle'
 import InlineUnlock from '@/app/components/InlineUnlock'
-import { FIELD_LABEL, cardClass } from '@/app/components/ui'
-import { IconPlus } from '@/app/components/icons'
+import { FIELD_LABEL, IconButton, cardClass } from '@/app/components/ui'
+import { IconPlus, IconSettings } from '@/app/components/icons'
 
 /**
  * A league's rounds, where the field can touch them — the Scoring tab and
@@ -330,6 +330,119 @@ export function TbcRoundTile({ door, itemId, date, number, lastVenueId, fieldMay
               onCourseAdded={upsert}
               allowAdd={organiser || door.fieldMayAddCourses}
             />
+          </div>
+        </Sheet>
+      )}
+    </>
+  )
+}
+
+// ─── One round's settings ──────────────────────────────────────
+
+/**
+ * The gear beside a league round on the Scoring tab — that round's own
+ * settings (docs/event-use-cases.md, Ross's answer 1). The event's settings
+ * live in the organiser area and set the defaults; this manages one round.
+ *
+ * So far it holds the one switch stage 2 needs: **whether the round counts
+ * towards the league** — rained off, too few players. Off is
+ * `rounds.casual`, the flag a trip's casual round already uses, so the
+ * overall skips it through the one rule in `buildRows` while its own
+ * leaderboard still shows, greyed. Never permanent: the scores are not
+ * touched, and switching it back counts them again. Sensitive, so the
+ * organiser's, with the PIN asked in place.
+ */
+export function RoundSettings({ door, roundId, number, casual }: {
+  door: Pick<LeagueDoor, 'tripId' | 'tripCode' | 'passcodeHash'>
+  roundId: string
+  number: number
+  /** The round does not count towards the league just now. */
+  casual: boolean
+}) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [unlocked, setUnlocked] = useState(false)
+  const [counts, setCounts] = useState(!casual)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const organiser = unlocked || !isLocked(door.passcodeHash)
+
+  function openSheet() {
+    setUnlocked(hasUnlocked(door.tripCode))
+    setCounts(!casual)
+    setError(null)
+    setOpen(true)
+  }
+
+  async function setCounting(next: boolean) {
+    if (!organiser) { setError('Changing a round needs the organiser PIN.'); return }
+    setSaving(true)
+    setError(null)
+    setCounts(next)
+    const { error: writeError } = await supabase
+      .from('rounds')
+      .update({ casual: !next })
+      .eq('trip_id', door.tripId)
+      .eq('id', roundId)
+    setSaving(false)
+    if (writeError) {
+      console.error('Round counting write failed:', writeError)
+      setCounts(!next)
+      setError('Could not save the change — try again.')
+      return
+    }
+    // The tab, the hub and the board all read the flag on the server.
+    router.refresh()
+  }
+
+  return (
+    <>
+      <IconButton
+        label={`Round ${number} settings`}
+        onClick={openSheet}
+        className="flex-shrink-0 self-center"
+      >
+        <IconSettings size={20} />
+      </IconButton>
+
+      {open && (
+        <Sheet
+          title={`Round ${number}`}
+          onClose={() => !saving && setOpen(false)}
+          onAdd={() => !saving && setOpen(false)}
+          addLabel="Done"
+          error={error}
+        >
+          {!organiser && door.passcodeHash && (
+            <div className={`p-4 ${cardClass()}`}>
+              <p className="text-ink text-sm font-medium">The organiser changes a round</p>
+              <p className="text-ink/65 text-[13px] mt-0.5 mb-3 leading-snug">
+                Enter the organiser PIN to carry on.
+              </p>
+              <InlineUnlock
+                tripCode={door.tripCode}
+                passcodeHash={door.passcodeHash}
+                onUnlocked={() => setUnlocked(true)}
+                prompt="Enter the PIN"
+              />
+            </div>
+          )}
+
+          <div className={`p-4 ${cardClass()}`}>
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-ink text-sm font-medium">Counts towards the league</p>
+              <Toggle
+                checked={counts}
+                onChange={setCounting}
+                label="Counts towards the league"
+              />
+            </div>
+            <p className="text-ink/65 text-[13px] mt-2 leading-snug">
+              {counts
+                ? 'Switch off for a round rained off or short of players. Its scores are kept.'
+                : 'Not counting. Its scores are kept and its own leaderboard shows, greyed; the overall skips it. Switch back any time.'}
+            </p>
           </div>
         </Sheet>
       )}

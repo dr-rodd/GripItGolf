@@ -614,6 +614,51 @@ section('A league grows from the Scoring tab and the hub, one round at a time')
     'an added round gives a pending handicap no snapshot — pending is not scratch')
 }
 
+section('Every round has its own leaderboard; a round can stop counting')
+{
+  const board = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  ok(board.includes('const showRounds = isEvent && series && roundOptions.length > 1'),
+    'a league reads its board overall or one round at a time')
+  ok(board.includes('const showCourses = isEvent && !series && courses.length > 1'),
+    '  …in the course switch\'s place, never beside it')
+  ok(board.includes('? [shownRound.id]') && board.includes('return withOnlyRounds(base, courseRoundIds)'),
+    'a round\'s board is the league\'s own boards narrowed by the one copy — never a stored second board')
+  ok(board.includes('r.id === shownRound.id ? { ...r, casual: false } : r'),
+    'a round that does not count is read with its flag cleared for that round alone')
+  ok(board.includes('? <div className="opacity-60">{board}</div>'),
+    '  …and greyed, with a line saying it does not count')
+  ok(board.includes("(r.casual !== true || r.id === shownRound?.id)"),
+    'the overall still draws no column for it')
+
+  const page = read('app/trip/[tripCode]/leaderboard/page.tsx')
+  ok(page.includes("const series = leagueSetup?.schedule === 'series'") && page.includes('series={series}'),
+    'the page tells the board it is a league, off the stored shape')
+
+  const rows = read('lib/boardRows.ts')
+  ok(rows.includes('withOnlyRounds(withoutCasualRounds(ctx), lb.roundIds)'),
+    'and the overall skips it through the one rule in buildRows, untouched')
+
+  const doors = read('app/trip/[tripCode]/LeagueRounds.tsx')
+  ok(doors.includes(".update({ casual: !next })") && doors.includes(".eq('trip_id', door.tripId)"),
+    'the gear writes the casual flag, scoped by trip — never the scores')
+  ok(doors.includes("if (!organiser) { setError('Changing a round needs the organiser PIN.')"),
+    'and it is the organiser\'s, with the PIN asked in place')
+
+  const tab = read('app/trip/[tripCode]/scoring/page.tsx')
+  ok(tab.includes('rounds(*, courses(name, location))'),
+    'the tab reads the flag without naming a column migration 031 adds')
+  ok(tab.indexOf('</Link>') < tab.indexOf('<RoundSettings'),
+    'the gear sits beside the tile, outside its link')
+
+  const hub = read('app/trip/[tripCode]/page.tsx')
+  ok(hub.includes("supabase.from('rounds').select('id, casual')"),
+    'the hub reads it in its own fail-soft query')
+
+  const summary = read('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
+  ok(summary.includes("(event ? ' · doesn’t count' : ' · casual')"),
+    'and a round\'s own page says it in an event\'s words')
+}
+
 // ─── Result ────────────────────────────────────────────────────
 
 console.log(`\n${passed} passed, ${failed} failed`)

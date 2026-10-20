@@ -205,17 +205,30 @@ Each stage tested on greendot.live before the next, as with Green Dot Run.
    themselves. Anyone may when `add_players` is on, the organiser with the
    PIN asked in place otherwise. A blank handicap is pending; a given one is
    snapshotted onto every round that exists. A trip's hub is unchanged.
-2. **Every round's own leaderboard, and rounds that do not count.** No
-   database change: the existing casual flag is reused, and the event's own
-   leaderboard reads it the way the round summary already does.
-3. **The gear.** An event's settings, including a player's card that does
-   not count (a toggle, reversible). That switch needs somewhere to be
-   stored, so probably the first new migration (057, with its grants), and
-   it is confirmed before it is written. The day's overrides of the event's
-   defaults sit in a sub-tab; the handicap one waits on the open question.
-4. **The next event appears the day after the previous one**, and the
+2. **Every round's own leaderboard, and rounds that do not count — built,
+   October 2026, no database change.** A league's leaderboard has a round
+   switch, **Overall · Round 1 · Round 2…**, in the course switch's place
+   (`series` on `TripLeaderboardClient`): a round's leaderboard is the
+   league's own boards read over that round alone through `withOnlyRounds`,
+   worked out on screen, never stored as a second board. A round can be set
+   **not to count** — rained off, short of players — from a **gear** beside
+   its tile on the Scoring tab (`RoundSettings` in `LeagueRounds.tsx`; the
+   organiser's, PIN asked in place). Off is `rounds.casual`, the flag a
+   trip's casual round uses, so the overall skips it through the one rule in
+   `buildRows`; picked on the switch, its own result still shows, read with
+   the flag cleared for that round alone (the round summary's way) and
+   greyed under a line saying it does not count. Never permanent: the scores
+   are untouched, and switching back counts them again. The Scoring tab, the
+   hub's round list and the round's own page say "Doesn’t count".
+3. **The gear, filled in.** The gear exists (stage 2) and holds the one
+   switch. Still to come in it: a player's card that does not count (a
+   toggle, reversible) — which needs somewhere to be stored, so probably
+   the first new migration (057, with its grants), confirmed before it is
+   written — and the round's overrides of the league's defaults, the
+   handicap allowance among them, in a sub-tab.
+4. **The next round appears the day after the previous one**, and the
    Scoring tab as the league's history.
-5. **Golf Ireland cards to events, by date and venue**, with stage 3's switch
+5. **Golf Ireland cards to rounds, by date and venue**, with stage 3's switch
    as the way out. Built with Golf Ireland's stage 5, once their
    documentation arrives.
 6. **Continuous, redefined.** After question 3 is answered.

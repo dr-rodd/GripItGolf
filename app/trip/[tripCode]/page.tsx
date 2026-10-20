@@ -141,7 +141,7 @@ export default async function TripPage({ params, searchParams }: {
   // that has not run migration 046 has no `kind`, and no kind is a trip.
   const isEvent = isEventKind(trip.kind)
 
-  const [roundsResult, playersResult, itineraryResult, endTimesResult, coursesResult, noticesResult, giLinked] = await Promise.all([
+  const [roundsResult, playersResult, itineraryResult, endTimesResult, coursesResult, noticesResult, giLinked, casualResult] = await Promise.all([
     // `itinerary_item_id` is the join that makes a countdown possible: the
     // date lives here and the tee time lives on the itinerary item, and this
     // is the only column tying the two together. `start_format` rides along
@@ -214,6 +214,12 @@ export default async function TripPage({ params, searchParams }: {
     // names. Asks nothing unless the league reads Golf Ireland; the setup
     // rides in on the `*` above, absent on an un-migrated database.
     golfIrelandLinkedIds(trip.id, (trip as { bracket_setup?: unknown }).bracket_setup),
+    // Which of a league's rounds do not count — its own query, never the
+    // rounds select above, so a database without migration 031 loses the
+    // "Doesn't count" note and nothing else. Only a dated event asks.
+    isEvent && trip.start_date
+      ? supabase.from('rounds').select('id, casual').eq('trip_id', trip.id)
+      : Promise.resolve({ data: [], error: null }),
   ])
 
   if (roundsResult.error) console.error('TripPage rounds query failed:', roundsResult.error)
@@ -471,6 +477,10 @@ export default async function TripPage({ params, searchParams }: {
     fieldMayAddCourses: allowsParticipant(trip.kind, tripRaw.event_permissions, 'add_courses'),
   } : null
   const leagueLastVenue = [...league].reverse().find(r => r.courseId)?.courseId ?? null
+  const offLeague = new Set(
+    ((casualResult.data ?? []) as { id: string; casual?: boolean | null }[])
+      .filter(r => r.casual === true).map(r => r.id),
+  )
   const otherItems = itinerary.filter(i => i.kind !== 'golf')
 
   const leagueSection = leagueDoor ? (
@@ -488,6 +498,9 @@ export default async function TripPage({ params, searchParams }: {
             <p className="t-card text-ink truncate">
               <CourseName name={(lr.courseId && courseMap[lr.courseId]) || `Round ${lr.number}`} />
             </p>
+            {offLeague.has(lr.roundId) && (
+              <p className="t-cap text-ink/65 mt-1">Doesn’t count towards the league</p>
+            )}
           </div>
           <span className="flex-shrink-0 ml-4 text-ink/50" aria-hidden="true">
             <IconChevronRight size={20} />

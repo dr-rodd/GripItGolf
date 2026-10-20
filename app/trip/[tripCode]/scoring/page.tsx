@@ -8,7 +8,7 @@ import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundS
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
 import AddRound from './AddRound'
-import { AddLeagueRound, TbcRoundTile, type LeagueDoor } from '../LeagueRounds'
+import { AddLeagueRound, RoundSettings, TbcRoundTile, type LeagueDoor } from '../LeagueRounds'
 import { parseLeagueSetup, leagueRounds, nextRoundNumber } from '@/lib/leagueSetup'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { describeShortDate } from '@/lib/itinerary'
@@ -49,7 +49,10 @@ export default async function TripCoursePortalPage({
       // One string, not two joined: supabase-js reads the select as a literal
       // type to work out the row shape, and a `+` between two halves leaves it
       // with nothing to read — every field on `trip` then fails to typecheck.
-      .select('id, name, start_date, end_date, track_stats, rounds(id, round_number, status, scheduled_date, course_id, itinerary_item_id, courses(name, location))')
+      // `*` on the rounds so the casual flag rides along without being named:
+      // a column migration 031 adds would fail the whole tab where it has
+      // not run, and a league's tile and gear both read it.
+      .select('id, name, start_date, end_date, track_stats, rounds(*, courses(name, location))')
       .eq('trip_code', tripCode)
       .order('round_number', { referencedTable: 'rounds' })
       .single(),
@@ -72,6 +75,8 @@ export default async function TripCoursePortalPage({
   const rounds = (trip.rounds ?? []) as unknown as {
     id: string; round_number: number; status: string
     scheduled_date: string | null; course_id: string | null; itinerary_item_id: string | null
+    /** Migration 031 — absent before it, which reads as counting. */
+    casual?: boolean | null
     courses: { name: string; location: string | null } | null
   }[]
 
@@ -258,11 +263,14 @@ export default async function TripCoursePortalPage({
             const round = entry
             const course = round.courses as unknown as { name: string; location: string | null } | null
             const tone = roundTone(scoredRounds.has(round.id), openRounds.has(round.id))
-            return (
+            // A league round switched off still plays and keeps its scores;
+            // the tile says it is off the overall.
+            const offLeague = series && round.casual === true
+            const tile = (
               <Link
                 key={round.id}
                 href={`/trip/${tripCode}/scoring/${round.round_number}`}
-                className={`flex items-center justify-between w-full px-5 py-4 rounded-card press ${ROUND_TILE[tone]}`}
+                className={`flex items-center justify-between ${series ? 'flex-1 min-w-0' : 'w-full'} px-5 py-4 rounded-card press ${ROUND_TILE[tone]}`}
               >
                 <div className="min-w-0">
                   <p className="t-label text-ink/65 mb-1">
@@ -275,6 +283,7 @@ export default async function TripCoursePortalPage({
                   </p>
                   <p className={`t-cap mt-1 truncate ${ROUND_NOTE_TONE[tone]}`}>
                     {course?.location ? `${course.location} · ` : ''}{ROUND_NOTE[tone]}
+                    {offLeague ? ' · Doesn’t count' : ''}
                   </p>
                 </div>
                 {/* The whole tile is the link, so "Open →" was a label for
@@ -294,6 +303,19 @@ export default async function TripCoursePortalPage({
                 )}
               </Link>
             )
+            // A league round carries its own gear beside it — outside the
+            // link, because a button inside an anchor is two taps in one.
+            return series && door ? (
+              <div key={round.id} className="flex items-center gap-2">
+                {tile}
+                <RoundSettings
+                  door={door}
+                  roundId={round.id}
+                  number={round.round_number}
+                  casual={round.casual === true}
+                />
+              </div>
+            ) : tile
           })}
         </div>
       </div>

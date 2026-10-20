@@ -1597,7 +1597,11 @@ section('Narrowing to a course is the same rule a day board goes through')
   ok(/const counted = withOnlyRounds\(withoutCasualRounds\(ctx\), lb\.roundIds\)/.test(src),
     'a board\'s own scope goes through it, after the casual filter')
   const client = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
-  ok(client.includes('withOnlyRounds(rowContext, courseRoundIds)'),
+  // A league's round switch narrows through the same call; `base` is the
+  // context itself unless a round that does not count is being shown on
+  // its own, when that one round's casual flag is cleared first.
+  ok(client.includes('withOnlyRounds(base, courseRoundIds)')
+    && client.includes(': rowContext\n    return withOnlyRounds(base, courseRoundIds)'),
     'and so does the course switch — not a second filter beside it')
   ok(client.includes('const [courseId, setCourseId] = useState<string | null>(null)'),
     'a choice of one, so no tap can leave the page with no golf on it')

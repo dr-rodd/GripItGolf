@@ -135,9 +135,12 @@ export default async function TripLeaderboardPage({
   // database that has not run migrations 046/047 simply has neither and
   // reads as the trip it has always been.
   const event = isEvent((trip as { kind?: unknown }).kind)
-  const dayBoards = event
-    ? parseLeagueSetup((trip as { bracket_setup?: unknown }).bracket_setup)?.dayBoards
-    : undefined
+  const leagueSetup = event
+    ? parseLeagueSetup((trip as { bracket_setup?: unknown }).bracket_setup)
+    : null
+  const dayBoards = leagueSetup?.dayBoards
+  // A league of rounds reads its board overall or one round at a time.
+  const series = leagueSetup?.schedule === 'series'
 
   // Derived through the one copy of the rule: a vacant card — open, nobody
   // locked on — puts nothing in play. See liveRoundPresence in rowContext.
@@ -173,6 +176,7 @@ export default async function TripLeaderboardPage({
         tees={teesRes.data ?? []}
         isEvent={event}
         dayBoards={dayBoards}
+        series={series}
         linkedIds={giLinked}
       />
 
