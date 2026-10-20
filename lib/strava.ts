@@ -30,7 +30,6 @@
 //     counting walks re-tells the board without anyone re-syncing — the
 //     boards decide what counts, as they do for typed-in runs.
 
-import { createHmac, timingSafeEqual } from 'crypto'
 import { activityFromStrava, type RunActivity } from './runChallenge'
 
 // ─── Configuration ─────────────────────────────────────────────
@@ -69,41 +68,10 @@ export function authorizeUrl(cfg: StravaConfig, redirectUri: string, state: stri
 // ─── State: the trip and runner, through Strava and back ───────
 //
 // Signed with the client secret so a forged callback cannot link somebody
-// else's Strava to somebody else's name. It carries the runner rather than
-// relying on the cookie at the callback: a phone's home-screen app has its
-// own cookie jar, and Strava may hand the runner back to the browser.
+// else's Strava to somebody else's name. The signing itself is shared with
+// Golf Ireland's connect — lib/signedState.ts is the only copy.
 
-export type ConnectState = { tripCode: string; playerId: string; expires: number }
-
-const b64url = (s: string) => Buffer.from(s).toString('base64url')
-const sign = (body: string, secret: string) =>
-  createHmac('sha256', secret).update(body).digest('base64url')
-
-/** Ten minutes to finish on Strava's screen. */
-export const STATE_TTL_MS = 10 * 60 * 1000
-
-export function signState(s: ConnectState, secret: string): string {
-  const body = b64url(JSON.stringify({ t: s.tripCode, p: s.playerId, e: s.expires }))
-  return `${body}.${sign(body, secret)}`
-}
-
-/** The state if it is ours, untouched and in time; null otherwise. */
-export function verifyState(raw: string | null | undefined, secret: string, now: number): ConnectState | null {
-  if (!raw) return null
-  const [body, sig] = raw.split('.')
-  if (!body || !sig) return null
-  const want = Buffer.from(sign(body, secret))
-  const got = Buffer.from(sig)
-  if (want.length !== got.length || !timingSafeEqual(want, got)) return null
-  try {
-    const v = JSON.parse(Buffer.from(body, 'base64url').toString()) as { t?: unknown; p?: unknown; e?: unknown }
-    if (typeof v.t !== 'string' || typeof v.p !== 'string' || typeof v.e !== 'number') return null
-    if (v.e < now) return null
-    return { tripCode: v.t, playerId: v.p, expires: v.e }
-  } catch {
-    return null
-  }
-}
+export { type ConnectState, STATE_TTL_MS, signState, verifyState } from './signedState'
 
 // ─── Activities into runs ──────────────────────────────────────
 
