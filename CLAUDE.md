@@ -212,7 +212,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `lib/tagBoards.ts` | **Tags — an event's overarching grouping, the only copy of its rules.** A tag is the side a player carries all week while the fourballs change daily. Under the hood **a tag IS a team on the main sheet** (`TAG_SET = MAIN_SET`), which is the decision everything else rests on: the main sheet is the one `players.team_id` mirrors, so every coloured dot the platform draws already shows the tag with no query changed, and `UNIQUE(player_id, team_set)` is already one-tag-per-player. **No migration for any of it.** Also the tee-sheet gate — `tagGateReason` (an untagged player cannot be *added*, never evicted) and `dayTeamTagIssue` (a team's card counts towards one tag, so a team is of one), plus `tagOfTeam`, which returns null for a mixed team rather than crediting whoever was first. Pure |
 | `lib/matchplayEntrants.ts` | Player/pairing shape and naming |
 | `lib/itinerarySync.ts` / `lib/itineraryStore.ts` | Itinerary diff-and-write. **`toItemRow` is the only row mapping** — trip creation had a second copy of it, field for field, and a kind gaining a column reached one writer and not the other. **The golf lock is per round** (`touchesLockedGolf`): a round with scores can't be removed or re-coursed, everything else — adding golf mid-trip included — stays open. **Moving the trip's dates re-dates its rounds** (`roundDateGroups` decides, `rescheduleRounds` writes, Trip Settings' `saveDates` calls it): a golf item holds a day *index* so the itinerary re-dates itself instantly, while `rounds.scheduled_date` is stored and did not follow — the hub countdown, the up-next card, the round summary and the weather all quoted the old dates under an itinerary showing the new ones. No start date re-dates nothing, or a series event's rounds would have their dates erased |
-| `supabase/migrations/` | All schema changes, in order. **Migration 010 has a one-time backfill — never replay it**: it flips every draft trip to live. `scripts/migrate.ts` now enforces that rather than trusting the reader — a bare run lists and stops, and the whole folder needs `--all` plus `ALLOW_REPLAY=1`. Run one file by name; for a single migration the Supabase SQL editor is easier still. **Migration 056 is taken**: Golf Ireland's tables (`golf_ireland_clubs`, `_members`, `_links`, `_cards`, `courses.golf_ireland_id`), applied to production October 2026 but kept off `master` — the work and its file live on the `golf-ireland` branch. Nothing on `master` reads them; the next migration here is 057 |
+| `supabase/migrations/` | All schema changes, in order. **Migration 010 has a one-time backfill — never replay it**: it flips every draft trip to live. `scripts/migrate.ts` now enforces that rather than trusting the reader — a bare run lists and stops, and the whole folder needs `--all` plus `ALLOW_REPLAY=1`. Run one file by name; for a single migration the Supabase SQL editor is easier still. **Migration 056 is taken**: Golf Ireland's tables (`golf_ireland_clubs`, `_members`, `_links`, `_cards`, `courses.golf_ireland_id`), applied to production October 2026 but kept off `master` — the work and its file live on the `golf-ireland` branch. Nothing on `master` reads them; the next migration here is 057, and **from 057 every new table carries its own grants** ("New tables need grants", below) |
 | `config/site.ts` | Global platform branding, the support address (`supportEmail`) and who runs it (`controller` — a name, never a home address) |
 
 ## Stableford scoring (canonical — never restate or vary this elsewhere)
@@ -334,6 +334,49 @@ Every trip route is `force-dynamic`, so what a tab press costs is the number of 
 ## Data insertion order
 
 `trips` → `teams` → `players` → `courses` → `holes` → `rounds` → `round_handicaps` → `scores`
+
+## New tables need grants (from migration 057)
+
+**From 30 October 2026 Supabase stops granting the Data API access to new
+tables in `public` on its own.** A table made after that refuses every
+request — the browser's and the server's — with "permission denied" until
+it is granted by name, so a feature built on it fails the first time anybody
+uses it. Every table up to migration 056 got the automatic grants and keeps
+them; none of those files carries a GRANT, and they are left as they are.
+
+From 057 on, **every `CREATE TABLE` carries its grants in the same file**:
+
+- **`service_role`, always** — even for a table closed to the browser. The
+  server's role bypasses RLS but still needs the grant; this is the one that
+  gets missed.
+- **`anon` only if the browser genuinely reads or writes it, and only with
+  RLS on** and a policy for what it may do. A grant with RLS off is the whole
+  table to anybody holding the site's public key. A server-only table gets no
+  `anon` grant at all — a second lock behind RLS.
+- **No `authenticated`.** Green Dot has no logins.
+- Grant each table by name — `ALL TABLES IN SCHEMA` doesn't count.
+
+`npm run test:migration-grants` holds every migration from 057 to this, and
+holds the template below to it too:
+
+```sql
+-- A table only the server touches (like runs, the Strava tables).
+CREATE TABLE IF NOT EXISTS example_private (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid()
+);
+ALTER TABLE example_private ENABLE ROW LEVEL SECURITY;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.example_private TO service_role;
+
+-- A table the browser reads (add insert/update/delete for anon only where
+-- the browser genuinely writes, each with its policy).
+CREATE TABLE IF NOT EXISTS example_public (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid()
+);
+ALTER TABLE example_public ENABLE ROW LEVEL SECURITY;
+CREATE POLICY example_public_read ON example_public FOR SELECT USING (true);
+GRANT SELECT ON public.example_public TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.example_public TO service_role;
+```
 
 ## What things are called on screen
 
