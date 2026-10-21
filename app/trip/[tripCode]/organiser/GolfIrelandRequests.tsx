@@ -34,6 +34,7 @@ export default function GolfIrelandRequests({ tripCode, rulesLine, connected, in
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tour, setTour] = useState(false)
+  const [fetched, setFetched] = useState<string | null>(null)
 
   async function decide(l: LinkRequest, decision: 'confirm' | 'refuse') {
     if (busy) return
@@ -53,6 +54,28 @@ export default function GolfIrelandRequests({ tripCode, rulesLine, connected, in
       setLinks(prev => decision === 'refuse'
         ? prev.filter(x => x.playerId !== l.playerId)
         : prev.map(x => x.playerId === l.playerId ? { ...x, confirmed: true } : x))
+    } catch {
+      setError('Could not reach the site — check your connection and try again')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** "Fetch everyone's scores": every confirmed link read in now. */
+  async function fetchAll() {
+    if (busy) return
+    setBusy('fetch')
+    setError(null)
+    setFetched(null)
+    try {
+      const res = await fetch('/api/golf-ireland/fetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tripCode, scope: 'all' }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok || !body.ok) { setError(body.message ?? 'Could not read the rounds — try again'); return }
+      setFetched(body.message ?? null)
     } catch {
       setError('Could not reach the site — check your connection and try again')
     } finally {
@@ -126,6 +149,17 @@ export default function GolfIrelandRequests({ tripCode, rulesLine, connected, in
           ))}
         </ul>
       )}
+      {linked.length > 0 && (
+        <button
+          type="button"
+          onClick={fetchAll}
+          disabled={!!busy}
+          className={`${SMALL_BUTTON} mt-3 border-accent-deep text-accent-deep hover:bg-accent-tint`}
+        >
+          {busy === 'fetch' ? 'Fetching…' : 'Fetch everyone’s scores'}
+        </button>
+      )}
+      {fetched && <p className="text-accent-deep text-[13px] mt-3 leading-snug">{fetched}</p>}
       {error && <p className="text-rust-deep text-sm mt-3 leading-snug">{error}</p>}
     </section>
   )

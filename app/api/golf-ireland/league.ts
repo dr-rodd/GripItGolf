@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { playerCookieName, readPlayerId } from '@/lib/playerCookie'
-import { parseLeagueSetup } from '@/lib/leagueSetup'
+import { parseLeagueSetup, type LeagueSetup } from '@/lib/leagueSetup'
 import {
   type ClubAccess, type GolfIrelandRules, type MemberLink, readsGolfIreland,
 } from '@/lib/golfIreland'
@@ -19,21 +19,23 @@ import { TRIP_CODE } from '../run/runner'
  * read for a link until the organiser has confirmed it.
  */
 
-export type GiTrip = { id: string; trip_code: string; start_date: string | null; end_date: string | null }
-export type LoadedLeague = { trip: GiTrip; rules: GolfIrelandRules }
+export type GiTrip = {
+  id: string; trip_code: string; start_date: string | null; end_date: string | null; created_at: string
+}
+export type LoadedLeague = { trip: GiTrip; rules: GolfIrelandRules; setup: LeagueSetup }
 
 /** The league with this code if it reads Golf Ireland; null for a bad code or any other event. */
 export async function loadLeague(admin: SupabaseClient, tripCodeRaw: unknown): Promise<LoadedLeague | null> {
   const tripCode = String(tripCodeRaw ?? '').toUpperCase().trim()
   if (!TRIP_CODE.test(tripCode)) return null
   const [tripRes, setupRes] = await Promise.all([
-    admin.from('trips').select('id, trip_code, start_date, end_date').eq('trip_code', tripCode).single(),
+    admin.from('trips').select('id, trip_code, start_date, end_date, created_at').eq('trip_code', tripCode).single(),
     admin.from('trips').select('bracket_setup').eq('trip_code', tripCode).single(),
   ])
   const trip = tripRes.data as GiTrip | null
   const setup = parseLeagueSetup((setupRes.data as { bracket_setup?: unknown } | null)?.bracket_setup)
   if (!trip || !setup?.golfIreland || !readsGolfIreland(setup.scoreSource)) return null
-  return { trip, rules: setup.golfIreland }
+  return { trip, rules: setup.golfIreland, setup }
 }
 
 /** The player this phone claimed in this league, or null. */

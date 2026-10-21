@@ -278,7 +278,22 @@ the next.
    (`readRoundCards`, `cardsOnRounds`, `RowContext.roundCards` —
    `docs/event-use-cases.md`, story 1 stage 5), and a round's gear switches
    one off. In a league of rounds `cardIssue` refuses a card that is no
-   round. The reading itself is still to come.
+   round. **The reading is built too, on the client's five calls**:
+   `syncCards` (`lib/golfIrelandSync.ts`, the pass — each confirmed
+   member's cards in the league's window, never past today, checked,
+   planned and written; a credential about to run out refreshed and kept;
+   one member refused is a retry, never a deletion; and a list holding a
+   card that will not check removes nothing, like a list cut short) and
+   `syncLeague` (`app/api/golf-ireland/sync.ts`, the store on the service
+   role and what each card is checked against — the league's venues, its
+   rounds for a series, a player's live days when scored both ways), behind
+   `/api/golf-ireland/fetch`: **Fetch my scores** on the link card once
+   confirmed, **Fetch everyone's scores** in the organiser's Golf Ireland
+   card. Until the documentation arrives the placeholder client stops the
+   pass at its first call, having written nothing, and both buttons say
+   Golf Ireland is not connected yet. Still to come: the nightly run (one
+   cron line calling `syncLeague` per league, added with the real client)
+   and the players-choose list.
 6. The privacy notice's Golf Ireland section (written before it opens, as
    `/privacy` promises), the terms, and these docs.
 

@@ -294,9 +294,14 @@ Each stage tested on greendot.live before the next, as with Green Dot Run.
    `cardKey`, through the same `withoutCardsOff`. The Scoring tab reads the
    round as "Scores in" once a card is on it.
 
-   *Still waiting on Golf Ireland*: the cards arriving at all — the reading
-   (nightly, and the fetch buttons) is Golf Ireland's own stage 5, built on
-   the client's five calls, which refuse until the documentation arrives.
-   And `courses.golf_ireland_id` has to be filled in for a venue before it
-   can take a card.
+   *Reading the cards in*: Fetch my scores (the player's link card) and
+   Fetch everyone's scores (the organiser area), through `syncLeague` —
+   `docs/golf-ireland.md`, stage 5. In a league of rounds every card is
+   checked against the rounds before it is stored.
+
+   *Still waiting on Golf Ireland*: the cards arriving at all — the
+   client's five calls refuse until the documentation arrives, so both
+   buttons say Golf Ireland is not connected yet; the nightly run comes with
+   the real client. And `courses.golf_ireland_id` has to be filled in for a
+   venue before it can take a card — nothing on screen sets it yet.
 6. **Continuous, redefined.** After question 3 is answered.

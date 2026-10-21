@@ -30,6 +30,7 @@ import {
   type GolfIrelandClient, type RawCard, type RawMember, type ClubCredential,
 } from '../lib/golfIrelandClient'
 import { parseLeagueSetup, describeLeagueSetup } from '../lib/leagueSetup'
+import { syncCards, describeSync, type SyncStore, type SyncResult } from '../lib/golfIrelandSync'
 import { parseBracketSetup } from '../lib/bracketSetup'
 import { signState, verifyState, sealJson, openJson } from '../lib/signedState'
 import * as strava from '../lib/strava'
@@ -557,6 +558,113 @@ section('Fake Golf Ireland, club by club → search → link → checked cards �
     .then(st => ok(!st.active, 'a club that withdrew says so — the one answer that ends its access')))
   pending.push(fakeGolfIreland(fake).cards({ ...credFor('gi-club-portsalon'), accessToken: 'key-gi-club-rosapenna' }, '1000001', '2026-11-01', '2026-11-30')
     .then(() => ok(false, 'one club\'s key should not reach another club'), () => ok(true, 'one club\'s key never reaches another club\'s members')))
+}
+
+section('A pass over the league: each confirmed member\'s cards read, checked and written')
+{
+  const fake: Record<string, FakeClub> = {
+    'gi-club-rosapenna': {
+      name: 'Rosapenna Golf Club', active: true, members: [],
+      cards: {
+        m1: [card({ cardId: 'a', playedOn: '2026-11-07' }), card({ cardId: 'b', playedOn: '2026-11-14' })],
+        m2: [card({ cardId: 'x', playedOn: '2026-11-07' }), card({ cardId: 'bad', playedOn: '2026-11-14', holesPlayed: 12 })],
+      },
+    },
+  }
+  // A table in memory, with a log of what was asked of it.
+  const fakeStore = (held: Record<string, string[]>, opts: { noCred?: boolean; expires?: number } = {}) => {
+    const db = new Map(Object.entries(held).map(([p, ids]) => [p, new Set(ids)]))
+    const log: string[] = []
+    const store: SyncStore = {
+      credential: async clubId => opts.noCred ? null
+        : { ...credFor(clubId), refreshToken: 'r', expiresAt: opts.expires ?? null },
+      saveCredential: async c => { log.push(`saved ${c.clubId}`) },
+      held: async p => [...(db.get(p) ?? [])].map(cardId => ({ cardId })),
+      write: async (p, cards) => {
+        if (!db.has(p)) db.set(p, new Set())
+        for (const c of cards) db.get(p)!.add(c.cardId)
+        log.push(`write ${p} ${cards.map(c => c.cardId).join(',')}`)
+      },
+      remove: async (p, ids) => { for (const id of ids) db.get(p)?.delete(id); log.push(`remove ${p} ${ids.join(',')}`) },
+      synced: async p => { log.push(`synced ${p}`) },
+    }
+    return { store, db, log }
+  }
+  const pass = (client: GolfIrelandClient, store: SyncStore, now = Date.parse('2026-11-20T12:00:00Z')) => syncCards({
+    client, store, now, rules: saturdays18, ctxFor: () => winter,
+    targets: [
+      { playerId: 'p1', memberId: 'm1', clubId: 'gi-club-rosapenna' },
+      { playerId: 'p2', memberId: 'm2', clubId: 'gi-club-rosapenna' },
+    ],
+    window: { from: '2026-11-01', to: '2026-11-20' },
+  })
+
+  const one = fakeStore({ p1: ['gone'], p2: ['old'] })
+  pending.push(pass(fakeGolfIreland(fake), one.store).then(r => {
+    eq(r, { state: 'done', read: 2, added: 3, refreshed: 0, removed: 1, failed: [] },
+      'two members read: three new cards, one gone')
+    eq([...one.db.get('p1')!].sort(), ['a', 'b'], 'the first member\'s cards are the two Saturdays, and the withdrawn one is gone')
+    eq([...one.db.get('p2')!].sort(), ['old', 'x'],
+      'a list with a card that will not check removes nothing — that card may be the one held, unreadable this time')
+    ok(one.log.includes('synced p1') && one.log.includes('synced p2'), 'each link is stamped as read')
+  }))
+
+  const again = fakeStore({ p1: ['a', 'b'] })
+  pending.push(pass(fakeGolfIreland(fake), again.store).then(r => {
+    ok(r.state === 'done' && r.added === 1 && r.refreshed === 2, 'read again: what is held is refreshed, never added twice')
+  }))
+
+  const cut = fakeStore({ p1: ['gone'] })
+  pending.push(pass(fakeGolfIreland(fake, { pageSize: 1, brokenPage: true }), cut.store).then(() => {
+    ok(cut.db.get('p1')!.has('gone'), 'a list cut short removes nothing')
+  }))
+
+  const soon = fakeStore({}, { expires: Date.parse('2026-11-20T12:00:30Z') })
+  pending.push(pass(fakeGolfIreland(fake), soon.store).then(() => {
+    eq(soon.log.filter(l => l.startsWith('saved')), ['saved gi-club-rosapenna'],
+      'a credential about to run out is refreshed once for the club, and kept')
+  }))
+
+  const failing: GolfIrelandClient = { ...fakeGolfIreland(fake),
+    cards: async (cred, memberId, from, to) => {
+      if (memberId === 'm1') throw new Error('503')
+      return fakeGolfIreland(fake).cards(cred, memberId, from, to)
+    } }
+  const flaky = fakeStore({ p1: ['a'] })
+  pending.push(pass(failing, flaky.store).then(r => {
+    ok(r.state === 'done' && r.failed.join() === 'p1' && r.read === 1, 'one member refused: counted, and the pass goes on')
+    ok(flaky.db.get('p1')!.has('a'), '  …a refusal is a retry, never a deletion')
+  }))
+
+  const noKey = fakeStore({}, { noCred: true })
+  pending.push(pass(fakeGolfIreland(fake), noKey.store).then(r => {
+    ok(r.state === 'done' && r.failed.length === 2 && noKey.log.length === 0, 'a club with no credential reads nothing')
+  }))
+
+  const placeholder = fakeStore({ p1: ['a'] })
+  pending.push(pass(golfIrelandClient({ clientId: 'i', clientSecret: 's', apiBase: 'https://x.ie' }), placeholder.store).then(r => {
+    eq(r, { state: 'not_ready' }, 'the placeholder client: the pass stops at the first call and says so')
+    eq(placeholder.log, [], '  …having written nothing')
+  }))
+
+  const said = (r: SyncResult, scope: 'mine' | 'all') => describeSync(r, scope)
+  eq(said({ state: 'done', read: 1, added: 3, refreshed: 0, removed: 0, failed: [] }, 'mine'), '3 new rounds read in.', 'the button says what came in')
+  eq(said({ state: 'done', read: 1, added: 0, refreshed: 2, removed: 1, failed: [] }, 'mine'),
+    'No new rounds. One round no longer counts.', '  …and what went')
+  eq(said({ state: 'done', read: 0, added: 0, refreshed: 0, removed: 0, failed: ['p1'] }, 'mine'),
+    'Could not read your rounds just now — try again later.', '  …and a refusal calmly')
+  ok(/not connected yet/.test(said({ state: 'not_ready' }, 'all')), '  …and that Golf Ireland is not connected yet')
+
+  const route = read('app/api/golf-ireland/fetch/route.ts')
+  ok(route.includes('cookiePlayer(admin, league.trip)') && route.includes("scope === 'mine'"),
+    'Fetch my scores reads the player this phone claimed, and nobody else')
+  const sync = read('app/api/golf-ireland/sync.ts')
+  ok(sync.includes('linkReadable(l, clubOf.get(l.clubId))'), 'only confirmed links whose club stands are read')
+  ok(sync.includes("league.setup.schedule === 'series' ? { rounds: venues }"),
+    'a league of rounds checks every card against its rounds')
+  ok(read('app/trip/[tripCode]/players/GolfIrelandLinkCard.tsx').includes("post('fetch', { scope: 'mine' })")
+    && read('app/trip/[tripCode]/organiser/GolfIrelandRequests.tsx').includes("scope: 'all'"),
+    'the player\'s button and the organiser\'s both go through it')
 }
 
 // ─── Wiring ────────────────────────────────────────────────────

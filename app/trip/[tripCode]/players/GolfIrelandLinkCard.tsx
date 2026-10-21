@@ -99,6 +99,22 @@ export default function GolfIrelandLinkCard({ tripCode, status, rulesLine, clubN
     }
   }
 
+  /** "Fetch my scores": this player's rounds read in now, not overnight. */
+  async function fetchMine() {
+    if (busy) return
+    setBusy('fetch')
+    setMessage(null)
+    try {
+      const { res, body } = await post('fetch', { scope: 'mine' })
+      setMessage({ ok: res.ok && !!body.ok, text: body.message ?? 'Could not read your rounds — try again.' })
+      if (res.ok && body.ok) router.refresh()
+    } catch {
+      setMessage({ ok: false, text: 'Could not reach the site — check your connection and try again.' })
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function unlink() {
     if (busy) return
     if (!window.confirm(
@@ -132,14 +148,26 @@ export default function GolfIrelandLinkCard({ tripCode, status, rulesLine, clubN
         </p>
         <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">{status.text}</p>
         <p className="t-cap text-ink/65 mt-2">Rounds that count: {rulesLine}</p>
-        <button
-          type="button"
-          onClick={unlink}
-          disabled={!!busy}
-          className={`${SMALL_BUTTON} mt-3 border-rust/40 text-rust-deep hover:bg-rust/[0.06]`}
-        >
-          {busy === 'unlink' ? 'Unlinking…' : 'Unlink'}
-        </button>
+        <div className="flex flex-wrap gap-2 mt-3">
+          {status.state === 'linked' && (
+            <button
+              type="button"
+              onClick={fetchMine}
+              disabled={!!busy}
+              className={`${SMALL_BUTTON} border-accent-deep text-accent-deep hover:bg-accent-tint`}
+            >
+              {busy === 'fetch' ? 'Fetching…' : 'Fetch my scores'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={unlink}
+            disabled={!!busy}
+            className={`${SMALL_BUTTON} border-rust/40 text-rust-deep hover:bg-rust/[0.06]`}
+          >
+            {busy === 'unlink' ? 'Unlinking…' : 'Unlink'}
+          </button>
+        </div>
         {note}
       </section>
     )
