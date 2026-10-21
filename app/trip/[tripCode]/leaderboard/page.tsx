@@ -14,6 +14,7 @@ import TripLeaderboardClient, { type Score, type LiveScore, type RoundHcp } from
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
 import { golfIrelandLinkedIds } from '../golfIreland'
+import { readRoundCards } from '@/lib/golfIrelandCards'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +31,8 @@ type BoardRound = {
   round_number: number
   status?: string
   casual?: boolean
+  scheduled_date?: string | null
+  course_id?: string | null
   courses: { id: string; name: string } | null
 }
 
@@ -65,12 +68,18 @@ export default async function TripLeaderboardPage({
 
   const rounds = (trip.rounds ?? []) as BoardRound[]
 
+  // Parsed up front: the Golf Ireland cards are read in the batch below,
+  // and only for a league that reads them.
+  const leagueSetup = isEvent((trip as { kind?: unknown }).kind)
+    ? parseLeagueSetup((trip as { bracket_setup?: unknown }).bracket_setup)
+    : null
+
   const roundIds  = rounds.map(r => r.id)
   const courseIds = rounds.map(r => r.courses?.id).filter(Boolean)
   const nilId     = '00000000-0000-0000-0000-000000000000'
 
   const [teamsRes, playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes,
-         memberships, nicknamesRes, giLinked] =
+         memberships, nicknamesRes, giLinked, roundCards] =
     await Promise.all([
       supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
       supabase.from('players')
@@ -121,6 +130,9 @@ export default async function TripLeaderboardPage({
       // A Golf Ireland league's linked players — the mark beside their
       // names. No query unless the league reads Golf Ireland.
       golfIrelandLinkedIds(trip.id, (trip as { bracket_setup?: unknown }).bracket_setup),
+      // Its Golf Ireland cards, each on the round it was played as — read
+      // on the server, which alone can (lib/golfIrelandCards.ts).
+      readRoundCards(trip.id, leagueSetup, rounds),
     ])
 
   // What the trip plays for. A stored list wins; a trip created before the
@@ -135,9 +147,6 @@ export default async function TripLeaderboardPage({
   // database that has not run migrations 046/047 simply has neither and
   // reads as the trip it has always been.
   const event = isEvent((trip as { kind?: unknown }).kind)
-  const leagueSetup = event
-    ? parseLeagueSetup((trip as { bracket_setup?: unknown }).bracket_setup)
-    : null
   const dayBoards = leagueSetup?.dayBoards
   // A league of rounds reads its board overall or one round at a time.
   const series = leagueSetup?.schedule === 'series'
@@ -178,6 +187,7 @@ export default async function TripLeaderboardPage({
         dayBoards={dayBoards}
         series={series}
         cardsOff={leagueSetup?.cardsOff}
+        roundCards={roundCards}
         linkedIds={giLinked}
       />
 

@@ -18,6 +18,7 @@ import {
   golfIrelandConfig, SCORE_SOURCES, scoresLive, readsGolfIreland,
   defaultRules, parseGolfIrelandRules, tidyWeekdays, describeWeekdays, describeRules,
   normaliseCard, leagueWindow, cardIssue, planImport, pickIssue, tidyClubs,
+  roundForCard, cardsOnRounds, type RoundVenue, type HeldCard,
   clubIssue, parseMemberQuery, foldName, normaliseMember, maskMembershipNumber, memberMatches,
   packPick, unpackPick, linkIssue, linkReadable, describeLink,
   MAX_MEMBER_MATCHES, MEMBER_PICK_TTL_MS,
@@ -408,6 +409,52 @@ section('Scored both ways, the same day never counts twice')
   eq(cardIssue(c, saturdays18, { ...both, liveDates: ['2026-11-14'] }), null, 'a different day: counts')
   eq(cardIssue(c, saturdays18, { ...winter, liveDates: ['2026-11-07'] }), null,
     'a Golf Ireland-only league has no live cards to clash with')
+}
+
+section('In a league of rounds, a card is the round played on its date at its venue')
+{
+  const rounds: RoundVenue[] = [
+    { roundId: 'r1', date: '2026-11-07', venueId: 'gi-rosapenna' },
+    { roundId: 'r2', date: '2026-11-14', venueId: 'gi-portsalon' },
+    { roundId: 'r3', date: '2026-11-21', venueId: null }, // its venue not matched yet
+  ]
+  const c = (over: Partial<Record<keyof RawCard, unknown>> = {}) => normaliseCard(card(over))!
+  eq(roundForCard(c(), rounds), 'r1', 'the right day at the right venue: round one')
+  eq(roundForCard(c({ playedOn: '2026-11-14', courseId: 'gi-portsalon' }), rounds), 'r2', 'and round two the week after')
+  eq(roundForCard(c({ playedOn: '2026-11-14' }), rounds), null, 'the right day, the wrong venue: no round')
+  eq(roundForCard(c({ courseId: null }), rounds), null, 'no course id: no round')
+  eq(roundForCard(c({ playedOn: '2026-11-21', courseId: 'gi-rosapenna' }), rounds), null,
+    'a round whose venue is not matched takes no card')
+
+  const series: CardContext = { ...winter, rounds }
+  const anyDay = { ...saturdays18, courses: 'any' as const }
+  eq(cardIssue(c(), anyDay, series), null, 'played as round one: counts')
+  eq(cardIssue(c({ playedOn: '2026-11-28' }), anyDay, series), 'Not played on the day of a league round.',
+    'a Saturday with no round on it does not count, whatever the weekday rule says')
+  eq(cardIssue(c({ playedOn: '2026-11-14' }), anyDay, series), 'Not played at that round\'s venue.',
+    'the round\'s day at another course')
+  eq(cardIssue(c({ playedOn: '2026-11-21' }), anyDay, series), 'That round\'s venue is not matched to Golf Ireland yet.',
+    'and a round nobody has matched says so — that one is ours to fix, not the player\'s')
+  eq(cardIssue(c({ playedOn: '2026-11-28' }), anyDay, winter), null, 'without rounds, the window alone decides, as before')
+
+  const held = (over: Partial<HeldCard>): HeldCard => ({
+    playerId: 'p1', cardId: 'a', playedOn: '2026-11-07', courseId: 'gi-rosapenna',
+    holesPlayed: 18, stablefordPoints: 34, grossTotal: 88, courseHandicap: 15, ...over,
+  })
+  eq(cardsOnRounds([held({}), held({ cardId: 'b', playedOn: '2026-11-28' })], rounds),
+    [{ roundId: 'r1', playerId: 'p1', cardId: 'a', holes: 18, points: 34, gross: 88, courseHandicap: 15 }],
+    'stored cards are placed on their rounds; one on no round is left off')
+  eq(cardsOnRounds([held({ cardId: 'z', stablefordPoints: 40 }), held({ cardId: 'm', stablefordPoints: 20 })], rounds)
+    .map(r => r.cardId), ['m'], 'two the same round: one kept, the same one on every screen — never the better')
+  eq(cardsOnRounds([held({}), held({ playerId: 'p2' })], rounds).length, 2, 'one a player, not one a round')
+  eq(cardsOnRounds([held({})], rounds.map(r => r.roundId === 'r1' ? { ...r, date: '2026-11-08' } : r)), [],
+    'worked out on every read: re-date the round and the card follows the date')
+
+  const plan = planImport({
+    stored: [], complete: true, rules: anyDay, ctx: series,
+    fetched: [c(), c({ cardId: 'c-2', playedOn: '2026-11-28' })],
+  })
+  eq(plan.upsert.map(x => x.cardId), ['c-1'], 'a sync in a league of rounds writes only the cards that are rounds')
 }
 
 // ─── What a sync does ──────────────────────────────────────────

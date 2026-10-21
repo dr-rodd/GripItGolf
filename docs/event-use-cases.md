@@ -261,7 +261,42 @@ Each stage tested on greendot.live before the next, as with Green Dot Run.
    handed out twice. Not yet held back: the hub's up-next countdown, which
    reads rounds directly — on a round's own afternoon it can name the next
    one a day early.
-5. **Golf Ireland cards to rounds, by date and venue**, with stage 3's switch
-   as the way out. Built with Golf Ireland's stage 5, once their
-   documentation arrives.
+5. **Golf Ireland cards to rounds, by date and venue — built, October 2026,
+   against the fake; live once Golf Ireland's documentation arrives.**
+   A card belongs to a round when it was played on the round's date at the
+   round's venue (`roundForCard` in `lib/golfIreland.ts`, Golf Ireland's id
+   for the venue being `courses.golf_ireland_id`). **Worked out on every
+   read, never stored**, so a round re-dated or given its venue later picks
+   up its cards with nothing to migrate. In a league of rounds a card that
+   is no round does not count, and says which half missed
+   (`cardIssue` with `CardContext.rounds`: not a round's day / not that
+   round's venue / that round's venue not matched to Golf Ireland yet — the
+   last one is ours to fix, not the player's).
+
+   *On the board*: `readRoundCards` (`lib/golfIrelandCards.ts`, server
+   only — the table is closed to the browser; asks nothing unless the
+   league reads Golf Ireland) places the stored cards on their rounds
+   (`cardsOnRounds`, one card a player a round, the lower card id kept) and
+   hands them to the board as `RowContext.roundCards`: the leaderboard as a
+   prop, the hub and a round's summary through `fetchTripContext`, the
+   export too. `buildRows` reads one only for a player with **no Green Dot
+   card in that round** — a round scored here is the round's own. A
+   Stableford board takes Golf Ireland's points as they stand (the official
+   figure; with no holes there is nothing to restate under an allowance), a
+   strokes board takes their course handicap off the gross, cut by the
+   board's allowance; quota and team boards read none, because they need
+   the holes. The round's tile on the board says "Golf Ireland card" and
+   opens no empty scorecard. The hub's cheap standing hands a Golf Ireland
+   league to the full path.
+
+   *The way out*: the round's gear lists a Golf Ireland card beside the live
+   ones ("Golf Ireland card · 34 points") and switches it off by the same
+   `cardKey`, through the same `withoutCardsOff`. The Scoring tab reads the
+   round as "Scores in" once a card is on it.
+
+   *Still waiting on Golf Ireland*: the cards arriving at all — the reading
+   (nightly, and the fetch buttons) is Golf Ireland's own stage 5, built on
+   the client's five calls, which refuse until the documentation arrives.
+   And `courses.golf_ireland_id` has to be filled in for a venue before it
+   can take a card.
 6. **Continuous, redefined.** After question 3 is answered.

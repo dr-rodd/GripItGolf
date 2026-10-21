@@ -544,6 +544,12 @@ export type CardContext = {
   venueCourseIds: readonly string[]
   source: ScoreSource
   liveDates?: readonly string[]
+  /**
+   * A league of rounds (a series): a card counts only as one of these
+   * rounds — played on its date, at its venue (`roundForCard`). Absent for
+   * any other league, whose cards are read against the window alone.
+   */
+  rounds?: readonly RoundVenue[]
 }
 
 /**
@@ -586,6 +592,19 @@ export function cardIssue(card: GolfIrelandCard, rules: GolfIrelandRules, ctx: C
     return 'Not played at one of the league\'s venues.'
   }
 
+  // A league of rounds: the card is one of the rounds or it is nothing.
+  // The reason names which half missed, because "wrong venue" and "the
+  // venue is not matched yet" are fixed by different people.
+  if (ctx.rounds) {
+    const sameDay = ctx.rounds.filter(r => r.date === card.playedOn)
+    if (sameDay.length === 0) return 'Not played on the day of a league round.'
+    if (!roundForCard(card, ctx.rounds)) {
+      return sameDay.every(r => !r.venueId)
+        ? 'That round\'s venue is not matched to Golf Ireland yet.'
+        : 'Not played at that round\'s venue.'
+    }
+  }
+
   // Scored both ways: a player who scored the day live here has that card
   // in the league already, and the same round must not count twice. The
   // Green Dot card is the league day's own, so it is the one kept.
@@ -594,6 +613,73 @@ export function cardIssue(card: GolfIrelandCard, rules: GolfIrelandRules, ctx: C
   }
 
   return null
+}
+
+// ─── Which round a card is ─────────────────────────────────────
+//
+// In a league of rounds a Golf Ireland card belongs to a round when it was
+// played on that round's date at that round's venue (Ross's story,
+// docs/event-use-cases.md). Worked out each time the cards are read, never
+// stored: a round re-dated or given its venue later picks up its cards
+// with nothing to migrate. The way out of a wrong match is the round's
+// gear — the same per-player card switch (`cardKey`) a live card uses.
+
+/**
+ * A league round as a card is matched against it: Golf Ireland's id for
+ * its venue (`courses.golf_ireland_id`) is null while the venue is not
+ * matched. A TBC round has no round yet, so it is never in the list.
+ */
+export type RoundVenue = { roundId: string; date: string | null; venueId: string | null }
+
+/** The round this card was played as, or null. Pure. */
+export function roundForCard(
+  card: Pick<GolfIrelandCard, 'playedOn' | 'courseId'>, rounds: readonly RoundVenue[],
+): string | null {
+  if (!card.courseId) return null
+  return rounds.find(r => r.date === card.playedOn && r.venueId === card.courseId)?.roundId ?? null
+}
+
+/**
+ * A Golf Ireland card as a league board reads it — one player's round,
+ * totals only. `points` is Golf Ireland's own Stableford, off their
+ * handicap of the day; `courseHandicap` is what a strokes board takes off
+ * the gross. lib/boardRows.ts reads these beside the live cards.
+ */
+export type RoundCard = {
+  roundId: string
+  playerId: string
+  cardId: string
+  holes: 9 | 18
+  points: number | null
+  gross: number | null
+  courseHandicap: number | null
+}
+
+/** A stored card, as the board's reader fetches it. */
+export type HeldCard = Pick<GolfIrelandCard,
+  'cardId' | 'playedOn' | 'courseId' | 'holesPlayed' | 'stablefordPoints' | 'grossTotal' | 'courseHandicap'
+> & { playerId: string }
+
+/**
+ * Stored cards placed on their rounds. A card on no round is left out.
+ * One card per player per round: a second the same day at the same venue
+ * (two rounds in a day) is set aside, the lower card id kept so every
+ * screen keeps the same one.
+ */
+export function cardsOnRounds(cards: readonly HeldCard[], rounds: readonly RoundVenue[]): RoundCard[] {
+  const out = new Map<string, RoundCard>()
+  const ordered = [...cards].sort((a, b) => a.cardId.localeCompare(b.cardId))
+  for (const c of ordered) {
+    const roundId = roundForCard(c, rounds)
+    if (!roundId) continue
+    const key = `${roundId}:${c.playerId}`
+    if (out.has(key)) continue
+    out.set(key, {
+      roundId, playerId: c.playerId, cardId: c.cardId, holes: c.holesPlayed,
+      points: c.stablefordPoints, gross: c.grossTotal, courseHandicap: c.courseHandicap,
+    })
+  }
+  return [...out.values()]
 }
 
 // ─── What a sync should do ─────────────────────────────────────

@@ -11,6 +11,7 @@ import {
 import { type Leaderboard, boardTitle, offersAllowance, parseLeaderboards } from '@/lib/leaderboards'
 import { ALLOWANCE_PRESETS, allowanceOf } from '@/lib/handicapAllowance'
 import { readLiveScores, readScores } from '@/lib/scoreReads'
+import type { RoundCard } from '@/lib/golfIreland'
 import { hasUnlocked, isLocked } from '@/lib/passcode'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
@@ -354,7 +355,9 @@ export function TbcRoundTile({ door, itemId, date, number, lastVenueId, fieldMay
  * stage 2: rained off, short of players), and each player's card in it
  * (`LeagueSetup.cardsOff`, stage 3: a Golf Ireland card swept in from a
  * different competition, or any card the league should not count). Both
- * are read in `buildRows` and nowhere else.
+ * are read in `buildRows` and nowhere else. A Golf Ireland card matched to
+ * the round by its date and venue is listed with the rest and switched off
+ * by the same key (stage 5) — the way out of a card matched wrongly.
  *
  * **Rules** — the round's own handicap allowance on each leaderboard
  * (`Leaderboard.roundAllowances`), the league's being the default. Kept on
@@ -362,12 +365,20 @@ export function TbcRoundTile({ door, itemId, date, number, lastVenueId, fieldMay
  *
  * All of it the organiser's, with the PIN asked in place — sensitive.
  */
-export function RoundSettings({ door, roundId, number, casual }: {
+/** One empty list, so a gear with no Golf Ireland cards never re-fetches on a re-render. */
+const NO_CARDS: RoundCard[] = []
+
+export function RoundSettings({ door, roundId, number, casual, golfIrelandCards = NO_CARDS }: {
   door: Pick<LeagueDoor, 'tripId' | 'tripCode' | 'passcodeHash'>
   roundId: string
   number: number
   /** The round does not count towards the league just now. */
   casual: boolean
+  /**
+   * The Golf Ireland cards played as this round — read on the server,
+   * which alone can (lib/golfIrelandCards.ts). Totals only.
+   */
+  golfIrelandCards?: RoundCard[]
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -376,7 +387,7 @@ export function RoundSettings({ door, roundId, number, casual }: {
   const [counts, setCounts] = useState(!casual)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const { data, reload } = useRoundGear(door.tripId, roundId, open)
+  const { data, reload } = useRoundGear(door.tripId, roundId, open, golfIrelandCards)
 
   const organiser = unlocked || !isLocked(door.passcodeHash)
 
@@ -487,6 +498,9 @@ export function RoundSettings({ door, roundId, number, casual }: {
                         <div key={card.id} className={`flex items-center justify-between gap-4 px-4 py-3 ${cardClass()}`}>
                           <div className="min-w-0">
                             <p className={`text-sm truncate ${on ? 'text-ink' : 'text-ink/50'}`}>{card.name}</p>
+                            {card.golfIreland && (
+                              <p className="t-cap text-ink/65">{card.golfIreland}</p>
+                            )}
                             {!on && <p className="t-cap text-ink/65">Doesn’t count</p>}
                           </div>
                           <Toggle
@@ -558,12 +572,25 @@ export function RoundSettings({ door, roundId, number, casual }: {
   )
 }
 
+/** "Golf Ireland card · 34 points" — what the gear says of a card read in. */
+export function describeRoundCard(c: Pick<RoundCard, 'points' | 'gross' | 'holes'>): string {
+  const parts = ['Golf Ireland card']
+  if (c.points != null) parts.push(`${c.points} points`)
+  else if (c.gross != null) parts.push(`${c.gross} gross`)
+  if (c.holes === 9) parts.push('9 holes')
+  return parts.join(' · ')
+}
+
 type GearData =
   | { state: 'idle' | 'loading' | 'failed'; cards: []; cardsOff: []; boards: [] }
   | {
       state: 'ready'
-      /** The players with a card in this round — the ones there is anything to switch. */
-      cards: { id: string; name: string }[]
+      /**
+       * The players with a card in this round — the ones there is anything
+       * to switch. `golfIreland` describes the card when the round is a
+       * Golf Ireland card rather than one scored here.
+       */
+      cards: { id: string; name: string; golfIreland?: string }[]
       cardsOff: string[]
       /** The league boards a round's allowance means anything on. */
       boards: Leaderboard[]
@@ -577,7 +604,7 @@ const EMPTY_GEAR: GearData = { state: 'idle', cards: [], cardsOff: [], boards: [
  * 1,000-row cap — lib/scoreReads.ts), the switched-off cards and the
  * boards, as stored now rather than as the page loaded them.
  */
-function useRoundGear(tripId: string, roundId: string, enabled: boolean) {
+function useRoundGear(tripId: string, roundId: string, enabled: boolean, imported: readonly RoundCard[]) {
   const [data, setData] = useState<GearData>(EMPTY_GEAR)
   const [version, setVersion] = useState(0)
 
@@ -604,15 +631,24 @@ function useRoundGear(tripId: string, roundId: string, enabled: boolean) {
         ...(scoresRes.data ?? []).map(s => s.player_id),
         ...(liveRes.data ?? []).map(s => s.player_id),
       ])
+      // A card scored here is the round's own card and wins on the board,
+      // so a player holding both is listed as the live card alone.
+      const fromGi = new Map(imported.filter(c => !holding.has(c.playerId)).map(c => [c.playerId, c]))
       setData({
         state: 'ready',
-        cards: (playersRes.data ?? []).filter(p => holding.has(p.id)),
+        cards: (playersRes.data ?? [])
+          .filter(p => holding.has(p.id) || fromGi.has(p.id))
+          .map(p => {
+            const gi = fromGi.get(p.id)
+            return gi ? { ...p, golfIreland: describeRoundCard(gi) } : p
+          }),
         cardsOff: parseLeagueSetup(trip.bracket_setup)?.cardsOff ?? [],
         boards: parseLeaderboards(trip.leaderboards).filter(b => offersAllowance(b)),
       })
     })
     return () => { live = false }
-  }, [tripId, roundId, enabled, version])
+    // `imported` is a server prop: it changes only when the page re-renders.
+  }, [tripId, roundId, enabled, version, imported])
 
   return { data, reload: () => setVersion(v => v + 1) }
 }

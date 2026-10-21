@@ -27,21 +27,32 @@ import {
   type OpenCard, type ScoreRow, type LiveScoreRow, type HandicapRow,
 } from './rowContext'
 import { readScores, readLiveScores, readRoundHandicaps } from './scoreReads'
-import { cardKey, parseLeagueSetup } from './leagueSetup'
+import { cardKey, parseLeagueSetup, type LeagueSetup } from './leagueSetup'
+import { readsGolfIreland, type RoundCard } from './golfIreland'
+import { readRoundCards } from './golfIrelandCards'
 
 /**
- * A league's switched-off cards (`LeagueSetup.cardsOff`) — read on their
- * own, fail-soft: a trip has none, a database without migration 047 has no
- * column, and either way every card counts, which is the right answer.
+ * A league's setup — its switched-off cards (`LeagueSetup.cardsOff`) and
+ * whether it reads Golf Ireland — read on its own, fail-soft: a trip has
+ * none, a database without migration 047 has no column, and either way
+ * every card counts and none is read in, which is the right answer.
  */
-async function fetchCardsOff(tripId: string): Promise<string[]> {
+async function fetchLeague(tripId: string): Promise<LeagueSetup | null> {
   const { data, error } = await supabase
     .from('trips')
     .select('bracket_setup')
     .eq('id', tripId)
     .maybeSingle()
-  if (error) return []
-  return parseLeagueSetup((data as { bracket_setup?: unknown } | null)?.bracket_setup)?.cardsOff ?? []
+  if (error) return null
+  return parseLeagueSetup((data as { bracket_setup?: unknown } | null)?.bracket_setup)
+}
+
+/** The setup, and its Golf Ireland cards on these rounds — one hop more only for a league reading them. */
+async function fetchLeagueCards(
+  tripId: string, rounds: readonly { id: string; scheduled_date?: string | null; course_id?: string | null }[],
+): Promise<{ cardsOff: string[]; roundCards: RoundCard[] }> {
+  const setup = await fetchLeague(tripId)
+  return { cardsOff: setup?.cardsOff ?? [], roundCards: await readRoundCards(tripId, setup, rounds) }
 }
 
 export type PlacingResult = {
@@ -110,13 +121,17 @@ async function simplePlacing(
   // two against each other. Not named in the column list because migration
   // 031 is run by hand, and this query serves most trips' hubs. A league's
   // switched-off cards come in the same breath, for the same reason.
-  const [{ data: rounds, error: roundsError }, cardsOff] = await Promise.all([
+  const [{ data: rounds, error: roundsError }, setup] = await Promise.all([
     supabase
       .from('rounds')
       .select('*')
       .eq('trip_id', tripId),
-    fetchCardsOff(tripId),
+    fetchLeague(tripId),
   ])
+  const cardsOff = setup?.cardsOff ?? []
+  // Golf Ireland cards are totals beside the holes, read by `buildRows` —
+  // a league reading them takes the full path, so the two cannot disagree.
+  if (readsGolfIreland(setup?.scoreSource)) return fullPlacing(tripId, lead, playerId, null)
 
   if (roundsError) {
     console.error('fetchPlacing rounds query failed:', roundsError)
@@ -299,7 +314,7 @@ export async function fetchTripContext(
   const someCourses = courseIds.length > 0 ? courseIds : [nil]
 
   const [playersRes, teamsRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, coursesRes,
-         openRes, memberships, cardsOff] =
+         openRes, memberships, league] =
     await Promise.all([
       supabase.from('players')
         .select('id, name, handicap, gender')
@@ -332,7 +347,7 @@ export async function fetchTripContext(
         .select('round_id, live_player_locks(player_id)')
         .eq('status', 'active').in('round_id', roundIds),
       fetchMemberships(tripId),
-      fetchCardsOff(tripId),
+      fetchLeagueCards(tripId, roundRows as { id: string; scheduled_date?: string | null; course_id?: string | null }[]),
     ])
 
   const failed = [playersRes, teamsRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes,
@@ -370,7 +385,8 @@ export async function fetchTripContext(
     activeRoundIds: presence.activeRoundIds,
     livePlayerIds: presence.livePlayerIds,
     legacyTeamScoring,
-    cardsOff,
+    cardsOff: league.cardsOff,
+    roundCards: league.roundCards,
   })
 
   return {

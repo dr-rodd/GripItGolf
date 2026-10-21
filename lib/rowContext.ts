@@ -25,6 +25,7 @@ import type {
 import type { Membership } from './teamSets'
 import type { TeamScoring } from './teamScoring'
 import { exactCourseHandicap, type TeeRating } from './courseHandicap'
+import type { RoundCard } from './golfIreland'
 
 /**
  * The two stats a card can carry beyond the score.
@@ -254,6 +255,11 @@ export type RowContextInput = {
    * read off the trip by the caller, like everything else here.
    */
   cardsOff?: readonly string[]
+  /**
+   * A league's Golf Ireland cards placed on their rounds — fetched on the
+   * server, which alone can read them (app/trip/[tripCode]/golfIreland.ts).
+   */
+  roundCards?: readonly RoundCard[]
 }
 
 /**
@@ -309,5 +315,6 @@ export function buildRowContext(input: RowContextInput): RowContext {
     livePlayerIds: new Set(input.livePlayerIds),
     legacyTeamScoring: input.legacyTeamScoring,
     ...(input.cardsOff?.length ? { cardsOff: new Set(input.cardsOff) } : {}),
+    ...(input.roundCards?.length ? { roundCards: input.roundCards } : {}),
   }
 }

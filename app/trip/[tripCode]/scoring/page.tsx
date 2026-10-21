@@ -8,6 +8,7 @@ import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundS
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
 import AddRound from './AddRound'
+import { readRoundCards } from '@/lib/golfIrelandCards'
 import { AddLeagueRound, RoundSettings, TbcRoundTile, type LeagueDoor } from '../LeagueRounds'
 import { parseLeagueSetup, leagueRounds, nextRoundNumber, revealedLeagueRounds } from '@/lib/leagueSetup'
 import { todayString } from '@/lib/tripStatus'
@@ -87,9 +88,8 @@ export default async function TripCoursePortalPage({
   // has no first round to count from, and keeps the organiser's running
   // order as its only door.
   const setupRow = setupRes.data as { bracket_setup?: unknown; settings_passcode_hash?: string | null } | null
-  const series = event
-    && parseLeagueSetup(setupRow?.bracket_setup)?.schedule === 'series'
-    && !!trip.start_date
+  const leagueSetup = event ? parseLeagueSetup(setupRow?.bracket_setup) : null
+  const series = leagueSetup?.schedule === 'series' && !!trip.start_date
   const permsRaw = (permsRes.data as { event_permissions?: unknown } | null)?.event_permissions
 
 
@@ -117,7 +117,10 @@ export default async function TripCoursePortalPage({
   // and only for a league, which draws a round still TBC from its item
   // because no round exists for it yet. Every other trip's itinerary stays
   // where the AddRound sheet fetches it, on the tap.
-  const [{ data: openData, error: openErr }, itemsRes] = await Promise.all([
+  //
+  // So do its Golf Ireland cards, each placed on the round it was played
+  // as — nothing asked unless the league reads them (lib/golfIrelandCards.ts).
+  const [{ data: openData, error: openErr }, itemsRes, roundCards] = await Promise.all([
     roundIds.length > 0
       ? supabase.from('live_rounds').select('round_id, live_player_locks(player_id)')
           .eq('status', 'active').in('round_id', roundIds)
@@ -126,6 +129,7 @@ export default async function TripCoursePortalPage({
       ? supabase.from('itinerary_items').select('id, day_index, position, kind, course_id')
           .eq('trip_id', trip.id)
       : Promise.resolve({ data: [], error: null }),
+    series ? readRoundCards(trip.id, leagueSetup, rounds) : Promise.resolve([]),
   ])
   if (openErr) console.error('TripCoursePortal live rounds query failed:', openErr)
   if (itemsRes.error) console.error('TripCoursePortal league items query failed:', itemsRes.error)
@@ -196,7 +200,11 @@ export default async function TripCoursePortalPage({
       return { id, scored: committed || live }
     }),
   )
-  const scoredRounds = new Set(played.filter(r => r.scored).map(r => r.id))
+  // A Golf Ireland card in a round is a score in it, as much as a live one.
+  const scoredRounds = new Set([
+    ...played.filter(r => r.scored).map(r => r.id),
+    ...roundCards.map(c => c.roundId),
+  ])
 
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
@@ -319,6 +327,7 @@ export default async function TripCoursePortalPage({
                   roundId={round.id}
                   number={round.round_number}
                   casual={round.casual === true}
+                  golfIrelandCards={roundCards.filter(c => c.roundId === round.id)}
                 />
               </div>
             ) : tile

@@ -9,6 +9,7 @@ import { fetchMemberships } from '@/lib/teamMembers'
 import { buildRowContext, type ScoreRow, type HandicapRow } from '@/lib/rowContext'
 import { readScores, readRoundHandicaps } from '@/lib/scoreReads'
 import { buildRows } from '@/lib/boardRows'
+import { readRoundCards } from '@/lib/golfIrelandCards'
 import {
   dayCount, dateForDay, describeDay, describeItem, itemsForDay,
 } from '@/lib/itinerary'
@@ -65,8 +66,10 @@ export default async function TripExportPage({
   const courseIds = rounds.map(r => r.courses?.id).filter(Boolean)
   const nilId = '00000000-0000-0000-0000-000000000000'
 
+  const leagueSetup = parseLeagueSetup((trip as { bracket_setup?: unknown }).bracket_setup)
+
   const [teamsRes, playersRes, holesRes, scoresRes, hcpsRes, teesRes, itineraryRes,
-         memberships] =
+         memberships, roundCards] =
     await Promise.all([
       supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
       supabase.from('players')
@@ -95,6 +98,10 @@ export default async function TripExportPage({
         .order('day_index')
         .order('position'),
       fetchMemberships(trip.id),
+      // A Golf Ireland league's cards are signed cards too. Nothing asked
+      // unless the league reads them.
+      readRoundCards(trip.id, leagueSetup,
+        rounds.map(r => ({ id: r.id, scheduled_date: r.scheduled_date, course_id: r.courses?.id ?? null }))),
     ])
 
   const stored = parseLeaderboards(trip.leaderboards)
@@ -119,7 +126,8 @@ export default async function TripExportPage({
     livePlayerIds: [],
     legacyTeamScoring: isLegacy(stored) ? teamScoring : null,
     // A league's switched-off cards are off paper too. Rides on the `*`.
-    cardsOff: parseLeagueSetup((trip as { bracket_setup?: unknown }).bracket_setup)?.cardsOff,
+    cardsOff: leagueSetup?.cardsOff,
+    roundCards,
   })
 
   const exportBoards: ExportBoard[] = boards

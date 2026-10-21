@@ -273,6 +273,12 @@ the next.
    it does not count. The league board reading Golf Ireland cards beside
    live ones. The scoring tab saying where the scores come from when live
    scoring is off.
+   **The board half is built (October 2026)**: stored cards are placed on
+   their league rounds by date and venue and read beside the live ones
+   (`readRoundCards`, `cardsOnRounds`, `RowContext.roundCards` —
+   `docs/event-use-cases.md`, story 1 stage 5), and a round's gear switches
+   one off. In a league of rounds `cardIssue` refuses a card that is no
+   round. The reading itself is still to come.
 6. The privacy notice's Golf Ireland section (written before it opens, as
    `/privacy` promises), the terms, and these docs.
 

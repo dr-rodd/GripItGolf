@@ -16,6 +16,7 @@ import {
   type DayBoards, boardGrouping, describeScope,
 } from '@/lib/leagueSetup'
 import { type Segment } from '@/lib/tiebreak'
+import type { RoundCard } from '@/lib/golfIreland'
 import { buildRowContext, sortRounds } from '@/lib/rowContext'
 import { allowanceOf } from '@/lib/handicapAllowance'
 import { boardNames } from '@/lib/displayNames'
@@ -125,6 +126,11 @@ interface Props {
   series?: boolean
   /** A league's switched-off cards — out of every board (`withoutCardsOff`). */
   cardsOff?: string[]
+  /**
+   * A league's Golf Ireland cards on their rounds — totals, read on the
+   * server (lib/golfIrelandCards.ts). Empty everywhere else.
+   */
+  roundCards?: RoundCard[]
   /**
    * A Golf Ireland league's confirmed links — the mark beside each of
    * those names. Read on the server (app/trip/[tripCode]/golfIreland.ts);
@@ -595,6 +601,9 @@ export function CourseTiles({
         const rel  = row.relativeByRound?.[round.id]
         const hero = row.heroByRound?.[round.id]
         const heroName = hero ? playerById.get(hero)?.name : null
+        // A Golf Ireland card is a total with no holes behind it: said on
+        // the tile, and nothing to open.
+        const imported = row.importedRounds?.includes(round.id) ?? false
 
         // The same three states the scoring round picker shows, read the
         // same way — see lib/roundState.ts.
@@ -608,7 +617,8 @@ export function CourseTiles({
         const note = live
           ? heroName ? `In play — carried by ${firstName(heroName)}` : ROUND_NOTE.live
           : hasScores
-            ? heroName ? `Carried by ${firstName(heroName)}` : ''
+            ? imported ? 'Golf Ireland card'
+              : heroName ? `Carried by ${firstName(heroName)}` : ''
             : ROUND_NOTE.empty
 
         // A countback that settled something on this round's card — the
@@ -620,7 +630,8 @@ export function CourseTiles({
         return (
           <button
             key={round.id}
-            onClick={() => onTileClick(round)}
+            onClick={() => { if (!imported) onTileClick(round) }}
+            disabled={imported}
             className={`w-full text-left rounded-card press ${ROUND_TILE[tone]}`}
           >
             <div className="px-5 py-4 flex items-center justify-between gap-4">
@@ -659,7 +670,7 @@ export function CourseTiles({
                       {countbackNote(settledBy)}
                     </span>
                   )}
-                  {tone !== 'empty' && (
+                  {tone !== 'empty' && !imported && (
                     <span className="text-ink/50" aria-hidden="true"><IconChevronRight size={20} /></span>
                   )}
                 </span>
@@ -1443,7 +1454,7 @@ function MatchplayTab({ tripCode }: { tripCode: string }) {
 export default function TripLeaderboardClient({
   tripCode, boards, activeRoundIds, livePlayerIds, legacyTeamScoring, rounds,
   teams, memberships, players, holes, scores, liveScores, roundHandicaps,
-  tees = [], nicknames = [], isEvent = false, dayBoards, linkedIds, series = false, cardsOff,
+  tees = [], nicknames = [], isEvent = false, dayBoards, linkedIds, series = false, cardsOff, roundCards,
 }: Props) {
   const linked = useMemo(() => new Set(linkedIds ?? []), [linkedIds])
   // Matchplay has its own route, so it is a button rather than a tab. Every
@@ -1546,8 +1557,9 @@ export default function TripLeaderboardClient({
     activeRoundIds, livePlayerIds,
     legacyTeamScoring,
     cardsOff,
+    roundCards,
   }), [players, teams, memberships, holes, rounds, scores, liveScores,
-       roundHandicaps, tees, activeRoundIds, livePlayerIds, legacyTeamScoring, cardsOff])
+       roundHandicaps, tees, activeRoundIds, livePlayerIds, legacyTeamScoring, cardsOff, roundCards])
 
   const resolved = rowContext.resolved
   // The same order the board columns them in, on the fuller row this screen

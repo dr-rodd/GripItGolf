@@ -16,6 +16,7 @@
 import type { Leaderboard } from './leaderboards'
 import { FULL_ALLOWANCE, allowanceFor, allowanceOf, allowedHandicap, variesByRound } from './handicapAllowance'
 import { shotsReceived } from './handicap'
+import type { RoundCard } from './golfIreland'
 import { quotaPoints, quotaTarget, quotaScaleOf } from './quota'
 import {
   setOf, sheetForBoard, teamsOnSheet, membersOf, daySheetId, type Membership,
@@ -136,6 +137,11 @@ export type BoardRow = {
   /** Rounds set aside by this board's discard rule — shown struck through. */
   droppedRounds?: string[]
   /**
+   * Rounds this row played as a Golf Ireland card — a total with no holes
+   * behind it, so there is no scorecard to open. Absent when there are none.
+   */
+  importedRounds?: string[]
+  /**
    * The total with nothing set aside.
    *
    * Present only when this board's discard rule actually dropped a round
@@ -248,6 +254,15 @@ export type RowContext = {
    * does not count, and nowhere else. Absent is every card counting.
    */
   cardsOff?: ReadonlySet<string>
+  /**
+   * A league's Golf Ireland cards, each already placed on its round
+   * (`cardsOnRounds` in lib/golfIreland.ts) — totals, no holes. Read by
+   * the individual shell only, and only for a player with no Green Dot
+   * card in that round: a round scored here is the round's own card.
+   * Absent is a league that reads no Golf Ireland cards, which is every
+   * board before them.
+   */
+  roundCards?: readonly RoundCard[]
   /**
    * Players with a scorecard open right now — a `live_player_locks` row on a
    * session still `active`.
@@ -500,8 +515,17 @@ export function buildRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
 function withoutCardsOff(ctx: RowContext): RowContext {
   if (!ctx.cardsOff || ctx.cardsOff.size === 0) return ctx
   const off = ctx.cardsOff
-  return { ...ctx, resolved: ctx.resolved.filter(s => !off.has(`${s.roundId}:${s.playerId}`)) }
+  return {
+    ...ctx,
+    resolved: ctx.resolved.filter(s => !off.has(`${s.roundId}:${s.playerId}`)),
+    // A Golf Ireland card is switched off by the same key, from the same gear.
+    ...(ctx.roundCards ? { roundCards: ctx.roundCards.filter(c => !off.has(`${c.roundId}:${c.playerId}`)) } : {}),
+  }
 }
+
+/** The Golf Ireland cards on these rounds only — beside the scores, in each narrowing. */
+const cardsIn = (ctx: RowContext, counted: ReadonlySet<string>) =>
+  ctx.roundCards ? { roundCards: ctx.roundCards.filter(c => counted.has(c.roundId)) } : {}
 
 /**
  * The context with casual rounds — and their scores — taken out.
@@ -520,6 +544,7 @@ function withoutCasualRounds(ctx: RowContext): RowContext {
     ...ctx,
     rounds,
     resolved: ctx.resolved.filter(s => counted.has(s.roundId)),
+    ...cardsIn(ctx, counted),
   }
 }
 
@@ -552,6 +577,7 @@ export function withOnlyRounds(
     ...ctx,
     rounds,
     resolved: ctx.resolved.filter(s => counted.has(s.roundId)),
+    ...cardsIn(ctx, counted),
   }
 }
 
@@ -583,6 +609,8 @@ type RoundScore = {
   relative: number | null
   live: boolean
   played: boolean
+  /** A Golf Ireland card's total, read in — no holes behind it. */
+  imported?: boolean
   heroPlayerId?: string | null
   /**
    * What this round was worth over each closing stretch, in whatever the
@@ -845,6 +873,8 @@ function perPlayerRounds(lb: Leaderboard, ctx: RowContext): {
   // The board's own scale. A quota is meaningless without one — see
   // lib/quota.ts — and reading it once here keeps every card on one.
   const scale = quotaScaleOf(lb)
+  // A league's Golf Ireland cards, by round and player. Usually none.
+  const imported = new Map((ctx.roundCards ?? []).map(c => [`${c.roundId}:${c.playerId}`, c]))
 
   const perPlayer = ctx.players.map(p => {
     let holesPlayed = 0, gross = 0
@@ -854,6 +884,21 @@ function perPlayerRounds(lb: Leaderboard, ctx: RowContext): {
         s.playerId === p.id && s.roundId === r.id && (!strokes || s.gross != null))
       holesPlayed += mine.length
       const allowance = allowanceAt(r.id)
+
+      // No Green Dot card in this round, but a Golf Ireland one: the round
+      // is that card's total. A round scored here always wins — it is the
+      // round's own card, the rule `cardIssue` keeps for a league scored
+      // both ways.
+      const card = imported.size > 0 ? imported.get(`${r.id}:${p.id}`) : undefined
+      if (card && !ctx.resolved.some(s => s.playerId === p.id && s.roundId === r.id)) {
+        const read = importedRound(lb, r.id, card, allowance)
+        if (read) {
+          holesPlayed += card.holes
+          if (strokes) gross += card.gross ?? 0
+          return read
+        }
+      }
+
       const ph = boardHandicap(ctx, r.id, p.id, p.handicap, allowance)
 
       if (quota) {
@@ -942,6 +987,32 @@ function perPlayerRounds(lb: Leaderboard, ctx: RowContext): {
   return perPlayer
 }
 
+/**
+ * A Golf Ireland card as one round on this board, or null where the board
+ * cannot read a total.
+ *
+ * · Stableford: Golf Ireland's own points — the official figure, off their
+ *   handicap of the day, and taken as it stands. A board on a reduced
+ *   allowance cannot restate it, because there are no holes to restate.
+ * · Strokes: the gross less Golf Ireland's course handicap, cut by this
+ *   board's allowance like any other handicap. No course handicap, no
+ *   nett, no round.
+ * · Quota: needs the holes against par, so it reads none.
+ *
+ * Never live, and no countback: a card read in is a signed card with no
+ * closing stretch to read.
+ */
+function importedRound(lb: Leaderboard, roundId: string, card: RoundCard, allowance: number): RoundScore | null {
+  if (lb.scoring === 'quota') return null
+  if (lb.scoring === 'strokes') {
+    if (card.gross == null || card.courseHandicap == null) return null
+    const score = card.gross - allowedHandicap(card.courseHandicap, allowance)
+    return { roundId, score, relative: null, live: false, played: true, imported: true }
+  }
+  if (card.points == null) return null
+  return { roundId, score: card.points, relative: null, live: false, played: true, imported: true }
+}
+
 function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const perPlayer = perPlayerRounds(lb, ctx)
 
@@ -962,6 +1033,8 @@ function individualRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
       perRound: c.perRound,
       playedRounds: rounds.filter(r => r.played).map(r => r.roundId),
       droppedRounds: c.dropped,
+      ...(rounds.some(r => r.imported)
+        ? { importedRounds: rounds.filter(r => r.imported).map(r => r.roundId) } : {}),
       liveRounds: rounds.filter(r => r.live).map(r => r.roundId),
       relativeByRound: relatives(lb, rounds),
       total: c.total,

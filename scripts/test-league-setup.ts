@@ -21,6 +21,7 @@ import {
   cardKey, tidyCardsOff, cardsOffWith, MAX_CARDS_OFF, revealedLeagueRounds,
 } from '../lib/leagueSetup'
 import { buildRows, type RowContext, type ResolvedScore } from '../lib/boardRows'
+import type { RoundCard } from '../lib/golfIreland'
 import type { Leaderboard } from '../lib/leaderboards'
 import { parseBracketSetup } from '../lib/bracketSetup'
 import { parseLeaderboards } from '../lib/leaderboards'
@@ -554,8 +555,7 @@ section('The day editor is a door on the organiser page, events only')
 section('A league grows from the Scoring tab and the hub, one round at a time')
 {
   const page = read('app/trip/[tripCode]/scoring/page.tsx')
-  ok(page.includes("parseLeagueSetup(setupRow?.bracket_setup)?.schedule === 'series'")
-    && page.includes('&& !!trip.start_date'),
+  ok(page.includes("const series = leagueSetup?.schedule === 'series' && !!trip.start_date"),
     'the door is a dated league\'s alone — an undated series keeps the running order')
   ok(page.includes("allowsParticipant(kind, permsRaw, 'add_rounds')"),
     'the field adds rounds only when the organiser lets it')
@@ -717,13 +717,13 @@ section('A player\'s card in a round can be switched off, and back on')
   ok(rc.includes('cardsOff: new Set(input.cardsOff)'), 'the one assembly carries the list')
 
   const hub = read('lib/hubStanding.ts')
-  ok(hub.includes('fetchCardsOff(tripId)') && hub.includes('.filter(s => !off.has(cardKey(s.round_id, s.player_id)))'),
+  ok(hub.includes('fetchLeague(tripId),') && hub.includes('.filter(s => !off.has(cardKey(s.round_id, s.player_id)))'),
     'the hub\'s cheap standing drops it too, so it cannot disagree with the board')
-  ok((hub.match(/fetchCardsOff\(tripId\)/g) ?? []).length === 2,
+  ok(hub.includes('fetchLeagueCards(tripId,') && hub.includes('cardsOff: league.cardsOff,'),
     '  …and its full path, both reading it fail-soft in their own batch')
   ok(read('app/trip/[tripCode]/leaderboard/page.tsx').includes('cardsOff={leagueSetup?.cardsOff}'),
     'the leaderboard is handed it')
-  ok(read('app/trip/[tripCode]/export/page.tsx').includes('cardsOff: parseLeagueSetup('),
+  ok(read('app/trip/[tripCode]/export/page.tsx').includes('cardsOff: leagueSetup?.cardsOff,'),
     'and the export, so paper agrees with the screen')
 
   const store = read('lib/leagueRoundStore.ts')
@@ -740,6 +740,84 @@ section('A player\'s card in a round can be switched off, and back on')
     'and every change in it is the organiser\'s')
   ok(gear.includes("readScores<") && gear.includes("readLiveScores<"),
     'who has a card is read whole, past the 1,000-row cap')
+}
+
+section('A Golf Ireland card played as a round counts as that round, and switches off with it')
+{
+  // The same nine par-4s; Alice scores round one here, Bob hands his in to
+  // Golf Ireland. Golf Ireland's own points stand as they are.
+  const holes = Array.from({ length: 9 }, (_, i) => ({
+    id: `h${i + 1}`, hole_number: i + 1, par: 4, stroke_index: i + 1, course_id: 'c1',
+  }))
+  const players = [
+    { id: 'p1', name: 'Alice', handicap: 9, gender: 'M' },
+    { id: 'p2', name: 'Bob', handicap: 9, gender: 'M' },
+  ]
+  const live = (roundId: string, playerId: string): ResolvedScore[] => holes.map(h => ({
+    playerId, roundId, holeId: h.id, holeNumber: h.hole_number,
+    gross: 5, points: 2, noReturn: false, live: false,
+  }))
+  const gi = (roundId: string, playerId: string, points: number | null, gross: number | null = 40, courseHandicap: number | null = 9): RoundCard => ({
+    roundId, playerId, cardId: `gi-${roundId}-${playerId}`, holes: 9, points, gross, courseHandicap,
+  })
+  const ctx = (extra: Partial<RowContext>): RowContext => ({
+    players, teams: [], memberships: [], holes,
+    rounds: [{ id: 'r1', round_number: 1 }, { id: 'r2', round_number: 2 }],
+    resolved: live('r1', 'p1'),
+    hcpFor: new Map(players.flatMap(p => [[`r1:${p.id}`, 9], [`r2:${p.id}`, 9]] as [string, number][])),
+    liveRoundIds: new Set<string>(), livePlayerIds: new Set<string>(), legacyTeamScoring: null,
+    ...extra,
+  })
+  const board = starterBoards()[0]
+  const row = (c: RowContext, id: string, lb: Leaderboard = board) => buildRows(lb, c).find(r => r.id === id)
+
+  eq(row(ctx({}), 'p2'), undefined, 'with no cards read in, Bob is not on the board')
+  const read1 = ctx({ roundCards: [gi('r1', 'p2', 21)] })
+  eq(row(read1, 'p2')?.total, 21, 'his Golf Ireland card for round one counts as round one — their points, as they stand')
+  eq(row(read1, 'p2')?.playedRounds, ['r1'], '  …and shows as a round played')
+  eq(row(read1, 'p2')?.liveRounds, [], '  …never as one in play')
+  eq(row(read1, 'p2')?.importedRounds, ['r1'], '  …and as a Golf Ireland card, which has no scorecard to open')
+  ok(!('importedRounds' in row(read1, 'p1')!), '  …a row with none carries nothing extra')
+  eq(row(read1, 'p1')?.total, 18, 'Alice, scored here, is untouched')
+
+  const both = ctx({ resolved: live('r1', 'p1'), roundCards: [gi('r1', 'p1', 30)] })
+  eq(row(both, 'p1')?.total, 18, 'a round scored here wins over a Golf Ireland card the same round')
+
+  eq(row(ctx({ roundCards: [gi('r1', 'p2', 21)], cardsOff: new Set([cardKey('r1', 'p2')]) }), 'p2'), undefined,
+    'the gear\'s switch takes a Golf Ireland card off, by the same key')
+  eq(row(ctx({ roundCards: [gi('r1', 'p2', 21), gi('r2', 'p2', 17)] }), 'p2', { ...board, roundIds: ['r2'] })?.total, 17,
+    'a round\'s own board counts only its own card')
+  eq(row(ctx({ rounds: [{ id: 'r1', round_number: 1, casual: true }, { id: 'r2', round_number: 2 }],
+    roundCards: [gi('r1', 'p2', 21), gi('r2', 'p2', 17)] }), 'p2')?.total, 17,
+    'a round that does not count drops its Golf Ireland cards with its live ones')
+
+  const strokes: Leaderboard = { ...board, scoring: 'strokes' }
+  eq(row(ctx({ resolved: [], roundCards: [gi('r1', 'p2', 21, 40, 9)] }), 'p2', strokes)?.total, 31,
+    'a strokes board takes Golf Ireland\'s course handicap off the gross')
+  eq(row(ctx({ resolved: [], roundCards: [gi('r1', 'p2', 21, 40, 10)] }), 'p2', { ...strokes, handicapAllowance: 90 })?.total, 31,
+    '  …cut by the board\'s allowance like any handicap')
+  eq(row(ctx({ resolved: [], roundCards: [gi('r1', 'p2', 21, 40, null)] }), 'p2', strokes), undefined,
+    '  …and with no course handicap there is no nett, so no round')
+  eq(row(ctx({ resolved: [], roundCards: [gi('r1', 'p2', null, 40)] }), 'p2'), undefined,
+    'a card with no points is no round on a Stableford board')
+
+  const rc = read('lib/rowContext.ts')
+  ok(rc.includes('roundCards: input.roundCards'), 'the one assembly carries them')
+  for (const f of ['app/trip/[tripCode]/leaderboard/page.tsx', 'app/trip/[tripCode]/export/page.tsx',
+                   'lib/hubStanding.ts', 'app/trip/[tripCode]/scoring/page.tsx']) {
+    ok(read(f).includes('readRoundCards('), `${f} reads them through the one reader`)
+  }
+  const reader = read('lib/golfIrelandCards.ts')
+  ok(reader.indexOf('readsGolfIreland(') >= 0 && reader.indexOf('readsGolfIreland(') < reader.indexOf('createAdminClient()'),
+    'and that reader asks nothing before it knows the league reads Golf Ireland')
+  ok(read('lib/hubStanding.ts').includes('if (readsGolfIreland(setup?.scoreSource)) return fullPlacing('),
+    'the hub\'s cheap standing hands a Golf Ireland league to the full path, which reads the cards')
+  const gear = read('app/trip/[tripCode]/LeagueRounds.tsx')
+  ok(gear.includes('golfIreland: describeRoundCard(gi)'), 'the gear lists a Golf Ireland card beside the live ones')
+  ok(!/from '@\/lib\/golfIrelandCards'/.test(gear), '  …handed it by the page — the browser never reads the closed table')
+  const tiles = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  ok(tiles.includes("imported ? 'Golf Ireland card'") && tiles.includes('disabled={imported}'),
+    'the leaderboard\'s round tile says so, and opens no empty scorecard')
 }
 
 section('The next round appears the day after the one before it')
