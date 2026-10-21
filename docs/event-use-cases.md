@@ -490,6 +490,33 @@ overview, or one column at a time), not a rebuild.
    PIN** (`MatchplayBracket`'s `lock`, asked in place before the change
    sheet opens); recording an open match stays open, and the cards still
    fill empty matches by themselves. A trip's bracket is unchanged.
-4. **The match play card on the Add page**, and the PIN on a finalised
-   manual result.
+4. **The match play card — built, October 2026. Needs migration 058,
+   applied by hand.** Ross: a slightly different card from the usual one,
+   **the top of the draw on the left and the bottom on the right**, players
+   entering their own scores with **a concede-hole button**; a result the
+   card settles **completes in the bracket by itself**, and is amended with
+   the admin PIN; **the admin PIN also finalises a match that doesn't
+   feature the user**. Migration 058: `match_scores` (a player's gross a
+   hole, keyed match/player/hole so two phones interleave) and
+   `match_concessions` (a hole and the side that gave it), browser-written
+   like every scorecard, RLS on with open policies, granted by name.
+   `lib/matchCard.ts` is the one copy of the card's rules: `shotsOn` (the
+   arrangement's shots on this hole's index), `holeOutcomes` (a pairing's
+   better nett; **a hole counts only once it is finished on both sides**,
+   or conceded — the bracket's `readMatch` treats a hole one side has as
+   lost, right for a signed card, wrong on the green), `cardState` (the
+   wording is `matchDecision`'s `marginLabel`/`progressLabel`, now exported
+   — "3&2", "2 up thru 14"; level after 18 is halved and put back to the
+   people), `openingHole`, `shouldWrite`. **The card**
+   (`/trip/[code]/match/[id]/card`, opened by **Score this match** once the
+   shots are known): one hole at a time, a strip of all eighteen showing
+   who won each (◂ ▸ =), each player's − and + with their shots as dots, a
+   Concede hole button under each side; every tap saved as made, one write
+   at a time per box; re-read every fifteen seconds through `usePoll`. Once
+   settled the result goes into an empty match by itself (`persistWinner`,
+   so the next round fills); from then on the card is read-only and changes
+   need the admin PIN, as on the bracket, and over a result already in
+   (entered by hand, a walkover) only the organiser's deliberate **Put … in
+   the bracket**. A match the viewer is not in is read-only until the admin
+   PIN is entered.
 5. **The public PIN** (entry and viewing), beside the admin PIN.

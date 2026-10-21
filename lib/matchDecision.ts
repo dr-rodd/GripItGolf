@@ -404,12 +404,12 @@ function holeByHole(
  * applies when the match ended early. A match that went the distance is
  * simply so many up.
  */
-function marginLabel(holesUp: number, remaining: number): string {
+export function marginLabel(holesUp: number, remaining: number): string {
   if (holesUp === 0) return 'Halved'
   return remaining > 0 ? `${holesUp}&${remaining}` : `${holesUp} up`
 }
 
-function progressLabel(holesUp: number, played: number, remaining: number): string {
+export function progressLabel(holesUp: number, played: number, remaining: number): string {
   if (played === 0) return 'Not started'
   const thru = remaining === 0 ? 'thru 18' : `thru ${played}`
   return holesUp === 0 ? `All square ${thru}` : `${holesUp} up ${thru}`

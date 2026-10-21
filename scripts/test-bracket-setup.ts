@@ -375,6 +375,28 @@ section('Arranging a match: venue, tees, shots, contacts, a walkover — and the
   ok(mpage.includes('isEvent(setupRow?.kind) && setupRow?.settings_passcode_hash'), '  …a trip\'s bracket stays open')
 }
 
+section('The match play card: top of the draw left, bottom right, concede a hole, the result into the bracket')
+{
+  const sql = read('supabase/migrations/20260101000058_match_cards.sql')
+  ok(sql.includes('PRIMARY KEY (match_id, player_id, hole_number)') && sql.includes('PRIMARY KEY (match_id, hole_number)'),
+    'migration 058: a score a player a hole, a concession a hole — two phones interleave, never clobber')
+  ok(sql.includes("CHECK (conceded_by IN ('A', 'B'))"), '  …a concession says which side gave it')
+  const client = read('app/trip/[tripCode]/match/[matchId]/card/MatchCardClient.tsx')
+  ok(/sideColumn\('A', a\)\}\s*\{sideColumn\('B', b\)/.test(client), 'the top of the draw on the left, the bottom on the right')
+  ok(client.includes("'Concede hole'") && client.includes('concede(key, current)'), 'each side has its concede-hole button')
+  ok(client.includes('usePoll(load, 15_000, true)') && !client.includes('setInterval'), 'the other phone shows up, through the one poller')
+  ok(client.includes('if (loaded && shouldWrite(state, winnerId, stored, false)) writeResult()'),
+    'a settled card puts its result into an empty match by itself')
+  ok(client.includes('persistWinner(all, matchId, winnerId as string, state.result)'), '  …through the bracket\'s own writer')
+  ok(client.includes('const canEdit = organiser || (inMatch && !decided)'),
+    'the players score their own match; once it is in, or for anyone else\'s, it is the admin PIN')
+  ok(client.includes('offerOverwrite') && client.includes('onClick={writeResult}'),
+    '  …and over a result already in, only by the organiser\'s deliberate tap')
+  const page = read('app/trip/[tripCode]/match/[matchId]/card/page.tsx')
+  ok(page.includes('matchStrokes(') && page.includes("Arrange the match first"), 'the card takes its shots from the arrangement, or sends you to arrange it')
+  ok(read('app/trip/[tripCode]/match/[matchId]/page.tsx').includes("'Score this match'"), 'the match page opens the card')
+}
+
 // ─── Result ────────────────────────────────────────────────────
 
 console.log(`\n${passed} passed, ${failed} failed`)

@@ -20,6 +20,7 @@ import {
   parseMatchTees, withTee, matchStrokes, shotHoles, describeReceives,
   normaliseContact, contactShown, walkoverChoices, WALKOVER,
 } from '../lib/matchArrangements'
+import { holeOutcomes, cardState, openingHole, shouldWrite } from '../lib/matchCard'
 
 // ─── Tiny harness ──────────────────────────────────────────────
 
@@ -584,6 +585,61 @@ guard('arrangements', () => {
   eq(walkoverChoices({ ...open, sideB: null }, null, true), [], 'not while a side is still to be decided')
   eq(walkoverChoices({ ...open, bIsBye: true }, null, true), [], 'and never on a bye')
   eq(WALKOVER.length <= 12, true, 'a walkover fits the bracket\'s margin column')
+})
+
+// ─── The match play card ───────────────────────────────────────
+
+section('The match play card: shots, better ball, concessions, and when it is over')
+guard('match card', () => {
+  const holes = Array.from({ length: 18 }, (_, i) => ({ holeNumber: i + 1, par: 4, strokeIndex: i + 1 }))
+  const A = { id: 'ann', players: [{ id: 'ann', gender: 'M', receives: 0 }] }
+  const B = { id: 'bob', players: [{ id: 'bob', gender: 'M', receives: 2 }] } // shots on SI 1 and 2
+  const card = (a: number[], b: number[]) => new Map([
+    ['ann', new Map(a.map((g, i) => [i + 1, g]))],
+    ['bob', new Map(b.map((g, i) => [i + 1, g]))],
+  ])
+  const none = new Map<number, 'A' | 'B'>()
+
+  let o = holeOutcomes(holes, A, B, card([4, 4, 4], [5, 4, 4]), none)
+  eq(o.slice(0, 3).map(x => x.winner), ['halved', 'B', 'halved'],
+    'Bob\'s shot on SI 1 halves his 5 with Ann\'s 4; on SI 2 his 4 wins; on SI 3 there is no shot and 4 halves 4')
+  o = holeOutcomes(holes, A, B, card([4, 4, 3], [5, 4, 4]), none)
+  eq(o[2].winner, 'A', 'a birdie wins the hole with no shot to come back')
+  eq(holeOutcomes(holes, A, B, card([4], []), none)[0].winner, null,
+    'a hole only one side has entered is not yet a hole of the match — the first phone to tap does not win it')
+  eq(holeOutcomes(holes, A, B, card([], []), new Map([[1, 'A' as const]]))[0],
+    { holeNumber: 1, winner: 'B', conceded: true, nettA: null, nettB: null }, 'a hole conceded by Ann is Bob\'s, scores or not')
+
+  const pairA = { id: 'pa', players: [{ id: 'a1', gender: 'M', receives: 0 }, { id: 'a2', gender: 'M', receives: 4 }] }
+  const pairB = { id: 'pb', players: [{ id: 'b1', gender: 'M', receives: 1 }, { id: 'b2', gender: 'M', receives: 0 }] }
+  const pairs = new Map([['a1', new Map([[1, 5]])], ['a2', new Map([[1, 5]])], ['b1', new Map([[1, 5]])], ['b2', new Map([[1, 4]])]])
+  const po = holeOutcomes(holes, pairA, pairB, pairs, none)[0]
+  eq([po.nettA, po.nettB, po.winner], [4, 4, 'halved'], 'a fourball: each pairing\'s better nett, shots and all')
+  eq(holeOutcomes(holes, pairA, pairB, new Map([['a1', new Map([[1, 4]])], ['b1', new Map([[1, 4]])], ['b2', new Map([[1, 4]])]]), none)[0].winner,
+    null, '  …and a pairing\'s hole waits for both its players')
+
+  const st = (a: number[], b: number[], c = none) => cardState(holeOutcomes(holes, A, B, card(a, b), c))
+  eq(st([], []).progress, 'Not started', 'nothing in: not started')
+  eq(st([4, 4, 3], [5, 4, 4]).progress, 'All square thru 3', 'halved, lost, won: all square')
+  const four = Array(16).fill(3), five = Array(16).fill(5)
+  const win = st(four, five)
+  ok(win.settled && win.leader === 'A' && win.result === '16&2', 'sixteen up with two to play: over, 16&2')
+  const tenUp = st(Array(10).fill(3), Array(10).fill(5))
+  eq([tenUp.settled, tenUp.result], [true, '10&8'], 'dormie and beyond: settled the moment it cannot change')
+  const close = st([...Array(17).fill(4), 3], [5, 5, ...Array(15).fill(4), 4])
+  eq([close.settled, close.result, close.leader], [true, '1 up', 'A'], 'won on the eighteenth: 1 up')
+  const level = st(Array(18).fill(4), [5, 5, ...Array(16).fill(4)])
+  ok(level.settled && level.halved && level.result === null, 'level after eighteen: halved, put back to the people')
+
+  eq(openingHole(holeOutcomes(holes, A, B, card([4, 4], [4, 4]), none)), 3, 'the card opens on the first hole not finished')
+
+  const done = { ...win }
+  ok(shouldWrite(done, 'ann', { winner: null, result: null }, false), 'a settled card writes its result to an empty match')
+  ok(!shouldWrite(done, 'ann', { winner: 'ann', result: '16&2' }, false), '  …once')
+  ok(!shouldWrite(done, 'ann', { winner: 'bob', result: '2&1' }, false), '  …never over a result already in, without the admin PIN')
+  ok(shouldWrite(done, 'ann', { winner: 'bob', result: '2&1' }, true), '  …and with it, it does')
+  ok(!shouldWrite(level, null, { winner: null, result: null }, true), 'a halved card writes nothing')
+  ok(!shouldWrite(st([4], [5]), 'ann', { winner: null, result: null }, false), 'nor does one still going')
 })
 
 // ─── Result ────────────────────────────────────────────────────

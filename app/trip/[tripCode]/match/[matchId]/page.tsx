@@ -9,7 +9,7 @@ import { formatHandicap, HANDICAP_PENDING_LABEL } from '@/lib/handicap'
 import { todayString } from '@/lib/tripStatus'
 import TripHeader from '@/app/components/TripHeader'
 import BackButton from '@/app/components/BackButton'
-import { cardClass } from '@/app/components/ui'
+import { buttonClass, cardClass } from '@/app/components/ui'
 import { readKnockout } from '../../knockout'
 import { readContacts } from '../../matchContacts'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
@@ -36,7 +36,8 @@ export const dynamic = 'force-dynamic'
  * hole. **Contact details**, each shown only as its player said (the field,
  * or the opponent). **A walkover**, conceded by a player or awarded by the
  * organiser. The arrangement columns arrive with migration 057 and are read
- * in their own fail-soft query, so the page stands without them.
+ * in their own fail-soft query, so the page stands without them. Once the
+ * shots are known, **Score this match** opens the match card (stage 4).
  */
 export default async function MatchPage({
   params,
@@ -248,6 +249,13 @@ export default async function MatchPage({
               </div>
             )}
           </div>
+        )}
+
+        {/* The match card — once the shots are known (stage 4). */}
+        {arrangeable && course && strokes && (
+          <Link href={`/trip/${tripCode}/match/${match.id}/card`} className={buttonClass('primary')}>
+            {result ? 'See the match card' : 'Score this match'}
+          </Link>
         )}
 
         {mine && me && me.claimed === true && !result && (
