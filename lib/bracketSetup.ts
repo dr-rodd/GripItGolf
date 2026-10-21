@@ -22,6 +22,58 @@
 // Pure. No I/O.
 
 import { roundName } from './matchplay'
+import type { Leaderboard } from './leaderboards'
+
+// ─── A match play event ────────────────────────────────────────
+//
+// Match play is a shape of its own on the tournament door (docs/event-use-
+// cases.md, story 2): one-off — a day or a run of days, its golf on the
+// schedule — or ongoing over a period, paced by the deadlines. Creation
+// seeds the column with `{ format, schedule? }`, a partial the parser below
+// rightly refuses, so these read the raw value.
+
+/** Is this event a knockout? True from the moment it is created. */
+export function isKnockoutEvent(raw: unknown): boolean {
+  return !!raw && typeof raw === 'object' && !Array.isArray(raw)
+    && (raw as Record<string, unknown>).format === 'match_play'
+}
+
+/** The seed a match play event is created with — one-off, or ongoing over a period. */
+export function knockoutSeed(schedule: 'standalone' | 'continuous'): Record<string, unknown> {
+  return schedule === 'continuous' ? { format: 'match_play', schedule: 'continuous' } : { format: 'match_play' }
+}
+
+/**
+ * The date each drawn round must be played by. The setup counts its
+ * deadlines from its ceiling (a draw of 32 has five) while the draw is
+ * shaped by the field that turned up (nine players draw 16, four rounds),
+ * so the two are lined up from the Final backwards: the last deadline is
+ * always the Final's. A round with no deadline left is null. Pure.
+ */
+export function drawDeadlines(deadlines: readonly string[], drawRounds: number): (string | null)[] {
+  const offset = deadlines.length - drawRounds
+  return Array.from({ length: drawRounds }, (_, i) => deadlines[offset + i] ?? null)
+}
+
+/**
+ * What a round's deadline says at the top of the bracket — "Play by Fri 14
+ * Nov", or, once it has passed with a match still open, "Was due Fri 14
+ * Nov". A finished round says nothing more than its date.
+ */
+export function deadlineNote(
+  date: string, shortDate: string, args: { today: string; finished: boolean },
+): string {
+  if (args.finished) return `Played by ${shortDate}`
+  return date < args.today ? `Was due ${shortDate}` : `Play by ${shortDate}`
+}
+
+/**
+ * The board a match play event is made with, so the bracket is switched on
+ * from the start rather than waiting for somebody to add one in Trip Setup.
+ */
+export function knockoutBoards(): Leaderboard[] {
+  return [{ id: 'lb-matchplay', audience: 'individual', competition: 'matchplay' }]
+}
 
 // ─── Format ────────────────────────────────────────────────────
 
@@ -67,7 +119,8 @@ export const BRACKET_MODES: { key: BracketMode; label: string; hint: string }[] 
 // seats one — the setup only fixes how tall the bracket is, which is what
 // the deadlines below are counted against.
 
-export const BRACKET_SIZES = [16, 32, 64, 128] as const
+// Up to 64 for now — the draw's own ceiling (`MAX_BRACKET` in lib/matchplay.ts).
+export const BRACKET_SIZES = [16, 32, 64] as const
 export type BracketSize = (typeof BRACKET_SIZES)[number]
 
 export function parseBracketSize(value: unknown): BracketSize | null {

@@ -19,6 +19,7 @@ import {
   type EventPermissions, defaultPermissions, storedPermissions,
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
+import { knockoutBoards, knockoutSeed } from '@/lib/bracketSetup'
 import { describeError, generateCode } from './CreateTripForm'
 import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
@@ -154,7 +155,10 @@ export default function CreateKnockoutForm() {
       // The format and the shape, seeded now so the bracket form knows what
       // it is finishing. Not a complete setup — parseBracketSetup rightly
       // returns null on it — and never claimed to be one.
-      bracket_setup: { format: 'match_play', schedule: 'continuous' },
+      bracket_setup: knockoutSeed('continuous'),
+      // The bracket's board, so the event plays from the moment it exists —
+      // without it the bracket said match play was not switched on.
+      leaderboards: knockoutBoards(),
       // Only when a toggle was actually flipped — nothing opened writes
       // nothing, so creation still lands before migration 049 has run.
       ...(storedPermissions(perms) ? { event_permissions: perms } : {}),

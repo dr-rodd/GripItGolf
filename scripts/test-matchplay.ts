@@ -131,7 +131,9 @@ section('Invalid player counts')
 throws(() => generateBracket(makePlayers(0)), 'rejects zero players')
 throws(() => generateBracket(makePlayers(1)), 'rejects a single player')
 throws(() => bracketShape(1), 'bracketShape rejects a single player')
-throws(() => generateBracket(makePlayers(33)), 'rejects more than 32 players')
+throws(() => generateBracket(makePlayers(65)), 'rejects more than 64 players')
+eq(generateBracket(makePlayers(64)).length, 63, '64 players → 63 matches, the largest draw')
+eq(generateBracket(makePlayers(33)).filter(m => m.roundNumber === 1).length, 32, '33 players → a draw of 64, byes and all')
 throws(
   () => generateBracket([{ id: 'p1', name: 'A' }, { id: 'p1', name: 'A again' }]),
   'rejects the same player twice')

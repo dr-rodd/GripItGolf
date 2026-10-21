@@ -14,6 +14,8 @@ import {
 import { readScores, readLiveScores, readRoundHandicaps } from '@/lib/scoreReads'
 import { readBracket, type MatchReading } from '@/lib/matchResults'
 import { type QuotaScale } from '@/lib/quota'
+import { drawDeadlines, isKnockoutEvent, parseBracketSetup } from '@/lib/bracketSetup'
+import { todayString } from '@/lib/tripStatus'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
@@ -55,7 +57,7 @@ export default async function MatchplayPage({
   const enabled = hasMatchplay(boards)
   const pairs   = needsPairings(boards)
 
-  const [matchesRes, playersRes, teamsRes, memberships, nicknamesRes] = await Promise.all([
+  const [matchesRes, playersRes, teamsRes, memberships, nicknamesRes, setupRes] = await Promise.all([
     supabase
       .from('matchplay_matches')
       .select(
@@ -82,6 +84,10 @@ export default async function MatchplayPage({
     // in the players select would fail the draw on a database that has not
     // run migration 047, and a bracket without nicknames still stands.
     supabase.from('players').select('id, nickname').eq('trip_id', trip.id),
+    // The bracket setup — the dates each round is played by, and whether
+    // this is a match play event — on its own and fail-soft, never in the
+    // trip's select (migration 047 is applied by hand).
+    supabase.from('trips').select('bracket_setup').eq('id', trip.id).maybeSingle(),
   ])
 
   if (matchesRes.error) console.error('MatchplayPage matches query failed:', matchesRes.error)
@@ -140,6 +146,16 @@ export default async function MatchplayPage({
   // before this existed — asks for none of this, and the page is the two
   // queries it always was.
   const links = draw?.roundLinks ?? []
+  // The deadlines across the top of the bracket, lined up with the rounds
+  // actually drawn (the setup counts from its ceiling, the draw from the
+  // field) — lib/bracketSetup.ts.
+  const rawSetup = (setupRes.data as { bracket_setup?: unknown } | null)?.bracket_setup
+  const drawnRounds = new Set(rawMatches.map(m => m.round_number as number)).size
+  const deadlines = drawDeadlines(parseBracketSetup(rawSetup)?.deadlines ?? [], drawnRounds)
+  // On a match play event the bracket IS the leaderboard tab, so there is
+  // no leaderboard to go back to.
+  const knockout = isKnockoutEvent(rawSetup)
+
   const readings = links.length > 0
     ? await readLinkedRounds(trip, links, matches, entrants, memberships,
         tripQuotaScale(boards))
@@ -150,7 +166,7 @@ export default async function MatchplayPage({
       <TripHeader backTo={`/trip/${tripCode}`} />
       <div className="paper border-b border-line">
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
-          <BackButton href={`/trip/${tripCode}/leaderboard`} />
+          {knockout ? <div className="w-11" /> : <BackButton href={`/trip/${tripCode}/leaderboard`} />}
           <h1 className="t-h2 text-ink truncate px-2">
             Match play
           </h1>
@@ -180,6 +196,8 @@ export default async function MatchplayPage({
             matches={matches as unknown as BracketMatchRow[]}
             entrants={entrants as BracketEntrantRow[]}
             readings={readings}
+            deadlines={deadlines}
+            today={todayString(new Date())}
           />
         )}
       </div>

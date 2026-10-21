@@ -16,7 +16,9 @@ import {
   roundsFor, bracketRoundNames, parseBracketSize, describeSize,
   normalizeEventCode, validEventCode, validDeadline, deadlinesIssue,
   unansweredSetup, isCompleteSetup, parseBracketSetup, describeSetup,
+  isKnockoutEvent, knockoutSeed, knockoutBoards, drawDeadlines, deadlineNote,
 } from '../lib/bracketSetup'
+import { hasMatchplay } from '../lib/leaderboards'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -37,17 +39,17 @@ const read = (p: string) => fs.readFileSync(p, 'utf-8')
 
 section('Four sizes, each a power of two, each knowing its rounds')
 {
-  eq([...BRACKET_SIZES], [16, 32, 64, 128], 'the four sizes, in order')
+  eq([...BRACKET_SIZES], [16, 32, 64], 'the three sizes, in order — up to 64 for now')
   eq(roundsFor(16), 4, '16 players is 4 rounds')
   eq(roundsFor(32), 5, '32 is 5')
   eq(roundsFor(64), 6, '64 is 6')
-  eq(roundsFor(128), 7, '128 is 7')
+  eq(roundsFor(64), 6, '64 is 6')
 
   eq(bracketRoundNames(16),
     ['Round of 16', 'Quarter-Final', 'Semi-Final', 'Final'],
     'round names come from lib/matchplay.ts, first round first')
-  eq(bracketRoundNames(128)[0], 'Round of 128', 'the big draw starts at 128')
-  eq(bracketRoundNames(128).at(-1), 'Final', 'and every draw ends at the Final')
+  eq(bracketRoundNames(64)[0], 'Round of 64', 'the big draw starts at 64')
+  eq(bracketRoundNames(64).at(-1), 'Final', 'and every draw ends at the Final')
 
   eq(parseBracketSize(32), 32, 'a real size parses')
   eq(parseBracketSize('64'), 64, 'even as a stored string')
@@ -267,6 +269,45 @@ section('The form stands where it should and writes only what it owns')
   const migration = read('supabase/migrations/20260101000047_bracket_setup.sql')
   ok(migration.includes('ADD COLUMN IF NOT EXISTS bracket_setup jsonb'),
     'migration 047 adds the one jsonb column, idempotently')
+}
+
+section('A match play event is a knockout from the moment it is made')
+{
+  ok(isKnockoutEvent(knockoutSeed('standalone')) && isKnockoutEvent(knockoutSeed('continuous')),
+    'both seeds read as a knockout — the parser refuses them, this does not need it to')
+  eq(knockoutSeed('continuous'), { format: 'match_play', schedule: 'continuous' }, 'ongoing carries its shape')
+  eq(knockoutSeed('standalone'), { format: 'match_play' }, 'one-off is the absent default')
+  ok(!isKnockoutEvent({ format: 'league', entry: 'organiser' }) && !isKnockoutEvent(null) && !isKnockoutEvent([]),
+    'a league, nothing, or nonsense is not')
+  const [board] = knockoutBoards()
+  ok(board.competition === 'matchplay' && hasMatchplay(knockoutBoards()), 'it is made with the bracket\'s board')
+
+  eq(drawDeadlines(['2026-11-14', '2026-12-12', '2027-01-16', '2027-02-13', '2027-03-13'], 4),
+    ['2026-12-12', '2027-01-16', '2027-02-13', '2027-03-13'],
+    'a setup for 32 over a draw of 16: lined up from the Final backwards')
+  eq(drawDeadlines(['2026-11-14', '2026-12-12'], 3), [null, '2026-11-14', '2026-12-12'],
+    'a draw taller than its dates: the early round has none')
+  eq(drawDeadlines([], 3), [null, null, null], 'no dates set: nothing to show')
+
+  eq(deadlineNote('2026-11-14', 'Sat 14 Nov', { today: '2026-11-01', finished: false }), 'Play by Sat 14 Nov', 'ahead of the date')
+  eq(deadlineNote('2026-11-14', 'Sat 14 Nov', { today: '2026-11-14', finished: false }), 'Play by Sat 14 Nov', '  …on the day itself')
+  eq(deadlineNote('2026-11-14', 'Sat 14 Nov', { today: '2026-11-15', finished: false }), 'Was due Sat 14 Nov', 'past it, a match still open')
+  eq(deadlineNote('2026-11-14', 'Sat 14 Nov', { today: '2026-11-15', finished: true }), 'Played by Sat 14 Nov', 'a finished round says only its date')
+
+  const bracket = read('app/trip/[tripCode]/matchplay/MatchplayBracket.tsx')
+  ok(bracket.includes('aria-label="Dates each round is played by"'), 'the dates sit across the top of the bracket')
+  const page = read('app/trip/[tripCode]/matchplay/page.tsx')
+  ok(page.includes("from('trips').select('bracket_setup').eq('id', trip.id).maybeSingle()"),
+    '  …read in their own fail-soft query, never the trip\'s select')
+  ok(page.includes('drawDeadlines(parseBracketSetup(rawSetup)?.deadlines ?? [], drawnRounds)'),
+    '  …lined up with the rounds actually drawn')
+  const board2 = read('app/trip/[tripCode]/leaderboard/page.tsx')
+  ok(board2.includes('isKnockoutEvent(') && board2.includes('redirect(`/trip/${tripCode}/matchplay`)'),
+    'a match play event\'s leaderboard tab is the bracket')
+  ok(board2.includes("own.every(lb => lb.competition === 'matchplay')"),
+    '  …unless the organiser added a board beside it')
+  ok(read('app/components/TabBar.tsx').includes('pathname.startsWith(`${base}/matchplay`)) return \'leaderboard\''),
+    'and the tab stays lit on the bracket')
 }
 
 // ─── Result ────────────────────────────────────────────────────

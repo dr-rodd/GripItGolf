@@ -162,13 +162,15 @@ export default function TabBar({ tripCode, isEvent = false, sport = 'golf' }: {
    */
   const activeKey = sport === 'run' ? runActiveKey(pathname, tripCode) : (() => {
     if (pathname === base || pathname === `${base}/`) return 'home'
-    if (pathname.startsWith(`${base}/leaderboard`)) return 'leaderboard'
+    // The bracket is the leaderboard's own — reached from its strip on a
+    // trip, and the tab itself on a match play event.
+    if (pathname.startsWith(`${base}/leaderboard`) || pathname.startsWith(`${base}/matchplay`)) return 'leaderboard'
     if (pathname.startsWith(`${base}/scoring`)) return 'scoring'
     if (pathname.startsWith(`${base}/stats`)) return 'stats'
     if (pathname.startsWith(`${base}/teesheet`)) return 'teesheet'
     if (pathname.startsWith(`${base}/setup`) || pathname.startsWith(`${base}/teams`)) return 'settings'
-    // Players, matchplay and anything else: no tab claims it rather than a
-    // wrong one being lit.
+    // Players and anything else: no tab claims it rather than a wrong one
+    // being lit.
     return null
   })()
 

@@ -305,3 +305,142 @@ Each stage tested on greendot.live before the next, as with Green Dot Run.
    the real client. And `courses.golf_ireland_id` has to be filled in for a
    venue before it can take a card — nothing on screen sets it yet.
 6. **Continuous, redefined.** After question 3 is answered.
+
+## 2. Corporate match play (a knockout)
+
+### The story
+
+Ross, October 2026.
+
+> A corporate match play: a knockout over a period, matches played on
+> different courses — people play whatever course they are a member of and
+> bring a guest. Match play in general has dates that rounds need to be
+> completed by. A standalone match play (one day, or a weekend at one
+> venue) has more flexibility in formatting, and the leaderboard page
+> becomes the bracket page. Up to 64 competitors for now.
+>
+> If it's a match play event there is no need for stroke play: people
+> amend the bracket with the long press, as they do now. But give an option
+> on the add page for a match play input — players enter scores and it
+> informs the match. Every score can be overridden, but a result finalised
+> by manual entry needs a PIN to change.
+>
+> Because the course isn't known until the match is arranged, the shots
+> given and received aren't known either until the course is chosen.
+> Players set a home club from the homepage, and can add contact details if
+> they want.
+>
+> For added security the creation form can have a separate public PIN and
+> admin PIN, so other people can't get in and change things.
+>
+> The homepage is a bird's-eye view of the tournament — maybe some stats,
+> such as matches played — but mostly what matters to the player: their
+> next match. Tapping into it they choose the venue, amend their handicap,
+> and go to scoring. The Scoring tab is a portal of the bracket rounds, each
+> tapped through to its matches; the player's own match is at the top,
+> active, and the others are listed but inactive.
+>
+> Most of this is built and just needs linking together.
+
+### What is already built
+
+- **The draw and its storage**: `matchplay_matches`, one row per match
+  (migrations 014/016/019), drawn by `generateBracket` in `lib/matchplay.ts`
+  (seeded in registration order; byes settled at the draw) and written by
+  `createBracket`. Pairs draws too.
+- **The bracket page** (`/trip/[code]/matchplay`, `MatchplayBracket.tsx`):
+  the progression styling — a decided match tinted, the winner's bar and
+  margin, the champion filled, faded columns and dimmed connectors — and the
+  **long press** that opens the decide sheet (margin, winner, a warning that
+  later results are voided). No PIN on it.
+- **Deciding from the cards**: a bracket round linked to a golf round
+  (`roundLinks`), decided by one of eight methods (`lib/matchDecision.ts`),
+  applied in the browser to empty matches only; "Cards disagree" when a card
+  changes after.
+- **The setup form** (organiser area → Format): strict or relaxed, a field
+  ceiling, entry, a qualifier, **a deadline per bracket round**, finalise.
+  Stored in `trips.bracket_setup`. The draw reads none of it yet, and the
+  deadlines show nowhere but the form.
+- **The hub's next-match line** (`lib/nextMatch.ts`): "Plays Ross ·
+  Semi-Final", one caption, no link.
+- **Creation**: continuous → match play has its own lean door
+  (`CreateKnockoutForm`: name, period, field, PIN). Standalone → match play
+  is the trip wizard with nothing telling it match play was picked. **Neither
+  writes a match play leaderboard**, so the bracket says "Match play isn't
+  switched on" until somebody adds one in Trip Setup.
+
+### What is new
+
+1. **Match play as its own shape** on the tournament door, beside
+   standalone, continuous and series — then one-off or ongoing.
+2. **A match play event plays from creation**: its board is made with it,
+   so the bracket is on.
+3. **The deadlines at the top of the bracket**, each round's "play by".
+4. **The leaderboard tab is the bracket** on a match play event.
+5. **Up to 64** (the draw stops at 32 today).
+6. **The hub's next match as a card**: opponent, deadline, venue, your
+   handicap, and the way to scoring; plus a bird's-eye line (matches played).
+7. **The Scoring tab as the bracket's portal**: the rounds, each opening its
+   matches, your own on top and active.
+8. **A match's own course**, chosen when it is arranged, so the shots
+   given and received can be worked out. Needs a column on
+   `matchplay_matches` — a migration.
+9. **A home club** on a player, and optional contact details, set from the
+   hub. Columns on `players` — a migration.
+10. **A match play card on the Add page**: players enter the holes, the
+    match is told the result; overridable; a manual result once finalised
+    needs the PIN.
+11. **A public PIN beside the admin PIN.** A second hash on `trips` — a
+    migration. What it locks is question 1 below.
+
+### Will it break at 128 or 256?
+
+Not in the logic: the draw (`seedOrder`), round names ("Round of 128"),
+the progression and the database columns all work for any power of two. The
+draw's own ceiling is a constant (32 today, 64 from stage 1), set low on
+purpose. What strains is the bracket screen: tiles are a fixed 98px apart,
+so a 128 field's first column is about 6,300px of scrolling and 256 twice
+that. It works, slowly. Going past 64 is a screen job (a zoomed-out
+overview, or one column at a time), not a rebuild.
+
+### Open questions
+
+1. **The public PIN — what does it guard?** Joining the event (typing the
+   code is no longer enough), seeing it at all, or entering results? The
+   admin PIN stays what it is.
+2. **Contact details — which, and who sees them?** A phone number and an
+   email, shown only to your opponent? Or the field?
+3. **The match play card — what is entered?** Each player's gross a hole
+   (the card works out who won the hole, with the shots), or just who won
+   each hole?
+4. **Pairs.** Corporate match play is singles here; pairs draws exist. Is
+   singles enough for now?
+
+### Build order
+
+1. **Match play as its own shape, playing from creation — built, October
+   2026.** The tournament door asks the shape alone: Standalone, Continuous
+   and Series go straight to the league wizard (the format question is
+   gone), and **Match play** asks when the matches are played — **One-off**
+   (the event wizard, `CreateTripForm matchPlay`) or **Ongoing** (the lean
+   knockout door). Both are made with the bracket's board (`knockoutBoards`)
+   and the seed `{ format: 'match_play', schedule? }` (`knockoutSeed`), and
+   `isKnockoutEvent` reads that raw seed — the parser refuses a partial. The
+   draw goes to 64 (`MAX_BRACKET`; the setup offers 16, 32, 64). **The
+   dates each round is played by sit across the top of the bracket**, one
+   chip a round, tapping one moves to it, and under the round's name "Play
+   by Sat 14 Nov" (or "Was due…" in rust once past with a match still
+   open) — the setup's deadlines lined up with the rounds actually drawn
+   from the Final backwards (`drawDeadlines`, `deadlineNote`). **The
+   leaderboard tab is the bracket** on a match play event whose boards are
+   all match play (a redirect to `/matchplay`, which keeps the tab lit and
+   drops its back-to-leaderboard button); add a board beside the draw and
+   the table returns, its strip linking to the bracket as on a trip. The
+   draw itself is still made from Trip Setup's match play panel, reached
+   from the organiser area.
+2. **The hub's next match and the Scoring tab's portal.** No migration.
+3. **A match's course and the shots; a player's home club and contact
+   details.** Migration 057.
+4. **The match play card on the Add page**, and the PIN on a finalised
+   manual result.
+5. **The public PIN.** After question 1.

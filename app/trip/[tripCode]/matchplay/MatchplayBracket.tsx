@@ -8,6 +8,8 @@ import {
 import { isDecidable, pressOutcome } from '@/lib/matchplayProgress'
 import { type MatchReading, pendingResults } from '@/lib/matchResults'
 import { decisionLabel } from '@/lib/matchDecision'
+import { deadlineNote } from '@/lib/bracketSetup'
+import { describeShortDate } from '@/lib/itinerary'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, optionClass } from '@/app/components/ui'
 
 // ─── Types ─────────────────────────────────────────────────────
@@ -61,10 +63,18 @@ const SWIPE_MS = 340
 // ─── Component ─────────────────────────────────────────────────
 
 export default function MatchplayBracket({
-  matches: initialMatches, entrants, readings = [],
+  matches: initialMatches, entrants, readings = [], deadlines = [], today = '',
 }: {
   matches: BracketMatchRow[]
   entrants: BracketEntrantRow[]
+  /**
+   * The date each drawn round must be played by, in round order — the
+   * organiser's Format card (`drawDeadlines` in lib/bracketSetup.ts). Empty
+   * when none are set; null for a round without one.
+   */
+  deadlines?: (string | null)[]
+  /** Today, from the server, so a deadline passing reads the same on every phone. */
+  today?: string
   /**
    * What the cards say, for every match whose bracket round is linked to a
    * round of golf. Empty for a draw decided by hand — which is every draw
@@ -213,6 +223,12 @@ export default function MatchplayBracket({
     ?.map(m => readingFor.get(m.id)?.link.decidedBy)
     .find(Boolean)
   const methodLabel = leftMethod ? decisionLabel(leftMethod) : null
+  const leftDeadline = deadlines[leftIndex] ?? null
+  const leftDeadlineNote = leftDeadline
+    ? deadlineNote(leftDeadline, describeShortDate(leftDeadline) ?? leftDeadline, {
+        today, finished: (rounds[leftIndex] ?? []).every(m => !!m.winner_player_id),
+      })
+    : ''
 
   // Columns worth rendering: the visible pair plus one either side, so a
   // swipe has something to bring in. Anything further out is clipped away.
@@ -271,6 +287,33 @@ export default function MatchplayBracket({
   return (
     <div className="select-none">
 
+      {/* The dates the rounds are played by — the pace of the whole draw,
+          across the top. Tapping one moves the bracket to it. */}
+      {deadlines.some(Boolean) && (
+        <div className="flex flex-wrap gap-1.5 mb-4" aria-label="Dates each round is played by">
+          {rounds.map((round, i) => {
+            const date = deadlines[i]
+            if (!date) return null
+            const finished = round.every(m => !!m.winner_player_id)
+            const overdue = !finished && !!today && date < today
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => animateTo(i)}
+                aria-pressed={i === leftIndex}
+                className={`px-3 py-1.5 rounded-full border text-[13px] leading-tight text-left transition-colors ${
+                  i === leftIndex ? 'border-accent-deep bg-accent-tint text-ink' : 'border-line text-ink/80'
+                }`}
+              >
+                <span className="font-medium">{roundNames[i]}</span>
+                <span className={overdue ? 'text-rust-deep' : 'text-ink/65'}> · {describeShortDate(date)}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {/* Round header — updates as you swipe */}
       <div className="flex items-center justify-between gap-3 mb-4">
         <button
@@ -293,6 +336,13 @@ export default function MatchplayBracket({
           {leftMethod && (
             <p className="text-ink/65 text-[13px] leading-tight truncate mt-0.5">
               {methodLabel}
+            </p>
+          )}
+          {leftDeadline && (
+            <p className={`text-[13px] leading-tight truncate mt-0.5 ${
+              leftDeadlineNote.startsWith('Was due') ? 'text-rust-deep' : 'text-ink/65'
+            }`}>
+              {leftDeadlineNote}
             </p>
           )}
         </div>

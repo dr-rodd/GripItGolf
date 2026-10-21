@@ -37,7 +37,13 @@ export type BracketMatch = {
 }
 
 export const MIN_PLAYERS = 2
-export const MAX_BRACKET  = 32
+/**
+ * The largest draw. Up to 64 for now (docs/event-use-cases.md, story 2):
+ * nothing in the draw, the names or the storage stops at a power of two,
+ * but the bracket screen's columns grow 98px a tile, so a 128 field's first
+ * column is some 6,300px tall. Past 64 is a screen job, not a rule change.
+ */
+export const MAX_BRACKET  = 64
 
 // ─── Bracket shape ─────────────────────────────────────────────
 

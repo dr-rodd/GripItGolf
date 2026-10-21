@@ -366,7 +366,7 @@ section('The organiser card says the league in one line')
 
 // ─── Wiring ────────────────────────────────────────────────────
 
-section('The tournament door asks the shape, then the format')
+section('The tournament door asks the shape — and match play is a shape of its own')
 {
   const page = read('app/dashboard/create/page.tsx')
   ok(page.includes('CreateFlow'), 'the create route renders the flow switch')
@@ -380,22 +380,30 @@ section('The tournament door asks the shape, then the format')
   ok(flow.includes("t === 'tournament' || t === 'run'") &&
      flow.includes("if (type !== 'tournament') return <CreateTripForm />"),
     'and only asks the questions through the tournament door')
-  for (const shape of ['Standalone', 'Continuous', 'Series']) {
+  for (const shape of ['Standalone', 'Continuous', 'Series', 'Match play']) {
     ok(flow.includes(`>${'\n'}            ${shape}`) || flow.includes(shape),
       `the shape question offers ${shape}`)
   }
-  ok(flow.includes('<CreateLeagueForm schedule="series" />'),
-    'a series is a league by nature — the format question is skipped')
-  ok(flow.includes("schedule === 'continuous' && format === 'match_play'"),
-    'a continuous knockout gets its own lean door')
+  ok(flow.includes("if (shape && shape !== 'match_play') return <CreateLeagueForm schedule={shape} />"),
+    'standalone, continuous and series are leagues — no format question')
+  ok(flow.includes("knockout === 'continuous') return <CreateKnockoutForm />"),
+    'an ongoing knockout gets its own lean door')
+  ok(flow.includes("knockout === 'standalone') return <CreateTripForm matchPlay />"),
+    'a one-off knockout is the event wizard, told it is match play')
+  ok(/One-off/.test(flow) && /Ongoing/.test(flow), 'match play asks when the matches are played')
+  const trip = read('app/dashboard/create/CreateTripForm.tsx')
+  ok(trip.includes('useState<Leaderboard[]>(() => matchPlay ? knockoutBoards() : [])')
+    && trip.includes("if (isTournament && matchPlay) tripRow.bracket_setup = knockoutSeed('standalone')"),
+    '  …made with the bracket\'s board and the match play seed')
 }
 
 section('The continuous knockout door is lean on purpose')
 {
   const src = read('app/dashboard/create/CreateKnockoutForm.tsx')
   ok(src.includes("kind: 'tournament'"), 'a knockout is an event')
-  ok(src.includes("{ format: 'match_play', schedule: 'continuous' }"),
+  ok(src.includes("bracket_setup: knockoutSeed('continuous')"),
     'creation seeds the format and shape for the bracket form to finish')
+  ok(src.includes('leaderboards: knockoutBoards()'), 'and the bracket\'s board, so it plays from the start')
   ok(!src.includes("from('itinerary_items')") && !src.includes("from('rounds')"),
     'no itinerary and no rounds — matches happen when players make them happen')
   ok(src.includes('hashPasscode'), 'the organiser PIN is hashed on the device')

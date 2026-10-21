@@ -1,4 +1,5 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { isKnockoutEvent } from '@/lib/bracketSetup'
 import { supabase } from '@/lib/supabase'
 import { parseFormats } from '@/lib/formats'
 import { parseLeaderboards } from '@/lib/leaderboards'
@@ -73,6 +74,19 @@ export default async function TripLeaderboardPage({
   const leagueSetup = isEvent((trip as { kind?: unknown }).kind)
     ? parseLeagueSetup((trip as { bracket_setup?: unknown }).bracket_setup)
     : null
+
+  // A match play event's leaderboard is its bracket (docs/event-use-cases.md,
+  // story 2) — unless the organiser has added a board beside the draw, in
+  // which case the table stays and its strip links to the bracket as on a
+  // trip. Asked before the batch, so the hop costs nothing it did not need.
+  {
+    const own = parseLeaderboards(trip.leaderboards)
+    if (isEvent((trip as { kind?: unknown }).kind)
+        && isKnockoutEvent((trip as { bracket_setup?: unknown }).bracket_setup)
+        && own.length > 0 && own.every(lb => lb.competition === 'matchplay')) {
+      redirect(`/trip/${tripCode}/matchplay`)
+    }
+  }
 
   const roundIds  = rounds.map(r => r.id)
   const courseIds = rounds.map(r => r.courses?.id).filter(Boolean)

@@ -25,6 +25,7 @@ import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
 import type { Leaderboard } from '@/lib/leaderboards'
+import { knockoutBoards, knockoutSeed } from '@/lib/bracketSetup'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import {
   type EventPermissions, defaultPermissions, storedPermissions,
@@ -95,7 +96,14 @@ export function generateCode(): string {
 
 // ── Root component ────────────────────────────────────────────────────────
 
-export default function CreateTripForm() {
+export default function CreateTripForm({ matchPlay = false }: {
+  /**
+   * A one-off match play event (the tournament door's Match play → One-off):
+   * the same wizard, made with the bracket's board and the match play seed
+   * so the bracket is on from the start (docs/event-use-cases.md, story 2).
+   */
+  matchPlay?: boolean
+} = {}) {
   /**
    * The platform course list, fetched here rather than handed down.
    *
@@ -143,7 +151,7 @@ export default function CreateTripForm() {
   // empty and deciding later is a normal path, not a failure. Empty stays
   // unwritten, and a skipped trip is byte-for-byte the trip creation has
   // always made.
-  const [boards, setBoards] = useState<Leaderboard[]>([])
+  const [boards, setBoards] = useState<Leaderboard[]>(() => matchPlay ? knockoutBoards() : [])
 
   // Tournaments only — how collaborative the event is, all off until the
   // organiser opts in (lib/eventPermissions.ts). A trip never asks and
@@ -298,6 +306,11 @@ export default function CreateTripForm() {
     // 046 has run. A tournament insert does need the column — until the
     // migration lands it fails, and describeError says why in as many words.
     if (isTournament) tripRow.kind = 'tournament'
+
+    // A match play event says so from the start (lib/bracketSetup.ts), so
+    // its leaderboard tab opens the bracket and the organiser's Format card
+    // finishes a knockout rather than asking what it is.
+    if (isTournament && matchPlay) tripRow.bracket_setup = knockoutSeed('standalone')
 
     // Events only, and only when a toggle was actually flipped — nothing
     // opened writes nothing, so creation still lands before migration 049.
