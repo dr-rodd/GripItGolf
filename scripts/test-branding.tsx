@@ -577,12 +577,12 @@ section('Dark mode is the same tokens with night values')
   // (`text-ink/65` becomes a baked `#2b2118a6` no theme can reach), so each
   // token must point at the plain property the theme blocks re-point.
   for (const name of ['cream', 'surface', 'ink', 'bark',
-                      'accent', 'accent-deep', 'rust', 'rust-deep']) {
+                      'accent', 'accent-deep', 'rust', 'rust-deep', 'gold', 'gold-deep', 'on-gold']) {
     ok(new RegExp(`--color-${name}:\\s*var\\(--gd-${name}\\)`).test(css),
       `the ${name} token is a var(), which the build cannot fold away`)
   }
   for (const name of ['cream', 'surface', 'ink', 'bark',
-                      'accent', 'accent-deep', 'rust', 'rust-deep']) {
+                      'accent', 'accent-deep', 'rust', 'rust-deep', 'gold', 'gold-deep', 'on-gold']) {
     ok(darkHex(name) !== '', `${name} has a dark value`)
   }
 
@@ -623,6 +623,30 @@ section('Dark mode is the same tokens with night values')
     `and the same green reads as a link on the page (${contrast(DDEEP, DCREAM).toFixed(2)}:1)`)
   ok(contrast(rgb(darkHex('accent')), DCREAM) >= 4.5,
     `the accent itself reads as text on the dark page (${contrast(rgb(darkHex('accent')), DCREAM).toFixed(2)}:1)`)
+
+  // Gold is winning (lib/resultTone.ts), and a result is read, so it is
+  // held to the same arithmetic as text — in both themes.
+  {
+    const lightBlock = css.match(/:root \{([\s\S]*?)\}/)?.[1] ?? ''
+    const lightHex = (name: string) =>
+      lightBlock.match(new RegExp(`--gd-${name}:\\s*(#[0-9A-Fa-f]{6})`))?.[1] ?? ''
+    const mixOver = (fg: number[], a: number, bg: number[]) => fg.map((c, i) => c * a + bg[i] * (1 - a))
+    const LGOLD = rgb(lightHex('gold')), LDEEP = rgb(lightHex('gold-deep')), ON = rgb(lightHex('on-gold'))
+    const LSURF = rgb(lightHex('surface'))
+    ok(lightHex('gold') !== '' && lightHex('gold').toUpperCase() !== '#C9A84C',
+      'gold is a token — and not the old identity\'s gold')
+    for (const [where, bg] of [['the page', CREAM], ['a card', LSURF]] as const) {
+      ok(contrast(LDEEP, bg) >= 4.5, `gold text reads on ${where} (${contrast(LDEEP, bg).toFixed(2)}:1)`)
+      ok(contrast(LDEEP, mixOver(LGOLD, 0.24, bg)) >= 4.5,
+        `  …and on the up pill's tint over ${where} (${contrast(LDEEP, mixOver(LGOLD, 0.24, bg)).toFixed(2)}:1)`)
+    }
+    ok(contrast(ON, LGOLD) >= 4.5, `the ink on a won pill reads (${contrast(ON, LGOLD).toFixed(2)}:1)`)
+    const DGOLD = rgb(darkHex('gold')), DGDEEP = rgb(darkHex('gold-deep')), DON = rgb(darkHex('on-gold'))
+    ok(contrast(DGDEEP, DCREAM) >= 4.5 && contrast(DGDEEP, DSURFACE) >= 4.5,
+      `dark gold text reads on the dark page and card (${contrast(DGDEEP, DSURFACE).toFixed(2)}:1)`)
+    ok(contrast(DGDEEP, mixOver(DGOLD, 0.24, DSURFACE)) >= 4.5, '  …and on the dark up pill')
+    ok(contrast(DON, DGOLD) >= 4.5, `the ink on a won pill reads at night too (${contrast(DON, DGOLD).toFixed(2)}:1)`)
+  }
 
   // Errors are text before they are colour
   ok(contrast(rgb(darkHex('rust-deep')), DCREAM) >= 4.5,
@@ -1490,10 +1514,10 @@ section('The parts kit')
 
   // Every choice on a form is one of those parts. The hand-made look they
   // replaced — an emerald edge and a wash typed out at the call site, ten
-  // copies at six strengths — is gone, bar the bracket's tiles, a dense
-  // screen whose decided state is its own.
+  // copies at six strengths — is gone. (The bracket's tiles were the one
+  // exception; a decided match is gold now, a result rather than a choice.)
   const handMade = /'border-accent(?:\/\d+)? bg-accent\/(?:\[0\.\d+\]|\d+)'/
-  eq(uiFiles().filter(f => handMade.test(read(f))), ['app/trip/[tripCode]/matchplay/MatchplayBracket.tsx'],
+  eq(uiFiles().filter(f => handMade.test(read(f))), [],
     'no choice wears a hand-made chosen look')
 }
 

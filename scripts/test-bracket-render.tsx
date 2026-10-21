@@ -224,14 +224,15 @@ section('Won matches show green and the margin')
   )
 
   ok(html.includes('3&amp;2') || html.includes('3&2'), 'the margin is shown on the tile')
-  ok(html.includes('border-accent/50'), 'the tile itself is outlined once won')
-  ok(html.includes('text-accent-deep'), 'and the winning name carries the accent')
+  ok(html.includes('border-gold/60'), 'the tile itself is outlined in gold once won')
+  ok(html.includes('text-gold-deep'), 'and the winning name is gold — winning')
+  ok(html.includes('text-bark') && html.includes('bg-bark'), 'and the side that lost is the brown')
 
   // Undecided matches stay neutral
   const plain = renderToStaticMarkup(
     React.createElement(MatchplayBracket, { matches, entrants: players })
   )
-  ok(!plain.includes('border-accent/50'), 'an unplayed tile is not outlined')
+  ok(!plain.includes('border-gold/60'), 'an unplayed tile is not outlined')
   ok(!plain.includes('3&amp;2'), 'and carries no margin')
 
   // A bye has a winner but was never played, so it must not read as won
@@ -241,7 +242,7 @@ section('Won matches show green and the margin')
   )
   const byeMatch = sixM.find(m => m.player_b_is_bye)!
   ok(byeMatch.winner_player_id !== null, 'the bye does carry a winner in the data')
-  ok(!byeHtml.includes('border-accent/50'),
+  ok(!byeHtml.includes('border-gold/60'),
     'but a bye is not marked as won — it was awarded, not played')
 }
 
@@ -269,16 +270,16 @@ section('The champion is solid, an ordinary win is a tint')
     React.createElement(MatchplayBracket, { matches: played, entrants: players })
   )
 
-  // There is only one accent now, so the hierarchy lives inside it: a won
-  // match is an emerald tint, the champion is filled solid emerald. Two
-  // weights of one hue rather than two competing colours.
-  ok(html.includes('border-accent bg-accent'), 'the champion tile is filled solid')
-  ok(html.includes('text-white font-semibold'), 'with the name reversed out of it')
+  // Winning is gold (Ross, 21 Oct 2026), so the hierarchy lives inside it:
+  // a won match is outlined with its winner in the tint, the champion is
+  // filled solid gold. Two weights of one hue.
+  ok(html.includes('border-gold bg-gold'), 'the champion tile is filled solid gold')
+  ok(html.includes('text-on-gold font-semibold'), 'with the name in the ink that sits on gold')
   ok(!html.includes('rgba(10,157,86,0.12), 0 0 24px'), 'and no glow — the guide has none')
 
   // Ordinary wins stay a tint — solid means winning the whole thing
-  ok(html.includes('border-accent/50'), 'the semi-finals keep the outline')
-  ok(html.includes('text-accent-deep'), 'and their winners the accent text')
+  ok(html.includes('border-gold/60'), 'the semi-finals keep the outline')
+  ok(html.includes('text-gold-deep'), 'and their winners the gold text')
 
   // An undecided Final gets none of it
   const unfinished = played.map(m => m.id === finalMatch.id
@@ -289,9 +290,9 @@ section('The champion is solid, an ordinary win is a tint')
   ok(!plainHtml.includes('rgba(201,168,76'), 'an unwon Final does not glow')
 
   // A won semi-final is not treated as the champion — it advances somewhere
-  ok(plainHtml.includes('border-accent/50'),
+  ok(plainHtml.includes('border-gold/60'),
     'a won semi is still marked even when the Final is open')
-  ok(!plainHtml.includes('border-accent bg-accent'),
+  ok(!plainHtml.includes('border-gold bg-gold'),
     'and never gets the champion styling')
 }
 

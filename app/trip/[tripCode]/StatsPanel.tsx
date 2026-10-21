@@ -41,7 +41,7 @@ export default function StatsPanel({
           {mine.form.length > 0 && (() => {
             const vs = mine.form.reduce((n, r) => n + r.vsHandicap, 0)
             const tone = Math.round(vs * 10) === 0 ? 'text-ink'
-              : vs > 0 ? 'text-accent-deep' : 'text-rust-deep'
+              : vs > 0 ? 'text-gold-deep' : 'text-bark'
             return (
               <div className="pt-3 pb-2.5 border-b border-line">
                 <span className="t-cap text-ink/65">
@@ -112,8 +112,8 @@ function Figure({ label, value, note, tone = 'ink' }: {
   note?: string
   tone?: 'ink' | 'accent' | 'rust'
 }) {
-  const colour = tone === 'accent' ? 'text-accent-deep'
-    : tone === 'rust' ? 'text-rust-deep'
+  const colour = tone === 'accent' ? 'text-gold-deep'
+    : tone === 'rust' ? 'text-bark'
     : 'text-ink'
   return (
     <div className="flex items-baseline justify-between gap-3 py-3 border-b border-line last:border-b-0">

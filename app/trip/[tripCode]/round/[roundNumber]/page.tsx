@@ -1,4 +1,5 @@
 import { Fragment, Suspense } from 'react'
+import { placeClass } from '@/lib/leaderboardStyle'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -473,7 +474,7 @@ async function RoundPodium({
           <CountUp
             value={mine.total}
             onceKey={`round:${roundId}:${meId}`}
-            className="font-serif text-accent-deep text-xl leading-none flex-shrink-0"
+            className="font-serif text-ink text-xl leading-none flex-shrink-0"
           />
         </div>
       )}
@@ -500,11 +501,12 @@ async function RoundPodium({
 function PodiumRow({ place }: { place: PodiumPlace }) {
   return (
     <div className={`font-serif flex items-center gap-3 px-4 py-3 ${cardClass()}`}>
-      <span className="w-8 flex-shrink-0 text-[15px] leading-[1.45] text-ink/50 tabular-nums">
+      <span className={`w-8 flex-shrink-0 text-[15px] leading-[1.45] tabular-nums ${place.position === 1 ? placeClass(1) : 'text-ink/50'}`}>
         {ordinal(place.position)}
       </span>
       <span className="flex-1 min-w-0 text-ink text-sm truncate">{place.name}</span>
-      <span className="text-accent-deep text-base leading-none tabular-nums flex-shrink-0">
+      {/* The winning total in gold; the rest in ink (lib/resultTone.ts) */}
+      <span className={`text-base leading-none tabular-nums flex-shrink-0 ${place.position === 1 ? 'text-gold-deep' : 'text-ink'}`}>
         {place.total}
       </span>
     </div>

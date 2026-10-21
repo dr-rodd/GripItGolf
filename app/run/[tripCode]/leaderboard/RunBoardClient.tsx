@@ -1,5 +1,6 @@
 'use client'
 
+import { placeClass } from '@/lib/leaderboardStyle'
 import { useState } from 'react'
 import { formatPoints } from '@/lib/runChallenge'
 import { formatKm } from '@/lib/runBoards'
@@ -105,7 +106,7 @@ export default function RunBoardClient({ boards, anyRuns, garmin = false, strava
             key={r.id}
             className={`${ROW} ${i < board.rows.length - 1 ? 'border-b border-line' : ''} ${r.isViewer ? 'bg-accent/[0.06]' : ''}`}
           >
-            <span className="text-[15px] leading-[1.45] text-ink/65 tabular-nums w-6">{r.place}</span>
+            <span className={`text-[15px] leading-[1.45] tabular-nums w-6 ${placeClass(r.place)}`}>{r.place}</span>
             <span className="flex-1 min-w-0">
               <span className="flex items-center gap-1.5">
                 {r.color && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} aria-hidden="true" />}
@@ -124,7 +125,7 @@ export default function RunBoardClient({ boards, anyRuns, garmin = false, strava
             key={r.id}
             className={`${ROW} ${i < board.rows.length - 1 ? 'border-b border-line' : ''} ${r.isViewer ? 'bg-accent/[0.06]' : ''}`}
           >
-            <span className="text-[15px] leading-[1.45] text-ink/65 tabular-nums w-6">{r.place}</span>
+            <span className={`text-[15px] leading-[1.45] tabular-nums w-6 ${placeClass(r.place)}`}>{r.place}</span>
             <span className="flex-1 min-w-0">
               <span className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} aria-hidden="true" />

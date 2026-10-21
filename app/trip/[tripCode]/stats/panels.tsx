@@ -28,8 +28,8 @@ export function Line({ label, value, tone = 'ink' }: {
   value: string
   tone?: 'ink' | 'accent' | 'rust'
 }) {
-  const colour = tone === 'accent' ? 'text-accent-deep'
-    : tone === 'rust' ? 'text-rust-deep'
+  const colour = tone === 'accent' ? 'text-gold-deep'
+    : tone === 'rust' ? 'text-bark'
     : 'text-ink'
   return (
     <div className="flex items-baseline justify-between py-2.5 border-b border-line last:border-b-0">
@@ -59,9 +59,10 @@ export function Panel({ title, hint, aside, children }: {
 }
 
 /**
- * A gain is emerald when it is one and rust when it is not — the one
- * sanctioned use of rust on these screens. Level is neither, and prints in
- * ink.
+ * A gain is gold — up — when it is one and the brown when it is not
+ * (lib/resultTone.ts: gold for up, brown for down, green for live alone).
+ * Level is neither, and prints in ink. The tone keeps its old names,
+ * 'accent' and 'rust', so the call sites read as they did.
  */
 export const gainTone = (n: number) =>
   Math.round(n * 10) === 0 ? 'ink' as const : n > 0 ? 'accent' as const : 'rust' as const
@@ -408,8 +409,8 @@ export function RankedBox({ title, hint, rows, meId, aside }: {
             <span className="t-body text-ink flex-1 min-w-0 truncate">{r.name}</span>
             {r.note && <span className="t-cap text-ink/50 flex-shrink-0">{r.note}</span>}
             <span className={`t-data t-num flex-shrink-0 ${
-              r.tone === 'accent' ? 'text-accent-deep'
-              : r.tone === 'rust' ? 'text-rust-deep'
+              r.tone === 'accent' ? 'text-gold-deep'
+              : r.tone === 'rust' ? 'text-bark'
               : 'text-ink'
             }`}>
               {r.figure}
@@ -424,7 +425,7 @@ export function RankedBox({ title, hint, rows, meId, aside }: {
               <div className="absolute inset-y-0 left-1/2 w-px bg-bark/25" />
               <div
                 className={`absolute inset-y-0 rounded-full ${
-                  r.share >= 0 ? 'left-1/2 bg-accent' : 'right-1/2 bg-rust'
+                  r.share >= 0 ? 'left-1/2 bg-gold' : 'right-1/2 bg-bark'
                 }`}
                 style={{ width: `${Math.min(50, Math.abs(r.share) * 50)}%` }}
               />

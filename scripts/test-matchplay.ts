@@ -20,6 +20,7 @@ import {
   parseMatchTees, withTee, matchStrokes, shotHoles, describeReceives,
   normaliseContact, contactShown, walkoverChoices, WALKOVER,
 } from '../lib/matchArrangements'
+import { RESULT_PILL, sideTone, signTone } from '../lib/resultTone'
 import { holeOutcomes, cardState, openingHole, shouldWrite, playCard, ordinal, courseHoleFor } from '../lib/matchCard'
 
 // ─── Tiny harness ──────────────────────────────────────────────
@@ -664,6 +665,20 @@ guard('match card', () => {
   ok(shouldWrite(done, 'ann', { winner: 'bob', result: '2&1' }, true), '  …and with it, it does')
   ok(!shouldWrite(level, null, { winner: null, result: null }, true), 'a level card writes nothing')
   ok(!shouldWrite(st([4], [5]), 'ann', { winner: null, result: null }, false), 'nor does one still going')
+})
+
+section('Result colours: gold winning, brown losing, green live')
+guard('result tone', () => {
+  eq([sideTone('A', { leader: 'A', settled: false }), sideTone('A', { leader: 'A', settled: true })], ['up', 'won'],
+    'ahead is up, and won once it is over')
+  eq([sideTone('A', { leader: 'B', settled: false }), sideTone('A', { leader: 'B', settled: true })], ['down', 'lost'],
+    'behind is down, and lost once it is over')
+  eq(sideTone('A', { leader: null, settled: false }), 'level', 'all square is neither')
+  eq([signTone(2), signTone(0), signTone(-1)], ['up', 'level', 'down'], 'a signed figure: up, level, down')
+  ok(RESULT_PILL.won.includes('bg-gold') && RESULT_PILL.up.includes('gold-tint'), 'won is solid gold, up the duller tint')
+  ok(RESULT_PILL.lost.includes('bg-bark') && RESULT_PILL.down.includes('bark-tint'), 'lost is solid brown, down the tint')
+  ok(RESULT_PILL.live.includes('accent') && !Object.entries(RESULT_PILL).some(([k, v]) => k !== 'live' && v.includes('accent')),
+    'and green is live, and only live')
 })
 
 // ─── Result ────────────────────────────────────────────────────

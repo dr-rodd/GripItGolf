@@ -629,10 +629,12 @@ function MatchTile({
     >
       <div
         className={`relative w-full rounded-lg border overflow-hidden ${
+          // Gold is winning (lib/resultTone.ts): the champion solid, a
+          // decided match outlined, its winner's row in the tint.
           isChampion
-            ? 'border-accent bg-accent'
+            ? 'border-gold bg-gold'
             : decided
-              ? 'border-accent/50 bg-accent/[0.07]'
+              ? 'border-gold/60 bg-surface'
               : 'border-line bg-surface'
         }`}
         style={{
@@ -650,16 +652,18 @@ function MatchTile({
           isBye={match.player_a_is_bye}
           seed={match.seed_a}
           isWinner={decided && match.winner_player_id === match.player_a_id}
+          isLoser={decided && !!match.player_a_id && match.winner_player_id !== match.player_a_id}
           isChampion={isChampion && match.winner_player_id === match.player_a_id}
           result={match.result}
           playerById={playerById}
         />
-        <div className={`h-px ${isChampion ? 'bg-accent/30' : 'bg-line'}`} />
+        <div className={`h-px ${isChampion ? 'bg-on-gold/20' : 'bg-line'}`} />
         <Side
           playerId={match.player_b_id}
           isBye={match.player_b_is_bye}
           seed={match.seed_b}
           isWinner={decided && match.winner_player_id === match.player_b_id}
+          isLoser={decided && !!match.player_b_id && match.winner_player_id !== match.player_b_id}
           isChampion={isChampion && match.winner_player_id === match.player_b_id}
           result={match.result}
           playerById={playerById}
@@ -694,12 +698,14 @@ function MatchTile({
 }
 
 function Side({
-  playerId, isBye, seed, isWinner, isChampion, result, playerById,
+  playerId, isBye, seed, isWinner, isLoser, isChampion, result, playerById,
 }: {
   playerId: string | null
   isBye: boolean
   seed: number | null
   isWinner: boolean
+  /** Played and beaten — the darker brown. */
+  isLoser: boolean
   isChampion: boolean
   result: string | null
   playerById: Map<string, BracketEntrantRow>
@@ -712,13 +718,14 @@ function Side({
   return (
     <div
       className={`h-[37px] flex items-center gap-1.5 pl-1.5 pr-2 ${
-        isChampion ? '' : isWinner ? 'bg-accent/[0.07]' : ''
+        isChampion ? '' : isWinner ? 'bg-gold-tint' : ''
       }`}
     >
-      {/* Green edge marks the winner at a glance, before you read anything */}
+      {/* A gold edge marks the winner at a glance, before you read anything;
+          brown the side that lost */}
       <span
         className={`w-[3px] h-6 rounded-full flex-shrink-0 ${
-          isChampion ? 'bg-white' : isWinner ? 'bg-accent' : 'bg-transparent'
+          isChampion ? 'bg-on-gold' : isWinner ? 'bg-gold' : isLoser ? 'bg-bark' : 'bg-transparent'
         }`}
       />
 
@@ -734,8 +741,9 @@ function Side({
         <>
           <span
             className={`flex-1 min-w-0 truncate text-sm leading-none ${
-              isChampion ? 'text-white font-semibold'
-                : isWinner ? 'text-accent-deep font-semibold'
+              isChampion ? 'text-on-gold font-semibold'
+                : isWinner ? 'text-gold-deep font-semibold'
+                : isLoser ? 'text-bark'
                 : 'text-ink/80'
             }`}
           >
@@ -746,7 +754,7 @@ function Side({
               the score is the thing worth knowing */}
           {isWinner && result ? (
             <span className={`flex-shrink-0 text-[12px] font-semibold tabular-nums ${
-              isChampion ? 'text-white' : 'text-accent-deep'
+              isChampion ? 'text-on-gold' : 'text-gold-deep'
             }`}>
               {result}
             </span>

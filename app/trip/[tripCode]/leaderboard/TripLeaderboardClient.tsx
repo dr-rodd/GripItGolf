@@ -1,5 +1,6 @@
 'use client'
 
+import { placeClass } from '@/lib/leaderboardStyle'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { resolveCustomPoints } from '@/lib/customPoints'
@@ -1285,7 +1286,7 @@ function Board({
                   {/* The place, not the row's index. Two level share one —
                       both are 1st and the next row is 3rd — which is what a
                       board that leaves ties standing is saying. */}
-                  <span className={`text-[15px] leading-[1.45] text-ink/65 tabular-nums ${POS_W}`}>{row.place}</span>
+                  <span className={`text-[15px] leading-[1.45] ${placeClass(row.place)} tabular-nums ${POS_W}`}>{row.place}</span>
 
                   {/* The name, a size down from t-card, and shown in full by
                       moving rather than by truncating — the column fits a

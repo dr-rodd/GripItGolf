@@ -20,8 +20,9 @@ code disagree, one of them is a bug: fix it, don't explain it.
 - **Scores in serif, everything else in sans.** Names and numbers on boards,
   cards and standings are Bespoke Serif, asked for by name. Every other word is
   Archivo. Titles are Schibsted Grotesk.
-- **One emerald action per screen.** Emerald means the dot, live, a win, and
-  the one thing to press. A page with three emerald buttons has none.
+- **One emerald action per screen.** Emerald means the dot, live, and the one
+  thing to press. A page with three emerald buttons has none. **A win is
+  gold, a loss brown** (`lib/resultTone.ts`).
 - **A number being read never moves.** A live score flashes its colour; it
   never slides, scales or counts while someone might be reading it.
 - **Facts, not explanations.** A board says "Stableford · Running total", a
@@ -43,12 +44,23 @@ gets baked into every opacity utility at build time and no theme can reach it.
 | `surface` | `#FFFFFF` | `#272019` | Cards, the tab bar, anything raised |
 | `ink` | `#2B2118` | `#F2EBE2` | Text: 100 primary, 80 secondary, 65 muted, 50 large-only |
 | `bark` | `#4A3728` | `#D9C6B2` | Every neutral, at an opacity. No grey hex, no `gray-*` |
-| `accent` | `#0A9D56` | `#22B573` | Emerald: the dot, live, win, bars, tints |
+| `accent` | `#0A9D56` | `#22B573` | Emerald: the dot, live, the primary action, a chosen answer. **Never a result** |
 | `accent-deep` | `#0A6B3C` | `#0E9151` | The primary button's fill; emerald text under 24px |
 | `rust` | `#B5533C` | `#D9765B` | Loss, and only loss |
 | `rust-deep` | `#8A3E2C` | `#E0937D` | Error text |
+| `gold` | `#D4A02A` | `#E3B341` | Winning: a won pill, the champion's tile, a gained bar |
+| `gold-deep` | `#755610` | `#E9C46A` | Gold text — the leader's place, a winner's name, "2 up" |
+| `on-gold` | `#2B2118` | `#2B2118` | The ink on a gold fill, the same in both themes |
 
-- **No gold, anywhere.** `#C9A84C` in any spelling fails the build.
+- **Results have their own colours (Ross, 21 Oct 2026)**, and
+  `lib/resultTone.ts` is the one copy: **gold for winning, the duller gold
+  (`gold-tint`, gold lettering) for up; the brown, bark, for down
+  (`bark-tint`) and solid bark for lost; green for live and nothing else.**
+  A match's sides, the bracket, a board's place 1 and its better-than-level
+  scores, the podium and a stat's gain all come through it. Score shapes on
+  the card (a birdie's circle) are not results and have not moved.
+- **Not the old gold.** `#C9A84C` in any spelling still fails the build:
+  the previous identity's gold was decoration; this gold is a result.
 - **No gradients. No glows** — one exception, §8.
 - **Ink below 65% only on large text.** 65% clears AA (4.8:1 on cream); 50% is
   3.1:1 and is for 24px and up. Nothing prints at 40% or below.

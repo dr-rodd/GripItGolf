@@ -6,15 +6,18 @@
 //
 // The rule the boards share:
 //
-//   better than level   emerald. The only colour on the board.
+//   better than level   gold — "up", the duller gold of lib/resultTone.ts
 //   level               neutral bark, quiet
-//   worse than level    MORE bark than level, never emerald
+//   worse than level    MORE bark than level: "down", the brown
+//
+// (Gold since 21 October 2026: Ross's rule is gold for winning and up,
+// brown for down and lost, green for live and nothing else. It was emerald.)
 //
 // The bug this exists to kill: the live board painted both sides of level
 // emerald, so a round four over and a round four under looked equally good.
 // Under par is the thing worth colouring; over par is worth *weight*, which
-// on this palette means more brown. Emerald is the accent — a board where
-// half the numbers are green has no accent at all.
+// on this palette means more brown. Green is kept for live — a board where
+// half the numbers are green has no live left to show.
 //
 // Which direction is "better" is not fixed: Stableford counts up and strokes
 // count down, so every caller says which it is rather than guessing.
@@ -50,14 +53,17 @@ export function scoreTone(relative: number, lowerIsBetter: boolean): ScoreTone {
  * column would read as a missing pill rather than as level.
  */
 export const TONE_PILL: Record<ScoreTone, string> = {
-  good:  'bg-accent/[0.14] text-accent-deep',
+  good:  'bg-gold-tint text-gold-deep',
   level: 'bg-bark/[0.04] text-ink/80',
   bad:   'bg-bark/[0.20] text-ink',
 }
 
 /** The same three tones as bare text, for a column too tight for a pill. */
 export const TONE_TEXT: Record<ScoreTone, string> = {
-  good:  'text-accent-deep',
+  good:  'text-gold-deep',
   level: 'text-ink/80',
   bad:   'text-ink',
 }
+
+/** A place on a board: the leader's in gold — winning — the rest quiet. */
+export const placeClass = (place: number) => (place === 1 ? 'text-gold-deep font-semibold' : 'text-ink/65')

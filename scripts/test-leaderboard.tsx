@@ -627,10 +627,11 @@ section('Under par is coloured; over par is weighted')
   eq(st(0), 'level', 'level is still level')
   eq(st(-4), 'good', 'and four under is good')
 
-  // Emerald appears once and only on the good side
-  ok(TONE_PILL.good.includes('accent'), 'good is the only tone that is emerald')
-  ok(!TONE_PILL.bad.includes('accent'), 'bad is not emerald — that was the bug')
-  ok(!TONE_PILL.level.includes('accent'), 'nor is level')
+  // Gold appears once and only on the good side — up (Ross, 21 Oct 2026:
+  // gold for winning and up, brown for down, green for live alone).
+  ok(TONE_PILL.good.includes('gold'), 'good is the only tone that is gold')
+  ok(!TONE_PILL.bad.includes('gold') && !TONE_PILL.level.includes('gold'), 'bad and level are not')
+  ok(!Object.values(TONE_PILL).some(c => c.includes('accent')), 'and no score tone is green — green means live')
 
   // Worse than level is browner than level, not lighter. Both are bark, and
   // the bad one carries more of it.
