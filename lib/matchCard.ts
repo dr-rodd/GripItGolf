@@ -12,8 +12,9 @@
 // win the hole. That difference is why this is its own small tally.
 //
 // **Level after eighteen, they go down the 19th** — extra holes off the
-// course's own holes from the 1st, shots as the round gave them, until a
-// hole is won. A match play card always ends with a winner. Pure.
+// course's own holes, the 1st unless the players choose another and on in
+// order from there, shots as the round gave them, until a hole is won. A
+// match play card always ends with a winner. Pure.
 
 import { shotsReceived } from './handicap'
 import { marginLabel, progressLabel } from './matchDecision'
@@ -158,18 +159,53 @@ export function cardState(outcomes: readonly HoleOutcome[]): CardState {
   }
 }
 
-/** The course hole an extra hole is played off: the 19th is the 1st again. */
-export const courseHoleFor = (n: number) => ((n - 1) % REGULATION_HOLES) + 1
+/**
+ * Which course hole each extra hole is played off, as the players chose it
+ * — extra hole number → course hole (`matchplay_matches.extra_holes`,
+ * migration 061). Only the choices made are held; the rest follow.
+ */
+export type ExtraHolePlan = Readonly<Record<number, number>>
+
+/** The stored object, tidied: 19–36 to 1–18, whole numbers, nothing else. Never null. */
+export function parseExtraPlan(raw: unknown): ExtraHolePlan {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out: Record<number, number> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const n = Number(k)
+    if (!Number.isInteger(n) || n <= REGULATION_HOLES || n > MAX_CARD_HOLES) continue
+    if (typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= REGULATION_HOLES) out[n] = v
+  }
+  return out
+}
+
+/**
+ * The course hole an extra hole is played off. **The 19th is the 1st
+ * unless the players chose another**, and each one after follows on from
+ * the one before it — the 20th after a 19th played off the 10th is the
+ * 11th — unless that one was chosen too.
+ */
+export function extraCourseHole(n: number, plan: ExtraHolePlan = {}): number {
+  if (n <= REGULATION_HOLES) return n
+  const chosen = plan[n]
+  if (chosen) return chosen
+  return n === REGULATION_HOLES + 1 ? 1 : (extraCourseHole(n - 1, plan) % REGULATION_HOLES) + 1
+}
+
+/** The plan with one extra hole's course hole chosen. */
+export function withExtraHole(plan: ExtraHolePlan, n: number, courseHole: number): ExtraHolePlan {
+  return { ...plan, [n]: courseHole }
+}
 
 /**
  * The whole card: the eighteen, and the extra holes a level match has
- * reached — each played off its course hole, shots and all, as the round
- * gave them — with the next one added for as long as the match is still
+ * reached — each played off its course hole (`extraCourseHole`), shots and
+ * all, as the round gave them — with the next one added for as long as the match is still
  * level and every hole so far is finished.
  */
 export function playCard(
   holes: readonly CardHole[], a: CardSide, b: CardSide,
   scores: CardScores, concessions: CardConcessions,
+  plan: ExtraHolePlan = {},
 ): { holes: CardHole[]; outcomes: HoleOutcome[]; state: CardState } {
   const base = [...holes].sort((x, y) => x.holeNumber - y.holeNumber).slice(0, REGULATION_HOLES)
   const list = [...base]
@@ -181,7 +217,7 @@ export function playCard(
       return { holes: list, outcomes, state }
     }
     const n = list.length + 1
-    const from = base[courseHoleFor(n) - 1]
+    const from = base[extraCourseHole(n, plan) - 1]
     list.push({ ...from, holeNumber: n })
   }
 }

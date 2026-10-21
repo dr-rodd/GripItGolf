@@ -398,6 +398,11 @@ section('The match play card: top of the draw left, bottom right, concede a hole
   ok(page.includes('readCardSetups(') && cards.includes('matchStrokes(') && page.includes("Arrange the match first"),
     'the card takes its shots from the arrangement, or sends you to arrange it')
   ok(client.includes('playCard(') && client.includes('Extra holes'), 'level after 18 the card grows extra holes')
+  ok(client.includes('<select') && client.includes('value={extraCourseHole(current, plan)}')
+    && /update\(\{ extra_holes: next \}\)\.eq\('id', matchId\)\.eq\('trip_id', tripId\)/.test(client),
+    '  …each with a dropdown for the hole it is played off, saved for both phones')
+  ok(read('app/trip/[tripCode]/match/matchCards.ts').includes(".select('id, extra_holes')"),
+    '  …read in its own query, so a database without migration 061 keeps the card\'s shots')
 
   // The live board: the Scoring tab reads every open match's card through the
   // same setup the card page draws from, so the two cannot disagree.

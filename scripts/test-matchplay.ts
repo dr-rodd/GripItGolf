@@ -21,7 +21,7 @@ import {
   normaliseContact, contactShown, walkoverChoices, WALKOVER,
 } from '../lib/matchArrangements'
 import { RESULT_PILL, sideTone, signTone } from '../lib/resultTone'
-import { holeOutcomes, cardState, openingHole, shouldWrite, playCard, ordinal, courseHoleFor } from '../lib/matchCard'
+import { holeOutcomes, cardState, openingHole, shouldWrite, playCard, ordinal, extraCourseHole, parseExtraPlan, withExtraHole } from '../lib/matchCard'
 
 // ─── Tiny harness ──────────────────────────────────────────────
 
@@ -637,7 +637,14 @@ guard('match card', () => {
   // Extra holes: the 19th off the 1st, the 20th off the 2nd, shots as the round gave them.
   eq([ordinal(19), ordinal(21), ordinal(22), ordinal(23), ordinal(31), ordinal(11)], ['19th', '21st', '22nd', '23rd', '31st', '11th'],
     'ordinals for the extra holes')
-  eq([courseHoleFor(19), courseHoleFor(20), courseHoleFor(36)], [1, 2, 18], 'the 19th is the 1st again')
+  eq([extraCourseHole(19), extraCourseHole(20), extraCourseHole(36)], [1, 2, 18], 'by default the 19th is the 1st again, and on in order')
+  const tenth = withExtraHole({}, 19, 10)
+  eq([extraCourseHole(19, tenth), extraCourseHole(20, tenth), extraCourseHole(27, tenth), extraCourseHole(28, tenth)], [10, 11, 18, 1],
+    'the 19th sent to the 10th: the 20th follows on to the 11th, and round past the 18th to the 1st')
+  const both = withExtraHole(tenth, 20, 18)
+  eq([extraCourseHole(20, both), extraCourseHole(21, both)], [18, 1], 'a later extra hole picked too: that one, and on from it')
+  eq(parseExtraPlan({ 19: 10, 20: 0, 18: 4, 21: 19, x: 2, 22: 2.5 }), { 19: 10 }, 'the stored plan is tidied: extra holes only, real course holes only')
+  eq([parseExtraPlan(null), parseExtraPlan([1])], [{}, {}], '  …and never null')
   const levelA = [...Array(18).fill(4)]
   const levelB = [5, 5, ...Array(16).fill(4)]
   const extend = (a: number[], b: number[], c = none) => playCard(holes, A, B, card(a, b), c)
@@ -653,6 +660,10 @@ guard('match card', () => {
   ok(shouldWrite(x.state, 'bob', { winner: null, result: null }, false), '  …and the result goes to the bracket')
   x = extend([...levelA, 4], [...levelB], new Map([[19, 'A' as const]]))
   eq([x.state.settled, x.state.leader, x.state.result], [true, 'B', 'at 19th'], 'a conceded 19th settles it too')
+  // Played off the 10th instead: the 10th's index, so Bob's shots stay on SI 1 and 2.
+  const plain = Array.from({ length: 18 }, (_, i) => ({ holeNumber: i + 1, par: 4, strokeIndex: ((i + 9) % 18) + 1 }))
+  x = playCard(plain, A, B, card(levelA, levelB.map((g, i) => (plain[i].strokeIndex <= 2 ? 5 : 4))), none, { 19: 10 })
+  eq([x.holes[18].strokeIndex, x.holes[18].holeNumber], [plain[9].strokeIndex, 19], 'the 19th played off the 10th takes the 10th\'s index')
   x = extend(Array(17).fill(4), [5, 5, ...Array(15).fill(4)])
   eq(x.holes.length, 18, 'no extra hole while the eighteenth is still to finish')
 

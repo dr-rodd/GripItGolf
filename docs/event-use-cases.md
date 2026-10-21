@@ -509,8 +509,10 @@ overview, or one column at a time), not a rebuild.
    — "3&2", "2 up thru 14"), `openingHole`, `shouldWrite`. **Level after
    18 they go down the 19th** (Ross, 21 Oct 2026; migration 059 widens the
    card's hole numbers to 36): `playCard` adds extra holes played off the
-   course's own holes from the 1st, shots as the round gave them, until one
-   is won — "at 19th" — and `cardState` stops counting the moment a match
+   course's own holes — **the 1st by default, changed by a dropdown on the
+   hole** (Ross, 21 Oct; `extraCourseHole`, `matchplay_matches.extra_holes`,
+   migration 061), each later one following on from the one before — shots
+   as the round gave them, until one is won — "at 19th" — and `cardState` stops counting the moment a match
    is settled, so playing out a 3&2 for fun cannot change it. **The card**
    (`/trip/[code]/match/[id]/card`, opened by **Score this match** once the
    shots are known): one hole at a time, a strip of all eighteen showing

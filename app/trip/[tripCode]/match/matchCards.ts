@@ -5,7 +5,8 @@ import { allowanceOf } from '@/lib/handicapAllowance'
 import { isPlayable } from '@/lib/knockoutPortal'
 import { matchStrokes, parseMatchTees } from '@/lib/matchArrangements'
 import {
-  playCard, type CardHole, type CardSideKey, type CardSideView, type CardState,
+  parseExtraPlan, playCard,
+  type CardHole, type CardSideKey, type CardSideView, type CardState, type ExtraHolePlan,
 } from '@/lib/matchCard'
 import type { KnockoutView } from '../knockout'
 
@@ -24,7 +25,7 @@ type Player = { id: string; name: string; handicap: number | null; gender: strin
 
 export type CardSetup = {
   /** Null when the match cannot be scored yet; `blocked` says why. */
-  card: { a: CardSideView; b: CardSideView; holes: CardHole[] } | null
+  card: { a: CardSideView; b: CardSideView; holes: CardHole[]; extraPlan: ExtraHolePlan } | null
   blocked: 'sides' | 'arrange' | 'scorecard' | null
   courseName: string | null
 }
@@ -39,10 +40,18 @@ export async function readCardSetups(
   const out = new Map<string, CardSetup>()
   if (matchIds.length === 0) return out
 
-  // Its own query, fail-soft: the columns arrive with migration 057.
-  const arrangedRes = await supabase.from('matchplay_matches').select('id, course_id, tees')
-    .eq('trip_id', trip.id).in('id', [...matchIds])
+  // Their own queries, fail-soft: the arrangement's columns arrive with
+  // migration 057, the extra holes' with 061 — and a missing 061 must not
+  // cost the card its shots.
+  const [arrangedRes, extraRes] = await Promise.all([
+    supabase.from('matchplay_matches').select('id, course_id, tees')
+      .eq('trip_id', trip.id).in('id', [...matchIds]),
+    supabase.from('matchplay_matches').select('id, extra_holes')
+      .eq('trip_id', trip.id).in('id', [...matchIds]),
+  ])
   if (arrangedRes.error) console.error('Match arrangements read failed:', arrangedRes.error)
+  const extraOf = new Map(((extraRes.error ? [] : extraRes.data ?? []) as { id: string; extra_holes: unknown }[])
+    .map(r => [r.id, parseExtraPlan(r.extra_holes)]))
   const arranged = new Map(((arrangedRes.data ?? []) as { id: string; course_id: string | null; tees: unknown }[])
     .map(r => [r.id, r]))
   const courseIds = [...new Set([...arranged.values()].map(r => r.course_id).filter((c): c is string => !!c))]
@@ -100,7 +109,11 @@ export async function readCardSetups(
         return p ? [{ id: pid, name: p.name, gender: p.gender, receives: receives.get(pid) ?? 0 }] : []
       }),
     })
-    out.set(id, { card: { a: side(match.sideA), b: side(match.sideB), holes }, blocked: null, courseName: name })
+    out.set(id, {
+      card: { a: side(match.sideA), b: side(match.sideB), holes, extraPlan: extraOf.get(id) ?? {} },
+      blocked: null,
+      courseName: name,
+    })
   }
   return out
 }
@@ -171,7 +184,9 @@ export async function readLiveMatches(
     const card = setups.get(id)?.card
     const match = open.find(m => m.id === id)
     if (!card || !match) continue
-    const { state } = playCard(card.holes, card.a, card.b, scoresOf.get(id) ?? new Map(), concededOf.get(id) ?? new Map())
+    const { state } = playCard(
+      card.holes, card.a, card.b, scoresOf.get(id) ?? new Map(), concededOf.get(id) ?? new Map(), card.extraPlan,
+    )
     live.push({
       id,
       roundName: match.roundName,

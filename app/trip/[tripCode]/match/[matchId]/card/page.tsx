@@ -68,6 +68,7 @@ export default async function MatchCardPage({
             a={card.a}
             b={card.b}
             holes={card.holes}
+            extraPlan={card.extraPlan}
             mySide={mySide}
             passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null}
             stored={{ winner: match.winner, result: match.result }}

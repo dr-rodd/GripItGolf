@@ -6,13 +6,13 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { hasUnlocked, isLocked } from '@/lib/passcode'
 import {
-  REGULATION_HOLES, courseHoleFor, openingHole, ordinal, playCard, shotsOn, shouldWrite,
-  type CardHole, type CardSideKey, type CardSideView,
+  REGULATION_HOLES, extraCourseHole, openingHole, ordinal, parseExtraPlan, playCard, shotsOn, shouldWrite,
+  withExtraHole, type CardHole, type CardSideKey, type CardSideView, type ExtraHolePlan,
 } from '@/lib/matchCard'
 import { RESULT_PILL, RESULT_TEXT, sideTone } from '@/lib/resultTone'
 import { usePoll } from '@/app/scoring/usePoll'
 import InlineUnlock from '@/app/components/InlineUnlock'
-import { buttonClass, cardClass } from '@/app/components/ui'
+import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
 
 /**
  * The match play card in the hand (docs/event-use-cases.md, story 2, stage
@@ -33,7 +33,9 @@ import { buttonClass, cardClass } from '@/app/components/ui'
  * also how the organiser scores or finishes a match they are not in.
  *
  * **All square after 18, the card goes on** — the 19th off the 1st, the
- * 20th off the 2nd — until a hole is won (`playCard`). Each side's
+ * 20th off the 2nd — until a hole is won (`playCard`). A dropdown on each
+ * extra hole changes which course hole it is played off (`extra_holes`,
+ * migration 061); the ones after follow on from it. Each side's
  * standing wears the result colours: gold up and won, brown down and lost.
  */
 
@@ -43,7 +45,8 @@ type Conceded = Record<number, CardSideKey>
 const MAX_GROSS = 20
 
 export default function MatchCardClient({
-  tripId, tripCode, matchId, a, b, holes: baseHoles, mySide, passcodeHash, stored: storedInitial,
+  tripId, tripCode, matchId, a, b, holes: baseHoles, extraPlan: planInitial = {}, mySide, passcodeHash,
+  stored: storedInitial,
 }: {
   tripId: string
   tripCode: string
@@ -52,6 +55,8 @@ export default function MatchCardClient({
   b: CardSideView
   /** The course's eighteen; extra holes are added from them. */
   holes: CardHole[]
+  /** Which course hole each extra hole is played off, where chosen. */
+  extraPlan?: ExtraHolePlan
   /** This phone's side of the match, or null when they are not in it. */
   mySide: CardSideKey | null
   passcodeHash: string | null
@@ -60,6 +65,7 @@ export default function MatchCardClient({
   const router = useRouter()
   const [scores, setScores] = useState<Scores>({})
   const [conceded, setConceded] = useState<Conceded>({})
+  const [plan, setPlan] = useState<ExtraHolePlan>(planInitial)
   const [loaded, setLoaded] = useState(false)
   const [unavailable, setUnavailable] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -78,9 +84,12 @@ export default function MatchCardClient({
   const load = useCallback(async () => {
     // A write in flight would be overwritten by an older read; skip a turn.
     if (dirty.current > 0) return
-    const [s, c] = await Promise.all([
+    const [s, c, x] = await Promise.all([
       supabase.from('match_scores').select('player_id, hole_number, gross').eq('trip_id', tripId).eq('match_id', matchId),
       supabase.from('match_concessions').select('hole_number, conceded_by').eq('trip_id', tripId).eq('match_id', matchId),
+      // Its own read, fail-soft: before migration 061 there is no column,
+      // and the extra holes simply run on from the 1st.
+      supabase.from('matchplay_matches').select('extra_holes').eq('trip_id', tripId).eq('id', matchId).maybeSingle(),
     ])
     if (s.error || c.error) {
       console.error('Match card read failed:', s.error ?? c.error)
@@ -98,6 +107,7 @@ export default function MatchCardClient({
     }
     setScores(nextScores)
     setConceded(nextConceded)
+    if (!x.error && x.data) setPlan(parseExtraPlan((x.data as { extra_holes?: unknown }).extra_holes))
     setLoaded(true)
     setUnavailable(false)
   }, [tripId, matchId, loaded])
@@ -112,7 +122,8 @@ export default function MatchCardClient({
     baseHoles, sides.A, sides.B,
     new Map(Object.entries(scores).map(([pid, hs]) => [pid, new Map(Object.entries(hs).map(([h, g]) => [Number(h), g]))])),
     new Map(Object.entries(conceded).map(([h, side]) => [Number(h), side])),
-  ), [baseHoles, sides, scores, conceded])
+    plan,
+  ), [baseHoles, sides, scores, conceded, plan])
   const current = hole ?? (loaded ? openingHole(outcomes) : 1)
   const h = holes.find(x => x.holeNumber === current) ?? holes[0]
   const outcome = outcomes.find(o => o.holeNumber === current)
@@ -128,8 +139,10 @@ export default function MatchCardClient({
       const { error: err } = await write()
       if (err) {
         console.error('Match card write failed:', err)
-        // Before migration 059 the card's tables stop at the 18th.
-        const refused = (err as { code?: string }).code === '23514' && hole > REGULATION_HOLES
+        // Before migration 059 the card's tables stop at the 18th; before
+        // 061 there is nowhere to keep which hole an extra hole is played off.
+        const { code, message } = err as { code?: string; message?: string }
+        const refused = (code === '23514' && hole > REGULATION_HOLES) || /extra_holes/.test(message ?? '')
         setError(refused
           ? 'Extra holes need a database update — the organiser can record the result on the bracket for now.'
           : 'Could not save that — check your connection and try again.')
@@ -170,6 +183,16 @@ export default function MatchCardClient({
           match_id: matchId, trip_id: tripId, hole_number: n, conceded_by: side,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'match_id,hole_number' }))
+  }
+
+  /** Which course hole this extra hole is played off — everybody's card follows. */
+  function playExtraOff(n: number, courseHole: number) {
+    if (!canEdit || n <= REGULATION_HOLES) return
+    setError(null)
+    const next = withExtraHole(plan, n, courseHole)
+    setPlan(next)
+    queue('x', n, () => supabase.from('matchplay_matches')
+      .update({ extra_holes: next }).eq('id', matchId).eq('trip_id', tripId))
   }
 
   // ── The result into the bracket, once the card says it is over ──
@@ -325,7 +348,7 @@ export default function MatchCardClient({
           {loaded ? status : 'Loading the card…'}
         </p>
         {state.extra && !state.settled && (
-          <p className="t-cap text-ink/65 mt-1">Extra holes are played off the 1st, 2nd and on, with the same shots, until a hole is won.</p>
+          <p className="t-cap text-ink/65 mt-1">Extra holes are played off the 1st and on — pick another below if your club sends you elsewhere. Same shots, until a hole is won.</p>
         )}
       </div>
 
@@ -354,9 +377,7 @@ export default function MatchCardClient({
         </button>
         <div className="text-center">
           <p className="t-card text-ink">{current > REGULATION_HOLES ? `The ${ordinal(current)}` : `Hole ${current}`}</p>
-          <p className="t-cap text-ink/65">
-            {current > REGULATION_HOLES ? `Played off the ${ordinal(courseHoleFor(current))} · ` : ''}Par {h.par} · Index {h.strokeIndex}
-          </p>
+          <p className="t-cap text-ink/65">Par {h.par} · Index {h.strokeIndex}</p>
         </div>
         <button
           type="button"
@@ -368,6 +389,27 @@ export default function MatchCardClient({
           ›
         </button>
       </div>
+
+      {/* An extra hole: which course hole it is played off — the 1st and
+          on unless the players pick another */}
+      {current > REGULATION_HOLES && (
+        <label className="flex items-center justify-center gap-2 t-cap text-ink/80">
+          Played off the
+          <select
+            value={extraCourseHole(current, plan)}
+            onChange={e => playExtraOff(current, Number(e.target.value))}
+            disabled={!canEdit}
+            aria-label={`The course hole the ${ordinal(current)} is played off`}
+            // .field is a full-width box, unlayered; this one sits in a line.
+            style={{ width: 'auto' }}
+            className={`${FIELD} field-dense`}
+          >
+            {Array.from({ length: REGULATION_HOLES }, (_, i) => i + 1).map(n => (
+              <option key={n} value={n}>{ordinal(n)}</option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {/* Top of the draw on the left, bottom on the right */}
       <div className="grid grid-cols-2 gap-3">
