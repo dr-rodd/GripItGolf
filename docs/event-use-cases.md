@@ -249,8 +249,18 @@ Each stage tested on greendot.live before the next, as with Green Dot Run.
    `setRoundAllowance`, merged into the stored board (`withRoundAllowance`);
    one that only repeats the board's own is dropped on reading. Viewing one
    round on the leaderboard, its facts line gives that round's allowance.
-4. **The next round appears the day after the previous one**, and the
-   Scoring tab as the league's history.
+4. **The next round appears the day after the previous one, and the
+   Scoring tab as the league's history — built, October 2026.**
+   `revealedLeagueRounds` (`lib/leagueSetup.ts`) is the one rule: every
+   round dated today or earlier, plus the first after today unless a round
+   is being played today, newest first — so the next round sits on top and
+   the history runs down. Before the first round the first is shown. The
+   Scoring tab and the hub's round list both draw it, and say "N more rounds
+   to come — the next appears the day after this one is played" without
+   saying when. Adding a round still reads the whole plan, so no number is
+   handed out twice. Not yet held back: the hub's up-next countdown, which
+   reads rounds directly — on a round's own afternoon it can name the next
+   one a day early.
 5. **Golf Ireland cards to rounds, by date and venue**, with stage 3's switch
    as the way out. Built with Golf Ireland's stage 5, once their
    documentation arrives.

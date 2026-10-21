@@ -18,7 +18,7 @@ import {
   weeklyDates, boardGrouping, describeScope,
   seriesDates, describeRepeat, nextRoundIssue, tidyRepeat, MAX_REPEAT_EVERY,
   leagueRounds, nextRoundNumber,
-  cardKey, tidyCardsOff, cardsOffWith, MAX_CARDS_OFF,
+  cardKey, tidyCardsOff, cardsOffWith, MAX_CARDS_OFF, revealedLeagueRounds,
 } from '../lib/leagueSetup'
 import { buildRows, type RowContext, type ResolvedScore } from '../lib/boardRows'
 import type { Leaderboard } from '../lib/leaderboards'
@@ -740,6 +740,37 @@ section('A player\'s card in a round can be switched off, and back on')
     'and every change in it is the organiser\'s')
   ok(gear.includes("readScores<") && gear.includes("readLiveScores<"),
     'who has a card is read whole, past the 1,000-row cap')
+}
+
+section('The next round appears the day after the one before it')
+{
+  // Four Wednesdays in November.
+  const rounds = ['2026-11-04', '2026-11-11', '2026-11-18', '2026-11-25']
+    .map((date, i) => ({ date, number: i + 1 }))
+  const on = (today: string) => revealedLeagueRounds(rounds, today)
+
+  eq(on('2026-11-01').shown.map(r => r.number), [1], 'before the league starts, the first round alone')
+  eq(on('2026-11-01').hidden, 3, '  …with three more to come')
+  eq(on('2026-11-04').shown.map(r => r.number), [1], 'on the day of round one, round one — the next waits')
+  eq(on('2026-11-05').shown.map(r => r.number), [2, 1],
+    'the day after, round two appears — newest first, the next on top')
+  eq(on('2026-11-11').shown.map(r => r.number), [2, 1], 'on round two\'s day, still no round three')
+  eq(on('2026-11-30').shown.map(r => r.number), [4, 3, 2, 1], 'after the last, the whole history')
+  eq(on('2026-11-30').hidden, 0, '  …and nothing held back')
+  eq(revealedLeagueRounds([{ date: null, number: 1 }, ...rounds], '2026-11-01').shown.map(r => r.number),
+    [1, 1], 'a round with no date is always shown')
+  eq(revealedLeagueRounds([], '2026-11-01'), { shown: [], hidden: 0 }, 'no rounds, nothing to show')
+
+  for (const page of ['app/trip/[tripCode]/scoring/page.tsx', 'app/trip/[tripCode]/page.tsx']) {
+    const src = read(page)
+    ok(src.includes('revealedLeagueRounds(league, todayString(new Date()))')
+      && src.includes('revealed.shown.map('),
+      `${page.split('/').slice(-2).join('/')} draws the revealed rounds, newest first`)
+    ok(src.includes('the next appears the day after this one is played'),
+      '  …and says more are to come without saying when')
+  }
+  ok(read('app/trip/[tripCode]/scoring/page.tsx').includes('number={nextRoundNumber(league)}'),
+    'adding a round still reads the whole plan, so no number is handed out twice')
 }
 
 // ─── Result ────────────────────────────────────────────────────

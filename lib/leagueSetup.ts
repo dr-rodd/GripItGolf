@@ -435,6 +435,38 @@ export function leagueRounds(
   return out
 }
 
+/**
+ * Which of a league's rounds the field sees today, newest first — the
+ * Scoring tab and the hub read the league as its history, with what comes
+ * next on top.
+ *
+ * **The next round appears the day after the previous one** (Ross's story:
+ * it builds a bit of anticipation, rather than the whole winter on show
+ * from the start). So: every round dated today or earlier, and the first
+ * round after today — unless a round is being played today, in which case
+ * the next one waits until tomorrow. A league whose first round has not
+ * come yet shows that first round. A round with no date is always shown.
+ *
+ * `hidden` is how many planned rounds are held back, so a screen can say
+ * that more are to come without saying when. The organiser area still
+ * lists the whole plan. Pure.
+ */
+export function revealedLeagueRounds<T extends Pick<LeagueRound, 'date' | 'number'>>(
+  rounds: readonly T[], today: string,
+): { shown: T[]; hidden: number } {
+  const playingToday = rounds.some(r => r.date === today)
+  const future = rounds
+    .filter(r => r.date != null && r.date > today)
+    .sort((a, b) => (a.date! < b.date! ? -1 : a.date! > b.date! ? 1 : a.number - b.number))
+  const next = playingToday ? null : future[0] ?? null
+  const shown = rounds.filter(r => r.date == null || r.date <= today || r === next)
+  const newestFirst = [...shown].sort((a, b) => {
+    if (a.date && b.date && a.date !== b.date) return a.date < b.date ? 1 : -1
+    return b.number - a.number
+  })
+  return { shown: newestFirst, hidden: rounds.length - shown.length }
+}
+
 /** The number the next round added to this league takes — the same rule. */
 export function nextRoundNumber(rounds: readonly Pick<LeagueRound, 'number'>[]): number {
   const used = new Set(rounds.map(r => r.number))

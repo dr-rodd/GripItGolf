@@ -9,7 +9,8 @@ import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
 import AddRound from './AddRound'
 import { AddLeagueRound, RoundSettings, TbcRoundTile, type LeagueDoor } from '../LeagueRounds'
-import { parseLeagueSetup, leagueRounds, nextRoundNumber } from '@/lib/leagueSetup'
+import { parseLeagueSetup, leagueRounds, nextRoundNumber, revealedLeagueRounds } from '@/lib/leagueSetup'
+import { todayString } from '@/lib/tripStatus'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { describeShortDate } from '@/lib/itinerary'
 import CourseName from '@/app/components/CourseName'
@@ -143,6 +144,10 @@ export default async function TripCoursePortalPage({
     trip.start_date ?? null,
   ) : []
   const lastVenueId = [...league].reverse().find(r => r.courseId)?.courseId ?? null
+  // What the field sees: the league's history newest first, with the next
+  // round on top — and only once the round before it has been played
+  // (`revealedLeagueRounds`). Adding a round still reads the whole plan.
+  const revealed = revealedLeagueRounds(league, todayString(new Date()))
   const door: LeagueDoor | null = series && trip.start_date ? {
     tripId: trip.id,
     tripCode,
@@ -241,10 +246,11 @@ export default async function TripCoursePortalPage({
         )}
 
         <div className="flex flex-col gap-3">
-          {/* A league lists its rounds in date order, a TBC one in its place
-              and paler; anything else lists its rounds as it always has. */}
+          {/* A league lists its rounds as its history — newest first, the
+              next one on top, a TBC one in its place and paler; anything
+              else lists its rounds as it always has. */}
           {(series
-            ? league.map(lr => lr.roundId ? roundById.get(lr.roundId)! : lr)
+            ? revealed.shown.map(lr => lr.roundId ? roundById.get(lr.roundId)! : lr)
             : (rounds ?? [])
           ).map(entry => {
             if (!('round_number' in entry)) {
@@ -318,6 +324,12 @@ export default async function TripCoursePortalPage({
             ) : tile
           })}
         </div>
+        {series && revealed.hidden > 0 && (
+          <p className="t-cap text-ink/65 text-center mt-4">
+            {revealed.hidden === 1 ? 'One more round' : `${revealed.hidden} more rounds`} to
+            come — the next appears the day after this one is played.
+          </p>
+        )}
       </div>
       <SupportLink className="px-4 pb-12" />
     </div>

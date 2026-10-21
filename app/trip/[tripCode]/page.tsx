@@ -43,7 +43,8 @@ import ShareTrip from './ShareTrip'
 import { golfIrelandLinkedIds } from './golfIreland'
 import { LinkedBadge } from '@/app/components/LinkMark'
 import { cardClass } from '@/app/components/ui'
-import { parseLeagueSetup, leagueRounds } from '@/lib/leagueSetup'
+import { parseLeagueSetup, leagueRounds, revealedLeagueRounds } from '@/lib/leagueSetup'
+import { todayString } from '@/lib/tripStatus'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { describeShortDate } from '@/lib/itinerary'
 import { TbcRoundTile, type LeagueDoor } from './LeagueRounds'
@@ -482,10 +483,13 @@ export default async function TripPage({ params, searchParams }: {
       .filter(r => r.casual === true).map(r => r.id),
   )
   const otherItems = itinerary.filter(i => i.kind !== 'golf')
+  // The same reading the Scoring tab gives: newest first, the next round
+  // only once the one before it has been played.
+  const revealed = revealedLeagueRounds(league, todayString(new Date()))
 
   const leagueSection = leagueDoor ? (
     <div className="flex flex-col gap-3">
-      {league.map(lr => lr.roundId ? (
+      {revealed.shown.map(lr => lr.roundId ? (
         <Link
           key={lr.roundId}
           href={`/trip/${tripCode}/round/${lr.number}`}
@@ -517,6 +521,12 @@ export default async function TripPage({ params, searchParams }: {
           fieldMaySetVenue={allowsParticipant(trip.kind, tripRaw.event_permissions, 'set_venues')}
         />
       ) : null)}
+      {revealed.hidden > 0 && (
+        <p className="t-cap text-ink/65 text-center">
+          {revealed.hidden === 1 ? 'One more round' : `${revealed.hidden} more rounds`} to
+          come — the next appears the day after this one is played.
+        </p>
+      )}
       {/* Anything else the organiser planned — a dinner, a stay — keeps the
           schedule it always had, under the rounds. */}
       {otherItems.length > 0 && (
