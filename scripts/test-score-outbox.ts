@@ -444,10 +444,11 @@ section('Nothing loads on the scoring path that the screen does not draw')
     && /series\n\s*\? supabase\.from\('itinerary_items'\)/.test(picker),
     '  …beyond a league\'s golf items, and only for a league')
   // A match play event is the other narrow exception: its portal names the
-  // matches, so the field's names — two columns — ride in the same batch,
-  // and only there.
+  // matches and works out the live ones' shots, so the field's names,
+  // handicaps and genders — four columns — ride in the same batch, and
+  // only there.
   ok((picker.match(/from\('players'\)/g) ?? []).length === 1
-    && /knockout\n\s*\? Promise\.all\(\[\n\s*supabase\.from\('players'\)\.select\('id, name'\)/.test(picker),
+    && /knockout\n\s*\? Promise\.all\(\[\n\s*supabase\.from\('players'\)\.select\('id, name, handicap, gender'\)/.test(picker),
     'and no players — beyond a match play event\'s names, for its portal')
   ok(/usePlatformCourses\(open\)/.test(sheet),
     'and the course catalogue waits for the sheet to be opened')

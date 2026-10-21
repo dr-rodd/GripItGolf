@@ -393,7 +393,21 @@ section('The match play card: top of the draw left, bottom right, concede a hole
   ok(client.includes('offerOverwrite') && client.includes('onClick={writeResult}'),
     '  …and over a result already in, only by the organiser\'s deliberate tap')
   const page = read('app/trip/[tripCode]/match/[matchId]/card/page.tsx')
-  ok(page.includes('matchStrokes(') && page.includes("Arrange the match first"), 'the card takes its shots from the arrangement, or sends you to arrange it')
+  const cards = read('app/trip/[tripCode]/match/matchCards.ts')
+  ok(page.includes('readCardSetups(') && cards.includes('matchStrokes(') && page.includes("Arrange the match first"),
+    'the card takes its shots from the arrangement, or sends you to arrange it')
+  ok(client.includes('playCard(') && client.includes('Extra holes'), 'level after 18 the card grows extra holes')
+
+  // The live board: the Scoring tab reads every open match's card through the
+  // same setup the card page draws from, so the two cannot disagree.
+  ok(cards.includes('export async function readLiveMatches') && /readCardSetups\(trip, view, players, started\)/.test(cards),
+    'live matches are read off their cards through the card\'s own setup')
+  const scoringPage = read('app/trip/[tripCode]/scoring/page.tsx')
+  ok(scoringPage.includes('readLiveMatches(trip, view, roster)') && scoringPage.includes('live={knockoutRead?.live ?? []}'),
+    'the Scoring tab hands the portal its live matches')
+  const views = read('app/trip/[tripCode]/KnockoutViews.tsx')
+  ok(views.includes('<LiveBoard') && views.includes('dot-live') && !views.includes('setInterval'),
+    'the portal draws a live board, refreshed through the one poller')
   ok(read('app/trip/[tripCode]/match/[matchId]/page.tsx').includes("'Score this match'"), 'the match page opens the card')
 }
 

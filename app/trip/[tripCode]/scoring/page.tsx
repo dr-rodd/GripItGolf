@@ -12,6 +12,7 @@ import { readRoundCards } from '@/lib/golfIrelandCards'
 import { isKnockoutEvent } from '@/lib/bracketSetup'
 import { linkedPlayerId } from '@/lib/currentPlayer'
 import { readKnockout } from '../knockout'
+import { readLiveMatches } from '../match/matchCards'
 import { KnockoutPortal } from '../KnockoutViews'
 import { AddLeagueRound, RoundSettings, TbcRoundTile, type LeagueDoor } from '../LeagueRounds'
 import { parseLeagueSetup, leagueRounds, nextRoundNumber, revealedLeagueRounds } from '@/lib/leagueSetup'
@@ -127,7 +128,7 @@ export default async function TripCoursePortalPage({
   //
   // So do its Golf Ireland cards, each placed on the round it was played
   // as — nothing asked unless the league reads them (lib/golfIrelandCards.ts).
-  const [{ data: openData, error: openErr }, itemsRes, roundCards, knockoutView] = await Promise.all([
+  const [{ data: openData, error: openErr }, itemsRes, roundCards, knockoutRead] = await Promise.all([
     roundIds.length > 0
       ? supabase.from('live_rounds').select('round_id, live_player_locks(player_id)')
           .eq('status', 'active').in('round_id', roundIds)
@@ -137,19 +138,23 @@ export default async function TripCoursePortalPage({
           .eq('trip_id', trip.id)
       : Promise.resolve({ data: [], error: null }),
     series ? readRoundCards(trip.id, leagueSetup, rounds) : Promise.resolve([]),
-    // The draw from this phone's side — who it is, the names, the matches.
+    // The draw from this phone's side — who it is, the names, the matches —
+    // and the matches being played now, off their cards.
     knockout
       ? Promise.all([
-          supabase.from('players').select('id, name').eq('trip_id', trip.id).eq('is_composite', false),
+          supabase.from('players').select('id, name, handicap, gender').eq('trip_id', trip.id).eq('is_composite', false),
           linkedPlayerId(tripCode),
-        ]).then(([playersRes, meId]) => {
-          const roster = (playersRes.data ?? []) as { id: string; name: string }[]
+        ]).then(async ([playersRes, meId]) => {
+          const roster = (playersRes.data ?? []) as { id: string; name: string; handicap: number | null; gender: string }[]
           const me = roster.some(p => p.id === meId) ? meId : null
-          return readKnockout(trip, setupRow?.bracket_setup, me, roster)
+          const view = await readKnockout(trip, setupRow?.bracket_setup, me, roster)
+          const live = view ? await readLiveMatches(trip, view, roster) : []
+          return view ? { view, live } : null
         }).catch(e => { console.error('TripCoursePortal knockout read failed:', e); return null })
       : Promise.resolve(null),
   ])
   if (openErr) console.error('TripCoursePortal live rounds query failed:', openErr)
+  const knockoutView = knockoutRead?.view ?? null
   if (itemsRes.error) console.error('TripCoursePortal league items query failed:', itemsRes.error)
   const items = (itemsRes.data ?? []) as {
     id: string; day_index: number; position: number; kind: string; course_id: string | null
@@ -265,7 +270,7 @@ export default async function TripCoursePortalPage({
 
         {knockoutView && (
           <div className="mb-8">
-            <KnockoutPortal tripCode={tripCode} view={knockoutView} today={todayString(new Date())} />
+            <KnockoutPortal tripCode={tripCode} view={knockoutView} live={knockoutRead?.live ?? []} today={todayString(new Date())} />
           </div>
         )}
 

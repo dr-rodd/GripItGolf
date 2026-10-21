@@ -33,6 +33,15 @@
   --color-rust:      var(--gd-rust);
   --color-rust-deep: var(--gd-rust-deep);
 
+  /* Winning (Ross, 21 Oct 2026): gold is a result, never decoration —
+     solid for won, the tint for up. Down and lost are the brown, bark.
+     Live stays emerald. lib/resultTone.ts is the one copy of which is
+     which. `on-gold` is the ink that sits on a gold fill in both themes —
+     the page's own ink turns light at night. */
+  --color-gold:      var(--gd-gold);
+  --color-gold-deep: var(--gd-gold-deep);     /* gold text */
+  --color-on-gold:   var(--gd-on-gold);
+
   /* ── Type ──
      Three families, one job each, never mixed.
      Schibsted Grotesk (titles) and Archivo (every other word) are
@@ -58,6 +67,8 @@
   --color-disabled-bg: var(--gd-disabled-bg);  /* a button that is not ready yet */
   --color-disabled-fg: var(--gd-disabled-fg);  /* …and its words; contrast-exempt, disabled: only */
   --color-accent-tint: var(--gd-accent-tint);  /* status pills, a selected wash */
+  --color-gold-tint:   var(--gd-gold-tint);    /* up: the duller gold */
+  --color-bark-tint:   var(--gd-bark-tint);    /* down, and worse than level */
 
   /* ── Elevation: four levels and no others ──
      Flat is a tint and no shadow. Raised is every card, list group,
@@ -119,6 +130,10 @@
   --gd-rust:      #B5533C;
   --gd-rust-deep: #8A3E2C;
 
+  --gd-gold:      #D4A02A;
+  --gd-gold-deep: #755610;
+  --gd-on-gold:   #2B2118;
+
   /* The named mixes, worked out from the palette on the element where the
      palette is declared — so under html.dark they read the night values
      with nothing restated. The dark block below moves only the strengths
@@ -129,6 +144,8 @@
   --gd-disabled-bg: color-mix(in srgb, var(--gd-bark) 10%, transparent);
   --gd-disabled-fg: color-mix(in srgb, var(--gd-ink) 45%, transparent);
   --gd-accent-tint: color-mix(in srgb, var(--gd-accent) 14%, transparent);
+  --gd-gold-tint:   color-mix(in srgb, var(--gd-gold) 24%, transparent);
+  --gd-bark-tint:   color-mix(in srgb, var(--gd-bark) 20%, transparent);
 
   /* Warm shadows, in bark rather than black — a black shadow on cream
      reads as dirt. */
@@ -184,6 +201,10 @@ html.dark {
   --gd-rust:      #D9765B;
   --gd-rust-deep: #E0937D;
 
+  --gd-gold:      #E3B341;
+  --gd-gold-deep: #E9C46A;
+  --gd-on-gold:   #2B2118;
+
   /* A touch stronger at night, where a light line on a dark page reads
      fainter than the same strength the other way round. */
   --gd-line-strong: color-mix(in srgb, var(--gd-bark) 20%, transparent);
@@ -221,6 +242,10 @@ html.dark {
 
     --gd-rust:      #B5533C;
     --gd-rust-deep: #8A3E2C;
+
+    --gd-gold:      #D4A02A;
+    --gd-gold-deep: #755610;
+    --gd-on-gold:   #2B2118;
 
     --gd-line-strong: color-mix(in srgb, var(--gd-bark) 18%, transparent);
     --gd-tint:        color-mix(in srgb, var(--gd-bark) 6%, transparent);

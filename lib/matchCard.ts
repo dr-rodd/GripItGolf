@@ -9,7 +9,11 @@
 // score, or one side conceded it. The bracket's reader (`readMatch`) treats
 // a hole only one side has as lost, which is right for a signed card and
 // wrong for one being filled in on the green — the first phone to tap would
-// win the hole. That difference is why this is its own small tally. Pure.
+// win the hole. That difference is why this is its own small tally.
+//
+// **Level after eighteen, they go down the 19th** — extra holes off the
+// course's own holes from the 1st, shots as the round gave them, until a
+// hole is won. A match play card always ends with a winner. Pure.
 
 import { shotsReceived } from './handicap'
 import { marginLabel, progressLabel } from './matchDecision'
@@ -19,6 +23,8 @@ export type CardSideKey = 'A' | 'B'
 
 export type CardPlayer = { id: string; gender: string; receives: number }
 export type CardSide = { id: string; players: CardPlayer[] }
+/** A side as the card draws it: its name, and each player's. */
+export type CardSideView = { id: string; name: string; players: (CardPlayer & { name: string })[] }
 export type CardHole = { holeNumber: number; par: number; strokeIndex: number; strokeIndexLadies?: number | null }
 
 /** Player id → hole number → gross. */
@@ -75,38 +81,108 @@ export function holeOutcomes(
 export type CardState = {
   leader: CardSideKey | null
   up: number
+  /** Holes finished, extra holes included, up to the one that settled it. */
   played: number
   /** True once nothing left to play can change it — what the bracket writes on. */
   settled: boolean
-  /** Settled and level after the last hole: put back to the people, never invented. */
-  halved: boolean
-  /** "3&2", "2 up" once settled. */
+  /** Level after eighteen: the match has gone down the 19th. */
+  extra: boolean
+  /** "3&2", "2 up", "at 19th" once settled. */
   result: string | null
-  /** "2 up thru 7", "All square thru 9", "Not started". */
+  /** "2 up thru 7", "All square thru 9", "All square after 18", "Not started". */
   progress: string
 }
 
-/** The match as the card stands. */
-export function cardState(outcomes: readonly HoleOutcome[], holeCount = 18): CardState {
+/** Eighteen holes, then extra holes until one is won. */
+export const REGULATION_HOLES = 18
+/** Hole numbers go to 36 — eighteen extra holes is further than any match has gone. */
+export const MAX_CARD_HOLES = 36
+
+/** "19th", "21st", "22nd", "23rd". */
+export function ordinal(n: number): string {
+  const tens = n % 100
+  if (tens >= 11 && tens <= 13) return `${n}th`
+  return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'}`
+}
+
+/**
+ * The match as the card stands. Read in hole order, and **stopped the
+ * moment it is settled** — a group that plays out the last two holes of a
+ * 3&2 for fun does not turn the result into 5 up.
+ *
+ * Level after eighteen, the match goes on: the 19th, the 20th and so on
+ * (`playCard` adds them), and the first of them won settles it — "at 19th".
+ * A halved extra hole just sends them to the next.
+ */
+export function cardState(outcomes: readonly HoleOutcome[]): CardState {
+  const inOrder = [...outcomes].sort((x, y) => x.holeNumber - y.holeNumber)
   let up = 0
   let played = 0
-  for (const o of outcomes) {
+  let settledAt: number | null = null
+  for (const o of inOrder) {
+    if (o.holeNumber > REGULATION_HOLES) break
     if (o.winner === null) continue
     played++
     if (o.winner === 'A') up++
     else if (o.winner === 'B') up--
+    if (Math.abs(up) > REGULATION_HOLES - played) { settledAt = o.holeNumber; break }
+  }
+  const extra = settledAt === null && played === REGULATION_HOLES && up === 0
+  if (extra) {
+    for (const o of inOrder) {
+      if (o.holeNumber <= REGULATION_HOLES) continue
+      if (o.winner === null) break
+      played++
+      if (o.winner === 'halved') continue
+      up = o.winner === 'A' ? 1 : -1
+      settledAt = o.holeNumber
+      break
+    }
   }
   const holesUp = Math.abs(up)
-  const remaining = Math.max(0, holeCount - played)
-  const settled = played > 0 && (remaining === 0 || holesUp > remaining)
+  const settled = settledAt !== null
+  const remaining = Math.max(0, REGULATION_HOLES - played)
+  const result = !settled ? null
+    : settledAt! > REGULATION_HOLES ? `at ${ordinal(settledAt!)}` : marginLabel(holesUp, remaining)
+  const progress = extra && !settled
+    ? played === REGULATION_HOLES ? 'All square after 18' : `All square thru ${played}`
+    : extra ? `1 up thru ${played}` : progressLabel(holesUp, played, remaining)
   return {
     leader: up === 0 ? null : up > 0 ? 'A' : 'B',
     up: holesUp,
     played,
     settled,
-    halved: settled && holesUp === 0,
-    result: settled && holesUp > 0 ? marginLabel(holesUp, remaining) : null,
-    progress: progressLabel(holesUp, played, remaining),
+    extra,
+    result,
+    progress,
+  }
+}
+
+/** The course hole an extra hole is played off: the 19th is the 1st again. */
+export const courseHoleFor = (n: number) => ((n - 1) % REGULATION_HOLES) + 1
+
+/**
+ * The whole card: the eighteen, and the extra holes a level match has
+ * reached — each played off its course hole, shots and all, as the round
+ * gave them — with the next one added for as long as the match is still
+ * level and every hole so far is finished.
+ */
+export function playCard(
+  holes: readonly CardHole[], a: CardSide, b: CardSide,
+  scores: CardScores, concessions: CardConcessions,
+): { holes: CardHole[]; outcomes: HoleOutcome[]; state: CardState } {
+  const base = [...holes].sort((x, y) => x.holeNumber - y.holeNumber).slice(0, REGULATION_HOLES)
+  const list = [...base]
+  for (;;) {
+    const outcomes = holeOutcomes(list, a, b, scores, concessions)
+    const state = cardState(outcomes)
+    const allIn = outcomes.every(o => o.winner !== null)
+    if (!state.extra || state.settled || !allIn || list.length >= MAX_CARD_HOLES || base.length < REGULATION_HOLES) {
+      return { holes: list, outcomes, state }
+    }
+    const n = list.length + 1
+    const from = base[courseHoleFor(n) - 1]
+    list.push({ ...from, holeNumber: n })
   }
 }
 
@@ -128,7 +204,7 @@ export function shouldWrite(
   state: CardState, winnerId: string | null, stored: { winner: string | null; result: string | null },
   organiser: boolean,
 ): boolean {
-  if (!state.settled || state.halved || !winnerId || !state.result) return false
+  if (!state.settled || !winnerId || !state.result) return false
   if (stored.winner === winnerId && stored.result === state.result) return false
   return stored.winner === null || organiser
 }

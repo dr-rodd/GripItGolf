@@ -1,13 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { hasUnlocked, isLocked } from '@/lib/passcode'
 import {
-  cardState, holeOutcomes, openingHole, shotsOn, shouldWrite,
-  type CardHole, type CardSideKey,
+  REGULATION_HOLES, courseHoleFor, openingHole, ordinal, playCard, shotsOn, shouldWrite,
+  type CardHole, type CardSideKey, type CardSideView,
 } from '@/lib/matchCard'
+import { RESULT_PILL, RESULT_TEXT, sideTone } from '@/lib/resultTone'
 import { usePoll } from '@/app/scoring/usePoll'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import { buttonClass, cardClass } from '@/app/components/ui'
@@ -29,13 +31,11 @@ import { buttonClass, cardClass } from '@/app/components/ui'
  * rounds follow). From then on the card is read-only, and changing it —
  * like changing it on the bracket — needs the admin PIN. The admin PIN is
  * also how the organiser scores or finishes a match they are not in.
+ *
+ * **All square after 18, the card goes on** — the 19th off the 1st, the
+ * 20th off the 2nd — until a hole is won (`playCard`). Each side's
+ * standing wears the result colours: gold up and won, brown down and lost.
  */
-
-export type CardSideView = {
-  id: string
-  name: string
-  players: { id: string; name: string; gender: string; receives: number }[]
-}
 
 type Scores = Record<string, Record<number, number>>
 type Conceded = Record<number, CardSideKey>
@@ -43,16 +43,17 @@ type Conceded = Record<number, CardSideKey>
 const MAX_GROSS = 20
 
 export default function MatchCardClient({
-  tripId, tripCode, matchId, a, b, holes, inMatch, passcodeHash, stored: storedInitial,
+  tripId, tripCode, matchId, a, b, holes: baseHoles, mySide, passcodeHash, stored: storedInitial,
 }: {
   tripId: string
   tripCode: string
   matchId: string
   a: CardSideView
   b: CardSideView
+  /** The course's eighteen; extra holes are added from them. */
   holes: CardHole[]
-  /** This phone's player is in the match. */
-  inMatch: boolean
+  /** This phone's side of the match, or null when they are not in it. */
+  mySide: CardSideKey | null
   passcodeHash: string | null
   stored: { winner: string | null; result: string | null }
 }) {
@@ -68,6 +69,7 @@ export default function MatchCardClient({
   useEffect(() => { setUnlocked(hasUnlocked(tripCode)) }, [tripCode])
   const organiser = unlocked || !isLocked(passcodeHash)
 
+  const inMatch = mySide !== null
   const decided = stored.winner !== null
   const canEdit = organiser || (inMatch && !decided)
 
@@ -106,12 +108,11 @@ export default function MatchCardClient({
     A: { id: a.id, players: a.players.map(p => ({ id: p.id, gender: p.gender, receives: p.receives })) },
     B: { id: b.id, players: b.players.map(p => ({ id: p.id, gender: p.gender, receives: p.receives })) },
   }), [a, b])
-  const outcomes = useMemo(() => holeOutcomes(
-    holes, sides.A, sides.B,
+  const { holes, outcomes, state } = useMemo(() => playCard(
+    baseHoles, sides.A, sides.B,
     new Map(Object.entries(scores).map(([pid, hs]) => [pid, new Map(Object.entries(hs).map(([h, g]) => [Number(h), g]))])),
     new Map(Object.entries(conceded).map(([h, side]) => [Number(h), side])),
-  ), [holes, sides, scores, conceded])
-  const state = useMemo(() => cardState(outcomes), [outcomes])
+  ), [baseHoles, sides, scores, conceded])
   const current = hole ?? (loaded ? openingHole(outcomes) : 1)
   const h = holes.find(x => x.holeNumber === current) ?? holes[0]
   const outcome = outcomes.find(o => o.holeNumber === current)
@@ -120,14 +121,18 @@ export default function MatchCardClient({
   // ── Writing ──
   // One write at a time per box, in the order tapped.
   const chains = useRef(new Map<string, Promise<void>>())
-  function queue(key: string, write: () => PromiseLike<{ error: unknown }>) {
+  function queue(key: string, hole: number, write: () => PromiseLike<{ error: unknown }>) {
     dirty.current++
     const prev = chains.current.get(key) ?? Promise.resolve()
     const next = prev.then(async () => {
       const { error: err } = await write()
       if (err) {
         console.error('Match card write failed:', err)
-        setError('Could not save that — check your connection and try again.')
+        // Before migration 059 the card's tables stop at the 18th.
+        const refused = (err as { code?: string }).code === '23514' && hole > REGULATION_HOLES
+        setError(refused
+          ? 'Extra holes need a database update — the organiser can record the result on the bracket for now.'
+          : 'Could not save that — check your connection and try again.')
       }
     }).finally(() => { dirty.current-- })
     chains.current.set(key, next)
@@ -141,7 +146,7 @@ export default function MatchCardClient({
       if (value === null) delete mine[n]; else mine[n] = value
       return { ...prev, [playerId]: mine }
     })
-    queue(`s:${playerId}:${n}`, () => value === null
+    queue(`s:${playerId}:${n}`, n, () => value === null
       ? supabase.from('match_scores').delete().eq('trip_id', tripId).eq('match_id', matchId)
           .eq('player_id', playerId).eq('hole_number', n)
       : supabase.from('match_scores').upsert({
@@ -159,7 +164,7 @@ export default function MatchCardClient({
       if (undo) delete next[n]; else next[n] = side
       return next
     })
-    queue(`c:${n}`, () => undo
+    queue(`c:${n}`, n, () => undo
       ? supabase.from('match_concessions').delete().eq('trip_id', tripId).eq('match_id', matchId).eq('hole_number', n)
       : supabase.from('match_concessions').upsert({
           match_id: matchId, trip_id: tripId, hole_number: n, conceded_by: side,
@@ -208,12 +213,30 @@ export default function MatchCardClient({
 
   const leaderName = state.leader === 'A' ? a.name : state.leader === 'B' ? b.name : null
   const status = state.settled
-    ? state.halved ? 'All square after 18' : `${leaderName} wins ${state.result}`
-    : state.leader ? `${leaderName} ${state.progress}` : state.progress
+    ? `${leaderName} wins ${state.result}`
+    : state.extra ? `${state.progress} — down the ${ordinal(state.played + 1)}`
+      : state.leader ? `${leaderName} ${state.progress}` : state.progress
+  // The status in the colours: from this phone's side when they are in the
+  // match, else as the leader has it — winning is gold either way.
+  const statusTone = sideTone(mySide ?? state.leader ?? 'A', state)
+  const standing = (key: CardSideKey) => {
+    const tone = sideTone(key, state)
+    const label = tone === 'won' ? `Won ${state.result}` : tone === 'lost' ? 'Lost'
+      : tone === 'up' ? `${state.up} up` : tone === 'down' ? `${state.up} down`
+        : state.played > 0 ? 'All square' : ''
+    return { tone, label }
+  }
 
   const sideColumn = (key: CardSideKey, side: CardSideView) => (
     <div className="min-w-0 flex flex-col gap-3">
-      <p className="t-card text-ink truncate text-center">{side.name}</p>
+      <div className="text-center">
+        <p className="t-card text-ink truncate">{side.name}</p>
+        {standing(key).label && (
+          <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full t-cap font-semibold ${RESULT_PILL[standing(key).tone]}`}>
+            {standing(key).label}
+          </span>
+        )}
+      </div>
       {side.players.map(p => {
         const value = scores[p.id]?.[current]
         const shots = shotsOn(h, { id: p.id, gender: p.gender, receives: p.receives })
@@ -266,6 +289,30 @@ export default function MatchCardClient({
     </div>
   )
 
+  // A hole on the strip: the mark says which side won it; on the phone of
+  // a player in the match, the box wears it — gold won, brown lost.
+  const holeButton = (o: (typeof outcomes)[number]) => {
+    const mine = mySide && (o.winner === 'A' || o.winner === 'B')
+      ? (o.winner === mySide ? RESULT_PILL.up : RESULT_PILL.down) : 'text-ink/80'
+    return (
+      <button
+        key={o.holeNumber}
+        type="button"
+        onClick={() => setHole(o.holeNumber)}
+        aria-pressed={o.holeNumber === current}
+        aria-label={`Hole ${o.holeNumber}`}
+        className={`h-11 rounded-tile border text-[13px] tabular-nums flex flex-col items-center justify-center leading-none ${
+          o.holeNumber === current ? 'border-accent-deep bg-accent-tint text-ink' : `border-line ${mine}`
+        }`}
+      >
+        <span>{o.holeNumber}</span>
+        <span className="text-[13px] mt-0.5 opacity-80" aria-hidden="true">
+          {o.winner === 'A' ? '◂' : o.winner === 'B' ? '▸' : o.winner === 'halved' ? '=' : ''}
+        </span>
+      </button>
+    )
+  }
+
   const holeLabel = outcome?.winner === 'A' ? `${a.name} wins the hole`
     : outcome?.winner === 'B' ? `${b.name} wins the hole`
       : outcome?.winner === 'halved' ? 'Hole halved' : ''
@@ -273,34 +320,27 @@ export default function MatchCardClient({
   return (
     <div className="flex flex-col gap-4">
       {/* The match as it stands */}
-      <div className={`px-4 py-3 text-center ${state.settled ? cardClass('chosen') : cardClass()}`} aria-live="polite">
-        <p className="t-card text-ink">{loaded ? status : 'Loading the card…'}</p>
-        {state.settled && state.halved && (
-          <p className="t-cap text-ink/65 mt-1">A halved match is settled on the bracket — the organiser records who goes through.</p>
+      <div className={`px-4 py-3 text-center ${cardClass()}`} aria-live="polite">
+        <p className={`t-card ${loaded && state.played > 0 ? RESULT_TEXT[statusTone] : 'text-ink'}`}>
+          {loaded ? status : 'Loading the card…'}
+        </p>
+        {state.extra && !state.settled && (
+          <p className="t-cap text-ink/65 mt-1">Extra holes are played off the 1st, 2nd and on, with the same shots, until a hole is won.</p>
         )}
       </div>
 
       {/* Every hole, with who won it — tap to go to one */}
       <div className="grid grid-cols-9 gap-1" aria-label="Holes">
-        {outcomes.map(o => (
-          <button
-            key={o.holeNumber}
-            type="button"
-            onClick={() => setHole(o.holeNumber)}
-            aria-pressed={o.holeNumber === current}
-            aria-label={`Hole ${o.holeNumber}`}
-            className={`h-11 rounded-tile border text-[13px] tabular-nums flex flex-col items-center justify-center leading-none ${
-              o.holeNumber === current ? 'border-accent-deep bg-accent-tint text-ink' : 'border-line text-ink/80'
-            }`}
-          >
-            <span>{o.holeNumber}</span>
-            <span className="text-[13px] text-ink/65 mt-0.5" aria-hidden="true">
-              {o.winner === 'A' ? '◂' : o.winner === 'B' ? '▸' : o.winner === 'halved' ? '=' : ''}
-            </span>
-          </button>
-        ))}
+        {outcomes.filter(o => o.holeNumber <= REGULATION_HOLES).map(o => holeButton(o))}
       </div>
-
+      {holes.length > REGULATION_HOLES && (
+        <div>
+          <p className="t-cap text-ink/65 mb-1">Extra holes</p>
+          <div className="grid grid-cols-9 gap-1" aria-label="Extra holes">
+            {outcomes.filter(o => o.holeNumber > REGULATION_HOLES).map(o => holeButton(o))}
+          </div>
+        </div>
+      )}
       {/* This hole */}
       <div className="flex items-center justify-between gap-2">
         <button
@@ -313,8 +353,10 @@ export default function MatchCardClient({
           ‹
         </button>
         <div className="text-center">
-          <p className="t-card text-ink">Hole {current}</p>
-          <p className="t-cap text-ink/65">Par {h.par} · Index {h.strokeIndex}</p>
+          <p className="t-card text-ink">{current > REGULATION_HOLES ? `The ${ordinal(current)}` : `Hole ${current}`}</p>
+          <p className="t-cap text-ink/65">
+            {current > REGULATION_HOLES ? `Played off the ${ordinal(courseHoleFor(current))} · ` : ''}Par {h.par} · Index {h.strokeIndex}
+          </p>
         </div>
         <button
           type="button"
@@ -356,6 +398,10 @@ export default function MatchCardClient({
           <InlineUnlock tripCode={tripCode} passcodeHash={passcodeHash} onUnlocked={() => setUnlocked(true)} prompt="Enter the admin PIN" />
         </div>
       )}
+
+      <p className="t-cap text-center">
+        <Link href={`/trip/${tripCode}/scoring`} className="text-accent-deep hover:text-accent">Every live match →</Link>
+      </p>
     </div>
   )
 }

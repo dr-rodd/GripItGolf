@@ -50,6 +50,8 @@ import { describeShortDate } from '@/lib/itinerary'
 import { TbcRoundTile, type LeagueDoor } from './LeagueRounds'
 import AddToField from './AddToField'
 import { readKnockout } from './knockout'
+import { readLiveMatches } from './match/matchCards'
+import { myNextMatch } from '@/lib/knockoutPortal'
 import { NextMatchCard } from './KnockoutViews'
 import MatchDetails from './MatchDetails'
 import { readContacts } from './matchContacts'
@@ -161,7 +163,7 @@ export default async function TripPage({ params, searchParams }: {
       .order('round_number'),
     supabase
       .from('players')
-      .select('id, name, handicap, claimed, team_id, is_lead')
+      .select('id, name, handicap, claimed, team_id, is_lead, gender')
       .eq('trip_id', trip.id)
       // A composite is a synthetic scorecard, not a person.
       .eq('is_composite', false)
@@ -343,6 +345,16 @@ export default async function TripPage({ params, searchParams }: {
   // the standing rather than after it; a failed read costs the card only.
   const knockoutView = isEventKind(trip.kind) && isKnockoutEvent((trip as { bracket_setup?: unknown }).bracket_setup)
     ? readKnockout(trip, (trip as { bracket_setup?: unknown }).bracket_setup, me?.id ?? null, players)
+        .then(async view => {
+          if (!view) return null
+          // Your own match, when it is being played now, says so on the card.
+          const next = myNextMatch(view.matches, view.entrantId)
+          const live = next
+            ? (await readLiveMatches(trip, { ...view, matches: view.matches.filter(m => m.id === next.id) },
+                players as { id: string; name: string; handicap: number | null; gender: string }[]))[0] ?? null
+            : null
+          return { view, live }
+        })
         .catch(e => { console.error('TripPage knockout read failed:', e); return null })
     : Promise.resolve(null)
   // And this player's own details for it — home club (migration 057, read
@@ -721,7 +733,7 @@ export default async function TripPage({ params, searchParams }: {
           noun={isEvent ? 'event' : 'trip'}
         />
 
-        {koView && <NextMatchCard tripCode={tripCode} view={koView} today={todayString(new Date())} />}
+        {koView && <NextMatchCard tripCode={tripCode} view={koView.view} live={koView.live} today={todayString(new Date())} />}
         {koView && me && myDetails && (
           <MatchDetails
             tripId={trip.id}

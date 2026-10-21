@@ -20,7 +20,7 @@ import {
   parseMatchTees, withTee, matchStrokes, shotHoles, describeReceives,
   normaliseContact, contactShown, walkoverChoices, WALKOVER,
 } from '../lib/matchArrangements'
-import { holeOutcomes, cardState, openingHole, shouldWrite } from '../lib/matchCard'
+import { holeOutcomes, cardState, openingHole, shouldWrite, playCard, ordinal, courseHoleFor } from '../lib/matchCard'
 
 // ─── Tiny harness ──────────────────────────────────────────────
 
@@ -623,13 +623,37 @@ guard('match card', () => {
   eq(st([4, 4, 3], [5, 4, 4]).progress, 'All square thru 3', 'halved, lost, won: all square')
   const four = Array(16).fill(3), five = Array(16).fill(5)
   const win = st(four, five)
-  ok(win.settled && win.leader === 'A' && win.result === '16&2', 'sixteen up with two to play: over, 16&2')
+  eq([win.settled, win.leader, win.result, win.played], [true, 'A', '10&8', 10],
+    'played on past the end: the result stands where it was settled, 10&8, not 16 up')
   const tenUp = st(Array(10).fill(3), Array(10).fill(5))
   eq([tenUp.settled, tenUp.result], [true, '10&8'], 'dormie and beyond: settled the moment it cannot change')
   const close = st([...Array(17).fill(4), 3], [5, 5, ...Array(15).fill(4), 4])
   eq([close.settled, close.result, close.leader], [true, '1 up', 'A'], 'won on the eighteenth: 1 up')
   const level = st(Array(18).fill(4), [5, 5, ...Array(16).fill(4)])
-  ok(level.settled && level.halved && level.result === null, 'level after eighteen: halved, put back to the people')
+  eq([level.settled, level.extra, level.result, level.progress], [false, true, null, 'All square after 18'],
+    'level after eighteen: not over — down the 19th')
+
+  // Extra holes: the 19th off the 1st, the 20th off the 2nd, shots as the round gave them.
+  eq([ordinal(19), ordinal(21), ordinal(22), ordinal(23), ordinal(31), ordinal(11)], ['19th', '21st', '22nd', '23rd', '31st', '11th'],
+    'ordinals for the extra holes')
+  eq([courseHoleFor(19), courseHoleFor(20), courseHoleFor(36)], [1, 2, 18], 'the 19th is the 1st again')
+  const levelA = [...Array(18).fill(4)]
+  const levelB = [5, 5, ...Array(16).fill(4)]
+  const extend = (a: number[], b: number[], c = none) => playCard(holes, A, B, card(a, b), c)
+  let x = extend(levelA, levelB)
+  eq([x.holes.length, x.holes[18].holeNumber, x.holes[18].strokeIndex, openingHole(x.outcomes)], [19, 19, 1, 19],
+    'level after 18: the card grows a 19th, played off the 1st, and opens on it')
+  x = extend([...levelA, 4], [...levelB, 5])
+  eq([x.state.settled, x.state.result], [false, null], 'Bob\'s shot on the 1st comes with it to the 19th: his 5 halves Ann\'s 4')
+  eq([x.holes.length, openingHole(x.outcomes)], [20, 20], '  …and they go to the 20th')
+  x = extend([...levelA, 4, 4], [...levelB, 5, 3])
+  eq([x.state.settled, x.state.leader, x.state.result, x.state.played], [true, 'B', 'at 20th', 20], 'won at the 20th: settled, "at 20th"')
+  eq(x.holes.length, 20, '  …and no 21st is offered')
+  ok(shouldWrite(x.state, 'bob', { winner: null, result: null }, false), '  …and the result goes to the bracket')
+  x = extend([...levelA, 4], [...levelB], new Map([[19, 'A' as const]]))
+  eq([x.state.settled, x.state.leader, x.state.result], [true, 'B', 'at 19th'], 'a conceded 19th settles it too')
+  x = extend(Array(17).fill(4), [5, 5, ...Array(15).fill(4)])
+  eq(x.holes.length, 18, 'no extra hole while the eighteenth is still to finish')
 
   eq(openingHole(holeOutcomes(holes, A, B, card([4, 4], [4, 4]), none)), 3, 'the card opens on the first hole not finished')
 
@@ -638,7 +662,7 @@ guard('match card', () => {
   ok(!shouldWrite(done, 'ann', { winner: 'ann', result: '16&2' }, false), '  …once')
   ok(!shouldWrite(done, 'ann', { winner: 'bob', result: '2&1' }, false), '  …never over a result already in, without the admin PIN')
   ok(shouldWrite(done, 'ann', { winner: 'bob', result: '2&1' }, true), '  …and with it, it does')
-  ok(!shouldWrite(level, null, { winner: null, result: null }, true), 'a halved card writes nothing')
+  ok(!shouldWrite(level, null, { winner: null, result: null }, true), 'a level card writes nothing')
   ok(!shouldWrite(st([4], [5]), 'ann', { winner: null, result: null }, false), 'nor does one still going')
 })
 
