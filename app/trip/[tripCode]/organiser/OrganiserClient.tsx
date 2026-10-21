@@ -61,7 +61,7 @@ type Overview = {
 
 export default function OrganiserClient({
   tripId, tripCode, initialNotices, initialRounds, formatSummary, isLeague,
-  initialPermissions, overview, tagsSummary, dayFormatSummary, golfIreland,
+  initialPermissions, overview, tagsSummary, dayFormatSummary, golfIreland, accessCard,
   series = false,
 }: {
   tripId: string
@@ -74,6 +74,8 @@ export default function OrganiserClient({
   isLeague: boolean
   /** The stored participant permissions, defaults filled (lib/eventPermissions.ts). */
   initialPermissions: EventPermissions
+  /** Who can see the event — the public PIN card, drawn by the page. */
+  accessCard?: React.ReactNode
   /** The bird's-eye numbers, counted on the server. */
   overview: Overview
   /** The Teams & tags card's one-liner (lib/tagBoards.ts describeTags). */
@@ -303,6 +305,8 @@ export default function OrganiserClient({
             <p className="text-rust-deep text-sm mt-3 leading-snug">{permsError}</p>
           )}
         </section>
+
+        {accessCard}
 
         {/* ── Post a notice ── */}
         <section>

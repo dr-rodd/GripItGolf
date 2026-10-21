@@ -19,6 +19,7 @@ import {
   isKnockoutEvent, knockoutSeed, knockoutBoards, drawDeadlines, deadlineNote,
 } from '../lib/bracketSetup'
 import { hasMatchplay } from '../lib/leaderboards'
+import { entryAllowed, entryCookie, publicPinIssue } from '../lib/publicPin'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -409,6 +410,44 @@ section('The match play card: top of the draw left, bottom right, concede a hole
   ok(views.includes('<LiveBoard') && views.includes('dot-live') && !views.includes('setInterval'),
     'the portal draws a live board, refreshed through the one poller')
   ok(read('app/trip/[tripCode]/match/[matchId]/page.tsx').includes("'Score this match'"), 'the match page opens the card')
+}
+
+// ─── The public PIN ────────────────────────────────────────────
+
+section('The public PIN: entry to the event, beside the admin PIN')
+{
+  eq(entryAllowed(null, undefined), true, 'no public PIN: open to anybody with the code, as ever')
+  eq(entryAllowed('', undefined), true, '  …an empty one too')
+  eq(entryAllowed('abc', undefined), false, 'a public PIN: a phone that has not entered is sent to the door')
+  eq(entryAllowed('abc', 'abc'), true, '  …and one that has goes straight through')
+  eq(entryAllowed('def', 'abc'), false, '  …until the PIN changes, which asks everybody again')
+  eq(entryCookie('gx7k2p'), 'gd_entry_GX7K2P', 'one cookie per event, whatever the case of the link')
+  const draft = (pin: string, confirm = pin) => ({ on: true, pin, confirm })
+  eq(publicPinIssue({ on: false, pin: '', confirm: '' }, '1234'), null, 'off is fine — it is optional')
+  eq(publicPinIssue(draft('5678'), '1234'), null, 'a different PIN from the admin PIN is fine')
+  ok(publicPinIssue(draft('1234'), '1234') !== null, 'the admin PIN itself is refused — handing it to the field hands them the event')
+  ok(publicPinIssue(draft('5678', '5679'), '1234') !== null, 'two that differ are refused')
+  ok(publicPinIssue(draft('12'), '1234') !== null, 'and the admin PIN\'s own length rules hold')
+
+  const layout = read('app/trip/[tripCode]/layout.tsx')
+  ok(/fetchEntryLock\(tripCode\)/.test(layout) && layout.includes('redirect(`/enter/${tripCode}`)'),
+    'the trip layout sends a phone that has not entered to the door')
+  ok(/Promise\.all\(\[fetchTripKind\(tripCode\), fetchEntryLock\(tripCode\)/.test(layout),
+    '  …asked alongside the kind, never after it')
+  const kind = read('app/trip/[tripCode]/kind.ts')
+  ok(kind.includes(".select('public_passcode_hash')") && /if \(error\) return null/.test(kind),
+    '  …in its own query, fail-soft — before migration 060 there is no lock')
+  const gate = read('app/enter/[tripCode]/EntryGate.tsx')
+  ok(gate.includes('hash === adminHash') && gate.includes('rememberUnlock(tripCode)'),
+    'the admin PIN opens the door too, and unlocks the organiser\'s side with it')
+  ok(read('app/enter/[tripCode]/page.tsx').includes("select('*')"), 'the door reads the trip whole, so no column means no lock')
+  for (const form of ['CreateKnockoutForm', 'CreateLeagueForm', 'CreateTripForm']) {
+    const src = read(`app/dashboard/create/${form}.tsx`)
+    ok(src.includes('<PublicPinField') && src.includes('rememberEntry(code, publicHash)')
+      && /public_passcode_hash/.test(src) && src.includes('!publicIssue'),
+      `${form} offers the public PIN, writes it only when set, and lets its own device in`)
+  }
+  ok(read('app/trip/[tripCode]/organiser/page.tsx').includes('<PublicPinCard'), 'the organiser can change or take it off')
 }
 
 // ─── Result ────────────────────────────────────────────────────

@@ -506,8 +506,12 @@ overview, or one column at a time), not a rebuild.
    or conceded — the bracket's `readMatch` treats a hole one side has as
    lost, right for a signed card, wrong on the green), `cardState` (the
    wording is `matchDecision`'s `marginLabel`/`progressLabel`, now exported
-   — "3&2", "2 up thru 14"; level after 18 is halved and put back to the
-   people), `openingHole`, `shouldWrite`. **The card**
+   — "3&2", "2 up thru 14"), `openingHole`, `shouldWrite`. **Level after
+   18 they go down the 19th** (Ross, 21 Oct 2026; migration 059 widens the
+   card's hole numbers to 36): `playCard` adds extra holes played off the
+   course's own holes from the 1st, shots as the round gave them, until one
+   is won — "at 19th" — and `cardState` stops counting the moment a match
+   is settled, so playing out a 3&2 for fun cannot change it. **The card**
    (`/trip/[code]/match/[id]/card`, opened by **Score this match** once the
    shots are known): one hole at a time, a strip of all eighteen showing
    who won each (◂ ▸ =), each player's − and + with their shots as dots, a
@@ -519,4 +523,24 @@ overview, or one column at a time), not a rebuild.
    (entered by hand, a walkover) only the organiser's deliberate **Put … in
    the bracket**. A match the viewer is not in is read-only until the admin
    PIN is entered.
-5. **The public PIN** (entry and viewing), beside the admin PIN.
+   **Built (stage 4, with Ross's 21 October additions):** the live board
+   — every open match with anything on its card, read on the server through
+   the card's own setup (`readLiveMatches` in
+   `app/trip/[tripCode]/match/matchCards.ts`), a **Live now** section at the
+   top of the Scoring tab's portal (each opens its card, read-only to anyone
+   not in it), a green Live line on a match in the round lists and on the
+   hub's next-match card when it is yours; refreshed through `usePoll`.
+   And the result colours, sitewide (`lib/resultTone.ts`): **gold for
+   winning, the duller gold for up, the brown for down, solid brown for
+   lost, green for live and nothing else**.
+5. **The public PIN** (entry and viewing), beside the admin PIN. **Built**
+   (migration 060, `trips.public_passcode_hash`, applied by hand):
+   `lib/publicPin.ts` is the one copy. Optional, set at creation on every
+   event door (`PublicPinField`; never the admin PIN itself) and changed or
+   taken off in the organiser area (`PublicPinCard`). The trip layout reads
+   it alongside the kind and **redirects** a phone that has not entered to
+   `/enter/[code]` — a redirect, because a layout renders beside its page
+   and a gate drawn in place of `children` would still send the page. The
+   door takes the public PIN or the admin PIN (which also unlocks the
+   organiser's side) and leaves a cookie holding the PIN's hash, so changing
+   the PIN asks everybody again. The same soft lock as the admin PIN.

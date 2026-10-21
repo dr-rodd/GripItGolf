@@ -23,3 +23,18 @@ export const fetchTripKind = cache(async (tripCode: string): Promise<string | nu
     .single()
   return (data as { kind?: string } | null)?.kind ?? null
 })
+
+/**
+ * The event's public PIN hash, or null when it has none (lib/publicPin.ts).
+ * Its own query and fail-soft for the same reason as the kind: before
+ * migration 060 the column is not there, and no column is no lock.
+ */
+export const fetchEntryLock = cache(async (tripCode: string): Promise<string | null> => {
+  const { data, error } = await supabase
+    .from('trips')
+    .select('public_passcode_hash')
+    .eq('trip_code', tripCode)
+    .maybeSingle()
+  if (error) return null
+  return (data as { public_passcode_hash?: string | null } | null)?.public_passcode_hash ?? null
+})

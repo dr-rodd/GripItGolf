@@ -11,6 +11,8 @@ import { describeRange } from '@/lib/confirmationEmail'
 import BackButton from '@/app/components/BackButton'
 import PasscodeGate from '../setup/PasscodeGate'
 import OrganiserClient from './OrganiserClient'
+import PublicPinCard from './PublicPinCard'
+import { fetchEntryLock } from '../kind'
 import { golfIrelandRequests } from '../golfIreland'
 
 export const dynamic = 'force-dynamic'
@@ -191,7 +193,10 @@ export default async function OrganiserPage({ params }: {
   // A league reading Golf Ireland: its link requests, read on the service
   // role (the link tables are closed to the browser). Null otherwise, or
   // on any failure — the card is then simply absent.
-  const gi = leagueSetup?.golfIreland ? await golfIrelandRequests(trip.id, setupRaw) : null
+  const [gi, publicLock] = await Promise.all([
+    leagueSetup?.golfIreland ? golfIrelandRequests(trip.id, setupRaw) : Promise.resolve(null),
+    fetchEntryLock(tripCode),
+  ])
 
   // How many days carry a board of their own — a board is a day's when it
   // is scoped to golf (lib/leaderboards.ts `roundIds`).
@@ -228,6 +233,7 @@ export default async function OrganiserPage({ params }: {
         playersResult.count ?? 0,
       )}
       golfIreland={gi}
+      accessCard={<PublicPinCard tripId={trip.id} tripCode={tripCode} hasPin={!!publicLock} />}
       dayFormatSummary={
         dayBoardCount === 0
           ? 'No day has its own format yet.'

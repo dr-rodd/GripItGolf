@@ -66,7 +66,11 @@ a six-character event code is the way in.
 - **Colour.** Cream page `#F6F4F0`, white surfaces, ink `#2B2118` text, every
   neutral is bark `#4A3728` at an opacity (no greys at all), **emerald
   `#0A9D56` the only accent** (`#0A6B3C` behind button text and for emerald
-  text under 24px), rust `#B5533C` for loss only. No gold, ever. **No
+  text under 24px), rust `#B5533C` for errors and a no return. **Results
+  have their own colours** (Ross, 21 Oct 2026, `lib/resultTone.ts`): gold
+  `#D4A02A` for winning (gold text `#755610`), its tint for up, the brown
+  (bark) for down and solid bark for lost; emerald for live and never a
+  result. The old identity's `#C9A84C` is still out. **No
   gradients, no glows** (one deliberate exception: the glow on a round being
   played right now). One primary emerald action per screen. The opacities
   that recur have names — `line` (hairlines), `line-strong` (field and chip

@@ -16,6 +16,8 @@ import Toggle from '@/app/components/Toggle'
 import {
   MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError, rememberUnlock,
 } from '@/lib/passcode'
+import { NO_PUBLIC_PIN, publicPinIssue, rememberEntry } from '@/lib/publicPin'
+import PublicPinField from '@/app/components/PublicPinField'
 import {
   parseHandicap, isPlusHandicap, isHandicapPending, PLUS_HANDICAP_WARNING,
   HANDICAP_PENDING_LABEL,
@@ -162,6 +164,7 @@ export default function CreateTripForm({ matchPlay = false }: {
   const [lockSettings, setLockSettings] = useState(false)
   const [passcode, setPasscode] = useState('')
   const [passcodeConfirm, setPasscodeConfirm] = useState('')
+  const [publicPin, setPublicPin] = useState(NO_PUBLIC_PIN)
 
   // Submit state
   const [submitting, setSubmitting] = useState(false)
@@ -194,6 +197,8 @@ export default function CreateTripForm({ matchPlay = false }: {
     ? null
     : passcodeError(passcode) ??
       (passcode !== passcodeConfirm ? 'The two passcodes do not match.' : null)
+  // The public PIN, beside it on an event (lib/publicPin.ts).
+  const publicIssue = isTournament ? publicPinIssue(publicPin, passcode) : null
   // Two people on one trip cannot share a name. Caught on the form rather
   // than on the insert, so it is said while the box that caused it is still
   // on screen — and said before a trip, its itinerary and its rounds have
@@ -203,7 +208,7 @@ export default function CreateTripForm({ matchPlay = false }: {
     ? null
     : duplicateNameError(players[duplicateIndex].name)
 
-  const step3Valid = !passcodeIssue && !duplicateIssue
+  const step3Valid = !passcodeIssue && !publicIssue && !duplicateIssue
 
   // ── Navigation ───────────────────────────────────────────────────────────
 
@@ -270,6 +275,19 @@ export default function CreateTripForm({ matchPlay = false }: {
       }
     }
 
+    // The public PIN, when one was asked for — hashed here too, and only
+    // sent when set, so an un-migrated database still creates events.
+    let publicHash: string | null = null
+    if (publicIssue === null && publicPin.on) {
+      try {
+        publicHash = await hashPasscode(publicPin.pin)
+      } catch {
+        setError('Could not set the public PIN on this device — try again.')
+        setSubmitting(false)
+        return
+      }
+    }
+
     // 1. Trip
     const tripRow: Record<string, unknown> = {
       name: tripName.trim(),
@@ -296,6 +314,7 @@ export default function CreateTripForm({ matchPlay = false }: {
     // Only sent when a passcode was actually set, so a database that has not
     // had that column added yet can still create ordinary trips.
     if (passcodeHash) tripRow.settings_passcode_hash = passcodeHash
+    if (publicHash) tripRow.public_passcode_hash = publicHash
 
     // Only when boards were actually built. Skipped, nothing is written and
     // the column keeps its empty default — the trip the wizard has always
@@ -499,6 +518,7 @@ export default function CreateTripForm({ matchPlay = false }: {
     // The device that set a passcode plainly knows it — remember the
     // unlock, so the creator is not asked for the code they just typed.
     if (lockOn) rememberUnlock(code)
+    if (publicHash) rememberEntry(code, publicHash)
 
     setResultCode(code)
     setStep('done')
@@ -980,6 +1000,7 @@ export default function CreateTripForm({ matchPlay = false }: {
                   {passcodeIssue && (passcode || passcodeConfirm) && (
                     <p className="text-rust-deep text-[13px] leading-snug">{passcodeIssue}</p>
                   )}
+                  {isTournament && <PublicPinField value={publicPin} onChange={setPublicPin} issue={publicIssue} />}
                 </div>
               )}
             </div>

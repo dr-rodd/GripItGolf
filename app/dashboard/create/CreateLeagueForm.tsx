@@ -20,6 +20,8 @@ import { toItemRow } from '@/lib/itinerarySync'
 import {
   MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError, rememberUnlock,
 } from '@/lib/passcode'
+import { NO_PUBLIC_PIN, publicPinIssue, rememberEntry } from '@/lib/publicPin'
+import PublicPinField from '@/app/components/PublicPinField'
 import { parseHandicap, isPlusHandicap, isHandicapPending, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import { type PlayerEntry, PLAYER_ENTRIES } from '@/lib/bracketSetup'
@@ -250,6 +252,7 @@ export default function CreateLeagueForm({ schedule }: {
   const [perms, setPerms] = useState<EventPermissions>(defaultPermissions)
   const [passcode, setPasscode] = useState('')
   const [passcodeConfirm, setPasscodeConfirm] = useState('')
+  const [publicPin, setPublicPin] = useState(NO_PUBLIC_PIN)
   // Where the scores come from — live here, Golf Ireland, or both — and,
   // when Golf Ireland is a source, which of its cards count
   // (lib/golfIreland.ts, docs/golf-ireland.md).
@@ -336,6 +339,8 @@ export default function CreateLeagueForm({ schedule }: {
   const passcodeIssue =
     passcodeError(passcode) ??
     (passcode !== passcodeConfirm ? 'The two passcodes do not match.' : null)
+  // The public PIN, beside it on an event (lib/publicPin.ts).
+  const publicIssue = publicPinIssue(publicPin, passcode)
 
   // The rules as they would be stored, or null while something is missing.
   const giStored = readsGolfIreland(scoreSource) ? parseGolfIrelandRules(giRules) : null
@@ -371,7 +376,7 @@ export default function CreateLeagueForm({ schedule }: {
     step === 1 ? step1Valid :
     step === 2 ? venuesComplete :
     step === 3 ? !!entry && !duplicateIssue :
-    step === 4 ? boards.length > 0 && (!asksDayBoards || !!dayBoards) && !passcodeIssue && !giIssue :
+    step === 4 ? boards.length > 0 && (!asksDayBoards || !!dayBoards) && !passcodeIssue && !publicIssue && !giIssue :
     false
   )
 
@@ -440,6 +445,19 @@ export default function CreateLeagueForm({ schedule }: {
       return
     }
 
+    // The public PIN, when one was asked for — hashed here too, and only
+    // sent when set, so an un-migrated database still creates events.
+    let publicHash: string | null = null
+    if (publicIssue === null && publicPin.on) {
+      try {
+        publicHash = await hashPasscode(publicPin.pin)
+      } catch {
+        setError('Could not set the public PIN on this device — try again.')
+        setSubmitting(false)
+        return
+      }
+    }
+
     const setup: LeagueSetup = {
       format: 'league',
       // Standalone is the absent default — the keep-the-no-op-off rule.
@@ -480,6 +498,7 @@ export default function CreateLeagueForm({ schedule }: {
       end_date: tripEnd || null,
       kind: 'tournament',
       settings_passcode_hash: passcodeHash,
+      ...(publicHash ? { public_passcode_hash: publicHash } : {}),
       formats: {
         ...NO_FORMATS,
         league: { ...NO_FORMATS.league },
@@ -639,6 +658,7 @@ export default function CreateLeagueForm({ schedule }: {
     // unlock now, so the organiser's own tee sheet and organiser area
     // are editable without being asked for the code they just typed.
     rememberUnlock(code)
+    if (publicHash) rememberEntry(code, publicHash)
 
     setResultCode(code)
     setStep('done')
@@ -1408,6 +1428,7 @@ export default function CreateLeagueForm({ schedule }: {
                 {passcodeIssue && (passcode || passcodeConfirm) && (
                   <p className="text-rust-deep text-[13px] leading-snug">{passcodeIssue}</p>
                 )}
+                <PublicPinField value={publicPin} onChange={setPublicPin} issue={publicIssue} />
               </div>
             </div>
           </div>

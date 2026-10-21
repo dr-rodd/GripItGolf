@@ -60,7 +60,7 @@ function uiFiles(): string[] {
       else if (/\.tsx?$/.test(e.name)) out.push(p)
     }
   }
-  for (const d of ['app/trip', 'app/components', 'app/join', 'app/dashboard', 'app/admin', 'app/golf', 'app/create', 'app/run', 'app/privacy', 'app/terms']) walk(d)
+  for (const d of ['app/trip', 'app/components', 'app/join', 'app/dashboard', 'app/admin', 'app/golf', 'app/create', 'app/run', 'app/privacy', 'app/terms', 'app/enter']) walk(d)
   out.push('app/page.tsx', 'app/layout.tsx', 'app/Landing.tsx', 'app/[code]/page.tsx')
   // The scoring screens a trip actually uses (refresh plan, Phase 6). The
   // legacy portal beside them — ScoringClient, CoursePortalClient and the

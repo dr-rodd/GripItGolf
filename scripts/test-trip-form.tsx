@@ -138,7 +138,7 @@ section('The itinerary replaces the rounds picker')
   ok(src.includes('<LeaderboardSetup'), 'the leaderboard picker is offered at creation')
   ok(src.includes('if (boards.length > 0) tripRow.leaderboards = boards'),
     '  …written only when boards were actually built')
-  ok(src.includes('const step3Valid = !passcodeIssue && !duplicateIssue'),
+  ok(src.includes('const step3Valid = !passcodeIssue && !publicIssue && !duplicateIssue'),
     '  …and never required — the way forward does not wait on a board')
 
   // A trip with no golf has nothing to score, so it cannot move on. It is a

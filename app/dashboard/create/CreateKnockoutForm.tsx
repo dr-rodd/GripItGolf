@@ -13,6 +13,8 @@ import { rememberPlayer } from '@/lib/playerCookie'
 import {
   MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError, rememberUnlock,
 } from '@/lib/passcode'
+import { NO_PUBLIC_PIN, publicPinIssue, rememberEntry } from '@/lib/publicPin'
+import PublicPinField from '@/app/components/PublicPinField'
 import { parseHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import {
@@ -69,6 +71,7 @@ export default function CreateKnockoutForm() {
   const [perms, setPerms] = useState<EventPermissions>(defaultPermissions)
   const [passcode, setPasscode] = useState('')
   const [passcodeConfirm, setPasscodeConfirm] = useState('')
+  const [publicPin, setPublicPin] = useState(NO_PUBLIC_PIN)
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -85,11 +88,13 @@ export default function CreateKnockoutForm() {
   const passcodeIssue =
     passcodeError(passcode) ??
     (passcode !== passcodeConfirm ? 'The two passcodes do not match.' : null)
+  // The public PIN, beside it on an event (lib/publicPin.ts).
+  const publicIssue = publicPinIssue(publicPin, passcode)
 
   const canProceed = !submitting && (
     step === 1 ? name.trim().length > 0 && !!startDate && !!endDate && !datesBackwards :
     step === 2 ? !duplicateIssue :
-    step === 3 ? !passcodeIssue :
+    step === 3 ? !passcodeIssue && !publicIssue :
     false
   )
 
@@ -135,6 +140,19 @@ export default function CreateKnockoutForm() {
       return
     }
 
+    // The public PIN, when one was asked for — hashed here too, and only
+    // sent when set, so an un-migrated database still creates events.
+    let publicHash: string | null = null
+    if (publicIssue === null && publicPin.on) {
+      try {
+        publicHash = await hashPasscode(publicPin.pin)
+      } catch {
+        setError('Could not set the public PIN on this device — try again.')
+        setSubmitting(false)
+        return
+      }
+    }
+
     // 1. The trip row. No rounds and no itinerary follow — the golf comes
     // later, when bracket rounds are linked to real days — so the row is
     // the whole of the structure this door creates.
@@ -147,6 +165,7 @@ export default function CreateKnockoutForm() {
       end_date: endDate || null,
       kind: 'tournament',
       settings_passcode_hash: passcodeHash,
+      ...(publicHash ? { public_passcode_hash: publicHash } : {}),
       formats: {
         ...NO_FORMATS,
         league: { ...NO_FORMATS.league },
@@ -226,6 +245,7 @@ export default function CreateKnockoutForm() {
     // unlock now, so the organiser's own tee sheet and organiser area
     // are editable without being asked for the code they just typed.
     rememberUnlock(code)
+    if (publicHash) rememberEntry(code, publicHash)
 
     setResultCode(code)
     setStep('done')
@@ -535,6 +555,7 @@ export default function CreateKnockoutForm() {
             {passcodeIssue && (passcode || passcodeConfirm) && (
               <p className="text-rust-deep text-[13px] leading-snug">{passcodeIssue}</p>
             )}
+            <PublicPinField value={publicPin} onChange={setPublicPin} issue={publicIssue} />
           </div>
         )}
 

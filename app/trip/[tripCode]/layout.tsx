@@ -1,8 +1,10 @@
+import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import TabBar from '@/app/components/TabBar'
 import { isEvent } from '@/lib/eventHub'
 import { isRunChallenge } from '@/lib/runChallenge'
-import { fetchTripKind } from './kind'
+import { entryAllowed, entryCookie } from '@/lib/publicPin'
+import { fetchEntryLock, fetchTripKind } from './kind'
 
 /**
  * Everything under `/trip/[tripCode]`, with the bottom bar around it.
@@ -33,6 +35,13 @@ import { fetchTripKind } from './kind'
  * short link, an old shared link — arrives here first, so this is the one
  * place that has to know; and no golf screen ever renders for a run
  * challenge, whichever page under `/trip/` was asked for.
+ *
+ * **And it is the door of an event with a public PIN** (lib/publicPin.ts,
+ * migration 060): a second one-column read, alongside the kind, and a
+ * phone that has not entered the event is sent to `/enter/[code]` before
+ * anything under it renders. A redirect rather than a gate drawn in place
+ * of `children`, because a layout renders beside its page, not before it —
+ * drawing a gate here would still send the page underneath it.
  */
 
 export default async function TripLayout({
@@ -43,8 +52,9 @@ export default async function TripLayout({
   params: Promise<{ tripCode: string }>
 }) {
   const { tripCode } = await params
-  const kind = await fetchTripKind(tripCode)
+  const [kind, lock, jar] = await Promise.all([fetchTripKind(tripCode), fetchEntryLock(tripCode), cookies()])
   if (isRunChallenge(kind)) redirect(`/run/${tripCode}`)
+  if (!entryAllowed(lock, jar.get(entryCookie(tripCode))?.value)) redirect(`/enter/${tripCode}`)
 
   return (
     <>
