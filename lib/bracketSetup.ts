@@ -21,6 +21,7 @@
 //
 // Pure. No I/O.
 
+import { parseDrawPlan, type DrawPlan } from './bracketDraw'
 import { roundName } from './matchplay'
 import type { Leaderboard } from './leaderboards'
 
@@ -38,9 +39,23 @@ export function isKnockoutEvent(raw: unknown): boolean {
     && (raw as Record<string, unknown>).format === 'match_play'
 }
 
-/** The seed a match play event is created with — one-off, or ongoing over a period. */
-export function knockoutSeed(schedule: 'standalone' | 'continuous'): Record<string, unknown> {
-  return schedule === 'continuous' ? { format: 'match_play', schedule: 'continuous' } : { format: 'match_play' }
+/**
+ * The seed a match play event is created with — one-off, or ongoing over a
+ * period — and, when creation planned it, how the draw is to be made
+ * (lib/bracketDraw.ts `DrawPlan`).
+ */
+export function knockoutSeed(schedule: 'standalone' | 'continuous', draw?: DrawPlan | null): Record<string, unknown> {
+  return {
+    format: 'match_play',
+    ...(schedule === 'continuous' ? { schedule: 'continuous' } : {}),
+    ...(draw ? { draw } : {}),
+  }
+}
+
+/** The draw plan off the raw column, whether or not the setup is complete yet. */
+export function rawDrawPlan(raw: unknown): DrawPlan | null {
+  return raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? parseDrawPlan((raw as Record<string, unknown>).draw) : null
 }
 
 /**
@@ -257,6 +272,11 @@ export type BracketSetup = {
   /** One date per bracket round, first round first — `roundsFor(size)` long. */
   deadlines: string[]
   /**
+   * How and when the draw is made, when it was planned (lib/bracketDraw.ts).
+   * Carried through every save of the setup form, as the schedule is.
+   */
+  draw?: DrawPlan
+  /**
    * Locked, or still open to joiners. Finalising fixes the format and the
    * bracket structure; until then the organiser can come back and change
    * any answer, and the field can keep growing.
@@ -337,6 +357,7 @@ export function parseBracketSetup(raw: unknown): BracketSetup | null {
     ...(qualifying ? { qualifying } : {}),
     deadlines: deadlines.slice(0, roundsFor(size)) as string[],
     finalized: r.finalized === true,
+    ...(parseDrawPlan(r.draw) ? { draw: parseDrawPlan(r.draw) as DrawPlan } : {}),
   }
 }
 

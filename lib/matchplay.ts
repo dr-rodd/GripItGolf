@@ -183,10 +183,47 @@ export function generateBracket(
     throw new MatchplayError('The same player appears twice in the bracket.')
   }
 
-  const makeId      = opts.makeId ?? (() => crypto.randomUUID())
+  // Seat the first round from the seed order. Seeds beyond the player
+  // count have nobody behind them, so those slots become byes.
   const bracketSize = nextPowerOfTwo(players.length)
+  const order = seedOrder(bracketSize)
+  const bySeed = new Map<number, BracketPlayer>()
+  players.forEach((p, i) => bySeed.set(i + 1, p))
+  return bracketFromSlots(order.map(seed => bySeed.get(seed) ?? null), { ...opts, seeds: order })
+}
+
+/**
+ * Build the full bracket from its first round, laid out slot by slot —
+ * `slots[0]` and `slots[1]` are the first match, `slots[2]` and `slots[3]`
+ * the second, and so on down the draw. An empty slot is a **bye**: the
+ * player opposite walks through.
+ *
+ * Every way of making a draw ends here (lib/bracketDraw.ts): a seeded or
+ * random draw lays its slots out by the seed order, a manual draw is the
+ * organiser's own layout, and editing a draw later is editing these slots.
+ * `seeds` labels each slot with its seed number, for a seeded draw only.
+ */
+export function bracketFromSlots(
+  slots: readonly (BracketPlayer | null)[],
+  opts: { makeId?: () => string; seeds?: readonly (number | null)[] } = {},
+): BracketMatch[] {
+  const bracketSize = slots.length
+  if (bracketSize < 2 || nextPowerOfTwo(bracketSize) !== bracketSize) {
+    throw new MatchplayError(`A draw has a power of two places, not ${bracketSize}.`)
+  }
+  if (bracketSize > MAX_BRACKET) {
+    throw new MatchplayError(`Match play currently supports up to ${MAX_BRACKET} players.`)
+  }
+  const placed = slots.filter((p): p is BracketPlayer => p !== null)
+  if (placed.length < MIN_PLAYERS) {
+    throw new MatchplayError(`A match play bracket needs at least ${MIN_PLAYERS} players.`)
+  }
+  if (new Set(placed.map(p => p.id)).size !== placed.length) {
+    throw new MatchplayError('The same player appears twice in the bracket.')
+  }
+
+  const makeId      = opts.makeId ?? (() => crypto.randomUUID())
   const totalRounds = Math.log2(bracketSize)
-  const order       = seedOrder(bracketSize)
 
   // 1. Lay out every round as empty matches
   const rounds: BracketMatch[][] = []
@@ -224,31 +261,24 @@ export function generateBracket(
     }
   }
 
-  // 3. Seat the first round from the seed order. Seeds beyond the player
-  //    count have nobody behind them, so those slots become byes.
-  const bySeed = new Map<number, BracketPlayer>()
-  players.forEach((p, i) => bySeed.set(i + 1, p))
-
+  // 3. Seat the first round.
   rounds[0].forEach((match, slot) => {
-    const seedA = order[slot * 2]
-    const seedB = order[slot * 2 + 1]
-    const a = bySeed.get(seedA) ?? null
-    const b = bySeed.get(seedB) ?? null
+    const a = slots[slot * 2] ?? null
+    const b = slots[slot * 2 + 1] ?? null
 
-    match.seedA = seedA
-    match.seedB = seedB
+    match.seedA = opts.seeds?.[slot * 2] ?? null
+    match.seedB = opts.seeds?.[slot * 2 + 1] ?? null
     match.playerAId = a?.id ?? null
     match.playerBId = b?.id ?? null
     match.playerAIsBye = a === null
     match.playerBIsBye = b === null
 
-    // Standard seeding always pairs a seed from the top half of the draw
-    // with one from the bottom half, and the bracket is never more than
-    // half empty, so both sides can never be byes. Fail loudly rather than
-    // emit an unplayable match if that ever stops holding.
+    // A match with nobody on either side is no match at all. Standard
+    // seeding never makes one (it pairs the top half with the bottom), and a
+    // manual draw is refused one rather than left with a hole in the tree.
     if (match.playerAIsBye && match.playerBIsBye) {
       throw new MatchplayError(
-        `Both sides of ${match.roundName} match ${slot + 1} are byes — bracket generation is broken.`
+        `${match.roundName} match ${slot + 1} has nobody in it — put a player on one side.`
       )
     }
   })

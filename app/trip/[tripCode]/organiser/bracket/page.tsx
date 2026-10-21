@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
-import { parseBracketSetup } from '@/lib/bracketSetup'
+import { parseBracketSetup, rawDrawPlan } from '@/lib/bracketSetup'
 import { parseLeagueSetup, describeLeagueSetup } from '@/lib/leagueSetup'
 import BackButton from '@/app/components/BackButton'
 import TripHeader from '@/app/components/TripHeader'
@@ -126,6 +126,7 @@ export default async function BracketSetupPage({ params }: {
         tripCode={tripCode}
         initialSetup={initialSetup}
         initialSchedule={initialSchedule}
+        initialDraw={rawDrawPlan(setupRaw)}
       />
     )
   }

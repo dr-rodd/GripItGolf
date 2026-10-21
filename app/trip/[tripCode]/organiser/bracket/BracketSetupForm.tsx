@@ -1,5 +1,6 @@
 'use client'
 
+import type { DrawPlan } from '@/lib/bracketDraw'
 import Link from 'next/link'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -128,7 +129,7 @@ function SetupSummary({ setup }: { setup: BracketSetup }) {
 }
 
 export default function BracketSetupForm({
-  tripId, tripCode, initialSetup, initialSchedule = null,
+  tripId, tripCode, initialSetup, initialSchedule = null, initialDraw = null,
 }: {
   tripId: string
   tripCode: string
@@ -139,6 +140,8 @@ export default function BracketSetupForm({
    * stay continuous through this form's first save.
    */
   initialSchedule?: 'continuous' | null
+  /** The draw plan creation wrote, carried through the first save. */
+  initialDraw?: DrawPlan | null
 }) {
   // ── The seven answers, prefilled from a saved-but-open setup ─────────────
   const [format, setFormat] = useState<TournamentFormat | null>(initialSetup?.format ?? null)
@@ -231,9 +234,12 @@ export default function BracketSetupForm({
     // The shape rides along whole-object like everything else: from the
     // saved setup when one exists, else from what creation wrote.
     const schedule = initialSetup?.schedule ?? initialSchedule ?? undefined
+    // And the draw plan, which lives in the same column (lib/bracketDraw.ts).
+    const draw = initialSetup?.draw ?? initialDraw ?? undefined
     const setup: BracketSetup = {
       format: 'match_play',
       ...(schedule === 'continuous' ? { schedule } : {}),
+      ...(draw ? { draw } : {}),
       mode, size, entry,
       deadlines: deadlines.slice(0, roundsFor(size)),
       finalized: finalizeNow,

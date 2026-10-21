@@ -1,7 +1,9 @@
 import { supabase } from '@/lib/supabase'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
-import { parseBracketSetup, describeSetup } from '@/lib/bracketSetup'
+import { parseBracketSetup, describeSetup, isKnockoutEvent, rawDrawPlan } from '@/lib/bracketSetup'
+import { describeDrawPlan } from '@/lib/bracketDraw'
+import { describeShortDate } from '@/lib/itinerary'
 import { parseLeagueSetup, describeLeagueSetup } from '@/lib/leagueSetup'
 import { parseEventPermissions } from '@/lib/eventPermissions'
 import { TAG_SET, describeTags } from '@/lib/tagBoards'
@@ -233,6 +235,8 @@ export default async function OrganiserPage({ params }: {
         playersResult.count ?? 0,
       )}
       golfIreland={gi}
+      knockout={isKnockoutEvent(setupRaw)}
+      drawSummary={rawDrawPlan(setupRaw)?.when === 'date' ? describeDrawPlan(rawDrawPlan(setupRaw), d => describeShortDate(d) ?? d) : null}
       accessCard={<PublicPinCard tripId={trip.id} tripCode={tripCode} hasPin={!!publicLock} />}
       dayFormatSummary={
         dayBoardCount === 0

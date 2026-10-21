@@ -393,7 +393,7 @@ section('The tournament door asks the shape — and match play is a shape of its
   ok(/One-off/.test(flow) && /Ongoing/.test(flow), 'match play asks when the matches are played')
   const trip = read('app/dashboard/create/CreateTripForm.tsx')
   ok(trip.includes('useState<Leaderboard[]>(() => matchPlay ? knockoutBoards() : [])')
-    && trip.includes("if (isTournament && matchPlay) tripRow.bracket_setup = knockoutSeed('standalone')"),
+    && trip.includes("if (isTournament && matchPlay) tripRow.bracket_setup = knockoutSeed('standalone', creationPlan(draw))"),
     '  …made with the bracket\'s board and the match play seed')
 }
 
@@ -401,7 +401,7 @@ section('The continuous knockout door is lean on purpose')
 {
   const src = read('app/dashboard/create/CreateKnockoutForm.tsx')
   ok(src.includes("kind: 'tournament'"), 'a knockout is an event')
-  ok(src.includes("bracket_setup: knockoutSeed('continuous')"),
+  ok(src.includes("bracket_setup: knockoutSeed('continuous', creationPlan(draw))"),
     'creation seeds the format and shape for the bracket form to finish')
   ok(src.includes('leaderboards: knockoutBoards()'), 'and the bracket\'s board, so it plays from the start')
   ok(!src.includes("from('itinerary_items')") && !src.includes("from('rounds')"),

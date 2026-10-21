@@ -61,7 +61,7 @@ type Overview = {
 
 export default function OrganiserClient({
   tripId, tripCode, initialNotices, initialRounds, formatSummary, isLeague,
-  initialPermissions, overview, tagsSummary, dayFormatSummary, golfIreland, accessCard,
+  initialPermissions, overview, tagsSummary, dayFormatSummary, golfIreland, accessCard, knockout = false, drawSummary = null,
   series = false,
 }: {
   tripId: string
@@ -75,6 +75,9 @@ export default function OrganiserClient({
   /** The stored participant permissions, defaults filled (lib/eventPermissions.ts). */
   initialPermissions: EventPermissions
   /** Who can see the event — the public PIN card, drawn by the page. */
+  /** A match play event: the draw's own row in Running the event. */
+  knockout?: boolean
+  drawSummary?: string | null
   accessCard?: React.ReactNode
   /** The bird's-eye numbers, counted on the server. */
   overview: Overview
@@ -509,6 +512,13 @@ export default function OrganiserClient({
               label={isLeague ? 'League' : 'Bracket setup'}
               hint={formatSummary ?? 'Mode, field size, qualifying and round deadlines.'}
             />
+            {knockout && (
+              <ListRow
+                href={`/trip/${tripCode}/organiser/draw`}
+                label="The draw"
+                hint={drawSummary ?? 'Random, seeded or picked by hand — now, or on a date.'}
+              />
+            )}
             <ListRow
               href={`/trip/${tripCode}/setup`}
               label="Formats, players and teams"

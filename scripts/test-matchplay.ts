@@ -21,6 +21,11 @@ import {
   normaliseContact, contactShown, walkoverChoices, WALKOVER,
 } from '../lib/matchArrangements'
 import { RESULT_PILL, sideTone, signTone } from '../lib/resultTone'
+import {
+  byHandicap, drawDue, drawInPlay, emptySlots, manualIssue, moveToSeed, parseDrawPlan, placeInSlot,
+  reconcileOrder, resizeSlots, shuffled, slotsFromSeeds, unplaced, drawCountIssue,
+} from '../lib/bracketDraw'
+import { bracketFromSlots } from '../lib/matchplay'
 import { holeOutcomes, cardState, openingHole, shouldWrite, playCard, ordinal, extraCourseHole, parseExtraPlan, withExtraHole } from '../lib/matchCard'
 
 // ─── Tiny harness ──────────────────────────────────────────────
@@ -676,6 +681,66 @@ guard('match card', () => {
   ok(shouldWrite(done, 'ann', { winner: 'bob', result: '2&1' }, true), '  …and with it, it does')
   ok(!shouldWrite(level, null, { winner: null, result: null }, true), 'a level card writes nothing')
   ok(!shouldWrite(st([4], [5]), 'ann', { winner: null, result: null }, false), 'nor does one still going')
+})
+
+section('The draw: random, seeded and picked by hand, all from the first round')
+guard('draw', () => {
+  // Seeding a list
+  const order = ['a', 'b', 'c', 'd', 'e']
+  eq(moveToSeed(order, 'e', 1), ['e', 'a', 'b', 'c', 'd'], 'typing 1 against a player moves them to the top, the rest down one')
+  eq(moveToSeed(order, 'a', 3), ['b', 'c', 'a', 'd', 'e'], 'typing 3 moves them to third')
+  eq(moveToSeed(order, 'b', 99), ['a', 'c', 'd', 'e', 'b'], 'past the end is last')
+  eq(moveToSeed(order, 'zz', 1), order, 'somebody not in the list changes nothing')
+  eq(byHandicap([{ id: 'x', handicap: 12 }, { id: 'p', handicap: null }, { id: 'y', handicap: -1 }, { id: 'z', handicap: 12 }]).map(e => e.id),
+    ['y', 'x', 'z', 'p'], 'by handicap: lowest first, a plus first of all, a pending one last, level ones as they came')
+  let n = 0
+  const fixed = () => [0.9, 0.1, 0.5, 0.3][n++ % 4]
+  const s1 = shuffled(order, fixed)
+  eq([...s1].sort(), [...order].sort(), 'a shuffle is the same field in a different order')
+  eq(reconcileOrder(['c', 'gone', 'a'], ['a', 'b', 'c', 'd']), ['c', 'a', 'b', 'd'], 'a saved order keeps its numbering; leavers drop out, newcomers go after')
+
+  // Seeded slots: 1 v 8, 4 v 5, 2 v 7, 3 v 6 over eight; byes to the top seeds
+  const six = slotsFromSeeds(['s1', 's2', 's3', 's4', 's5', 's6'])
+  eq(six.slots.length, 8, 'six players draw eight places')
+  const firstMatch = six.slots.slice(0, 2)
+  eq(firstMatch, ['s1', null], 'seed 1 gets a bye, as standard seeding gives it')
+  const tree = bracketFromSlots(six.slots.map(id => (id ? { id, name: id } : null)), { seeds: six.seeds })
+  eq(tree.filter(m => m.roundNumber === 1 && (m.playerAIsBye || m.playerBIsBye)).length, 2, '  …two byes, awarded at once')
+
+  // Manual
+  let slots = emptySlots(5)
+  eq(slots.length, 8, 'a manual draw is sized off the field so far: five entered, eight places')
+  slots = placeInSlot(slots, 0, 'a')
+  slots = placeInSlot(slots, 3, 'a')
+  eq([slots[0], slots[3]], [null, 'a'], 'placing somebody again moves them — nobody is in a draw twice')
+  ok(manualIssue(slots, order)?.includes('4 players are not in the draw') ?? false, 'everybody entered must be in it')
+  slots = ['a', 'b', 'c', null, 'd', null, 'e', null]
+  eq(manualIssue(slots, order), null, 'every player placed, every match with somebody in it: ready')
+  eq(manualIssue(['a', 'b', null, null, 'c', 'd', 'e', null], order), 'Match 2 has nobody in it — move a player into it.',
+    'a match empty on both sides is refused — a bye needs somebody to walk through')
+  const manualTree = bracketFromSlots(slots.map(id => (id ? { id, name: id } : null)))
+  eq(manualTree.filter(m => m.roundNumber === 1 && m.winnerPlayerId).map(m => m.winnerPlayerId), ['c', 'd', 'e'],
+    'an empty place is a bye for the player opposite')
+  eq(manualTree.every(m => m.seedA === null && m.seedB === null), true, '  …and nobody in a manual draw carries a seed number')
+  eq(unplaced(['a', null], ['a', 'b']), ['b'], 'who is still to place')
+  eq(resizeSlots(['a', 'b', null, null], 6, ['a', 'b', 'c', 'd', 'e', 'f']), ['a', 'b', null, null, null, null, null, null],
+    'a field that grows grows the draw, keeping who is placed')
+  eq(drawCountIssue(1) !== null && drawCountIssue(33, 32) !== null && drawCountIssue(32, 32) === null, true,
+    'a draw needs two, and no more than the setup\'s ceiling')
+
+  // The plan, and the nightly draw
+  eq(parseDrawPlan({ when: 'date', on: '2026-11-14', seeding: 'handicap' }), { when: 'date', on: '2026-11-14', seeding: 'handicap' }, 'a dated plan reads back')
+  eq(parseDrawPlan({ when: 'date', on: '14/11' }), null, '  …and one without a real date is no plan')
+  eq(parseDrawPlan({ when: 'date', on: '2026-11-14', seeding: 'order', order: ['a', 3] }), { when: 'date', on: '2026-11-14', seeding: 'order', order: ['a'] },
+    '  …an order of ids only')
+  const plan = parseDrawPlan({ when: 'date', on: '2026-11-14' })
+  eq([drawDue(plan, '2026-11-13', false), drawDue(plan, '2026-11-14', false), drawDue(plan, '2026-11-20', false), drawDue(plan, '2026-11-14', true)],
+    [false, true, true, false], 'a dated draw is made on its day or after a missed night — and never over a draw already made')
+
+  // In play
+  eq(drawInPlay([{ winner: 'a', aIsBye: false, bIsBye: true }], 0), false, 'a bye is awarded, not played — not in play')
+  eq(drawInPlay([{ winner: 'a', aIsBye: false, bIsBye: false }], 0), true, 'a played result is in play')
+  eq(drawInPlay([{ winner: null, aIsBye: false, bIsBye: false }], 1), true, 'and so is one hole on one card')
 })
 
 section('Result colours: gold winning, brown losing, green live')

@@ -22,6 +22,11 @@ import {
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import { knockoutBoards, knockoutSeed } from '@/lib/bracketSetup'
+import { todayString } from '@/lib/tripStatus'
+import CreationDraw, {
+  NO_CREATION_DRAW, creationDrawIssue, creationEntrants, creationPlan, drawKey, writeCreationDraw,
+  type CreationDrawValue,
+} from './CreationDraw'
 import { describeError, generateCode } from './CreateTripForm'
 import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
@@ -63,6 +68,9 @@ export default function CreateKnockoutForm() {
 
   // Step 2 — the field
   const [organiserPlaying, setOrganiserPlaying] = useState(true)
+  // The draw: now, later or on a date (lib/bracketDraw.ts)
+  const [draw, setDraw] = useState<CreationDrawValue>(NO_CREATION_DRAW)
+  const [drawWarning, setDrawWarning] = useState<string | null>(null)
   const [players, setPlayers] = useState<PlayerInput[]>([
     { name: '', handicap: '', gender: 'M' },
   ])
@@ -91,9 +99,13 @@ export default function CreateKnockoutForm() {
   // The public PIN, beside it on an event (lib/publicPin.ts).
   const publicIssue = publicPinIssue(publicPin, passcode)
 
+  const today = todayString(new Date())
+  const drawEntrants = creationEntrants(players)
+  const drawIssue = creationDrawIssue(draw, drawEntrants, today)
+
   const canProceed = !submitting && (
     step === 1 ? name.trim().length > 0 && !!startDate && !!endDate && !datesBackwards :
-    step === 2 ? !duplicateIssue :
+    step === 2 ? !duplicateIssue && !drawIssue :
     step === 3 ? !passcodeIssue && !publicIssue :
     false
   )
@@ -174,7 +186,7 @@ export default function CreateKnockoutForm() {
       // The format and the shape, seeded now so the bracket form knows what
       // it is finishing. Not a complete setup — parseBracketSetup rightly
       // returns null on it — and never claimed to be one.
-      bracket_setup: knockoutSeed('continuous'),
+      bracket_setup: knockoutSeed('continuous', creationPlan(draw)),
       // The bracket's board, so the event plays from the moment it exists —
       // without it the bracket said match play was not switched on.
       leaderboards: knockoutBoards(),
@@ -201,11 +213,14 @@ export default function CreateKnockoutForm() {
     // 2. Players — same shape as every creation door; no round_handicaps
     // because there are no rounds yet.
     const validPlayers = players.filter(p => p.name.trim())
+    const idFor = new Map(validPlayers.map(p => [drawKey(p.name), crypto.randomUUID()]))
     if (validPlayers.length > 0) {
       const { data: insertedPlayers, error: playersErr } = await supabase
         .from('players')
         .insert(
           validPlayers.map((p, i) => ({
+            // Given here, so a draw made now can name them (CreationDraw).
+            id: idFor.get(drawKey(p.name)),
             trip_id: trip.id,
             name: p.name.trim(),
             // Blank is pending, never scratch (lib/handicap.ts)
@@ -226,6 +241,17 @@ export default function CreateKnockoutForm() {
       }
       const lead = insertedPlayers.find(p => p.is_lead)
       if (lead) rememberPlayer(code, lead.id)
+    }
+
+    // 3. The draw, when it is made now. A draw that fails costs the draw,
+    // never the event — it can be made from the organiser area.
+    if (draw.timing.when === 'now') {
+      try {
+        await writeCreationDraw(supabase, trip.id, draw, drawEntrants, idFor)
+      } catch (e) {
+        console.error('Creation draw failed:', e)
+        setDrawWarning('The event is made, but the draw could not be saved — make it from the organiser area.')
+      }
     }
 
     try {
@@ -276,9 +302,11 @@ export default function CreateKnockoutForm() {
             Event created
           </h1>
           <p className="text-ink/65 text-sm mb-10">
-            Share this code with the field. Next, set up the bracket in the
-            organiser area on your Event Hub.
+            {draw.timing.when === 'now' && !drawWarning
+              ? 'Share this code with the field. The draw is made — it is on the bracket.'
+              : 'Share this code with the field. Next, set up the bracket in the organiser area on your Event Hub.'}
           </p>
+          {drawWarning && <p className="text-rust-deep text-sm mb-6 leading-snug">{drawWarning}</p>}
 
           <div className={`px-4 py-8 mb-4 ${cardClass()}`}>
             <p className="t-label text-ink/65 mb-4">Your event code</p>
@@ -501,6 +529,10 @@ export default function CreateKnockoutForm() {
             >
               + Add another player
             </button>
+
+            <div className="pt-4">
+              <CreationDraw entrants={drawEntrants} value={draw} onChange={setDraw} issue={drawIssue} today={today} />
+            </div>
           </div>
         )}
 

@@ -16,7 +16,7 @@ import {
   roundsFor, bracketRoundNames, parseBracketSize, describeSize,
   normalizeEventCode, validEventCode, validDeadline, deadlinesIssue,
   unansweredSetup, isCompleteSetup, parseBracketSetup, describeSetup,
-  isKnockoutEvent, knockoutSeed, knockoutBoards, drawDeadlines, deadlineNote,
+  isKnockoutEvent, knockoutSeed, knockoutBoards, drawDeadlines, deadlineNote, rawDrawPlan,
 } from '../lib/bracketSetup'
 import { hasMatchplay } from '../lib/leaderboards'
 import { entryAllowed, entryCookie, publicPinIssue } from '../lib/publicPin'
@@ -278,6 +278,10 @@ section('A match play event is a knockout from the moment it is made')
     'both seeds read as a knockout — the parser refuses them, this does not need it to')
   eq(knockoutSeed('continuous'), { format: 'match_play', schedule: 'continuous' }, 'ongoing carries its shape')
   eq(knockoutSeed('standalone'), { format: 'match_play' }, 'one-off is the absent default')
+  eq(knockoutSeed('continuous', { when: 'date', on: '2026-11-14', seeding: 'handicap' }),
+    { format: 'match_play', schedule: 'continuous', draw: { when: 'date', on: '2026-11-14', seeding: 'handicap' } },
+    'and a draw planned at creation rides in the seed')
+  eq(rawDrawPlan(knockoutSeed('standalone', { when: 'later' })), { when: 'later' }, '  …read back off the raw column, before the setup is complete')
   ok(!isKnockoutEvent({ format: 'league', entry: 'organiser' }) && !isKnockoutEvent(null) && !isKnockoutEvent([]),
     'a league, nothing, or nonsense is not')
   const [board] = knockoutBoards()
@@ -415,6 +419,35 @@ section('The match play card: top of the draw left, bottom right, concede a hole
   ok(views.includes('<LiveBoard') && views.includes('dot-live') && !views.includes('setInterval'),
     'the portal draws a live board, refreshed through the one poller')
   ok(read('app/trip/[tripCode]/match/[matchId]/page.tsx').includes("'Score this match'"), 'the match page opens the card')
+}
+
+// ─── The draw ──────────────────────────────────────────────────
+
+section('The draw: made at creation, from the organiser area, or by itself on a date')
+{
+  const drawer = read('app/components/BracketDrawer.tsx')
+  ok(drawer.includes('DRAW_METHODS.map') && drawer.includes('Draw again'), 'random, seeded or picked by hand, a random draw drawn again')
+  ok(drawer.includes('moveToSeed(order, typing.id, n)') && drawer.includes('onPointerDown') && drawer.includes('By handicap') && drawer.includes('Shuffle'),
+    'seeded: type a number, drag the handle, start from handicap order or shuffle')
+  ok(drawer.includes('placeInSlot(slots, place, id)') && drawer.includes('Tap to add a player'), 'by hand: each empty place a dropdown of the players not yet placed')
+  const creation = read('app/dashboard/create/CreationDraw.tsx')
+  ok(creation.includes('writeCreationDraw') && creation.includes('idFor.get(key)'), 'a draw made at creation names the players by the ids the form gives them')
+  for (const form of ['CreateKnockoutForm', 'CreateTripForm']) {
+    const src = read(`app/dashboard/create/${form}.tsx`)
+    ok(src.includes('<CreationDraw') && src.includes('id: idFor.get(drawKey(p.name))') && src.includes('writeCreationDraw(supabase'),
+      `${form} offers the draw and makes it with the event when asked`)
+  }
+  const store = read('lib/drawStore.ts')
+  ok(store.includes('if (state.inPlay)') && store.includes('bracketFromSlots(slots'), 'one writer, which refuses a draw already in play')
+  ok(/saveDrawPlan[\s\S]*select\('bracket_setup'\)[\s\S]*\.\.\.\(raw/.test(store), 'a plan is merged into the setup read fresh, never written from a stale copy')
+  ok(read('app/trip/[tripCode]/organiser/bracket/BracketSetupForm.tsx').includes('...(draw ? { draw } : {})'),
+    'the setup form carries the plan through its save')
+  const cleanup = read('app/api/cleanup/route.ts')
+  ok(cleanup.includes('runDueDraws(supabaseAdmin, todayString(new Date()), dryRun)'), 'the nightly job makes the draws due today')
+  const due = read('app/api/match/dueDraws.ts')
+  ok(due.includes('drawDue(plan, today, state.drawn)') && due.includes('writeDraw(admin'), '  …only where nothing is drawn yet, through the one writer')
+  ok(read('app/trip/[tripCode]/organiser/OrganiserClient.tsx').includes('/organiser/draw'), 'the organiser area has the draw')
+  ok(read('app/trip/[tripCode]/organiser/draw/DrawClient.tsx').includes('if (state.inPlay)'), '  …which, once in play, says so rather than offering a redraw')
 }
 
 // ─── The public PIN ────────────────────────────────────────────

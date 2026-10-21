@@ -18,6 +18,11 @@ import {
 } from '@/lib/passcode'
 import { NO_PUBLIC_PIN, publicPinIssue, rememberEntry } from '@/lib/publicPin'
 import PublicPinField from '@/app/components/PublicPinField'
+import { todayString } from '@/lib/tripStatus'
+import CreationDraw, {
+  NO_CREATION_DRAW, creationDrawIssue, creationEntrants, creationPlan, drawKey, writeCreationDraw,
+  type CreationDrawValue,
+} from './CreationDraw'
 import {
   parseHandicap, isPlusHandicap, isHandicapPending, PLUS_HANDICAP_WARNING,
   HANDICAP_PENDING_LABEL,
@@ -165,6 +170,9 @@ export default function CreateTripForm({ matchPlay = false }: {
   const [passcode, setPasscode] = useState('')
   const [passcodeConfirm, setPasscodeConfirm] = useState('')
   const [publicPin, setPublicPin] = useState(NO_PUBLIC_PIN)
+  // A match play event's draw: now, later or on a date (lib/bracketDraw.ts)
+  const [draw, setDraw] = useState<CreationDrawValue>(NO_CREATION_DRAW)
+  const [drawWarning, setDrawWarning] = useState<string | null>(null)
 
   // Submit state
   const [submitting, setSubmitting] = useState(false)
@@ -208,7 +216,10 @@ export default function CreateTripForm({ matchPlay = false }: {
     ? null
     : duplicateNameError(players[duplicateIndex].name)
 
-  const step3Valid = !passcodeIssue && !publicIssue && !duplicateIssue
+  const today = todayString(new Date())
+  const drawEntrants = creationEntrants(players)
+  const drawIssue = isTournament && matchPlay ? creationDrawIssue(draw, drawEntrants, today) : null
+  const step3Valid = !passcodeIssue && !publicIssue && !duplicateIssue && !drawIssue
 
   // ── Navigation ───────────────────────────────────────────────────────────
 
@@ -329,7 +340,7 @@ export default function CreateTripForm({ matchPlay = false }: {
     // A match play event says so from the start (lib/bracketSetup.ts), so
     // its leaderboard tab opens the bracket and the organiser's Format card
     // finishes a knockout rather than asking what it is.
-    if (isTournament && matchPlay) tripRow.bracket_setup = knockoutSeed('standalone')
+    if (isTournament && matchPlay) tripRow.bracket_setup = knockoutSeed('standalone', creationPlan(draw))
 
     // Events only, and only when a toggle was actually flipped — nothing
     // opened writes nothing, so creation still lands before migration 049.
@@ -373,6 +384,8 @@ export default function CreateTripForm({ matchPlay = false }: {
     const firstIsOrganiser = !isTournament || organiserPlaying
 
     const validPlayers = players.filter(p => p.name.trim())
+    // Ids given here, so a draw made now can name the players (CreationDraw).
+    const idFor = new Map(validPlayers.map(p => [drawKey(p.name), crypto.randomUUID()]))
     // `handicap` is nullable now: a box left empty is a handicap nobody has
     // given yet, not scratch — see `isHandicapPending`. It used to be
     // `?? 0`, which turned the one player the organiser was least sure
@@ -383,6 +396,7 @@ export default function CreateTripForm({ matchPlay = false }: {
         .from('players')
         .insert(
           validPlayers.map((p, i) => ({
+            id: idFor.get(drawKey(p.name)),
             trip_id: tripId,
             name: p.name.trim(),
             handicap: parseHandicap(p.handicap),
@@ -515,6 +529,17 @@ export default function CreateTripForm({ matchPlay = false }: {
       }).catch(() => { /* the trip is created; the email is best-effort */ })
     }
 
+    // A match play event's draw, when it is made now. A draw that fails
+    // costs the draw, never the event — the organiser area makes it again.
+    if (isTournament && matchPlay && draw.timing.when === 'now') {
+      try {
+        await writeCreationDraw(supabase, tripId, draw, drawEntrants, idFor)
+      } catch (e) {
+        console.error('Creation draw failed:', e)
+        setDrawWarning('The event is made, but the draw could not be saved — make it from the organiser area.')
+      }
+    }
+
     // The device that set a passcode plainly knows it — remember the
     // unlock, so the creator is not asked for the code they just typed.
     if (lockOn) rememberUnlock(code)
@@ -555,6 +580,7 @@ export default function CreateTripForm({ matchPlay = false }: {
               ? 'Share this code with the field to join. Next, choose formats and starts in the organiser area on your Event Hub.'
               : 'Share this code with your group to join. Next, choose leaderboard formats and teams in Trip Setup.'}
           </p>
+          {drawWarning && <p className="text-rust-deep text-sm -mt-6 mb-6 leading-snug">{drawWarning}</p>}
 
           <div className={`${cardClass()} px-4 py-8 mb-4`}>
             <p className="t-label text-ink/65 mb-4">Your {noun} code</p>
@@ -893,6 +919,13 @@ export default function CreateTripForm({ matchPlay = false }: {
             >
               + Add another player
             </button>
+
+            {/* A match play event's draw — now, later or on a date */}
+            {isTournament && matchPlay && (
+              <div className="mt-8 pt-6 border-t border-line">
+                <CreationDraw entrants={drawEntrants} value={draw} onChange={setDraw} issue={drawIssue} today={today} />
+              </div>
+            )}
 
             {/* ── Leaderboards, offered but never demanded ──
                 The same picker the league wizard embeds and Trip Setup

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-admin"
 import { readAllRows } from "@/lib/allRows"
+import { todayString } from "@/lib/tripStatus"
+import { runDueDraws } from "@/app/api/match/dueDraws"
 import {
   cardsToClose, deadScoreKeys, activityKey,
   type LiveCard, type CardLock, type ScoreActivity,
@@ -165,9 +167,20 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ── 3. Draws planned for today ──
+  // A match play event whose draw was set for a date (lib/bracketDraw.ts).
+  // Its own try: a draw that fails costs that draw, never the cleanup.
+  let draws: Awaited<ReturnType<typeof runDueDraws>> = []
+  try {
+    draws = await runDueDraws(supabaseAdmin, todayString(new Date()), dryRun)
+  } catch (e) {
+    console.error("due draws failed:", e)
+  }
+
   return NextResponse.json({
     ok: true,
     dryRun,
+    draws,
     closedEmpty,
     closedAbandoned,
     // On a dry run nothing is deleted, so report what would have been.
