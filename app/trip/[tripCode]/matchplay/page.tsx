@@ -16,6 +16,7 @@ import { readBracket, type MatchReading } from '@/lib/matchResults'
 import { type QuotaScale } from '@/lib/quota'
 import { drawDeadlines, isKnockoutEvent, parseBracketSetup } from '@/lib/bracketSetup'
 import { todayString } from '@/lib/tripStatus'
+import { isEvent } from '@/lib/eventHub'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
@@ -87,7 +88,7 @@ export default async function MatchplayPage({
     // The bracket setup — the dates each round is played by, and whether
     // this is a match play event — on its own and fail-soft, never in the
     // trip's select (migration 047 is applied by hand).
-    supabase.from('trips').select('bracket_setup').eq('id', trip.id).maybeSingle(),
+    supabase.from('trips').select('bracket_setup, kind, settings_passcode_hash').eq('id', trip.id).maybeSingle(),
   ])
 
   if (matchesRes.error) console.error('MatchplayPage matches query failed:', matchesRes.error)
@@ -155,6 +156,10 @@ export default async function MatchplayPage({
   // On a match play event the bracket IS the leaderboard tab, so there is
   // no leaderboard to go back to.
   const knockout = isKnockoutEvent(rawSetup)
+  // On an event, a result already in is changed with the admin PIN.
+  const setupRow = setupRes.data as { kind?: unknown; settings_passcode_hash?: string | null } | null
+  const lock = isEvent(setupRow?.kind) && setupRow?.settings_passcode_hash
+    ? { tripCode, passcodeHash: setupRow.settings_passcode_hash } : null
 
   const readings = links.length > 0
     ? await readLinkedRounds(trip, links, matches, entrants, memberships,
@@ -198,6 +203,7 @@ export default async function MatchplayPage({
             readings={readings}
             deadlines={deadlines}
             today={todayString(new Date())}
+            lock={lock}
           />
         )}
       </div>

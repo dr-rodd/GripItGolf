@@ -16,6 +16,10 @@ import {
   portalRounds, currentRound, describeProgress, myNextMatch, opponentOf, describeResult,
   type PortalMatch,
 } from '../lib/knockoutPortal'
+import {
+  parseMatchTees, withTee, matchStrokes, shotHoles, describeReceives,
+  normaliseContact, contactShown, walkoverChoices, WALKOVER,
+} from '../lib/matchArrangements'
 
 // ─── Tiny harness ──────────────────────────────────────────────
 
@@ -530,6 +534,56 @@ guard('portal', () => {
   const done = portalRounds(draw.map(m => ({ ...m, winner: m.winner ?? 'z' })), null)
   eq(currentRound(done)?.roundName, 'Final', 'a finished draw opens on its Final')
   eq(describeProgress(done), 'Every match played', '  …and says so')
+})
+
+// ─── Arranging a match ─────────────────────────────────────────
+
+section('Arranging a match: tees, the shots, contacts, a walkover')
+guard('arrangements', () => {
+  const tee = { slope: 113, course_rating: 72, par: 72 } // course handicap = index
+  eq(parseMatchTees({ a: 't1', b: 7, c: '' }), { a: 't1' }, 'stored tees are tidied: string to string')
+  eq(parseMatchTees(null), {}, '  …and nothing is an empty set, never null')
+  eq(withTee({ a: 't1' }, 'b', 't2'), { a: 't1', b: 't2' }, 'a tee set')
+  eq(withTee({ a: 't1' }, 'a', null), {}, '  …and taken off')
+
+  eq(matchStrokes([{ playerId: 'a', index: 8, tee }, { playerId: 'b', index: 12, tee }], 100),
+    [{ playerId: 'a', courseHandicap: 8, playing: 8, receives: 0 }, { playerId: 'b', courseHandicap: 12, playing: 12, receives: 4 }],
+    'singles: the higher handicap gets the difference')
+  eq(matchStrokes([{ playerId: 'a', index: 10, tee }, { playerId: 'b', index: 20, tee },
+                   { playerId: 'c', index: 4, tee }, { playerId: 'd', index: 15, tee }], 90)?.map(r => r.receives),
+    [5, 14, 0, 10], 'a fourball at 90%: everyone off the lowest, after the allowance')
+  eq(matchStrokes([{ playerId: 'a', index: 8, tee }, { playerId: 'b', index: 12, tee: null }], 100), null,
+    'no shots until every player has a tee')
+  eq(matchStrokes([{ playerId: 'a', index: null, tee }, { playerId: 'b', index: 12, tee }], 100), null,
+    '  …and a handicap')
+  const holes = Array.from({ length: 18 }, (_, i) => ({ holeNumber: i + 1, strokeIndex: 18 - i, strokeIndexLadies: i + 1 }))
+  eq(shotHoles(4, holes, 'M').map(h => h.holeNumber), [15, 16, 17, 18], 'four shots: the four hardest holes')
+  eq(shotHoles(4, holes, 'F').map(h => h.holeNumber), [1, 2, 3, 4], '  …off the ladies\' index for a woman')
+  eq(shotHoles(20, holes, 'M').filter(h => h.shots === 2).map(h => h.holeNumber), [17, 18], 'twenty: two on the two hardest')
+  eq(shotHoles(0, holes, 'M'), [], 'scratch in the match: none')
+  eq([describeReceives(0), describeReceives(1), describeReceives(4)], ['Plays off scratch', 'Gets 1 shot', 'Gets 4 shots'], 'said plainly')
+
+  eq(normaliseContact({ phone: ' 087  123 4567 ', email: 'Ross@Example.ie', visibility: 'public' }),
+    { phone: '087 123 4567', email: 'ross@example.ie', visibility: 'public' }, 'contact details tidied')
+  eq(normaliseContact({}), { phone: null, email: null, visibility: 'opponent' }, '  …both optional, opponent-only by default')
+  ok('issue' in normaliseContact({ phone: 'call me' }), 'a phone number that is not one is refused')
+  ok('issue' in normaliseContact({ phone: '123' }), '  …and one too short to be real')
+  ok('issue' in normaliseContact({ email: 'ross@' }), 'an email that is not one is refused')
+  ok(contactShown({ visibility: 'opponent' }, { isSelf: false, isOpponent: true }), 'opponent-only: the opponent sees them')
+  ok(!contactShown({ visibility: 'opponent' }, { isSelf: false, isOpponent: false }), '  …nobody else does')
+  ok(contactShown({ visibility: 'public' }, { isSelf: false, isOpponent: false }), 'public: the field sees them')
+  ok(contactShown({ visibility: 'opponent' }, { isSelf: true, isOpponent: false }), 'and you always see your own')
+
+  const open: PortalMatch = { id: 'm', roundNumber: 1, roundName: 'Final', slot: 0, sideA: 'me', sideB: 'dan',
+    aIsBye: false, bIsBye: false, winner: null, result: null }
+  eq(walkoverChoices(open, 'me', false), ['dan'], 'a player concedes: the walkover goes to the other side')
+  eq(walkoverChoices(open, 'eve', false), [], '  …nobody else in the field can')
+  eq(walkoverChoices(open, null, true), ['me', 'dan'], 'the organiser awards it to either side')
+  eq(walkoverChoices({ ...open, winner: 'me' }, 'dan', false), [], 'a decided match cannot be conceded')
+  eq(walkoverChoices({ ...open, winner: 'me' }, null, true), ['me', 'dan'], '  …the organiser can still change it')
+  eq(walkoverChoices({ ...open, sideB: null }, null, true), [], 'not while a side is still to be decided')
+  eq(walkoverChoices({ ...open, bIsBye: true }, null, true), [], 'and never on a bye')
+  eq(WALKOVER.length <= 12, true, 'a walkover fits the bracket\'s margin column')
 })
 
 // ─── Result ────────────────────────────────────────────────────

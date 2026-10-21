@@ -297,7 +297,7 @@ section('A match play event is a knockout from the moment it is made')
   const bracket = read('app/trip/[tripCode]/matchplay/MatchplayBracket.tsx')
   ok(bracket.includes('aria-label="Dates each round is played by"'), 'the dates sit across the top of the bracket')
   const page = read('app/trip/[tripCode]/matchplay/page.tsx')
-  ok(page.includes("from('trips').select('bracket_setup').eq('id', trip.id).maybeSingle()"),
+  ok(page.includes("from('trips').select('bracket_setup, kind, settings_passcode_hash').eq('id', trip.id).maybeSingle()"),
     '  …read in their own fail-soft query, never the trip\'s select')
   ok(page.includes('drawDeadlines(parseBracketSetup(rawSetup)?.deadlines ?? [], drawnRounds)'),
     '  …lined up with the rounds actually drawn')
@@ -331,6 +331,48 @@ section('A match play event reads from the player\'s side: the hub\'s card, the 
   const mine = read('app/trip/[tripCode]/match/[matchId]/MyHandicap.tsx')
   ok(mine.includes(".eq('id', playerId).eq('trip_id', tripId)") && mine.includes('syncRoundHandicaps('),
     '  …written where Trip Setup writes it, scoped to the trip')
+}
+
+section('Arranging a match: venue, tees, shots, contacts, a walkover — and the PIN on a result already in')
+{
+  const sql = read('supabase/migrations/20260101000057_match_arrangements.sql')
+  ok(/ADD COLUMN IF NOT EXISTS course_id uuid REFERENCES courses\(id\) ON DELETE SET NULL/.test(sql)
+    && sql.includes('ADD COLUMN IF NOT EXISTS played_on date') && sql.includes('ADD COLUMN IF NOT EXISTS tees jsonb'),
+    'migration 057 gives a match its venue, day and tees')
+  ok(sql.includes('ADD COLUMN IF NOT EXISTS home_course_id uuid'), '  …a player their home club')
+  ok(sql.includes('ALTER TABLE player_contacts ENABLE ROW LEVEL SECURITY')
+    && sql.includes('GRANT SELECT, INSERT, UPDATE, DELETE ON public.player_contacts TO service_role')
+    && !/TO anon/.test(sql),
+    '  …and contact details in a table closed to the browser, the server\'s grant only')
+
+  const match = read('app/trip/[tripCode]/match/[matchId]/page.tsx')
+  ok(match.includes("select('course_id, played_on, tees')") && match.includes('const arrangeable = !arrangedRes.error'),
+    'the match page reads the arrangement in its own fail-soft query')
+  ok(match.includes('matchStrokes(') && match.includes('allowanceOf(draw)') && match.includes('shotHoles('),
+    '  …works out the shots off each tee at the draw\'s allowance, hole by hole')
+  ok(match.includes('contactShown(c, {'), '  …shows contact details only as each player said')
+  ok(match.includes('walkoverChoices(match, view.entrantId, false)') && match.includes('<MatchWalkover'),
+    '  …and offers the walkover')
+  const actions = read('app/trip/[tripCode]/match/[matchId]/MatchActions.tsx')
+  ok(actions.includes(".eq('id', matchId).eq('trip_id', tripId)"), 'arranging writes the one match, scoped to the event')
+  ok(actions.includes('persistWinner(all, matchId, winnerId, WALKOVER)'), 'a walkover goes through the bracket\'s own writer, cascade and all')
+  ok(actions.includes("if (!organiser && !conceding) { setError('Awarding a walkover needs the admin PIN.')"),
+    '  …a player may only concede; awarding is the organiser\'s')
+
+  const route = read('app/api/match/contact/route.ts')
+  ok(route.includes('readPlayerId(jar.get(playerCookieName(tripCode))?.value)') && route.includes(".eq('trip_id', trip.id)"),
+    'contact details are saved only for the player this phone claimed')
+  const reader = read('app/trip/[tripCode]/matchContacts.ts')
+  ok(reader.includes('createAdminClient()') && reader.includes(".eq('trip_id', tripId)"), '  …and read on the server, scoped to the event')
+  ok(!/from '@\/lib\/supabase-admin'|matchContacts/.test(read('app/trip/[tripCode]/MatchDetails.tsx')),
+    '  …never from the browser')
+  ok(read('app/trip/[tripCode]/page.tsx').includes('<MatchDetails'), 'the hub carries your home club and contact')
+
+  const bracket = read('app/trip/[tripCode]/matchplay/MatchplayBracket.tsx')
+  ok(bracket.includes('pin={sheet.correcting && lock && !unlocked ? lock : null}'),
+    'on an event, a result already in is changed only with the admin PIN')
+  const mpage = read('app/trip/[tripCode]/matchplay/page.tsx')
+  ok(mpage.includes('isEvent(setupRow?.kind) && setupRow?.settings_passcode_hash'), '  …a trip\'s bracket stays open')
 }
 
 // ─── Result ────────────────────────────────────────────────────

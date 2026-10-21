@@ -10,6 +10,8 @@ import { type MatchReading, pendingResults } from '@/lib/matchResults'
 import { decisionLabel } from '@/lib/matchDecision'
 import { deadlineNote } from '@/lib/bracketSetup'
 import { describeShortDate } from '@/lib/itinerary'
+import { hasUnlocked } from '@/lib/passcode'
+import InlineUnlock from '@/app/components/InlineUnlock'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, optionClass } from '@/app/components/ui'
 
 // ─── Types ─────────────────────────────────────────────────────
@@ -63,8 +65,15 @@ const SWIPE_MS = 340
 // ─── Component ─────────────────────────────────────────────────
 
 export default function MatchplayBracket({
-  matches: initialMatches, entrants, readings = [], deadlines = [], today = '',
+  matches: initialMatches, entrants, readings = [], deadlines = [], today = '', lock = null,
 }: {
+  /**
+   * On an event, changing a result already in is the admin PIN's
+   * (docs/event-use-cases.md, story 2): a result the cards filled in, or
+   * one somebody entered, is corrected only by the organiser. Null on a
+   * trip, and on an event with no PIN — open, as ever.
+   */
+  lock?: { tripCode: string; passcodeHash: string } | null
   matches: BracketMatchRow[]
   entrants: BracketEntrantRow[]
   /**
@@ -88,6 +97,9 @@ export default function MatchplayBracket({
   useEffect(() => { setMatches(initialMatches) }, [initialMatches])
 
   const [sheet, setSheet] = useState<{ match: BracketMatchRow; correcting: boolean } | null>(null)
+  // This device's organiser unlock — sessionStorage, read after mount.
+  const [unlocked, setUnlocked] = useState(false)
+  useEffect(() => { if (lock) setUnlocked(hasUnlocked(lock.tripCode)) }, [lock])
 
   const readingFor = useMemo(
     () => new Map(readings.map(r => [r.matchId, r])),
@@ -432,6 +444,8 @@ export default function MatchplayBracket({
         <DecideSheet
           match={sheet.match}
           correcting={sheet.correcting}
+          pin={sheet.correcting && lock && !unlocked ? lock : null}
+          onUnlocked={() => setUnlocked(true)}
           playerById={playerById}
           onClose={() => setSheet(null)}
           onApply={async (winnerId: string | null, margin) => {
@@ -752,10 +766,13 @@ function Side({
 // ─── Decide / correct sheet ────────────────────────────────────
 
 function DecideSheet({
-  match, correcting, playerById, onClose, onApply,
+  match, correcting, pin = null, onUnlocked, playerById, onClose, onApply,
 }: {
   match: BracketMatchRow
   correcting: boolean
+  /** Set when changing this result needs the admin PIN first. */
+  pin?: { tripCode: string; passcodeHash: string } | null
+  onUnlocked?: () => void
   playerById: Map<string, BracketEntrantRow>
   onClose: () => void
   onApply: (winnerId: string | null, margin: string | null) => Promise<void>
@@ -787,6 +804,33 @@ function DecideSheet({
   }
 
   const voiding = correcting && picked === null
+
+  // A result already in, on an event: the admin PIN first, asked in place.
+  if (pin) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
+        <div className="absolute inset-0 bg-ink/50 page-enter" />
+        <div
+          className="relative paper border-t border-line rounded-t-sheet shadow-floating-up px-5 pt-5 sheet-up"
+          style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 20px)' }}
+          onClick={e => e.stopPropagation()}
+        >
+          <p className="t-cap text-ink/65">{match.round_name}</p>
+          <p className="t-h2 text-ink mt-0.5">Change the result</p>
+          <p className="text-ink/80 text-sm leading-snug mt-2 mb-4">
+            This result is in. Changing it is the organiser’s — enter the admin PIN to carry on.
+          </p>
+          <InlineUnlock
+            tripCode={pin.tripCode}
+            passcodeHash={pin.passcodeHash}
+            onUnlocked={() => onUnlocked?.()}
+            prompt="Enter the admin PIN"
+          />
+          <button onClick={onClose} className={`${buttonClass('quiet')} mt-3 w-full`}>Close</button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>

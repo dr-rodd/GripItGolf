@@ -51,6 +51,8 @@ import { TbcRoundTile, type LeagueDoor } from './LeagueRounds'
 import AddToField from './AddToField'
 import { readKnockout } from './knockout'
 import { NextMatchCard } from './KnockoutViews'
+import MatchDetails from './MatchDetails'
+import { readContacts } from './matchContacts'
 import { isKnockoutEvent } from '@/lib/bracketSetup'
 import CourseName from '@/app/components/CourseName'
 import { IconChevronRight } from '@/app/components/icons'
@@ -343,6 +345,25 @@ export default async function TripPage({ params, searchParams }: {
     ? readKnockout(trip, (trip as { bracket_setup?: unknown }).bracket_setup, me?.id ?? null, players)
         .catch(e => { console.error('TripPage knockout read failed:', e); return null })
     : Promise.resolve(null)
+  // And this player's own details for it — home club (migration 057, read
+  // on its own and fail-soft) and contact (the closed table, on the server).
+  const myMatchDetails = me && isConfirmed(me) && isEventKind(trip.kind)
+      && isKnockoutEvent((trip as { bracket_setup?: unknown }).bracket_setup)
+    ? Promise.all([
+        supabase.from('players').select('home_course_id, courses:home_course_id(name)')
+          .eq('id', me.id).eq('trip_id', trip.id).maybeSingle(),
+        readContacts(trip.id, [me.id]),
+      ]).then(([homeRes, contacts]) => {
+        if (homeRes.error) return null
+        const row = homeRes.data as { home_course_id: string | null; courses: { name: string } | { name: string }[] | null } | null
+        const named = Array.isArray(row?.courses) ? row?.courses[0] : row?.courses
+        return {
+          homeCourseId: row?.home_course_id ?? null,
+          homeCourseName: named?.name ?? null,
+          contact: contacts.get(me.id) ?? null,
+        }
+      }).catch(() => null)
+    : Promise.resolve(null)
 
   // ── Has this device been shown around? ──
   //
@@ -608,7 +629,7 @@ export default async function TripPage({ params, searchParams }: {
     ? <PlayerSettings tripId={trip.id} playerId={me.id} />
     : undefined
 
-  const koView = await knockoutView
+  const [koView, myDetails] = await Promise.all([knockoutView, myMatchDetails])
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
@@ -701,6 +722,17 @@ export default async function TripPage({ params, searchParams }: {
         />
 
         {koView && <NextMatchCard tripCode={tripCode} view={koView} today={todayString(new Date())} />}
+        {koView && me && myDetails && (
+          <MatchDetails
+            tripId={trip.id}
+            tripCode={tripCode}
+            playerId={me.id}
+            homeCourseId={myDetails.homeCourseId}
+            homeCourseName={myDetails.homeCourseName}
+            contact={myDetails.contact}
+            allowAddCourse={allowsParticipant(trip.kind, (trip as { event_permissions?: unknown }).event_permissions, 'add_courses')}
+          />
+        )}
 
         {standingError && (
           <p className="text-rust-deep text-sm text-center mt-3 leading-snug">{standingError}</p>

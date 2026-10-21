@@ -460,7 +460,36 @@ overview, or one column at a time), not a rebuild.
    (`MyHandicap`, written as Trip Setup writes it). The result is still
    recorded on the bracket by the long press.
 3. **A match's course and the shots; a player's home club and contact
-   details.** Migration 057.
+   details; the walkover; the PIN on a result already in — built, October
+   2026. Needs migration 057, applied by hand.** Migration 057 gives
+   `matchplay_matches` its `course_id`, `played_on` and `tees` (`{ player
+   id: tee id }`), `players` a `home_course_id`, and makes
+   `player_contacts` — phone, email and who sees them — **closed to the
+   browser** (RLS on, no policies, the server's grant only), because an
+   opponent-only number cannot sit in `players`, which anybody with the
+   code can read. `lib/matchArrangements.ts` is the one copy of the rules:
+   `matchStrokes` (each tee's course handicap, the draw's allowance off the
+   unrounded figure, then the difference from the lowest — singles and
+   fourballs alike; nothing until every player has a handicap and a tee),
+   `shotHoles` (through `shotsReceived`, the ladies' index for a woman),
+   `normaliseContact`, `contactShown` (yourself always; the field when
+   public; the opponent only otherwise) and `walkoverChoices` (a player
+   concedes an open match to the other side; the organiser awards either
+   side, a result already in included). **The match page** shows the venue
+   and day, each player's tees, "Gets 4 shots · holes 3, 7, 11, 15", and
+   each contact as allowed, with **Choose the venue** (`MatchArrange` — the
+   players' home clubs as chips first, the course picker, the day, a tee
+   each; the players in the match, or the organiser with the admin PIN) and
+   **Walkover** (`MatchWalkover`, written through `persistWinner` as "W/O"
+   so later rounds cascade exactly as the bracket's own sheet does). The
+   arrangement is read in its own fail-soft query, so the page stands
+   before 057. **The hub** carries "Your home club and contact"
+   (`MatchDetails`): the home club on the player row, the contact through
+   `/api/match/contact`, saved only for the player this phone claimed.
+   **On an event's bracket, changing a result already in needs the admin
+   PIN** (`MatchplayBracket`'s `lock`, asked in place before the change
+   sheet opens); recording an open match stays open, and the cards still
+   fill empty matches by themselves. A trip's bracket is unchanged.
 4. **The match play card on the Add page**, and the PIN on a finalised
    manual result.
 5. **The public PIN** (entry and viewing), beside the admin PIN.
