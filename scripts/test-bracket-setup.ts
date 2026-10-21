@@ -429,7 +429,7 @@ section('The draw: made at creation, from the organiser area, or by itself on a 
   ok(drawer.includes('DRAW_METHODS.map') && drawer.includes('Draw again'), 'random, seeded or picked by hand, a random draw drawn again')
   ok(drawer.includes('moveToSeed(order, typing.id, n)') && drawer.includes('onPointerDown') && drawer.includes('By handicap') && drawer.includes('Shuffle'),
     'seeded: type a number, drag the handle, start from handicap order or shuffle')
-  ok(drawer.includes('placeInSlot(slots, place, id)') && drawer.includes('Tap to add a player'), 'by hand: each empty place a dropdown of the players not yet placed')
+  ok(drawer.includes('placeInSlot(slots, place, id)') && drawer.includes('Add a player'), 'by hand: each empty place a dropdown of the players not yet placed')
   const creation = read('app/dashboard/create/CreationDraw.tsx')
   ok(creation.includes('writeCreationDraw') && creation.includes('idFor.get(key)'), 'a draw made at creation names the players by the ids the form gives them')
   for (const form of ['CreateKnockoutForm', 'CreateTripForm']) {

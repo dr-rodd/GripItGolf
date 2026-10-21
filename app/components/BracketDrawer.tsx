@@ -7,6 +7,7 @@ import {
   type AutoSeeding, type DrawDraft, type DrawEntrant, type DrawMethod, type DrawWhen,
 } from '@/lib/bracketDraw'
 import { roundName } from '@/lib/matchplay'
+import { formatHandicap } from '@/lib/handicap'
 import DateField from './DateField'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass, optionClass } from './ui'
 
@@ -146,7 +147,7 @@ function SeedList({ entrants, order, onChange }: {
               />
               <span className="flex-1 min-w-0">
                 <span className="block text-sm text-ink truncate">{e?.name ?? 'A player'}</span>
-                <span className="block t-cap text-ink/65">{e?.handicap == null ? 'Handicap to come' : `Handicap ${e.handicap}`}</span>
+                <span className="block t-cap text-ink/65">{e?.handicap == null ? 'Handicap to come' : `Handicap ${formatHandicap(e.handicap)}`}</span>
               </span>
               <button
                 type="button"
@@ -229,7 +230,7 @@ function PlaceSelect({ label, value, options, nameOf, onChange, className }: {
       onChange={e => onChange(e.target.value || null)}
       className={`${FIELD} field-dense min-w-0 ${value ? '' : 'text-ink/65'} ${className}`}
     >
-      <option value="">{value ? 'Empty — a bye' : 'Tap to add a player'}</option>
+      <option value="">{value ? 'Empty — a bye' : 'Add a player'}</option>
       {options.map(id => <option key={id} value={id}>{nameOf(id)}</option>)}
     </select>
   )

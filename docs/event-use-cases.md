@@ -546,3 +546,57 @@ overview, or one column at a time), not a rebuild.
    door takes the public PIN or the admin PIN (which also unlocks the
    organiser's side) and leaves a cookie holding the PIN's hash, so changing
    the PIN asks everybody again. The same soft lock as the admin PIN.
+6. **The draw** (Ross, 21 Oct 2026). **Built:** the whole draw can be made
+   in the creation form (both match play doors, `CreationDraw`), left for
+   later, or **set for a date and made by the nightly job** (`/api/cleanup`
+   → `app/api/match/dueDraws.ts`) from whoever has joined by then — at
+   random, by handicap, or in an order the organiser set (late joiners after
+   by handicap). Three ways to make it (`lib/bracketDraw.ts`, the one copy;
+   `BracketDrawer` the one builder, at creation and at
+   `/trip/[code]/organiser/draw`):
+   - **Random** — out of a hat, drawn again as often as wanted; seated as a
+     seeded draw would be, so byes fall where a draw puts them; no seed
+     numbers shown.
+   - **Seeded** — a numbered list: typing a number moves a player to it,
+     dragging the handle renumbers, and it can start from handicap order
+     (pending last) or be shuffled as often as liked.
+   - **Pick the matches** — the draw sized off the field so far
+     (`emptySlots`), each empty place a dropdown of the players not yet
+     placed; a place left empty is a bye; a match empty on both sides is
+     refused (`manualIssue`).
+   Every method produces **the first round, slot by slot**, which
+   `bracketFromSlots` (`lib/matchplay.ts`) turns into the tree —
+   `generateBracket` is now seeds → slots → that. One writer, `writeDraw`
+   (`lib/drawStore.ts`, browser and server alike), which **refuses a draw
+   in play** (`drawInPlay`: a played result, or one hole on one match
+   card — a bye is awarded, not played). The plan rides in
+   `bracket_setup.draw` (`DrawPlan`, `rawDrawPlan`, carried through the
+   setup form's save) — **no migration**. Creation gives players their ids
+   up front so a draw made there can name them.
+
+   **Next phase — the draw editor (agreed, not built; these decisions are
+   why the draw is stored as first-round slots):**
+   - Reached from the organiser area behind the admin PIN: the same builder
+     with an **edit toggle**, names dragged between places.
+   - **Only the base of the tree is ever edited** — first-round places,
+     never a later round. A first-round match **in play or finished** (any
+     hole on its card, or a result that was played) shows **disabled grey**
+     and its players cannot be moved; moving one means voiding that match
+     and every one before it first. A bye is not in play and can be
+     replaced by a player.
+   - Editing a draw in play warns first, in a pop-up that says what will
+     and will not be touched, and that in-play cards and bracket results
+     can be voided by hand if the organiser wants (the card's own void,
+     the bracket's long-press), or the **whole event restarted, voiding
+     every score** — the only way an in-play match is ever changed here.
+   - **Growing the draw: add a round below.** Unallocated players go in by
+     the dropdown, or the system places them. The current first round
+     becomes the second; every in-play match's two new feeder places show
+     disabled (they are already decided), and new players can only go into
+     the parents of vacant places. Ross's worked case: 14 players in play in
+     a round of 16 with one vacant place, 4 more join — add a round of 32;
+     the in-play matches' parents are grey, and the 4 go into the
+     non-disabled parents of the vacant place. This means renumbering
+     `round_number` (and the deadlines line up from the Final back, as
+     `drawDeadlines` already does), and the stored `roundLinks` by number
+     need shifting with it — the one awkward part, to be designed then.
