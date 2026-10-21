@@ -12,6 +12,10 @@ import {
   generateBracket, sortPlayersBySeed, bracketToRows, rowsInInsertOrder,
   MatchplayError, type BracketPlayer,
 } from '../lib/matchplay'
+import {
+  portalRounds, currentRound, describeProgress, myNextMatch, opponentOf, describeResult,
+  type PortalMatch,
+} from '../lib/knockoutPortal'
 
 // ─── Tiny harness ──────────────────────────────────────────────
 
@@ -490,6 +494,42 @@ guard('determinism', () => {
   const a = generateBracket(makePlayers(11), { makeId: idMaker() })
   const b = generateBracket(makePlayers(11), { makeId: idMaker() })
   eq(JSON.stringify(a), JSON.stringify(b), 'the same input produces the same bracket')
+})
+
+// ─── The knockout from one player's side ───────────────────────
+
+section('The portal: rounds, deadlines, your match first, byes not listed')
+guard('portal', () => {
+  const pm = (o: Partial<PortalMatch>): PortalMatch => ({
+    id: 'x', roundNumber: 1, roundName: 'Quarter-Final', slot: 0, sideA: null, sideB: null,
+    aIsBye: false, bIsBye: false, winner: null, result: null, ...o,
+  })
+  const draw = [
+    pm({ id: 'q1', slot: 0, sideA: 'ann', sideB: 'bob', winner: 'ann', result: '3&2' }),
+    pm({ id: 'q2', slot: 1, sideA: 'cat', sideB: null, bIsBye: true, winner: 'cat' }),
+    pm({ id: 'q3', slot: 2, sideA: 'dan', sideB: 'me' }),
+    pm({ id: 'q4', slot: 3, sideA: 'eve', sideB: 'fay' }),
+    pm({ id: 's1', roundNumber: 2, roundName: 'Semi-Final', slot: 0, sideA: 'ann', sideB: 'cat' }),
+    pm({ id: 's2', roundNumber: 2, roundName: 'Semi-Final', slot: 1 }),
+    pm({ id: 'f', roundNumber: 3, roundName: 'Final', slot: 0 }),
+  ]
+  const rounds = portalRounds(draw, 'me', ['2026-11-14', '2026-12-12', null])
+  eq(rounds.map(r => r.roundName).join(), 'Quarter-Final,Semi-Final,Final', 'every bracket round, in playing order')
+  eq(rounds[0].matches.map(m => m.id).join(), 'q3,q1,q4', 'your own match first, then the draw order; the bye is not a match')
+  ok(rounds[0].matches[0].mine && !rounds[0].matches[1].mine, '  …and only yours is marked yours')
+  eq([rounds[0].played, rounds[0].total], [1, 3], 'one of three played — the bye is not counted')
+  eq(rounds.map(r => r.deadline).join(), '2026-11-14,2026-12-12,', 'each round carries its play-by date')
+  eq(currentRound(rounds)?.roundName, 'Quarter-Final', 'the round being played now: the first with a match open')
+  eq(describeProgress(rounds), '1 of 6 matches played', 'the draw at a glance')
+  eq(myNextMatch(draw, 'me')?.id, 'q3', 'your next match')
+  eq(myNextMatch(draw, 'bob'), null, 'out: no next match')
+  eq(myNextMatch(draw, 'cat')?.id, 's1', 'through on a bye: the next real match')
+  eq(opponentOf(draw[2], 'me'), 'dan', 'the other side, from your seat')
+  eq(describeResult(draw[0], id => ({ ann: 'Ann' } as Record<string, string>)[id] ?? null), 'Ann won 3&2', 'a result in a sentence')
+  eq(describeResult(draw[2], () => 'x'), null, '  …and nothing while it is open')
+  const done = portalRounds(draw.map(m => ({ ...m, winner: m.winner ?? 'z' })), null)
+  eq(currentRound(done)?.roundName, 'Final', 'a finished draw opens on its Final')
+  eq(describeProgress(done), 'Every match played', '  …and says so')
 })
 
 // ─── Result ────────────────────────────────────────────────────

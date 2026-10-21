@@ -403,18 +403,20 @@ so a 128 field's first column is about 6,300px of scrolling and 256 twice
 that. It works, slowly. Going past 64 is a screen job (a zoomed-out
 overview, or one column at a time), not a rebuild.
 
-### Open questions
+### Ross's answers (October 2026)
 
-1. **The public PIN — what does it guard?** Joining the event (typing the
-   code is no longer enough), seeing it at all, or entering results? The
-   admin PIN stays what it is.
-2. **Contact details — which, and who sees them?** A phone number and an
-   email, shown only to your opponent? Or the field?
-3. **The match play card — what is entered?** Each player's gross a hole
-   (the card works out who won the hole, with the shots), or just who won
-   each hole?
-4. **Pairs.** Corporate match play is singles here; pairs draws exist. Is
-   singles enough for now?
+1. **Two PINs.** The **public PIN** protects entry to the league and
+   viewing its pages. The **admin PIN** (today's organiser PIN) protects
+   destructive actions within the event and overriding scores.
+2. **Contact details: the player chooses** — shown to the public (the
+   field) or to their opponent only.
+3. **The match play card is shots per hole** — each player's gross, the
+   shots worked out from the course — **with a concession option** for a
+   clear win, so a hole (or the match) can be given without entering
+   scores.
+4. **Build in pairings.** Pairs draws exist; the card and the match page
+   carry them too. Event creation will need reworking eventually to be less
+   onerous — noted, not now.
 
 ### Build order
 
@@ -438,9 +440,27 @@ overview, or one column at a time), not a rebuild.
    the table returns, its strip linking to the bracket as on a trip. The
    draw itself is still made from Trip Setup's match play panel, reached
    from the organiser area.
-2. **The hub's next match and the Scoring tab's portal.** No migration.
+2. **The hub's next match and the Scoring tab's portal — built, October
+   2026.** `lib/knockoutPortal.ts` reads the draw from one player's side
+   (pure: `portalRounds` — every bracket round with its play-by date and
+   "n of m played", the player's own match first, byes not listed as
+   matches; `currentRound`, `myNextMatch`, `describeProgress`,
+   `describeResult`), fed by `readKnockout` (`app/trip/[tripCode]/
+   knockout.ts`: the rows in one shape for singles and pairs, a pairs
+   entrant being the pairing on the draw's own sheet). **The hub** carries
+   `NextMatchCard` on a match play event — "Your next match · Quarter-Final",
+   "v Dave", the play-by date (rust once past) — opening the match, with
+   the draw at a glance under it ("12 of 31 matches played · Quarter-Final");
+   the one-line caption stays a trip's. **The Scoring tab** is the bracket's
+   portal (`KnockoutPortal`): a card a round, the current one open, the
+   player's own match on top, active, the others listed with their results,
+   greyed and inert. **A match's own page** (`/trip/[code]/match/[id]`):
+   who plays whom, the round, the play-by date, each side's handicaps, the
+   result once there is one, and the player's own handicap amended in place
+   (`MyHandicap`, written as Trip Setup writes it). The result is still
+   recorded on the bracket by the long press.
 3. **A match's course and the shots; a player's home club and contact
    details.** Migration 057.
 4. **The match play card on the Add page**, and the PIN on a finalised
    manual result.
-5. **The public PIN.** After question 1.
+5. **The public PIN** (entry and viewing), beside the admin PIN.

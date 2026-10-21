@@ -310,6 +310,29 @@ section('A match play event is a knockout from the moment it is made')
     'and the tab stays lit on the bracket')
 }
 
+section('A match play event reads from the player\'s side: the hub\'s card, the Scoring tab\'s portal, a match\'s page')
+{
+  const hub = read('app/trip/[tripCode]/page.tsx')
+  ok(hub.includes('isKnockoutEvent(') && hub.includes('<NextMatchCard'), 'the hub carries the next-match card on a match play event')
+  ok(hub.includes("nextMatch: koView ? '' : nextMatchLine"), '  …in place of the one-line caption, which a trip keeps')
+  const scoring = read('app/trip/[tripCode]/scoring/page.tsx')
+  ok(scoring.includes('<KnockoutPortal') && scoring.includes('const knockout = event && isKnockoutEvent('),
+    'the Scoring tab is the bracket\'s portal on a match play event')
+  const views = read('app/trip/[tripCode]/KnockoutViews.tsx')
+  ok(views.includes("cardClass('chosen', true)") && views.includes('opacity-60'),
+    '  …your own match active and the rest listed, inactive')
+  ok(views.includes('href={matchHref(tripCode, m.id)}') && !/m\.mine \? \(\s*<Link[\s\S]*?\) : \(\s*<Link/.test(views),
+    '  …and only your own opens')
+  const helper = read('app/trip/[tripCode]/knockout.ts')
+  ok(helper.includes("teamFor(memberships, meId, setOf(draw)"), 'a pairs draw\'s entrant is the pairing on the draw\'s own sheet')
+  ok(helper.includes("drawDeadlines(parseBracketSetup(rawSetup)?.deadlines ?? [], drawnRounds)"), 'every view lines the deadlines up the same way')
+  const match = read('app/trip/[tripCode]/match/[matchId]/page.tsx')
+  ok(match.includes('<MyHandicap') && match.includes("me.claimed === true"), 'a claimed player in the match amends their own handicap there')
+  const mine = read('app/trip/[tripCode]/match/[matchId]/MyHandicap.tsx')
+  ok(mine.includes(".eq('id', playerId).eq('trip_id', tripId)") && mine.includes('syncRoundHandicaps('),
+    '  …written where Trip Setup writes it, scoped to the trip')
+}
+
 // ─── Result ────────────────────────────────────────────────────
 
 console.log(`\n${passed} passed, ${failed} failed`)

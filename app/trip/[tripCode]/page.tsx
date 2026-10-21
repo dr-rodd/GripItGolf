@@ -49,6 +49,9 @@ import { allowsParticipant } from '@/lib/eventPermissions'
 import { describeShortDate } from '@/lib/itinerary'
 import { TbcRoundTile, type LeagueDoor } from './LeagueRounds'
 import AddToField from './AddToField'
+import { readKnockout } from './knockout'
+import { NextMatchCard } from './KnockoutViews'
+import { isKnockoutEvent } from '@/lib/bracketSetup'
 import CourseName from '@/app/components/CourseName'
 import { IconChevronRight } from '@/app/components/icons'
 
@@ -331,6 +334,16 @@ export default async function TripPage({ params, searchParams }: {
   // page they will not see.
   const me = await currentPlayer(tripCode, players)
 
+  // ── A match play event: the draw from this player's side ──
+  //
+  // The next-match card under the status block (docs/event-use-cases.md,
+  // story 2). Started now and awaited at the render, so it rides beside
+  // the standing rather than after it; a failed read costs the card only.
+  const knockoutView = isEventKind(trip.kind) && isKnockoutEvent((trip as { bracket_setup?: unknown }).bracket_setup)
+    ? readKnockout(trip, (trip as { bracket_setup?: unknown }).bracket_setup, me?.id ?? null, players)
+        .catch(e => { console.error('TripPage knockout read failed:', e); return null })
+    : Promise.resolve(null)
+
   // ── Has this device been shown around? ──
   //
   // Decided here, on the server, rather than in the browser after hydration:
@@ -595,6 +608,8 @@ export default async function TripPage({ params, searchParams }: {
     ? <PlayerSettings tripId={trip.id} playerId={me.id} />
     : undefined
 
+  const koView = await knockoutView
+
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
 
@@ -674,7 +689,8 @@ export default async function TripPage({ params, searchParams }: {
           player={me ? {
             firstName: me.name.split(' ')[0],
             placing: placingLine,
-            nextMatch: nextMatchLine,
+            // A match play event says it in the card below, with the way in.
+            nextMatch: koView ? '' : nextMatchLine,
           } : null}
           items={itinerary}
           startDate={trip.start_date ?? null}
@@ -683,6 +699,8 @@ export default async function TripPage({ params, searchParams }: {
           courseNames={courseMap}
           noun={isEvent ? 'event' : 'trip'}
         />
+
+        {koView && <NextMatchCard tripCode={tripCode} view={koView} today={todayString(new Date())} />}
 
         {standingError && (
           <p className="text-rust-deep text-sm text-center mt-3 leading-snug">{standingError}</p>

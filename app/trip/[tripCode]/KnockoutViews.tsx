@@ -1,0 +1,177 @@
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { describeShortDate } from '@/lib/itinerary'
+import { deadlineNote } from '@/lib/bracketSetup'
+import {
+  currentRound, describeProgress, describeResult, myNextMatch, opponentOf, portalRounds,
+} from '@/lib/knockoutPortal'
+import type { KnockoutView } from './knockout'
+import { cardClass } from '@/app/components/ui'
+import { IconChevronRight } from '@/app/components/icons'
+
+/**
+ * A knockout from the player's side (docs/event-use-cases.md, story 2):
+ * the hub's next-match card and the Scoring tab's portal of bracket rounds.
+ * Both read `readKnockout`'s view through lib/knockoutPortal.ts; a match
+ * opens its own page, `/trip/[code]/match/[id]`.
+ */
+
+const matchHref = (tripCode: string, id: string) => `/trip/${tripCode}/match/${id}`
+
+/** "Play by Sat 14 Nov" for an open round, or nothing when no date is set. */
+function roundDate(deadline: string | null, today: string, finished: boolean): string {
+  if (!deadline) return ''
+  return deadlineNote(deadline, describeShortDate(deadline) ?? deadline, { today, finished })
+}
+
+// ─── The hub ───────────────────────────────────────────────────
+
+/**
+ * The bird's-eye card on a match play event's hub: this player's next
+ * match — who, which round, by when — opening the match itself, and the
+ * draw at a glance under it. A player out of the draw, or a visitor, sees
+ * the glance alone.
+ */
+export function NextMatchCard({ tripCode, view, today }: {
+  tripCode: string
+  view: KnockoutView
+  today: string
+}) {
+  const rounds = portalRounds(view.matches, view.entrantId, view.deadlines)
+  if (rounds.length === 0) return null
+  const now = currentRound(rounds)
+  const progress = describeProgress(rounds)
+  const next = myNextMatch(view.matches, view.entrantId)
+  const nextRound = next ? rounds.find(r => r.roundNumber === next.roundNumber) : null
+  const opponent = next && view.entrantId ? opponentOf(next, view.entrantId) : null
+  const glance = [progress, now && now.played < now.total ? now.roundName : null].filter(Boolean).join(' · ')
+
+  return (
+    <div className="mt-4">
+      {next && (
+        <Link href={matchHref(tripCode, next.id)} className={`block px-5 py-4 ${cardClass('raised', true)}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="t-cap text-ink/65">Your next match · {next.roundName}</p>
+              <p className="t-card text-ink truncate mt-0.5">
+                {opponent ? `v ${view.names[opponent] ?? 'Opponent'}` : 'Opponent to be decided'}
+              </p>
+              {nextRound?.deadline && (
+                <p className={`t-cap mt-0.5 ${nextRound.deadline < today ? 'text-rust-deep' : 'text-ink/65'}`}>
+                  {roundDate(nextRound.deadline, today, false)}
+                </p>
+              )}
+            </div>
+            <span className="text-ink/50 flex-shrink-0" aria-hidden="true"><IconChevronRight size={20} /></span>
+          </div>
+        </Link>
+      )}
+      {glance && <p className="t-cap text-ink/65 text-center mt-3">{glance}</p>}
+    </div>
+  )
+}
+
+// ─── The Scoring tab ───────────────────────────────────────────
+
+/**
+ * The bracket's rounds on the Scoring tab, the one being played open. In
+ * each, this player's own match sits on top and is the one that opens —
+ * active — and the rest are listed, inactive, with their results.
+ */
+export function KnockoutPortal({ tripCode, view, today }: {
+  tripCode: string
+  view: KnockoutView
+  today: string
+}) {
+  const rounds = portalRounds(view.matches, view.entrantId, view.deadlines)
+  const [open, setOpen] = useState<number | null>(() => currentRound(rounds)?.roundNumber ?? null)
+  const nameOf = (id: string | null) => (id ? view.names[id] ?? null : null)
+
+  if (rounds.length === 0) {
+    return (
+      <p className="text-ink/65 text-sm text-center leading-snug">
+        The bracket has not been drawn yet. The organiser draws it once the field is in.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {rounds.map(round => {
+        const isOpen = open === round.roundNumber
+        const finished = round.total > 0 && round.played === round.total
+        const date = roundDate(round.deadline, today, finished)
+        return (
+          <section key={round.roundNumber} className={cardClass()}>
+            <button
+              type="button"
+              onClick={() => setOpen(isOpen ? null : round.roundNumber)}
+              aria-expanded={isOpen}
+              className="w-full text-left px-5 py-4 flex items-center justify-between gap-3"
+            >
+              <span className="min-w-0">
+                <span className="block t-card text-ink truncate">{round.roundName}</span>
+                <span className={`block t-cap mt-0.5 ${date.startsWith('Was due') ? 'text-rust-deep' : 'text-ink/65'}`}>
+                  {[date, `${round.played} of ${round.total} played`].filter(Boolean).join(' · ')}
+                </span>
+              </span>
+              <span
+                className={`text-ink/50 flex-shrink-0 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                aria-hidden="true"
+              >
+                <IconChevronRight size={20} />
+              </span>
+            </button>
+
+            {isOpen && (
+              <ul className="px-3 pb-3 space-y-2">
+                {round.matches.map(m => {
+                  const a = nameOf(m.sideA) ?? 'To be decided'
+                  const b = nameOf(m.sideB) ?? 'To be decided'
+                  const result = describeResult(m, nameOf)
+                  const body = (
+                    <>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-ink truncate">{a} v {b}</span>
+                        <span className="block t-cap text-ink/65 truncate">
+                          {result ?? (m.mine ? 'Your match' : 'To play')}
+                        </span>
+                      </span>
+                      {m.mine && (
+                        <span className="text-ink/50 flex-shrink-0" aria-hidden="true"><IconChevronRight size={20} /></span>
+                      )}
+                    </>
+                  )
+                  return (
+                    <li key={m.id}>
+                      {m.mine ? (
+                        <Link
+                          href={matchHref(tripCode, m.id)}
+                          className={`flex items-center justify-between gap-3 px-4 py-3 ${cardClass('chosen', true)}`}
+                        >
+                          {body}
+                        </Link>
+                      ) : (
+                        <div className={`flex items-center justify-between gap-3 px-4 py-3 opacity-60 ${cardClass('flat')}`}>
+                          {body}
+                        </div>
+                      )}
+                    </li>
+                  )
+                })}
+                {round.matches.length === 0 && (
+                  <li className="t-cap text-ink/65 px-2 py-1">No matches to play in this round.</li>
+                )}
+              </ul>
+            )}
+          </section>
+        )
+      })}
+      <p className="t-cap text-ink/65 text-center">
+        <Link href={`/trip/${tripCode}/matchplay`} className="text-accent-deep hover:text-accent">See the whole bracket →</Link>
+      </p>
+    </div>
+  )
+}

@@ -9,6 +9,10 @@ import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
 import AddRound from './AddRound'
 import { readRoundCards } from '@/lib/golfIrelandCards'
+import { isKnockoutEvent } from '@/lib/bracketSetup'
+import { linkedPlayerId } from '@/lib/currentPlayer'
+import { readKnockout } from '../knockout'
+import { KnockoutPortal } from '../KnockoutViews'
 import { AddLeagueRound, RoundSettings, TbcRoundTile, type LeagueDoor } from '../LeagueRounds'
 import { parseLeagueSetup, leagueRounds, nextRoundNumber, revealedLeagueRounds } from '@/lib/leagueSetup'
 import { todayString } from '@/lib/tripStatus'
@@ -54,7 +58,7 @@ export default async function TripCoursePortalPage({
       // `*` on the rounds so the casual flag rides along without being named:
       // a column migration 031 adds would fail the whole tab where it has
       // not run, and a league's tile and gear both read it.
-      .select('id, name, start_date, end_date, track_stats, rounds(*, courses(name, location))')
+      .select('id, name, start_date, end_date, track_stats, leaderboards, formats, team_scoring, rounds(*, courses(name, location))')
       .eq('trip_code', tripCode)
       .order('round_number', { referencedTable: 'rounds' })
       .single(),
@@ -90,6 +94,9 @@ export default async function TripCoursePortalPage({
   const setupRow = setupRes.data as { bracket_setup?: unknown; settings_passcode_hash?: string | null } | null
   const leagueSetup = event ? parseLeagueSetup(setupRow?.bracket_setup) : null
   const series = leagueSetup?.schedule === 'series' && !!trip.start_date
+  // A match play event's Scoring tab is the bracket's portal: its rounds,
+  // each opening its matches, this player's own on top (story 2).
+  const knockout = event && isKnockoutEvent(setupRow?.bracket_setup)
   const permsRaw = (permsRes.data as { event_permissions?: unknown } | null)?.event_permissions
 
 
@@ -120,7 +127,7 @@ export default async function TripCoursePortalPage({
   //
   // So do its Golf Ireland cards, each placed on the round it was played
   // as — nothing asked unless the league reads them (lib/golfIrelandCards.ts).
-  const [{ data: openData, error: openErr }, itemsRes, roundCards] = await Promise.all([
+  const [{ data: openData, error: openErr }, itemsRes, roundCards, knockoutView] = await Promise.all([
     roundIds.length > 0
       ? supabase.from('live_rounds').select('round_id, live_player_locks(player_id)')
           .eq('status', 'active').in('round_id', roundIds)
@@ -130,6 +137,17 @@ export default async function TripCoursePortalPage({
           .eq('trip_id', trip.id)
       : Promise.resolve({ data: [], error: null }),
     series ? readRoundCards(trip.id, leagueSetup, rounds) : Promise.resolve([]),
+    // The draw from this phone's side — who it is, the names, the matches.
+    knockout
+      ? Promise.all([
+          supabase.from('players').select('id, name').eq('trip_id', trip.id).eq('is_composite', false),
+          linkedPlayerId(tripCode),
+        ]).then(([playersRes, meId]) => {
+          const roster = (playersRes.data ?? []) as { id: string; name: string }[]
+          const me = roster.some(p => p.id === meId) ? meId : null
+          return readKnockout(trip, setupRow?.bracket_setup, me, roster)
+        }).catch(e => { console.error('TripCoursePortal knockout read failed:', e); return null })
+      : Promise.resolve(null),
   ])
   if (openErr) console.error('TripCoursePortal live rounds query failed:', openErr)
   if (itemsRes.error) console.error('TripCoursePortal league items query failed:', itemsRes.error)
@@ -245,7 +263,13 @@ export default async function TripCoursePortalPage({
           )}
         </div>
 
-        {(series ? league.length === 0 : (rounds ?? []).length === 0) && (
+        {knockoutView && (
+          <div className="mb-8">
+            <KnockoutPortal tripCode={tripCode} view={knockoutView} today={todayString(new Date())} />
+          </div>
+        )}
+
+        {!knockoutView && (series ? league.length === 0 : (rounds ?? []).length === 0) && (
           <p className="text-ink/65 text-sm py-8 text-center">
             {series
               ? 'No rounds yet — add the first one above.'
