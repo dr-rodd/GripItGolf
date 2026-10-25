@@ -7,8 +7,8 @@ import { splitCourseName } from '@/lib/courseDirectory'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { sideColours } from '@/lib/matchSides'
 import TripHeader from '@/app/components/TripHeader'
-import BackButton from '@/app/components/BackButton'
-import { buttonClass } from '@/app/components/ui'
+import { IconChevronLeft } from '@/app/components/icons'
+import { buttonClass, cardClass } from '@/app/components/ui'
 import { readKnockout } from '../../../knockout'
 import { readCardSetups } from '../../matchCards'
 import MatchCardClient from './MatchCardClient'
@@ -53,13 +53,22 @@ export default async function MatchCardPage({
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
       <TripHeader backTo={`/trip/${tripCode}`} />
-      <div className="max-w-lg mx-auto px-4 pt-4">
-        <BackButton href={`/trip/${tripCode}/match/${matchId}`} label="Match" />
-      </div>
-      <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
-        <header className="text-center mb-5">
-          <p className="t-label text-ink/65">{match.roundName}{named ? ` · ${named.club}` : ''}</p>
-          <h1 className="t-h2 text-ink mt-1">Match card</h1>
+      <div className="max-w-lg mx-auto px-4 pt-3 pb-8">
+        {/* One row: the way back on a card at the left, the round and club
+            small and centred — no page title; the hole is the headline. */}
+        <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-3">
+          <Link
+            href={`/trip/${tripCode}/match/${matchId}`}
+            className={`justify-self-start h-10 pl-2 pr-3 inline-flex items-center gap-0.5 t-label text-ink/80 ${cardClass('raised', true)}`}
+          >
+            <IconChevronLeft size={18} /> Match
+          </Link>
+          {/* Two short lines, so it can sit in the middle beside the button. */}
+          <p className="t-cap text-ink/65 text-center leading-tight max-w-[44vw]">
+            <span className="block truncate">{match.roundName}</span>
+            {named && <span className="block truncate">{named.club}</span>}
+          </p>
+          <span aria-hidden="true" />
         </header>
 
         {card ? (

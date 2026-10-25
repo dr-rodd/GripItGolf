@@ -9,7 +9,7 @@ import {
   REGULATION_HOLES, extraCourseHole, openingHole, ordinal, parseExtraPlan, playCard, shotsOn, shouldWrite,
   withExtraHole, type CardHole, type CardSideKey, type CardSideView, type ExtraHolePlan,
 } from '@/lib/matchCard'
-import { DEFAULT_SIDE_COLOURS, sideTint, type SideColour } from '@/lib/matchSides'
+import { DEFAULT_SIDE_COLOURS, type SideColour } from '@/lib/matchSides'
 import { usePoll } from '@/app/scoring/usePoll'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
@@ -242,28 +242,16 @@ export default function MatchCardClient({
     : state.extra ? `${state.progress} — down the ${ordinal(state.played + 1)}`
       : state.leader ? `${nameOf(state.leader)} ${state.progress}` : state.progress
 
-  /** A side's standing as a pill: its colour solid once won, washed while up. */
-  const standing = (key: CardSideKey): { label: string; style: React.CSSProperties } | null => {
-    if (state.played === 0) return null
-    if (state.leader === null) return { label: 'All square', style: { backgroundColor: 'var(--color-tint)' } }
-    const ahead = state.leader === key
-    const c = colours[key]
-    if (state.settled) {
-      return ahead
-        ? { label: `Won ${state.result}`, style: { backgroundColor: c.fill, color: c.on } }
-        : { label: 'Lost', style: { backgroundColor: 'var(--color-tint)' } }
-    }
-    return ahead
-      ? { label: `${state.up} up`, style: { backgroundColor: sideTint(c, 22) } }
-      : { label: `${state.up} down`, style: { backgroundColor: 'var(--color-tint)' } }
-  }
-
-  /** What a hole's mark on the strip is filled with: the winner's colour. */
+  /**
+   * A hole's mark on the strip: green for the hole being played, the
+   * winner's colour, dark ink for a half, faint for one still to play.
+   */
   const holeFill = (o: (typeof outcomes)[number] | undefined, isNow: boolean): string =>
-    o?.winner === 'A' ? colours.A.fill
-      : o?.winner === 'B' ? colours.B.fill
-        : o?.winner === 'halved' ? 'color-mix(in srgb, var(--color-ink) 35%, transparent)'
-          : isNow ? 'var(--color-ink)' : 'var(--color-tint)'
+    isNow ? 'var(--color-accent)'
+      : o?.winner === 'A' ? colours.A.fill
+        : o?.winner === 'B' ? colours.B.fill
+          : o?.winner === 'halved' ? 'var(--color-ink)'
+            : 'var(--color-tint)'
 
   const playerBox = (key: CardSideKey, p: CardSideView['players'][number], showName: boolean) => {
     const entered = scores[p.id]?.[current]
@@ -281,11 +269,11 @@ export default function MatchCardClient({
       const n = parseInt(raw, 10)
       if (!isNaN(n) && n >= 1 && n <= MAX_GROSS) setGross(p.id, current, n)
     }
-    const stepClass = 'flex-1 h-14 rounded-xl border border-line text-ink/80 text-3xl leading-none ' +
+    const stepClass = 'flex-1 h-12 rounded-xl border border-line text-ink/80 text-3xl leading-none ' +
       'active:scale-95 transition-all flex items-center justify-center disabled:opacity-20 disabled:cursor-not-allowed'
     return (
-      <div key={p.id} className={`p-3 bg-surface border rounded-xl ${isNR ? 'border-rust/40' : 'border-line'}`}>
-        <div className="flex items-center justify-between gap-2 min-h-8">
+      <div key={p.id} className={`p-2.5 bg-surface border rounded-xl ${isNR ? 'border-rust/40' : 'border-line'}`}>
+        <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             {showName && <p className="t-cap text-ink/80 truncate">{p.name}</p>}
             <p className="t-cap text-ink/65" aria-label={`${shots} shots on this hole`}>
@@ -298,7 +286,7 @@ export default function MatchCardClient({
             onClick={() => setGross(p.id, current, isNR ? undefined : null)}
             aria-pressed={isNR}
             aria-label={`No return for ${p.name}`}
-            className={`text-sm border rounded-xl px-3 py-1.5 transition-colors flex-shrink-0 disabled:opacity-40 ${
+            className={`text-sm border rounded-xl px-3 py-1 transition-colors flex-shrink-0 disabled:opacity-40 ${
               isNR ? 'border-rust/50 text-rust-deep bg-rust/10' : 'border-line text-ink/50'
             }`}
           >
@@ -306,7 +294,7 @@ export default function MatchCardClient({
           </button>
         </div>
         {isNR ? (
-          <span className="mt-2 font-serif text-5xl flex items-center justify-center w-full h-20 text-rust-deep/80 border border-rust/30 rounded-xl">
+          <span className="mt-2 font-serif text-4xl flex items-center justify-center w-full h-16 text-rust-deep/80 border border-rust/30 rounded-xl">
             NR
           </span>
         ) : (
@@ -318,12 +306,12 @@ export default function MatchCardClient({
             onChange={e => typed(e.target.value)}
             disabled={!canEdit}
             aria-label={`${p.name}'s score on this hole`}
-            className={`mt-2 font-serif text-5xl text-center bg-transparent outline-none text-ink caret-accent border rounded-xl p-0 w-full h-20 ${
+            className={`mt-2 font-serif text-5xl text-center bg-transparent outline-none text-ink caret-accent border rounded-xl p-0 w-full h-16 ${
               value === null ? 'border-accent/50' : 'border-line-strong'
             }`}
             // Sized and set here, not by class: the site's unlayered input rule
             // sets every field's face and size and would win over a utility.
-            style={{ fontFamily: 'var(--font-serif)', fontSize: 48, lineHeight: '5rem', borderColor: value !== null ? colours[key].fill : undefined }}
+            style={{ fontFamily: 'var(--font-serif)', fontSize: 44, lineHeight: '4rem', borderColor: value !== null ? colours[key].fill : undefined }}
           />
         )}
         <div className="flex gap-2 mt-2">
@@ -334,30 +322,21 @@ export default function MatchCardClient({
     )
   }
 
-  const sideColumn = (key: CardSideKey, side: CardSideView) => {
-    const st = standing(key)
-    return (
-      <div className="min-w-0 flex flex-col gap-2">
-        <div className="text-center">
-          <span className="block h-1.5 rounded-full mb-2" style={{ backgroundColor: colours[key].fill }} aria-hidden="true" />
-          <p className="t-card text-ink truncate">{side.name}</p>
-          <span
-            className="inline-block mt-1 px-2.5 py-0.5 rounded-full t-cap font-semibold text-ink min-h-6"
-            style={st?.style}
-          >
-            {st?.label ?? '\u00a0'}
-          </span>
-        </div>
-        {side.players.map(p => playerBox(key, p, side.players.length > 1))}
+  const sideColumn = (key: CardSideKey, side: CardSideView) => (
+    <div className="min-w-0 flex flex-col gap-2">
+      <div>
+        <span className="block h-1 rounded-full mb-1.5" style={{ backgroundColor: colours[key].fill }} aria-hidden="true" />
+        <p className="t-label font-semibold text-ink truncate text-center">{side.name}</p>
       </div>
-    )
-  }
+      {side.players.map(p => playerBox(key, p, side.players.length > 1))}
+    </div>
+  )
 
   const holeLabel = outcome?.winner === 'A' || outcome?.winner === 'B'
     ? `${nameOf(outcome.winner)} wins the hole` : outcome?.winner === 'halved' ? 'Hole halved' : ''
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       {/* Every hole: a mark each, filled in the colour of whoever won it,
           the hole being played the long one — trip scoring's strip. */}
       <div className="flex items-center gap-3" aria-hidden="true">
@@ -372,8 +351,6 @@ export default function MatchCardClient({
                 style={{
                   flexGrow: isNow ? 1.6 : 1, flexBasis: 0, minWidth: isNow ? 18 : 0,
                   backgroundColor: holeFill(o, isNow),
-                  outline: isNow && o?.winner ? '2px solid var(--color-ink)' : undefined,
-                  outlineOffset: 1,
                 }}
               />
             )
@@ -381,46 +358,45 @@ export default function MatchCardClient({
         </div>
       </div>
 
-      {/* The hole being played, large */}
-      <div className="text-center">
-        <p className="t-h1 text-ink leading-none" style={{ fontSize: 44 }}>
-          {current > REGULATION_HOLES ? `The ${ordinal(current)}` : `Hole ${current}`}
-        </p>
-        <p className="t-label text-ink/65 mt-2">Par {h.par} · Index {h.strokeIndex}</p>
-        {/* An extra hole: which course hole it is played off — the 1st and
-            on unless the players pick another */}
-        {current > REGULATION_HOLES && (
-          <label className="flex items-center justify-center gap-2 t-cap text-ink/80 mt-2">
-            Played off the
-            <select
-              value={extraCourseHole(current, plan)}
-              onChange={e => playExtraOff(current, Number(e.target.value))}
-              disabled={!canEdit}
-              aria-label={`The course hole the ${ordinal(current)} is played off`}
-              // .field is a full-width box, unlayered; this one sits in a line.
-              style={{ width: 'auto' }}
-              className={`${FIELD} field-dense`}
-            >
-              {Array.from({ length: REGULATION_HOLES }, (_, i) => i + 1).map(n => (
-                <option key={n} value={n}>{ordinal(n)}</option>
-              ))}
-            </select>
-          </label>
-        )}
+      {/* The match as it stands on the left; the hole being played,
+          large, on the right */}
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0 pb-1" aria-live="polite">
+          <p className="t-label text-ink flex items-center gap-2">
+            {loaded && state.leader && (
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colours[state.leader].fill }} aria-hidden="true" />
+            )}
+            <span className="min-w-0">{loaded ? status : 'Loading the card…'}</span>
+          </p>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <p className="t-h1 text-ink leading-none">
+            {current > REGULATION_HOLES ? `The ${ordinal(current)}` : `Hole ${current}`}
+          </p>
+          <p className="t-cap text-ink/65 mt-1">Par {h.par} · Index {h.strokeIndex}</p>
+        </div>
       </div>
 
-      {/* The match as it stands */}
-      <div className={`px-4 py-3 text-center ${cardClass()}`} aria-live="polite">
-        <p className="t-card text-ink flex items-center justify-center gap-2">
-          {loaded && state.leader && (
-            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colours[state.leader].fill }} aria-hidden="true" />
-          )}
-          {loaded ? status : 'Loading the card…'}
-        </p>
-        {state.extra && !state.settled && (
-          <p className="t-cap text-ink/65 mt-1">Extra holes are played off the 1st and on — pick another above if your club sends you elsewhere. Same shots, until a hole is won.</p>
-        )}
-      </div>
+      {/* An extra hole: which course hole it is played off — the 1st and
+          on unless the players pick another. Same shots, until one is won. */}
+      {current > REGULATION_HOLES && (
+        <label className="flex items-center justify-end gap-2 t-cap text-ink/80 -mt-1">
+          Played off the
+          <select
+            value={extraCourseHole(current, plan)}
+            onChange={e => playExtraOff(current, Number(e.target.value))}
+            disabled={!canEdit}
+            aria-label={`The course hole the ${ordinal(current)} is played off`}
+            // .field is a full-width box, unlayered; this one sits in a line.
+            style={{ width: 'auto' }}
+            className={`${FIELD} field-dense`}
+          >
+            {Array.from({ length: REGULATION_HOLES }, (_, i) => i + 1).map(n => (
+              <option key={n} value={n}>{ordinal(n)}</option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {/* Top of the draw on the left, bottom on the right */}
       <div className="grid grid-cols-2 gap-3">
@@ -428,7 +404,7 @@ export default function MatchCardClient({
         {sideColumn('B', b)}
       </div>
 
-      <p className="t-label text-ink text-center h-6 flex items-center justify-center gap-2">
+      <p className="t-cap text-ink text-center h-5 flex items-center justify-center gap-2">
         {(outcome?.winner === 'A' || outcome?.winner === 'B') && (
           <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colours[outcome.winner].fill }} aria-hidden="true" />
         )}
@@ -442,7 +418,7 @@ export default function MatchCardClient({
           onClick={() => setHole(Math.max(1, current - 1))}
           disabled={current <= 1}
           aria-label="Previous hole"
-          className="flex-1 py-4 border border-line text-ink/65 text-2xl rounded-xl active:bg-tint transition-colors disabled:opacity-25"
+          className="flex-1 py-3 border border-line text-ink/65 text-2xl rounded-xl active:bg-tint transition-colors disabled:opacity-25"
         >
           ←
         </button>
@@ -451,7 +427,7 @@ export default function MatchCardClient({
           onClick={() => setHole(Math.min(holes.length, current + 1))}
           disabled={current >= holes.length}
           aria-label="Next hole"
-          className="flex-[2] py-4 bg-accent-deep text-white text-2xl font-bold rounded-xl hover:bg-accent active:scale-[0.98] transition-all disabled:opacity-30"
+          className="flex-[2] py-3 bg-accent-deep text-white text-2xl font-bold rounded-xl hover:bg-accent active:scale-[0.98] transition-all disabled:opacity-30"
         >
           →
         </button>
