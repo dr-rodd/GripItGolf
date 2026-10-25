@@ -203,6 +203,8 @@ export default function MatchCardClient({
   // entered by hand, a walkover — it is the organiser's deliberate tap, never
   // something that happens because they opened the card with the PIN in.
   const writing = useRef(false)
+  // Where a sideways swipe between holes began (onTouchStart below).
+  const swipe = useRef<{ x: number; y: number } | null>(null)
   const writeResult = useCallback(() => {
     if (writing.current) return
     writing.current = true
@@ -243,16 +245,39 @@ export default function MatchCardClient({
       : state.leader ? `${nameOf(state.leader)} ${state.progress}` : state.progress
 
   /**
-   * A hole's mark on the strip: a light green for the hole being played
-   * (the old hole grid's mint), the winner's colour, the brown for a half,
-   * faint for one still to play. No black (Ross, 25 Oct 2026).
+   * A hole's mark on the strip: the winner's colour, the brown for a half,
+   * faint for one still to play. The hole being played is the long mark,
+   * in a lighter version of its own colour — light green while it has no
+   * result yet. No black (Ross, 25 Oct 2026).
    */
-  const holeFill = (o: (typeof outcomes)[number] | undefined, isNow: boolean): string =>
-    isNow ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)'
-      : o?.winner === 'A' ? colours.A.fill
-        : o?.winner === 'B' ? colours.B.fill
-          : o?.winner === 'halved' ? 'color-mix(in srgb, var(--color-bark) 45%, transparent)'
-            : 'var(--color-tint)'
+  const lighter = (c: string) => `color-mix(in srgb, ${c} 45%, transparent)`
+  const holeFill = (o: (typeof outcomes)[number] | undefined, isNow: boolean): string => {
+    const base = o?.winner === 'A' ? colours.A.fill
+      : o?.winner === 'B' ? colours.B.fill
+        : o?.winner === 'halved' ? 'var(--color-bark)'
+          : null
+    if (isNow) return lighter(base ?? 'var(--color-accent)')
+    if (!base) return 'var(--color-tint)'
+    return o?.winner === 'halved' ? lighter(base) : base
+  }
+
+  // Swipe between holes: left for the next, right for the previous — a
+  // sideways stroke only, so scrolling the page never moves the hole.
+  const goTo = (n: number) => setHole(Math.max(1, Math.min(holes.length, n)))
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0]
+    swipe.current = { x: t.clientX, y: t.clientY }
+  }
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = swipe.current
+    swipe.current = null
+    if (!start) return
+    const t = e.changedTouches[0]
+    const dx = t.clientX - start.x
+    const dy = t.clientY - start.y
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return
+    goTo(current + (dx < 0 ? 1 : -1))
+  }
 
   const playerBox = (key: CardSideKey, p: CardSideView['players'][number], showName: boolean) => {
     const entered = scores[p.id]?.[current]
@@ -337,7 +362,7 @@ export default function MatchCardClient({
     ? `${nameOf(outcome.winner)} wins the hole` : outcome?.winner === 'halved' ? 'Hole halved' : ''
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       {/* Every hole: a mark each, filled in the colour of whoever won it,
           the hole being played the long one — trip scoring's strip. */}
       <div className="flex items-center gap-3" aria-hidden="true">
@@ -429,7 +454,7 @@ export default function MatchCardClient({
       <div className="flex gap-3">
         <button
           type="button"
-          onClick={() => setHole(Math.max(1, current - 1))}
+          onClick={() => goTo(current - 1)}
           disabled={current <= 1}
           aria-label="Previous hole"
           className="flex-1 py-3 border border-line text-ink/65 text-2xl rounded-xl active:bg-tint transition-colors disabled:opacity-25"
@@ -438,7 +463,7 @@ export default function MatchCardClient({
         </button>
         <button
           type="button"
-          onClick={() => setHole(Math.min(holes.length, current + 1))}
+          onClick={() => goTo(current + 1)}
           disabled={current >= holes.length}
           aria-label="Next hole"
           className="flex-[2] py-3 bg-accent-deep text-white text-2xl font-bold rounded-xl hover:bg-accent active:scale-[0.98] transition-all disabled:opacity-30"
