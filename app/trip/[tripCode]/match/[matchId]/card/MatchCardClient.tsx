@@ -352,9 +352,10 @@ export default function MatchCardClient({
             }`}
             // Sized and set here, not by class: the site's unlayered input rule
             // sets every field's face and size and would win over a utility.
-            // A line height of 1 lets the box centre the figure; a line as
-            // tall as the box sat it on the bottom edge on a phone.
-            style={{ fontFamily: 'var(--font-serif)', fontSize: 44, lineHeight: 1, paddingTop: 2, borderColor: value !== null ? colours[key].fill : undefined }}
+            // A line height of 1, lifted by padding below: Bespoke Serif's
+            // figures sit low in their line, so a box centring the line put
+            // the number near the bottom edge on a phone.
+            style={{ fontFamily: 'var(--font-serif)', fontSize: 44, lineHeight: 1, paddingTop: 0, paddingBottom: 18, borderColor: value !== null ? colours[key].fill : undefined }}
           />
         )}
         <div className="flex gap-2 mt-2">

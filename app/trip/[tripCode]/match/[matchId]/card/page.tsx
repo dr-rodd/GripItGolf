@@ -61,7 +61,7 @@ export default async function MatchCardPage({
             href={`/trip/${tripCode}/match/${matchId}`}
             className={`justify-self-start h-10 pl-2 pr-3 inline-flex items-center gap-0.5 t-label text-ink/80 ${cardClass('raised', true)}`}
           >
-            <IconChevronLeft size={18} /> Match
+            <IconChevronLeft size={18} /> Back
           </Link>
           {/* Two short lines, so it can sit in the middle beside the button. */}
           <p className="t-cap text-ink/65 text-center leading-tight max-w-[44vw]">
