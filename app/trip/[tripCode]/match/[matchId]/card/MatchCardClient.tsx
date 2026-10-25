@@ -137,6 +137,11 @@ export default function MatchCardClient({
   const current = hole ?? (loaded ? openingHole(outcomes) : 1)
   const h = holes.find(x => x.holeNumber === current) ?? holes[0]
   const outcome = outcomes.find(o => o.holeNumber === current)
+  // Holes are scored in order: a hole takes a score only once every hole
+  // before it has a result. Looking ahead — the index, the par — is free.
+  const firstOpen = holes.find(x => !outcomes.find(o => o.holeNumber === x.holeNumber)?.winner)?.holeNumber
+  const holeOpen = !loaded || firstOpen === undefined || current <= firstOpen
+  const editHere = canEdit && holeOpen
   const winnerId = state.leader === 'A' ? a.id : state.leader === 'B' ? b.id : null
 
   // ── Writing ──
@@ -311,7 +316,7 @@ export default function MatchCardClient({
       <div key={p.id} className={`p-2.5 bg-surface border rounded-xl ${isNR ? 'border-rust/40' : 'border-line'}`}>
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            {showName && <p className="t-cap text-ink/80 truncate">{p.name}</p>}
+            {showName && <p className="t-label font-semibold text-ink truncate">{p.name}</p>}
             <p className="t-cap text-ink/65" aria-label={`${shots} shots on this hole`}>
               {shots > 0 ? `${'•'.repeat(shots)} ${shots === 1 ? 'shot' : 'shots'}` : 'No shot'}
             </p>
@@ -321,7 +326,7 @@ export default function MatchCardClient({
               the layout does not move. */}
           <button
             type="button"
-            disabled={!canEdit}
+            disabled={!editHere}
             onClick={() => setGross(p.id, current, isNR ? undefined : null)}
             aria-pressed={isNR}
             aria-label={`No return for ${p.name}`}
@@ -335,7 +340,7 @@ export default function MatchCardClient({
           </button>
         </div>
         {isNR ? (
-          <span className="mt-2 font-serif text-4xl flex items-center justify-center w-full h-16 text-rust-deep/80 border border-rust/30 rounded-xl">
+          <span className="mt-2 font-serif text-4xl flex items-center justify-center w-full h-20 text-rust-deep/80 border border-rust/30 rounded-xl">
             NR
           </span>
         ) : (
@@ -345,22 +350,22 @@ export default function MatchCardClient({
             pattern="[0-9]*"
             value={value === null ? '' : String(value)}
             onChange={e => typed(e.target.value)}
-            disabled={!canEdit}
+            disabled={!editHere}
             aria-label={`${p.name}'s score on this hole`}
-            className={`mt-2 font-serif text-5xl text-center bg-transparent outline-none text-ink caret-accent border rounded-xl p-0 w-full h-16 ${
+            className={`mt-2 font-serif text-5xl text-center bg-transparent outline-none text-ink caret-accent border rounded-xl p-0 w-full h-20 disabled:opacity-60 ${
               value === null ? 'border-accent/50' : 'border-line-strong'
             }`}
             // Sized and set here, not by class: the site's unlayered input rule
             // sets every field's face and size and would win over a utility.
-            // A line height of 1, lifted by padding below: Bespoke Serif's
+            // A line height of 1, lifted 9px by the padding: Bespoke Serif's
             // figures sit low in their line, so a box centring the line put
-            // the number near the bottom edge on a phone.
-            style={{ fontFamily: 'var(--font-serif)', fontSize: 44, lineHeight: 1, paddingTop: 0, paddingBottom: 18, borderColor: value !== null ? colours[key].fill : undefined }}
+            // the number near the bottom edge on a phone. 80 = 2 + 6 + 48 + 24.
+            style={{ fontFamily: 'var(--font-serif)', fontSize: 48, lineHeight: 1, paddingTop: 6, paddingBottom: 24, borderColor: value !== null ? colours[key].fill : undefined }}
           />
         )}
         <div className="flex gap-2 mt-2">
-          <button type="button" disabled={!canEdit || isNR} onClick={() => step(-1)} aria-label={`One fewer for ${p.name}`} className={stepClass}>−</button>
-          <button type="button" disabled={!canEdit || isNR} onClick={() => step(1)} aria-label={`One more for ${p.name}`} className={stepClass}>+</button>
+          <button type="button" disabled={!editHere || isNR} onClick={() => step(-1)} aria-label={`One fewer for ${p.name}`} className={stepClass}>−</button>
+          <button type="button" disabled={!editHere || isNR} onClick={() => step(1)} aria-label={`One more for ${p.name}`} className={stepClass}>+</button>
         </div>
       </div>
     )
@@ -370,7 +375,7 @@ export default function MatchCardClient({
     <div className="min-w-0 flex flex-col gap-2">
       <div>
         <span className="block h-1 rounded-full mb-1.5" style={{ backgroundColor: colours[key].fill }} aria-hidden="true" />
-        <p className="t-label font-semibold text-ink truncate text-center">{side.name}</p>
+        <p className="t-h2 text-ink truncate text-center">{side.name}</p>
       </div>
       {side.players.map(p => playerBox(key, p, side.players.length > 1))}
     </div>
@@ -468,7 +473,11 @@ export default function MatchCardClient({
         {(outcome?.winner === 'A' || outcome?.winner === 'B') && (
           <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colours[outcome.winner].fill }} aria-hidden="true" />
         )}
-        {holeLabel}
+        {canEdit && !holeOpen && firstOpen !== undefined ? (
+          <button type="button" onClick={() => goTo(firstOpen)} className="t-cap text-accent-deep">
+            Score hole {firstOpen} first →
+          </button>
+        ) : holeLabel}
       </p>
       </div>
 
