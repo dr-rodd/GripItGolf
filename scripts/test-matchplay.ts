@@ -770,10 +770,10 @@ guard('result tone', () => {
     'behind is down, and lost once it is over')
   eq(sideTone('A', { leader: null, settled: false }), 'level', 'all square is neither')
   eq([signTone(2), signTone(0), signTone(-1)], ['up', 'level', 'down'], 'a signed figure: up, level, down')
-  ok(RESULT_PILL.won.includes('bg-gold') && RESULT_PILL.up.includes('gold-tint'), 'won is solid gold, up the duller tint')
+  ok(RESULT_PILL.won.includes('bg-gold') && RESULT_PILL.up.includes('accent'), 'won is solid gold, up is green — trips\' green and gold (25 Oct)')
   ok(RESULT_PILL.lost.includes('bg-bark') && RESULT_PILL.down.includes('bark-tint'), 'lost is solid brown, down the tint')
-  ok(RESULT_PILL.live.includes('accent') && !Object.entries(RESULT_PILL).some(([k, v]) => k !== 'live' && v.includes('accent')),
-    'and green is live, and only live')
+  ok(!Object.values(RESULT_PILL).some(v => /rust/.test(v)),
+    'and nothing is red — over par is most golfers')
 })
 
 // ─── Result ────────────────────────────────────────────────────

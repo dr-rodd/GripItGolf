@@ -1,14 +1,15 @@
-// How a result reads, sitewide — the only copy (Ross, 21 October 2026).
+// How a result reads, sitewide — the only copy (Ross, 21 October 2026;
+// green and gold again 25 October).
 //
-//   won     gold, solid
-//   up      the duller gold: the tint, gold lettering
+//   won     gold, solid — winning, and only winning
+//   up      emerald: better than level, a gain — trips' original green
 //   level   neutral
-//   down    the brown: bark at a tint
+//   down    the brown: bark at a tint — never red, over par is most golfers
 //   lost    the darker brown: bark, solid
-//   live    emerald — green means live and nothing else on a result
+//   live    emerald
 //
-// A match, a board's relative score and a stat's gain all come through
-// here, so "winning" is one colour on every screen. The tokens live in
+// A match play match is not read through here: its sides are red and blue
+// (lib/matchSides.ts). The tokens live in
 // app/globals.css (`gold`, `gold-deep`, `gold-tint`, `on-gold`,
 // `bark-tint`). Pure. No I/O, no React.
 
@@ -17,7 +18,7 @@ export type ResultTone = 'won' | 'up' | 'level' | 'down' | 'lost' | 'live'
 /** A pill or a small filled box. */
 export const RESULT_PILL: Record<ResultTone, string> = {
   won:   'bg-gold text-on-gold',
-  up:    'bg-gold-tint text-gold-deep',
+  up:    'bg-accent-tint text-accent-deep',
   level: 'bg-tint text-ink/80',
   down:  'bg-bark-tint text-ink',
   lost:  'bg-bark text-cream',
@@ -27,7 +28,7 @@ export const RESULT_PILL: Record<ResultTone, string> = {
 /** The same tones as bare text, for a line too tight for a pill. */
 export const RESULT_TEXT: Record<ResultTone, string> = {
   won:   'text-gold-deep font-semibold',
-  up:    'text-gold-deep',
+  up:    'text-accent-deep',
   level: 'text-ink/80',
   down:  'text-bark',
   lost:  'text-ink font-semibold',
@@ -37,7 +38,7 @@ export const RESULT_TEXT: Record<ResultTone, string> = {
 /** A fill with no words on it — an edge, a bar, a dot. */
 export const RESULT_FILL: Record<ResultTone, string> = {
   won:   'bg-gold',
-  up:    'bg-gold-tint',
+  up:    'bg-accent',
   level: 'bg-tint',
   down:  'bg-bark-tint',
   lost:  'bg-bark',

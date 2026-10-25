@@ -10,10 +10,10 @@
  * Two rules carried from the dataviz method, and the reason they matter
  * here specifically:
  *
- * **Position encodes, colour reinforces.** Gold-for-gain and
- * brown-for-loss is the app's own law (lib/resultTone.ts — it was emerald
- * and rust, a red/green pair a deutan reader cannot separate). Gold and
- * brown are kinder, but polarity is still never carried by colour alone: a
+ * **Position encodes, colour reinforces.** Emerald-for-gain and
+ * brown-for-loss is the app's own law (lib/resultTone.ts — never red for a
+ * loss: it was rust once, a red/green pair a deutan reader cannot separate).
+ * Polarity is still never carried by colour alone: a
  * gained bar sits on one side of the zero line and a lost bar on the
  * other, every readout figure is signed, and the hue is reinforcement for
  * the readers who get it.
@@ -39,9 +39,6 @@ export type GainedBar = {
 
 const ACCENT = 'var(--color-accent)'
 const ACCENT_DEEP = 'var(--color-accent-deep)'
-// Up and down on a bar: gold and the brown (lib/resultTone.ts).
-const GOLD = 'var(--color-gold)'
-const GOLD_DEEP = 'var(--color-gold-deep)'
 const INK = 'var(--color-ink)'
 const BARK = 'var(--color-bark)'
 
@@ -142,7 +139,7 @@ export function GainedByRoundChart({ bars, hint }: {
               <rect
                 x={x} y={y} width={barW} height={h}
                 rx="4"
-                fill={up ? (isPinned ? GOLD_DEEP : GOLD) : BARK}
+                fill={up ? (isPinned ? ACCENT_DEEP : ACCENT) : BARK}
                 fillOpacity={isPinned ? 1 : 0.75}
               />
               <text

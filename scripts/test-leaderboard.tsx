@@ -627,11 +627,12 @@ section('Under par is coloured; over par is weighted')
   eq(st(0), 'level', 'level is still level')
   eq(st(-4), 'good', 'and four under is good')
 
-  // Gold appears once and only on the good side — up (Ross, 21 Oct 2026:
-  // gold for winning and up, brown for down, green for live alone).
-  ok(TONE_PILL.good.includes('gold'), 'good is the only tone that is gold')
-  ok(!TONE_PILL.bad.includes('gold') && !TONE_PILL.level.includes('gold'), 'bad and level are not')
-  ok(!Object.values(TONE_PILL).some(c => c.includes('accent')), 'and no score tone is green — green means live')
+  // Green appears once and only on the good side — under par (Ross, 25 Oct
+  // 2026: back to trips' green and gold; gold is winning alone).
+  ok(TONE_PILL.good.includes('accent'), 'good is the only tone that is green')
+  ok(!TONE_PILL.bad.includes('accent') && !TONE_PILL.level.includes('accent'), 'bad and level are not')
+  ok(!Object.values(TONE_PILL).some(c => /gold|rust/.test(c)),
+    'and no score tone is gold or red — gold is winning, and over par is most golfers')
 
   // Worse than level is browner than level, not lighter. Both are bark, and
   // the bad one carries more of it.

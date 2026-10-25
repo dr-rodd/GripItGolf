@@ -1,6 +1,6 @@
 # Green Dot Golf
 
-Multi-trip golf platform: a group leader creates a trip, gets a shareable code, and the group gets live scoring, leaderboards, and teams. Forked from Donegal Masters (single-trip family app) — its scoring code is already in this repo (`app/scoring/`), being generalised with `trip_id` scoping. Its look is not the target: `docs/style-guide.md` + `app/globals.css` are the current design system — emerald for action and live, gold only for winning (`lib/resultTone.ts`).
+Multi-trip golf platform: a group leader creates a trip, gets a shareable code, and the group gets live scoring, leaderboards, and teams. Forked from Donegal Masters (single-trip family app) — its scoring code is already in this repo (`app/scoring/`), being generalised with `trip_id` scoping. Its look is not the target: `docs/style-guide.md` + `app/globals.css` are the current design system — emerald for action, live and under par, gold only for winning, never red for over par (`lib/resultTone.ts`).
 
 ## Who's building this
 
@@ -191,7 +191,7 @@ Don't read these up front. Open the matching file when the task actually touches
 | `lib/handicapAllowance.ts` | Playing off a percentage of the course handicap. **Never stored reduced** — applied when a board reads the cards. A board's allowance may differ by round (`roundAllowances`, a league round's gear): `allowanceOf(lb, roundId)` is the one reader, `allowanceFor(lb)` the per-round function the board code takes, `withRoundAllowance` the merge its writer uses. **Never hand `allowanceOf` to `.map` directly** — the list position would arrive as a round id |
 | `lib/leaderboardsCompat.ts` / `lib/formats.ts` / `lib/tripSetupFlow.ts` | Reading old trips' stored settings — don't extend, only read |
 | `lib/roster.ts` | Who is confirmed, the join list's order, and the no-two-same-names rule. **Confirmed is `players.claimed === true`** — the column is nullable, so `!claimed` and `.eq('claimed', false)` are both wrong |
-| `lib/resultTone.ts` | **How a result reads, sitewide — the only copy** (Ross, 21 Oct 2026): gold won, the duller gold (`gold-tint`, gold lettering) up, bark-tint down, solid bark lost, emerald live and nothing else. `sideTone`, `signTone`, `RESULT_PILL`/`_TEXT`/`_FILL`. A board's place 1 (`placeClass`) and better-than-level tone (`TONE_PILL.good`), the podium and the stats' gains wear it. **Match play does not** (Ross, 25 Oct 2026: gold and brown did not work there) — `lib/matchSides.ts`. Score shapes on the card (a birdie's circle) are not results and stay as they were |
+| `lib/resultTone.ts` | **How a result reads, sitewide — the only copy** (Ross, 21 Oct 2026; **back to trips' green and gold, 25 Oct**): gold won — winning and only winning — **emerald up** (under par, a gain), bark-tint down, solid bark lost, emerald live; **never red**, because over par is most golfers. A gold "up" ran for four days and is gone. `sideTone`, `signTone`, `RESULT_PILL`/`_TEXT`/`_FILL`. A board's place 1 (`placeClass`) and better-than-level tone (`TONE_PILL.good`), the podium and the stats' gains wear it. **Match play does not** (Ross, 25 Oct 2026: gold and brown did not work there) — `lib/matchSides.ts`. Score shapes on the card (a birdie's circle) are not results and stay as they were |
 | `lib/matchSides.ts` | **A match's two sides in colour, the only copy**: the top of the draw red (`side-a`), the bottom blue (`side-b`), `on-side` the ink on either — or each side's team colour (`KnockoutView.colours`, the tag every player in it shares) when both have one and they differ. The same on every phone, whoever is viewing: the card's strip and standings, the live board, the round lists and the bracket. CSS values for a `style`, because a team colour is whatever the organiser picked |
 | `lib/staleBuild.ts` | **A phone left on an older version across a deploy, the only copy.** Every push replaces the deployment's files, so a page already open crashes with Next's bare "Application error" when it asks for one more (a refresh cures it). `isStaleBuildError` recognises the missing file; `StaleBuildGuard` (in the root layout, every page) and the site's own error pages (`app/error.tsx`, `app/global-error.tsx`, through `ErrorScreen`) reload onto the new version — **once a minute at most**, remembered in sessionStorage, so it can never loop — and any other fault gets a calm message and Try again. Vercel's Skew Protection, where the plan has it, stops the failure at source |
 | `lib/displayNames.ts` | **What every leaderboard prints for a player — the only copy**: the trip board, the in-play panel, a round's result and the matchplay tiles (`shortNames` in `lib/matchplayEntrants.ts` delegates here now). A nickname the player chose themselves (preferences gear, `players.nickname`, migration 047) wins outright; else the **first name alone**, reaching for the surname only when first names clash — grown *together*, and cut the way surnames are built: **O'x compacts ("Ross OG" / "Ross OB"), Mc and Mac stay whole ("John Mc" / "John Mac")**. The stored name never changes; the scorecard sheet keeps it in full. **Fetch `players.nickname` on its own, fail-soft** — naming it in a shared select fails the page pre-047. Team selection used to rename real players for board space; that door is closed |
@@ -450,9 +450,11 @@ know before touching a screen:
   (`dense`, `compact`, `shape`, `variant`) rather than a class on top.
   `.field` sets `display` and centres its line with padding (iOS top-aligns a
   date or time value otherwise); a `button.field` lays out as a row.
-- **Gold is back, as a result only.** `gold`, `gold-deep` (text), `on-gold`
-  (the ink on a gold fill, both themes), `gold-tint`, `bark-tint` —
-  winning gold, losing brown, live green, through `lib/resultTone.ts`. The
+- **Green and gold (Ross, 25 Oct 2026).** Under par and a gain are
+  emerald, winning (a board's leader, the podium's winner) is `gold` /
+  `gold-deep`, over par and a loss are bark — **never red**, over par
+  being most golfers — through `lib/resultTone.ts`. Match play is the
+  exception: red and blue sides (`lib/matchSides.ts`). The
   old identity's `#C9A84C` still fails the build.
 - **Named mixes, never retyped opacities.** `line`, `line-strong`, `tint`,
   `accent-tint`, `disabled-bg`/`disabled-fg` — `test:branding` refuses
