@@ -691,11 +691,16 @@ section('Dark mode is the same tokens with night values')
   ok(theme.includes("LIGHT_THEME_COLOR = '#F6F4F0'"),
     'and the light one is still cream')
 
-  // The toggle is a claimed player\'s, on the hub, and nobody else\'s
+  // The gear is on every hub, claimed or not — a phone that went dark must
+  // always have the way back (Ross, 25 Oct 2026). The nickname is a
+  // claimed player\'s, so only the player is conditional.
   const hub = read('app/trip/[tripCode]/page.tsx')
   ok(hub.includes('<PlayerSettings'), 'the hub carries the preferences gear')
-  ok(/me && isConfirmed\(me\)/.test(hub),
-    '  …only for a device that has claimed a player')
+  ok(!/preferences = me &&/.test(hub), '  …for every phone, not only a claimed one')
+  ok(/playerId=\{me && isConfirmed\(me\) \? me\.id : null\}/.test(hub),
+    '  …handing it the player only when one is claimed')
+  ok(!read('app/components/PlayerSettings.tsx').includes('dark_mode'),
+    'appearance is the device\'s — the old player column is never read or written')
 
   // The other half of the indirection: Turbopack's CSS pass strips the
   // color-mix branches the tinted utilities compile to when the browser

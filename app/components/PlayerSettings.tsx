@@ -1,46 +1,34 @@
 'use client'
 
 /**
- * The gear on the trip hub: a claimed player's own preferences.
+ * The gear on the trip hub: this phone's own preferences.
  *
  * Not Trip Setup and not the Trip Settings drawer — those are the trip's.
- * This sheet is the person's: what THEY want screens to look like, saved
- * against their player row so it follows them to their other devices. The
- * hub only renders the gear for a device that has claimed a player, which is
- * the rule the feature was asked for with: no claim, no personalisation.
- *
- * One preference so far — dark mode. The theme itself is lib/theme.ts's job
- * (the class, the cookie, the browser chrome); this component's job is the
- * control and the column.
- *
- * The column write is best-effort on purpose. The theme has already changed
- * and the cookie already holds it before the request leaves, so a dead radio
- * costs only the cross-device echo — and the sheet says so, calmly, rather
- * than failing a toggle that visibly worked.
+ * This sheet is the person's: how THEY want screens to look. Every hub
+ * carries it, claimed or not — appearance is the device's choice
+ * (lib/theme.ts: light, dark, or the phone's own setting), and a phone that
+ * went dark must always have the way back in reach. The leaderboard
+ * nickname is a player's, so it shows only once this phone has claimed one.
  */
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
-import { applyTheme, isDark, rememberTheme } from '@/lib/theme'
+import { THEME_CHOICES, chooseTheme, currentThemeChoice, type ThemeChoice } from '@/lib/theme'
 import { MAX_NICKNAME, normalizeNickname } from '@/lib/displayNames'
 import { IconSettings } from './icons'
-import Toggle from './Toggle'
-import { FIELD, buttonClass, cardClass } from './ui'
+import { FIELD, Segmented, buttonClass, cardClass } from './ui'
 
 export default function PlayerSettings({
   tripId, playerId,
 }: {
   tripId: string
-  playerId: string
+  /** The claimed player on this phone, or null — the nickname needs one. */
+  playerId: string | null
 }) {
   const [open, setOpen] = useState(false)
-  // Lazily, so the class on <html> is read on the client's first render and
-  // never re-read on re-renders. The server initialises this to false (it has
-  // no document), which cannot mismatch: the toggle only renders inside the
-  // sheet, and the sheet is closed until a finger opens it.
-  const [dark, setDark] = useState(() => isDark())
-  const [saveFailed, setSaveFailed] = useState(false)
+  // Read when the sheet opens, from the cookie the boot script painted by.
+  const [theme, setTheme] = useState<ThemeChoice>('light')
 
   // The leaderboard nickname — the player's own short name for the board's
   // tight columns. Their stored name never changes; lib/displayNames.ts is
@@ -51,30 +39,10 @@ export default function PlayerSettings({
   const [nickFailed, setNickFailed] = useState(false)
 
   useEffect(() => {
-    // What this player chose, possibly on another phone. The device cookie
-    // painted the page already; the column outranks it, because the column is
-    // the preference and the cookie only its local echo. Errors are ignored
-    // whole — a trip whose database does not carry the column yet just stays
-    // a device-local preference.
+    if (!playerId) return
     let cancelled = false
-    supabase
-      .from('players')
-      .select('dark_mode')
-      .eq('id', playerId)
-      .eq('trip_id', tripId)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (cancelled || error) return
-        const saved = (data as { dark_mode?: boolean | null } | null)?.dark_mode
-        if (typeof saved === 'boolean' && saved !== isDark()) {
-          applyTheme(saved)
-          rememberTheme(saved)
-          setDark(saved)
-        }
-      })
-    // Its own query, not a second column on the one above: naming `nickname`
-    // there would fail the whole read — dark mode included — on a database
-    // that has not run migration 047. Errors are ignored the same way.
+    // Its own query, never named inside a wider select: a database that has
+    // not run migration 047 fails the read, and errors are ignored whole.
     supabase
       .from('players')
       .select('nickname')
@@ -95,6 +63,7 @@ export default function PlayerSettings({
   const nickDirty = (normalizeNickname(nickname) ?? '') !== savedNickname
 
   async function saveNickname() {
+    if (!playerId) return
     const next = normalizeNickname(nickname)
     setNickSaving(true)
     setNickFailed(false)
@@ -105,7 +74,7 @@ export default function PlayerSettings({
       .eq('id', playerId)
       .eq('trip_id', tripId)
     setNickSaving(false)
-    if (error) {
+    if (error || !playerId) {
       setNickFailed(true)
       return
     }
@@ -113,19 +82,9 @@ export default function PlayerSettings({
     setSavedNickname(next ?? '')
   }
 
-  async function handleToggle(next: boolean) {
-    // The page first, the network second: the switch must answer the finger.
-    applyTheme(next)
-    rememberTheme(next)
-    setDark(next)
-    setSaveFailed(false)
-
-    const { error } = await supabase
-      .from('players')
-      .update({ dark_mode: next })
-      .eq('id', playerId)
-      .eq('trip_id', tripId)
-    if (error) setSaveFailed(true)
+  function pickTheme(next: ThemeChoice) {
+    chooseTheme(next)
+    setTheme(next)
   }
 
   return (
@@ -133,7 +92,7 @@ export default function PlayerSettings({
       <button
         type="button"
         aria-label="Your preferences"
-        onClick={() => setOpen(true)}
+        onClick={() => { setTheme(currentThemeChoice()); setOpen(true) }}
         className="press flex items-center justify-center w-10 h-10 rounded-full text-bark/60 hover:text-ink"
       >
         <IconSettings size={20} />
@@ -175,24 +134,20 @@ export default function PlayerSettings({
               </div>
 
               <div className="px-5 py-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="t-label text-ink">Dark mode</p>
-                    <p className="t-cap text-ink/65 mt-0.5">
-                      Saved to your name, so it follows you to other devices.
-                    </p>
-                  </div>
-                  <Toggle checked={dark} onChange={handleToggle} label="Dark mode" />
-                </div>
-                {saveFailed && (
-                  <p className="t-cap text-rust-deep mt-3">
-                    Could not save that to your name — this phone will
-                    remember it anyway.
-                  </p>
-                )}
+                <p className="t-label text-ink">Appearance</p>
+                <p className="t-cap text-ink/65 mt-0.5">
+                  For this phone. System follows the phone&apos;s own light or dark setting.
+                </p>
+                <Segmented
+                  options={THEME_CHOICES}
+                  value={theme}
+                  onChange={pickTheme}
+                  label="Appearance"
+                  className="mt-3"
+                />
 
                 {/* ── Leaderboard nickname ── */}
-                <div className="mt-5 pt-5 border-t border-line">
+                {playerId && <div className="mt-5 pt-5 border-t border-line">
                   <p className="t-label text-ink">Leaderboard nickname</p>
                   <p className="t-cap text-ink/65 mt-0.5">
                     Saves space on the board. Your player name doesn&apos;t
@@ -224,7 +179,7 @@ export default function PlayerSettings({
                       Could not save the nickname — try again
                     </p>
                   )}
-                </div>
+                </div>}
               </div>
 
             </div>

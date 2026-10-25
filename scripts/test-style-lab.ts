@@ -16,6 +16,7 @@ import {
   AXES, LAB_FAMILIES, HOUSE_SETUP, STYLE_BOOT_SCRIPT, labCount, parseSetup, serialiseSetup,
   setupAttributes, type FontOption, type Setup,
 } from '../lib/styleLab'
+import { THEME_BOOT_SCRIPT, resolvesDark, themeChoiceOf } from '../lib/theme'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -158,6 +159,45 @@ section('The head script')
   eq(run(`gg_style=${encodeURIComponent('title=Bad<script> colour=gold grain=off')}`),
     { 'data-grain': 'off' }, 'a value that is not a plain word is ignored, as is an unknown axis')
   eq(run('gg_style=%E0%A4%A'), {}, 'a malformed cookie throws inside the try, and nothing is set')
+}
+
+section('The theme: light, dark or the phone\'s own')
+{
+  // The head script against a fake phone: what class it leaves, and whether
+  // a phone turning dark later moves a System page with it.
+  const boot = (cookie: string, systemDark: boolean) => {
+    const classes = new Set<string>()
+    const listeners: (() => void)[] = []
+    const q = { matches: systemDark, addEventListener: (_: string, f: () => void) => listeners.push(f) }
+    const document = {
+      cookie,
+      documentElement: { classList: { toggle: (c: string, on: boolean) => { if (on) classes.add(c); else classes.delete(c) } } },
+      querySelector: () => null,
+      addEventListener: () => {},
+    }
+    const window = { matchMedia: () => q }
+    new Function('document', 'window', THEME_BOOT_SCRIPT)(document, window)
+    return {
+      dark: () => classes.has('dark'),
+      phoneTurns: (dark: boolean) => { q.matches = dark; listeners.forEach(f => f()) },
+    }
+  }
+  eq(boot('', true).dark(), false, 'no choice is light, whatever the phone says')
+  eq(boot('gg_theme=dark', false).dark(), true, 'Dark is dark')
+  eq(boot('gg_theme=light', true).dark(), false, 'Light is light on a dark phone')
+  eq(boot('gg_theme=system', true).dark(), true, 'System on a dark phone is dark')
+  eq(boot('gg_theme=system', false).dark(), false, '  …and on a light one, light')
+  const sys = boot('a=1; gg_theme=system', false)
+  sys.phoneTurns(true)
+  eq(sys.dark(), true, 'System follows the phone turning dark, without a reload')
+  const fixed = boot('gg_theme=light', false)
+  fixed.phoneTurns(true)
+  eq(fixed.dark(), false, '  …which never moves a page set to Light')
+
+  eq(themeChoiceOf('x=1; gg_theme=system'), 'system', 'the choice reads back off the cookie')
+  eq(themeChoiceOf('gg_theme=purple'), 'light', '  …and anything else is light')
+  eq(resolvesDark('system', true) && !resolvesDark('light', true) && resolvesDark('dark', false), true,
+    'resolvesDark agrees with the script')
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

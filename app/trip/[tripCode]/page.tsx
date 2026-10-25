@@ -631,15 +631,12 @@ export default async function TripPage({ params, searchParams }: {
     </p>
   ))
 
-  // The gear in the header's corner — a claimed player's OWN preferences
-  // (dark mode, so far), saved to their player row. Not a second door to
-  // Trip Setup, which stays on the tab bar: that room is the trip's, this
-  // one is the person's. A device that is nobody yet gets no gear at all —
-  // personalisation belongs to a claimed player, and an unclaimed phone has
-  // nobody to save it against.
-  const preferences = me && isConfirmed(me)
-    ? <PlayerSettings tripId={trip.id} playerId={me.id} />
-    : undefined
+  // The gear in the header's corner — this phone's OWN preferences, on
+  // every hub: appearance is the device's (light, dark, system), and a phone
+  // that went dark must always have the way back. The nickname inside it
+  // is a claimed player's, so it is handed the player only when there is
+  // one. Not a second door to Trip Setup, which stays on the tab bar.
+  const preferences = <PlayerSettings tripId={trip.id} playerId={me && isConfirmed(me) ? me.id : null} />
 
   const [koView, myDetails] = await Promise.all([knockoutView, myMatchDetails])
 
