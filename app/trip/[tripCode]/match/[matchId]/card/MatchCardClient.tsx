@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
+import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { hasUnlocked, isLocked } from '@/lib/passcode'
 import {
@@ -203,6 +203,10 @@ export default function MatchCardClient({
   // entered by hand, a walkover — it is the organiser's deliberate tap, never
   // something that happens because they opened the card with the PIN in.
   const writing = useRef(false)
+  // In the browser yet? The pinned bar portals to <body>, which the server has not got.
+  const inBrowser = useSyncExternalStore(() => () => {}, () => true, () => false)
+  // Which way the hole just changed, so the new one slides in from that side.
+  const [slide, setSlide] = useState<'slide-in-right' | 'slide-in-left' | ''>('')
   // Where a sideways swipe between holes began (onTouchStart below).
   const swipe = useRef<{ x: number; y: number } | null>(null)
   const writeResult = useCallback(() => {
@@ -263,7 +267,12 @@ export default function MatchCardClient({
 
   // Swipe between holes: left for the next, right for the previous — a
   // sideways stroke only, so scrolling the page never moves the hole.
-  const goTo = (n: number) => setHole(Math.max(1, Math.min(holes.length, n)))
+  const goTo = (n: number) => {
+    const next = Math.max(1, Math.min(holes.length, n))
+    if (next === current) return
+    setSlide(next > current ? 'slide-in-right' : 'slide-in-left')
+    setHole(next)
+  }
   const onTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0]
     swipe.current = { x: t.clientX, y: t.clientY }
@@ -295,7 +304,8 @@ export default function MatchCardClient({
       const n = parseInt(raw, 10)
       if (!isNaN(n) && n >= 1 && n <= MAX_GROSS) setGross(p.id, current, n)
     }
-    const stepClass = 'flex-1 h-12 rounded-xl border border-line text-ink/80 text-3xl leading-none ' +
+    // Squares, as tall as they are wide — a thumb's target on the green.
+    const stepClass = 'flex-1 aspect-square rounded-xl border border-line text-ink/80 text-4xl leading-none ' +
       'active:scale-95 transition-all flex items-center justify-center disabled:opacity-20 disabled:cursor-not-allowed'
     return (
       <div key={p.id} className={`p-2.5 bg-surface border rounded-xl ${isNR ? 'border-rust/40' : 'border-line'}`}>
@@ -306,17 +316,22 @@ export default function MatchCardClient({
               {shots > 0 ? `${'•'.repeat(shots)} ${shots === 1 ? 'shot' : 'shots'}` : 'No shot'}
             </p>
           </div>
+          {/* The button reaches past what it draws: the padding is a margin
+              for a slightly missed tap, given back by the negative margin so
+              the layout does not move. */}
           <button
             type="button"
             disabled={!canEdit}
             onClick={() => setGross(p.id, current, isNR ? undefined : null)}
             aria-pressed={isNR}
             aria-label={`No return for ${p.name}`}
-            className={`text-sm border rounded-xl px-3 py-1 transition-colors flex-shrink-0 disabled:opacity-40 ${
-              isNR ? 'border-rust/50 text-rust-deep bg-rust/10' : 'border-line text-ink/50'
-            }`}
+            className="-m-2.5 p-2.5 flex-shrink-0 disabled:opacity-40"
           >
-            NR
+            <span className={`flex items-center justify-center h-11 min-w-14 px-4 border rounded-xl t-label font-semibold transition-colors ${
+              isNR ? 'border-rust/50 text-rust-deep bg-rust/10' : 'border-line-strong text-ink/65'
+            }`}>
+              NR
+            </span>
           </button>
         </div>
         {isNR ? (
@@ -337,7 +352,9 @@ export default function MatchCardClient({
             }`}
             // Sized and set here, not by class: the site's unlayered input rule
             // sets every field's face and size and would win over a utility.
-            style={{ fontFamily: 'var(--font-serif)', fontSize: 44, lineHeight: '4rem', borderColor: value !== null ? colours[key].fill : undefined }}
+            // A line height of 1 lets the box centre the figure; a line as
+            // tall as the box sat it on the bottom edge on a phone.
+            style={{ fontFamily: 'var(--font-serif)', fontSize: 44, lineHeight: 1, paddingTop: 2, borderColor: value !== null ? colours[key].fill : undefined }}
           />
         )}
         <div className="flex gap-2 mt-2">
@@ -384,6 +401,9 @@ export default function MatchCardClient({
         </div>
       </div>
 
+      {/* Everything about the hole being played slides in from the side it
+          was swiped from; the strip above it stays put. */}
+      <div key={current} className={`flex flex-col gap-3 ${slide}`}>
       {/* The match as it stands on the left; the hole being played,
           large, on the right */}
       <div className="flex items-end justify-between gap-3">
@@ -449,28 +469,38 @@ export default function MatchCardClient({
         )}
         {holeLabel}
       </p>
-
-      {/* Previous and next — trip scoring's pair */}
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={() => goTo(current - 1)}
-          disabled={current <= 1}
-          aria-label="Previous hole"
-          className="flex-1 py-3 border border-line text-ink/65 text-2xl rounded-xl active:bg-tint transition-colors disabled:opacity-25"
-        >
-          ←
-        </button>
-        <button
-          type="button"
-          onClick={() => goTo(current + 1)}
-          disabled={current >= holes.length}
-          aria-label="Next hole"
-          className="flex-[2] py-3 bg-accent-deep text-white text-2xl font-bold rounded-xl hover:bg-accent active:scale-[0.98] transition-all disabled:opacity-30"
-        >
-          →
-        </button>
       </div>
+
+      {/* Previous and next, pinned to the bottom of the screen above the
+          tab bar — portalled to <body> so no ancestor's transform can pin
+          it to the page instead. Fixed to the page's own bottom edge, a
+          keyboard opening for the score box covers it rather than pushing
+          it up over the boxes. */}
+      {inBrowser && createPortal(
+        <div className="fixed inset-x-0 z-30 paper border-t border-line bottom-[calc(64px+env(safe-area-inset-bottom))] print:hidden">
+          <div className="max-w-lg mx-auto px-4 py-2 flex gap-3">
+            <button
+              type="button"
+              onClick={() => goTo(current - 1)}
+              disabled={current <= 1}
+              aria-label="Previous hole"
+              className="flex-1 py-3 border border-line bg-surface text-ink/65 text-2xl rounded-xl active:bg-tint transition-colors disabled:opacity-25"
+            >
+              ←
+            </button>
+            <button
+              type="button"
+              onClick={() => goTo(current + 1)}
+              disabled={current >= holes.length}
+              aria-label="Next hole"
+              className="flex-[2] py-3 bg-accent-deep text-white text-2xl font-bold rounded-xl hover:bg-accent active:scale-[0.98] transition-all disabled:opacity-30"
+            >
+              →
+            </button>
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {error && <p className="text-rust-deep text-sm text-center leading-snug">{error}</p>}
 
@@ -494,9 +524,8 @@ export default function MatchCardClient({
         </div>
       )}
 
-      <p className="t-cap text-center">
-        <Link href={`/trip/${tripCode}/scoring`} className="text-accent-deep hover:text-accent">Every live match →</Link>
-      </p>
+      {/* Room for the pinned previous/next bar, so the last line is never under it. */}
+      <div className="h-16" aria-hidden="true" />
     </div>
   )
 }
