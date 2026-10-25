@@ -18,6 +18,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import fs from 'fs'
+import { isStaleBuildError, shouldReload, RELOAD_GAP_MS } from '../lib/staleBuild'
 import Home from '../app/page'
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime'
 import Wordmark from '../app/components/Wordmark'
@@ -86,6 +87,27 @@ section('The palette is defined once, in one place')
     ok(css.includes(`--color-${name}:`), `${name} is a token`)
     ok(css.toUpperCase().includes(hex.toUpperCase()), `${name} is ${hex}`)
   }
+}
+
+section('A page left open across a deploy reloads onto the new version')
+{
+  // lib/staleBuild.ts — Ross saw the bare "Application error" after a push
+  // with a tab already open; a refresh cured it, so the site refreshes itself.
+  for (const msg of [
+    'ChunkLoadError: Loading chunk 123 failed.',
+    'Failed to fetch dynamically imported module: https://greendot.live/_next/static/chunks/x.js',
+    'Importing a module script failed.',
+    'Loading CSS chunk 9 failed',
+  ]) ok(isStaleBuildError(new Error(msg)), `a missing file from an older version is recognised: ${msg.slice(0, 40)}`)
+  ok(isStaleBuildError({ name: 'ChunkLoadError', message: '' }), '  …by its name too')
+  ok(!isStaleBuildError(new Error("Cannot read properties of undefined (reading 'id')")), 'an ordinary fault is not mistaken for one — that gets the calm message')
+  ok(!isStaleBuildError(null), '  …and nothing is nothing')
+  ok(shouldReload(null, 1000) && !shouldReload(1000, 1000 + RELOAD_GAP_MS - 1) && shouldReload(1000, 1000 + RELOAD_GAP_MS),
+    'one reload a minute at most, so a failure a reload cannot cure never loops')
+  const layout = read('app/layout.tsx')
+  ok(layout.includes('<StaleBuildGuard />'), 'every page listens for it')
+  ok(fs.existsSync('app/error.tsx') && fs.existsSync('app/global-error.tsx'), 'and the error pages are the site\'s own, never the bare Next one')
+  ok(read('app/components/ErrorScreen.tsx').includes('if (reloading) reloadForNewVersion()'), '  …which reload for a stale version first')
 }
 
 section('The old identity is gone')
