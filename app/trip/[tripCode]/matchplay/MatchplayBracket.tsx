@@ -1,5 +1,6 @@
 'use client'
 
+import { sideColours, sideTint, type SideColour } from '@/lib/matchSides'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   tileTop, tileCenter, columnX, columnHeight,
@@ -50,6 +51,8 @@ export type BracketEntrantRow = {
   /** What fits on a tile. "Ross" for a player, "Ross & Dave" for a pairing. */
   shortName: string
   handicap: number | null
+  /** The team colour the side plays in, where it has one (lib/matchSides.ts). */
+  colour?: string | null
 }
 
 // ─── Fixed dimensions ──────────────────────────────────────────
@@ -531,9 +534,15 @@ function MatchTile({
   // A bye has a winner but was never played, so it is not a "won" match
   const isBye   = match.player_a_is_bye || match.player_b_is_bye
   const decided = !!match.winner_player_id && !isBye
-  // Winning the Final is winning the whole thing — gold rather than the green
-  // an ordinary win gets, and a glow so it reads as the end of the bracket.
+  // Winning the Final is winning the whole thing: the tile fills in the
+  // champion's colour.
   const isChampion = decided && !match.next_match_id
+  // Top red, bottom blue — or the two sides' team colours (lib/matchSides.ts).
+  const colours = sideColours(
+    match.player_a_id ? playerById.get(match.player_a_id)?.colour : null,
+    match.player_b_id ? playerById.get(match.player_b_id)?.colour : null,
+  )
+  const winnerColour = match.winner_player_id === match.player_a_id ? colours.A : colours.B
   // Byes are genuinely inert: there is no decision to make, so no handler is
   // attached at all rather than a handler that declines to act.
   const interactive = isDecidable(match)
@@ -628,16 +637,15 @@ function MatchTile({
       }}
     >
       <div
+        data-champion={isChampion || undefined}
+        data-decided={decided || undefined}
         className={`relative w-full rounded-lg border overflow-hidden ${
-          // Gold is winning (lib/resultTone.ts): the champion solid, a
-          // decided match outlined, its winner's row in the tint.
-          isChampion
-            ? 'border-gold bg-gold'
-            : decided
-              ? 'border-gold/60 bg-surface'
-              : 'border-line bg-surface'
+          isChampion ? '' : 'border-line bg-surface'
         }`}
         style={{
+          // The champion solid in their side's colour; every other tile
+          // marks its winner on the winner's own row.
+          ...(isChampion ? { backgroundColor: winnerColour.fill, borderColor: winnerColour.fill } : {}),
           height: TILE_H,
           transform: `scale(${scale})`,
           transition: feedback === 'holding'
@@ -656,8 +664,10 @@ function MatchTile({
           isChampion={isChampion && match.winner_player_id === match.player_a_id}
           result={match.result}
           playerById={playerById}
+          colour={colours.A}
+          onChampion={isChampion ? winnerColour : null}
         />
-        <div className={`h-px ${isChampion ? 'bg-on-gold/20' : 'bg-line'}`} />
+        <div className="h-px bg-line" />
         <Side
           playerId={match.player_b_id}
           isBye={match.player_b_is_bye}
@@ -667,6 +677,8 @@ function MatchTile({
           isChampion={isChampion && match.winner_player_id === match.player_b_id}
           result={match.result}
           playerById={playerById}
+          colour={colours.B}
+          onChampion={isChampion ? winnerColour : null}
         />
 
         {/* Fills over the hold so it is clear the press is doing something
@@ -698,54 +710,57 @@ function MatchTile({
 }
 
 function Side({
-  playerId, isBye, seed, isWinner, isLoser, isChampion, result, playerById,
+  playerId, isBye, seed, isWinner, isLoser, isChampion, result, playerById, colour, onChampion,
 }: {
   playerId: string | null
   isBye: boolean
   seed: number | null
   isWinner: boolean
-  /** Played and beaten — the darker brown. */
+  /** Played and beaten — faded back. */
   isLoser: boolean
   isChampion: boolean
   result: string | null
   playerById: Map<string, BracketEntrantRow>
+  /** This side's colour in the match — top red, bottom blue, or a team's. */
+  colour: SideColour
+  /** On the Final's tile, once won: the champion's colour the tile is filled in. */
+  onChampion: SideColour | null
 }) {
   const player = playerId ? playerById.get(playerId) : null
   // Worked out upstream: a first name for a player, both first names for a
   // pairing. Splitting it here would turn "Ross & Dave" back into "Ross".
   const shortName = player ? player.shortName : ''
+  // Words on the champion's fill read in its own ink; elsewhere the page's.
+  const ink = onChampion ? { color: onChampion.on } : undefined
 
   return (
     <div
-      className={`h-[37px] flex items-center gap-1.5 pl-1.5 pr-2 ${
-        isChampion ? '' : isWinner ? 'bg-gold-tint' : ''
-      }`}
+      data-result={isWinner ? 'won' : isLoser ? 'lost' : undefined}
+      className="h-[37px] flex items-center gap-1.5 pl-1.5 pr-2"
+      style={isWinner && !onChampion ? { backgroundColor: sideTint(colour) } : undefined}
     >
-      {/* A gold edge marks the winner at a glance, before you read anything;
-          brown the side that lost */}
+      {/* The side's colour on its edge: every name says which side of the
+          match it is on, and the winner's row is washed in it. */}
       <span
-        className={`w-[3px] h-6 rounded-full flex-shrink-0 ${
-          isChampion ? 'bg-on-gold' : isWinner ? 'bg-gold' : isLoser ? 'bg-bark' : 'bg-transparent'
-        }`}
+        className={`w-[3px] h-6 rounded-full flex-shrink-0 ${isLoser ? 'opacity-35' : ''}`}
+        style={{ backgroundColor: onChampion ? onChampion.on : player ? colour.fill : 'transparent' }}
       />
 
-      <span className="w-3 flex-shrink-0 text-[12px] tabular-nums text-ink/50 text-right">
+      <span className="w-3 flex-shrink-0 text-[12px] tabular-nums text-ink/50 text-right" style={ink}>
         {isBye ? '' : seed ?? ''}
       </span>
 
       {isBye ? (
-        <span className="flex-1 text-[12px] text-ink/50">
+        <span className="flex-1 text-[12px] text-ink/50" style={ink}>
           Bye
         </span>
       ) : player ? (
         <>
           <span
             className={`flex-1 min-w-0 truncate text-sm leading-none ${
-              isChampion ? 'text-on-gold font-semibold'
-                : isWinner ? 'text-gold-deep font-semibold'
-                : isLoser ? 'text-bark'
-                : 'text-ink/80'
+              isChampion || isWinner ? 'font-semibold text-ink' : isLoser ? 'text-ink/50' : 'text-ink/80'
             }`}
+            style={ink}
           >
             {shortName}
           </span>
@@ -753,19 +768,17 @@ function Side({
           {/* The margin replaces the handicap once a match is won — by then
               the score is the thing worth knowing */}
           {isWinner && result ? (
-            <span className={`flex-shrink-0 text-[12px] font-semibold tabular-nums ${
-              isChampion ? 'text-on-gold' : 'text-gold-deep'
-            }`}>
+            <span className="flex-shrink-0 text-[12px] font-semibold tabular-nums text-ink" style={ink}>
               {result}
             </span>
           ) : (
-            <span className="flex-shrink-0 text-[12px] tabular-nums text-ink/65">
+            <span className="flex-shrink-0 text-[12px] tabular-nums text-ink/65" style={ink}>
               {player.handicap ?? '—'}
             </span>
           )}
         </>
       ) : (
-        <span className="flex-1 text-[12px] text-ink/50 italic">To be decided</span>
+        <span className="flex-1 text-[12px] text-ink/50 italic" style={ink}>To be decided</span>
       )}
     </div>
   )

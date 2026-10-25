@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { hasMatchplay, needsPairings, tripQuotaScale } from '@/lib/leaderboards'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
-import { MAIN_SET, setOf, teamsOnSheet, membersOf } from '@/lib/teamSets'
+import { MAIN_SET, setOf, teamsOnSheet, membersOf, teamFor } from '@/lib/teamSets'
+import { commonColour } from '@/lib/matchSides'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { playerEntrant, pairEntrant, type Entrant } from '@/lib/matchplayEntrants'
 import { parseTeamScoring } from '@/lib/teamScoring'
@@ -78,7 +79,7 @@ export default async function MatchplayPage({
     // this a single round trip rather than a conditional second one.
     supabase
       .from('teams')
-      .select('id, name, team_set')
+      .select('id, name, team_set, color')
       .eq('trip_id', trip.id),
     fetchMemberships(trip.id),
     // Leaderboard nicknames, on their own and fail-soft: naming the column
@@ -130,6 +131,14 @@ export default async function MatchplayPage({
         return pairEntrant(t, roster.filter(p => ids.includes(p.id)))
       })
     : roster.map(playerEntrant)
+  // Each side's team colour, where all its players share a side of the
+  // event (lib/matchSides.ts decides whether a match wears it).
+  const teamColour = new Map(((teamsRes.data ?? []) as { id: string; color?: string | null }[])
+    .map(t => [t.id, t.color ?? null]))
+  const colourOf = (id: string) => commonColour(
+    (storedAsPairs ? membersOf(memberships, id) : [id])
+      .map(pid => teamColour.get(teamFor(memberships, pid, MAIN_SET) ?? '') ?? null))
+  const coloured = entrants.map(e => ({ ...e, colour: colourOf(e.id) }))
 
   // A pairs row keeps its sides in the team columns; everything downstream
   // works in one shape, so they are moved across on the way in.
@@ -199,7 +208,7 @@ export default async function MatchplayPage({
         ) : (
           <MatchplayBracket
             matches={matches as unknown as BracketMatchRow[]}
-            entrants={entrants as BracketEntrantRow[]}
+            entrants={coloured as BracketEntrantRow[]}
             readings={readings}
             deadlines={deadlines}
             today={todayString(new Date())}

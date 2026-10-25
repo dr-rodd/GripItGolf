@@ -614,7 +614,26 @@ guard('match card', () => {
   eq(holeOutcomes(holes, A, B, card([4], []), none)[0].winner, null,
     'a hole only one side has entered is not yet a hole of the match — the first phone to tap does not win it')
   eq(holeOutcomes(holes, A, B, card([], []), new Map([[1, 'A' as const]]))[0],
-    { holeNumber: 1, winner: 'B', conceded: true, nettA: null, nettB: null }, 'a hole conceded by Ann is Bob\'s, scores or not')
+    { holeNumber: 1, winner: 'B', conceded: true, nettA: null, nettB: null, nrA: false, nrB: false },
+    'a hole conceded by Ann (a card from before NR) is still Bob\'s, scores or not')
+
+  // An NR — the player picked up — is a score row with no gross.
+  const nr = (a: (number | null)[], b: (number | null)[]) => new Map<string, Map<number, number | null>>([
+    ['ann', new Map(a.map((g, i) => [i + 1, g]))],
+    ['bob', new Map(b.map((g, i) => [i + 1, g]))],
+  ])
+  eq(holeOutcomes(holes, A, B, nr([null], [9]), none)[0].winner, 'B',
+    'an NR loses to a number, even a 9 that scores nothing')
+  eq(holeOutcomes(holes, A, B, nr([3], [null]), none)[0].winner, 'A', '  …from either side')
+  const twoNR = holeOutcomes(holes, A, B, nr([null], [null]), none)[0]
+  eq([twoNR.winner, twoNR.nrA, twoNR.nrB], ['halved', true, true], 'two NRs halve the hole')
+  eq(holeOutcomes(holes, A, B, nr([null], []), none)[0].winner, null, 'an NR on one side alone waits for the other')
+  const pairNR = holeOutcomes(holes,
+    { id: 'pa', players: [{ id: 'a1', gender: 'M', receives: 0 }, { id: 'a2', gender: 'M', receives: 0 }] },
+    { id: 'pb', players: [{ id: 'b1', gender: 'M', receives: 0 }, { id: 'b2', gender: 'M', receives: 0 }] },
+    new Map<string, Map<number, number | null>>([['a1', new Map([[1, null]])], ['a2', new Map([[1, 4]])], ['b1', new Map([[1, 5]])], ['b2', new Map([[1, null]])]]),
+    none)[0]
+  eq([pairNR.winner, pairNR.nettA, pairNR.nrA], ['A', 4, false], 'a pairing with one NR plays its partner\'s ball')
 
   const pairA = { id: 'pa', players: [{ id: 'a1', gender: 'M', receives: 0 }, { id: 'a2', gender: 'M', receives: 4 }] }
   const pairB = { id: 'pb', players: [{ id: 'b1', gender: 'M', receives: 1 }, { id: 'b2', gender: 'M', receives: 0 }] }

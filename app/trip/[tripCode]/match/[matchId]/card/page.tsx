@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { isMine } from '@/lib/knockoutPortal'
 import { splitCourseName } from '@/lib/courseDirectory'
+import { allowsParticipant } from '@/lib/eventPermissions'
+import { sideColours } from '@/lib/matchSides'
 import TripHeader from '@/app/components/TripHeader'
 import BackButton from '@/app/components/BackButton'
 import { buttonClass } from '@/app/components/ui'
@@ -15,9 +17,9 @@ export const dynamic = 'force-dynamic'
 
 /**
  * A knockout match's own scorecard (docs/event-use-cases.md, story 2,
- * stage 4) — the top of the draw on the left, the bottom on the right, each
- * player's gross a hole with the shots they receive marked, and a concede
- * button for each side. The rules are lib/matchCard.ts's; this page hands
+ * stage 4) — the top of the draw on the left in red, the bottom on the right
+ * in blue, each player's gross a hole with the shots they receive marked,
+ * and NR for a player who picks up. The rules are lib/matchCard.ts's; this page hands
  * the card its holes, its sides and their shots, which come off the
  * arrangement (the course and each player's tee — the match page's job,
  * so a match not yet arranged is sent back there).
@@ -72,6 +74,17 @@ export default async function MatchCardPage({
             mySide={mySide}
             passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null}
             stored={{ winner: match.winner, result: match.result }}
+            colours={sideColours(
+              match.sideA ? view.colours[match.sideA] : null,
+              match.sideB ? view.colours[match.sideB] : null,
+            )}
+            // Open to anybody with the code unless the organiser keeps it to
+            // the players (lib/eventPermissions.ts, `score_matches`).
+            anyoneScores={allowsParticipant(
+              (trip as { kind?: unknown }).kind,
+              (trip as { event_permissions?: unknown }).event_permissions,
+              'score_matches',
+            )}
           />
         ) : (
           <div className="text-center">

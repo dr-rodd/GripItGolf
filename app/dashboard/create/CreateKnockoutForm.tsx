@@ -18,7 +18,7 @@ import PublicPinField from '@/app/components/PublicPinField'
 import { parseHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import {
-  type EventPermissions, defaultPermissions, storedPermissions,
+  type EventPermissions, defaultPermissions, permissionsFor, storedPermissions,
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import { knockoutBoards, knockoutSeed } from '@/lib/bracketSetup'
@@ -544,7 +544,7 @@ export default function CreateKnockoutForm() {
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
                 What the field can do for itself. Editable in the organiser area.
               </p>
-              <EventPermissionToggles value={perms} onChange={setPerms} />
+              <EventPermissionToggles value={perms} onChange={setPerms} registry={permissionsFor(false, true)} />
             </div>
 
             <div className={`px-4 py-4 ${cardClass()}`}>

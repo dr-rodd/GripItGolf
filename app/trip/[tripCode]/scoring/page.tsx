@@ -270,7 +270,7 @@ export default async function TripCoursePortalPage({
 
         {knockoutView && (
           <div className="mb-8">
-            <KnockoutPortal tripCode={tripCode} view={knockoutView} live={knockoutRead?.live ?? []} today={todayString(new Date())} />
+            <KnockoutPortal tripCode={tripCode} view={knockoutView} live={knockoutRead?.live ?? []} today={todayString(new Date())} anyoneScores={allowsParticipant(kind, permsRaw, 'score_matches')} />
           </div>
         )}
 

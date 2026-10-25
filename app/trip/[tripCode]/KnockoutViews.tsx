@@ -10,7 +10,7 @@ import {
 } from '@/lib/knockoutPortal'
 import type { KnockoutView } from './knockout'
 import type { LiveMatch } from './match/matchCards'
-import { RESULT_PILL, sideTone, type ResultTone } from '@/lib/resultTone'
+import { sideColours, sideTint, type SideColour } from '@/lib/matchSides'
 import { usePoll } from '@/app/scoring/usePoll'
 import { cardClass } from '@/app/components/ui'
 import { IconChevronRight } from '@/app/components/icons'
@@ -68,7 +68,7 @@ export function NextMatchCard({ tripCode, view, live = null, today }: {
                 <p className="flex items-center gap-1.5 t-cap text-accent-deep mt-0.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-accent dot-live flex-shrink-0" aria-hidden="true" />
                   Live
-                  <span className={`px-2 py-0.5 rounded-full font-semibold ${RESULT_PILL[myTone(live, view.entrantId)]}`}>
+                  <span className="px-2 py-0.5 rounded-full font-semibold text-ink" style={standingStyle(live, view)}>
                     {myStanding(live, view.entrantId)}
                   </span>
                 </p>
@@ -91,15 +91,18 @@ export function NextMatchCard({ tripCode, view, live = null, today }: {
 
 /**
  * The bracket's rounds on the Scoring tab, the one being played open. In
- * each, this player's own match sits on top and is the one that opens —
- * active — and the rest are listed, inactive, with their results.
+ * each, this player's own match sits on top, chosen; the rest open too
+ * while anybody may score a match (`score_matches`), and are listed
+ * inactive when only their players may.
  */
-export function KnockoutPortal({ tripCode, view, live = [], today }: {
+export function KnockoutPortal({ tripCode, view, live = [], today, anyoneScores = true }: {
   tripCode: string
   view: KnockoutView
   /** The matches being played now, off their cards (`readLiveMatches`). */
   live?: LiveMatch[]
   today: string
+  /** Anybody may score any match — every match opens, not only your own. */
+  anyoneScores?: boolean
 }) {
   const rounds = portalRounds(view.matches, view.entrantId, view.deadlines)
   const [open, setOpen] = useState<number | null>(() => currentRound(rounds)?.roundNumber ?? null)
@@ -159,10 +162,15 @@ export function KnockoutPortal({ tripCode, view, live = [], today }: {
                   const b = nameOf(m.sideB) ?? 'To be decided'
                   const result = describeResult(m, nameOf)
                   const now = liveById.get(m.id)
+                  // Anybody can score an open match, so every one with both
+                  // sides known opens — yours still sits on top, chosen.
+                  const opens = !m.mine && anyoneScores && !!m.sideA && !!m.sideB && !m.aIsBye && !m.bIsBye
                   const body = (
                     <>
                       <span className="min-w-0">
-                        <span className="block text-sm font-medium text-ink truncate">{a} v {b}</span>
+                        <span className="block text-sm font-medium text-ink truncate">
+                          <SideNames a={a} b={b} colours={coloursOf(view, m.sideA, m.sideB)} />
+                        </span>
                         {now ? (
                           <span className="flex items-center gap-1.5 t-cap text-accent-deep truncate">
                             <span className="w-1.5 h-1.5 rounded-full bg-accent dot-live flex-shrink-0" aria-hidden="true" />
@@ -174,7 +182,7 @@ export function KnockoutPortal({ tripCode, view, live = [], today }: {
                           </span>
                         )}
                       </span>
-                      {m.mine && (
+                      {(m.mine || opens) && (
                         <span className="text-ink/50 flex-shrink-0" aria-hidden="true"><IconChevronRight size={20} /></span>
                       )}
                     </>
@@ -185,6 +193,13 @@ export function KnockoutPortal({ tripCode, view, live = [], today }: {
                         <Link
                           href={matchHref(tripCode, m.id)}
                           className={`flex items-center justify-between gap-3 px-4 py-3 ${cardClass('chosen', true)}`}
+                        >
+                          {body}
+                        </Link>
+                      ) : opens ? (
+                        <Link
+                          href={matchHref(tripCode, m.id)}
+                          className={`flex items-center justify-between gap-3 px-4 py-3 ${cardClass('flat', true)}`}
                         >
                           {body}
                         </Link>
@@ -213,21 +228,40 @@ export function KnockoutPortal({ tripCode, view, live = [], today }: {
 
 // ─── Live ──────────────────────────────────────────────────────
 
-/** Your side of a live match: up and won gold, down and lost brown. */
-function myTone(l: LiveMatch, entrantId: string | null): ResultTone {
-  const seat = entrantId === l.sideA ? 'A' : entrantId === l.sideB ? 'B' : null
-  return seat ? sideTone(seat, l.state) : 'level'
+/** The two sides' colours: top red, bottom blue, or their team colours (lib/matchSides.ts). */
+function coloursOf(view: KnockoutView, a: string | null, b: string | null): Record<'A' | 'B', SideColour> {
+  return sideColours(a ? view.colours?.[a] : null, b ? view.colours?.[b] : null)
+}
+
+/** "● Ann v ● Bob" — each name with its side's colour, the same on every phone. */
+function SideNames({ a, b, colours }: { a: string; b: string; colours: Record<'A' | 'B', SideColour> }) {
+  const dot = (c: SideColour) => (
+    <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: c.fill }} aria-hidden="true" />
+  )
+  return <>{dot(colours.A)}{a} v {dot(colours.B)}{b}</>
+}
+
+/**
+ * A live match's standing, in the colour of whoever is ahead: the side's
+ * colour solid once won, washed while up, neutral when all square. Never
+ * from the viewer's side — every phone shows the same.
+ */
+function standingStyle(l: LiveMatch, view: KnockoutView): React.CSSProperties {
+  if (l.state.leader === null) return { backgroundColor: 'var(--color-tint)' }
+  const c = coloursOf(view, l.sideA, l.sideB)[l.state.leader]
+  return l.state.settled ? { backgroundColor: c.fill, color: c.on } : { backgroundColor: sideTint(c, 22) }
 }
 
 /** "2 up thru 7", "1 down thru 12", "All square thru 9" — from your side. */
 function myStanding(l: LiveMatch, entrantId: string | null): string {
-  const tone = myTone(l, entrantId)
+  const seat = entrantId === l.sideA ? 'A' : entrantId === l.sideB ? 'B' : null
   const thru = `thru ${l.state.played}`
-  if (tone === 'won') return `Won ${l.state.result}`
-  if (tone === 'lost') return `Lost ${l.state.result}`
-  if (tone === 'up') return `${l.state.up} up ${thru}`
-  if (tone === 'down') return `${l.state.up} down ${thru}`
-  return l.state.played > 0 ? (l.state.extra ? l.state.progress : `All square ${thru}`) : 'Started'
+  if (!seat || l.state.leader === null) {
+    return l.state.played > 0 ? (l.state.extra ? l.state.progress : `All square ${thru}`) : 'Started'
+  }
+  const ahead = l.state.leader === seat
+  if (l.state.settled) return `${ahead ? 'Won' : 'Lost'} ${l.state.result}`
+  return `${l.state.up} ${ahead ? 'up' : 'down'} ${thru}`
 }
 
 /** "Ann 2 up thru 7", "All square thru 9", "Ann won 3&2". */
@@ -241,8 +275,8 @@ function liveLine(l: LiveMatch, nameOf: (id: string | null) => string | null): s
 /**
  * The matches being played now, at the top of the Scoring tab — the match
  * play live leaderboard. Each opens its card, read-only to anybody not in
- * it. The standing wears the result colours: gold for whoever is up (and,
- * on your own match, brown when it is you who is down); green says live.
+ * it. The standing wears the colour of the side ahead — top of the draw
+ * red, bottom blue — the same on every phone; green says live.
  */
 function LiveBoard({ tripCode, view, live }: { tripCode: string; view: KnockoutView; live: LiveMatch[] }) {
   const nameOf = (id: string | null) => (id ? view.names[id] ?? null : null)
@@ -258,9 +292,6 @@ function LiveBoard({ tripCode, view, live }: { tripCode: string; view: KnockoutV
       <ul className="px-3 pb-3 space-y-2">
         {live.map(l => {
           const mine = view.entrantId === l.sideA || view.entrantId === l.sideB
-          const seat = !mine ? null : view.entrantId === l.sideA ? 'A' : 'B'
-          const tone: ResultTone = l.state.leader === null ? 'level'
-            : sideTone(seat ?? l.state.leader, l.state)
           const standing = l.state.leader === null
             ? (l.state.extra ? 'All square · extra holes' : 'All square')
             : l.state.settled ? `${nameOf(l.leaderId) ?? 'Won'} ${l.state.result}`
@@ -274,11 +305,11 @@ function LiveBoard({ tripCode, view, live }: { tripCode: string; view: KnockoutV
               >
                 <span className="min-w-0">
                   <span className="block text-sm font-medium text-ink truncate">
-                    {nameOf(l.sideA) ?? 'A player'} v {nameOf(l.sideB) ?? 'A player'}
+                    <SideNames a={nameOf(l.sideA) ?? 'A player'} b={nameOf(l.sideB) ?? 'A player'} colours={coloursOf(view, l.sideA, l.sideB)} />
                   </span>
                   <span className="block t-cap text-ink/65 truncate">{l.roundName} · {thru}</span>
                 </span>
-                <span className={`flex-shrink-0 px-2.5 py-1 rounded-full t-cap font-semibold max-w-[45%] truncate ${RESULT_PILL[tone]}`}>
+                <span className="flex-shrink-0 px-2.5 py-1 rounded-full t-cap font-semibold max-w-[45%] truncate text-ink" style={standingStyle(l, view)}>
                   {standing}
                 </span>
               </Link>

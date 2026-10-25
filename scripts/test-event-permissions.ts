@@ -38,10 +38,12 @@ const read = (p: string) => fs.readFileSync(p, 'utf-8')
 section('Three seeded permissions, conservative by default')
 {
   eq(EVENT_PERMISSIONS.map(p => p.key),
-    ['add_courses', 'add_players', 'edit_scores', 'edit_tee_sheet', 'assign_tag', 'add_rounds', 'set_venues'],
-    'the three seeded keys, then the tee sheet, the tag and a league\'s rounds and venues — each the promised one-line addition')
-  ok(EVENT_PERMISSIONS.every(p => p.dflt === false),
-    'every default is off — the organiser opts in')
+    ['add_courses', 'add_players', 'edit_scores', 'edit_tee_sheet', 'assign_tag', 'add_rounds', 'set_venues', 'score_matches'],
+    'the three seeded keys, then the tee sheet, the tag, a league\'s rounds and venues, and scoring a match — each the promised one-line addition')
+  ok(EVENT_PERMISSIONS.every(p => p.dflt === (p.key === 'score_matches')),
+    'every default is off — the organiser opts in — except scoring a match, open unless the organiser closes it')
+  ok(!permissionsFor(false).some(p => p.key === 'score_matches') && permissionsFor(false, true).some(p => p.key === 'score_matches'),
+    'only a match play event is asked who scores its matches')
   ok(EVENT_PERMISSIONS.every(p => p.label.startsWith('Participants can')),
     'labels are plain language, said from the field\'s side')
   ok(EVENT_PERMISSIONS.every(p => p.hint.length > 0), 'each explains itself')
@@ -85,7 +87,7 @@ section('Storage reads whole, falls soft, and never nulls')
 
   const full: EventPermissions = {
     add_courses: true, add_players: false, edit_scores: true, edit_tee_sheet: false,
-    assign_tag: true, add_rounds: true, set_venues: false,
+    assign_tag: true, add_rounds: true, set_venues: false, score_matches: false,
   }
   eq(parseEventPermissions(JSON.parse(JSON.stringify(full))), full,
     'a full map reads back whole')
@@ -120,11 +122,13 @@ section('The gate opens for anything that is not an event')
 
 section('The admin card sums it up')
 {
-  ok(describePermissions(defaultPermissions()).includes('Organiser-run'),
+  ok(describePermissions({ ...defaultPermissions(), score_matches: false }).includes('Organiser-run'),
     'all off reads as organiser-run')
+  ok(describePermissions(defaultPermissions(), permissionsFor(false, true)).includes('anyone can score'),
+    '  …and a match play event at its defaults says its matches are open to score')
   const two = {
     add_courses: true, add_players: true, edit_scores: false, edit_tee_sheet: false,
-    assign_tag: false, add_rounds: false, set_venues: false,
+    assign_tag: false, add_rounds: false, set_venues: false, score_matches: false,
   }
   ok(describePermissions(two, permissionsFor(false)).includes('2 of 5'),
     'partial says the count, out of what this event is asked')
@@ -139,8 +143,8 @@ section('A series-only permission is asked of a series alone')
   ok(permissionsFor(true).some(p => p.key === 'add_rounds')
     && permissionsFor(true).some(p => p.key === 'set_venues'),
     'a series is')
-  eq(permissionsFor(true).map(p => p.key), EVENT_PERMISSIONS.map(p => p.key),
-    'a series is asked the whole registry, in order')
+  eq(permissionsFor(true).map(p => p.key), EVENT_PERMISSIONS.filter(p => !p.knockoutOnly).map(p => p.key),
+    'a series is asked the whole registry but match play\'s, in order')
   ok(!allowsParticipant('tournament', null, 'add_rounds')
     && !allowsParticipant('tournament', null, 'set_venues'),
     'off until the organiser opens it, like every other')

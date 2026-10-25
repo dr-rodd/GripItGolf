@@ -1,12 +1,18 @@
 // The match play scorecard — the only copy of its rules (docs/event-use-
 // cases.md, story 2, stage 4). Each player enters their gross a hole; the
 // shots come off the arrangement (lib/matchArrangements.ts `matchStrokes`,
-// the difference from the lowest); a pairing takes its better nett; and a
-// side may concede a hole outright. The wording of a result — "3&2",
-// "2 up thru 14" — is lib/matchDecision.ts's, the one copy.
+// the difference from the lowest); a pairing takes its better nett. The
+// wording of a result — "3&2", "2 up thru 14" — is lib/matchDecision.ts's,
+// the one copy.
+//
+// **A player who picks up is an NR** (no return — the hole given up; Ross,
+// 25 Oct 2026, in place of a Concede button): stored as a score row with
+// no gross (migration 062). **An NR loses to any number**, however many
+// strokes; a pairing with one NR plays its partner's ball; **two NRs halve
+// the hole**. Concessions from before (`match_concessions`) still count.
 //
 // **A hole counts once it is finished on both sides**: every player has a
-// score, or one side conceded it. The bracket's reader (`readMatch`) treats
+// score or an NR, or one side conceded it. The bracket's reader (`readMatch`) treats
 // a hole only one side has as lost, which is right for a signed card and
 // wrong for one being filled in on the green — the first phone to tap would
 // win the hole. That difference is why this is its own small tally.
@@ -28,8 +34,8 @@ export type CardSide = { id: string; players: CardPlayer[] }
 export type CardSideView = { id: string; name: string; players: (CardPlayer & { name: string })[] }
 export type CardHole = { holeNumber: number; par: number; strokeIndex: number; strokeIndexLadies?: number | null }
 
-/** Player id → hole number → gross. */
-export type CardScores = ReadonlyMap<string, ReadonlyMap<number, number>>
+/** Player id → hole number → gross, or null for an NR. Absent is not yet entered. */
+export type CardScores = ReadonlyMap<string, ReadonlyMap<number, number | null>>
 /** Hole number → the side that conceded it. */
 export type CardConcessions = ReadonlyMap<number, CardSideKey>
 
@@ -41,6 +47,9 @@ export type HoleOutcome = {
   /** Each side's figure — a pairing's better nett — once all its players have scored. */
   nettA: number | null
   nettB: number | null
+  /** The side picked up — every player in it an NR. */
+  nrA: boolean
+  nrB: boolean
 }
 
 /** The stroke index this player plays the hole off — the ladies' where a woman has one. */
@@ -52,15 +61,21 @@ export function shotsOn(h: CardHole, p: CardPlayer): number {
   return p.receives > 0 ? shotsReceived(p.receives, siFor(h, p.gender)) : 0
 }
 
-/** A side's nett on a hole: the better of its players', once every one has scored. */
-function sideNett(h: CardHole, side: CardSide, scores: CardScores): number | null {
+/**
+ * A side's figure on a hole: its better nett once every player has a score
+ * or an NR; 'NR' when all of them picked up; null while somebody has not
+ * entered anything.
+ */
+function sideNett(h: CardHole, side: CardSide, scores: CardScores): number | 'NR' | null {
   const netts: number[] = []
   for (const p of side.players) {
-    const gross = scores.get(p.id)?.get(h.holeNumber)
-    if (gross === undefined) return null
-    netts.push(gross - shotsOn(h, p))
+    const mine = scores.get(p.id)
+    if (!mine?.has(h.holeNumber)) return null
+    const gross = mine.get(h.holeNumber)
+    if (typeof gross === 'number') netts.push(gross - shotsOn(h, p))
   }
-  return netts.length > 0 ? Math.min(...netts) : null
+  if (side.players.length === 0) return null
+  return netts.length > 0 ? Math.min(...netts) : 'NR'
 }
 
 /** Every hole of the card, in order, with who won it so far. */
@@ -69,13 +84,25 @@ export function holeOutcomes(
   scores: CardScores, concessions: CardConcessions,
 ): HoleOutcome[] {
   return [...holes].sort((x, y) => x.holeNumber - y.holeNumber).map(h => {
-    const nettA = sideNett(h, a, scores)
-    const nettB = sideNett(h, b, scores)
+    const figA = sideNett(h, a, scores)
+    const figB = sideNett(h, b, scores)
     const gave = concessions.get(h.holeNumber)
-    if (gave) return { holeNumber: h.holeNumber, winner: gave === 'A' ? 'B' : 'A', conceded: true, nettA, nettB }
-    const winner = nettA === null || nettB === null ? null
-      : nettA === nettB ? 'halved' : nettA < nettB ? 'A' : 'B'
-    return { holeNumber: h.holeNumber, winner, conceded: false, nettA, nettB }
+    let winner: HoleOutcome['winner'] = null
+    if (gave) winner = gave === 'A' ? 'B' : 'A'
+    else if (figA !== null && figB !== null) {
+      winner = figA === 'NR' && figB === 'NR' ? 'halved'
+        : figA === 'NR' ? 'B' : figB === 'NR' ? 'A'
+          : figA === figB ? 'halved' : figA < figB ? 'A' : 'B'
+    }
+    return {
+      holeNumber: h.holeNumber,
+      winner,
+      conceded: !!gave,
+      nettA: typeof figA === 'number' ? figA : null,
+      nettB: typeof figB === 'number' ? figB : null,
+      nrA: figA === 'NR',
+      nrB: figB === 'NR',
+    }
   })
 }
 

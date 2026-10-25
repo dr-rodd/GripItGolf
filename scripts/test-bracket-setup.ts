@@ -380,7 +380,7 @@ section('Arranging a match: venue, tees, shots, contacts, a walkover — and the
   ok(mpage.includes('isEvent(setupRow?.kind) && setupRow?.settings_passcode_hash'), '  …a trip\'s bracket stays open')
 }
 
-section('The match play card: top of the draw left, bottom right, concede a hole, the result into the bracket')
+section('The match play card: top of the draw left, bottom right, NR, the result into the bracket')
 {
   const sql = read('supabase/migrations/20260101000058_match_cards.sql')
   ok(sql.includes('PRIMARY KEY (match_id, player_id, hole_number)') && sql.includes('PRIMARY KEY (match_id, hole_number)'),
@@ -388,13 +388,23 @@ section('The match play card: top of the draw left, bottom right, concede a hole
   ok(sql.includes("CHECK (conceded_by IN ('A', 'B'))"), '  …a concession says which side gave it')
   const client = read('app/trip/[tripCode]/match/[matchId]/card/MatchCardClient.tsx')
   ok(/sideColumn\('A', a\)\}\s*\{sideColumn\('B', b\)/.test(client), 'the top of the draw on the left, the bottom on the right')
-  ok(client.includes("'Concede hole'") && client.includes('concede(key, current)'), 'each side has its concede-hole button')
+  ok(!client.includes('Concede hole') && client.includes('setGross(p.id, current, isNR ? undefined : null)'),
+    'no concede button: each player has NR, saved as a score with no gross (migration 062)')
+  ok(read('supabase/migrations/20260101000062_match_no_return.sql').includes('ALTER COLUMN gross DROP NOT NULL'),
+    '  …which migration 062 lets the card keep')
+  ok(client.includes('const nettPar = h.par + shots') && client.includes('value === null ? nettPar'),
+    'the first tap of − or + lands on two points, nett par, as on a trip')
+  ok(client.includes('aria-label="Previous hole"') && client.includes('aria-label="Next hole"') && !client.includes('grid-cols-9'),
+    'previous and next move between holes — no grid of numbered holes')
+  ok(client.includes('backgroundColor: holeFill(o, isNow)'), 'the strip marks each hole in the colour of the side that won it')
   ok(client.includes('usePoll(load, 15_000, true)') && !client.includes('setInterval'), 'the other phone shows up, through the one poller')
   ok(client.includes('if (loaded && shouldWrite(state, winnerId, stored, false)) writeResult()'),
     'a settled card puts its result into an empty match by itself')
   ok(client.includes('persistWinner(all, matchId, winnerId as string, state.result)'), '  …through the bracket\'s own writer')
-  ok(client.includes('const canEdit = organiser || (inMatch && !decided)'),
-    'the players score their own match; once it is in, or for anyone else\'s, it is the admin PIN')
+  ok(client.includes('const canEdit = organiser || (!decided && (inMatch || anyoneScores))'),
+    'anybody scores an open match unless kept to its players; once it is in, it is the admin PIN')
+  ok(read('app/trip/[tripCode]/match/[matchId]/card/page.tsx').includes("'score_matches'"),
+    '  …the page asking the event\'s permission')
   ok(client.includes('offerOverwrite') && client.includes('onClick={writeResult}'),
     '  …and over a result already in, only by the organiser\'s deliberate tap')
   const page = read('app/trip/[tripCode]/match/[matchId]/card/page.tsx')

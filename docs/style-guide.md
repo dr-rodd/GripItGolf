@@ -22,7 +22,8 @@ code disagree, one of them is a bug: fix it, don't explain it.
   Archivo. Titles are Schibsted Grotesk.
 - **One emerald action per screen.** Emerald means the dot, live, and the one
   thing to press. A page with three emerald buttons has none. **A win is
-  gold, a loss brown** (`lib/resultTone.ts`).
+  gold, a loss brown** (`lib/resultTone.ts`) — except in match play, where
+  the sides are red and blue (`lib/matchSides.ts`).
 - **A number being read never moves.** A live score flashes its colour; it
   never slides, scales or counts while someone might be reading it.
 - **Facts, not explanations.** A board says "Stableford · Running total", a
@@ -51,13 +52,22 @@ gets baked into every opacity utility at build time and no theme can reach it.
 | `gold` | `#D4A02A` | `#E3B341` | Winning: a won pill, the champion's tile, a gained bar |
 | `gold-deep` | `#755610` | `#E9C46A` | Gold text — the leader's place, a winner's name, "2 up" |
 | `on-gold` | `#2B2118` | `#2B2118` | The ink on a gold fill, the same in both themes |
+| `side-a` | `#C62F3A` | `#F07373` | Match play: the top of the draw, the card's left — red |
+| `side-b` | `#2563B8` | `#6EA5F0` | Match play: the bottom of the draw, the card's right — blue |
+| `on-side` | `#FFFFFF` | `#1B1510` | The ink on either side's fill |
 
 - **Results have their own colours (Ross, 21 Oct 2026)**, and
   `lib/resultTone.ts` is the one copy: **gold for winning, the duller gold
   (`gold-tint`, gold lettering) for up; the brown, bark, for down
   (`bark-tint`) and solid bark for lost; green for live and nothing else.**
-  A match's sides, the bracket, a board's place 1 and its better-than-level
-  scores, the podium and a stat's gain all come through it. Score shapes on
+  A board's place 1 and its better-than-level scores, the podium and a
+  stat's gain come through it.
+- **A match is red and blue, never gold and brown (Ross, 25 Oct 2026).**
+  The top of the draw is red, the bottom blue — or the two sides' team
+  colours where they have different ones — and every phone shows the same,
+  whoever holds it: a hole on the card's strip, a standing on the live
+  board, a winner in the bracket all wear the side's colour.
+  `lib/matchSides.ts` is the one copy. Score shapes on
   the card (a birdie's circle) are not results and have not moved.
 - **Not the old gold.** `#C9A84C` in any spelling still fails the build:
   the previous identity's gold was decoration; this gold is a result.

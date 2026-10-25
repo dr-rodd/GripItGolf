@@ -4,6 +4,7 @@ import { MAIN_SET, membersOf, setOf, teamFor } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { drawDeadlines, parseBracketSetup } from '@/lib/bracketSetup'
 import type { PortalMatch } from '@/lib/knockoutPortal'
+import { commonColour } from '@/lib/matchSides'
 
 /**
  * A knockout as one player's screens read it — the hub's next-match card,
@@ -27,6 +28,12 @@ export type KnockoutView = {
   /** The date each drawn round is played by, in round order. */
   deadlines: (string | null)[]
   pairs: boolean
+  /**
+   * Side id → the team colour it plays in, where every player in it is on
+   * the same side of the event (a tag). lib/matchSides.ts decides whether
+   * a match wears them or red and blue.
+   */
+  colours: Record<string, string>
 }
 
 type Row = {
@@ -58,7 +65,7 @@ export async function readKnockout(
       .eq('trip_id', trip.id)
       .order('round_number').order('slot'),
     fetchMemberships(trip.id),
-    supabase.from('teams').select('id, name').eq('trip_id', trip.id),
+    supabase.from('teams').select('id, name, color').eq('trip_id', trip.id),
   ])
   if (matchesRes.error) console.error('readKnockout matches query failed:', matchesRes.error)
   const rows = (matchesRes.data ?? []) as unknown as Row[]
@@ -80,13 +87,23 @@ export async function readKnockout(
 
   const names: Record<string, string> = {}
   const members: Record<string, string[]> = {}
+  const teamRows = (teamsRes.data ?? []) as { id: string; name: string; color?: string | null }[]
   if (pairs) {
-    for (const t of (teamsRes.data ?? []) as { id: string; name: string }[]) {
+    for (const t of teamRows) {
       names[t.id] = t.name
       members[t.id] = membersOf(memberships, t.id)
     }
   } else {
     for (const p of players) { names[p.id] = p.name; members[p.id] = [p.id] }
+  }
+
+  // A side's team colour: the tag (a team on the main sheet) all its
+  // players share.
+  const teamColour = new Map(teamRows.map(t => [t.id, t.color ?? null]))
+  const colours: Record<string, string> = {}
+  for (const [side, ids] of Object.entries(members)) {
+    const c = commonColour(ids.map(pid => teamColour.get(teamFor(memberships, pid, MAIN_SET) ?? '') ?? null))
+    if (c) colours[side] = c
   }
 
   const drawnRounds = new Set(matches.map(m => m.roundNumber)).size
@@ -97,5 +114,6 @@ export async function readKnockout(
     members,
     deadlines: drawDeadlines(parseBracketSetup(rawSetup)?.deadlines ?? [], drawnRounds),
     pairs,
+    colours,
   }
 }

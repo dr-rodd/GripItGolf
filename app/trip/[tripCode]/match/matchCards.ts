@@ -143,7 +143,7 @@ export async function readLiveMatches(
   if (open.length === 0) return []
   const openIds = open.map(m => m.id)
 
-  type ScoreRow = { match_id: string; player_id: string; hole_number: number; gross: number }
+  type ScoreRow = { match_id: string; player_id: string; hole_number: number; gross: number | null }
   type ConcessionRow = { match_id: string; hole_number: number; conceded_by: string }
   const [scoresRes, concessionsRes] = await Promise.all([
     readAllRows<ScoreRow>(
@@ -162,10 +162,10 @@ export async function readLiveMatches(
   // Before migration 058 neither table exists — nothing is live, quietly.
   if (scoresRes.error || concessionsRes.error) return []
 
-  const scoresOf = new Map<string, Map<string, Map<number, number>>>()
+  const scoresOf = new Map<string, Map<string, Map<number, number | null>>>()
   for (const r of scoresRes.data) {
-    const byPlayer = scoresOf.get(r.match_id) ?? new Map<string, Map<number, number>>()
-    const holes = byPlayer.get(r.player_id) ?? new Map<number, number>()
+    const byPlayer = scoresOf.get(r.match_id) ?? new Map<string, Map<number, number | null>>()
+    const holes = byPlayer.get(r.player_id) ?? new Map<number, number | null>()
     holes.set(r.hole_number, r.gross)
     byPlayer.set(r.player_id, holes)
     scoresOf.set(r.match_id, byPlayer)

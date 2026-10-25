@@ -9,17 +9,21 @@ import {
   REGULATION_HOLES, extraCourseHole, openingHole, ordinal, parseExtraPlan, playCard, shotsOn, shouldWrite,
   withExtraHole, type CardHole, type CardSideKey, type CardSideView, type ExtraHolePlan,
 } from '@/lib/matchCard'
-import { RESULT_PILL, RESULT_TEXT, sideTone } from '@/lib/resultTone'
+import { DEFAULT_SIDE_COLOURS, sideTint, type SideColour } from '@/lib/matchSides'
 import { usePoll } from '@/app/scoring/usePoll'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
 
 /**
  * The match play card in the hand (docs/event-use-cases.md, story 2, stage
- * 4): one hole at a time, **the top of the draw on the left and the bottom
- * on the right**, each player's gross entered with − and +, the shots they
- * get on the hole shown as dots, and a **Concede hole** button under each
- * side. lib/matchCard.ts decides who won each hole and when it is over.
+ * 4; remodelled on trip scoring, Ross 25 Oct 2026): one hole at a time, its
+ * number large, a strip of every hole across the top, **the top of the draw
+ * on the left (red) and the bottom on the right (blue)** — or the sides'
+ * team colours (lib/matchSides.ts) — the same on every phone. Each player
+ * has a big number box with − and + under it; the first tap lands on the
+ * score worth two points, nett par. **NR** is a player picking up: it loses
+ * to any number, and two halve the hole. Previous and next move between
+ * holes. lib/matchCard.ts decides who won each hole and when it is over.
  *
  * Every tap is saved as it is made (`match_scores`, `match_concessions`,
  * migration 058), one write at a time per box so a fast + + + lands in
@@ -29,24 +33,26 @@ import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
  * **Once the match is settled the result goes into the bracket by itself**
  * (`shouldWrite` → `persistWinner`, the bracket's own writer, so later
  * rounds follow). From then on the card is read-only, and changing it —
- * like changing it on the bracket — needs the admin PIN. The admin PIN is
- * also how the organiser scores or finishes a match they are not in.
+ * like changing it on the bracket — needs the admin PIN. **Anybody with
+ * the code may score an open match** unless the organiser has kept it to
+ * the players (`score_matches`, lib/eventPermissions.ts); the admin PIN
+ * scores anything.
  *
  * **All square after 18, the card goes on** — the 19th off the 1st, the
  * 20th off the 2nd — until a hole is won (`playCard`). A dropdown on each
  * extra hole changes which course hole it is played off (`extra_holes`,
- * migration 061); the ones after follow on from it. Each side's
- * standing wears the result colours: gold up and won, brown down and lost.
+ * migration 061); the ones after follow on from it.
  */
 
-type Scores = Record<string, Record<number, number>>
+/** Player → hole → gross; null is an NR. */
+type Scores = Record<string, Record<number, number | null>>
 type Conceded = Record<number, CardSideKey>
 
 const MAX_GROSS = 20
 
 export default function MatchCardClient({
   tripId, tripCode, matchId, a, b, holes: baseHoles, extraPlan: planInitial = {}, mySide, passcodeHash,
-  stored: storedInitial,
+  stored: storedInitial, colours = DEFAULT_SIDE_COLOURS, anyoneScores = true,
 }: {
   tripId: string
   tripCode: string
@@ -61,6 +67,10 @@ export default function MatchCardClient({
   mySide: CardSideKey | null
   passcodeHash: string | null
   stored: { winner: string | null; result: string | null }
+  /** Top red, bottom blue — or the sides' team colours. */
+  colours?: Record<CardSideKey, SideColour>
+  /** Whether anybody with the code may score it, or only its players. */
+  anyoneScores?: boolean
 }) {
   const router = useRouter()
   const [scores, setScores] = useState<Scores>({})
@@ -77,7 +87,7 @@ export default function MatchCardClient({
 
   const inMatch = mySide !== null
   const decided = stored.winner !== null
-  const canEdit = organiser || (inMatch && !decided)
+  const canEdit = organiser || (!decided && (inMatch || anyoneScores))
 
   // ── Reading the card ──
   const dirty = useRef(0)
@@ -98,7 +108,7 @@ export default function MatchCardClient({
       return
     }
     const nextScores: Scores = {}
-    for (const r of (s.data ?? []) as { player_id: string; hole_number: number; gross: number }[]) {
+    for (const r of (s.data ?? []) as { player_id: string; hole_number: number; gross: number | null }[]) {
       (nextScores[r.player_id] ??= {})[r.hole_number] = r.gross
     }
     const nextConceded: Conceded = {}
@@ -143,46 +153,38 @@ export default function MatchCardClient({
         // 061 there is nowhere to keep which hole an extra hole is played off.
         const { code, message } = err as { code?: string; message?: string }
         const refused = (code === '23514' && hole > REGULATION_HOLES) || /extra_holes/.test(message ?? '')
-        setError(refused
-          ? 'Extra holes need a database update — the organiser can record the result on the bracket for now.'
-          : 'Could not save that — check your connection and try again.')
+        // Before migration 062 a score row must carry a number.
+        const noNR = code === '23502'
+        setError(noNR
+          ? 'Saving an NR needs a database update — enter a score for now.'
+          : refused
+            ? 'Extra holes need a database update — the organiser can record the result on the bracket for now.'
+            : 'Could not save that — check your connection and try again.')
       }
     }).finally(() => { dirty.current-- })
     chains.current.set(key, next)
   }
 
-  function setGross(playerId: string, n: number, value: number | null) {
+  /** A gross, an NR (null), or cleared (undefined). */
+  function setGross(playerId: string, n: number, value: number | null | undefined) {
     if (!canEdit) return
     setError(null)
+    // The card opens on the first hole not finished; once somebody is
+    // scoring it stays where they are, rather than jumping on the moment
+    // both sides are in and hiding who won the hole.
+    if (hole === null) setHole(n)
     setScores(prev => {
       const mine = { ...(prev[playerId] ?? {}) }
-      if (value === null) delete mine[n]; else mine[n] = value
+      if (value === undefined) delete mine[n]; else mine[n] = value
       return { ...prev, [playerId]: mine }
     })
-    queue(`s:${playerId}:${n}`, n, () => value === null
+    queue(`s:${playerId}:${n}`, n, () => value === undefined
       ? supabase.from('match_scores').delete().eq('trip_id', tripId).eq('match_id', matchId)
           .eq('player_id', playerId).eq('hole_number', n)
       : supabase.from('match_scores').upsert({
           match_id: matchId, trip_id: tripId, player_id: playerId, hole_number: n, gross: value,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'match_id,player_id,hole_number' }))
-  }
-
-  function concede(side: CardSideKey, n: number) {
-    if (!canEdit) return
-    setError(null)
-    const undo = conceded[n] === side
-    setConceded(prev => {
-      const next = { ...prev }
-      if (undo) delete next[n]; else next[n] = side
-      return next
-    })
-    queue(`c:${n}`, n, () => undo
-      ? supabase.from('match_concessions').delete().eq('trip_id', tripId).eq('match_id', matchId).eq('hole_number', n)
-      : supabase.from('match_concessions').upsert({
-          match_id: matchId, trip_id: tripId, hole_number: n, conceded_by: side,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'match_id,hole_number' }))
   }
 
   /** Which course hole this extra hole is played off — everybody's card follows. */
@@ -234,182 +236,191 @@ export default function MatchCardClient({
     )
   }
 
-  const leaderName = state.leader === 'A' ? a.name : state.leader === 'B' ? b.name : null
-  const status = state.settled
-    ? `${leaderName} wins ${state.result}`
+  const nameOf = (key: CardSideKey) => (key === 'A' ? a.name : b.name)
+  const status = state.settled && state.leader
+    ? `${nameOf(state.leader)} wins ${state.result}`
     : state.extra ? `${state.progress} — down the ${ordinal(state.played + 1)}`
-      : state.leader ? `${leaderName} ${state.progress}` : state.progress
-  // The status in the colours: from this phone's side when they are in the
-  // match, else as the leader has it — winning is gold either way.
-  const statusTone = sideTone(mySide ?? state.leader ?? 'A', state)
-  const standing = (key: CardSideKey) => {
-    const tone = sideTone(key, state)
-    const label = tone === 'won' ? `Won ${state.result}` : tone === 'lost' ? 'Lost'
-      : tone === 'up' ? `${state.up} up` : tone === 'down' ? `${state.up} down`
-        : state.played > 0 ? 'All square' : ''
-    return { tone, label }
+      : state.leader ? `${nameOf(state.leader)} ${state.progress}` : state.progress
+
+  /** A side's standing as a pill: its colour solid once won, washed while up. */
+  const standing = (key: CardSideKey): { label: string; style: React.CSSProperties } | null => {
+    if (state.played === 0) return null
+    if (state.leader === null) return { label: 'All square', style: { backgroundColor: 'var(--color-tint)' } }
+    const ahead = state.leader === key
+    const c = colours[key]
+    if (state.settled) {
+      return ahead
+        ? { label: `Won ${state.result}`, style: { backgroundColor: c.fill, color: c.on } }
+        : { label: 'Lost', style: { backgroundColor: 'var(--color-tint)' } }
+    }
+    return ahead
+      ? { label: `${state.up} up`, style: { backgroundColor: sideTint(c, 22) } }
+      : { label: `${state.up} down`, style: { backgroundColor: 'var(--color-tint)' } }
   }
 
-  const sideColumn = (key: CardSideKey, side: CardSideView) => (
-    <div className="min-w-0 flex flex-col gap-3">
-      <div className="text-center">
-        <p className="t-card text-ink truncate">{side.name}</p>
-        {standing(key).label && (
-          <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full t-cap font-semibold ${RESULT_PILL[standing(key).tone]}`}>
-            {standing(key).label}
-          </span>
-        )}
-      </div>
-      {side.players.map(p => {
-        const value = scores[p.id]?.[current]
-        const shots = shotsOn(h, { id: p.id, gender: p.gender, receives: p.receives })
-        return (
-          <div key={p.id} className={`p-3 ${cardClass()}`}>
-            {side.players.length > 1 && <p className="t-cap text-ink/80 truncate text-center">{p.name}</p>}
-            <p className="t-cap text-accent-deep text-center h-5" aria-label={`${shots} shots on this hole`}>
-              {shots > 0 ? '•'.repeat(shots) : ''}
-            </p>
-            <div className="flex items-center justify-between gap-1">
-              <button
-                type="button"
-                disabled={!canEdit}
-                onClick={() => setGross(p.id, current, value === undefined ? h.par : Math.max(1, value - 1))}
-                aria-label={`One fewer for ${p.name}`}
-                className="w-11 h-11 rounded-full border border-line text-xl text-ink disabled:opacity-30"
-              >
-                −
-              </button>
-              <span className="font-serif text-[30px] font-bold text-ink tabular-nums w-10 text-center">
-                {value ?? '–'}
-              </span>
-              <button
-                type="button"
-                disabled={!canEdit}
-                onClick={() => setGross(p.id, current, value === undefined ? h.par : Math.min(MAX_GROSS, value + 1))}
-                aria-label={`One more for ${p.name}`}
-                className="w-11 h-11 rounded-full border border-line text-xl text-ink disabled:opacity-30"
-              >
-                +
-              </button>
-            </div>
-            {value !== undefined && canEdit && (
-              <button type="button" onClick={() => setGross(p.id, current, null)} className="block mx-auto t-cap text-ink/65 mt-1">
-                Clear
-              </button>
-            )}
-          </div>
-        )
-      })}
-      <button
-        type="button"
-        disabled={!canEdit}
-        onClick={() => concede(key, current)}
-        aria-pressed={conceded[current] === key}
-        className={`${buttonClass(conceded[current] === key ? 'danger' : 'secondary', true, true)} disabled:opacity-40`}
-      >
-        {conceded[current] === key ? 'Conceded — undo' : 'Concede hole'}
-      </button>
-    </div>
-  )
+  /** What a hole's mark on the strip is filled with: the winner's colour. */
+  const holeFill = (o: (typeof outcomes)[number] | undefined, isNow: boolean): string =>
+    o?.winner === 'A' ? colours.A.fill
+      : o?.winner === 'B' ? colours.B.fill
+        : o?.winner === 'halved' ? 'color-mix(in srgb, var(--color-ink) 35%, transparent)'
+          : isNow ? 'var(--color-ink)' : 'var(--color-tint)'
 
-  // A hole on the strip: the mark says which side won it; on the phone of
-  // a player in the match, the box wears it — gold won, brown lost.
-  const holeButton = (o: (typeof outcomes)[number]) => {
-    const mine = mySide && (o.winner === 'A' || o.winner === 'B')
-      ? (o.winner === mySide ? RESULT_PILL.up : RESULT_PILL.down) : 'text-ink/80'
+  const playerBox = (key: CardSideKey, p: CardSideView['players'][number], showName: boolean) => {
+    const entered = scores[p.id]?.[current]
+    const isNR = entered === null
+    const value = typeof entered === 'number' ? entered : null
+    const shots = shotsOn(h, { id: p.id, gender: p.gender, receives: p.receives })
+    // Two points: nett par. The first tap of − or + lands here, as on a trip.
+    const nettPar = h.par + shots
+    const step = (delta: number) => {
+      if (isNR) return
+      setGross(p.id, current, value === null ? nettPar : Math.max(1, Math.min(MAX_GROSS, value + delta)))
+    }
+    const typed = (raw: string) => {
+      if (raw === '') { setGross(p.id, current, undefined); return }
+      const n = parseInt(raw, 10)
+      if (!isNaN(n) && n >= 1 && n <= MAX_GROSS) setGross(p.id, current, n)
+    }
+    const stepClass = 'flex-1 h-14 rounded-xl border border-line text-ink/80 text-3xl leading-none ' +
+      'active:scale-95 transition-all flex items-center justify-center disabled:opacity-20 disabled:cursor-not-allowed'
     return (
-      <button
-        key={o.holeNumber}
-        type="button"
-        onClick={() => setHole(o.holeNumber)}
-        aria-pressed={o.holeNumber === current}
-        aria-label={`Hole ${o.holeNumber}`}
-        className={`h-11 rounded-tile border text-[13px] tabular-nums flex flex-col items-center justify-center leading-none ${
-          o.holeNumber === current ? 'border-accent-deep bg-accent-tint text-ink' : `border-line ${mine}`
-        }`}
-      >
-        <span>{o.holeNumber}</span>
-        <span className="text-[13px] mt-0.5 opacity-80" aria-hidden="true">
-          {o.winner === 'A' ? '◂' : o.winner === 'B' ? '▸' : o.winner === 'halved' ? '=' : ''}
-        </span>
-      </button>
+      <div key={p.id} className={`p-3 bg-surface border rounded-xl ${isNR ? 'border-rust/40' : 'border-line'}`}>
+        <div className="flex items-center justify-between gap-2 min-h-8">
+          <div className="min-w-0">
+            {showName && <p className="t-cap text-ink/80 truncate">{p.name}</p>}
+            <p className="t-cap text-ink/65" aria-label={`${shots} shots on this hole`}>
+              {shots > 0 ? `${'•'.repeat(shots)} ${shots === 1 ? 'shot' : 'shots'}` : 'No shot'}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={!canEdit}
+            onClick={() => setGross(p.id, current, isNR ? undefined : null)}
+            aria-pressed={isNR}
+            aria-label={`No return for ${p.name}`}
+            className={`text-sm border rounded-xl px-3 py-1.5 transition-colors flex-shrink-0 disabled:opacity-40 ${
+              isNR ? 'border-rust/50 text-rust-deep bg-rust/10' : 'border-line text-ink/50'
+            }`}
+          >
+            NR
+          </button>
+        </div>
+        {isNR ? (
+          <span className="mt-2 font-serif text-5xl flex items-center justify-center w-full h-20 text-rust-deep/80 border border-rust/30 rounded-xl">
+            NR
+          </span>
+        ) : (
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={value === null ? '' : String(value)}
+            onChange={e => typed(e.target.value)}
+            disabled={!canEdit}
+            aria-label={`${p.name}'s score on this hole`}
+            className={`mt-2 font-serif text-5xl text-center bg-transparent outline-none text-ink caret-accent border rounded-xl p-0 w-full h-20 ${
+              value === null ? 'border-accent/50' : 'border-line-strong'
+            }`}
+            // Sized and set here, not by class: the site's unlayered input rule
+            // sets every field's face and size and would win over a utility.
+            style={{ fontFamily: 'var(--font-serif)', fontSize: 48, lineHeight: '5rem', borderColor: value !== null ? colours[key].fill : undefined }}
+          />
+        )}
+        <div className="flex gap-2 mt-2">
+          <button type="button" disabled={!canEdit || isNR} onClick={() => step(-1)} aria-label={`One fewer for ${p.name}`} className={stepClass}>−</button>
+          <button type="button" disabled={!canEdit || isNR} onClick={() => step(1)} aria-label={`One more for ${p.name}`} className={stepClass}>+</button>
+        </div>
+      </div>
     )
   }
 
-  const holeLabel = outcome?.winner === 'A' ? `${a.name} wins the hole`
-    : outcome?.winner === 'B' ? `${b.name} wins the hole`
-      : outcome?.winner === 'halved' ? 'Hole halved' : ''
+  const sideColumn = (key: CardSideKey, side: CardSideView) => {
+    const st = standing(key)
+    return (
+      <div className="min-w-0 flex flex-col gap-2">
+        <div className="text-center">
+          <span className="block h-1.5 rounded-full mb-2" style={{ backgroundColor: colours[key].fill }} aria-hidden="true" />
+          <p className="t-card text-ink truncate">{side.name}</p>
+          <span
+            className="inline-block mt-1 px-2.5 py-0.5 rounded-full t-cap font-semibold text-ink min-h-6"
+            style={st?.style}
+          >
+            {st?.label ?? '\u00a0'}
+          </span>
+        </div>
+        {side.players.map(p => playerBox(key, p, side.players.length > 1))}
+      </div>
+    )
+  }
+
+  const holeLabel = outcome?.winner === 'A' || outcome?.winner === 'B'
+    ? `${nameOf(outcome.winner)} wins the hole` : outcome?.winner === 'halved' ? 'Hole halved' : ''
 
   return (
     <div className="flex flex-col gap-4">
-      {/* The match as it stands */}
-      <div className={`px-4 py-3 text-center ${cardClass()}`} aria-live="polite">
-        <p className={`t-card ${loaded && state.played > 0 ? RESULT_TEXT[statusTone] : 'text-ink'}`}>
-          {loaded ? status : 'Loading the card…'}
+      {/* Every hole: a mark each, filled in the colour of whoever won it,
+          the hole being played the long one — trip scoring's strip. */}
+      <div className="flex items-center gap-3" aria-hidden="true">
+        <div className="flex-1 flex gap-[3px] items-center">
+          {holes.map(x => {
+            const isNow = x.holeNumber === current
+            const o = outcomes.find(y => y.holeNumber === x.holeNumber)
+            return (
+              <div
+                key={x.holeNumber}
+                className="h-1.5 rounded-full transition-all duration-300 ease-out"
+                style={{
+                  flexGrow: isNow ? 1.6 : 1, flexBasis: 0, minWidth: isNow ? 18 : 0,
+                  backgroundColor: holeFill(o, isNow),
+                  outline: isNow && o?.winner ? '2px solid var(--color-ink)' : undefined,
+                  outlineOffset: 1,
+                }}
+              />
+            )
+          })}
+        </div>
+      </div>
+
+      {/* The hole being played, large */}
+      <div className="text-center">
+        <p className="t-h1 text-ink leading-none" style={{ fontSize: 44 }}>
+          {current > REGULATION_HOLES ? `The ${ordinal(current)}` : `Hole ${current}`}
         </p>
-        {state.extra && !state.settled && (
-          <p className="t-cap text-ink/65 mt-1">Extra holes are played off the 1st and on — pick another below if your club sends you elsewhere. Same shots, until a hole is won.</p>
+        <p className="t-label text-ink/65 mt-2">Par {h.par} · Index {h.strokeIndex}</p>
+        {/* An extra hole: which course hole it is played off — the 1st and
+            on unless the players pick another */}
+        {current > REGULATION_HOLES && (
+          <label className="flex items-center justify-center gap-2 t-cap text-ink/80 mt-2">
+            Played off the
+            <select
+              value={extraCourseHole(current, plan)}
+              onChange={e => playExtraOff(current, Number(e.target.value))}
+              disabled={!canEdit}
+              aria-label={`The course hole the ${ordinal(current)} is played off`}
+              // .field is a full-width box, unlayered; this one sits in a line.
+              style={{ width: 'auto' }}
+              className={`${FIELD} field-dense`}
+            >
+              {Array.from({ length: REGULATION_HOLES }, (_, i) => i + 1).map(n => (
+                <option key={n} value={n}>{ordinal(n)}</option>
+              ))}
+            </select>
+          </label>
         )}
       </div>
 
-      {/* Every hole, with who won it — tap to go to one */}
-      <div className="grid grid-cols-9 gap-1" aria-label="Holes">
-        {outcomes.filter(o => o.holeNumber <= REGULATION_HOLES).map(o => holeButton(o))}
+      {/* The match as it stands */}
+      <div className={`px-4 py-3 text-center ${cardClass()}`} aria-live="polite">
+        <p className="t-card text-ink flex items-center justify-center gap-2">
+          {loaded && state.leader && (
+            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colours[state.leader].fill }} aria-hidden="true" />
+          )}
+          {loaded ? status : 'Loading the card…'}
+        </p>
+        {state.extra && !state.settled && (
+          <p className="t-cap text-ink/65 mt-1">Extra holes are played off the 1st and on — pick another above if your club sends you elsewhere. Same shots, until a hole is won.</p>
+        )}
       </div>
-      {holes.length > REGULATION_HOLES && (
-        <div>
-          <p className="t-cap text-ink/65 mb-1">Extra holes</p>
-          <div className="grid grid-cols-9 gap-1" aria-label="Extra holes">
-            {outcomes.filter(o => o.holeNumber > REGULATION_HOLES).map(o => holeButton(o))}
-          </div>
-        </div>
-      )}
-      {/* This hole */}
-      <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() => setHole(Math.max(1, current - 1))}
-          disabled={current <= 1}
-          aria-label="Previous hole"
-          className={`w-11 h-11 flex items-center justify-center disabled:opacity-25 ${cardClass()}`}
-        >
-          ‹
-        </button>
-        <div className="text-center">
-          <p className="t-card text-ink">{current > REGULATION_HOLES ? `The ${ordinal(current)}` : `Hole ${current}`}</p>
-          <p className="t-cap text-ink/65">Par {h.par} · Index {h.strokeIndex}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setHole(Math.min(holes.length, current + 1))}
-          disabled={current >= holes.length}
-          aria-label="Next hole"
-          className={`w-11 h-11 flex items-center justify-center disabled:opacity-25 ${cardClass()}`}
-        >
-          ›
-        </button>
-      </div>
-
-      {/* An extra hole: which course hole it is played off — the 1st and
-          on unless the players pick another */}
-      {current > REGULATION_HOLES && (
-        <label className="flex items-center justify-center gap-2 t-cap text-ink/80">
-          Played off the
-          <select
-            value={extraCourseHole(current, plan)}
-            onChange={e => playExtraOff(current, Number(e.target.value))}
-            disabled={!canEdit}
-            aria-label={`The course hole the ${ordinal(current)} is played off`}
-            // .field is a full-width box, unlayered; this one sits in a line.
-            style={{ width: 'auto' }}
-            className={`${FIELD} field-dense`}
-          >
-            {Array.from({ length: REGULATION_HOLES }, (_, i) => i + 1).map(n => (
-              <option key={n} value={n}>{ordinal(n)}</option>
-            ))}
-          </select>
-        </label>
-      )}
 
       {/* Top of the draw on the left, bottom on the right */}
       <div className="grid grid-cols-2 gap-3">
@@ -417,7 +428,34 @@ export default function MatchCardClient({
         {sideColumn('B', b)}
       </div>
 
-      <p className="t-cap text-ink/80 text-center h-5">{holeLabel}</p>
+      <p className="t-label text-ink text-center h-6 flex items-center justify-center gap-2">
+        {(outcome?.winner === 'A' || outcome?.winner === 'B') && (
+          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colours[outcome.winner].fill }} aria-hidden="true" />
+        )}
+        {holeLabel}
+      </p>
+
+      {/* Previous and next — trip scoring's pair */}
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={() => setHole(Math.max(1, current - 1))}
+          disabled={current <= 1}
+          aria-label="Previous hole"
+          className="flex-1 py-4 border border-line text-ink/65 text-2xl rounded-xl active:bg-tint transition-colors disabled:opacity-25"
+        >
+          ←
+        </button>
+        <button
+          type="button"
+          onClick={() => setHole(Math.min(holes.length, current + 1))}
+          disabled={current >= holes.length}
+          aria-label="Next hole"
+          className="flex-[2] py-4 bg-accent-deep text-white text-2xl font-bold rounded-xl hover:bg-accent active:scale-[0.98] transition-all disabled:opacity-30"
+        >
+          →
+        </button>
+      </div>
 
       {error && <p className="text-rust-deep text-sm text-center leading-snug">{error}</p>}
 

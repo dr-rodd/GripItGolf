@@ -90,7 +90,7 @@ export default function OrganiserClient({
   /** A series league — asked the series-only permissions too (`permissionsFor`). */
   series?: boolean
 }) {
-  const permRegistry = permissionsFor(series)
+  const permRegistry = permissionsFor(series, knockout)
 
   // ── Participant permissions ──────────────────────────────────
   // Saved the moment a toggle moves — optimistic, reverting on refusal,

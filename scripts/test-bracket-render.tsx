@@ -209,7 +209,7 @@ section('Tile content')
 
 // ─── Decided matches ───────────────────────────────────────────
 
-section('Won matches show green and the margin')
+section('Won matches show the winner\'s side colour and the margin')
 {
   const { players, matches } = build(8)
   // Settle the first quarter-final 3&2
@@ -224,15 +224,19 @@ section('Won matches show green and the margin')
   )
 
   ok(html.includes('3&amp;2') || html.includes('3&2'), 'the margin is shown on the tile')
-  ok(html.includes('border-gold/60'), 'the tile itself is outlined in gold once won')
-  ok(html.includes('text-gold-deep'), 'and the winning name is gold — winning')
-  ok(html.includes('text-bark') && html.includes('bg-bark'), 'and the side that lost is the brown')
+  // Top of the draw red, bottom blue (lib/matchSides.ts) — the same on
+  // every phone, and no gold or brown on a match (Ross, 25 Oct 2026).
+  ok(html.includes('data-decided="true"'), 'the tile is marked won')
+  ok(/data-result="won"[^>]*color-mix\(in srgb, var\(--color-side-a\) 18%/.test(html),
+    'and the winner\'s row is washed in their side\'s colour — top of the draw, red')
+  ok(html.includes('data-result="lost"') && html.includes('opacity-35'), 'and the side that lost fades back')
+  ok(!/gold|bark-tint/.test(html), 'no gold or brown anywhere on the bracket')
 
   // Undecided matches stay neutral
   const plain = renderToStaticMarkup(
     React.createElement(MatchplayBracket, { matches, entrants: players })
   )
-  ok(!plain.includes('border-gold/60'), 'an unplayed tile is not outlined')
+  ok(!plain.includes('data-decided'), 'an unplayed tile is not marked')
   ok(!plain.includes('3&amp;2'), 'and carries no margin')
 
   // A bye has a winner but was never played, so it must not read as won
@@ -242,7 +246,7 @@ section('Won matches show green and the margin')
   )
   const byeMatch = sixM.find(m => m.player_b_is_bye)!
   ok(byeMatch.winner_player_id !== null, 'the bye does carry a winner in the data')
-  ok(!byeHtml.includes('border-gold/60'),
+  ok(!byeHtml.includes('data-decided'),
     'but a bye is not marked as won — it was awarded, not played')
 }
 
@@ -270,16 +274,16 @@ section('The champion is solid, an ordinary win is a tint')
     React.createElement(MatchplayBracket, { matches: played, entrants: players })
   )
 
-  // Winning is gold (Ross, 21 Oct 2026), so the hierarchy lives inside it:
-  // a won match is outlined with its winner in the tint, the champion is
-  // filled solid gold. Two weights of one hue.
-  ok(html.includes('border-gold bg-gold'), 'the champion tile is filled solid gold')
-  ok(html.includes('text-on-gold font-semibold'), 'with the name in the ink that sits on gold')
+  // The hierarchy lives inside the side's colour: a won match washes its
+  // winner's row, the champion's tile is filled solid in it.
+  ok(/data-champion="true"[^>]*background-color:var\(--color-side-a\)/.test(html),
+    'the champion tile is filled solid in their side\'s colour')
+  ok(html.includes('color:var(--color-on-side)'), 'with the name in the ink that sits on it')
   ok(!html.includes('rgba(10,157,86,0.12), 0 0 24px'), 'and no glow — the guide has none')
 
   // Ordinary wins stay a tint — solid means winning the whole thing
-  ok(html.includes('border-gold/60'), 'the semi-finals keep the outline')
-  ok(html.includes('text-gold-deep'), 'and their winners the gold text')
+  ok((html.match(/data-decided="true"/g) ?? []).length === 3, 'the semi-finals are marked won too')
+  ok(html.includes('data-result="won"'), 'and their winners\' rows washed')
 
   // An undecided Final gets none of it
   const unfinished = played.map(m => m.id === finalMatch.id
@@ -290,9 +294,9 @@ section('The champion is solid, an ordinary win is a tint')
   ok(!plainHtml.includes('rgba(201,168,76'), 'an unwon Final does not glow')
 
   // A won semi-final is not treated as the champion — it advances somewhere
-  ok(plainHtml.includes('border-gold/60'),
+  ok(plainHtml.includes('data-decided="true"'),
     'a won semi is still marked even when the Final is open')
-  ok(!plainHtml.includes('border-gold bg-gold'),
+  ok(!plainHtml.includes('data-champion'),
     'and never gets the champion styling')
 }
 

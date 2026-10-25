@@ -10,8 +10,11 @@
 // stored before the new key existed simply reads the new default until its
 // organiser says otherwise.
 //
-// Defaults lean conservative — everything off, the organiser opts in —
-// because an event is organiser-run in a way a trip is not. **Trips are
+// Defaults lean conservative — off, the organiser opts in — because an
+// event is organiser-run in a way a trip is not. The one exception is
+// scoring a match play card, which is open by default (Ross, 25 Oct 2026):
+// anybody can take a match live, and the organiser can keep it to the
+// players. **Trips are
 // untouched by all of this**: `allowsParticipant` answers true for
 // anything that is not an event, so every trip keeps the open access it
 // has always had, and no trip-scoped screen changes behaviour.
@@ -34,6 +37,7 @@ export type EventPermissionKey =
   | 'assign_tag'
   | 'add_rounds'
   | 'set_venues'
+  | 'score_matches'
 
 export const EVENT_PERMISSIONS: {
   key: EventPermissionKey
@@ -46,6 +50,8 @@ export const EVENT_PERMISSIONS: {
    * the registry stays one list.
    */
   seriesOnly?: true
+  /** Only means anything on a match play event (`permissionsFor`). */
+  knockoutOnly?: true
 }[] = [
   { key: 'add_courses', dflt: false,
     label: 'Participants can add new courses',
@@ -77,16 +83,22 @@ export const EVENT_PERMISSIONS: {
   { key: 'set_venues', dflt: false, seriesOnly: true,
     label: 'Participants can choose a round\'s venue',
     hint: 'Let anyone pick a venue still to be confirmed, without the PIN.' },
+  // A match play card: on, anybody with the code can take a match live and
+  // score every hole; off, only the players in it, and the organiser with
+  // the admin PIN. The one permission on by default.
+  { key: 'score_matches', dflt: true, knockoutOnly: true,
+    label: 'Participants can score any match',
+    hint: 'Let anyone take a match live and score it. Off, only its players can — and you, with the PIN.' },
 ]
 
 /**
  * The permissions worth asking about on this event — every one, less those
- * that only mean something on a series when it is not one. The creation
- * toggles, the admin page and its summary line all read this, so a series-
- * only permission is never offered where it would do nothing.
+ * that only mean something on a series, or on match play, when it is not
+ * one. The creation toggles, the admin page and its summary line all read
+ * this, so a permission is never offered where it would do nothing.
  */
-export function permissionsFor(series: boolean): typeof EVENT_PERMISSIONS {
-  return EVENT_PERMISSIONS.filter(p => series || !p.seriesOnly)
+export function permissionsFor(series: boolean, knockout = false): typeof EVENT_PERMISSIONS {
+  return EVENT_PERMISSIONS.filter(p => (series || !p.seriesOnly) && (knockout || !p.knockoutOnly))
 }
 
 export type EventPermissions = Record<EventPermissionKey, boolean>
@@ -148,5 +160,8 @@ export function describePermissions(
 ): string {
   const on = registry.filter(p => perms[p.key]).length
   if (on === 0) return 'Organiser-run — participants play, you manage.'
+  if (on === 1 && registry.length > 1 && registry.some(p => p.key === 'score_matches' && perms[p.key])) {
+    return 'Organiser-run — anyone can score a match.'
+  }
   return `${on} of ${registry.length} participant permissions on.`
 }

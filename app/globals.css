@@ -42,6 +42,15 @@
   --color-gold-deep: var(--gd-gold-deep);     /* gold text */
   --color-on-gold:   var(--gd-on-gold);
 
+  /* The two sides of a match (Ross, 25 Oct 2026): the top of the draw red,
+     the bottom blue, the same on every phone whoever is holding it — a
+     hole, a standing and a bracket winner all wear the side's colour.
+     A side with a team colour wears that instead (lib/matchSides.ts).
+     `on-side` is the ink on either fill. */
+  --color-side-a:  var(--gd-side-a);
+  --color-side-b:  var(--gd-side-b);
+  --color-on-side: var(--gd-on-side);
+
   /* ── Type ──
      Three families, one job each, never mixed.
      Schibsted Grotesk (titles) and Archivo (every other word) are
@@ -134,6 +143,10 @@
   --gd-gold-deep: #755610;
   --gd-on-gold:   #2B2118;
 
+  --gd-side-a:  #C62F3A;
+  --gd-side-b:  #2563B8;
+  --gd-on-side: #FFFFFF;
+
   /* The named mixes, worked out from the palette on the element where the
      palette is declared — so under html.dark they read the night values
      with nothing restated. The dark block below moves only the strengths
@@ -205,6 +218,10 @@ html.dark {
   --gd-gold-deep: #E9C46A;
   --gd-on-gold:   #2B2118;
 
+  --gd-side-a:  #F07373;
+  --gd-side-b:  #6EA5F0;
+  --gd-on-side: #1B1510;
+
   /* A touch stronger at night, where a light line on a dark page reads
      fainter than the same strength the other way round. */
   --gd-line-strong: color-mix(in srgb, var(--gd-bark) 20%, transparent);
@@ -246,6 +263,10 @@ html.dark {
     --gd-gold:      #D4A02A;
     --gd-gold-deep: #755610;
     --gd-on-gold:   #2B2118;
+
+    --gd-side-a:  #C62F3A;
+    --gd-side-b:  #2563B8;
+    --gd-on-side: #FFFFFF;
 
     --gd-line-strong: color-mix(in srgb, var(--gd-bark) 18%, transparent);
     --gd-tint:        color-mix(in srgb, var(--gd-bark) 6%, transparent);
