@@ -60,14 +60,20 @@ export function NextMatchCard({ tripCode, view, live = null, today }: {
         <Link href={matchHref(tripCode, next.id)} className={`block px-5 py-4 ${cardClass('raised', true)}`}>
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="t-cap text-ink/65">Your next match · {next.roundName}</p>
+              {/* In play, the live tag takes the "your next match" line. */}
+              {live ? (
+                <p className="flex items-center gap-1.5 t-cap text-accent-deep">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent dot-live flex-shrink-0" aria-hidden="true" />
+                  Live · {next.roundName}
+                </p>
+              ) : (
+                <p className="t-cap text-ink/65">Your next match · {next.roundName}</p>
+              )}
               <p className="t-card text-ink truncate mt-0.5">
                 {opponent ? `v ${view.names[opponent] ?? 'Opponent'}` : 'Opponent to be decided'}
               </p>
               {live ? (
-                <p className="flex items-center gap-1.5 t-cap text-accent-deep mt-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-accent dot-live flex-shrink-0" aria-hidden="true" />
-                  Live
+                <p className="flex items-center t-cap mt-1">
                   <span className="px-2 py-0.5 rounded-full font-semibold text-ink" style={standingStyle(live, view)}>
                     {myStanding(live, view.entrantId)}
                   </span>
