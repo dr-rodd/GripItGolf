@@ -243,14 +243,15 @@ export default function MatchCardClient({
       : state.leader ? `${nameOf(state.leader)} ${state.progress}` : state.progress
 
   /**
-   * A hole's mark on the strip: green for the hole being played, the
-   * winner's colour, dark ink for a half, faint for one still to play.
+   * A hole's mark on the strip: a light green for the hole being played
+   * (the old hole grid's mint), the winner's colour, the brown for a half,
+   * faint for one still to play. No black (Ross, 25 Oct 2026).
    */
   const holeFill = (o: (typeof outcomes)[number] | undefined, isNow: boolean): string =>
-    isNow ? 'var(--color-accent)'
+    isNow ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)'
       : o?.winner === 'A' ? colours.A.fill
         : o?.winner === 'B' ? colours.B.fill
-          : o?.winner === 'halved' ? 'var(--color-ink)'
+          : o?.winner === 'halved' ? 'color-mix(in srgb, var(--color-bark) 45%, transparent)'
             : 'var(--color-tint)'
 
   const playerBox = (key: CardSideKey, p: CardSideView['players'][number], showName: boolean) => {
