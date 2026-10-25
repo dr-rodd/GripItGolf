@@ -255,7 +255,7 @@ function standingStyle(l: LiveMatch, view: KnockoutView): React.CSSProperties {
 /** "2 up thru 7", "1 down thru 12", "All square thru 9" — from your side. */
 function myStanding(l: LiveMatch, entrantId: string | null): string {
   const seat = entrantId === l.sideA ? 'A' : entrantId === l.sideB ? 'B' : null
-  const thru = `thru ${l.state.played}`
+  const thru = `thru ${l.state.thru}`
   if (!seat || l.state.leader === null) {
     return l.state.played > 0 ? (l.state.extra ? l.state.progress : `All square ${thru}`) : 'Started'
   }
@@ -296,7 +296,7 @@ function LiveBoard({ tripCode, view, live }: { tripCode: string; view: KnockoutV
             ? (l.state.extra ? 'All square · extra holes' : 'All square')
             : l.state.settled ? `${nameOf(l.leaderId) ?? 'Won'} ${l.state.result}`
               : `${nameOf(l.leaderId) ?? ''} ${l.state.up} up`.trim()
-          const thru = l.state.settled ? 'Finished' : l.state.played > 0 ? `Thru ${l.state.played}` : 'Started'
+          const thru = l.state.settled ? 'Finished' : l.state.played > 0 ? `Thru ${l.state.thru}` : 'Started'
           return (
             <li key={l.id}>
               <Link

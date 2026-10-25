@@ -111,6 +111,14 @@ export type CardState = {
   up: number
   /** Holes finished, extra holes included, up to the one that settled it. */
   played: number
+  /**
+   * The furthest hole with a result — what "thru" means to a golfer. Not
+   * `played` when a hole behind it is still to finish: 1, 3 and 4 in with
+   * the 2nd missing a score is thru 4, not thru 3 (Ross, 25 Oct 2026).
+   */
+  thru: number
+  /** Holes behind `thru` with no result yet — a score still to enter. */
+  unfinished: number[]
   /** True once nothing left to play can change it — what the bracket writes on. */
   settled: boolean
   /** Level after eighteen: the match has gone down the 19th. */
@@ -146,11 +154,13 @@ export function cardState(outcomes: readonly HoleOutcome[]): CardState {
   const inOrder = [...outcomes].sort((x, y) => x.holeNumber - y.holeNumber)
   let up = 0
   let played = 0
+  let thru = 0
   let settledAt: number | null = null
   for (const o of inOrder) {
     if (o.holeNumber > REGULATION_HOLES) break
     if (o.winner === null) continue
     played++
+    thru = o.holeNumber
     if (o.winner === 'A') up++
     else if (o.winner === 'B') up--
     if (Math.abs(up) > REGULATION_HOLES - played) { settledAt = o.holeNumber; break }
@@ -161,6 +171,7 @@ export function cardState(outcomes: readonly HoleOutcome[]): CardState {
       if (o.holeNumber <= REGULATION_HOLES) continue
       if (o.winner === null) break
       played++
+      thru = o.holeNumber
       if (o.winner === 'halved') continue
       up = o.winner === 'A' ? 1 : -1
       settledAt = o.holeNumber
@@ -172,13 +183,20 @@ export function cardState(outcomes: readonly HoleOutcome[]): CardState {
   const remaining = Math.max(0, REGULATION_HOLES - played)
   const result = !settled ? null
     : settledAt! > REGULATION_HOLES ? `at ${ordinal(settledAt!)}` : marginLabel(holesUp, remaining)
+  // Up and down, and whether it is over, count only finished holes — a hole
+  // still to finish can swing it. "Thru" is the furthest hole with a result.
   const progress = extra && !settled
-    ? played === REGULATION_HOLES ? 'All square after 18' : `All square thru ${played}`
-    : extra ? `1 up thru ${played}` : progressLabel(holesUp, played, remaining)
+    ? thru === REGULATION_HOLES ? 'All square after 18' : `All square thru ${thru}`
+    : extra ? `1 up thru ${thru}` : progressLabel(holesUp, thru, remaining)
+  const unfinished = inOrder
+    .filter(o => o.holeNumber < thru && o.winner === null && (settledAt === null || o.holeNumber < settledAt))
+    .map(o => o.holeNumber)
   return {
     leader: up === 0 ? null : up > 0 ? 'A' : 'B',
     up: holesUp,
     played,
+    thru,
+    unfinished,
     settled,
     extra,
     result,

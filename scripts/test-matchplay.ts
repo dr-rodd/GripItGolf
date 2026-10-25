@@ -654,6 +654,13 @@ guard('match card', () => {
   eq([tenUp.settled, tenUp.result], [true, '10&8'], 'dormie and beyond: settled the moment it cannot change')
   const close = st([...Array(17).fill(4), 3], [5, 5, ...Array(15).fill(4), 4])
   eq([close.settled, close.result, close.leader], [true, '1 up', 'A'], 'won on the eighteenth: 1 up')
+  // Ross's card, 25 Oct: the 1st won, the 2nd not finished, the 3rd lost,
+  // the 4th halved — that is thru 4, with the 2nd still to come.
+  const gap = cardState(holeOutcomes(holes, A, B,
+    new Map([['ann', new Map([[1, 2], [3, 5], [4, 4]])], ['bob', new Map([[1, 4], [2, 5], [3, 4], [4, 4]])]]), none))
+  eq([gap.progress, gap.played, gap.thru, gap.unfinished], ['All square thru 4', 3, 4, [2]],
+    'a hole left unfinished behind: "thru" is the furthest hole played, and the gap is named')
+  eq(st([4, 4, 3], [5, 4, 4]).unfinished, [], '  …and a card with no gap names none')
   const level = st(Array(18).fill(4), [5, 5, ...Array(16).fill(4)])
   eq([level.settled, level.extra, level.result, level.progress], [false, true, null, 'All square after 18'],
     'level after eighteen: not over — down the 19th')

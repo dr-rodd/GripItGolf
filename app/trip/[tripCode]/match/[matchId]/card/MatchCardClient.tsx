@@ -368,6 +368,19 @@ export default function MatchCardClient({
             )}
             <span className="min-w-0">{loaded ? status : 'Loading the card…'}</span>
           </p>
+          {/* A hole behind the furthest one played with no result — the
+              standing is "thru" the furthest, but this one still counts. */}
+          {loaded && !state.settled && state.unfinished.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setHole(state.unfinished[0])}
+              className="t-cap text-accent-deep text-left mt-0.5"
+            >
+              {state.unfinished.length === 1
+                ? `Hole ${state.unfinished[0]} has no result yet →`
+                : `Holes ${state.unfinished.join(', ')} have no result yet →`}
+            </button>
+          )}
         </div>
         <div className="text-right flex-shrink-0">
           <p className="t-h1 text-ink leading-none">
