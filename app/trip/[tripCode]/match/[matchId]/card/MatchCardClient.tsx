@@ -258,18 +258,23 @@ export default function MatchCardClient({
   }, [state.result, winnerId, tripId, matchId, router])
 
   // ── The end of the match: confirm, finalise, then the card ──
-  // Nothing goes into the bracket until somebody scoring says the last
-  // score is right. "Go back" puts the sheet away for this ending; a
-  // changed score makes a new ending and asks again.
+  // Nothing interrupts while scores are going in (Ross, 26 Oct 2026: the
+  // first tap of + can settle a match a second tap undoes). On the hole
+  // that settles it — or the last hole, when the group played on — the
+  // next button becomes "Finalise match", and only that tap opens the
+  // sheet. Nothing goes into the bracket until the sheet's Finalise.
   const [finish, setFinish] = useState<{ phase: 'done'; bloom: boolean } | null>(null)
-  const [fixing, setFixing] = useState<string | null>(null)
-  // Played out to the 18th after it was settled? That is a new ending, so
-  // the sheet asks again once the last hole is in.
+  const [asking, setAsking] = useState(false)
   const playedOut = outcomes.filter(o => o.holeNumber <= REGULATION_HOLES).every(o => o.winner !== null)
-  const ending = state.settled ? `${winnerId}:${state.result}:${state.played}:${playedOut}` : null
   const awaitingFinal = loaded && canEdit && shouldWrite(state, winnerId, stored, false)
-  const sheetPhase: 'confirm' | 'done' | null = finish?.phase
-    ?? (awaitingFinal && fixing !== ending ? 'confirm' : null)
+  // The hole that settled it: holes are scored in order, so the
+  // `played`-th finished hole.
+  const settleHole = state.settled
+    ? outcomes.filter(o => o.winner !== null).sort((x, y) => x.holeNumber - y.holeNumber)[state.played - 1]?.holeNumber ?? null
+    : null
+  const finaliseHere = awaitingFinal && settleHole !== null
+    && (current === settleHole || (current > settleHole && (current === REGULATION_HOLES || current >= holes.length)))
+  const sheetPhase: 'confirm' | 'done' | null = finish?.phase ?? (asking && awaitingFinal ? 'confirm' : null)
   const finalise = async () => {
     if (await writeResult()) setFinish({ phase: 'done', bloom: true })
   }
@@ -301,7 +306,7 @@ export default function MatchCardClient({
       await persistWinner(all, matchId, null, null)
       setStored({ winner: null, result: null })
       // Back to amending: the sheet waits until the card is finalised again.
-      setFixing(ending)
+      setAsking(false)
       router.refresh()
     } catch (e) {
       console.error('Reopening the match failed:', e)
@@ -609,12 +614,12 @@ export default function MatchCardClient({
             </button>
             <button
               type="button"
-              onClick={() => goTo(current + 1)}
-              disabled={current >= holes.length}
-              aria-label="Next hole"
-              className="flex-[2] py-3 bg-accent-deep text-white text-2xl font-bold rounded-xl hover:bg-accent active:scale-[0.98] transition-all disabled:opacity-30"
+              onClick={() => finaliseHere ? setAsking(true) : goTo(current + 1)}
+              disabled={!finaliseHere && current >= holes.length}
+              aria-label={finaliseHere ? 'Finalise match' : 'Next hole'}
+              className={`flex-[2] py-3 bg-accent-deep text-white font-bold rounded-xl hover:bg-accent active:scale-[0.98] transition-all disabled:opacity-30 ${finaliseHere ? 'text-base' : 'text-2xl'}`}
             >
-              →
+              {finaliseHere ? 'Finalise match' : '→'}
             </button>
           </div>
         </div>,
@@ -623,8 +628,8 @@ export default function MatchCardClient({
 
       {error && <p className="text-rust-deep text-sm text-center leading-snug">{error}</p>}
 
-      {awaitingFinal && sheetPhase === null && (
-        <button type="button" onClick={() => setFixing(null)} className={buttonClass('primary')}>
+      {awaitingFinal && !finaliseHere && sheetPhase === null && (
+        <button type="button" onClick={() => setAsking(true)} className={buttonClass('primary')}>
           Finalise the match
         </button>
       )}
@@ -644,12 +649,14 @@ export default function MatchCardClient({
           saving={saving}
           error={error}
           onFinalise={finalise}
-          canContinue={!playedOut}
-          onContinue={() => setFixing(ending)}
+          canContinue={settleHole !== null && settleHole < REGULATION_HOLES && !playedOut}
+          onContinue={() => {
+            setAsking(false)
+            if (settleHole !== null && current <= settleHole) goTo(settleHole + 1)
+          }}
           onFix={() => {
-            setFixing(ending)
-            const last = outcomes.filter(o => o.winner !== null).pop()
-            if (last) goTo(last.holeNumber)
+            setAsking(false)
+            if (settleHole !== null) goTo(settleHole)
           }}
           onClose={() => setFinish(null)}
         />

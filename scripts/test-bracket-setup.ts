@@ -394,11 +394,14 @@ section('The match play card: top of the draw left, bottom right, NR, the result
     '  …which migration 062 lets the card keep')
   ok(client.includes('const nettPar = h.par + shots') && client.includes('value === null ? nettPar'),
     'the first tap of − or + lands on two points, nett par, as on a trip')
-  ok(client.includes('aria-label="Previous hole"') && client.includes('aria-label="Next hole"') && !client.includes('grid-cols-9'),
+  ok(client.includes('aria-label="Previous hole"') && client.includes("'Next hole'") && !client.includes('grid-cols-9'),
     'previous and next move between holes — no grid of numbered holes')
   ok(client.includes('backgroundColor: holeFill(o, isNow)'), 'the strip marks each hole in the colour of the side that won it')
   ok(client.includes('usePoll(load, 15_000, true)') && !client.includes('setInterval'), 'the other phone shows up, through the one poller')
   const finishSheet = read('app/trip/[tripCode]/match/[matchId]/card/MatchFinish.tsx')
+  ok(client.includes("finish?.phase ?? (asking && awaitingFinal ? 'confirm' : null)")
+    && client.includes("{finaliseHere ? 'Finalise match' : '→'}"),
+    'the end of a match never interrupts scoring — the next button becomes Finalise match on the hole that settles it')
   ok(client.includes('const awaitingFinal = loaded && canEdit && shouldWrite(state, winnerId, stored, false)')
     && !client.includes('writeResult()\n  }, [loaded'),
     'a settled card asks before its result goes into an empty match — never by itself')
