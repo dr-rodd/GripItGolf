@@ -11,26 +11,29 @@ import { supabase } from '@/lib/supabase'
  * as well. What a round's sheet then *is* — vacant, active or legacy — is
  * lib/teeSheet.ts `roundSheet`'s to decide.
  */
-export type StoredSheet = { rules: unknown; intervalMins: unknown; groupSize: unknown }
+export type StoredSheet = { rules: unknown; intervalMins: unknown; groupSize: unknown; startFormat: unknown }
 
 export async function readSheetSettings(tripId: string): Promise<Map<string, StoredSheet>> {
   const [rulesRes, oldRes] = await Promise.all([
     supabase.from('rounds').select('id, tee_sheet').eq('trip_id', tripId),
-    supabase.from('rounds').select('id, tee_interval_mins, tee_group_size').eq('trip_id', tripId),
+    // The start format rides here, migration 046 being older than 050 —
+    // so a trip's screens can ask it without naming it in a main select.
+    supabase.from('rounds').select('id, tee_interval_mins, tee_group_size, start_format').eq('trip_id', tripId),
   ])
   const out = new Map<string, StoredSheet>()
   const at = (id: string) => {
     let s = out.get(id)
-    if (!s) { s = { rules: null, intervalMins: null, groupSize: null }; out.set(id, s) }
+    if (!s) { s = { rules: null, intervalMins: null, groupSize: null, startFormat: null }; out.set(id, s) }
     return s
   }
   for (const r of (rulesRes.data ?? []) as { id: string; tee_sheet?: unknown }[]) {
     at(r.id).rules = r.tee_sheet ?? null
   }
-  for (const r of (oldRes.data ?? []) as { id: string; tee_interval_mins?: unknown; tee_group_size?: unknown }[]) {
+  for (const r of (oldRes.data ?? []) as { id: string; tee_interval_mins?: unknown; tee_group_size?: unknown; start_format?: unknown }[]) {
     const s = at(r.id)
     s.intervalMins = r.tee_interval_mins ?? null
     s.groupSize = r.tee_group_size ?? null
+    s.startFormat = r.start_format ?? null
   }
   return out
 }

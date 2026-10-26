@@ -30,7 +30,7 @@ import {
   activeHubModules, teeSheetInUse, eventFourthTab,
 } from '@/lib/eventHub'
 import { hubTeeRound, myTee, roundSheet, sheetClock, sheetIsOpen } from '@/lib/teeSheet'
-import { readSheetSettings, type StoredSheet } from './teesheet/sheets'
+import { readSheetSettings } from './teesheet/sheets'
 import { readAllRows } from '@/lib/allRows'
 import NoticesPanel, { type Notice } from './NoticesPanel'
 import TeeTimesPanel from './TeeTimesPanel'
@@ -238,25 +238,23 @@ export default async function TripPage({ params, searchParams }: {
     isEvent && trip.start_date
       ? supabase.from('rounds').select('id, casual').eq('trip_id', trip.id)
       : Promise.resolve({ data: [], error: null }),
-    // The tee times module's two reads — events only, in the same breath
-    // rather than after the rounds say whether a tee sheet is in play, so
-    // the module costs this screen no hop. Both fail soft, as on the sheet:
-    // before the migrations each round's sheet reads as vacant and nobody
-    // is on one. The assignments are read whole for the same reason the
-    // sheet reads them whole (lib/allRows.ts).
-    isEvent
-      ? readSheetSettings(trip.id)
-      : Promise.resolve(new Map<string, StoredSheet>()),
-    isEvent
-      ? readAllRows<{ round_id: string; player_id: string; slot_index: number }>(
-          () => supabase
-            .from('tee_assignments')
-            .select('round_id, player_id, slot_index', { count: 'exact' })
-            .eq('trip_id', trip.id)
-            .order('created_at').order('round_id').order('player_id'),
-          a => `${a.round_id}|${a.player_id}`,
-        )
-      : Promise.resolve({ data: [], error: null }),
+    // The tee times module's two reads — an event's or a trip's, since tee
+    // times reached trips — in the same breath rather than after the rounds
+    // say whether a tee sheet is in play, so the module costs this screen
+    // no hop. Both fail soft, as on the sheet: before the migrations each
+    // round's sheet reads as vacant and nobody is on one. The start formats
+    // ride in the settings read, so a trip's main select never names one.
+    // The assignments are read whole for the same reason the sheet reads
+    // them whole (lib/allRows.ts).
+    readSheetSettings(trip.id),
+    readAllRows<{ round_id: string; player_id: string; slot_index: number }>(
+      () => supabase
+        .from('tee_assignments')
+        .select('round_id, player_id, slot_index', { count: 'exact' })
+        .eq('trip_id', trip.id)
+        .order('created_at').order('round_id').order('player_id'),
+      a => `${a.round_id}|${a.player_id}`,
+    ),
   ])
 
   if (roundsResult.error) console.error('TripPage rounds query failed:', roundsResult.error)
@@ -336,14 +334,18 @@ export default async function TripPage({ params, searchParams }: {
   // On while any round starts from a tee sheet; it speaks for one of them
   // (lib/teeSheet.ts `hubTeeRound`). Who this phone is comes later, so the
   // place on the sheet is worked out once `me` is known.
-  const teeSheet = isEvent && teeSheetInUse(rounds.map(r => r.start_format))
+  // Each round's start format — an event's main select has it, a trip's
+  // comes from the settings read.
+  const startFormatOf = (r: { id: string; start_format?: unknown }) =>
+    r.start_format ?? teeSettingsResult.get(r.id)?.startFormat ?? null
+  const teeSheet = teeSheetInUse(rounds.map(startFormatOf))
   // The bar's fourth tab (lib/eventHub.ts). Stats with a tab of their own
   // are not on the home screen too — only when the tee times have it.
   const fourthTab = isEvent ? eventFourthTab({ teeTimes: teeSheet, stats: trip.track_stats === true }) : null
   const statsOnHome = !isEvent || fourthTab === 'teeTimes'
   const teeRound = teeSheet ? hubTeeRound(
     rounds
-      .filter(r => parseStartFormat(r.start_format) === 'tee_sheet')
+      .filter(r => parseStartFormat(startFormatOf(r)) === 'tee_sheet')
       .map(r => ({
         id: r.id,
         roundNumber: r.round_number,

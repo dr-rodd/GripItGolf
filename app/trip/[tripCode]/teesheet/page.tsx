@@ -4,7 +4,7 @@ import { fetchTripKind } from '../kind'
 import {
   parseLeaderboards, teamBoardForRound, tagsInPlay,
 } from '@/lib/leaderboards'
-import { allowsParticipant } from '@/lib/eventPermissions'
+import { teeSheetAccess } from '@/lib/eventPermissions'
 import { readAllRows } from '@/lib/allRows'
 import { parseStartFormat } from '@/lib/eventHub'
 import { describeOpening, roundSheet, sheetIsOpen } from '@/lib/teeSheet'
@@ -21,8 +21,8 @@ export const dynamic = 'force-dynamic'
 /**
  * The Tee times tab — who goes off when, a sheet per tee-sheet round.
  *
- * Events only, like the organiser area: a trip's field sorts its own
- * fourballs on the first tee and has no tab pointing here. Only rounds
+ * An event's, and a trip's that has turned tee times on — the fourth tab
+ * in Stats' place (lib/eventHub.ts `fourthTab`). Only rounds
  * that start from a tee sheet are on it, each vacant until its sheet is
  * made in the wizard (lib/teeSheet.ts `roundSheet`). Everything comes down
  * in one batch; the sheet settings and the assignments table ride in their
@@ -41,6 +41,8 @@ export default async function TeeSheetPage({ params, searchParams }: {
 }) {
   const [{ tripCode }, { round: initialRoundId }] = await Promise.all([params, searchParams])
 
+  // The kind alongside, for the words only — a trip's sheet speaks of its
+  // lead player and passcode.
   const [kind, { data: trip, error }] = await Promise.all([
     fetchTripKind(tripCode),
     supabase
@@ -54,27 +56,15 @@ export default async function TeeSheetPage({ params, searchParams }: {
   if (!trip) {
     return (
       <main className="min-h-dvh flex flex-col items-center justify-center paper px-6">
-        <p className="t-h2 text-ink mb-3">Event not found</p>
+        <p className="t-h2 text-ink mb-3">Not found</p>
         <p className="text-ink/65 text-sm mb-8">Check the code and try again.</p>
         <BackButton href="/" label="Home" />
       </main>
     )
   }
 
-  if (!isEvent(kind)) {
-    return (
-      <main className="min-h-dvh has-tabbar flex flex-col items-center justify-center paper px-6 text-center">
-        <p className="t-h2 text-ink mb-3">
-          This is a trip
-        </p>
-        <p className="text-ink/65 text-sm mb-8 max-w-[22rem] leading-relaxed">
-          Tee sheets belong to events — a trip&apos;s groups sort themselves
-          on the first tee.
-        </p>
-        <BackButton href={`/trip/${tripCode}`} label="Trip" />
-      </main>
-    )
-  }
+  // An event's, or a trip's since tee times reached trips (Ross, 26 Oct
+  // 2026) — the same sheet, the same two answers, read from the same column.
 
   // Whose teams a slot is showing is now a per-round question: a day with
   // its own team board plays that day's fourballs, and a day without plays
@@ -188,6 +178,9 @@ export default async function TeeSheetPage({ params, searchParams }: {
       }
     })
 
+  // The tee times question's two answers, stored alike on a trip and an event.
+  const access = teeSheetAccess((permsResult.data as { event_permissions?: unknown } | null)?.event_permissions)
+
   // Who this phone is — the player who may pick their own time.
   const roster = (playersResult.data ?? []) as { id: string; name: string; claimed: boolean | null }[]
   const me = await currentPlayer(tripCode, roster)
@@ -279,18 +272,11 @@ export default async function TeeSheetPage({ params, searchParams }: {
       // the top instead.
       storageReady={!assignmentsResult.error}
       hasTeamBoard={anyTeamBoard}
-      fieldMayEdit={allowsParticipant(
-        kind,
-        (permsResult.data as { event_permissions?: unknown } | null)?.event_permissions,
-        'edit_tee_sheet',
-      )}
-      fieldMaySet={allowsParticipant(
-        kind,
-        (permsResult.data as { event_permissions?: unknown } | null)?.event_permissions,
-        'set_tee_sheets',
-      )}
+      fieldMayEdit={access.playersPick}
+      fieldMaySet={access.anyoneOpens}
       meId={me && isConfirmed(me) ? me.id : null}
       initialRoundId={initialRoundId ?? null}
+      isTrip={!isEvent(kind)}
       passcodeHash={(trip.settings_passcode_hash as string | null) ?? null}
     />
   )

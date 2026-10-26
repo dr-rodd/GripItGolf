@@ -158,6 +158,7 @@ export default function TripSetupClient({
   lockedGolfItemIds,
   askTeeTeams = false,
   askTags = false,
+  teeTimes = null,
 }: {
   trip: Trip
   teams: Team[]
@@ -179,6 +180,11 @@ export default function TripSetupClient({
   askTeeTeams?: boolean
   /** Events only — offer a board that ranks tags (lib/tagBoards.ts). */
   askTags?: boolean
+  /**
+   * A trip's Tee times section, drawn by the page (`TripTeeTimes`) — an
+   * event keeps its tee times in the organiser area instead.
+   */
+  teeTimes?: React.ReactNode
 }) {
   const router = useRouter()
 
@@ -862,6 +868,8 @@ export default function TripSetupClient({
             </p>
           </section>
         )}
+
+          {teeTimes}
 
           {/* ── Players ── */}
           <section>

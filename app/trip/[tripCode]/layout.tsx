@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import TabBar from '@/app/components/TabBar'
-import { eventFourthTab, isEvent } from '@/lib/eventHub'
+import { fourthTab, isEvent } from '@/lib/eventHub'
 import { isRunChallenge } from '@/lib/runChallenge'
 import { entryAllowed, entryCookie } from '@/lib/publicPin'
 import { fetchEntryLock, fetchIsKnockout, fetchTabExtras, fetchTripKind } from './kind'
@@ -47,9 +47,10 @@ import { fetchEntryLock, fetchIsKnockout, fetchTabExtras, fetchTripKind } from '
  * is the Bracket rather than the Leaderboard (Ross, 26 Oct 2026) — the
  * setup's one `format` key, in parallel with the other two.
  *
- * **And a fourth says what the event's fourth tab is** — Tee times while a
- * round starts from a tee sheet, else Stats while the event records them
- * (lib/eventHub.ts `eventFourthTab`): the stats flag and the rounds' start
+ * **And a fourth says what the fourth tab is** — on an event, Tee times
+ * while a round starts from a tee sheet, else Stats while the event
+ * records them; on a trip, Stats unless Tee times has taken its place
+ * (lib/eventHub.ts `fourthTab`): the stats flag and the rounds' start
  * formats in one request, in parallel with the rest. A screen that changes
  * either refreshes the router, so the bar follows.
  */
@@ -75,7 +76,7 @@ export default async function TripLayout({
         tripCode={tripCode}
         isEvent={isEvent(kind)}
         bracket={isEvent(kind) && knockout}
-        fourth={isEvent(kind) ? eventFourthTab(extras) : null}
+        fourth={fourthTab(isEvent(kind), extras)}
       />
     </>
   )

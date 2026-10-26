@@ -186,8 +186,8 @@ section('Every event door asks how collaborative, and writes only real answers')
   ok(tripForm.includes('{isTournament && (\n              <div className="mt-8 pt-6 border-t border-bark/12">\n                <p className="text-ink/80 text-[13px] uppercase tracking-wider mb-2">\n                  How collaborative should this event be?')
     || /isTournament && \([\s\S]{0,400}How collaborative/.test(tripForm),
     'the trip wizard only asks through the tournament door')
-  ok(tripForm.includes('isTournament && storedPermissions(finalPerms)'),
-    'and only writes for an event')
+  ok(tripForm.includes('(isTournament || teeTimes) && storedPermissions(finalPerms)'),
+    'and only writes for an event — or a trip\'s tee times answers')
 }
 
 // ─── Wiring: the admin page ────────────────────────────────────

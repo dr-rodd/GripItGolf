@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
-import { allowsParticipant } from '@/lib/eventPermissions'
+import { teeSheetAccess } from '@/lib/eventPermissions'
 import { parseLeaderboards, teamBoardForRound } from '@/lib/leaderboards'
 import { PAIR_SIZE } from '@/lib/teamLimits'
 import { draftRules, roundSheet } from '@/lib/teeSheet'
@@ -22,9 +22,11 @@ export const dynamic = 'force-dynamic'
  * waiting on its venue has no `rounds` row, so it has nothing to make a
  * sheet for until the venue is chosen.
  *
- * Behind the organiser PIN, unless the event lets anyone make the sheets
- * (`set_tee_sheets` — a casual event nobody runs). The same soft lock as
- * every other organiser screen, and an event with no PIN is open, as ever.
+ * Behind the organiser PIN — on a trip, the Trip Setup passcode — unless
+ * the event or trip lets anyone open the sheets (`set_tee_sheets` — a
+ * casual event nobody runs; `teeSheetAccess`, read alike for both). The
+ * same soft lock as every other organiser screen, and one with no PIN is
+ * open, as ever.
  */
 export default async function TeeSheetSetupPage({ params, searchParams }: {
   params: Promise<{ tripCode: string; roundId: string }>
@@ -40,7 +42,9 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
   if (error) console.error('TeeSheetSetupPage trip query failed:', error)
 
   const sheetHref = `/trip/${tripCode}/teesheet?round=${roundId}`
-  const backHref = from === 'organiser' ? `/trip/${tripCode}/organiser` : sheetHref
+  const backHref = from === 'organiser' ? `/trip/${tripCode}/organiser`
+    : from === 'setup' ? `/trip/${tripCode}/setup`
+    : sheetHref
 
   const notHere = (title: string, body: string) => (
     <main className="min-h-dvh has-tabbar flex flex-col items-center justify-center paper px-6 text-center">
@@ -50,10 +54,9 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
     </main>
   )
 
-  if (!trip) return notHere('Event not found', 'Check the code and try again.')
-  if (!isEvent(trip.kind)) {
-    return notHere('This is a trip', 'Tee sheets belong to events — a trip’s groups sort themselves on the first tee.')
-  }
+  if (!trip) return notHere('Not found', 'Check the code and try again.')
+  // An event's, or a trip's since tee times reached trips (Ross, 26 Oct 2026).
+  const event = isEvent(trip.kind)
 
   const [roundRes, playersRes, permsRes, sheets, assignRes] = await Promise.all([
     supabase
@@ -135,9 +138,7 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
     </main>
   )
 
-  const openToAll = allowsParticipant(
-    trip.kind, (permsRes.data as { event_permissions?: unknown } | null)?.event_permissions, 'set_tee_sheets',
-  )
+  const openToAll = teeSheetAccess((permsRes.data as { event_permissions?: unknown } | null)?.event_permissions).anyoneOpens
   if (!openToAll && isLocked(trip.settings_passcode_hash)) {
     return (
       <PasscodeGate
@@ -145,7 +146,7 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
         tripName={trip.name}
         passcodeHash={trip.settings_passcode_hash as string}
         title="Tee sheet"
-        hint={`Enter the organiser PIN for ${trip.name} to open round ${round.round_number}'s tee sheet.`}
+        hint={`Enter the ${event ? 'organiser PIN' : 'Trip Setup passcode'} for ${trip.name} to open round ${round.round_number}'s tee sheet.`}
       >
         {content}
       </PasscodeGate>

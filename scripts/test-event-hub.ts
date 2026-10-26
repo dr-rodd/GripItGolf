@@ -12,7 +12,7 @@ import fs from 'fs'
 import {
   isEvent, normalizeNotice, MAX_NOTICE,
   parseStartFormat, describeStart, START_FORMAT_LABEL,
-  activeHubModules, teeSheetInUse, eventFourthTab,
+  activeHubModules, teeSheetInUse, eventFourthTab, fourthTab,
 } from '../lib/eventHub'
 
 let passed = 0, failed = 0
@@ -195,7 +195,7 @@ section('An event hides Trip Setup from the field')
   const settingsItem = bar.slice(bar.indexOf('const EVENT_SETTINGS'), bar.indexOf('\n\n', bar.indexOf('const EVENT_SETTINGS')))
   ok(settingsItem.includes("label: 'Settings'") && settingsItem.includes('/settings`'),
     'an event\'s bar ends on Settings, its own screen')
-  const eventItems = bar.slice(bar.indexOf(': isEvent ? ['), bar.indexOf(']\n      : ITEMS'))
+  const eventItems = bar.slice(bar.indexOf(': isEvent ? ['), bar.indexOf(']\n      // A trip'))
   ok(!eventItems.includes('/setup`') && !eventItems.includes('ITEMS[4]'),
     '  …never Trip Setup')
   ok(/ITEMS\[0\], ITEMS\[1\], bracket \? BRACKET_ITEM : ITEMS\[2\],/.test(eventItems),
@@ -212,8 +212,12 @@ section('An event hides Trip Setup from the field')
   ], ['teeTimes', 'teeTimes', 'stats', null],
     'tee times win the fourth tab when both are on; stats have it alone; neither, the bar is four')
   const layout4 = read('app/trip/[tripCode]/layout.tsx')
-  ok(layout4.includes('fetchTabExtras(tripCode)') && layout4.includes('fourth={isEvent(kind) ? eventFourthTab(extras) : null}'),
-    'the layout reads it alongside the kind, events only')
+  ok(layout4.includes('fetchTabExtras(tripCode)') && layout4.includes('fourth={fourthTab(isEvent(kind), extras)}'),
+    'the layout reads it alongside the kind')
+  eq([fourthTab(false, { teeTimes: true, stats: false }), fourthTab(false, { teeTimes: false, stats: false })],
+    ['teeTimes', 'stats'], 'a trip keeps Stats as its fourth tab until tee times take its place (26 Oct 2026)')
+  ok(bar.includes("fourth === 'teeTimes' ? [ITEMS[0], ITEMS[1], ITEMS[2], TEE_TIMES_ITEM, ITEMS[4]]"),
+    '  …Trip Setup still last')
   const hub4 = read('app/trip/[tripCode]/page.tsx')
   ok(hub4.includes("const statsOnHome = !isEvent || fourthTab === 'teeTimes'")
      && hub4.includes('stats: statsOnHome && !!statsCover'),

@@ -87,7 +87,7 @@ export default function TeeSheetClient({
   tripId, tripCode, rounds, players, initialAssignments,
   roundTeams, tagOf, playingForTags = false,
   hasTeamBoard, fieldMayEdit, fieldMaySet = false, passcodeHash = null,
-  storageReady = true, meId = null, initialRoundId = null,
+  storageReady = true, meId = null, initialRoundId = null, isTrip = false,
 }: {
   tripId: string
   tripCode: string
@@ -113,6 +113,8 @@ export default function TeeSheetClient({
   meId?: string | null
   /** The round to open on — the wizard sends people back to the one they made. */
   initialRoundId?: string | null
+  /** A trip's sheet: its lead player and passcode, never an organiser and PIN. */
+  isTrip?: boolean
   /** For the inline organiser unlock; null when the event has no PIN. */
   passcodeHash?: string | null
   /** False when the assignments table could not be read — nothing will save. */
@@ -446,7 +448,7 @@ export default function TeeSheetClient({
               ? 'Pick a free time — tap Join.'
               : fieldMayEdit
                 ? 'Claim your name to pick a time.'
-                : 'Who goes off when. The organiser sets the groups.'}
+                : `Who goes off when. The ${isTrip ? 'lead player' : 'organiser'} sets the groups.`}
         </p>
         {fieldMayEdit && !meId && !organiser && (
           <Link
@@ -504,7 +506,7 @@ export default function TeeSheetClient({
               tripCode={tripCode}
               passcodeHash={passcodeHash}
               onUnlocked={() => setUnlocked(true)}
-              prompt="Organiser? Enter your PIN to place players."
+              prompt={isTrip ? 'Lead player? Enter the passcode to place players.' : 'Organiser? Enter your PIN to place players.'}
             />
           </div>
         )}
@@ -576,7 +578,9 @@ export default function TeeSheetClient({
               Open the tee sheet
             </Link>
             {!fieldMaySet && isLocked(passcodeHash) && !unlocked && (
-              <p className="t-cap text-ink/65 mt-2 text-center">Asks for the organiser PIN.</p>
+              <p className="t-cap text-ink/65 mt-2 text-center">
+                {isTrip ? 'Asks for the Trip Setup passcode.' : 'Asks for the organiser PIN.'}
+              </p>
             )}
           </div>
         ) : fieldBarred ? (

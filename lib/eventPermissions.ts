@@ -122,6 +122,21 @@ export function permissionsFor(series: boolean, knockout = false): typeof EVENT_
 /** The tee times question's two answers, in the order they are asked. */
 export const TEE_SHEET_PERMISSIONS = EVENT_PERMISSIONS.filter(p => p.teeSheet)
 
+/**
+ * The tee times question's two answers as stored — on an event, and on a
+ * trip too (Ross, 26 Oct 2026: tee times reached trips "under similar
+ * conditions"). Read straight from the column for both, never through
+ * `allowsParticipant`, which opens every gate on a trip: a trip's lead
+ * player answers this question like an organiser does, and the defaults
+ * (the organiser opens the sheets and places the players) hold until they
+ * do. On a trip with no passcode "the organiser" is anybody, the soft
+ * lock's fail-open.
+ */
+export function teeSheetAccess(raw: unknown): { anyoneOpens: boolean; playersPick: boolean } {
+  const p = parseEventPermissions(raw)
+  return { anyoneOpens: p.set_tee_sheets, playersPick: p.edit_tee_sheet }
+}
+
 export type EventPermissions = Record<EventPermissionKey, boolean>
 
 /** Every permission at its registry default — a fresh, conservative event. */

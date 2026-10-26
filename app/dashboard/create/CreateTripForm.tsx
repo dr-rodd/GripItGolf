@@ -350,7 +350,8 @@ export default function CreateTripForm({ matchPlay = false }: {
     // opened writes nothing, so creation still lands before migration 049.
     // Tee times off leaves both of its answers at their defaults.
     const finalPerms = teeTimes ? perms : { ...perms, set_tee_sheets: false, edit_tee_sheet: false }
-    if (isTournament && storedPermissions(finalPerms)) tripRow.event_permissions = finalPerms
+    // A trip writes the column only for its tee times answers.
+    if ((isTournament || teeTimes) && storedPermissions(finalPerms)) tripRow.event_permissions = finalPerms
 
     // Same reasoning, and the same for anything that is not an address:
     // blank, half-typed or nonsense all mean "not given", and none of them is
@@ -477,9 +478,10 @@ export default function CreateTripForm({ matchPlay = false }: {
             // so creation still works before migration 031 has run.
             ...(g.casual ? { casual: true } : {}),
             ...(g.casual && g.casualStats ? { casual_stats: true } : {}),
-            // An event with tee times: every round on a tee sheet, vacant
-            // until the organiser makes it.
-            ...(isTournament && teeTimes ? { start_format: 'tee_sheet' } : {}),
+            // Tee times on: every round on a tee sheet, not open until the
+            // organiser (or a trip's lead player) opens it. Named only then,
+            // so a trip without tee times is byte for byte what it was.
+            ...(teeTimes ? { start_format: 'tee_sheet' } : {}),
           }
         })
       )
@@ -966,16 +968,17 @@ export default function CreateTripForm({ matchPlay = false }: {
                 event starts organiser-run and opens up only where its
                 organiser says so. The same toggles are editable any time
                 from the organiser area. */}
-            {isTournament && (
-              <div className="mt-8 pt-6 border-t border-line">
-                <TeeTimesQuestion
-                  on={teeTimes}
-                  onToggle={setTeeTimes}
-                  value={{ anyoneMakes: perms.set_tee_sheets, playersPick: perms.edit_tee_sheet }}
-                  onChange={v => setPerms({ ...perms, set_tee_sheets: v.anyoneMakes, edit_tee_sheet: v.playersPick })}
-                />
-              </div>
-            )}
+            {/* Tee times — an event's and, since 26 Oct 2026, a trip's
+                too, under the same question (its lead player's words). */}
+            <div className="mt-8 pt-6 border-t border-line">
+              <TeeTimesQuestion
+                on={teeTimes}
+                onToggle={setTeeTimes}
+                value={{ anyoneMakes: perms.set_tee_sheets, playersPick: perms.edit_tee_sheet }}
+                onChange={v => setPerms({ ...perms, set_tee_sheets: v.anyoneMakes, edit_tee_sheet: v.playersPick })}
+                trip={!isTournament}
+              />
+            </div>
 
             {isTournament && (
               <div className="mt-8 pt-6 border-t border-line">

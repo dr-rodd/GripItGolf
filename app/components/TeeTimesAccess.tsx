@@ -18,10 +18,13 @@ import Toggle from './Toggle'
  */
 export type TeeTimesAccessValue = { anyoneMakes: boolean; playersPick: boolean }
 
-export default function TeeTimesAccess({ value, onChange }: {
+export default function TeeTimesAccess({ value, onChange, trip = false }: {
   value: TeeTimesAccessValue
   onChange: (next: TeeTimesAccessValue) => void
+  /** Asked of a trip: its lead player and passcode, never an organiser and PIN. */
+  trip?: boolean
 }) {
+  const boss = trip ? 'The lead player' : 'The organiser'
   return (
     <div className="flex flex-col gap-4">
       <div>
@@ -31,14 +34,14 @@ export default function TeeTimesAccess({ value, onChange }: {
           value={value.anyoneMakes ? 'anyone' : 'organiser'}
           onChange={v => onChange({ ...value, anyoneMakes: v === 'anyone' })}
           options={[
-            { value: 'organiser', label: 'The organiser' },
+            { value: 'organiser', label: boss },
             { value: 'anyone', label: 'Anyone' },
           ]}
         />
         <p className="t-cap text-ink/65 mt-1.5 leading-snug">
           {value.anyoneMakes
-            ? 'A casual event nobody runs: anyone can open or change a round’s tee sheet, no PIN.'
-            : 'Opened and changed behind the organiser PIN.'}
+            ? `A casual ${trip ? 'trip' : 'event'} nobody runs: anyone can open or change a round’s tee sheet, no ${trip ? 'passcode' : 'PIN'}.`
+            : trip ? 'Opened and changed in Trip Setup, behind its passcode if it has one.' : 'Opened and changed behind the organiser PIN.'}
         </p>
       </div>
       <div>
@@ -48,14 +51,14 @@ export default function TeeTimesAccess({ value, onChange }: {
           value={value.playersPick ? 'players' : 'organiser'}
           onChange={v => onChange({ ...value, playersPick: v === 'players' })}
           options={[
-            { value: 'organiser', label: 'The organiser' },
+            { value: 'organiser', label: boss },
             { value: 'players', label: 'Each player' },
           ]}
         />
         <p className="t-cap text-ink/65 mt-1.5 leading-snug">
           {value.playersPick
             ? 'Each player picks a free time for themselves.'
-            : 'The organiser places everyone; the sheet is read-only to the rest.'}
+            : `${boss} places everyone; the sheet is read-only to the rest.`}
         </p>
       </div>
     </div>
@@ -68,11 +71,12 @@ export default function TeeTimesAccess({ value, onChange }: {
  * from a tee sheet — an empty slot on the Tee times tab until the organiser
  * makes it — and a league round added later follows (lib/leagueRoundStore.ts).
  */
-export function TeeTimesQuestion({ on, onToggle, value, onChange }: {
+export function TeeTimesQuestion({ on, onToggle, value, onChange, trip = false }: {
   on: boolean
   onToggle: (on: boolean) => void
   value: TeeTimesAccessValue
   onChange: (next: TeeTimesAccessValue) => void
+  trip?: boolean
 }) {
   return (
     <div>
@@ -87,7 +91,7 @@ export function TeeTimesQuestion({ on, onToggle, value, onChange }: {
       </div>
       {on && (
         <div className="mt-4">
-          <TeeTimesAccess value={value} onChange={onChange} />
+          <TeeTimesAccess value={value} onChange={onChange} trip={trip} />
         </div>
       )}
     </div>

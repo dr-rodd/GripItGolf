@@ -8,7 +8,10 @@ import { fromItemRow } from '@/lib/itinerarySync'
 import TripSetupClient from './TripSetupClient'
 import PasscodeGate from './PasscodeGate'
 import { isLocked } from '@/lib/passcode'
-import { isEvent } from '@/lib/eventHub'
+import { isEvent, parseStartFormat, teeSheetInUse } from '@/lib/eventHub'
+import { roundSheet, teeSheetSummary } from '@/lib/teeSheet'
+import { readAllRows } from '@/lib/allRows'
+import TripTeeTimes from './TripTeeTimes'
 
 export const dynamic = 'force-dynamic'
 
@@ -147,6 +150,56 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
     .filter(r => lockedRoundIds.has(r.id) && r.itinerary_item_id)
     .map(r => r.itinerary_item_id as string)
 
+  // A trip's tee times (Ross, 26 Oct 2026) — the Trip Setup counterpart to
+  // an event's Starts card. The rounds came whole (`*`), so their start
+  // format, rules and settings are here already; who is on each sheet is
+  // the one more read, taken whole (lib/allRows.ts). An event keeps its
+  // tee times in the organiser area.
+  let teeTimes: React.ReactNode = null
+  if (!isEvent(trip.kind) && rounds.length > 0) {
+    const booked = await readAllRows<{ round_id: string; player_id: string }>(
+      () => supabase
+        .from('tee_assignments')
+        .select('round_id, player_id', { count: 'exact' })
+        .eq('trip_id', trip.id)
+        .order('created_at').order('round_id').order('player_id'),
+      a => `${a.round_id}|${a.player_id}`,
+    )
+    const bookedOn = new Map<string, number>()
+    for (const a of (booked.data ?? []) as { round_id: string }[]) {
+      bookedOn.set(a.round_id, (bookedOn.get(a.round_id) ?? 0) + 1)
+    }
+    const teeTimeOf = new Map(((itineraryResult.data ?? []) as unknown as ItinRow[]).map(i => [i.id, i.tee_time]))
+    const now = new Date()
+    const teeRounds = rounds
+      .filter(r => parseStartFormat(r.start_format) === 'tee_sheet')
+      .map(r => {
+        const sheet = roundSheet({
+          rules: r.tee_sheet,
+          startTime: r.itinerary_item_id ? teeTimeOf.get(r.itinerary_item_id) ?? null : null,
+          intervalMins: r.tee_interval_mins,
+          groupSize: r.tee_group_size,
+          hasAssignments: bookedOn.has(r.id),
+        })
+        return {
+          id: r.id as string,
+          roundNumber: r.round_number as number,
+          state: sheet.state,
+          summary: teeSheetSummary(sheet, (r.scheduled_date as string | null) ?? null, now),
+          booked: bookedOn.get(r.id) ?? 0,
+        }
+      })
+    teeTimes = (
+      <TripTeeTimes
+        tripId={trip.id}
+        tripCode={tripCode}
+        initialOn={teeSheetInUse(rounds.map(r => r.start_format))}
+        rawPermissions={trip.event_permissions}
+        rounds={teeRounds}
+      />
+    )
+  }
+
   const settings = (
     <TripSetupClient
       trip={{
@@ -187,6 +240,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       // a trip has no sheet and is never asked (fail-soft over kind).
       askTeeTeams={isEvent(trip.kind)}
       askTags={isEvent(trip.kind)}
+      teeTimes={teeTimes}
     />
   )
 

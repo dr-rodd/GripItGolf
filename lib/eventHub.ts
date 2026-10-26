@@ -105,6 +105,16 @@ export function eventFourthTab({ teeTimes, stats }: {
   return teeTimes ? 'teeTimes' : stats ? 'stats' : null
 }
 
+/**
+ * The fourth tab on anything with a bar. An event's rule above; a trip
+ * keeps Stats there as it always has — until a round starts from a tee
+ * sheet, when Tee times takes its place and the stats stay on the trip's
+ * home screen (Ross, 26 Oct 2026: tee times on trips, under the same rule).
+ */
+export function fourthTab(event: boolean, extras: { teeTimes: boolean; stats: boolean }): FourthTab | null {
+  return event ? eventFourthTab(extras) : extras.teeTimes ? 'teeTimes' : 'stats'
+}
+
 // ─── The home screen's modules ─────────────────────────────────
 //
 // Four things on an event's home screen only exist some of the time: the

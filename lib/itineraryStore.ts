@@ -12,6 +12,7 @@
 // round mid-trip is always allowed — an impromptu game is still golf.
 
 import { supabase } from '@/lib/supabase'
+import { teeSheetInUse } from './eventHub'
 import { golfItems, dateForDay, type ItineraryItem } from './itinerary'
 import { isHandicapPending } from './handicap'
 import {
@@ -205,6 +206,15 @@ async function addRounds(
 
   let nextNumber = (last?.[0]?.round_number ?? 0) + 1
 
+  // A trip or event whose rounds go out from a tee sheet gives a new round
+  // one too — not open until it is opened (Ross, 26 Oct 2026). Its own
+  // query, fail-soft: a failed read is no tee sheet, never no round.
+  const { data: formats } = await supabase
+    .from('rounds')
+    .select('start_format')
+    .eq('trip_id', tripId)
+  const teeSheet = teeSheetInUse(((formats ?? []) as { start_format: string | null }[]).map(r => r.start_format))
+
   const { data: newRounds, error } = await supabase
     .from('rounds')
     .insert(items.map(item => {
@@ -220,6 +230,7 @@ async function addRounds(
         // database that has not run migration 031 yet.
         ...(item.casual ? { casual: true } : {}),
         ...(item.casual && item.casualStats ? { casual_stats: true } : {}),
+        ...(teeSheet ? { start_format: 'tee_sheet' } : {}),
       }
     }))
     .select('id')

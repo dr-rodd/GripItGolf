@@ -151,7 +151,7 @@ function Tab({
 
 export default function TabBar({ tripCode, isEvent = false, bracket = false, fourth = null, sport = 'golf' }: {
   tripCode: string
-  /** An event's tab between the leaderboard and Settings, or none (`eventFourthTab`). */
+  /** The tab between the leaderboard and the last — Tee times, Stats or none (`fourthTab`). */
   fourth?: FourthTab | null
   /**
    * A match play event: the middle tab is the Bracket, with its own mark,
@@ -182,6 +182,8 @@ export default function TabBar({ tripCode, isEvent = false, bracket = false, fou
           ...(fourth === 'teeTimes' ? [TEE_TIMES_ITEM] : fourth === 'stats' ? [ITEMS[3]] : []),
           EVENT_SETTINGS,
         ]
+      // A trip's five, Tee times in Stats' place while it uses tee sheets.
+      : fourth === 'teeTimes' ? [ITEMS[0], ITEMS[1], ITEMS[2], TEE_TIMES_ITEM, ITEMS[4]]
       : ITEMS
 
   /**
@@ -200,8 +202,10 @@ export default function TabBar({ tripCode, isEvent = false, bracket = false, fou
     if (pathname.startsWith(`${base}/scoring`)) return 'scoring'
     // An event's stats and tee times light their tab while they have one,
     // and nothing otherwise, like the players list.
-    if (pathname.startsWith(`${base}/stats`)) return !isEvent || fourth === 'stats' ? 'stats' : null
-    if (pathname.startsWith(`${base}/teesheet`)) return isEvent && fourth === 'teeTimes' ? 'teetimes' : null
+    if (pathname.startsWith(`${base}/stats`)) {
+      return fourth === 'stats' || (!isEvent && fourth !== 'teeTimes') ? 'stats' : null
+    }
+    if (pathname.startsWith(`${base}/teesheet`)) return fourth === 'teeTimes' ? 'teetimes' : null
     if (pathname.startsWith(`${base}/setup`) || pathname.startsWith(`${base}/teams`)) return 'settings'
     // An event's Settings is the door to the organiser area, so the area
     // and everything behind it keep Settings lit.

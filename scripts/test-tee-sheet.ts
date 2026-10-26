@@ -22,6 +22,7 @@ import {
   opensAt, sheetIsOpen, describeOpening, teeSheetSummary,
 } from '../lib/teeSheet'
 import { irishInstant, daysBefore } from '../lib/irishTime'
+import { teeSheetAccess } from '../lib/eventPermissions'
 import { TEE_INTERVAL_MINS } from '../lib/itinerary'
 import {
   type Leaderboard, parseLeaderboards, offersTeeTeams,
@@ -126,6 +127,48 @@ section('A round\'s sheet is vacant until the wizard has been through')
   eq(draftRules(active, '06:00', 50), rules, 'and a live one as saved')
 }
 
+section('Trips have tee times too, under the same rules (Ross, 26 Oct 2026)')
+{
+  eq(teeSheetAccess(null), { anyoneOpens: false, playersPick: false },
+    'nothing stored: the lead player or organiser opens the sheets and places the players')
+  eq(teeSheetAccess({ set_tee_sheets: true, edit_tee_sheet: true }), { anyoneOpens: true, playersPick: true },
+    '  …and the stored answers are read as given — on a trip as on an event, never opened wholesale for a trip')
+
+  const sheetPage = read('app/trip/[tripCode]/teesheet/page.tsx')
+  ok(!sheetPage.includes('This is a trip'), 'the Tee times tab no longer turns a trip away')
+  ok(sheetPage.includes('isTrip={!isEvent(kind)}'), '  …and speaks of a trip\'s lead player and passcode')
+  const wizPage = read('app/trip/[tripCode]/teesheet/[roundId]/setup/page.tsx')
+  ok(!wizPage.includes('This is a trip') && wizPage.includes("from === 'setup' ? `/trip/${tripCode}/setup`"),
+    'nor does the wizard, which sends a trip back to Trip Setup')
+
+  const setup = read('app/trip/[tripCode]/setup/page.tsx')
+  ok(setup.includes('if (!isEvent(trip.kind) && rounds.length > 0)') && setup.includes('<TripTeeTimes'),
+    'Trip Setup carries a trip\'s Tee times section — an event keeps its own in the organiser area')
+  const section = read('app/trip/[tripCode]/setup/TripTeeTimes.tsx')
+  ok(section.includes("update({ start_format: next ? 'tee_sheet' : null }).eq('trip_id', tripId)")
+     && section.includes(".eq('start_format', 'tee_sheet')"),
+    '  …on puts every round on a tee sheet; off takes them off and deletes nothing')
+  ok(section.includes('<TeeSheetRoundControls') && section.includes('from="setup"'),
+    '  …each round with the same controls the organiser area draws')
+  ok(/update\(\{ event_permissions: merged \}\)\.eq\('id', tripId\)/.test(section),
+    '  …and the two answers stored where an event keeps them, merged')
+
+  const access = read('app/components/TeeTimesAccess.tsx')
+  ok(access.includes("const boss = trip ? 'The lead player' : 'The organiser'"),
+    'a trip is asked in its lead player\'s words, never an organiser\'s')
+
+  const form = read('app/dashboard/create/CreateTripForm.tsx')
+  ok(form.includes('trip={!isTournament}') && /teeTimes \? \{ start_format: 'tee_sheet' \} : \{\}/.test(form),
+    'trip creation asks the question and puts every round on a tee sheet when it is on')
+  const store = read('lib/itineraryStore.ts')
+  ok(/\.\.\.\(teeSheet \? \{ start_format: 'tee_sheet' \} : \{\}\)/.test(store),
+    'a round added to a trip later follows it onto a tee sheet')
+
+  const hub = read('app/trip/[tripCode]/page.tsx')
+  ok(/\/\/ them whole \(lib\/allRows\.ts\)\.\s*readSheetSettings\(trip\.id\),/.test(hub),
+    'a trip\'s home screen reads its tee sheets as an event\'s does')
+}
+
 section('A sheet may open later: days before the round, or on a date, Irish time')
 {
   eq([irishInstant('2026-12-01', '20:00')?.toISOString(), irishInstant('2026-07-01', '20:00')?.toISOString()],
@@ -193,8 +236,8 @@ section('A sheet can be deleted, or cleared of its players')
 section('A sheet is made in its own wizard, behind the PIN unless the event is open')
 {
   const page = read('app/trip/[tripCode]/teesheet/[roundId]/setup/page.tsx')
-  ok(/allowsParticipant\([\s\S]{0,120}'set_tee_sheets'/.test(page) && /!openToAll && isLocked\(/.test(page),
-    'the wizard asks for the PIN unless anyone may make the sheets')
+  ok(/teeSheetAccess\([\s\S]{0,120}\.anyoneOpens/.test(page) && /!openToAll && isLocked\(/.test(page),
+    'the wizard asks for the PIN unless anyone may open the sheets — on a trip, its passcode')
   ok(page.includes(".from('rounds')") && page.includes(".eq('id', roundId)") && page.includes(".eq('trip_id', trip.id)"),
     'a sheet is for a round in Scoring, read scoped to the event')
   ok(page.includes('No such round'), '  …and a round that is not there says so, never a blank form')
@@ -422,8 +465,8 @@ section('The tee times are a tab, and your time is on the home screen too')
     'the hub draws the tee times while they are active')
   ok(hub.includes("teeSheet: !!teeRoundSheet && teeRoundSheet.state !== 'vacant'"),
     '  …which is while the round it speaks for has a live sheet — a vacant one says nothing there')
-  ok(hub.includes('teeSheetInUse(rounds.map(r => r.start_format))'),
-    '  …which is while a round starts from a tee sheet')
+  ok(hub.includes('teeSheetInUse(rounds.map(startFormatOf))'),
+    '  …which is while a round starts from a tee sheet — an event\'s or a trip\'s')
   ok(hub.includes('hubTeeRound(') && hub.includes('myTee('),
     'the round and the place come from lib/teeSheet.ts, never re-derived')
   ok(/from\('tee_assignments'\)[\s\S]{0,200}\.eq\('trip_id', trip\.id\)/.test(hub),
@@ -448,10 +491,10 @@ section('The sheet reads fail-soft and writes scoped')
   ok(page.includes('readSheetSettings(trip.id)'),
     'the settings ride in their own fail-soft queries')
   const sheets = read('app/trip/[tripCode]/teesheet/sheets.ts')
-  ok(sheets.includes("select('id, tee_sheet')") && sheets.includes("select('id, tee_interval_mins, tee_group_size')"),
+  ok(sheets.includes("select('id, tee_sheet')") && sheets.includes("select('id, tee_interval_mins, tee_group_size, start_format')"),
     '  …the wizard\'s rules and the older two apart, so one missing migration costs only its own')
-  ok(page.includes("'edit_tee_sheet'") && page.includes("'set_tee_sheets'"),
-    'the field\'s rights are the two permissions')
+  ok(page.includes('teeSheetAccess(') && page.includes('fieldMayEdit={access.playersPick}') && page.includes('fieldMaySet={access.anyoneOpens}'),
+    'the field\'s rights are the two stored answers — read alike on a trip and an event')
   ok(/\.filter\(r => parseStartFormat\(r\.start_format\) === 'tee_sheet'\)/.test(page),
     'only rounds that start from a tee sheet are on the tab')
   ok(page.includes('roundSheet({') && page.includes('hasAssignments: assignedRounds.has(r.id)'),
