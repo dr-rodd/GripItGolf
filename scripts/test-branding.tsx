@@ -1711,7 +1711,8 @@ section('One count-up, one celebration, and never on a board')
   eq(users('DotBloom'), [
     'app/run/[tripCode]/add/RunAddClient.tsx',
     'app/scoring/LiveScoringFlow.tsx',
-  ], 'the dot blooms in two: a run logged, a card signed')
+    'app/trip/[tripCode]/match/[matchId]/card/MatchFinish.tsx',
+  ], 'the dot blooms in three: a run logged, a card signed, a match finalised')
 
   const cu = stripComments(read('app/components/CountUp.tsx'))
   ok(cu.includes('export const COUNT_UP_MS = 400'), 'the count takes 400ms — inside the ceiling')

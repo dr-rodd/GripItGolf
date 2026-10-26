@@ -398,14 +398,20 @@ section('The match play card: top of the draw left, bottom right, NR, the result
     'previous and next move between holes — no grid of numbered holes')
   ok(client.includes('backgroundColor: holeFill(o, isNow)'), 'the strip marks each hole in the colour of the side that won it')
   ok(client.includes('usePoll(load, 15_000, true)') && !client.includes('setInterval'), 'the other phone shows up, through the one poller')
-  ok(client.includes('if (loaded && shouldWrite(state, winnerId, stored, false)) writeResult()'),
-    'a settled card puts its result into an empty match by itself')
+  const finishSheet = read('app/trip/[tripCode]/match/[matchId]/card/MatchFinish.tsx')
+  ok(client.includes('const awaitingFinal = loaded && canEdit && shouldWrite(state, winnerId, stored, false)')
+    && !client.includes('writeResult()\n  }, [loaded'),
+    'a settled card asks before its result goes into an empty match — never by itself')
+  ok(finishSheet.includes('Yes — finalise the match') && finishSheet.includes('No — go back and fix it'),
+    '  …the sheet showing the last score and asking whether it is right')
+  ok(finishSheet.includes('aria-label="Scores hole by hole"') && finishSheet.includes('backgroundColor: fillOf(o)'),
+    '  …then the card hole by hole, each marked in the colour of whoever won it')
   ok(client.includes('persistWinner(all, matchId, winnerId as string, state.result)'), '  …through the bracket\'s own writer')
   ok(client.includes('const canEdit = organiser || (!decided && (inMatch || anyoneScores))'),
     'anybody scores an open match unless kept to its players; once it is in, it is the admin PIN')
   ok(read('app/trip/[tripCode]/match/[matchId]/card/page.tsx').includes("'score_matches'"),
     '  …the page asking the event\'s permission')
-  ok(client.includes('offerOverwrite') && client.includes('onClick={writeResult}'),
+  ok(client.includes('offerOverwrite') && client.includes('onClick={() => { void writeResult() }}'),
     '  …and over a result already in, only by the organiser\'s deliberate tap')
   const page = read('app/trip/[tripCode]/match/[matchId]/card/page.tsx')
   const cards = read('app/trip/[tripCode]/match/matchCards.ts')

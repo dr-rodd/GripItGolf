@@ -12,6 +12,7 @@ import {
 import { DEFAULT_SIDE_COLOURS, type SideColour } from '@/lib/matchSides'
 import { usePoll } from '@/app/scoring/usePoll'
 import InlineUnlock from '@/app/components/InlineUnlock'
+import MatchFinish from './MatchFinish'
 import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
 
 /**
@@ -30,9 +31,11 @@ import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
  * order. The card re-reads every fifteen seconds while it is on screen,
  * so the other side's phone shows up.
  *
- * **Once the match is settled the result goes into the bracket by itself**
- * (`shouldWrite` → `persistWinner`, the bracket's own writer, so later
- * rounds follow). From then on the card is read-only, and changing it —
+ * **Once the match is settled a sheet asks whether the last score is right**
+ * (MatchFinish.tsx, Ross 26 Oct 2026), and its Finalise puts the result into
+ * the bracket (`shouldWrite` → `persistWinner`, the bracket's own writer, so
+ * later rounds follow), then shows the card hole by hole. From then on the
+ * card is read-only, and changing it —
  * like changing it on the bracket — needs the admin PIN. **Anybody with
  * the code may score an open match** unless the organiser has kept it to
  * the players (`score_matches`, lib/eventPermissions.ts); the admin PIN
@@ -214,27 +217,42 @@ export default function MatchCardClient({
   const [slide, setSlide] = useState<'slide-in-right' | 'slide-in-left' | ''>('')
   // Where a sideways swipe between holes began (onTouchStart below).
   const swipe = useRef<{ x: number; y: number } | null>(null)
-  const writeResult = useCallback(() => {
-    if (writing.current) return
+  const [saving, setSaving] = useState(false)
+  const writeResult = useCallback(async (): Promise<boolean> => {
+    if (writing.current) return false
     writing.current = true
-    ;(async () => {
-      try {
-        const { loadBracket, persistWinner } = await import('@/lib/matchplayStore')
-        const all = await loadBracket(tripId)
-        await persistWinner(all, matchId, winnerId as string, state.result)
-        setStored({ winner: winnerId, result: state.result })
-        router.refresh()
-      } catch (e) {
-        console.error('Match result write failed:', e)
-        setError('The match is over, but the result could not reach the bracket — try again.')
-      } finally {
-        writing.current = false
-      }
-    })()
+    setSaving(true)
+    setError(null)
+    try {
+      const { loadBracket, persistWinner } = await import('@/lib/matchplayStore')
+      const all = await loadBracket(tripId)
+      await persistWinner(all, matchId, winnerId as string, state.result)
+      setStored({ winner: winnerId, result: state.result })
+      router.refresh()
+      return true
+    } catch (e) {
+      console.error('Match result write failed:', e)
+      setError('The result could not reach the draw — check your connection and try again.')
+      return false
+    } finally {
+      writing.current = false
+      setSaving(false)
+    }
   }, [state.result, winnerId, tripId, matchId, router])
-  useEffect(() => {
-    if (loaded && shouldWrite(state, winnerId, stored, false)) writeResult()
-  }, [loaded, state, winnerId, stored, writeResult])
+
+  // ── The end of the match: confirm, finalise, then the card ──
+  // Nothing goes into the bracket until somebody scoring says the last
+  // score is right. "Go back" puts the sheet away for this ending; a
+  // changed score makes a new ending and asks again.
+  const [finish, setFinish] = useState<{ phase: 'done'; bloom: boolean } | null>(null)
+  const [fixing, setFixing] = useState<string | null>(null)
+  const ending = state.settled ? `${winnerId}:${state.result}:${state.played}` : null
+  const awaitingFinal = loaded && canEdit && shouldWrite(state, winnerId, stored, false)
+  const sheetPhase: 'confirm' | 'done' | null = finish?.phase
+    ?? (awaitingFinal && fixing !== ending ? 'confirm' : null)
+  const finalise = async () => {
+    if (await writeResult()) setFinish({ phase: 'done', bloom: true })
+  }
   const offerOverwrite = loaded && organiser
     && shouldWrite(state, winnerId, stored, true) && !shouldWrite(state, winnerId, stored, false)
 
@@ -514,8 +532,44 @@ export default function MatchCardClient({
 
       {error && <p className="text-rust-deep text-sm text-center leading-snug">{error}</p>}
 
+      {awaitingFinal && sheetPhase === null && (
+        <button type="button" onClick={() => setFixing(null)} className={buttonClass('primary')}>
+          Finalise the match
+        </button>
+      )}
+
+      {decided && sheetPhase === null && (
+        <button type="button" onClick={() => setFinish({ phase: 'done', bloom: false })} className={buttonClass('secondary')}>
+          Match card
+        </button>
+      )}
+
+      {inBrowser && sheetPhase && (
+        <MatchFinish
+          phase={sheetPhase}
+          bloom={finish?.bloom ?? false}
+          a={a}
+          b={b}
+          colours={colours}
+          holes={holes}
+          outcomes={outcomes}
+          scores={scores}
+          headline={status}
+          winner={state.leader}
+          saving={saving}
+          error={error}
+          onFinalise={finalise}
+          onFix={() => {
+            setFixing(ending)
+            const last = outcomes.filter(o => o.winner !== null).pop()
+            if (last) goTo(last.holeNumber)
+          }}
+          onClose={() => setFinish(null)}
+        />
+      )}
+
       {offerOverwrite && (
-        <button type="button" onClick={writeResult} className={buttonClass('primary')}>
+        <button type="button" onClick={() => { void writeResult() }} className={buttonClass('primary')}>
           Put {status} in the bracket
         </button>
       )}
