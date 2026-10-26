@@ -38,3 +38,19 @@ export const fetchEntryLock = cache(async (tripCode: string): Promise<string | n
   if (error) return null
   return (data as { public_passcode_hash?: string | null } | null)?.public_passcode_hash ?? null
 })
+
+/**
+ * Whether the event is match play — the bar's middle tab is then the
+ * Bracket. Only the setup's `format` key is asked for, so the draw plan
+ * riding in the same column never crosses the wire; fail-soft like the
+ * kind (before migration 047 there is no column, and no column is no).
+ */
+export const fetchIsKnockout = cache(async (tripCode: string): Promise<boolean> => {
+  const { data, error } = await supabase
+    .from('trips')
+    .select('format:bracket_setup->>format')
+    .eq('trip_code', tripCode)
+    .maybeSingle()
+  if (error) return false
+  return (data as { format?: string | null } | null)?.format === 'match_play'
+})

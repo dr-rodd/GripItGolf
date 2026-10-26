@@ -4,7 +4,7 @@ import Link, { useLinkStatus } from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
-  IconHome, IconTrophy, IconClipboardList, IconSettings, IconChartBar,
+  IconHome, IconTrophy, IconClipboardList, IconSettings, IconChartBar, IconBracket,
 } from './icons'
 import { RUN_TABS, runActiveKey } from './runTabs'
 
@@ -65,6 +65,10 @@ const EVENT_ITEMS = [
   ITEMS[0], ITEMS[1], ITEMS[2],
   { key: 'settings',    label: 'Settings',    icon: IconSettings,      path: (t: string) => `/trip/${t}/settings` },
 ] as const
+
+/** A match play event's middle tab: the draw is its leaderboard. */
+const BRACKET_ITEM =
+  { key: 'leaderboard', label: 'Bracket', icon: IconBracket, path: (t: string) => `/trip/${t}/matchplay` }
 
 /**
  * What one tab looks like, once it knows whether it is the page you are on
@@ -141,8 +145,14 @@ function Tab({
   )
 }
 
-export default function TabBar({ tripCode, isEvent = false, sport = 'golf' }: {
+export default function TabBar({ tripCode, isEvent = false, bracket = false, sport = 'golf' }: {
   tripCode: string
+  /**
+   * A match play event: the middle tab is the Bracket, with its own mark,
+   * straight to /matchplay (Ross, 26 Oct 2026) — the leaderboard there only
+   * ever redirected to it.
+   */
+  bracket?: boolean
   /**
    * An event's field never sees Trip Setup — the organiser reaches it
    * through the organiser area, behind the PIN, where the rest of the
@@ -161,6 +171,7 @@ export default function TabBar({ tripCode, isEvent = false, sport = 'golf' }: {
   // own five.
   const items: readonly { key: string; label: string; icon: typeof IconHome; path: (t: string) => string }[] =
     sport === 'run' ? RUN_TABS
+      : isEvent && bracket ? EVENT_ITEMS.map(i => i.key === 'leaderboard' ? BRACKET_ITEM : i)
       : isEvent ? EVENT_ITEMS
       : ITEMS
 

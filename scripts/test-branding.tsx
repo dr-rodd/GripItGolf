@@ -834,8 +834,8 @@ section('The bottom tab bar')
   // modules now).
   eq(
     (src.match(/label: '([^']+)'/g) ?? []).map(s => s.replace(/label: '|'/g, '')),
-    ['Home', 'Scoring', 'Leaderboard', 'Stats', 'Trip Setup', 'Settings'],
-    'a trip\'s five with the leaderboard centred, and the Settings an event ends on',
+    ['Home', 'Scoring', 'Leaderboard', 'Stats', 'Trip Setup', 'Settings', 'Bracket'],
+    'a trip\'s five with the leaderboard centred, the Settings an event ends on, and a match play event\'s Bracket in the leaderboard\'s place',
   )
   ok(src.includes('grid-cols-5') && src.includes('grid-cols-4'), 'the grid matches the count')
   ok(!/emphasis/.test(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')) && !/rounded-full/.test(src),

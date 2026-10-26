@@ -21,6 +21,7 @@ import {
   normaliseContact, contactShown, walkoverChoices, WALKOVER,
 } from '../lib/matchArrangements'
 import { RESULT_PILL, sideTone, signTone } from '../lib/resultTone'
+import { DEFAULT_SIDE_COLOURS, sideColours, shade } from '../lib/matchSides'
 import {
   byHandicap, drawDue, drawInPlay, emptySlots, manualIssue, moveToSeed, parseDrawPlan, placeInSlot,
   reconcileOrder, resizeSlots, shuffled, slotsFromSeeds, unplaced, drawCountIssue,
@@ -784,6 +785,21 @@ guard('result tone', () => {
   ok(RESULT_PILL.lost.includes('bg-bark') && RESULT_PILL.down.includes('bark-tint'), 'lost is solid brown, down the tint')
   ok(!Object.values(RESULT_PILL).some(v => /rust/.test(v)),
     'and nothing is red — over par is most golfers')
+})
+
+section('Side colours: a tag colour is kept all the way up the bracket')
+guard('side colours', () => {
+  eq(sideColours(null, null), DEFAULT_SIDE_COLOURS, 'no tags: top red, bottom blue')
+  eq([sideColours('#22AA44', '#F2C230').A.fill, sideColours('#F2C230', '#22AA44').B.fill], ['#22AA44', '#22AA44'],
+    'a tagged player is their colour on the top of a match and on the bottom')
+  const same = sideColours('#22AA44', '#22aa44')
+  ok(same.A.fill === shade('#22AA44', -0.3) && same.B.fill === shade('#22AA44', 0.45) && same.A.fill !== same.B.fill,
+    'two in the same tag: a dark version on top, a light one below')
+  eq(sideColours('#2563B8', null).B, DEFAULT_SIDE_COLOURS.A, 'an untagged side opposite a blue tag is red')
+  eq(sideColours(null, '#C62F3A').A, DEFAULT_SIDE_COLOURS.B, '  …and opposite a red tag, blue')
+  eq(sideColours('#22AA44', null).A.fill, '#22AA44', '  …while the tagged side keeps its own')
+  eq(shade('#808080', -0.5), '#404040', 'a shade mixes toward black')
+  eq(shade('#000000', 1), '#ffffff', '  …or white')
 })
 
 // ─── Result ────────────────────────────────────────────────────

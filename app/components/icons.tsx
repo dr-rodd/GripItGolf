@@ -60,6 +60,16 @@ export const IconTrophy = (p: IconProps) => (
   </Svg>
 )
 
+/** A knockout draw: two pairs meeting, and the line on to the winner. */
+export const IconBracket = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 5h5v6h-5" />
+    <path d="M3 13h5v6h-5" />
+    <path d="M8 8h4v8h-4" />
+    <path d="M12 12h9" />
+  </Svg>
+)
+
 export const IconClipboardList = (p: IconProps) => (
   <Svg {...p}>
     <path d="M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2" />

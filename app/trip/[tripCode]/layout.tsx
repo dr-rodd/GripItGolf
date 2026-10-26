@@ -4,7 +4,7 @@ import TabBar from '@/app/components/TabBar'
 import { isEvent } from '@/lib/eventHub'
 import { isRunChallenge } from '@/lib/runChallenge'
 import { entryAllowed, entryCookie } from '@/lib/publicPin'
-import { fetchEntryLock, fetchTripKind } from './kind'
+import { fetchEntryLock, fetchIsKnockout, fetchTripKind } from './kind'
 
 /**
  * Everything under `/trip/[tripCode]`, with the bottom bar around it.
@@ -42,6 +42,10 @@ import { fetchEntryLock, fetchTripKind } from './kind'
  * anything under it renders. A redirect rather than a gate drawn in place
  * of `children`, because a layout renders beside its page, not before it —
  * drawing a gate here would still send the page underneath it.
+ *
+ * **A third read says whether the event is match play**, whose middle tab
+ * is the Bracket rather than the Leaderboard (Ross, 26 Oct 2026) — the
+ * setup's one `format` key, in parallel with the other two.
  */
 
 export default async function TripLayout({
@@ -52,14 +56,14 @@ export default async function TripLayout({
   params: Promise<{ tripCode: string }>
 }) {
   const { tripCode } = await params
-  const [kind, lock, jar] = await Promise.all([fetchTripKind(tripCode), fetchEntryLock(tripCode), cookies()])
+  const [kind, lock, knockout, jar] = await Promise.all([fetchTripKind(tripCode), fetchEntryLock(tripCode), fetchIsKnockout(tripCode), cookies()])
   if (isRunChallenge(kind)) redirect(`/run/${tripCode}`)
   if (!entryAllowed(lock, jar.get(entryCookie(tripCode))?.value)) redirect(`/enter/${tripCode}`)
 
   return (
     <>
       {children}
-      <TabBar tripCode={tripCode} isEvent={isEvent(kind)} />
+      <TabBar tripCode={tripCode} isEvent={isEvent(kind)} bracket={isEvent(kind) && knockout} />
     </>
   )
 }
