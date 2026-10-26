@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { hasUnlocked, isLocked } from '@/lib/passcode'
 import {
-  REGULATION_HOLES, extraCourseHole, openingHole, ordinal, parseExtraPlan, playCard, shotsOn, shouldWrite,
+  REGULATION_HOLES, extraCourseHole, openingHole, ordinal, parseExtraPlan, playCard, reopenBlocked, shotsOn, shouldWrite,
   withExtraHole, type CardHole, type CardSideKey, type CardSideView, type ExtraHolePlan,
 } from '@/lib/matchCard'
 import { DEFAULT_SIDE_COLOURS, type SideColour } from '@/lib/matchSides'
@@ -107,7 +107,7 @@ export default function MatchCardClient({
 
   const inMatch = mySide !== null
   const decided = stored.winner !== null
-  const canEdit = organiser || (!decided && (inMatch || anyoneScores))
+  const canEdit = !decided && (organiser || inMatch || anyoneScores)
 
   // ── Reading the card ──
   const dirty = useRef(0)
@@ -263,15 +263,53 @@ export default function MatchCardClient({
   // changed score makes a new ending and asks again.
   const [finish, setFinish] = useState<{ phase: 'done'; bloom: boolean } | null>(null)
   const [fixing, setFixing] = useState<string | null>(null)
-  const ending = state.settled ? `${winnerId}:${state.result}:${state.played}` : null
+  // Played out to the 18th after it was settled? That is a new ending, so
+  // the sheet asks again once the last hole is in.
+  const playedOut = outcomes.filter(o => o.holeNumber <= REGULATION_HOLES).every(o => o.winner !== null)
+  const ending = state.settled ? `${winnerId}:${state.result}:${state.played}:${playedOut}` : null
   const awaitingFinal = loaded && canEdit && shouldWrite(state, winnerId, stored, false)
   const sheetPhase: 'confirm' | 'done' | null = finish?.phase
     ?? (awaitingFinal && fixing !== ending ? 'confirm' : null)
   const finalise = async () => {
     if (await writeResult()) setFinish({ phase: 'done', bloom: true })
   }
-  const offerOverwrite = loaded && organiser
-    && shouldWrite(state, winnerId, stored, true) && !shouldWrite(state, winnerId, stored, false)
+
+  // ── Reopening a finalised match (the organiser, with the PIN) ──
+  // Takes the result out of the bracket, so the match reads as live again
+  // and the card can be amended and finalised afresh. Refused once the
+  // match it fed has a result or a score of its own: undoing this one
+  // would undo theirs.
+  const [reopening, setReopening] = useState(false)
+  const reopen = async () => {
+    if (reopening) return
+    setReopening(true)
+    setError(null)
+    try {
+      const { loadBracket, persistWinner } = await import('@/lib/matchplayStore')
+      const all = await loadBracket(tripId)
+      const me = all.find(m => m.id === matchId)
+      const next = me?.next_match_id ? all.find(m => m.id === me.next_match_id) : undefined
+      if (next) {
+        const [s, c] = await Promise.all([
+          supabase.from('match_scores').select('hole_number', { count: 'exact', head: true }).eq('trip_id', tripId).eq('match_id', next.id),
+          supabase.from('match_concessions').select('hole_number', { count: 'exact', head: true }).eq('trip_id', tripId).eq('match_id', next.id),
+        ])
+        if (s.error || c.error) throw s.error ?? c.error
+        const blocked = reopenBlocked(next.round_name, !!next.winner_player_id, (s.count ?? 0) + (c.count ?? 0) > 0)
+        if (blocked) { setError(blocked); return }
+      }
+      await persistWinner(all, matchId, null, null)
+      setStored({ winner: null, result: null })
+      // Back to amending: the sheet waits until the card is finalised again.
+      setFixing(ending)
+      router.refresh()
+    } catch (e) {
+      console.error('Reopening the match failed:', e)
+      setError('Could not reopen the match — check your connection and try again.')
+    } finally {
+      setReopening(false)
+    }
+  }
 
   if (unavailable) {
     return (
@@ -606,6 +644,8 @@ export default function MatchCardClient({
           saving={saving}
           error={error}
           onFinalise={finalise}
+          canContinue={!playedOut}
+          onContinue={() => setFixing(ending)}
           onFix={() => {
             setFixing(ending)
             const last = outcomes.filter(o => o.winner !== null).pop()
@@ -615,20 +655,26 @@ export default function MatchCardClient({
         />
       )}
 
-      {offerOverwrite && (
-        <button type="button" onClick={() => { void writeResult() }} className={buttonClass('primary')}>
-          Put {status} in the bracket
-        </button>
+      {decided && organiser && (
+        <div className={`p-4 ${cardClass()}`}>
+          <p className="text-ink text-sm font-medium">The result is in the draw</p>
+          <p className="text-ink/65 text-[13px] mt-0.5 mb-3 leading-snug">
+            Reopen the match to amend the card. It goes back to live in the draw until it is finalised again.
+          </p>
+          <button type="button" onClick={() => { void reopen() }} disabled={reopening} className={buttonClass('secondary')}>
+            {reopening ? 'Reopening…' : 'Reopen the match'}
+          </button>
+        </div>
       )}
 
-      {!canEdit && passcodeHash && (
+      {!canEdit && !(decided && organiser) && passcodeHash && (
         <div className={`p-4 ${cardClass()}`}>
           <p className="text-ink text-sm font-medium">
-            {decided ? 'The result is in the bracket' : 'The players score this match'}
+            {decided ? 'The result is in the draw' : 'The players score this match'}
           </p>
           <p className="text-ink/65 text-[13px] mt-0.5 mb-3 leading-snug">
             {decided
-              ? 'Changing it needs the admin PIN.'
+              ? 'Reopening it to amend the card needs the admin PIN.'
               : 'The organiser can score or finish it with the admin PIN.'}
           </p>
           <InlineUnlock tripCode={tripCode} passcodeHash={passcodeHash} onUnlocked={() => setUnlocked(true)} prompt="Enter the admin PIN" />

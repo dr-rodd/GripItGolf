@@ -21,7 +21,7 @@ import type { SideColour } from '@/lib/matchSides'
  */
 export default function MatchFinish({
   phase, bloom, a, b, colours, holes, outcomes, scores, headline, winner, saving, error,
-  onFinalise, onFix, onClose,
+  onFinalise, onFix, onClose, canContinue, onContinue,
 }: {
   phase: 'confirm' | 'done'
   /** Straight after finalising: the one celebration. */
@@ -39,6 +39,9 @@ export default function MatchFinish({
   error: string | null
   onFinalise: () => void
   onFix: () => void
+  /** Holes still to play after it was settled: the group may play them out. */
+  canContinue: boolean
+  onContinue: () => void
   onClose: () => void
 }) {
   const played = outcomes.filter(o => o.winner !== null)
@@ -100,8 +103,13 @@ export default function MatchFinish({
                 {saving ? 'Finalising…' : 'Yes — finalise the match'}
               </button>
               <button type="button" onClick={onFix} disabled={saving} className={`${buttonClass('secondary')} mt-2`}>
-                No — go back and fix it
+                No — go back and amend the scores
               </button>
+              {canContinue && (
+                <button type="button" onClick={onContinue} disabled={saving} className={`${buttonClass('secondary')} mt-2`}>
+                  Keep scoring — play out the 18
+                </button>
+              )}
             </>
           ) : (
             <>

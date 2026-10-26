@@ -70,7 +70,7 @@ export function MatchScoresTable({ a, b, colours, holes, outcomes, scores, finis
             </th>
           ))}
           <th className="w-6"><span className="sr-only">Won by</span></th>
-          <th className="font-normal w-12 pr-2">After</th>
+          <th className="font-normal w-12 pr-2">Thru</th>
         </tr>
       </thead>
       <tbody>

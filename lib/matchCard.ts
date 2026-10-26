@@ -289,3 +289,15 @@ export function shouldWrite(
   if (stored.winner === winnerId && stored.result === state.result) return false
   return stored.winner === null || organiser
 }
+
+/**
+ * Why a finalised match may not be reopened, or null when it may: the match
+ * its winner went on to has a result, or a score on its card. Reopening
+ * takes the winner back out of that match, so it would undo theirs too
+ * (Ross, 26 Oct 2026).
+ */
+export function reopenBlocked(nextRound: string, nextDecided: boolean, nextScored: boolean): string | null {
+  if (nextDecided) return `The ${nextRound} match this fed already has a result, so this one can no longer be reopened.`
+  if (nextScored) return `Scores are already in for the ${nextRound} match this fed, so this one can no longer be reopened.`
+  return null
+}

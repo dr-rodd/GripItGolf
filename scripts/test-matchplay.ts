@@ -26,7 +26,7 @@ import {
   reconcileOrder, resizeSlots, shuffled, slotsFromSeeds, unplaced, drawCountIssue,
 } from '../lib/bracketDraw'
 import { bracketFromSlots } from '../lib/matchplay'
-import { holeOutcomes, cardState, openingHole, shouldWrite, playCard, ordinal, extraCourseHole, parseExtraPlan, withExtraHole } from '../lib/matchCard'
+import { holeOutcomes, cardState, openingHole, shouldWrite, reopenBlocked, playCard, ordinal, extraCourseHole, parseExtraPlan, withExtraHole } from '../lib/matchCard'
 
 // ─── Tiny harness ──────────────────────────────────────────────
 
@@ -705,6 +705,9 @@ guard('match card', () => {
   ok(!shouldWrite(done, 'ann', { winner: 'ann', result: '16&2' }, false), '  …once')
   ok(!shouldWrite(done, 'ann', { winner: 'bob', result: '2&1' }, false), '  …never over a result already in, without the admin PIN')
   ok(shouldWrite(done, 'ann', { winner: 'bob', result: '2&1' }, true), '  …and with it, it does')
+  ok(reopenBlocked('Quarter-Final', false, false) === null, 'a finalised match reopens while the match it fed has not begun')
+  ok(/already has a result/.test(reopenBlocked('Quarter-Final', true, false) ?? ''), '  …not once that match has a result')
+  ok(/Scores are already in/.test(reopenBlocked('Quarter-Final', false, true) ?? ''), '  …nor once a score is on its card')
   ok(!shouldWrite(level, null, { winner: null, result: null }, true), 'a level card writes nothing')
   ok(!shouldWrite(st([4], [5]), 'ann', { winner: null, result: null }, false), 'nor does one still going')
 })

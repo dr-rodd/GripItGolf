@@ -402,7 +402,8 @@ section('The match play card: top of the draw left, bottom right, NR, the result
   ok(client.includes('const awaitingFinal = loaded && canEdit && shouldWrite(state, winnerId, stored, false)')
     && !client.includes('writeResult()\n  }, [loaded'),
     'a settled card asks before its result goes into an empty match — never by itself')
-  ok(finishSheet.includes('Yes — finalise the match') && finishSheet.includes('No — go back and fix it'),
+  ok(finishSheet.includes('Yes — finalise the match') && finishSheet.includes('No — go back and amend the scores')
+    && finishSheet.includes('Keep scoring — play out the 18'),
     '  …the sheet showing the last score and asking whether it is right')
   const scorecard = read('app/trip/[tripCode]/match/[matchId]/card/MatchScorecard.tsx')
   ok(finishSheet.includes('<MatchScoresTable') && scorecard.includes('aria-label="Scores hole by hole"')
@@ -412,12 +413,13 @@ section('The match play card: top of the draw left, bottom right, NR, the result
     && client.includes("translateX(-50%)"),
     'the same card, live, a slide away from the score — anybody may look')
   ok(client.includes('persistWinner(all, matchId, winnerId as string, state.result)'), '  …through the bracket\'s own writer')
-  ok(client.includes('const canEdit = organiser || (!decided && (inMatch || anyoneScores))'),
-    'anybody scores an open match unless kept to its players; once it is in, it is the admin PIN')
+  ok(client.includes('const canEdit = !decided && (organiser || inMatch || anyoneScores)'),
+    'anybody scores an open match unless kept to its players; once it is in, nobody — it is reopened first')
   ok(read('app/trip/[tripCode]/match/[matchId]/card/page.tsx').includes("'score_matches'"),
     '  …the page asking the event\'s permission')
-  ok(client.includes('offerOverwrite') && client.includes('onClick={() => { void writeResult() }}'),
-    '  …and over a result already in, only by the organiser\'s deliberate tap')
+  ok(client.includes("await persistWinner(all, matchId, null, null)") && client.includes('reopenBlocked(next.round_name')
+    && client.includes('decided && organiser'),
+    '  …the organiser reopens it with the PIN, taking it out of the draw, unless the match it fed has begun')
   const page = read('app/trip/[tripCode]/match/[matchId]/card/page.tsx')
   const cards = read('app/trip/[tripCode]/match/matchCards.ts')
   ok(page.includes('readCardSetups(') && cards.includes('matchStrokes(') && page.includes("Arrange the match first"),
