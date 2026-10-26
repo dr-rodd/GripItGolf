@@ -4,8 +4,8 @@
  * Two halves. The rules in lib/teeSheet.ts are checked directly — the
  * bounds, the slot clock, how long a sheet is, how a slot groups its
  * teams, and that the interval's default is the same ten minutes the golf
- * span has always assumed. Then the wiring: the tab stands at the right
- * for events only, the sheet reads and writes scoped to its trip, the
+ * span has always assumed. Then the wiring: the tee times are a home
+ * screen module on an event, the sheet reads and writes scoped to its trip, the
  * organiser's tuning lives with the start-format choice, and the team
  * boards' tee-teams question is asked exactly where an event is asking.
  */
@@ -15,7 +15,7 @@ import {
   DEFAULT_TEE_INTERVAL_MINS, MIN_TEE_INTERVAL_MINS, MAX_TEE_INTERVAL_MINS,
   DEFAULT_GROUP_SIZE, MIN_GROUP_SIZE, MAX_GROUP_SIZE, MAX_SLOTS,
   parseInterval, parseGroupSize, slotClock, slotCount, groupSlot, bySlot,
-  sheetStart, pickerUnits, unitMatches,
+  sheetStart, pickerUnits, unitMatches, hubTeeRound, myTee,
 } from '../lib/teeSheet'
 import { TEE_INTERVAL_MINS } from '../lib/itinerary'
 import {
@@ -190,15 +190,57 @@ section('A team board can say how it meets the sheet')
 
 // ─── Wiring ────────────────────────────────────────────────────
 
-section('The tab stands at the right, for events only')
+section('The home screen speaks for one round, from the reader\'s side')
+{
+  const r = (roundNumber: number, date: string | null) => ({ roundNumber, date })
+  eq(hubTeeRound([r(2, '2026-06-14'), r(1, '2026-06-13')], '2026-06-13')?.roundNumber, 1,
+    'today\'s round, in round order whatever order they came in')
+  eq(hubTeeRound([r(1, '2026-06-13'), r(2, '2026-06-14')], '2026-06-14')?.roundNumber, 2,
+    'yesterday\'s is passed over for today\'s')
+  eq(hubTeeRound([r(1, '2026-06-13'), r(2, '2026-06-14')], '2026-06-20')?.roundNumber, 2,
+    'after the last round, the last one — not nothing')
+  eq(hubTeeRound([r(1, '2026-06-13'), r(2, null)], '2026-06-20')?.roundNumber, 2,
+    'an undated round still counts as to come')
+  eq(hubTeeRound([], '2026-06-13'), null, 'no tee-sheet round, no round')
+
+  const names: Record<string, string> = { a: 'Ross', b: 'Dave', c: 'John' }
+  const nameOf = (id: string) => names[id] ?? null
+  const rows = [
+    { player_id: 'a', slot_index: 2 }, { player_id: 'b', slot_index: 2 },
+    { player_id: 'c', slot_index: 0 },
+  ]
+  eq(myTee(rows, 'a', '09:00', 10, nameOf),
+    { slotIndex: 2, clock: slotClock('09:00', 2, 10), partners: ['Dave'] },
+    'your slot, its clock off slotClock, and who else is in it')
+  eq(myTee(rows, 'c', '09:00', 10, nameOf)?.partners, [], 'alone in a slot is nobody else')
+  eq(myTee(rows, 'z', '09:00', 10, nameOf), null, 'not on the sheet is null')
+  eq(myTee(rows, null, '09:00', 10, nameOf), null, 'and so is a phone that is nobody')
+  eq(myTee(rows, 'a', null, 10, nameOf)?.clock, null,
+    'no start time is no clock — never an invented nine o\'clock')
+}
+
+section('The tee times are a home screen module, not a tab')
 {
   const bar = read('app/components/TabBar.tsx')
-  ok(/teesheet[\s\S]{0,120}Tee Sheet/.test(bar), 'the tab exists')
-  ok(bar.includes("i.key !== 'teesheet'"), 'a trip filters it out')
-  ok(bar.includes("i.key !== 'settings'"), 'an event trades Trip Setup for it')
-  const items = bar.slice(bar.indexOf('const ITEMS'), bar.indexOf('] as const'))
-  ok(items.lastIndexOf('teesheet') > items.lastIndexOf('settings'),
-    'and it is the rightmost item — where the brief put it')
+  ok(!bar.includes('teesheet') && !bar.includes('Tee Sheet'),
+    'the bar no longer carries the tee sheet')
+
+  const hub = read('app/trip/[tripCode]/page.tsx')
+  ok(hub.includes("modules.includes('teeTimes')"),
+    'the hub draws the tee times while they are active')
+  ok(hub.includes('teeSheetInUse(rounds.map(r => r.start_format))'),
+    '  …which is while a round starts from a tee sheet')
+  ok(hub.includes('hubTeeRound(') && hub.includes('myTee('),
+    'the round and the place come from lib/teeSheet.ts, never re-derived')
+  ok(/from\('tee_assignments'\)[\s\S]{0,200}\.eq\('trip_id', trip\.id\)/.test(hub),
+    'the assignments are read scoped to the trip')
+  const mainRounds = hub.match(/select\(`id, round_number[^`]*`\)/)?.[0] ?? ''
+  ok(!mainRounds.includes('tee_interval'),
+    'the hub\'s rounds select never names a migration-050 column')
+
+  const panel = read('app/trip/[tripCode]/TeeTimesPanel.tsx')
+  ok(panel.includes('href={`/trip/${tripCode}/teesheet`}'),
+    'and the module is the way to the whole sheet')
 }
 
 section('The sheet reads fail-soft and writes scoped')

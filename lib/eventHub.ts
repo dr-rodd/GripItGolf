@@ -84,3 +84,50 @@ export function describeStart(
   }
   return 'Tee sheet'
 }
+
+// ─── The home screen's modules ─────────────────────────────────
+//
+// Three things on an event's home screen only exist some of the time: the
+// organiser's notices, the tee times and the stats. Each is a module,
+// shown while it is active and simply absent while it is not — no heading
+// with "nothing yet" under it, which is clutter a reader has to open to
+// find empty (Ross, 26 Oct 2026). They used to be tabs, or a section that
+// was always there; the bar is Home, Scoring, Leaderboard and Settings now.
+//
+// What switches each one on is a decision the organiser already makes:
+//   notices    a notice is up
+//   teeTimes   a round starts from a tee sheet (the Starts card)
+//   stats      the event records stats (`trips.track_stats`) and a card
+//              has recorded some — the organiser area's Home screen card
+//              is where the event adds it
+//
+// The order is the screen's: notices first, they are the news; then the
+// tee times; stats at the foot, after the schedule and the field.
+
+export type HubModule = 'notices' | 'teeTimes' | 'stats'
+
+export const HUB_MODULE_LABEL: Record<HubModule, string> = {
+  notices: 'Notices',
+  teeTimes: 'Tee times',
+  stats: 'Stats',
+}
+
+/** Whether any round starts from a tee sheet — what puts Tee times on the home screen. */
+export function teeSheetInUse(startFormats: readonly unknown[]): boolean {
+  return startFormats.some(f => parseStartFormat(f) === 'tee_sheet')
+}
+
+/** The modules an event's home screen shows, in the order it shows them. */
+export function activeHubModules({ noticeCount, teeSheet, stats }: {
+  noticeCount: number
+  /** `teeSheetInUse` over the rounds. */
+  teeSheet: boolean
+  /** Stats switched on, and something recorded to show. */
+  stats: boolean
+}): HubModule[] {
+  const out: HubModule[] = []
+  if (noticeCount > 0) out.push('notices')
+  if (teeSheet) out.push('teeTimes')
+  if (stats) out.push('stats')
+  return out
+}

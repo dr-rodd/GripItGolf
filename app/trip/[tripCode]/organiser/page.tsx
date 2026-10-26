@@ -42,7 +42,7 @@ export default async function OrganiserPage({ params }: {
 
   const { data: trip, error } = await supabase
     .from('trips')
-    .select('id, trip_code, name, kind, settings_passcode_hash, start_date, end_date, leaderboards')
+    .select('id, trip_code, name, kind, settings_passcode_hash, start_date, end_date, leaderboards, track_stats')
     .eq('trip_code', tripCode)
     .single()
   if (error) console.error('OrganiserPage trip query failed:', error)
@@ -228,6 +228,7 @@ export default async function OrganiserPage({ params }: {
         : null
       }
       isLeague={!!leagueSetup}
+      initialTrackStats={trip.track_stats === true}
       series={leagueSetup?.schedule === 'series'}
       tagsSummary={describeTags(
         tagsResult.count ?? 0,

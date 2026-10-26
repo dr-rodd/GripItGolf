@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   IconHome, IconTrophy, IconClipboardList, IconSettings, IconChartBar,
-  IconClock,
 } from './icons'
 import { RUN_TABS, runActiveKey } from './runTabs'
 
@@ -29,6 +28,13 @@ import { RUN_TABS, runActiveKey } from './runTabs'
  * Dog called it: more trouble than it was worth. Five identical tabs, the
  * board in the middle because the middle is where the thumb rests.
  *
+ * **An event has four** (Ross, 26 Oct 2026): Home, Scoring, Leaderboard and
+ * Settings, Settings at the bottom right where a trip keeps Trip Setup.
+ * The tee sheet and the stats were tabs of their own on an event; both are
+ * home screen modules now, there only while the organiser has them on
+ * (lib/eventHub.ts `activeHubModules`), and a tab for something that is off
+ * most of the time was clutter.
+ *
  * Rendered once, by `app/trip/[tripCode]/layout.tsx`, and never by a page.
  * That is what keeps it on screen through a navigation instead of unmounting
  * with the page that drew it — see the note in that file.
@@ -48,10 +54,16 @@ const ITEMS = [
   { key: 'leaderboard', label: 'Leaderboard', icon: IconTrophy,        path: (t: string) => `/trip/${t}/leaderboard` },
   { key: 'stats',       label: 'Stats',       icon: IconChartBar,      path: (t: string) => `/trip/${t}/stats` },
   { key: 'settings',    label: 'Trip Setup',  icon: IconSettings,      path: (t: string) => `/trip/${t}/setup` },
-  // Events only, at the right — where Trip Setup stands on a trip. A trip
-  // never shows it: tee times are competition furniture, and the trip bar
-  // is the five tabs it has always been.
-  { key: 'teesheet',    label: 'Tee Sheet',   icon: IconClock,         path: (t: string) => `/trip/${t}/teesheet` },
+] as const
+
+/**
+ * An event's four. Settings is the player's own screen with the door to the
+ * organiser area in it — never Trip Setup, which the field does not see on
+ * an event — so the PIN asks at that door rather than in front of the tab.
+ */
+const EVENT_ITEMS = [
+  ITEMS[0], ITEMS[1], ITEMS[2],
+  { key: 'settings',    label: 'Settings',    icon: IconSettings,      path: (t: string) => `/trip/${t}/settings` },
 ] as const
 
 /**
@@ -134,9 +146,9 @@ export default function TabBar({ tripCode, isEvent = false, sport = 'golf' }: {
   /**
    * An event's field never sees Trip Setup — the organiser reaches it
    * through the organiser area, behind the PIN, where the rest of the
-   * running of the event already lives. Four tabs then; the leaderboard
-   * still holds the centre of what remains. Decided by the layout, which
-   * is the one place that knows the kind before the bar first paints.
+   * running of the event already lives, and Settings is the way to that
+   * door. Four tabs then. Decided by the layout, which is the one place
+   * that knows the kind before the bar first paints.
    */
   isEvent?: boolean
   /** A run challenge's bar: running's five tabs, under /run/. */
@@ -145,12 +157,12 @@ export default function TabBar({ tripCode, isEvent = false, sport = 'golf' }: {
   const pathname = usePathname() ?? ''
   const base = `/trip/${tripCode}`
 
-  // An event trades Trip Setup for the tee sheet; a trip keeps its five.
-  // A run challenge has its own five.
+  // An event has its four; a trip keeps its five. A run challenge has its
+  // own five.
   const items: readonly { key: string; label: string; icon: typeof IconHome; path: (t: string) => string }[] =
     sport === 'run' ? RUN_TABS
-      : isEvent ? ITEMS.filter(i => i.key !== 'settings')
-      : ITEMS.filter(i => i.key !== 'teesheet')
+      : isEvent ? EVENT_ITEMS
+      : ITEMS
 
   /**
    * Which tab is lit.
@@ -166,9 +178,13 @@ export default function TabBar({ tripCode, isEvent = false, sport = 'golf' }: {
     // trip, and the tab itself on a match play event.
     if (pathname.startsWith(`${base}/leaderboard`) || pathname.startsWith(`${base}/matchplay`)) return 'leaderboard'
     if (pathname.startsWith(`${base}/scoring`)) return 'scoring'
-    if (pathname.startsWith(`${base}/stats`)) return 'stats'
-    if (pathname.startsWith(`${base}/teesheet`)) return 'teesheet'
+    // An event's stats and tee sheet are reached from the home screen and
+    // light no tab, like the players list: there is no tab for them to light.
+    if (pathname.startsWith(`${base}/stats`)) return isEvent ? null : 'stats'
     if (pathname.startsWith(`${base}/setup`) || pathname.startsWith(`${base}/teams`)) return 'settings'
+    // An event's Settings is the door to the organiser area, so the area
+    // and everything behind it keep Settings lit.
+    if (isEvent && (pathname.startsWith(`${base}/settings`) || pathname.startsWith(`${base}/organiser`))) return 'settings'
     // Players and anything else: no tab claims it rather than a wrong one
     // being lit.
     return null
@@ -195,7 +211,9 @@ export default function TabBar({ tripCode, isEvent = false, sport = 'golf' }: {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label={sport === 'run' ? 'Challenge' : 'Trip'}
     >
-      <ul className="max-w-lg mx-auto grid grid-cols-5">
+      {/* Spelled out rather than built from the count — Tailwind only
+          ships the classes it can find written down. */}
+      <ul className={`max-w-lg mx-auto grid ${items.length === 4 ? 'grid-cols-4' : 'grid-cols-5'}`}>
         {items.map(item => {
           const active = activeKey === item.key
           const Icon = item.icon

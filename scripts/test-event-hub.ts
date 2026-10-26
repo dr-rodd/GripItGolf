@@ -12,6 +12,7 @@ import fs from 'fs'
 import {
   isEvent, normalizeNotice, MAX_NOTICE,
   parseStartFormat, describeStart, START_FORMAT_LABEL,
+  activeHubModules, teeSheetInUse,
 } from '../lib/eventHub'
 
 let passed = 0, failed = 0
@@ -101,6 +102,24 @@ section('Migration 046 carries the three changes')
   ok(/ON DELETE CASCADE/.test(sql), 'and a deleted trip takes its notices with it')
 }
 
+// ─── The home screen's modules ─────────────────────────────────
+
+section('A module is on the home screen only while it is active')
+{
+  eq(activeHubModules({ noticeCount: 0, teeSheet: false, stats: false }), [],
+    'nothing on, nothing drawn — no empty headings')
+  eq(activeHubModules({ noticeCount: 2, teeSheet: true, stats: true }),
+    ['notices', 'teeTimes', 'stats'], 'all three, in the screen\'s order')
+  eq(activeHubModules({ noticeCount: 1, teeSheet: false, stats: false }), ['notices'],
+    'a notice up puts Notices on')
+  eq(activeHubModules({ noticeCount: 0, teeSheet: false, stats: true }), ['stats'],
+    'stats stand alone')
+
+  ok(teeSheetInUse(['shotgun', 'tee_sheet', null]), 'one round on a tee sheet is enough')
+  ok(!teeSheetInUse(['shotgun', null, 'TEE_SHEET']), 'shotgun, unset or junk is not')
+  ok(!teeSheetInUse([]), 'and no rounds is no tee sheet')
+}
+
 // ─── The hub wears the right clothes ───────────────────────────
 
 section('The hub is the Event Hub only for a tournament')
@@ -114,8 +133,8 @@ section('The hub is the Event Hub only for a tournament')
     'start_format is only selected for an event')
   ok(/from\('event_messages'\)[\s\S]{0,120}\.eq\('trip_id', trip\.id\)/.test(hub),
     'notices are fetched scoped to the trip')
-  ok(/\.\.\.\(isEvent \? \[\{\s*key: 'notices'/.test(hub),
-    'and the Notices section exists only on an event')
+  ok(/\.\.\.\(modules\.includes\('notices'\) \? \[\{\s*key: 'notices'/.test(hub),
+    'and the Notices section is a module — there only while one is up')
   ok(hub.includes("isEvent ? 'Schedule' : 'Itinerary'"),
     'an event has a Schedule where a trip has its Itinerary')
   ok(hub.includes('startLines={startLines}'),
@@ -155,7 +174,12 @@ section('The organiser area stands behind the one PIN')
     'and so is a refused time')
 
   const panel = read('app/trip/[tripCode]/NoticesPanel.tsx')
-  ok(panel.includes('/organiser'), 'the hub links into the organiser area')
+  ok(!panel.includes('Nothing from the organiser yet'),
+    'the notices carry no empty state — the hub never draws them empty')
+  ok(!panel.includes('<Link'), '  …and no door: the organiser\'s is on the Settings tab')
+  const settings = read('app/trip/[tripCode]/settings/page.tsx')
+  ok(settings.includes('href={`/trip/${tripCode}/organiser`}'),
+    'the event\'s Settings tab links into the organiser area')
   ok(/mounted &&/.test(panel),
     'timestamps wait for the reader\'s own clock rather than hydrating UTC')
 }
@@ -164,14 +188,24 @@ section('The organiser area stands behind the one PIN')
 
 section('An event hides Trip Setup from the field')
 {
-  // An event drops Trip Setup and gains the tee sheet in its place, so both
-  // bars are five tabs and the grid never changes shape.
+  // An event's bar is four tabs — Home, Scoring, Leaderboard, Settings —
+  // with Settings at the bottom right, where a trip keeps Trip Setup. The
+  // tee sheet and the stats are home screen modules instead (Ross, 26 Oct
+  // 2026). Settings is the player's own screen, never Trip Setup.
   const bar = read('app/components/TabBar.tsx')
-  ok(bar.includes("ITEMS.filter(i => i.key !== 'settings')"),
-    'an event\'s tab bar drops Trip Setup')
-  ok(bar.includes("ITEMS.filter(i => i.key !== 'teesheet')"),
-    'and a trip\'s drops the tee sheet — five tabs either way')
-  ok(bar.includes('grid grid-cols-5'), 'on one five-column grid')
+  const eventItems = bar.slice(bar.indexOf('const EVENT_ITEMS'), bar.indexOf('] as const', bar.indexOf('const EVENT_ITEMS')))
+  ok(eventItems.includes("label: 'Settings'") && eventItems.includes('/settings`'),
+    'an event\'s bar ends on Settings, its own screen')
+  ok(!eventItems.includes('/setup`') && !eventItems.includes('ITEMS[4]'),
+    '  …never Trip Setup')
+  ok(!eventItems.includes('ITEMS[3]') && !bar.includes('teesheet'),
+    'and carries neither Stats nor the tee sheet')
+  ok(eventItems.lastIndexOf('settings') > eventItems.lastIndexOf('ITEMS[2]'),
+    'Settings is the rightmost tab')
+  ok(bar.includes("isEvent ? EVENT_ITEMS") && bar.includes(': ITEMS'),
+    'a trip keeps its five')
+  ok(bar.includes("items.length === 4 ? 'grid-cols-4' : 'grid-cols-5'"),
+    'and the grid matches the count, so Settings sits at the right edge')
 
   const layout = read('app/trip/[tripCode]/layout.tsx')
   ok(layout.includes('isEvent={isEvent(kind)}'),

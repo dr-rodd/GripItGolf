@@ -25,8 +25,14 @@ import { firstTeeTarget } from '@/lib/upNext'
 // "13–16 August" — one copy, shared with the confirmation email.
 import { describeRange } from '@/lib/confirmationEmail'
 import { SectionStack } from '@/app/components/Section'
-import { isEvent as isEventKind, parseStartFormat, describeStart } from '@/lib/eventHub'
+import {
+  isEvent as isEventKind, parseStartFormat, describeStart,
+  activeHubModules, teeSheetInUse,
+} from '@/lib/eventHub'
+import { hubTeeRound, myTee, slotClock, parseInterval } from '@/lib/teeSheet'
+import { readAllRows } from '@/lib/allRows'
 import NoticesPanel, { type Notice } from './NoticesPanel'
+import TeeTimesPanel from './TeeTimesPanel'
 import TripCountdown from './TripCountdown'
 import TripDescription from './TripDescription'
 import StatusBlock from './StatusBlock'
@@ -149,7 +155,10 @@ export default async function TripPage({ params, searchParams }: {
   // that has not run migration 046 has no `kind`, and no kind is a trip.
   const isEvent = isEventKind(trip.kind)
 
-  const [roundsResult, playersResult, itineraryResult, endTimesResult, coursesResult, noticesResult, giLinked, casualResult] = await Promise.all([
+  const [
+    roundsResult, playersResult, itineraryResult, endTimesResult, coursesResult,
+    noticesResult, giLinked, casualResult, teeSettingsResult, teeRowsResult,
+  ] = await Promise.all([
     // `itinerary_item_id` is the join that makes a countdown possible: the
     // date lives here and the tee time lives on the itinerary item, and this
     // is the only column tying the two together. `start_format` rides along
@@ -228,6 +237,25 @@ export default async function TripPage({ params, searchParams }: {
     isEvent && trip.start_date
       ? supabase.from('rounds').select('id, casual').eq('trip_id', trip.id)
       : Promise.resolve({ data: [], error: null }),
+    // The tee times module's two reads — events only, in the same breath
+    // rather than after the rounds say whether a tee sheet is in play, so
+    // the module costs this screen no hop. Both fail soft, as on the sheet:
+    // pre-050 the columns and the table do not exist, the interval reads
+    // at its default and nobody is on any sheet. Read whole for the same
+    // reason the sheet reads whole (lib/allRows.ts).
+    isEvent
+      ? supabase.from('rounds').select('id, tee_interval_mins').eq('trip_id', trip.id)
+      : Promise.resolve({ data: [], error: null }),
+    isEvent
+      ? readAllRows<{ round_id: string; player_id: string; slot_index: number }>(
+          () => supabase
+            .from('tee_assignments')
+            .select('round_id, player_id, slot_index', { count: 'exact' })
+            .eq('trip_id', trip.id)
+            .order('created_at').order('round_id').order('player_id'),
+          a => `${a.round_id}|${a.player_id}`,
+        )
+      : Promise.resolve({ data: [], error: null }),
   ])
 
   if (roundsResult.error) console.error('TripPage rounds query failed:', roundsResult.error)
@@ -301,6 +329,34 @@ export default async function TripPage({ params, searchParams }: {
     const line = describeStart(format, teeTimeByItem.get(r.itinerary_item_id))
     if (line) startLines[r.itinerary_item_id] = line
   }
+
+  // ── The tee times module ──
+  //
+  // On while any round starts from a tee sheet; it speaks for one of them
+  // (lib/teeSheet.ts `hubTeeRound`). Who this phone is comes later, so the
+  // place on the sheet is worked out once `me` is known.
+  const teeSheet = isEvent && teeSheetInUse(rounds.map(r => r.start_format))
+  const teeIntervals = new Map(
+    ((teeSettingsResult.data ?? []) as { id: string; tee_interval_mins?: unknown }[])
+      .map(r => [r.id, parseInterval(r.tee_interval_mins)]),
+  )
+  const teeRound = teeSheet ? hubTeeRound(
+    rounds
+      .filter(r => parseStartFormat(r.start_format) === 'tee_sheet')
+      .map(r => ({
+        id: r.id,
+        roundNumber: r.round_number,
+        date: r.scheduled_date,
+        courseName: courseMap[r.course_id] ?? null,
+        startTime: r.itinerary_item_id ? teeTimeByItem.get(r.itinerary_item_id) ?? null : null,
+        intervalMins: teeIntervals.get(r.id) ?? parseInterval(null),
+      })),
+    todayString(new Date()),
+  ) : null
+  const teeRows = teeRound
+    ? ((teeRowsResult.data ?? []) as { round_id: string; player_id: string; slot_index: number }[])
+        .filter(a => a.round_id === teeRound.id)
+    : []
 
   // Grouped by the day they are played, so a two-round day reads as one day
   // with two courses rather than as two unrelated entries. Only reached by a
@@ -632,11 +688,29 @@ export default async function TripPage({ params, searchParams }: {
   ))
 
   // The gear in the header's corner — this phone's OWN preferences, on
-  // every hub: appearance is the device's (light, dark, system), and a phone
-  // that went dark must always have the way back. The nickname inside it
-  // is a claimed player's, so it is handed the player only when there is
-  // one. Not a second door to Trip Setup, which stays on the tab bar.
-  const preferences = <PlayerSettings tripId={trip.id} playerId={me && isConfirmed(me) ? me.id : null} />
+  // every trip's hub: appearance is the device's (light, dark, system), and
+  // a phone that went dark must always have the way back. The nickname
+  // inside it is a claimed player's, so it is handed the player only when
+  // there is one. Not a second door to Trip Setup, which stays on the tab
+  // bar. An event has none: its Settings tab carries the same preferences
+  // (`/trip/[code]/settings`), and a gear here would be a second door.
+  const preferences = isEvent
+    ? undefined
+    : <PlayerSettings tripId={trip.id} playerId={me && isConfirmed(me) ? me.id : null} />
+
+  // The home screen's modules, each there only while it is active
+  // (lib/eventHub.ts). A trip has no notices and no tee sheet, so for a
+  // trip this is Stats or nothing, on the gate it always had.
+  const modules = activeHubModules({
+    noticeCount: notices.length,
+    teeSheet: !!teeRound,
+    stats: !!statsCover && statsCover.level !== 'none',
+  })
+  const fieldNameOf = (id: string) => players.find(p => p.id === id)?.name ?? null
+  const mineOnSheet = teeRound
+    ? myTee(teeRows, me && isConfirmed(me) ? me.id : null, teeRound.startTime, teeRound.intervalMins, fieldNameOf)
+    : null
+  const firstTee = teeRound ? slotClock(teeRound.startTime, 0, teeRound.intervalMins) : null
 
   const [koView, myDetails] = await Promise.all([knockoutView, myMatchDetails])
 
@@ -772,13 +846,31 @@ export default async function TripPage({ params, searchParams }: {
           initial={isEvent && notices.length > 0 ? 'notices' : 'itinerary'}
           sections={[
             /* Notices lead an event: the organiser's line to the field is
-               the hub's news, and it opens first once there is any. A trip
-               has no organiser and no section. */
-            ...(isEvent ? [{
+               the hub's news, and it opens first. A module — there only
+               while a notice is up, never a heading with nothing under it.
+               A trip has no organiser and no section. */
+            ...(modules.includes('notices') ? [{
               key: 'notices',
               title: 'Notices',
-              meta: notices.length > 0 ? `${notices.length}` : undefined,
-              content: <NoticesPanel notices={notices} tripCode={tripCode} />,
+              meta: `${notices.length}`,
+              content: <NoticesPanel notices={notices} />,
+            }] : []),
+            /* The tee times, while a round starts from a tee sheet — the
+               reader's own time on the heading, so a closed section still
+               answers the question. It was the event's fifth tab. */
+            ...(modules.includes('teeTimes') && teeRound ? [{
+              key: 'teetimes',
+              title: 'Tee times',
+              meta: mineOnSheet?.clock ?? (firstTee ? `From ${firstTee}` : undefined),
+              content: <TeeTimesPanel
+                tripCode={tripCode}
+                round={teeRound}
+                mine={mineOnSheet}
+                firstClock={firstTee}
+                booked={new Set(teeRows.map(a => a.player_id)).size}
+                fieldSize={players.length}
+                claimed={!!me && isConfirmed(me)}
+              />,
             }] : []),
             {
               key: 'itinerary',
@@ -833,8 +925,10 @@ export default async function TripPage({ params, searchParams }: {
                tiles left behind, kept rather than dropped — see
                docs/features.md. `initial` still opens the itinerary, so a hub
                with stats on looks exactly like one without until it is
-               tapped. */
-            ...(statsCover && statsCover.level !== 'none' ? [{
+               tapped. On an event this is the Stats module, and the only way
+               to the stats hub: the tab is gone, and the organiser adds it
+               from the organiser area's Home screen card. */
+            ...(modules.includes('stats') && statsCover && statsCover.level !== 'none' ? [{
               key: 'stats',
               title: 'Stats',
               meta: `${statsCover.holes} holes`,

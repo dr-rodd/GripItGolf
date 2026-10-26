@@ -618,7 +618,7 @@ with a rule beside it is what the screen now says; **Ross** items are unchanged.
 
 **H-19 · Tab bar labels** · `app/components/TabBar.tsx:25–28`
 - Now: Home · Leaderboard · Scoring · Settings
-- Today: Home · Scoring · Leaderboard · Stats · Trip Setup (an event: Tee Sheet in place of Trip Setup)
+- Today: Home · Scoring · Leaderboard · Stats · Trip Setup (an event, from 26 Oct 2026: Home · Scoring · Leaderboard · Settings — its tee sheet and stats are home screen modules)
 - New:
 
 **H-20 · Matchplay draw couldn't be read** · `page.tsx:207`
@@ -1852,7 +1852,7 @@ are left alone.
 
 **EO-23 · Page title** · `teesheet/TeeSheetClient.tsx`
 - Now: Tee Sheet
-- New: Tee sheet *(rule 4 — the tab label in `app/components/TabBar.tsx` still reads "Tee Sheet")*
+- New: Tee sheet *(rule 4 — there is no tab label to match any more: since 26 Oct 2026 the sheet is reached from the hub's Tee times module)*
 
 **EO-24 · The sheet cannot save yet** · `teesheet/TeeSheetClient.tsx`
 - Now: The tee sheet's database update has not been applied, so a name added here would disappear again. Everything else on the event works as normal.
