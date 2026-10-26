@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import DotBloom from '@/app/components/DotBloom'
 import { buttonClass } from '@/app/components/ui'
 import { ordinal, type CardHole, type CardSideKey, type CardSideView, type HoleOutcome } from '@/lib/matchCard'
+import { MatchScoresTable } from './MatchScorecard'
 import type { SideColour } from '@/lib/matchSides'
 
 /**
@@ -43,16 +44,11 @@ export default function MatchFinish({
   const played = outcomes.filter(o => o.winner !== null)
   const last = played[played.length - 1]
   const players = [...a.players.map(p => ({ ...p, side: 'A' as const })), ...b.players.map(p => ({ ...p, side: 'B' as const }))]
-  const many = players.length > 2
 
   const scoreOf = (pid: string, n: number) => {
     const g = scores[pid]?.[n]
     return g === null ? 'NR' : g === undefined ? '–' : String(g)
   }
-  const fillOf = (o: HoleOutcome) => o.winner === 'A' ? colours.A.fill
-    : o.winner === 'B' ? colours.B.fill : 'color-mix(in srgb, var(--color-bark) 45%, transparent)'
-  const holeName = (n: number) => n > 18 ? ordinal(n) : String(n)
-  const parOf = (n: number) => holes.find(h => h.holeNumber === n)?.par
 
   const sheet = (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={phase === 'done' ? onClose : undefined}>
@@ -109,51 +105,9 @@ export default function MatchFinish({
             </>
           ) : (
             <>
-              {/* The card: a row a hole, each player's score, the hole's mark
-                  in the winner's colour — the brown for a half. */}
-              <table className="w-full mt-5 text-center border-separate border-spacing-y-1" aria-label="Scores hole by hole">
-                <thead>
-                  <tr className="t-eyebrow text-ink/65">
-                    <th className="font-normal text-left pl-2 w-12">Hole</th>
-                    <th className="font-normal w-10">Par</th>
-                    {players.map(p => (
-                      <th key={p.id} className="font-normal px-1">
-                        <span className="block h-1 rounded-full mb-1" style={{ backgroundColor: colours[p.side].fill }} aria-hidden="true" />
-                        <span className={`block truncate normal-case tracking-normal t-cap font-semibold text-ink ${many ? 'max-w-[18vw]' : ''}`}>{p.name}</span>
-                      </th>
-                    ))}
-                    <th className="w-8"><span className="sr-only">Won by</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {played.map(o => (
-                    <tr key={o.holeNumber} className="bg-surface">
-                      <td className="text-left pl-2 py-1.5 rounded-l-lg t-label text-ink">{holeName(o.holeNumber)}</td>
-                      <td className="t-cap text-ink/65">{parOf(o.holeNumber) ?? ''}</td>
-                      {players.map(p => {
-                        const won = o.winner === p.side
-                        return (
-                          <td key={p.id} className="px-1">
-                            <span
-                              className={`inline-flex items-center justify-center min-w-9 h-8 px-1.5 rounded-lg font-serif text-lg tabular-nums ${won ? 'font-semibold' : 'text-ink/80'}`}
-                              style={won ? { backgroundColor: colours[p.side].fill, color: colours[p.side].on } : undefined}
-                            >
-                              {o.conceded && o.winner !== p.side ? '–' : scoreOf(p.id, o.holeNumber)}
-                            </span>
-                          </td>
-                        )
-                      })}
-                      <td className="rounded-r-lg pr-2">
-                        <span
-                          className="inline-block w-3 h-3 rounded-full align-middle"
-                          style={{ backgroundColor: fillOf(o) }}
-                          aria-label={o.winner === 'halved' ? 'Halved' : `${o.winner === 'A' ? a.name : b.name} won it`}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="mt-5">
+                <MatchScoresTable a={a} b={b} colours={colours} holes={holes} outcomes={outcomes} scores={scores} finishedOnly />
+              </div>
               <button type="button" onClick={onClose} className={`${buttonClass('secondary')} mt-4`}>Close</button>
             </>
           )}

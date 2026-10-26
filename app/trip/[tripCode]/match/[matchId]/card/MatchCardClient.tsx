@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
@@ -13,6 +14,8 @@ import { DEFAULT_SIDE_COLOURS, type SideColour } from '@/lib/matchSides'
 import { usePoll } from '@/app/scoring/usePoll'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import MatchFinish from './MatchFinish'
+import { MatchScoresTable } from './MatchScorecard'
+import { IconChevronLeft } from '@/app/components/icons'
 import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
 
 /**
@@ -55,8 +58,12 @@ const MAX_GROSS = 20
 
 export default function MatchCardClient({
   tripId, tripCode, matchId, a, b, holes: baseHoles, extraPlan: planInitial = {}, mySide, passcodeHash,
-  stored: storedInitial, colours = DEFAULT_SIDE_COLOURS, anyoneScores = true,
+  stored: storedInitial, colours = DEFAULT_SIDE_COLOURS, anyoneScores = true, backHref, roundName, club = null,
 }: {
+  /** The header: the way back, and the round and club in the middle. */
+  backHref: string
+  roundName: string
+  club?: string | null
   tripId: string
   tripCode: string
   matchId: string
@@ -84,6 +91,16 @@ export default function MatchCardClient({
   const [error, setError] = useState<string | null>(null)
   const [hole, setHole] = useState<number | null>(null)
   const [stored, setStored] = useState(storedInitial)
+  // The card and its scorecard side by side, slid between like trip
+  // scoring's live board; both stay live. At rest, the one off screen
+  // folds to no height so it adds no scroll to the one being read.
+  const [panel, setPanel] = useState<'card' | 'scorecard'>('card')
+  const [atRest, setAtRest] = useState(true)
+  const showPanel = (next: 'card' | 'scorecard') => {
+    if (next === panel) return
+    setAtRest(false)
+    setPanel(next)
+  }
   const [unlocked, setUnlocked] = useState(false)
   useEffect(() => { setUnlocked(hasUnlocked(tripCode)) }, [tripCode])
   const organiser = unlocked || !isLocked(passcodeHash)
@@ -403,7 +420,43 @@ export default function MatchCardClient({
     ? `${nameOf(outcome.winner)} wins the hole` : outcome?.winner === 'halved' ? 'Hole halved' : ''
 
   return (
-    <div className="flex flex-col gap-3" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div className="flex flex-col gap-3">
+      {/* One row: the way back on a card at the left, the round and club
+          small and centred, the scorecard on a card at the right — no page
+          title; the hole is the headline. */}
+      <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <Link
+          href={backHref}
+          className={`justify-self-start h-10 pl-2 pr-3 inline-flex items-center gap-0.5 t-label text-ink/80 ${cardClass('raised', true)}`}
+        >
+          <IconChevronLeft size={18} /> Back
+        </Link>
+        <p className="t-cap text-ink/65 text-center leading-tight max-w-[40vw]">
+          <span className="block truncate">{roundName}</span>
+          {club && <span className="block truncate">{club}</span>}
+        </p>
+        <button
+          type="button"
+          onClick={() => showPanel(panel === 'card' ? 'scorecard' : 'card')}
+          aria-pressed={panel === 'scorecard'}
+          className={`justify-self-end h-10 px-3 inline-flex items-center t-label text-ink/80 ${cardClass('raised', true)}`}
+        >
+          {panel === 'card' ? 'Scorecard' : 'Score'}
+        </button>
+      </header>
+
+      <div style={{ overflowX: 'clip' }}>
+      <div
+        className="flex items-start transition-transform duration-300 ease-out motion-reduce:transition-none"
+        style={{ width: '200%', transform: panel === 'scorecard' ? 'translateX(-50%)' : 'translateX(0)' }}
+        onTransitionEnd={e => { if (e.target === e.currentTarget) setAtRest(true) }}
+      >
+      <div
+        className={`w-1/2 min-w-0 flex flex-col gap-3 ${panel !== 'card' && atRest ? 'h-0 overflow-hidden' : ''}`}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        aria-hidden={panel !== 'card'}
+      >
       {/* Every hole: a mark each, filled in the colour of whoever won it,
           the hole being played the long one — trip scoring's strip. */}
       <div className="flex items-center gap-3" aria-hidden="true">
@@ -504,7 +557,7 @@ export default function MatchCardClient({
           it to the page instead. Fixed to the page's own bottom edge, a
           keyboard opening for the score box covers it rather than pushing
           it up over the boxes. */}
-      {inBrowser && createPortal(
+      {inBrowser && panel === 'card' && createPortal(
         <div className="hide-with-keyboard fixed inset-x-0 z-30 paper border-t border-line bottom-[calc(64px+env(safe-area-inset-bottom))] print:hidden">
           <div className="max-w-lg mx-auto px-4 py-2 flex gap-3">
             <button
@@ -535,12 +588,6 @@ export default function MatchCardClient({
       {awaitingFinal && sheetPhase === null && (
         <button type="button" onClick={() => setFixing(null)} className={buttonClass('primary')}>
           Finalise the match
-        </button>
-      )}
-
-      {decided && sheetPhase === null && (
-        <button type="button" onClick={() => setFinish({ phase: 'done', bloom: false })} className={buttonClass('secondary')}>
-          Match card
         </button>
       )}
 
@@ -590,6 +637,36 @@ export default function MatchCardClient({
 
       {/* Room for the pinned previous/next bar, so the last line is never under it. */}
       <div className="h-16" aria-hidden="true" />
+      </div>
+
+      {/* The scorecard: how everybody is playing and how the match has
+          gone, hole by hole — anybody may look. Swipe right to go back. */}
+      <div
+        className={`w-1/2 min-w-0 flex flex-col gap-3 ${panel !== 'scorecard' && atRest ? 'h-0 overflow-hidden' : ''}`}
+        onTouchStart={onTouchStart}
+        onTouchEnd={e => {
+          const start = swipe.current
+          swipe.current = null
+          if (!start) return
+          const t = e.changedTouches[0]
+          const dx = t.clientX - start.x
+          if (dx >= 60 && Math.abs(dx) >= Math.abs(t.clientY - start.y) * 1.5) showPanel('card')
+        }}
+        aria-hidden={panel !== 'scorecard'}
+      >
+        <p className="t-label text-ink flex items-center gap-2" aria-live="polite">
+          {loaded && state.leader && (
+            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colours[state.leader].fill }} aria-hidden="true" />
+          )}
+          <span className="min-w-0">{loaded ? status : 'Loading the card…'}</span>
+        </p>
+        {loaded && (
+          <MatchScoresTable a={a} b={b} colours={colours} holes={holes} outcomes={outcomes} scores={scores} />
+        )}
+        <div className="h-4" aria-hidden="true" />
+      </div>
+      </div>
+      </div>
     </div>
   )
 }

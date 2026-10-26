@@ -404,8 +404,13 @@ section('The match play card: top of the draw left, bottom right, NR, the result
     'a settled card asks before its result goes into an empty match — never by itself')
   ok(finishSheet.includes('Yes — finalise the match') && finishSheet.includes('No — go back and fix it'),
     '  …the sheet showing the last score and asking whether it is right')
-  ok(finishSheet.includes('aria-label="Scores hole by hole"') && finishSheet.includes('backgroundColor: fillOf(o)'),
+  const scorecard = read('app/trip/[tripCode]/match/[matchId]/card/MatchScorecard.tsx')
+  ok(finishSheet.includes('<MatchScoresTable') && scorecard.includes('aria-label="Scores hole by hole"')
+    && scorecard.includes('backgroundColor: fillOf(o)'),
     '  …then the card hole by hole, each marked in the colour of whoever won it')
+  ok(client.includes("<MatchScoresTable a={a} b={b}") && client.includes("showPanel(panel === 'card' ? 'scorecard' : 'card')")
+    && client.includes("translateX(-50%)"),
+    'the same card, live, a slide away from the score — anybody may look')
   ok(client.includes('persistWinner(all, matchId, winnerId as string, state.result)'), '  …through the bracket\'s own writer')
   ok(client.includes('const canEdit = organiser || (!decided && (inMatch || anyoneScores))'),
     'anybody scores an open match unless kept to its players; once it is in, it is the admin PIN')
