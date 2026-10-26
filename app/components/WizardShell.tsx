@@ -82,7 +82,7 @@ export default function WizardShell({
       </StepSlider>
 
       {footer && (
-        <div className="sticky bottom-0 z-20 paper border-t border-line">
+        <div className="hide-with-keyboard sticky bottom-0 z-20 paper border-t border-line">
           <div className="max-w-lg mx-auto px-4 pt-3 pb-[calc(28px+env(safe-area-inset-bottom))]">
             {footer}
           </div>

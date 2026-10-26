@@ -1689,7 +1689,7 @@ export default function LiveScoringFlow({
           </div>
 
           {/* Sticky save */}
-          <div className="sticky bottom-0 paper border-t border-line px-4 py-4 max-w-lg mx-auto w-full">
+          <div className="hide-with-keyboard sticky bottom-0 paper border-t border-line px-4 py-4 max-w-lg mx-auto w-full">
             <button
               onClick={saveEditDraft}
               disabled={editSaving}

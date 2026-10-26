@@ -746,7 +746,7 @@ export default function ScoreEntryForm({ players, courses }: { players: Player[]
         <button
           onClick={() => setA11y(v => !v)}
           title={a11y ? "Standard view" : "Accessibility: larger text"}
-          className={`fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full bg-[#0a1a0e] border-2 flex items-center justify-center transition-all
+          className={`hide-with-keyboard fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full bg-[#0a1a0e] border-2 flex items-center justify-center transition-all
             ${a11y
               ? "border-[#C9A84C] text-[#C9A84C]"
               : "border-[#1e3d28] text-white/50 hover:border-white/40 hover:text-white/70"}`}

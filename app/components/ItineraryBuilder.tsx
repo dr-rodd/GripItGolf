@@ -515,7 +515,7 @@ export default function ItineraryBuilder({
           guide supports they still clear the tap-target minimum, and a
           second row would push the way out of the day below the fold. */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-30 bg-cream/95 backdrop-blur-sm border-t border-line"
+        className="hide-with-keyboard fixed bottom-0 left-0 right-0 z-30 bg-cream/95 backdrop-blur-sm border-t border-line"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 10px)' }}
       >
         <div className="max-w-lg mx-auto px-4 pt-3">

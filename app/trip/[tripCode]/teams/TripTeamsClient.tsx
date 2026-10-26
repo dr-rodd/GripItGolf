@@ -802,7 +802,7 @@ export default function TripTeamsClient({
         </div>
 
         {selected.length > 0 && (
-          <div className="sticky z-30" style={{ bottom: ABOVE_TABBAR }}>
+          <div className="hide-with-keyboard sticky z-30" style={{ bottom: ABOVE_TABBAR }}>
             <button type="button" onClick={beginSelection} className={buttonClass('primary')}>
               Choose {teamNoun(forBoards).many} for {selected.length} leaderboard
               {selected.length === 1 ? '' : 's'}
@@ -929,7 +929,7 @@ className="fixed left-1/2 -translate-x-1/2 max-w-[92vw] px-5 py-3 bg-surface bor
           </p>
         )}
 
-        <div className="sticky z-30" style={{ bottom: ABOVE_TABBAR }}>
+        <div className="hide-with-keyboard sticky z-30" style={{ bottom: ABOVE_TABBAR }}>
           <button
             type="button"
             onClick={confirm}
