@@ -2023,9 +2023,10 @@ section('Every wizard is one frame')
   ok(!/inert=""/.test(two.split('Step ')[0]), '  …and step 2 can use it')
   ok(/Step (<!-- -->)?2(<!-- -->)? of (<!-- -->)?3/.test(two), 'the row says which step it is')
 
-  // Sticky, not fixed: it rides above the keyboard instead of under it.
-  ok(/class="sticky bottom-0 z-20 paper border-t border-line"/.test(one) && one.includes('Continue'),
-    'the way forward is a bar stuck to the bottom')
+  // Sticky, not fixed — and it steps aside while the keyboard is up
+  // (KeyboardWatch), rather than riding over the box being typed in.
+  ok(/class="hide-with-keyboard sticky bottom-0 z-20 paper border-t border-line"/.test(one) && one.includes('Continue'),
+    'the way forward is a bar stuck to the bottom, out of the way while typing')
   ok(one.includes('env(safe-area-inset-bottom)'), '  …clear of the home indicator')
   ok(!render({ footer: undefined }).includes('sticky bottom-0'),
     '  …and absent where a step pins its own')
