@@ -344,18 +344,23 @@ export function describeRepeat(repeat: SeriesRepeat, first?: string | null): str
 }
 
 /**
- * Why this date cannot be a league's next round, or null when it can.
+ * Why this date cannot take a new round of the league, or null when it can.
  *
- * **The next round goes after the last one.** Rounds are numbered in date
- * order, and every screen calls a round by its number, so a date slipped in
- * between two others would make Round 6 come before Round 5. A league with
- * no rounds yet takes anything from its first date on.
+ * **Anywhere from the league's first date, after the last round played**
+ * (Ross, 26 Oct 2026: an extra round mid-series was refused because it was
+ * not after the last round planned). A round goes into its place in date
+ * order and the rounds after it move up a number (`insertedRoundNumber`);
+ * a round already played — or being played — never changes number, which
+ * is why the new one must come after the last of those. Two rounds may
+ * share a day.
  */
 export function nextRoundIssue(date: string, ctx: {
   /** The first round's date — the trip's start date. */
   startDate: string
   /** Every date the league already has a round on, TBC ones included. */
   roundDates: readonly string[]
+  /** The latest date of a round with scores or a card open on it, or null. */
+  lastPlayedDate?: string | null
 }): string | null {
   if (!date || !Number.isFinite(Date.parse(`${date}T00:00:00Z`))) {
     return 'Pick a date for the round.'
@@ -363,14 +368,25 @@ export function nextRoundIssue(date: string, ctx: {
   if (ctx.roundDates.length >= MAX_LEAGUE_DAYS) {
     return `A league can hold at most ${MAX_LEAGUE_DAYS} rounds.`
   }
-  const last = [...ctx.roundDates].sort().at(-1) ?? null
-  if (last && date <= last) {
-    return `The last round is on ${describeDay(last, 0)} — the next one goes after it.`
-  }
   if (date < ctx.startDate) {
-    return `The league starts on ${describeDay(ctx.startDate, 0)} — the next round goes on or after it.`
+    return `The league starts on ${describeDay(ctx.startDate, 0)} — a new round goes on or after it.`
+  }
+  if (ctx.lastPlayedDate && date <= ctx.lastPlayedDate) {
+    return `The last round played was on ${describeDay(ctx.lastPlayedDate, 0)} — a new round goes after it.`
   }
   return null
+}
+
+/**
+ * The number a round added on this date takes: its place in date order,
+ * after any round already on the day. The rounds numbered from it on move
+ * up one (lib/leagueRoundStore.ts) — so the league reads 1, 2, 3 by date.
+ */
+export function insertedRoundNumber(
+  rounds: readonly Pick<LeagueRound, 'date' | 'number'>[],
+  date: string,
+): number {
+  return rounds.filter(r => r.date != null && r.date <= date).length + 1
 }
 
 // ─── A league's rounds, venue or not ───────────────────────────
@@ -436,35 +452,36 @@ export function leagueRounds(
 }
 
 /**
- * Which of a league's rounds the field sees today, newest first — the
- * Scoring tab and the hub read the league as its history, with what comes
- * next on top.
+ * A league's rounds as the field reads them today — every round shown, the
+ * ones not reachable yet pale and inert (Ross, 26 Oct 2026; it used to hold
+ * them back altogether).
  *
- * **The next round appears the day after the previous one** (Ross's story:
- * it builds a bit of anticipation, rather than the whole winter on show
- * from the start). So: every round dated today or earlier, and the first
- * round after today — unless a round is being played today, in which case
- * the next one waits until tomorrow. A league whose first round has not
- * come yet shows that first round. A round with no date is always shown.
- *
- * `hidden` is how many planned rounds are held back, so a screen can say
- * that more are to come without saying when. The organiser area still
- * lists the whole plan. Pure.
+ * **What comes next on top**: the rounds still to play in date order, the
+ * first date's round(s) open and **every later one locked** until the
+ * round before it has happened — the next round opens the day after the
+ * previous one, as it always did. Then the rounds played, newest first. A
+ * round with no date (a series made before series carried dates) is
+ * history, at the foot, newest number first. Pure.
  */
-export function revealedLeagueRounds<T extends Pick<LeagueRound, 'date' | 'number'>>(
+export function seriesListing<T extends Pick<LeagueRound, 'date' | 'number'>>(
   rounds: readonly T[], today: string,
-): { shown: T[]; hidden: number } {
-  const playingToday = rounds.some(r => r.date === today)
-  const future = rounds
-    .filter(r => r.date != null && r.date > today)
+): { round: T; locked: boolean }[] {
+  const upcoming = rounds
+    .filter(r => r.date != null && r.date >= today)
     .sort((a, b) => (a.date! < b.date! ? -1 : a.date! > b.date! ? 1 : a.number - b.number))
-  const next = playingToday ? null : future[0] ?? null
-  const shown = rounds.filter(r => r.date == null || r.date <= today || r === next)
-  const newestFirst = [...shown].sort((a, b) => {
-    if (a.date && b.date && a.date !== b.date) return a.date < b.date ? 1 : -1
-    return b.number - a.number
-  })
-  return { shown: newestFirst, hidden: rounds.length - shown.length }
+  const nextDate = upcoming[0]?.date ?? null
+  const played = rounds
+    .filter(r => r.date == null || r.date < today)
+    .sort((a, b) => {
+      if (a.date && b.date && a.date !== b.date) return a.date < b.date ? 1 : -1
+      if (a.date && !b.date) return -1
+      if (!a.date && b.date) return 1
+      return b.number - a.number
+    })
+  return [
+    ...upcoming.map(round => ({ round, locked: round.date !== nextDate })),
+    ...played.map(round => ({ round, locked: false })),
+  ]
 }
 
 /** The number the next round added to this league takes — the same rule. */

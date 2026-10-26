@@ -14,8 +14,8 @@ import { linkedPlayerId } from '@/lib/currentPlayer'
 import { readKnockout } from '../knockout'
 import { readLiveMatches } from '../match/matchCards'
 import { KnockoutPortal } from '../KnockoutViews'
-import { AddLeagueRound, RoundSettings, TbcRoundTile, type LeagueDoor } from '../LeagueRounds'
-import { parseLeagueSetup, leagueRounds, nextRoundNumber, revealedLeagueRounds } from '@/lib/leagueSetup'
+import { AddLeagueRound, LockedRoundTile, RoundSettings, TbcRoundTile, type LeagueDoor } from '../LeagueRounds'
+import { parseLeagueSetup, leagueRounds, seriesListing } from '@/lib/leagueSetup'
 import { todayString } from '@/lib/tripStatus'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { describeShortDate } from '@/lib/itinerary'
@@ -171,10 +171,10 @@ export default async function TripCoursePortalPage({
     trip.start_date ?? null,
   ) : []
   const lastVenueId = [...league].reverse().find(r => r.courseId)?.courseId ?? null
-  // What the field sees: the league's history newest first, with the next
-  // round on top — and only once the round before it has been played
-  // (`revealedLeagueRounds`). Adding a round still reads the whole plan.
-  const revealed = revealedLeagueRounds(league, todayString(new Date()))
+  // What the field sees: every round — the next on top, the later ones
+  // under it pale and inert until the one before has been played, then
+  // the history newest first (`seriesListing`).
+  const listing = seriesListing(league, todayString(new Date()))
   const door: LeagueDoor | null = series && trip.start_date ? {
     tripId: trip.id,
     tripCode,
@@ -228,6 +228,14 @@ export default async function TripCoursePortalPage({
     ...played.filter(r => r.scored).map(r => r.id),
     ...roundCards.map(c => c.roundId),
   ])
+  // A new league round goes after the last one played or being played —
+  // those never change number (lib/leagueSetup.ts `nextRoundIssue`).
+  const lastPlayedDate = rounds
+    .filter(r => scoredRounds.has(r.id) || openRounds.has(r.id))
+    .map(r => r.scheduled_date as string | null)
+    .filter((d): d is string => !!d)
+    .sort()
+    .at(-1) ?? null
 
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
@@ -259,8 +267,8 @@ export default async function TripCoursePortalPage({
             <AddLeagueRound
               door={door}
               endDate={trip.end_date ?? null}
-              roundDates={league.flatMap(r => (r.date ? [r.date] : []))}
-              number={nextRoundNumber(league)}
+              rounds={league.map(r => ({ date: r.date, number: r.number }))}
+              lastPlayedDate={lastPlayedDate}
               positionsByDay={positionsByDay}
               lastVenueId={lastVenueId}
               fieldMayAdd={allowsParticipant(kind, permsRaw, 'add_rounds')}
@@ -283,13 +291,25 @@ export default async function TripCoursePortalPage({
         )}
 
         <div className="flex flex-col gap-3">
-          {/* A league lists its rounds as its history — newest first, the
-              next one on top, a TBC one in its place and paler; anything
-              else lists its rounds as it always has. */}
+          {/* A league lists every round — the next on top, the later ones
+              pale and inert, then its history newest first, a TBC one in
+              its place and paler; anything else lists its rounds as it
+              always has. */}
           {(series
-            ? revealed.shown.map(lr => lr.roundId ? roundById.get(lr.roundId)! : lr)
+            ? listing.map(({ round: lr, locked }) => locked
+                ? { locked: true as const, lr }
+                : lr.roundId ? roundById.get(lr.roundId)! : lr)
             : (rounds ?? [])
           ).map(entry => {
+            if ('locked' in entry) {
+              const lr = entry.lr
+              const lockedCourse = lr.roundId
+                ? (roundById.get(lr.roundId)?.courses as unknown as { name: string } | null)?.name ?? null
+                : null
+              return lr.date ? (
+                <LockedRoundTile key={lr.roundId ?? lr.itemId} number={lr.number} date={lr.date} courseName={lockedCourse} />
+              ) : null
+            }
             if (!('round_number' in entry)) {
               return door && entry.date ? (
                 <TbcRoundTile
@@ -362,12 +382,7 @@ export default async function TripCoursePortalPage({
             ) : tile
           })}
         </div>
-        {series && revealed.hidden > 0 && (
-          <p className="t-cap text-ink/65 text-center mt-4">
-            {revealed.hidden === 1 ? 'One more round' : `${revealed.hidden} more rounds`} to
-            come — the next appears the day after this one is played.
-          </p>
-        )}
+
       </div>
       <SupportLink className="px-4 pb-12" />
     </div>

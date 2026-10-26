@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { describeShortDate } from '@/lib/itinerary'
-import { cardKey, nextRoundIssue, parseLeagueSetup } from '@/lib/leagueSetup'
+import { cardKey, insertedRoundNumber, nextRoundIssue, parseLeagueSetup } from '@/lib/leagueSetup'
 import {
   addLeagueRound, confirmLeagueVenue, setCardCounts, setRoundAllowance,
 } from '@/lib/leagueRoundStore'
@@ -19,6 +19,7 @@ import { Sheet } from '@/app/components/ItineraryForms'
 import CourseSelect from '@/app/components/CourseSelect'
 import DateField from '@/app/components/DateField'
 import Toggle from '@/app/components/Toggle'
+import CourseName from '@/app/components/CourseName'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import { FIELD_LABEL, IconButton, Segmented, cardClass, chipClass } from '@/app/components/ui'
 import { IconPlus, IconSettings } from '@/app/components/icons'
@@ -27,11 +28,14 @@ import { IconPlus, IconSettings } from '@/app/components/icons'
  * A league's rounds, where the field can touch them — the Scoring tab and
  * the hub (docs/event-use-cases.md).
  *
- * Two doors, both for a dated series: **Add round**, the next round on the
- * day it is played, at the last venue unless told otherwise or left TBC;
- * and a **TBC round's tile**, paler than the rest, which opens "Choose the
- * venue". Choosing one makes the round (lib/leagueRoundStore.ts), and only
- * then can it be scored — a TBC round has nothing to open a card on.
+ * Two doors, both for a dated series: **Add round**, a round on any date
+ * after the last one played, at the last venue unless told otherwise or
+ * left TBC — it takes its place in date order and the rounds after it move
+ * up a number; and a **TBC round's tile**, paler than the rest, which opens
+ * "Choose the venue". Choosing one makes the round
+ * (lib/leagueRoundStore.ts), and only then can it be scored — a TBC round
+ * has nothing to open a card on. A round not reachable yet — dated after
+ * the next one — wears `LockedRoundTile`: shown, pale, and inert.
  *
  * Who may: the organiser always, with the PIN asked in place; the field
  * when the organiser has switched on `add_rounds` or `set_venues`. Adding a
@@ -126,14 +130,14 @@ function localToday(): string {
 // ─── Add round ─────────────────────────────────────────────────
 
 export function AddLeagueRound({
-  door, endDate, roundDates, number, positionsByDay, lastVenueId, fieldMayAdd,
+  door, endDate, rounds, lastPlayedDate, positionsByDay, lastVenueId, fieldMayAdd,
 }: {
   door: LeagueDoor
   endDate: string | null
-  /** Every date the league already has a round on, TBC ones included. */
-  roundDates: string[]
-  /** The number the new round takes (`nextRoundNumber`). */
-  number: number
+  /** Every round of the league, TBC ones included — dates and numbers. */
+  rounds: { date: string | null; number: number }[]
+  /** The latest date a round has scores or a card open on — a new one goes after it. */
+  lastPlayedDate: string | null
   /** How many items each day already holds, so the round goes after them. */
   positionsByDay: Record<number, number>
   /** The most recent round's course — a league presumes its home venue. */
@@ -155,13 +159,20 @@ export function AddLeagueRound({
 
   const organiser = unlocked || !isLocked(door.passcodeHash)
   const mayAdd = fieldMayAdd || organiser
+  const roundDates = rounds.flatMap(r => (r.date ? [r.date] : []))
+  const rules = { startDate: door.startDate, roundDates, lastPlayedDate }
+  // The earliest date the picker offers: the league's start, or the day
+  // after the last round played.
+  const minDate = lastPlayedDate && lastPlayedDate >= door.startDate
+    ? new Date(Date.parse(`${lastPlayedDate}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)
+    : door.startDate
 
   function openSheet() {
     // Read on tap, never during render: the unlock lives in sessionStorage
     // and the date on the device's own calendar.
     setUnlocked(hasUnlocked(door.tripCode))
     const today = localToday()
-    setDate(nextRoundIssue(today, { startDate: door.startDate, roundDates }) ? '' : today)
+    setDate(nextRoundIssue(today, rules) ? '' : today)
     setCourseId(lastVenueId ?? '')
     setTbc(false)
     setError(null)
@@ -170,7 +181,7 @@ export function AddLeagueRound({
 
   async function add() {
     if (!mayAdd) { setError('Adding a round needs the organiser PIN.'); return }
-    const issue = nextRoundIssue(date, { startDate: door.startDate, roundDates })
+    const issue = nextRoundIssue(date, rules)
     if (issue) { setError(issue); return }
     if (!tbc && !courseId) { setError('Pick a venue, or leave it to be confirmed.'); return }
     if (!players) {
@@ -183,7 +194,7 @@ export function AddLeagueRound({
     const dayIndex = Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${door.startDate}T00:00:00Z`)) / 86_400_000)
     const result = await addLeagueRound({
       tripId: door.tripId, startDate: door.startDate, endDate, date,
-      courseId: tbc ? null : courseId, number,
+      courseId: tbc ? null : courseId, number: insertedRoundNumber(rounds, date),
       position: positionsByDay[dayIndex] ?? 0, players,
     })
     setSaving(false)
@@ -205,7 +216,7 @@ export function AddLeagueRound({
 
       {open && (
         <Sheet
-          title="Add the next round"
+          title="Add a round"
           onClose={() => !saving && setOpen(false)}
           onAdd={add}
           addLabel={saving ? 'Adding…' : 'Add round'}
@@ -215,7 +226,12 @@ export function AddLeagueRound({
             <OrganiserOnly door={door} what="adds rounds" onUnlocked={() => setUnlocked(true)} />
           )}
 
-          <DateField label="Date" value={date} onChange={setDate} min={door.startDate} />
+          <DateField label="Date" value={date} onChange={setDate} min={minDate} />
+          {date && !nextRoundIssue(date, rules) && insertedRoundNumber(rounds, date) <= rounds.length && (
+            <p className="t-cap text-ink/65 -mt-2 leading-snug">
+              It becomes round {insertedRoundNumber(rounds, date)}; the rounds after it move up one.
+            </p>
+          )}
 
           <div>
             <label className={FIELD_LABEL}>Venue</label>
@@ -240,6 +256,37 @@ export function AddLeagueRound({
         </Sheet>
       )}
     </>
+  )
+}
+
+// ─── A round not reachable yet ─────────────────────────────────
+
+/**
+ * A round dated after the next one (`seriesListing`'s `locked`): shown so
+ * the field can see what is coming, pale, and inert — no card, no venue,
+ * no gear — until the round before it has happened (Ross, 26 Oct 2026).
+ */
+export function LockedRoundTile({ number, date, courseName }: {
+  number: number
+  date: string
+  /** The venue, or null while it is to be confirmed. */
+  courseName: string | null
+}) {
+  return (
+    <div
+      aria-disabled="true"
+      className="flex items-center justify-between w-full px-5 py-4 rounded-card border border-line"
+    >
+      <div className="min-w-0">
+        <p className="t-label text-ink/50 mb-1">
+          Round {number} · {describeShortDate(date)}
+        </p>
+        <p className="t-card text-ink/50 truncate">
+          {courseName ? <CourseName name={courseName} /> : 'Venue TBC'}
+        </p>
+        <p className="t-cap mt-1 text-ink/50">Opens once the round before it has been played</p>
+      </div>
+    </div>
   )
 }
 

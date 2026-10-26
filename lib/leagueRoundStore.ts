@@ -90,8 +90,39 @@ async function makeRound(args: {
 }
 
 /**
- * Add the league's next round: on `date`, at `courseId` — or TBC when that
+ * The rounds numbered `from` and above move up one, the highest first so
+ * none lands on a number still taken (UNIQUE trip, round number). False
+ * when any move is refused — the rounds stay valid, a gap at worst, and
+ * the caller says so rather than adding a round onto a number in use.
+ */
+async function shiftRoundNumbers(tripId: string, from: number): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('rounds')
+    .select('id, round_number')
+    .eq('trip_id', tripId)
+    .gte('round_number', from)
+    .order('round_number', { ascending: false })
+  if (error) return false
+  for (const r of (data ?? []) as { id: string; round_number: number }[]) {
+    const { error: moveError } = await supabase
+      .from('rounds')
+      .update({ round_number: r.round_number + 1 })
+      .eq('id', r.id)
+      .eq('trip_id', tripId)
+    if (moveError) return false
+  }
+  return true
+}
+
+/**
+ * Add a round to the league: on `date`, at `courseId` — or TBC when that
  * is null, in which case only the dated golf item is written.
+ *
+ * **It takes its place in date order** (Ross, 26 Oct 2026): `number` is
+ * the caller's `insertedRoundNumber`, and the rounds from it on move up one
+ * first — never a played one, because `nextRoundIssue` only allows a date
+ * after the last round played. A TBC round has no row to move; its number
+ * is its place in date order, so it follows by itself.
  *
  * The trip runs from its first round to its last, so a round past the end
  * moves the end on first: an end stretched with nothing under it yet is a
@@ -115,6 +146,10 @@ export async function addLeagueRound(args: {
       .update({ end_date: args.date })
       .eq('id', args.tripId)
     if (error) return { ok: false, error: 'Could not add the round — try again.' }
+  }
+
+  if (!(await shiftRoundNumbers(args.tripId, args.number))) {
+    return { ok: false, error: 'Could not make room for the round — refresh and try again.' }
   }
 
   const item: ItineraryItem = {

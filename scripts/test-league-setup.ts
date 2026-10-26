@@ -18,7 +18,7 @@ import {
   weeklyDates, boardGrouping, describeScope,
   seriesDates, describeRepeat, nextRoundIssue, tidyRepeat, MAX_REPEAT_EVERY,
   leagueRounds, nextRoundNumber,
-  cardKey, tidyCardsOff, cardsOffWith, MAX_CARDS_OFF, revealedLeagueRounds,
+  cardKey, tidyCardsOff, cardsOffWith, MAX_CARDS_OFF, seriesListing, insertedRoundNumber,
 } from '../lib/leagueSetup'
 import { buildRows, type RowContext, type ResolvedScore } from '../lib/boardRows'
 import type { RoundCard } from '../lib/golfIreland'
@@ -138,14 +138,22 @@ section('A repeat says itself the way a club does')
   eq(describeRepeat({ every: 1, unit: 'week' }), 'every week', 'with no date there is no day to name')
 }
 
-section('The next round goes after the last one')
+section('A new round goes anywhere after the last round played (Ross, 26 Oct 2026)')
 {
-  const ctx = { startDate: '2026-11-04', roundDates: ['2026-11-04', '2026-11-11'] }
-  eq(nextRoundIssue('2026-11-18', ctx), null, 'a week on is the next round')
-  ok(!!nextRoundIssue('2026-11-11', ctx)?.includes('after'), 'the last round\'s own day is refused')
-  ok(!!nextRoundIssue('2026-11-08', ctx)?.includes('11 November'),
-    'an earlier day is refused, naming the last round')
+  const ctx = { startDate: '2026-11-04', roundDates: ['2026-11-04', '2026-11-11', '2026-11-18'], lastPlayedDate: '2026-11-04' }
+  eq(nextRoundIssue('2026-11-25', ctx), null, 'after the last round planned, as ever')
+  eq(nextRoundIssue('2026-11-08', ctx), null, 'and now between two planned rounds too — the extra round that was refused')
+  eq(nextRoundIssue('2026-11-11', ctx), null, '  …or on a day that already has one')
+  ok(!!nextRoundIssue('2026-11-04', ctx)?.includes('played'), 'never on or before the last round played')
+  ok(!!nextRoundIssue('2026-11-02', { ...ctx, lastPlayedDate: null })?.includes('starts'),
+    '  …nor before the league starts')
   ok(nextRoundIssue('', ctx) !== null, 'no date is refused')
+  const rounds = [
+    { date: '2026-11-04', number: 1 }, { date: '2026-11-11', number: 2 }, { date: '2026-11-18', number: 3 },
+  ]
+  eq(insertedRoundNumber(rounds, '2026-11-08'), 2, 'a round slipped in takes its place in date order')
+  eq(insertedRoundNumber(rounds, '2026-11-11'), 3, '  …after one already on its day')
+  eq(insertedRoundNumber(rounds, '2026-11-25'), 4, '  …and at the end, the next number')
   eq(nextRoundIssue('2026-11-04', { startDate: '2026-11-04', roundDates: [] }), null,
     'an empty league takes its first date')
   ok(nextRoundIssue('2026-11-01', { startDate: '2026-11-04', roundDates: [] }) !== null,
@@ -576,8 +584,9 @@ section('A league grows from the Scoring tab and the hub, one round at a time')
     'the setup and permissions ride in their own fail-soft queries, never the main select')
   ok(page.includes('leagueRounds(') && page.includes('<TbcRoundTile'),
     'the tab lists the league\'s rounds through the one copy, a TBC one in its place')
-  ok(page.includes('number={nextRoundNumber(league)}'),
-    'a new round takes the number the one rule gives it')
+  ok(page.includes('rounds={league.map(r => ({ date: r.date, number: r.number }))}')
+     && page.includes('lastPlayedDate={lastPlayedDate}'),
+    'a new round is told the whole league and the last round played')
 
   const hub = read('app/trip/[tripCode]/page.tsx')
   ok(hub.includes('leagueRounds(') && hub.includes('<TbcRoundTile'),
@@ -586,8 +595,14 @@ section('A league grows from the Scoring tab and the hub, one round at a time')
     'behind the same permission')
 
   const doors = read('app/trip/[tripCode]/LeagueRounds.tsx')
-  ok(doors.includes('nextRoundIssue(date, { startDate: door.startDate, roundDates })'),
+  ok(doors.includes('const rules = { startDate: door.startDate, roundDates, lastPlayedDate }')
+     && doors.includes('nextRoundIssue(date, rules)'),
     'the date is checked by the one copy of the rule')
+  ok(doors.includes('number: insertedRoundNumber(rounds, date)'), '  …and numbered by it')
+  const shifter = read('lib/leagueRoundStore.ts')
+  ok(shifter.includes("order('round_number', { ascending: false })")
+     && /if \(!\(await shiftRoundNumbers\(args\.tripId, args\.number\)\)\)/.test(shifter),
+    'the rounds after it move up one, the highest first, before it is written')
   ok(doors.includes('addLeagueRound({') && doors.includes('confirmLeagueVenue({'),
     'both doors write through the league\'s own writer')
   ok(doors.includes('<InlineUnlock') && doors.includes('hasUnlocked(door.tripCode)'),
@@ -828,35 +843,34 @@ section('A Golf Ireland card played as a round counts as that round, and switche
     'the leaderboard\'s round tile says so, and opens no empty scorecard')
 }
 
-section('The next round appears the day after the one before it')
+section('Every round shows; the later ones pale until the one before is played')
 {
   // Four Wednesdays in November.
   const rounds = ['2026-11-04', '2026-11-11', '2026-11-18', '2026-11-25']
     .map((date, i) => ({ date, number: i + 1 }))
-  const on = (today: string) => revealedLeagueRounds(rounds, today)
+  const on = (today: string) => seriesListing(rounds, today)
+    .map(e => `${e.round.number}${e.locked ? 'x' : ''}`)
 
-  eq(on('2026-11-01').shown.map(r => r.number), [1], 'before the league starts, the first round alone')
-  eq(on('2026-11-01').hidden, 3, '  …with three more to come')
-  eq(on('2026-11-04').shown.map(r => r.number), [1], 'on the day of round one, round one — the next waits')
-  eq(on('2026-11-05').shown.map(r => r.number), [2, 1],
-    'the day after, round two appears — newest first, the next on top')
-  eq(on('2026-11-11').shown.map(r => r.number), [2, 1], 'on round two\'s day, still no round three')
-  eq(on('2026-11-30').shown.map(r => r.number), [4, 3, 2, 1], 'after the last, the whole history')
-  eq(on('2026-11-30').hidden, 0, '  …and nothing held back')
-  eq(revealedLeagueRounds([{ date: null, number: 1 }, ...rounds], '2026-11-01').shown.map(r => r.number),
-    [1, 1], 'a round with no date is always shown')
-  eq(revealedLeagueRounds([], '2026-11-01'), { shown: [], hidden: 0 }, 'no rounds, nothing to show')
+  eq(on('2026-11-01'), ['1', '2x', '3x', '4x'], 'before the league starts: the first round, the rest pale')
+  eq(on('2026-11-04'), ['1', '2x', '3x', '4x'], 'on the day of round one, round one — the next still waits')
+  eq(on('2026-11-05'), ['2', '3x', '4x', '1'],
+    'the day after, round two opens on top, the later ones under it, then the history')
+  eq(on('2026-11-11'), ['2', '3x', '4x', '1'], 'on round two\'s day, round three still pale')
+  eq(on('2026-11-30'), ['4', '3', '2', '1'], 'after the last, the whole history, newest first')
+  eq(seriesListing([{ date: null, number: 1 }, ...rounds], '2026-11-05').map(e => e.round.number),
+    [2, 3, 4, 1, 1], 'a round with no date is history, at the foot')
+  eq(seriesListing([], '2026-11-01'), [], 'no rounds, nothing to show')
 
   for (const page of ['app/trip/[tripCode]/scoring/page.tsx', 'app/trip/[tripCode]/page.tsx']) {
     const src = read(page)
-    ok(src.includes('revealedLeagueRounds(league, todayString(new Date()))')
-      && src.includes('revealed.shown.map('),
-      `${page.split('/').slice(-2).join('/')} draws the revealed rounds, newest first`)
-    ok(src.includes('the next appears the day after this one is played'),
-      '  …and says more are to come without saying when')
+    ok(src.includes('seriesListing(league, todayString(new Date()))') && src.includes('<LockedRoundTile'),
+      `${page.split('/').slice(-2).join('/')} draws every round, a locked one as a pale tile`)
+    ok(!src.includes('more rounds'), '  …so it no longer counts the ones held back')
   }
-  ok(read('app/trip/[tripCode]/scoring/page.tsx').includes('number={nextRoundNumber(league)}'),
-    'adding a round still reads the whole plan, so no number is handed out twice')
+  const tile = read('app/trip/[tripCode]/LeagueRounds.tsx')
+  const locked = tile.slice(tile.indexOf('export function LockedRoundTile'), tile.indexOf('// ─── A round whose venue is TBC'))
+  ok(locked.includes('aria-disabled="true"') && !locked.includes('<Link') && !locked.includes('onClick'),
+    'a locked round is inert — no card, no venue, no gear')
 }
 
 // ─── Result ────────────────────────────────────────────────────
