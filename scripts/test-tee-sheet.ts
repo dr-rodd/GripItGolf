@@ -355,9 +355,17 @@ section('The sheet reads fail-soft and writes scoped')
   const mainRounds = page.match(/select\('id, round_number[^']*'\)/)?.[0] ?? ''
   ok(!mainRounds.includes('tee_interval'),
     'the main rounds select never names a migration-050 column')
-  ok(page.includes("select('id, tee_interval_mins, tee_group_size')"),
-    'the settings ride in their own fail-soft query')
-  ok(page.includes("'edit_tee_sheet'"), 'the field\'s right is the permission')
+  ok(page.includes('readSheetSettings(trip.id)'),
+    'the settings ride in their own fail-soft queries')
+  const sheets = read('app/trip/[tripCode]/teesheet/sheets.ts')
+  ok(sheets.includes("select('id, tee_sheet')") && sheets.includes("select('id, tee_interval_mins, tee_group_size')"),
+    '  …the wizard\'s rules and the older two apart, so one missing migration costs only its own')
+  ok(page.includes("'edit_tee_sheet'") && page.includes("'set_tee_sheets'"),
+    'the field\'s rights are the two permissions')
+  ok(/\.filter\(r => parseStartFormat\(r\.start_format\) === 'tee_sheet'\)/.test(page),
+    'only rounds that start from a tee sheet are on the tab')
+  ok(page.includes('roundSheet({') && page.includes('hasAssignments: assignedRounds.has(r.id)'),
+    '  …each vacant, live or legacy by lib/teeSheet.ts')
 
   const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes('hasUnlocked(tripCode)'),
@@ -370,7 +378,7 @@ section('The sheet reads fail-soft and writes scoped')
     'adds are one batch carrying the trip id')
   ok(/delete\(\)[\s\S]{0,80}\.eq\('trip_id', tripId\)/.test(client),
     'removes are scoped to the trip')
-  ok(client.includes('groupSlot(') && client.includes('slotClock('),
+  ok(client.includes('groupSlot(') && client.includes('sheetClock(sheet, i)') && client.includes('sheetSlots('),
     'the maths comes from lib/teeSheet.ts, never re-derived')
   ok(client.includes('Pick teams'), 'a team board offers the way to its pairings')
   ok(fs.existsSync('app/trip/[tripCode]/teesheet/loading.tsx'),
@@ -384,6 +392,27 @@ section('The sheet reads fail-soft and writes scoped')
     'a team only fits where the whole team fits')
   ok(client.includes('removePlayers(i, g.players.map(p => p.id))'),
     'and leaves as one block on a share-a-tee board')
+}
+
+section('A vacant round offers the wizard; players pick their own time when allowed')
+{
+  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  ok(client.includes("aren&apos;t set up yet") && client.includes('Set up the tee times'),
+    'a round with no sheet yet says so and offers the wizard — never an empty heading')
+  ok(/!fieldMaySet && isLocked\(passcodeHash\) && !unlocked/.test(client) && client.includes('Asks for the organiser PIN.'),
+    '  …saying the PIN is asked, unless anyone may make the sheets')
+  ok(/\{fieldMaySet && \([\s\S]{0,200}Edit the tee times/.test(client),
+    'an open event\'s live sheet carries an Edit button into the wizard; a closed one does not')
+  ok(client.includes('const organiser = unlocked || !isLocked(passcodeHash)'),
+    'the organiser places anybody — the PIN unlocked, or an event without one')
+  ok(client.includes('const selfPick = !organiser && fieldMayEdit && !!meId'),
+    'a claimed player picks their own time only when the event says players pick')
+  ok(/selfPick && storageReady && myUnitIds\.length > 0 && vacancy >= myUnitIds\.length/.test(client),
+    '  …joining a time with room for them, and on a share-a-tee board their whole team')
+  ok(client.includes('removePlayers(i, myLeavers(slotPlayers))'), '  …and leaving only their own')
+  ok(!/\{canEdit/.test(client) && /\{organiser && vacancy > 0 && !open/.test(client),
+    'nobody but the organiser places anybody else')
+  ok(client.includes('myTee(roundAssignments, meId, live'), 'your own time sits at the top, from the one copy')
 }
 
 section('A write that does not land says so where it was asked for')

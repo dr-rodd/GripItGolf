@@ -6,7 +6,11 @@ import {
 } from '@/lib/leaderboards'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { readAllRows } from '@/lib/allRows'
-import { parseInterval, parseGroupSize } from '@/lib/teeSheet'
+import { parseStartFormat } from '@/lib/eventHub'
+import { roundSheet } from '@/lib/teeSheet'
+import { currentPlayer } from '@/lib/currentPlayer'
+import { isConfirmed } from '@/lib/roster'
+import { readSheetSettings } from './sheets'
 import { sheetForBoard, isDaySheet } from '@/lib/teamSets'
 import { TAG_SET } from '@/lib/tagBoards'
 import BackButton from '@/app/components/BackButton'
@@ -15,24 +19,27 @@ import TeeSheetClient from './TeeSheetClient'
 export const dynamic = 'force-dynamic'
 
 /**
- * The tee sheet — who goes off when, one screen per event.
+ * The Tee times tab — who goes off when, a sheet per tee-sheet round.
  *
  * Events only, like the organiser area: a trip's field sorts its own
- * fourballs on the first tee and has no tab pointing here. Everything the
- * sheet needs comes down in one batch; the two tee-sheet columns and the
- * assignments table ride in their own fail-soft queries (migration 050),
- * so an un-migrated database shows a read-only sheet at its defaults
+ * fourballs on the first tee and has no tab pointing here. Only rounds
+ * that start from a tee sheet are on it, each vacant until its sheet is
+ * made in the wizard (lib/teeSheet.ts `roundSheet`). Everything comes down
+ * in one batch; the sheet settings and the assignments table ride in their
+ * own fail-soft queries, so an un-migrated database shows vacant rounds
  * rather than no page.
  *
- * Who may edit is decided on the client, deliberately: the field's right
- * comes from the `edit_tee_sheet` permission (read here), the organiser's
- * from the PIN unlock this device already holds — which lives in
- * sessionStorage and only the browser can see.
+ * Who may do what is decided on the client, deliberately: the field's
+ * rights come from two permissions (read here) — picking their own time,
+ * and making the sheets — and the organiser's from the PIN unlock this
+ * device already holds, which lives in sessionStorage and only the
+ * browser can see.
  */
-export default async function TeeSheetPage({ params }: {
+export default async function TeeSheetPage({ params, searchParams }: {
   params: Promise<{ tripCode: string }>
+  searchParams: Promise<{ round?: string }>
 }) {
-  const { tripCode } = await params
+  const [{ tripCode }, { round: initialRoundId }] = await Promise.all([params, searchParams])
 
   const [kind, { data: trip, error }] = await Promise.all([
     fetchTripKind(tripCode),
@@ -87,7 +94,7 @@ export default async function TeeSheetPage({ params }: {
   ] = await Promise.all([
     supabase
       .from('rounds')
-      .select('id, round_number, itinerary_item_id, courses(name)')
+      .select('id, round_number, itinerary_item_id, start_format, courses(name)')
       .eq('trip_id', trip.id)
       .order('round_number'),
     supabase
@@ -97,16 +104,13 @@ export default async function TeeSheetPage({ params }: {
       .eq('kind', 'golf'),
     supabase
       .from('players')
-      .select('id, name')
+      .select('id, name, claimed')
       .eq('trip_id', trip.id)
       .eq('is_composite', false)
       .order('name'),
-    // The two settings columns, fail-soft — pre-050 this errors and every
-    // round reads at its defaults (10 minutes, fours).
-    supabase
-      .from('rounds')
-      .select('id, tee_interval_mins, tee_group_size')
-      .eq('trip_id', trip.id),
+    // Each round's sheet settings — the wizard's rules and the older two
+    // columns, each fail-soft on its own.
+    readSheetSettings(trip.id),
     // The assignments, fail-soft the same way — pre-050 the sheet is empty
     // and the first write says calmly what is missing.
     // Read whole: one row per player per round, so a long league with a
@@ -146,28 +150,38 @@ export default async function TeeSheetPage({ params }: {
   const teeTimes = new Map(
     (itemsResult.data ?? []).map(i => [i.id as string, i.tee_time as string | null]),
   )
-  const settings = new Map(
-    ((settingsResult.data ?? []) as {
-      id: string; tee_interval_mins?: unknown; tee_group_size?: unknown
-    }[]).map(r => [r.id, r]),
+  const assignedRounds = new Set(
+    ((assignmentsResult.data ?? []) as { round_id: string }[]).map(a => a.round_id),
   )
 
   type RoundRow = {
     id: string; round_number: number; itinerary_item_id: string | null
+    start_format: string | null
     courses: { name: string } | { name: string }[] | null
   }
-  const rounds = ((roundsResult.data ?? []) as unknown as RoundRow[]).map(r => {
-    const course = Array.isArray(r.courses) ? r.courses[0] : r.courses
-    const s = settings.get(r.id)
-    return {
-      id: r.id,
-      roundNumber: r.round_number,
-      courseName: course?.name ?? null,
-      startTime: r.itinerary_item_id ? teeTimes.get(r.itinerary_item_id) ?? null : null,
-      intervalMins: parseInterval(s?.tee_interval_mins),
-      groupSize: parseGroupSize(s?.tee_group_size),
-    }
-  })
+  // The rounds that start from a tee sheet — the ones tee times are on for.
+  const rounds = ((roundsResult.data ?? []) as unknown as RoundRow[])
+    .filter(r => parseStartFormat(r.start_format) === 'tee_sheet')
+    .map(r => {
+      const course = Array.isArray(r.courses) ? r.courses[0] : r.courses
+      const s = settingsResult.get(r.id)
+      return {
+        id: r.id,
+        roundNumber: r.round_number,
+        courseName: course?.name ?? null,
+        sheet: roundSheet({
+          rules: s?.rules,
+          startTime: r.itinerary_item_id ? teeTimes.get(r.itinerary_item_id) ?? null : null,
+          intervalMins: s?.intervalMins,
+          groupSize: s?.groupSize,
+          hasAssignments: assignedRounds.has(r.id),
+        }),
+      }
+    })
+
+  // Who this phone is — the player who may pick their own time.
+  const roster = (playersResult.data ?? []) as { id: string; name: string; claimed: boolean | null }[]
+  const me = await currentPlayer(tripCode, roster)
 
   const allTeams = (teamsResult.data ?? []) as {
     id: string; name: string; color: string; team_set: string | null
@@ -237,7 +251,7 @@ export default async function TeeSheetPage({ params }: {
       tripId={trip.id}
       tripCode={tripCode}
       rounds={rounds}
-      players={(playersResult.data ?? []) as { id: string; name: string }[]}
+      players={roster.map(p => ({ id: p.id, name: p.name }))}
       initialAssignments={
         ((assignmentsResult.data ?? []) as {
           round_id: string; player_id: string; slot_index: number
@@ -261,6 +275,13 @@ export default async function TeeSheetPage({ params }: {
         (permsResult.data as { event_permissions?: unknown } | null)?.event_permissions,
         'edit_tee_sheet',
       )}
+      fieldMaySet={allowsParticipant(
+        kind,
+        (permsResult.data as { event_permissions?: unknown } | null)?.event_permissions,
+        'set_tee_sheets',
+      )}
+      meId={me && isConfirmed(me) ? me.id : null}
+      initialRoundId={initialRoundId ?? null}
       passcodeHash={(trip.settings_passcode_hash as string | null) ?? null}
     />
   )

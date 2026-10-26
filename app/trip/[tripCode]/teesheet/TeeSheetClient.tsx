@@ -5,11 +5,11 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 import InlineUnlock from '@/app/components/InlineUnlock'
-import { hasUnlocked } from '@/lib/passcode'
+import { hasUnlocked, isLocked } from '@/lib/passcode'
 import { IconPlus, IconX, IconUsers } from '@/app/components/icons'
 import {
-  type SlotPlayer, slotClock, slotCount, groupSlot,
-  pickerUnits, unitMatches,
+  type SlotPlayer, type RoundSheet, groupSlot, pickerUnits, unitMatches,
+  sheetClock, sheetSlots, sheetGroupSize, describeRules, myTee,
 } from '@/lib/teeSheet'
 import { joinNames, firstName } from '@/lib/matchplayEntrants'
 import {
@@ -17,7 +17,7 @@ import {
 } from '@/lib/tagBoards'
 import { setTeam } from '@/lib/teamMembers'
 import { PRESET_COLORS } from '@/lib/teamColors'
-import { FIELD, cardClass, optionClass } from '@/app/components/ui'
+import { FIELD, buttonClass, cardClass, optionClass } from '@/app/components/ui'
 import { courseLabel } from '@/lib/courseDirectory'
 
 /**
@@ -27,11 +27,19 @@ import { courseLabel } from '@/lib/courseDirectory'
  * by side at two or three and a 2×2 grid at four, because a team going out
  * together should read as one thing.
  *
- * Who may edit: the field, when the organiser's `edit_tee_sheet` permission
- * says so — or whoever has already unlocked the organiser PIN in this
- * session, read from the same sessionStorage the PasscodeGate writes. The
- * unlock is checked after mount, deliberately: the server cannot see
- * sessionStorage, and deciding during render would tear hydration.
+ * One sheet per tee-sheet round, and a round's sheet is live only once it
+ * has been made in the wizard (lib/teeSheet.ts `roundSheet`): until then
+ * the round shows a vacant slot with the way to make it — the PIN asked
+ * there, unless the event lets anyone make the sheets (`set_tee_sheets`),
+ * in which case a live sheet carries an Edit button into the wizard too.
+ *
+ * Who places players (Ross, 26 Oct 2026): the organiser, whoever has
+ * unlocked the PIN in this session — read from the same sessionStorage the
+ * PasscodeGate writes, after mount, because the server cannot see it and
+ * deciding during render would tear hydration — puts anybody anywhere.
+ * When the event lets players pick their own time (`edit_tee_sheet`),
+ * this phone's claimed player joins a free time and leaves their own, and
+ * nobody else's; otherwise the sheet is read-only to everybody else.
  *
  * Writes are one row per player per round (`tee_assignments`, migration
  * 050) — adding and removing are single-row inserts and deletes, so two
@@ -44,9 +52,8 @@ type Round = {
   id: string
   roundNumber: number
   courseName: string | null
-  startTime: string | null
-  intervalMins: number
-  groupSize: number
+  /** Vacant, live from the wizard's rules, or made before the wizard. */
+  sheet: RoundSheet
 }
 
 type Assignment = { round_id: string; player_id: string; slot_index: number }
@@ -77,8 +84,8 @@ type RoundTeams = {
 export default function TeeSheetClient({
   tripId, tripCode, rounds, players, initialAssignments,
   roundTeams, tagOf, playingForTags = false,
-  hasTeamBoard, fieldMayEdit, passcodeHash = null,
-  storageReady = true,
+  hasTeamBoard, fieldMayEdit, fieldMaySet = false, passcodeHash = null,
+  storageReady = true, meId = null, initialRoundId = null,
 }: {
   tripId: string
   tripCode: string
@@ -96,14 +103,22 @@ export default function TeeSheetClient({
   /** The event ranks tags, so a player without one cannot go on the sheet. */
   playingForTags?: boolean
   hasTeamBoard: boolean
-  /** The `edit_tee_sheet` permission — the field's right to edit. */
+  /** The `edit_tee_sheet` permission — each player picks their own time. */
   fieldMayEdit: boolean
+  /** The `set_tee_sheets` permission — anyone may make the sheets, no PIN. */
+  fieldMaySet?: boolean
+  /** This phone's claimed player, who may pick their own time. */
+  meId?: string | null
+  /** The round to open on — the wizard sends people back to the one they made. */
+  initialRoundId?: string | null
   /** For the inline organiser unlock; null when the event has no PIN. */
   passcodeHash?: string | null
   /** False when the assignments table could not be read — nothing will save. */
   storageReady?: boolean
 }) {
-  const [roundId, setRoundId] = useState<string | null>(rounds[0]?.id ?? null)
+  const [roundId, setRoundId] = useState<string | null>(
+    rounds.find(r => r.id === initialRoundId)?.id ?? rounds[0]?.id ?? null,
+  )
   const [assignments, setAssignments] = useState<Assignment[]>(initialAssignments)
   // The failure and the slot it happened in — a message about a name has to
   // appear beside that name, not at the foot of a sheet that may be a long
@@ -116,9 +131,16 @@ export default function TeeSheetClient({
   // exist on the server, and a render that reads it would tear hydration.
   const [unlocked, setUnlocked] = useState(false)
   useEffect(() => { setUnlocked(hasUnlocked(tripCode)) }, [tripCode])
-  const canEdit = fieldMayEdit || unlocked
+  // The organiser places anybody — the PIN unlocked here, or an event
+  // with no PIN at all, the soft lock's fail-open. A player picking their
+  // own time places themselves and nobody else.
+  const organiser = unlocked || !isLocked(passcodeHash)
+  const selfPick = !organiser && fieldMayEdit && !!meId
 
   const round = rounds.find(r => r.id === roundId) ?? null
+  const sheet = round?.sheet ?? { state: 'vacant' as const }
+  const live = sheet.state !== 'vacant' ? sheet : null
+  const groupSize = live ? sheetGroupSize(live) : 0
   const nameOf = useMemo(() => new Map(players.map(p => [p.id, p.name])), [players])
 
   /**
@@ -174,7 +196,7 @@ export default function TeeSheetClient({
   )
 
   const maxAssigned = roundAssignments.reduce((m, a) => Math.max(m, a.slot_index), -1)
-  const count = round ? slotCount(players.length, round.groupSize, maxAssigned) : 0
+  const count = round ? sheetSlots(sheet, players.length, maxAssigned) : 0
 
   /**
    * What a rejected write is allowed to say. The raw error goes to the
@@ -381,6 +403,26 @@ export default function TeeSheetClient({
   const units = pickerUnits(unassigned, teamMap, together)
     .filter(u => unitMatches(u, search))
 
+  // This phone's own place, and what joining would book: themselves, or on
+  // a share-a-tee board their whole team still off the sheet — the same
+  // unit the organiser's picker offers.
+  const mine = live ? myTee(roundAssignments, meId, live, id => nameOf.get(id) ?? null) : null
+  const myUnit = meId && !mine
+    ? pickerUnits(unassigned, teamMap, together)
+        .find(u => u.kind === 'solo' ? u.player.id === meId : u.players.some(p => p.id === meId))
+    : undefined
+  const myUnitIds = myUnit
+    ? myUnit.kind === 'solo' ? [myUnit.player.id] : myUnit.players.map(p => p.id)
+    : []
+  /** Who leaving takes out of the slot: this player, or their whole linked block. */
+  const myLeavers = (slotPlayers: SlotPlayer[]) => {
+    const t = meId ? teamMap.get(meId) : undefined
+    return together && t
+      ? slotPlayers.filter(p => teamMap.get(p.id)?.teamId === t.teamId).map(p => p.id)
+      : meId ? [meId] : []
+  }
+  const setupHref = round ? `/trip/${tripCode}/teesheet/${round.id}/setup` : null
+
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
       <TripHeader backTo={`/trip/${tripCode}`} />
@@ -388,13 +430,25 @@ export default function TeeSheetClient({
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
 
         <h1 className="t-h1 text-ink mb-1">
-          Tee sheet
+          Tee times
         </h1>
         <p className="text-ink/65 text-sm mb-2">
-          {canEdit
-            ? 'Tap an open slot to put a name in it.'
-            : 'Who goes off when. The organiser sets the groups.'}
+          {organiser
+            ? 'Tap an open time to put a name in it.'
+            : selfPick
+              ? 'Pick a free time — tap Join.'
+              : fieldMayEdit
+                ? 'Claim your name to pick a time.'
+                : 'Who goes off when. The organiser sets the groups.'}
         </p>
+        {fieldMayEdit && !meId && !organiser && (
+          <Link
+            href={`/trip/${tripCode}/players`}
+            className="inline-block mb-2 t-cap text-accent-deep hover:text-accent transition-colors"
+          >
+            Claim your spot →
+          </Link>
+        )}
 
         {/* Nowhere to save. Said once, at the top, before anybody spends a
             minute tapping names that cannot stick — the assignments read
@@ -437,16 +491,17 @@ export default function TeeSheetClient({
             passed the PasscodeGate saw a read-only sheet with no way in.
             The unlock is offered here, in place — same PIN, same session
             memory as every other gate. */}
-        {!canEdit && passcodeHash && (
+        {!organiser && passcodeHash && (
           <div className="mb-4">
             <InlineUnlock
               tripCode={tripCode}
               passcodeHash={passcodeHash}
               onUnlocked={() => setUnlocked(true)}
+              prompt="Organiser? Enter your PIN to place players."
             />
           </div>
         )}
-        {canEdit && <div className="mb-3" /> }
+        {organiser && <div className="mb-3" /> }
 
         {/* The way to the pairings, when the event has them. Adding a team
             as one — tap a partner, book the pair — arrives with the teams
@@ -485,6 +540,9 @@ export default function TeeSheetClient({
                   {r.courseName && (
                     <span className="block t-cap text-ink/65 mt-0.5">{courseLabel(r.courseName)}</span>
                   )}
+                  {r.sheet.state === 'vacant' && (
+                    <span className="block t-cap text-ink/65 mt-0.5">Not set up yet</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -493,31 +551,70 @@ export default function TeeSheetClient({
 
         {!round ? (
           <p className="t-cap text-ink/65 text-center py-8">
-            No rounds yet — the sheet fills in once the event has golf.
+            No round starts from a tee sheet yet.
           </p>
+        ) : !live ? (
+          /* The vacant slot: tee times are on for this round, and nobody
+             has made its sheet yet. The way to the wizard, the PIN asked
+             there unless anyone may make the sheets. */
+          <div className={`p-4 ${cardClass()}`}>
+            <p className="t-card text-ink">Round {round.roundNumber}&apos;s tee times aren&apos;t set up yet</p>
+            <p className="t-cap text-ink/65 mt-1 leading-snug">
+              Once they are, everybody can see who goes off when.
+            </p>
+            <Link href={setupHref!} className={`${buttonClass('secondary')} mt-4`}>
+              Set up the tee times
+            </Link>
+            {!fieldMaySet && isLocked(passcodeHash) && !unlocked && (
+              <p className="t-cap text-ink/65 mt-2 text-center">Asks for the organiser PIN.</p>
+            )}
+          </div>
         ) : (
           <>
-            {round.startTime === null && (
+            {/* Your time, before the scroll: when, and who with. */}
+            {mine && (
+              <div className={`px-4 py-3 mb-3 ${cardClass('raised')}`}>
+                <p className="t-cap text-ink/65">{mine.clock ? 'You’re off at' : 'You’re in'}</p>
+                <p className="font-serif text-2xl t-num text-ink mt-0.5">
+                  {mine.clock ?? `Group ${mine.slotIndex + 1}`}
+                </p>
+                <p className="t-cap text-ink/80 mt-0.5 leading-snug">
+                  {mine.partners.length > 0 ? `With ${joinNames(mine.partners)}` : 'Nobody else in your group yet.'}
+                </p>
+              </div>
+            )}
+
+            {live.state === 'legacy' && live.startTime === null && (
               <p className="t-cap text-ink/65 mb-3 leading-snug">
                 Groups are numbered until the organiser sets a start time.
               </p>
             )}
 
+            {/* Open to everyone: the sheet's own rules are anybody's to change. */}
+            {fieldMaySet && (
+              <div className="flex justify-end mb-2">
+                <Link href={setupHref!} className={`${buttonClass('secondary', false, true)}`}>
+                  Edit the tee times
+                </Link>
+              </div>
+            )}
+
             <ol className={`divide-y divide-line ${cardClass()}`}>
               {Array.from({ length: count }, (_, i) => {
                 const slotPlayers = slots.get(i) ?? []
-                const vacancy = Math.max(0, round.groupSize - slotPlayers.length)
-                const clock = slotClock(round.startTime, i, round.intervalMins)
+                const vacancy = Math.max(0, groupSize - slotPlayers.length)
+                const clock = sheetClock(sheet, i)
+                const isMine = !!mine && mine.slotIndex === i
                 const groups = groupSlot(slotPlayers, teamMap)
                 const open = adding === i
 
                 return (
-                  <li key={i} className="px-3.5 py-2.5">
+                  <li key={i} className={`px-3.5 py-2.5 ${isMine ? 'bg-accent/[0.06]' : ''}`}>
                     <div className="flex items-start justify-between gap-3">
                       {/* Names on the left, stacked; a team is one block —
                           side by side at 2 or 3, a 2×2 grid at 4. */}
                       <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                        {slotPlayers.length === 0 && !canEdit && (
+                        {slotPlayers.length === 0 && !organiser && !(selfPick && myUnitIds.length > 0) && (
                           <span className="t-cap text-ink/50 py-0.5">Open</span>
                         )}
 
@@ -541,7 +638,7 @@ export default function TeeSheetClient({
                                 {g.players.map(p => (
                                   <span key={p.id} className="flex items-center gap-1 min-w-0">
                                     <span className="t-card text-ink truncate">{p.name}</span>
-                                    {canEdit && !together && (
+                                    {organiser && !together && (
                                       <button
                                         type="button"
                                         onClick={() => removePlayers(i, [p.id])}
@@ -554,7 +651,7 @@ export default function TeeSheetClient({
                                   </span>
                                 ))}
                               </div>
-                              {canEdit && together && (
+                              {organiser && together && (
                                 <button
                                   type="button"
                                   onClick={() => removePlayers(i, g.players.map(p => p.id))}
@@ -570,7 +667,7 @@ export default function TeeSheetClient({
                               {g.players.map(p => (
                                 <span key={p.id} className="flex items-center gap-1 min-w-0">
                                   <span className="t-card text-ink truncate">{p.name}</span>
-                                  {canEdit && (
+                                  {organiser && (
                                     <button
                                       type="button"
                                       onClick={() => removePlayers(i, [p.id])}
@@ -586,7 +683,7 @@ export default function TeeSheetClient({
                           )
                         ))}
 
-                        {canEdit && vacancy > 0 && !open && (
+                        {organiser && vacancy > 0 && !open && (
                           <button
                             type="button"
                             onClick={() => { setAdding(i); setSearch('') }}
@@ -597,11 +694,35 @@ export default function TeeSheetClient({
                           </button>
                         )}
 
+                        {/* A player picking their own time: join a time with
+                            room for them (and their linked team), leave the
+                            one they are in. Nobody else's name is theirs to
+                            move. */}
+                        {selfPick && storageReady && myUnitIds.length > 0 && vacancy >= myUnitIds.length && (
+                          <button
+                            type="button"
+                            onClick={() => addPlayers(i, myUnitIds)}
+                            className="self-start flex items-center gap-1 t-cap text-accent-deep hover:text-accent transition-colors py-0.5"
+                          >
+                            <IconPlus size={12} />
+                            {myUnitIds.length > 1 ? 'Join with your team' : 'Join'}
+                          </button>
+                        )}
+                        {selfPick && isMine && (
+                          <button
+                            type="button"
+                            onClick={() => removePlayers(i, myLeavers(slotPlayers))}
+                            className="self-start t-cap text-ink/65 hover:text-ink transition-colors py-0.5"
+                          >
+                            Leave this time
+                          </button>
+                        )}
+
                         {/* A day that plays its own teams makes them here.
                             The group standing in the slot is the team —
                             the fourball that is about to go out — so the
                             control is one tap rather than a picker. */}
-                        {canEdit && roundTeamInfo?.isDay && slotPlayers.length >= 2 && (
+                        {(organiser || (selfPick && isMine)) && roundTeamInfo?.isDay && slotPlayers.length >= 2 && (
                           untidyGroups(groups).length > 0 ? (
                             <button
                               type="button"
@@ -730,7 +851,9 @@ export default function TeeSheetClient({
             </ol>
 
             <p className="t-cap text-ink/65 mt-4 leading-snug">
-              {round.intervalMins} minutes between groups · groups of up to {round.groupSize}
+              {live.state === 'active'
+                ? `${describeRules(live.rules)}.`
+                : `${live.intervalMins} minutes between groups · groups of up to ${live.groupSize}`}
             </p>
           </>
         )}
