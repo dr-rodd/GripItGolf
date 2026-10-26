@@ -480,10 +480,16 @@ export function sheetSlots(sheet: RoundSheet, rosterSize: number, maxAssignedInd
 /**
  * Where the wizard starts: the rules as they stand, a legacy sheet's old
  * settings as one batch, or — for a vacant round — one batch from the
- * round's start (or eight o'clock) at ten-minute gaps, long enough for the
- * field in fours.
+ * round's start (or eight o'clock) at ten-minute gaps: as many tee times
+ * as the golf item planned (`teeCount`, asked when the event was made),
+ * else long enough for the field in fours.
  */
-export function draftRules(sheet: RoundSheet, startTime: string | null, fieldSize: number): TeeRules {
+export function draftRules(
+  sheet: RoundSheet,
+  startTime: string | null,
+  fieldSize: number,
+  teeCount?: number | null,
+): TeeRules {
   if (sheet.state === 'active') return sheet.rules
   const start = clockMins(startTime) !== null ? startTime!.slice(0, 5) : '08:00'
   if (sheet.state === 'legacy') {
@@ -495,7 +501,10 @@ export function draftRules(sheet: RoundSheet, startTime: string | null, fieldSiz
   return {
     batches: [{
       start, interval: DEFAULT_TEE_INTERVAL_MINS,
-      count: Math.max(1, Math.ceil(fieldSize / DEFAULT_GROUP_SIZE)), ends: 'count',
+      count: teeCount && teeCount > 1
+        ? Math.min(MAX_SLOTS, teeCount)
+        : Math.max(1, Math.ceil(fieldSize / DEFAULT_GROUP_SIZE)),
+      ends: 'count',
     }],
     groupSize: DEFAULT_GROUP_SIZE,
   }

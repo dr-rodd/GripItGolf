@@ -2025,11 +2025,15 @@ section('Every wizard is one frame')
 
   // Sticky, not fixed — and it steps aside while the keyboard is up
   // (KeyboardWatch), rather than riding over the box being typed in.
-  ok(/class="hide-with-keyboard sticky bottom-0 z-20 paper border-t border-line"/.test(one) && one.includes('Continue'),
+  ok(/class="hide-with-keyboard sticky z-20 paper border-t border-line" style="bottom:0"/.test(one) && one.includes('Continue'),
     'the way forward is a bar stuck to the bottom, out of the way while typing')
   ok(one.includes('env(safe-area-inset-bottom)'), '  …clear of the home indicator')
-  ok(!render({ footer: undefined }).includes('sticky bottom-0'),
+  ok(!render({ footer: undefined }).includes('sticky z-20'),
     '  …and absent where a step pins its own')
+  // Under a trip's tab bar (the tee sheet wizard), the bar sticks just above
+  // it — at the foot of the screen it would be behind the tabs mid-scroll.
+  ok(/sticky z-20[^>]*style="bottom:calc\(64px \+ env\(safe-area-inset-bottom\)\)"/.test(render({ aboveTabBar: true })),
+    '  …or just above the tab bar, where the wizard sits under one')
 }
 
 section('A step slides')

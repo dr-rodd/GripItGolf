@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import BackButton from './BackButton'
+import { TABBAR_SPACE } from './tabbarMetrics'
 
 /**
  * Every create wizard's frame — trip, league, knockout, run challenge and the
@@ -22,7 +23,7 @@ import BackButton from './BackButton'
  *     hiding under it.
  */
 export default function WizardShell({
-  step, titles, intro, onBack, footer, children,
+  step, titles, intro, onBack, footer, children, aboveTabBar = false,
 }: {
   /** 1-based. */
   step: number
@@ -34,6 +35,11 @@ export default function WizardShell({
   /** The Continue bar's contents. Absent where a step pins its own. */
   footer?: React.ReactNode
   children: React.ReactNode
+  /**
+   * The wizard sits under a trip's tab bar, so the Continue bar sticks
+   * just above it rather than at the foot of the screen, behind it.
+   */
+  aboveTabBar?: boolean
 }) {
   const total = titles.length
   const first = step <= 1
@@ -82,8 +88,11 @@ export default function WizardShell({
       </StepSlider>
 
       {footer && (
-        <div className="hide-with-keyboard sticky bottom-0 z-20 paper border-t border-line">
-          <div className="max-w-lg mx-auto px-4 pt-3 pb-[calc(28px+env(safe-area-inset-bottom))]">
+        <div
+          className="hide-with-keyboard sticky z-20 paper border-t border-line"
+          style={{ bottom: aboveTabBar ? TABBAR_SPACE : 0 }}
+        >
+          <div className={`max-w-lg mx-auto px-4 pt-3 ${aboveTabBar ? 'pb-3' : 'pb-[calc(28px+env(safe-area-inset-bottom))]'}`}>
             {footer}
           </div>
         </div>

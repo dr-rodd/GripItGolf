@@ -114,10 +114,37 @@ section('A round\'s sheet is vacant until the wizard has been through')
     { batches: [{ start: '07:45', interval: DEFAULT_TEE_INTERVAL_MINS, count: 5, ends: 'count' }], groupSize: 4 },
     'the wizard opens on the round\'s start, ten minutes apart, long enough for the field in fours')
   eq(draftRules({ state: 'vacant' }, null, 0).batches[0].start, '08:00', '  …eight o\'clock with no start, never nothing')
+  eq(draftRules({ state: 'vacant' }, '07:45', 18, 9).batches[0].count, 9,
+    '  …and as many tee times as the event planned for the round, where it said')
+  eq(draftRules({ state: 'vacant' }, '07:45', 18, 1).batches[0].count, 5,
+    '  …a plan of one being the form\'s default, not an answer')
   eq(draftRules(legacy, '08:30', 7),
     { batches: [{ start: '08:30', interval: 12, count: 4, ends: 'count' }], groupSize: 2 },
     'a legacy sheet opens as it stood')
   eq(draftRules(active, '06:00', 50), rules, 'and a live one as saved')
+}
+
+section('A sheet is made in its own wizard, behind the PIN unless the event is open')
+{
+  const page = read('app/trip/[tripCode]/teesheet/[roundId]/setup/page.tsx')
+  ok(/allowsParticipant\([\s\S]{0,120}'set_tee_sheets'/.test(page) && /!openToAll && isLocked\(/.test(page),
+    'the wizard asks for the PIN unless anyone may make the sheets')
+  ok(page.includes(".from('rounds')") && page.includes(".eq('id', roundId)") && page.includes(".eq('trip_id', trip.id)"),
+    'a sheet is for a round in Scoring, read scoped to the event')
+  ok(page.includes('No such round'), '  …and a round that is not there says so, never a blank form')
+  ok(page.includes('draftRules(sheet, startTime, fieldSize, item?.tee_count)'),
+    'it opens on the draft lib/teeSheet.ts makes')
+
+  const wiz = read('app/trip/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
+  ok(wiz.includes('<WizardShell') && wiz.includes('aboveTabBar'),
+    'it wears the wizard frame, its Continue bar above the tab bar')
+  ok(/tee_sheet: rules,\s*start_format: 'tee_sheet'/.test(wiz),
+    'saving stores the rules whole and makes the round a tee-sheet round')
+  ok(/update\(\{ tee_time: first\.start, tee_count: length \}\)/.test(wiz),
+    '  …and moves the round\'s start to the first tee time, where the countdown reads it')
+  ok(/if \(short > 0\) \{ setAskShort\(true\); return \}/.test(wiz) && wiz.includes('Save anyway') && wiz.includes('Add tee times'),
+    'a sheet too short for the field asks once, and saves anyway if told to')
+  ok(wiz.includes('disabled={!!issue || saving}'), 'rules that do not hold cannot be saved')
 }
 
 section('The interval and the group size know their bounds')
