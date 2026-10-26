@@ -38,6 +38,7 @@ import {
   type EventPermissions, defaultPermissions, permissionsFor, storedPermissions,
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
+import { TeeTimesQuestion } from '@/app/components/TeeTimesAccess'
 import { ChoiceChips, CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
 
@@ -164,6 +165,9 @@ export default function CreateTripForm({ matchPlay = false }: {
   // organiser opts in (lib/eventPermissions.ts). A trip never asks and
   // never writes: its open access is the trip's whole way of working.
   const [perms, setPerms] = useState<EventPermissions>(defaultPermissions)
+  // An event's tee times: on, every round starts from a tee sheet, and the
+  // two answers ride in the permissions (components/TeeTimesAccess.tsx).
+  const [teeTimes, setTeeTimes] = useState(false)
 
   // Settings lock — can only ever be set here, at creation
   const [lockSettings, setLockSettings] = useState(false)
@@ -344,7 +348,9 @@ export default function CreateTripForm({ matchPlay = false }: {
 
     // Events only, and only when a toggle was actually flipped — nothing
     // opened writes nothing, so creation still lands before migration 049.
-    if (isTournament && storedPermissions(perms)) tripRow.event_permissions = perms
+    // Tee times off leaves both of its answers at their defaults.
+    const finalPerms = teeTimes ? perms : { ...perms, set_tee_sheets: false, edit_tee_sheet: false }
+    if (isTournament && storedPermissions(finalPerms)) tripRow.event_permissions = finalPerms
 
     // Same reasoning, and the same for anything that is not an address:
     // blank, half-typed or nonsense all mean "not given", and none of them is
@@ -471,6 +477,9 @@ export default function CreateTripForm({ matchPlay = false }: {
             // so creation still works before migration 031 has run.
             ...(g.casual ? { casual: true } : {}),
             ...(g.casual && g.casualStats ? { casual_stats: true } : {}),
+            // An event with tee times: every round on a tee sheet, vacant
+            // until the organiser makes it.
+            ...(isTournament && teeTimes ? { start_format: 'tee_sheet' } : {}),
           }
         })
       )
@@ -957,6 +966,17 @@ export default function CreateTripForm({ matchPlay = false }: {
                 event starts organiser-run and opens up only where its
                 organiser says so. The same toggles are editable any time
                 from the organiser area. */}
+            {isTournament && (
+              <div className="mt-8 pt-6 border-t border-line">
+                <TeeTimesQuestion
+                  on={teeTimes}
+                  onToggle={setTeeTimes}
+                  value={{ anyoneMakes: perms.set_tee_sheets, playersPick: perms.edit_tee_sheet }}
+                  onChange={v => setPerms({ ...perms, set_tee_sheets: v.anyoneMakes, edit_tee_sheet: v.playersPick })}
+                />
+              </div>
+            )}
+
             {isTournament && (
               <div className="mt-8 pt-6 border-t border-line">
                 <p className="t-label text-ink/80 mb-2">

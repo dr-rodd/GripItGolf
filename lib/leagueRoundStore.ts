@@ -21,6 +21,7 @@ import { toItemRow } from './itinerarySync'
 import { dayNumber, type ItineraryItem } from './itinerary'
 import { cardKey, cardsOffWith, parseLeagueSetup, tidyCardsOff } from './leagueSetup'
 import { withRoundAllowance } from './handicapAllowance'
+import { teeSheetInUse } from './eventHub'
 
 type Result = { ok: true } | { ok: false; error: string }
 /** `made` says whether the round row exists, whatever else went wrong. */
@@ -36,11 +37,22 @@ function dayIndexOf(startDate: string, date: string): number {
  * The round and its handicap snapshots — a rated player gets one, a pending
  * one gets none, as everywhere (lib/handicap.ts). The index stands in until
  * a tee is chosen, the same as at creation.
+ *
+ * **A league whose rounds go out from a tee sheet gives the new one a tee
+ * sheet too** (Ross, 26 Oct 2026: a tee time for every round) — vacant on
+ * the Tee times tab until the organiser makes it. Asked of the rounds as
+ * they stand, fail-soft: a failed read is no tee sheet, never no round.
  */
 async function makeRound(args: {
   tripId: string; itemId: string; courseId: string; number: number; date: string
   players: readonly Player[]
 }): Promise<Made> {
+  const { data: formats } = await supabase
+    .from('rounds')
+    .select('start_format')
+    .eq('trip_id', args.tripId)
+  const teeSheet = teeSheetInUse(((formats ?? []) as { start_format: string | null }[]).map(r => r.start_format))
+
   const { data: round, error } = await supabase
     .from('rounds')
     .insert({
@@ -50,6 +62,7 @@ async function makeRound(args: {
       status: 'upcoming',
       itinerary_item_id: args.itemId,
       scheduled_date: args.date,
+      ...(teeSheet ? { start_format: 'tee_sheet' } : {}),
     })
     .select('id')
     .single()

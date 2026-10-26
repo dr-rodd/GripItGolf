@@ -236,7 +236,7 @@ That is why parts take parameters (`dense`, `compact`, `shape`, `variant`).
 | `EmptyState` | Nothing here yet | One sentence and one action | Illustrations |
 | `WizardShell` (`WizardShell.tsx`) | Every create flow: trip, league, knockout, run, bracket | `titles`, `intro`, `footer` | Draw a step row or progress bar of its own |
 | `CourseName` (`CourseName.tsx`) | A course: club on line 1, course on line 2 | — | Print a raw `--` |
-| `TabBar` (`TabBar.tsx`) | The bottom bar | A trip's five; an event trades Trip Setup for the tee sheet; a run's five | Render from a page — the trip layout draws it once |
+| `TabBar` (`TabBar.tsx`) | The bottom bar | A trip's five; an event's Home · Scoring · Leaderboard (or Bracket) · Tee times or Stats while one is on · Settings (`eventFourthTab`); a run's five | Render from a page — the trip layout draws it once |
 
 ---
 

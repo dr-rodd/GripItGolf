@@ -147,6 +147,25 @@ section('A sheet is made in its own wizard, behind the PIN unless the event is o
   ok(wiz.includes('disabled={!!issue || saving}'), 'rules that do not hold cannot be saved')
 }
 
+section('An event made with tee times has a tee sheet for every round')
+{
+  for (const f of ['app/dashboard/create/CreateLeagueForm.tsx', 'app/dashboard/create/CreateTripForm.tsx']) {
+    const src = read(f)
+    const name = f.split('/').pop()
+    ok(src.includes('<TeeTimesQuestion'), `${name} asks the tee times question, the shared one`)
+    ok(/teeTimes \? \{ start_format: 'tee_sheet' \} : \{\}/.test(src),
+      '  …and on, every round it makes starts from a tee sheet — named only then')
+    ok(src.includes("const finalPerms = teeTimes ? perms : { ...perms, set_tee_sheets: false, edit_tee_sheet: false }"),
+      '  …off, its two answers stay at their defaults whatever was tapped')
+  }
+  const store = read('lib/leagueRoundStore.ts')
+  ok(store.includes('teeSheetInUse(') && /\.\.\.\(teeSheet \? \{ start_format: 'tee_sheet' \} : \{\}\)/.test(store),
+    'a league round added later, or made when its venue is chosen, follows the event onto a tee sheet')
+  const access = read('app/components/TeeTimesAccess.tsx')
+  ok(access.includes('Who makes the tee sheets') && access.includes('Who puts players on a tee time'),
+    'the question\'s two answers, said from the organiser\'s side')
+}
+
 section('The interval and the group size know their bounds')
 {
   eq(DEFAULT_TEE_INTERVAL_MINS, TEE_INTERVAL_MINS,

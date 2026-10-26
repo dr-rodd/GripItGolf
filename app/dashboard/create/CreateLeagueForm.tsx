@@ -36,6 +36,7 @@ import {
   type EventPermissions, defaultPermissions, permissionsFor, storedPermissions,
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
+import { TeeTimesQuestion } from '@/app/components/TeeTimesAccess'
 import GolfIrelandRulesForm from '@/app/components/GolfIrelandRulesForm'
 import {
   type GolfIrelandRules, type ScoreSource, SCORE_SOURCES,
@@ -250,6 +251,9 @@ export default function CreateLeagueForm({ schedule }: {
   // How collaborative the event is — all off until the organiser opts in
   // (lib/eventPermissions.ts, the one registry).
   const [perms, setPerms] = useState<EventPermissions>(defaultPermissions)
+  // Tee times: on, every round starts from a tee sheet, and the two answers
+  // ride in the permissions (components/TeeTimesAccess.tsx).
+  const [teeTimes, setTeeTimes] = useState(false)
   const [passcode, setPasscode] = useState('')
   const [passcodeConfirm, setPasscodeConfirm] = useState('')
   const [publicPin, setPublicPin] = useState(NO_PUBLIC_PIN)
@@ -489,6 +493,9 @@ export default function CreateLeagueForm({ schedule }: {
     const tripEnd = schedule === 'series' ? (slots.at(-1)?.date ?? startDate)
       : schedule === 'standalone' && !multiDay ? startDate
       : endDate
+    // Tee times off leaves both of its answers at their defaults, whatever
+    // was tapped while it was on.
+    const finalPerms = teeTimes ? perms : { ...perms, set_tee_sheets: false, edit_tee_sheet: false }
     const tripRow: Record<string, unknown> = {
       name: name.trim(),
       slug: code.toLowerCase(),
@@ -508,7 +515,7 @@ export default function CreateLeagueForm({ schedule }: {
       bracket_setup: setup,
       // Only when a toggle was actually flipped — nothing opened writes
       // nothing, so creation still lands before migration 049 has run.
-      ...(storedPermissions(perms) ? { event_permissions: perms } : {}),
+      ...(storedPermissions(finalPerms) ? { event_permissions: finalPerms } : {}),
     }
 
     const leadEmail = normaliseEmail(email)
@@ -607,6 +614,9 @@ export default function CreateLeagueForm({ schedule }: {
         status: 'upcoming',
         itinerary_item_id: savedBySlot.get(`${item.dayIndex}:${item.position}`) ?? null,
         ...(date ? { scheduled_date: date } : {}),
+        // Every round on a tee sheet when tee times are on — vacant until
+        // the organiser makes it. Named only then, as every optional column.
+        ...(teeTimes ? { start_format: 'tee_sheet' } : {}),
       }]
     })
     const { data: insertedRounds, error: roundsErr } = roundRows.length > 0
@@ -1369,6 +1379,17 @@ export default function CreateLeagueForm({ schedule }: {
                 </div>
               </div>
             )}
+
+            {/* ── Tee times ──
+                Its own question (Ross, 26 Oct 2026): on, every round gets a
+                tee sheet, and the two answers — who makes the sheets, who
+                places players — are asked here rather than as toggles. */}
+            <TeeTimesQuestion
+              on={teeTimes}
+              onToggle={setTeeTimes}
+              value={{ anyoneMakes: perms.set_tee_sheets, playersPick: perms.edit_tee_sheet }}
+              onChange={v => setPerms({ ...perms, set_tee_sheets: v.anyoneMakes, edit_tee_sheet: v.playersPick })}
+            />
 
             {/* ── How collaborative? ──
                 One question, three toggles, all off until the organiser
