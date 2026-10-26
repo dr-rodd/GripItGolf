@@ -97,10 +97,11 @@ export function describeStart(
 // What switches each one on is a decision the organiser already makes:
 //   notices    a notice is up
 //   teeTimes   a round starts from a tee sheet (the Starts card)
-//   schedule   the organiser has put something on it beyond the golf — an
-//              activity, travel or a stay (Ross, 26 Oct 2026). The rounds
-//              alone are no schedule anybody wrote: creation makes them,
-//              and the Scoring tab and the Up next card already carry them
+//   schedule   anything is on it — golf, a stay, travel or an activity —
+//              and gone only while it is empty (Ross, 26 Oct 2026: a match
+//              play event whose players pick the course on the day had a
+//              Schedule heading with nothing under it). Self-evident, so
+//              there is nothing for the organiser to switch
 //   stats      the event records stats (`trips.track_stats`) and a card
 //              has recorded some — the organiser area's Home screen card
 //              is where the event adds it
@@ -121,14 +122,6 @@ export const HUB_MODULE_LABEL: Record<HubModule, string> = {
   stats: 'Stats',
 }
 
-/**
- * Whether the organiser has written a schedule: anything on the itinerary
- * that is not golf. Golf items are the rounds, which creation makes.
- */
-export function organiserSchedule(kinds: readonly unknown[]): boolean {
-  return kinds.some(k => k === 'activity' || k === 'travel' || k === 'stay')
-}
-
 /** Whether any round starts from a tee sheet — what puts Tee times on the home screen. */
 export function teeSheetInUse(startFormats: readonly unknown[]): boolean {
   return startFormats.some(f => parseStartFormat(f) === 'tee_sheet')
@@ -139,7 +132,7 @@ export function activeHubModules({ noticeCount, teeSheet, schedule, stats }: {
   noticeCount: number
   /** `teeSheetInUse` over the rounds. */
   teeSheet: boolean
-  /** `organiserSchedule` over the itinerary's kinds. */
+  /** Anything on the schedule at all — golf included. */
   schedule: boolean
   /** Stats switched on, and something recorded to show. */
   stats: boolean

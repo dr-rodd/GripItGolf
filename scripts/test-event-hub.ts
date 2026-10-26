@@ -12,7 +12,7 @@ import fs from 'fs'
 import {
   isEvent, normalizeNotice, MAX_NOTICE,
   parseStartFormat, describeStart, START_FORMAT_LABEL,
-  activeHubModules, teeSheetInUse, organiserSchedule,
+  activeHubModules, teeSheetInUse,
 } from '../lib/eventHub'
 
 let passed = 0, failed = 0
@@ -113,15 +113,6 @@ section('A module is on the home screen only while it is active')
   eq(activeHubModules({ ...none, noticeCount: 1 }), ['notices'], 'a notice up puts Notices on')
   eq(activeHubModules({ ...none, schedule: true }), ['schedule'], 'a schedule stands alone')
   eq(activeHubModules({ ...none, stats: true }), ['stats'], 'and so do stats')
-
-  // The schedule is the organiser's once it holds anything beyond the
-  // rounds — creation makes the golf, the organiser adds the rest.
-  ok(!organiserSchedule(['golf', 'golf']), 'the rounds alone are no schedule')
-  ok(!organiserSchedule([]), 'nor is an empty itinerary')
-  for (const k of ['activity', 'travel', 'stay']) {
-    ok(organiserSchedule(['golf', k]), `an added ${k} makes one`)
-  }
-  ok(!organiserSchedule(['Activity', null, undefined]), 'junk does not')
 
   ok(teeSheetInUse(['shotgun', 'tee_sheet', null]), 'one round on a tee sheet is enough')
   ok(!teeSheetInUse(['shotgun', null, 'TEE_SHEET']), 'shotgun, unset or junk is not')

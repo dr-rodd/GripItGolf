@@ -27,7 +27,7 @@ import { describeRange } from '@/lib/confirmationEmail'
 import { SectionStack } from '@/app/components/Section'
 import {
   isEvent as isEventKind, parseStartFormat, describeStart,
-  activeHubModules, teeSheetInUse, organiserSchedule,
+  activeHubModules, teeSheetInUse,
 } from '@/lib/eventHub'
 import { hubTeeRound, myTee, slotClock, parseInterval } from '@/lib/teeSheet'
 import { readAllRows } from '@/lib/allRows'
@@ -705,7 +705,9 @@ export default async function TripPage({ params, searchParams }: {
   const modules = activeHubModules({
     noticeCount: notices.length,
     teeSheet: !!teeRound,
-    schedule: isEvent && organiserSchedule(itinerary.map(i => i.kind)),
+    // Anything on it — the itinerary, or the rounds of an event made before
+    // the itinerary existed. Only an empty one is left off.
+    schedule: isEvent && (itinerary.length > 0 || days.length > 0),
     stats: !!statsCover && statsCover.level !== 'none',
   })
   const showSchedule = !isEvent || modules.includes('schedule')
@@ -890,9 +892,8 @@ export default async function TripPage({ params, searchParams }: {
                ("10 of 10 done") beside it saying whose trip it is. An
                event's is the Schedule — a standalone day has no itinerary
                in any sense a traveller would recognise — and a module:
-               there only once the organiser has added an activity, travel
-               or a stay. The rounds alone are already the Scoring tab's and
-               the Up next card's. A trip's always shows. */
+               there whenever anything is on it, golf included, and gone
+               while it is empty. A trip's always shows. */
             ...(showSchedule ? [{
               key: 'itinerary',
               title: isEvent ? 'Schedule' : 'Itinerary',

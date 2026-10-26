@@ -1122,13 +1122,14 @@ section('The hub is the sections it should be, and nothing else')
   ok(/modules\.includes\('notices'\) \? 'notices'\s*: modules\.includes\('schedule'\) \? 'itinerary'\s*: modules\.includes\('teeTimes'\) \? 'teetimes'/.test(hub),
     '  …an event on its news, else its schedule, else its tee times')
 
-  // An event's Schedule is a module (Ross, 26 Oct 2026): there only once
-  // the organiser has added something beyond the golf. A trip's itinerary
-  // always shows.
+  // An event's Schedule is a module (Ross, 26 Oct 2026): there whenever
+  // anything is on it, golf included, and gone while it is empty — a match
+  // play event whose players pick the course on the day had a heading with
+  // nothing under it. A trip's itinerary always shows.
   ok(hub.includes("const showSchedule = !isEvent || modules.includes('schedule')"),
-    'a trip always shows its itinerary; an event only its organiser\'s schedule')
-  ok(hub.includes('organiserSchedule(itinerary.map(i => i.kind))'),
-    '  …decided by lib/eventHub.ts, off the itinerary\'s kinds')
+    'a trip always shows its itinerary; an event only a schedule with something on it')
+  ok(hub.includes('schedule: isEvent && (itinerary.length > 0 || days.length > 0)'),
+    '  …golf counting as much as anything else')
   ok(/\.\.\.\(showSchedule \? \[\{\s*key: 'itinerary'/.test(hub),
     '  …and the section is drawn only then')
 
