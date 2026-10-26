@@ -10,8 +10,8 @@ import Toggle from './Toggle'
  * `TEE_SHEET_PERMISSIONS`), which is why neither appears among the
  * collaborative toggles as well.
  *
- *   Making the sheets — the organiser, behind the PIN; or anyone, a casual
- *   event nobody runs (`set_tee_sheets`).
+ *   Opening the sheets (making one is called opening it) — the organiser,
+ *   behind the PIN; or anyone, a casual event nobody runs (`set_tee_sheets`).
  *   Placing players — the organiser, the sheet read-only to everybody
  *   else; or each player picking their own time from what is free
  *   (`edit_tee_sheet`).
@@ -25,9 +25,9 @@ export default function TeeTimesAccess({ value, onChange }: {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <p className={FIELD_LABEL}>Who makes the tee sheets</p>
+        <p className={FIELD_LABEL}>Who opens the tee sheets</p>
         <ChoiceChips
-          label="Who makes the tee sheets"
+          label="Who opens the tee sheets"
           value={value.anyoneMakes ? 'anyone' : 'organiser'}
           onChange={v => onChange({ ...value, anyoneMakes: v === 'anyone' })}
           options={[
@@ -37,8 +37,8 @@ export default function TeeTimesAccess({ value, onChange }: {
         />
         <p className="t-cap text-ink/65 mt-1.5 leading-snug">
           {value.anyoneMakes
-            ? 'A casual event nobody runs: anyone can make or change a round’s tee times, no PIN.'
-            : 'Made and changed behind the organiser PIN.'}
+            ? 'A casual event nobody runs: anyone can open or change a round’s tee sheet, no PIN.'
+            : 'Opened and changed behind the organiser PIN.'}
         </p>
       </div>
       <div>
@@ -80,7 +80,7 @@ export function TeeTimesQuestion({ on, onToggle, value, onChange }: {
         <div className="min-w-0">
           <p className="text-ink text-sm font-medium">Tee times</p>
           <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-            A tee sheet for every round, set up once the field is in.
+            A tee sheet for every round, opened once the field is in.
           </p>
         </div>
         <Toggle checked={on} onChange={onToggle} label="Tee times" />

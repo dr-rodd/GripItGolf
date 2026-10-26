@@ -54,6 +54,8 @@ type Round = {
   courseName: string | null
   /** Vacant, live from the wizard's rules, or made before the wizard. */
   sheet: RoundSheet
+  /** When a live sheet opens to the field — "Thu 30 Oct at 8:00 pm" — or null once it has. */
+  opensLabel: string | null
 }
 
 type Assignment = { round_id: string; player_id: string; slot_index: number }
@@ -135,11 +137,16 @@ export default function TeeSheetClient({
   // with no PIN at all, the soft lock's fail-open. A player picking their
   // own time places themselves and nobody else.
   const organiser = unlocked || !isLocked(passcodeHash)
-  const selfPick = !organiser && fieldMayEdit && !!meId
+  const selfPickAllowed = !organiser && fieldMayEdit && !!meId
 
   const round = rounds.find(r => r.id === roundId) ?? null
   const sheet = round?.sheet ?? { state: 'vacant' as const }
   const live = sheet.state !== 'vacant' ? sheet : null
+  // Not open to the field yet: the organiser sees it and may place players
+  // early; everybody else is told when it opens, and nothing more.
+  const notYetOpen = !!live && !!round?.opensLabel
+  const fieldBarred = notYetOpen && !organiser
+  const selfPick = selfPickAllowed && !notYetOpen
   const groupSize = live ? sheetGroupSize(live) : 0
   const nameOf = useMemo(() => new Map(players.map(p => [p.id, p.name])), [players])
 
@@ -541,7 +548,10 @@ export default function TeeSheetClient({
                     <span className="block t-cap text-ink/65 mt-0.5">{courseLabel(r.courseName)}</span>
                   )}
                   {r.sheet.state === 'vacant' && (
-                    <span className="block t-cap text-ink/65 mt-0.5">Not set up yet</span>
+                    <span className="block t-cap text-ink/65 mt-0.5">Not open yet</span>
+                  )}
+                  {r.sheet.state !== 'vacant' && r.opensLabel && (
+                    <span className="block t-cap text-ink/65 mt-0.5">Opens {r.opensLabel}</span>
                   )}
                 </button>
               ))}
@@ -558,19 +568,38 @@ export default function TeeSheetClient({
              has made its sheet yet. The way to the wizard, the PIN asked
              there unless anyone may make the sheets. */
           <div className={`p-4 ${cardClass()}`}>
-            <p className="t-card text-ink">Round {round.roundNumber}&apos;s tee times aren&apos;t set up yet</p>
+            <p className="t-card text-ink">Round {round.roundNumber}&apos;s tee sheet isn&apos;t open yet</p>
             <p className="t-cap text-ink/65 mt-1 leading-snug">
-              Once they are, everybody can see who goes off when.
+              Once it is, everybody can see who goes off when.
             </p>
             <Link href={setupHref!} className={`${buttonClass('secondary')} mt-4`}>
-              Set up the tee times
+              Open the tee sheet
             </Link>
             {!fieldMaySet && isLocked(passcodeHash) && !unlocked && (
               <p className="t-cap text-ink/65 mt-2 text-center">Asks for the organiser PIN.</p>
             )}
           </div>
+        ) : fieldBarred ? (
+          /* Opened for later: the field is told when, and nothing more. */
+          <div className={`p-4 ${cardClass()}`}>
+            <p className="t-card text-ink">Round {round.roundNumber}&apos;s tee sheet opens {round.opensLabel}</p>
+            <p className="t-cap text-ink/65 mt-1 leading-snug">
+              {fieldMayEdit ? 'Pick your time here once it opens.' : 'Who goes off when shows here once it opens.'}
+            </p>
+            {fieldMaySet && (
+              <Link href={setupHref!} className={`${buttonClass('secondary')} mt-4`}>
+                Edit the tee sheet
+              </Link>
+            )}
+          </div>
         ) : (
           <>
+            {notYetOpen && (
+              <p className="t-cap text-ink/80 mb-3 leading-snug">
+                Opens to the field {round.opensLabel}. Until then only you can see it.
+              </p>
+            )}
+
             {/* Your time, before the scroll: when, and who with. */}
             {mine && (
               <div className={`px-4 py-3 mb-3 ${cardClass('raised')}`}>
@@ -594,7 +623,7 @@ export default function TeeSheetClient({
             {fieldMaySet && (
               <div className="flex justify-end mb-2">
                 <Link href={setupHref!} className={`${buttonClass('secondary', false, true)}`}>
-                  Edit the tee times
+                  Edit the tee sheet
                 </Link>
               </div>
             )}

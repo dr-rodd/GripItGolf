@@ -79,8 +79,8 @@ export const EVENT_PERMISSIONS: {
   // the code may make or change a round's sheet — a casual event nobody
   // runs, with an Edit button on the Tee times tab.
   { key: 'set_tee_sheets', dflt: false, teeSheet: true,
-    label: 'Anyone can make the tee sheets',
-    hint: 'For a casual event nobody runs: make or change a round\'s tee sheet without the PIN.' },
+    label: 'Anyone can open the tee sheets',
+    hint: 'For a casual event nobody runs: open or change a round\'s tee sheet without the PIN.' },
   // Joining a tag is a different verb from forming a team: a tag board's
   // `teamPick: 'self'` cousin lets the field CREATE teams on that board's
   // sheet, while this only lets a claimed player join one of the tags the

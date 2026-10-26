@@ -7,7 +7,7 @@ import { describeShortDate } from '@/lib/itinerary'
 import { parseLeagueSetup, describeLeagueSetup } from '@/lib/leagueSetup'
 import { parseEventPermissions } from '@/lib/eventPermissions'
 import { TAG_SET, describeTags } from '@/lib/tagBoards'
-import { describeRules, roundSheet } from '@/lib/teeSheet'
+import { roundSheet, teeSheetSummary } from '@/lib/teeSheet'
 import { readAllRows } from '@/lib/allRows'
 import { readSheetSettings } from '../teesheet/sheets'
 import { parseLeaderboards } from '@/lib/leaderboards'
@@ -91,7 +91,7 @@ export default async function OrganiserPage({ params }: {
       .order('created_at', { ascending: false }),
     supabase
       .from('rounds')
-      .select('id, round_number, itinerary_item_id, start_format, courses(name)')
+      .select('id, round_number, itinerary_item_id, start_format, scheduled_date, courses(name)')
       .eq('trip_id', trip.id)
       .order('round_number'),
     supabase
@@ -162,11 +162,15 @@ export default async function OrganiserPage({ params }: {
   type RoundRow = {
     id: string; round_number: number; itinerary_item_id: string | null
     start_format: string | null
+    scheduled_date: string | null
     courses: { name: string } | { name: string }[] | null
   }
-  const onSheets = new Set(
-    ((teeAssignmentsResult.data ?? []) as { round_id: string }[]).map(a => a.round_id),
-  )
+  // How many stand on each round's sheet — what Clear would take off.
+  const bookedOn = new Map<string, number>()
+  for (const a of (teeAssignmentsResult.data ?? []) as { round_id: string }[]) {
+    bookedOn.set(a.round_id, (bookedOn.get(a.round_id) ?? 0) + 1)
+  }
+  const now = new Date()
 
   const rounds = ((roundsResult.data ?? []) as unknown as RoundRow[]).map(r => {
     const course = Array.isArray(r.courses) ? r.courses[0] : r.courses
@@ -177,7 +181,7 @@ export default async function OrganiserPage({ params }: {
       startTime: teeTime,
       intervalMins: stored?.intervalMins,
       groupSize: stored?.groupSize,
-      hasAssignments: onSheets.has(r.id),
+      hasAssignments: bookedOn.has(r.id),
     })
     return {
       id: r.id,
@@ -187,10 +191,8 @@ export default async function OrganiserPage({ params }: {
       startFormat: r.start_format,
       teeTime,
       teeState: sheet.state,
-      teeSummary: sheet.state === 'active' ? describeRules(sheet.rules)
-        : sheet.state === 'legacy'
-          ? `${sheet.intervalMins} minutes between groups, groups of up to ${sheet.groupSize}`
-          : null,
+      teeSummary: teeSheetSummary(sheet, r.scheduled_date, now),
+      teeBooked: bookedOn.get(r.id) ?? 0,
     }
   })
 

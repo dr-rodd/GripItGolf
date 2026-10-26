@@ -72,7 +72,7 @@ export default function TeeTimesPanel({
         href={`/trip/${tripCode}/teesheet`}
         className="inline-block mt-4 t-label text-accent-deep hover:text-accent transition-colors duration-150"
       >
-        Open the tee sheet →
+        See the tee sheet →
       </Link>
     </div>
   )

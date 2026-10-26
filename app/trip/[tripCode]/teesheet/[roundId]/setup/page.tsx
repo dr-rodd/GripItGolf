@@ -122,6 +122,7 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
         roundId={round.id}
         roundNumber={round.round_number}
         courseName={course?.name ?? null}
+        roundDate={round.scheduled_date}
         itineraryItemId={round.itinerary_item_id}
         initial={draftRules(sheet, startTime, fieldSize, item?.tee_count)}
         live={sheet.state !== 'vacant'}
@@ -144,7 +145,7 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
         tripName={trip.name}
         passcodeHash={trip.settings_passcode_hash as string}
         title="Tee sheet"
-        hint={`Enter the organiser PIN for ${trip.name} to set up round ${round.round_number}'s tee times.`}
+        hint={`Enter the organiser PIN for ${trip.name} to open round ${round.round_number}'s tee sheet.`}
       >
         {content}
       </PasscodeGate>

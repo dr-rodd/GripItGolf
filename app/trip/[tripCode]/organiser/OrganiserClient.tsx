@@ -15,6 +15,7 @@ import {
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import Toggle from '@/app/components/Toggle'
 import TeeTimesAccess from '@/app/components/TeeTimesAccess'
+import TeeSheetRoundControls from '../teesheet/TeeSheetRoundControls'
 import { ChoiceChips, FIELD, FIELD_LABEL, ListGroup, ListRow, SectionHeader, buttonClass, cardClass, iconButtonClass } from '@/app/components/ui'
 import { courseLabel } from '@/lib/courseDirectory'
 import GolfIrelandRequests, { type LinkRequest } from './GolfIrelandRequests'
@@ -48,8 +49,10 @@ type RoundInfo = {
   teeTime: string | null
   /** Its tee sheet: not made yet, made in the wizard, or made before it (lib/teeSheet.ts). */
   teeState: 'vacant' | 'active' | 'legacy'
-  /** The sheet in a line, or null while it is vacant. */
+  /** The sheet in a line, opening included, or null while it is not open yet. */
   teeSummary: string | null
+  /** How many are on its sheet. */
+  teeBooked: number
 }
 
 
@@ -457,29 +460,21 @@ export default function OrganiserClient({
 
                     {/* ── The tee sheet ──
                         Its times are the wizard's: here it says where the
-                        sheet stands and is the way in. Until it is made the
-                        round is an empty slot on the Tee times tab. */}
+                        sheet stands and is the way in — and the way to
+                        clear it. Until it is opened the round is an empty
+                        slot on the Tee times tab. */}
                     {chosen === 'tee_sheet' && (
                       <div className="mt-3">
-                        <p className="t-cap text-ink/80 leading-snug">
-                          {round.teeSummary
-                            ? `${round.teeSummary}.`
-                            : 'Not set up yet — the round shows an empty slot on the Tee times tab until it is.'}
-                        </p>
-                        <Link
-                          href={`/trip/${tripCode}/teesheet/${round.id}/setup?from=organiser`}
-                          className={`${buttonClass('secondary')} mt-3`}
-                        >
-                          {round.teeState === 'vacant' ? 'Set up the tee times' : 'Change the tee times'}
-                        </Link>
-                        {round.teeState !== 'vacant' && (
-                          <Link
-                            href={`/trip/${tripCode}/teesheet?round=${round.id}`}
-                            className="block mt-2 t-cap text-accent-deep hover:text-accent transition-colors"
-                          >
-                            Open the tee sheet →
-                          </Link>
-                        )}
+                        <TeeSheetRoundControls
+                          tripId={tripId}
+                          tripCode={tripCode}
+                          roundId={round.id}
+                          roundNumber={round.roundNumber}
+                          state={round.teeState}
+                          summary={round.teeSummary}
+                          booked={round.teeBooked}
+                          from="organiser"
+                        />
                       </div>
                     )}
                   </li>

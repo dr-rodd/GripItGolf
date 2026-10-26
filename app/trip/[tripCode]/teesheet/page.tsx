@@ -7,7 +7,7 @@ import {
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { readAllRows } from '@/lib/allRows'
 import { parseStartFormat } from '@/lib/eventHub'
-import { roundSheet } from '@/lib/teeSheet'
+import { describeOpening, roundSheet, sheetIsOpen } from '@/lib/teeSheet'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { isConfirmed } from '@/lib/roster'
 import { readSheetSettings } from './sheets'
@@ -94,7 +94,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
   ] = await Promise.all([
     supabase
       .from('rounds')
-      .select('id, round_number, itinerary_item_id, start_format, courses(name)')
+      .select('id, round_number, itinerary_item_id, start_format, scheduled_date, courses(name)')
       .eq('trip_id', trip.id)
       .order('round_number'),
     supabase
@@ -157,25 +157,34 @@ export default async function TeeSheetPage({ params, searchParams }: {
   type RoundRow = {
     id: string; round_number: number; itinerary_item_id: string | null
     start_format: string | null
+    scheduled_date: string | null
     courses: { name: string } | { name: string }[] | null
   }
+  // When each live sheet opens to the field, against the server's clock at
+  // render — lib/teeSheet.ts works the Irish wall clock into an instant.
+  const now = new Date()
   // The rounds that start from a tee sheet — the ones tee times are on for.
   const rounds = ((roundsResult.data ?? []) as unknown as RoundRow[])
     .filter(r => parseStartFormat(r.start_format) === 'tee_sheet')
     .map(r => {
       const course = Array.isArray(r.courses) ? r.courses[0] : r.courses
       const s = settingsResult.get(r.id)
+      const sheet = roundSheet({
+        rules: s?.rules,
+        startTime: r.itinerary_item_id ? teeTimes.get(r.itinerary_item_id) ?? null : null,
+        intervalMins: s?.intervalMins,
+        groupSize: s?.groupSize,
+        hasAssignments: assignedRounds.has(r.id),
+      })
       return {
         id: r.id,
         roundNumber: r.round_number,
         courseName: course?.name ?? null,
-        sheet: roundSheet({
-          rules: s?.rules,
-          startTime: r.itinerary_item_id ? teeTimes.get(r.itinerary_item_id) ?? null : null,
-          intervalMins: s?.intervalMins,
-          groupSize: s?.groupSize,
-          hasAssignments: assignedRounds.has(r.id),
-        }),
+        sheet,
+        // A sheet made before the wizard has no opening: it is open.
+        opensLabel: sheet.state === 'active' && !sheetIsOpen(sheet.rules, r.scheduled_date, now)
+          ? describeOpening(sheet.rules, r.scheduled_date)
+          : null,
       }
     })
 

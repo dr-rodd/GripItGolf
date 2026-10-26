@@ -6,10 +6,15 @@
 // group-size bounds, the slot clock, how many slots a sheet shows, and how
 // a slot's players read when some of them are a team.
 //
-// **A round's sheet is made in its own wizard, and only then is it live**
-// (Ross, 26 Oct 2026; `/trip/[code]/teesheet/[roundId]/setup`). Until the
-// organiser has set its rules a tee-sheet round is a *vacant* slot: there
-// on the Tee times tab, offering the wizard, taking no names. The rules are
+// **A round's sheet is opened in its own wizard, and only then is it live**
+// (Ross, 26 Oct 2026; `/trip/[code]/teesheet/[roundId]/setup` — "opening"
+// a tee sheet is what making one is called on screen). Until the organiser
+// has set its rules a tee-sheet round is a *vacant* slot: there on the Tee
+// times tab, "not open yet", offering the wizard, taking no names. **A sheet
+// may open later than it is made** (`TeeRules.opens`): some days before the
+// round at a time, or on a date at a time, Irish time (lib/irishTime.ts) —
+// until then the field sees when it opens and nothing more, and the
+// organiser sees it and may place players early. The rules are
 // a list of **batches** — a first tee time, the minutes between, and how
 // many (given as a count or as the last tee time) — so a morning wave and
 // an afternoon wave are one sheet, its tee times numbered straight through.
@@ -44,8 +49,9 @@
 //
 // Pure. No I/O.
 
-import { TEE_INTERVAL_MINS, describeTime } from './itinerary'
+import { TEE_INTERVAL_MINS, describeShortDate, describeTime } from './itinerary'
 import type { ItineraryItem } from './itinerary'
+import { daysBefore, irishInstant } from './irishTime'
 
 // ─── Settings and their bounds ─────────────────────────────────
 
@@ -276,7 +282,21 @@ export type TeeRules = {
    * as players.
    */
   teamsPerTee?: number
+  /** When the field may see it and pick from it. Absent = as soon as it is saved. */
+  opens?: TeeOpening
 }
+
+/**
+ * When a sheet opens to the field (Ross, 26 Oct 2026): some days before
+ * the round at a time — which needs the round's date — or on a date at a
+ * time. Both on Irish clocks.
+ */
+export type TeeOpening =
+  | { daysBefore: number; time: string }
+  | { date: string; time: string }
+
+/** The furthest ahead "days before" may reach. */
+export const MAX_OPEN_DAYS_BEFORE = 60
 
 /** A sheet may be split this many ways — a morning and an afternoon wave, and room to spare. */
 export const MAX_BATCHES = 4
@@ -361,7 +381,51 @@ export function rulesIssue(rules: TeeRules): string | null {
     prevLast = start + (b.count - 1) * b.interval
   }
   if (sheetLength(rules) > MAX_SLOTS) return `At most ${MAX_SLOTS} tee times on one sheet.`
+  if (rules.opens) {
+    const o = rules.opens
+    if (clockMins(o.time) === null) return 'Pick the time the sheet opens.'
+    if ('daysBefore' in o) {
+      if (!Number.isInteger(o.daysBefore) || o.daysBefore < 0 || o.daysBefore > MAX_OPEN_DAYS_BEFORE) {
+        return `Between 0 and ${MAX_OPEN_DAYS_BEFORE} days before the round.`
+      }
+    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(o.date)) {
+      return 'Pick the date the sheet opens.'
+    }
+  }
   return null
+}
+
+/**
+ * The instant the sheet opens, or null when it is open from the moment it
+ * is saved — no opening given, or "days before" a round that has no date
+ * (nothing to count back from, so nothing to wait for).
+ */
+export function opensAt(rules: Pick<TeeRules, 'opens'>, roundDate: string | null): Date | null {
+  const o = rules.opens
+  if (!o) return null
+  if ('date' in o) return irishInstant(o.date, o.time)
+  if (!roundDate) return null
+  const day = daysBefore(roundDate, o.daysBefore)
+  return day ? irishInstant(day, o.time) : null
+}
+
+/** Whether the field may see and pick from the sheet yet. */
+export function sheetIsOpen(rules: Pick<TeeRules, 'opens'>, roundDate: string | null, now: Date): boolean {
+  const at = opensAt(rules, roundDate)
+  return !at || now.getTime() >= at.getTime()
+}
+
+/**
+ * When the sheet opens, in words — "Thu 30 Oct at 8:00 pm" — or null when
+ * it opens straight away. The date is the one it works out to, so "3 days
+ * before" reads as the day it lands on.
+ */
+export function describeOpening(rules: Pick<TeeRules, 'opens'>, roundDate: string | null): string | null {
+  const o = rules.opens
+  if (!o) return null
+  const day = 'date' in o ? o.date : roundDate ? daysBefore(roundDate, o.daysBefore) : null
+  if (!day) return null
+  return `${describeShortDate(day)} at ${describeTime(o.time)}`
 }
 
 /**
@@ -389,6 +453,15 @@ export function parseTeeRules(raw: unknown): TeeRules | null {
     groupSize: Number(r.groupSize),
     ...(Number.isInteger(r.teamsPerTee) && (r.teamsPerTee as number) > 0
       ? { teamsPerTee: r.teamsPerTee as number } : {}),
+  }
+  // The opening is read on its own: one that does not parse is dropped —
+  // the sheet opens now — rather than costing the whole sheet.
+  const o = r.opens as Record<string, unknown> | null | undefined
+  if (o && typeof o === 'object' && typeof o.time === 'string') {
+    const opens: TeeOpening | null = typeof o.date === 'string'
+      ? { date: o.date, time: o.time.slice(0, 5) }
+      : Number.isInteger(o.daysBefore) ? { daysBefore: o.daysBefore as number, time: o.time.slice(0, 5) } : null
+    if (opens && !rulesIssue({ ...rules, opens })) rules.opens = opens
   }
   return rulesIssue(rules) ? null : rules
 }
@@ -475,6 +548,18 @@ export function sheetSlots(sheet: RoundSheet, rosterSize: number, maxAssignedInd
   if (sheet.state === 'vacant') return 0
   if (sheet.state === 'legacy') return slotCount(rosterSize, sheet.groupSize, maxAssignedIndex)
   return Math.min(MAX_SLOTS, Math.max(sheetLength(sheet.rules), maxAssignedIndex + 1))
+}
+
+/**
+ * A sheet in a line for the organiser — "12 tee times, 8:00 am to 9:50 am,
+ * in fours · opens Thu 30 Oct at 8:00 pm" — or null while it is not open
+ * yet. The opening is said only while it is still to come.
+ */
+export function teeSheetSummary(sheet: RoundSheet, roundDate: string | null, now: Date): string | null {
+  if (sheet.state === 'vacant') return null
+  if (sheet.state === 'legacy') return `${sheet.intervalMins} minutes between groups, groups of up to ${sheet.groupSize}`
+  const opening = sheetIsOpen(sheet.rules, roundDate, now) ? null : describeOpening(sheet.rules, roundDate)
+  return `${describeRules(sheet.rules)}${opening ? ` · opens ${opening}` : ''}`
 }
 
 /**

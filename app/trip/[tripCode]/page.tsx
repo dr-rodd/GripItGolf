@@ -29,7 +29,7 @@ import {
   isEvent as isEventKind, parseStartFormat, describeStart,
   activeHubModules, teeSheetInUse, eventFourthTab,
 } from '@/lib/eventHub'
-import { hubTeeRound, myTee, roundSheet, sheetClock } from '@/lib/teeSheet'
+import { hubTeeRound, myTee, roundSheet, sheetClock, sheetIsOpen } from '@/lib/teeSheet'
 import { readSheetSettings, type StoredSheet } from './teesheet/sheets'
 import { readAllRows } from '@/lib/allRows'
 import NoticesPanel, { type Notice } from './NoticesPanel'
@@ -716,7 +716,9 @@ export default async function TripPage({ params, searchParams }: {
   // Stats or nothing, on the gate it always had.
   const modules = activeHubModules({
     noticeCount: notices.length,
-    teeSheet: !!teeRoundSheet && teeRoundSheet.state !== 'vacant',
+    // A sheet opened for later says nothing here until it opens.
+    teeSheet: !!teeRoundSheet && teeRoundSheet.state !== 'vacant'
+      && (teeRoundSheet.state !== 'active' || sheetIsOpen(teeRoundSheet.rules, teeRound?.date ?? null, new Date())),
     // Anything on it — the itinerary, or the rounds of an event made before
     // the itinerary existed. Only an empty one is left off.
     schedule: isEvent && (itinerary.length > 0 || days.length > 0),

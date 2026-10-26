@@ -19,7 +19,9 @@ import {
   type TeeRules, MAX_BATCHES, clockMins, minsClock, batchLast, countToLast, teeClocks,
   sheetLength, sheetCapacity, seatsShort, rulesIssue, parseTeeRules, describeRules,
   roundSheet, sheetClock, sheetSlots, sheetGroupSize, draftRules,
+  opensAt, sheetIsOpen, describeOpening, teeSheetSummary,
 } from '../lib/teeSheet'
+import { irishInstant, daysBefore } from '../lib/irishTime'
 import { TEE_INTERVAL_MINS } from '../lib/itinerary'
 import {
   type Leaderboard, parseLeaderboards, offersTeeTeams,
@@ -124,6 +126,70 @@ section('A round\'s sheet is vacant until the wizard has been through')
   eq(draftRules(active, '06:00', 50), rules, 'and a live one as saved')
 }
 
+section('A sheet may open later: days before the round, or on a date, Irish time')
+{
+  eq([irishInstant('2026-12-01', '20:00')?.toISOString(), irishInstant('2026-07-01', '20:00')?.toISOString()],
+    ['2026-12-01T20:00:00.000Z', '2026-07-01T19:00:00.000Z'],
+    'eight o\'clock is eight o\'clock in Ireland, winter and summer, whatever clock the server keeps')
+  eq(irishInstant('2026-12-01', '25:00'), null, '  …and a time that is not one is no instant')
+  eq(daysBefore('2026-03-02', 3), '2026-02-27', 'days before count back over a month end')
+
+  const base: TeeRules = { batches: [{ start: '08:00', interval: 10, count: 6 }], groupSize: 4 }
+  const before: TeeRules = { ...base, opens: { daysBefore: 3, time: '20:00' } }
+  const onDate: TeeRules = { ...base, opens: { date: '2026-11-20', time: '09:30' } }
+  eq(opensAt(base, '2026-12-05'), null, 'no opening given: open the moment it is saved')
+  eq(opensAt(before, '2026-12-05')?.toISOString(), '2026-12-02T20:00:00.000Z', '3 days before at 8 pm')
+  eq(opensAt(before, null), null, '  …a round with no date has nothing to count back from, so it is open')
+  eq(opensAt(onDate, '2026-12-05')?.toISOString(), '2026-11-20T09:30:00.000Z', 'or a date and a time of its own')
+  eq([sheetIsOpen(before, '2026-12-05', new Date('2026-12-02T19:59:00Z')), sheetIsOpen(before, '2026-12-05', new Date('2026-12-02T20:00:00Z'))],
+    [false, true], 'closed until the minute it opens, and open from it')
+  eq(describeOpening(before, '2026-12-05'), 'Wed 2 Dec at 8:00 pm', 'said as the day it lands on')
+  eq(describeOpening(base, '2026-12-05'), null, '  …and nothing for a sheet that is open already')
+
+  eq(parseTeeRules(JSON.parse(JSON.stringify(before))), before, 'the opening is stored with the rules and read back')
+  eq(parseTeeRules({ ...base, opens: { daysBefore: 999, time: '20:00' } }), base,
+    'an opening that does not hold is dropped — the sheet opens now — never the sheet with it')
+  ok(!!rulesIssue({ ...base, opens: { date: '', time: '20:00' } }), 'an opening date must be given to be saved')
+
+  const legacy = { state: 'legacy' as const, startTime: '08:00', intervalMins: 10, groupSize: 4 }
+  eq(teeSheetSummary(roundSheet({ rules: before, startTime: null, intervalMins: null, groupSize: null, hasAssignments: false }), '2026-12-05', new Date('2026-12-01T00:00:00Z')),
+    '6 tee times, 8:00 am to 8:50 am, in fours · opens Wed 2 Dec at 8:00 pm',
+    'the organiser\'s line says when it opens while that is still to come')
+  eq(teeSheetSummary(legacy, null, new Date()), '10 minutes between groups, groups of up to 4', '  …and a legacy sheet as it always read')
+  eq(teeSheetSummary({ state: 'vacant' }, null, new Date()), null, '  …and a vacant one not at all')
+
+  const wiz = read('app/trip/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
+  ok(wiz.includes("'When does it open?'") && wiz.includes('Some days before the round') && wiz.includes('On a date'),
+    'the wizard asks when it opens: now, days before the round, or a date')
+  ok(/\{roundDate && \(\s*<div className=\{optionClass\(openMode === 'before'\)\}/.test(wiz),
+    '  …days before only for a round with a date')
+  ok(wiz.includes("live ? 'Save changes' : 'Open tee sheet'"), 'making a sheet is opening it (Ross, 26 Oct 2026)')
+
+  const page = read('app/trip/[tripCode]/teesheet/page.tsx')
+  ok(page.includes('!sheetIsOpen(sheet.rules, r.scheduled_date, now)'), 'the tab works out, per round, whether it has opened')
+  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  ok(client.includes('const fieldBarred = notYetOpen && !organiser') && client.includes('tee sheet opens {round.opensLabel}'),
+    '  …the field told when, and nothing more')
+  ok(client.includes('const selfPick = selfPickAllowed && !notYetOpen'), '  …nobody picking a time before it opens')
+  ok(client.includes('Until then only you can see it.'), '  …while the organiser sees it and may place players early')
+  ok(read('app/trip/[tripCode]/page.tsx').includes("sheetIsOpen(teeRoundSheet.rules, teeRound?.date ?? null, new Date())"),
+    'and the home screen says nothing of it until it opens')
+}
+
+section('A sheet can be deleted, or cleared of its players')
+{
+  const wiz = read('app/trip/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
+  ok(wiz.includes('Delete this tee sheet') && /\{live && \(/.test(wiz), 'an open sheet can be deleted from its wizard')
+  ok(/from\('tee_assignments'\)\s*\.delete\(\)\s*\.eq\('trip_id', tripId\)\s*\.eq\('round_id', roundId\)/.test(wiz)
+     && wiz.includes('.update({ tee_sheet: null })'),
+    '  …taking its bookings and its rules, scoped — as if it was never opened')
+  const controls = read('app/trip/[tripCode]/teesheet/TeeSheetRoundControls.tsx')
+  ok(controls.includes('Clear the tee sheet') && /from\('tee_assignments'\)\s*\.delete\(\)\s*\.eq\('trip_id', tripId\)\s*\.eq\('round_id', roundId\)/.test(controls),
+    'the organiser can clear a sheet: everybody off it, scoped to the round')
+  ok(!controls.includes('tee_sheet:'), '  …and the times stay')
+  ok(controls.includes('Keep them'), '  …asked once before it goes')
+}
+
 section('A sheet is made in its own wizard, behind the PIN unless the event is open')
 {
   const page = read('app/trip/[tripCode]/teesheet/[roundId]/setup/page.tsx')
@@ -144,7 +210,7 @@ section('A sheet is made in its own wizard, behind the PIN unless the event is o
     '  …and moves the round\'s start to the first tee time, where the countdown reads it')
   ok(/if \(short > 0\) \{ setAskShort\(true\); return \}/.test(wiz) && wiz.includes('Save anyway') && wiz.includes('Add tee times'),
     'a sheet too short for the field asks once, and saves anyway if told to')
-  ok(wiz.includes('disabled={!!issue || saving}'), 'rules that do not hold cannot be saved')
+  ok(wiz.includes('disabled={!!stepIssue || saving}'), 'rules that do not hold cannot be saved')
 }
 
 section('An event made with tee times has a tee sheet for every round')
@@ -162,7 +228,7 @@ section('An event made with tee times has a tee sheet for every round')
   ok(store.includes('teeSheetInUse(') && /\.\.\.\(teeSheet \? \{ start_format: 'tee_sheet' \} : \{\}\)/.test(store),
     'a league round added later, or made when its venue is chosen, follows the event onto a tee sheet')
   const access = read('app/components/TeeTimesAccess.tsx')
-  ok(access.includes('Who makes the tee sheets') && access.includes('Who puts players on a tee time'),
+  ok(access.includes('Who opens the tee sheets') && access.includes('Who puts players on a tee time'),
     'the question\'s two answers, said from the organiser\'s side')
 }
 
@@ -421,15 +487,15 @@ section('The sheet reads fail-soft and writes scoped')
 section('A vacant round offers the wizard; players pick their own time when allowed')
 {
   const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
-  ok(client.includes("aren&apos;t set up yet") && client.includes('Set up the tee times'),
+  ok(client.includes("isn&apos;t open yet") && client.includes('Open the tee sheet'),
     'a round with no sheet yet says so and offers the wizard — never an empty heading')
   ok(/!fieldMaySet && isLocked\(passcodeHash\) && !unlocked/.test(client) && client.includes('Asks for the organiser PIN.'),
     '  …saying the PIN is asked, unless anyone may make the sheets')
-  ok(/\{fieldMaySet && \([\s\S]{0,200}Edit the tee times/.test(client),
+  ok(/\{fieldMaySet && \([\s\S]{0,200}Edit the tee sheet/.test(client),
     'an open event\'s live sheet carries an Edit button into the wizard; a closed one does not')
   ok(client.includes('const organiser = unlocked || !isLocked(passcodeHash)'),
     'the organiser places anybody — the PIN unlocked, or an event without one')
-  ok(client.includes('const selfPick = !organiser && fieldMayEdit && !!meId'),
+  ok(client.includes('const selfPickAllowed = !organiser && fieldMayEdit && !!meId'),
     'a claimed player picks their own time only when the event says players pick')
   ok(/selfPick && storageReady && myUnitIds\.length > 0 && vacancy >= myUnitIds\.length/.test(client),
     '  …joining a time with room for them, and on a share-a-tee board their whole team')
@@ -496,10 +562,12 @@ section('The organiser is never locked out of their own sheet')
 section('The organiser reaches the wizard where the start is chosen')
 {
   const client = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
-  ok(client.includes('/teesheet/${round.id}/setup?from=organiser'),
+  const controls = read('app/trip/[tripCode]/teesheet/TeeSheetRoundControls.tsx')
+  ok(client.includes('<TeeSheetRoundControls') && client.includes('from="organiser"')
+     && controls.includes('/teesheet/${roundId}/setup?from=${from}'),
     'a tee-sheet round\'s card is the way into its wizard, and back')
-  ok(client.includes("round.teeState === 'vacant' ? 'Set up the tee times' : 'Change the tee times'"),
-    '  …set up while vacant, changed once live')
+  ok(controls.includes("state === 'vacant' ? 'Open the tee sheet' : 'Change the tee sheet'"),
+    '  …opened while not open yet, changed once it is')
   ok(!client.includes('saveTeeSetting') && !client.includes('Minutes between groups'),
     'the times are the wizard\'s alone — no second set of controls here')
   ok(client.includes('<TeeTimesAccess') && /set_tee_sheets: next\.anyoneMakes, edit_tee_sheet: next\.playersPick/.test(client),
