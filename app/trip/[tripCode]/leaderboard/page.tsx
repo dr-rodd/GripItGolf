@@ -16,6 +16,7 @@ import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
 import { golfIrelandLinkedIds } from '../golfIreland'
 import { readRoundCards } from '@/lib/golfIrelandCards'
+import { picksFrom, playerColourOf } from '@/lib/playerColours'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,7 +94,7 @@ export default async function TripLeaderboardPage({
   const nilId     = '00000000-0000-0000-0000-000000000000'
 
   const [teamsRes, playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes,
-         memberships, nicknamesRes, giLinked, roundCards] =
+         memberships, nicknamesRes, giLinked, roundCards, picksRes] =
     await Promise.all([
       supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
       supabase.from('players')
@@ -147,6 +148,11 @@ export default async function TripLeaderboardPage({
       // Its Golf Ireland cards, each on the round it was played as — read
       // on the server, which alone can (lib/golfIrelandCards.ts).
       readRoundCards(trip.id, leagueSetup, rounds),
+      // An event's players' own colours, on their own and fail-soft
+      // (migration 063). A trip offers no picker, so it asks for nothing.
+      isEvent((trip as { kind?: unknown }).kind)
+        ? supabase.from('players').select('id, colour').eq('trip_id', trip.id)
+        : Promise.resolve({ data: null }),
     ])
 
   // What the trip plays for. A stored list wins; a trip created before the
@@ -162,6 +168,22 @@ export default async function TripLeaderboardPage({
   // reads as the trip it has always been.
   const event = isEvent((trip as { kind?: unknown }).kind)
   const dayBoards = leagueSetup?.dayBoards
+
+  // Each player's colour, for the dot beside their name on an individual
+  // board — their side's, or their own pick where the event has no sides
+  // (lib/playerColours.ts). Events only: a trip's individual boards are
+  // as they were.
+  const playerColours: Record<string, string> = {}
+  if (event) {
+    const colourOf = playerColourOf(
+      teamsRes.data ?? [], memberships,
+      picksFrom(picksRes.data as { id: string; colour?: string | null }[] | null),
+    )
+    for (const p of playersRes.data ?? []) {
+      const c = colourOf(p.id)
+      if (c) playerColours[p.id] = c
+    }
+  }
   // A league of rounds reads its board overall or one round at a time.
   const series = leagueSetup?.schedule === 'series'
 
@@ -198,6 +220,7 @@ export default async function TripLeaderboardPage({
         roundHandicaps={hcpsRes.data ?? []}
         tees={teesRes.data ?? []}
         isEvent={event}
+        playerColours={playerColours}
         dayBoards={dayBoards}
         series={series}
         cardsOff={leagueSetup?.cardsOff}

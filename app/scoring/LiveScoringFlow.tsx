@@ -33,7 +33,18 @@ interface Player {
   id: string; name: string; role: string; handicap: number | null
   gender: string; is_composite: boolean
   teams: { name: string; color: string } | null
+  /**
+   * The dot beside the name, where the page worked one out: the player's
+   * side's, or on an event without sides their own pick
+   * (lib/playerColours.ts). Absent reads the team's, as it always did.
+   */
+  colour?: string | null
 }
+
+/** The colour of a player's dot, or null for none. */
+const dotColour = (p: Pick<Player, 'teams' | 'colour'>): string | null =>
+  p.colour ?? p.teams?.color ?? null
+
 interface Round {
   id: string; round_number: number; status: string
   courses: { id: string; name: string } | null
@@ -1257,8 +1268,8 @@ export default function LiveScoringFlow({
                       : "border-line text-ink/80 hover:border-line-strong"}`}
                 >
                   <div className="flex items-center gap-2">
-                    {player.teams && (
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: player.teams.color }} />
+                    {dotColour(player) && (
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: dotColour(player)! }} />
                     )}
                     <span>{player.name}</span>
                   </div>
@@ -1543,10 +1554,10 @@ export default function LiveScoringFlow({
                 card read at 85% gives different points for the same gross,
                 and editing against a number you cannot see is guesswork. */}
             <div className="flex items-baseline gap-2 min-w-0">
-              {player.teams && (
+              {dotColour(player) && (
                 <span
                   className="w-2 h-2 rounded-full flex-shrink-0 self-center"
-                  style={{ backgroundColor: player.teams.color }}
+                  style={{ backgroundColor: dotColour(player)! }}
                 />
               )}
               <span className="text-ink/80 text-base font-semibold truncate">{player.name}</span>
@@ -1728,8 +1739,8 @@ export default function LiveScoringFlow({
                       : "border-line bg-surface hover:border-line"}`}
                 >
                   <div className="flex items-center gap-1.5 mb-1">
-                    {player.teams && (
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: player.teams.color }} />
+                    {dotColour(player) && (
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: dotColour(player)! }} />
                     )}
                     <span className={`text-base font-medium leading-tight ${isSel ? "text-ink" : "text-ink/65"}`}>
                       {player.name.split(" ")[0]}
@@ -2038,7 +2049,7 @@ function HoleCard({
               effectivePar={ePar}
               effectiveSI={eSI}
               playerName={player.name}
-              teamColor={player.teams?.color}
+              teamColor={dotColour(player) ?? undefined}
               score={hs.gross}
               isNR={hs.isNR}
               // The allowance the card is being read at. What this tile

@@ -47,6 +47,8 @@ interface Player {
    */
   nickname?: string | null
   teams: { name: string; color: string } | null
+  /** The dot's colour where the page worked one out (lib/playerColours.ts); absent reads the team's. */
+  colour?: string | null
 }
 
 interface Hole {
@@ -764,10 +766,10 @@ export default function LiveLeaderboardPanel({
 
                   {/* Col 2: team dot + name */}
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                    {player.teams && (
+                    {(player.colour ?? player.teams?.color) && (
                       <span
                         className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: player.teams.color }}
+                        style={{ backgroundColor: (player.colour ?? player.teams?.color)! }}
                       />
                     )}
                     {/* No live dot here: the Thru column already says F or a

@@ -82,8 +82,13 @@ section('A tag is a team on the main sheet — the decision the dots rest on')
   const roster = read('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')
   ok(roster.includes('teams(name, color)'),
     'the live scoring roster still joins straight through that mirror')
+  // A player's own colour (lib/playerColours.ts) is only ever worked out
+  // with the tag first, so the mirror's colour still wins whenever there is
+  // a side.
+  ok(/resolvePlayerColour\(tagsOn, \(p\.teams as/.test(roster),
+    '  …and a player\'s own colour is worked out with the tag\'s first')
   const panel = read('app/scoring/LiveLeaderboardPanel.tsx')
-  ok(panel.includes('player.teams') && panel.includes('backgroundColor: player.teams.color'),
+  ok(panel.includes('player.colour ?? player.teams?.color'),
     'and the panel still draws the dot from it — nothing to rewire')
 }
 

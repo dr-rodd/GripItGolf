@@ -9,6 +9,8 @@ import TripHeader from '@/app/components/TripHeader'
 import { HEADER_H } from '@/app/components/headerMetrics'
 import { TABBAR_SPACE } from '@/app/components/tabbarMetrics'
 import { courseLabel } from '@/lib/courseDirectory'
+import { isEvent } from '@/lib/eventHub'
+import { hasTags, picksFrom, resolvePlayerColour } from '@/lib/playerColours'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,7 +56,11 @@ export default async function TripCoursePage({
 
   const courseId = (thisRound.courses as any).id as string
 
-  const [playersRes, holesRes, teesRes, hcpsRes, nicknamesRes] = await Promise.all([
+  // An event's players may carry their own colour (lib/playerColours.ts);
+  // a trip's dots are its teams', and asks for nothing more.
+  const event = isEvent((trip as { kind?: unknown }).kind)
+
+  const [playersRes, holesRes, teesRes, hcpsRes, nicknamesRes, picksRes, teamsRes] = await Promise.all([
     supabase
       .from('players')
       .select('id, name, role, handicap, gender, is_composite, teams(name, color)')
@@ -88,6 +94,14 @@ export default async function TripCoursePage({
     // fail-soft: naming the column in the players select would fail this
     // whole screen on a database that has not run migration 047.
     supabase.from('players').select('id, nickname').eq('trip_id', trip.id),
+    // An event's own colours, on their own and fail-soft (migration 063),
+    // and its teams — whether it has sides decides whether a pick counts.
+    event
+      ? supabase.from('players').select('id, colour').eq('trip_id', trip.id)
+      : Promise.resolve({ data: null }),
+    event
+      ? supabase.from('teams').select('id, name, team_set').eq('trip_id', trip.id)
+      : Promise.resolve({ data: null }),
   ])
 
   // Merged in code, never in the select — the panel reads `player.nickname`
@@ -96,8 +110,13 @@ export default async function TripCoursePage({
     ((nicknamesRes.data ?? []) as { id: string; nickname: string | null }[])
       .map(r => [r.id, r.nickname]),
   )
+  const picks = picksFrom(picksRes.data as { id: string; colour?: string | null }[] | null)
+  const tagsOn = hasTags((teamsRes.data ?? []) as { id: string; name: string; team_set?: string | null }[])
   const players = (playersRes.data ?? []).map(p => ({
     ...p, nickname: nickById.get(p.id) ?? null,
+    ...(event ? {
+      colour: resolvePlayerColour(tagsOn, (p.teams as { color?: string | null } | null)?.color, picks.get(p.id)),
+    } : {}),
   }))
 
   return (

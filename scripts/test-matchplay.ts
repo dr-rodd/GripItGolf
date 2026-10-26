@@ -21,7 +21,11 @@ import {
   normaliseContact, contactShown, walkoverChoices, WALKOVER,
 } from '../lib/matchArrangements'
 import { RESULT_PILL, sideTone, signTone } from '../lib/resultTone'
-import { DEFAULT_SIDE_COLOURS, sideColours, shade } from '../lib/matchSides'
+import { DEFAULT_SIDE_COLOURS, MIN_SIDE_DISTANCE, colourDistance, setApart, sideColours, shade } from '../lib/matchSides'
+import {
+  PLAYER_COLOURS, normalisePlayerColour, ownColoursOffered, picksFrom, playerColourOf, resolvePlayerColour,
+} from '../lib/playerColours'
+import { PRESET_COLORS, PRESET_COLOR_NAMES } from '../lib/teamColors'
 import {
   byHandicap, drawDue, drawInPlay, emptySlots, manualIssue, moveToSeed, parseDrawPlan, placeInSlot,
   reconcileOrder, resizeSlots, shuffled, slotsFromSeeds, unplaced, drawCountIssue,
@@ -800,6 +804,81 @@ guard('side colours', () => {
   eq(sideColours('#22AA44', null).A.fill, '#22AA44', '  …while the tagged side keeps its own')
   eq(shade('#808080', -0.5), '#404040', 'a shade mixes toward black')
   eq(shade('#000000', 1), '#ffffff', '  …or white')
+})
+
+section('Side colours: two too alike are shaded apart (Ross, 26 Oct 2026)')
+guard('similar colours', () => {
+  ok(colourDistance('#9333EA', '#7C3AED') < MIN_SIDE_DISTANCE && colourDistance('#16A34A', '#0A9D56') < MIN_SIDE_DISTANCE,
+    'the palette\'s two purples and two greens are too alike as they stand')
+  const [p1, p2] = setApart('#9333EA', '#7C3AED')
+  ok(colourDistance(p1, p2) >= MIN_SIDE_DISTANCE, 'shaded apart, they read as two')
+  // A slight shade, not a new colour: the hue is the pick's, only lighter or
+  // darker, and never shaded further than the same colour twice would be.
+  const hue = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min
+    if (d === 0) return 0
+    const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+    return (h * 60 + 360) % 360
+  }
+  const reach = (c: string) => Math.max(colourDistance(c, shade(c, 0.45)), colourDistance(c, shade(c, -0.45)))
+  let slight = true
+  for (const a of PLAYER_COLOURS) for (const b of PLAYER_COLOURS) {
+    if (a === b || colourDistance(a, b) >= MIN_SIDE_DISTANCE) continue
+    const [x, y] = setApart(a, b)
+    for (const [was, now] of [[a, x], [b, y]]) {
+      if (Math.abs(hue(was) - hue(now)) > 2 || colourDistance(was, now) > reach(was)) slight = false
+    }
+  }
+  ok(slight, '  …each keeping the hue that was picked, only lighter or darker — a slight shade, not a new colour')
+  const [q2, q1] = setApart('#7C3AED', '#9333EA')
+  eq([q1, q2], [p1, p2], '  …whichever side of the draw each is on')
+  ok(colourDistance(p2, '#000000') < colourDistance('#7C3AED', '#000000')
+     && colourDistance(p1, '#FFFFFF') < colourDistance('#9333EA', '#FFFFFF'),
+    'the darker of the two goes darker, the lighter lighter — never toward each other')
+  eq(setApart('#DC2626', '#2563EB'), ['#DC2626', '#2563EB'], 'two that already differ are left exactly as picked')
+  eq([sideColours('#9333EA', '#7C3AED').A.fill, sideColours('#9333EA', '#7C3AED').B.fill], [p1, p2],
+    'a match between them wears the shaded pair')
+  let worst = Infinity
+  for (const a of PLAYER_COLOURS) for (const b of PLAYER_COLOURS) {
+    const c = sideColours(a, b)
+    worst = Math.min(worst, colourDistance(c.A.fill, c.B.fill))
+  }
+  ok(worst >= MIN_SIDE_DISTANCE, `any two picks from the palette, the same one included, read apart on the strip (closest ${worst.toFixed(1)})`)
+  ok(PLAYER_COLOURS.every(c => colourDistance(c, '#C62F3A') >= MIN_SIDE_DISTANCE || colourDistance(c, '#2563B8') >= MIN_SIDE_DISTANCE),
+    'and any pick against a player with none has red or blue well clear of it')
+})
+
+section('Player colours: their own pick, until the event has sides')
+guard('player colours', () => {
+  eq(PLAYER_COLOURS, PRESET_COLORS, 'the picks are the team palette — one copy')
+  ok(PRESET_COLORS.every(c => !!PRESET_COLOR_NAMES[c]), '  …each with a name for a screen reader')
+  eq([normalisePlayerColour('#dc2626'), normalisePlayerColour(' #DC2626 ')], ['#DC2626', '#DC2626'], 'a stored pick reads back as hex')
+  eq([normalisePlayerColour('red'), normalisePlayerColour('#abc'), normalisePlayerColour(null), normalisePlayerColour(7)],
+    [null, null, null, null], '  …and anything else as no pick')
+
+  const tag = { id: 't1', name: 'Europe', team_set: 'main', color: '#2563EB' }
+  const dayTeam = { id: 'd1', name: 'Ross & Dave', team_set: 'day:r1', color: '#16A34A' }
+  eq([ownColoursOffered(true, []), ownColoursOffered(true, [dayTeam])], [true, true],
+    'an event with no sides offers the picker — a day\'s fourballs are not sides')
+  eq(ownColoursOffered(true, [tag]), false, '  …and the first tag made takes it away')
+  eq(ownColoursOffered(true, [{ id: 'old', name: 'Old', team_set: null }]), false, '  …a team from before sheets being a main-sheet one')
+  eq(ownColoursOffered(false, []), false, 'a trip never offers it')
+
+  eq(resolvePlayerColour(false, null, '#DC2626'), '#DC2626', 'no sides: the player wears their own pick')
+  eq(resolvePlayerColour(true, '#2563EB', '#DC2626'), '#2563EB', 'sides: their side\'s colour, whatever they picked')
+  eq(resolvePlayerColour(true, null, '#DC2626'), null, '  …and nothing while they carry no tag, so a pick cannot pass for a side')
+  eq(resolvePlayerColour(false, null, null), null, 'no pick, no colour')
+
+  const picks = picksFrom([{ id: 'p1', colour: '#dc2626' }, { id: 'p2', colour: null }, { id: 'p3', colour: 'blue' }])
+  eq([...picks.entries()], [['p1', '#DC2626']], 'the read keeps only real picks')
+  eq(picksFrom(null).size, 0, '  …and a failed read is no picks at all')
+
+  const memberships = [{ team_id: 't1', team_set: 'main', player_id: 'p1' }]
+  const untagged = playerColourOf([dayTeam], memberships, picks)
+  eq([untagged('p1'), untagged('p2')], ['#DC2626', null], 'the knockout and the board read the same answer per player')
+  const tagged = playerColourOf([tag], memberships, picks)
+  eq([tagged('p1'), tagged('p2')], ['#2563EB', null], '  …the side\'s once there are sides')
 })
 
 // ─── Result ────────────────────────────────────────────────────

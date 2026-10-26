@@ -251,6 +251,62 @@ section('A tournament is created as one, with its PIN')
   ok(src.includes('Organiser PIN'), 'and the form calls it what the organiser will')
 }
 
+// ─── A player's own colour (Ross, 26 Oct 2026) ─────────────────
+
+section('A player picks their own colour while the event has no sides')
+{
+  const migration = read('supabase/migrations/20260101000063_player_colour.sql')
+  ok(/ADD COLUMN IF NOT EXISTS colour text/.test(migration) && /players_colour_hex/.test(migration),
+    'migration 063 adds players.colour, held to a hex by a check')
+
+  const settings = read('app/trip/[tripCode]/settings/page.tsx')
+  ok(/colourPicker = !teamsError && ownColoursOffered\(true, teams/.test(settings),
+    'the Settings tab offers the picker only while the event has no sides, and not on a failed read')
+  ok(settings.includes('colourPicker={colourPicker}'), '  …and hands that answer to the preferences')
+
+  const prefs = read('app/components/PlayerSettings.tsx')
+  ok(prefs.includes("select('colour')"), 'the preferences read the pick on its own, fail-soft')
+  ok(/const showColour = colourPicker && !!playerId/.test(prefs), '  …and only a claimed player is offered one')
+  ok(prefs.includes('PLAYER_COLOURS.map') && prefs.includes('role="radiogroup"'),
+    'the picker is the palette, one answer at a time')
+  ok(/setColour\(before\)/.test(prefs) && prefs.includes('Could not save your colour'),
+    '  …and a save that does not land is put back and said so')
+  ok(!read('app/trip/[tripCode]/page.tsx').includes('colourPicker'),
+    'a trip\'s gear never offers it')
+
+  // Every read of the column is its own query: naming it in a wider select
+  // fails the whole screen before migration 063 has run.
+  const readers = [
+    'app/trip/[tripCode]/knockout.ts',
+    'app/trip/[tripCode]/matchplay/page.tsx',
+    'app/trip/[tripCode]/leaderboard/page.tsx',
+    'app/trip/[tripCode]/scoring/[roundNumber]/page.tsx',
+  ]
+  for (const f of readers) {
+    const src = read(f)
+    ok(src.includes("select('id, colour')"), `${f.split('/').slice(-2).join('/')} reads the picks on their own`)
+  }
+  const wide = /select\(\s*'[^']*\bcolour\b[^']*'\s*\)/g
+  for (const f of [...readers, 'app/components/PlayerSettings.tsx', 'app/trip/[tripCode]/settings/page.tsx']) {
+    const bad = (read(f).match(wide) ?? []).filter(m => !/'(id, )?colour'/.test(m))
+    ok(bad.length === 0, `  …never inside a wider select (${f.split('/').pop()})`)
+  }
+
+  ok(read('app/trip/[tripCode]/knockout.ts').includes('playerColourOf(')
+     && read('app/trip/[tripCode]/matchplay/page.tsx').includes('playerColourOf('),
+    'the match card, the live board and the bracket colour a side from the one rule')
+  const board = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  ok(board.includes('row.color ?? colourById.get(row.id)'),
+    'an individual board\'s dot is the player\'s colour')
+  ok(/if \(event\) \{\s*const colourOf = playerColourOf/.test(read('app/trip/[tripCode]/leaderboard/page.tsx')),
+    '  …on an event only — a trip\'s board is as it was')
+  const flow = read('app/scoring/LiveScoringFlow.tsx')
+  ok(!flow.includes('player.teams.color') && flow.includes('p.colour ?? p.teams?.color'),
+    'the live scorecard\'s dots read the player\'s colour, a team\'s when none was worked out')
+  ok(read('app/scoring/LiveLeaderboardPanel.tsx').includes('player.colour ?? player.teams?.color'),
+    '  …and so does its in-play board')
+}
+
 console.log(`\n${'─'.repeat(56)}`)
 if (failed === 0) console.log(`✓ all ${passed} checks passed`)
 else {

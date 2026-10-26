@@ -3,8 +3,9 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { hasMatchplay, needsPairings, tripQuotaScale } from '@/lib/leaderboards'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
-import { MAIN_SET, setOf, teamsOnSheet, membersOf, teamFor } from '@/lib/teamSets'
+import { MAIN_SET, setOf, teamsOnSheet, membersOf } from '@/lib/teamSets'
 import { commonColour } from '@/lib/matchSides'
+import { picksFrom, playerColourOf } from '@/lib/playerColours'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { playerEntrant, pairEntrant, type Entrant } from '@/lib/matchplayEntrants'
 import { parseTeamScoring } from '@/lib/teamScoring'
@@ -59,7 +60,7 @@ export default async function MatchplayPage({
   const enabled = hasMatchplay(boards)
   const pairs   = needsPairings(boards)
 
-  const [matchesRes, playersRes, teamsRes, memberships, nicknamesRes, setupRes] = await Promise.all([
+  const [matchesRes, playersRes, teamsRes, memberships, nicknamesRes, setupRes, picksRes] = await Promise.all([
     supabase
       .from('matchplay_matches')
       .select(
@@ -90,6 +91,8 @@ export default async function MatchplayPage({
     // this is a match play event — on its own and fail-soft, never in the
     // trip's select (migration 047 is applied by hand).
     supabase.from('trips').select('bracket_setup, kind, settings_passcode_hash').eq('id', trip.id).maybeSingle(),
+    // The players' own colours, on their own and fail-soft (migration 063).
+    supabase.from('players').select('id, colour').eq('trip_id', trip.id),
   ])
 
   if (matchesRes.error) console.error('MatchplayPage matches query failed:', matchesRes.error)
@@ -131,13 +134,16 @@ export default async function MatchplayPage({
         return pairEntrant(t, roster.filter(p => ids.includes(p.id)))
       })
     : roster.map(playerEntrant)
-  // Each side's team colour, where all its players share a side of the
-  // event (lib/matchSides.ts decides whether a match wears it).
-  const teamColour = new Map(((teamsRes.data ?? []) as { id: string; color?: string | null }[])
-    .map(t => [t.id, t.color ?? null]))
+  // Each side's colour, where all its players have the same one: a side of
+  // the event (a tag), or on an event without tags their own picks
+  // (lib/playerColours.ts). lib/matchSides.ts decides how a match wears it.
+  const playerColour = playerColourOf(
+    (teamsRes.data ?? []) as { id: string; name: string; color?: string | null; team_set?: string | null }[],
+    memberships,
+    picksFrom(picksRes.data as { id: string; colour?: string | null }[] | null),
+  )
   const colourOf = (id: string) => commonColour(
-    (storedAsPairs ? membersOf(memberships, id) : [id])
-      .map(pid => teamColour.get(teamFor(memberships, pid, MAIN_SET) ?? '') ?? null))
+    (storedAsPairs ? membersOf(memberships, id) : [id]).map(playerColour))
   const coloured = entrants.map(e => ({ ...e, colour: colourOf(e.id) }))
 
   // A pairs row keeps its sides in the team columns; everything downstream

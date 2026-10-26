@@ -109,6 +109,12 @@ interface Props {
    */
   nicknames?: { id: string; nickname: string | null }[]
   /**
+   * Player id → the colour of the dot beside their name on an individual
+   * board: their side's, or on an event without sides their own pick
+   * (lib/playerColours.ts). Worked out by the page; events only.
+   */
+  playerColours?: Record<string, string>
+  /**
    * An event, not a trip — the per-course switch is offered on an event's
    * board only. A trip's leaderboard is the trip's, and a new control on
    * it would be answering a question nobody asked.
@@ -1018,7 +1024,7 @@ function TeamName({ row, byPlayers, memberNames }: {
 }
 
 function Board({
-  board, rows: allRows, rounds, playerById, boardNameById, onOpenCard, linked,
+  board, rows: allRows, rounds, playerById, boardNameById, onOpenCard, linked, colourById,
 }: {
   board: Leaderboard
   rows: BoardRow[]
@@ -1029,11 +1035,16 @@ function Board({
   onOpenCard: (row: BoardRow, round: Round) => void
   /** Players carrying the Golf Ireland mark beside their name. */
   linked: Set<string>
+  /** A player's colour, for the dot an individual row carries (a team row has its own). */
+  colourById: Map<string, string>
 }) {
   // A team's row stacks its members' names rather than gliding them — see
   // TeamName. An individual board keeps the gliding name.
   const isTeamBoard = board.audience === 'team'
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  // The dot beside an individual name: the row's own colour, else the
+  // player's.
+  const dotOf = (row: BoardRow) => row.color ?? colourById.get(row.id)
 
   /**
    * Whether the board's discard rule is being applied to what you can see.
@@ -1303,8 +1314,8 @@ function Board({
                       />
                     ) : (
                       <span className="flex items-center gap-1.5">
-                        {row.color && (
-                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} />
+                        {dotOf(row) && (
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: dotOf(row) }} />
                         )}
                         <ScrollingName
                           text={boardNameById.get(row.id) ?? row.name}
@@ -1318,7 +1329,7 @@ function Board({
                     {!isTeamBoard && row.subLabel && (
                       <ScrollingName
                         text={row.subLabel}
-                        className={`block ${row.color ? 'pl-3.5' : ''}`}
+                        className={`block ${dotOf(row) ? 'pl-3.5' : ''}`}
                         textClassName="text-ink/65 text-[13px] leading-snug"
                       />
                     )}
@@ -1456,8 +1467,10 @@ export default function TripLeaderboardClient({
   tripCode, boards, activeRoundIds, livePlayerIds, legacyTeamScoring, rounds,
   teams, memberships, players, holes, scores, liveScores, roundHandicaps,
   tees = [], nicknames = [], isEvent = false, dayBoards, linkedIds, series = false, cardsOff, roundCards,
+  playerColours,
 }: Props) {
   const linked = useMemo(() => new Set(linkedIds ?? []), [linkedIds])
+  const colourById = useMemo(() => new Map(Object.entries(playerColours ?? {})), [playerColours])
   // Matchplay has its own route, so it is a button rather than a tab. Every
   // other board is a table, and its own rules travel with it.
   //
@@ -1776,6 +1789,7 @@ export default function TripLeaderboardClient({
       boardNameById={boardNameById}
       onOpenCard={(row, round) => setCard({ row, round })}
       linked={linked}
+      colourById={colourById}
     />
   )
 

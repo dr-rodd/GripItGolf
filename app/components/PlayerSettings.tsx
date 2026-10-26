@@ -12,7 +12,8 @@
  *
  * An event shows the same controls inline on its Settings tab
  * (`/trip/[code]/settings`) instead of behind a gear — `PreferencesPanel`
- * below is the one copy both draw.
+ * below is the one copy both draw. There it may also offer the player's
+ * own colour (lib/playerColours.ts), which a trip never does.
  */
 
 import { useEffect, useState } from 'react'
@@ -20,6 +21,8 @@ import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { THEME_CHOICES, chooseTheme, currentThemeChoice, type ThemeChoice } from '@/lib/theme'
 import { MAX_NICKNAME, normalizeNickname } from '@/lib/displayNames'
+import { PLAYER_COLOURS, normalisePlayerColour } from '@/lib/playerColours'
+import { PRESET_COLOR_NAMES } from '@/lib/teamColors'
 import { IconSettings } from './icons'
 import { FIELD, Segmented, buttonClass, cardClass } from './ui'
 
@@ -96,11 +99,12 @@ export default function PlayerSettings({
 
 /**
  * The preferences themselves — appearance, and the nickname once this
- * phone is a player. Drawn inside the hub's sheet on a trip and straight
- * onto an event's Settings tab.
+ * phone is a player, and on an event without sides their colour. Drawn
+ * inside the hub's sheet on a trip and straight onto an event's Settings
+ * tab.
  */
 export function PreferencesPanel({
-  tripId, playerId, initialTheme,
+  tripId, playerId, initialTheme, colourPicker = false,
 }: {
   tripId: string
   /** The claimed player on this phone, or null — the nickname needs one. */
@@ -111,6 +115,11 @@ export function PreferencesPanel({
    * it is read again after mount either way.
    */
   initialTheme?: ThemeChoice
+  /**
+   * Offer the player's own colour — an event with no sides, decided by the
+   * page through `ownColoursOffered`. Only ever drawn for a claimed player.
+   */
+  colourPicker?: boolean
 }) {
   const [theme, setTheme] = useState<ThemeChoice>(initialTheme ?? 'light')
   useEffect(() => { setTheme(currentThemeChoice()) }, [])
@@ -146,6 +155,45 @@ export function PreferencesPanel({
   }, [tripId, playerId])
 
   const nickDirty = (normalizeNickname(nickname) ?? '') !== savedNickname
+
+  // The player's own colour. Saved on the tap — a swatch is one answer, not
+  // a draft — and put back if the save does not land.
+  const showColour = colourPicker && !!playerId
+  const [colour, setColour] = useState<string | null>(null)
+  const [colourFailed, setColourFailed] = useState(false)
+
+  useEffect(() => {
+    if (!showColour) return
+    let cancelled = false
+    // Its own query, fail-soft, for the nickname's reason: migration 063.
+    supabase
+      .from('players')
+      .select('colour')
+      .eq('id', playerId)
+      .eq('trip_id', tripId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled || error) return
+        setColour(normalisePlayerColour((data as { colour?: string | null } | null)?.colour))
+      })
+    return () => { cancelled = true }
+  }, [tripId, playerId, showColour])
+
+  async function pickColour(next: string | null) {
+    if (!playerId || next === colour) return
+    const before = colour
+    setColour(next)
+    setColourFailed(false)
+    const { error } = await supabase
+      .from('players')
+      .update({ colour: next })
+      .eq('id', playerId)
+      .eq('trip_id', tripId)
+    if (error) {
+      setColour(before)
+      setColourFailed(true)
+    }
+  }
 
   async function saveNickname() {
     if (!playerId) return
@@ -220,6 +268,61 @@ export function PreferencesPanel({
           </p>
         )}
       </div>}
+
+      {/* ── Your colour ── */}
+      {showColour && <div className="mt-5 pt-5 border-t border-line">
+        <p className="t-label text-ink">Your colour</p>
+        <p className="t-cap text-ink/65 mt-0.5">
+          Beside your name on the leaderboard and scorecard, and your side of a match.
+        </p>
+        <div role="radiogroup" aria-label="Your colour" className="grid grid-cols-7 mt-2 -mx-1">
+          <ColourSwatch label="No colour" chosen={colour === null} onPick={() => pickColour(null)} />
+          {PLAYER_COLOURS.map(c => (
+            <ColourSwatch
+              key={c}
+              fill={c}
+              label={PRESET_COLOR_NAMES[c] ?? c}
+              chosen={colour?.toLowerCase() === c.toLowerCase()}
+              onPick={() => pickColour(c)}
+            />
+          ))}
+        </div>
+        {colourFailed && (
+          <p className="t-cap text-rust-deep mt-2">
+            Could not save your colour — try again
+          </p>
+        )}
+      </div>}
     </>
+  )
+}
+
+/**
+ * One colour to pick: a 44px target round a smaller dot, the chosen one
+ * ringed. No fill is "No colour" — an empty circle.
+ */
+function ColourSwatch({ fill, label, chosen, onPick }: {
+  fill?: string
+  label: string
+  chosen: boolean
+  onPick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={chosen}
+      aria-label={label}
+      onClick={onPick}
+      className="press flex items-center justify-center h-11"
+    >
+      <span
+        className={`block w-7 h-7 rounded-full ${fill ? '' : 'border-2 border-dashed border-line-strong'} ${
+          chosen ? 'ring-2 ring-ink ring-offset-2 ring-offset-surface' : ''
+        }`}
+        style={fill ? { backgroundColor: fill } : undefined}
+        aria-hidden="true"
+      />
+    </button>
   )
 }

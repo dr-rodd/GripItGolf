@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { isEvent } from '@/lib/eventHub'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { isConfirmed } from '@/lib/roster'
+import { ownColoursOffered } from '@/lib/playerColours'
 import { SITE } from '@/config/site'
 import TripHeader from '@/app/components/TripHeader'
 import BackButton from '@/app/components/BackButton'
@@ -25,7 +26,8 @@ const LINK = 'text-accent-deep underline underline-offset-2 hover:text-accent tr
  * hub carries no gear — the organiser area for whoever holds the PIN, and
  * help & privacy. Green Dot Run's Settings is the model: the PIN asks at
  * the organiser's door, not at this tab, so a player opening Settings is
- * never met by a lock.
+ * never met by a lock. While the event has no sides, the preferences carry
+ * the player's own colour too (lib/playerColours.ts).
  *
  * Events only. A trip's settings are Trip Setup, so a trip landing here is
  * sent there.
@@ -62,8 +64,18 @@ export default async function EventSettingsPage({ params }: {
   type Row = { id: string; name: string; claimed: boolean | null; is_composite: boolean | null }
   // A composite is a synthetic scorecard, not a person.
   const roster = ((trip.players ?? []) as Row[]).filter(p => p.is_composite !== true)
-  const me = await currentPlayer(tripCode, roster)
+  // The teams say whether there are sides yet, which is what decides the
+  // colour picker. Its own query rather than an embed — players point at
+  // teams too, so `teams(...)` on trips could be read two ways — taken
+  // beside the cookie read.
+  const [me, { data: teams, error: teamsError }] = await Promise.all([
+    currentPlayer(tripCode, roster),
+    supabase.from('teams').select('id, name, team_set').eq('trip_id', trip.id),
+  ])
+  if (teamsError) console.error('EventSettingsPage teams query failed:', teamsError)
   const claimed = me && isConfirmed(me) ? me : null
+  // A failed read offers nothing rather than guessing there are no sides.
+  const colourPicker = !teamsError && ownColoursOffered(true, teams ?? [])
 
   return (
     <main className="min-h-dvh paper has-tabbar">
@@ -101,7 +113,7 @@ export default async function EventSettingsPage({ params }: {
         <section>
           <SectionTitle className="mb-3">This phone</SectionTitle>
           <div className={`p-4 ${cardClass()}`}>
-            <PreferencesPanel tripId={trip.id} playerId={claimed?.id ?? null} />
+            <PreferencesPanel tripId={trip.id} playerId={claimed?.id ?? null} colourPicker={colourPicker} />
           </div>
         </section>
 

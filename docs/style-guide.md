@@ -68,8 +68,15 @@ gets baked into every opacity utility at build time and no theme can reach it.
   colours where they have different ones — and every phone shows the same,
   whoever holds it: a hole on the card's strip, a standing on the live
   board, a winner in the bracket all wear the side's colour.
-  `lib/matchSides.ts` is the one copy. Score shapes on
-  the card (a birdie's circle) are not results and have not moved.
+  **On an event without sides, a player's own colour is worn the same way**
+  (picked on the Settings tab from the team palette — `lib/playerColours.ts`;
+  Ross, 26 Oct 2026), and it is also the dot beside their name on the
+  leaderboard and the scorecard. **Two sides too alike to tell apart are
+  shaded apart** — the darker a touch darker, the lighter a touch lighter,
+  only until they clear `MIN_SIDE_DISTANCE` — so a strip of purple against
+  purple still reads as two players. `lib/matchSides.ts` is the one copy.
+  Score shapes on the card (a birdie's circle) are not results and have
+  not moved.
 - **Not the old gold.** `#C9A84C` in any spelling still fails the build:
   the previous identity's gold was decoration; this gold is a result.
 - **No gradients. No glows** — one exception, §8.

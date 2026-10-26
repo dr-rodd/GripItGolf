@@ -5,6 +5,7 @@ import { fetchMemberships } from '@/lib/teamMembers'
 import { drawDeadlines, parseBracketSetup } from '@/lib/bracketSetup'
 import type { PortalMatch } from '@/lib/knockoutPortal'
 import { commonColour } from '@/lib/matchSides'
+import { picksFrom, playerColourOf } from '@/lib/playerColours'
 
 /**
  * A knockout as one player's screens read it — the hub's next-match card,
@@ -29,9 +30,10 @@ export type KnockoutView = {
   deadlines: (string | null)[]
   pairs: boolean
   /**
-   * Side id → the team colour it plays in, where every player in it is on
-   * the same side of the event (a tag). lib/matchSides.ts decides whether
-   * a match wears them or red and blue.
+   * Side id → the colour it plays in, where every player in it has the
+   * same one: their tag's, or on an event without tags their own pick
+   * (lib/playerColours.ts). lib/matchSides.ts decides how a match wears
+   * them, or red and blue.
    */
   colours: Record<string, string>
 }
@@ -57,7 +59,7 @@ export async function readKnockout(
   }).find(lb => lb.competition === 'matchplay')
   if (!draw) return null
 
-  const [matchesRes, memberships, teamsRes] = await Promise.all([
+  const [matchesRes, memberships, teamsRes, picksRes] = await Promise.all([
     supabase.from('matchplay_matches')
       .select('id, round_number, round_name, slot, player_a_id, player_b_id, ' +
               'player_a_is_bye, player_b_is_bye, team_a_id, team_b_id, ' +
@@ -65,7 +67,9 @@ export async function readKnockout(
       .eq('trip_id', trip.id)
       .order('round_number').order('slot'),
     fetchMemberships(trip.id),
-    supabase.from('teams').select('id, name, color').eq('trip_id', trip.id),
+    supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id),
+    // The players' own colours, on their own and fail-soft (migration 063).
+    supabase.from('players').select('id, colour').eq('trip_id', trip.id),
   ])
   if (matchesRes.error) console.error('readKnockout matches query failed:', matchesRes.error)
   const rows = (matchesRes.data ?? []) as unknown as Row[]
@@ -87,7 +91,8 @@ export async function readKnockout(
 
   const names: Record<string, string> = {}
   const members: Record<string, string[]> = {}
-  const teamRows = (teamsRes.data ?? []) as { id: string; name: string; color?: string | null }[]
+  const teamRows = (teamsRes.data ?? []) as
+    { id: string; name: string; color?: string | null; team_set?: string | null }[]
   if (pairs) {
     for (const t of teamRows) {
       names[t.id] = t.name
@@ -97,12 +102,15 @@ export async function readKnockout(
     for (const p of players) { names[p.id] = p.name; members[p.id] = [p.id] }
   }
 
-  // A side's team colour: the tag (a team on the main sheet) all its
-  // players share.
-  const teamColour = new Map(teamRows.map(t => [t.id, t.color ?? null]))
+  // A side's colour: the one every player in it has — the tag (a team on
+  // the main sheet), or each player's own pick where there are no tags.
+  const colourOf = playerColourOf(
+    teamRows, memberships,
+    picksFrom(picksRes.data as { id: string; colour?: string | null }[] | null),
+  )
   const colours: Record<string, string> = {}
   for (const [side, ids] of Object.entries(members)) {
-    const c = commonColour(ids.map(pid => teamColour.get(teamFor(memberships, pid, MAIN_SET) ?? '') ?? null))
+    const c = commonColour(ids.map(colourOf))
     if (c) colours[side] = c
   }
 
