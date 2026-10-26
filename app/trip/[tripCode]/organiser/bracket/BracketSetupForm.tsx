@@ -328,6 +328,9 @@ export default function BracketSetupForm({
         titles={STEP_TITLES}
         intro={STEP_INTROS[stepNum - 1]}
         onBack={goBack}
+        // Under the trip's tab bar: the Continue bar sticks just above it,
+        // never behind it mid-scroll.
+        aboveTabBar
         footer={<>
           <button
             onClick={goNext}
