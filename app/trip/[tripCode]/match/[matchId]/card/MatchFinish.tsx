@@ -3,13 +3,13 @@
 import { createPortal } from 'react-dom'
 import DotBloom from '@/app/components/DotBloom'
 import { buttonClass } from '@/app/components/ui'
-import { ordinal, type CardHole, type CardSideKey, type CardSideView, type HoleOutcome } from '@/lib/matchCard'
+import { type CardHole, type CardSideKey, type CardSideView, type HoleOutcome } from '@/lib/matchCard'
 import { MatchScoresTable } from './MatchScorecard'
 import type { SideColour } from '@/lib/matchSides'
 
 /**
  * The end of a match (Ross, 26 Oct 2026): once the card is settled, a sheet
- * says how it finished and asks whether the last score is right. **Finalise**
+ * says how it finished and offers the choices — just those (Ross, 26 Oct). **Finalise**
  * is what puts the result into the bracket — the card no longer does that by
  * itself — and the sheet then turns into the match card: every hole played,
  * each player's score, the hole marked in the colour of whoever won it and
@@ -44,15 +44,6 @@ export default function MatchFinish({
   onContinue: () => void
   onClose: () => void
 }) {
-  const played = outcomes.filter(o => o.winner !== null)
-  const last = played[played.length - 1]
-  const players = [...a.players.map(p => ({ ...p, side: 'A' as const })), ...b.players.map(p => ({ ...p, side: 'B' as const }))]
-
-  const scoreOf = (pid: string, n: number) => {
-    const g = scores[pid]?.[n]
-    return g === null ? 'NR' : g === undefined ? '–' : String(g)
-  }
-
   const sheet = (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={phase === 'done' ? onClose : undefined}>
       <div className="absolute inset-0 bg-ink/50 page-enter" />
@@ -79,25 +70,6 @@ export default function MatchFinish({
 
           {phase === 'confirm' ? (
             <>
-              {last && (
-                <div className="mt-5 p-4 bg-surface border border-line rounded-xl">
-                  <p className="t-label text-ink">
-                    The last score — {last.holeNumber > 18 ? `the ${ordinal(last.holeNumber)}` : `hole ${last.holeNumber}`}
-                  </p>
-                  <div className="mt-2 flex flex-col gap-1.5">
-                    {players.map(p => (
-                      <div key={p.id} className="flex items-center justify-between gap-3">
-                        <span className="flex items-center gap-2 min-w-0 text-ink">
-                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colours[p.side].fill }} aria-hidden="true" />
-                          <span className="truncate">{p.name}</span>
-                        </span>
-                        <span className="font-serif text-2xl text-ink tabular-nums">{scoreOf(p.id, last.holeNumber)}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="t-cap text-ink/65 mt-3">Is that right? Once finalised, the result goes into the draw.</p>
-                </div>
-              )}
               {error && <p className="text-rust-deep text-sm text-center leading-snug mt-3">{error}</p>}
               <button type="button" onClick={onFinalise} disabled={saving} className={`${buttonClass('primary')} mt-5`}>
                 {saving ? 'Finalising…' : 'Yes — finalise the match'}
