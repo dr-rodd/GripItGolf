@@ -229,3 +229,60 @@ export function sheetStart(
 ): string | null {
   return item?.teeTime ?? null
 }
+
+// ─── The home screen's tee times ───────────────────────────────
+//
+// The sheet's own screen is where a sheet is read and edited; the home
+// screen carries one round of it, from the player's side — when you go
+// off and who with — while a round starts from a tee sheet
+// (lib/eventHub.ts `activeHubModules`).
+
+/**
+ * The tee-sheet round the home screen speaks for: the first today or later
+ * in round order, else the last one, so the morning after the final round
+ * still shows the sheet everybody just played off. An undated round (a
+ * series made before series carried dates) counts as still to come.
+ */
+export function hubTeeRound<R extends { roundNumber: number; date: string | null }>(
+  rounds: readonly R[],
+  today: string,
+): R | null {
+  const ordered = [...rounds].sort((a, b) => a.roundNumber - b.roundNumber)
+  return ordered.find(r => !r.date || r.date >= today) ?? ordered[ordered.length - 1] ?? null
+}
+
+/** One player's place on one round's sheet. */
+export type MyTee = {
+  slotIndex: number
+  /** "9:40 am", or null while the round has no start time. */
+  clock: string | null
+  /** Who else is in the slot, in assignment order. */
+  partners: string[]
+}
+
+/**
+ * Where a player stands on a round's sheet, or null when they are not on
+ * it (or this phone is nobody). `rows` are that round's assignments as
+ * fetched; `bySlot` cleans them, and the clock is `slotClock`'s, so the
+ * home screen and the sheet cannot disagree about a time.
+ */
+export function myTee(
+  rows: unknown,
+  playerId: string | null,
+  startTime: string | null | undefined,
+  intervalMins: number,
+  nameOf: (id: string) => string | null,
+): MyTee | null {
+  if (!playerId) return null
+  for (const [slotIndex, ids] of bySlot(rows)) {
+    if (!ids.includes(playerId)) continue
+    return {
+      slotIndex,
+      clock: slotClock(startTime, slotIndex, intervalMins),
+      partners: ids.filter(id => id !== playerId)
+        .map(nameOf)
+        .filter((n): n is string => !!n),
+    }
+  }
+  return null
+}

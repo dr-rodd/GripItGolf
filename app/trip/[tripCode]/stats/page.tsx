@@ -76,14 +76,19 @@ export default async function StatsPage({
             Could not work the stats out just now — try again.
           </p>
         ) : cover.level === 'none' ? (
+          // An event switches stats on from the organiser area's Home
+          // screen card, where the rest of its home screen is decided; a
+          // trip from Trip Setup, as ever.
           <EmptyState
             message={
               trip.track_stats
                 ? 'No putts or fairways recorded yet. They start filling in from the next card.'
-                : `Stats are switched off for this ${isEvent(trip.kind) ? 'event' : 'trip'}. Turn them on in Trip Setup and the scorecard starts asking.`
+                : isEvent(trip.kind)
+                  ? 'Stats are switched off for this event. The organiser turns them on in the organiser area and the scorecard starts asking.'
+                  : 'Stats are switched off for this trip. Turn them on in Trip Setup and the scorecard starts asking.'
             }
-            actionLabel={trip.track_stats ? undefined : 'Trip Setup'}
-            actionHref={trip.track_stats ? undefined : `/trip/${tripCode}/setup`}
+            actionLabel={trip.track_stats ? undefined : isEvent(trip.kind) ? 'Organiser area' : 'Trip Setup'}
+            actionHref={trip.track_stats ? undefined : `/trip/${tripCode}/${isEvent(trip.kind) ? 'organiser' : 'setup'}`}
           />
         ) : (
           <StatsClient

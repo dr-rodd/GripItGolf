@@ -6,12 +6,13 @@ import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 import {
   MAX_NOTICE, normalizeNotice, parseStartFormat,
-  START_FORMAT_LABEL, type StartFormat,
+  START_FORMAT_LABEL, type StartFormat, teeSheetInUse,
 } from '@/lib/eventHub'
 import {
   type EventPermissions, describePermissions, permissionsFor,
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
+import Toggle from '@/app/components/Toggle'
 import { ChoiceChips, FIELD, FIELD_LABEL, ListGroup, ListRow, SectionHeader, buttonClass, cardClass, iconButtonClass } from '@/app/components/ui'
 import {
   MIN_TEE_INTERVAL_MINS, MAX_TEE_INTERVAL_MINS,
@@ -24,7 +25,9 @@ import GolfIrelandRequests, { type LinkRequest } from './GolfIrelandRequests'
  * What the organiser can actually do, once past the PIN.
  *
  * Notices: post to the Event Hub's Notices section, newest first, and take
- * one down again. Starts: per round, shotgun (one time for the field — the
+ * one down again. Home screen: which modules the field's home screen
+ * carries — notices and tee times follow what is set below, stats is a
+ * switch of its own (lib/eventHub.ts `activeHubModules`). Starts: per round, shotgun (one time for the field — the
  * time is written to the round's itinerary item, where the countdown, the
  * weather and the schedule already read it) or tee sheet (the choice is
  * stored now; the sheet itself, groups and times, is still to come).
@@ -62,7 +65,7 @@ type Overview = {
 export default function OrganiserClient({
   tripId, tripCode, initialNotices, initialRounds, formatSummary, isLeague,
   initialPermissions, overview, tagsSummary, dayFormatSummary, golfIreland, accessCard, knockout = false, drawSummary = null,
-  series = false,
+  series = false, initialTrackStats = false,
 }: {
   tripId: string
   tripCode: string
@@ -89,6 +92,8 @@ export default function OrganiserClient({
   golfIreland?: { rulesLine: string; connected: boolean; links: LinkRequest[] } | null
   /** A series league — asked the series-only permissions too (`permissionsFor`). */
   series?: boolean
+  /** `trips.track_stats` — whether the event records stats, and so shows them. */
+  initialTrackStats?: boolean
 }) {
   const permRegistry = permissionsFor(series, knockout)
 
@@ -114,6 +119,28 @@ export default function OrganiserClient({
       setPermsError(/column|schema cache/i.test(error.message ?? '')
         ? 'Could not save — a database update may not have been applied yet.'
         : 'Could not save the change — try again')
+    }
+  }
+
+  // ── Home screen: stats ───────────────────────────────────────
+  // The one module that is a switch rather than a consequence. It is the
+  // same `track_stats` Trip Settings carries — recording putts and fairways
+  // is what gives the module anything to show — saved the same optimistic
+  // way as everything here.
+  const [trackStats, setTrackStats] = useState(initialTrackStats)
+  const [statsError, setStatsError] = useState<string | null>(null)
+
+  async function saveTrackStats(next: boolean) {
+    const prev = trackStats
+    setTrackStats(next)
+    setStatsError(null)
+    const { error } = await supabase
+      .from('trips')
+      .update({ track_stats: next })
+      .eq('id', tripId)
+    if (error) {
+      setTrackStats(prev)
+      setStatsError('Could not save — try again')
     }
   }
 
@@ -310,6 +337,39 @@ export default function OrganiserClient({
         </section>
 
         {accessCard}
+
+        {/* ── The home screen ──
+            What the field's home screen carries beyond the schedule and the
+            field. Each module is there only while it is on — the hub never
+            draws an empty one. Notices and tee times follow from this page
+            (a notice up, a round on a tee sheet), so they say where they
+            stand; stats is the one the organiser adds. */}
+        <section className="mb-10">
+          <h2 className="t-h2 text-ink mb-1">Home screen</h2>
+          <p className="text-ink/65 text-[13px] mb-3 leading-snug">
+            Each shows on the home screen only while it&apos;s on.
+          </p>
+          <ListGroup>
+            <ListRow
+              label="Notices"
+              hint="On while a notice is up — post one below."
+              value={notices.length > 0 ? 'On' : 'Off'}
+            />
+            <ListRow
+              label="Tee times"
+              hint="On while a round starts from a tee sheet — choose it in Starts."
+              value={teeSheetInUse(rounds.map(r => r.startFormat)) ? 'On' : 'Off'}
+            />
+            <ListRow
+              label="Stats"
+              hint="The scorecard asks for putts and fairways, and each player sees their stats."
+              trailing={<Toggle checked={trackStats} onChange={saveTrackStats} label="Stats on the home screen" />}
+            />
+          </ListGroup>
+          {statsError && (
+            <p className="text-rust-deep text-sm mt-3 leading-snug">{statsError}</p>
+          )}
+        </section>
 
         {/* ── Post a notice ── */}
         <section>
