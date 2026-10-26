@@ -487,7 +487,7 @@ export default function MatchCardClient({
           keyboard opening for the score box covers it rather than pushing
           it up over the boxes. */}
       {inBrowser && createPortal(
-        <div className="fixed inset-x-0 z-30 paper border-t border-line bottom-[calc(64px+env(safe-area-inset-bottom))] print:hidden">
+        <div className="hide-with-keyboard fixed inset-x-0 z-30 paper border-t border-line bottom-[calc(64px+env(safe-area-inset-bottom))] print:hidden">
           <div className="max-w-lg mx-auto px-4 py-2 flex gap-3">
             <button
               type="button"

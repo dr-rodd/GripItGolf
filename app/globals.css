@@ -942,3 +942,7 @@ input[type="date"] {
   background-color: rgba(10, 157, 86, 0.2);
   color: var(--color-ink);
 }
+
+/* A phone's keyboard is up: the bars fixed to the bottom step aside rather
+   than ride up over the box being typed in (app/components/KeyboardWatch.tsx). */
+html.keyboard-open .hide-with-keyboard { display: none; }

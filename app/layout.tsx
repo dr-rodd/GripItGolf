@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import StaleBuildGuard from "./components/StaleBuildGuard";
+import KeyboardWatch from "./components/KeyboardWatch";
 import { Archivo, Schibsted_Grotesk } from "next/font/google";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import { STYLE_BOOT_SCRIPT } from "@/lib/styleLab";
@@ -133,6 +134,7 @@ export default function RootLayout({
         {/* A page left open across a deploy reloads onto the new version
             rather than showing the bare error (lib/staleBuild.ts). */}
         <StaleBuildGuard />
+        <KeyboardWatch />
         {children}
       </body>
     </html>
