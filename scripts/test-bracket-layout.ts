@@ -11,6 +11,7 @@
 import {
   columnGeometry, tileTop, tileCenter, columnX, columnHeight,
   connectorPath, roundHeaderLabel, clampPosition, easeOut, centringShift,
+  swipeAxis, releaseTarget, settleMs, focalY, dragRange, SWIPE_SLOP, SWIPE_COMMIT, FLICK_SPEED,
 } from '../lib/bracketLayout'
 import { bracketShape, generateBracket } from '../lib/matchplay'
 
@@ -301,6 +302,81 @@ section('Easing')
     if (easeOut(i / 50) < easeOut((i - 1) / 50)) monotonic = false
   }
   ok(monotonic, 'never goes backwards')
+}
+
+// The component's own pitch and tile — the swipe cases below are phone-sized.
+const PITCH = 98
+
+section('One axis per gesture')
+{
+  eq(swipeAxis(3, 4), 'pending', 'a few pixels decide nothing')
+  eq(swipeAxis(SWIPE_SLOP - 1, 0), 'pending', '  …up to the slop')
+  eq(swipeAxis(-12, 3), 'x', 'mostly sideways is the bracket\'s')
+  eq(swipeAxis(4, 20), 'y', 'mostly up or down is the page\'s')
+  eq(swipeAxis(6, -30), 'y', '  …however much it wanders sideways on the way')
+  eq(swipeAxis(10, 10), 'y', 'a dead diagonal is the page\'s, as the browser reads pan-y')
+}
+
+section('A release lands on a round, by distance or by speed')
+{
+  const at = (from: number, position: number, velocity = 0, roundCount = 6) =>
+    releaseTarget({ from, position, velocity, roundCount })
+
+  eq(at(0, 0.1), 0, 'a nudge settles back')
+  eq(at(0, SWIPE_COMMIT + 0.01), 1, 'past the commit line, on to the next round')
+  eq(at(0, SWIPE_COMMIT - 0.01), 0, '  …and short of it, back')
+  eq(at(2, 1.7), 1, 'the same going back a round')
+  eq(at(2, 1.9), 2, '  …and a nudge back settles where it was')
+  eq(at(1, 1.05), 1, 'a drag that just reaches a round stays on it')
+  eq(at(0, 1, FLICK_SPEED * 2), 1, 'a long fast sweep is still one round — the player\'s next match, not the one after')
+  eq(at(2, 1, -FLICK_SPEED * 2), 1, '  …and the same going back')
+  eq(dragRange(2, 6), [1, 3], 'a drag reaches one round either side')
+  eq(dragRange(0, 6), [0, 1], '  …and never off the ends')
+  eq(dragRange(1.6, 6), [1, 3], '  …around the round a caught settle was nearest')
+  eq(at(0, 0.05, FLICK_SPEED), 1, 'a flick goes on however short')
+  eq(at(3, 2.95, -FLICK_SPEED), 2, 'a flick back goes back')
+  eq(at(0, 0.6, -FLICK_SPEED), 0, 'a flick the other way at the end wins over the distance')
+  eq(at(1.5, 1.6, 0), 2, 'a settle caught mid-flight goes on the way the finger took it')
+  eq(at(0, 0.3, 0, 1), 0, 'a one-round bracket goes nowhere')
+  eq(at(5, 5, FLICK_SPEED), 5, 'nor past the Final')
+  eq(at(0, 0, -FLICK_SPEED), 0, 'nor before the first round')
+
+  eq(settleMs(1, 340), 340, 'a whole round takes the full time')
+  eq(settleMs(3, 340), 340, '  …and so does a jump of several — never over the ceiling')
+  ok(settleMs(0.3, 340) < 340, 'what is left of a dragged round takes less')
+  ok(settleMs(0.01, 340) >= 150, '  …but never so little it reads as a jump')
+}
+
+section('The bracket closes in on what you are looking at')
+{
+  // Every tile, in every round, at every position, follows the one scaling —
+  // which is what lets one held point keep a player in view through a swipe.
+  let follows = true
+  for (const r of [0, 1, 2, 3, 4]) {
+    for (let j = 0; j < 16; j++) {
+      for (const [p0, p1] of [[0, 1], [1, 0], [0, 2.5], [1.3, 3], [2, 0.4]]) {
+        const before = tileTop(j, r - p0, PITCH)
+        const after = tileTop(j, r - p1, PITCH)
+        if (Math.abs(focalY(before, p0, p1, PITCH) - after) > 1e-6) follows = false
+      }
+    }
+  }
+  ok(follows, 'every tile follows focalY, so the held point tracks the tiles exactly')
+  eq(focalY(300, 1, 1, PITCH), 300, 'not moving moves nothing')
+
+  // The case Ross met: the foot of a 32-player draw, a finger on a match near
+  // the bottom, a swipe to that player's next round. Held under the finger,
+  // their next match lands under it too.
+  const TILE = 76
+  const j = 13                               // the lower of a pair, near the foot
+  const finger = tileTop(j, 0, PITCH) + TILE / 2
+  const next = Math.floor(j / 2)
+  const landed = focalY(finger, 0, 1, PITCH)
+  const nextTop = tileTop(next, 0, PITCH)
+  ok(landed >= nextTop && landed <= nextTop + TILE,
+    'the point under the finger lands inside that player\'s next match')
+  ok(tileTop(next, 0, PITCH) < finger - 500,
+    '  …which, drawn from the top, would have flown a long way up the screen')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

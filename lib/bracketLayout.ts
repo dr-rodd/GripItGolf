@@ -147,3 +147,109 @@ export function easeOut(t: number): number {
   const c = Math.min(Math.max(t, 0), 1)
   return 1 - Math.pow(1 - c, 3)
 }
+
+// ─── Swiping ───────────────────────────────────────────────────
+//
+// The gesture, decided here so it can be checked without a finger. Three
+// rules, each the fix for something the first version got wrong:
+//
+//   · **One axis per gesture.** A finger moving up the page is scrolling it,
+//     and a few pixels of sideways wobble on the way must not move the
+//     bracket — nor, on release, flick it a whole round. The direction is
+//     settled once, over the first few pixels, and the gesture is that
+//     direction until the finger lifts (`swipeAxis`). The 45° line is the
+//     browser's own for `touch-action: pan-y`, so the two always agree on
+//     whose gesture it is.
+//   · **A swipe is one round, at most** (`dragRange`, `releaseTarget`),
+//     landed by distance or by speed — someone swiping to see their
+//     player's next match wants that match, not the one after it, however
+//     long their thumb's sweep across the screen.
+//   · **The bracket closes in on what you are looking at** (`focalY`).
+//     Every column is one tree drawn at a scale of 2^-position, so moving a
+//     round on halves it; anchored at the top, the half a phone was scrolled
+//     to at the bottom of a big draw flew up off the screen. The point under
+//     the finger is held still instead, and the page scrolls to keep it so.
+
+/** Pixels a finger travels before the gesture's direction is decided. */
+export const SWIPE_SLOP = 8
+
+/** How much of a round a drag must cover to carry on to the next. */
+export const SWIPE_COMMIT = 0.22
+
+/** px per ms. Faster than this, a release goes on whatever the distance. */
+export const FLICK_SPEED = 0.45
+
+/**
+ * Whose gesture this is, from how far the finger has moved: still deciding,
+ * the bracket's (sideways) or the page's (up and down).
+ */
+export function swipeAxis(dx: number, dy: number, slop = SWIPE_SLOP): 'pending' | 'x' | 'y' {
+  const ax = Math.abs(dx)
+  const ay = Math.abs(dy)
+  if (Math.max(ax, ay) < slop) return 'pending'
+  return ax > ay ? 'x' : 'y'
+}
+
+/**
+ * How far one drag may carry the bracket: a round either side of the round
+ * it started on — the nearest, when it caught a settle mid-flight.
+ */
+export function dragRange(from: number, roundCount: number): [number, number] {
+  const base = Math.round(from)
+  return [clampPosition(base - 1, roundCount), clampPosition(base + 1, roundCount)]
+}
+
+/**
+ * Where a released drag settles, as a round index.
+ *
+ * `velocity` is the finger's speed at the release in px per ms, positive
+ * towards later rounds (the finger moving left). A flick goes to the next
+ * round in its direction from wherever the bracket stands. Otherwise the
+ * drag settles on the nearest round, nudged in the direction it travelled
+ * so that `SWIPE_COMMIT` of a round is enough to carry it on.
+ */
+export function releaseTarget(o: {
+  /** Where the drag started (may be mid-animation). */
+  from: number
+  /** Where the bracket stands now. */
+  position: number
+  velocity: number
+  roundCount: number
+}): number {
+  const eps = 1e-6
+  let target: number
+  if (Math.abs(o.velocity) >= FLICK_SPEED) {
+    target = o.velocity > 0
+      ? Math.floor(o.position + eps) + 1
+      : Math.ceil(o.position - eps) - 1
+  } else {
+    const travelled = o.position - o.from
+    target = Math.round(o.position + Math.sign(travelled) * (0.5 - SWIPE_COMMIT))
+  }
+  const [lo, hi] = dragRange(o.from, o.roundCount)
+  return Math.min(hi, Math.max(lo, target))
+}
+
+/**
+ * How long the bracket takes to settle `distance` rounds: the full swipe
+ * time for a round or more, less for the last part of one a finger has
+ * already done most of — never so little it reads as a jump.
+ */
+export function settleMs(distance: number, fullMs: number): number {
+  const d = Math.abs(distance)
+  return Math.round(fullMs * Math.min(1, Math.max(0.45, d)))
+}
+
+/**
+ * Where a point in the bracket, `y` down the view at one position, sits at
+ * another.
+ *
+ * A tile's top is b·2^(r−P)·(j + ½) − b/2 for round r, index j at position
+ * P, which is (j + ½)·2^r — a fixed place in the tree — scaled by 2^−P about
+ * the line b/2 above the view. So every point moves the same way whatever
+ * column it is in, and this is that one scaling, read from one position to
+ * another.
+ */
+export function focalY(y: number, from: number, to: number, basePitch: number): number {
+  return (y + basePitch / 2) * Math.pow(2, from - to) - basePitch / 2
+}

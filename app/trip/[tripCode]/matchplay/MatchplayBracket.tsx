@@ -1,10 +1,11 @@
 'use client'
 
 import { sideColours, sideTint, type SideColour } from '@/lib/matchSides'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   tileTop, tileCenter, columnX, columnHeight,
   connectorPath, roundHeaderLabel, clampPosition, easeOut, centringShift,
+  swipeAxis, releaseTarget, settleMs, focalY, dragRange,
 } from '@/lib/bracketLayout'
 import { isDecidable, pressOutcome } from '@/lib/matchplayProgress'
 import { type MatchReading, pendingResults } from '@/lib/matchResults'
@@ -170,10 +171,44 @@ export default function MatchplayBracket({
   // halfway through a swipe. Every coordinate on screen derives from it, which
   // is what keeps the connectors welded to the tiles while it moves.
   const [position, setPosition] = useState(0)
+  // The same number, for a gesture or an animation frame to read without
+  // waiting on a render. Handlers holding a render's copy of `position` is
+  // how a drag could take hold from somewhere the bracket no longer was.
+  const posRef = useRef(0)
+  const setPos = useCallback((p: number) => { posRef.current = p; setPosition(p) }, [])
   const [width, setWidth] = useState(360)
   const containerRef = useRef<HTMLDivElement>(null)
   const animRef = useRef<number | null>(null)
-  const dragRef = useRef<{ x: number; from: number; active: boolean } | null>(null)
+
+  /**
+   * One finger, from touching down until it lifts. `axis` is decided once,
+   * over the first few pixels (lib/bracketLayout.ts `swipeAxis`): sideways
+   * is the bracket's, up and down is the page's and the bracket keeps out
+   * of it — the version before this moved the bracket by however far a
+   * scrolling thumb wandered sideways, and flicked it a round on release.
+   */
+  const gestureRef = useRef<{
+    id: number
+    x: number
+    y: number
+    axis: 'pending' | 'x' | 'y'
+    /** Where the bracket stood, and the finger was, when the drag took hold. */
+    from: number
+    startX: number
+    /** The last moments of travel, for the speed at release. */
+    samples: { t: number; x: number }[]
+  } | null>(null)
+
+  /**
+   * The point held still while the bracket moves: its height on screen, and
+   * where it sat in the bracket at position `p0`. Moving a round on halves
+   * the bracket's height (lib/bracketLayout.ts `focalY`), and drawn from the
+   * top that dragged whatever a phone was scrolled to at the foot of a big
+   * draw up and off the screen. Held here instead — the finger's height for
+   * a swipe, the middle of the bracket's visible part for an arrow or a dot
+   * — and the page scrolls to keep it there.
+   */
+  const focalRef = useRef<{ screenY: number; y0: number; p0: number } | null>(null)
 
   useEffect(() => {
     const el = containerRef.current
@@ -187,45 +222,121 @@ export default function MatchplayBracket({
 
   useEffect(() => () => { if (animRef.current) cancelAnimationFrame(animRef.current) }, [])
 
+  // After every move, before the frame is painted: scroll the page by
+  // however far the held point has drifted. The container's own top is read
+  // fresh, so a heading that changed height with the round is allowed for.
+  useLayoutEffect(() => {
+    const f = focalRef.current
+    const el = containerRef.current
+    if (!f || !el) return
+    const drift = el.getBoundingClientRect().top + focalY(f.y0, f.p0, position, PITCH) - f.screenY
+    if (Math.abs(drift) >= 0.5) window.scrollBy({ top: drift, behavior: 'instant' as ScrollBehavior })
+  }, [position])
+
   const stride = Math.max(TILE_W + MIN_GAP, width - TILE_W)
 
-  const animateTo = useCallback((target: number) => {
-    if (animRef.current) cancelAnimationFrame(animRef.current)
-    const from = position
+  const stopAnimation = () => {
+    if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null }
+  }
+
+  /** Hold the bracket point at this height on screen while it moves. */
+  const holdFocal = (screenY: number) => {
+    const el = containerRef.current
+    if (!el) return
+    const top = el.getBoundingClientRect().top
+    focalRef.current = { screenY, y0: screenY - top, p0: posRef.current }
+  }
+
+  /** For the arrows, dots and dates, which have no finger on the bracket. */
+  const holdVisibleMiddle = () => {
+    const el = containerRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const top = Math.max(r.top, 0)
+    const bottom = Math.min(r.bottom, window.innerHeight)
+    holdFocal(bottom > top
+      ? (top + bottom) / 2
+      : Math.min(Math.max(window.innerHeight / 2, r.top), r.bottom))
+  }
+
+  const animateTo = (target: number) => {
+    stopAnimation()
+    const from = posRef.current
     const to = clampPosition(target, rounds.length)
-    if (Math.abs(to - from) < 0.001) { setPosition(to); return }
+    if (Math.abs(to - from) < 0.001) { setPos(to); return }
+    // Reduce Motion: straight there. The drag still follows the finger —
+    // that is the gesture, not an animation.
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { setPos(to); return }
+    const duration = settleMs(to - from, SWIPE_MS)
     const started = performance.now()
     const step = (now: number) => {
-      const t = Math.min(1, (now - started) / SWIPE_MS)
-      setPosition(from + (to - from) * easeOut(t))
-      if (t < 1) animRef.current = requestAnimationFrame(step)
-      else animRef.current = null
+      const t = Math.min(1, (now - started) / duration)
+      setPos(from + (to - from) * easeOut(t))
+      animRef.current = t < 1 ? requestAnimationFrame(step) : null
     }
     animRef.current = requestAnimationFrame(step)
-  }, [position, rounds.length])
-
-  // ── Dragging ────────────────────────────────────────────────
-
-  const onDragStart = (x: number) => {
-    if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null }
-    dragRef.current = { x, from: position, active: true }
   }
-  const onDragMove = (x: number) => {
-    const d = dragRef.current
-    if (!d?.active) return
-    // Dragging left (negative delta) advances to later rounds
-    setPosition(clampPosition(d.from - (x - d.x) / stride, rounds.length))
-  }
-  const onDragEnd = (x: number) => {
-    const d = dragRef.current
-    dragRef.current = null
-    if (!d?.active) return
-    const moved = (d.x - x) / stride
-    // A decisive flick counts even if it did not travel far
-    const target = Math.abs(moved) > 0.22
-      ? d.from + Math.sign(moved)
-      : Math.round(position)
+
+  /** An arrow, a dot or a date: the visible middle held, then the move. */
+  const goTo = (target: number) => {
+    holdVisibleMiddle()
     animateTo(target)
+  }
+
+  // ── Swiping ─────────────────────────────────────────────────
+  // Pointer events, one handler for touch and mouse alike — the touch and
+  // mouse pairs before them both fired for one tap on a phone, and the
+  // second could stop a settle half way.
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    gestureRef.current = {
+      id: e.pointerId, x: e.clientX, y: e.clientY, axis: 'pending',
+      from: posRef.current, startX: e.clientX, samples: [],
+    }
+  }
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const g = gestureRef.current
+    if (!g || g.id !== e.pointerId || g.axis === 'y') return
+    if (g.axis === 'pending') {
+      g.axis = swipeAxis(e.clientX - g.x, e.clientY - g.y)
+      if (g.axis !== 'x') return
+      // The bracket's. Take hold from here, so the few pixels spent
+      // deciding do not arrive as a jump, and catch a settle mid-flight.
+      stopAnimation()
+      g.from = posRef.current
+      g.startX = e.clientX
+      holdFocal(e.clientY)
+      // A touch stays with the element it began on by itself; a mouse
+      // has to be asked, or the drag ends the moment it leaves the box.
+      if (e.pointerType === 'mouse') e.currentTarget.setPointerCapture?.(e.pointerId)
+    }
+    g.samples.push({ t: e.timeStamp, x: e.clientX })
+    if (g.samples.length > 8) g.samples.shift()
+    // Dragging left advances to later rounds — one round either way at most.
+    const [lo, hi] = dragRange(g.from, rounds.length)
+    setPos(Math.min(hi, Math.max(lo, g.from - (e.clientX - g.startX) / stride)))
+  }
+
+  const endGesture = (e: React.PointerEvent, cancelled: boolean) => {
+    const g = gestureRef.current
+    if (!g || g.id !== e.pointerId) return
+    gestureRef.current = null
+    if (g.axis !== 'x') return
+    // The finger's speed over its last tenth of a second, positive towards
+    // later rounds. A cancelled gesture had no release to measure.
+    let velocity = 0
+    if (!cancelled) {
+      const recent = [...g.samples, { t: e.timeStamp, x: e.clientX }]
+        .filter(p => e.timeStamp - p.t <= 100)
+      const a = recent[0]
+      const b = recent[recent.length - 1]
+      if (a && b && b.t > a.t) velocity = -(b.x - a.x) / (b.t - a.t)
+    }
+    animateTo(releaseTarget({
+      from: g.from, position: posRef.current, velocity, roundCount: rounds.length,
+    }))
   }
 
   if (rounds.length === 0) return null
@@ -315,7 +426,7 @@ export default function MatchplayBracket({
               <button
                 key={i}
                 type="button"
-                onClick={() => animateTo(i)}
+                onClick={() => goTo(i)}
                 aria-pressed={i === leftIndex}
                 className={`px-3 py-1.5 rounded-full border text-[13px] leading-tight text-left transition-colors ${
                   i === leftIndex ? 'border-accent-deep bg-accent-tint text-ink' : 'border-line text-ink/80'
@@ -332,7 +443,7 @@ export default function MatchplayBracket({
       {/* Round header — updates as you swipe */}
       <div className="flex items-center justify-between gap-3 mb-4">
         <button
-          onClick={() => animateTo(leftIndex - 1)}
+          onClick={() => goTo(leftIndex - 1)}
           disabled={atStart}
           aria-label="Previous round"
           className={`w-11 h-11 flex-shrink-0 flex items-center justify-center text-ink/80 disabled:opacity-25 enabled:hover:text-ink enabled:hover:border-line-strong enabled:hover:bg-surface transition-colors ${cardClass()}`}
@@ -363,7 +474,7 @@ export default function MatchplayBracket({
         </div>
 
         <button
-          onClick={() => animateTo(leftIndex + 1)}
+          onClick={() => goTo(leftIndex + 1)}
           disabled={atEnd}
           aria-label="Next round"
           className={`w-11 h-11 flex-shrink-0 flex items-center justify-center text-ink/80 disabled:opacity-25 enabled:hover:text-ink enabled:hover:border-line-strong enabled:hover:bg-surface transition-colors ${cardClass()}`}
@@ -374,18 +485,17 @@ export default function MatchplayBracket({
         </button>
       </div>
 
-      {/* The bracket itself */}
+      {/* The bracket itself. `touch-pan-y` leaves up and down to the
+          browser, which scrolls the page; sideways is ours. The tiles
+          inside must not narrow that — see MatchTile. */}
       <div
         ref={containerRef}
         className="relative overflow-hidden touch-pan-y"
-        style={{ height: viewHeight }}
-        onTouchStart={e => onDragStart(e.touches[0].clientX)}
-        onTouchMove={e => onDragMove(e.touches[0].clientX)}
-        onTouchEnd={e => onDragEnd(e.changedTouches[0].clientX)}
-        onMouseDown={e => onDragStart(e.clientX)}
-        onMouseMove={e => dragRef.current?.active && onDragMove(e.clientX)}
-        onMouseUp={e => onDragEnd(e.clientX)}
-        onMouseLeave={e => dragRef.current?.active && onDragEnd(e.clientX)}
+        style={{ height: viewHeight, WebkitTouchCallout: 'none' }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={e => endGesture(e, false)}
+        onPointerCancel={e => endGesture(e, true)}
       >
         {/* Connectors sit behind the tiles, drawn from the same numbers */}
         <svg
@@ -430,7 +540,7 @@ export default function MatchplayBracket({
         {rounds.map((_, i) => (
           <button
             key={i}
-            onClick={() => animateTo(i)}
+            onClick={() => goTo(i)}
             aria-label={`Go to ${roundNames[i]}`}
             className={`h-1 rounded-full transition-all ${
               i === leftIndex ? 'w-6 bg-accent' : 'w-1.5 bg-bark/[0.08] hover:bg-bark/25'
@@ -554,6 +664,15 @@ function MatchTile({
   // springs it back out when the hold completes, so the gesture confirms itself
   // without needing a message.
   const [feedback, setFeedback] = useState<'idle' | 'holding' | 'popped'>('idle')
+  /**
+   * A press that opened the sheet. On a phone the browser follows a tap with
+   * a click of its own at the same spot, after the finger lifts — by which
+   * time the sheet is open and the spot is its backdrop, which closed it
+   * again before anyone saw it (or one of its buttons, which would record a
+   * result nobody chose). `touchend` comes after `pointerup` and is the one
+   * event that can cancel that click, so it is swallowed there.
+   */
+  const swallowClick = useRef(false)
 
   const clearTimer = () => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null }
@@ -571,6 +690,7 @@ function MatchTile({
   const handlers = interactive ? {
     onPointerDown: (e: React.PointerEvent) => {
       press.current = { x: e.clientX, y: e.clientY, at: Date.now(), moved: false, fired: false }
+      swallowClick.current = false
       clearTimer()
       setFeedback('holding')
       // Holding reopens a finished match. Only a decided one can be corrected.
@@ -578,6 +698,7 @@ function MatchTile({
         timer.current = setTimeout(() => {
           if (press.current && !press.current.moved) {
             press.current.fired = true
+            swallowClick.current = true
             pop()
             onOpen(true)
           }
@@ -608,8 +729,14 @@ function MatchTile({
         heldMs: Date.now() - p.at,
         longPressMs: LONG_PRESS_MS,
       })
+      if (outcome === 'decide' || outcome === 'correct') swallowClick.current = true
       if (outcome === 'decide') onOpen(false)
       else if (outcome === 'correct') onOpen(true)
+    },
+    onTouchEnd: (e: React.TouchEvent) => {
+      if (!swallowClick.current) return
+      swallowClick.current = false
+      e.preventDefault()
     },
     onPointerCancel: () => { press.current = null; clearTimer(); setFeedback('idle') },
     onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
@@ -633,7 +760,13 @@ function MatchTile({
         // wrapper and a fixed height would put it outside the tap target it
         // belongs to. The box below still holds the tile's own height.
         opacity: faded ? 0.25 : 1,
-        touchAction: 'none',
+        // pan-y, the bracket's own, and never `none`: a tile is most of the
+        // bracket's area, and `none` here meant a thumb landing on one could
+        // not scroll the page at all — the swipe the bracket then took for
+        // its own was the "caught between up and down" of the first version.
+        // A hold that starts to scroll is cancelled by the browser, which
+        // `onPointerCancel` already treats as letting go.
+        touchAction: 'pan-y',
       }}
     >
       <div
