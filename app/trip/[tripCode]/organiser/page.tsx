@@ -80,7 +80,7 @@ export default async function OrganiserPage({ params }: {
   const [
     noticesResult, roundsResult, itemsResult, setupResult,
     permsResult, playersResult, claimedResult, teeSettingsResult,
-    tagsResult, taggedResult,
+    tagsResult, taggedResult, scheduleResult,
   ] = await Promise.all([
     supabase
       .from('event_messages')
@@ -142,6 +142,14 @@ export default async function OrganiserPage({ params }: {
       .select('player_id', { count: 'exact', head: true })
       .eq('trip_id', trip.id)
       .eq('team_set', TAG_SET),
+    // Whether the home screen shows a Schedule: anything on the itinerary
+    // beyond the golf (lib/eventHub.ts `organiserSchedule`). A count in a
+    // header — the answer is yes or no.
+    supabase
+      .from('itinerary_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('trip_id', trip.id)
+      .neq('kind', 'golf'),
   ])
 
   if (noticesResult.error) console.error('OrganiserPage notices query failed:', noticesResult.error)
@@ -229,6 +237,7 @@ export default async function OrganiserPage({ params }: {
       }
       isLeague={!!leagueSetup}
       initialTrackStats={trip.track_stats === true}
+      scheduleShown={(scheduleResult.count ?? 0) > 0}
       series={leagueSetup?.schedule === 'series'}
       tagsSummary={describeTags(
         tagsResult.count ?? 0,

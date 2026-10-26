@@ -65,7 +65,7 @@ type Overview = {
 export default function OrganiserClient({
   tripId, tripCode, initialNotices, initialRounds, formatSummary, isLeague,
   initialPermissions, overview, tagsSummary, dayFormatSummary, golfIreland, accessCard, knockout = false, drawSummary = null,
-  series = false, initialTrackStats = false,
+  series = false, initialTrackStats = false, scheduleShown = false,
 }: {
   tripId: string
   tripCode: string
@@ -94,6 +94,8 @@ export default function OrganiserClient({
   series?: boolean
   /** `trips.track_stats` — whether the event records stats, and so shows them. */
   initialTrackStats?: boolean
+  /** Whether the itinerary holds anything beyond the golf — the home screen's Schedule. */
+  scheduleShown?: boolean
 }) {
   const permRegistry = permissionsFor(series, knockout)
 
@@ -359,6 +361,11 @@ export default function OrganiserClient({
               label="Tee times"
               hint="On while a round starts from a tee sheet — choose it in Starts."
               value={teeSheetInUse(rounds.map(r => r.startFormat)) ? 'On' : 'Off'}
+            />
+            <ListRow
+              label="Schedule"
+              hint="On once the itinerary has an activity, travel or a stay — add them in Trip Setup."
+              value={scheduleShown ? 'On' : 'Off'}
             />
             <ListRow
               label="Stats"

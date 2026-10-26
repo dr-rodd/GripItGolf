@@ -1114,10 +1114,23 @@ section('The hub is the sections it should be, and nothing else')
   const hubCode = code('app/trip/[tripCode]/page.tsx')
 
   ok(hub.includes('SectionStack'), 'the collapsible sections are one shared component')
-  // A trip opens on the itinerary; an event with notices posted opens on
-  // them — the organiser's line to the field is the hub's news.
-  ok(hub.includes("initial={isEvent && notices.length > 0 ? 'notices' : 'itinerary'}"),
-    'and the itinerary is the one open on arrival, unless an event has news')
+  // A trip opens on the itinerary; an event opens on its news, else its
+  // schedule, else its tee times — whichever of those it is showing.
+  ok(hub.includes('initial={openOnArrival}'), 'the section open on arrival is decided once')
+  ok(/const openOnArrival = !isEvent \? 'itinerary'/.test(hub),
+    '  …and a trip opens on the itinerary, as it always has')
+  ok(/modules\.includes\('notices'\) \? 'notices'\s*: modules\.includes\('schedule'\) \? 'itinerary'\s*: modules\.includes\('teeTimes'\) \? 'teetimes'/.test(hub),
+    '  …an event on its news, else its schedule, else its tee times')
+
+  // An event's Schedule is a module (Ross, 26 Oct 2026): there only once
+  // the organiser has added something beyond the golf. A trip's itinerary
+  // always shows.
+  ok(hub.includes("const showSchedule = !isEvent || modules.includes('schedule')"),
+    'a trip always shows its itinerary; an event only its organiser\'s schedule')
+  ok(hub.includes('organiserSchedule(itinerary.map(i => i.kind))'),
+    '  …decided by lib/eventHub.ts, off the itinerary\'s kinds')
+  ok(/\.\.\.\(showSchedule \? \[\{\s*key: 'itinerary'/.test(hub),
+    '  …and the section is drawn only then')
 
   for (const title of ['Itinerary', 'Travel & accommodation', 'Players']) {
     ok(hub.includes(`'${title}'`) || hub.includes(`"${title}"`), `there is a ${title} section`)
@@ -1148,7 +1161,7 @@ section('The hub is the sections it should be, and nothing else')
     '  …and on a card having actually recorded something')
   ok(hub.indexOf("key: 'itinerary'") < hub.indexOf("key: 'stats'"),
     'and it is added after the three sections that were always there')
-  ok(/initial=\{isEvent && notices\.length > 0 \? 'notices' : 'itinerary'\}/.test(hub),
+  ok(/const openOnArrival = !isEvent \? 'itinerary'/.test(hub),
     '  …so a trip still opens on the itinerary either way')
 
   // Nothing personal is fetched for a phone the trip does not recognise, and

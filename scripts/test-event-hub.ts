@@ -12,7 +12,7 @@ import fs from 'fs'
 import {
   isEvent, normalizeNotice, MAX_NOTICE,
   parseStartFormat, describeStart, START_FORMAT_LABEL,
-  activeHubModules, teeSheetInUse,
+  activeHubModules, teeSheetInUse, organiserSchedule,
 } from '../lib/eventHub'
 
 let passed = 0, failed = 0
@@ -106,14 +106,22 @@ section('Migration 046 carries the three changes')
 
 section('A module is on the home screen only while it is active')
 {
-  eq(activeHubModules({ noticeCount: 0, teeSheet: false, stats: false }), [],
-    'nothing on, nothing drawn — no empty headings')
-  eq(activeHubModules({ noticeCount: 2, teeSheet: true, stats: true }),
-    ['notices', 'teeTimes', 'stats'], 'all three, in the screen\'s order')
-  eq(activeHubModules({ noticeCount: 1, teeSheet: false, stats: false }), ['notices'],
-    'a notice up puts Notices on')
-  eq(activeHubModules({ noticeCount: 0, teeSheet: false, stats: true }), ['stats'],
-    'stats stand alone')
+  const none = { noticeCount: 0, teeSheet: false, schedule: false, stats: false }
+  eq(activeHubModules(none), [], 'nothing on, nothing drawn — no empty headings')
+  eq(activeHubModules({ noticeCount: 2, teeSheet: true, schedule: true, stats: true }),
+    ['notices', 'teeTimes', 'schedule', 'stats'], 'all four, in the screen\'s order')
+  eq(activeHubModules({ ...none, noticeCount: 1 }), ['notices'], 'a notice up puts Notices on')
+  eq(activeHubModules({ ...none, schedule: true }), ['schedule'], 'a schedule stands alone')
+  eq(activeHubModules({ ...none, stats: true }), ['stats'], 'and so do stats')
+
+  // The schedule is the organiser's once it holds anything beyond the
+  // rounds — creation makes the golf, the organiser adds the rest.
+  ok(!organiserSchedule(['golf', 'golf']), 'the rounds alone are no schedule')
+  ok(!organiserSchedule([]), 'nor is an empty itinerary')
+  for (const k of ['activity', 'travel', 'stay']) {
+    ok(organiserSchedule(['golf', k]), `an added ${k} makes one`)
+  }
+  ok(!organiserSchedule(['Activity', null, undefined]), 'junk does not')
 
   ok(teeSheetInUse(['shotgun', 'tee_sheet', null]), 'one round on a tee sheet is enough')
   ok(!teeSheetInUse(['shotgun', null, 'TEE_SHEET']), 'shotgun, unset or junk is not')

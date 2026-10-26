@@ -27,7 +27,7 @@ import { describeRange } from '@/lib/confirmationEmail'
 import { SectionStack } from '@/app/components/Section'
 import {
   isEvent as isEventKind, parseStartFormat, describeStart,
-  activeHubModules, teeSheetInUse,
+  activeHubModules, teeSheetInUse, organiserSchedule,
 } from '@/lib/eventHub'
 import { hubTeeRound, myTee, slotClock, parseInterval } from '@/lib/teeSheet'
 import { readAllRows } from '@/lib/allRows'
@@ -699,13 +699,25 @@ export default async function TripPage({ params, searchParams }: {
     : <PlayerSettings tripId={trip.id} playerId={me && isConfirmed(me) ? me.id : null} />
 
   // The home screen's modules, each there only while it is active
-  // (lib/eventHub.ts). A trip has no notices and no tee sheet, so for a
-  // trip this is Stats or nothing, on the gate it always had.
+  // (lib/eventHub.ts). A trip has no notices and no tee sheet, and its
+  // itinerary is not a module — it always shows — so for a trip this is
+  // Stats or nothing, on the gate it always had.
   const modules = activeHubModules({
     noticeCount: notices.length,
     teeSheet: !!teeRound,
+    schedule: isEvent && organiserSchedule(itinerary.map(i => i.kind)),
     stats: !!statsCover && statsCover.level !== 'none',
   })
+  const showSchedule = !isEvent || modules.includes('schedule')
+
+  // Which section is open on arrival. A trip opens on its itinerary, as it
+  // always has. An event opens on its news, else its schedule, else its
+  // tee times — the first of those it is showing, or none of them.
+  const openOnArrival = !isEvent ? 'itinerary'
+    : modules.includes('notices') ? 'notices'
+    : modules.includes('schedule') ? 'itinerary'
+    : modules.includes('teeTimes') ? 'teetimes'
+    : undefined
   const fieldNameOf = (id: string) => players.find(p => p.id === id)?.name ?? null
   const mineOnSheet = teeRound
     ? myTee(teeRows, me && isConfirmed(me) ? me.id : null, teeRound.startTime, teeRound.intervalMins, fieldNameOf)
@@ -843,7 +855,7 @@ export default async function TripPage({ params, searchParams }: {
             than as the start of something new. */}
         <div className="mt-6">
         <SectionStack
-          initial={isEvent && notices.length > 0 ? 'notices' : 'itinerary'}
+          initial={openOnArrival}
           sections={[
             /* Notices lead an event: the organiser's line to the field is
                the hub's news, and it opens first. A module — there only
@@ -872,17 +884,20 @@ export default async function TripPage({ params, searchParams }: {
                 claimed={!!me && isConfirmed(me)}
               />,
             }] : []),
-            {
+            /* "Itinerary" — it was "Your Itinerary", for the player
+               reading it rather than the leader filing it; the refresh
+               (plan 4.1) settled on the plain noun, with the progress
+               ("10 of 10 done") beside it saying whose trip it is. An
+               event's is the Schedule — a standalone day has no itinerary
+               in any sense a traveller would recognise — and a module:
+               there only once the organiser has added an activity, travel
+               or a stay. The rounds alone are already the Scoring tab's and
+               the Up next card's. A trip's always shows. */
+            ...(showSchedule ? [{
               key: 'itinerary',
-              /* "Itinerary" — it was "Your Itinerary", for the player
-                 reading it rather than the leader filing it; the refresh
-                 (plan 4.1) settled on the plain noun, with the progress
-                 ("10 of 10 done") beside it saying whose trip it is. An event's is the
-                 Schedule — a standalone day has no itinerary in any sense a
-                 traveller would recognise. */
               title: isEvent ? 'Schedule' : 'Itinerary',
               content: itinerarySection,
-            },
+            }] : []),
             /* A standalone event has no travel to speak of, so the heading
                only appears when somebody actually planned a stay or a
                journey — which a multi-day event still might. */
