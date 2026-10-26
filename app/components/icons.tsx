@@ -60,13 +60,18 @@ export const IconTrophy = (p: IconProps) => (
   </Svg>
 )
 
-/** A knockout draw: two pairs meeting, and the line on to the winner. */
+/**
+ * A knockout draw: two pairs meeting, and the line on to the winner. Drawn
+ * the full height the other tab icons use (3 to 21) — at 14 units tall it
+ * read squashed beside them — with the winner's line short, so the draw is
+ * centred rather than trailing off to the right (Ross, 26 Oct 2026).
+ */
 export const IconBracket = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M3 5h5v6h-5" />
-    <path d="M3 13h5v6h-5" />
-    <path d="M8 8h4v8h-4" />
-    <path d="M12 12h9" />
+    <path d="M5 3h5v7h-5" />
+    <path d="M5 14h5v7h-5" />
+    <path d="M10 6.5h4v11h-4" />
+    <path d="M14 12h5" />
   </Svg>
 )
 

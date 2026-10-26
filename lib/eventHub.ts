@@ -87,8 +87,8 @@ export function describeStart(
 
 // ─── The home screen's modules ─────────────────────────────────
 //
-// Three things on an event's home screen only exist some of the time: the
-// organiser's notices, the tee times and the stats. Each is a module,
+// Four things on an event's home screen only exist some of the time: the
+// organiser's notices, the tee times, the schedule and the stats. Each is a module,
 // shown while it is active and simply absent while it is not — no heading
 // with "nothing yet" under it, which is clutter a reader has to open to
 // find empty (Ross, 26 Oct 2026). They used to be tabs, or a section that
@@ -97,19 +97,36 @@ export function describeStart(
 // What switches each one on is a decision the organiser already makes:
 //   notices    a notice is up
 //   teeTimes   a round starts from a tee sheet (the Starts card)
+//   schedule   the organiser has put something on it beyond the golf — an
+//              activity, travel or a stay (Ross, 26 Oct 2026). The rounds
+//              alone are no schedule anybody wrote: creation makes them,
+//              and the Scoring tab and the Up next card already carry them
 //   stats      the event records stats (`trips.track_stats`) and a card
 //              has recorded some — the organiser area's Home screen card
 //              is where the event adds it
 //
 // The order is the screen's: notices first, they are the news; then the
-// tee times; stats at the foot, after the schedule and the field.
+// tee times and the schedule; stats at the foot, after the field.
+//
+// A trip is none of this: its itinerary is the lead player's own and always
+// shows, and it has no notices or tee sheet. Only stats reach a trip's hub
+// through here, on the gate they always had.
 
-export type HubModule = 'notices' | 'teeTimes' | 'stats'
+export type HubModule = 'notices' | 'teeTimes' | 'schedule' | 'stats'
 
 export const HUB_MODULE_LABEL: Record<HubModule, string> = {
   notices: 'Notices',
   teeTimes: 'Tee times',
+  schedule: 'Schedule',
   stats: 'Stats',
+}
+
+/**
+ * Whether the organiser has written a schedule: anything on the itinerary
+ * that is not golf. Golf items are the rounds, which creation makes.
+ */
+export function organiserSchedule(kinds: readonly unknown[]): boolean {
+  return kinds.some(k => k === 'activity' || k === 'travel' || k === 'stay')
 }
 
 /** Whether any round starts from a tee sheet — what puts Tee times on the home screen. */
@@ -118,16 +135,19 @@ export function teeSheetInUse(startFormats: readonly unknown[]): boolean {
 }
 
 /** The modules an event's home screen shows, in the order it shows them. */
-export function activeHubModules({ noticeCount, teeSheet, stats }: {
+export function activeHubModules({ noticeCount, teeSheet, schedule, stats }: {
   noticeCount: number
   /** `teeSheetInUse` over the rounds. */
   teeSheet: boolean
+  /** `organiserSchedule` over the itinerary's kinds. */
+  schedule: boolean
   /** Stats switched on, and something recorded to show. */
   stats: boolean
 }): HubModule[] {
   const out: HubModule[] = []
   if (noticeCount > 0) out.push('notices')
   if (teeSheet) out.push('teeTimes')
+  if (schedule) out.push('schedule')
   if (stats) out.push('stats')
   return out
 }
