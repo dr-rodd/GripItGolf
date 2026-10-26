@@ -29,7 +29,8 @@ import {
   isEvent as isEventKind, parseStartFormat, describeStart,
   activeHubModules, teeSheetInUse,
 } from '@/lib/eventHub'
-import { hubTeeRound, myTee, slotClock, parseInterval } from '@/lib/teeSheet'
+import { hubTeeRound, myTee, roundSheet, sheetClock } from '@/lib/teeSheet'
+import { readSheetSettings, type StoredSheet } from './teesheet/sheets'
 import { readAllRows } from '@/lib/allRows'
 import NoticesPanel, { type Notice } from './NoticesPanel'
 import TeeTimesPanel from './TeeTimesPanel'
@@ -240,12 +241,12 @@ export default async function TripPage({ params, searchParams }: {
     // The tee times module's two reads — events only, in the same breath
     // rather than after the rounds say whether a tee sheet is in play, so
     // the module costs this screen no hop. Both fail soft, as on the sheet:
-    // pre-050 the columns and the table do not exist, the interval reads
-    // at its default and nobody is on any sheet. Read whole for the same
-    // reason the sheet reads whole (lib/allRows.ts).
+    // before the migrations each round's sheet reads as vacant and nobody
+    // is on one. The assignments are read whole for the same reason the
+    // sheet reads them whole (lib/allRows.ts).
     isEvent
-      ? supabase.from('rounds').select('id, tee_interval_mins').eq('trip_id', trip.id)
-      : Promise.resolve({ data: [], error: null }),
+      ? readSheetSettings(trip.id)
+      : Promise.resolve(new Map<string, StoredSheet>()),
     isEvent
       ? readAllRows<{ round_id: string; player_id: string; slot_index: number }>(
           () => supabase
@@ -336,10 +337,6 @@ export default async function TripPage({ params, searchParams }: {
   // (lib/teeSheet.ts `hubTeeRound`). Who this phone is comes later, so the
   // place on the sheet is worked out once `me` is known.
   const teeSheet = isEvent && teeSheetInUse(rounds.map(r => r.start_format))
-  const teeIntervals = new Map(
-    ((teeSettingsResult.data ?? []) as { id: string; tee_interval_mins?: unknown }[])
-      .map(r => [r.id, parseInterval(r.tee_interval_mins)]),
-  )
   const teeRound = teeSheet ? hubTeeRound(
     rounds
       .filter(r => parseStartFormat(r.start_format) === 'tee_sheet')
@@ -349,7 +346,6 @@ export default async function TripPage({ params, searchParams }: {
         date: r.scheduled_date,
         courseName: courseMap[r.course_id] ?? null,
         startTime: r.itinerary_item_id ? teeTimeByItem.get(r.itinerary_item_id) ?? null : null,
-        intervalMins: teeIntervals.get(r.id) ?? parseInterval(null),
       })),
     todayString(new Date()),
   ) : null
@@ -357,6 +353,16 @@ export default async function TripPage({ params, searchParams }: {
     ? ((teeRowsResult.data ?? []) as { round_id: string; player_id: string; slot_index: number }[])
         .filter(a => a.round_id === teeRound.id)
     : []
+  // That round's sheet — a vacant one (no rules made yet) has nothing to
+  // say on the home screen, so the module waits for the wizard.
+  const teeStored = teeRound ? teeSettingsResult.get(teeRound.id) : undefined
+  const teeRoundSheet = teeRound ? roundSheet({
+    rules: teeStored?.rules,
+    startTime: teeRound.startTime,
+    intervalMins: teeStored?.intervalMins,
+    groupSize: teeStored?.groupSize,
+    hasAssignments: teeRows.length > 0,
+  }) : null
 
   // Grouped by the day they are played, so a two-round day reads as one day
   // with two courses rather than as two unrelated entries. Only reached by a
@@ -704,7 +710,7 @@ export default async function TripPage({ params, searchParams }: {
   // Stats or nothing, on the gate it always had.
   const modules = activeHubModules({
     noticeCount: notices.length,
-    teeSheet: !!teeRound,
+    teeSheet: !!teeRoundSheet && teeRoundSheet.state !== 'vacant',
     // Anything on it — the itinerary, or the rounds of an event made before
     // the itinerary existed. Only an empty one is left off.
     schedule: isEvent && (itinerary.length > 0 || days.length > 0),
@@ -721,10 +727,10 @@ export default async function TripPage({ params, searchParams }: {
     : modules.includes('teeTimes') ? 'teetimes'
     : undefined
   const fieldNameOf = (id: string) => players.find(p => p.id === id)?.name ?? null
-  const mineOnSheet = teeRound
-    ? myTee(teeRows, me && isConfirmed(me) ? me.id : null, teeRound.startTime, teeRound.intervalMins, fieldNameOf)
+  const mineOnSheet = teeRoundSheet
+    ? myTee(teeRows, me && isConfirmed(me) ? me.id : null, teeRoundSheet, fieldNameOf)
     : null
-  const firstTee = teeRound ? slotClock(teeRound.startTime, 0, teeRound.intervalMins) : null
+  const firstTee = teeRoundSheet ? sheetClock(teeRoundSheet, 0) : null
 
   const [koView, myDetails] = await Promise.all([knockoutView, myMatchDetails])
 

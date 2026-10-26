@@ -34,6 +34,7 @@ export type EventPermissionKey =
   | 'add_players'
   | 'edit_scores'
   | 'edit_tee_sheet'
+  | 'set_tee_sheets'
   | 'assign_tag'
   | 'add_rounds'
   | 'set_venues'
@@ -52,6 +53,12 @@ export const EVENT_PERMISSIONS: {
   seriesOnly?: true
   /** Only means anything on a match play event (`permissionsFor`). */
   knockoutOnly?: true
+  /**
+   * Asked as the event's tee times question rather than among the toggles
+   * (`TEE_SHEET_PERMISSIONS`; Ross, 26 Oct 2026) — two answers that only
+   * mean anything together with the sheets themselves.
+   */
+  teeSheet?: true
 }[] = [
   { key: 'add_courses', dflt: false,
     label: 'Participants can add new courses',
@@ -62,9 +69,18 @@ export const EVENT_PERMISSIONS: {
   { key: 'edit_scores', dflt: false,
     label: 'Participants can edit leaderboard entries',
     hint: 'Let players rework a finished scorecard; live scoring stays open either way.' },
-  { key: 'edit_tee_sheet', dflt: false,
-    label: 'Participants can edit the tee sheet',
-    hint: 'Let the field add and remove names on the sheet.' },
+  // Placing players: off, the organiser places everybody and the sheet is
+  // read-only to the rest; on, each claimed player picks their own time
+  // from what is free (lib/teeSheet.ts).
+  { key: 'edit_tee_sheet', dflt: false, teeSheet: true,
+    label: 'Players pick their own tee time',
+    hint: 'Each player chooses a free time on the sheet. Off, you place everyone and the sheet is read-only to the rest.' },
+  // Making the sheets: off, the wizard asks for the PIN; on, anyone with
+  // the code may make or change a round's sheet — a casual event nobody
+  // runs, with an Edit button on the Tee times tab.
+  { key: 'set_tee_sheets', dflt: false, teeSheet: true,
+    label: 'Anyone can make the tee sheets',
+    hint: 'For a casual event nobody runs: make or change a round\'s tee sheet without the PIN.' },
   // Joining a tag is a different verb from forming a team: a tag board's
   // `teamPick: 'self'` cousin lets the field CREATE teams on that board's
   // sheet, while this only lets a claimed player join one of the tags the
@@ -94,12 +110,17 @@ export const EVENT_PERMISSIONS: {
 /**
  * The permissions worth asking about on this event — every one, less those
  * that only mean something on a series, or on match play, when it is not
- * one. The creation toggles, the admin page and its summary line all read
- * this, so a permission is never offered where it would do nothing.
+ * one, and less the two the tee times question asks. The creation toggles,
+ * the admin page and its summary line all read this, so a permission is
+ * never offered where it would do nothing, nor twice.
  */
 export function permissionsFor(series: boolean, knockout = false): typeof EVENT_PERMISSIONS {
-  return EVENT_PERMISSIONS.filter(p => (series || !p.seriesOnly) && (knockout || !p.knockoutOnly))
+  return EVENT_PERMISSIONS.filter(p =>
+    (series || !p.seriesOnly) && (knockout || !p.knockoutOnly) && !p.teeSheet)
 }
+
+/** The tee times question's two answers, in the order they are asked. */
+export const TEE_SHEET_PERMISSIONS = EVENT_PERMISSIONS.filter(p => p.teeSheet)
 
 export type EventPermissions = Record<EventPermissionKey, boolean>
 

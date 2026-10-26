@@ -16,6 +16,9 @@ import {
   DEFAULT_GROUP_SIZE, MIN_GROUP_SIZE, MAX_GROUP_SIZE, MAX_SLOTS,
   parseInterval, parseGroupSize, slotClock, slotCount, groupSlot, bySlot,
   sheetStart, pickerUnits, unitMatches, hubTeeRound, myTee,
+  type TeeRules, MAX_BATCHES, clockMins, minsClock, batchLast, countToLast, teeClocks,
+  sheetLength, sheetCapacity, seatsShort, rulesIssue, parseTeeRules, describeRules,
+  roundSheet, sheetClock, sheetSlots, sheetGroupSize, draftRules,
 } from '../lib/teeSheet'
 import { TEE_INTERVAL_MINS } from '../lib/itinerary'
 import {
@@ -43,6 +46,79 @@ const section = (n: string) => console.log(`\n${n}`)
 const read = (p: string) => fs.readFileSync(p, 'utf-8')
 
 // ─── Settings and their bounds ─────────────────────────────────
+
+section('A sheet is batches of tee times (Ross, 26 Oct 2026)')
+{
+  eq([clockMins('08:05'), clockMins('8:05'), clockMins('24:00'), clockMins(null)], [485, null, null, null],
+    'a clock is HH:MM, nothing else')
+  eq(minsClock(485), '08:05', '  …and back')
+
+  const morning = { start: '08:00', interval: 10, count: 6 }
+  const afternoon = { start: '12:00', interval: 8, count: 3 }
+  const rules: TeeRules = { batches: [morning, afternoon], groupSize: 4 }
+  eq(batchLast(morning), '08:50', 'a batch\'s last tee time is its count of intervals on')
+  eq(teeClocks(rules), ['08:00', '08:10', '08:20', '08:30', '08:40', '08:50', '12:00', '12:08', '12:16'],
+    'the batches run straight through — slot 6 is the afternoon\'s first')
+  eq([sheetLength(rules), sheetCapacity(rules)], [9, 36], 'nine tee times in fours: room for 36')
+  eq([seatsShort(rules, 40), seatsShort(rules, 30)], [4, 0], 'a field of 40 leaves four without a time; 30 fit')
+
+  eq(countToLast('08:00', 10, '09:00'), 7, 'a last tee time on the interval is counted')
+  eq(countToLast('08:00', 10, '09:05'), 7, '  …one between intervals stops at the one before')
+  eq(countToLast('08:00', 10, '07:00'), null, '  …and one before the first is no answer')
+
+  eq(rulesIssue(rules), null, 'a morning and an afternoon wave are a valid sheet')
+  ok(/starts before/.test(rulesIssue({ batches: [morning, { ...afternoon, start: '08:30' }], groupSize: 4 }) ?? ''),
+    'a batch may not start before the last tee time of the one before')
+  ok(/midnight/.test(rulesIssue({ batches: [{ start: '23:00', interval: 10, count: 7 }], groupSize: 4 }) ?? ''),
+    'nor run past midnight')
+  ok(!!rulesIssue({ batches: [], groupSize: 4 }), 'no batches is no sheet')
+  ok(!!rulesIssue({ batches: [morning], groupSize: 5 }), 'a five-ball is not on this sheet')
+  ok(!!rulesIssue({ batches: [{ ...morning, interval: 3 }], groupSize: 4 }), 'three minutes apart is too tight')
+  ok(!!rulesIssue({ batches: Array.from({ length: MAX_BATCHES + 1 }, (_, i) => ({ start: minsClock(420 + i * 60), interval: 10, count: 1 })), groupSize: 4 }),
+    `at most ${MAX_BATCHES} batches`)
+  ok(!!rulesIssue({ batches: [{ start: '06:00', interval: 5, count: MAX_SLOTS + 1 }], groupSize: 2 }),
+    `at most ${MAX_SLOTS} tee times`)
+
+  eq(parseTeeRules(JSON.parse(JSON.stringify(rules))), rules, 'stored rules read back whole')
+  eq(parseTeeRules({ ...rules, groupSize: 9 }), null, 'invalid rules are no rules — the sheet reads vacant, never a guess')
+  eq([parseTeeRules(null), parseTeeRules('x'), parseTeeRules({ batches: 'x' })], [null, null, null], 'junk is nothing')
+
+  eq(describeRules(rules), '9 tee times, 8:00 am to 8:50 am and 12:00 pm to 12:16 pm, in fours',
+    'the rules in a line')
+  eq(describeRules({ batches: [morning], groupSize: 4, teamsPerTee: 2 }), '6 tee times, 8:00 am to 8:50 am, 2 teams a tee time',
+    '  …or in teams, where it was asked that way')
+}
+
+section('A round\'s sheet is vacant until the wizard has been through')
+{
+  const rules: TeeRules = { batches: [{ start: '09:00', interval: 10, count: 3 }], groupSize: 3 }
+  const base = { rules: null, startTime: '08:30', intervalMins: 12, groupSize: 2, hasAssignments: false }
+  eq(roundSheet(base), { state: 'vacant' }, 'no rules and nobody on it: vacant, offering the wizard')
+  eq(roundSheet({ ...base, rules }), { state: 'active', rules }, 'rules saved: live')
+  eq(roundSheet({ ...base, hasAssignments: true }),
+    { state: 'legacy', startTime: '08:30', intervalMins: 12, groupSize: 2 },
+    'a sheet made before the wizard, with names on it, keeps working as it was')
+
+  const active = roundSheet({ ...base, rules })
+  eq([sheetClock(active, 0), sheetClock(active, 2), sheetClock(active, 3)], ['9:00 am', '9:20 am', null],
+    'a live sheet\'s clock is its rules — and a slot past them has none')
+  eq([sheetSlots(active, 20, -1), sheetSlots(active, 20, 4)], [3, 5],
+    'its length is the rules, never fewer than the last slot somebody stands in')
+  eq(sheetGroupSize(active as Exclude<typeof active, { state: 'vacant' }>), 3, 'and its group size is theirs')
+  const legacy = roundSheet({ ...base, hasAssignments: true })
+  eq([sheetClock(legacy, 1), sheetSlots(legacy, 7, 0)], [slotClock('08:30', 1, 12), slotCount(7, 2, 0)],
+    'a legacy sheet reads exactly as it always did, spare slot and all')
+  eq([sheetClock({ state: 'vacant' }, 0), sheetSlots({ state: 'vacant' }, 20, 3)], [null, 0], 'a vacant one draws nothing')
+
+  eq(draftRules({ state: 'vacant' }, '07:45', 18),
+    { batches: [{ start: '07:45', interval: DEFAULT_TEE_INTERVAL_MINS, count: 5, ends: 'count' }], groupSize: 4 },
+    'the wizard opens on the round\'s start, ten minutes apart, long enough for the field in fours')
+  eq(draftRules({ state: 'vacant' }, null, 0).batches[0].start, '08:00', '  …eight o\'clock with no start, never nothing')
+  eq(draftRules(legacy, '08:30', 7),
+    { batches: [{ start: '08:30', interval: 12, count: 4, ends: 'count' }], groupSize: 2 },
+    'a legacy sheet opens as it stood')
+  eq(draftRules(active, '06:00', 50), rules, 'and a live one as saved')
+}
 
 section('The interval and the group size know their bounds')
 {
@@ -209,13 +285,14 @@ section('The home screen speaks for one round, from the reader\'s side')
     { player_id: 'a', slot_index: 2 }, { player_id: 'b', slot_index: 2 },
     { player_id: 'c', slot_index: 0 },
   ]
-  eq(myTee(rows, 'a', '09:00', 10, nameOf),
+  const old = (start: string | null) => ({ state: 'legacy' as const, startTime: start, intervalMins: 10, groupSize: 4 })
+  eq(myTee(rows, 'a', old('09:00'), nameOf),
     { slotIndex: 2, clock: slotClock('09:00', 2, 10), partners: ['Dave'] },
-    'your slot, its clock off slotClock, and who else is in it')
-  eq(myTee(rows, 'c', '09:00', 10, nameOf)?.partners, [], 'alone in a slot is nobody else')
-  eq(myTee(rows, 'z', '09:00', 10, nameOf), null, 'not on the sheet is null')
-  eq(myTee(rows, null, '09:00', 10, nameOf), null, 'and so is a phone that is nobody')
-  eq(myTee(rows, 'a', null, 10, nameOf)?.clock, null,
+    'your slot, its clock off the sheet\'s own, and who else is in it')
+  eq(myTee(rows, 'c', old('09:00'), nameOf)?.partners, [], 'alone in a slot is nobody else')
+  eq(myTee(rows, 'z', old('09:00'), nameOf), null, 'not on the sheet is null')
+  eq(myTee(rows, null, old('09:00'), nameOf), null, 'and so is a phone that is nobody')
+  eq(myTee(rows, 'a', old(null), nameOf)?.clock, null,
     'no start time is no clock — never an invented nine o\'clock')
 }
 

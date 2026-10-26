@@ -6,23 +6,41 @@
 // group-size bounds, the slot clock, how many slots a sheet shows, and how
 // a slot's players read when some of them are a team.
 //
-// What is stored where (migration 050):
-//   rounds.tee_interval_mins   minutes between groups; absent = 10, the
-//                              same ten minutes the golf span has always
-//                              assumed (lib/itinerary.ts TEE_INTERVAL_MINS)
-//   rounds.tee_group_size      players per slot, 2–4; absent = 4
+// **A round's sheet is made in its own wizard, and only then is it live**
+// (Ross, 26 Oct 2026; `/trip/[code]/teesheet/[roundId]/setup`). Until the
+// organiser has set its rules a tee-sheet round is a *vacant* slot: there
+// on the Tee times tab, offering the wizard, taking no names. The rules are
+// a list of **batches** — a first tee time, the minutes between, and how
+// many (given as a count or as the last tee time) — so a morning wave and
+// an afternoon wave are one sheet, its tee times numbered straight through.
+//
+// What is stored where:
+//   rounds.tee_sheet           the rules, `TeeRules` as jsonb (migration
+//                              064): the batches and the players per tee
+//                              time. Null = vacant.
+//   rounds.tee_interval_mins   minutes between groups (migration 050) —
+//   rounds.tee_group_size      players per slot — both written alongside
+//                              the rules from the first batch, and read
+//                              only for a sheet made before the wizard
 //   tee_assignments            one row per player per round: who stands in
 //                              which slot. The slots themselves are never
-//                              rows — a slot exists because the maths says
+//                              rows — a slot exists because the rules say
 //                              so, and an empty one is a vacancy, not data.
 //
-// The sheet's start time is the round's own — the golf item's tee_time,
-// where the countdown, the weather and the schedule already read it. No
-// second copy of the clock.
+// The first tee time is also written to the round's golf item, where the
+// countdown, the weather and the schedule already read the round's start.
 //
-// Editing is the organiser's, and — through the `edit_tee_sheet` event
-// permission — optionally the field's. Both are UI gates in the platform's
-// honest sense; the group-size cap is enforced by what the screen offers.
+// **A sheet made before the wizard keeps working** while it has names on
+// it (`roundSheet`'s legacy case): its old start, interval and group size,
+// with a spare slot at the foot as it always had. With nobody on it, it is
+// vacant like any other until the wizard has been through.
+//
+// Who may do what is two event permissions, both asked as the event's tee
+// times question (lib/eventPermissions.ts): `set_tee_sheets` — anyone may
+// run the wizard, a casual event nobody runs; off, it asks for the PIN —
+// and `edit_tee_sheet` — each player picks their own time from what is
+// free; off, the organiser places everybody and the sheet is read-only to
+// the rest. Both are UI gates in the platform's honest sense.
 //
 // Pure. No I/O.
 
@@ -230,6 +248,259 @@ export function sheetStart(
   return item?.teeTime ?? null
 }
 
+// ─── The sheet's rules (migration 064) ─────────────────────────
+
+/** One run of tee times at a steady interval. */
+export type TeeBatch = {
+  /** The first tee time, "08:00". */
+  start: string
+  /** Minutes between tee times. */
+  interval: number
+  /** How many tee times. */
+  count: number
+  /**
+   * How the length was given — a count, or a last tee time. Only so the
+   * wizard reopens the way it was answered; `count` is what counts.
+   */
+  ends?: 'count' | 'last'
+}
+
+export type TeeRules = {
+  /** In time order, none overlapping the one before. */
+  batches: TeeBatch[]
+  /** Players per tee time. */
+  groupSize: number
+  /**
+   * Asked as whole teams per tee time, where the round has a team board:
+   * how many. `groupSize` is then that many teams' players. Absent = asked
+   * as players.
+   */
+  teamsPerTee?: number
+}
+
+/** A sheet may be split this many ways — a morning and an afternoon wave, and room to spare. */
+export const MAX_BATCHES = 4
+
+const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/
+
+/** "08:05" → 485, or null for anything that is not a time. */
+export function clockMins(time: string | null | undefined): number | null {
+  const m = time ? HHMM.exec(time.slice(0, 5)) : null
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null
+}
+
+/** 485 → "08:05". */
+export function minsClock(mins: number): string {
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`
+}
+
+/** A batch's last tee time, "09:50". */
+export function batchLast(b: Pick<TeeBatch, 'start' | 'interval' | 'count'>): string {
+  return minsClock((clockMins(b.start) ?? 0) + Math.max(0, b.count - 1) * b.interval)
+}
+
+/**
+ * How many tee times run from the first to a last one — the last counted
+ * when it falls on the interval, the one before it when it does not. Null
+ * when the last is before the first.
+ */
+export function countToLast(start: string, interval: number, last: string): number | null {
+  const a = clockMins(start), b = clockMins(last)
+  if (a === null || b === null || b < a || interval <= 0) return null
+  return Math.floor((b - a) / interval) + 1
+}
+
+/** Every tee time on the sheet in order, "08:00", "08:10"… — slot i is the i-th. */
+export function teeClocks(rules: Pick<TeeRules, 'batches'>): string[] {
+  const out: string[] = []
+  for (const b of rules.batches) {
+    const start = clockMins(b.start)
+    if (start === null) continue
+    for (let i = 0; i < b.count; i++) out.push(minsClock(start + i * b.interval))
+  }
+  return out
+}
+
+/** How many tee times the rules make. */
+export function sheetLength(rules: Pick<TeeRules, 'batches'>): number {
+  return rules.batches.reduce((n, b) => n + Math.max(0, b.count), 0)
+}
+
+/** How many players the sheet has room for. */
+export function sheetCapacity(rules: Pick<TeeRules, 'batches' | 'groupSize'>): number {
+  return sheetLength(rules) * rules.groupSize
+}
+
+/** How many of the field will have no tee time — the wizard's reminder, never a refusal. */
+export function seatsShort(rules: Pick<TeeRules, 'batches' | 'groupSize'>, fieldSize: number): number {
+  return Math.max(0, fieldSize - sheetCapacity(rules))
+}
+
+/**
+ * Why these rules cannot be saved, in a sentence, or null. Batches must
+ * each be a real run of tee times inside the day, and each must start
+ * after the last tee time of the one before.
+ */
+export function rulesIssue(rules: TeeRules): string | null {
+  if (rules.batches.length === 0) return 'Add the first tee time.'
+  if (rules.batches.length > MAX_BATCHES) return `At most ${MAX_BATCHES} batches on one sheet.`
+  if (!Number.isInteger(rules.groupSize) || rules.groupSize < MIN_GROUP_SIZE || rules.groupSize > MAX_GROUP_SIZE) {
+    return `Between ${MIN_GROUP_SIZE} and ${MAX_GROUP_SIZE} players a tee time.`
+  }
+  let prevLast = -1
+  for (const [i, b] of rules.batches.entries()) {
+    const name = rules.batches.length > 1 ? `Batch ${i + 1}` : 'The sheet'
+    const start = clockMins(b.start)
+    if (start === null) return `${name} needs a first tee time.`
+    if (!Number.isInteger(b.interval) || b.interval < MIN_TEE_INTERVAL_MINS || b.interval > MAX_TEE_INTERVAL_MINS) {
+      return `${MIN_TEE_INTERVAL_MINS} to ${MAX_TEE_INTERVAL_MINS} minutes between tee times.`
+    }
+    if (!Number.isInteger(b.count) || b.count < 1) return `${name} needs at least one tee time.`
+    if (start + (b.count - 1) * b.interval >= 24 * 60) return `${name} runs past midnight.`
+    if (start <= prevLast) return `Batch ${i + 1} starts before batch ${i}'s last tee time.`
+    prevLast = start + (b.count - 1) * b.interval
+  }
+  if (sheetLength(rules) > MAX_SLOTS) return `At most ${MAX_SLOTS} tee times on one sheet.`
+  return null
+}
+
+/**
+ * The stored rules, whole and valid, or null. Nothing half-read: a sheet
+ * whose rules do not parse reads as vacant, never as a guess.
+ */
+export function parseTeeRules(raw: unknown): TeeRules | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const r = raw as Record<string, unknown>
+  if (!Array.isArray(r.batches)) return null
+  const batches: TeeBatch[] = []
+  for (const x of r.batches) {
+    if (!x || typeof x !== 'object') return null
+    const b = x as Record<string, unknown>
+    if (typeof b.start !== 'string') return null
+    batches.push({
+      start: b.start.slice(0, 5),
+      interval: Number(b.interval),
+      count: Number(b.count),
+      ...(b.ends === 'last' || b.ends === 'count' ? { ends: b.ends } : {}),
+    })
+  }
+  const rules: TeeRules = {
+    batches,
+    groupSize: Number(r.groupSize),
+    ...(Number.isInteger(r.teamsPerTee) && (r.teamsPerTee as number) > 0
+      ? { teamsPerTee: r.teamsPerTee as number } : {}),
+  }
+  return rulesIssue(rules) ? null : rules
+}
+
+const GROUP_WORD: Record<number, string> = { 2: 'twos', 3: 'threes', 4: 'fours' }
+
+/**
+ * The rules in a line — "12 tee times, 8:00 am to 9:50 am, in fours", a
+ * second batch joined with "and".
+ */
+export function describeRules(rules: TeeRules): string {
+  const n = sheetLength(rules)
+  const runs = rules.batches.map(b => b.count === 1
+    ? describeTime(b.start)
+    : `${describeTime(b.start)} to ${describeTime(batchLast(b))}`)
+  const per = rules.teamsPerTee
+    ? `${rules.teamsPerTee} team${rules.teamsPerTee === 1 ? '' : 's'} a tee time`
+    : `in ${GROUP_WORD[rules.groupSize] ?? `groups of ${rules.groupSize}`}`
+  return `${n} tee time${n === 1 ? '' : 's'}, ${runs.join(' and ')}, ${per}`
+}
+
+// ─── A round's sheet, whatever state it is in ──────────────────
+
+/**
+ * What one tee-sheet round has to show.
+ *
+ * `vacant` — no rules yet: a slot on the Tee times tab offering the wizard.
+ * `active` — the wizard's rules: these tee times and no others.
+ * `legacy` — made before the wizard, with names on it: its old start,
+ *            interval and group size, read the way they always were.
+ */
+export type RoundSheet =
+  | { state: 'vacant' }
+  | { state: 'active'; rules: TeeRules }
+  | { state: 'legacy'; startTime: string | null; intervalMins: number; groupSize: number }
+
+export function roundSheet(input: {
+  /** `rounds.tee_sheet` as read — fail-soft, so absent before 064. */
+  rules: unknown
+  /** The round's start, off its golf item. */
+  startTime: string | null
+  intervalMins: unknown
+  groupSize: unknown
+  /** Whether anybody is on this round's sheet. */
+  hasAssignments: boolean
+}): RoundSheet {
+  const rules = parseTeeRules(input.rules)
+  if (rules) return { state: 'active', rules }
+  if (input.hasAssignments) {
+    return {
+      state: 'legacy',
+      startTime: input.startTime,
+      intervalMins: parseInterval(input.intervalMins),
+      groupSize: parseGroupSize(input.groupSize),
+    }
+  }
+  return { state: 'vacant' }
+}
+
+/** Players per tee time on a live sheet. */
+export function sheetGroupSize(sheet: Exclude<RoundSheet, { state: 'vacant' }>): number {
+  return sheet.state === 'active' ? sheet.rules.groupSize : sheet.groupSize
+}
+
+/**
+ * When slot i goes off on this sheet — "9:40 am" — or null: a legacy sheet
+ * with no start yet, or a slot past the end of the rules (somebody left on
+ * a tee time the organiser has since taken away).
+ */
+export function sheetClock(sheet: RoundSheet, index: number): string | null {
+  if (sheet.state === 'vacant') return null
+  if (sheet.state === 'legacy') return slotClock(sheet.startTime, index, sheet.intervalMins)
+  const t = teeClocks(sheet.rules)[index]
+  return t ? describeTime(t) : null
+}
+
+/**
+ * How many slots the sheet draws. A live sheet is its rules — never fewer
+ * than the highest slot somebody stands in, because an assignment must
+ * always be visible on the sheet that holds it. A legacy sheet keeps its
+ * old length, a spare at the foot.
+ */
+export function sheetSlots(sheet: RoundSheet, rosterSize: number, maxAssignedIndex: number): number {
+  if (sheet.state === 'vacant') return 0
+  if (sheet.state === 'legacy') return slotCount(rosterSize, sheet.groupSize, maxAssignedIndex)
+  return Math.min(MAX_SLOTS, Math.max(sheetLength(sheet.rules), maxAssignedIndex + 1))
+}
+
+/**
+ * Where the wizard starts: the rules as they stand, a legacy sheet's old
+ * settings as one batch, or — for a vacant round — one batch from the
+ * round's start (or eight o'clock) at ten-minute gaps, long enough for the
+ * field in fours.
+ */
+export function draftRules(sheet: RoundSheet, startTime: string | null, fieldSize: number): TeeRules {
+  if (sheet.state === 'active') return sheet.rules
+  const start = clockMins(startTime) !== null ? startTime!.slice(0, 5) : '08:00'
+  if (sheet.state === 'legacy') {
+    return {
+      batches: [{ start, interval: sheet.intervalMins, count: slotCount(fieldSize, sheet.groupSize, -1) - 1, ends: 'count' }],
+      groupSize: sheet.groupSize,
+    }
+  }
+  return {
+    batches: [{
+      start, interval: DEFAULT_TEE_INTERVAL_MINS,
+      count: Math.max(1, Math.ceil(fieldSize / DEFAULT_GROUP_SIZE)), ends: 'count',
+    }],
+    groupSize: DEFAULT_GROUP_SIZE,
+  }
+}
+
 // ─── The home screen's tee times ───────────────────────────────
 //
 // The sheet's own screen is where a sheet is read and edited; the home
@@ -263,14 +534,13 @@ export type MyTee = {
 /**
  * Where a player stands on a round's sheet, or null when they are not on
  * it (or this phone is nobody). `rows` are that round's assignments as
- * fetched; `bySlot` cleans them, and the clock is `slotClock`'s, so the
+ * fetched; `bySlot` cleans them, and the clock is `sheetClock`'s, so the
  * home screen and the sheet cannot disagree about a time.
  */
 export function myTee(
   rows: unknown,
   playerId: string | null,
-  startTime: string | null | undefined,
-  intervalMins: number,
+  sheet: RoundSheet,
   nameOf: (id: string) => string | null,
 ): MyTee | null {
   if (!playerId) return null
@@ -278,7 +548,7 @@ export function myTee(
     if (!ids.includes(playerId)) continue
     return {
       slotIndex,
-      clock: slotClock(startTime, slotIndex, intervalMins),
+      clock: sheetClock(sheet, slotIndex),
       partners: ids.filter(id => id !== playerId)
         .map(nameOf)
         .filter((n): n is string => !!n),
