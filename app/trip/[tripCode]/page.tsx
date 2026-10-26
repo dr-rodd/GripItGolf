@@ -27,7 +27,7 @@ import { describeRange } from '@/lib/confirmationEmail'
 import { SectionStack } from '@/app/components/Section'
 import {
   isEvent as isEventKind, parseStartFormat, describeStart,
-  activeHubModules, teeSheetInUse,
+  activeHubModules, teeSheetInUse, eventFourthTab,
 } from '@/lib/eventHub'
 import { hubTeeRound, myTee, roundSheet, sheetClock } from '@/lib/teeSheet'
 import { readSheetSettings, type StoredSheet } from './teesheet/sheets'
@@ -337,6 +337,10 @@ export default async function TripPage({ params, searchParams }: {
   // (lib/teeSheet.ts `hubTeeRound`). Who this phone is comes later, so the
   // place on the sheet is worked out once `me` is known.
   const teeSheet = isEvent && teeSheetInUse(rounds.map(r => r.start_format))
+  // The bar's fourth tab (lib/eventHub.ts). Stats with a tab of their own
+  // are not on the home screen too — only when the tee times have it.
+  const fourthTab = isEvent ? eventFourthTab({ teeTimes: teeSheet, stats: trip.track_stats === true }) : null
+  const statsOnHome = !isEvent || fourthTab === 'teeTimes'
   const teeRound = teeSheet ? hubTeeRound(
     rounds
       .filter(r => parseStartFormat(r.start_format) === 'tee_sheet')
@@ -482,7 +486,9 @@ export default async function TripPage({ params, searchParams }: {
       // Only for a trip that asked for stats, and only alongside the standing
       // rather than after it — the two are the same nine queries twice, so
       // stacking them would double the wait rather than the load.
-      trip.track_stats === true
+      // An event whose stats have the tab does not draw them here, so
+      // does not pay for them either.
+      trip.track_stats === true && statsOnHome
         ? fetchTripStats(trip.id)
         : Promise.resolve(null),
     ])
@@ -714,7 +720,7 @@ export default async function TripPage({ params, searchParams }: {
     // Anything on it — the itinerary, or the rounds of an event made before
     // the itinerary existed. Only an empty one is left off.
     schedule: isEvent && (itinerary.length > 0 || days.length > 0),
-    stats: !!statsCover && statsCover.level !== 'none',
+    stats: statsOnHome && !!statsCover && statsCover.level !== 'none',
   })
   const showSchedule = !isEvent || modules.includes('schedule')
 

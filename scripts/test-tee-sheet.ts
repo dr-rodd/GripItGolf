@@ -323,15 +323,20 @@ section('The home screen speaks for one round, from the reader\'s side')
     'no start time is no clock — never an invented nine o\'clock')
 }
 
-section('The tee times are a home screen module, not a tab')
+section('The tee times are a tab, and your time is on the home screen too')
 {
+  // Ross, 26 Oct 2026: Tee times is the bar's fourth tab while a round
+  // starts from a tee sheet, and the home screen keeps your time as well.
   const bar = read('app/components/TabBar.tsx')
-  ok(!bar.includes('teesheet') && !bar.includes('Tee Sheet'),
-    'the bar no longer carries the tee sheet')
+  ok(bar.includes("label: 'Tee times'") && bar.includes('/teesheet`'),
+    'the bar carries Tee times, straight to the sheet')
+  ok(bar.includes("fourth === 'teeTimes' ? [TEE_TIMES_ITEM]"), '  …as the fourth tab, when it is the fourth tab')
 
   const hub = read('app/trip/[tripCode]/page.tsx')
   ok(hub.includes("modules.includes('teeTimes')"),
     'the hub draws the tee times while they are active')
+  ok(hub.includes("teeSheet: !!teeRoundSheet && teeRoundSheet.state !== 'vacant'"),
+    '  …which is while the round it speaks for has a live sheet — a vacant one says nothing there')
   ok(hub.includes('teeSheetInUse(rounds.map(r => r.start_format))'),
     '  …which is while a round starts from a tee sheet')
   ok(hub.includes('hubTeeRound(') && hub.includes('myTee('),
@@ -469,14 +474,19 @@ section('The organiser is never locked out of their own sheet')
   ok(page.includes('settings_passcode_hash'), 'with the hash the page already has')
 }
 
-section('The organiser tunes the sheet where the start is chosen')
+section('The organiser reaches the wizard where the start is chosen')
 {
   const client = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
-  ok(client.includes('saveTeeSetting'), 'interval and group size save as they move')
-  ok(/update\(\{[\s\S]{0,200}tee_interval_mins[\s\S]{0,200}\.eq\('trip_id', tripId\)/.test(client),
-    '  …scoped to the trip')
-  ok(client.includes('Minutes between groups'), 'the interval is asked in words')
-  ok(client.includes('Players per group'), 'so is the group size')
+  ok(client.includes('/teesheet/${round.id}/setup?from=organiser'),
+    'a tee-sheet round\'s card is the way into its wizard, and back')
+  ok(client.includes("round.teeState === 'vacant' ? 'Set up the tee times' : 'Change the tee times'"),
+    '  …set up while vacant, changed once live')
+  ok(!client.includes('saveTeeSetting') && !client.includes('Minutes between groups'),
+    'the times are the wizard\'s alone — no second set of controls here')
+  ok(client.includes('<TeeTimesAccess') && /set_tee_sheets: next\.anyoneMakes, edit_tee_sheet: next\.playersPick/.test(client),
+    'the tee times question is asked here, saved as its two permissions')
+  ok(/setStartError\('Could not save the start format — try again'\)\s*return\s*\}\s*router\.refresh\(\)/.test(client),
+    'a start format that lands refreshes the router, so the bar\'s fourth tab follows')
   ok(!client.includes('coming soon'), 'the tee sheet is no longer a promise')
 }
 

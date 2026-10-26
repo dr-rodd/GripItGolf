@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 import {
@@ -13,11 +14,8 @@ import {
 } from '@/lib/eventPermissions'
 import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import Toggle from '@/app/components/Toggle'
+import TeeTimesAccess from '@/app/components/TeeTimesAccess'
 import { ChoiceChips, FIELD, FIELD_LABEL, ListGroup, ListRow, SectionHeader, buttonClass, cardClass, iconButtonClass } from '@/app/components/ui'
-import {
-  MIN_TEE_INTERVAL_MINS, MAX_TEE_INTERVAL_MINS,
-  MIN_GROUP_SIZE, MAX_GROUP_SIZE,
-} from '@/lib/teeSheet'
 import { courseLabel } from '@/lib/courseDirectory'
 import GolfIrelandRequests, { type LinkRequest } from './GolfIrelandRequests'
 
@@ -25,12 +23,14 @@ import GolfIrelandRequests, { type LinkRequest } from './GolfIrelandRequests'
  * What the organiser can actually do, once past the PIN.
  *
  * Notices: post to the Event Hub's Notices section, newest first, and take
- * one down again. Home screen: which modules the field's home screen
- * carries — notices and tee times follow what is set below, stats is a
- * switch of its own (lib/eventHub.ts `activeHubModules`). Starts: per round, shotgun (one time for the field — the
- * time is written to the round's itinerary item, where the countdown, the
- * weather and the schedule already read it) or tee sheet (the choice is
- * stored now; the sheet itself, groups and times, is still to come).
+ * one down again. Home screen and tabs: what the field's home screen and
+ * bar carry — notices and tee times follow what is set below, stats is a
+ * switch of its own (lib/eventHub.ts `activeHubModules`, `eventFourthTab`).
+ * Starts: per round, shotgun (one time for the field — the time is written
+ * to the round's itinerary item, where the countdown, the weather and the
+ * schedule already read it) or tee sheet, whose times are made in the tee
+ * sheet wizard; and the tee times question's two answers, who makes the
+ * sheets and who places players.
  *
  * Writes go straight to Supabase with the anon key, like every trip-scoped
  * write on the platform — the PIN in front of this screen is a soft gate,
@@ -46,9 +46,10 @@ type RoundInfo = {
   itineraryItemId: string | null
   startFormat: string | null
   teeTime: string | null
-  /** The tee sheet's tuning, defaults filled (lib/teeSheet.ts). */
-  teeIntervalMins: number
-  teeGroupSize: number
+  /** Its tee sheet: not made yet, made in the wizard, or made before it (lib/teeSheet.ts). */
+  teeState: 'vacant' | 'active' | 'legacy'
+  /** The sheet in a line, or null while it is vacant. */
+  teeSummary: string | null
 }
 
 
@@ -96,6 +97,9 @@ export default function OrganiserClient({
   initialTrackStats?: boolean
 }) {
   const permRegistry = permissionsFor(series, knockout)
+  // A change to the stats or a round's start can change the bar's fourth
+  // tab, which the layout reads — so a landed save refreshes the router.
+  const router = useRouter()
 
   // ── Participant permissions ──────────────────────────────────
   // Saved the moment a toggle moves — optimistic, reverting on refusal,
@@ -120,6 +124,16 @@ export default function OrganiserClient({
         ? 'Could not save — a database update may not have been applied yet.'
         : 'Could not save the change — try again')
     }
+    return !error
+  }
+
+  // The tee times question's answers live in the same map; their own error
+  // line, so a refusal reads beside the question it refused.
+  const [teeAccessError, setTeeAccessError] = useState<string | null>(null)
+  async function saveTeeAccess(next: { anyoneMakes: boolean; playersPick: boolean }) {
+    setTeeAccessError(null)
+    const ok = await savePermissions({ ...perms, set_tee_sheets: next.anyoneMakes, edit_tee_sheet: next.playersPick })
+    if (!ok) { setPermsError(null); setTeeAccessError('Could not save the change — try again') }
   }
 
   // ── Home screen: stats ───────────────────────────────────────
@@ -141,7 +155,9 @@ export default function OrganiserClient({
     if (error) {
       setTrackStats(prev)
       setStatsError('Could not save — try again')
+      return
     }
+    router.refresh()
   }
 
   // ── Notices ──────────────────────────────────────────────────
@@ -211,37 +227,9 @@ export default function OrganiserClient({
     if (error) {
       patchRound(round.id, { startFormat: prev })
       setStartError('Could not save the start format — try again')
+      return
     }
-  }
-
-  /**
-   * The tee sheet's tuning, saved as it moves — interval and group size to
-   * the round's own columns (migration 050), the same optimistic manners
-   * as everything else on this screen.
-   */
-  async function saveTeeSetting(
-    round: RoundInfo,
-    patch: { teeIntervalMins?: number; teeGroupSize?: number },
-  ) {
-    const prev = { teeIntervalMins: round.teeIntervalMins, teeGroupSize: round.teeGroupSize }
-    patchRound(round.id, patch)
-    setStartError(null)
-
-    const { error } = await supabase
-      .from('rounds')
-      .update({
-        ...(patch.teeIntervalMins !== undefined ? { tee_interval_mins: patch.teeIntervalMins } : {}),
-        ...(patch.teeGroupSize !== undefined ? { tee_group_size: patch.teeGroupSize } : {}),
-      })
-      .eq('id', round.id)
-      .eq('trip_id', tripId)
-
-    if (error) {
-      patchRound(round.id, prev)
-      setStartError(/column|schema cache/i.test(error.message ?? '')
-        ? 'Could not save — a database update may not have been applied yet.'
-        : 'Could not save the tee sheet setting — try again')
-    }
+    router.refresh()
   }
 
   async function saveTime(round: RoundInfo, time: string) {
@@ -338,16 +326,16 @@ export default function OrganiserClient({
 
         {accessCard}
 
-        {/* ── The home screen ──
-            What the field's home screen carries beyond the schedule and the
-            field. Each module is there only while it is on — the hub never
-            draws an empty one. Notices and tee times follow from this page
-            (a notice up, a round on a tee sheet), so they say where they
-            stand; stats is the one the organiser adds. */}
+        {/* ── The home screen and tabs ──
+            What the field's home screen and bar carry beyond the schedule
+            and the field. Each is there only while it is on — the hub never
+            draws an empty module. Notices and tee times follow from this
+            page (a notice up, a round on a tee sheet), so they say where
+            they stand; stats is the one the organiser adds. */}
         <section className="mb-10">
-          <h2 className="t-h2 text-ink mb-1">Home screen</h2>
+          <h2 className="t-h2 text-ink mb-1">Home screen and tabs</h2>
           <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-            Each shows on the home screen only while it&apos;s on.
+            Each shows only while it&apos;s on.
           </p>
           <ListGroup>
             <ListRow
@@ -357,13 +345,13 @@ export default function OrganiserClient({
             />
             <ListRow
               label="Tee times"
-              hint="On while a round starts from a tee sheet — choose it in Starts."
+              hint="A tab of its own, and each player's time on the home screen, while a round starts from a tee sheet — choose it in Starts."
               value={teeSheetInUse(rounds.map(r => r.startFormat)) ? 'On' : 'Off'}
             />
             <ListRow
               label="Stats"
-              hint="The scorecard asks for putts and fairways, and each player sees their stats."
-              trailing={<Toggle checked={trackStats} onChange={saveTrackStats} label="Stats on the home screen" />}
+              hint="The scorecard asks for putts and fairways. A tab of its own — on the home screen instead while tee times have the tab."
+              trailing={<Toggle checked={trackStats} onChange={saveTrackStats} label="Stats" />}
             />
           </ListGroup>
           {statsError && (
@@ -467,67 +455,31 @@ export default function OrganiserClient({
                       </div>
                     )}
 
-                    {/* ── Tee sheet settings ──
-                        The sheet's tuning lives with the choice that makes
-                        it a tee-sheet morning. First group time: the same
-                        time control shotgun uses — one clock, on the
-                        round's itinerary item, where everything reads it. */}
+                    {/* ── The tee sheet ──
+                        Its times are the wizard's: here it says where the
+                        sheet stands and is the way in. Until it is made the
+                        round is an empty slot on the Tee times tab. */}
                     {chosen === 'tee_sheet' && (
-                      <div className="mt-3 space-y-3">
-                        {round.itineraryItemId && (
-                          <div>
-                            <label className={FIELD_LABEL}>
-                              First group
-                            </label>
-                            <input
-                              type="time"
-                              value={round.teeTime ?? ''}
-                              onChange={e => saveTime(round, e.target.value)}
-                              className={FIELD}
-                              style={{
-                                colorScheme: 'dark',
-                                WebkitAppearance: 'none',
-                                appearance: 'none',
-                                minWidth: 0,
-                                maxWidth: '100%',
-                              }}
-                            />
-                          </div>
-                        )}
-
-                        <div>
-                          <p className={FIELD_LABEL}>
-                            Minutes between groups
-                          </p>
-                          <ChoiceChips
-                            label="Minutes between groups"
-                            value={String(round.teeIntervalMins)}
-                            onChange={m => saveTeeSetting(round, { teeIntervalMins: Number(m) })}
-                            options={[5, 8, 10, 12, 15, 20].map(m => ({ value: String(m), label: m }))}
-                          />
-                        </div>
-
-                        <div>
-                          <p className={FIELD_LABEL}>
-                            Players per group
-                          </p>
-                          <ChoiceChips
-                            label="Players per group"
-                            value={String(round.teeGroupSize)}
-                            onChange={n => saveTeeSetting(round, { teeGroupSize: Number(n) })}
-                            options={Array.from(
-                              { length: MAX_GROUP_SIZE - MIN_GROUP_SIZE + 1 },
-                              (_, i) => MIN_GROUP_SIZE + i,
-                            ).map(n => ({ value: String(n), label: n }))}
-                          />
-                        </div>
-
+                      <div className="mt-3">
+                        <p className="t-cap text-ink/80 leading-snug">
+                          {round.teeSummary
+                            ? `${round.teeSummary}.`
+                            : 'Not set up yet — the round shows an empty slot on the Tee times tab until it is.'}
+                        </p>
                         <Link
-                          href={`/trip/${tripCode}/teesheet`}
-                          className="block t-cap text-accent-deep hover:text-accent transition-colors"
+                          href={`/trip/${tripCode}/teesheet/${round.id}/setup?from=organiser`}
+                          className={`${buttonClass('secondary')} mt-3`}
                         >
-                          Open the tee sheet →
+                          {round.teeState === 'vacant' ? 'Set up the tee times' : 'Change the tee times'}
                         </Link>
+                        {round.teeState !== 'vacant' && (
+                          <Link
+                            href={`/trip/${tripCode}/teesheet?round=${round.id}`}
+                            className="block mt-2 t-cap text-accent-deep hover:text-accent transition-colors"
+                          >
+                            Open the tee sheet →
+                          </Link>
+                        )}
                       </div>
                     )}
                   </li>
@@ -538,6 +490,21 @@ export default function OrganiserClient({
 
           {startError && (
             <p className="text-rust-deep text-sm mt-3 leading-snug">{startError}</p>
+          )}
+
+          {/* The tee times question — who makes the sheets, who places
+              players — once any round starts from one. */}
+          {teeSheetInUse(rounds.map(r => r.startFormat)) && (
+            <div className={`${cardClass()} p-4 mt-4`}>
+              <p className="t-label text-ink mb-3">Tee times</p>
+              <TeeTimesAccess
+                value={{ anyoneMakes: perms.set_tee_sheets, playersPick: perms.edit_tee_sheet }}
+                onChange={saveTeeAccess}
+              />
+              {teeAccessError && (
+                <p className="text-rust-deep text-sm mt-3 leading-snug">{teeAccessError}</p>
+              )}
+            </div>
           )}
         </section>
 

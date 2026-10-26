@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import { supabase } from '@/lib/supabase'
+import { teeSheetInUse } from '@/lib/eventHub'
 
 /**
  * The trip's kind, once per request — the one copy of this lookup.
@@ -53,4 +54,25 @@ export const fetchIsKnockout = cache(async (tripCode: string): Promise<boolean> 
     .maybeSingle()
   if (error) return false
   return (data as { format?: string | null } | null)?.format === 'match_play'
+})
+
+/**
+ * What the bar's fourth tab could be on an event (lib/eventHub.ts
+ * `eventFourthTab`): whether any round starts from a tee sheet, and whether
+ * the event records stats. One request, the rounds embedded — their start
+ * formats and nothing else — and fail-soft like the rest: a failed read is
+ * neither, and the bar is four.
+ */
+export const fetchTabExtras = cache(async (tripCode: string): Promise<{ teeTimes: boolean; stats: boolean }> => {
+  const { data, error } = await supabase
+    .from('trips')
+    .select('track_stats, rounds(start_format)')
+    .eq('trip_code', tripCode)
+    .maybeSingle()
+  if (error || !data) return { teeTimes: false, stats: false }
+  const row = data as { track_stats?: boolean | null; rounds?: { start_format: string | null }[] | null }
+  return {
+    teeTimes: teeSheetInUse((row.rounds ?? []).map(r => r.start_format)),
+    stats: row.track_stats === true,
+  }
 })

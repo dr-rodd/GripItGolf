@@ -7,7 +7,9 @@ import { describeShortDate } from '@/lib/itinerary'
 import { parseLeagueSetup, describeLeagueSetup } from '@/lib/leagueSetup'
 import { parseEventPermissions } from '@/lib/eventPermissions'
 import { TAG_SET, describeTags } from '@/lib/tagBoards'
-import { parseInterval, parseGroupSize } from '@/lib/teeSheet'
+import { describeRules, roundSheet } from '@/lib/teeSheet'
+import { readAllRows } from '@/lib/allRows'
+import { readSheetSettings } from '../teesheet/sheets'
 import { parseLeaderboards } from '@/lib/leaderboards'
 import { describeRange } from '@/lib/confirmationEmail'
 import BackButton from '@/app/components/BackButton'
@@ -79,7 +81,7 @@ export default async function OrganiserPage({ params }: {
   // migration 047 loses the summary line and nothing else.
   const [
     noticesResult, roundsResult, itemsResult, setupResult,
-    permsResult, playersResult, claimedResult, teeSettingsResult,
+    permsResult, playersResult, claimedResult, teeSettingsResult, teeAssignmentsResult,
     tagsResult, taggedResult,
   ] = await Promise.all([
     supabase
@@ -123,12 +125,19 @@ export default async function OrganiserPage({ params }: {
       .eq('trip_id', trip.id)
       .eq('is_composite', false)
       .eq('claimed', true),
-    // The tee-sheet settings, fail-soft — pre-050 the columns do not exist
-    // and every round reads at its defaults.
-    supabase
-      .from('rounds')
-      .select('id, tee_interval_mins, tee_group_size')
-      .eq('trip_id', trip.id),
+    // Each round's tee sheet — its rules and the older settings, each
+    // fail-soft — and who is on one, which is what keeps a sheet made
+    // before the wizard live (lib/teeSheet.ts `roundSheet`). Read whole,
+    // as the sheet reads them (lib/allRows.ts).
+    readSheetSettings(trip.id),
+    readAllRows<{ round_id: string; player_id: string }>(
+      () => supabase
+        .from('tee_assignments')
+        .select('round_id, player_id', { count: 'exact' })
+        .eq('trip_id', trip.id)
+        .order('created_at').order('round_id').order('player_id'),
+      a => `${a.round_id}|${a.player_id}`,
+    ),
     // The Teams & tags card's numbers. A tag is a team on the main sheet
     // (lib/tagBoards.ts), so both are counts in headers against tables
     // that have existed since migration 023.
@@ -155,24 +164,33 @@ export default async function OrganiserPage({ params }: {
     start_format: string | null
     courses: { name: string } | { name: string }[] | null
   }
-  const teeSettings = new Map(
-    ((teeSettingsResult.data ?? []) as {
-      id: string; tee_interval_mins?: unknown; tee_group_size?: unknown
-    }[]).map(r => [r.id, r]),
+  const onSheets = new Set(
+    ((teeAssignmentsResult.data ?? []) as { round_id: string }[]).map(a => a.round_id),
   )
 
   const rounds = ((roundsResult.data ?? []) as unknown as RoundRow[]).map(r => {
     const course = Array.isArray(r.courses) ? r.courses[0] : r.courses
-    const tee = teeSettings.get(r.id)
+    const stored = teeSettingsResult.get(r.id)
+    const teeTime = r.itinerary_item_id ? teeTimes.get(r.itinerary_item_id) ?? null : null
+    const sheet = roundSheet({
+      rules: stored?.rules,
+      startTime: teeTime,
+      intervalMins: stored?.intervalMins,
+      groupSize: stored?.groupSize,
+      hasAssignments: onSheets.has(r.id),
+    })
     return {
       id: r.id,
       roundNumber: r.round_number,
       courseName: course?.name ?? null,
       itineraryItemId: r.itinerary_item_id,
       startFormat: r.start_format,
-      teeTime: r.itinerary_item_id ? teeTimes.get(r.itinerary_item_id) ?? null : null,
-      teeIntervalMins: parseInterval(tee?.tee_interval_mins),
-      teeGroupSize: parseGroupSize(tee?.tee_group_size),
+      teeTime,
+      teeState: sheet.state,
+      teeSummary: sheet.state === 'active' ? describeRules(sheet.rules)
+        : sheet.state === 'legacy'
+          ? `${sheet.intervalMins} minutes between groups, groups of up to ${sheet.groupSize}`
+          : null,
     }
   })
 

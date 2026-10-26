@@ -85,26 +85,47 @@ export function describeStart(
   return 'Tee sheet'
 }
 
+// ─── The bar's fourth tab ──────────────────────────────────────
+//
+// An event's bar is Home · Scoring · Leaderboard (or Bracket) · [one more]
+// · Settings — Home always bottom left, Settings always bottom right
+// (Ross, 26 Oct 2026). The one more is Tee times while any round starts
+// from a tee sheet, else Stats while the event records them, else nothing
+// and the bar is four. Both on, Tee times takes the tab and Stats goes
+// back to the home screen as a module.
+
+export type FourthTab = 'teeTimes' | 'stats'
+
+export function eventFourthTab({ teeTimes, stats }: {
+  /** `teeSheetInUse` over the rounds. */
+  teeTimes: boolean
+  /** `trips.track_stats`. */
+  stats: boolean
+}): FourthTab | null {
+  return teeTimes ? 'teeTimes' : stats ? 'stats' : null
+}
+
 // ─── The home screen's modules ─────────────────────────────────
 //
 // Four things on an event's home screen only exist some of the time: the
 // organiser's notices, the tee times, the schedule and the stats. Each is a module,
 // shown while it is active and simply absent while it is not — no heading
 // with "nothing yet" under it, which is clutter a reader has to open to
-// find empty (Ross, 26 Oct 2026). They used to be tabs, or a section that
-// was always there; the bar is Home, Scoring, Leaderboard and Settings now.
+// find empty (Ross, 26 Oct 2026).
 //
 // What switches each one on is a decision the organiser already makes:
 //   notices    a notice is up
-//   teeTimes   a round starts from a tee sheet (the Starts card)
+//   teeTimes   the round it speaks for has a live sheet — made in the
+//              wizard, so a vacant one says nothing here. A tab as well
+//              (Ross kept your time on the home screen too)
 //   schedule   anything is on it — golf, a stay, travel or an activity —
 //              and gone only while it is empty (Ross, 26 Oct 2026: a match
 //              play event whose players pick the course on the day had a
 //              Schedule heading with nothing under it). Self-evident, so
 //              there is nothing for the organiser to switch
-//   stats      the event records stats (`trips.track_stats`) and a card
-//              has recorded some — the organiser area's Home screen card
-//              is where the event adds it
+//   stats      the event records stats (`trips.track_stats`), a card has
+//              recorded some, and the tee times hold the bar's fourth tab
+//              (`eventFourthTab`) — otherwise stats are that tab instead
 //
 // The order is the screen's: notices first, they are the news; then the
 // tee times and the schedule; stats at the foot, after the field.
@@ -122,7 +143,7 @@ export const HUB_MODULE_LABEL: Record<HubModule, string> = {
   stats: 'Stats',
 }
 
-/** Whether any round starts from a tee sheet — what puts Tee times on the home screen. */
+/** Whether any round starts from a tee sheet — what puts Tee times on the bar. */
 export function teeSheetInUse(startFormats: readonly unknown[]): boolean {
   return startFormats.some(f => parseStartFormat(f) === 'tee_sheet')
 }
@@ -134,7 +155,7 @@ export function activeHubModules({ noticeCount, teeSheet, schedule, stats }: {
   teeSheet: boolean
   /** Anything on the schedule at all — golf included. */
   schedule: boolean
-  /** Stats switched on, and something recorded to show. */
+  /** Stats switched on, something recorded to show, and no tab of their own. */
   stats: boolean
 }): HubModule[] {
   const out: HubModule[] = []

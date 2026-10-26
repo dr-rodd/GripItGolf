@@ -4,8 +4,9 @@ import Link, { useLinkStatus } from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
-  IconHome, IconTrophy, IconClipboardList, IconSettings, IconChartBar, IconBracket,
+  IconHome, IconTrophy, IconClipboardList, IconSettings, IconChartBar, IconBracket, IconClock,
 } from './icons'
+import type { FourthTab } from '@/lib/eventHub'
 import { RUN_TABS, runActiveKey } from './runTabs'
 
 /**
@@ -28,12 +29,12 @@ import { RUN_TABS, runActiveKey } from './runTabs'
  * Dog called it: more trouble than it was worth. Five identical tabs, the
  * board in the middle because the middle is where the thumb rests.
  *
- * **An event has four** (Ross, 26 Oct 2026): Home, Scoring, Leaderboard and
- * Settings, Settings at the bottom right where a trip keeps Trip Setup.
- * The tee sheet and the stats were tabs of their own on an event; both are
- * home screen modules now, there only while the organiser has them on
- * (lib/eventHub.ts `activeHubModules`), and a tab for something that is off
- * most of the time was clutter.
+ * **An event has four, or five** (Ross, 26 Oct 2026): Home bottom left,
+ * then Scoring, then Leaderboard (or the Bracket), and Settings always
+ * bottom right, where a trip keeps Trip Setup. Between the last two sits
+ * Tee times while a round starts from a tee sheet, else Stats while the
+ * event records them, else nothing (lib/eventHub.ts `eventFourthTab`) —
+ * both on, Tee times has the tab and Stats goes back to the home screen.
  *
  * Rendered once, by `app/trip/[tripCode]/layout.tsx`, and never by a page.
  * That is what keeps it on screen through a navigation instead of unmounting
@@ -57,14 +58,17 @@ const ITEMS = [
 ] as const
 
 /**
- * An event's four. Settings is the player's own screen with the door to the
- * organiser area in it — never Trip Setup, which the field does not see on
- * an event — so the PIN asks at that door rather than in front of the tab.
+ * An event's Settings, always last. The player's own screen with the door
+ * to the organiser area in it — never Trip Setup, which the field does not
+ * see on an event — so the PIN asks at that door rather than in front of
+ * the tab.
  */
-const EVENT_ITEMS = [
-  ITEMS[0], ITEMS[1], ITEMS[2],
-  { key: 'settings',    label: 'Settings',    icon: IconSettings,      path: (t: string) => `/trip/${t}/settings` },
-] as const
+const EVENT_SETTINGS =
+  { key: 'settings',    label: 'Settings',    icon: IconSettings,      path: (t: string) => `/trip/${t}/settings` }
+
+/** An event's fourth tab, while a round starts from a tee sheet. */
+const TEE_TIMES_ITEM =
+  { key: 'teetimes',    label: 'Tee times',   icon: IconClock,         path: (t: string) => `/trip/${t}/teesheet` }
 
 /** A match play event's middle tab: the draw is its leaderboard. */
 const BRACKET_ITEM =
@@ -145,8 +149,10 @@ function Tab({
   )
 }
 
-export default function TabBar({ tripCode, isEvent = false, bracket = false, sport = 'golf' }: {
+export default function TabBar({ tripCode, isEvent = false, bracket = false, fourth = null, sport = 'golf' }: {
   tripCode: string
+  /** An event's tab between the leaderboard and Settings, or none (`eventFourthTab`). */
+  fourth?: FourthTab | null
   /**
    * A match play event: the middle tab is the Bracket, with its own mark,
    * straight to /matchplay (Ross, 26 Oct 2026) — the leaderboard there only
@@ -167,12 +173,15 @@ export default function TabBar({ tripCode, isEvent = false, bracket = false, spo
   const pathname = usePathname() ?? ''
   const base = `/trip/${tripCode}`
 
-  // An event has its four; a trip keeps its five. A run challenge has its
-  // own five.
+  // An event has its four or five; a trip keeps its five. A run challenge
+  // has its own five.
   const items: readonly { key: string; label: string; icon: typeof IconHome; path: (t: string) => string }[] =
     sport === 'run' ? RUN_TABS
-      : isEvent && bracket ? EVENT_ITEMS.map(i => i.key === 'leaderboard' ? BRACKET_ITEM : i)
-      : isEvent ? EVENT_ITEMS
+      : isEvent ? [
+          ITEMS[0], ITEMS[1], bracket ? BRACKET_ITEM : ITEMS[2],
+          ...(fourth === 'teeTimes' ? [TEE_TIMES_ITEM] : fourth === 'stats' ? [ITEMS[3]] : []),
+          EVENT_SETTINGS,
+        ]
       : ITEMS
 
   /**
@@ -189,9 +198,10 @@ export default function TabBar({ tripCode, isEvent = false, bracket = false, spo
     // trip, and the tab itself on a match play event.
     if (pathname.startsWith(`${base}/leaderboard`) || pathname.startsWith(`${base}/matchplay`)) return 'leaderboard'
     if (pathname.startsWith(`${base}/scoring`)) return 'scoring'
-    // An event's stats and tee sheet are reached from the home screen and
-    // light no tab, like the players list: there is no tab for them to light.
-    if (pathname.startsWith(`${base}/stats`)) return isEvent ? null : 'stats'
+    // An event's stats and tee times light their tab while they have one,
+    // and nothing otherwise, like the players list.
+    if (pathname.startsWith(`${base}/stats`)) return !isEvent || fourth === 'stats' ? 'stats' : null
+    if (pathname.startsWith(`${base}/teesheet`)) return isEvent && fourth === 'teeTimes' ? 'teetimes' : null
     if (pathname.startsWith(`${base}/setup`) || pathname.startsWith(`${base}/teams`)) return 'settings'
     // An event's Settings is the door to the organiser area, so the area
     // and everything behind it keep Settings lit.

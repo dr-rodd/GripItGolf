@@ -12,7 +12,7 @@ import fs from 'fs'
 import {
   isEvent, normalizeNotice, MAX_NOTICE,
   parseStartFormat, describeStart, START_FORMAT_LABEL,
-  activeHubModules, teeSheetInUse,
+  activeHubModules, teeSheetInUse, eventFourthTab,
 } from '../lib/eventHub'
 
 let passed = 0, failed = 0
@@ -187,22 +187,38 @@ section('The organiser area stands behind the one PIN')
 
 section('An event hides Trip Setup from the field')
 {
-  // An event's bar is four tabs — Home, Scoring, Leaderboard, Settings —
-  // with Settings at the bottom right, where a trip keeps Trip Setup. The
-  // tee sheet and the stats are home screen modules instead (Ross, 26 Oct
-  // 2026). Settings is the player's own screen, never Trip Setup.
+  // An event's bar is Home · Scoring · Leaderboard (or Bracket) · [Tee
+  // times or Stats] · Settings — Home always bottom left, Settings always
+  // bottom right, where a trip keeps Trip Setup (Ross, 26 Oct 2026).
+  // Settings is the player's own screen, never Trip Setup.
   const bar = read('app/components/TabBar.tsx')
-  const eventItems = bar.slice(bar.indexOf('const EVENT_ITEMS'), bar.indexOf('] as const', bar.indexOf('const EVENT_ITEMS')))
-  ok(eventItems.includes("label: 'Settings'") && eventItems.includes('/settings`'),
+  const settingsItem = bar.slice(bar.indexOf('const EVENT_SETTINGS'), bar.indexOf('\n\n', bar.indexOf('const EVENT_SETTINGS')))
+  ok(settingsItem.includes("label: 'Settings'") && settingsItem.includes('/settings`'),
     'an event\'s bar ends on Settings, its own screen')
+  const eventItems = bar.slice(bar.indexOf(': isEvent ? ['), bar.indexOf(']\n      : ITEMS'))
   ok(!eventItems.includes('/setup`') && !eventItems.includes('ITEMS[4]'),
     '  …never Trip Setup')
-  ok(!eventItems.includes('ITEMS[3]') && !bar.includes('teesheet'),
-    'and carries neither Stats nor the tee sheet')
-  ok(eventItems.lastIndexOf('settings') > eventItems.lastIndexOf('ITEMS[2]'),
-    'Settings is the rightmost tab')
-  ok(bar.includes("isEvent ? EVENT_ITEMS") && bar.includes(': ITEMS'),
-    'a trip keeps its five')
+  ok(/ITEMS\[0\], ITEMS\[1\], bracket \? BRACKET_ITEM : ITEMS\[2\],/.test(eventItems),
+    'Home bottom left, then Scoring, then the leaderboard or the bracket')
+  ok(eventItems.includes("fourth === 'teeTimes' ? [TEE_TIMES_ITEM] : fourth === 'stats' ? [ITEMS[3]] : []"),
+    '  …then Tee times, else Stats, else nothing')
+  ok(eventItems.trim().endsWith('EVENT_SETTINGS,'), 'Settings is the rightmost tab')
+  ok(/: isEvent \? \[[\s\S]*\]\s*: ITEMS/.test(bar), 'a trip keeps its five')
+  eq([
+    eventFourthTab({ teeTimes: true, stats: true }),
+    eventFourthTab({ teeTimes: true, stats: false }),
+    eventFourthTab({ teeTimes: false, stats: true }),
+    eventFourthTab({ teeTimes: false, stats: false }),
+  ], ['teeTimes', 'teeTimes', 'stats', null],
+    'tee times win the fourth tab when both are on; stats have it alone; neither, the bar is four')
+  const layout4 = read('app/trip/[tripCode]/layout.tsx')
+  ok(layout4.includes('fetchTabExtras(tripCode)') && layout4.includes('fourth={isEvent(kind) ? eventFourthTab(extras) : null}'),
+    'the layout reads it alongside the kind, events only')
+  const hub4 = read('app/trip/[tripCode]/page.tsx')
+  ok(hub4.includes("const statsOnHome = !isEvent || fourthTab === 'teeTimes'")
+     && hub4.includes('stats: statsOnHome && !!statsCover'),
+    'stats come back to the home screen only while the tee times hold the tab')
+  ok(hub4.includes('trip.track_stats === true && statsOnHome'), '  …and are not read when they will not be drawn')
   ok(bar.includes("items.length === 4 ? 'grid-cols-4' : 'grid-cols-5'"),
     'and the grid matches the count, so Settings sits at the right edge')
 

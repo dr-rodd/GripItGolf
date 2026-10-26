@@ -828,14 +828,13 @@ section('The bottom tab bar')
   // the emerald circle around it was tried and retired the same day (the
   // label had to go, then came back and dragged the alignment sideways).
   // Five identical tabs; position does the emphasising.
-  // A trip's five, then the one an event adds: an event is Home, Scoring,
-  // Leaderboard and Settings — four, with Settings at the right edge where
-  // a trip keeps Trip Setup (its tee sheet and stats are home screen
-  // modules now).
+  // A trip's five, then the ones an event adds: an event is Home, Scoring,
+  // Leaderboard, then Tee times or Stats while one is on, and Settings at
+  // the right edge where a trip keeps Trip Setup (Ross, 26 Oct 2026).
   eq(
     (src.match(/label: '([^']+)'/g) ?? []).map(s => s.replace(/label: '|'/g, '')),
-    ['Home', 'Scoring', 'Leaderboard', 'Stats', 'Trip Setup', 'Settings', 'Bracket'],
-    'a trip\'s five with the leaderboard centred, the Settings an event ends on, and a match play event\'s Bracket in the leaderboard\'s place',
+    ['Home', 'Scoring', 'Leaderboard', 'Stats', 'Trip Setup', 'Settings', 'Tee times', 'Bracket'],
+    'a trip\'s five with the leaderboard centred, the Settings an event ends on, its Tee times, and a match play event\'s Bracket in the leaderboard\'s place',
   )
   ok(src.includes('grid-cols-5') && src.includes('grid-cols-4'), 'the grid matches the count')
   ok(!/emphasis/.test(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')) && !/rounded-full/.test(src),

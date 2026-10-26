@@ -496,7 +496,7 @@ section('The public PIN: entry to the event, beside the admin PIN')
   const layout = read('app/trip/[tripCode]/layout.tsx')
   ok(/fetchEntryLock\(tripCode\)/.test(layout) && layout.includes('redirect(`/enter/${tripCode}`)'),
     'the trip layout sends a phone that has not entered to the door')
-  ok(/Promise\.all\(\[fetchTripKind\(tripCode\), fetchEntryLock\(tripCode\)/.test(layout),
+  ok(/Promise\.all\(\[\s*fetchTripKind\(tripCode\), fetchEntryLock\(tripCode\)/.test(layout),
     '  …asked alongside the kind, never after it')
   const kind = read('app/trip/[tripCode]/kind.ts')
   ok(kind.includes(".select('public_passcode_hash')") && /if \(error\) return null/.test(kind),
