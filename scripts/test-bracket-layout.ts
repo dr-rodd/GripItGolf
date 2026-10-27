@@ -11,9 +11,10 @@
 import {
   columnGeometry, tileTop, tileCenter, columnX, columnHeight,
   connectorPath, roundHeaderLabel, clampPosition, easeOut, centringShift,
-  swipeAxis, releaseTarget, settleMs, focalY, dragRange, SWIPE_SLOP, SWIPE_COMMIT, FLICK_SPEED,
+  swipeAxis, releaseTarget, settleMs, focalY, dragRange, heldLift, SWIPE_SLOP, SWIPE_COMMIT, FLICK_SPEED,
 } from '../lib/bracketLayout'
 import { bracketShape, generateBracket } from '../lib/matchplay'
+import { readFileSync } from 'fs'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -377,6 +378,95 @@ section('The bracket closes in on what you are looking at')
     'the point under the finger lands inside that player\'s next match')
   ok(tileTop(next, 0, PITCH) < finger - 500,
     '  …which, drawn from the top, would have flown a long way up the screen')
+}
+
+section('Held without scrolling the page while it moves')
+{
+  // Ross, 27 Oct 2026: the swipe juddered. The page was scrolled every frame
+  // to hold the point, and a page scrolled under a finger fights it. The
+  // bracket moves inside its own box now, and the page takes the lift over
+  // once, at rest. These walk a swipe frame by frame on a 32-player draw.
+  // The page: 300 above the box, 400 below it, a 844-high screen.
+  const TILE = 76, VH = 844, REST = 700, BOX = 300
+  const height = (p: number) => {
+    let h = TILE
+    for (let r = Math.max(0, Math.floor(p) - 1); r <= Math.min(4, Math.ceil(p) + 2); r++) {
+      h = Math.max(h, columnHeight(16 / 2 ** r, r - p, PITCH, TILE))
+    }
+    return h
+  }
+  // One swipe from p0 to p1 with the finger at `screenY` and the page at
+  // `scrollY`, never scrolled while it moves. What the eye sees each frame,
+  // and the page once the lift is handed over.
+  const swipe = (p0: number, p1: number, scrollY: number, screenY: number, rest = REST) => {
+    const y0 = screenY + scrollY - BOX
+    const frames: { screen: number; lift: number; pageHeight: number; gapOnScreen: boolean; cutOnScreen: boolean }[] = []
+    for (let i = 0; i <= 20; i++) {
+      const p = p0 + (p1 - p0) * i / 20
+      const lift = heldLift({
+        pointPageY: screenY + scrollY, boxTop: BOX, pointY: focalY(y0, p0, p, PITCH),
+        scrollY, height: height(p), restHeight: rest, viewportHeight: VH,
+      })
+      const boxOnScreen = BOX - scrollY
+      frames.push({
+        screen: boxOnScreen + lift + focalY(y0, p0, p, PITCH),
+        lift,
+        pageHeight: rest + Math.max(TILE, height(p) + lift),
+        gapOnScreen: lift > 0 && boxOnScreen + lift > 0.5,
+        cutOnScreen: lift < 0 && boxOnScreen > 0.5,
+      })
+    }
+    const end = frames[frames.length - 1]
+    return { frames, end, pageAfter: scrollY - end.lift, pageHeightAfter: rest + height(p1) }
+  }
+
+  // The case Ross met, deep in the draw: held exactly, every frame.
+  const deep = swipe(0, 1, 1000, 420)
+  ok(deep.frames.every(f => Math.abs(f.screen - 420) < 1e-6),
+    'deep in a big draw the point stays under the finger every frame, the page unscrolled')
+  ok(deep.frames.every(f => !f.gapOnScreen && !f.cutOnScreen),
+    '  …the gap opened over the bracket never on the screen')
+  ok(deep.pageAfter >= 0 && deep.pageAfter + VH <= deep.pageHeightAfter + 1e-6,
+    '  …and the page can take the lift over: in range at rest')
+  ok(deep.frames.every(f => f.pageHeight >= 1000 + VH - 1e-6),
+    '  …and never too short for where it is scrolled, so the browser never scrolls it either')
+
+  const back = swipe(1, 0, 500, 420)
+  ok(back.frames.every(f => Math.abs(f.screen - 420) < 1e-6), 'going back, the same — held every frame')
+  ok(back.frames.every(f => !f.cutOnScreen), '  …the top it cuts off never on the screen')
+  ok(back.pageAfter + VH <= back.pageHeightAfter + 1e-6, '  …and in range at rest')
+
+  // The foot of the draw on a page with little under it: the page would run
+  // out below. The point gives way rather than the browser scrolling the
+  // page under the finger.
+  const rest = BOX + 60
+  const bottom = rest + height(0) - VH             // scrolled as far as it goes
+  const foot = swipe(0, 1, bottom, 640, rest)      // a finger on the last match
+  ok(foot.frames.every(f => f.pageHeight >= bottom + VH - 1e-6),
+    'at the foot of the draw the page never runs short under the finger')
+  ok(foot.end.screen > 640 && foot.end.screen < VH - 64,
+    '  …the point drifting down instead, as little as it must, still above the tab bar')
+  ok(foot.pageAfter >= 0 && foot.pageAfter + VH <= foot.pageHeightAfter + 1e-6, '  …and in range at rest')
+
+  // The heading in view: the bracket stays put in its box, as it always did.
+  const top = swipe(0, 1, 0, 500)
+  ok(top.frames.every(f => f.lift === 0), 'with the heading in view the bracket is never moved in its box')
+  ok(top.frames.every(f => f.screen <= 500 + 1e-6 && f.screen >= BOX), '  …and the point stays on the screen')
+  const topBack = swipe(1, 0, 0, 500)
+  ok(topBack.frames.every(f => f.lift === 0 && !f.cutOnScreen), '  …going back too')
+
+  // Just past the heading: lowered only as far as the box's top is above.
+  const near = swipe(0, 1, BOX + 40, 600)
+  ok(near.frames.every(f => !f.gapOnScreen && f.lift <= 40 + 1e-6),
+    'just past the heading, lowered no further than the box is above the screen')
+
+  // And the bracket itself: the page is moved in one place, at rest.
+  const src = readFileSync('app/trip/[tripCode]/matchplay/MatchplayBracket.tsx', 'utf8')
+  ok(!src.includes('scrollBy('), 'the bracket never scrolls the page by a frame\'s drift')
+  ok((src.match(/window\.scrollTo\(/g) ?? []).length === 1 && src.includes('pageTargetRef.current = window.scrollY - l'),
+    '  …only once, handing the lift over at rest')
+  ok(/fingersRef\.current > 0 \|\| performance\.now\(\) - lastScrollRef\.current < 150/.test(src),
+    '  …and not while a finger is down or the page is gliding')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

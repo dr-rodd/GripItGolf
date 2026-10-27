@@ -168,7 +168,13 @@ export function easeOut(t: number): number {
 //     Every column is one tree drawn at a scale of 2^-position, so moving a
 //     round on halves it; anchored at the top, the half a phone was scrolled
 //     to at the bottom of a big draw flew up off the screen. The point under
-//     the finger is held still instead, and the page scrolls to keep it so.
+//     the finger is held still instead — by moving the bracket inside its
+//     own box (`heldLift`), **never by scrolling the page while it moves**.
+//     The first version scrolled the page every frame, and on an iPhone a
+//     page scrolled under a finger fights the finger: the bracket juddered
+//     the whole way across (Ross, 27 Oct 2026). The page moves once, after
+//     the bracket has settled and nothing else is scrolling it, by exactly
+//     the lift, so nothing on screen moves when it does.
 
 /** Pixels a finger travels before the gesture's direction is decided. */
 export const SWIPE_SLOP = 8
@@ -252,4 +258,46 @@ export function settleMs(distance: number, fullMs: number): number {
  */
 export function focalY(y: number, from: number, to: number, basePitch: number): number {
   return (y + basePitch / 2) * Math.pow(2, from - to) - basePitch / 2
+}
+
+/**
+ * How far down its own box to draw the bracket so a held point stays where
+ * it is on screen while the bracket moves — the page left exactly where it
+ * is scrolled. Negative draws it higher, the top cut off by the box.
+ *
+ * Wanted is whatever keeps the point still. Three limits, each so that
+ * handing the lift to the page afterwards (scrolling by it, the lift back to
+ * nothing) changes nothing anybody can see:
+ *
+ *   · Drawn lower only while the box's top is above the screen, and never
+ *     by more than it is above — the gap opened over the bracket stays off
+ *     the screen. With the heading in view the bracket stays put in its box,
+ *     as it always used to.
+ *   · Drawn higher only while the box's top is above the screen — the part
+ *     cut off stays off the screen too.
+ *   · The page never grows too short for where it is scrolled — the browser
+ *     would scroll it itself, under the finger, which is the very thing this
+ *     avoids. The point gives way first.
+ */
+export function heldLift(o: {
+  /** Where the held point should stay, down the page. */
+  pointPageY: number
+  /** The top of the bracket's box, down the page. */
+  boxTop: number
+  /** The held point inside the bracket at this position (`focalY`). */
+  pointY: number
+  /** How far the page is scrolled. */
+  scrollY: number
+  /** The bracket's own height at this position. */
+  height: number
+  /** The page's height without the bracket's box. */
+  restHeight: number
+  viewportHeight: number
+}): number {
+  const wanted = o.pointPageY - o.boxTop - o.pointY
+  const floor = o.scrollY + o.viewportHeight - o.restHeight - o.height
+  const above = o.scrollY - o.boxTop
+  const hi = Math.max(0, above)
+  const lo = above >= 0 ? -Infinity : 0
+  return Math.min(hi, Math.max(lo, wanted, floor))
 }

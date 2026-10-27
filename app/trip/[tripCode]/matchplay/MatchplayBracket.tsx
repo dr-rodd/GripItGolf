@@ -1,11 +1,11 @@
 'use client'
 
 import { sideColours, sideTint, type SideColour } from '@/lib/matchSides'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   tileTop, tileCenter, columnX, columnHeight,
   connectorPath, roundHeaderLabel, clampPosition, easeOut, centringShift,
-  swipeAxis, releaseTarget, settleMs, focalY, dragRange,
+  swipeAxis, releaseTarget, settleMs, focalY, dragRange, heldLift,
 } from '@/lib/bracketLayout'
 import { isDecidable, pressOutcome } from '@/lib/matchplayProgress'
 import { type MatchReading, pendingResults } from '@/lib/matchResults'
@@ -65,6 +65,24 @@ const TILE_H = 76          // two 38px rows — comfortably readable on the cour
 const PITCH  = 98          // standard vertical spacing, left column
 const MIN_GAP = 30         // smallest gap between the two columns
 const SWIPE_MS = 340
+
+/**
+ * The rounds drawn at a position: the visible pair plus one either side, so
+ * a swipe has something to bring in. Anything further out is clipped away.
+ */
+function drawnRounds(position: number, roundCount: number): [number, number] {
+  return [Math.max(0, Math.floor(position) - 1), Math.min(roundCount - 1, Math.ceil(position) + 2)]
+}
+
+/** The bracket's own height at a position: the tallest column it draws. */
+function bracketHeight(rounds: BracketMatchRow[][], position: number): number {
+  const [first, last] = drawnRounds(position, rounds.length)
+  let height = TILE_H
+  for (let i = first; i <= last; i++) {
+    height = Math.max(height, columnHeight(rounds[i].length, i - position, PITCH, TILE_H))
+  }
+  return height
+}
 
 // ─── Component ─────────────────────────────────────────────────
 
@@ -169,13 +187,17 @@ export default function MatchplayBracket({
 
   // `position` is continuous: 2.0 means round 3 is the left column, 2.5 is
   // halfway through a swipe. Every coordinate on screen derives from it, which
-  // is what keeps the connectors welded to the tiles while it moves.
-  const [position, setPosition] = useState(0)
-  // The same number, for a gesture or an animation frame to read without
+  // is what keeps the connectors welded to the tiles while it moves. `lift`
+  // is how far down its own box the bracket is drawn while it moves, holding
+  // a point still without scrolling the page (lib/bracketLayout.ts
+  // `heldLift`); nothing at rest once the page has taken it over.
+  const [view, setView] = useState({ position: 0, lift: 0 })
+  const { position, lift } = view
+  // The same numbers, for a gesture or an animation frame to read without
   // waiting on a render. Handlers holding a render's copy of `position` is
   // how a drag could take hold from somewhere the bracket no longer was.
   const posRef = useRef(0)
-  const setPos = useCallback((p: number) => { posRef.current = p; setPosition(p) }, [])
+  const liftRef = useRef(0)
   const [width, setWidth] = useState(360)
   const containerRef = useRef<HTMLDivElement>(null)
   const animRef = useRef<number | null>(null)
@@ -200,15 +222,27 @@ export default function MatchplayBracket({
   } | null>(null)
 
   /**
-   * The point held still while the bracket moves: its height on screen, and
-   * where it sat in the bracket at position `p0`. Moving a round on halves
-   * the bracket's height (lib/bracketLayout.ts `focalY`), and drawn from the
-   * top that dragged whatever a phone was scrolled to at the foot of a big
-   * draw up and off the screen. Held here instead — the finger's height for
-   * a swipe, the middle of the bracket's visible part for an arrow or a dot
-   * — and the page scrolls to keep it there.
+   * The point held still while the bracket moves: where it is down the
+   * page, and where it sat in the bracket at position `p0`. Moving a round
+   * on halves the bracket's height (lib/bracketLayout.ts `focalY`), and
+   * drawn from the top that dragged whatever a phone was scrolled to at the
+   * foot of a big draw up and off the screen. Held here instead — the
+   * finger's height for a swipe, the middle of the bracket's visible part
+   * for an arrow or a dot — by the lift, never by scrolling the page.
    */
-  const focalRef = useRef<{ screenY: number; y0: number; p0: number } | null>(null)
+  const focalRef = useRef<{ pageY: number; y0: number; p0: number } | null>(null)
+
+  /**
+   * Handing the lift to the page waits until nothing else is moving it: no
+   * finger on the screen and no scroll for a moment, a flick's glide
+   * included. Scrolling under a finger, or into a glide, is the fight this
+   * whole arrangement exists to avoid.
+   */
+  const fingersRef = useRef(0)
+  const lastScrollRef = useRef(0)
+  const settleTimerRef = useRef<number | null>(null)
+  /** Where the page goes, in the same frame the lift goes. */
+  const pageTargetRef = useRef<number | null>(null)
 
   useEffect(() => {
     const el = containerRef.current
@@ -220,18 +254,79 @@ export default function MatchplayBracket({
     return () => ro.disconnect()
   }, [])
 
-  useEffect(() => () => { if (animRef.current) cancelAnimationFrame(animRef.current) }, [])
+  useEffect(() => () => {
+    if (animRef.current) cancelAnimationFrame(animRef.current)
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current)
+  }, [])
 
-  // After every move, before the frame is painted: scroll the page by
-  // however far the held point has drifted. The container's own top is read
-  // fresh, so a heading that changed height with the round is allowed for.
+  useEffect(() => {
+    const onScroll = () => { lastScrollRef.current = performance.now() }
+    const onTouch = (e: TouchEvent) => { fingersRef.current = e.touches.length }
+    const opts = { passive: true, capture: true }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    for (const t of ['touchstart', 'touchend', 'touchcancel'] as const) window.addEventListener(t, onTouch, opts)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      for (const t of ['touchstart', 'touchend', 'touchcancel'] as const) window.removeEventListener(t, onTouch, opts)
+    }
+  }, [])
+
+  // The page taking the lift over: scrolled by it in the same frame the
+  // bracket is drawn without it, before anything is painted, so nothing on
+  // screen moves.
   useLayoutEffect(() => {
+    const top = pageTargetRef.current
+    if (top === null) return
+    pageTargetRef.current = null
+    window.scrollTo({ top, behavior: 'instant' as ScrollBehavior })
+  }, [view])
+
+  /** The lift that holds the held point still at position `p`. */
+  const liftAt = (p: number): number => {
     const f = focalRef.current
     const el = containerRef.current
-    if (!f || !el) return
-    const drift = el.getBoundingClientRect().top + focalY(f.y0, f.p0, position, PITCH) - f.screenY
-    if (Math.abs(drift) >= 0.5) window.scrollBy({ top: drift, behavior: 'instant' as ScrollBehavior })
-  }, [position])
+    if (!f || !el) return 0
+    const scrollY = window.scrollY
+    return heldLift({
+      pointPageY: f.pageY,
+      boxTop: el.getBoundingClientRect().top + scrollY,
+      pointY: focalY(f.y0, f.p0, p, PITCH),
+      scrollY,
+      height: bracketHeight(rounds, p),
+      restHeight: document.documentElement.scrollHeight - el.offsetHeight,
+      viewportHeight: window.innerHeight,
+    })
+  }
+
+  const setPos = (p: number) => {
+    posRef.current = p
+    liftRef.current = liftAt(p)
+    setView({ position: p, lift: liftRef.current })
+  }
+
+  const cancelSettle = () => {
+    if (settleTimerRef.current) { clearTimeout(settleTimerRef.current); settleTimerRef.current = null }
+  }
+
+  /** At rest: the page takes the lift over once nothing else is moving it. */
+  const settlePage = () => {
+    cancelSettle()
+    if (animRef.current || gestureRef.current?.axis === 'x') return
+    const l = liftRef.current
+    if (Math.abs(l) < 0.5) {
+      focalRef.current = null
+      if (l !== 0) { liftRef.current = 0; setView({ position: posRef.current, lift: 0 }) }
+      return
+    }
+    if (fingersRef.current > 0 || performance.now() - lastScrollRef.current < 150) {
+      settleTimerRef.current = window.setTimeout(settlePage, 120)
+      return
+    }
+    focalRef.current = null
+    pageTargetRef.current = window.scrollY - l
+    liftRef.current = 0
+    setView({ position: posRef.current, lift: 0 })
+  }
 
   const stride = Math.max(TILE_W + MIN_GAP, width - TILE_W)
 
@@ -243,8 +338,13 @@ export default function MatchplayBracket({
   const holdFocal = (screenY: number) => {
     const el = containerRef.current
     if (!el) return
+    cancelSettle()
     const top = el.getBoundingClientRect().top
-    focalRef.current = { screenY, y0: screenY - top, p0: posRef.current }
+    focalRef.current = {
+      pageY: screenY + window.scrollY,
+      y0: screenY - top - liftRef.current,
+      p0: posRef.current,
+    }
   }
 
   /** For the arrows, dots and dates, which have no finger on the bracket. */
@@ -263,16 +363,17 @@ export default function MatchplayBracket({
     stopAnimation()
     const from = posRef.current
     const to = clampPosition(target, rounds.length)
-    if (Math.abs(to - from) < 0.001) { setPos(to); return }
+    if (Math.abs(to - from) < 0.001) { setPos(to); settlePage(); return }
     // Reduce Motion: straight there. The drag still follows the finger —
     // that is the gesture, not an animation.
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { setPos(to); return }
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { setPos(to); settlePage(); return }
     const duration = settleMs(to - from, SWIPE_MS)
     const started = performance.now()
     const step = (now: number) => {
       const t = Math.min(1, (now - started) / duration)
       setPos(from + (to - from) * easeOut(t))
       animRef.current = t < 1 ? requestAnimationFrame(step) : null
+      if (t >= 1) settlePage()
     }
     animRef.current = requestAnimationFrame(step)
   }
@@ -356,18 +457,13 @@ export default function MatchplayBracket({
       })
     : ''
 
-  // Columns worth rendering: the visible pair plus one either side, so a
-  // swipe has something to bring in. Anything further out is clipped away.
-  const first = Math.max(0, Math.floor(position) - 1)
-  const last  = Math.min(rounds.length - 1, Math.ceil(position) + 2)
+  const [first, last] = drawnRounds(position, rounds.length)
   const visible: number[] = []
   for (let i = first; i <= last; i++) visible.push(i)
 
-  // Height follows the tallest thing on screen so the page does not jump
-  const viewHeight = Math.max(
-    ...visible.map(i => columnHeight(rounds[i].length, i - position, PITCH, TILE_H)),
-    TILE_H
-  )
+  // The box holds the bracket where the lift puts it — a gap over it, or
+  // its top cut off, both kept off the screen (lib/bracketLayout.ts).
+  const viewHeight = Math.max(TILE_H, bracketHeight(rounds, position) + lift)
 
   const atStart = position <= 0.001
   const atEnd   = position >= rounds.length - 1.001
@@ -400,10 +496,10 @@ export default function MatchplayBracket({
         key: `${target.id}-conn`,
         d: connectorPath({
           feederRightX: feederX,
-          feederTopY:    tileCenter(2 * j,     slot, PITCH, TILE_H),
-          feederBottomY: tileCenter(2 * j + 1, slot, PITCH, TILE_H),
+          feederTopY:    tileCenter(2 * j,     slot, PITCH, TILE_H) + lift,
+          feederBottomY: tileCenter(2 * j + 1, slot, PITCH, TILE_H) + lift,
           targetLeftX: targetX,
-          targetY: tileCenter(j, slot + 1, PITCH, TILE_H),
+          targetY: tileCenter(j, slot + 1, PITCH, TILE_H) + lift,
         }),
         dim: slot < -0.05,
       })
@@ -526,7 +622,7 @@ export default function MatchplayBracket({
               reading={readingFor.get(match.id) ?? null}
               playerById={playerById}
               x={x}
-              y={tileTop(j, slot, PITCH)}
+              y={tileTop(j, slot, PITCH) + lift}
               faded={slot < -0.05 || slot > 1.05}
               onOpen={correcting => setSheet({ match, correcting })}
             />
