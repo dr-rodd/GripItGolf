@@ -495,7 +495,8 @@ export default function CreateLeagueForm({ schedule }: {
       : endDate
     // Tee times off leaves both of its answers at their defaults, whatever
     // was tapped while it was on.
-    const finalPerms = teeTimes ? perms : { ...perms, set_tee_sheets: false, edit_tee_sheet: false }
+    const finalPerms = teeTimes ? perms
+      : { ...perms, set_tee_sheets: defaultPermissions().set_tee_sheets, edit_tee_sheet: defaultPermissions().edit_tee_sheet }
     const tripRow: Record<string, unknown> = {
       name: name.trim(),
       slug: code.toLowerCase(),

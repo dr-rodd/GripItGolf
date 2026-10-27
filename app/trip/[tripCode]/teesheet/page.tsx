@@ -80,7 +80,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
 
   const [
     roundsResult, itemsResult, playersResult, settingsResult,
-    assignmentsResult, permsResult, teamsResult, membersResult,
+    assignmentsResult, permsResult, teamsResult, membersResult, bookersResult,
   ] = await Promise.all([
     supabase
       .from('rounds')
@@ -129,6 +129,16 @@ export default async function TeeSheetPage({ params, searchParams }: {
     anyTeamBoard || playingForTags
       ? supabase.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id)
       : Promise.resolve({ data: null, error: null }),
+    // Who booked each name (migration 065), on its own and fail-soft —
+    // named in the read above it would cost the whole sheet before 065.
+    readAllRows<{ round_id: string; player_id: string; booked_by: string | null }>(
+      () => supabase
+        .from('tee_assignments')
+        .select('round_id, player_id, booked_by', { count: 'exact' })
+        .eq('trip_id', trip.id)
+        .order('created_at').order('round_id').order('player_id'),
+      a => `${a.round_id}|${a.player_id}`,
+    ),
   ])
 
   if (roundsResult.error) console.error('TeeSheetPage rounds query failed:', roundsResult.error)
@@ -177,6 +187,12 @@ export default async function TeeSheetPage({ params, searchParams }: {
           : null,
       }
     })
+
+  // Who booked whom, where recorded.
+  const bookerOf = new Map(
+    ((bookersResult.data ?? []) as { round_id: string; player_id: string; booked_by: string | null }[])
+      .map(b => [`${b.round_id}|${b.player_id}`, b.booked_by]),
+  )
 
   // The tee times question's two answers, stored alike on a trip and an event.
   const access = teeSheetAccess((permsResult.data as { event_permissions?: unknown } | null)?.event_permissions)
@@ -259,8 +275,10 @@ export default async function TeeSheetPage({ params, searchParams }: {
           round_id: string; player_id: string; slot_index: number
         }[]).map(a => ({
           round_id: a.round_id, player_id: a.player_id, slot_index: a.slot_index,
+          booked_by: bookerOf.get(`${a.round_id}|${a.player_id}`) ?? null,
         }))
       }
+      bookerRecorded={!bookersResult.error}
       roundTeams={roundTeams}
       tagOf={tagOfPlayer}
       playingForTags={playingForTags}

@@ -9,7 +9,7 @@ import { hasUnlocked, isLocked } from '@/lib/passcode'
 import { IconPlus, IconX, IconUsers } from '@/app/components/icons'
 import {
   type SlotPlayer, type RoundSheet, groupSlot, pickerUnits, unitMatches,
-  sheetClock, sheetSlots, sheetGroupSize, describeRules, myTee,
+  sheetClock, sheetSlots, sheetGroupSize, describeRules, myTee, mayRemoveBooking,
 } from '@/lib/teeSheet'
 import { joinNames, firstName } from '@/lib/matchplayEntrants'
 import {
@@ -37,9 +37,12 @@ import { courseLabel } from '@/lib/courseDirectory'
  * unlocked the PIN in this session — read from the same sessionStorage the
  * PasscodeGate writes, after mount, because the server cannot see it and
  * deciding during render would tear hydration — puts anybody anywhere.
- * When the event lets players pick their own time (`edit_tee_sheet`),
- * this phone's claimed player joins a free time and leaves their own, and
- * nobody else's; otherwise the sheet is read-only to everybody else.
+ * When the event lets players book their own times (`edit_tee_sheet`, the
+ * default — "medium security", Ross, 26 Oct 2026), this phone's claimed
+ * player books themselves and anyone they bring, and moves or removes only
+ * themselves and those they booked (lib/teeSheet.ts `mayRemoveBooking`,
+ * `tee_assignments.booked_by`); otherwise the sheet is read-only to
+ * everybody else.
  *
  * Writes are one row per player per round (`tee_assignments`, migration
  * 050) — adding and removing are single-row inserts and deletes, so two
@@ -58,7 +61,8 @@ type Round = {
   opensLabel: string | null
 }
 
-type Assignment = { round_id: string; player_id: string; slot_index: number }
+/** `booked_by`: who booked them on — absent before migration 065, null for the organiser's. */
+type Assignment = { round_id: string; player_id: string; slot_index: number; booked_by?: string | null }
 
 /**
  * The blocks in a slot that are not yet a team.
@@ -87,7 +91,7 @@ export default function TeeSheetClient({
   tripId, tripCode, rounds, players, initialAssignments,
   roundTeams, tagOf, playingForTags = false,
   hasTeamBoard, fieldMayEdit, fieldMaySet = false, passcodeHash = null,
-  storageReady = true, meId = null, initialRoundId = null, isTrip = false,
+  storageReady = true, meId = null, initialRoundId = null, isTrip = false, bookerRecorded = false,
 }: {
   tripId: string
   tripCode: string
@@ -115,6 +119,12 @@ export default function TeeSheetClient({
   initialRoundId?: string | null
   /** A trip's sheet: its lead player and passcode, never an organiser and PIN. */
   isTrip?: boolean
+  /**
+   * Whether who booked each name is recorded (migration 065). Without it a
+   * player books themselves only — there is no saying later whom else they
+   * may change.
+   */
+  bookerRecorded?: boolean
   /** For the inline organiser unlock; null when the event has no PIN. */
   passcodeHash?: string | null
   /** False when the assignments table could not be read — nothing will save. */
@@ -239,12 +249,12 @@ export default function TeeSheetClient({
     if (!round) return null
     const { data, error: err } = await supabase
       .from('tee_assignments')
-      .select('round_id, player_id, slot_index')
+      .select(bookerRecorded ? 'round_id, player_id, slot_index, booked_by' : 'round_id, player_id, slot_index')
       .eq('trip_id', tripId)
       .eq('round_id', round.id)
       .order('created_at')
     if (err || !data) return null
-    const fresh = data as Assignment[]
+    const fresh = data as unknown as Assignment[]
     setAssignments(prev => [...prev.filter(a => a.round_id !== round.id), ...fresh])
     return fresh
   }
@@ -270,8 +280,11 @@ export default function TeeSheetClient({
       }
     }
 
+    // Who booked them: this phone's player, or nobody for the organiser
+    // placing names without one — named only once the column exists.
     const next: Assignment[] = playerIds.map(id => ({
       round_id: round.id, player_id: id, slot_index: slotIndex,
+      ...(bookerRecorded ? { booked_by: meId ?? null } : {}),
     }))
     setAssignments(prev => [...prev, ...next])
 
@@ -432,6 +445,14 @@ export default function TeeSheetClient({
   }
   const setupHref = round ? `/trip/${tripCode}/teesheet/${round.id}/setup` : null
 
+  // Who may take a name off, and who may book somebody else on: the
+  // organiser anybody; a player booking their own times themselves and
+  // those they booked (lib/teeSheet.ts `mayRemoveBooking`).
+  const bookedBy = new Map(roundAssignments.map(a => [a.player_id, a.booked_by ?? null]))
+  const mayRemove = (playerId: string) =>
+    mayRemoveBooking({ organiser, meId, playersBook: selfPick }, { playerId, bookedBy: bookedBy.get(playerId) })
+  const mayBookOthers = organiser || (selfPick && bookerRecorded)
+
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
       <TripHeader backTo={`/trip/${tripCode}`} />
@@ -445,7 +466,9 @@ export default function TeeSheetClient({
           {organiser
             ? 'Tap an open time to put a name in it.'
             : selfPick
-              ? 'Pick a free time — tap Join.'
+              ? bookerRecorded
+                ? 'Book a free time — Join for yourself, Add player to bring others.'
+                : 'Pick a free time — tap Join.'
               : fieldMayEdit
                 ? 'Claim your name to pick a time.'
                 : `Who goes off when. The ${isTrip ? 'lead player' : 'organiser'} sets the groups.`}
@@ -647,7 +670,7 @@ export default function TeeSheetClient({
                       {/* Names on the left, stacked; a team is one block —
                           side by side at 2 or 3, a 2×2 grid at 4. */}
                       <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                        {slotPlayers.length === 0 && !organiser && !(selfPick && myUnitIds.length > 0) && (
+                        {slotPlayers.length === 0 && !mayBookOthers && !(selfPick && myUnitIds.length > 0) && (
                           <span className="t-cap text-ink/50 py-0.5">Open</span>
                         )}
 
@@ -671,7 +694,7 @@ export default function TeeSheetClient({
                                 {g.players.map(p => (
                                   <span key={p.id} className="flex items-center gap-1 min-w-0">
                                     <span className="t-card text-ink truncate">{p.name}</span>
-                                    {organiser && !together && (
+                                    {mayRemove(p.id) && !together && (
                                       <button
                                         type="button"
                                         onClick={() => removePlayers(i, [p.id])}
@@ -684,7 +707,7 @@ export default function TeeSheetClient({
                                   </span>
                                 ))}
                               </div>
-                              {organiser && together && (
+                              {together && g.players.every(p => mayRemove(p.id)) && (
                                 <button
                                   type="button"
                                   onClick={() => removePlayers(i, g.players.map(p => p.id))}
@@ -700,7 +723,7 @@ export default function TeeSheetClient({
                               {g.players.map(p => (
                                 <span key={p.id} className="flex items-center gap-1 min-w-0">
                                   <span className="t-card text-ink truncate">{p.name}</span>
-                                  {organiser && (
+                                  {mayRemove(p.id) && (
                                     <button
                                       type="button"
                                       onClick={() => removePlayers(i, [p.id])}
@@ -716,7 +739,7 @@ export default function TeeSheetClient({
                           )
                         ))}
 
-                        {organiser && vacancy > 0 && !open && (
+                        {mayBookOthers && storageReady && vacancy > 0 && !open && (
                           <button
                             type="button"
                             onClick={() => { setAdding(i); setSearch('') }}

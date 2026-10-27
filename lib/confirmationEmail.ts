@@ -99,6 +99,16 @@ export type ConfirmationDetails = {
  * table, so the HTML and the text version cannot drift into saying two
  * different things.
  */
+/**
+ * How organiser access works on a phone (Ross, 26 Oct 2026): the way in
+ * from any phone, and how long it lasts — until the browser or app is
+ * closed, which is lib/passcode.ts's sessionStorage, said plainly so it
+ * is never a surprise.
+ */
+const MANAGE = (thing: string) =>
+  `To run the ${thing} from a phone, open it, tap Settings, then Organiser area, and enter your PIN. `
+  + 'That phone then has organiser access on every page until the browser or app is closed.'
+
 function wordsFor(d: ConfirmationDetails) {
   if (d.sport === 'run') {
     return {
@@ -109,6 +119,7 @@ function wordsFor(d: ConfirmationDetails) {
       admin: 'Your admin link opens the organiser area: teams, permissions and the points rules.',
       adminText: 'Your admin link (the organiser area)',
       created: 'when creating the challenge',
+      manage: MANAGE('challenge'),
       signOff: 'Lace up — let’s go 🏃',
       signOffText: "Lace up — let's go 🏃",
     }
@@ -121,6 +132,7 @@ function wordsFor(d: ConfirmationDetails) {
     admin: 'Your admin link opens the organiser area: permissions, notices, starts and the event’s setup.',
     adminText: 'Your admin link (the organiser area)',
     created: 'when creating the event',
+    manage: MANAGE('event'),
     signOff: 'Let’s go — launch ’em&nbsp;🏌️',
     signOffText: "Let's go — launch 'em 🏌️",
   }
@@ -200,7 +212,8 @@ ${d.adminUrl ? `
                     <a href="${escapeHtml(d.adminUrl)}" style="color:#0A6B3C;font-weight:600;text-decoration:underline;">Open the organiser area</a><br /><br />
                     <strong>Your organiser PIN</strong> is the one you set
                     ${w.created}. It was never sent to us and
-                    cannot be recovered or changed &mdash; write it down.
+                    cannot be recovered or changed &mdash; write it down.<br /><br />
+                    ${w.manage.replace(/’/g, '&rsquo;')}
                   </td>
                 </tr>
               </table>
@@ -250,6 +263,8 @@ export function confirmationText(d: ConfirmationDetails): string {
       `${w.adminText}: ${d.adminUrl}`,
       `Your organiser PIN is the one you set ${w.created}.`,
       'It was never sent to us and cannot be recovered or changed — write it down.',
+      '',
+      w.manage,
     ] : []),
     '',
     'Hot tip: pin the link in your messaging group for easy access.',

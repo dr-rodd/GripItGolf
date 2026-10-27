@@ -12,9 +12,9 @@ import Toggle from './Toggle'
  *
  *   Opening the sheets (making one is called opening it) — the organiser,
  *   behind the PIN; or anyone, a casual event nobody runs (`set_tee_sheets`).
- *   Placing players — the organiser, the sheet read-only to everybody
- *   else; or each player picking their own time from what is free
- *   (`edit_tee_sheet`).
+ *   Placing players — each player booking themselves and anyone they
+ *   bring, changing only those (the default, `edit_tee_sheet`); or the
+ *   organiser, the sheet read-only to everybody else.
  */
 export type TeeTimesAccessValue = { anyoneMakes: boolean; playersPick: boolean }
 
@@ -57,7 +57,7 @@ export default function TeeTimesAccess({ value, onChange, trip = false }: {
         />
         <p className="t-cap text-ink/65 mt-1.5 leading-snug">
           {value.playersPick
-            ? 'Each player picks a free time for themselves.'
+            ? 'Each player books themselves and anyone they bring, and can change only those.'
             : `${boss} places everyone; the sheet is read-only to the rest.`}
         </p>
       </div>

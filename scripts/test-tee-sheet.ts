@@ -19,7 +19,7 @@ import {
   type TeeRules, MAX_BATCHES, clockMins, minsClock, batchLast, countToLast, teeClocks,
   sheetLength, sheetCapacity, seatsShort, rulesIssue, parseTeeRules, describeRules,
   roundSheet, sheetClock, sheetSlots, sheetGroupSize, draftRules,
-  opensAt, sheetIsOpen, describeOpening, teeSheetSummary,
+  opensAt, sheetIsOpen, describeOpening, teeSheetSummary, mayRemoveBooking,
 } from '../lib/teeSheet'
 import { irishInstant, daysBefore } from '../lib/irishTime'
 import { teeSheetAccess } from '../lib/eventPermissions'
@@ -127,10 +127,41 @@ section('A round\'s sheet is vacant until the wizard has been through')
   eq(draftRules(active, '06:00', 50), rules, 'and a live one as saved')
 }
 
+section('Medium security: a player changes only themselves and those they booked')
+{
+  const player = { organiser: false, meId: 'me', playersBook: true }
+  eq([
+    mayRemoveBooking(player, { playerId: 'me' }),
+    mayRemoveBooking(player, { playerId: 'mate', bookedBy: 'me' }),
+    mayRemoveBooking(player, { playerId: 'stranger', bookedBy: 'someone' }),
+    mayRemoveBooking(player, { playerId: 'stranger', bookedBy: null }),
+  ], [true, true, false, false],
+    'yourself and anyone you booked; never a name somebody else put there, or the organiser placed')
+  ok(mayRemoveBooking({ organiser: true, meId: null, playersBook: false }, { playerId: 'stranger', bookedBy: 'someone' }),
+    'a phone with organiser access removes anybody')
+  ok(!mayRemoveBooking({ organiser: false, meId: 'me', playersBook: false }, { playerId: 'me' }),
+    'where the organiser places everyone, the sheet is read-only to the rest')
+  ok(!mayRemoveBooking({ organiser: false, meId: null, playersBook: true }, { playerId: 'x', bookedBy: null }),
+    'and a phone that is nobody changes nothing')
+
+  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  ok(client.includes('const mayBookOthers = organiser || (selfPick && bookerRecorded)'),
+    'a player brings others only once who booked them can be recorded (migration 065)')
+  ok(client.includes('...(bookerRecorded ? { booked_by: meId ?? null } : {})'),
+    '  …and every booking records who made it, named only once the column exists')
+  ok(client.includes('{mayRemove(p.id) && (') && client.includes('together && g.players.every(p => mayRemove(p.id))'),
+    'each ✕ asks the one rule — a linked team only when every member is yours to move')
+  const page = read('app/trip/[tripCode]/teesheet/page.tsx')
+  ok(page.includes("select('round_id, player_id, booked_by', { count: 'exact' })") && page.includes('bookerRecorded={!bookersResult.error}'),
+    'who booked whom is read on its own, fail-soft — before 065 the sheet stands, players booking themselves')
+  ok(fs.readFileSync('supabase/migrations/20260101000065_tee_booked_by.sql', 'utf-8').includes('ADD COLUMN IF NOT EXISTS booked_by uuid REFERENCES players(id) ON DELETE SET NULL'),
+    'migration 065 adds the column, cleared rather than cascading if the booker leaves')
+}
+
 section('Trips have tee times too, under the same rules (Ross, 26 Oct 2026)')
 {
-  eq(teeSheetAccess(null), { anyoneOpens: false, playersPick: false },
-    'nothing stored: the lead player or organiser opens the sheets and places the players')
+  eq(teeSheetAccess(null), { anyoneOpens: false, playersPick: true },
+    'nothing stored: the lead player or organiser opens the sheets, and players book their own times — the medium default')
   eq(teeSheetAccess({ set_tee_sheets: true, edit_tee_sheet: true }), { anyoneOpens: true, playersPick: true },
     '  …and the stored answers are read as given — on a trip as on an event, never opened wholesale for a trip')
 
@@ -264,7 +295,7 @@ section('An event made with tee times has a tee sheet for every round')
     ok(src.includes('<TeeTimesQuestion'), `${name} asks the tee times question, the shared one`)
     ok(/teeTimes \? \{ start_format: 'tee_sheet' \} : \{\}/.test(src),
       '  …and on, every round it makes starts from a tee sheet — named only then')
-    ok(src.includes("const finalPerms = teeTimes ? perms : { ...perms, set_tee_sheets: false, edit_tee_sheet: false }"),
+    ok(/const finalPerms = teeTimes \? perms\s*: \{ \.\.\.perms, set_tee_sheets: defaultPermissions\(\)\.set_tee_sheets, edit_tee_sheet: defaultPermissions\(\)\.edit_tee_sheet \}/.test(src),
       '  …off, its two answers stay at their defaults whatever was tapped')
   }
   const store = read('lib/leagueRoundStore.ts')
@@ -543,8 +574,8 @@ section('A vacant round offers the wizard; players pick their own time when allo
   ok(/selfPick && storageReady && myUnitIds\.length > 0 && vacancy >= myUnitIds\.length/.test(client),
     '  …joining a time with room for them, and on a share-a-tee board their whole team')
   ok(client.includes('removePlayers(i, myLeavers(slotPlayers))'), '  …and leaving only their own')
-  ok(!/\{canEdit/.test(client) && /\{organiser && vacancy > 0 && !open/.test(client),
-    'nobody but the organiser places anybody else')
+  ok(!/\{canEdit/.test(client) && /\{mayBookOthers && storageReady && vacancy > 0 && !open/.test(client),
+    'only the organiser, or a player booking their own times, places anybody else')
   ok(client.includes('myTee(roundAssignments, meId, live'), 'your own time sits at the top, from the one copy')
 }
 

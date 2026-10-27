@@ -69,12 +69,14 @@ export const EVENT_PERMISSIONS: {
   { key: 'edit_scores', dflt: false,
     label: 'Participants can edit leaderboard entries',
     hint: 'Let players rework a finished scorecard; live scoring stays open either way.' },
-  // Placing players: off, the organiser places everybody and the sheet is
-  // read-only to the rest; on, each claimed player picks their own time
-  // from what is free (lib/teeSheet.ts).
-  { key: 'edit_tee_sheet', dflt: false, teeSheet: true,
-    label: 'Players pick their own tee time',
-    hint: 'Each player chooses a free time on the sheet. Off, you place everyone and the sheet is read-only to the rest.' },
+  // Placing players — on by default, "medium security" (Ross, 26 Oct 2026):
+  // each claimed player books themselves and anyone they bring, and may
+  // move or remove only those (`tee_assignments.booked_by`, migration 065);
+  // the organiser removes anybody. Off, the organiser places everybody and
+  // the sheet is read-only to the rest (lib/teeSheet.ts `mayRemoveBooking`).
+  { key: 'edit_tee_sheet', dflt: true, teeSheet: true,
+    label: 'Players book their own tee times',
+    hint: 'Each player books themselves and anyone they bring, and can change only those. Off, you place everyone and the sheet is read-only to the rest.' },
   // Making the sheets: off, the wizard asks for the PIN; on, anyone with
   // the code may make or change a round's sheet — a casual event nobody
   // runs, with an Edit button on the Tee times tab.

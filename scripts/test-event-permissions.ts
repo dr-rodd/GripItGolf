@@ -40,8 +40,8 @@ section('Three seeded permissions, conservative by default')
   eq(EVENT_PERMISSIONS.map(p => p.key),
     ['add_courses', 'add_players', 'edit_scores', 'edit_tee_sheet', 'set_tee_sheets', 'assign_tag', 'add_rounds', 'set_venues', 'score_matches'],
     'the three seeded keys, then the tee sheet\'s two, the tag, a league\'s rounds and venues, and scoring a match — each the promised one-line addition')
-  ok(EVENT_PERMISSIONS.every(p => p.dflt === (p.key === 'score_matches')),
-    'every default is off — the organiser opts in — except scoring a match, open unless the organiser closes it')
+  ok(EVENT_PERMISSIONS.every(p => p.dflt === (p.key === 'score_matches' || p.key === 'edit_tee_sheet')),
+    'every default is off — the organiser opts in — except scoring a match, open unless the organiser closes it, and players booking their own tee times (Ross, 26 Oct 2026: the medium level is the default)')
   ok(!permissionsFor(false).some(p => p.key === 'score_matches') && permissionsFor(false, true).some(p => p.key === 'score_matches'),
     'only a match play event is asked who scores its matches')
   ok(EVENT_PERMISSIONS.filter(p => !p.teeSheet).every(p => p.label.startsWith('Participants can')),
@@ -127,8 +127,8 @@ section('The gate opens for anything that is not an event')
 
 section('The admin card sums it up')
 {
-  ok(describePermissions({ ...defaultPermissions(), score_matches: false }).includes('Organiser-run'),
-    'all off reads as organiser-run')
+  ok(describePermissions({ ...defaultPermissions(), score_matches: false }, permissionsFor(false)).includes('Organiser-run'),
+    'all off reads as organiser-run — over the toggles asked, the tee times question being its own')
   ok(describePermissions(defaultPermissions(), permissionsFor(false, true)).includes('anyone can score'),
     '  …and a match play event at its defaults says its matches are open to score')
   const two = {
@@ -268,12 +268,22 @@ section('The event email carries the admin link, never the PIN')
   ok(html.includes('cannot be recovered'), 'with the PIN reminder spelled out')
   ok(html.includes('Event code:'), 'an event calls its code an event code')
 
+  // How organiser access works on a phone (Ross, 26 Oct 2026): the way in
+  // from Settings, and how long it lasts — lib/passcode.ts's session.
+  ok(html.includes('tap Settings, then Organiser area, and enter your PIN')
+     && html.includes('organiser access on every page until the browser or app is closed'),
+    'the message says how to run the event from a phone, and for how long')
+  ok(read('lib/passcode.ts').includes('sessionStorage.setItem'),
+    '  …which is the session the unlock is kept in, so the sentence stays true')
+
   const text = confirmationText(eventDetails)
   ok(text.includes(eventDetails.adminUrl), 'the text version carries the link too')
   ok(text.includes('KEEP THIS EMAIL'), 'and the label')
+  ok(text.includes('tap Settings, then Organiser area'), '  …and the way in from a phone')
 
   const tripHtml = confirmationHtml(details)
   ok(!tripHtml.includes('organiser'), 'a trip\'s message has no organiser block')
+  ok(!tripHtml.includes('Organiser area'), '  …nor the way into one')
   ok(tripHtml.includes('Trip code:'), 'and keeps its own wording')
 
   // The PIN itself can never be in the message, because the words never

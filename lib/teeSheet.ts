@@ -213,9 +213,32 @@ export function unitMatches(unit: PickerUnit, query: string): boolean {
     || unit.players.some(p => p.name.toLowerCase().includes(q))
 }
 
+// ─── Who may change a booking ──────────────────────────────────
+//
+// "Medium security", the default (Ross, 26 Oct 2026): where players book
+// their own times, a player books themselves and anyone they bring — and
+// may then move or remove only themselves and those they booked
+// (`tee_assignments.booked_by`, migration 065), so a stranger's name is
+// never taken off by accident. The organiser — the PIN unlocked on this
+// phone — removes anybody.
+
+/**
+ * Whether this phone may take a player off their tee time: the organiser
+ * always; a player booking their own times, themselves and anyone they
+ * booked; nobody else.
+ */
+export function mayRemoveBooking(
+  who: { organiser: boolean; meId: string | null; playersBook: boolean },
+  booking: { playerId: string; bookedBy?: string | null },
+): boolean {
+  if (who.organiser) return true
+  if (!who.playersBook || !who.meId) return false
+  return booking.playerId === who.meId || booking.bookedBy === who.meId
+}
+
 // ─── Assignments as fetched ────────────────────────────────────
 
-export type TeeAssignment = { player_id: string; slot_index: number }
+export type TeeAssignment = { player_id: string; slot_index: number; booked_by?: string | null }
 
 /**
  * Rows into a slot map, junk dropped: a player appears once (the database

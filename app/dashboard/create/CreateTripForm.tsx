@@ -349,7 +349,8 @@ export default function CreateTripForm({ matchPlay = false }: {
     // Events only, and only when a toggle was actually flipped — nothing
     // opened writes nothing, so creation still lands before migration 049.
     // Tee times off leaves both of its answers at their defaults.
-    const finalPerms = teeTimes ? perms : { ...perms, set_tee_sheets: false, edit_tee_sheet: false }
+    const finalPerms = teeTimes ? perms
+      : { ...perms, set_tee_sheets: defaultPermissions().set_tee_sheets, edit_tee_sheet: defaultPermissions().edit_tee_sheet }
     // A trip writes the column only for its tee times answers.
     if ((isTournament || teeTimes) && storedPermissions(finalPerms)) tripRow.event_permissions = finalPerms
 
