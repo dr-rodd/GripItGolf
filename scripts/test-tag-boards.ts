@@ -662,8 +662,8 @@ section('The field only picks its own tag when the organiser says so')
   ok(page.includes('assign_tag'), 'the teams screen reads the permission')
   ok(page.includes('tags.length > 0'),
     'and offers nothing until there are tags to pick from')
-  ok(page.includes('selfPick || mayPickTag'),
-    'either standing grant opens the join face — neither speaks for the other')
+  ok(page.includes('{mayPickTag && (') && page.includes('<TeamsClient'),
+    'joining a tag is its own card above the teams — neither grant speaks for the other')
 
   const join = read('app/trip/[tripCode]/teams/TagJoinClient.tsx')
   ok(join.includes('setTeam(tripId, viewer.id, TAG_SET, tagId)'),
@@ -725,7 +725,8 @@ section('Nothing here reaches a trip')
 
   for (const f of [
     'app/trip/[tripCode]/teams/TripTeamsClient.tsx',
-    'app/trip/[tripCode]/teams/TeamJoinClient.tsx',
+    'app/trip/[tripCode]/teams/TeamsClient.tsx',
+    'app/trip/[tripCode]/teams/pick/TeamPickerWizard.tsx',
   ]) {
     ok(!read(f).includes('tagBoards'),
       `${f.split('/').pop()} is untouched by tags`)

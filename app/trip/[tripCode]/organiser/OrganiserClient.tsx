@@ -69,8 +69,10 @@ type Overview = {
 export default function OrganiserClient({
   tripId, tripCode, initialNotices, initialRounds, formatSummary, isLeague,
   initialPermissions, overview, tagsSummary, dayFormatSummary, golfIreland, accessCard, knockout = false, drawSummary = null,
-  series = false, initialTrackStats = false,
+  series = false, initialTrackStats = false, hasTeamBoards = false,
 }: {
+  /** A leaderboard plays in teams — the team picker gets a row of its own. */
+  hasTeamBoards?: boolean
   tripId: string
   tripCode: string
   initialNotices: Notice[]
@@ -88,7 +90,7 @@ export default function OrganiserClient({
   accessCard?: React.ReactNode
   /** The bird's-eye numbers, counted on the server. */
   overview: Overview
-  /** The Teams & tags card's one-liner (lib/tagBoards.ts describeTags). */
+  /** The Tags row's one-liner (lib/tagBoards.ts describeTags). */
   tagsSummary: string
   /** How many days carry a format of their own, said in one line. */
   dayFormatSummary: string
@@ -514,7 +516,8 @@ export default function OrganiserClient({
 
         {/* ── The rest of the running of the event ──
             One list, one row each (refresh plan, 4.2): the tags portal (the
-            sides players carry all event), a format for each day (only
+            tags players carry all event), the team picker (while a
+            leaderboard plays in teams), a format for each day (only
             worth a door when there is more than one day), the format — a
             match play bracket's setup, or a league's summary, never a form
             that could overwrite the league with a bracket — and the setup
@@ -526,6 +529,11 @@ export default function OrganiserClient({
           <SectionHeader className="mb-4">Running the event</SectionHeader>
           <ListGroup>
             <ListRow href={`/trip/${tripCode}/organiser/tags`} label="Tags" hint={tagsSummary} />
+            {/* The team picker — the teams and partnerships the leaderboards
+                play in (Ross, 27 Oct 2026: they were hard to find). */}
+            {hasTeamBoards && (
+              <ListRow href={`/trip/${tripCode}/teams`} label="Teams" hint="Pick the teams, or see the ones players have made." />
+            )}
             {rounds.length > 1 && (
               <ListRow href={`/trip/${tripCode}/organiser/days`} label="Each day’s own format" hint={dayFormatSummary} />
             )}

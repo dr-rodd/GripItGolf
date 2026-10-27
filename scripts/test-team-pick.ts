@@ -101,32 +101,33 @@ section('teamSizeLimit is the one copy of every cap')
 
 // ─── Wiring ────────────────────────────────────────────────────
 
-section('The join screen stands only where the board says players pick')
+section('Players pick only where the board says so — through the team picker')
 {
+  // The join screen and its two-faced switch were replaced by the team
+  // picker (Ross, 27 Oct 2026); lib/teamPicker.ts is the rules, held by
+  // test:partnerships. What this suite still pins is the wiring.
+  const lib = read('lib/teamPicker.ts')
+  ok(lib.includes("selfPick: here.some(b => b.teamPick === 'self')"), 'a list reads the board\'s answer')
+  ok(lib.includes('cap: teamSizeLimit(here)'), 'room is the one copy of the cap')
+
   const page = read('app/trip/[tripCode]/teams/page.tsx')
-  ok(page.includes("b.teamPick === 'self'"), 'the page reads the answer')
-  ok(page.includes('<TeamsModeSwitch'), 'and switches faces on it')
   ok(page.includes('linkedPlayerId(tripCode)'),
     'the viewer is the claim cookie — personalises, never authorises')
   ok(page.includes('<PasscodeGate'),
-    'an event without self-pick keeps the gate exactly as it was')
+    'the drag editor keeps its gate on an event exactly as it was')
 
-  const join = read('app/trip/[tripCode]/teams/TeamJoinClient.tsx')
-  ok(join.includes('setTeam(tripId, viewer.id, sheet'),
-    'joins and leaves go through the one membership writer')
-  ok(join.includes('teamSizeLimit(boards)'), 'room is the one copy of the cap')
-  ok(join.includes('joinNames('),
-    'a team is named from its members — Ross & Dave')
-  ok(join.includes('Claim your spot'),
-    'a stranger is pointed at the players screen, calmly')
-  ok(join.includes('PRESET_COLORS'),
-    'self-made teams colour from the same twelve as everyone else')
+  const client = read('app/trip/[tripCode]/teams/TeamsClient.tsx')
+  ok(client.includes('Claim your spot'), 'a stranger is pointed at the players screen, calmly')
+  ok(client.includes('hasUnlocked(tripCode)') && client.includes('<InlineUnlock'),
+    'the organiser is recognised by the same session unlock, one inline PIN away')
 
-  const modeSwitch = read('app/trip/[tripCode]/teams/TeamsModeSwitch.tsx')
-  ok(modeSwitch.includes('hasUnlocked(tripCode)'),
-    'the organiser is recognised by the same session unlock as every gate')
-  ok(modeSwitch.includes('<InlineUnlock'),
-    'and is one inline PIN away from the full editor')
+  const writes = read('app/trip/[tripCode]/teams/teamWrites.ts')
+  ok(writes.includes('setTeam(tripId, id, sheet, teamId, addedBy)'),
+    'joins, leaves and picks go through the one membership writer')
+  ok(writes.includes('madeTeamName(after)'), 'a team is named from its members — Ross & Dave')
+
+  const wizard = read('app/trip/[tripCode]/teams/pick/TeamPickerWizard.tsx')
+  ok(wizard.includes('PRESET_COLORS'), 'picked teams colour from the same twelve as everyone else')
 }
 
 section('The trip editor scales without losing its drag')

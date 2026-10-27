@@ -50,6 +50,13 @@ export async function setTeam(
   playerId: string,
   teamSet: string,
   teamId: string | null,
+  /**
+   * Who put them there (`team_members.added_by`, migration 066) — the team
+   * picker's, and only where the column is known to exist; null for the
+   * organiser. Left out, the column is never named, so every other caller
+   * writes exactly what it always wrote.
+   */
+  addedBy?: string | null,
 ): Promise<WriteFailure | null> {
   const { error: delError } = await supabase
     .from('team_members')
@@ -62,7 +69,10 @@ export async function setTeam(
   if (teamId) {
     const { error: insError } = await supabase
       .from('team_members')
-      .insert({ trip_id: tripId, team_id: teamId, team_set: teamSet, player_id: playerId })
+      .insert({
+        trip_id: tripId, team_id: teamId, team_set: teamSet, player_id: playerId,
+        ...(addedBy !== undefined ? { added_by: addedBy } : {}),
+      })
     if (insError) return failed('team_members insert', insError)
   }
 

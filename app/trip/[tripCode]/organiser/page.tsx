@@ -259,6 +259,8 @@ export default async function OrganiserPage({ params }: {
       knockout={isKnockoutEvent(setupRaw)}
       drawSummary={rawDrawPlan(setupRaw)?.when === 'date' ? describeDrawPlan(rawDrawPlan(setupRaw), d => describeShortDate(d) ?? d) : null}
       accessCard={<PublicPinCard tripId={trip.id} tripCode={tripCode} hasPin={!!publicLock} />}
+      // The door to the team picker, while a leaderboard plays in teams.
+      hasTeamBoards={boards.some(b => b.audience === 'team' && !b.tagMode)}
       dayFormatSummary={
         dayBoardCount === 0
           ? 'No day has its own format yet.'

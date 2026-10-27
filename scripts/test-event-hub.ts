@@ -248,7 +248,9 @@ section('An event hides Trip Setup from the field')
 
   const teams = read('app/trip/[tripCode]/teams/page.tsx')
   ok(teams.includes('<PasscodeGate') && teams.includes('title="Organisers only"'),
-    'and the teams screen stands behind the PIN on an event')
+    'and the drag-and-drop teams editor stands behind the PIN on an event')
+  ok(read('app/trip/[tripCode]/teams/TeamsClient.tsx').includes('const organiser = isTrip || unlocked || !isLocked(passcodeHash)'),
+    '  …while the team picker\'s list changes nothing for the field without the PIN or the organiser\'s say-so')
 
   const organiser = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
   ok(/href=\{`\/trip\/\$\{tripCode\}\/setup`\}/.test(organiser),
