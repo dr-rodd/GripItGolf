@@ -300,7 +300,8 @@ section('A match play event is a knockout from the moment it is made')
   eq(deadlineNote('2026-11-14', 'Sat 14 Nov', { today: '2026-11-15', finished: true }), 'Played by Sat 14 Nov', 'a finished round says only its date')
 
   const bracket = read('app/trip/[tripCode]/matchplay/MatchplayBracket.tsx')
-  ok(bracket.includes('aria-label="Dates each round is played by"'), 'the dates sit across the top of the bracket')
+  ok(bracket.includes('leftDeadlineNote') && !bracket.includes('aria-label="Dates each round is played by"'),
+    'a round\'s play-by date sits under its name — no row of round chips across the top')
   const page = read('app/trip/[tripCode]/matchplay/page.tsx')
   ok(page.includes("from('trips').select('bracket_setup, kind, settings_passcode_hash').eq('id', trip.id).maybeSingle()"),
     '  …read in their own fail-soft query, never the trip\'s select')

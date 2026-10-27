@@ -429,8 +429,7 @@ overview, or one column at a time), not a rebuild.
    and the seed `{ format: 'match_play', schedule? }` (`knockoutSeed`), and
    `isKnockoutEvent` reads that raw seed — the parser refuses a partial. The
    draw goes to 64 (`MAX_BRACKET`; the setup offers 16, 32, 64). **The
-   dates each round is played by sit across the top of the bracket**, one
-   chip a round, tapping one moves to it, and under the round's name "Play
+   date each round is played by sits under the round's name** — "Play
    by Sat 14 Nov" (or "Was due…" in rust once past with a match still
    open) — the setup's deadlines lined up with the rounds actually drawn
    from the Final backwards (`drawDeadlines`, `deadlineNote`). **The

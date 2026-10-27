@@ -347,7 +347,7 @@ export default function MatchplayBracket({
     }
   }
 
-  /** For the arrows, dots and dates, which have no finger on the bracket. */
+  /** For the arrows and dots, which have no finger on the bracket. */
   const holdVisibleMiddle = () => {
     const el = containerRef.current
     if (!el) return
@@ -378,7 +378,7 @@ export default function MatchplayBracket({
     animRef.current = requestAnimationFrame(step)
   }
 
-  /** An arrow, a dot or a date: the visible middle held, then the move. */
+  /** An arrow or a dot: the visible middle held, then the move. */
   const goTo = (target: number) => {
     holdVisibleMiddle()
     animateTo(target)
@@ -509,34 +509,10 @@ export default function MatchplayBracket({
   return (
     <div className="select-none">
 
-      {/* The dates the rounds are played by — the pace of the whole draw,
-          across the top. Tapping one moves the bracket to it. */}
-      {deadlines.some(Boolean) && (
-        <div className="flex flex-wrap gap-1.5 mb-4" aria-label="Dates each round is played by">
-          {rounds.map((round, i) => {
-            const date = deadlines[i]
-            if (!date) return null
-            const finished = round.every(m => !!m.winner_player_id)
-            const overdue = !finished && !!today && date < today
-            return (
-              <button
-                key={i}
-                type="button"
-                onClick={() => goTo(i)}
-                aria-pressed={i === leftIndex}
-                className={`px-3 py-1.5 rounded-full border text-[13px] leading-tight text-left transition-colors ${
-                  i === leftIndex ? 'border-accent-deep bg-accent-tint text-ink' : 'border-line text-ink/80'
-                }`}
-              >
-                <span className="font-medium">{roundNames[i]}</span>
-                <span className={overdue ? 'text-rust-deep' : 'text-ink/65'}> · {describeShortDate(date)}</span>
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Round header — updates as you swipe */}
+      {/* Round header — updates as you swipe. The round's play-by date sits
+          under its name; a row of tappable round chips across the top was
+          tried and taken off (Ross, 27 Oct 2026: it looked machine-made, not
+          like the rest of the site). */}
       <div className="flex items-center justify-between gap-3 mb-4">
         <button
           onClick={() => goTo(leftIndex - 1)}

@@ -285,7 +285,7 @@ and the named rules below say what replaces each.
 | Progress fill | A step completes | 340ms colour | putt | Instant |
 | Sheet up (`sheet-up`) | A sheet opens | 280ms | ease-out | Instant |
 | Scoring card slide | Next / previous player | 260ms | ease-out | Instant |
-| Bracket swipe | Sideways swipe, arrows, dots, dates | Follows the finger; settles in up to 340ms, one round a swipe, the point under the finger held still inside the bracket's box — the page never scrolled while it moves, only once at rest | ease-out | Settles instantly; the drag still follows the finger |
+| Bracket swipe | Sideways swipe, arrows, dots | Follows the finger; settles in up to 340ms, one round a swipe, the point under the finger held still inside the bracket's box — the page never scrolled while it moves, only once at rest | ease-out | Settles instantly; the drag still follows the finger |
 | Score flash | A live score changed | 400ms colour only | ease-out | Instant |
 | Live dot (`dot-live`) | A card is open | 2s repeat | ease-in-out | Still |
 | Skeleton | Loading | 1.4s repeat | ease-in-out | Still |
