@@ -19,11 +19,14 @@
 // board, else the first board covering it (the primary) — and that board
 // alone: a secondary board ranks the golf, it does not shape it.
 //
-//   · a pairs knockout: always, in twos;
-//   · a team league whose teams are at most four: yes, unless the organiser
-//     said its players play apart. Asked once, where tee times are set up —
-//     "Do players play in their teams?" (`teeTeams`, absent until answered,
-//     and read as yes meanwhile, which is what every board did before);
+//   · pairs — a pairs knockout, or a league of twos (a better ball pair,
+//     foursomes): always, never asked. A pair plays together, usually two
+//     pairs to a tee time (Ross, 27 Oct 2026);
+//   · a team league whose teams are three or four: yes, unless the
+//     organiser said its players play apart. Asked once, where tee times
+//     are set up — "Do players play in their teams?" (`teeTeams`, absent
+//     until answered, and read as yes meanwhile, which is what every board
+//     did before);
 //   · anything else — individuals, the event's tags, teams of five or
 //     more: no; those teams stay teams.
 //
@@ -87,11 +90,26 @@ function candidate(
 }
 
 /**
+ * Whether a board's teams are pairs: a pairs knockout; a league whose
+ * players pick teams of two; or a league the organiser is filling in twos —
+ * no team on its sheet bigger than two (`largestTeam`), and at least one of
+ * two. Pairs always play together (Ross, 27 Oct 2026), so they are never
+ * asked.
+ */
+export function isPairs(board: Leaderboard, largestTeam = 0): boolean {
+  if (board.audience !== 'team' || board.tagMode) return false
+  if (board.competition === 'matchplay') return true
+  if (board.teamPick === 'self') return board.teamSize === PAIR
+  return largestTeam === PAIR
+}
+
+/**
  * This round's partnerships, or null when it has none.
  *
  * `largestTeam` is the biggest team already on the board's sheet, where the
  * caller has the memberships: a league whose organiser put six in a team is
- * not playing in partnerships, whatever it was never asked.
+ * not playing in partnerships, whatever it was never asked — and one whose
+ * teams are all twos is playing in pairs.
  */
 export function roundPartnership(
   boards: readonly Leaderboard[],
@@ -100,20 +118,20 @@ export function roundPartnership(
 ): RoundPartnership | null {
   const board = candidate(boards, roundId, largestTeam)
   if (!board) return null
-  if (board.competition !== 'matchplay' && board.teeTeams === 'separate') return null
+  const pairs = isPairs(board, largestTeam)
+  if (!pairs && board.teeTeams === 'separate') return null
   const sheet = sheetForBoard(board)
   return {
     board,
     sheet,
     isDay: isDaySheet(sheet),
-    size: board.competition === 'matchplay' ? PAIR
-      : board.teamPick === 'self' ? board.teamSize ?? null : null,
+    size: pairs ? PAIR : board.teamPick === 'self' ? board.teamSize ?? null : null,
   }
 }
 
 /**
  * The board to ask "Do players play in their teams?" of, for this round —
- * or null when there is nothing to ask: a pair always plays together, and
+ * or null when there is nothing to ask: pairs always play together, and
  * individuals, the event's tags and teams over four never do.
  *
  * Asked whether or not it has been answered, so the answer can be changed
@@ -125,7 +143,7 @@ export function playTogetherQuestion(
   largestTeam = 0,
 ): Leaderboard | null {
   const board = candidate(boards, roundId, largestTeam)
-  return board && board.competition === 'league' ? board : null
+  return board && board.competition === 'league' && !isPairs(board, largestTeam) ? board : null
 }
 
 /**

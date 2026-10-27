@@ -12,7 +12,7 @@ import {
   batchLast, clockMins, countToLast, minsClock, teeClocks, sheetLength, sheetCapacity,
   seatsShort, rulesIssue, describeRules, describeOpening,
 } from '@/lib/teeSheet'
-import { type CarriedPartnership, withPlayTogether } from '@/lib/partnerships'
+import { type CarriedPartnership, PAIR, withPlayTogether } from '@/lib/partnerships'
 import { setTeam } from '@/lib/teamMembers'
 import DateField from '@/app/components/DateField'
 import WizardShell from '@/app/components/WizardShell'
@@ -101,11 +101,17 @@ export default function TeeSheetWizard({
   const [together, setTogether] = useState(playTogether?.together ?? true)
   const unitSize = playTogether ? (together ? playTogether.size ?? teamSize : null) : teamSize
   const maxTeams = unitSize ? Math.floor(MAX_GROUP_SIZE / unitSize) : 0
+  // Pairs usually go out two to a tee time (Ross, 27 Oct 2026), so a pairs
+  // round's sheet being opened for the first time is counted that way.
+  const pairsFirstTime = !live && unitSize === PAIR && maxTeams > 0
   const [unit, setUnit] = useState<'players' | 'teams'>(
-    initial.teamsPerTee && maxTeams > 0 ? 'teams' : 'players',
+    (initial.teamsPerTee || pairsFirstTime) && maxTeams > 0 ? 'teams' : 'players',
   )
   const [players, setPlayers] = useState(initial.groupSize)
-  const [teams, setTeams] = useState(Math.min(Math.max(1, initial.teamsPerTee ?? 1), Math.max(1, maxTeams)))
+  const [teams, setTeams] = useState(Math.min(
+    Math.max(1, initial.teamsPerTee ?? (pairsFirstTime ? Math.floor(initial.groupSize / PAIR) : 1)),
+    Math.max(1, maxTeams),
+  ))
 
   // When it opens — now, some days before the round, or on a date — each
   // answer's fields kept while another is chosen, so changing your mind

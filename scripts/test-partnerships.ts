@@ -14,7 +14,7 @@
 
 import fs from 'fs'
 import {
-  governingBoard, roundPartnership, playTogetherQuestion, withPlayTogether,
+  governingBoard, roundPartnership, playTogetherQuestion, withPlayTogether, isPairs,
   isMadeName, partnershipName, carriedPartnerships, MAX_PARTNERSHIP, PAIR,
 } from '../lib/partnerships'
 import { type Leaderboard, parseLeaderboards } from '../lib/leaderboards'
@@ -94,6 +94,33 @@ section('Partnerships come from the governing board, and only that one')
   ok(!!d && d.isDay && d.sheet === daySheetId('r2'),
     'a round\'s own team board makes that round\'s partnerships, on the round\'s own sheet — new ones each round')
   eq(roundPartnership([solo, day], 'r1'), null, '  …and the other rounds go out as they please')
+}
+
+section('Pairs always play together, and are never asked')
+{
+  // Ross, 27 Oct 2026: "any pairings (usually a better ball or foursomes)"
+  // are partnerships — they play together, usually two pairs a tee time.
+  const selfPairs: Leaderboard = { ...fourball, teamPick: 'self', teamSize: 2 }
+  eq(roundPartnership([selfPairs], 'r1')?.size, PAIR, 'a league of self-picked twos plays in pairs')
+  eq(roundPartnership([{ ...selfPairs, teeTeams: 'separate' }], 'r1')?.size, PAIR,
+    '  …whatever was once answered: a pair always plays together')
+  eq(playTogetherQuestion([selfPairs], 'r1'), null, '  …so it is never asked')
+  ok(isPairs(selfPairs) && !isPairs({ ...fourball, teamPick: 'self', teamSize: 3 }, PAIR),
+    '  …while a self-picked three is a three, however many have joined so far')
+
+  eq(roundPartnership([fourball], 'r1', PAIR)?.size, PAIR,
+    'an organiser filling a league in twos is playing in pairs')
+  eq(roundPartnership([{ ...fourball, teeTeams: 'separate' }], 'r1', PAIR)?.size, PAIR,
+    '  …together, whatever was answered before the teams were made')
+  eq(playTogetherQuestion([fourball], 'r1', PAIR), null, '  …and not asked')
+  eq(playTogetherQuestion([fourball], 'r1', 3)?.id, 'fb', 'threes are asked')
+  eq(roundPartnership([{ ...fourball, teeTeams: 'separate' }], 'r1', 3), null,
+    '  …and a three that plays apart is a team, not a partnership')
+  ok(!isPairs(tags, PAIR) && !isPairs(solo, PAIR), 'the event\'s tags and individuals are never pairs')
+
+  const wizard = read('app/trip/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
+  ok(wizard.includes('const pairsFirstTime = !live && unitSize === PAIR'),
+    'a pairs round\'s first sheet is counted in pairs — two to a tee time, a group of four')
 }
 
 // ─── Asking whether they play together ─────────────────────────
