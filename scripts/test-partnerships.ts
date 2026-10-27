@@ -1,10 +1,10 @@
 /**
  * Partnership tests. Run with: npm run test:partnerships
  *
- * Ross, 27 Oct 2026: on screen everything is a "team", but underneath there
- * are two things — the long-horizon team (the code's tag) and the
- * partnership, the two to four who go out on one tee time and enter the
- * sheet and the board as one. The rules are in lib/partnerships.ts and are
+ * Ross, 27 Oct 2026: three things — the event's tags (the umbrella group),
+ * the teams a leaderboard makes, and partnerships, the tight subset of
+ * teams: the two to four who go out on one tee time and enter the sheet
+ * and the board as one. The rules are in lib/partnerships.ts and are
  * checked directly: which board governs a round, when its teams are
  * partnerships, when the organiser is asked whether they play together,
  * how the answer is stored, and how a pair is named. Then the wiring: the
@@ -75,7 +75,7 @@ section('Partnerships come from the governing board, and only that one')
   eq(roundPartnership([{ ...pairsDraw, teeTeams: 'separate' }], 'r1')?.size, PAIR,
     '  …whatever was ever stored: a pair always plays together')
 
-  eq(roundPartnership([tags], 'r1'), null, 'the event\'s teams are never partnerships — twelve is not a fourball')
+  eq(roundPartnership([tags], 'r1'), null, 'the event\'s tags are never partnerships — twelve is not a fourball')
   eq(roundPartnership([{ ...fourball, teeTeams: 'separate' }], 'r1'), null,
     'a league whose players play apart has none')
   ok(!!roundPartnership([{ ...fourball, teeTeams: 'together' }], 'r1'), '  …and one that said yes has them')
@@ -105,7 +105,7 @@ section('"Do players play in their teams?" is asked where it can be answered')
     '  …even once answered no, so the answer can be changed where it was given')
   eq(playTogetherQuestion([pairsDraw], 'r1'), null, 'never of a pair — a pair always plays together')
   eq(playTogetherQuestion([solo, fourball], 'r1'), null, 'never of a board that does not govern the round')
-  eq(playTogetherQuestion([tags], 'r1'), null, 'never of the event\'s teams')
+  eq(playTogetherQuestion([tags], 'r1'), null, 'never of the event\'s tags')
   eq(playTogetherQuestion([fourball], 'r1', 5), null, 'never of teams of five or more')
 }
 
@@ -159,11 +159,11 @@ section('A pair reads "Ross & Dave"')
 
 // ─── Kept apart from the event's teams ─────────────────────────
 
-section('An event\'s main sheet is its teams\', never a board\'s partnerships')
+section('An event\'s main sheet is its tags\', never a board\'s teams')
 {
   eq(nextSheetId([]), MAIN_SET, 'a trip\'s first team board takes the main sheet, as it always has')
   eq(nextSheetId([], { reserveMain: true }), 'set-2',
-    'an event\'s goes on a sheet of its own — the main sheet is the event\'s teams')
+    'an event\'s goes on a sheet of its own — the main sheet is the event\'s tags')
   eq(nextSheetId([fourball], { reserveMain: true }), 'set-3', '  …and the next after it')
 
   const form = read('app/components/LeaderboardSetup.tsx')
@@ -200,7 +200,7 @@ section('A round that makes its own partnerships starts from the last round\'s')
   eq(two[0].playerIds, ['ross', 'dave'], '  …the same players in each')
   eq(two[0].color, '#123456', '  …in the same colour')
   ok(!two.some(t => t.name === 'Mary'), '  …and a partner left on their own does not carry — one is not a partnership')
-  ok(!two.some(t => t.name === 'Europe'), '  …nor do the event\'s teams')
+  ok(!two.some(t => t.name === 'Europe'), '  …nor do the event\'s tags')
   eq(carry('r3').map(t => t.name), ['Ross & Dave', 'Seán & John'],
     'round three reaches back past a round that made none')
   eq(carry('r1'), [], 'the first round has nothing to start from')

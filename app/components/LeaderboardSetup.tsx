@@ -848,22 +848,26 @@ function Builder({
       </Question>
 
       {/* Events only, and asked *of* a team board rather than beside it.
-          A side is a team — a `teams` row on the main sheet
+          A tag is a team — a `teams` row on the main sheet
           (lib/tagBoards.ts) — so offering it as a third answer up there
           made an organiser choose between two things that are additive:
-          an event can rank its sides and its playing teams at once, a
-          board each. A trip is never asked, having no organiser to make
-          sides — the same context `askTeeTeams` carries, for the same
-          reason: this model does not know what kind of trip is asking.
+          an event can rank its tags and its teams at once, a board each.
+          Three words, three things (Ross, 27 Oct 2026): a tag lasts the
+          whole event; a team is the group a leaderboard makes, loose or
+          bound; a partnership is a team that goes out together
+          (lib/partnerships.ts), which the tee sheet asks about. A trip is
+          never asked, having no organiser to make tags — the same context
+          `askTeeTeams` carries, for the same reason: this model does not
+          know what kind of trip is asking.
 
-          Picking the sides writes a mode straight away, so the draft is
+          Picking the tags writes a mode straight away, so the draft is
           never a tags board that has not said how it scores. */}
       {askTags && draft.audience === 'team' && (
-        <Question n={next()} title="Which teams are being ranked?">
+        <Question n={next()} title="Which groups are being ranked?">
           <Choice
             on={!draft.tagMode}
-            label="The teams playing together"
-            hint="Pairs and fourballs, free to change from round to round."
+            label="Teams"
+            hint="Pairs, fourballs or bigger groups made for this leaderboard. Whether they play together is asked when the tee times are set up."
             onClick={() => {
               if (!draft.tagMode) return
               setDraft({ ...fresh, audience: 'team' })
@@ -871,10 +875,10 @@ function Builder({
           />
           <Choice
             on={isTagBoard(draft)}
-            label="The event's teams"
-            hint="A player keeps their team all event, like Europe or USA, whoever they play with."
+            label="The event's tags"
+            hint="A player keeps their tag all event, like Europe or USA, whoever they play with."
             onClick={() => {
-              // Already on the sides: re-tapping must not throw away the
+              // Already on the tags: re-tapping must not throw away the
               // mode and the scoring underneath it.
               if (isTagBoard(draft)) return
               setDraft({ ...fresh, audience: 'team', tagMode: TAG_MODES[0].key })
@@ -958,7 +962,7 @@ function Builder({
           how its players combine — because it is the same question asked
           of a side: what makes its score for the day. */}
       {offersTagMode(draft) && (
-        <Question n={next()} title="How does a team score a round?">
+        <Question n={next()} title="How does a tag score a round?">
           {TAG_MODES.map(m => (
             <Choice
               key={m.key}
@@ -1001,7 +1005,7 @@ function Builder({
             ))}
           </div>
           <p className="t-cap text-ink/65 leading-snug">
-            If fewer of the team play, every card they hand in counts.
+            If fewer of the tag play, every card they hand in counts.
           </p>
         </Question>
       )}
@@ -1331,7 +1335,7 @@ export default function LeaderboardSetup({
   readOnly?: boolean
   /**
    * An event's form: team boards are asked how their teams are formed, and
-   * are kept off the main sheet, which holds the event's teams. Whether
+   * are kept off the main sheet, which holds the event's tags. Whether
    * teams play together is asked on the tee sheet wizard now, of trips and
    * events alike (lib/partnerships.ts).
    */
@@ -1390,8 +1394,8 @@ export default function LeaderboardSetup({
     if (was?.audience === 'team' && was.teamSet && was.teamSet !== TAG_SET) {
       return { ...lb, teamSet: was.teamSet }
     }
-    // On an event the main sheet is the event's teams', never a board's
-    // partnerships (lib/teamSets.ts `nextSheetId`).
+    // On an event the main sheet is the event's tags', never a board's
+    // teams (lib/teamSets.ts `nextSheetId`).
     return {
       ...lb,
       teamSet: nextSheetId(boards.filter(b => b.id !== lb.id), { reserveMain: askTeeTeams || askTags }),

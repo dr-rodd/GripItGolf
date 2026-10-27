@@ -50,8 +50,8 @@ export default async function TagsPage({ params }: {
           This is a trip
         </p>
         <p className="text-ink/65 text-sm mb-8 max-w-[22rem] leading-relaxed">
-          This screen is for events. A trip&apos;s teams are picked in
-          Trip Setup, on the tab bar below.
+          Tags belong to events. A trip&apos;s teams are picked in Trip
+          Setup, on the tab bar below.
         </p>
         <BackButton href={`/trip/${tripCode}`} label="Trip" />
       </main>
@@ -124,7 +124,7 @@ export default async function TagsPage({ params }: {
         tripCode={tripCode}
         tripName={trip.name}
         passcodeHash={trip.settings_passcode_hash as string}
-        title="Teams"
+        title="Tags"
         hint={`Enter the organiser PIN for ${trip.name}.`}
       >
         {content}

@@ -525,7 +525,7 @@ export default function OrganiserClient({
         <section className="mt-10">
           <SectionHeader className="mb-4">Running the event</SectionHeader>
           <ListGroup>
-            <ListRow href={`/trip/${tripCode}/organiser/tags`} label="Teams" hint={tagsSummary} />
+            <ListRow href={`/trip/${tripCode}/organiser/tags`} label="Tags" hint={tagsSummary} />
             {rounds.length > 1 && (
               <ListRow href={`/trip/${tripCode}/organiser/days`} label="Each day’s own format" hint={dayFormatSummary} />
             )}

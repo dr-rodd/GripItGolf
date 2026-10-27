@@ -1,15 +1,18 @@
 // Partnerships — the playing unit (Ross, 27 Oct 2026).
 //
-// On screen everything is a "team". Internally there are two words,
-// because there are two things:
+// Three words, because there are three things:
 //
-//   · a team — the long-horizon grouping a player carries all event, or all
-//     series: Europe and USA, the club sides. The code's tag, on the main
-//     sheet (lib/tagBoards.ts).
-//   · a partnership — a tightly bound playing unit of two to four who go
-//     out on one tee time and enter the tee sheet and the leaderboard as
-//     one: a pair in a pairs bracket, a fourball's team card. A pair reads
-//     "Ross & Dave", with the field's usual shortening.
+//   · a tag — the umbrella group a player carries all event, or all series:
+//     Europe and USA, the club sides. On the main sheet (lib/tagBoards.ts).
+//   · a team — the group a leaderboard makes, which need not play together:
+//     teammates may go out at different times, every card counting.
+//   · a partnership — the tight subset of teams: two to four who go out on
+//     one tee time and enter the tee sheet and the leaderboard as one — a
+//     pair in a pairs bracket, a fourball's team card. On screen still a
+//     "team"; a pair reads "Ross & Dave", with the field's usual shortening.
+//
+// Teams and partnerships are picked in the same way (one selection wizard,
+// to come); which one a board's teams are is the rule below.
 //
 // Whether a round has partnerships is never a switch of its own. It is read
 // off the board that governs how the round is played — the round's own
@@ -21,8 +24,8 @@
 //     said its players play apart. Asked once, where tee times are set up —
 //     "Do players play in their teams?" (`teeTeams`, absent until answered,
 //     and read as yes meanwhile, which is what every board did before);
-//   · anything else — individuals, the event's teams, teams of five or
-//     more: no.
+//   · anything else — individuals, the event's tags, teams of five or
+//     more: no; those teams stay teams.
 //
 // A partnership is a team row on the governing board's sheet: a round's own
 // board keeps that round's (`day:<roundId>`), so they can change from round
@@ -67,7 +70,7 @@ export type RoundPartnership = {
 
 /**
  * The board whose teams could be this round's partnerships — a team league
- * or a pairs knockout governing the round, not the event's teams, and no
+ * or a pairs knockout governing the round, not the event's tags, and no
  * bigger than a tee time. Whether they play together is the next question.
  */
 function candidate(
@@ -111,7 +114,7 @@ export function roundPartnership(
 /**
  * The board to ask "Do players play in their teams?" of, for this round —
  * or null when there is nothing to ask: a pair always plays together, and
- * individuals, the event's teams and teams over four never do.
+ * individuals, the event's tags and teams over four never do.
  *
  * Asked whether or not it has been answered, so the answer can be changed
  * where it was given.

@@ -1746,9 +1746,12 @@ a rule decided it; **Ross** marks a question. Paths are under
 `app/trip/[tripCode]/` unless they start with `lib/`. ~~On screen a tag is a
 **side**; "tags" stays only in the portal's name ("Teams and tags" row, the
 "Tags" page) so it is recognisable.~~ **Decided 27 Oct 2026 (Ross): on screen
-a tag is a team** — the row and the page are "Teams", and every "side" below
-now reads "team" (CLAUDE.md, "An event has two levels of grouping"). The
-lines below keep their earlier wording as the record of what was proposed.
+a tag is a tag** — the row and the page are "Tags", and every "side" below
+now reads "tag". (For an afternoon they read "team"; Ross then kept "team"
+for the looser group a leaderboard makes, and "partnership", internally, for
+the tight subset that goes out together — CLAUDE.md, "An event has two
+levels of grouping".) The lines below keep their earlier wording as the
+record of what was proposed.
 
 ### The organiser area
 

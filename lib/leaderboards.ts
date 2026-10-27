@@ -324,17 +324,16 @@ export type TagMode = 'best_cards' | 'all_cards' | 'day_teams'
 export const TAG_MODES: { key: TagMode; label: string; hint: string }[] = [
   // Hints carry a full stop: `boardRules` joins them into the line under a
   // saved board's title, the same contract every other registry here keeps.
-  // Said in teams rather than in tags: "tag" is what the platform calls
-  // the row, "team" is what a golfer calls the thing (Ross, 27 Oct 2026 —
-  // they were "sides" until then) — and these hints are read on a saved
-  // board's own line, where nobody has the portal open to remind them
-  // which is which.
+  // Said in tags, the word on screen for the umbrella grouping (Ross, 27
+  // Oct 2026 — "sides" until then, briefly "teams"): a team is the looser
+  // group a leaderboard makes, a partnership the tight subset of teams that
+  // goes out together. These hints are read on a saved board's own line.
   { key: 'best_cards', label: 'Best cards only',
-    hint: 'Only the team\'s best cards count each round.' },
+    hint: 'Only the tag\'s best cards count each round.' },
   { key: 'all_cards', label: 'Every card counts',
-    hint: 'Every player\'s card counts towards their team.' },
+    hint: 'Every player\'s card counts towards their tag.' },
   { key: 'day_teams', label: 'The day\'s team cards',
-    hint: 'Each pair or fourball\'s card counts for the team its players share.' },
+    hint: 'Each pair or fourball\'s card counts for the tag its players share.' },
 ]
 
 /**
@@ -386,8 +385,8 @@ export function describeTagMode(lb: Pick<Partial<Leaderboard>, 'tagMode' | 'tagC
   if (lb.tagMode === 'best_cards') {
     const n = tagCountOf(lb)
     return n === 1
-      ? 'The team\'s best card counts each round.'
-      : `The team's best ${n} cards count each round.`
+      ? 'The tag\'s best card counts each round.'
+      : `The tag's best ${n} cards count each round.`
   }
   return ALL_TAG_MODES.find(m => m.key === lb.tagMode)?.hint ?? ''
 }
@@ -797,12 +796,12 @@ export function boardTitle(lb: Leaderboard): string {
   }
   const scoring = SCORINGS.find(s => s.key === lb.scoring)?.label ?? 'League'
   const format = ALL_TEAM_FORMATS.find(f => f.key === lb.teamFormat)?.label ?? 'Team'
-  // A tags board is named for what it ranks, then how: "Teams — Stableford
-  // Points", the event's teams, beside "Team better ball", the teams
-  // playing together. The scoring rather than the mode, because a tag
+  // A tags board is named for what it ranks, then how: "Tags — Stableford
+  // Points" beside "Team better ball", so the event's tags and its teams
+  // never share a tab name. The scoring rather than the mode, because a tag
   // reads whole individual cards — the same thing a solo board is named
   // after.
-  const base = isTagBoard(lb) ? `Teams — ${scoring}`
+  const base = isTagBoard(lb) ? `Tags — ${scoring}`
     : lb.audience === 'individual' ? scoring
     : `Team ${format.toLowerCase()}`
   // The same scoring totalled and paid by position are two boards, so the tab

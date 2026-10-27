@@ -67,7 +67,7 @@ export default function PrivacyPage() {
         <p>Whatever the sport:</p>
         <ul className="list-disc pl-5 space-y-1.5">
           <li><B>Names</B>, as you or the organiser typed them, and an optional nickname you choose.</li>
-          <li><B>Teams</B> you are placed on or pick.</li>
+          <li><B>Teams and tags</B> you are placed on or pick.</li>
           <li>
             <B>The event itself</B> — its name, dates and venues, and anything the organiser adds:
             an itinerary (where the group stays, how it travels, what else is planned) and notices

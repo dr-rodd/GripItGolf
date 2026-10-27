@@ -88,8 +88,8 @@ export const EVENT_PERMISSIONS: {
   // sheet, while this only lets a claimed player join one of the tags the
   // organiser has already made (lib/tagBoards.ts). Both stay, deliberately.
   { key: 'assign_tag', dflt: false,
-    label: 'Participants can pick their own team',
-    hint: 'Let claimed players join one of your teams for the event.' },
+    label: 'Participants can pick their own tag',
+    hint: 'Let claimed players join one of your tags for the event.' },
   // A league's rounds can arrive as they are played: somebody adds the
   // day's round on the Scoring tab when the group turns up. The organiser
   // can always do it with the PIN; this lets the field do it without.

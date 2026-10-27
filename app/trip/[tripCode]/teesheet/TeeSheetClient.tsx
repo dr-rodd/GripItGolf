@@ -504,18 +504,18 @@ export default function TeeSheetClient({
           <div className="bg-rust/[0.06] border border-rust/25 rounded-2xl p-4 mb-4">
             <p className="text-ink text-sm font-medium">
               {untagged.length === 1
-                ? 'One player still needs a team'
-                : `${untagged.length} players still need a team`}
+                ? 'One player still needs a tag'
+                : `${untagged.length} players still need a tag`}
             </p>
             <p className="text-ink/65 t-cap mt-1 leading-snug">
-              The event ranks its teams, so these cannot go on the sheet yet:{' '}
+              The event ranks its tags, so these cannot go on the sheet yet:{' '}
               {untagged.map(id => nameOf.get(id)).filter(Boolean).join(' · ')}
             </p>
             <Link
               href={`/trip/${tripCode}/organiser/tags`}
               className="inline-block mt-2 t-cap text-accent-deep hover:text-accent transition-colors"
             >
-              Set teams →
+              Set tags →
             </Link>
           </div>
         )}
