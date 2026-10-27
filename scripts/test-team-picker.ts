@@ -7,12 +7,18 @@
  * people they added. The rules are lib/teamPicker.ts and are checked
  * directly; then the wiring: one writer, the added-by column named only
  * once it exists, and the drag editor kept behind its link.
+ *
+ * Stage 4: a team made from the tee sheet, for one tee time — whoever is
+ * on the time in no team is in it and fixed, the rest of the choice is the
+ * players on no time yet, and the sheet places the team when it is back.
  */
 
 import fs from 'fs'
 import {
   pickerSheets, mayPick, mayTakeOut, mayAddOthers, pickChoices, selectionIssue,
   pickPlan, madeTeamName, hasRoom, type PickerViewer, type PickerMember,
+  roundPickerSheet, teeTimeChoices, matesLockedIn, roomOnTime, teeTimeIssue, toPlace, openTeamOnTime,
+  withinMyTag, teamTagIssue, type TeeTimePick,
 } from '../lib/teamPicker'
 import { isMadeName } from '../lib/partnerships'
 import { type Leaderboard } from '../lib/leaderboards'
@@ -139,6 +145,109 @@ section('A selection, and what saving it changes')
   ok(isMadeName(name, ['Ross O\'Grady', 'Dave Byrne']), '  …which reads as a name nobody chose, so it follows them')
 }
 
+// ─── From the tee sheet ────────────────────────────────────────
+
+section('A round\'s own list, from its tee sheet')
+{
+  const daily: Leaderboard = { ...fourball, id: 'd1', roundIds: ['r1'], teamSet: undefined }
+  const own = roundPickerSheet([solo, daily], 'r1', () => 0, true)
+  ok(!!own && own.id.startsWith('day:'), 'a round\'s own partnerships are picked on its own sheet — the teams page never lists them')
+  ok(!!own?.selfPick, '  …by the field wherever it books its own time, as "Make this group a team" always let it')
+  ok(!roundPickerSheet([solo, daily], 'r1', () => 0, false)?.selfPick, '  …and only the organiser where it does not')
+  eq(roundPickerSheet([fourball], 'r1', () => 0, true)?.selfPick, false,
+    'an event-long partnership is the field\'s only where the board says the field picks')
+  eq(roundPickerSheet([{ ...fourball, teamPick: 'self', teamSize: 2 }], 'r1', () => 0, false)?.cap, 2,
+    '  …and a self-picked pair is two')
+  eq(roundPickerSheet([fourball], 'r1', () => 0, true)?.cap, 4, 'never more than a tee time')
+  eq(roundPickerSheet([solo, fourball], 'r1', () => 0, true), null, 'a round without partnerships has nothing to pick')
+}
+
+section('Who the picker offers for a tee time')
+{
+  const players = ['ross', 'dave', 'sean', 'john', 'mary', 'kate'].map(id => ({ id, name: id[0].toUpperCase() + id.slice(1) }))
+  const ms: PickerMember[] = [
+    { team_id: 't1', team_set: 'set-2', player_id: 'mary', added_by: null },
+    { team_id: 't1', team_set: 'set-2', player_id: 'kate', added_by: null },
+  ]
+  const at: TeeTimePick = {
+    label: '8:10 am', onSlot: ['dave'], mates: ['dave'], free: ['sean', 'john'], vacancy: 3, bookerRecorded: true,
+  }
+  const john: PickerViewer = { organiser: false, meId: 'ross', selfPick: true, addedRecorded: true }
+  const c = teeTimeChoices({ players, memberships: ms, sheet: 'set-2', teamId: null, viewer: john, at, cap: 2 })
+  eq(c.map(x => x.id), ['ross', 'dave', 'sean', 'john'], 'you, whoever is on the time, then the players on no time — never another team')
+  ok(c[1].picked && c[1].locked,
+    'whoever is on the time in no team is in your team and cannot be taken out (Ross: "preselected … and not deletable")')
+  ok(!c[2].picked && !c[2].locked, '  …the players on no time are yours to add')
+
+  const crowd: TeeTimePick = { ...at, onSlot: ['dave', 'sean'], mates: ['dave', 'sean'], free: [], vacancy: 2 }
+  ok(!matesLockedIn(crowd, john, 0, 2), 'two on a pairs round\'s time do not both fit with you')
+  const offered = teeTimeChoices({ players, memberships: ms, sheet: 'set-2', teamId: null, viewer: john, at: crowd, cap: 2 })
+  ok(offered.filter(x => x.id !== 'ross').every(x => !x.picked && !x.locked), '  …so they are offered, for you to choose between')
+
+  const early = teeTimeChoices({ players, memberships: ms, sheet: 'set-2', teamId: null, viewer: john, at: { ...at, bookerRecorded: false }, cap: 2 })
+  eq(early.map(x => x.id), ['ross', 'dave'], 'before 065 records who booked whom, nobody is brought along — those on the time still are')
+
+  const organiserChoices = teeTimeChoices({ players, memberships: ms, sheet: 'set-2', teamId: null, viewer: organiser, at, cap: 2 })
+  ok(organiserChoices.every(x => !x.locked) && organiserChoices[0].id === 'dave',
+    'the organiser can untick anybody, and is not in the team themselves')
+}
+
+section('Room on the time, and who goes on')
+{
+  const at: TeeTimePick = {
+    label: '8:10 am', onSlot: ['dave', 'sean'], mates: ['dave'], free: ['john', 'mary'], vacancy: 2, bookerRecorded: true,
+  }
+  ok(roomOnTime('john', ['ross'], at, 4), 'one place left on the time after you')
+  ok(!roomOnTime('mary', ['ross', 'john'], at, 4), '  …and none after that')
+  ok(roomOnTime('dave', ['ross', 'john'], at, 4), 'somebody already on the time takes no place')
+  ok(!roomOnTime('dave', ['ross', 'john'], at, 2), 'nor more than the team holds')
+  eq(teeTimeIssue(['ross', 'john'], at), null, 'two coming, two places')
+  eq(teeTimeIssue(['ross', 'john', 'mary'], at), 'Only 2 more fit at 8:10 am.', 'three coming says so')
+  eq(teeTimeIssue(['ross'], { ...at, vacancy: 0 }), '8:10 am is full now — go back and pick another time.', 'a time filled meanwhile says so')
+  eq(toPlace(['ross', 'dave', 'john'], new Set(['dave', 'sean'])), ['ross', 'john'], 'the sheet books whoever is not on it yet')
+}
+
+section('Where tags are in play, a team made for a time is of one')
+{
+  const tagged = [
+    { team_id: 'eu', team_set: MAIN_SET, player_id: 'ross' },
+    { team_id: 'eu', team_set: MAIN_SET, player_id: 'dave' },
+    { team_id: 'us', team_set: MAIN_SET, player_id: 'sean' },
+    { team_id: 'us', team_set: MAIN_SET, player_id: 'john' },
+  ]
+  const at: TeeTimePick = {
+    label: '8:10 am', onSlot: ['dave', 'sean'], mates: ['dave', 'sean'], free: ['john'], vacancy: 2, bookerRecorded: true,
+  }
+  const mine = withinMyTag(at, { organiser: false, meId: 'ross' }, tagged, true)
+  eq([mine.mates, mine.free], [['dave'], []], 'a player is offered only their own tag\'s')
+  eq(withinMyTag(at, { organiser: true, meId: null }, tagged, true), at, '  …the organiser everybody')
+  eq(withinMyTag(at, { organiser: false, meId: 'ross' }, tagged, false), at, '  …and without tags nothing is narrowed — a trip is untouched')
+  ok(!!teamTagIssue(['ross', 'sean'], tagged, true), 'two tags in one team are refused')
+  eq(teamTagIssue(['ross', 'sean'], tagged, false), null, '  …only while tags are in play')
+}
+
+section('A part-filled team on the time is joined, not doubled')
+{
+  const ms = [
+    { team_id: 'half', team_set: 'set-2', player_id: 'mary' },
+    { team_id: 'half', team_set: 'set-2', player_id: 'kate' },
+    { team_id: 'full', team_set: 'set-2', player_id: 'sean' },
+    { team_id: 'full', team_set: 'set-2', player_id: 'john' },
+  ]
+  eq(openTeamOnTime(ms, 'set-2', ['mary', 'kate'], 4), 'half', 'two of a four on the time: whoever picks it next joins them')
+  eq(openTeamOnTime(ms, 'set-2', ['sean', 'john'], 2), null, 'a full pair has no room')
+  eq(openTeamOnTime(ms, 'set-2', ['mary', 'sean'], 4), null, 'two with room is a choice, and the picker makes it')
+  eq(openTeamOnTime(ms, 'set-3', ['mary', 'kate'], 4), null, 'only this round\'s list counts')
+
+  const joining = teeTimeChoices({
+    players: ['ross', 'mary', 'kate'].map(id => ({ id, name: id })),
+    memberships: ms.map(m => ({ ...m, added_by: 'mary' })), sheet: 'set-2', teamId: 'half',
+    viewer: { organiser: false, meId: 'ross', selfPick: true, addedRecorded: true },
+    at: { label: '8:10 am', onSlot: ['mary', 'kate'], mates: [], free: [], vacancy: 2, bookerRecorded: true }, cap: 4,
+  })
+  ok(joining.every(c => c.picked && c.locked), '  …in it with them, nobody taken out by the one joining')
+}
+
 // ─── Wiring ────────────────────────────────────────────────────
 
 section('One writer, and the column named only once it is there')
@@ -171,6 +280,28 @@ section('One writer, and the column named only once it is there')
   const organiserArea = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
   ok(organiserArea.includes('href={`/trip/${tripCode}/teams`} label="Teams"'),
     'the organiser area has a door to the teams — they were hard to find')
+}
+
+section('The tee sheet and the picker, wired')
+{
+  const pick = read('app/trip/[tripCode]/teams/pick/page.tsx')
+  ok(pick.includes('readTeeTime(trip.id, teeRoundId, slotIndex)') && pick.includes('roundPickerSheet(boards, teeRoundId'),
+    'the picker reads the time as it stands — who is on it is never taken from the link')
+  const wizard = read('app/trip/[tripCode]/teams/pick/TeamPickerWizard.tsx')
+  ok(wizard.includes('`${backHref}&place=${teeTime.slot}&team=${target.id}`'), 'saved, it goes back to the sheet with the team to place')
+  ok(wizard.includes('`${backHref}&place=${teeTime.slot}&player=${only}`'), '  …and one player goes on alone — one is not a team')
+  ok(wizard.includes('addedBy: addedRecorded ? null : undefined'), '  …those on the time are in by rule, carrying nobody, so the maker cannot take them out')
+
+  const sheet = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  ok(sheet.includes('Pick your team') && sheet.includes('Just me'), 'Join on a partnership round asks: your team first, or just you')
+  ok(sheet.includes('placed.current = true') && sheet.includes('router.replace(`/trip/${tripCode}/teesheet?round='),
+    'the sheet places the team once, and drops the request so a refresh cannot book twice')
+  ok(sheet.includes('void addPlayers(placing.slot, coming)'), '  …through its own booking, tag gate and in-slot refusals included')
+  ok(sheet.includes('await leaveRoundTeams(slotIndex, playerIds)') && sheet.includes("if (!round || !info?.isDay) return"),
+    'off the time is out of the round\'s own team — an event-long partnership leaves as one block and stays one')
+  ok(sheet.includes('for (const teamId of teamIds) await deleteTeam('), 'a team broken up on the sheet goes, rather than staying as a blank row')
+  ok(sheet.includes('slotPlayers.length > roundTeamInfo.cap') && sheet.includes('Pick a team from this time'),
+    'a time holding more than a team — a pairs fourball — picks its team rather than making all four one')
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

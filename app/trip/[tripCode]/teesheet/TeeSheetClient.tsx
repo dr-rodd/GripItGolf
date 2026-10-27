@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 import InlineUnlock from '@/app/components/InlineUnlock'
@@ -16,6 +17,10 @@ import {
   TAG_SET, untaggedIds, tagGateReason, dayTeamTagIssue,
 } from '@/lib/tagBoards'
 import { setTeam } from '@/lib/teamMembers'
+import { partnershipName } from '@/lib/partnerships'
+import { matesLockedIn, toPlace, openTeamOnTime } from '@/lib/teamPicker'
+import { boardNames } from '@/lib/displayNames'
+import { deleteTeam, refreshTeamName } from '../teams/teamWrites'
 import { PRESET_COLORS } from '@/lib/teamColors'
 import { FIELD, buttonClass, cardClass, optionClass } from '@/app/components/ui'
 import { courseLabel } from '@/lib/courseDirectory'
@@ -49,6 +54,14 @@ import { courseLabel } from '@/lib/courseDirectory'
  * phones editing at once interleave instead of clobbering, and the unique
  * constraint makes the same player in two slots impossible however the
  * taps race.
+ *
+ * On a round that plays in partnerships (Ross, 27 Oct 2026, stage 4), a
+ * player in no team who may make one is asked on Join: pick your team —
+ * the team picker, with anybody on the time in no team already in it —
+ * or just me. The picker sends them back here with the team, which this
+ * screen then books onto the time (`placing`), once, with its own checks.
+ * Taking somebody off a round whose partnerships are its own takes them
+ * out of that round's team as well.
  */
 
 type Round = {
@@ -81,14 +94,18 @@ const untidyGroups = (groups: { teamId: string | null }[]) =>
  * players go out as they please.
  */
 type RoundTeams = {
-  /** Player → their partnership, named as one ("Ross & Dave"). */
-  teamOf: Record<string, { teamId: string; teamName: string }>
+  /** Player → their partnership, named as one ("Ross & Dave"), and the name it is stored under. */
+  teamOf: Record<string, { teamId: string; teamName: string; stored: string }>
   /** The sheet those partnerships stand on (lib/teamSets.ts `sheetForBoard`). */
   sheet: string
   /** A sheet belonging to this round alone — its partnerships are made here. */
   isDay: boolean
   /** The size the board asks for, when it asks for one. */
   teamSize: number | null
+  /** The most a team made here may hold — never more than a tee time. */
+  cap: number
+  /** The board lets the field pick its own teams (`teamPick: 'self'`). */
+  playersPick: boolean
 }
 
 export default function TeeSheetClient({
@@ -96,6 +113,7 @@ export default function TeeSheetClient({
   roundTeams, tagOf, playingForTags = false,
   fieldMayEdit, fieldMaySet = false, passcodeHash = null,
   storageReady = true, meId = null, initialRoundId = null, isTrip = false, bookerRecorded = false,
+  placing = null,
 }: {
   tripId: string
   tripCode: string
@@ -120,6 +138,8 @@ export default function TeeSheetClient({
   meId?: string | null
   /** The round to open on — the wizard sends people back to the one they made. */
   initialRoundId?: string | null
+  /** Back from the team picker: a team, or one player, to put on a time. */
+  placing?: { roundId: string; slot: number; teamId: string | null; playerId: string | null } | null
   /** A trip's sheet: its lead player and passcode, never an organiser and PIN. */
   isTrip?: boolean
   /**
@@ -142,7 +162,10 @@ export default function TeeSheetClient({
   // scroll away.
   const [error, setError] = useState<{ slot: number; message: string } | null>(null)
   const [adding, setAdding] = useState<number | null>(null)
+  // The slot whose Join is asking "pick your team, or just you?".
+  const [joining, setJoining] = useState<number | null>(null)
   const [search, setSearch] = useState('')
+  const router = useRouter()
 
   // The organiser's PIN unlock, read after mount — sessionStorage does not
   // exist on the server, and a render that reads it would tear hydration.
@@ -164,6 +187,7 @@ export default function TeeSheetClient({
   const selfPick = selfPickAllowed && !notYetOpen
   const groupSize = live ? sheetGroupSize(live) : 0
   const nameOf = useMemo(() => new Map(players.map(p => [p.id, p.name])), [players])
+  const shortOf = useMemo(() => boardNames(players), [players])
 
   /**
    * This round's teams, kept in state because a day's are made here.
@@ -330,7 +354,53 @@ export default function TeeSheetClient({
     if (err) {
       if (!(await resyncRound())) setAssignments(prev)
       calmError(slotIndex, err, playerIds.length > 1 ? 'remove the team' : 'remove the player')
+      return
     }
+    await leaveRoundTeams(slotIndex, playerIds)
+  }
+
+  /**
+   * Off the time and out of the round's team with it (Ross, 27 Oct 2026:
+   * the organiser removing a player "will remove them from the
+   * partnership"). Only where the round's partnerships are its own — the
+   * group on the time is the team. A partnership kept for the whole event
+   * leaves the time as one block and stays a partnership.
+   *
+   * A team left with one player is no team: they go back to a name on the
+   * time, for whoever joins it next to make a team with.
+   */
+  async function leaveRoundTeams(slotIndex: number, playerIds: string[]) {
+    const info = roundTeamInfo
+    if (!round || !info?.isDay) return
+    const leaving = new Set(playerIds.filter(id => info.teamOf[id]))
+    if (leaving.size === 0) return
+    const next = { ...info.teamOf }
+    for (const teamId of new Set([...leaving].map(id => info.teamOf[id].teamId))) {
+      const before = Object.keys(info.teamOf).filter(id => info.teamOf[id].teamId === teamId)
+      const after = before.filter(id => !leaving.has(id))
+      const out = after.length < 2 ? before : before.filter(id => leaving.has(id))
+      for (const id of out) {
+        const failure = await setTeam(tripId, id, info.sheet, null)
+        if (failure) {
+          calmError(slotIndex, failure.error as { message?: string; code?: string }, 'take them out of their team')
+          return
+        }
+        delete next[id]
+      }
+      if (after.length < 2) {
+        await deleteTeam({ tripId, sheet: info.sheet, teamId, memberIds: [] })
+        continue
+      }
+      const stored = await refreshTeamName({
+        tripId,
+        team: { id: teamId, name: info.teamOf[before[0]].stored },
+        before: before.map(id => nameOf.get(id) ?? ''),
+        after: after.map(id => nameOf.get(id) ?? ''),
+      })
+      const teamName = partnershipName({ name: stored }, after.map(id => ({ id, name: nameOf.get(id) ?? '' })), shortOf)
+      for (const id of after) next[id] = { teamId, teamName, stored }
+    }
+    setTeamsByRound(prev => ({ ...prev, [round.id]: { ...info, teamOf: next } }))
   }
 
   /**
@@ -392,7 +462,7 @@ export default function TeeSheetClient({
         teamOf: {
           ...roundTeamInfo.teamOf,
           ...Object.fromEntries(ids.map(id =>
-            [id, { teamId: team.id, teamName: team.name }])),
+            [id, { teamId: team.id, teamName: team.name, stored: team.name }])),
         },
       },
     }))
@@ -411,6 +481,10 @@ export default function TeeSheetClient({
         return
       }
     }
+    // The team itself goes too — a team row with nobody in it is a blank
+    // line on the round's leaderboard.
+    const teamIds = new Set(memberIds.map(id => roundTeamInfo.teamOf[id]?.teamId).filter(Boolean) as string[])
+    for (const teamId of teamIds) await deleteTeam({ tripId, sheet, teamId, memberIds: [] })
     setTeamsByRound(prev => {
       const rest = { ...(prev[round.id]?.teamOf ?? {}) }
       for (const id of memberIds) delete rest[id]
@@ -445,6 +519,53 @@ export default function TeeSheetClient({
       : meId ? [meId] : []
   }
   const setupHref = round ? `/trip/${tripCode}/teesheet/${round.id}/setup` : null
+
+  // A player in no team, on a round that plays in partnerships they may
+  // make — a round's own wherever they book their own time, an event-long
+  // one where the board lets the field pick — is asked on Join: pick your
+  // team first, or just you (Ross, 27 Oct 2026).
+  const asksForTeam = selfPick && !!meId && !!roundTeamInfo && !teamMap.has(meId)
+    && (roundTeamInfo.isDay || roundTeamInfo.playersPick)
+  const pickHref = (slot: number) =>
+    round ? `/trip/${tripCode}/teams/pick?round=${encodeURIComponent(round.id)}&slot=${slot}` : '#'
+  /** Those on a time in no team — the ones a team made for it starts with. */
+  const looseOn = (slotPlayers: SlotPlayer[]) => {
+    const myTag = meId ? tagOf[meId]?.teamId : undefined
+    return slotPlayers.filter(p => !teamMap.has(p.id) && p.id !== meId
+      && (!playingForTags || !myTag || tagOf[p.id]?.teamId === myTag))
+  }
+
+  // Back from the picker: the team (or the one player going alone) onto
+  // the time they picked, once. The organiser's unlock is read straight
+  // from the session here — the state that mirrors it arrives a render
+  // later — and the address loses the request either way, so a refresh
+  // never books twice.
+  const placed = useRef(false)
+  useEffect(() => {
+    if (!placing || placed.current || !round || round.id !== placing.roundId || !live) return
+    placed.current = true
+    router.replace(`/trip/${tripCode}/teesheet?round=${encodeURIComponent(placing.roundId)}`, { scroll: false })
+    const byOrganiser = hasUnlocked(tripCode) || !isLocked(passcodeHash)
+    if (!storageReady || (!byOrganiser && !(fieldMayEdit && meId && !notYetOpen))) return
+    const team = placing.teamId
+      ? [...teamMap].filter(([, t]) => t.teamId === placing.teamId).map(([id]) => id)
+      : placing.playerId ? [placing.playerId] : []
+    const coming = toPlace(team, assignedIds)
+    if (coming.length === 0) return
+    const room = Math.max(0, groupSize - (slots.get(placing.slot)?.length ?? 0))
+    if (coming.length > room) {
+      setError({
+        slot: placing.slot,
+        message: placing.teamId
+          ? 'Your team is made, but this time no longer has room for all of you — pick another.'
+          : 'This time is full now — pick another.',
+      })
+      return
+    }
+    void addPlayers(placing.slot, coming)
+    // Once, on arrival: everything it reads is what arrived with it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placing, round, live])
 
   // Who may take a name off, and who may book somebody else on: the
   // organiser anybody; a player booking their own times themselves and
@@ -756,7 +877,10 @@ export default function TeeSheetClient({
                         {selfPick && storageReady && myUnitIds.length > 0 && vacancy >= myUnitIds.length && (
                           <button
                             type="button"
-                            onClick={() => addPlayers(i, myUnitIds)}
+                            onClick={() => (asksForTeam
+                              ? setJoining(joining === i ? null : i)
+                              : addPlayers(i, myUnitIds))}
+                            aria-expanded={asksForTeam ? joining === i : undefined}
                             className="self-start flex items-center gap-1 t-cap text-accent-deep hover:text-accent transition-colors py-0.5"
                           >
                             <IconPlus size={12} />
@@ -778,7 +902,18 @@ export default function TeeSheetClient({
                             the fourball that is about to go out — so the
                             control is one tap rather than a picker. */}
                         {(organiser || (selfPick && isMine)) && roundTeamInfo?.isDay && slotPlayers.length >= 2 && (
-                          untidyGroups(groups).length > 0 ? (
+                          untidyGroups(groups).length > 0 && slotPlayers.length > roundTeamInfo.cap ? (
+                            /* More on the time than one team holds — a
+                               pairs round's fourball — so which of them is
+                               a team is a choice, made in the picker. */
+                            <Link
+                              href={pickHref(i)}
+                              className="self-start flex items-center gap-1 t-cap text-accent-deep hover:text-accent transition-colors py-0.5"
+                            >
+                              <IconUsers size={12} />
+                              Pick a team from this time
+                            </Link>
+                          ) : untidyGroups(groups).length > 0 ? (
                             <button
                               type="button"
                               onClick={() => formTeam(i, slotPlayers)}
@@ -813,6 +948,51 @@ export default function TeeSheetClient({
                     {error?.slot === i && (
                       <p className="text-rust-deep t-cap mt-1.5 leading-snug">{error.message}</p>
                     )}
+
+                    {/* Join, on a round played in partnerships: the team
+                        first, or just you. Whoever is on the time in no
+                        team is in it, when they all fit — the picker
+                        holds them there. */}
+                    {joining === i && asksForTeam && (() => {
+                      const loose = looseOn(slotPlayers)
+                      const names = joinNames(loose.map(p => p.name))
+                      // A part-filled team on the time is joined, as the picker will.
+                      const openTeamId = openTeamOnTime(
+                        Object.entries(roundTeamInfo!.teamOf).map(([player_id, t]) => ({ team_id: t.teamId, team_set: roundTeamInfo!.sheet, player_id })),
+                        roundTeamInfo!.sheet, slotPlayers.map(p => p.id), roundTeamInfo!.cap,
+                      )
+                      const openTeam = groups.find(g => g.teamId && g.teamId === openTeamId)
+                      const lockedIn = matesLockedIn(
+                        { mates: loose.map(p => p.id), onSlot: slotPlayers.map(p => p.id) },
+                        { organiser: false, meId }, 0, roundTeamInfo!.cap,
+                      )
+                      return (
+                        <div className="mt-2 rounded-xl border border-line bg-cream p-3">
+                          <p className="text-ink text-sm font-medium">Playing in a team?</p>
+                          <p className="t-cap text-ink/65 mt-0.5 leading-snug">
+                            {openTeam
+                              ? `${openTeam.teamName} ${openTeam.players.length === 1 ? 'is' : 'are'} on this time with room — you’ll be in their team.`
+                              : loose.length === 0
+                              ? 'Pick your team first, then you all go on this time together.'
+                              : lockedIn
+                                ? `${names} ${loose.length === 1 ? 'is' : 'are'} on this time and will be in your team.`
+                                : `${names} are on this time — pick who is in your team.`}
+                          </p>
+                          <div className="flex gap-2 mt-3">
+                            <Link href={pickHref(i)} className={buttonClass('primary', false, true)}>
+                              Pick your team
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => { setJoining(null); addPlayers(i, myUnitIds) }}
+                              className={buttonClass('secondary', false, true)}
+                            >
+                              Just me
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })()}
 
                     {/* The picker: a filter and the unassigned field, the
                         course-select manner in miniature. Stays open while

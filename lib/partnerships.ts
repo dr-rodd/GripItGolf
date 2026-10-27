@@ -11,8 +11,9 @@
 //     pair in a pairs bracket, a fourball's team card. On screen still a
 //     "team"; a pair reads "Ross & Dave", with the field's usual shortening.
 //
-// Teams and partnerships are picked in the same way (one selection wizard,
-// to come); which one a board's teams are is the rule below.
+// Teams and partnerships are picked in the same way — the team picker,
+// lib/teamPicker.ts, from the teams page or a tee time; which one a
+// board's teams are is the rule below.
 //
 // Whether a round has partnerships is never a switch of its own. It is read
 // off the board that governs how the round is played — the round's own

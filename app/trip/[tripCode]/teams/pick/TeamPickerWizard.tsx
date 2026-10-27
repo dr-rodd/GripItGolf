@@ -5,11 +5,12 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { hasUnlocked, isLocked } from '@/lib/passcode'
 import { boardNames } from '@/lib/displayNames'
-import { partnershipName, isMadeName } from '@/lib/partnerships'
+import { partnershipName, isMadeName, MAX_PARTNERSHIP } from '@/lib/partnerships'
 import { PRESET_COLORS } from '@/lib/teamColors'
 import {
-  type PickerSheet, type PickerMember, type PickerViewer,
+  type PickerSheet, type PickerMember, type PickerViewer, type TeeTimePick,
   mayPick, pickChoices, selectionIssue, pickPlan, madeTeamName,
+  teeTimeChoices, roomOnTime, teeTimeIssue, withinMyTag, teamTagIssue,
 } from '@/lib/teamPicker'
 import WizardShell from '@/app/components/WizardShell'
 import InlineUnlock from '@/app/components/InlineUnlock'
@@ -28,10 +29,15 @@ const TITLES = ['Who’s in the team?', 'Check the team'] as const
  * the check: the team as it will read — a pair is "Ross & Dave" — the
  * leaderboards it plays on, and whether it goes out together on one tee
  * time (lib/partnerships.ts). Every write goes through ../teamWrites.ts.
+ *
+ * From the tee sheet (`teeTime`, stage 4) the team is for one tee time:
+ * those already on it and in no team are in the team and fixed, the rest
+ * of the choice is the players on no time yet, and saving goes back to the
+ * sheet with the team to place there (lib/teamPicker.ts `teeTimeChoices`).
  */
 export default function TeamPickerWizard({
   tripId, tripCode, isTrip, passcodeHash, sheet, team: givenTeam, teamsOnSheet,
-  memberships, players, meId, addedRecorded, backHref,
+  memberships, players, meId, addedRecorded, backHref, teeTime = null,
 }: {
   tripId: string
   tripCode: string
@@ -46,6 +52,8 @@ export default function TeamPickerWizard({
   meId: string | null
   addedRecorded: boolean
   backHref: string
+  /** The tee time the team is for, when it came from the tee sheet. */
+  teeTime?: { roundId: string; slot: number; at: TeeTimePick; playingForTags: boolean } | null
 }) {
   const router = useRouter()
   const [unlocked, setUnlocked] = useState(false)
@@ -60,14 +68,28 @@ export default function TeamPickerWizard({
   // A player already in a team here changes that one — one team a sheet.
   const team = givenTeam
     ?? (!organiser && meId ? teamsOnSheet.find(t => t.id === teamOfPlayer.get(meId)) ?? null : null)
-  // A player may change only a team they are in; anybody may look.
+  // A player may change only a team they are in — or, from the tee sheet,
+  // join the part-filled one on their time; anybody may look.
   const isMember = !!team && !!meId && teamOfPlayer.get(meId) === team.id
-  const allowed = mayPick(viewer) && (organiser || !team || isMember)
+  const joiningTeam = !!teeTime && !!team && !isMember && !organiser
+    && !!meId && !teamOfPlayer.has(meId) && membersOf(team.id).length < (sheet.cap ?? MAX_PARTNERSHIP)
+  const allowed = mayPick(viewer) && (organiser || !team || isMember || joiningTeam)
+
+  // A tee time's team is never more than the time holds.
+  const cap = teeTime ? Math.min(sheet.cap ?? MAX_PARTNERSHIP, MAX_PARTNERSHIP) : sheet.cap
+  // Where tags are in play a team is of one, so a player is offered only
+  // their own tag's; the organiser is told instead (`tagIssue`, below).
+  const at = useMemo(
+    () => (teeTime ? withinMyTag(teeTime.at, { organiser, meId }, memberships, teeTime.playingForTags) : null),
+    [teeTime, organiser, meId, memberships],
+  )
 
   const choices = useMemo(
-    () => pickChoices({ players, memberships, sheet: sheet.id, teamId: team?.id ?? null, viewer }),
+    () => at
+      ? teeTimeChoices({ players, memberships, sheet: sheet.id, teamId: team?.id ?? null, viewer, at, cap: cap! })
+      : pickChoices({ players, memberships, sheet: sheet.id, teamId: team?.id ?? null, viewer }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [players, memberships, sheet.id, team?.id, organiser, meId, sheet.selfPick, addedRecorded],
+    [players, memberships, sheet.id, team?.id, organiser, meId, sheet.selfPick, addedRecorded, at, cap],
   )
   const [picked, setPicked] = useState<Set<string>>(() => new Set(choices.filter(c => c.picked).map(c => c.id)))
   // The organiser's unlock arrives after mount; who is ticked to start follows it.
@@ -87,8 +109,10 @@ export default function TeamPickerWizard({
   }
 
   const after = [...picked]
-  const issue = selectionIssue(after, sheet.cap, sheet.noun)
-  const full = sheet.cap !== null && picked.size >= sheet.cap
+  const tagIssue = teamTagIssue(after, memberships, !!teeTime?.playingForTags)
+  const issue = selectionIssue(after, cap, sheet.noun) ?? (at ? teeTimeIssue(after, at) : null) ?? tagIssue
+  const full = cap !== null && picked.size >= cap
+  const fits = (id: string) => (at ? roomOnTime(id, after, at, cap!) : !full)
   const shown = choices.filter(c => !query.trim() || c.name.toLowerCase().includes(query.trim().toLowerCase()))
   // A name somebody chose stands; a made one follows the players as picked.
   const chosenName = team && !isMadeName(team.name, membersOf(team.id).map(id => nameOf.get(id) ?? ''))
@@ -105,7 +129,7 @@ export default function TeamPickerWizard({
     setPicked(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
-      else if (!full) next.add(id)
+      else if (fits(id)) next.add(id)
       return next
     })
   }
@@ -133,11 +157,18 @@ export default function TeamPickerWizard({
       setError(`Could not make the ${sheet.noun.one} — try again`)
       return
     }
+    // Those on the tee time already are in by the sheet's rule, not by
+    // whoever made the team, so nobody but the organiser and themselves can
+    // take them out again — they carry nobody, as the organiser's do.
+    const byRule = new Set(choices.filter(c => c.locked && c.id !== meId && at?.mates.includes(c.id)).map(c => c.id))
     const failure = await moveMembers({
-      tripId, sheet: sheet.id, teamId: target.id, add, remove,
+      tripId, sheet: sheet.id, teamId: target.id, add: add.filter(id => !byRule.has(id)), remove,
       // The organiser's placings carry nobody; a player's carry them — and
       // neither names the column before migration 066 is in.
       addedBy: addedRecorded ? (organiser ? null : meId) : undefined,
+    }) ?? await moveMembers({
+      tripId, sheet: sheet.id, teamId: target.id, add: add.filter(id => byRule.has(id)), remove: [],
+      addedBy: addedRecorded ? null : undefined,
     })
     if (failure) {
       console.error('Team picker save failed:', failure)
@@ -160,8 +191,20 @@ export default function TeamPickerWizard({
       if (left.length === 0) await deleteTeam({ tripId, sheet: sheet.id, teamId: oldId, memberIds: [] })
       else await refreshTeamName({ tripId, team: old, before: was.map(id => nameOf.get(id) ?? ''), after: left.map(id => nameOf.get(id) ?? '') })
     }
-    router.push(backHref)
+    // Back to the sheet with the team to put on the time — the sheet books
+    // it, with its own checks, and says so in the slot if it no longer fits.
+    router.push(teeTime ? `${backHref}&place=${teeTime.slot}&team=${target.id}` : backHref)
     router.refresh()
+  }
+
+  // One player for a tee time is not a team: they go on alone, as "Just
+  // me" on the sheet does, and anybody joining the time later finds them
+  // there to make a team with.
+  const alone = !!teeTime && !team && picked.size === 1
+  function goAlone() {
+    if (!teeTime || picked.size !== 1) return
+    const [only] = [...picked]
+    router.push(`${backHref}&place=${teeTime.slot}&player=${only}`)
   }
 
   async function removeTeam() {
@@ -206,19 +249,23 @@ export default function TeamPickerWizard({
       <WizardShell
         step={step}
         titles={TITLES}
-        intro={sheet.boardTitles}
+        intro={at ? `For ${at.label} · ${sheet.boardTitles}` : sheet.boardTitles}
         onBack={() => (step === 1 ? router.push(backHref) : setStep(1))}
         aboveTabBar
         footer={
           <>
             {error && <p className="text-rust-deep text-sm mb-3 text-center leading-snug">{error}</p>}
-            {step === 1 ? (
+            {step === 1 && alone ? (
+              <button type="button" onClick={goAlone} disabled={!!issue} className={buttonClass('primary')}>
+                {organiser ? 'Put them on alone' : 'Go on my own'}
+              </button>
+            ) : step === 1 ? (
               <button type="button" onClick={() => setStep(2)} disabled={!!issue} className={buttonClass('primary')}>
                 Continue
               </button>
             ) : (
               <button type="button" onClick={save} disabled={!!issue || saving} className={buttonClass('primary')}>
-                {saving ? 'Saving…' : team ? 'Save changes' : `Make the ${sheet.noun.one}`}
+                {saving ? 'Saving…' : joiningTeam ? `Join the ${sheet.noun.one}` : team ? 'Save changes' : `Make the ${sheet.noun.one}`}
               </button>
             )}
           </>
@@ -227,8 +274,10 @@ export default function TeamPickerWizard({
         {step === 1 && (
           <div className="flex flex-col gap-3">
             <p className="t-body text-ink/80">
-              {sheet.cap !== null ? `${picked.size} of ${sheet.cap} picked.` : `${picked.size} picked.`}
-              {!organiser && !addedRecorded && ' For now you can put only yourself in — your partners join themselves.'}
+              {cap !== null ? `${picked.size} of ${cap} picked.` : `${picked.size} picked.`}
+              {at
+                ? ` They all go on at ${at.label}.${cap !== null && picked.size < cap ? ' Not everyone yet? The team can be filled later.' : ''}`
+                : !organiser && !addedRecorded && ' For now you can put only yourself in — your partners join themselves.'}
             </p>
             {choices.length > 10 && (
               <input
@@ -242,9 +291,10 @@ export default function TeamPickerWizard({
             <ul className="flex flex-col gap-2">
               {shown.map(c => {
                 const on = picked.has(c.id)
-                const blocked = c.locked || (!on && full)
+                const blocked = c.locked || (!on && !fits(c.id))
                 const note = c.locked
-                  ? (c.id === meId ? 'You' : 'Added by someone else')
+                  ? (c.id === meId ? 'You' : at?.mates.includes(c.id) ? `On ${at.label} already` : 'Added by someone else')
+                  : at?.onSlot.includes(c.id) ? `On ${at.label} already`
                   : c.otherTeamId && !on ? `In ${teamName(c.otherTeamId)}`
                   : c.otherTeamId && on ? `Moves from ${teamName(c.otherTeamId)}`
                   : null
@@ -273,6 +323,13 @@ export default function TeamPickerWizard({
               {shown.length === 0 && (
                 <li className="t-cap text-ink/65 py-2">Nobody to add — everyone is in a {sheet.noun.one}.</li>
               )}
+              {at && !organiser && choices.length === 1 && (
+                <li className="t-cap text-ink/65 py-2 leading-snug">
+                  {!at.bookerRecorded || !addedRecorded
+                    ? 'For now you can put only yourself on — your partners book themselves.'
+                    : 'Everyone else is on a time or in a team already.'}
+                </li>
+              )}
             </ul>
           </div>
         )}
@@ -287,7 +344,9 @@ export default function TeamPickerWizard({
               </p>
             </div>
             <p className="t-body text-ink/80 leading-snug">
-              {sheet.together
+              {at
+                ? `They go on at ${at.label} together, and play as one.`
+                : sheet.together
                 ? `They play together — the tee sheet books them onto one time, as one.`
                 : `They can go out at different times — every card counts for the ${sheet.noun.one}.`}
             </p>

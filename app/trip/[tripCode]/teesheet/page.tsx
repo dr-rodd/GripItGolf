@@ -2,7 +2,8 @@ import { supabase } from '@/lib/supabase'
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
 import { parseLeaderboards, tagsInPlay } from '@/lib/leaderboards'
-import { roundPartnership, partnershipName } from '@/lib/partnerships'
+import { roundPartnership, partnershipName, MAX_PARTNERSHIP } from '@/lib/partnerships'
+import { roundPickerSheet } from '@/lib/teamPicker'
 import { boardNames } from '@/lib/displayNames'
 import { teeSheetAccess } from '@/lib/eventPermissions'
 import { readAllRows } from '@/lib/allRows'
@@ -36,9 +37,16 @@ export const dynamic = 'force-dynamic'
  */
 export default async function TeeSheetPage({ params, searchParams }: {
   params: Promise<{ tripCode: string }>
-  searchParams: Promise<{ round?: string }>
+  searchParams: Promise<{ round?: string; place?: string; team?: string; player?: string }>
 }) {
-  const [{ tripCode }, { round: initialRoundId }] = await Promise.all([params, searchParams])
+  const [{ tripCode }, query] = await Promise.all([params, searchParams])
+  const initialRoundId = query.round
+  // Back from the team picker with a team — or one player going alone — to
+  // put on a time (stage 4). Done once, on the phone, by the sheet's own
+  // booking, so its checks and its in-slot refusals are the only ones.
+  const placing = initialRoundId && query.place && /^\d{1,3}$/.test(query.place) && (query.team || query.player)
+    ? { roundId: initialRoundId, slot: Number(query.place), teamId: query.team ?? null, playerId: query.player ?? null }
+    : null
 
   // The kind alongside, for the words only — a trip's sheet speaks of its
   // lead player and passcode.
@@ -215,12 +223,12 @@ export default async function TeeSheetPage({ params, searchParams }: {
   /** Which partnership each player stands in, on one sheet, named as one. */
   const teamsOn = (sheet: string) => {
     const onSheet = memberships.filter(m => m.team_set === sheet)
-    const out: Record<string, { teamId: string; teamName: string }> = {}
+    const out: Record<string, { teamId: string; teamName: string; stored: string }> = {}
     for (const t of allTeams.filter(t => (t.team_set ?? 'main') === sheet)) {
       const members = onSheet.filter(m => m.team_id === t.id)
         .map(m => ({ id: m.player_id, name: nameOf.get(m.player_id) ?? '' }))
       const teamName = partnershipName(t, members, shortOf)
-      for (const m of members) out[m.id] = { teamId: t.id, teamName }
+      for (const m of members) out[m.id] = { teamId: t.id, teamName, stored: t.name }
     }
     return out
   }
@@ -239,10 +247,12 @@ export default async function TeeSheetPage({ params, searchParams }: {
   // are the round's own to make. A record rather than a Map — this crosses
   // the server/client line.
   const roundTeams: Record<string, {
-    teamOf: Record<string, { teamId: string; teamName: string }>
+    teamOf: Record<string, { teamId: string; teamName: string; stored: string }>
     sheet: string
     isDay: boolean
     teamSize: number | null
+    cap: number
+    playersPick: boolean
   }> = {}
   for (const r of rounds) {
     const first = roundPartnership(boards, r.id)
@@ -253,6 +263,10 @@ export default async function TeeSheetPage({ params, searchParams }: {
       sheet: p.sheet,
       isDay: p.isDay,
       teamSize: p.size,
+      // The most a team made on the sheet may hold — the picker's own figure.
+      cap: roundPickerSheet(boards, r.id, largestOn, false)?.cap ?? MAX_PARTNERSHIP,
+      // The field makes its own partnerships here — the board says so.
+      playersPick: p.board.teamPick === 'self',
     }
   }
 
@@ -304,6 +318,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
       fieldMaySet={access.anyoneOpens}
       meId={me && isConfirmed(me) ? me.id : null}
       initialRoundId={initialRoundId ?? null}
+      placing={placing}
       isTrip={!isEvent(kind)}
       passcodeHash={(trip.settings_passcode_hash as string | null) ?? null}
     />

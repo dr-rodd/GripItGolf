@@ -25,8 +25,9 @@
 import { type Leaderboard, boardTitle } from './leaderboards'
 import { type Membership, sheetsInUse, sheetForBoard } from './teamSets'
 import { teamSizeLimit, teamNoun, type TeamNoun } from './teamLimits'
-import { roundPartnership, isPairs } from './partnerships'
+import { roundPartnership, isPairs, MAX_PARTNERSHIP } from './partnerships'
 import { mayRemoveBooking } from './teeSheet'
+import { TAG_SET, dayTeamTagIssue } from './tagBoards'
 import { joinNames, firstName } from './matchplayEntrants'
 
 /** One list of teams the picker manages — a sheet, and what is played on it. */
@@ -201,4 +202,198 @@ export function madeTeamName(memberFullNames: readonly string[]): string {
 /** Whether there is room for one more in a team of this size. */
 export function hasRoom(size: number, cap: number | null): boolean {
   return cap === null || size < cap
+}
+
+// ─── From the tee sheet ────────────────────────────────────────
+//
+// Ross, 27 Oct 2026: a player picking a tee time on a round that plays in
+// partnerships, and in none yet, is sent to the picker first and comes back
+// with the team on that time — or goes on alone. Anybody already on the
+// time and in no team is in the team, and cannot be taken out of it, so
+// long as they all fit; a time holding more than one team's worth offers
+// them first instead. The organiser takes a player off the time, and that
+// takes them out of a round's own partnership with it.
+
+/**
+ * The list a round's partnerships are picked on, from its tee sheet: the
+ * board that governs the round, its sheet — a round's own (`day:<roundId>`)
+ * as well as the event's — and at most a tee time's worth. Null for a round
+ * without partnerships.
+ *
+ * The field picks a round's own partnerships wherever it books its own
+ * times (`playersBook`), as the sheet's "Make this group a team" always
+ * let it; an event-long partnership only where the board lets the field
+ * pick (`teamPick: 'self'`).
+ */
+export function roundPickerSheet(
+  boards: readonly Leaderboard[],
+  roundId: string,
+  largestOn: (sheet: string) => number,
+  playersBook: boolean,
+): PickerSheet | null {
+  const first = roundPartnership(boards, roundId)
+  const p = first && roundPartnership(boards, roundId, largestOn(first.sheet))
+  if (!p) return null
+  const here = p.isDay
+    ? [p.board]
+    : boards.filter(b => b.audience === 'team' && !b.tagMode && sheetForBoard(b) === p.sheet)
+  return {
+    id: p.sheet,
+    noun: teamNoun(here),
+    boardTitles: here.map(boardTitle).join(' · '),
+    cap: Math.min(p.size ?? teamSizeLimit(here) ?? MAX_PARTNERSHIP, MAX_PARTNERSHIP),
+    selfPick: here.some(b => b.teamPick === 'self') || (p.isDay && playersBook),
+    together: true,
+  }
+}
+
+/** The tee time a team is being made for. */
+export type TeeTimePick = {
+  /** "8:10 am", or "Group 3" on a sheet with no clock. */
+  label: string
+  /** Everybody on the time now. */
+  onSlot: string[]
+  /** Those on it and in no team here, this phone's player apart. */
+  mates: string[]
+  /** Players on no time this round and in no team here — the others who can go on with them. */
+  free: string[]
+  /** Places left on the time. */
+  vacancy: number
+  /** Who booked whom is recorded (migration 065) — before it, a player books only themselves. */
+  bookerRecorded: boolean
+}
+
+/** Whether the players on the time who are in no team all go into this one. */
+export function matesLockedIn(
+  at: Pick<TeeTimePick, 'mates' | 'onSlot'>,
+  viewer: Pick<PickerViewer, 'organiser' | 'meId'>,
+  inTeam: number,
+  cap: number,
+): boolean {
+  const me = !viewer.organiser && viewer.meId && !at.onSlot.includes(viewer.meId) ? 1 : 0
+  return at.mates.length > 0 && at.mates.length + inTeam + me <= cap
+}
+
+/**
+ * Who the picker offers when the team is for one tee time: the team's own
+ * members, this phone's player, the players on the time in no team, and
+ * those on no time this round — nobody on another time, who would have to
+ * be moved, and nobody in another team. Those on the time are ticked and
+ * fixed when they all fit (`matesLockedIn`); the organiser can untick them.
+ * A player offers the free field only once who added and who booked whom
+ * are both recorded (066 and 065), the tee sheet's own rule for bringing
+ * somebody along.
+ */
+export function teeTimeChoices(input: {
+  players: readonly { id: string; name: string }[]
+  memberships: readonly PickerMember[]
+  sheet: string
+  teamId: string | null
+  viewer: PickerViewer
+  at: TeeTimePick
+  cap: number
+}): PickerChoice[] {
+  const { players, memberships, sheet, teamId, viewer, at, cap } = input
+  const nameOf = new Map(players.map(p => [p.id, p.name]))
+  const members = teamId
+    ? memberships.filter(m => m.team_set === sheet && m.team_id === teamId)
+    : []
+  const inTeam = new Set(members.map(m => m.player_id))
+  const lockMates = matesLockedIn(at, viewer, members.length, cap)
+  const mayBring = viewer.organiser || (mayAddOthers(viewer) && at.bookerRecorded)
+  const me = !viewer.organiser ? viewer.meId : null
+
+  // The team's own first, so one joined reads as it did with the newcomer
+  // added — "Mary, John & Ross".
+  const order = [
+    ...members.map(m => m.player_id),
+    ...(me ? [me] : []),
+    ...at.mates,
+    ...(mayBring ? at.free : []),
+  ]
+  const out: PickerChoice[] = []
+  const seen = new Set<string>()
+  for (const id of order) {
+    const name = nameOf.get(id)
+    if (seen.has(id) || name === undefined) continue
+    seen.add(id)
+    const mate = at.mates.includes(id) && !inTeam.has(id)
+    const member = members.find(m => m.player_id === id)
+    const picked = inTeam.has(id) || id === me || (mate && lockMates)
+    const locked = !viewer.organiser && (id === me
+      || (mate && lockMates)
+      || (!!member && !mayTakeOut(viewer, { playerId: id, addedBy: member.added_by ?? null })))
+    out.push({ id, name, picked, locked, otherTeamId: null })
+  }
+  return out
+}
+
+/** Whether one more can be ticked: room in the team, and on the time for anybody not on it yet. */
+export function roomOnTime(id: string, picked: readonly string[], at: TeeTimePick, cap: number): boolean {
+  if (picked.length >= cap) return false
+  if (at.onSlot.includes(id)) return true
+  return picked.filter(p => !at.onSlot.includes(p)).length < at.vacancy
+}
+
+/** Why this team will not go on the time, or null when it will. */
+export function teeTimeIssue(picked: readonly string[], at: TeeTimePick): string | null {
+  const coming = picked.filter(p => !at.onSlot.includes(p)).length
+  if (coming <= at.vacancy) return null
+  return at.vacancy === 0
+    ? `${at.label} is full now — go back and pick another time.`
+    : `Only ${at.vacancy} more fit${at.vacancy === 1 ? 's' : ''} at ${at.label}.`
+}
+
+/** Who goes onto the time once the team is saved: its players not on the round's sheet yet. */
+export function toPlace(team: readonly string[], onRound: ReadonlySet<string>): string[] {
+  return team.filter(id => !onRound.has(id))
+}
+
+/**
+ * The team on a tee time with room in it — a part-filled one somebody went
+ * on with — which whoever picks the time next joins rather than starting a
+ * second. Null when there is none, or more than one to choose between.
+ */
+export function openTeamOnTime(
+  memberships: readonly Membership[],
+  sheet: string,
+  onSlot: readonly string[],
+  cap: number,
+): string | null {
+  const here = memberships.filter(m => m.team_set === sheet)
+  const size = new Map<string, number>()
+  for (const m of here) size.set(m.team_id, (size.get(m.team_id) ?? 0) + 1)
+  const open = [...new Set(here.filter(m => onSlot.includes(m.player_id)).map(m => m.team_id))]
+    .filter(id => (size.get(id) ?? 0) < cap)
+  return open.length === 1 ? open[0] : null
+}
+
+/**
+ * A tee time's choice narrowed to this player's tag, where tags are in
+ * play: a team's card counts towards one tag, so a team is of one
+ * (lib/tagBoards.ts `dayTeamTagIssue`). The organiser is offered everybody
+ * and told instead (`teamTagIssue`). Off — a trip, an event without tags —
+ * the time is returned as it was.
+ */
+export function withinMyTag(
+  at: TeeTimePick,
+  viewer: Pick<PickerViewer, 'organiser' | 'meId'>,
+  memberships: readonly Membership[],
+  playingForTags: boolean,
+): TeeTimePick {
+  if (!playingForTags || viewer.organiser || !viewer.meId) return at
+  const tags = memberships.filter(m => m.team_set === TAG_SET)
+  const mine = tags.find(m => m.player_id === viewer.meId)?.team_id
+  if (!mine) return at
+  const sameTag = (id: string) => tags.some(m => m.player_id === id && m.team_id === mine)
+  return { ...at, mates: at.mates.filter(sameTag), free: at.free.filter(sameTag) }
+}
+
+/** Why these players cannot be one team for the tags, or null — and null whenever tags are not in play. */
+export function teamTagIssue(
+  picked: readonly string[],
+  memberships: readonly Membership[],
+  playingForTags: boolean,
+): string | null {
+  return playingForTags ? dayTeamTagIssue(picked, memberships.filter(m => m.team_set === TAG_SET)) : null
 }
