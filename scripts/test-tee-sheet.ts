@@ -785,8 +785,8 @@ section('The day\'s teams are made at the sheet, through the one writer')
   ok(client.includes('unformTeam'), 'and it can be broken up again')
 
   const page = read('app/trip/[tripCode]/teesheet/page.tsx')
-  ok(page.includes('teamBoardForRound(boards, r.id)'),
-    'whose teams a round groups by is asked per round, through the one copy')
+  ok(page.includes('roundPartnership(boards, r.id'),
+    'whose partnerships a round groups by is asked per round, through the one copy')
   ok(!/boards\.find\(b => b\.audience === 'team'\)/.test(page),
     'the old take-the-first-team-board is gone — it silently picked one of two')
 }

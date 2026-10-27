@@ -1,9 +1,9 @@
 import { supabase } from '@/lib/supabase'
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
-import {
-  parseLeaderboards, teamBoardForRound, tagsInPlay,
-} from '@/lib/leaderboards'
+import { parseLeaderboards, tagsInPlay } from '@/lib/leaderboards'
+import { roundPartnership, partnershipName } from '@/lib/partnerships'
+import { boardNames } from '@/lib/displayNames'
 import { teeSheetAccess } from '@/lib/eventPermissions'
 import { readAllRows } from '@/lib/allRows'
 import { parseStartFormat } from '@/lib/eventHub'
@@ -11,7 +11,6 @@ import { describeOpening, roundSheet, sheetIsOpen } from '@/lib/teeSheet'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { isConfirmed } from '@/lib/roster'
 import { readSheetSettings } from './sheets'
-import { sheetForBoard, isDaySheet } from '@/lib/teamSets'
 import { TAG_SET } from '@/lib/tagBoards'
 import BackButton from '@/app/components/BackButton'
 import TeeSheetClient from './TeeSheetClient'
@@ -66,11 +65,11 @@ export default async function TeeSheetPage({ params, searchParams }: {
   // An event's, or a trip's since tee times reached trips (Ross, 26 Oct
   // 2026) — the same sheet, the same two answers, read from the same column.
 
-  // Whose teams a slot is showing is now a per-round question: a day with
-  // its own team board plays that day's fourballs, and a day without plays
-  // the event's teams for the week. `teamBoardForRound` is the one copy of
-  // that order — this page used to take the first team board it found,
-  // which on an event running two of them silently picked one.
+  // Whose partnerships a slot is showing is a per-round question: a day
+  // with its own team board plays that day's, and a day without plays the
+  // governing board's for the whole event — and only the governing board's
+  // (lib/partnerships.ts `roundPartnership`, the one copy). This page used
+  // to take the first team board it found, primary or not.
   //
   // The teams and memberships are fetched for the whole trip either way,
   // so the client can group any round without a second trip to the server.
@@ -208,40 +207,52 @@ export default async function TeeSheetPage({ params, searchParams }: {
     team_id: string; team_set: string; player_id: string
   }[]).map(m => ({ team_id: m.team_id, team_set: m.team_set, player_id: m.player_id }))
 
-  /** Which team each player stands in, on one sheet. */
+  // The field's short names, so a pair reads "Ross & Dave" and two Rosses
+  // in different pairs are still two people (lib/partnerships.ts).
+  const shortOf = boardNames(roster)
+  const nameOf = new Map(roster.map(p => [p.id, p.name]))
+
+  /** Which partnership each player stands in, on one sheet, named as one. */
   const teamsOn = (sheet: string) => {
-    const names = new Map(
-      allTeams.filter(t => (t.team_set ?? 'main') === sheet).map(t => [t.id, t.name]),
-    )
+    const onSheet = memberships.filter(m => m.team_set === sheet)
     const out: Record<string, { teamId: string; teamName: string }> = {}
-    for (const m of memberships) {
-      if (m.team_set !== sheet) continue
-      const name = names.get(m.team_id)
-      if (name) out[m.player_id] = { teamId: m.team_id, teamName: name }
+    for (const t of allTeams.filter(t => (t.team_set ?? 'main') === sheet)) {
+      const members = onSheet.filter(m => m.team_id === t.id)
+        .map(m => ({ id: m.player_id, name: nameOf.get(m.player_id) ?? '' }))
+      const teamName = partnershipName(t, members, shortOf)
+      for (const m of members) out[m.id] = { teamId: t.id, teamName }
     }
     return out
   }
 
-  // Per round: whose teams its slots group by, and whether that day's
-  // teams are its own to make. A record rather than a Map — this crosses
+  /** The most players in any one team on a sheet — over four is not a partnership. */
+  const largestOn = (sheet: string) => {
+    const counts = new Map<string, number>()
+    for (const m of memberships) {
+      if (m.team_set === sheet) counts.set(m.team_id, (counts.get(m.team_id) ?? 0) + 1)
+    }
+    return Math.max(0, ...counts.values())
+  }
+
+  // Per round: its partnerships, when it has any — read off the board that
+  // governs the round and no other (lib/partnerships.ts) — and whether they
+  // are the round's own to make. A record rather than a Map — this crosses
   // the server/client line.
   const roundTeams: Record<string, {
     teamOf: Record<string, { teamId: string; teamName: string }>
     sheet: string
     isDay: boolean
-    teeTeamsSeparate: boolean
     teamSize: number | null
   }> = {}
   for (const r of rounds) {
-    const board = teamBoardForRound(boards, r.id)
-    if (!board) continue
-    const sheet = sheetForBoard(board)
+    const first = roundPartnership(boards, r.id)
+    const p = first && roundPartnership(boards, r.id, largestOn(first.sheet))
+    if (!p) continue
     roundTeams[r.id] = {
-      teamOf: teamsOn(sheet),
-      sheet,
-      isDay: isDaySheet(sheet),
-      teeTeamsSeparate: board.teeTeams === 'separate',
-      teamSize: board.teamSize ?? null,
+      teamOf: teamsOn(p.sheet),
+      sheet: p.sheet,
+      isDay: p.isDay,
+      teamSize: p.size,
     }
   }
 
@@ -289,7 +300,6 @@ export default async function TeeSheetPage({ params, searchParams }: {
       // rendered somewhere off the bottom of a long sheet. Said plainly at
       // the top instead.
       storageReady={!assignmentsResult.error}
-      hasTeamBoard={anyTeamBoard}
       fieldMayEdit={access.playersPick}
       fieldMaySet={access.anyoneOpens}
       meId={me && isConfirmed(me) ? me.id : null}

@@ -2,8 +2,9 @@ import { supabase } from '@/lib/supabase'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
 import { teeSheetAccess } from '@/lib/eventPermissions'
-import { parseLeaderboards, teamBoardForRound } from '@/lib/leaderboards'
-import { PAIR_SIZE } from '@/lib/teamLimits'
+import { parseLeaderboards } from '@/lib/leaderboards'
+import { roundPartnership, playTogetherQuestion, carriedPartnerships } from '@/lib/partnerships'
+import { sheetForBoard } from '@/lib/teamSets'
 import { draftRules, roundSheet } from '@/lib/teeSheet'
 import BackButton from '@/app/components/BackButton'
 import TripHeader from '@/app/components/TripHeader'
@@ -58,7 +59,7 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
   // An event's, or a trip's since tee times reached trips (Ross, 26 Oct 2026).
   const event = isEvent(trip.kind)
 
-  const [roundRes, playersRes, permsRes, sheets, assignRes] = await Promise.all([
+  const [roundRes, playersRes, permsRes, sheets, assignRes, membersRes, teamsRes, allRoundsRes] = await Promise.all([
     supabase
       .from('rounds')
       .select('id, round_number, itinerary_item_id, scheduled_date, courses(name)')
@@ -75,6 +76,13 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
     // Who is on this round's sheet already — fail-soft, like the sheet's own
     // read. Their highest slot is what a shorter sheet must not lose.
     supabase.from('tee_assignments').select('slot_index').eq('trip_id', trip.id).eq('round_id', roundId),
+    // Who is in which team — a league whose teams are over four is not
+    // playing in partnerships, so it is not asked whether they play together.
+    supabase.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id),
+    // The teams and every round, for the partnerships a round makes of its
+    // own to start from the last round's (lib/partnerships.ts).
+    supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id),
+    supabase.from('rounds').select('id, round_number').eq('trip_id', trip.id),
   ])
 
   type RoundRow = {
@@ -108,13 +116,41 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
   })
   const fieldSize = playersRes.count ?? 0
 
-  // Whole teams a tee time, where this round's teammates share one and
-  // the teams have a known size: a pairs draw's pairings, or a self-picked
-  // board's teams.
-  const board = teamBoardForRound(parseLeaderboards(trip.leaderboards), round.id)
-  const teamSize = board && board.teeTeams !== 'separate'
-    ? board.competition === 'matchplay' ? PAIR_SIZE : board.teamSize ?? null
-    : null
+  // The round's partnerships (lib/partnerships.ts), read off the board that
+  // governs it. Whole teams a tee time where they have a known size — a
+  // pairs draw's pairs, a self-picked board's teams — and, for a league of
+  // teams of four or fewer, the question whether they play together at all,
+  // asked here rather than where the leaderboard was made (Ross, 27 Oct 2026).
+  const boards = parseLeaderboards(trip.leaderboards)
+  const members = (membersRes.data ?? []) as { team_id: string; team_set: string; player_id: string }[]
+  const largestOn = (sheet: string) => {
+    const counts = new Map<string, number>()
+    for (const m of members) {
+      if (m.team_set === sheet) counts.set(m.team_id, (counts.get(m.team_id) ?? 0) + 1)
+    }
+    return Math.max(0, ...counts.values())
+  }
+  const asked = playTogetherQuestion(boards, round.id)
+  const largest = asked ? largestOn(sheetForBoard(asked)) : 0
+  const togetherBoard = asked && playTogetherQuestion(boards, round.id, largest)
+  const partnership = roundPartnership(boards, round.id, largest)
+  const teamSize = partnership?.size ?? null
+
+  // Each round, carried over (Ross, 27 Oct 2026): a round that makes its
+  // own partnerships starts from the last round's, made when its sheet is
+  // first opened. Only read when it could apply — and a failed read of
+  // either carries nothing rather than a guess.
+  const carried = partnership?.isDay && sheet.state === 'vacant' && !membersRes.error && !teamsRes.error
+    ? carriedPartnerships({
+        roundId: round.id,
+        rounds: ((allRoundsRes.data ?? []) as { id: string; round_number: number }[])
+          .map(r => ({ id: r.id, roundNumber: r.round_number })),
+        sheet: partnership.sheet,
+        teams: (teamsRes.data ?? []) as { id: string; name: string; color: string; team_set: string | null }[],
+        memberships: members,
+        sheetOf: rid => roundPartnership(boards, rid)?.sheet ?? null,
+      })
+    : []
 
   const course = Array.isArray(round.courses) ? round.courses[0] : round.courses
   const content = (
@@ -132,6 +168,15 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
         fieldSize={fieldSize}
         lastAssignedSlot={assigned.reduce((m, a) => Math.max(m, a.slot_index), -1)}
         teamSize={teamSize}
+        playTogether={togetherBoard
+          ? {
+              boardId: togetherBoard.id,
+              together: togetherBoard.teeTeams !== 'separate',
+              answered: togetherBoard.teeTeams !== undefined,
+              size: togetherBoard.teamPick === 'self' ? togetherBoard.teamSize ?? null : null,
+            }
+          : null}
+        carried={carried.length > 0 && partnership ? { sheet: partnership.sheet, teams: carried } : null}
         backHref={backHref}
         doneHref={sheetHref}
       />

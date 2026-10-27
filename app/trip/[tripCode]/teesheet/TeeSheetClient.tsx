@@ -75,22 +75,26 @@ type Assignment = { round_id: string; player_id: string; slot_index: number; boo
 const untidyGroups = (groups: { teamId: string | null }[]) =>
   groups.filter(g => g.teamId === null)
 
-/** What a round's slots are grouped by, and whether it makes its own teams. */
+/**
+ * A round's partnerships (lib/partnerships.ts): what its slots are grouped
+ * by, and whether it makes its own. Absent for a round without any — its
+ * players go out as they please.
+ */
 type RoundTeams = {
+  /** Player → their partnership, named as one ("Ross & Dave"). */
   teamOf: Record<string, { teamId: string; teamName: string }>
-  /** The sheet those teams stand on (lib/teamSets.ts `sheetForBoard`). */
+  /** The sheet those partnerships stand on (lib/teamSets.ts `sheetForBoard`). */
   sheet: string
-  /** A sheet belonging to this round alone — its teams are made here. */
+  /** A sheet belonging to this round alone — its partnerships are made here. */
   isDay: boolean
-  teeTeamsSeparate: boolean
-  /** The size the day's board asks for, when it asks for one. */
+  /** The size the board asks for, when it asks for one. */
   teamSize: number | null
 }
 
 export default function TeeSheetClient({
   tripId, tripCode, rounds, players, initialAssignments,
   roundTeams, tagOf, playingForTags = false,
-  hasTeamBoard, fieldMayEdit, fieldMaySet = false, passcodeHash = null,
+  fieldMayEdit, fieldMaySet = false, passcodeHash = null,
   storageReady = true, meId = null, initialRoundId = null, isTrip = false, bookerRecorded = false,
 }: {
   tripId: string
@@ -99,16 +103,15 @@ export default function TeeSheetClient({
   players: { id: string; name: string }[]
   initialAssignments: Assignment[]
   /**
-   * Per round, whose teams its slots group by. A day with its own team
-   * board plays that day's fourballs; a day without plays the event's
-   * teams for the week — `teamBoardForRound` decides, on the server.
+   * Per round, its partnerships, where it has any. A day with its own team
+   * board plays that day's; a day without plays the governing board's for
+   * the whole event — `roundPartnership` decides, on the server.
    */
   roundTeams: Record<string, RoundTeams>
   /** Player id → the tag they carry, for the gate and the block's colour. */
   tagOf: Record<string, { teamId: string; teamName: string; color: string }>
   /** The event ranks tags, so a player without one cannot go on the sheet. */
   playingForTags?: boolean
-  hasTeamBoard: boolean
   /** The `edit_tee_sheet` permission — each player picks their own time. */
   fieldMayEdit: boolean
   /** The `set_tee_sheets` permission — anyone may make the sheets, no PIN. */
@@ -415,13 +418,11 @@ export default function TeeSheetClient({
     })
   }
 
-  // On a board whose teammates share a tee time, the picker offers linked
-  // teams as one stuck-together card and never their members alone. A day
-  // that makes its own teams never does: nobody is linked to anybody until
-  // the groups are on the sheet, which is the whole point of picking them
-  // here.
-  const teeTeamsSeparate = roundTeamInfo?.teeTeamsSeparate ?? false
-  const together = hasTeamBoard && !teeTeamsSeparate && !roundTeamInfo?.isDay
+  // Where the round plays in partnerships, the picker offers each as one
+  // stuck-together card and never its members alone. A day that makes its
+  // own never does: nobody is linked to anybody until the groups are on the
+  // sheet, which is the whole point of making them here.
+  const together = !!roundTeamInfo && !roundTeamInfo.isDay
   const units = pickerUnits(unassigned, teamMap, together)
     .filter(u => unitMatches(u, search))
 
@@ -535,10 +536,10 @@ export default function TeeSheetClient({
         )}
         {organiser && <div className="mb-3" /> }
 
-        {/* The way to the pairings, when the event has them. Adding a team
-            as one — tap a partner, book the pair — arrives with the teams
-            machinery; the door to picking them is already this one. */}
-        {hasTeamBoard && (
+        {/* The way to the partnerships, where this round plays in them and
+            they are made ahead (a round making its own makes them here, on
+            the sheet). Partnerships are "teams" on screen. */}
+        {together && (
           <Link
             href={`/trip/${tripCode}/teams`}
             className={`flex items-center gap-3 p-4 mb-5 ${cardClass('raised', true)}`}
@@ -549,9 +550,7 @@ export default function TeeSheetClient({
             <span className="min-w-0">
               <span className="block text-ink text-sm font-medium">Pick teams</span>
               <span className="block t-cap text-ink/65 mt-0.5">
-                {teeTeamsSeparate
-                  ? 'Teammates may go out in separate slots — every card feeds the board.'
-                  : 'Partners share a tee time — teammates group together on the sheet.'}
+                Each team plays together — it books its tee time as one.
               </span>
             </span>
           </Link>

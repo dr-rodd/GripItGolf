@@ -1077,33 +1077,14 @@ function Builder({
         </Question>
       )}
 
-      {/* Events only — a trip has no tee sheet to meet, so `askTeeTeams`
-          arrives false there and the question never renders. Absent is
-          together, because partners almost always play together; only the
-          exception is stored (lib/leaderboards.ts `teeTeams`). */}
-      {askTeeTeams && offersTeeTeams(draft) && (
-        <Question n={next()} title="How do teams meet the tee sheet?">
-          <Choice
-            on={draft.teeTeams !== 'separate'}
-            label="Teams share a tee time"
-            hint="Partners go out together — putting one on the sheet books the team."
-            // Tightening back to together also tightens the size cap.
-            onClick={() => set({
-              teeTeams: undefined,
-              ...(draft.teamSize && draft.teamSize > MAX_TEAM_SIZE_TOGETHER
-                ? { teamSize: MAX_TEAM_SIZE_TOGETHER } : {}),
-            })}
-          />
-          <Choice
-            on={draft.teeTeams === 'separate'}
-            label="Members can play separately"
-            hint="Teammates may go out in different slots, all feeding the same board."
-            onClick={() => set({ teeTeams: 'separate' })}
-          />
-        </Question>
-      )}
+      {/* Whether teammates play together — "Do players play in their
+          teams?" — is no longer asked here: it is asked where the round's
+          tee times are set up, once this board governs a round and its
+          teams are four or fewer (lib/partnerships.ts; Ross, 27 Oct 2026).
+          Teams of five or more cannot share a tee time, so choosing that
+          size below answers it. */}
 
-      {/* Events only, like the tee-teams question above. Absent means the
+      {/* Events only — `askTeeTeams` arrives false on a trip. Absent means the
           organiser assigns — the teams screen as it has always been. 'self'
           opens the teams screen to the field: teams of the chosen size,
           formed and joined without the PIN, named from their members —
@@ -1132,17 +1113,18 @@ function Builder({
               <p className="t-cap text-ink/65 mb-2">Players per team</p>
               <div className="flex gap-1.5">
                 {Array.from(
-                  {
-                    length: (draft.teeTeams === 'separate'
-                      ? MAX_TEAM_SIZE_SEPARATE : MAX_TEAM_SIZE_TOGETHER)
-                      - MIN_TEAM_SIZE + 1,
-                  },
+                  { length: MAX_TEAM_SIZE_SEPARATE - MIN_TEAM_SIZE + 1 },
                   (_, i) => MIN_TEAM_SIZE + i,
                 ).map(n => (
                   <button
                     key={n}
                     type="button"
-                    onClick={() => set({ teamSize: n })}
+                    // Five or more cannot share one tee time, so the size
+                    // says they play apart.
+                    onClick={() => set({
+                      teamSize: n,
+                      ...(n > MAX_TEAM_SIZE_TOGETHER ? { teeTeams: 'separate' as const } : {}),
+                    })}
                     aria-pressed={draft.teamSize === n}
                     className={`${chipClass(draft.teamSize === n)} flex-1`}
                   >
@@ -1348,9 +1330,10 @@ export default function LeaderboardSetup({
   /** Shown but not changeable — somebody who is not the trip's owner. */
   readOnly?: boolean
   /**
-   * Ask team boards how they meet the tee sheet — events only, because
-   * only an event has one. A trip never sees the question and never stores
-   * the answer (lib/leaderboards.ts `teeTeams`).
+   * An event's form: team boards are asked how their teams are formed, and
+   * are kept off the main sheet, which holds the event's teams. Whether
+   * teams play together is asked on the tee sheet wizard now, of trips and
+   * events alike (lib/partnerships.ts).
    */
   askTeeTeams?: boolean
   /**
@@ -1407,7 +1390,12 @@ export default function LeaderboardSetup({
     if (was?.audience === 'team' && was.teamSet && was.teamSet !== TAG_SET) {
       return { ...lb, teamSet: was.teamSet }
     }
-    return { ...lb, teamSet: nextSheetId(boards.filter(b => b.id !== lb.id)) }
+    // On an event the main sheet is the event's teams', never a board's
+    // partnerships (lib/teamSets.ts `nextSheetId`).
+    return {
+      ...lb,
+      teamSet: nextSheetId(boards.filter(b => b.id !== lb.id), { reserveMain: askTeeTeams || askTags }),
+    }
   }
 
   function save(lb: Leaderboard) {

@@ -12,6 +12,8 @@ import {
   batchLast, clockMins, countToLast, minsClock, teeClocks, sheetLength, sheetCapacity,
   seatsShort, rulesIssue, describeRules, describeOpening,
 } from '@/lib/teeSheet'
+import { type CarriedPartnership, withPlayTogether } from '@/lib/partnerships'
+import { setTeam } from '@/lib/teamMembers'
 import DateField from '@/app/components/DateField'
 import WizardShell from '@/app/components/WizardShell'
 import { Stepper } from '@/app/components/ItineraryForms'
@@ -56,7 +58,7 @@ function toDraft(b: TeeBatch): Draft {
 
 export default function TeeSheetWizard({
   tripId, roundId, roundNumber, courseName, roundDate, itineraryItemId, initial, live,
-  fieldSize, lastAssignedSlot, teamSize, backHref, doneHref,
+  fieldSize, lastAssignedSlot, teamSize, playTogether = null, carried = null, backHref, doneHref,
 }: {
   tripId: string
   roundId: string
@@ -75,6 +77,18 @@ export default function TeeSheetWizard({
   lastAssignedSlot: number
   /** Players in a team, where whole teams may share a tee time; else null. */
   teamSize: number | null
+  /**
+   * "Do players play in their teams?" — asked of a league of teams of four
+   * or fewer governing this round (lib/partnerships.ts), with its answer so
+   * far. Null when there is nothing to ask: a pair always plays together.
+   */
+  playTogether?: { boardId: string; together: boolean; answered: boolean; size: number | null } | null
+  /**
+   * The last round's partnerships, for a round that makes its own and has
+   * none yet — made on its sheet when it is first opened (lib/partnerships.ts
+   * `carriedPartnerships`). Null when there is nothing to carry.
+   */
+  carried?: { sheet: string; teams: CarriedPartnership[] } | null
   backHref: string
   doneHref: string
 }) {
@@ -82,7 +96,11 @@ export default function TeeSheetWizard({
   const [step, setStep] = useState(1)
   const [drafts, setDrafts] = useState<Draft[]>(() => initial.batches.map(toDraft))
 
-  const maxTeams = teamSize ? Math.floor(MAX_GROUP_SIZE / teamSize) : 0
+  // Yes, they play in their teams — the partnerships go out together, and
+  // a tee time can be counted in whole teams where their size is known.
+  const [together, setTogether] = useState(playTogether?.together ?? true)
+  const unitSize = playTogether ? (together ? playTogether.size ?? teamSize : null) : teamSize
+  const maxTeams = unitSize ? Math.floor(MAX_GROUP_SIZE / unitSize) : 0
   const [unit, setUnit] = useState<'players' | 'teams'>(
     initial.teamsPerTee && maxTeams > 0 ? 'teams' : 'players',
   )
@@ -103,10 +121,10 @@ export default function TeeSheetWizard({
     : openMode === 'date' ? { date: openDate, time: openTime }
     : null
 
-  const byTeams = unit === 'teams' && !!teamSize && maxTeams > 0
+  const byTeams = unit === 'teams' && !!unitSize && maxTeams > 0
   const rules: TeeRules = {
     batches: drafts.map(toBatch),
-    groupSize: byTeams ? teams * teamSize! : players,
+    groupSize: byTeams ? teams * unitSize! : players,
     ...(byTeams ? { teamsPerTee: teams } : {}),
     ...(opens ? { opens } : {}),
   }
@@ -164,6 +182,46 @@ export default function TeeSheetWizard({
         ? 'Could not save — a database update may not have been applied yet.'
         : 'Could not save the tee sheet — try again')
       return
+    }
+    // The answer to "Do players play in their teams?", written onto the
+    // board it was asked of — first time, or changed. Read fresh and edited
+    // in place, so nothing else on the boards is touched on the way past.
+    if (playTogether && (!playTogether.answered || together !== playTogether.together)) {
+      const { data: fresh, error: e0 } = await supabase
+        .from('trips').select('leaderboards').eq('id', tripId).single()
+      const { error: e3 } = e0 ? { error: e0 } : await supabase
+        .from('trips')
+        .update({ leaderboards: withPlayTogether((fresh as { leaderboards?: unknown } | null)?.leaderboards, playTogether.boardId, together) })
+        .eq('id', tripId)
+      if (e3) {
+        console.error('Play-together answer save failed:', e3)
+        setSaving(false)
+        setError('The sheet is saved, but whether players play in their teams could not be — try again')
+        return
+      }
+    }
+    // Each round, carried over: the last round's partnerships made on this
+    // round's own sheet, so nobody re-picks unless they want to change. A
+    // failure here leaves the sheet open and says so — the partnerships can
+    // still be made on the sheet itself.
+    if (carried && together) {
+      for (const t of carried.teams) {
+        const { data: made, error: e4 } = await supabase
+          .from('teams')
+          .insert({ trip_id: tripId, team_set: carried.sheet, name: t.name, color: t.color })
+          .select('id')
+          .single()
+        const failed = e4 || !made
+          ? true
+          : (await Promise.all(t.playerIds.map(id => setTeam(tripId, id, carried.sheet, (made as { id: string }).id))))
+              .some(Boolean)
+        if (failed) {
+          console.error('Carrying partnerships over failed:', e4)
+          setSaving(false)
+          setError('The sheet is saved, but last round’s teams could not be carried over — make them on the sheet')
+          return
+        }
+      }
     }
     // The round's start is the first tee time — the countdown, the weather
     // and the schedule read it off the golf item, so it moves with the sheet.
@@ -354,6 +412,29 @@ export default function TeeSheetWizard({
 
         {step === 2 && (
           <div className="flex flex-col gap-5">
+            {/* Asked here, where it shapes the sheet (Ross, 27 Oct 2026):
+                yes makes each team a partnership — booked onto a tee time
+                as one, and shown together everywhere. */}
+            {playTogether && (
+              <div>
+                <p className={FIELD_LABEL}>Do players play in their teams?</p>
+                <ChoiceChips
+                  label="Do players play in their teams?"
+                  value={together ? 'yes' : 'no'}
+                  onChange={v => {
+                    setTogether(v === 'yes')
+                    if (v !== 'yes') setUnit('players')
+                  }}
+                  options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]}
+                />
+                <p className="t-cap text-ink/65 mt-1.5 leading-snug">
+                  {together
+                    ? 'Each team goes out together and books its tee time as one.'
+                    : 'Teammates can go out at different times — every card still counts for the team.'}
+                </p>
+              </div>
+            )}
+
             {maxTeams > 0 && (
               <div>
                 <p className={FIELD_LABEL}>Count each tee time in</p>
@@ -375,7 +456,7 @@ export default function TeeSheetWizard({
                   onChange={n => setTeams(Number(n))}
                   options={Array.from({ length: maxTeams }, (_, k) => k + 1).map(n => ({
                     value: String(n),
-                    label: `${n} (${n * teamSize!} players)`,
+                    label: `${n} (${n * unitSize!} players)`,
                   }))}
                 />
               </div>

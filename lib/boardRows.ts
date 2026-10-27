@@ -25,7 +25,9 @@ import {
   type TeamScoring, type TeamScoreInput, type ScoringBasis,
   DEFAULT_TEAM_SCORING, teamRoundPoints, teamHolePoints,
 } from './teamScoring'
-import { shortNames } from './matchplayEntrants'
+import { joinNames } from './matchplayEntrants'
+import { boardNames } from './displayNames'
+import { isMadeName, MAX_PARTNERSHIP } from './partnerships'
 import {
   TAG_SET, tagRoundScore, countingPlayers, tagOfTeam,
 } from './tagBoards'
@@ -1136,16 +1138,21 @@ function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const combined = combineRounds(lb, perTeam.map(t => ({ id: t.team.id, rounds: t.rounds })),
     teams.length)
 
+  // The field's short names, so a pair reads "Ross & Dave" and two Rosses
+  // anywhere in the field stay two different people (lib/displayNames.ts).
+  const shortOf = boardNames(ctx.players)
   const rows = perTeam.map(({ team, memberIds, rounds }) => {
     const c = combined.get(team.id)!
     const members = ctx.players.filter(p => memberIds.includes(p.id))
     // A board can name its rows by the players instead of the team — for the
-    // group that never christened its teams. `shortNames` rather than bare
-    // first names, so two Rosses on one team stay two different people.
+    // group that never christened its teams — and a team nobody named (a
+    // lettered default, or its members' names) is its players anyway: a
+    // pair reads "Ross & Dave" (lib/partnerships.ts, Ross 27 Oct 2026).
     const byPlayers = lb.hideTeamName === true
+      || (members.length <= MAX_PARTNERSHIP && isMadeName(team.name, members.map(m => m.name)))
     const row: UnplacedRow = {
       id: team.id,
-      name: byPlayers ? shortNames(members.map(m => m.name)).join(', ') : team.name,
+      name: byPlayers ? joinNames(members.map(m => shortOf.get(m.id) ?? m.name)) : team.name,
       color: team.color,
       // Empty rather than the members again: with the players already on the
       // top line, the same names underneath would say nothing twice.

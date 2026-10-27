@@ -67,10 +67,19 @@ export function sheetsInUse(boards: readonly Leaderboard[]): string[] {
  *
  * Numbered from two, because the first sheet is `main` — "sheet 2" beside
  * "main" reads as the second one, which is what it is.
+ *
+ * `reserveMain` on an event: `main` is where the event's teams live (the
+ * code's tags, lib/tagBoards.ts), so a board's partnerships never start
+ * there — otherwise a pairs board made first would have its pairs read as
+ * the event's teams, and the two would mix the moment the event made any
+ * (Ross, 27 Oct 2026). A trip, having no teams of that kind, keeps `main`.
  */
-export function nextSheetId(boards: readonly Leaderboard[]): string {
+export function nextSheetId(
+  boards: readonly Leaderboard[],
+  { reserveMain = false }: { reserveMain?: boolean } = {},
+): string {
   const used = new Set(sheetsInUse(boards))
-  if (!used.has(MAIN_SET)) return MAIN_SET
+  if (!used.has(MAIN_SET) && !reserveMain) return MAIN_SET
   for (let n = 2; ; n++) {
     const id = `set-${n}`
     if (!used.has(id)) return id

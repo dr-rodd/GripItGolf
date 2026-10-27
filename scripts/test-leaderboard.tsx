@@ -1355,7 +1355,7 @@ section('A board told to hide the team name is the players')
   ok((named?.subLabel ?? '').includes('Alice'), 'with the players underneath')
 
   const hidden = rowsFor({ ...TEAM('better_ball'), hideTeamName: true }, opts).board[0]
-  eq(hidden?.name, 'Alice, Bob, Cara', 'hidden, the row reads as the players themselves')
+  eq(hidden?.name, 'Alice, Bob & Cara', 'hidden, the row reads as the players themselves, joined as a partnership is')
   ok(!hidden?.subLabel, 'and nothing underneath repeats them')
 
   // On screen too — the board shows the players, stacked one to a line with

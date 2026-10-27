@@ -169,14 +169,17 @@ export type Leaderboard = {
   overallTie?: OverallTie
 
   /**
-   * Team boards on an event only — whether teammates occupy one tee-sheet
-   * slot together, or may go out in separate slots contributing to the same
-   * board. Absent means together, because partners almost always play
-   * together; only 'separate' is stored. The tee sheet reads it to decide
-   * whether adding one member books the pair (lib/teeSheet.ts) — a trip,
-   * having no tee sheet, never asks and never stores it.
+   * Team boards — "Do players play in their teams?": whether teammates
+   * occupy one tee-sheet slot together, as a partnership, or may go out in
+   * separate slots contributing to the same board. Asked where the round's
+   * tee times are set up, once the board governs a round and its teams are
+   * four or fewer (lib/partnerships.ts, Ross 27 Oct 2026 — it was a
+   * leaderboard-form question before). Absent means not asked yet, and reads
+   * as together, because partners almost always play together and that is
+   * what every board did before the question; 'together' is the same answer
+   * given. Trips and events alike, now trips have tee sheets.
    */
-  teeTeams?: 'separate'
+  teeTeams?: 'separate' | 'together'
 
   /**
    * Team boards on an event only — teams formed by criteria, with the
@@ -767,27 +770,10 @@ export function dayBoardFor(
   return scoped.find(b => b.audience === 'team') ?? scoped[0] ?? null
 }
 
-/**
- * The board whose teams a round is played in.
- *
- * The day's own team board when it has one — its teams are that day's
- * fourballs, on that day's sheet — and otherwise the event's team board,
- * whose teams stand for the whole week. This is the one copy of that
- * order, so the tee sheet, the grouping and the scoring cannot disagree
- * about whose teams a slot is showing.
- *
- * A tags board is never it: a tag is not a playing group, and grouping a
- * tee sheet by tag would put twelve people in a fourball.
- */
-export function teamBoardForRound(
-  boards: readonly Leaderboard[],
-  roundId: string,
-): Leaderboard | null {
-  const day = dayBoardFor(boards, roundId)
-  if (day && day.audience === 'team' && !day.tagMode) return day
-  return boards.find(b =>
-    b.audience === 'team' && !b.tagMode && !b.roundIds?.length) ?? null
-}
+// Whose teams a round is played in — its partnerships — is
+// lib/partnerships.ts `roundPartnership`, read off the board governing the
+// round and no other (Ross, 27 Oct 2026). `teamBoardForRound` used to take
+// the first team board it found, primary or not.
 
 /** Whether this board needs teams picked before the trip can go live. */
 export function needsTeams(boards: readonly Leaderboard[]): boolean {
@@ -1138,10 +1124,11 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
       // the `assign_tag` permission — so those answers are left behind
       // rather than carried where they would gate the wrong thing.
       if (!lb.tagMode) {
-        // Whether teammates share a tee-sheet slot. Only the non-default is
-        // worth a key: absent means together, which is what every board did
-        // before the sheet could ask.
-        if (r.teeTeams === 'separate') lb.teeTeams = 'separate'
+        // Whether teammates share a tee-sheet slot — "Do players play in
+        // their teams?", asked where tee times are set up (lib/partnerships.ts).
+        // Absent is not yet asked, and reads as together, which is what
+        // every board did before the sheet could ask; either answer is kept.
+        if (r.teeTeams === 'separate' || r.teeTeams === 'together') lb.teeTeams = r.teeTeams
 
         // Self-picked teams, and their size. The size only means anything
         // with the pick, and is clamped to what the tee sheet can seat when
