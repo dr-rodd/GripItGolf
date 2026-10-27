@@ -129,12 +129,14 @@ section('Who still needs one')
 
 section('The organiser card says where tagging stands')
 {
-  // On screen a tag is a side (CLAUDE.md) — the card speaks of sides.
-  ok(describeTags(0, 0, 12).includes('No sides yet'),
+  // On screen a tag is a team (Ross, 27 Oct 2026; "side" until then) —
+  // the card speaks of teams.
+  ok(describeTags(0, 0, 12).includes('No teams yet'),
     'nothing made yet reads as an invitation, not a count')
-  ok(describeTags(2, 12, 12).includes('2 sides'), 'two sides say two')
-  ok(describeTags(1, 3, 12).includes('1 side ') || describeTags(1, 3, 12).includes('1 side·')
-    || /1 side\b/.test(describeTags(1, 3, 12)), 'one side is singular')
+  ok(describeTags(2, 12, 12).includes('2 teams'), 'two teams say two')
+  ok(/1 team\b/.test(describeTags(1, 3, 12)) && !describeTags(1, 3, 12).includes('1 teams'),
+    'one team is singular')
+  ok(!/\bsides?\b/.test(describeTags(2, 9, 12) + describeTags(0, 0, 12)), '…and no card says "side" any more')
   ok(describeTags(2, 9, 12).includes('9 of 12'), 'and how far the tagging has got')
   ok(describeTags(2, 0, 0).includes('nobody on the roster'),
     'an event with tags but no field says so rather than dividing by nothing')
@@ -268,8 +270,8 @@ section('A tags board is named for what it ranks')
     id: 'b', audience: 'team', competition: 'league',
     scoring: 'stableford', combine: 'total', tagMode: 'best_cards', tagCount: 3,
   }
-  ok(boardTitle(lb).startsWith('Tags'),
-    'named for what it ranks — not "Team better ball", which would read as the week\'s teams')
+  ok(boardTitle(lb).startsWith('Teams — '),
+    'named for what it ranks — the event\'s teams, not "Team better ball", the teams playing together')
   ok(boardTitle(lb) !== boardTitle({ ...lb, tagMode: undefined, teamFormat: 'better_ball' }),
     'and never the same tab as an ordinary team board on the same cards')
   ok(boardRules(lb).includes('best 3 cards'),
@@ -644,7 +646,7 @@ section('The organiser dashboard carries the door')
 {
   const client = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
   ok(client.includes('/organiser/tags'), 'a card links to the portal')
-  ok(client.includes('label="Teams and tags"'), 'under the amalgamated heading, a row in the organiser\'s list')
+  ok(client.includes('label="Teams" hint={tagsSummary}'), 'a row in the organiser\'s list, called Teams')
   ok(client.includes('{tagsSummary}'), 'showing where tagging stands')
 
   const page = read('app/trip/[tripCode]/organiser/page.tsx')
@@ -706,8 +708,8 @@ section('The board is offered where boards are made, and only on events')
   const client = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   ok(client.includes("b.competition === 'league'"),
     'the leaderboard tabs every league board — a tags board rides in unchanged')
-  ok(client.includes('the sides are set in the organiser area'),
-    'and an empty one points at where tags come from, not at Trip Setup')
+  ok(client.includes('No teams yet — they are set in the organiser area.'),
+    'and an empty one points at where the event\'s teams come from, not at Trip Setup')
   ok(client.includes('picked on the tee sheet'),
     'while an empty day board points at where its fourballs come from')
 }

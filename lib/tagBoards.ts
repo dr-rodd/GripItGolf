@@ -171,8 +171,8 @@ export function tagGateReason(
     ? names[0]
     : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
   return names.length === 1
-    ? `${who} needs a side before going on the sheet. Sides are set in the organiser area.`
-    : `${who} need sides before going on the sheet. Sides are set in the organiser area.`
+    ? `${who} needs a team before going on the sheet. Teams are set in the organiser area.`
+    : `${who} need teams before going on the sheet. Teams are set in the organiser area.`
 }
 
 /**
@@ -190,9 +190,9 @@ export function dayTeamTagIssue(
 ): string | null {
   if (memberIds.length === 0) return null
   const tags = new Set(memberIds.map(id => tagOf(memberships, id)))
-  if (tags.has(null)) return 'Everyone in a team needs a side first.'
+  if (tags.has(null)) return 'Everyone playing together needs a team first.'
   return tags.size > 1
-    ? 'A team has to be all one side. Its card counts towards that side.'
+    ? 'Everyone playing together has to be on the same team — their card counts for it.'
     : null
 }
 
@@ -205,8 +205,8 @@ export function describeTags(
   taggedCount: number,
   playerCount: number,
 ): string {
-  if (tagCount === 0) return 'No sides yet · each player keeps one for the whole event.'
-  const tags = `${tagCount} side${tagCount === 1 ? '' : 's'}`
+  if (tagCount === 0) return 'No teams yet · each player keeps one for the whole event.'
+  const tags = `${tagCount} team${tagCount === 1 ? '' : 's'}`
   if (playerCount === 0) return `${tags} · nobody on the roster yet.`
   return `${tags} · ${taggedCount} of ${playerCount} player${playerCount === 1 ? '' : 's'} assigned.`
 }

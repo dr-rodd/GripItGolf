@@ -1743,9 +1743,12 @@ New screens, not in the August sheet: the organiser area and its doors
 (Formats by day, Bracket setup / League, Tags), the participant permissions
 the creation doors share, the tee sheet and the export. Already changed where
 a rule decided it; **Ross** marks a question. Paths are under
-`app/trip/[tripCode]/` unless they start with `lib/`. On screen a tag is a
+`app/trip/[tripCode]/` unless they start with `lib/`. ~~On screen a tag is a
 **side**; "tags" stays only in the portal's name ("Teams and tags" row, the
-"Tags" page) so it is recognisable (CLAUDE.md).
+"Tags" page) so it is recognisable.~~ **Decided 27 Oct 2026 (Ross): on screen
+a tag is a team** — the row and the page are "Teams", and every "side" below
+now reads "team" (CLAUDE.md, "An event has two levels of grouping"). The
+lines below keep their earlier wording as the record of what was proposed.
 
 ### The organiser area
 

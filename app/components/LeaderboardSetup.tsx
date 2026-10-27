@@ -871,8 +871,8 @@ function Builder({
           />
           <Choice
             on={isTagBoard(draft)}
-            label="The event's sides — its tags"
-            hint="A player keeps their side all event, like Europe or USA."
+            label="The event's teams"
+            hint="A player keeps their team all event, like Europe or USA, whoever they play with."
             onClick={() => {
               // Already on the sides: re-tapping must not throw away the
               // mode and the scoring underneath it.
@@ -958,7 +958,7 @@ function Builder({
           how its players combine — because it is the same question asked
           of a side: what makes its score for the day. */}
       {offersTagMode(draft) && (
-        <Question n={next()} title="How does a side score a round?">
+        <Question n={next()} title="How does a team score a round?">
           {TAG_MODES.map(m => (
             <Choice
               key={m.key}
@@ -1001,7 +1001,7 @@ function Builder({
             ))}
           </div>
           <p className="t-cap text-ink/65 leading-snug">
-            If fewer of the side play, every card they hand in counts.
+            If fewer of the team play, every card they hand in counts.
           </p>
         </Question>
       )}

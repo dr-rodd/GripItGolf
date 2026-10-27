@@ -85,7 +85,7 @@ export default function TagPortalClient({
       })
       .select('id, name, color, team_set')
       .single()
-    if (err || !data) return fail('add the side')
+    if (err || !data) return fail('add the team')
     setTeams(prev => [...prev, data as Team])
     setDraftName('')
   }
@@ -102,7 +102,7 @@ export default function TagPortalClient({
       .update({ name: trimmed })
       .eq('id', tagId)
       .eq('trip_id', tripId)
-    if (err) { setTeams(prev); fail('rename the side') }
+    if (err) { setTeams(prev); fail('rename the team') }
   }
 
   async function recolorTag(tagId: string, color: string) {
@@ -120,7 +120,7 @@ export default function TagPortalClient({
 
   async function removeTag(tagId: string) {
     // Deliberate, never one tap — the same rule deleting anything follows.
-    if (!window.confirm('Remove this side? Its players keep their scores.')) return
+    if (!window.confirm('Remove this team? Its players keep their scores.')) return
     setError(null)
     const memberIds = membersOf(memberships, tagId)
 
@@ -129,7 +129,7 @@ export default function TagPortalClient({
       .delete()
       .eq('id', tagId)
       .eq('trip_id', tripId)
-    if (err) return fail('remove the side')
+    if (err) return fail('remove the team')
 
     // The database cascades the memberships; the players.team_id mirror is
     // ours to clear, exactly as the teams editor does when teams go.
@@ -150,7 +150,7 @@ export default function TagPortalClient({
     const failure = await setTeam(tripId, playerId, TAG_SET, tagId)
     if (failure) {
       setMemberships(prev)
-      fail(tagId ? 'move the player' : 'take the player off the side')
+      fail(tagId ? 'move the player' : 'take the player off the team')
     }
   }
 
@@ -206,10 +206,10 @@ export default function TagPortalClient({
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
         <h1 className="t-h1 text-ink mb-1">
-          Tags
+          Teams
         </h1>
         <p className="text-ink/65 text-sm mb-6 leading-snug">
-          Each player&apos;s side for the whole event, whoever they play with.
+          Each player&apos;s team for the whole event, whoever they play with.
         </p>
 
         {/* ── Self-assign ── */}
@@ -255,7 +255,7 @@ export default function TagPortalClient({
                     onKeyDown={e => {
                       if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
                     }}
-                    aria-label="Side name"
+                    aria-label="Team name"
                     className="flex-1 min-w-0 bg-transparent text-ink text-sm font-medium focus:outline-none focus:border-b focus:border-accent/50"
                   />
                   <button
@@ -332,7 +332,7 @@ export default function TagPortalClient({
                                 <span
                                   className="w-2 h-2 rounded-full flex-shrink-0"
                                   style={{ backgroundColor: colorOf.get(currentTag) }}
-                                  aria-label="Already on a side. Tapping moves them."
+                                  aria-label="Already on a team. Tapping moves them."
                                 />
                               )}
                             </button>
@@ -386,7 +386,7 @@ export default function TagPortalClient({
 
         {untagged.length > 0 && tags.length > 0 && (
           <p className="t-cap text-ink/65 mt-4 leading-snug">
-            No side yet: {untagged.map(id => nameOf.get(id)).filter(Boolean).join(' · ')}
+            No team yet: {untagged.map(id => nameOf.get(id)).filter(Boolean).join(' · ')}
           </p>
         )}
 
@@ -396,12 +396,12 @@ export default function TagPortalClient({
             cascade Trip Setup uses, never a smaller second copy of it. */}
         <section className="mt-10">
           <h2 className="t-h2 text-ink mb-1">
-            What the sides play for
+            What the teams play for
           </h2>
           <p className="text-ink/65 text-[13px] mb-3 leading-snug">
             {ranked
-              ? 'The sides are being ranked.'
-              : 'On their own, sides only colour player cards.'}
+              ? 'The teams are being ranked.'
+              : 'On their own, teams only colour player cards.'}
           </p>
 
           {ranked && !showBoards && (
@@ -439,7 +439,7 @@ export default function TagPortalClient({
               onClick={() => setShowBoards(true)}
               className="w-full py-4 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:border-bark/40 hover:text-ink/80 transition-colors"
             >
-              {ranked ? 'Change the leaderboards' : '+ Rank the sides'}
+              {ranked ? 'Change the leaderboards' : '+ Rank the teams'}
             </button>
           )}
         </section>

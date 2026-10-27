@@ -341,7 +341,7 @@ The screen stays open once the trip is live. It has to — a player who joins ha
 
 ### Tags, and a sheet for each day
 
-An event has two levels of grouping and they are different things. A **tag** is the side a player carries for the whole event — Europe and USA, the four club sides — set once and never changing. A **team** is the playing group on the day: the fourball, the pair, picked at the tee sheet and different every morning. An event may use one, the other, or both, and the two are **additive rather than alternative**: a sides board and a playing-teams board run side by side on the same cards.
+An event has two levels of grouping and they are different things (on screen both are called **team** since 27 Oct 2026; internally a *team* and a *partnership*). A **tag** is the team a player carries for the whole event — Europe and USA, the four club sides — set once and never changing. A **team** is the playing group on the day: the fourball, the pair, picked at the tee sheet and different every morning. An event may use one, the other, or both, and the two are **additive rather than alternative**: a sides board and a playing-teams board run side by side on the same cards.
 
 Both are sheets, which is why neither needed a migration:
 

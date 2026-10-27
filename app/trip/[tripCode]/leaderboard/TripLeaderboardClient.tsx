@@ -1759,7 +1759,7 @@ export default function TripLeaderboardClient({
   // different screens, and "Set teams in Trip Setup" points at neither.
   const emptyMessage =
     activeBoard.audience !== 'team' ? 'No scores yet.'
-    : activeBoard.tagMode ? 'No tags yet — the sides are set in the organiser area.'
+    : activeBoard.tagMode ? 'No teams yet — they are set in the organiser area.'
     : activeBoard.roundIds?.length ? 'No teams for this day yet — they are picked on the tee sheet.'
     : 'Set teams in Trip Setup'
 

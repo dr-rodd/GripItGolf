@@ -687,11 +687,11 @@ section('An untagged player cannot go on a sheet that is playing for tags')
 
   eq(tagGateReason(['ross', 'john'], ms, nameOf), null, 'tagged players go on')
   const one = tagGateReason(['mary'], ms, nameOf)
-  ok(!!one?.includes('Mary') && one.includes('needs a side'),
+  ok(!!one?.includes('Mary') && one.includes('needs a team'),
     'an untagged one is refused by name')
   ok(!!one?.includes('organiser area'), '  …and told where a tag comes from')
   const two = tagGateReason(['mary', 'sean'], ms, nameOf)
-  ok(!!two?.includes('Mary and Sean') && two.includes('need sides'),
+  ok(!!two?.includes('Mary and Sean') && two.includes('need teams'),
     'two are refused together, and the sentence agrees with itself')
   ok(!/Failed|Please/.test(one ?? ''), 'and it is calm, like every other refusal')
 }
@@ -704,9 +704,9 @@ section('A team card counts towards one tag, so a team is of one')
     { team_id: 'tag-us', team_set: MAIN_SET, player_id: 'john' },
   ]
   eq(dayTeamTagIssue(['ross', 'dave'], ms), null, 'one tag between them is a team')
-  ok(!!dayTeamTagIssue(['ross', 'john'], ms)?.includes('all one side'),
+  ok(!!dayTeamTagIssue(['ross', 'john'], ms)?.includes('on the same team'),
     'two tags is not — the card could only count towards one')
-  ok(!!dayTeamTagIssue(['ross', 'mary'], ms)?.includes('needs a side'),
+  ok(!!dayTeamTagIssue(['ross', 'mary'], ms)?.includes('needs a team'),
     'and an untagged member is refused here too, not left to the gate')
   eq(dayTeamTagIssue([], ms), null, 'an empty team has nothing wrong with it yet')
 }
@@ -718,8 +718,8 @@ section('The gate refuses an add, and never evicts')
     'the check runs inside addPlayers, before the write')
   ok(/tagGateReason[\s\S]{0,200}setError\(\{ slot: slotIndex/.test(client),
     'and the refusal reads in the slot it was refused in')
-  ok(client.includes('One player still needs a side')
-    || client.includes('still need a side'),
+  ok(client.includes('One player still needs a team')
+    && client.includes('still need a team'),
     'with a banner at the top, so the first tap does not discover the rule')
   ok(!/removePlayers[\s\S]{0,300}tagGateReason/.test(client),
     'removing is never gated — a name already on the sheet stays put')
