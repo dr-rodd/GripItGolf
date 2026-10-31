@@ -101,7 +101,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
       .eq('kind', 'golf'),
     supabase
       .from('players')
-      .select('id, name, claimed')
+      .select('id, name, claimed, handicap')
       .eq('trip_id', trip.id)
       .eq('is_composite', false)
       .order('name'),
@@ -205,7 +205,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
   const access = teeSheetAccess((permsResult.data as { event_permissions?: unknown } | null)?.event_permissions)
 
   // Who this phone is — the player who may pick their own time.
-  const roster = (playersResult.data ?? []) as { id: string; name: string; claimed: boolean | null }[]
+  const roster = (playersResult.data ?? []) as { id: string; name: string; claimed: boolean | null; handicap: number | null }[]
   const me = await currentPlayer(tripCode, roster)
 
   const allTeams = (teamsResult.data ?? []) as {
@@ -294,7 +294,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
       tripId={trip.id}
       tripCode={tripCode}
       rounds={rounds}
-      players={roster.map(p => ({ id: p.id, name: p.name }))}
+      players={roster.map(p => ({ id: p.id, name: p.name, handicap: p.handicap }))}
       initialAssignments={
         ((assignmentsResult.data ?? []) as {
           round_id: string; player_id: string; slot_index: number

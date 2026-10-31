@@ -7,9 +7,9 @@ import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import { hasUnlocked, isLocked } from '@/lib/passcode'
-import { IconPlus, IconX, IconUsers } from '@/app/components/icons'
+import { IconX, IconUsers } from '@/app/components/icons'
 import {
-  type SlotPlayer, type RoundSheet, groupSlot, pickerUnits, unitMatches,
+  type SlotPlayer, type RoundSheet, groupSlot, seatGrid, pickerUnits, unitMatches,
   sheetClock, sheetSlots, sheetGroupSize, describeRules, myTee, mayRemoveBooking,
 } from '@/lib/teeSheet'
 import { joinNames, firstName } from '@/lib/matchplayEntrants'
@@ -24,13 +24,16 @@ import { deleteTeam, refreshTeamName } from '../teams/teamWrites'
 import { PRESET_COLORS } from '@/lib/teamColors'
 import { FIELD, buttonClass, cardClass, optionClass } from '@/app/components/ui'
 import { courseLabel } from '@/lib/courseDirectory'
+import TeeSeats, { type SeatAction } from './TeeSeats'
 
 /**
- * The tee sheet on a phone: a full day is a long scroll, so every row is
- * condensed — the names stacked on the left, the time on the right, one
- * hairline between groups. Teammates in a slot gather into one block, side
- * by side at two or three and a 2×2 grid at four, because a team going out
- * together should read as one thing.
+ * The tee sheet on a phone reads like a day on a calendar (Ross, 31 Oct
+ * 2026): the times down a gutter on the left, a hairline between them, and
+ * each tee time's players in seats made for them — two across, a 2×2 grid
+ * for a fourball, name and handicap — rather than a line that stretches.
+ * Partners are one ticket, joined by a perforation; a player on their own
+ * has a seat to themselves (`TeeSeats`, laid out by lib/teeSheet.ts
+ * `seatGrid`). Open seats carry Join and Add player.
  *
  * One sheet per tee-sheet round, and a round's sheet is live only once it
  * has been made in the wizard (lib/teeSheet.ts `roundSheet`): until then
@@ -118,7 +121,8 @@ export default function TeeSheetClient({
   tripId: string
   tripCode: string
   rounds: Round[]
-  players: { id: string; name: string }[]
+  /** The field, with each handicap index for the seats (null = not given yet). */
+  players: { id: string; name: string; handicap?: number | null }[]
   initialAssignments: Assignment[]
   /**
    * Per round, its partnerships, where it has any. A day with its own team
@@ -187,6 +191,7 @@ export default function TeeSheetClient({
   const selfPick = selfPickAllowed && !notYetOpen
   const groupSize = live ? sheetGroupSize(live) : 0
   const nameOf = useMemo(() => new Map(players.map(p => [p.id, p.name])), [players])
+  const handicapOf = useMemo(() => new Map(players.map(p => [p.id, p.handicap ?? null])), [players])
   const shortOf = useMemo(() => boardNames(players), [players])
 
   /**
@@ -784,114 +789,83 @@ export default function TeeSheetClient({
                 const groups = groupSlot(slotPlayers, teamMap)
                 const open = adding === i
 
+                // What this phone may do in the open seats, first seat first.
+                const actions: SeatAction[] = []
+                if (selfPick && storageReady && myUnitIds.length > 0 && vacancy >= myUnitIds.length) {
+                  actions.push({
+                    label: 'Join',
+                    sub: myUnitIds.length > 1 ? 'with your team' : undefined,
+                    onClick: () => (asksForTeam
+                      ? setJoining(joining === i ? null : i)
+                      : addPlayers(i, myUnitIds)),
+                  })
+                }
+                if (mayBookOthers && storageReady && vacancy > 0) {
+                  actions.push({ label: 'Add player', onClick: () => { setAdding(open ? null : i); setSearch('') } })
+                }
+                // "8:10 am" in the gutter as the hour over its half of the day.
+                const cut = clock ? clock.lastIndexOf(' ') : -1
+                const [hourMins, meridiem] = clock
+                  ? cut > 0 ? [clock.slice(0, cut), clock.slice(cut + 1)] : [clock, '']
+                  : [String(i + 1), 'Group']
+
                 return (
-                  <li key={i} className={`px-3.5 py-2.5 ${isMine ? 'bg-accent/[0.06]' : ''}`}>
-                    <div className="flex items-start justify-between gap-3">
-                      {/* Names on the left, stacked; a team is one block —
-                          side by side at 2 or 3, a 2×2 grid at 4. */}
-                      <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                        {slotPlayers.length === 0 && !mayBookOthers && !(selfPick && myUnitIds.length > 0) && (
-                          <span className="t-cap text-ink/50 py-0.5">Open</span>
-                        )}
+                  <li key={i} className="grid grid-cols-[3.75rem_minmax(0,1fr)]">
+                    {/* The time in the gutter, as a calendar keeps its hours. */}
+                    <div className={`pl-3.5 pr-1.5 pt-3 border-r border-line ${isMine ? 'text-accent-deep' : 'text-ink/80'}`}>
+                      {clock ? (
+                        <>
+                          <span className="block t-label tabular-nums">{hourMins}</span>
+                          <span className="block text-[13px] leading-tight opacity-80">{meridiem}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="block text-[13px] leading-tight opacity-80">{meridiem}</span>
+                          <span className="block t-label tabular-nums">{hourMins}</span>
+                        </>
+                      )}
+                    </div>
 
-                        {groups.map((g, gi) => (
-                          g.teamId ? (
-                            /* A linked team is one thing: on a share-a-tee
-                               board its ✕ takes the whole block out, because
-                               stuck together cuts both ways. Separate-play
-                               boards keep the per-name ✕. */
-                            <div
-                              key={g.teamId}
-                              className="rounded-lg bg-accent/[0.06] border border-accent/20 px-2 py-1.5 flex items-start gap-1"
-                            >
-                              <div
-                                className={`flex-1 min-w-0 ${
-                                  g.players.length === 4
-                                    ? 'grid grid-cols-2 gap-x-3 gap-y-0.5'
-                                    : 'flex flex-wrap items-center gap-x-3 gap-y-0.5'
-                                }`}
-                              >
-                                {g.players.map(p => (
-                                  <span key={p.id} className="flex items-center gap-1 min-w-0">
-                                    <span className="t-card text-ink truncate">{p.name}</span>
-                                    {mayRemove(p.id) && !together && (
-                                      <button
-                                        type="button"
-                                        onClick={() => removePlayers(i, [p.id])}
-                                        aria-label={`Remove ${p.name}`}
-                                        className="flex-shrink-0 text-ink/50 hover:text-rust transition-colors p-0.5"
-                                      >
-                                        <IconX size={12} />
-                                      </button>
-                                    )}
-                                  </span>
-                                ))}
-                              </div>
-                              {together && g.players.every(p => mayRemove(p.id)) && (
-                                <button
-                                  type="button"
-                                  onClick={() => removePlayers(i, g.players.map(p => p.id))}
-                                  aria-label={`Remove ${g.teamName}`}
-                                  className="flex-shrink-0 text-ink/50 hover:text-rust transition-colors p-0.5"
-                                >
-                                  <IconX size={12} />
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <div key={`solo-${gi}`} className="flex flex-col gap-0.5">
-                              {g.players.map(p => (
-                                <span key={p.id} className="flex items-center gap-1 min-w-0">
-                                  <span className="t-card text-ink truncate">{p.name}</span>
-                                  {mayRemove(p.id) && (
-                                    <button
-                                      type="button"
-                                      onClick={() => removePlayers(i, [p.id])}
-                                      aria-label={`Remove ${p.name}`}
-                                      className="flex-shrink-0 text-ink/50 hover:text-rust transition-colors p-0.5"
-                                    >
-                                      <IconX size={12} />
-                                    </button>
-                                  )}
-                                </span>
-                              ))}
-                            </div>
-                          )
-                        ))}
+                    <div className="min-w-0 p-2.5">
+                    {/* The seats: two across, a 2×2 grid for a fourball,
+                        partners one ticket (lib/teeSheet.ts `seatGrid`). On
+                        a share-a-tee board a team's ✕ takes the whole block
+                        out, because stuck together cuts both ways; it sits
+                        on the ticket's top right seat. */}
+                    <TeeSeats
+                      rows={seatGrid(groups, groupSize)}
+                      handicapOf={id => handicapOf.get(id)}
+                      meId={meId}
+                      actions={actions}
+                      removeFor={cell => {
+                        if (cell.teamId && together) {
+                          if (cell.joins.right || cell.joins.up) return null
+                          const block = slotPlayers.filter(p => teamMap.get(p.id)?.teamId === cell.teamId).map(p => p.id)
+                          if (!block.every(mayRemove)) return null
+                          return {
+                            ids: block,
+                            label: `Remove ${teamMap.get(cell.player.id)?.teamName ?? cell.player.name}`,
+                            onRemove: () => removePlayers(i, block),
+                          }
+                        }
+                        if (!mayRemove(cell.player.id)) return null
+                        return {
+                          ids: [cell.player.id],
+                          label: `Remove ${cell.player.name}`,
+                          onRemove: () => removePlayers(i, [cell.player.id]),
+                        }
+                      }}
+                    />
 
-                        {mayBookOthers && storageReady && vacancy > 0 && !open && (
-                          <button
-                            type="button"
-                            onClick={() => { setAdding(i); setSearch('') }}
-                            className="self-start flex items-center gap-1 t-cap text-accent-deep hover:text-accent transition-colors py-0.5"
-                          >
-                            <IconPlus size={12} />
-                            Add player{vacancy > 1 ? ` · ${vacancy} open` : ''}
-                          </button>
-                        )}
-
-                        {/* A player picking their own time: join a time with
-                            room for them (and their linked team), leave the
-                            one they are in. Nobody else's name is theirs to
-                            move. */}
-                        {selfPick && storageReady && myUnitIds.length > 0 && vacancy >= myUnitIds.length && (
-                          <button
-                            type="button"
-                            onClick={() => (asksForTeam
-                              ? setJoining(joining === i ? null : i)
-                              : addPlayers(i, myUnitIds))}
-                            aria-expanded={asksForTeam ? joining === i : undefined}
-                            className="self-start flex items-center gap-1 t-cap text-accent-deep hover:text-accent transition-colors py-0.5"
-                          >
-                            <IconPlus size={12} />
-                            {myUnitIds.length > 1 ? 'Join with your team' : 'Join'}
-                          </button>
-                        )}
+                    {/* Leaving, and a day's own teams — the time's other
+                        doings, under its seats and only where they apply. */}
+                    {((selfPick && isMine) || ((organiser || (selfPick && isMine)) && roundTeamInfo?.isDay && slotPlayers.length >= 2)) && (
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
                         {selfPick && isMine && (
                           <button
                             type="button"
                             onClick={() => removePlayers(i, myLeavers(slotPlayers))}
-                            className="self-start t-cap text-ink/65 hover:text-ink transition-colors py-0.5"
+                            className="t-cap text-ink/65 hover:text-ink transition-colors py-0.5"
                           >
                             Leave this time
                           </button>
@@ -908,7 +882,7 @@ export default function TeeSheetClient({
                                a team is a choice, made in the picker. */
                             <Link
                               href={pickHref(i)}
-                              className="self-start flex items-center gap-1 t-cap text-accent-deep hover:text-accent transition-colors py-0.5"
+                              className="flex items-center gap-1 t-cap text-accent-deep hover:text-accent transition-colors py-0.5"
                             >
                               <IconUsers size={12} />
                               Pick a team from this time
@@ -917,7 +891,7 @@ export default function TeeSheetClient({
                             <button
                               type="button"
                               onClick={() => formTeam(i, slotPlayers)}
-                              className="self-start flex items-center gap-1 t-cap text-accent-deep hover:text-accent transition-colors py-0.5"
+                              className="flex items-center gap-1 t-cap text-accent-deep hover:text-accent transition-colors py-0.5"
                             >
                               <IconUsers size={12} />
                               Make this group a team
@@ -926,20 +900,14 @@ export default function TeeSheetClient({
                             <button
                               type="button"
                               onClick={() => unformTeam(i, slotPlayers.map(p => p.id))}
-                              className="self-start t-cap text-ink/50 hover:text-ink/80 transition-colors py-0.5"
+                              className="t-cap text-ink/50 hover:text-ink/80 transition-colors py-0.5"
                             >
                               Break the team up
                             </button>
                           )
                         )}
                       </div>
-
-                      {/* The time, on the right — tabular so a column of
-                          them reads as a column. */}
-                      <span className="flex-shrink-0 t-card text-ink/80 tabular-nums pt-0.5">
-                        {clock ?? `Group ${i + 1}`}
-                      </span>
-                    </div>
+                    )}
 
                     {/* A refused write says so in the slot it was refused
                         in. At the foot of the sheet it was a scroll away
@@ -1080,6 +1048,7 @@ export default function TeeSheetClient({
                         )}
                       </div>
                     )}
+                    </div>
                   </li>
                 )
               })}

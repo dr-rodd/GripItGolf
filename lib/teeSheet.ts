@@ -139,9 +139,9 @@ export type SlotGroup = {
 
 /**
  * A slot's players arranged for the screen: teammates gathered into one
- * block (side by side at 2 or 3, a 2×2 grid at 4 — the caller draws, this
- * only groups), singles in a block of their own at the end. Order inside a
- * block follows the order given, which is assignment order.
+ * block, singles in a block of their own at the end — `seatGrid` then sits
+ * them, a team as one ticket. Order inside a block follows the order
+ * given, which is assignment order.
  */
 export function groupSlot(
   players: readonly SlotPlayer[],
@@ -164,6 +164,115 @@ export function groupSlot(
   }
   if (solos.length > 0) order.push({ teamId: null, teamName: null, players: solos })
   return order
+}
+
+// ─── A tee time's seats ────────────────────────────────────────
+//
+// Ross, 31 Oct 2026: a tee time reads like a day on a calendar, and its
+// players sit in places made for them rather than a line that stretches —
+// two seats across, a 2×2 grid for a fourball. A player on their own has a
+// seat to themselves; partners are one ticket, joined across the seam by a
+// perforation, so who plays with whom is plain at a glance.
+
+/** Seats across a tee time. */
+export const SEATS_ACROSS = 2
+
+/** Which sides of a seat join a partner's — the ticket's seams. */
+export type SeatJoins = { left: boolean; right: boolean; up: boolean; down: boolean }
+
+export type SeatCell =
+  | { kind: 'player'; player: SlotPlayer; teamId: string | null; joins: SeatJoins }
+  | { kind: 'open' }
+  /** Past the tee time's last seat — a threeball's fourth place. */
+  | { kind: 'none' }
+
+const NO_JOINS: SeatJoins = { left: false, right: false, up: false, down: false }
+
+/**
+ * A tee time's players in their seats, row by row, two across.
+ *
+ * Teams first, biggest first, each into the first run of free seats that
+ * touch one another — a pair across one row, a fourball the whole grid, a
+ * three an L — so a team is always one piece; then everybody on their own,
+ * in the order they booked. As many seats as the tee time holds, and never
+ * fewer than the players in it (a sheet whose group size came down keeps
+ * everybody it had). `seats` is the group size.
+ */
+export function seatGrid(groups: readonly SlotGroup[], seats: number): SeatCell[][] {
+  const count = Math.max(seats, groups.reduce((n, g) => n + g.players.length, 0), 1)
+  const rows = Math.ceil(count / SEATS_ACROSS)
+  const cells: (SeatCell | null)[] = Array.from({ length: rows * SEATS_ACROSS }, (_, i) =>
+    i < count ? null : { kind: 'none' })
+  const free = (i: number) => i < count && cells[i] === null
+  const touching = (a: number, b: number) =>
+    (Math.floor(a / SEATS_ACROSS) === Math.floor(b / SEATS_ACROSS) && Math.abs(a - b) === 1)
+    || Math.abs(a - b) === SEATS_ACROSS
+  const connected = (run: number[]) => {
+    const seen = new Set([run[0]])
+    for (let grew = true; grew;) {
+      grew = false
+      for (const c of run) {
+        if (!seen.has(c) && [...seen].some(s => touching(s, c))) { seen.add(c); grew = true }
+      }
+    }
+    return seen.size === run.length
+  }
+
+  const teams = groups.filter(g => g.teamId).slice().sort((a, b) => b.players.length - a.players.length)
+  for (const team of teams) {
+    const k = team.players.length
+    let place: number[] | null = null
+    for (let start = 0; start + k <= count && !place; start++) {
+      const run = Array.from({ length: k }, (_, j) => start + j)
+      if (run.every(free) && connected(run)) place = run
+    }
+    place ??= cells.map((_, i) => i).filter(free).slice(0, k)
+    team.players.forEach((player, j) => {
+      if (place![j] !== undefined) cells[place![j]] = { kind: 'player', player, teamId: team.teamId, joins: NO_JOINS }
+    })
+  }
+  for (const solo of groups.filter(g => !g.teamId).flatMap(g => g.players)) {
+    const at = cells.findIndex((c, i) => c === null && i < count)
+    if (at >= 0) cells[at] = { kind: 'player', player: solo, teamId: null, joins: NO_JOINS }
+  }
+
+  const teamAt = (i: number) => {
+    const c = cells[i]
+    return c && c.kind === 'player' ? c.teamId : null
+  }
+  const out = cells.map((c, i): SeatCell => {
+    if (!c) return { kind: 'open' }
+    if (c.kind !== 'player' || !c.teamId) return c
+    const col = i % SEATS_ACROSS
+    const same = (j: number) => j >= 0 && j < cells.length && teamAt(j) === c.teamId
+    return {
+      ...c,
+      joins: {
+        left: col > 0 && same(i - 1),
+        right: col < SEATS_ACROSS - 1 && same(i + 1),
+        up: same(i - SEATS_ACROSS),
+        down: same(i + SEATS_ACROSS),
+      },
+    }
+  })
+  return Array.from({ length: rows }, (_, r) => out.slice(r * SEATS_ACROSS, (r + 1) * SEATS_ACROSS))
+}
+
+/**
+ * How one seat is cut, from its seams: a corner is rounded where nothing
+ * joins it, square where a partner's seat does, and notched — the half-moon
+ * a ticket has at each end of its perforation — where exactly one seam runs
+ * out to the ticket's edge. Where two seams cross, inside a fourball's
+ * ticket, it is square and whole.
+ */
+export function seatCorners(j: SeatJoins): {
+  rounded: { tl: boolean; tr: boolean; bl: boolean; br: boolean }
+  notched: { tl: boolean; tr: boolean; bl: boolean; br: boolean }
+} {
+  return {
+    rounded: { tl: !j.left && !j.up, tr: !j.right && !j.up, bl: !j.left && !j.down, br: !j.right && !j.down },
+    notched: { tl: j.left !== j.up, tr: j.right !== j.up, bl: j.left !== j.down, br: j.right !== j.down },
+  }
 }
 
 // ─── The add picker's units ────────────────────────────────────

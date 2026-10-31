@@ -20,6 +20,7 @@ import {
   sheetLength, sheetCapacity, seatsShort, rulesIssue, parseTeeRules, describeRules,
   roundSheet, sheetClock, sheetSlots, sheetGroupSize, draftRules,
   opensAt, sheetIsOpen, describeOpening, teeSheetSummary, mayRemoveBooking,
+  seatGrid, seatCorners, type SlotGroup,
 } from '../lib/teeSheet'
 import { irishInstant, daysBefore } from '../lib/irishTime'
 import { teeSheetAccess } from '../lib/eventPermissions'
@@ -149,7 +150,7 @@ section('Medium security: a player changes only themselves and those they booked
     'a player brings others only once who booked them can be recorded (migration 065)')
   ok(client.includes('...(bookerRecorded ? { booked_by: meId ?? null } : {})'),
     '  …and every booking records who made it, named only once the column exists')
-  ok(client.includes('{mayRemove(p.id) && (') && client.includes('together && g.players.every(p => mayRemove(p.id))'),
+  ok(client.includes('if (!mayRemove(cell.player.id)) return null') && client.includes('if (!block.every(mayRemove)) return null'),
     'each ✕ asks the one rule — a linked team only when every member is yours to move')
   const page = read('app/trip/[tripCode]/teesheet/page.tsx')
   ok(page.includes("select('round_id, player_id, booked_by', { count: 'exact' })") && page.includes('bookerRecorded={!bookersResult.error}'),
@@ -554,7 +555,7 @@ section('The sheet reads fail-soft and writes scoped')
   ok(client.includes('unitMatches(u, search)'), 'filtered by member or team name')
   ok(client.includes("u.players.length <= vacancy"),
     'a team only fits where the whole team fits')
-  ok(client.includes('removePlayers(i, g.players.map(p => p.id))'),
+  ok(client.includes('onRemove: () => removePlayers(i, block)'),
     'and leaves as one block on a share-a-tee board')
 }
 
@@ -574,7 +575,7 @@ section('A vacant round offers the wizard; players pick their own time when allo
   ok(/selfPick && storageReady && myUnitIds\.length > 0 && vacancy >= myUnitIds\.length/.test(client),
     '  …joining a time with room for them, and on a share-a-tee board their whole team')
   ok(client.includes('removePlayers(i, myLeavers(slotPlayers))'), '  …and leaving only their own')
-  ok(!/\{canEdit/.test(client) && /\{mayBookOthers && storageReady && vacancy > 0 && !open/.test(client),
+  ok(!/\{canEdit/.test(client) && /if \(mayBookOthers && storageReady && vacancy > 0\)/.test(client),
     'only the organiser, or a player booking their own times, places anybody else')
   ok(client.includes('myTee(roundAssignments, meId, live'), 'your own time sits at the top, from the one copy')
 }
@@ -789,6 +790,62 @@ section('The day\'s teams are made at the sheet, through the one writer')
     'whose partnerships a round groups by is asked per round, through the one copy')
   ok(!/boards\.find\(b => b\.audience === 'team'\)/.test(page),
     'the old take-the-first-team-board is gone — it silently picked one of two')
+}
+
+// ─── A tee time's seats ────────────────────────────────────────
+
+section('A tee time is seats, two across — partners one ticket (Ross, 31 Oct 2026)')
+{
+  const p = (id: string) => ({ id, name: id })
+  const solo = (...ids: string[]): SlotGroup => ({ teamId: null, teamName: null, players: ids.map(p) })
+  const team = (t: string, ...ids: string[]): SlotGroup => ({ teamId: t, teamName: t, players: ids.map(p) })
+  const layout = (g: SlotGroup[], seats: number) => seatGrid(g, seats).map(r => r.map(c =>
+    c.kind === 'player' ? c.player.id : c.kind))
+
+  eq(layout([solo('a', 'b', 'c')], 4), [['a', 'b'], ['c', 'open']], 'three on their own and a seat open — a 2×2 for a fourball')
+  eq(layout([], 4), [['open', 'open'], ['open', 'open']], 'an empty time is four open seats')
+  eq(layout([solo('a')], 3), [['a', 'open'], ['open', 'none']], 'a threeball has three seats, no fourth')
+  eq(layout([solo('a')], 2), [['a', 'open']], 'a two-ball one row')
+  eq(layout([solo('c'), team('T', 'a', 'b')], 4), [['a', 'b'], ['c', 'open']],
+    'a pair takes a row of its own, whoever booked first')
+  eq(layout([team('S', 'a', 'b'), team('T', 'c', 'd')], 4), [['a', 'b'], ['c', 'd']], 'two pairs, a row each')
+  eq(layout([team('T', 'a', 'b', 'c'), solo('d')], 4), [['a', 'b'], ['c', 'd']], 'a three is an L, the fourth beside it')
+  eq(layout([solo('a', 'b', 'c', 'd', 'e')], 4), [['a', 'b'], ['c', 'd'], ['e', 'none']],
+    'more on the time than its seats — nobody is dropped')
+
+  const pair = seatGrid([team('T', 'a', 'b'), solo('c')], 4)
+  const [left, right] = pair[0]
+  ok(left.kind === 'player' && left.joins.right && !left.joins.down && right.kind === 'player' && right.joins.left,
+    'partners join across their seam')
+  const single = pair[1][0]
+  ok(single.kind === 'player' && !single.joins.up && !single.joins.right, '  …and a player on their own joins nobody')
+  const four = seatGrid([team('F', 'a', 'b', 'c', 'd')], 4)
+  ok(four.flat().every(c => c.kind === 'player' && (c.joins.left || c.joins.right) && (c.joins.up || c.joins.down)),
+    'a fourball is one ticket, every seat joined both ways')
+
+  const cut = (j: Partial<Record<'left' | 'right' | 'up' | 'down', boolean>>) =>
+    seatCorners({ left: false, right: false, up: false, down: false, ...j })
+  eq(cut({}).notched, { tl: false, tr: false, bl: false, br: false }, 'a seat of its own: no notches…')
+  eq(cut({}).rounded, { tl: true, tr: true, bl: true, br: true }, '  …and every corner rounded')
+  eq(cut({ right: true }), {
+    rounded: { tl: true, tr: false, bl: true, br: false },
+    notched: { tl: false, tr: true, bl: false, br: true },
+  }, 'a pair\'s left seat: square and notched at both ends of the perforation')
+  eq(cut({ right: true, down: true }), {
+    rounded: { tl: true, tr: false, bl: false, br: false },
+    notched: { tl: false, tr: true, bl: true, br: false },
+  }, 'a fourball\'s top left: notched where each seam meets the edge, whole where they cross')
+
+  const seats = read('app/trip/[tripCode]/teesheet/TeeSeats.tsx')
+  ok(!/linear-gradient|radial-gradient/.test(seats) && seats.includes('bg-surface'),
+    'the notches are drawn circles in the card\'s colour — the site draws no gradients')
+  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  ok(client.includes('rows={seatGrid(groups, groupSize)}') && client.includes('grid-cols-[3.75rem_minmax(0,1fr)]'),
+    'every tee time is a calendar row — the time in the gutter, its seats beside it')
+  ok(client.includes(`<ol className={\`divide-y divide-line \${cardClass()}\`}>`),
+    '  …on a surface card, which the notches are cut to match')
+  const page = read('app/trip/[tripCode]/teesheet/page.tsx')
+  ok(page.includes("select('id, name, claimed, handicap')"), 'each seat carries its player\'s handicap')
 }
 
 // ─── Result ────────────────────────────────────────────────────
