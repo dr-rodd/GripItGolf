@@ -839,7 +839,9 @@ section('A tee time is seats, two across — partners one ticket (Ross, 31 Oct 2
 
   const seats = read('app/trip/[tripCode]/teesheet/TeeSeats.tsx')
   ok(!/linear-gradient|radial-gradient|maskImage|mask-image/.test(seats) && seats.includes('clipPath: seatClip(joins, notched)'),
-    'the half-moons are cut with a clip path — no outline round them, no gradient or mask')
+    'the half-moons are cut with a clip path — no gradient or mask')
+  ok(seats.includes('const BITE = 5.5') && seats.includes('<path d={CUT_EDGE}') && !/className=\{`relative overflow-hidden/.test(seats),
+    '  …slightly smaller, with the ticket\'s edge carried on round each one (Ross, 1 Nov 2026)')
   ok(seats.includes("borderRightColor: seam") && seats.includes("const seam = 'var(--color-line)'"),
     '  …and the seam between partners is a faint line (Ross, 1 Nov 2026)')
   const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')

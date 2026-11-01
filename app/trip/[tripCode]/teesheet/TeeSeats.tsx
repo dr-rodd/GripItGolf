@@ -5,16 +5,23 @@ import { IconPlus, IconX } from '@/app/components/icons'
 import { type SeatCell, type SeatJoins, type SeatTarget, seatCorners } from '@/lib/teeSheet'
 import { formatHandicap, isHandicapPending, HANDICAP_PENDING_LABEL } from '@/lib/handicap'
 
-/** The half-moon cut at each end of a seam — its radius. */
-const BITE = 7
+/** The half-moon cut at each end of a seam — its radius (Ross, 1 Nov 2026: slightly smaller than the first 7). */
+const BITE = 5.5
 /** The rounding where the cut meets the ticket's edge, so it has no sharp corner. */
-const FILLET = 3
+const FILLET = 2.5
 /** Points along each curve of the cut. */
 const STEPS = 6
+/** The ticket's edge, which carries on round the cut. */
+const EDGE = 1
 /** Half the gap between seats — what a joined seat reaches across to meet its partner. */
 const HALF_GAP = 3
+/** How far along the ticket's edge the cut starts, from the corner. */
+const REACH = Math.sqrt((BITE + FILLET) ** 2 - FILLET ** 2)
 
 type Corner = 'tl' | 'tr' | 'br' | 'bl'
+
+/** The side a corner's seat is joined on, left or right — else the seam there runs across, to the seat above or below. */
+const sideJoined = (j: SeatJoins, c: Corner) => (c === 'tl' || c === 'bl' ? j.left : j.right)
 
 /**
  * The cut at one corner of a seat, as points measured in from that corner —
@@ -27,7 +34,7 @@ type Corner = 'tl' | 'tr' | 'br' | 'bl'
  * and below) rather than down it.
  */
 function cutPoints(seamAcross: boolean): [number, number][] {
-  const d = Math.sqrt((BITE + FILLET) ** 2 - FILLET ** 2)
+  const d = REACH
   const out: [number, number][] = []
   // The fillet: centred (d, FILLET), from the edge round to where it meets the bite.
   const end = Math.atan2(-FILLET, -d)
@@ -59,13 +66,12 @@ function seatClip(j: SeatJoins, notched: Record<Corner, boolean>): string | unde
   }
   // The edge each corner is reached along, going round clockwise.
   const arrivesAcross: Record<Corner, boolean> = { tl: false, tr: true, br: false, bl: true }
-  const sideJoined: Record<Corner, boolean> = { tl: j.left, tr: j.right, br: j.right, bl: j.left }
   const points: string[] = []
   for (const c of ['tl', 'tr', 'br', 'bl'] as Corner[]) {
     if (!notched[c]) { points.push(at(c, 0, 0)); continue }
     // The seam runs down the ticket where this corner's side joins a
     // partner, and across it where the seat above or below does.
-    const seamAcross = !sideJoined[c]
+    const seamAcross = !sideJoined(j, c)
     let cut = cutPoints(seamAcross)
     // From the edge to the seam; reversed where the way round meets the seam first.
     const edgeFirst = arrivesAcross[c] !== seamAcross
@@ -76,6 +82,34 @@ function seatClip(j: SeatJoins, notched: Record<Corner, boolean>): string | unde
 }
 
 /**
+ * The ticket's edge carried on round one cut (Ross, 1 Nov 2026: a border
+ * round the indent), as a band EDGE wide just inside the clip — measured
+ * as `cutPoints` is, from the corner, with the edge along the top and the
+ * seam down the left. The seat's own border already draws the first EDGE
+ * of the ticket's edge, so the band starts below it rather than painting a
+ * see-through colour twice: from there round the lip and the half-moon to
+ * the seam. A filled band, not a stroke, so it can stop exactly there.
+ */
+function cutEdgePath(): string {
+  const n = (x: number) => Math.round(x * 1000) / 1000
+  // A point on the line from the corner to the lip's centre, r from the corner.
+  const toward = (r: number) => `${n(REACH * r / (BITE + FILLET))} ${n(FILLET * r / (BITE + FILLET))}`
+  const start = REACH - Math.sqrt(FILLET ** 2 - (FILLET - EDGE) ** 2)
+  return [
+    `M ${n(start)} ${EDGE}`,
+    `A ${FILLET} ${FILLET} 0 0 0 ${toward(BITE)}`,
+    `A ${BITE} ${BITE} 0 0 1 0 ${BITE}`,
+    `L 0 ${BITE + EDGE}`,
+    `A ${BITE + EDGE} ${BITE + EDGE} 0 0 0 ${toward(BITE + EDGE)}`,
+    `A ${FILLET - EDGE} ${FILLET - EDGE} 0 0 1 ${n(REACH)} ${EDGE}`,
+    'Z',
+  ].join(' ')
+}
+const CUT_EDGE = cutEdgePath()
+/** The square each cut's edge is drawn in. */
+const CUT_BOX = Math.ceil(REACH + FILLET)
+
+/**
  * One tee time's seats (Ross, 31 Oct 2026): two across, a 2×2 grid for a
  * fourball, every player in a place made for them — name and handicap — and
  * partners joined into one ticket. The layout is lib/teeSheet.ts
@@ -84,8 +118,9 @@ function seatClip(j: SeatJoins, notched: Record<Corner, boolean>): string | unde
  * A seat on its own is a ticket of its own. Partners' seats close the gap
  * between them, the seam is a faint line, and each end of it is cut into a
  * half-moon with a rounded lip — a clip path on each seat, a quarter in
- * each, so the cut shows whatever is behind and carries no outline (Ross,
- * 1 Nov 2026). No gradient and no mask, which the site does not draw.
+ * each, so the cut shows whatever is behind, and the ticket's edge carries
+ * on round it (Ross, 1 Nov 2026). No gradient and no mask, which the site
+ * does not draw.
  *
  * On the sheet, open seats are dashed and the ones this phone may book
  * carry a + (`targets`, lib/teeSheet.ts `seatTargets`) that pushes down
@@ -196,15 +231,17 @@ function Seat({ joins, tone, children }: { joins: SeatJoins; tone: 'plain' | 'mi
   // Partners' seats reach across the gap to meet. The left and upper seat
   // of each seam carry it as a faint line; the other has no edge there.
   const seam = 'var(--color-line)'
+  const edge = tone === 'chosen' ? 'var(--color-accent-deep)' : 'var(--color-line-strong)'
+  const width = { top: joins.up ? 0 : EDGE, right: EDGE, bottom: EDGE, left: joins.left ? 0 : EDGE }
   const style: CSSProperties = {
     marginTop: joins.up ? -HALF_GAP : 0,
     marginRight: joins.right ? -HALF_GAP : 0,
     marginBottom: joins.down ? -HALF_GAP : 0,
     marginLeft: joins.left ? -HALF_GAP : 0,
-    borderTopWidth: joins.up ? 0 : 1,
-    borderRightWidth: 1,
-    borderBottomWidth: 1,
-    borderLeftWidth: joins.left ? 0 : 1,
+    borderTopWidth: width.top,
+    borderRightWidth: width.right,
+    borderBottomWidth: width.bottom,
+    borderLeftWidth: width.left,
     ...(joins.right ? { borderRightColor: seam } : {}),
     ...(joins.down ? { borderBottomColor: seam } : {}),
     borderTopLeftRadius: rounded.tl ? r : 0,
@@ -213,13 +250,32 @@ function Seat({ joins, tone, children }: { joins: SeatJoins; tone: 'plain' | 'mi
     borderBottomRightRadius: rounded.br ? r : 0,
     clipPath: seatClip(joins, notched),
   }
+  // Not overflow-hidden: that clips to inside the border, and the edge
+  // round each cut is drawn over the border's own ground. The clip path
+  // and the name's truncate already keep everything in.
   return (
     <div
-      className={`relative overflow-hidden px-2.5 py-2 border-solid ${
+      className={`relative px-2.5 py-2 border-solid ${
         tone === 'chosen' ? 'bg-accent-tint border-accent-deep' : tone === 'mine' ? 'bg-accent-tint border-line-strong' : 'bg-tint border-line-strong'
       }`}
       style={style}
     >
+      {(['tl', 'tr', 'br', 'bl'] as Corner[]).filter(c => notched[c]).map(c => {
+        const [v, h] = [c[0] === 't' ? 'top' : 'bottom', c[1] === 'l' ? 'left' : 'right'] as const
+        return (
+          <svg
+            key={c}
+            aria-hidden="true"
+            width={CUT_BOX}
+            height={CUT_BOX}
+            viewBox={`0 0 ${CUT_BOX} ${CUT_BOX}`}
+            className="absolute pointer-events-none"
+            style={{ [v]: -width[v], [h]: -width[h], transform: `scale(${h === 'right' ? -1 : 1}, ${v === 'bottom' ? -1 : 1})` }}
+          >
+            <path d={CUT_EDGE} transform={sideJoined(joins, c) ? undefined : 'matrix(0 1 1 0 0 0)'} style={{ fill: edge }} />
+          </svg>
+        )
+      })}
       {children}
     </div>
   )

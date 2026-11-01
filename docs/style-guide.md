@@ -266,9 +266,9 @@ That is why parts take parameters (`dense`, `compact`, `shape`, `variant`).
 - **Tee sheet**: a calendar day — times in a 3.75rem gutter with a `line`
   rule, each tee time's players in fixed 56px seats two across (`tint`, 1px
   `line-strong`, `rounded-tile`; your own `accent-tint`). Partners are one
-  ticket: no gap, a 1px `line` seam, and a 14px half-moon at each end of
-  it with a rounded lip, cut by a clip path so it has no outline (never a
-  gradient or mask). Open seats are dashed; those this phone may book carry
+  ticket: no gap, a 1px `line` seam, and an 11px half-moon at each end of
+  it with a rounded lip, cut by a clip path, the ticket's 1px edge carried
+  on round it (never a gradient or mask). Open seats are dashed; those this phone may book carry
   a `+` that takes `.press`. Booking a time lifts it (the motion table's
   Tee time lift): the draft's picks wear the chosen look, the seat the next
   pick goes in is a dashed `accent-tint` seat labelled Partner or Next, and
