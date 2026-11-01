@@ -837,13 +837,15 @@ section('A tee time is seats, two across — partners one ticket (Ross, 31 Oct 2
   }, 'a fourball\'s top left: notched where each seam meets the edge, whole where they cross')
 
   const seats = read('app/trip/[tripCode]/teesheet/TeeSeats.tsx')
-  ok(!/linear-gradient|radial-gradient/.test(seats) && seats.includes('bg-surface'),
-    'the notches are drawn circles in the card\'s colour — the site draws no gradients')
+  ok(!/linear-gradient|radial-gradient|maskImage|mask-image/.test(seats) && seats.includes('clipPath: seatClip(joins, notched)'),
+    'the half-moons are cut with a clip path — no outline round them, no gradient or mask')
+  ok(seats.includes("borderRightColor: seam") && seats.includes("const seam = 'var(--color-line)'"),
+    '  …and the seam between partners is a faint line (Ross, 1 Nov 2026)')
   const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes('rows={seatGrid(groups, groupSize)}') && client.includes('grid-cols-[3.75rem_minmax(0,1fr)]'),
     'every tee time is a calendar row — the time in the gutter, its seats beside it')
   ok(client.includes(`<ol className={\`divide-y divide-line \${cardClass()}\`}>`),
-    '  …on a surface card, which the notches are cut to match')
+    '  …on a card, as the sheet always was')
   const page = read('app/trip/[tripCode]/teesheet/page.tsx')
   ok(page.includes("select('id, name, claimed, handicap')"), 'each seat carries its player\'s handicap')
 }

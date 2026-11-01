@@ -266,10 +266,10 @@ That is why parts take parameters (`dense`, `compact`, `shape`, `variant`).
 - **Tee sheet**: a calendar day — times in a 3.75rem gutter with a `line`
   rule, each tee time's players in fixed 56px seats two across (`tint`, 1px
   `line-strong`, `rounded-tile`; your own `accent-tint`). Partners are one
-  ticket: no gap, a 2px dotted `line-strong` perforation, a 16px half-moon
-  at each end of it drawn in `surface` (never a gradient or mask), so it
-  sits on a surface card. Open seats are dashed; the first carry the
-  action. `app/trip/[tripCode]/teesheet/TeeSeats.tsx`.
+  ticket: no gap, a 1px `line` seam, and a 14px half-moon at each end of
+  it with a rounded lip, cut by a clip path so it has no outline (never a
+  gradient or mask). Open seats are dashed; the first carry the action.
+  `app/trip/[tripCode]/teesheet/TeeSeats.tsx`.
 
 ---
 

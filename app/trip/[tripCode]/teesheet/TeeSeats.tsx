@@ -8,12 +8,75 @@ import { formatHandicap, isHandicapPending, HANDICAP_PENDING_LABEL } from '@/lib
 /** An open seat that does something when tapped — Join, Add player. */
 export type SeatAction = { label: string; sub?: string; onClick: () => void }
 
-/** The half-moon at each end of a perforation. */
-const NOTCH = 16
-/** The perforation's dots. */
-const SEAM = 2
+/** The half-moon cut at each end of a seam — its radius. */
+const BITE = 7
+/** The rounding where the cut meets the ticket's edge, so it has no sharp corner. */
+const FILLET = 3
+/** Points along each curve of the cut. */
+const STEPS = 6
 /** Half the gap between seats — what a joined seat reaches across to meet its partner. */
 const HALF_GAP = 3
+
+type Corner = 'tl' | 'tr' | 'br' | 'bl'
+
+/**
+ * The cut at one corner of a seat, as points measured in from that corner —
+ * `u` across, `v` down or up — from the ticket's edge round to the seam.
+ *
+ * A quarter circle centred on the corner, so this seat's quarter and its
+ * partner's make one half-moon across the seam, and a small round where it
+ * leaves the edge (Ross, 1 Nov 2026: no hard corner, the house's rounding).
+ * `seamAcross` is true where the seam runs across the ticket (seats above
+ * and below) rather than down it.
+ */
+function cutPoints(seamAcross: boolean): [number, number][] {
+  const d = Math.sqrt((BITE + FILLET) ** 2 - FILLET ** 2)
+  const out: [number, number][] = []
+  // The fillet: centred (d, FILLET), from the edge round to where it meets the bite.
+  const end = Math.atan2(-FILLET, -d)
+  for (let i = 0; i <= STEPS; i++) {
+    const a = -Math.PI / 2 + (end + Math.PI / 2) * (i / STEPS)
+    out.push([d + FILLET * Math.cos(a), FILLET + FILLET * Math.sin(a)])
+  }
+  // The bite: centred on the corner, from there round to the seam.
+  const start = Math.atan2(FILLET, d)
+  for (let i = 1; i <= STEPS; i++) {
+    const b = start + (Math.PI / 2 - start) * (i / STEPS)
+    out.push([BITE * Math.cos(b), BITE * Math.sin(b)])
+  }
+  return seamAcross ? out.map(([u, v]) => [v, u]) : out
+}
+
+/**
+ * A seat's outline as a clip path: its four corners clockwise, each either
+ * the plain corner (its rounding is the border radius's) or a cut. The cut
+ * takes the edge's line with it — no outline round the half-moon.
+ */
+function seatClip(j: SeatJoins, notched: Record<Corner, boolean>): string | undefined {
+  if (!notched.tl && !notched.tr && !notched.br && !notched.bl) return undefined
+  const px = (n: number) => `${Math.round(n * 100) / 100}px`
+  const at = (c: Corner, u: number, v: number) => {
+    const x = c === 'tr' || c === 'br' ? `calc(100% - ${px(u)})` : px(u)
+    const y = c === 'bl' || c === 'br' ? `calc(100% - ${px(v)})` : px(v)
+    return `${x} ${y}`
+  }
+  // The edge each corner is reached along, going round clockwise.
+  const arrivesAcross: Record<Corner, boolean> = { tl: false, tr: true, br: false, bl: true }
+  const sideJoined: Record<Corner, boolean> = { tl: j.left, tr: j.right, br: j.right, bl: j.left }
+  const points: string[] = []
+  for (const c of ['tl', 'tr', 'br', 'bl'] as Corner[]) {
+    if (!notched[c]) { points.push(at(c, 0, 0)); continue }
+    // The seam runs down the ticket where this corner's side joins a
+    // partner, and across it where the seat above or below does.
+    const seamAcross = !sideJoined[c]
+    let cut = cutPoints(seamAcross)
+    // From the edge to the seam; reversed where the way round meets the seam first.
+    const edgeFirst = arrivesAcross[c] !== seamAcross
+    if (!edgeFirst) cut = cut.slice().reverse()
+    for (const [u, v] of cut) points.push(at(c, u, v))
+  }
+  return `polygon(${points.join(', ')})`
+}
 
 /**
  * One tee time's seats (Ross, 31 Oct 2026): two across, a 2×2 grid for a
@@ -22,10 +85,10 @@ const HALF_GAP = 3
  * `seatGrid`; how each seat is cut is `seatCorners`. Here it is only drawn.
  *
  * A seat on its own is a ticket of its own. Partners' seats close the gap
- * between them, the seam is a dotted perforation, and each end of it is cut
- * into a half-moon — drawn as two quarter circles in the colour of the card
- * behind, one in each seat, because the site draws no gradients and a mask
- * would need one. So the tee sheet must sit on a `surface` card.
+ * between them, the seam is a faint line, and each end of it is cut into a
+ * half-moon with a rounded lip — a clip path on each seat, a quarter in
+ * each, so the cut shows whatever is behind and carries no outline (Ross,
+ * 1 Nov 2026). No gradient and no mask, which the site does not draw.
  *
  * Open seats are dashed. The first ones carry what this phone may do there
  * (`actions`, in order); the rest just say Open.
@@ -99,58 +162,32 @@ export default function TeeSeats({
 function Seat({ joins, mine, children }: { joins: SeatJoins; mine: boolean; children: ReactNode }) {
   const { rounded, notched } = seatCorners(joins)
   const r = 'var(--radius-tile)'
-  // Partners' seats reach across the gap to meet; the left and upper seat
-  // of each seam carry its dots, the other has no edge there.
-  const width = {
-    top: joins.up ? 0 : 1,
-    right: joins.right ? SEAM : 1,
-    bottom: joins.down ? SEAM : 1,
-    left: joins.left ? 0 : 1,
-  }
+  // Partners' seats reach across the gap to meet. The left and upper seat
+  // of each seam carry it as a faint line; the other has no edge there.
+  const seam = 'var(--color-line)'
   const style: CSSProperties = {
     marginTop: joins.up ? -HALF_GAP : 0,
     marginRight: joins.right ? -HALF_GAP : 0,
     marginBottom: joins.down ? -HALF_GAP : 0,
     marginLeft: joins.left ? -HALF_GAP : 0,
-    borderTopWidth: width.top,
-    borderRightWidth: width.right,
-    borderBottomWidth: width.bottom,
-    borderLeftWidth: width.left,
-    borderRightStyle: joins.right ? 'dotted' : 'solid',
-    borderBottomStyle: joins.down ? 'dotted' : 'solid',
+    borderTopWidth: joins.up ? 0 : 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderLeftWidth: joins.left ? 0 : 1,
+    ...(joins.right ? { borderRightColor: seam } : {}),
+    ...(joins.down ? { borderBottomColor: seam } : {}),
     borderTopLeftRadius: rounded.tl ? r : 0,
     borderTopRightRadius: rounded.tr ? r : 0,
     borderBottomLeftRadius: rounded.bl ? r : 0,
     borderBottomRightRadius: rounded.br ? r : 0,
+    clipPath: seatClip(joins, notched),
   }
-  // Each notch is centred where the seam meets the ticket's edge, so the
-  // quarter inside this seat meets the partner's quarter across it — on
-  // the middle of the dots, which the left or upper seat carries.
-  const half = NOTCH / 2
-  const joined = { top: joins.up, bottom: joins.down, left: joins.left, right: joins.right }
-  const onSeam = (side: 'top' | 'bottom' | 'left' | 'right') => {
-    const at = -(half + width[side])
-    if (!joined[side]) return at
-    return side === 'right' || side === 'bottom' ? at + SEAM / 2 : at - SEAM / 2
-  }
-  const notch = (v: 'top' | 'bottom', h: 'left' | 'right') => (
-    <span
-      key={`${v}-${h}`}
-      aria-hidden="true"
-      className="absolute rounded-full bg-surface border border-line-strong"
-      style={{ width: NOTCH, height: NOTCH, [v]: onSeam(v), [h]: onSeam(h) }}
-    />
-  )
   return (
     <div
-      className={`relative overflow-hidden px-2.5 py-2 border-solid ${mine ? 'bg-accent-tint border-line-strong' : 'bg-tint border-line-strong'}`}
+      className={`relative overflow-hidden px-2.5 py-2 border-solid border-line-strong ${mine ? 'bg-accent-tint' : 'bg-tint'}`}
       style={style}
     >
       {children}
-      {notched.tl && notch('top', 'left')}
-      {notched.tr && notch('top', 'right')}
-      {notched.bl && notch('bottom', 'left')}
-      {notched.br && notch('bottom', 'right')}
     </div>
   )
 }
