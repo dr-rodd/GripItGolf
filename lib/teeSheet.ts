@@ -52,6 +52,7 @@
 import { TEE_INTERVAL_MINS, describeShortDate, describeTime } from './itinerary'
 import type { ItineraryItem } from './itinerary'
 import { daysBefore, irishInstant } from './irishTime'
+import type { TeeMode } from './partnerships'
 
 // ─── Settings and their bounds ─────────────────────────────────
 
@@ -186,76 +187,117 @@ export type SeatCell =
   /** Past the tee time's last seat — a threeball's fourth place. */
   | { kind: 'none' }
 
-const NO_JOINS: SeatJoins = { left: false, right: false, up: false, down: false }
-
 /**
- * A tee time's players in their seats, row by row, two across.
+ * A tee time's players in their seats, row by row, two across, read by how
+ * the round's tee times bind (lib/partnerships.ts `teeMode`, Ross, 1 Nov
+ * 2026):
  *
- * Teams first, biggest first, each into the first run of free seats that
- * touch one another — a pair across one row, a fourball the whole grid, a
- * three an L — so a team is always one piece; then everybody on their own,
- * in the order they booked. As many seats as the tee time holds, and never
- * fewer than the players in it (a sheet whose group size came down keeps
- * everybody it had). `seats` is the group size.
+ *   · pairs — a row is a pairing: each pair takes a row of its own, and a
+ *     player with no partner yet a row to themselves, their partner's seat
+ *     beside them left open for whoever joins them;
+ *   · team — the tee time is one team, its players one ticket in booking
+ *     order: an L for three, the whole grid for four;
+ *   · separate — everybody in a seat of their own, in booking order.
+ *
+ * As many seats as the tee time holds (`seats`, the group size), and never
+ * fewer than the players in it — nobody is ever dropped. Where the rows run
+ * out (a pairs time booked before rows meant pairings) the rest fill any
+ * free seat, and say only what is true: two in a row who are not partners
+ * are not joined.
  */
-export function seatGrid(groups: readonly SlotGroup[], seats: number): SeatCell[][] {
-  const count = Math.max(seats, groups.reduce((n, g) => n + g.players.length, 0), 1)
+export function seatGrid(groups: readonly SlotGroup[], seats: number, mode: TeeMode): SeatCell[][] {
+  const placed = groups.flatMap(g => g.players.map(player => ({ player, teamId: g.teamId })))
+  const count = Math.max(seats, placed.length, 1)
   const rows = Math.ceil(count / SEATS_ACROSS)
-  const cells: (SeatCell | null)[] = Array.from({ length: rows * SEATS_ACROSS }, (_, i) =>
-    i < count ? null : { kind: 'none' })
-  const free = (i: number) => i < count && cells[i] === null
-  const touching = (a: number, b: number) =>
-    (Math.floor(a / SEATS_ACROSS) === Math.floor(b / SEATS_ACROSS) && Math.abs(a - b) === 1)
-    || Math.abs(a - b) === SEATS_ACROSS
-  const connected = (run: number[]) => {
-    const seen = new Set([run[0]])
-    for (let grew = true; grew;) {
-      grew = false
-      for (const c of run) {
-        if (!seen.has(c) && [...seen].some(s => touching(s, c))) { seen.add(c); grew = true }
-      }
+  type Placed = { player: SlotPlayer; teamId: string | null }
+  const cells: (Placed | null | 'none')[] = Array.from({ length: rows * SEATS_ACROSS }, (_, i) =>
+    i < count ? null : 'none')
+
+  const left: Placed[] = []
+  if (mode === 'pairs') {
+    const rowOpen = (r: number) => cells[r * 2] === null && (cells[r * 2 + 1] === null || cells[r * 2 + 1] === 'none')
+    const rowWhole = (r: number) => cells[r * 2] === null && cells[r * 2 + 1] === null
+    for (const g of groups) {
+      if (!g.teamId || g.players.length !== 2) continue
+      const r = Array.from({ length: rows }, (_, i) => i).find(rowWhole)
+      if (r === undefined) continue
+      g.players.forEach((player, j) => { cells[r * 2 + j] = { player, teamId: g.teamId } })
     }
-    return seen.size === run.length
+    for (const p of placed) {
+      if (cells.some(c => c && c !== 'none' && c.player.id === p.player.id)) continue
+      const r = Array.from({ length: rows }, (_, i) => i).find(rowOpen)
+      if (r === undefined) { left.push(p); continue }
+      cells[r * 2] = p
+    }
+  } else {
+    left.push(...placed)
+  }
+  for (const p of left) {
+    const at = cells.findIndex(c => c === null)
+    if (at >= 0) cells[at] = p
   }
 
-  const teams = groups.filter(g => g.teamId).slice().sort((a, b) => b.players.length - a.players.length)
-  for (const team of teams) {
-    const k = team.players.length
-    let place: number[] | null = null
-    for (let start = 0; start + k <= count && !place; start++) {
-      const run = Array.from({ length: k }, (_, j) => start + j)
-      if (run.every(free) && connected(run)) place = run
+  const linked = (a: number, b: number) => {
+    const x = cells[a], y = cells[b]
+    if (!x || !y || x === 'none' || y === 'none') return false
+    if (mode === 'team') return true
+    if (mode === 'pairs') {
+      return Math.floor(a / SEATS_ACROSS) === Math.floor(b / SEATS_ACROSS) && !!x.teamId && x.teamId === y.teamId
     }
-    place ??= cells.map((_, i) => i).filter(free).slice(0, k)
-    team.players.forEach((player, j) => {
-      if (place![j] !== undefined) cells[place![j]] = { kind: 'player', player, teamId: team.teamId, joins: NO_JOINS }
-    })
-  }
-  for (const solo of groups.filter(g => !g.teamId).flatMap(g => g.players)) {
-    const at = cells.findIndex((c, i) => c === null && i < count)
-    if (at >= 0) cells[at] = { kind: 'player', player: solo, teamId: null, joins: NO_JOINS }
-  }
-
-  const teamAt = (i: number) => {
-    const c = cells[i]
-    return c && c.kind === 'player' ? c.teamId : null
+    return false
   }
   const out = cells.map((c, i): SeatCell => {
+    if (c === 'none') return { kind: 'none' }
     if (!c) return { kind: 'open' }
-    if (c.kind !== 'player' || !c.teamId) return c
     const col = i % SEATS_ACROSS
-    const same = (j: number) => j >= 0 && j < cells.length && teamAt(j) === c.teamId
     return {
-      ...c,
+      kind: 'player',
+      player: c.player,
+      teamId: c.teamId,
       joins: {
-        left: col > 0 && same(i - 1),
-        right: col < SEATS_ACROSS - 1 && same(i + 1),
-        up: same(i - SEATS_ACROSS),
-        down: same(i + SEATS_ACROSS),
+        left: col > 0 && linked(i, i - 1),
+        right: col < SEATS_ACROSS - 1 && linked(i, i + 1),
+        up: i >= SEATS_ACROSS && linked(i, i - SEATS_ACROSS),
+        down: i + SEATS_ACROSS < cells.length && linked(i, i + SEATS_ACROSS),
       },
     }
   })
   return Array.from({ length: rows }, (_, r) => out.slice(r * SEATS_ACROSS, (r + 1) * SEATS_ACROSS))
+}
+
+/** What tapping an open seat does: book the next seat, start a pairing, or join a player's. */
+export type SeatTarget = { kind: 'add' } | { kind: 'start' } | { kind: 'join'; with: string }
+
+/**
+ * Where a tee time's + signs go (Ross, 1 Nov 2026). On a pairs round, the
+ * seat beside a player with no partner yet — tap it to join their pairing —
+ * and the first seat of a row nobody is in, to start one. Otherwise one +,
+ * in the next free seat; a threeball's fourth place stays empty.
+ */
+export function seatTargets(rows: readonly SeatCell[][], mode: TeeMode): (SeatTarget | null)[] {
+  const flat = rows.flat()
+  const out: (SeatTarget | null)[] = flat.map(() => null)
+  if (mode === 'pairs') {
+    for (let r = 0; r < rows.length; r++) {
+      const [a, b] = [flat[r * 2], flat[r * 2 + 1]]
+      if (a.kind === 'player' && b?.kind === 'open') out[r * 2 + 1] = { kind: 'join', with: a.player.id }
+      else if (b?.kind === 'player' && a.kind === 'open') out[r * 2] = { kind: 'join', with: b.player.id }
+      else if (a.kind === 'open' && (!b || b.kind !== 'player')) out[r * 2] = { kind: 'start' }
+    }
+    return out
+  }
+  const first = flat.findIndex(c => c.kind === 'open')
+  if (first >= 0) out[first] = { kind: 'add' }
+  return out
+}
+
+/**
+ * Players linked in a partnership, named as one in a list of who to put on
+ * a time (Ross, 1 Nov 2026): a pair "Ross & Dave", three or four with
+ * commas, "Ross, Dave, Seán".
+ */
+export function listName(names: readonly string[]): string {
+  return names.length === 2 ? `${names[0]} & ${names[1]}` : names.join(', ')
 }
 
 /**

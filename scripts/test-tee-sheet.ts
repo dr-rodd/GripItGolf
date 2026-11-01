@@ -553,7 +553,7 @@ section('The sheet reads fail-soft and writes scoped')
   // cuts both ways.
   ok(client.includes('pickerUnits('), 'the picker offers units from the one copy')
   ok(client.includes('unitMatches(u, search)'), 'filtered by member or team name')
-  ok(client.includes("u.players.length <= vacancy"),
+  ok(client.includes("placeUnit(here.draft, draftUnit(u), mode, next) !== null"),
     'a team only fits where the whole team fits')
   ok(client.includes('onRemove: () => removePlayers(i, block)'),
     'and leaves as one block on a share-a-tee board')
@@ -572,10 +572,10 @@ section('A vacant round offers the wizard; players pick their own time when allo
     'the organiser places anybody — the PIN unlocked, or an event without one')
   ok(client.includes('const selfPickAllowed = !organiser && fieldMayEdit && !!meId'),
     'a claimed player picks their own time only when the event says players pick')
-  ok(/selfPick && storageReady && myUnitIds\.length > 0 && vacancy >= myUnitIds\.length/.test(client),
-    '  …joining a time with room for them, and on a share-a-tee board their whole team')
+  ok(client.includes('const mayBook = storageReady && (organiser || (selfPick && (!mine || mayBookOthers)))'),
+    '  …booking a time while they have none, and on a share-a-tee board their whole team with them')
   ok(client.includes('removePlayers(i, myLeavers(slotPlayers))'), '  …and leaving only their own')
-  ok(!/\{canEdit/.test(client) && /if \(mayBookOthers && storageReady && vacancy > 0\)/.test(client),
+  ok(!/\{canEdit/.test(client) && client.includes(".filter(u => mayBookOthers || idsOf(u).includes(meId ?? ''))"),
     'only the organiser, or a player booking their own times, places anybody else')
   ok(client.includes('myTee(roundAssignments, meId, live'), 'your own time sits at the top, from the one copy')
 }
@@ -772,18 +772,19 @@ section('A board scoped to one day plays that day\'s teams')
     'so an event whose only team board is a day board can still go live')
 }
 
-section('The day\'s teams are made at the sheet, through the one writer')
+section('Partnerships are made at the sheet, through the one writer')
 {
   const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
-  ok(client.includes('setTeam(tripId, id, sheet, team.id)'),
-    'joining a formed team goes through setTeam, like every membership write')
-  ok(client.includes("team_set: sheet"),
-    'and the team row is made on the round\'s own sheet')
-  ok(/dayTeamTagIssue\(ids, memberships\)/.test(client),
+  ok(client.includes('setTeam(tripId, id, info.sheet, teamId,'),
+    'joining a partnership goes through setTeam, like every membership write')
+  ok(client.includes('createTeam(tripId, info.sheet,'),
+    'and a new one is made on the round\'s partnership sheet')
+  ok(client.includes('dayTeamTagIssue([...playingWith(draft, mode, at), ...ids], memberships)'),
     'a mixed-tag group is refused before the team exists')
-  ok(client.includes('joinNames('),
-    'named from its members — a fourball made on the morning has no other name')
-  ok(client.includes('unformTeam'), 'and it can be broken up again')
+  ok(client.includes('madeTeamName(names(link.members))'),
+    'named from its members — a pairing made on the morning has no other name')
+  ok(client.includes('await leaveRoundTeams(slotIndex, playerIds)'),
+    'and taking somebody off a round\'s own time takes them out of its team')
 
   const page = read('app/trip/[tripCode]/teesheet/page.tsx')
   ok(page.includes('roundPartnership(boards, r.id'),
@@ -799,29 +800,29 @@ section('A tee time is seats, two across — partners one ticket (Ross, 31 Oct 2
   const p = (id: string) => ({ id, name: id })
   const solo = (...ids: string[]): SlotGroup => ({ teamId: null, teamName: null, players: ids.map(p) })
   const team = (t: string, ...ids: string[]): SlotGroup => ({ teamId: t, teamName: t, players: ids.map(p) })
-  const layout = (g: SlotGroup[], seats: number) => seatGrid(g, seats).map(r => r.map(c =>
-    c.kind === 'player' ? c.player.id : c.kind))
+  const layout = (g: SlotGroup[], seats: number, mode: 'pairs' | 'team' | 'separate' = 'separate') =>
+    seatGrid(g, seats, mode).map(r => r.map(c => (c.kind === 'player' ? c.player.id : c.kind)))
 
   eq(layout([solo('a', 'b', 'c')], 4), [['a', 'b'], ['c', 'open']], 'three on their own and a seat open — a 2×2 for a fourball')
   eq(layout([], 4), [['open', 'open'], ['open', 'open']], 'an empty time is four open seats')
   eq(layout([solo('a')], 3), [['a', 'open'], ['open', 'none']], 'a threeball has three seats, no fourth')
   eq(layout([solo('a')], 2), [['a', 'open']], 'a two-ball one row')
-  eq(layout([solo('c'), team('T', 'a', 'b')], 4), [['a', 'b'], ['c', 'open']],
+  eq(layout([solo('c'), team('T', 'a', 'b')], 4, 'pairs'), [['a', 'b'], ['c', 'open']],
     'a pair takes a row of its own, whoever booked first')
-  eq(layout([team('S', 'a', 'b'), team('T', 'c', 'd')], 4), [['a', 'b'], ['c', 'd']], 'two pairs, a row each')
-  eq(layout([team('T', 'a', 'b', 'c'), solo('d')], 4), [['a', 'b'], ['c', 'd']], 'a three is an L, the fourth beside it')
+  eq(layout([team('S', 'a', 'b'), team('T', 'c', 'd')], 4, 'pairs'), [['a', 'b'], ['c', 'd']], 'two pairs, a row each')
   eq(layout([solo('a', 'b', 'c', 'd', 'e')], 4), [['a', 'b'], ['c', 'd'], ['e', 'none']],
     'more on the time than its seats — nobody is dropped')
 
-  const pair = seatGrid([team('T', 'a', 'b'), solo('c')], 4)
+  const pair = seatGrid([team('T', 'a', 'b'), solo('c')], 4, 'pairs')
   const [left, right] = pair[0]
   ok(left.kind === 'player' && left.joins.right && !left.joins.down && right.kind === 'player' && right.joins.left,
     'partners join across their seam')
   const single = pair[1][0]
   ok(single.kind === 'player' && !single.joins.up && !single.joins.right, '  …and a player on their own joins nobody')
-  const four = seatGrid([team('F', 'a', 'b', 'c', 'd')], 4)
+  const four = seatGrid([team('F', 'a', 'b', 'c', 'd')], 4, 'team')
   ok(four.flat().every(c => c.kind === 'player' && (c.joins.left || c.joins.right) && (c.joins.up || c.joins.down)),
     'a fourball is one ticket, every seat joined both ways')
+  // Which kind of time, and the + signs, are test:tee-booking's.
 
   const cut = (j: Partial<Record<'left' | 'right' | 'up' | 'down', boolean>>) =>
     seatCorners({ left: false, right: false, up: false, down: false, ...j })
@@ -842,7 +843,7 @@ section('A tee time is seats, two across — partners one ticket (Ross, 31 Oct 2
   ok(seats.includes("borderRightColor: seam") && seats.includes("const seam = 'var(--color-line)'"),
     '  …and the seam between partners is a faint line (Ross, 1 Nov 2026)')
   const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
-  ok(client.includes('rows={seatGrid(groups, groupSize)}') && client.includes('grid-cols-[3.75rem_minmax(0,1fr)]'),
+  ok(client.includes('seatGrid(groupSlot(slotPlayers, teamMap), seatsOnTime, mode)') && client.includes('grid-cols-[3.75rem_minmax(0,1fr)]'),
     'every tee time is a calendar row — the time in the gutter, its seats beside it')
   ok(client.includes(`<ol className={\`divide-y divide-line \${cardClass()}\`}>`),
     '  …on a card, as the sheet always was')

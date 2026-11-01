@@ -2,11 +2,8 @@
 
 import type { CSSProperties, ReactNode } from 'react'
 import { IconPlus, IconX } from '@/app/components/icons'
-import { type SeatCell, type SeatJoins, seatCorners } from '@/lib/teeSheet'
+import { type SeatCell, type SeatJoins, type SeatTarget, seatCorners } from '@/lib/teeSheet'
 import { formatHandicap, isHandicapPending, HANDICAP_PENDING_LABEL } from '@/lib/handicap'
-
-/** An open seat that does something when tapped — Join, Add player. */
-export type SeatAction = { label: string; sub?: string; onClick: () => void }
 
 /** The half-moon cut at each end of a seam — its radius. */
 const BITE = 7
@@ -90,51 +87,83 @@ function seatClip(j: SeatJoins, notched: Record<Corner, boolean>): string | unde
  * each, so the cut shows whatever is behind and carries no outline (Ross,
  * 1 Nov 2026). No gradient and no mask, which the site does not draw.
  *
- * Open seats are dashed. The first ones carry what this phone may do there
- * (`actions`, in order); the rest just say Open.
+ * On the sheet, open seats are dashed and the ones this phone may book
+ * carry a + (`targets`, lib/teeSheet.ts `seatTargets`) that pushes down
+ * under the thumb. While a time is being booked (`booking`) the seats are
+ * the draft: this booking's picks wear the chosen look and come out with a
+ * tap of their ✕, and the seat the next pick goes in is marked.
  */
 export default function TeeSeats({
-  rows, handicapOf, meId, actions, removeFor,
+  rows, handicapOf, meId, targets, onTarget, removeFor, booking,
 }: {
   rows: SeatCell[][]
   handicapOf: (playerId: string) => number | null | undefined
   meId: string | null
-  /** What the first open seats do, in order. */
-  actions: SeatAction[]
+  /** The + signs, by seat (reading order), and what tapping one does. */
+  targets?: (SeatTarget | null)[]
+  onTarget?: (seat: number, target: SeatTarget) => void
   /**
-   * The ✕ on a seat, if this phone may take the player off: the ids it
-   * removes (a stuck-together team's whole block, on the ticket's top right
-   * seat only) and the label it reads as. Null for no ✕.
+   * The ✕ on a seat, if this phone may take the player off: what it reads
+   * as, and what it does (a stuck-together team's whole ticket, on its top
+   * right seat only). Null for no ✕.
    */
-  removeFor: (cell: Extract<SeatCell, { kind: 'player' }>) => { ids: string[]; label: string; onRemove: () => void } | null
+  removeFor?: (cell: Extract<SeatCell, { kind: 'player' }>) => { label: string; onRemove: () => void } | null
+  /** The draft being booked, when it is. */
+  booking?: {
+    /** The seat the next pick goes in. */
+    next: number | null
+    /** What the next seat is called — "Partner", "Next". */
+    nextLabel: string
+    /** This booking's own picks, which can come out again. */
+    isNew: (seat: number) => boolean
+    onTakeOut: (seat: number) => void
+    /** Tapping another open seat moves where the next pick goes. */
+    onChoose: (seat: number) => void
+  }
 }) {
-  let nextAction = 0
   return (
     <div className="grid grid-cols-2 gap-1.5 auto-rows-[56px]">
       {rows.flat().map((cell, i) => {
         if (cell.kind === 'none') return <div key={i} aria-hidden="true" />
         if (cell.kind === 'open') {
-          const action = actions[nextAction++]
-          return action ? (
+          if (booking) {
+            const next = booking.next === i
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => booking.onChoose(i)}
+                aria-pressed={next}
+                className={`press rounded-tile border border-dashed px-2.5 flex items-center t-label transition-colors ${
+                  next ? 'border-accent-deep bg-accent-tint text-accent-deep' : 'border-line text-ink/50'
+                }`}
+              >
+                {next ? booking.nextLabel : ''}
+              </button>
+            )
+          }
+          const target = targets?.[i]
+          return target && onTarget ? (
             <button
               key={i}
               type="button"
-              onClick={action.onClick}
-              className="rounded-tile border border-dashed border-line-strong px-2.5 flex flex-col items-start justify-center text-left text-accent-deep hover:border-accent hover:text-accent transition-colors"
+              onClick={() => onTarget(i, target)}
+              aria-label={target.kind === 'join' ? 'Join this pairing' : target.kind === 'start' ? 'Start a pairing' : 'Book this time'}
+              className="press rounded-tile border border-dashed border-line-strong flex items-center justify-center text-accent-deep hover:border-accent hover:text-accent"
             >
-              <span className="flex items-center gap-1 t-label"><IconPlus size={13} />{action.label}</span>
-              {action.sub && <span className="text-[13px] leading-tight text-ink/65 mt-0.5">{action.sub}</span>}
+              <IconPlus size={20} />
             </button>
           ) : (
-            <div key={i} className="rounded-tile border border-dashed border-line px-2.5 flex items-center t-cap text-ink/50">
-              Open
-            </div>
+            <div key={i} aria-hidden="true" className="rounded-tile border border-dashed border-line" />
           )
         }
-        const remove = removeFor(cell)
+        const fresh = !!booking?.isNew(i)
+        const remove = booking
+          ? (fresh ? { label: `Take ${cell.player.name} out`, onRemove: () => booking.onTakeOut(i) } : null)
+          : removeFor?.(cell) ?? null
         const h = handicapOf(cell.player.id)
         return (
-          <Seat key={cell.player.id} joins={cell.joins} mine={cell.player.id === meId}>
+          <Seat key={cell.player.id} joins={cell.joins} tone={fresh ? 'chosen' : cell.player.id === meId ? 'mine' : 'plain'}>
             <span className={`block t-label text-ink truncate ${remove ? 'pr-5' : ''}`}>
               {cell.player.name}
             </span>
@@ -159,7 +188,7 @@ export default function TeeSeats({
 }
 
 /** A filled seat — a ticket, or one part of one. */
-function Seat({ joins, mine, children }: { joins: SeatJoins; mine: boolean; children: ReactNode }) {
+function Seat({ joins, tone, children }: { joins: SeatJoins; tone: 'plain' | 'mine' | 'chosen'; children: ReactNode }) {
   const { rounded, notched } = seatCorners(joins)
   const r = 'var(--radius-tile)'
   // Partners' seats reach across the gap to meet. The left and upper seat
@@ -184,7 +213,9 @@ function Seat({ joins, mine, children }: { joins: SeatJoins; mine: boolean; chil
   }
   return (
     <div
-      className={`relative overflow-hidden px-2.5 py-2 border-solid border-line-strong ${mine ? 'bg-accent-tint' : 'bg-tint'}`}
+      className={`relative overflow-hidden px-2.5 py-2 border-solid ${
+        tone === 'chosen' ? 'bg-accent-tint border-accent-deep' : tone === 'mine' ? 'bg-accent-tint border-line-strong' : 'bg-tint border-line-strong'
+      }`}
       style={style}
     >
       {children}

@@ -2,38 +2,43 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import { hasUnlocked, isLocked } from '@/lib/passcode'
-import { IconX, IconUsers } from '@/app/components/icons'
+import { IconUsers } from '@/app/components/icons'
 import {
-  type SlotPlayer, type RoundSheet, groupSlot, seatGrid, pickerUnits, unitMatches,
+  type SlotPlayer, type RoundSheet, type SeatCell, type SeatTarget, type PickerUnit,
+  groupSlot, seatGrid, seatTargets, listName, pickerUnits, unitMatches,
   sheetClock, sheetSlots, sheetGroupSize, describeRules, myTee, mayRemoveBooking,
 } from '@/lib/teeSheet'
-import { joinNames, firstName } from '@/lib/matchplayEntrants'
+import {
+  type DraftSeat, type BookingLink,
+  draftFrom, nextSeat, placeUnit, takeOut, playingWith, draftRows, bookingPlan,
+} from '@/lib/teeBooking'
+import { joinNames } from '@/lib/matchplayEntrants'
 import {
   TAG_SET, untaggedIds, tagGateReason, dayTeamTagIssue,
 } from '@/lib/tagBoards'
 import { setTeam } from '@/lib/teamMembers'
-import { partnershipName } from '@/lib/partnerships'
-import { matesLockedIn, toPlace, openTeamOnTime } from '@/lib/teamPicker'
+import { partnershipName, type TeeMode } from '@/lib/partnerships'
+import { madeTeamName } from '@/lib/teamPicker'
 import { boardNames } from '@/lib/displayNames'
-import { deleteTeam, refreshTeamName } from '../teams/teamWrites'
+import { createTeam, deleteTeam, refreshTeamName } from '../teams/teamWrites'
 import { PRESET_COLORS } from '@/lib/teamColors'
+import { putt, reducedMotion } from '@/lib/motion'
+import { HEADER_H } from '@/app/components/headerMetrics'
 import { FIELD, buttonClass, cardClass, optionClass } from '@/app/components/ui'
 import { courseLabel } from '@/lib/courseDirectory'
-import TeeSeats, { type SeatAction } from './TeeSeats'
+import TeeSeats from './TeeSeats'
 
 /**
  * The tee sheet on a phone reads like a day on a calendar (Ross, 31 Oct
  * 2026): the times down a gutter on the left, a hairline between them, and
  * each tee time's players in seats made for them — two across, a 2×2 grid
  * for a fourball, name and handicap — rather than a line that stretches.
- * Partners are one ticket, joined by a perforation; a player on their own
- * has a seat to themselves (`TeeSeats`, laid out by lib/teeSheet.ts
- * `seatGrid`). Open seats carry Join and Add player.
+ * Partners are one ticket; a player on their own has a seat to themselves
+ * (`TeeSeats`, laid out by lib/teeSheet.ts `seatGrid`).
  *
  * One sheet per tee-sheet round, and a round's sheet is live only once it
  * has been made in the wizard (lib/teeSheet.ts `roundSheet`): until then
@@ -58,11 +63,15 @@ import TeeSeats, { type SeatAction } from './TeeSeats'
  * constraint makes the same player in two slots impossible however the
  * taps race.
  *
- * On a round that plays in partnerships (Ross, 27 Oct 2026, stage 4), a
- * player in no team who may make one is asked on Join: pick your team —
- * the team picker, with anybody on the time in no team already in it —
- * or just me. The picker sends them back here with the team, which this
- * screen then books onto the time (`placing`), once, with its own checks.
+ * Booking is done in place (Ross, 1 Nov 2026). A + presses down under the
+ * thumb; let go and the tee time lifts to the top of the screen with the
+ * players to pick from beneath it, the seats filling as they are picked —
+ * a player booking starts in the seat they tapped, and the seat the next
+ * pick goes in is marked. On a round played in partnerships the seats are
+ * the linking: a row of two on a pairs time is a pairing, everybody on a
+ * team time one team (lib/partnerships.ts `teeMode`), and saving makes
+ * them durable partnerships, the same team rows the team picker makes
+ * (lib/teeBooking.ts `bookingPlan`). A knockout's pairings book as drawn.
  * Taking somebody off a round whose partnerships are its own takes them
  * out of that round's team as well.
  */
@@ -80,16 +89,11 @@ type Round = {
 /** `booked_by`: who booked them on — absent before migration 065, null for the organiser's. */
 type Assignment = { round_id: string; player_id: string; slot_index: number; booked_by?: string | null }
 
-/**
- * The blocks in a slot that are not yet a team.
- *
- * A slot standing as one whole team has one block and no loose names;
- * anything else — nobody teamed, or two of four teamed and two not — still
- * has a group to make. That is the difference between offering "make this
- * group a team" and offering to break the one that is there.
- */
-const untidyGroups = (groups: { teamId: string | null }[]) =>
-  groups.filter(g => g.teamId === null)
+/** A tee time being booked: which, its draft seats, and a seat the booker tapped. */
+type Booking = { slot: number; draft: DraftSeat[]; tapped: number | null }
+
+/** How long the tee time takes to lift to the top — a wizard step's figure. */
+const LIFT_MS = 340
 
 /**
  * A round's partnerships (lib/partnerships.ts): what its slots are grouped
@@ -109,6 +113,10 @@ type RoundTeams = {
   cap: number
   /** The board lets the field pick its own teams (`teamPick: 'self'`). */
   playersPick: boolean
+  /** How a tee time binds its players — pairs, one team, or separate (lib/partnerships.ts `teeMode`). */
+  mode: TeeMode
+  /** A knockout's pairings — booked as drawn, never re-made here. */
+  fixed: boolean
 }
 
 export default function TeeSheetClient({
@@ -116,7 +124,7 @@ export default function TeeSheetClient({
   roundTeams, tagOf, playingForTags = false,
   fieldMayEdit, fieldMaySet = false, passcodeHash = null,
   storageReady = true, meId = null, initialRoundId = null, isTrip = false, bookerRecorded = false,
-  placing = null,
+  addedRecorded = false,
 }: {
   tripId: string
   tripCode: string
@@ -142,8 +150,6 @@ export default function TeeSheetClient({
   meId?: string | null
   /** The round to open on — the wizard sends people back to the one they made. */
   initialRoundId?: string | null
-  /** Back from the team picker: a team, or one player, to put on a time. */
-  placing?: { roundId: string; slot: number; teamId: string | null; playerId: string | null } | null
   /** A trip's sheet: its lead player and passcode, never an organiser and PIN. */
   isTrip?: boolean
   /**
@@ -152,6 +158,8 @@ export default function TeeSheetClient({
    * may change.
    */
   bookerRecorded?: boolean
+  /** Who put each player in their team is recorded (migration 066). */
+  addedRecorded?: boolean
   /** For the inline organiser unlock; null when the event has no PIN. */
   passcodeHash?: string | null
   /** False when the assignments table could not be read — nothing will save. */
@@ -165,11 +173,11 @@ export default function TeeSheetClient({
   // appear beside that name, not at the foot of a sheet that may be a long
   // scroll away.
   const [error, setError] = useState<{ slot: number; message: string } | null>(null)
-  const [adding, setAdding] = useState<number | null>(null)
-  // The slot whose Join is asking "pick your team, or just you?".
-  const [joining, setJoining] = useState<number | null>(null)
+  // The tee time being booked, and its search — one at a time.
+  const [booking, setBooking] = useState<Booking | null>(null)
+  const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
-  const router = useRouter()
+  const slotRefs = useRef(new Map<number, HTMLLIElement>())
 
   // The organiser's PIN unlock, read after mount — sessionStorage does not
   // exist on the server, and a render that reads it would tear hydration.
@@ -296,8 +304,8 @@ export default function TeeSheetClient({
    * One batch insert, one INSERT statement, so a race with another phone
    * books all of a team or none of it, never half.
    */
-  async function addPlayers(slotIndex: number, playerIds: string[]) {
-    if (!round) return
+  async function addPlayers(slotIndex: number, playerIds: string[]): Promise<boolean> {
+    if (!round) return false
     setError(null)
 
     // The tag gate, checked before the write rather than after — the same
@@ -308,7 +316,7 @@ export default function TeeSheetClient({
       const refusal = tagGateReason(playerIds, memberships, id => nameOf.get(id))
       if (refusal) {
         setError({ slot: slotIndex, message: refusal })
-        return
+        return false
       }
     }
 
@@ -323,7 +331,7 @@ export default function TeeSheetClient({
     const { error: err } = await supabase
       .from('tee_assignments')
       .insert(next.map(a => ({ trip_id: tripId, ...a })))
-    if (!err) return
+    if (!err) return true
 
     // Ask the database rather than assume. Somebody already on the sheet is
     // the one rejection that is not a failure — another phone got there
@@ -331,13 +339,14 @@ export default function TeeSheetClient({
     const fresh = await resyncRound()
     if (fresh) {
       const landed = new Set(fresh.map(a => a.player_id))
-      if (playerIds.every(id => landed.has(id))) return
+      if (playerIds.every(id => landed.has(id))) return true
     } else {
       const ids = new Set(playerIds)
       setAssignments(prev => prev.filter(a =>
         !(a.round_id === round.id && ids.has(a.player_id))))
     }
     calmError(slotIndex, err, playerIds.length > 1 ? 'add the team' : 'add the player')
+    return false
   }
 
   /** One or several players out — a solo's ✕, or a linked block's. */
@@ -409,113 +418,91 @@ export default function TeeSheetClient({
   }
 
   /**
-   * A slot's players made into this day's team.
+   * The partnerships a booking's seats make, kept as durable team rows on
+   * the round's sheet — the same rows the team picker writes, through the
+   * one writer, `setTeam` (lib/teeBooking.ts `bookingPlan` decides which).
+   * A pairing joins the team already waiting for a partner, else is a new
+   * team named from its players and coloured by their tag where they have
+   * one. Somebody moved out of another team leaves it renamed, or gone
+   * where nobody is left — and on a round's own sheet a team left with one
+   * is no team.
    *
-   * The teams themselves are ordinary `teams` rows on the round's own
-   * sheet (`day:<roundId>`), so `membersOf`, the scoring path and this
-   * screen's own grouping all read them without knowing they were made on
-   * a Tuesday morning. A player already in a team for this day leaves it
-   * by joining the new one — the database's UNIQUE(player_id, team_set)
-   * is the rule, and `setTeam` is the one writer of it.
-   *
-   * Named from its members, like a self-picked team: a fourball made on
-   * the morning has no name anybody gave it. Coloured by the tag they
-   * share when there is one, so the block reads as that side's group.
+   * Who put each player in is recorded (migration 066): this phone's player
+   * for their own picks, nobody for the organiser's, and nobody for a player
+   * who was already on the time — they are in by where they stood, so the
+   * newcomer cannot take them out again.
    */
-  async function formTeam(slotIndex: number, slotPlayers: SlotPlayer[]) {
-    if (!round || !roundTeamInfo?.isDay || slotPlayers.length < 2) return
-    setError(null)
-    const ids = slotPlayers.map(p => p.id)
+  async function linkPartnerships(slotIndex: number, links: BookingLink[], picked: ReadonlySet<string>): Promise<boolean> {
+    const info = roundTeamInfo
+    if (!round || !info) return true
+    const teamOf = { ...info.teamOf }
+    const membersOf = (teamId: string) => Object.keys(teamOf).filter(id => teamOf[id].teamId === teamId)
+    const names = (ids: string[]) => ids.map(id => nameOf.get(id) ?? '')
+    const shown = (stored: string, ids: string[]) =>
+      partnershipName({ name: stored }, ids.map(id => ({ id, name: nameOf.get(id) ?? '' })), shortOf)
 
-    // A team's card counts towards one tag, so a team is of one tag.
-    if (playingForTags) {
-      const issue = dayTeamTagIssue(ids, memberships)
-      if (issue) { setError({ slot: slotIndex, message: issue }); return }
-    }
-
-    const sheet = roundTeamInfo.sheet
-    const name = joinNames(slotPlayers.map(p => firstName(p.name)))
-    const color = tagOf[ids[0]]?.color
-      ?? PRESET_COLORS[slotIndex % PRESET_COLORS.length]
-
-    const { data: made, error: err } = await supabase
-      .from('teams')
-      .insert({ trip_id: tripId, team_set: sheet, name, color })
-      .select('id, name')
-      .single()
-    if (err || !made) {
-      calmError(slotIndex, err, 'make the team')
-      return
-    }
-
-    const team = made as { id: string; name: string }
-    for (const id of ids) {
-      const failure = await setTeam(tripId, id, sheet, team.id)
-      if (failure) {
-        calmError(slotIndex, failure.error as { message?: string; code?: string }, 'make the team')
-        return
+    for (const link of links) {
+      let teamId = link.teamId
+      let stored = teamId ? teamOf[membersOf(teamId)[0]]?.stored ?? '' : ''
+      const before = teamId ? membersOf(teamId) : []
+      if (!teamId) {
+        const colour = tagOf[link.members[0]]?.color ?? PRESET_COLORS[slotIndex % PRESET_COLORS.length]
+        const made = await createTeam(tripId, info.sheet, madeTeamName(names(link.members)), colour)
+        if (!made) {
+          setError({ slot: slotIndex, message: 'Booked — but could not link them as a team. Try again from their seats.' })
+          return false
+        }
+        teamId = made.id
+        stored = made.name
       }
+      const leaving = new Map<string, string[]>()
+      for (const id of link.members) {
+        const was = teamOf[id]?.teamId
+        if (was === teamId) continue
+        const failure = await setTeam(tripId, id, info.sheet, teamId,
+          addedRecorded ? (picked.has(id) && !organiser ? meId : null) : undefined)
+        if (failure) {
+          calmError(slotIndex, failure.error as { message?: string; code?: string }, 'link the team')
+          return false
+        }
+        if (was) leaving.set(was, [...(leaving.get(was) ?? []), id])
+        teamOf[id] = { teamId, teamName: '', stored }
+      }
+      // The teams people came from: renamed, or gone where nobody (or, on a
+      // round's own sheet, only one) is left.
+      for (const [oldId, gone] of leaving) {
+        const was = [...membersOf(oldId), ...gone]
+        const left = membersOf(oldId)
+        if (left.length === 0 || (info.isDay && left.length < 2)) {
+          for (const id of left) { await setTeam(tripId, id, info.sheet, null); delete teamOf[id] }
+          await deleteTeam({ tripId, sheet: info.sheet, teamId: oldId, memberIds: [] })
+          continue
+        }
+        const oldStored = teamOf[left[0]].stored
+        const renamed = await refreshTeamName({ tripId, team: { id: oldId, name: oldStored }, before: names(was), after: names(left) })
+        for (const id of left) teamOf[id] = { teamId: oldId, teamName: shown(renamed, left), stored: renamed }
+      }
+      const after = membersOf(teamId)
+      if (link.teamId) {
+        stored = await refreshTeamName({ tripId, team: { id: teamId, name: stored }, before: names(before), after: names(after) })
+      }
+      for (const id of after) teamOf[id] = { teamId, teamName: shown(stored, after), stored }
     }
-
-    // Draw it at once: the grouping this screen reads is its own from
-    // here, and a team that only appears after a refresh reads as a tap
-    // that did nothing.
-    setTeamsByRound(prev => ({
-      ...prev,
-      [round.id]: {
-        ...roundTeamInfo,
-        teamOf: {
-          ...roundTeamInfo.teamOf,
-          ...Object.fromEntries(ids.map(id =>
-            [id, { teamId: team.id, teamName: team.name, stored: team.name }])),
-        },
-      },
-    }))
+    setTeamsByRound(prev => ({ ...prev, [round.id]: { ...info, teamOf } }))
+    return true
   }
 
-  /** This day's team broken up again — the members go back to loose names. */
-  async function unformTeam(slotIndex: number, memberIds: string[]) {
-    if (!round || !roundTeamInfo?.isDay) return
-    setError(null)
-    const sheet = roundTeamInfo.sheet
-
-    for (const id of memberIds) {
-      const failure = await setTeam(tripId, id, sheet, null)
-      if (failure) {
-        calmError(slotIndex, failure.error as { message?: string; code?: string }, 'break up the team')
-        return
-      }
-    }
-    // The team itself goes too — a team row with nobody in it is a blank
-    // line on the round's leaderboard.
-    const teamIds = new Set(memberIds.map(id => roundTeamInfo.teamOf[id]?.teamId).filter(Boolean) as string[])
-    for (const teamId of teamIds) await deleteTeam({ tripId, sheet, teamId, memberIds: [] })
-    setTeamsByRound(prev => {
-      const rest = { ...(prev[round.id]?.teamOf ?? {}) }
-      for (const id of memberIds) delete rest[id]
-      return { ...prev, [round.id]: { ...roundTeamInfo, teamOf: rest } }
-    })
-  }
-
-  // Where the round plays in partnerships, the picker offers each as one
-  // stuck-together card and never its members alone. A day that makes its
-  // own never does: nobody is linked to anybody until the groups are on the
-  // sheet, which is the whole point of making them here.
+  // How this round's tee times bind (lib/partnerships.ts `teeMode`): pairs,
+  // one team a time, or everybody their own. An event-long partnership is
+  // offered as one unit and leaves a time as one block.
+  const mode: TeeMode = roundTeamInfo?.mode ?? 'separate'
+  const fixed = roundTeamInfo?.fixed ?? false
   const together = !!roundTeamInfo && !roundTeamInfo.isDay
-  const units = pickerUnits(unassigned, teamMap, together)
-    .filter(u => unitMatches(u, search))
+  // A team time holds one team: threes on a fourball sheet leave the fourth place empty.
+  const seatsOnTime = mode === 'team' ? Math.min(groupSize, roundTeamInfo?.cap ?? groupSize) : groupSize
 
-  // This phone's own place, and what joining would book: themselves, or on
-  // a share-a-tee board their whole team still off the sheet — the same
-  // unit the organiser's picker offers.
+  // This phone's own place.
   const mine = live ? myTee(roundAssignments, meId, live, id => nameOf.get(id) ?? null) : null
-  const myUnit = meId && !mine
-    ? pickerUnits(unassigned, teamMap, together)
-        .find(u => u.kind === 'solo' ? u.player.id === meId : u.players.some(p => p.id === meId))
-    : undefined
-  const myUnitIds = myUnit
-    ? myUnit.kind === 'solo' ? [myUnit.player.id] : myUnit.players.map(p => p.id)
-    : []
   /** Who leaving takes out of the slot: this player, or their whole linked block. */
   const myLeavers = (slotPlayers: SlotPlayer[]) => {
     const t = meId ? teamMap.get(meId) : undefined
@@ -525,53 +512,6 @@ export default function TeeSheetClient({
   }
   const setupHref = round ? `/trip/${tripCode}/teesheet/${round.id}/setup` : null
 
-  // A player in no team, on a round that plays in partnerships they may
-  // make — a round's own wherever they book their own time, an event-long
-  // one where the board lets the field pick — is asked on Join: pick your
-  // team first, or just you (Ross, 27 Oct 2026).
-  const asksForTeam = selfPick && !!meId && !!roundTeamInfo && !teamMap.has(meId)
-    && (roundTeamInfo.isDay || roundTeamInfo.playersPick)
-  const pickHref = (slot: number) =>
-    round ? `/trip/${tripCode}/teams/pick?round=${encodeURIComponent(round.id)}&slot=${slot}` : '#'
-  /** Those on a time in no team — the ones a team made for it starts with. */
-  const looseOn = (slotPlayers: SlotPlayer[]) => {
-    const myTag = meId ? tagOf[meId]?.teamId : undefined
-    return slotPlayers.filter(p => !teamMap.has(p.id) && p.id !== meId
-      && (!playingForTags || !myTag || tagOf[p.id]?.teamId === myTag))
-  }
-
-  // Back from the picker: the team (or the one player going alone) onto
-  // the time they picked, once. The organiser's unlock is read straight
-  // from the session here — the state that mirrors it arrives a render
-  // later — and the address loses the request either way, so a refresh
-  // never books twice.
-  const placed = useRef(false)
-  useEffect(() => {
-    if (!placing || placed.current || !round || round.id !== placing.roundId || !live) return
-    placed.current = true
-    router.replace(`/trip/${tripCode}/teesheet?round=${encodeURIComponent(placing.roundId)}`, { scroll: false })
-    const byOrganiser = hasUnlocked(tripCode) || !isLocked(passcodeHash)
-    if (!storageReady || (!byOrganiser && !(fieldMayEdit && meId && !notYetOpen))) return
-    const team = placing.teamId
-      ? [...teamMap].filter(([, t]) => t.teamId === placing.teamId).map(([id]) => id)
-      : placing.playerId ? [placing.playerId] : []
-    const coming = toPlace(team, assignedIds)
-    if (coming.length === 0) return
-    const room = Math.max(0, groupSize - (slots.get(placing.slot)?.length ?? 0))
-    if (coming.length > room) {
-      setError({
-        slot: placing.slot,
-        message: placing.teamId
-          ? 'Your team is made, but this time no longer has room for all of you — pick another.'
-          : 'This time is full now — pick another.',
-      })
-      return
-    }
-    void addPlayers(placing.slot, coming)
-    // Once, on arrival: everything it reads is what arrived with it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [placing, round, live])
-
   // Who may take a name off, and who may book somebody else on: the
   // organiser anybody; a player booking their own times themselves and
   // those they booked (lib/teeSheet.ts `mayRemoveBooking`).
@@ -579,6 +519,114 @@ export default function TeeSheetClient({
   const mayRemove = (playerId: string) =>
     mayRemoveBooking({ organiser, meId, playersBook: selfPick }, { playerId, bookedBy: bookedBy.get(playerId) })
   const mayBookOthers = organiser || (selfPick && bookerRecorded)
+  // A + for this phone: the organiser always; a player while they have a
+  // time to book, or may bring somebody.
+  const mayBook = storageReady && (organiser || (selfPick && (!mine || mayBookOthers)))
+
+  /** A tee time's seats, as it stands. */
+  const rowsFor = (slotPlayers: SlotPlayer[]) => seatGrid(groupSlot(slotPlayers, teamMap), seatsOnTime, mode)
+
+  /** The units the list offers: players on no time this round, a partnership as one. */
+  const allUnits = useMemo(
+    () => pickerUnits(unassigned, teamMap, mode !== 'separate'),
+    [unassigned, teamMap, mode],
+  )
+  const idsOf = (u: PickerUnit) => (u.kind === 'solo' ? [u.player.id] : u.players.map(p => p.id))
+  const draftUnit = (u: PickerUnit) => (u.kind === 'solo' ? [u.player] : u.players)
+    .map(p => ({ id: p.id, name: p.name, teamId: teamMap.get(p.id)?.teamId ?? null }))
+
+  /**
+   * Why a unit cannot go in the seat the next pick goes in, or null: the
+   * tag gate, a team being all one tag, and a knockout's pairings as drawn.
+   */
+  function unitIssue(u: PickerUnit, draft: DraftSeat[], at: number | null): string | null {
+    const ids = idsOf(u)
+    if (playingForTags) {
+      const gate = tagGateReason(ids, memberships, id => nameOf.get(id))
+      if (gate) return 'Needs a tag first'
+      if (at !== null && mode !== 'separate') {
+        const issue = dayTeamTagIssue([...playingWith(draft, mode, at), ...ids], memberships)
+        if (issue) return 'Plays for another tag'
+      }
+    }
+    if (fixed && mode === 'pairs' && at !== null) {
+      const mate = playingWith(draft, mode, at)[0]
+      const mateTeam = mate ? teamMap.get(mate)?.teamId : undefined
+      if (mate && ids.some(id => teamMap.get(id)?.teamId !== mateTeam)) return 'Drawn with someone else'
+    }
+    return null
+  }
+
+  /**
+   * Opening a tee time to book: the draft from its seats as they stand,
+   * a player booking starting in the seat they tapped (with their partners
+   * still off the sheet, where they fit), and the time lifted to the top.
+   * Joining a player on their own never quietly re-pairs somebody already
+   * partnered — they pick themselves from the list if they mean to.
+   */
+  function openBooking(slot: number, rows: SeatCell[][], seat: number, target: SeatTarget) {
+    let draft = draftFrom(rows)
+    if (selfPick && meId && !assignedIds.has(meId)) {
+      const unit = allUnits.find(u => idsOf(u).includes(meId))
+      const myTeam = teamMap.get(meId)?.teamId ?? null
+      if (unit && !unitIssue(unit, draft, seat)) {
+        if (target.kind === 'join') {
+          const theirs = teamMap.get(target.with)?.teamId ?? null
+          if (fixed ? myTeam !== null && myTeam === theirs : !myTeam || myTeam === theirs) {
+            draft = placeUnit(draft, [{ id: meId, name: nameOf.get(meId) ?? '', teamId: myTeam }], mode, seat) ?? draft
+          }
+        } else {
+          draft = placeUnit(draft, draftUnit(unit), mode, seat)
+            ?? placeUnit(draft, [{ id: meId, name: nameOf.get(meId) ?? '', teamId: myTeam }], mode, seat)
+            ?? draft
+        }
+      }
+    }
+    setError(null)
+    setSearch('')
+    setBooking({ slot, draft, tapped: draft[seat] === null ? seat : null })
+    liftTo(slot)
+  }
+
+  /**
+   * The tee time jumps out to the top of the screen, under the header, to
+   * make room for the list beneath it (Ross, 1 Nov 2026) — on the putt
+   * curve, a wizard step's length; at once under Reduce Motion.
+   */
+  function liftTo(slot: number) {
+    requestAnimationFrame(() => {
+      const el = slotRefs.current.get(slot)
+      if (!el) return
+      const from = window.scrollY
+      const to = Math.max(0, el.getBoundingClientRect().top + from - HEADER_H - 8)
+      if (reducedMotion() || Math.abs(to - from) < 2) { window.scrollTo(0, to); return }
+      const begin = performance.now()
+      const step = (now: number) => {
+        const t = Math.min(1, (now - begin) / LIFT_MS)
+        window.scrollTo(0, from + (to - from) * putt(t))
+        if (t < 1) requestAnimationFrame(step)
+      }
+      requestAnimationFrame(step)
+    })
+  }
+
+  function closeBooking() {
+    setBooking(null)
+    setSearch('')
+  }
+
+  /** Saving the draft: the bookings first, then the partnerships the seats make. */
+  async function saveBooking() {
+    if (!booking || saving) return
+    const sizeOf = (teamId: string) => [...teamMap.values()].filter(t => t.teamId === teamId).length
+    const { book, links } = bookingPlan(booking.draft, mode, fixed, sizeOf)
+    if (book.length === 0 && links.length === 0) { closeBooking(); return }
+    setSaving(true)
+    const landed = book.length === 0 || await addPlayers(booking.slot, book)
+    const linked = landed && (links.length === 0 || await linkPartnerships(booking.slot, links, new Set(book)))
+    setSaving(false)
+    if (linked) closeBooking()
+  }
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
@@ -591,11 +639,11 @@ export default function TeeSheetClient({
         </h1>
         <p className="text-ink/65 text-sm mb-2">
           {organiser
-            ? 'Tap an open time to put a name in it.'
+            ? 'Tap a + to put players on a time.'
             : selfPick
-              ? bookerRecorded
-                ? 'Book a free time — Join for yourself, Add player to bring others.'
-                : 'Pick a free time — tap Join.'
+              ? mode === 'pairs'
+                ? 'Tap a + beside a player to join their pairing, or in an empty row to start one.'
+                : 'Tap a + to book a time.'
               : fieldMayEdit
                 ? 'Claim your name to pick a time.'
                 : `Who goes off when. The ${isTrip ? 'lead player' : 'organiser'} sets the groups.`}
@@ -690,7 +738,7 @@ export default function TeeSheetClient({
                 <button
                   key={r.id}
                   type="button"
-                  onClick={() => { setRoundId(r.id); setAdding(null); setSearch('') }}
+                  onClick={() => { setRoundId(r.id); closeBooking() }}
                   className={optionClass(r.id === roundId, 'tile')}
                 >
                   <span className="block t-label">Round {r.roundNumber}</span>
@@ -783,26 +831,20 @@ export default function TeeSheetClient({
             <ol className={`divide-y divide-line ${cardClass()}`}>
               {Array.from({ length: count }, (_, i) => {
                 const slotPlayers = slots.get(i) ?? []
-                const vacancy = Math.max(0, groupSize - slotPlayers.length)
                 const clock = sheetClock(sheet, i)
                 const isMine = !!mine && mine.slotIndex === i
-                const groups = groupSlot(slotPlayers, teamMap)
-                const open = adding === i
-
-                // What this phone may do in the open seats, first seat first.
-                const actions: SeatAction[] = []
-                if (selfPick && storageReady && myUnitIds.length > 0 && vacancy >= myUnitIds.length) {
-                  actions.push({
-                    label: 'Join',
-                    sub: myUnitIds.length > 1 ? 'with your team' : undefined,
-                    onClick: () => (asksForTeam
-                      ? setJoining(joining === i ? null : i)
-                      : addPlayers(i, myUnitIds)),
+                const rows = rowsFor(slotPlayers)
+                const here = booking?.slot === i ? booking : null
+                const next = here ? nextSeat(here.draft, mode, here.tapped) : null
+                // The + signs this phone may tap. A knockout's lone player
+                // is joined only by the partner the draw gave them.
+                const targets = mayBook
+                  ? seatTargets(rows, mode).map(t => {
+                    if (!t || t.kind !== 'join' || !fixed) return t
+                    const theirs = teamMap.get(t.with)?.teamId
+                    return theirs && unassigned.some(p => teamMap.get(p.id)?.teamId === theirs) ? t : null
                   })
-                }
-                if (mayBookOthers && storageReady && vacancy > 0) {
-                  actions.push({ label: 'Add player', onClick: () => { setAdding(open ? null : i); setSearch('') } })
-                }
+                  : undefined
                 // "8:10 am" in the gutter as the hour over its half of the day.
                 const cut = clock ? clock.lastIndexOf(' ') : -1
                 const [hourMins, meridiem] = clock
@@ -810,9 +852,15 @@ export default function TeeSheetClient({
                   : [String(i + 1), 'Group']
 
                 return (
-                  <li key={i} className="grid grid-cols-[3.75rem_minmax(0,1fr)]">
+                  <li
+                    key={i}
+                    ref={el => { if (el) slotRefs.current.set(i, el); else slotRefs.current.delete(i) }}
+                    className={`grid grid-cols-[3.75rem_minmax(0,1fr)] transition-shadow duration-200 ${
+                      here ? 'relative z-10 bg-surface rounded-card shadow-floating' : ''
+                    }`}
+                  >
                     {/* The time in the gutter, as a calendar keeps its hours. */}
-                    <div className={`pl-3.5 pr-1.5 pt-3 border-r border-line ${isMine ? 'text-accent-deep' : 'text-ink/80'}`}>
+                    <div className={`pl-3.5 pr-1.5 pt-3 border-r border-line ${isMine || here ? 'text-accent-deep' : 'text-ink/80'}`}>
                       {clock ? (
                         <>
                           <span className="block t-label tabular-nums">{hourMins}</span>
@@ -827,86 +875,57 @@ export default function TeeSheetClient({
                     </div>
 
                     <div className="min-w-0 p-2.5">
-                    {/* The seats: two across, a 2×2 grid for a fourball,
-                        partners one ticket (lib/teeSheet.ts `seatGrid`). On
-                        a share-a-tee board a team's ✕ takes the whole block
-                        out, because stuck together cuts both ways; it sits
-                        on the ticket's top right seat. */}
-                    <TeeSeats
-                      rows={seatGrid(groups, groupSize)}
-                      handicapOf={id => handicapOf.get(id)}
-                      meId={meId}
-                      actions={actions}
-                      removeFor={cell => {
-                        if (cell.teamId && together) {
-                          if (cell.joins.right || cell.joins.up) return null
-                          const block = slotPlayers.filter(p => teamMap.get(p.id)?.teamId === cell.teamId).map(p => p.id)
-                          if (!block.every(mayRemove)) return null
-                          return {
-                            ids: block,
-                            label: `Remove ${teamMap.get(cell.player.id)?.teamName ?? cell.player.name}`,
-                            onRemove: () => removePlayers(i, block),
+                    {here ? (
+                      /* Being booked: the draft, the next seat marked. */
+                      <TeeSeats
+                        rows={draftRows(here.draft, mode)}
+                        handicapOf={id => handicapOf.get(id)}
+                        meId={meId}
+                        booking={{
+                          next,
+                          nextLabel: mode === 'pairs' && next !== null && playingWith(here.draft, mode, next).length > 0
+                            ? 'Partner' : 'Next',
+                          isNew: seat => { const c = here.draft[seat]; return !!c && c !== 'none' && c.isNew },
+                          onTakeOut: seat => setBooking({ ...here, draft: takeOut(here.draft, seat), tapped: seat }),
+                          onChoose: seat => setBooking({ ...here, tapped: seat }),
+                        }}
+                      />
+                    ) : (
+                      /* The seats: two across, a 2×2 grid for a fourball,
+                         partners one ticket (lib/teeSheet.ts `seatGrid`). On
+                         a share-a-tee board a team's ✕ takes the whole ticket
+                         out, because stuck together cuts both ways; it sits
+                         on the ticket's top right seat. */
+                      <TeeSeats
+                        rows={rows}
+                        handicapOf={id => handicapOf.get(id)}
+                        meId={meId}
+                        targets={targets}
+                        onTarget={(seat, t) => openBooking(i, rows, seat, t)}
+                        removeFor={cell => {
+                          if (cell.teamId && together) {
+                            if (cell.joins.right || cell.joins.up) return null
+                            const block = slotPlayers.filter(p => teamMap.get(p.id)?.teamId === cell.teamId).map(p => p.id)
+                            if (!block.every(mayRemove)) return null
+                            return {
+                              label: `Remove ${teamMap.get(cell.player.id)?.teamName ?? cell.player.name}`,
+                              onRemove: () => removePlayers(i, block),
+                            }
                           }
-                        }
-                        if (!mayRemove(cell.player.id)) return null
-                        return {
-                          ids: [cell.player.id],
-                          label: `Remove ${cell.player.name}`,
-                          onRemove: () => removePlayers(i, [cell.player.id]),
-                        }
-                      }}
-                    />
+                          if (!mayRemove(cell.player.id)) return null
+                          return { label: `Remove ${cell.player.name}`, onRemove: () => removePlayers(i, [cell.player.id]) }
+                        }}
+                      />
+                    )}
 
-                    {/* Leaving, and a day's own teams — the time's other
-                        doings, under its seats and only where they apply. */}
-                    {((selfPick && isMine) || ((organiser || (selfPick && isMine)) && roundTeamInfo?.isDay && slotPlayers.length >= 2)) && (
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-                        {selfPick && isMine && (
-                          <button
-                            type="button"
-                            onClick={() => removePlayers(i, myLeavers(slotPlayers))}
-                            className="t-cap text-ink/65 hover:text-ink transition-colors py-0.5"
-                          >
-                            Leave this time
-                          </button>
-                        )}
-
-                        {/* A day that plays its own teams makes them here.
-                            The group standing in the slot is the team —
-                            the fourball that is about to go out — so the
-                            control is one tap rather than a picker. */}
-                        {(organiser || (selfPick && isMine)) && roundTeamInfo?.isDay && slotPlayers.length >= 2 && (
-                          untidyGroups(groups).length > 0 && slotPlayers.length > roundTeamInfo.cap ? (
-                            /* More on the time than one team holds — a
-                               pairs round's fourball — so which of them is
-                               a team is a choice, made in the picker. */
-                            <Link
-                              href={pickHref(i)}
-                              className="flex items-center gap-1 t-cap text-accent-deep hover:text-accent transition-colors py-0.5"
-                            >
-                              <IconUsers size={12} />
-                              Pick a team from this time
-                            </Link>
-                          ) : untidyGroups(groups).length > 0 ? (
-                            <button
-                              type="button"
-                              onClick={() => formTeam(i, slotPlayers)}
-                              className="flex items-center gap-1 t-cap text-accent-deep hover:text-accent transition-colors py-0.5"
-                            >
-                              <IconUsers size={12} />
-                              Make this group a team
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => unformTeam(i, slotPlayers.map(p => p.id))}
-                              className="t-cap text-ink/50 hover:text-ink/80 transition-colors py-0.5"
-                            >
-                              Break the team up
-                            </button>
-                          )
-                        )}
-                      </div>
+                    {!here && selfPick && isMine && (
+                      <button
+                        type="button"
+                        onClick={() => removePlayers(i, myLeavers(slotPlayers))}
+                        className="t-cap text-ink/65 hover:text-ink transition-colors py-0.5 mt-2"
+                      >
+                        Leave this time
+                      </button>
                     )}
 
                     {/* A refused write says so in the slot it was refused
@@ -917,137 +936,90 @@ export default function TeeSheetClient({
                       <p className="text-rust-deep t-cap mt-1.5 leading-snug">{error.message}</p>
                     )}
 
-                    {/* Join, on a round played in partnerships: the team
-                        first, or just you. Whoever is on the time in no
-                        team is in it, when they all fit — the picker
-                        holds them there. */}
-                    {joining === i && asksForTeam && (() => {
-                      const loose = looseOn(slotPlayers)
-                      const names = joinNames(loose.map(p => p.name))
-                      // A part-filled team on the time is joined, as the picker will.
-                      const openTeamId = openTeamOnTime(
-                        Object.entries(roundTeamInfo!.teamOf).map(([player_id, t]) => ({ team_id: t.teamId, team_set: roundTeamInfo!.sheet, player_id })),
-                        roundTeamInfo!.sheet, slotPlayers.map(p => p.id), roundTeamInfo!.cap,
-                      )
-                      const openTeam = groups.find(g => g.teamId && g.teamId === openTeamId)
-                      const lockedIn = matesLockedIn(
-                        { mates: loose.map(p => p.id), onSlot: slotPlayers.map(p => p.id) },
-                        { organiser: false, meId }, 0, roundTeamInfo!.cap,
-                      )
+                    {/* The list beneath the lifted time: who can go on it,
+                        a partnership as one ("Ross & Dave", "Ross, Dave,
+                        Seán"). Saving sits above the box, so the keyboard
+                        never covers it; the box asks for no keyboard until
+                        it is tapped. */}
+                    {here && (() => {
+                      const inDraft = new Set(here.draft.filter((c): c is Exclude<DraftSeat, null | 'none'> => !!c && c !== 'none').map(c => c.id))
+                      const offered = allUnits
+                        .filter(u => !idsOf(u).some(id => inDraft.has(id)))
+                        .filter(u => mayBookOthers || idsOf(u).includes(meId ?? ''))
+                      const shownUnits = offered.filter(u => unitMatches(u, search))
+                      const picks = here.draft.filter(c => !!c && c !== 'none' && c.isNew).length
                       return (
-                        <div className="mt-2 rounded-xl border border-line bg-cream p-3">
-                          <p className="text-ink text-sm font-medium">Playing in a team?</p>
-                          <p className="t-cap text-ink/65 mt-0.5 leading-snug">
-                            {openTeam
-                              ? `${openTeam.teamName} ${openTeam.players.length === 1 ? 'is' : 'are'} on this time with room — you’ll be in their team.`
-                              : loose.length === 0
-                              ? 'Pick your team first, then you all go on this time together.'
-                              : lockedIn
-                                ? `${names} ${loose.length === 1 ? 'is' : 'are'} on this time and will be in your team.`
-                                : `${names} are on this time — pick who is in your team.`}
-                          </p>
-                          <div className="flex gap-2 mt-3">
-                            <Link href={pickHref(i)} className={buttonClass('primary', false, true)}>
-                              Pick your team
-                            </Link>
+                        <div className="mt-3">
+                          <div className="flex gap-2 mb-3">
                             <button
                               type="button"
-                              onClick={() => { setJoining(null); addPlayers(i, myUnitIds) }}
-                              className={buttonClass('secondary', false, true)}
+                              onClick={saveBooking}
+                              disabled={saving || picks === 0}
+                              className={`${buttonClass('primary', false, true)} flex-1`}
                             >
-                              Just me
+                              {saving ? 'Saving…' : 'Save'}
+                            </button>
+                            <button type="button" onClick={closeBooking} className={buttonClass('secondary', false, true)}>
+                              Cancel
                             </button>
                           </div>
-                        </div>
-                      )
-                    })()}
-
-                    {/* The picker: a filter and the unassigned field, the
-                        course-select manner in miniature. Stays open while
-                        the slot still has room, so a fourball is four taps. */}
-                    {open && (
-                      <div className="mt-2 rounded-xl border border-line bg-cream p-2.5">
-                        <div className="flex items-center gap-2 mb-2">
-                          <input
-                            type="text"
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            placeholder="Find a player…"
-                            className={`${FIELD} field-dense flex-1 min-w-0`}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setAdding(null)}
-                            aria-label="Close"
-                            className="flex-shrink-0 text-ink/50 hover:text-ink/80 transition-colors p-1.5"
-                          >
-                            <IconX size={14} />
-                          </button>
-                        </div>
-                        {units.length === 0 ? (
-                          <p className="t-cap text-ink/65 px-1 py-1.5">
-                            {unassigned.length === 0
-                              ? 'Everyone is on the sheet.'
-                              : 'Nobody by that name still needs a time.'}
-                          </p>
-                        ) : (
-                          <ul className="max-h-48 overflow-y-auto space-y-1">
-                            {units.map(u => {
-                              if (u.kind === 'solo') {
-                                const p = u.player
+                          {offered.length > 6 && (
+                            <input
+                              type="text"
+                              value={search}
+                              onChange={e => setSearch(e.target.value)}
+                              placeholder="Find a player…"
+                              aria-label="Find a player"
+                              className={`${FIELD} field-dense w-full mb-2`}
+                            />
+                          )}
+                          {next === null && (
+                            <p className="t-cap text-ink/65 py-1.5">This time is full — save, or take somebody out.</p>
+                          )}
+                          {offered.length === 0 ? (
+                            <p className="t-cap text-ink/65 py-1.5">
+                              {mayBookOthers ? 'Everyone has a time.' : 'You have a time already.'}
+                            </p>
+                          ) : (
+                            <ul className="max-h-[50vh] overflow-y-auto space-y-1">
+                              {shownUnits.map(u => {
+                                const ids = idsOf(u)
+                                const issue = unitIssue(u, here.draft, next)
+                                const fits = !issue && placeUnit(here.draft, draftUnit(u), mode, next) !== null
+                                const label = u.kind === 'solo'
+                                  ? u.player.name
+                                  : listName(u.players.map(p => shortOf.get(p.id) ?? p.name))
                                 return (
-                                  <li key={p.id}>
+                                  <li key={ids.join('|')}>
                                     <button
                                       type="button"
-                                      disabled={vacancy === 0}
+                                      disabled={!fits}
                                       onClick={() => {
-                                        addPlayers(i, [p.id])
-                                        if (vacancy <= 1) setAdding(null)
+                                        const placed = placeUnit(here.draft, draftUnit(u), mode, next)
+                                        if (placed) setBooking({ ...here, draft: placed, tapped: null })
                                       }}
-                                      className="w-full text-left px-2 py-2 rounded-lg text-ink text-sm hover:bg-tint transition-colors disabled:opacity-40"
+                                      className={`press w-full text-left px-3 py-2.5 rounded-tile transition-colors disabled:opacity-40 ${
+                                        u.kind === 'solo' ? 'hover:bg-tint' : 'bg-tint hover:bg-accent-tint'
+                                      }`}
                                     >
-                                      {p.name}
-                                      {!together && teamMap.get(p.id) && (
-                                        <span className="t-cap text-ink/65 ml-2">
-                                          {teamMap.get(p.id)!.teamName}
+                                      <span className="block t-label text-ink truncate">{label}</span>
+                                      {(u.kind !== 'solo' || issue) && (
+                                        <span className="block t-cap text-ink/65">
+                                          {issue ?? (ids.length === 2 ? 'Partners — go on together' : 'A team — goes on together')}
                                         </span>
                                       )}
                                     </button>
                                   </li>
                                 )
-                              }
-
-                              // A linked team, offered as one stuck-together
-                              // card — the same tinted block it becomes in
-                              // the slot. Tapping books everyone in it.
-                              const fits = u.players.length <= vacancy
-                              return (
-                                <li key={u.teamId}>
-                                  <button
-                                    type="button"
-                                    disabled={!fits}
-                                    onClick={() => {
-                                      addPlayers(i, u.players.map(p => p.id))
-                                      if (vacancy - u.players.length <= 0) setAdding(null)
-                                    }}
-                                    className="w-full text-left px-2 py-2 rounded-lg bg-accent/[0.06] border border-accent/20 transition-colors hover:border-accent/40 disabled:opacity-40"
-                                  >
-                                    <span className="block text-ink text-sm">
-                                      {joinNames(u.players.map(p => firstName(p.name)))}
-                                    </span>
-                                    <span className="block t-cap text-ink/65 mt-0.5">
-                                      {fits
-                                        ? `${u.players.length === 2 ? 'Pair' : `Team of ${u.players.length}`} — added together`
-                                        : `Needs ${u.players.length} spots`}
-                                    </span>
-                                  </button>
-                                </li>
-                              )
-                            })}
-                          </ul>
-                        )}
-                      </div>
-                    )}
+                              })}
+                              {shownUnits.length === 0 && (
+                                <li className="t-cap text-ink/65 px-1 py-1.5">Nobody by that name still needs a time.</li>
+                              )}
+                            </ul>
+                          )}
+                        </div>
+                      )
+                    })()}
                     </div>
                   </li>
                 )

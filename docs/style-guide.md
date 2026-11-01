@@ -268,7 +268,11 @@ That is why parts take parameters (`dense`, `compact`, `shape`, `variant`).
   `line-strong`, `rounded-tile`; your own `accent-tint`). Partners are one
   ticket: no gap, a 1px `line` seam, and a 14px half-moon at each end of
   it with a rounded lip, cut by a clip path so it has no outline (never a
-  gradient or mask). Open seats are dashed; the first carry the action.
+  gradient or mask). Open seats are dashed; those this phone may book carry
+  a `+` that takes `.press`. Booking a time lifts it (the motion table's
+  Tee time lift): the draft's picks wear the chosen look, the seat the next
+  pick goes in is a dashed `accent-tint` seat labelled Partner or Next, and
+  Save sits above the list so the keyboard never covers it.
   `app/trip/[tripCode]/teesheet/TeeSeats.tsx`.
 
 ---
@@ -292,6 +296,7 @@ and the named rules below say what replaces each.
 | Progress fill | A step completes | 340ms colour | putt | Instant |
 | Sheet up (`sheet-up`) | A sheet opens | 280ms | ease-out | Instant |
 | Scoring card slide | Next / previous player | 260ms | ease-out | Instant |
+| Tee time lift | Releasing a tee sheet + | 340ms scroll to the top, under the header; the time raised to `shadow-floating` | putt | At once |
 | Bracket swipe | Sideways swipe, arrows, dots | Follows the finger; settles in up to 340ms, one round a swipe, the point under the finger held still inside the bracket's box — the page never scrolled while it moves, only once at rest | ease-out | Settles instantly; the drag still follows the finger |
 | Score flash | A live score changed | 400ms colour only | ease-out | Instant |
 | Live dot (`dot-live`) | A card is open | 2s repeat | ease-in-out | Still |

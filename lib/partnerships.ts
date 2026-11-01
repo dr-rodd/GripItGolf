@@ -236,3 +236,27 @@ export function partnershipName(
   if (!isMadeName(team.name, members.map(m => m.name))) return team.name
   return joinNames(members.map(m => shortOf.get(m.id) ?? m.name.split(/\s+/)[0]))
 }
+
+/**
+ * How a round's tee times bind their players (Ross, 1 Nov 2026) — the one
+ * question the tee sheet asks of the board governing the round:
+ *
+ *   · pairs — each row of two on a tee time is a pairing;
+ *   · team — everybody on the tee time is one team, threes and fours;
+ *   · separate — everybody is their own, partnerships or none.
+ */
+export type TeeMode = 'pairs' | 'team' | 'separate'
+
+export function teeMode(p: RoundPartnership | null): TeeMode {
+  if (!p) return 'separate'
+  return p.size === PAIR ? 'pairs' : 'team'
+}
+
+/**
+ * Whether the tee sheet must take a round's partnerships as they are: a
+ * knockout's pairings come from its draw, and re-pairing on the sheet
+ * would change the bracket (Ross, 1 Nov 2026). They book as drawn.
+ */
+export function partnershipsFixed(p: RoundPartnership | null): boolean {
+  return !!p && p.board.competition === 'matchplay'
+}

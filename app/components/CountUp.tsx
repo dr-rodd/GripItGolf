@@ -1,6 +1,7 @@
 'use client'
 
 import { useLayoutEffect, useRef, useState } from 'react'
+import { putt } from '@/lib/motion'
 
 /**
  * A total that counts up to itself, once, after somebody did the thing that
@@ -24,19 +25,6 @@ import { useLayoutEffect, useRef, useState } from 'react'
  * the final figure.
  */
 export const COUNT_UP_MS = 400
-
-/** The putt curve, cubic-bezier(0.16, 1, 0.3, 1), solved for y at time x. */
-function putt(x: number): number {
-  const [x1, y1, x2, y2] = [0.16, 1, 0.3, 1]
-  const bx = (t: number) => 3 * x1 * t * (1 - t) ** 2 + 3 * x2 * t ** 2 * (1 - t) + t ** 3
-  const by = (t: number) => 3 * y1 * t * (1 - t) ** 2 + 3 * y2 * t ** 2 * (1 - t) + t ** 3
-  let lo = 0, hi = 1, t = x
-  for (let i = 0; i < 20; i++) {
-    t = (lo + hi) / 2
-    if (bx(t) < x) lo = t; else hi = t
-  }
-  return by(t)
-}
 
 /** Whole numbers bare, the rest to one place — the way points print. */
 const show = (n: number, decimals: 0 | 1) =>

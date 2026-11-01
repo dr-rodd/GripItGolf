@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase'
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
 import { parseLeaderboards, tagsInPlay } from '@/lib/leaderboards'
-import { roundPartnership, partnershipName, MAX_PARTNERSHIP } from '@/lib/partnerships'
+import { roundPartnership, partnershipName, teeMode, partnershipsFixed, MAX_PARTNERSHIP, type TeeMode } from '@/lib/partnerships'
 import { roundPickerSheet } from '@/lib/teamPicker'
 import { boardNames } from '@/lib/displayNames'
 import { teeSheetAccess } from '@/lib/eventPermissions'
@@ -37,16 +37,9 @@ export const dynamic = 'force-dynamic'
  */
 export default async function TeeSheetPage({ params, searchParams }: {
   params: Promise<{ tripCode: string }>
-  searchParams: Promise<{ round?: string; place?: string; team?: string; player?: string }>
+  searchParams: Promise<{ round?: string }>
 }) {
-  const [{ tripCode }, query] = await Promise.all([params, searchParams])
-  const initialRoundId = query.round
-  // Back from the team picker with a team — or one player going alone — to
-  // put on a time (stage 4). Done once, on the phone, by the sheet's own
-  // booking, so its checks and its in-slot refusals are the only ones.
-  const placing = initialRoundId && query.place && /^\d{1,3}$/.test(query.place) && (query.team || query.player)
-    ? { roundId: initialRoundId, slot: Number(query.place), teamId: query.team ?? null, playerId: query.player ?? null }
-    : null
+  const [{ tripCode }, { round: initialRoundId }] = await Promise.all([params, searchParams])
 
   // The kind alongside, for the words only — a trip's sheet speaks of its
   // lead player and passcode.
@@ -87,7 +80,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
 
   const [
     roundsResult, itemsResult, playersResult, settingsResult,
-    assignmentsResult, permsResult, teamsResult, membersResult, bookersResult,
+    assignmentsResult, permsResult, teamsResult, membersResult, bookersResult, addedResult,
   ] = await Promise.all([
     supabase
       .from('rounds')
@@ -146,6 +139,11 @@ export default async function TeeSheetPage({ params, searchParams }: {
         .order('created_at').order('round_id').order('player_id'),
       a => `${a.round_id}|${a.player_id}`,
     ),
+    // Whether who put each player in their team is recorded (migration
+    // 066) — a booking that makes a partnership names it only then.
+    anyTeamBoard
+      ? supabase.from('team_members').select('added_by').eq('trip_id', trip.id).limit(1)
+      : Promise.resolve({ data: null, error: { message: 'no team boards' } }),
   ])
 
   if (roundsResult.error) console.error('TeeSheetPage rounds query failed:', roundsResult.error)
@@ -253,6 +251,8 @@ export default async function TeeSheetPage({ params, searchParams }: {
     teamSize: number | null
     cap: number
     playersPick: boolean
+    mode: TeeMode
+    fixed: boolean
   }> = {}
   for (const r of rounds) {
     const first = roundPartnership(boards, r.id)
@@ -267,6 +267,9 @@ export default async function TeeSheetPage({ params, searchParams }: {
       cap: roundPickerSheet(boards, r.id, largestOn, false)?.cap ?? MAX_PARTNERSHIP,
       // The field makes its own partnerships here — the board says so.
       playersPick: p.board.teamPick === 'self',
+      // How a tee time binds: a row a pairing, the time a team, or neither.
+      mode: teeMode(p),
+      fixed: partnershipsFixed(p),
     }
   }
 
@@ -318,7 +321,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
       fieldMaySet={access.anyoneOpens}
       meId={me && isConfirmed(me) ? me.id : null}
       initialRoundId={initialRoundId ?? null}
-      placing={placing}
+      addedRecorded={!addedResult.error}
       isTrip={!isEvent(kind)}
       passcodeHash={(trip.settings_passcode_hash as string | null) ?? null}
     />
