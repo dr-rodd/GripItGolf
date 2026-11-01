@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 import InlineUnlock from '@/app/components/InlineUnlock'
@@ -27,6 +28,8 @@ import { createTeam, deleteTeam, refreshTeamName } from '../teams/teamWrites'
 import { PRESET_COLORS } from '@/lib/teamColors'
 import { putt, reducedMotion } from '@/lib/motion'
 import { HEADER_H } from '@/app/components/headerMetrics'
+import { frozenSlots } from '@/lib/teeFreeze'
+import { useTeeFreeze } from './useTeeFreeze'
 import { FIELD, buttonClass, cardClass, optionClass } from '@/app/components/ui'
 import { courseLabel } from '@/lib/courseDirectory'
 import TeeSeats from './TeeSeats'
@@ -95,6 +98,8 @@ type Booking = {
   tapped: number | null
   /** Players already on the time taken off it in this booking. */
   removed: string[]
+  /** Who was on the time when it was opened — Save checks the database still says so. */
+  start: string[]
   /**
    * Why it is open: a + tapped; your own time's Edit (Ross, 1 Nov 2026: in
    * place of the old leave button — leave with your ✕, or change it); or from
@@ -221,6 +226,35 @@ export default function TeeSheetClient({
   const shortOf = useMemo(() => boardNames(players), [players])
 
   /**
+   * A tee time is frozen while one phone books it (Ross, 1 Nov 2026: it
+   * does not matter whose, only that it is) — lib/teeFreeze.ts. Every
+   * other phone sees it at once; when it thaws they read the sheet again.
+   */
+  const router = useRouter()
+  const freeze = useTeeFreeze(
+    tripId,
+    !!live && storageReady,
+    lifted => { if (lifted === roundId) router.refresh() },
+    slot => {
+      setBooking(null)
+      setSearch('')
+      setError({ slot, message: 'Somebody else is booking this time — try again in a moment.' })
+    },
+  )
+  // A freeze lets go after a couple of quiet minutes, so the sheet looks
+  // again now and then while another phone holds one.
+  const [now, setNow] = useState(() => Date.now())
+  const othersFreezing = freeze.freezes.some(f => f.key !== freeze.key)
+  useEffect(() => {
+    if (!othersFreezing) return
+    const timer = setInterval(() => setNow(Date.now()), 15_000)
+    return () => clearInterval(timer)
+  }, [othersFreezing])
+  const frozen = round
+    ? frozenSlots(freeze.freezes, round.id, freeze.key, Math.max(now, ...freeze.freezes.map(f => f.seen)))
+    : new Set<number>()
+
+  /**
    * This round's teams, kept in state because a day's are made here.
    *
    * The server sends every round's grouping; forming a team on the morning
@@ -228,6 +262,14 @@ export default function TeeSheetClient({
    * screen draws from is its own from then on.
    */
   const [teamsByRound, setTeamsByRound] = useState(roundTeams)
+  // Read again from the server — another phone's freeze lifted, so a time
+  // may have changed — the sheet starts from what it was sent.
+  const [sent, setSent] = useState({ initialAssignments, roundTeams })
+  if (sent.initialAssignments !== initialAssignments || sent.roundTeams !== roundTeams) {
+    setSent({ initialAssignments, roundTeams })
+    setAssignments(initialAssignments)
+    setTeamsByRound(roundTeams)
+  }
   const roundTeamInfo = roundId ? teamsByRound[roundId] ?? null : null
   const teamMap = useMemo(
     () => new Map(Object.entries(roundTeamInfo?.teamOf ?? {})),
@@ -399,11 +441,19 @@ export default function TeeSheetClient({
    * one block and stays a partnership.
    */
   async function removePlayers(slotIndex: number, playerIds: string[]) {
-    if (!(await deleteAssignments(slotIndex, playerIds))) return
-    const info = roundTeamInfo
-    if (!round || !info?.isDay) return
-    const next = await leaveTeams(slotIndex, playerIds, info.teamOf, info)
-    if (next) setTeamsByRound(prev => ({ ...prev, [round.id]: { ...info, teamOf: next } }))
+    if (!round) return
+    // Under the time's freeze, like every write to it, so the other phones
+    // read it again once it is done.
+    freeze.hold(round.id, slotIndex)
+    try {
+      if (!(await deleteAssignments(slotIndex, playerIds))) return
+      const info = roundTeamInfo
+      if (!info?.isDay) return
+      const next = await leaveTeams(slotIndex, playerIds, info.teamOf, info)
+      if (next) setTeamsByRound(prev => ({ ...prev, [round.id]: { ...info, teamOf: next } }))
+    } finally {
+      freeze.release()
+    }
   }
 
   /**
@@ -601,7 +651,25 @@ export default function TeeSheetClient({
    * partnered — they pick themselves from the list if they mean to. A team
    * of one is nobody's partner yet, so its player joins like anyone else.
    */
+  /** Who is on a time, as drawn. */
+  const onTime = (rows: SeatCell[][]) => rows.flat().flatMap(c => (c.kind === 'player' ? [c.player.id] : []))
+
+  /**
+   * Whether this phone may open a time: not while another phone has it
+   * frozen. Opening it freezes it here.
+   */
+  function claim(slot: number): boolean {
+    if (!round) return false
+    if (frozen.has(slot)) {
+      setError({ slot, message: 'Somebody else is booking this time — try again in a moment.' })
+      return false
+    }
+    freeze.hold(round.id, slot)
+    return true
+  }
+
   function openBooking(slot: number, rows: SeatCell[][], seat: number, target: SeatTarget) {
+    if (!claim(slot)) return
     let draft = draftFrom(rows)
     if (selfPick && meId && !assignedIds.has(meId)) {
       const unit = allUnits.find(u => idsOf(u).includes(meId))
@@ -621,15 +689,16 @@ export default function TeeSheetClient({
     }
     setError(null)
     setSearch('')
-    setBooking({ slot, draft, tapped: draft[seat] === null ? seat : null, removed: [], purpose: 'book' })
+    setBooking({ slot, draft, tapped: draft[seat] === null ? seat : null, removed: [], start: onTime(rows), purpose: 'book' })
     liftTo(slot)
   }
 
   /** Your own time opened to change: leave with your ✕, or put somebody in. */
   function openEdit(slot: number, rows: SeatCell[][]) {
+    if (!claim(slot)) return
     setError(null)
     setSearch('')
-    setBooking({ slot, draft: draftFrom(rows), tapped: null, removed: [], purpose: 'edit' })
+    setBooking({ slot, draft: draftFrom(rows), tapped: null, removed: [], start: onTime(rows), purpose: 'edit' })
     liftTo(slot)
   }
 
@@ -679,7 +748,9 @@ export default function TeeSheetClient({
   useEffect(() => {
     if (editOpened.current || editSlot === null || !live || !round || round.id !== initialRoundId) return
     editOpened.current = true
-    setBooking({ slot: editSlot, draft: draftFrom(rowsFor(slots.get(editSlot) ?? [])), tapped: null, removed: [], purpose: 'leave' })
+    freeze.hold(round.id, editSlot)
+    const rows = rowsFor(slots.get(editSlot) ?? [])
+    setBooking({ slot: editSlot, draft: draftFrom(rows), tapped: null, removed: [], start: onTime(rows), purpose: 'leave' })
     liftTo(editSlot)
     // Once, on arrival: what it reads is what arrived with it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -688,7 +759,12 @@ export default function TeeSheetClient({
   function closeBooking() {
     setBooking(null)
     setSearch('')
+    freeze.release()
   }
+
+  // Every change to the booking keeps its freeze from going idle.
+  const { touch } = freeze
+  useEffect(() => { if (booking) touch() }, [booking, touch])
 
   /**
    * Saving the draft, in order: anybody taken off comes off the time and
@@ -701,6 +777,23 @@ export default function TeeSheetClient({
     if (!booking || saving || !round) return
     const info = roundTeamInfo
     setSaving(true)
+    // The database first: if the time changed since it was opened —
+    // another phone got in before the freeze reached this one — nothing
+    // is written, and the time is shown as it now stands.
+    const fresh = await resyncRound()
+    if (!fresh) {
+      setError({ slot: booking.slot, message: 'Could not save — try again.' })
+      setSaving(false)
+      return
+    }
+    const nowOn = new Set(fresh.filter(a => a.slot_index === booking.slot).map(a => a.player_id))
+    if (nowOn.size !== booking.start.length || booking.start.some(id => !nowOn.has(id))) {
+      setSaving(false)
+      closeBooking()
+      setError({ slot: booking.slot, message: 'This time changed while you were booking — here it is now.' })
+      router.refresh()
+      return
+    }
     let teamOf = info?.teamOf ?? {}
     if (booking.removed.length > 0) {
       if (!(await deleteAssignments(booking.slot, booking.removed))) { setSaving(false); return }
@@ -917,7 +1010,9 @@ export default function TeeSheetClient({
                 const next = here ? nextSeat(here.draft, mode, here.tapped) : null
                 // The + signs this phone may tap. A knockout's lone player
                 // is joined only by the partner the draw gave them.
-                const targets = mayBook
+                // Frozen: another phone is booking it, so this one waits.
+                const isFrozen = frozen.has(i) && !here
+                const targets = mayBook && !isFrozen
                   ? seatTargets(rows, mode).map(t => {
                     if (!t || t.kind !== 'join' || !fixed) return t
                     const theirs = teamMap.get(t.with)?.teamId
@@ -993,13 +1088,14 @@ export default function TeeSheetClient({
                          a share-a-tee board a team's ✕ takes the whole ticket
                          out, because stuck together cuts both ways; it sits
                          on the ticket's top right seat. */
+                      <div className={`transition-opacity duration-200 ${isFrozen ? 'opacity-50' : ''}`}>
                       <TeeSeats
                         rows={rows}
                         handicapOf={id => handicapOf.get(id)}
                         meId={meId}
                         targets={targets}
                         onTarget={(seat, t) => openBooking(i, rows, seat, t)}
-                        removeFor={(cell, seat) => {
+                        removeFor={isFrozen ? undefined : (cell, seat) => {
                           const block = cell.teamId && together
                             ? slotPlayers.filter(p => teamMap.get(p.id)?.teamId === cell.teamId).map(p => p.id)
                             : [cell.player.id]
@@ -1018,9 +1114,14 @@ export default function TeeSheetClient({
                           return { label: `Remove ${cell.player.name}`, onRemove: () => removePlayers(i, [cell.player.id]) }
                         }}
                       />
+                      </div>
                     )}
 
-                    {!here && selfPick && isMine && (
+                    {isFrozen && (
+                      <p className="t-cap text-ink/65 mt-2" role="status">Being booked — one moment.</p>
+                    )}
+
+                    {!here && !isFrozen && selfPick && isMine && (
                       <button
                         type="button"
                         onClick={() => openEdit(i, rows)}

@@ -275,7 +275,9 @@ That is why parts take parameters (`dense`, `compact`, `shape`, `variant`).
   Add. Each `+` takes `.press`. Booking a time lifts it (the motion table's
   Tee time lift): the draft's picks wear the chosen look, the seat the next
   pick goes in is `accent-tint` labelled Partner or Next, and Save sits
-  above the list so the keyboard never covers it.
+  above the list so the keyboard never covers it. A time another phone is
+  booking is frozen: its seats at half opacity, no `+` or ✕, and "Being
+  booked — one moment" under them in `t-cap`.
   `app/trip/[tripCode]/teesheet/TeeSeats.tsx`.
 
 ---
