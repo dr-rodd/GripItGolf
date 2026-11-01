@@ -1,9 +1,15 @@
 // A tee time frozen while one phone books it (Ross, 1 Nov 2026).
 //
 // Tapping a time opens it on that phone, and every other phone looking at
-// the sheet sees it frozen straight away — it does not matter whose phone,
-// only that the time is being changed — so two people cannot fill the same
-// seats differently and leave two versions of who plays with whom.
+// the sheet sees it frozen straight away, saying only "Locked" — it does
+// not matter whose phone, only that the time is being changed — so two
+// people cannot fill the same seats differently and leave two versions of
+// who plays with whom.
+//
+// A booking's lock lasts two minutes, counted down on the booker's phone,
+// and then the booking closes and the time unlocks. An edit of your own
+// time shows no countdown (Ross, 1 Nov 2026): its lock lasts while it is
+// being changed, and lets go after two quiet minutes.
 //
 // The freezes travel as Supabase Realtime presence on one channel per
 // event, never through the database: nothing to migrate, nothing to clean
@@ -25,19 +31,27 @@ export type Freeze = {
   slot: number
   /** When the freeze began, for which of two came first. */
   since: number
-  /** When its phone last touched the booking. */
-  seen: number
+  /** When it lets go. */
+  until: number
+  /** A booking's lock, counted down on its phone — not an edit's. */
+  timed?: boolean
 }
 
 /**
- * How long a freeze outlives the last tap on its booking. A phone left in a
- * pocket with a time open lets go of it after this; its Save still checks
- * the database before writing anything.
+ * How long a lock lasts: a booking's from when it began, an edit's from its
+ * last change. A phone left in a pocket with a time open lets go of it
+ * after this; its Save still checks the database before writing anything.
  */
-export const FREEZE_IDLE_MS = 2 * 60_000
+export const LOCK_MS = 2 * 60_000
 
 /** Whether a freeze still holds at `now`. */
-export const freezeLive = (f: Freeze, now: number) => now - f.seen < FREEZE_IDLE_MS
+export const freezeLive = (f: Freeze, now: number) => now < f.until
+
+/** What a booking's countdown reads — "1:42" — rounding up, so it says 0:00 only once it is over. */
+export function lockClock(msLeft: number): string {
+  const s = Math.max(0, Math.ceil(Math.min(msLeft, LOCK_MS) / 1000))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
 
 /** Whether `a` came before `b` — the earlier, else the lower key, so every phone agrees. */
 const firstOf = (a: Freeze, b: Freeze) => a.since < b.since || (a.since === b.since && a.key < b.key)
@@ -74,8 +88,8 @@ export function readFreezes(state: Record<string, readonly unknown[]>): Freeze[]
   for (const [key, metas] of Object.entries(state)) {
     const m = metas[metas.length - 1] as Partial<Freeze> | undefined
     if (!m || typeof m.round !== 'string' || !Number.isInteger(m.slot) || (m.slot as number) < 0) continue
-    if (typeof m.since !== 'number' || typeof m.seen !== 'number') continue
-    out.push({ key, round: m.round, slot: m.slot as number, since: m.since, seen: m.seen })
+    if (typeof m.since !== 'number' || typeof m.until !== 'number') continue
+    out.push({ key, round: m.round, slot: m.slot as number, since: m.since, until: m.until })
   }
   return out
 }

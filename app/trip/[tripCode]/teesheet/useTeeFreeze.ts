@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
-import { type Freeze, beaten, liftedRounds, readFreezes } from '@/lib/teeFreeze'
+import { type Freeze, LOCK_MS, beaten, liftedRounds, readFreezes } from '@/lib/teeFreeze'
 
 /**
  * The tee sheet's freezes, live (lib/teeFreeze.ts has the rules): this
@@ -26,6 +26,8 @@ export function useTeeFreeze(
   const [key] = useState(() =>
     typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`)
   const [freezes, setFreezes] = useState<Freeze[]>([])
+  // This phone's own, for the booker's countdown.
+  const [held, setHeld] = useState<Freeze | null>(null)
   const channelRef = useRef<RealtimeChannel | null>(null)
   const ready = useRef(false)
   const wanted = useRef<Freeze | null>(null)
@@ -45,6 +47,7 @@ export function useTeeFreeze(
       const mine = wanted.current
       if (mine && beaten(next, mine, Date.now())) {
         wanted.current = null
+        setHeld(null)
         void channel.untrack()
         handlers.current.onBeaten(mine.slot)
       }
@@ -64,20 +67,25 @@ export function useTeeFreeze(
 
   const send = useCallback((f: Freeze | null) => {
     wanted.current = f
+    setHeld(f)
     const channel = channelRef.current
     if (!channel || !ready.current) return
     void (f ? channel.track(f) : channel.untrack())
   }, [])
 
-  /** Freeze a time while this phone changes it. */
-  const hold = useCallback((round: string, slot: number) => {
+  /**
+   * Freeze a time while this phone changes it: a booking for two minutes
+   * from now (`timed`), an edit for two minutes from its last change.
+   */
+  const hold = useCallback((round: string, slot: number, timed = false) => {
     const now = Date.now()
-    send({ key, round, slot, since: now, seen: now })
+    send({ key, round, slot, since: now, until: now + LOCK_MS, ...(timed ? { timed } : {}) })
   }, [key, send])
 
-  /** The booking moved on — keep the freeze from going idle. */
+  /** An edit moved on — keep its lock from going idle. A booking's runs its two minutes. */
   const touch = useCallback(() => {
-    if (wanted.current) send({ ...wanted.current, seen: Date.now() })
+    const f = wanted.current
+    if (f && !f.timed) send({ ...f, until: Date.now() + LOCK_MS })
   }, [send])
 
   /** Done with the time: it thaws on every phone, which read it again. */
@@ -85,5 +93,5 @@ export function useTeeFreeze(
     if (wanted.current) send(null)
   }, [send])
 
-  return { key, freezes, hold, touch, release }
+  return { key, freezes, held, hold, touch, release }
 }

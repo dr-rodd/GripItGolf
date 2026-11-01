@@ -276,8 +276,9 @@ That is why parts take parameters (`dense`, `compact`, `shape`, `variant`).
   Tee time lift): the draft's picks wear the chosen look, the seat the next
   pick goes in is `accent-tint` labelled Partner or Next, and Save sits
   above the list so the keyboard never covers it. A time another phone is
-  booking is frozen: its seats at half opacity, no `+` or ✕, and "Being
-  booked — one moment" under them in `t-cap`.
+  booking is locked: its seats at half opacity, no `+` or ✕, and "Locked"
+  under them in `t-cap`. The booker sees "Locked for you · 1:42" above Save,
+  counting down two minutes; an edit shows no countdown.
   `app/trip/[tripCode]/teesheet/TeeSeats.tsx`.
 
 ---

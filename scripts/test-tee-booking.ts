@@ -16,7 +16,7 @@ import {
 } from '../lib/teeBooking'
 import { teeMode, partnershipsFixed, roundPartnership } from '../lib/partnerships'
 import type { Leaderboard } from '../lib/leaderboards'
-import { type Freeze, FREEZE_IDLE_MS, frozenSlots, beaten, liftedRounds, readFreezes } from '../lib/teeFreeze'
+import { type Freeze, LOCK_MS, lockClock, frozenSlots, beaten, liftedRounds, readFreezes } from '../lib/teeFreeze'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -231,11 +231,13 @@ section('Leaving a partnership happens at your tee time (stage 2)')
 
 section('A time is frozen while a phone books it (Ross, 1 Nov 2026)')
 {
-  const f = (key: string, slot: number, since: number, seen = since, round = 'r1'): Freeze => ({ key, round, slot, since, seen })
+  const f = (key: string, slot: number, since: number, until = since + LOCK_MS, round = 'r1'): Freeze => ({ key, round, slot, since, until })
   const now = 1_000_000
-  const all = [f('me', 0, now - 5), f('them', 2, now - 10), f('old', 3, now - FREEZE_IDLE_MS - 1), f('other-round', 1, now, now, 'r2')]
+  const all = [f('me', 0, now - 5), f('them', 2, now - 10), f('old', 3, now - LOCK_MS - 1), f('other-round', 1, now, now + LOCK_MS, 'r2')]
   eq([...frozenSlots(all, 'r1', 'me', now)], [2],
-    'other phones\' times on this round are frozen — not this phone\'s own, not one gone quiet, not another round\'s')
+    'other phones\' times on this round are locked — not this phone\'s own, not one run out, not another round\'s')
+  eq([lockClock(LOCK_MS + 40), lockClock(LOCK_MS), lockClock(102_000), lockClock(500), lockClock(0), lockClock(-3)], ['2:00', '2:00', '1:42', '0:01', '0:00', '0:00'],
+    'a booking\'s countdown starts at 2:00 and says 0:00 only once it is over (Ross, 1 Nov 2026)')
   ok(beaten([f('me', 2, now), f('them', 2, now - 1)], f('me', 2, now), now), 'two tap one time: the earlier freeze wins…')
   ok(!beaten([f('me', 2, now - 1), f('them', 2, now)], f('me', 2, now - 1), now), '  …so the later one loses, not the earlier')
   ok(beaten([f('b', 2, now), f('a', 2, now)], f('b', 2, now), now) && !beaten([f('b', 2, now), f('a', 2, now)], f('a', 2, now), now),
@@ -244,14 +246,22 @@ section('A time is frozen while a phone books it (Ross, 1 Nov 2026)')
   eq(liftedRounds([f('them', 2, 1), f('me', 0, 1)], [f('me', 0, 1)], 'me'), ['r1'],
     'another phone\'s freeze going is the signal to read that round again')
   eq(liftedRounds([f('me', 0, 1)], [], 'me'), [], '  …this phone\'s own is not')
-  eq(readFreezes({ a: [{ round: 'r1', slot: 2, since: 5, seen: 6 }], b: [{ round: 'r1', slot: -1, since: 5, seen: 6 }], c: [{ slot: 2 }], d: [] }),
-    [{ key: 'a', round: 'r1', slot: 2, since: 5, seen: 6 }], 'a freeze is another phone talking — anything malformed is dropped')
+  eq(readFreezes({ a: [{ round: 'r1', slot: 2, since: 5, until: 6 }], b: [{ round: 'r1', slot: -1, since: 5, until: 6 }], c: [{ slot: 2 }], d: [] }),
+    [{ key: 'a', round: 'r1', slot: 2, since: 5, until: 6 }], 'a freeze is another phone talking — anything malformed is dropped')
 
   const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
-  ok(client.includes('if (frozen.has(slot)) {') && client.includes('freeze.hold(round.id, slot)'),
+  ok(client.includes('if (frozen.has(slot)) {') && client.includes('freeze.hold(round.id, slot, timed)'),
     'opening a time freezes it, and a frozen one will not open')
-  ok(client.includes('Being booked — one moment.') && client.includes('const targets = mayBook && !isFrozen'),
-    '  …and on other phones it shows as frozen, with no + to tap')
+  ok(client.includes('role="status">Locked</p>') && client.includes('const targets = mayBook && !isFrozen'),
+    '  …and on other phones it says Locked, with no + to tap (Ross, 1 Nov 2026)')
+  ok(client.includes("if (!claim(slot, true)) return") && client.includes("if (!claim(slot, false)) return")
+    && client.includes('Locked for you · {lockClock(timedUntil - now)}') && client.includes("here.purpose === 'book' && timedUntil !== null"),
+    'the booker sees two minutes counted down; an edit shows none')
+  ok(client.includes("if (t < timedUntil || savingNow.current) return") && client.includes("'Your two minutes ran out — tap the time again to carry on.'"),
+    '  …and at nought the booking closes and the time unlocks, never mid-save')
+  const hookSrc = read('app/trip/[tripCode]/teesheet/useTeeFreeze.ts')
+  ok(hookSrc.includes('if (f && !f.timed) send({ ...f, until: Date.now() + LOCK_MS })'),
+    '  …an edit\'s lock kept alive by each change, a booking\'s running its two minutes')
   ok(/freeze\.hold\(round\.id, slotIndex\)[\s\S]{0,400}finally \{\s*freeze\.release\(\)/.test(client),
     'a ✕ on the sheet writes under the time\'s freeze too, so every write tells the other phones to look again')
   ok(client.includes("lifted => { if (lifted === roundId) router.refresh() }"), '  …which they do when it thaws')

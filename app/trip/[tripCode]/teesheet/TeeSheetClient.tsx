@@ -28,7 +28,7 @@ import { createTeam, deleteTeam, refreshTeamName } from '../teams/teamWrites'
 import { PRESET_COLORS } from '@/lib/teamColors'
 import { putt, reducedMotion } from '@/lib/motion'
 import { HEADER_H } from '@/app/components/headerMetrics'
-import { frozenSlots } from '@/lib/teeFreeze'
+import { frozenSlots, lockClock } from '@/lib/teeFreeze'
 import { useTeeFreeze } from './useTeeFreeze'
 import { FIELD, buttonClass, cardClass, optionClass } from '@/app/components/ui'
 import { courseLabel } from '@/lib/courseDirectory'
@@ -226,9 +226,10 @@ export default function TeeSheetClient({
   const shortOf = useMemo(() => boardNames(players), [players])
 
   /**
-   * A tee time is frozen while one phone books it (Ross, 1 Nov 2026: it
+   * A tee time is locked while one phone books it (Ross, 1 Nov 2026: it
    * does not matter whose, only that it is) — lib/teeFreeze.ts. Every
-   * other phone sees it at once; when it thaws they read the sheet again.
+   * other phone sees "Locked" at once; when it thaws they read the sheet
+   * again. A booking's lock is two minutes, counted down for the booker.
    */
   const router = useRouter()
   const freeze = useTeeFreeze(
@@ -238,21 +239,40 @@ export default function TeeSheetClient({
     slot => {
       setBooking(null)
       setSearch('')
-      setError({ slot, message: 'Somebody else is booking this time — try again in a moment.' })
+      setError({ slot, message: 'Locked — try again in a moment.' })
     },
   )
-  // A freeze lets go after a couple of quiet minutes, so the sheet looks
-  // again now and then while another phone holds one.
+  // A lock runs out, so the sheet looks again now and then while another
+  // phone holds one.
   const [now, setNow] = useState(() => Date.now())
   const othersFreezing = freeze.freezes.some(f => f.key !== freeze.key)
   useEffect(() => {
     if (!othersFreezing) return
-    const timer = setInterval(() => setNow(Date.now()), 15_000)
+    const timer = setInterval(() => setNow(Date.now()), 5_000)
     return () => clearInterval(timer)
   }, [othersFreezing])
-  const frozen = round
-    ? frozenSlots(freeze.freezes, round.id, freeze.key, Math.max(now, ...freeze.freezes.map(f => f.seen)))
-    : new Set<number>()
+  const frozen = round ? frozenSlots(freeze.freezes, round.id, freeze.key, now) : new Set<number>()
+
+  // The booker's two minutes, counted down each second; at nought the
+  // booking closes and the time unlocks — never in the middle of a save.
+  const savingNow = useRef(false)
+  useEffect(() => { savingNow.current = saving }, [saving])
+  const timedUntil = freeze.held?.timed ? freeze.held.until : null
+  const timedSlot = freeze.held?.slot ?? null
+  const { release } = freeze
+  useEffect(() => {
+    if (timedUntil === null || timedSlot === null) return
+    const timer = setInterval(() => {
+      const t = Date.now()
+      setNow(t)
+      if (t < timedUntil || savingNow.current) return
+      setBooking(null)
+      setSearch('')
+      release()
+      setError({ slot: timedSlot, message: 'Your two minutes ran out — tap the time again to carry on.' })
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [timedUntil, timedSlot, release])
 
   /**
    * This round's teams, kept in state because a day's are made here.
@@ -656,20 +676,22 @@ export default function TeeSheetClient({
 
   /**
    * Whether this phone may open a time: not while another phone has it
-   * frozen. Opening it freezes it here.
+   * locked. Opening it locks it here — a booking for two minutes,
+   * counted down (`timed`); an edit while it is being changed.
    */
-  function claim(slot: number): boolean {
+  function claim(slot: number, timed: boolean): boolean {
     if (!round) return false
     if (frozen.has(slot)) {
-      setError({ slot, message: 'Somebody else is booking this time — try again in a moment.' })
+      setError({ slot, message: 'Locked — try again in a moment.' })
       return false
     }
-    freeze.hold(round.id, slot)
+    freeze.hold(round.id, slot, timed)
+    setNow(Date.now())
     return true
   }
 
   function openBooking(slot: number, rows: SeatCell[][], seat: number, target: SeatTarget) {
-    if (!claim(slot)) return
+    if (!claim(slot, true)) return
     let draft = draftFrom(rows)
     if (selfPick && meId && !assignedIds.has(meId)) {
       const unit = allUnits.find(u => idsOf(u).includes(meId))
@@ -695,7 +717,7 @@ export default function TeeSheetClient({
 
   /** Your own time opened to change: leave with your ✕, or put somebody in. */
   function openEdit(slot: number, rows: SeatCell[][]) {
-    if (!claim(slot)) return
+    if (!claim(slot, false)) return
     setError(null)
     setSearch('')
     setBooking({ slot, draft: draftFrom(rows), tapped: null, removed: [], start: onTime(rows), purpose: 'edit' })
@@ -762,7 +784,7 @@ export default function TeeSheetClient({
     freeze.release()
   }
 
-  // Every change to the booking keeps its freeze from going idle.
+  // Every change to an edit keeps its lock from going idle.
   const { touch } = freeze
   useEffect(() => { if (booking) touch() }, [booking, touch])
 
@@ -1118,7 +1140,7 @@ export default function TeeSheetClient({
                     )}
 
                     {isFrozen && (
-                      <p className="t-cap text-ink/65 mt-2" role="status">Being booked — one moment.</p>
+                      <p className="t-cap text-ink/65 mt-2" role="status">Locked</p>
                     )}
 
                     {!here && !isFrozen && selfPick && isMine && (
@@ -1153,6 +1175,11 @@ export default function TeeSheetClient({
                       const picks = here.draft.filter(c => !!c && c !== 'none' && c.isNew).length + here.removed.length
                       return (
                         <div className="mt-3">
+                          {here.purpose === 'book' && timedUntil !== null && (
+                            <p className="t-cap text-ink/65 mb-2 tabular-nums" role="timer">
+                              Locked for you · {lockClock(timedUntil - now)}
+                            </p>
+                          )}
                           {here.purpose !== 'book' && (
                             <p className="t-cap text-ink/80 mb-3 leading-snug">
                               {here.purpose === 'leave'
