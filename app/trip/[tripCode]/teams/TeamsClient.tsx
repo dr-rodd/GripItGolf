@@ -27,7 +27,7 @@ import { type TeamRow, moveMembers, refreshTeamName, deleteTeam } from './teamWr
  */
 export default function TeamsClient({
   tripId, tripCode, isTrip, passcodeHash, sheets, teams: initialTeams,
-  memberships: initialMemberships, players, meId, addedRecorded,
+  memberships: initialMemberships, players, meId, addedRecorded, myTeeTimes = {},
 }: {
   tripId: string
   tripCode: string
@@ -42,6 +42,8 @@ export default function TeamsClient({
   meId: string | null
   /** Who added whom is recorded (migration 066). */
   addedRecorded: boolean
+  /** Per list, the tee time this player's partnership is booked on, for the next round to come. */
+  myTeeTimes?: Record<string, { roundId: string; slot: number; roundNumber: number }>
 }) {
   const router = useRouter()
   // The organiser's PIN unlock, read after mount — sessionStorage does not
@@ -177,15 +179,32 @@ export default function TeamsClient({
                       ? 'Add a partner'
                       : 'See your team'}
                   </Link>
-                  <button
-                    type="button"
-                    onClick={() => leave(sheet, myTeam)}
-                    disabled={busy}
-                    className={buttonClass('quiet', false, true)}
-                  >
-                    Leave
-                  </button>
+                  {/* Booked on a tee sheet, a partnership is changed there —
+                      leave on the sheet, and put somebody in your place
+                      (Ross, 1 Nov 2026). Otherwise Leave is here. */}
+                  {sheet.together && myTeeTimes[sheet.id] ? (
+                    <Link
+                      href={`/trip/${tripCode}/teesheet?round=${encodeURIComponent(myTeeTimes[sheet.id].roundId)}&edit=${myTeeTimes[sheet.id].slot}`}
+                      className={buttonClass('quiet', false, true)}
+                    >
+                      Leave
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => leave(sheet, myTeam)}
+                      disabled={busy}
+                      className={buttonClass('quiet', false, true)}
+                    >
+                      Leave
+                    </button>
+                  )}
                 </div>
+                {sheet.together && myTeeTimes[sheet.id] && (
+                  <p className="t-cap text-ink/65 mt-2 leading-snug">
+                    Your {sheet.noun.one} is on Round {myTeeTimes[sheet.id].roundNumber}&apos;s tee sheet — leaving takes you to your time there, so you can put somebody in your place.
+                  </p>
+                )}
               </div>
             )}
 

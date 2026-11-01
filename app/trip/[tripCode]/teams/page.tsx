@@ -4,6 +4,7 @@ import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { MAIN_SET } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { pickerSheets, type PickerMember } from '@/lib/teamPicker'
+import { roundPartnership } from '@/lib/partnerships'
 import { readAllRows } from '@/lib/allRows'
 import BackButton from '@/app/components/BackButton'
 import TripTeamsClient from './TripTeamsClient'
@@ -44,13 +45,16 @@ export default async function TripTeamsPage({
 
   // The kind alongside, not inside: a named `kind` would fail this select
   // on an un-migrated database — the note on fetchTripKind.
-  const [kind, { data: trip, error: tripError }] = await Promise.all([
+  const [kind, { data: trip, error: tripError }, viewerPlayerId] = await Promise.all([
     fetchTripKind(tripCode),
     supabase
       .from('trips')
       .select('id, trip_code, name, formats, leaderboards, team_scoring, settings_passcode_hash')
       .eq('trip_code', tripCode)
       .single(),
+    // Who this device claims to be — the picker's identity, a cookie read.
+    // A stranger is an ordinary answer, pointed at the players screen.
+    linkedPlayerId(tripCode),
   ])
   const event = isEvent(kind)
 
@@ -59,7 +63,7 @@ export default async function TripTeamsPage({
 
   const boards = boardsForTrip(trip)
 
-  const [teamsRes, playersRes, memberships, viewerPlayerId, permsRes, addedRes, roundsRes] = await Promise.all([
+  const [teamsRes, playersRes, memberships, permsRes, addedRes, roundsRes, myTeeRes] = await Promise.all([
     supabase.from('teams')
       .select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
     supabase
@@ -69,9 +73,6 @@ export default async function TripTeamsPage({
       .eq('is_composite', false)
       .order('name'),
     fetchMemberships(trip.id),
-    // Who this device claims to be — the picker's identity. A stranger is
-    // an ordinary answer, pointed at the players screen.
-    linkedPlayerId(tripCode),
     // Its own query, never the main select: pre-049 the column does not
     // exist, this errors, and self-assign simply reads at its default off.
     supabase
@@ -90,7 +91,13 @@ export default async function TripTeamsPage({
       m => `${m.team_set}|${m.player_id}`,
     ),
     // The rounds, so each list can say whether its teams go out together.
-    supabase.from('rounds').select('id').eq('trip_id', trip.id),
+    supabase.from('rounds').select('id, round_number, scheduled_date').eq('trip_id', trip.id),
+    // Where this phone's player stands on the tee sheets — leaving a
+    // partnership booked on one happens there (Ross, 1 Nov 2026). Fail-soft:
+    // before migration 050 there is nowhere they could be booked.
+    viewerPlayerId
+      ? supabase.from('tee_assignments').select('round_id, slot_index').eq('trip_id', trip.id).eq('player_id', viewerPlayerId)
+      : Promise.resolve({ data: [], error: null }),
   ])
 
   if (teamsRes.error) console.error('TripTeamsPage teams query failed:', teamsRes.error)
@@ -169,6 +176,26 @@ export default async function TripTeamsPage({
   const sheets = pickerSheets(boards, ((roundsRes.data ?? []) as { id: string }[]).map(r => r.id), largestOn)
   const meId = viewerPlayerId && players.some(p => p.id === viewerPlayerId) ? viewerPlayerId : null
 
+  // The tee time each of this player's partnerships is booked on, for the
+  // next round still to come: Leave sends them there, to leave it on the
+  // sheet and put somebody in their place (Ross, 1 Nov 2026).
+  const rounds = (roundsRes.data ?? []) as { id: string; round_number: number; scheduled_date: string | null }[]
+  const today = new Date().toISOString().slice(0, 10)
+  const myTeeTimes: Record<string, { roundId: string; slot: number; roundNumber: number }> = {}
+  if (meId) {
+    for (const a of (myTeeRes.data ?? []) as { round_id: string; slot_index: number }[]) {
+      const r = rounds.find(x => x.id === a.round_id)
+      if (!r || (r.scheduled_date && r.scheduled_date.slice(0, 10) < today)) continue
+      const first = roundPartnership(boards, r.id)
+      const p = first && roundPartnership(boards, r.id, largestOn(first.sheet))
+      if (!p) continue
+      const held = myTeeTimes[p.sheet]
+      if (!held || r.round_number < held.roundNumber) {
+        myTeeTimes[p.sheet] = { roundId: r.id, slot: a.slot_index, roundNumber: r.round_number }
+      }
+    }
+  }
+
   // A claimed player joining one of the organiser's tags — a different verb
   // from forming a team (lib/tagBoards.ts), and on its own card above them.
   const tags = eventTags(teams)
@@ -215,6 +242,7 @@ export default async function TripTeamsPage({
           players={players.map(p => ({ id: p.id, name: p.name }))}
           meId={meId}
           addedRecorded={!addedRes.error}
+          myTeeTimes={myTeeTimes}
         />
       </div>
       <SupportLink className="px-4 pb-12" />

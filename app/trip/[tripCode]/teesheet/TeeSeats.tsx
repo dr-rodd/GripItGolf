@@ -114,8 +114,10 @@ export default function TeeSeats({
     next: number | null
     /** What the next seat is called — "Partner", "Next". */
     nextLabel: string
-    /** This booking's own picks, which can come out again. */
+    /** This booking's own picks, worn in the chosen look. */
     isNew: (seat: number) => boolean
+    /** Who can come off the time here: this booking's picks, and those this phone may remove. */
+    mayTakeOut: (seat: number) => boolean
     onTakeOut: (seat: number) => void
     /** Tapping another open seat moves where the next pick goes. */
     onChoose: (seat: number) => void
@@ -159,7 +161,7 @@ export default function TeeSeats({
         }
         const fresh = !!booking?.isNew(i)
         const remove = booking
-          ? (fresh ? { label: `Take ${cell.player.name} out`, onRemove: () => booking.onTakeOut(i) } : null)
+          ? (booking.mayTakeOut(i) ? { label: `Take ${cell.player.name} off this time`, onRemove: () => booking.onTakeOut(i) } : null)
           : removeFor?.(cell) ?? null
         const h = handicapOf(cell.player.id)
         return (

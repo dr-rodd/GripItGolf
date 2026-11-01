@@ -14,7 +14,7 @@ import {
 } from '@/lib/teeSheet'
 import {
   type DraftSeat, type BookingLink,
-  draftFrom, nextSeat, placeUnit, takeOut, playingWith, draftRows, bookingPlan,
+  draftFrom, nextSeat, placeUnit, takeOut, vacate, playingWith, draftRows, bookingPlan,
 } from '@/lib/teeBooking'
 import { joinNames } from '@/lib/matchplayEntrants'
 import {
@@ -90,7 +90,15 @@ type Round = {
 type Assignment = { round_id: string; player_id: string; slot_index: number; booked_by?: string | null }
 
 /** A tee time being booked: which, its draft seats, and a seat the booker tapped. */
-type Booking = { slot: number; draft: DraftSeat[]; tapped: number | null }
+type Booking = {
+  slot: number
+  draft: DraftSeat[]
+  tapped: number | null
+  /** Players already on the time taken off it in this booking — out of their partnership too. */
+  removed: string[]
+  /** Opened from the Teams page to leave a partnership: say how. */
+  leaving: boolean
+}
 
 /** How long the tee time takes to lift to the top — a wizard step's figure. */
 const LIFT_MS = 340
@@ -124,7 +132,7 @@ export default function TeeSheetClient({
   roundTeams, tagOf, playingForTags = false,
   fieldMayEdit, fieldMaySet = false, passcodeHash = null,
   storageReady = true, meId = null, initialRoundId = null, isTrip = false, bookerRecorded = false,
-  addedRecorded = false,
+  addedRecorded = false, editSlot = null,
 }: {
   tripId: string
   tripCode: string
@@ -150,6 +158,12 @@ export default function TeeSheetClient({
   meId?: string | null
   /** The round to open on — the wizard sends people back to the one they made. */
   initialRoundId?: string | null
+  /**
+   * A tee time to open for changing, on arrival — the Teams page sends a
+   * player leaving a partnership here, to do it on the sheet and put a
+   * replacement in (Ross, 1 Nov 2026).
+   */
+  editSlot?: number | null
   /** A trip's sheet: its lead player and passcode, never an organiser and PIN. */
   isTrip?: boolean
   /**
@@ -349,9 +363,9 @@ export default function TeeSheetClient({
     return false
   }
 
-  /** One or several players out — a solo's ✕, or a linked block's. */
-  async function removePlayers(slotIndex: number, playerIds: string[]) {
-    if (!round) return
+  /** Players off the time in the database — the partnerships are the caller's. */
+  async function deleteAssignments(slotIndex: number, playerIds: string[]): Promise<boolean> {
+    if (!round) return false
     setError(null)
     const ids = new Set(playerIds)
     const prev = assignments
@@ -368,53 +382,68 @@ export default function TeeSheetClient({
     if (err) {
       if (!(await resyncRound())) setAssignments(prev)
       calmError(slotIndex, err, playerIds.length > 1 ? 'remove the team' : 'remove the player')
-      return
+      return false
     }
-    await leaveRoundTeams(slotIndex, playerIds)
+    return true
   }
 
   /**
-   * Off the time and out of the round's team with it (Ross, 27 Oct 2026:
-   * the organiser removing a player "will remove them from the
-   * partnership"). Only where the round's partnerships are its own — the
-   * group on the time is the team. A partnership kept for the whole event
-   * leaves the time as one block and stays a partnership.
-   *
-   * A team left with one player is no team: they go back to a name on the
-   * time, for whoever joins it next to make a team with.
+   * One or several players out — a solo's ✕, or a linked block's. Off a
+   * round whose partnerships are its own they leave its team with it (Ross,
+   * 27 Oct 2026: the organiser removing a player "will remove them from the
+   * partnership"); a partnership kept for the whole event leaves the time as
+   * one block and stays a partnership.
    */
-  async function leaveRoundTeams(slotIndex: number, playerIds: string[]) {
+  async function removePlayers(slotIndex: number, playerIds: string[]) {
+    if (!(await deleteAssignments(slotIndex, playerIds))) return
     const info = roundTeamInfo
     if (!round || !info?.isDay) return
-    const leaving = new Set(playerIds.filter(id => info.teamOf[id]))
-    if (leaving.size === 0) return
-    const next = { ...info.teamOf }
-    for (const teamId of new Set([...leaving].map(id => info.teamOf[id].teamId))) {
-      const before = Object.keys(info.teamOf).filter(id => info.teamOf[id].teamId === teamId)
+    const next = await leaveTeams(slotIndex, playerIds, info.teamOf, info)
+    if (next) setTeamsByRound(prev => ({ ...prev, [round.id]: { ...info, teamOf: next } }))
+  }
+
+  /**
+   * Players out of their partnerships, on a copy of the round's team map,
+   * returned — or null where a write failed (said in the slot). On a
+   * round's own sheet a team left with one is no team: its last player
+   * goes back to a name on the time for whoever joins it next. On an
+   * event-long sheet the one left keeps the team, waiting for the
+   * replacement that joins them.
+   */
+  async function leaveTeams(
+    slotIndex: number,
+    playerIds: string[],
+    teamOf: RoundTeams['teamOf'],
+    info: RoundTeams,
+  ): Promise<RoundTeams['teamOf'] | null> {
+    const leaving = new Set(playerIds.filter(id => teamOf[id]))
+    const next = { ...teamOf }
+    for (const teamId of new Set([...leaving].map(id => teamOf[id].teamId))) {
+      const before = Object.keys(teamOf).filter(id => teamOf[id].teamId === teamId)
       const after = before.filter(id => !leaving.has(id))
-      const out = after.length < 2 ? before : before.filter(id => leaving.has(id))
-      for (const id of out) {
+      const dissolve = after.length < (info.isDay ? 2 : 1)
+      for (const id of dissolve ? before : before.filter(id => leaving.has(id))) {
         const failure = await setTeam(tripId, id, info.sheet, null)
         if (failure) {
           calmError(slotIndex, failure.error as { message?: string; code?: string }, 'take them out of their team')
-          return
+          return null
         }
         delete next[id]
       }
-      if (after.length < 2) {
+      if (dissolve) {
         await deleteTeam({ tripId, sheet: info.sheet, teamId, memberIds: [] })
         continue
       }
       const stored = await refreshTeamName({
         tripId,
-        team: { id: teamId, name: info.teamOf[before[0]].stored },
+        team: { id: teamId, name: teamOf[before[0]].stored },
         before: before.map(id => nameOf.get(id) ?? ''),
         after: after.map(id => nameOf.get(id) ?? ''),
       })
       const teamName = partnershipName({ name: stored }, after.map(id => ({ id, name: nameOf.get(id) ?? '' })), shortOf)
       for (const id of after) next[id] = { teamId, teamName, stored }
     }
-    setTeamsByRound(prev => ({ ...prev, [round.id]: { ...info, teamOf: next } }))
+    return next
   }
 
   /**
@@ -425,17 +454,22 @@ export default function TeeSheetClient({
    * team named from its players and coloured by their tag where they have
    * one. Somebody moved out of another team leaves it renamed, or gone
    * where nobody is left — and on a round's own sheet a team left with one
-   * is no team.
+   * is no team. Works on a copy of the round's team map and returns it, or
+   * null where a write failed.
    *
    * Who put each player in is recorded (migration 066): this phone's player
    * for their own picks, nobody for the organiser's, and nobody for a player
    * who was already on the time — they are in by where they stood, so the
    * newcomer cannot take them out again.
    */
-  async function linkPartnerships(slotIndex: number, links: BookingLink[], picked: ReadonlySet<string>): Promise<boolean> {
-    const info = roundTeamInfo
-    if (!round || !info) return true
-    const teamOf = { ...info.teamOf }
+  async function linkPartnerships(
+    slotIndex: number,
+    links: BookingLink[],
+    picked: ReadonlySet<string>,
+    start: RoundTeams['teamOf'],
+    info: RoundTeams,
+  ): Promise<RoundTeams['teamOf'] | null> {
+    const teamOf = { ...start }
     const membersOf = (teamId: string) => Object.keys(teamOf).filter(id => teamOf[id].teamId === teamId)
     const names = (ids: string[]) => ids.map(id => nameOf.get(id) ?? '')
     const shown = (stored: string, ids: string[]) =>
@@ -450,7 +484,7 @@ export default function TeeSheetClient({
         const made = await createTeam(tripId, info.sheet, madeTeamName(names(link.members)), colour)
         if (!made) {
           setError({ slot: slotIndex, message: 'Booked — but could not link them as a team. Try again from their seats.' })
-          return false
+          return null
         }
         teamId = made.id
         stored = made.name
@@ -463,7 +497,7 @@ export default function TeeSheetClient({
           addedRecorded ? (picked.has(id) && !organiser ? meId : null) : undefined)
         if (failure) {
           calmError(slotIndex, failure.error as { message?: string; code?: string }, 'link the team')
-          return false
+          return null
         }
         if (was) leaving.set(was, [...(leaving.get(was) ?? []), id])
         teamOf[id] = { teamId, teamName: '', stored }
@@ -488,8 +522,7 @@ export default function TeeSheetClient({
       }
       for (const id of after) teamOf[id] = { teamId, teamName: shown(stored, after), stored }
     }
-    setTeamsByRound(prev => ({ ...prev, [round.id]: { ...info, teamOf } }))
-    return true
+    return teamOf
   }
 
   // How this round's tee times bind (lib/partnerships.ts `teeMode`): pairs,
@@ -584,7 +617,7 @@ export default function TeeSheetClient({
     }
     setError(null)
     setSearch('')
-    setBooking({ slot, draft, tapped: draft[seat] === null ? seat : null })
+    setBooking({ slot, draft, tapped: draft[seat] === null ? seat : null, removed: [], leaving: false })
     liftTo(slot)
   }
 
@@ -610,23 +643,59 @@ export default function TeeSheetClient({
     })
   }
 
+  // Arriving to change a partnership: that time opened and lifted, once.
+  // Nothing is written until Save, so opening it again on a refresh is
+  // harmless.
+  const editOpened = useRef(false)
+  useEffect(() => {
+    if (editOpened.current || editSlot === null || !live || !round || round.id !== initialRoundId) return
+    editOpened.current = true
+    setBooking({ slot: editSlot, draft: draftFrom(rowsFor(slots.get(editSlot) ?? [])), tapped: null, removed: [], leaving: true })
+    liftTo(editSlot)
+    // Once, on arrival: what it reads is what arrived with it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function closeBooking() {
     setBooking(null)
     setSearch('')
   }
 
-  /** Saving the draft: the bookings first, then the partnerships the seats make. */
+  /**
+   * Saving the draft, in order: anybody taken off comes off the time and
+   * out of their partnership (a knockout's pairings stay as drawn); then
+   * the bookings, through the sheet's own `addPlayers`; then the
+   * partnerships the seats now make.
+   */
   async function saveBooking() {
-    if (!booking || saving) return
-    const sizeOf = (teamId: string) => [...teamMap.values()].filter(t => t.teamId === teamId).length
-    const { book, links } = bookingPlan(booking.draft, mode, fixed, sizeOf)
-    if (book.length === 0 && links.length === 0) { closeBooking(); return }
+    if (!booking || saving || !round) return
+    const info = roundTeamInfo
     setSaving(true)
+    let teamOf = info?.teamOf ?? {}
+    if (booking.removed.length > 0) {
+      if (!(await deleteAssignments(booking.slot, booking.removed))) { setSaving(false); return }
+      if (info && !fixed) {
+        const after = await leaveTeams(booking.slot, booking.removed, teamOf, info)
+        if (!after) { setSaving(false); return }
+        teamOf = after
+      }
+    }
+    // Plan against the teams as they now stand: a partner left waiting is
+    // still in their team on an event-long sheet, and in none on a day's.
+    const draft = booking.draft.map(c => (c && c !== 'none' ? { ...c, teamId: teamOf[c.id]?.teamId ?? null } : c))
+    const sizeOf = (teamId: string) => Object.values(teamOf).filter(t => t.teamId === teamId).length
+    const { book, links } = bookingPlan(draft, mode, fixed, sizeOf)
     const landed = book.length === 0 || await addPlayers(booking.slot, book)
-    const linked = landed && (links.length === 0 || await linkPartnerships(booking.slot, links, new Set(book)))
+    const linked = landed && info && links.length > 0
+      ? await linkPartnerships(booking.slot, links, new Set(book), teamOf, info)
+      : teamOf
+    if (info && (booking.removed.length > 0 || links.length > 0)) {
+      setTeamsByRound(prev => ({ ...prev, [round.id]: { ...info, teamOf: linked ?? teamOf } }))
+    }
     setSaving(false)
-    if (linked) closeBooking()
+    if (landed && linked) closeBooking()
   }
+
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
@@ -886,7 +955,19 @@ export default function TeeSheetClient({
                           nextLabel: mode === 'pairs' && next !== null && playingWith(here.draft, mode, next).length > 0
                             ? 'Partner' : 'Next',
                           isNew: seat => { const c = here.draft[seat]; return !!c && c !== 'none' && c.isNew },
-                          onTakeOut: seat => setBooking({ ...here, draft: takeOut(here.draft, seat), tapped: seat }),
+                          // This booking's picks, and anybody already on the
+                          // time this phone may take off (medium security).
+                          mayTakeOut: seat => {
+                            const c = here.draft[seat]
+                            return !!c && c !== 'none' && (c.isNew || mayRemove(c.id))
+                          },
+                          onTakeOut: seat => {
+                            const c = here.draft[seat]
+                            if (!c || c === 'none') return
+                            if (c.isNew) { setBooking({ ...here, draft: takeOut(here.draft, seat), tapped: seat }); return }
+                            const { draft, off } = vacate(here.draft, seat)
+                            setBooking({ ...here, draft, tapped: seat, removed: off ? [...here.removed, off] : here.removed })
+                          },
                           onChoose: seat => setBooking({ ...here, tapped: seat }),
                         }}
                       />
@@ -947,9 +1028,14 @@ export default function TeeSheetClient({
                         .filter(u => !idsOf(u).some(id => inDraft.has(id)))
                         .filter(u => mayBookOthers || idsOf(u).includes(meId ?? ''))
                       const shownUnits = offered.filter(u => unitMatches(u, search))
-                      const picks = here.draft.filter(c => !!c && c !== 'none' && c.isNew).length
+                      const picks = here.draft.filter(c => !!c && c !== 'none' && c.isNew).length + here.removed.length
                       return (
                         <div className="mt-3">
+                          {here.leaving && (
+                            <p className="t-cap text-ink/80 mb-3 leading-snug">
+                              Take yourself off with your ✕, and put in whoever is taking your place.
+                            </p>
+                          )}
                           <div className="flex gap-2 mb-3">
                             <button
                               type="button"

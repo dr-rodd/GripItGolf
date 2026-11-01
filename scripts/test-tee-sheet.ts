@@ -783,7 +783,7 @@ section('Partnerships are made at the sheet, through the one writer')
     'a mixed-tag group is refused before the team exists')
   ok(client.includes('madeTeamName(names(link.members))'),
     'named from its members — a pairing made on the morning has no other name')
-  ok(client.includes('await leaveRoundTeams(slotIndex, playerIds)'),
+  ok(client.includes('const next = await leaveTeams(slotIndex, playerIds, info.teamOf, info)') && client.includes("if (!round || !info?.isDay) return"),
     'and taking somebody off a round\'s own time takes them out of its team')
 
   const page = read('app/trip/[tripCode]/teesheet/page.tsx')

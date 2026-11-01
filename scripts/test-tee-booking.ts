@@ -12,7 +12,7 @@
 import fs from 'fs'
 import { seatGrid, seatTargets, listName, type SlotGroup, type SeatCell } from '../lib/teeSheet'
 import {
-  draftFrom, nextSeat, placeUnit, takeOut, playingWith, draftRows, bookingPlan, type DraftSeat,
+  draftFrom, nextSeat, placeUnit, takeOut, vacate, playingWith, draftRows, bookingPlan, type DraftSeat,
 } from '../lib/teeBooking'
 import { teeMode, partnershipsFixed, roundPartnership } from '../lib/partnerships'
 import type { Leaderboard } from '../lib/leaderboards'
@@ -130,6 +130,19 @@ section('Booking a pairs time: you, then your partner, then the next pairing')
     'and does not fit where no row is free')
 }
 
+section('Changing a partnership on the sheet: off, and a replacement in')
+{
+  const d = draftFrom(seatGrid([team('P', 'ross', 'dave')], 4, 'pairs'))
+  const { draft: left, off } = vacate(d, 0)
+  eq(off, 'ross', 'somebody already on the time comes off it')
+  eq(shape(left), ['_', 'dave', '_', '_'], '  …leaving their seat free')
+  eq(nextSeat(left, 'pairs', 0), 0, '  …for the replacement')
+  const replaced = placeUnit(left, [u('kate')], 'pairs', 0)!
+  eq(bookingPlan(replaced, 'pairs', false, t => (t === 'P' ? 1 : 0)).links, [{ members: ['kate', 'dave'], teamId: 'P' }],
+    'the replacement joins the partner left waiting, in the same team')
+  eq(vacate(replaced, 0).off, null, 'a pick of this booking\'s own just comes back out')
+}
+
 section('Booking a team time, and a separate one')
 {
   let d = draftFrom(seatGrid([solo('a')], 4, 'team'))
@@ -183,6 +196,30 @@ section('The sheet books in place')
     'the time lifts to the top on the putt curve, at once under Reduce Motion')
   const seats = read('app/trip/[tripCode]/teesheet/TeeSeats.tsx')
   ok(seats.includes('press rounded-tile border border-dashed border-line-strong'), 'a + pushes down under the thumb')
+}
+
+section('Leaving a partnership happens at your tee time (stage 2)')
+{
+  const teamsPage = read('app/trip/[tripCode]/teams/page.tsx')
+  ok(teamsPage.includes(".from('tee_assignments').select('round_id, slot_index').eq('trip_id', trip.id).eq('player_id', viewerPlayerId)"),
+    'the Teams page asks where this player stands on the tee sheets')
+  ok(teamsPage.includes('r.scheduled_date.slice(0, 10) < today') && teamsPage.includes('roundPartnership(boards, r.id'),
+    '  …for the next round to come, on the list that round\'s partnerships are kept on')
+  const teams = read('app/trip/[tripCode]/teams/TeamsClient.tsx')
+  ok(teams.includes('/teesheet?round=${encodeURIComponent(myTeeTimes[sheet.id].roundId)}&edit=${myTeeTimes[sheet.id].slot}'),
+    'Leave on a booked partnership goes to the tee time (Ross, 1 Nov 2026)')
+  ok(teams.includes('onClick={() => leave(sheet, myTeam)}'), '  …and is the same Leave as ever where none is booked')
+
+  const sheetPage = read('app/trip/[tripCode]/teesheet/page.tsx')
+  ok(sheetPage.includes('editSlot={editSlot}'), 'the sheet takes the tee time to open')
+  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  ok(client.includes('removed: [], leaving: true') && client.includes('Take yourself off with your ✕'),
+    '  …opens it, lifted, saying how')
+  ok(client.includes('const { draft, off } = vacate(here.draft, seat)'), 'anybody this phone may remove comes off in the booking')
+  const order = ['deleteAssignments(booking.slot, booking.removed)', 'leaveTeams(booking.slot, booking.removed', 'addPlayers(booking.slot, book)', 'linkPartnerships(booking.slot, links']
+  ok(order.every((x, i) => client.indexOf(x) >= 0 && (i === 0 || client.indexOf(x) > client.indexOf(order[i - 1]))),
+    'saving: off the time and out of the partnership, then the bookings, then the new partnerships')
+  ok(client.includes('if (info && !fixed) {'), '  …a knockout\'s pairings stay as drawn')
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

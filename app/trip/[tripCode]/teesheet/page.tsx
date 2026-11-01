@@ -37,9 +37,11 @@ export const dynamic = 'force-dynamic'
  */
 export default async function TeeSheetPage({ params, searchParams }: {
   params: Promise<{ tripCode: string }>
-  searchParams: Promise<{ round?: string }>
+  searchParams: Promise<{ round?: string; edit?: string }>
 }) {
-  const [{ tripCode }, { round: initialRoundId }] = await Promise.all([params, searchParams])
+  const [{ tripCode }, { round: initialRoundId, edit }] = await Promise.all([params, searchParams])
+  // A tee time to open for changing, from the Teams page (stage 2).
+  const editSlot = initialRoundId && edit && /^\d{1,3}$/.test(edit) ? Number(edit) : null
 
   // The kind alongside, for the words only — a trip's sheet speaks of its
   // lead player and passcode.
@@ -322,6 +324,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
       meId={me && isConfirmed(me) ? me.id : null}
       initialRoundId={initialRoundId ?? null}
       addedRecorded={!addedResult.error}
+      editSlot={editSlot}
       isTrip={!isEvent(kind)}
       passcodeHash={(trip.settings_passcode_hash as string | null) ?? null}
     />

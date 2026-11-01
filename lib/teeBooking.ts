@@ -100,6 +100,21 @@ export function takeOut(draft: readonly DraftSeat[], at: number): DraftSeat[] {
 }
 
 /**
+ * The draft with somebody already on the time taken off it — leaving their
+ * partnership with it, which is how a partnership is changed on the sheet
+ * (Ross, 1 Nov 2026: leaving one sends a player to their tee time to do it
+ * there, and put a replacement in). Who may is the sheet's medium security,
+ * decided by the screen. Returns the draft and who came off.
+ */
+export function vacate(draft: readonly DraftSeat[], at: number): { draft: DraftSeat[]; off: string | null } {
+  const c = draft[at]
+  if (!c || c === 'none') return { draft: draft.slice(), off: null }
+  const next = draft.slice()
+  next[at] = null
+  return { draft: next, off: c.isNew ? null : c.id }
+}
+
+/**
  * The players who would be playing together with a pick at `at`, for the
  * tag rule — the row on a pairs time, the whole time on a team one, nobody
  * on a separate one.
