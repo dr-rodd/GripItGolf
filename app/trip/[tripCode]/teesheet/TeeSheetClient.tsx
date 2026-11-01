@@ -6,10 +6,9 @@ import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import { hasUnlocked, isLocked } from '@/lib/passcode'
-import { IconUsers } from '@/app/components/icons'
 import {
   type SlotPlayer, type RoundSheet, type SeatCell, type SeatTarget, type PickerUnit,
-  groupSlot, seatGrid, seatTargets, listName, pickerUnits, unitMatches,
+  SEATS_ACROSS, groupSlot, seatGrid, seatTargets, listName, pickerUnits, unitMatches,
   sheetClock, sheetSlots, sheetGroupSize, describeRules, myTee, mayRemoveBooking,
 } from '@/lib/teeSheet'
 import {
@@ -94,10 +93,15 @@ type Booking = {
   slot: number
   draft: DraftSeat[]
   tapped: number | null
-  /** Players already on the time taken off it in this booking — out of their partnership too. */
+  /** Players already on the time taken off it in this booking. */
   removed: string[]
-  /** Opened from the Teams page to leave a partnership: say how. */
-  leaving: boolean
+  /**
+   * Why it is open: a + tapped; your own time's Edit (Ross, 1 Nov 2026: in
+   * place of the old leave button — leave with your ✕, or change it); or from
+   * Leave on the Teams page, to leave a partnership — the one way a
+   * partnership kept for the whole event is left from the sheet.
+   */
+  purpose: 'book' | 'edit' | 'leave'
 }
 
 /** How long the tee time takes to lift to the top — a wizard step's figure. */
@@ -536,13 +540,6 @@ export default function TeeSheetClient({
 
   // This phone's own place.
   const mine = live ? myTee(roundAssignments, meId, live, id => nameOf.get(id) ?? null) : null
-  /** Who leaving takes out of the slot: this player, or their whole linked block. */
-  const myLeavers = (slotPlayers: SlotPlayer[]) => {
-    const t = meId ? teamMap.get(meId) : undefined
-    return together && t
-      ? slotPlayers.filter(p => teamMap.get(p.id)?.teamId === t.teamId).map(p => p.id)
-      : meId ? [meId] : []
-  }
   const setupHref = round ? `/trip/${tripCode}/teesheet/${round.id}/setup` : null
 
   // Who may take a name off, and who may book somebody else on: the
@@ -558,6 +555,12 @@ export default function TeeSheetClient({
 
   /** A tee time's seats, as it stands. */
   const rowsFor = (slotPlayers: SlotPlayer[]) => seatGrid(groupSlot(slotPlayers, teamMap), seatsOnTime, mode)
+
+  /** Whether a player has a partner: a team of one is a person on their own (Ross, 1 Nov 2026). */
+  const partnered = (playerId: string) => {
+    const t = teamMap.get(playerId)?.teamId
+    return !!t && [...teamMap.values()].filter(x => x.teamId === t).length > 1
+  }
 
   /** The units the list offers: players on no time this round, a partnership as one. */
   const allUnits = useMemo(
@@ -595,7 +598,8 @@ export default function TeeSheetClient({
    * a player booking starting in the seat they tapped (with their partners
    * still off the sheet, where they fit), and the time lifted to the top.
    * Joining a player on their own never quietly re-pairs somebody already
-   * partnered — they pick themselves from the list if they mean to.
+   * partnered — they pick themselves from the list if they mean to. A team
+   * of one is nobody's partner yet, so its player joins like anyone else.
    */
   function openBooking(slot: number, rows: SeatCell[][], seat: number, target: SeatTarget) {
     let draft = draftFrom(rows)
@@ -605,7 +609,7 @@ export default function TeeSheetClient({
       if (unit && !unitIssue(unit, draft, seat)) {
         if (target.kind === 'join') {
           const theirs = teamMap.get(target.with)?.teamId ?? null
-          if (fixed ? myTeam !== null && myTeam === theirs : !myTeam || myTeam === theirs) {
+          if (fixed ? myTeam !== null && myTeam === theirs : !partnered(meId) || myTeam === theirs) {
             draft = placeUnit(draft, [{ id: meId, name: nameOf.get(meId) ?? '', teamId: myTeam }], mode, seat) ?? draft
           }
         } else {
@@ -617,8 +621,33 @@ export default function TeeSheetClient({
     }
     setError(null)
     setSearch('')
-    setBooking({ slot, draft, tapped: draft[seat] === null ? seat : null, removed: [], leaving: false })
+    setBooking({ slot, draft, tapped: draft[seat] === null ? seat : null, removed: [], purpose: 'book' })
     liftTo(slot)
+  }
+
+  /** Your own time opened to change: leave with your ✕, or put somebody in. */
+  function openEdit(slot: number, rows: SeatCell[][]) {
+    setError(null)
+    setSearch('')
+    setBooking({ slot, draft: draftFrom(rows), tapped: null, removed: [], purpose: 'edit' })
+    liftTo(slot)
+  }
+
+  /**
+   * Who taking a seat's player off the time takes with them, or null where
+   * this phone may not: this booking's own pick alone; somebody already on
+   * it alone — out of their pairing too — except a partnership kept for the
+   * whole event, which comes off as one block and stays a partnership,
+   * unless this is its player leaving it (from the Teams page).
+   */
+  function takeOff(b: Booking, seat: number): string[] | null {
+    const c = b.draft[seat]
+    if (!c || c === 'none') return null
+    if (c.isNew) return [c.id]
+    const block = together && c.teamId && b.purpose !== 'leave'
+      ? b.draft.flatMap(d => (d && d !== 'none' && !d.isNew && d.teamId === c.teamId ? [d.id] : []))
+      : [c.id]
+    return block.every(mayRemove) ? block : null
   }
 
   /**
@@ -650,7 +679,7 @@ export default function TeeSheetClient({
   useEffect(() => {
     if (editOpened.current || editSlot === null || !live || !round || round.id !== initialRoundId) return
     editOpened.current = true
-    setBooking({ slot: editSlot, draft: draftFrom(rowsFor(slots.get(editSlot) ?? [])), tapped: null, removed: [], leaving: true })
+    setBooking({ slot: editSlot, draft: draftFrom(rowsFor(slots.get(editSlot) ?? [])), tapped: null, removed: [], purpose: 'leave' })
     liftTo(editSlot)
     // Once, on arrival: what it reads is what arrived with it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -663,9 +692,10 @@ export default function TeeSheetClient({
 
   /**
    * Saving the draft, in order: anybody taken off comes off the time and
-   * out of their partnership (a knockout's pairings stay as drawn); then
-   * the bookings, through the sheet's own `addPlayers`; then the
-   * partnerships the seats now make.
+   * out of their partnership — a round's own pairings; an event-long one
+   * only when its player is leaving it, from the Teams page; a knockout's
+   * never, booked as drawn — then the bookings, through the sheet's own
+   * `addPlayers`; then the partnerships the seats now make.
    */
   async function saveBooking() {
     if (!booking || saving || !round) return
@@ -674,7 +704,7 @@ export default function TeeSheetClient({
     let teamOf = info?.teamOf ?? {}
     if (booking.removed.length > 0) {
       if (!(await deleteAssignments(booking.slot, booking.removed))) { setSaving(false); return }
-      if (info && !fixed) {
+      if (info && !fixed && (info.isDay || booking.purpose === 'leave')) {
         const after = await leaveTeams(booking.slot, booking.removed, teamOf, info)
         if (!after) { setSaving(false); return }
         teamOf = after
@@ -778,26 +808,6 @@ export default function TeeSheetClient({
           </div>
         )}
         {organiser && <div className="mb-3" /> }
-
-        {/* The way to the partnerships, where this round plays in them and
-            they are made ahead (a round making its own makes them here, on
-            the sheet). Partnerships are "teams" on screen. */}
-        {together && (
-          <Link
-            href={`/trip/${tripCode}/teams`}
-            className={`flex items-center gap-3 p-4 mb-5 ${cardClass('raised', true)}`}
-          >
-            <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent/[0.14] text-accent-deep flex items-center justify-center">
-              <IconUsers size={16} />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-ink text-sm font-medium">Pick teams</span>
-              <span className="block t-cap text-ink/65 mt-0.5">
-                Each team plays together — it books its tee time as one.
-              </span>
-            </span>
-          </Link>
-        )}
 
         {/* One sheet per round; a one-round event skips the chips. */}
         {rounds.length > 1 && (
@@ -957,16 +967,22 @@ export default function TeeSheetClient({
                           isNew: seat => { const c = here.draft[seat]; return !!c && c !== 'none' && c.isNew },
                           // This booking's picks, and anybody already on the
                           // time this phone may take off (medium security).
-                          mayTakeOut: seat => {
-                            const c = here.draft[seat]
-                            return !!c && c !== 'none' && (c.isNew || mayRemove(c.id))
-                          },
+                          mayTakeOut: seat => takeOff(here, seat) !== null,
                           onTakeOut: seat => {
                             const c = here.draft[seat]
-                            if (!c || c === 'none') return
+                            const ids = takeOff(here, seat)
+                            if (!c || c === 'none' || !ids) return
                             if (c.isNew) { setBooking({ ...here, draft: takeOut(here.draft, seat), tapped: seat }); return }
-                            const { draft, off } = vacate(here.draft, seat)
-                            setBooking({ ...here, draft, tapped: seat, removed: off ? [...here.removed, off] : here.removed })
+                            let draft = here.draft
+                            const removed = [...here.removed]
+                            for (let k = 0; k < draft.length; k++) {
+                              const d = draft[k]
+                              if (!d || d === 'none' || !ids.includes(d.id)) continue
+                              const { draft: after, off } = vacate(draft, k)
+                              draft = after
+                              if (off) removed.push(off)
+                            }
+                            setBooking({ ...here, draft, tapped: seat, removed })
                           },
                           onChoose: seat => setBooking({ ...here, tapped: seat }),
                         }}
@@ -983,11 +999,16 @@ export default function TeeSheetClient({
                         meId={meId}
                         targets={targets}
                         onTarget={(seat, t) => openBooking(i, rows, seat, t)}
-                        removeFor={cell => {
-                          if (cell.teamId && together) {
-                            if (cell.joins.right || cell.joins.up) return null
-                            const block = slotPlayers.filter(p => teamMap.get(p.id)?.teamId === cell.teamId).map(p => p.id)
-                            if (!block.every(mayRemove)) return null
+                        removeFor={(cell, seat) => {
+                          const block = cell.teamId && together
+                            ? slotPlayers.filter(p => teamMap.get(p.id)?.teamId === cell.teamId).map(p => p.id)
+                            : [cell.player.id]
+                          if (block.length > 1) {
+                            // One ✕ for the ticket, on its top right seat.
+                            const seats = rows.flat().flatMap((c, k) => (c.kind === 'player' && block.includes(c.player.id) ? [k] : []))
+                            const rowOf = (k: number) => Math.floor(k / SEATS_ACROSS)
+                            const corner = seats.sort((a, b) => rowOf(a) - rowOf(b) || b - a)[0]
+                            if (seat !== corner || !block.every(mayRemove)) return null
                             return {
                               label: `Remove ${teamMap.get(cell.player.id)?.teamName ?? cell.player.name}`,
                               onRemove: () => removePlayers(i, block),
@@ -1002,10 +1023,10 @@ export default function TeeSheetClient({
                     {!here && selfPick && isMine && (
                       <button
                         type="button"
-                        onClick={() => removePlayers(i, myLeavers(slotPlayers))}
-                        className="t-cap text-ink/65 hover:text-ink transition-colors py-0.5 mt-2"
+                        onClick={() => openEdit(i, rows)}
+                        className="t-cap text-accent-deep hover:text-accent transition-colors py-0.5 mt-2"
                       >
-                        Leave this time
+                        Edit
                       </button>
                     )}
 
@@ -1031,9 +1052,13 @@ export default function TeeSheetClient({
                       const picks = here.draft.filter(c => !!c && c !== 'none' && c.isNew).length + here.removed.length
                       return (
                         <div className="mt-3">
-                          {here.leaving && (
+                          {here.purpose !== 'book' && (
                             <p className="t-cap text-ink/80 mb-3 leading-snug">
-                              Take yourself off with your ✕, and put in whoever is taking your place.
+                              {here.purpose === 'leave'
+                                ? 'Take yourself off with your ✕, and put in whoever is taking your place.'
+                                : mayBookOthers
+                                  ? 'Take yourself off with your ✕ to leave, or put somebody in from the list.'
+                                  : 'Take yourself off with your ✕ to leave.'}
                             </p>
                           )}
                           <div className="flex gap-2 mb-3">
@@ -1089,11 +1114,7 @@ export default function TeeSheetClient({
                                       }`}
                                     >
                                       <span className="block t-label text-ink truncate">{label}</span>
-                                      {(u.kind !== 'solo' || issue) && (
-                                        <span className="block t-cap text-ink/65">
-                                          {issue ?? (ids.length === 2 ? 'Partners — go on together' : 'A team — goes on together')}
-                                        </span>
-                                      )}
+                                      {issue && <span className="block t-cap text-ink/65">{issue}</span>}
                                     </button>
                                   </li>
                                 )

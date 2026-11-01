@@ -268,11 +268,14 @@ That is why parts take parameters (`dense`, `compact`, `shape`, `variant`).
   `line-strong`, `rounded-tile`; your own `accent-tint`). Partners are one
   ticket: no gap, a 1px `line` seam, and an 11px half-moon at each end of
   it with a rounded lip, cut by a clip path, the ticket's 1px edge carried
-  on round it (never a gradient or mask). Open seats are dashed; those this phone may book carry
-  a `+` that takes `.press`. Booking a time lifts it (the motion table's
+  on round it (never a gradient or mask); three make an L whose inside
+  corner is cut round, never a square step. An open seat a partnership
+  still has to fill is the ticket's empty end — no fill, the ticket's edge,
+  a `+` reading Join; any other open seat is a dashed box whose `+` reads
+  Add. Each `+` takes `.press`. Booking a time lifts it (the motion table's
   Tee time lift): the draft's picks wear the chosen look, the seat the next
-  pick goes in is a dashed `accent-tint` seat labelled Partner or Next, and
-  Save sits above the list so the keyboard never covers it.
+  pick goes in is `accent-tint` labelled Partner or Next, and Save sits
+  above the list so the keyboard never covers it.
   `app/trip/[tripCode]/teesheet/TeeSeats.tsx`.
 
 ---

@@ -16,7 +16,7 @@
 // through `setTeam` — durable team rows on the round's sheet, as the team
 // picker makes them.
 
-import { type SeatCell, SEATS_ACROSS } from './teeSheet'
+import { type SeatCell, SEATS_ACROSS, attachOpenSeats } from './teeSheet'
 import type { TeeMode } from './partnerships'
 
 /** A player in the draft — `isNew` for those this booking is putting on. */
@@ -128,7 +128,9 @@ export function playingWith(draft: readonly DraftSeat[], mode: TeeMode, at: numb
 
 /**
  * The draft as seats to draw: who is joined to whom once it is saved — a
- * row this booking fills is a pairing, the whole time a team.
+ * row this booking fills is a pairing, the whole time a team — and the
+ * open seats a partnership still filling has, on its ticket: the other half
+ * of the booker's own, where the next pick goes (`attachOpenSeats`).
  */
 export function draftRows(draft: readonly DraftSeat[], mode: TeeMode): SeatCell[][] {
   const linked = (a: number, b: number) => {
@@ -157,7 +159,7 @@ export function draftRows(draft: readonly DraftSeat[], mode: TeeMode): SeatCell[
     }
   })
   const rows = Math.ceil(cells.length / SEATS_ACROSS)
-  return Array.from({ length: rows }, (_, r) => cells.slice(r * SEATS_ACROSS, (r + 1) * SEATS_ACROSS))
+  return attachOpenSeats(Array.from({ length: rows }, (_, r) => cells.slice(r * SEATS_ACROSS, (r + 1) * SEATS_ACROSS)), mode)
 }
 
 /** A partnership saving the draft makes or changes: its players, and the team it is kept as (null for a new one). */

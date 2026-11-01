@@ -213,13 +213,19 @@ section('Leaving a partnership happens at your tee time (stage 2)')
   const sheetPage = read('app/trip/[tripCode]/teesheet/page.tsx')
   ok(sheetPage.includes('editSlot={editSlot}'), 'the sheet takes the tee time to open')
   const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
-  ok(client.includes('removed: [], leaving: true') && client.includes('Take yourself off with your ✕'),
+  ok(client.includes("removed: [], purpose: 'leave'") && client.includes('Take yourself off with your ✕'),
     '  …opens it, lifted, saying how')
-  ok(client.includes('const { draft, off } = vacate(here.draft, seat)'), 'anybody this phone may remove comes off in the booking')
+  ok(client.includes('const { draft: after, off } = vacate(draft, k)') && client.includes('mayTakeOut: seat => takeOff(here, seat) !== null'),
+    'anybody this phone may remove comes off in the booking')
+  ok(client.includes("const block = together && c.teamId && b.purpose !== 'leave'"),
+    '  …a partnership kept for the whole event as one block, unless its player is leaving it')
   const order = ['deleteAssignments(booking.slot, booking.removed)', 'leaveTeams(booking.slot, booking.removed', 'addPlayers(booking.slot, book)', 'linkPartnerships(booking.slot, links']
   ok(order.every((x, i) => client.indexOf(x) >= 0 && (i === 0 || client.indexOf(x) > client.indexOf(order[i - 1]))),
     'saving: off the time and out of the partnership, then the bookings, then the new partnerships')
-  ok(client.includes('if (info && !fixed) {'), '  …a knockout\'s pairings stay as drawn')
+  ok(client.includes("if (info && !fixed && (info.isDay || booking.purpose === 'leave')) {"),
+    '  …a knockout\'s pairings stay as drawn, and an event-long one is only left from the Teams page')
+  ok(!client.includes('go on together') && !client.includes('goes on together'), 'the list does not say partners go on together (Ross, 1 Nov 2026)')
+  ok(client.includes('!partnered(meId) || myTeam === theirs'), 'a team of one joins a player on their own like anybody unpartnered')
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

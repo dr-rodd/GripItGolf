@@ -2,7 +2,7 @@
 
 import type { CSSProperties, ReactNode } from 'react'
 import { IconPlus, IconX } from '@/app/components/icons'
-import { type SeatCell, type SeatJoins, type SeatTarget, seatCorners } from '@/lib/teeSheet'
+import { type SeatCell, type SeatJoins, type SeatNeighbours, type SeatTarget, SEATS_ACROSS, seatCorners } from '@/lib/teeSheet'
 import { formatHandicap, isHandicapPending, HANDICAP_PENDING_LABEL } from '@/lib/handicap'
 
 /** The half-moon cut at each end of a seam — its radius (Ross, 1 Nov 2026: slightly smaller than the first 7). */
@@ -52,12 +52,14 @@ function cutPoints(seamAcross: boolean): [number, number][] {
 }
 
 /**
- * A seat's outline as a clip path: its four corners clockwise, each either
- * the plain corner (its rounding is the border radius's) or a cut. The cut
- * takes the edge's line with it — no outline round the half-moon.
+ * A seat's outline as a clip path: its four corners clockwise, each the
+ * plain corner (its rounding is the border radius's), a half-moon's cut,
+ * or an L's round inside corner. Each cut takes the edge's line with it;
+ * the edge is drawn back round it separately (`CUT_EDGE`, `CONCAVE_EDGE`).
  */
-function seatClip(j: SeatJoins, notched: Record<Corner, boolean>): string | undefined {
-  if (!notched.tl && !notched.tr && !notched.br && !notched.bl) return undefined
+function seatClip(j: SeatJoins, notched: Record<Corner, boolean>, concave: Record<Corner, boolean>): string | undefined {
+  const corners = ['tl', 'tr', 'br', 'bl'] as Corner[]
+  if (!corners.some(c => notched[c] || concave[c])) return undefined
   const px = (n: number) => `${Math.round(n * 100) / 100}px`
   const at = (c: Corner, u: number, v: number) => {
     const x = c === 'tr' || c === 'br' ? `calc(100% - ${px(u)})` : px(u)
@@ -67,7 +69,15 @@ function seatClip(j: SeatJoins, notched: Record<Corner, boolean>): string | unde
   // The edge each corner is reached along, going round clockwise.
   const arrivesAcross: Record<Corner, boolean> = { tl: false, tr: true, br: false, bl: true }
   const points: string[] = []
-  for (const c of ['tl', 'tr', 'br', 'bl'] as Corner[]) {
+  for (const c of corners) {
+    if (concave[c]) {
+      // A quarter circle round the corner itself, from one seam to the other.
+      for (let i = 0; i <= STEPS; i++) {
+        const a = (Math.PI / 2) * (arrivesAcross[c] ? i / STEPS : 1 - i / STEPS)
+        points.push(at(c, HALF_GAP * Math.cos(a), HALF_GAP * Math.sin(a)))
+      }
+      continue
+    }
     if (!notched[c]) { points.push(at(c, 0, 0)); continue }
     // The seam runs down the ticket where this corner's side joins a
     // partner, and across it where the seat above or below does.
@@ -110,6 +120,19 @@ const CUT_EDGE = cutEdgePath()
 const CUT_BOX = Math.ceil(REACH + FILLET)
 
 /**
+ * An L's inside corner (Ross, 1 Nov 2026: tidy the square step). The seat
+ * in the crook reaches across both gaps, so its corner stood proud of its
+ * neighbours by half the gap. Cut round that corner, HALF_GAP out, the
+ * ticket's edge runs smoothly from one neighbour's edge to the other's —
+ * and the band drawn just inside the cut lines up with their borders.
+ */
+const CONCAVE_EDGE = (() => {
+  const [r, o] = [HALF_GAP, HALF_GAP + EDGE]
+  return `M ${r} 0 A ${r} ${r} 0 0 1 0 ${r} L 0 ${o} A ${o} ${o} 0 0 0 ${o} 0 Z`
+})()
+const CONCAVE_BOX = Math.ceil(HALF_GAP + EDGE)
+
+/**
  * One tee time's seats (Ross, 31 Oct 2026): two across, a 2×2 grid for a
  * fourball, every player in a place made for them — name and handicap — and
  * partners joined into one ticket. The layout is lib/teeSheet.ts
@@ -122,11 +145,13 @@ const CUT_BOX = Math.ceil(REACH + FILLET)
  * on round it (Ross, 1 Nov 2026). No gradient and no mask, which the site
  * does not draw.
  *
- * On the sheet, open seats are dashed and the ones this phone may book
- * carry a + (`targets`, lib/teeSheet.ts `seatTargets`) that pushes down
- * under the thumb. While a time is being booked (`booking`) the seats are
- * the draft: this booking's picks wear the chosen look and come out with a
- * tap of their ✕, and the seat the next pick goes in is marked.
+ * An open seat a partnership still has to fill is that ticket's empty end
+ * (`attachOpenSeats`) — its + reads Join. Any other open seat is a dashed
+ * box, its + reading Add, for a new pairing or team (Ross, 1 Nov 2026).
+ * Each + pushes down under the thumb. While a time is being booked
+ * (`booking`) the seats are the draft: this booking's picks wear the chosen
+ * look and come out with a tap of their ✕, and the seat the next pick goes
+ * in is marked.
  */
 export default function TeeSeats({
   rows, handicapOf, meId, targets, onTarget, removeFor, booking,
@@ -142,7 +167,7 @@ export default function TeeSeats({
    * as, and what it does (a stuck-together team's whole ticket, on its top
    * right seat only). Null for no ✕.
    */
-  removeFor?: (cell: Extract<SeatCell, { kind: 'player' }>) => { label: string; onRemove: () => void } | null
+  removeFor?: (cell: Extract<SeatCell, { kind: 'player' }>, seat: number) => { label: string; onRemove: () => void } | null
   /** The draft being booked, when it is. */
   booking?: {
     /** The seat the next pick goes in. */
@@ -158,20 +183,41 @@ export default function TeeSeats({
     onChoose: (seat: number) => void
   }
 }) {
+  const flat = rows.flat()
+  const joinsAt = (k: number): SeatJoins | undefined => {
+    const c = flat[k]
+    return c?.kind === 'player' || c?.kind === 'open' ? c.joins : undefined
+  }
+  // The seams of the seats round each one — what tells an L's inside
+  // corner from a fourball's crossing.
+  const nearOf = (i: number): SeatNeighbours => ({
+    left: i % SEATS_ACROSS > 0 ? joinsAt(i - 1) : undefined,
+    right: i % SEATS_ACROSS < SEATS_ACROSS - 1 ? joinsAt(i + 1) : undefined,
+    up: joinsAt(i - SEATS_ACROSS),
+    down: joinsAt(i + SEATS_ACROSS),
+  })
+
   return (
     <div className="grid grid-cols-2 gap-1.5 auto-rows-[56px]">
-      {rows.flat().map((cell, i) => {
+      {flat.map((cell, i) => {
         if (cell.kind === 'none') return <div key={i} aria-hidden="true" />
         if (cell.kind === 'open') {
+          const j = cell.joins
+          const onTicket = !!j && (j.left || j.right || j.up || j.down)
           if (booking) {
             const next = booking.next === i
-            return (
+            return onTicket ? (
+              <Seat key={i} joins={j!} near={nearOf(i)} tone={next ? 'next' : 'open'} align="start"
+                onClick={() => booking.onChoose(i)} pressed={next}>
+                <span className="t-label">{next ? booking.nextLabel : ''}</span>
+              </Seat>
+            ) : (
               <button
                 key={i}
                 type="button"
                 onClick={() => booking.onChoose(i)}
                 aria-pressed={next}
-                className={`press rounded-tile border border-dashed px-2.5 flex items-center t-label transition-colors ${
+                className={`press rounded-tile border border-dashed px-2.5 flex items-center t-label ${
                   next ? 'border-accent-deep bg-accent-tint text-accent-deep' : 'border-line text-ink/50'
                 }`}
               >
@@ -180,27 +226,45 @@ export default function TeeSeats({
             )
           }
           const target = targets?.[i]
-          return target && onTarget ? (
-            <button
-              key={i}
-              type="button"
-              onClick={() => onTarget(i, target)}
-              aria-label={target.kind === 'join' ? 'Join this pairing' : target.kind === 'start' ? 'Start a pairing' : 'Book this time'}
-              className="press rounded-tile border border-dashed border-line-strong flex items-center justify-center text-accent-deep hover:border-accent hover:text-accent"
-            >
-              <IconPlus size={20} />
-            </button>
-          ) : (
-            <div key={i} aria-hidden="true" className="rounded-tile border border-dashed border-line" />
-          )
+          if (target && onTarget) {
+            // Join where a partnership is waiting for this seat; Add where
+            // the seat starts a new pairing or team.
+            const words = (
+              <span className="flex items-center justify-center gap-1 t-label">
+                <IconPlus size={16} />
+                {onTicket ? 'Join' : 'Add'}
+                <span className="sr-only">
+                  {target.kind === 'join' ? ' this pairing' : target.kind === 'start' ? ' a pairing' : onTicket ? ' this team' : ' to this time'}
+                </span>
+              </span>
+            )
+            return onTicket ? (
+              <Seat key={i} joins={j!} near={nearOf(i)} tone="open" align="centre" onClick={() => onTarget(i, target)}>
+                {words}
+              </Seat>
+            ) : (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onTarget(i, target)}
+                className="press rounded-tile border border-dashed border-line-strong flex items-center justify-center text-accent-deep hover:border-accent hover:text-accent"
+              >
+                {words}
+              </button>
+            )
+          }
+          return onTicket
+            ? <Seat key={i} joins={j!} near={nearOf(i)} tone="open" />
+            : <div key={i} aria-hidden="true" className="rounded-tile border border-dashed border-line" />
         }
         const fresh = !!booking?.isNew(i)
         const remove = booking
           ? (booking.mayTakeOut(i) ? { label: `Take ${cell.player.name} off this time`, onRemove: () => booking.onTakeOut(i) } : null)
-          : removeFor?.(cell) ?? null
+          : removeFor?.(cell, i) ?? null
         const h = handicapOf(cell.player.id)
         return (
-          <Seat key={cell.player.id} joins={cell.joins} tone={fresh ? 'chosen' : cell.player.id === meId ? 'mine' : 'plain'}>
+          <Seat key={cell.player.id} joins={cell.joins} near={nearOf(i)}
+            tone={fresh ? 'chosen' : cell.player.id === meId ? 'mine' : 'plain'}>
             <span className={`block t-label text-ink truncate ${remove ? 'pr-5' : ''}`}>
               {cell.player.name}
             </span>
@@ -224,14 +288,36 @@ export default function TeeSeats({
   )
 }
 
-/** A filled seat — a ticket, or one part of one. */
-function Seat({ joins, tone, children }: { joins: SeatJoins; tone: 'plain' | 'mine' | 'chosen'; children: ReactNode }) {
-  const { rounded, notched } = seatCorners(joins)
+/** A seat's look: a player's (yours, a pick in this booking), or a ticket's empty end (the next pick's). */
+type Tone = 'plain' | 'mine' | 'chosen' | 'open' | 'next'
+const TONES: Record<Tone, string> = {
+  plain: 'bg-tint border-line-strong',
+  mine: 'bg-accent-tint border-line-strong',
+  chosen: 'bg-accent-tint border-accent-deep',
+  open: 'border-line-strong text-accent-deep hover:text-accent',
+  next: 'bg-accent-tint border-accent-deep text-accent-deep',
+}
+
+/**
+ * A seat on a ticket — a player's, or an empty end, which is a button when
+ * tapping it does something.
+ */
+function Seat({ joins, near, tone, align, onClick, pressed, children }: {
+  joins: SeatJoins
+  near: SeatNeighbours
+  tone: Tone
+  /** An empty end's words: at the start, or in the middle. */
+  align?: 'start' | 'centre'
+  onClick?: () => void
+  pressed?: boolean
+  children?: ReactNode
+}) {
+  const { rounded, notched, concave } = seatCorners(joins, near)
   const r = 'var(--radius-tile)'
   // Partners' seats reach across the gap to meet. The left and upper seat
   // of each seam carry it as a faint line; the other has no edge there.
   const seam = 'var(--color-line)'
-  const edge = tone === 'chosen' ? 'var(--color-accent-deep)' : 'var(--color-line-strong)'
+  const edge = tone === 'chosen' || tone === 'next' ? 'var(--color-accent-deep)' : 'var(--color-line-strong)'
   const width = { top: joins.up ? 0 : EDGE, right: EDGE, bottom: EDGE, left: joins.left ? 0 : EDGE }
   const style: CSSProperties = {
     marginTop: joins.up ? -HALF_GAP : 0,
@@ -248,34 +334,43 @@ function Seat({ joins, tone, children }: { joins: SeatJoins; tone: 'plain' | 'mi
     borderTopRightRadius: rounded.tr ? r : 0,
     borderBottomLeftRadius: rounded.bl ? r : 0,
     borderBottomRightRadius: rounded.br ? r : 0,
-    clipPath: seatClip(joins, notched),
+    clipPath: seatClip(joins, notched, concave),
   }
+  // The ticket's edge round each cut, drawn in the corner it belongs to.
+  const corners = (['tl', 'tr', 'br', 'bl'] as Corner[]).filter(c => notched[c] || concave[c])
+  const edges = corners.map(c => {
+    const [v, h] = [c[0] === 't' ? 'top' : 'bottom', c[1] === 'l' ? 'left' : 'right'] as const
+    const box = concave[c] ? CONCAVE_BOX : CUT_BOX
+    return (
+      <svg
+        key={c}
+        aria-hidden="true"
+        width={box}
+        height={box}
+        viewBox={`0 0 ${box} ${box}`}
+        className="absolute pointer-events-none"
+        style={{ [v]: -width[v], [h]: -width[h], transform: `scale(${h === 'right' ? -1 : 1}, ${v === 'bottom' ? -1 : 1})` }}
+      >
+        {concave[c]
+          ? <path d={CONCAVE_EDGE} style={{ fill: edge }} />
+          : <path d={CUT_EDGE} transform={sideJoined(joins, c) ? undefined : 'matrix(0 1 1 0 0 0)'} style={{ fill: edge }} />}
+      </svg>
+    )
+  })
   // Not overflow-hidden: that clips to inside the border, and the edge
   // round each cut is drawn over the border's own ground. The clip path
   // and the name's truncate already keep everything in.
-  return (
-    <div
-      className={`relative px-2.5 py-2 border-solid ${
-        tone === 'chosen' ? 'bg-accent-tint border-accent-deep' : tone === 'mine' ? 'bg-accent-tint border-line-strong' : 'bg-tint border-line-strong'
-      }`}
-      style={style}
-    >
-      {(['tl', 'tr', 'br', 'bl'] as Corner[]).filter(c => notched[c]).map(c => {
-        const [v, h] = [c[0] === 't' ? 'top' : 'bottom', c[1] === 'l' ? 'left' : 'right'] as const
-        return (
-          <svg
-            key={c}
-            aria-hidden="true"
-            width={CUT_BOX}
-            height={CUT_BOX}
-            viewBox={`0 0 ${CUT_BOX} ${CUT_BOX}`}
-            className="absolute pointer-events-none"
-            style={{ [v]: -width[v], [h]: -width[h], transform: `scale(${h === 'right' ? -1 : 1}, ${v === 'bottom' ? -1 : 1})` }}
-          >
-            <path d={CUT_EDGE} transform={sideJoined(joins, c) ? undefined : 'matrix(0 1 1 0 0 0)'} style={{ fill: edge }} />
-          </svg>
-        )
-      })}
+  const className = `relative px-2.5 py-2 border-solid text-left ${TONES[tone]} ${
+    align ? `flex items-center ${align === 'centre' ? 'justify-center' : ''}` : ''
+  } ${onClick ? 'press' : ''}`
+  return onClick ? (
+    <button type="button" onClick={onClick} aria-pressed={pressed} className={className} style={style}>
+      {edges}
+      {children}
+    </button>
+  ) : (
+    <div className={className} style={style} aria-hidden={tone === 'open' && !children ? true : undefined}>
+      {edges}
       {children}
     </div>
   )

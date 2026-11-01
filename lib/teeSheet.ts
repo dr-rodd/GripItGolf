@@ -183,7 +183,13 @@ export type SeatJoins = { left: boolean; right: boolean; up: boolean; down: bool
 
 export type SeatCell =
   | { kind: 'player'; player: SlotPlayer; teamId: string | null; joins: SeatJoins }
-  | { kind: 'open' }
+  /**
+   * A seat nobody is in. `joins` where it is part of a partnership still
+   * filling — the other half of a lone player's pairing, a team time's
+   * places left — so it is drawn as that ticket's empty end, not a box on
+   * its own (`attachOpenSeats`).
+   */
+  | { kind: 'open'; joins?: SeatJoins }
   /** Past the tee time's last seat — a threeball's fourth place. */
   | { kind: 'none' }
 
@@ -262,7 +268,56 @@ export function seatGrid(groups: readonly SlotGroup[], seats: number, mode: TeeM
       },
     }
   })
-  return Array.from({ length: rows }, (_, r) => out.slice(r * SEATS_ACROSS, (r + 1) * SEATS_ACROSS))
+  return attachOpenSeats(
+    Array.from({ length: rows }, (_, r) => out.slice(r * SEATS_ACROSS, (r + 1) * SEATS_ACROSS)),
+    mode,
+  )
+}
+
+/**
+ * The open seats a partnership still filling has, joined onto its ticket
+ * (Ross, 1 Nov 2026: an open place somebody is going to join was a box on
+ * its own) — so the ticket shows where its next player goes:
+ *
+ *   · pairs — a player on their own in a row, and the seat beside them;
+ *   · team — once anybody is on the time, every place left on it;
+ *   · separate — none: nobody partners anybody.
+ *
+ * A row nobody is in, and a team time nobody is on, stay boxes of their
+ * own. Joins between players are left as they were.
+ */
+export function attachOpenSeats(rows: readonly SeatCell[][], mode: TeeMode): SeatCell[][] {
+  const flat: SeatCell[] = rows.flat().map(c =>
+    c.kind === 'player' ? { ...c, joins: { ...c.joins } } : c.kind === 'open' ? { kind: 'open' } : c)
+  const none: SeatJoins = { left: false, right: false, up: false, down: false }
+  const join = (a: number, b: number, side: keyof SeatJoins, back: keyof SeatJoins) => {
+    for (const [i, s] of [[a, side], [b, back]] as const) {
+      const c = flat[i]
+      if (c.kind === 'player') c.joins[s] = true
+      else if (c.kind === 'open') flat[i] = { kind: 'open', joins: { ...(c.joins ?? none), [s]: true } }
+    }
+  }
+  if (mode === 'pairs') {
+    for (let r = 0; r * SEATS_ACROSS < flat.length; r++) {
+      const [a, b] = [r * SEATS_ACROSS, r * SEATS_ACROSS + 1]
+      const kinds = [flat[a]?.kind, flat[b]?.kind].sort().join()
+      if (kinds === 'open,player') join(a, b, 'right', 'left')
+    }
+  } else if (mode === 'team' && flat.some(c => c.kind === 'player')) {
+    const inTicket = (i: number) => i >= 0 && i < flat.length && flat[i].kind !== 'none'
+    for (let i = 0; i < flat.length; i++) {
+      if (!inTicket(i)) continue
+      const right = i % SEATS_ACROSS < SEATS_ACROSS - 1 ? i + 1 : -1
+      const down = i + SEATS_ACROSS
+      for (const [j, side, back] of [[right, 'right', 'left'], [down, 'down', 'up']] as const) {
+        if (!inTicket(j)) continue
+        if (flat[i].kind === 'player' && flat[j].kind === 'player') continue
+        join(i, j, side, back)
+      }
+    }
+  }
+  const across = rows[0]?.length ?? SEATS_ACROSS
+  return Array.from({ length: rows.length }, (_, r) => flat.slice(r * across, (r + 1) * across))
 }
 
 /** What tapping an open seat does: book the next seat, start a pairing, or join a player's. */
@@ -300,21 +355,42 @@ export function listName(names: readonly string[]): string {
   return names.length === 2 ? `${names[0]} & ${names[1]}` : names.join(', ')
 }
 
+/** The seams of the seats round one — each side's neighbour, where it has one. */
+export type SeatNeighbours = Partial<Record<keyof SeatJoins, SeatJoins>>
+
+type Corners = { tl: boolean; tr: boolean; bl: boolean; br: boolean }
+
 /**
  * How one seat is cut, from its seams: a corner is rounded where nothing
  * joins it, square where a partner's seat does, and notched — the half-moon
  * a ticket has at each end of its perforation — where exactly one seam runs
  * out to the ticket's edge. Where two seams cross, inside a fourball's
  * ticket, it is square and whole.
+ *
+ * An L — three on a time — has an inside corner, where both its seams end
+ * (Ross, 1 Nov 2026: tidy the square step there). The seat in the crook of
+ * the L reaches across both gaps and so stands proud of the other two by
+ * the gap's half; it is cut `concave` instead — a small round inside
+ * corner — and the two seams ending there end square, not notched. Telling
+ * an inside corner from a crossing takes the neighbours' seams
+ * (`near`); without them a seat is read as before.
  */
-export function seatCorners(j: SeatJoins): {
-  rounded: { tl: boolean; tr: boolean; bl: boolean; br: boolean }
-  notched: { tl: boolean; tr: boolean; bl: boolean; br: boolean }
+export function seatCorners(j: SeatJoins, near: SeatNeighbours = {}): {
+  rounded: Corners
+  notched: Corners
+  concave: Corners
 } {
-  return {
-    rounded: { tl: !j.left && !j.up, tr: !j.right && !j.up, bl: !j.left && !j.down, br: !j.right && !j.down },
-    notched: { tl: j.left !== j.up, tr: j.right !== j.up, bl: j.left !== j.down, br: j.right !== j.down },
+  const corner = (h: 'left' | 'right', v: 'up' | 'down'): 'rounded' | 'square' | 'notched' | 'concave' => {
+    if (!j[h] && !j[v]) return 'rounded'
+    // Both seams meet here: a fourball's crossing, or an L's inside corner.
+    if (j[h] && j[v]) return near[h]?.[v] || near[v]?.[h] ? 'square' : 'concave'
+    // One seam ends here: at the ticket's edge, or at an L's inside corner.
+    if (j[h]) return near[h]?.[v] ? 'square' : 'notched'
+    return near[v]?.[h] ? 'square' : 'notched'
   }
+  const all = { tl: corner('left', 'up'), tr: corner('right', 'up'), bl: corner('left', 'down'), br: corner('right', 'down') }
+  const is = (k: string): Corners => ({ tl: all.tl === k, tr: all.tr === k, bl: all.bl === k, br: all.br === k })
+  return { rounded: is('rounded'), notched: is('notched'), concave: is('concave') }
 }
 
 // ─── The add picker's units ────────────────────────────────────
@@ -329,9 +405,11 @@ export type PickerUnit =
  * On a board whose teammates share a tee time (`together`), a teamed player
  * is never offered alone: the team is one stuck-together unit carrying
  * every member still off this round's sheet, and tapping it books them all.
- * A team with one member left is still a unit — the link is the point, and
- * showing it keeps "who am I stuck to" visible. Players with no team, and
- * every player when members may go out separately, are solos.
+ * One player is a person, whatever team they are in (Ross, 1 Nov 2026: a
+ * player left on their own in a team read as a team, and could not be
+ * picked as somebody's partner) — a team of one, or the one member of a
+ * team still to book. Players with no team, and every player when members
+ * may go out separately, are solos.
  *
  * Built on `groupSlot`, the one copy of gathering-by-team, so the picker
  * and the slots can never group differently.
@@ -346,7 +424,7 @@ export function pickerUnits(
   }
   const out: PickerUnit[] = []
   for (const g of groupSlot(unassigned, teamOf)) {
-    if (g.teamId) {
+    if (g.teamId && g.players.length > 1) {
       out.push({ kind: 'team', teamId: g.teamId, teamName: g.teamName!, players: g.players })
     } else {
       for (const player of g.players) out.push({ kind: 'solo', player })
