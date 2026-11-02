@@ -149,9 +149,10 @@ const CONCAVE_BOX = Math.ceil(HALF_GAP + EDGE)
  * (`attachOpenSeats`) — its + reads Join. Any other open seat is a dashed
  * box, its + reading Add, for a new pairing or team (Ross, 1 Nov 2026).
  * Each + pushes down under the thumb. While a time is being booked
- * (`booking`) the seats are the draft: this booking's picks wear the chosen
- * look and come out with a tap of their ✕, and the seat the next pick goes
- * in is marked.
+ * (`booking`) the seats are the draft: this booking's picks come out with a
+ * tap of their ✕, every seat the next pick may go in carries its Add or
+ * Join as on the sheet, and the one it will go in is outlined in ink —
+ * never green, which is your own seat's colour (Ross, 2 Nov 2026).
  */
 export default function TeeSeats({
   rows, handicapOf, meId, targets, onTarget, removeFor, booking,
@@ -172,10 +173,8 @@ export default function TeeSeats({
   booking?: {
     /** The seat the next pick goes in. */
     next: number | null
-    /** What the next seat is called — "Partner", "Next". */
-    nextLabel: string
-    /** This booking's own picks, worn in the chosen look. */
-    isNew: (seat: number) => boolean
+    /** Where the next pick may go — a row fills from the left. */
+    mayChoose: (seat: number) => boolean
     /** Who can come off the time here: this booking's picks, and those this phone may remove. */
     mayTakeOut: (seat: number) => boolean
     onTakeOut: (seat: number) => void
@@ -204,12 +203,29 @@ export default function TeeSeats({
         if (cell.kind === 'open') {
           const j = cell.joins
           const onTicket = !!j && (j.left || j.right || j.up || j.down)
+          // Join where a partnership is waiting for this seat; Add where
+          // the seat starts a new pairing or team.
+          const plus = (context: string) => (
+            <span className="flex items-center justify-center gap-1 t-label">
+              <IconPlus size={16} />
+              {onTicket ? 'Join' : 'Add'}
+              <span className="sr-only">{context}</span>
+            </span>
+          )
           if (booking) {
+            if (!booking.mayChoose(i)) {
+              return onTicket
+                ? <Seat key={i} joins={j!} near={nearOf(i)} tone="open" />
+                : <div key={i} aria-hidden="true" className="rounded-tile border border-dashed border-line" />
+            }
+            // The seat the next pick goes in, outlined; any other may be
+            // tapped to move it there.
             const next = booking.next === i
+            const words = plus(next ? ' — the next player goes here' : ' — put the next player here')
             return onTicket ? (
-              <Seat key={i} joins={j!} near={nearOf(i)} tone={next ? 'next' : 'open'} align="start"
+              <Seat key={i} joins={j!} near={nearOf(i)} tone={next ? 'next' : 'open'} align="centre"
                 onClick={() => booking.onChoose(i)} pressed={next}>
-                <span className="t-label">{next ? booking.nextLabel : ''}</span>
+                {words}
               </Seat>
             ) : (
               <button
@@ -217,27 +233,17 @@ export default function TeeSeats({
                 type="button"
                 onClick={() => booking.onChoose(i)}
                 aria-pressed={next}
-                className={`press rounded-tile border border-dashed px-2.5 flex items-center t-label ${
-                  next ? 'border-accent-deep bg-accent-tint text-accent-deep' : 'border-line text-ink/50'
+                className={`press rounded-tile flex items-center justify-center text-accent-deep ${
+                  next ? 'border-2 border-solid border-ink bg-surface' : 'border border-dashed border-line-strong hover:border-accent hover:text-accent'
                 }`}
               >
-                {next ? booking.nextLabel : ''}
+                {words}
               </button>
             )
           }
           const target = targets?.[i]
           if (target && onTarget) {
-            // Join where a partnership is waiting for this seat; Add where
-            // the seat starts a new pairing or team.
-            const words = (
-              <span className="flex items-center justify-center gap-1 t-label">
-                <IconPlus size={16} />
-                {onTicket ? 'Join' : 'Add'}
-                <span className="sr-only">
-                  {target.kind === 'join' ? ' this pairing' : target.kind === 'start' ? ' a pairing' : onTicket ? ' this team' : ' to this time'}
-                </span>
-              </span>
-            )
+            const words = plus(target.kind === 'join' ? ' this pairing' : target.kind === 'start' ? ' a pairing' : onTicket ? ' this team' : ' to this time')
             return onTicket ? (
               <Seat key={i} joins={j!} near={nearOf(i)} tone="open" align="centre" onClick={() => onTarget(i, target)}>
                 {words}
@@ -257,14 +263,13 @@ export default function TeeSeats({
             ? <Seat key={i} joins={j!} near={nearOf(i)} tone="open" />
             : <div key={i} aria-hidden="true" className="rounded-tile border border-dashed border-line" />
         }
-        const fresh = !!booking?.isNew(i)
         const remove = booking
           ? (booking.mayTakeOut(i) ? { label: `Take ${cell.player.name} off this time`, onRemove: () => booking.onTakeOut(i) } : null)
           : removeFor?.(cell, i) ?? null
         const h = handicapOf(cell.player.id)
         return (
           <Seat key={cell.player.id} joins={cell.joins} near={nearOf(i)}
-            tone={fresh ? 'chosen' : cell.player.id === meId ? 'mine' : 'plain'}>
+            tone={cell.player.id === meId ? 'mine' : 'plain'}>
             <span className={`block t-label text-ink truncate ${remove ? 'pr-5' : ''}`}>
               {cell.player.name}
             </span>
@@ -288,14 +293,20 @@ export default function TeeSeats({
   )
 }
 
-/** A seat's look: a player's (yours, a pick in this booking), or a ticket's empty end (the next pick's). */
-type Tone = 'plain' | 'mine' | 'chosen' | 'open' | 'next'
+/**
+ * A seat's look: a player's — green only for your own, so it never means
+ * anything else — or a ticket's empty end, outlined in ink where a booking's
+ * next pick goes.
+ */
+type Tone = 'plain' | 'mine' | 'open' | 'next'
 const TONES: Record<Tone, string> = {
   plain: 'bg-tint border-line-strong',
   mine: 'bg-accent-tint border-line-strong',
-  chosen: 'bg-accent-tint border-accent-deep',
   open: 'border-line-strong text-accent-deep hover:text-accent',
-  next: 'bg-accent-tint border-accent-deep text-accent-deep',
+  // Outlined 2px inside its edge, as a field in focus is — the seam sides,
+  // which have no border of their own, too — so the box being filled
+  // stands out of its ticket all the way round.
+  next: 'bg-surface border-ink text-accent-deep outline-2 outline-solid outline-ink -outline-offset-2',
 }
 
 /**
@@ -317,7 +328,7 @@ function Seat({ joins, near, tone, align, onClick, pressed, children }: {
   // Partners' seats reach across the gap to meet. The left and upper seat
   // of each seam carry it as a faint line; the other has no edge there.
   const seam = 'var(--color-line)'
-  const edge = tone === 'chosen' || tone === 'next' ? 'var(--color-accent-deep)' : 'var(--color-line-strong)'
+  const edge = tone === 'next' ? 'var(--color-ink)' : 'var(--color-line-strong)'
   const width = { top: joins.up ? 0 : EDGE, right: EDGE, bottom: EDGE, left: joins.left ? 0 : EDGE }
   const style: CSSProperties = {
     marginTop: joins.up ? -HALF_GAP : 0,

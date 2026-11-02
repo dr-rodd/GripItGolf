@@ -37,15 +37,27 @@ export function draftFrom(rows: readonly SeatCell[][]): DraftSeat[] {
 }
 
 /**
- * The seat the next pick goes in. A seat the booker tapped comes first;
- * then, on a pairs time, the other half of a pairing this booking has
- * started — the cue that the next pick is a partner — and then the first
- * row nobody is in. Elsewhere, the next free seat. Null when nothing is
- * left to fill.
+ * Whether the next pick may go in seat `i`: an open seat, and a row is
+ * filled from the left — the right-hand seat opens only once somebody is
+ * in the left (Ross, 2 Nov 2026).
+ */
+export function mayChoose(draft: readonly DraftSeat[], i: number): boolean {
+  if (i < 0 || i >= draft.length || draft[i] !== null) return false
+  if (i % SEATS_ACROSS === 0) return true
+  const left = draft[i - 1]
+  return !!left && left !== 'none'
+}
+
+/**
+ * The seat the next pick goes in. A seat the booker tapped comes first,
+ * where a pick may go (`mayChoose`); then, on a pairs time, the other half
+ * of a pairing this booking has started — the cue that the next pick is a
+ * partner — and then the first row nobody is in. Elsewhere, the next free
+ * seat. Null when nothing is left to fill.
  */
 export function nextSeat(draft: readonly DraftSeat[], mode: TeeMode, tapped: number | null): number | null {
   const open = (i: number) => i >= 0 && i < draft.length && draft[i] === null
-  if (tapped !== null && open(tapped)) return tapped
+  if (tapped !== null && mayChoose(draft, tapped)) return tapped
   if (mode === 'pairs') {
     for (let i = 0; i < draft.length; i++) {
       const c = draft[i]

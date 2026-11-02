@@ -14,7 +14,7 @@ import {
 } from '@/lib/teeSheet'
 import {
   type DraftSeat, type BookingLink,
-  draftFrom, nextSeat, placeUnit, takeOut, vacate, playingWith, draftRows, bookingPlan,
+  draftFrom, nextSeat, mayChoose, placeUnit, takeOut, vacate, playingWith, draftRows, bookingPlan,
 } from '@/lib/teeBooking'
 import { joinNames } from '@/lib/matchplayEntrants'
 import {
@@ -228,8 +228,9 @@ export default function TeeSheetClient({
   /**
    * A tee time is locked while one phone books it (Ross, 1 Nov 2026: it
    * does not matter whose, only that it is) — lib/teeFreeze.ts. Every
-   * other phone sees "Locked" at once; when it thaws they read the sheet
-   * again. A booking's lock is two minutes, counted down for the booker.
+   * other phone sees "Locked by another user" at once; when it thaws they
+   * read the sheet again. A booking's lock is two minutes, counted down
+   * for the booker: "Time to complete booking · 1:42".
    */
   const router = useRouter()
   const freeze = useTeeFreeze(
@@ -1086,9 +1087,7 @@ export default function TeeSheetClient({
                         meId={meId}
                         booking={{
                           next,
-                          nextLabel: mode === 'pairs' && next !== null && playingWith(here.draft, mode, next).length > 0
-                            ? 'Partner' : 'Next',
-                          isNew: seat => { const c = here.draft[seat]; return !!c && c !== 'none' && c.isNew },
+                          mayChoose: seat => mayChoose(here.draft, seat),
                           // This booking's picks, and anybody already on the
                           // time this phone may take off (medium security).
                           mayTakeOut: seat => takeOff(here, seat) !== null,
@@ -1108,7 +1107,7 @@ export default function TeeSheetClient({
                             }
                             setBooking({ ...here, draft, tapped: seat, removed })
                           },
-                          onChoose: seat => setBooking({ ...here, tapped: seat }),
+                          onChoose: seat => { if (mayChoose(here.draft, seat)) setBooking({ ...here, tapped: seat }) },
                         }}
                       />
                     ) : (
@@ -1150,7 +1149,7 @@ export default function TeeSheetClient({
                     )}
 
                     {isFrozen && (
-                      <p className="t-cap text-ink/65 mt-2" role="status">Locked</p>
+                      <p className="t-cap text-ink/65 mt-2" role="status">Locked by another user</p>
                     )}
 
                     {!here && !isFrozen && selfPick && isMine && (
@@ -1188,7 +1187,7 @@ export default function TeeSheetClient({
                         <div className="mt-3">
                           {here.purpose === 'book' && timedUntil !== null && (
                             <p className="t-cap text-ink/65 mb-2 tabular-nums" role="timer">
-                              {lockClock(timedUntil - now)} left to save
+                              Time to complete booking · {lockClock(timedUntil - now)}
                             </p>
                           )}
                           {here.purpose !== 'book' && (

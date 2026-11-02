@@ -272,14 +272,19 @@ That is why parts take parameters (`dense`, `compact`, `shape`, `variant`).
   corner is cut round, never a square step. An open seat a partnership
   still has to fill is the ticket's empty end — no fill, the ticket's edge,
   a `+` reading Join; any other open seat is a dashed box whose `+` reads
-  Add. Each `+` takes `.press`. Booking a time lifts it (the motion table's
-  Tee time lift): the draft's picks wear the chosen look, the seat the next
-  pick goes in is `accent-tint` labelled Partner or Next, and Save sits
-  above the list so the keyboard never covers it. A time another phone is
-  booking is locked: its seats at half opacity, no `+` or ✕, and "Locked"
-  under them in `t-cap` — nothing else, no second line saying so. The
-  booker sees "1:42 left to save" above Save, counting down two minutes,
-  never the word Locked; an edit shows no countdown.
+  Add. Each `+` takes `.press`. **Green on the sheet is only ever your own
+  seat** — never a pick, never a selection. Booking a time lifts it (the
+  motion table's Tee time lift): the draft's picks look like any player,
+  every seat the next pick may go in keeps its `+` Add or Join, the one it
+  will go in outlined 2px in `ink` (a ticket's end: an outline drawn inside
+  its edge, as a field in focus is — never a shadow), and a row fills from
+  the left — an empty
+  row's right seat is a blank dashed box until the left is filled. Save
+  sits above the list so the keyboard never covers it. A time another
+  phone is booking is locked: its seats at half opacity, no `+` or ✕, and
+  "Locked by another user" under them in `t-cap` — nothing else. The
+  booker sees "Time to complete booking · 1:42" above Save, counting down
+  two minutes; an edit shows no countdown.
   `app/trip/[tripCode]/teesheet/TeeSeats.tsx`.
 
 ---

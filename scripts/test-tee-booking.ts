@@ -12,7 +12,7 @@
 import fs from 'fs'
 import { seatGrid, seatTargets, listName, type SlotGroup, type SeatCell } from '../lib/teeSheet'
 import {
-  draftFrom, nextSeat, placeUnit, takeOut, vacate, playingWith, draftRows, bookingPlan, type DraftSeat,
+  draftFrom, nextSeat, mayChoose, placeUnit, takeOut, vacate, playingWith, draftRows, bookingPlan, type DraftSeat,
 } from '../lib/teeBooking'
 import { teeMode, partnershipsFixed, roundPartnership } from '../lib/partnerships'
 import type { Leaderboard } from '../lib/leaderboards'
@@ -124,6 +124,15 @@ section('Booking a pairs time: you, then your partner, then the next pairing')
   e = placeUnit(e, [u('me')], 'pairs', 0)!
   eq(nextSeat(e, 'pairs', 2), 2, 'tapping the row below leaves you on your own and starts another there')
 
+  const empty = draftFrom(seatGrid([], 4, 'pairs'))
+  eq([0, 1, 2, 3].map(i => mayChoose(empty, i)), [true, false, true, false],
+    'an empty row takes its first player on the left, never the right (Ross, 2 Nov 2026)…')
+  const one = placeUnit(empty, [u('me')], 'pairs', 0)!
+  eq([0, 1, 2, 3].map(i => mayChoose(one, i)), [false, true, true, false], '  …and the right opens once the left is filled')
+  eq(nextSeat(empty, 'pairs', 1), 0, '  …so a tap on an empty row\'s right seat cannot put the next pick there')
+  const team3 = placeUnit(draftFrom(seatGrid([], 4, 'team')), [u('a')], 'team', 0)!
+  eq([0, 1, 2, 3].map(i => mayChoose(team3, i)), [false, true, true, false], '  …on a fourball\'s grid as on a pairs time')
+
   const joined = draftFrom(seatGrid([solo('ross')], 4, 'pairs'))
   eq(placeUnit(joined, [u('kate'), u('mary')], 'pairs', 1)?.map(c => (c && c !== 'none' ? c.id : c)), ['ross', null, 'kate', 'mary'],
     'a pair picked beside a lone player goes to a row of its own, not split')
@@ -197,6 +206,15 @@ section('The sheet books in place')
     'the time lifts to the top on the putt curve, at once under Reduce Motion')
   const seats = read('app/trip/[tripCode]/teesheet/TeeSeats.tsx')
   ok(seats.includes('press rounded-tile border border-dashed border-line-strong'), 'a + pushes down under the thumb')
+  ok(!seats.includes("'Partner'") && !seats.includes("'Next'") && !client.includes("'Partner'") && !client.includes("? 'Next'")
+    && seats.includes("{onTicket ? 'Join' : 'Add'}") && (seats.match(/const words = plus\(/g) ?? []).length === 2,
+    'while booking, the seats keep their Add and Join — never Partner or Next (Ross, 2 Nov 2026)')
+  ok(seats.includes("next: 'bg-surface border-ink text-accent-deep outline-2 outline-solid outline-ink -outline-offset-2'") && seats.includes('border-2 border-solid border-ink bg-surface')
+    && !/chosen|bg-accent-tint border-accent-deep/.test(seats) && seats.includes("mine: 'bg-accent-tint"),
+    '  …the seat the next pick goes in outlined in ink, green kept for your own seat alone')
+  ok(seats.includes('if (!booking.mayChoose(i))') && client.includes('mayChoose: seat => mayChoose(here.draft, seat)')
+    && client.includes('if (mayChoose(here.draft, seat)) setBooking'),
+    '  …and only the seats a pick may go in can be tapped')
 }
 
 section('Leaving a partnership happens at your tee time (stage 2)')
@@ -252,15 +270,15 @@ section('A time is frozen while a phone books it (Ross, 1 Nov 2026)')
   const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes('if (!round || frozen.has(slot)) return false') && client.includes('freeze.hold(round.id, slot, timed)'),
     'opening a time freezes it, and a frozen one will not open')
-  ok(client.includes('role="status">Locked</p>') && client.includes('const targets = mayBook && !isFrozen'),
-    '  …and on other phones it says Locked, with no + to tap (Ross, 1 Nov 2026)')
+  ok(client.includes('role="status">Locked by another user</p>') && client.includes('const targets = mayBook && !isFrozen'),
+    '  …and on other phones it says Locked by another user, with no + to tap (Ross, 2 Nov 2026)')
   ok(!client.includes('try again in a moment') && client.includes('{error?.slot === i && !isFrozen && ('),
     '  …and nothing else: no second line saying so, which outlived the lock (Ross, 2 Nov 2026)')
   ok(client.includes("if (!claim(slot, true)) return") && client.includes("if (!claim(slot, false)) return")
-    && client.includes('{lockClock(timedUntil - now)} left to save') && client.includes("here.purpose === 'book' && timedUntil !== null"),
+    && client.includes('Time to complete booking · {lockClock(timedUntil - now)}') && client.includes("here.purpose === 'book' && timedUntil !== null"),
     'the booker sees two minutes counted down; an edit shows none')
   ok(!client.includes('Locked for you'),
-    '  …and the countdown does not say Locked too — one Locked on a screen, on the times others hold (Ross, 2 Nov 2026)')
+    '  …and the countdown reads Time to complete booking, never Locked (Ross, 2 Nov 2026)')
   ok(client.includes('removeFor={isFrozen || booking ? undefined'),
     'while this phone books a time, the sheet\'s ✕s wait — one would let go of the booking\'s lock')
   ok(client.includes("if (t < timedUntil || savingNow.current) return") && client.includes("'Your two minutes ran out — tap the time again to carry on.'"),
