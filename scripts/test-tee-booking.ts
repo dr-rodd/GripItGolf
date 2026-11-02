@@ -250,13 +250,19 @@ section('A time is frozen while a phone books it (Ross, 1 Nov 2026)')
     [{ key: 'a', round: 'r1', slot: 2, since: 5, until: 6 }], 'a freeze is another phone talking — anything malformed is dropped')
 
   const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
-  ok(client.includes('if (frozen.has(slot)) {') && client.includes('freeze.hold(round.id, slot, timed)'),
+  ok(client.includes('if (!round || frozen.has(slot)) return false') && client.includes('freeze.hold(round.id, slot, timed)'),
     'opening a time freezes it, and a frozen one will not open')
   ok(client.includes('role="status">Locked</p>') && client.includes('const targets = mayBook && !isFrozen'),
     '  …and on other phones it says Locked, with no + to tap (Ross, 1 Nov 2026)')
+  ok(!client.includes('try again in a moment') && client.includes('{error?.slot === i && !isFrozen && ('),
+    '  …and nothing else: no second line saying so, which outlived the lock (Ross, 2 Nov 2026)')
   ok(client.includes("if (!claim(slot, true)) return") && client.includes("if (!claim(slot, false)) return")
-    && client.includes('Locked for you · {lockClock(timedUntil - now)}') && client.includes("here.purpose === 'book' && timedUntil !== null"),
+    && client.includes('{lockClock(timedUntil - now)} left to save') && client.includes("here.purpose === 'book' && timedUntil !== null"),
     'the booker sees two minutes counted down; an edit shows none')
+  ok(!client.includes('Locked for you'),
+    '  …and the countdown does not say Locked too — one Locked on a screen, on the times others hold (Ross, 2 Nov 2026)')
+  ok(client.includes('removeFor={isFrozen || booking ? undefined'),
+    'while this phone books a time, the sheet\'s ✕s wait — one would let go of the booking\'s lock')
   ok(client.includes("if (t < timedUntil || savingNow.current) return") && client.includes("'Your two minutes ran out — tap the time again to carry on.'"),
     '  …and at nought the booking closes and the time unlocks, never mid-save')
   const hookSrc = read('app/trip/[tripCode]/teesheet/useTeeFreeze.ts')
@@ -272,6 +278,16 @@ section('A time is frozen while a phone books it (Ross, 1 Nov 2026)')
   const hook = read('app/trip/[tripCode]/teesheet/useTeeFreeze.ts')
   ok(hook.includes("supabase.channel(`tee-sheet:${tripId}`, { config: { presence: { key } } })") && !/from\('/.test(hook),
     'the freezes are presence on one channel per event — nothing stored')
+  ok(/visibilityState === 'hidden'[\s\S]{0,250}channel\.untrack\(\)/.test(hook)
+    && hook.includes('if (!channel || !ready.current || away.current) return'),
+    'a phone that leaves the page lets go of its time at once (Ross, 2 Nov 2026: it stayed locked after its booker left)…')
+  ok(hook.includes('send({ ...f, since: now, until: f.timed ? f.until : now + LOCK_MS })')
+    && hook.includes('if (f.timed && now >= f.until) return'),
+    '  …and takes it back on return as if just tapped, a booking keeping its own two minutes')
+  ok(beaten([f('them', 2, now - 30_000), f('me', 2, now)], f('me', 2, now), now),
+    '  …so a phone that opened it meanwhile came first and keeps it')
+  ok(hook.includes('if (!ready.current) setFreezes([])') && hook.includes("mine && !away.current && beaten("),
+    'with the connection lost, no time shows locked that cannot be vouched for')
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

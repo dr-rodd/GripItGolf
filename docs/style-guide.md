@@ -277,8 +277,9 @@ That is why parts take parameters (`dense`, `compact`, `shape`, `variant`).
   pick goes in is `accent-tint` labelled Partner or Next, and Save sits
   above the list so the keyboard never covers it. A time another phone is
   booking is locked: its seats at half opacity, no `+` or ✕, and "Locked"
-  under them in `t-cap`. The booker sees "Locked for you · 1:42" above Save,
-  counting down two minutes; an edit shows no countdown.
+  under them in `t-cap` — nothing else, no second line saying so. The
+  booker sees "1:42 left to save" above Save, counting down two minutes,
+  never the word Locked; an edit shows no countdown.
   `app/trip/[tripCode]/teesheet/TeeSeats.tsx`.
 
 ---

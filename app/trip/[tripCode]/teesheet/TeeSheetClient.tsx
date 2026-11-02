@@ -236,10 +236,13 @@ export default function TeeSheetClient({
     tripId,
     !!live && storageReady,
     lifted => { if (lifted === roundId) router.refresh() },
-    slot => {
+    // Two tapped it together and the other phone came first: the booking
+    // closes, and the time simply reads Locked like any other — no second
+    // line saying so, which outlived the lock (Ross, 2 Nov 2026).
+    () => {
       setBooking(null)
       setSearch('')
-      setError({ slot, message: 'Locked — try again in a moment.' })
+      setError(null)
     },
   )
   // A lock runs out, so the sheet looks again now and then while another
@@ -251,6 +254,13 @@ export default function TeeSheetClient({
     const timer = setInterval(() => setNow(Date.now()), 5_000)
     return () => clearInterval(timer)
   }, [othersFreezing])
+  // Back from another app or a locked screen, the clock is read at once —
+  // timers sleep with the page, and a lock that ran out meanwhile is gone.
+  useEffect(() => {
+    const back = () => { if (document.visibilityState === 'visible') setNow(Date.now()) }
+    document.addEventListener('visibilitychange', back)
+    return () => document.removeEventListener('visibilitychange', back)
+  }, [])
   const frozen = round ? frozenSlots(freeze.freezes, round.id, freeze.key, now) : new Set<number>()
 
   // The booker's two minutes, counted down each second; at nought the
@@ -676,15 +686,12 @@ export default function TeeSheetClient({
 
   /**
    * Whether this phone may open a time: not while another phone has it
-   * locked. Opening it locks it here — a booking for two minutes,
-   * counted down (`timed`); an edit while it is being changed.
+   * locked — the time already says so. Opening it locks it here — a
+   * booking for two minutes, counted down (`timed`); an edit while it is
+   * being changed.
    */
   function claim(slot: number, timed: boolean): boolean {
-    if (!round) return false
-    if (frozen.has(slot)) {
-      setError({ slot, message: 'Locked — try again in a moment.' })
-      return false
-    }
+    if (!round || frozen.has(slot)) return false
     freeze.hold(round.id, slot, timed)
     setNow(Date.now())
     return true
@@ -1117,7 +1124,10 @@ export default function TeeSheetClient({
                         meId={meId}
                         targets={targets}
                         onTarget={(seat, t) => openBooking(i, rows, seat, t)}
-                        removeFor={isFrozen ? undefined : (cell, seat) => {
+                        // Not while this phone books a time: a ✕ writes
+                        // under its own freeze, which would let go of that
+                        // booking's.
+                        removeFor={isFrozen || booking ? undefined : (cell, seat) => {
                           const block = cell.teamId && together
                             ? slotPlayers.filter(p => teamMap.get(p.id)?.teamId === cell.teamId).map(p => p.id)
                             : [cell.player.id]
@@ -1156,8 +1166,9 @@ export default function TeeSheetClient({
                     {/* A refused write says so in the slot it was refused
                         in. At the foot of the sheet it was a scroll away
                         from the tap, so a name appearing and vanishing read
-                        as a glitch rather than as a message. */}
-                    {error?.slot === i && (
+                        as a glitch rather than as a message. A locked time
+                        says Locked and nothing else. */}
+                    {error?.slot === i && !isFrozen && (
                       <p className="text-rust-deep t-cap mt-1.5 leading-snug">{error.message}</p>
                     )}
 
@@ -1177,7 +1188,7 @@ export default function TeeSheetClient({
                         <div className="mt-3">
                           {here.purpose === 'book' && timedUntil !== null && (
                             <p className="t-cap text-ink/65 mb-2 tabular-nums" role="timer">
-                              Locked for you · {lockClock(timedUntil - now)}
+                              {lockClock(timedUntil - now)} left to save
                             </p>
                           )}
                           {here.purpose !== 'book' && (

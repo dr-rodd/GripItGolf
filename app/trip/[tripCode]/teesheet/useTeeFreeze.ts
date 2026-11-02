@@ -14,6 +14,11 @@ import { type Freeze, LOCK_MS, beaten, liftedRounds, readFreezes } from '@/lib/t
  * may have changed, so the sheet reads itself again. `onBeaten` hears that
  * another phone froze the time this one opened a moment earlier.
  *
+ * A phone that leaves the page — another app, the screen locked — lets go
+ * of its time at once rather than holding it from a pocket, and takes it
+ * back on return as if just tapped, so a phone that opened it meanwhile
+ * keeps it (Ross, 2 Nov 2026: a time stayed locked after its booker left).
+ *
  * Without a connection it fails soft: no freezes shown, and Save's own
  * check against the database still stops two versions of a time.
  */
@@ -31,6 +36,8 @@ export function useTeeFreeze(
   const channelRef = useRef<RealtimeChannel | null>(null)
   const ready = useRef(false)
   const wanted = useRef<Freeze | null>(null)
+  // The page is out of sight: its freeze is let go until it comes back.
+  const away = useRef(false)
   const last = useRef<Freeze[]>([])
   const handlers = useRef({ onLift, onBeaten })
   useEffect(() => { handlers.current = { onLift, onBeaten } })
@@ -45,7 +52,7 @@ export function useTeeFreeze(
       setFreezes(next)
       for (const round of lifted) handlers.current.onLift(round)
       const mine = wanted.current
-      if (mine && beaten(next, mine, Date.now())) {
+      if (mine && !away.current && beaten(next, mine, Date.now())) {
         wanted.current = null
         setHeld(null)
         void channel.untrack()
@@ -54,13 +61,18 @@ export function useTeeFreeze(
     })
     channel.subscribe(status => {
       ready.current = status === 'SUBSCRIBED'
-      if (ready.current && wanted.current) void channel.track(wanted.current)
+      // Connection lost: what it last heard can no longer be vouched for,
+      // so no time shows locked until it hears again. `last` is kept, so a
+      // freeze gone in the meantime still has the sheet read again.
+      if (!ready.current) setFreezes([])
+      else if (wanted.current && !away.current) void channel.track(wanted.current)
     })
     channelRef.current = channel
     return () => {
       ready.current = false
       channelRef.current = null
       last.current = []
+      setFreezes([])
       void supabase.removeChannel(channel)
     }
   }, [tripId, enabled, key])
@@ -69,9 +81,35 @@ export function useTeeFreeze(
     wanted.current = f
     setHeld(f)
     const channel = channelRef.current
-    if (!channel || !ready.current) return
+    if (!channel || !ready.current || away.current) return
     void (f ? channel.track(f) : channel.untrack())
   }, [])
+
+  // Out of sight, the time is let go; back, it is taken again as if just
+  // tapped — a later `since`, so a phone that opened it meanwhile came first
+  // and keeps it (`beaten` closes this one). A booking keeps its own two
+  // minutes; one that ran out while away closes itself.
+  useEffect(() => {
+    if (!enabled) return
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        if (away.current) return
+        away.current = true
+        const channel = channelRef.current
+        if (wanted.current && channel && ready.current) void channel.untrack()
+        return
+      }
+      if (!away.current) return
+      away.current = false
+      const f = wanted.current
+      if (!f) return
+      const now = Date.now()
+      if (f.timed && now >= f.until) return
+      send({ ...f, since: now, until: f.timed ? f.until : now + LOCK_MS })
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [enabled, send])
 
   /**
    * Freeze a time while this phone changes it: a booking for two minutes
