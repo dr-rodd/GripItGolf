@@ -272,14 +272,15 @@ That is why parts take parameters (`dense`, `compact`, `shape`, `variant`).
   corner is cut round, never a square step. An open seat a partnership
   still has to fill is the ticket's empty end — no fill, the ticket's edge,
   a `+` reading Join; any other open seat is a dashed box whose `+` reads
-  Add. Each `+` takes `.press`. **Green on the sheet is only ever your own
-  seat** — never a pick, never a selection. Booking a time lifts it (the
-  motion table's Tee time lift): the draft's picks look like any player,
-  every seat the next pick may go in keeps its `+` Add or Join, the one it
-  will go in outlined 2px in `ink` (a ticket's end: an outline drawn inside
-  its edge, as a field in focus is — never a shadow), and a row fills from
-  the left — an empty
-  row's right seat is a blank dashed box until the left is filled. Save
+  Add. Each `+` takes `.press`. **A green fill on the sheet is only ever
+  your own seat** — never a pick, never a selection. Booking a time lifts
+  it (the motion table's Tee time lift): the draft's picks look like any
+  player, every seat the next pick may go in keeps its `+` Add or Join,
+  the one it will go in outlined 2px in `accent-deep`, the Save button's
+  green, with no fill (a ticket's end: an outline drawn inside its edge, as
+  a field in focus is — never a shadow), and a row fills from the left —
+  an empty row's right seat is a blank dashed box until the left is
+  filled. Save
   sits above the list so the keyboard never covers it. A time another
   phone is booking is locked: its seats at half opacity, no `+` or ✕, and
   "Locked by another user" under them in `t-cap` — nothing else. The

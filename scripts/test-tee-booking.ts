@@ -209,9 +209,9 @@ section('The sheet books in place')
   ok(!seats.includes("'Partner'") && !seats.includes("'Next'") && !client.includes("'Partner'") && !client.includes("? 'Next'")
     && seats.includes("{onTicket ? 'Join' : 'Add'}") && (seats.match(/const words = plus\(/g) ?? []).length === 2,
     'while booking, the seats keep their Add and Join — never Partner or Next (Ross, 2 Nov 2026)')
-  ok(seats.includes("next: 'bg-surface border-ink text-accent-deep outline-2 outline-solid outline-ink -outline-offset-2'") && seats.includes('border-2 border-solid border-ink bg-surface')
+  ok(seats.includes("next: 'bg-surface border-accent-deep text-accent-deep outline-2 outline-solid outline-accent-deep -outline-offset-2'") && seats.includes('border-2 border-solid border-accent-deep bg-surface')
     && !/chosen|bg-accent-tint border-accent-deep/.test(seats) && seats.includes("mine: 'bg-accent-tint"),
-    '  …the seat the next pick goes in outlined in ink, green kept for your own seat alone')
+    '  …the seat the next pick goes in outlined in the Save button\'s green, a green fill kept for your own seat alone (Ross, 3 Nov 2026)')
   ok(seats.includes('if (!booking.mayChoose(i))') && client.includes('mayChoose: seat => mayChoose(here.draft, seat)')
     && client.includes('if (mayChoose(here.draft, seat)) setBooking'),
     '  …and only the seats a pick may go in can be tapped')

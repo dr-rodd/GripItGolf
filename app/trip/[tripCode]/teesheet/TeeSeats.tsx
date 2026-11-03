@@ -151,8 +151,9 @@ const CONCAVE_BOX = Math.ceil(HALF_GAP + EDGE)
  * Each + pushes down under the thumb. While a time is being booked
  * (`booking`) the seats are the draft: this booking's picks come out with a
  * tap of their ✕, every seat the next pick may go in carries its Add or
- * Join as on the sheet, and the one it will go in is outlined in ink —
- * never green, which is your own seat's colour (Ross, 2 Nov 2026).
+ * Join as on the sheet, and the one it will go in is outlined in the Save
+ * button's green (Ross, 3 Nov 2026) — outlined, never filled: a green fill
+ * is your own seat's (Ross, 2 Nov 2026).
  */
 export default function TeeSeats({
   rows, handicapOf, meId, targets, onTarget, removeFor, booking,
@@ -234,7 +235,7 @@ export default function TeeSeats({
                 onClick={() => booking.onChoose(i)}
                 aria-pressed={next}
                 className={`press rounded-tile flex items-center justify-center text-accent-deep ${
-                  next ? 'border-2 border-solid border-ink bg-surface' : 'border border-dashed border-line-strong hover:border-accent hover:text-accent'
+                  next ? 'border-2 border-solid border-accent-deep bg-surface' : 'border border-dashed border-line-strong hover:border-accent hover:text-accent'
                 }`}
               >
                 {words}
@@ -294,9 +295,9 @@ export default function TeeSeats({
 }
 
 /**
- * A seat's look: a player's — green only for your own, so it never means
- * anything else — or a ticket's empty end, outlined in ink where a booking's
- * next pick goes.
+ * A seat's look: a player's — a green fill only for your own, so it never
+ * means anything else — or a ticket's empty end, outlined in the Save
+ * button's green (`accent-deep`) where a booking's next pick goes.
  */
 type Tone = 'plain' | 'mine' | 'open' | 'next'
 const TONES: Record<Tone, string> = {
@@ -306,7 +307,7 @@ const TONES: Record<Tone, string> = {
   // Outlined 2px inside its edge, as a field in focus is — the seam sides,
   // which have no border of their own, too — so the box being filled
   // stands out of its ticket all the way round.
-  next: 'bg-surface border-ink text-accent-deep outline-2 outline-solid outline-ink -outline-offset-2',
+  next: 'bg-surface border-accent-deep text-accent-deep outline-2 outline-solid outline-accent-deep -outline-offset-2',
 }
 
 /**
@@ -328,7 +329,7 @@ function Seat({ joins, near, tone, align, onClick, pressed, children }: {
   // Partners' seats reach across the gap to meet. The left and upper seat
   // of each seam carry it as a faint line; the other has no edge there.
   const seam = 'var(--color-line)'
-  const edge = tone === 'next' ? 'var(--color-ink)' : 'var(--color-line-strong)'
+  const edge = tone === 'next' ? 'var(--color-accent-deep)' : 'var(--color-line-strong)'
   const width = { top: joins.up ? 0 : EDGE, right: EDGE, bottom: EDGE, left: joins.left ? 0 : EDGE }
   const style: CSSProperties = {
     marginTop: joins.up ? -HALF_GAP : 0,
