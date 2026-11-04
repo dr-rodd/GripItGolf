@@ -29,6 +29,9 @@ export type FieldPlayer = { name: string; handicap: string; gender: 'M' | 'F'; s
 /** A player of the other event, as read from it. */
 export type SeedPlayer = { id: string; name: string; handicap: number | null; gender: string | null }
 
+/** One of the other event's leaderboards, as it finished: its player ids, first to last. */
+export type SeedBoard = { id: string; title: string; order: string[] }
+
 /** The seeding, as the form holds it. */
 export type FieldSeed = {
   on: boolean
@@ -37,7 +40,11 @@ export type FieldSeed = {
    * out — with its organiser PIN's hash, to check that PIN against on this
    * phone (anybody with the code can read it: lib/passcode.ts).
    */
-  source: { code: string; name: string; tripId: string; adminHash: string | null } | null
+  source: {
+    code: string; name: string; tripId: string; adminHash: string | null
+    /** Its leaderboards as finishing orders, by its own player ids — for the draw's seeds. */
+    boards: SeedBoard[]
+  } | null
   /** That event's organiser PIN, once it checks out — everything comes across. */
   adminPin: string | null
 }
@@ -119,6 +126,21 @@ export function seedPairs(
     const to = r.sourceId && r.name.trim() ? idFor.get(keyOf(r.name)) : undefined
     return r.sourceId && to ? [{ from: r.sourceId, to }] : []
   })
+}
+
+/**
+ * The other event's leaderboards as the draw sees them — each finishing
+ * order in this form's draw keys, through the players brought in (or a
+ * typed name matched to one). A board none of this field is on is dropped.
+ */
+export function drawStandings(
+  seed: FieldSeed, rows: readonly FieldPlayer[], keyOf: (name: string) => string,
+): { id: string; title: string; order: string[] }[] {
+  if (!seed.source) return []
+  const keyFor = new Map(rows.flatMap(r => (r.sourceId && r.name.trim() ? [[r.sourceId, keyOf(r.name)] as const] : [])))
+  return seed.source.boards
+    .map(b => ({ id: b.id, title: b.title, order: b.order.flatMap(id => keyFor.get(id) ?? []) }))
+    .filter(b => b.order.length > 0)
 }
 
 /** An event code as typed: six letters and numbers. */

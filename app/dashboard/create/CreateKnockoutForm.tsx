@@ -14,7 +14,7 @@ import {
 import { NO_PUBLIC_PIN, publicPinIssue, rememberEntry } from '@/lib/publicPin'
 import PublicPinField from '@/app/components/PublicPinField'
 import { parseHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
-import { NO_FIELD_SEED, seedPairs, type FieldPlayer, type FieldSeed } from '@/lib/fieldSeed'
+import { NO_FIELD_SEED, drawStandings, seedPairs, type FieldPlayer, type FieldSeed } from '@/lib/fieldSeed'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import {
   type EventPermissions, defaultPermissions, permissionsFor, storedPermissions,
@@ -475,7 +475,8 @@ export default function CreateKnockoutForm() {
 
         {/* ── 3 · The draw, a step of its own ── */}
         {step === 3 && (
-          <CreationDraw entrants={drawEntrants} value={draw} onChange={setDraw} issue={drawIssue} today={today} heading={false} />
+          <CreationDraw entrants={drawEntrants} value={draw} onChange={setDraw} issue={drawIssue} today={today} heading={false}
+            standings={drawStandings(seed, players, drawKey)} from={seed.source?.name} />
         )}
 
         {/* ── 4 · How collaborative, and the organiser PIN ── */}

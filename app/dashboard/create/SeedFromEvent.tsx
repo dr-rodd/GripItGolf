@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { hashPasscode, MAX_PASSCODE } from '@/lib/passcode'
-import { EVENT_CODE, NO_FIELD_SEED, tidyCode, type FieldSeed, type SeedPlayer } from '@/lib/fieldSeed'
+import { EVENT_CODE, NO_FIELD_SEED, tidyCode, type FieldSeed, type SeedBoard, type SeedPlayer } from '@/lib/fieldSeed'
 import Toggle from '@/app/components/Toggle'
 import { IconCheck } from '@/app/components/icons'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
@@ -29,7 +29,9 @@ export default function SeedFromEvent({ value, onChange, onSeed, onUnseed }: {
 }) {
   const [code, setCode] = useState(value.source?.code ?? '')
   // Back on this step after moving on: what was found is the form's to keep.
-  const [found, setFound] = useState<Found | null>(() => value.source ? { ...value.source, publicHash: null } : null)
+  const [found, setFound] = useState<Found | null>(() => value.source
+    ? { tripId: value.source.tripId, code: value.source.code, name: value.source.name, adminHash: value.source.adminHash, publicHash: null }
+    : null)
   const [publicPin, setPublicPin] = useState('')
   const [adminPin, setAdminPin] = useState(value.adminPin ?? '')
   const [busy, setBusy] = useState(false)
@@ -58,8 +60,21 @@ export default function SeedFromEvent({ value, onChange, onSeed, onUnseed }: {
     if (err) { setError('Could not read that event’s players — try again.'); return }
     const players = (data ?? []) as SeedPlayer[]
     if (players.length === 0) { setError(`${f.name} has no players to bring in yet.`); return }
+    // Its leaderboards' finishing orders too, while its public PIN is to
+    // hand — the draw step offers them as seeds. Never in the way: none
+    // read means none offered.
+    let boards: SeedBoard[] = []
+    try {
+      const res = await fetch('/api/event/standings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: f.code, pin: publicPin }),
+      })
+      const out = await res.json().catch(() => null) as { boards?: SeedBoard[] } | null
+      if (res.ok && Array.isArray(out?.boards)) boards = out.boards
+    } catch { /* no seeds offered */ }
     onSeed(players)
-    onChange({ on: true, source: { code: f.code, name: f.name, tripId: f.tripId, adminHash: f.adminHash }, adminPin: null })
+    onChange({ on: true, source: { code: f.code, name: f.name, tripId: f.tripId, adminHash: f.adminHash, boards }, adminPin: null })
   }
 
   async function findEvent() {

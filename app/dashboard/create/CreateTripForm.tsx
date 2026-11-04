@@ -25,7 +25,7 @@ import CreationDraw, {
 } from './CreationDraw'
 import MatchPlayField from './MatchPlayField'
 import { bringAcross } from './SeedFromEvent'
-import { NO_FIELD_SEED, seedPairs, type FieldPlayer, type FieldSeed } from '@/lib/fieldSeed'
+import { NO_FIELD_SEED, drawStandings, seedPairs, type FieldPlayer, type FieldSeed } from '@/lib/fieldSeed'
 import {
   parseHandicap, isPlusHandicap, isHandicapPending, PLUS_HANDICAP_WARNING,
   HANDICAP_PENDING_LABEL,
@@ -867,7 +867,8 @@ export default function CreateTripForm({ matchPlay = false }: {
 
         {/* ── Step 4: a match play event's draw, a step of its own ── */}
         {step === 4 && matchPlay && (
-          <CreationDraw entrants={drawEntrants} value={draw} onChange={setDraw} issue={drawIssue} today={today} heading={false} />
+          <CreationDraw entrants={drawEntrants} value={draw} onChange={setDraw} issue={drawIssue} today={today} heading={false}
+            standings={drawStandings(seed, players, drawKey)} from={seed.source?.name} />
         )}
 
         {/* ── Step 3: Players, then the rest; a match play event's rest is step 5 ── */}

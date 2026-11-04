@@ -125,6 +125,18 @@ export function byHandicap<T extends { handicap: number | null }>(items: readonl
   })
 }
 
+/**
+ * The field in a leaderboard's finishing order (Ross, 4 Nov 2026: seeds
+ * from the event the field came from) — those on the board first, as they
+ * finished, then everybody it never had, in the order they were.
+ */
+export function byStandings(order: readonly string[], standings: readonly string[]): string[] {
+  const inField = new Set(order)
+  const placed = standings.filter((id, i) => inField.has(id) && standings.indexOf(id) === i)
+  const done = new Set(placed)
+  return [...placed, ...order.filter(id => !done.has(id))]
+}
+
 // ─── Seeding ───────────────────────────────────────────────────
 
 /**

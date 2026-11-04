@@ -10,9 +10,10 @@
 import fs from 'fs'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  withSeeded, withoutSeeded, addLabel, seedPairs, fieldRow, tidyCode, EVENT_CODE,
+  withSeeded, withoutSeeded, addLabel, seedPairs, fieldRow, tidyCode, drawStandings, EVENT_CODE, NO_FIELD_SEED,
   type FieldPlayer, type SeedPlayer,
 } from '../lib/fieldSeed'
+import { byStandings } from '../lib/bracketDraw'
 import { copyAcross } from '../app/api/event/import/copyAcross'
 import { hashPasscode } from '../lib/passcode'
 
@@ -60,6 +61,34 @@ section('The other event\'s players join the list')
   eq(seedPairs(merged, ids, n => n.trim().toLowerCase()), [{ from: 'a', to: 'n1' }, { from: 'b', to: 'n3' }],
     'each player brought in is paired with who they are in the new event — a typed one nobody\'s')
   ok(EVENT_CODE.test(tidyCode(' qx7 k2p ')) && !EVENT_CODE.test(tidyCode('QX7K')), 'a code is tidied to six capitals')
+}
+
+section('The draw seeded from that event\'s leaderboard (Ross, 4 Nov 2026)')
+{
+  eq(byStandings(['dave', 'kate', 'ross', 'new'], ['ross', 'gone', 'kate', 'ross']), ['ross', 'kate', 'dave', 'new'],
+    'the field in finishing order — those the board had first, then the rest as they were, nobody twice, nobody added')
+  const rows = withSeeded([row('Ross OG')], [sp('o1', 'Ross OG'), sp('o2', 'Kate B'), sp('o3', 'Dave C')], true)
+  const seed = {
+    ...NO_FIELD_SEED, on: true,
+    source: {
+      code: 'OLDKO1', name: 'Summer 2026', tripId: 'T1', adminHash: null,
+      boards: [
+        { id: 'b1', title: 'Stableford Points', order: ['o3', 'o9', 'o1'] },
+        { id: 'b2', title: 'Strokes', order: ['o9'] },
+      ],
+    },
+  }
+  eq(drawStandings(seed, rows, n => n.trim().toLowerCase()), [{ id: 'b1', title: 'Stableford Points', order: ['dave c', 'ross og'] }],
+    'each leaderboard in this draw\'s own keys, through the players brought in — one none of this field is on dropped')
+  eq(drawStandings(NO_FIELD_SEED, rows, n => n), [], '  …and nothing offered without a seeded field')
+  const route = read('app/api/event/standings/route.ts')
+  ok(route.includes("lb.audience === 'individual' && lb.competition === 'league'") && route.includes('buildRows(lb, ctx).map(r => r.id)')
+    && route.includes('publicHash &&'),
+    'the standings are each individual table\'s own order, from the board\'s own rows, behind the event\'s public PIN where it has one')
+  const draw = read('app/dashboard/create/CreationDraw.tsx')
+  ok(draw.includes('Seed from {from ?? \'the other event\'}&apos;s leaderboard') && draw.includes("method: 'seeded', order: byStandings(draft.order, board.order)")
+    && draw.includes('Pick which leaderboard'),
+    'the draw step offers it, a leaderboard to pick where there are several, and seeds the list from it')
 }
 
 // ─── A stand-in database ───────────────────────────────────────

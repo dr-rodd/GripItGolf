@@ -1,10 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  draftIssue, draftSlots, newDraft, syncDraft,
+  byStandings, draftIssue, draftSlots, newDraft, syncDraft,
   type DrawDraft, type DrawEntrant, type DrawPlan,
 } from '@/lib/bracketDraw'
+import { cardClass, chipClass } from '@/app/components/ui'
 import { parseHandicap } from '@/lib/handicap'
 import BracketDrawer, { DrawTiming, type DrawTimingValue } from '@/app/components/BracketDrawer'
 
@@ -69,7 +71,7 @@ export async function writeCreationDraw(
 /** What the draw offers, said under its title — the step's own, where it has one. */
 export const DRAW_INTRO = 'Make it now, leave it for later, or have it made on a date.'
 
-export default function CreationDraw({ entrants, value, onChange, issue, today, heading = true }: {
+export default function CreationDraw({ entrants, value, onChange, issue, today, heading = true, standings = [], from }: {
   entrants: DrawEntrant[]
   value: CreationDrawValue
   onChange: (next: CreationDrawValue) => void
@@ -77,9 +79,22 @@ export default function CreationDraw({ entrants, value, onChange, issue, today, 
   today: string
   /** Its own title and line — off where it is a step of its own (Ross, 4 Nov 2026). */
   heading?: boolean
+  /**
+   * The leaderboards of the event the field was seeded from, as finishing
+   * orders in this draw's keys (lib/fieldSeed.ts `drawStandings`) — offered
+   * as the seeds, one to pick where there are several (Ross, 4 Nov 2026).
+   */
+  standings?: { id: string; title: string; order: string[] }[]
+  /** That event's name. */
+  from?: string
 }) {
   const field = entrants.map(e => e.id)
   const draft = syncDraft(value.draft, field)
+  const [picked, setPicked] = useState<string | null>(null)
+  const seedFrom = (board: { id: string; order: string[] }) => {
+    setPicked(board.id)
+    onChange({ ...value, draft: { ...draft, method: 'seeded', order: byStandings(draft.order, board.order) } })
+  }
   return (
     <div className="space-y-4">
       {heading && (
@@ -94,6 +109,35 @@ export default function CreationDraw({ entrants, value, onChange, issue, today, 
         allowNow={entrants.length >= 2}
         min={today}
       />
+      {standings.length > 0 && (
+        value.timing.when === 'now' ? (
+          <div className={`p-4 ${cardClass()}`}>
+            <p className="text-ink text-sm font-medium">Seed from {from ?? 'the other event'}&apos;s leaderboard</p>
+            <p className="t-cap text-ink/65 mt-0.5 leading-snug">
+              {standings.length > 1
+                ? 'Pick which leaderboard — its finishing order becomes the seeds, first plays last.'
+                : 'Its finishing order becomes the seeds, first plays last.'}
+            </p>
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {standings.map(b => (
+                <button
+                  key={b.id}
+                  type="button"
+                  aria-pressed={picked === b.id && draft.method === 'seeded'}
+                  onClick={() => seedFrom(b)}
+                  className={chipClass(picked === b.id && draft.method === 'seeded')}
+                >
+                  {b.title}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="t-cap text-ink/65 leading-snug">
+            Make the draw now to seed it from {from ?? 'the other event'}&apos;s leaderboard.
+          </p>
+        )
+      )}
       {value.timing.when === 'now' && (
         <BracketDrawer entrants={entrants} value={draft} onChange={d => onChange({ ...value, draft: d })} />
       )}
