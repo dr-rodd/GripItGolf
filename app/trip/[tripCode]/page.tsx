@@ -944,6 +944,7 @@ export default async function TripPage({ params, searchParams }: {
                     roundIds={rounds.map(r => r.id)}
                     players={players}
                     fieldMayAdd={allowsParticipant(trip.kind, tripRaw.event_permissions, 'add_players')}
+                    fieldSetsHandicaps={allowsParticipant(trip.kind, tripRaw.event_permissions, 'edit_handicaps')}
                     passcodeHash={tripRaw.settings_passcode_hash ?? null}
                   />
                 ) : null}

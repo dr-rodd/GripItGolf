@@ -28,7 +28,7 @@ import { IconPlus } from '@/app/components/icons'
  * snapshotted onto every round that already exists, as a late join is.
  */
 export default function AddToField({
-  tripId, tripCode, roundIds, players, fieldMayAdd, passcodeHash,
+  tripId, tripCode, roundIds, players, fieldMayAdd, fieldSetsHandicaps = true, passcodeHash,
 }: {
   tripId: string
   tripCode: string
@@ -38,6 +38,12 @@ export default function AddToField({
   players: { id: string; name: string }[]
   /** `add_players` is on: anyone adds to the field without the PIN. */
   fieldMayAdd: boolean
+  /**
+   * `edit_handicaps` is on: whoever adds a name may give its handicap. Off,
+   * the handicaps are the organiser's (Ross, 4 Nov 2026) — anybody else
+   * adds the name pending.
+   */
+  fieldSetsHandicaps?: boolean
   passcodeHash: string | null
 }) {
   const router = useRouter()
@@ -50,6 +56,7 @@ export default function AddToField({
   const [saving, setSaving] = useState(false)
 
   const mayAdd = fieldMayAdd || unlocked || !isLocked(passcodeHash)
+  const maySetHandicap = fieldSetsHandicaps || unlocked || !isLocked(passcodeHash)
 
   function openSheet() {
     // The unlock lives in sessionStorage — read on tap, never in render.
@@ -65,7 +72,7 @@ export default function AddToField({
     if (!mayAdd) { setError('Adding to the field needs the organiser PIN.'); return }
     const trimmed = name.trim()
     if (!trimmed) { setError('Enter a name first.'); return }
-    const hcp = readHandicapField(handicap)
+    const hcp = maySetHandicap ? readHandicapField(handicap) : null
     if (hcp === undefined) {
       setError('That handicap does not read as a number — clear it to leave it pending.')
       return
@@ -148,13 +155,19 @@ export default function AddToField({
             />
           </div>
 
-          <div>
-            <label className={FIELD_LABEL}>Handicap</label>
-            <HandicapField value={handicap} onChange={setHandicap} placeholder="Leave blank if unknown" className={FIELD} />
-            <p className="t-cap text-ink/65 mt-2 leading-snug">
-              Blank is pending, not scratch. They can add it when they claim their name.
+          {maySetHandicap ? (
+            <div>
+              <label className={FIELD_LABEL}>Handicap</label>
+              <HandicapField value={handicap} onChange={setHandicap} placeholder="Leave blank if unknown" className={FIELD} />
+              <p className="t-cap text-ink/65 mt-2 leading-snug">
+                Blank is pending, not scratch. They can add it when they claim their name.
+              </p>
+            </div>
+          ) : (
+            <p className="t-cap text-ink/65 leading-snug">
+              The organiser sets the handicaps — theirs shows as pending until they do.
             </p>
-          </div>
+          )}
 
           <div className="flex gap-1.5">
             {(['M', 'F'] as const).map(g => (

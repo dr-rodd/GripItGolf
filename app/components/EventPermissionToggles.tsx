@@ -23,13 +23,13 @@ import { cardClass } from './ui'
  */
 export default function EventPermissionToggles<K extends string = EventPermissionKey>({
   value, onChange, disabled = false,
-  registry = EVENT_PERMISSIONS as unknown as { key: K; label: string; hint: string }[],
+  registry = EVENT_PERMISSIONS as unknown as { key: K; label: string; hint: string; offWarning?: string }[],
 }: {
   value: Record<K, boolean>
   // The map's keys decide K; the callback and the registry follow them.
   onChange: (next: NoInfer<Record<K, boolean>>) => void
   disabled?: boolean
-  registry?: NoInfer<{ key: K; label: string; hint: string }[]>
+  registry?: NoInfer<{ key: K; label: string; hint: string; offWarning?: string }[]>
 }) {
   return (
     <div className="space-y-2">
@@ -41,6 +41,10 @@ export default function EventPermissionToggles<K extends string = EventPermissio
           <div className="min-w-0">
             <p className="text-ink text-sm font-medium">{p.label}</p>
             <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">{p.hint}</p>
+            {/* What switching it off costs, said while it is off. */}
+            {p.offWarning && !value[p.key] && (
+              <p className="text-rust-deep text-[13px] mt-2 leading-snug">{p.offWarning}</p>
+            )}
           </div>
           <Toggle
             checked={value[p.key]}

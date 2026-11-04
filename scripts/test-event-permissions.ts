@@ -38,10 +38,16 @@ const read = (p: string) => fs.readFileSync(p, 'utf-8')
 section('Three seeded permissions, conservative by default')
 {
   eq(EVENT_PERMISSIONS.map(p => p.key),
-    ['add_courses', 'add_players', 'edit_scores', 'edit_tee_sheet', 'set_tee_sheets', 'assign_tag', 'add_rounds', 'set_venues', 'score_matches'],
-    'the three seeded keys, then the tee sheet\'s two, the tag, a league\'s rounds and venues, and scoring a match — each the promised one-line addition')
-  ok(EVENT_PERMISSIONS.every(p => p.dflt === (p.key === 'score_matches' || p.key === 'edit_tee_sheet')),
-    'every default is off — the organiser opts in — except scoring a match, open unless the organiser closes it, and players booking their own tee times (Ross, 26 Oct 2026: the medium level is the default)')
+    ['add_courses', 'add_players', 'edit_scores', 'edit_tee_sheet', 'set_tee_sheets', 'assign_tag', 'add_rounds', 'set_venues', 'score_matches', 'edit_handicaps'],
+    'the three seeded keys, then the tee sheet\'s two, the tag, a league\'s rounds and venues, scoring a match and handicaps — each the promised one-line addition')
+  ok(EVENT_PERMISSIONS.every(p => p.dflt === (p.key === 'score_matches' || p.key === 'edit_tee_sheet' || p.key === 'edit_handicaps')),
+    'every default is off — the organiser opts in — except scoring a match, open unless the organiser closes it, players booking their own tee times (Ross, 26 Oct 2026: the medium level is the default) and setting their own handicaps (Ross, 4 Nov 2026)')
+  const hcp = EVENT_PERMISSIONS.find(p => p.key === 'edit_handicaps')!
+  ok(!!hcp.offWarning?.includes('invite link') && hcp.offWarning.includes('start a round'),
+    '  …switching that one off says what it costs: invite-link players need you, and no handicap means no round')
+  ok(describePermissions(defaultPermissions(), permissionsFor(false)) === 'Organiser-run — players set their own handicaps.'
+    && describePermissions(defaultPermissions(), permissionsFor(false, true)) === 'Organiser-run — anyone can score a match, and players set their own handicaps.',
+    '  …and an event at its defaults is still organiser-run, the two open ones said by name')
   ok(!permissionsFor(false).some(p => p.key === 'score_matches') && permissionsFor(false, true).some(p => p.key === 'score_matches'),
     'only a match play event is asked who scores its matches')
   ok(EVENT_PERMISSIONS.filter(p => !p.teeSheet).every(p => p.label.startsWith('Participants can')),
@@ -93,6 +99,7 @@ section('Storage reads whole, falls soft, and never nulls')
   const full: EventPermissions = {
     add_courses: true, add_players: false, edit_scores: true, edit_tee_sheet: false,
     set_tee_sheets: true, assign_tag: true, add_rounds: true, set_venues: false, score_matches: false,
+    edit_handicaps: false,
   }
   eq(parseEventPermissions(JSON.parse(JSON.stringify(full))), full,
     'a full map reads back whole')
@@ -134,10 +141,11 @@ section('The admin card sums it up')
   const two = {
     add_courses: true, add_players: true, edit_scores: false, edit_tee_sheet: false,
     set_tee_sheets: false, assign_tag: false, add_rounds: false, set_venues: false, score_matches: false,
+    edit_handicaps: false,
   }
-  ok(describePermissions(two, permissionsFor(false)).includes('2 of 4'),
+  ok(describePermissions(two, permissionsFor(false)).includes('2 of 5'),
     'partial says the count, out of what this event is asked')
-  ok(describePermissions(two, permissionsFor(true)).includes('2 of 6'),
+  ok(describePermissions(two, permissionsFor(true)).includes('2 of 7'),
     '  …which on a series includes its own')
 }
 
@@ -310,6 +318,26 @@ section('Migration 049 is the one column the model promised')
     'one jsonb column, idempotently')
   ok(sql.includes('lib/eventPermissions.ts'),
     'pointing at the registry as the only copy of the keys')
+}
+
+section('Handicaps: the field\'s own, or the organiser\'s (Ross, 4 Nov 2026)')
+{
+  const page = read('app/trip/[tripCode]/players/page.tsx')
+  const client = read('app/trip/[tripCode]/players/PlayersClient.tsx')
+  ok(page.includes("askHandicap={!isEvent(kind) ? true : handicapsOpen ? 'pending' : false}") && page.includes('ownHandicap={handicapsOpen}')
+    && page.includes("'edit_handicaps',"),
+    'an event whose players set their own handicaps asks one of a name left without, and of somebody joining')
+  ok(client.includes("askHandicap === 'pending' && isHandicapPending(player.handicap)")
+    && client.includes('const handicap = ownHandicap ? parseHandicap(addHandicap) : null'),
+    '  …and where the organiser keeps them, somebody joining comes in pending, never asked')
+  const match = read('app/trip/[tripCode]/match/[matchId]/page.tsx')
+  ok(match.includes("!underWay && allowsParticipant(kind, perms, 'edit_handicaps')") && match.includes("from('match_scores').select('match_id', { count: 'exact', head: true })"),
+    'a player changes their own on their match page only while the field may, and until the card is under way')
+  const add = read('app/trip/[tripCode]/AddToField.tsx')
+  ok(add.includes('const maySetHandicap = fieldSetsHandicaps || unlocked || !isLocked(passcodeHash)'),
+    'adding a name to the field gives its handicap only where the field may — or the organiser, with the PIN')
+  const toggles = read('app/components/EventPermissionToggles.tsx')
+  ok(toggles.includes('p.offWarning && !value[p.key]'), 'switched off, the toggle says what it costs')
 }
 
 // ─── Result ────────────────────────────────────────────────────

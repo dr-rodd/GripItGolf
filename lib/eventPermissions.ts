@@ -39,6 +39,7 @@ export type EventPermissionKey =
   | 'add_rounds'
   | 'set_venues'
   | 'score_matches'
+  | 'edit_handicaps'
 
 export const EVENT_PERMISSIONS: {
   key: EventPermissionKey
@@ -53,6 +54,8 @@ export const EVENT_PERMISSIONS: {
   seriesOnly?: true
   /** Only means anything on a match play event (`permissionsFor`). */
   knockoutOnly?: true
+  /** Said under the toggle while it is off — what switching it off costs. */
+  offWarning?: string
   /**
    * Asked as the event's tee times question rather than among the toggles
    * (`TEE_SHEET_PERMISSIONS`; Ross, 26 Oct 2026) — two answers that only
@@ -107,6 +110,15 @@ export const EVENT_PERMISSIONS: {
   { key: 'score_matches', dflt: true, knockoutOnly: true,
     label: 'Participants can score any match',
     hint: 'Let anyone take a match live and score it. Off, only its players can — and you, with the PIN.' },
+  // A player's own handicap — on by default (Ross, 4 Nov 2026): each player
+  // fills theirs in on claiming a name left without one, or joining, and
+  // amends it on their match page until the match is under way. Off, the
+  // handicaps are the organiser's alone (Trip Setup, with the PIN), which
+  // has a cost the toggle says.
+  { key: 'edit_handicaps', dflt: true,
+    label: 'Participants can set their own handicaps',
+    hint: 'Each player fills in their own handicap, and can change it until they play.',
+    offWarning: 'Only you can change a handicap. Players who join by invite link will need you to set theirs, and anyone without a handicap can’t start a round.' },
 ]
 
 /**
@@ -191,15 +203,26 @@ export function storedPermissions(perms: EventPermissions): EventPermissions | n
   return EVENT_PERMISSIONS.some(p => perms[p.key] !== p.dflt) ? perms : null
 }
 
+/**
+ * The permissions that start on, said by name in the summary rather than
+ * counted — an event at its defaults is still organiser-run.
+ */
+const OPEN_BY_DEFAULT: Partial<Record<EventPermissionKey, string>> = {
+  edit_handicaps: 'players set their own handicaps',
+  score_matches: 'anyone can score a match',
+}
+
 /** "2 of 3 on" — the admin card's one-line summary, over what this event is asked. */
 export function describePermissions(
   perms: EventPermissions,
   registry: readonly { key: EventPermissionKey }[] = EVENT_PERMISSIONS,
 ): string {
-  const on = registry.filter(p => perms[p.key]).length
-  if (on === 0) return 'Organiser-run — participants play, you manage.'
-  if (on === 1 && registry.length > 1 && registry.some(p => p.key === 'score_matches' && perms[p.key])) {
-    return 'Organiser-run — anyone can score a match.'
+  const on = registry.filter(p => perms[p.key])
+  if (on.every(p => OPEN_BY_DEFAULT[p.key])) {
+    const open = on.map(p => OPEN_BY_DEFAULT[p.key]!)
+    return open.length === 0
+      ? 'Organiser-run — participants play, you manage.'
+      : `Organiser-run — ${open.join(', and ')}.`
   }
-  return `${on} of ${registry.length} participant permissions on.`
+  return `${on.length} of ${registry.length} participant permissions on.`
 }

@@ -101,6 +101,14 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
     me?.id ?? null,
   )
 
+  // Whether the field sets its own handicaps (lib/eventPermissions.ts,
+  // `edit_handicaps`) — always on a trip.
+  const handicapsOpen = allowsParticipant(
+    kind,
+    (permsResult.data as { event_permissions?: unknown } | null)?.event_permissions,
+    'edit_handicaps',
+  )
+
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
       <TripHeader backTo={`/trip/${tripCode}`} />
@@ -154,7 +162,13 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
           // the organiser's own entry — often off a club list — and the
           // field revising it on the way in is their call to make, not this
           // screen's, so an event claims in one tap as before.
-          askHandicap={!isEvent(kind)}
+          //
+          // Unless the event's players set their own handicaps (the default,
+          // Ross, 4 Nov 2026) — then a name the organiser left without one
+          // asks for it as it is claimed, and somebody joining gives theirs.
+          // Where the organiser keeps the handicaps, neither does.
+          askHandicap={!isEvent(kind) ? true : handicapsOpen ? 'pending' : false}
+          ownHandicap={handicapsOpen}
           noun={noun}
         />
 

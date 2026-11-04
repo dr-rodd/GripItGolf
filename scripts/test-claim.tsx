@@ -395,16 +395,19 @@ section('Claiming a name stops to check the handicap')
   ok(/disabled=\{busy \|\| typed === null\}/.test(client),
     'Confirm is inert until there is a handicap to confirm')
 
-  // Events are untouched. The organiser entered that field deliberately,
-  // and the field revising it on the way in is their call, not this
-  // screen's — so a claim there is one tap, exactly as it always was.
+  // An event's roster is the organiser's own entry — the field revising
+  // it on the way in is their call — so a claim there is one tap. Except a
+  // name the organiser left without a handicap, while the event's players
+  // set their own (Ross, 4 Nov 2026): that one could not start a round as
+  // it is, so it asks.
   ok(client.includes('askHandicap = true'),
     'a trip asks by default')
-  ok(/else if \(askHandicap\) setChecking/.test(client) && /else handleClaim\(player, null\)/.test(client),
+  ok(/askHandicap === true \|\| \(askHandicap === 'pending' && isHandicapPending\(player\.handicap\)\)\) setChecking/.test(client)
+    && /else handleClaim\(player, null\)/.test(client),
     '  …and a screen that does not ask claims straight through')
   const page = code('app/trip/[tripCode]/players/page.tsx')
-  ok(/askHandicap=\{!isEvent\(kind\)\}/.test(page),
-    'the page asks on a trip and not on an event')
+  ok(/askHandicap=\{!isEvent\(kind\) \? true : handicapsOpen \? 'pending' : false\}/.test(page),
+    'the page asks on a trip; on an event only of a name without a handicap, and only while players set their own')
 }
 
 section('A player who joins late gets their round handicaps')

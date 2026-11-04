@@ -95,7 +95,7 @@ export default async function MatchPage({
   const tees = parseMatchTees(arranged?.tees)
   const sideIds = [match.sideA, match.sideB].filter((x): x is string => !!x)
   const inMatchIds = sideIds.flatMap(id => view.members[id] ?? [])
-  const [courseRes, teesRes, holesRes, contacts] = await Promise.all([
+  const [courseRes, teesRes, holesRes, contacts, scoredRes] = await Promise.all([
     arranged?.course_id
       ? supabase.from('courses').select('id, name').eq('id', arranged.course_id).maybeSingle()
       : Promise.resolve({ data: null }),
@@ -106,7 +106,13 @@ export default async function MatchPage({
       ? supabase.from('holes').select('hole_number, stroke_index, stroke_index_ladies').eq('course_id', arranged.course_id)
       : Promise.resolve({ data: [] }),
     readContacts(trip.id, inMatchIds),
+    // Whether the card is under way — counted, not fetched. A player's own
+    // handicap is theirs to change until it is (Ross, 4 Nov 2026: "until
+    // the day of play"). Fail-soft: before migration 058 nothing is scored.
+    supabase.from('match_scores').select('match_id', { count: 'exact', head: true })
+      .eq('trip_id', trip.id).eq('match_id', matchId),
   ])
+  const underWay = !scoredRes.error && (scoredRes.count ?? 0) > 0
   const course = courseRes.data as { id: string; name: string } | null
   const teeById = new Map(((teesRes.data ?? []) as {
     id: string; name: string | null; gender: string; slope: number | null; course_rating: number | null; par: number | null
@@ -258,7 +264,10 @@ export default async function MatchPage({
           </Link>
         )}
 
-        {mine && me && me.claimed === true && !result && (
+        {/* Your own handicap, while the event's players set their own
+            (`edit_handicaps`, always on a trip) and until the match is
+            under way. */}
+        {mine && me && me.claimed === true && !result && !underWay && allowsParticipant(kind, perms, 'edit_handicaps') && (
           <MyHandicap tripId={trip.id} playerId={me.id} handicap={me.handicap} roundIds={roundIds} />
         )}
 

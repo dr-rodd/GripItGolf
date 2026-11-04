@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { rememberPlayer } from '@/lib/playerCookie'
 import {
-  parseHandicap, formatHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING,
+  parseHandicap, formatHandicap, isPlusHandicap, isHandicapPending, PLUS_HANDICAP_WARNING,
 } from '@/lib/handicap'
 import HandicapField from '@/app/components/HandicapField'
 import { syncRoundHandicaps } from '@/lib/roundHandicaps'
@@ -182,6 +182,7 @@ export default function PlayersClient({
   roundIds,
   canAddPlayers = true,
   askHandicap = true,
+  ownHandicap = true,
   noun = 'trip',
   linkedIds,
 }: {
@@ -208,8 +209,18 @@ export default function PlayersClient({
    * the field editing it on the way in is the organiser's decision to make
    * rather than this screen's. Off, a claim is exactly what it always was —
    * one tap, no sheet.
+   *
+   * `'pending'` — an event whose players set their own handicaps (Ross,
+   * 4 Nov 2026: "players fill their own handicaps") — asks only of a name
+   * the organiser left without one, which could not start a round as it is.
    */
-  askHandicap?: boolean
+  askHandicap?: boolean | 'pending'
+  /**
+   * Whether somebody joining gives their own handicap. Off where an event's
+   * organiser keeps the handicaps (`edit_handicaps`): they join without
+   * one, and the organiser sets it.
+   */
+  ownHandicap?: boolean
   /** "trip" or "event" — what the button and messages call it. */
   noun?: 'trip' | 'event'
   /** A Golf Ireland league's confirmed links — a badge beside each name. */
@@ -321,7 +332,7 @@ export default function PlayersClient({
     // The one question this screen asks, and only of the person taking the
     // name for the first time. Nothing is written until they answer — a
     // sheet closed without confirming leaves the slot exactly as it was.
-    else if (askHandicap) setChecking(player)
+    else if (askHandicap === true || (askHandicap === 'pending' && isHandicapPending(player.handicap))) setChecking(player)
     else handleClaim(player, null)
   }
 
@@ -329,9 +340,11 @@ export default function PlayersClient({
     e.preventDefault()
     setError('')
     const name = addName.trim()
-    const handicap = parseHandicap(addHandicap)
-    if (!name || handicap === null) {
-      setError('Enter a name and a handicap')
+    // Where the organiser keeps the handicaps, nobody joining gives one:
+    // pending until they set it.
+    const handicap = ownHandicap ? parseHandicap(addHandicap) : null
+    if (!name || (ownHandicap && handicap === null)) {
+      setError(ownHandicap ? 'Enter a name and a handicap' : 'Enter your name')
       return
     }
     // Said before anything is written, and said plainly. Somebody whose name
@@ -344,7 +357,7 @@ export default function PlayersClient({
     }
     // The one value on this form that means the opposite of what it looks
     // like, asked before it is written — see PLUS_HANDICAP_WARNING.
-    if (isPlusHandicap(handicap) && !window.confirm(PLUS_HANDICAP_WARNING)) return
+    if (handicap !== null && isPlusHandicap(handicap) && !window.confirm(PLUS_HANDICAP_WARNING)) return
 
     setAdding(true)
     // The id comes back from the insert — that is the id the cookie stores,
@@ -375,7 +388,7 @@ export default function PlayersClient({
     // with no row in `round_handicaps` is scored off nothing. Written before
     // they are sent anywhere, so a failure is seen rather than discovered
     // halfway round the course.
-    const hcpErr = await syncRoundHandicaps(roundIds, data.id, handicap)
+    const hcpErr = handicap === null ? null : await syncRoundHandicaps(roundIds, data.id, handicap)
     // Linked either way: the player exists and is theirs, whatever happened
     // to the snapshots.
     rememberPlayer(tripCode, data.id)
@@ -471,12 +484,19 @@ export default function PlayersClient({
             required
             className={FIELD}
           />
-          <HandicapField
-            value={addHandicap}
-            onChange={setAddHandicap}
-            placeholder="Handicap (e.g. 14.2)"
-            className={`${FIELD} min-w-0`}
-          />
+          {ownHandicap ? (
+            <HandicapField
+              value={addHandicap}
+              onChange={setAddHandicap}
+              placeholder="Handicap (e.g. 14.2)"
+              className={`${FIELD} min-w-0`}
+            />
+          ) : (
+            <p className="text-ink/65 text-[13px] leading-snug">
+              The organiser sets everyone&apos;s handicap — you can&apos;t start a round until they
+              have set yours.
+            </p>
+          )}
           <div className="flex gap-3">
             {(['M', 'F'] as const).map((g) => (
               <button
@@ -496,7 +516,7 @@ export default function PlayersClient({
 
           <button
             type="submit"
-            disabled={busy || !addName.trim() || !addHandicap}
+            disabled={busy || !addName.trim() || (ownHandicap && !addHandicap)}
             className={buttonClass('primary')}
           >
             {adding ? 'Adding…' : noun === 'event' ? 'Join event' : 'Join trip'}
