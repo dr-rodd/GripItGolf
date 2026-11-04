@@ -423,8 +423,9 @@ overview, or one column at a time), not a rebuild.
 1. **Match play as its own shape, playing from creation — built, October
    2026.** The tournament door asks the shape alone: Standalone, Continuous
    and Series go straight to the league wizard (the format question is
-   gone), and **Match play** asks when the matches are played — **One-off**
-   (the event wizard, `CreateTripForm matchPlay`) or **Ongoing** (the lean
+   gone), and **Match play** asks when the matches are played — a
+   **Standalone event** (called One-off until Ross renamed it, 4 Nov 2026;
+   the event wizard, `CreateTripForm matchPlay`) or **Ongoing** (the lean
    knockout door). Both are made with the bracket's board (`knockoutBoards`)
    and the seed `{ format: 'match_play', schedule? }` (`knockoutSeed`), and
    `isKnockoutEvent` reads that raw seed — the parser refuses a partial. The

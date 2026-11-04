@@ -23,9 +23,11 @@ import { cardClass } from '@/app/components/ui'
  *                 branch.
  *   Series      — a league of rounds on separate dates → its series branch.
  *   Match play  — a knockout, its own shape since story 2, then asked when
- *                 the matches are played: One-off (a day or a run of days)
- *                 → the event wizard made with the bracket on; Ongoing (a
- *                 period, paced by the deadlines) → the lean knockout door.
+ *                 the matches are played: a Standalone event (a day or a
+ *                 run of days) → the event wizard made with the bracket on;
+ *                 Ongoing (a period, paced by the deadlines) → the lean
+ *                 knockout door. Described casually, for whoever is setting
+ *                 one up for the first time (Ross, 4 Nov 2026).
  *
  * A run challenge (`?type=run`, from the sport chooser at /create) is a
  * different sport altogether and goes straight to its own wizard.
@@ -139,10 +141,11 @@ export default function CreateFlow() {
     >
       <button onClick={() => setKnockout('standalone')} className={CARD}>
         <p className="t-card text-ink">
-          One-off
+          Standalone event
         </p>
         <p className="text-ink/65 text-sm mt-1 leading-snug">
-          A day or a run of days, the golf on the schedule.
+          One day, or a few days together. You set when the golf is and
+          everyone plays on the day.
         </p>
       </button>
 
@@ -151,7 +154,8 @@ export default function CreateFlow() {
           Ongoing
         </p>
         <p className="text-ink/65 text-sm mt-1 leading-snug">
-          Over a period, each round played by a date, wherever the players arrange.
+          Over a few weeks or a season. Players sort out their own matches,
+          with a date to play each round by.
         </p>
       </button>
     </Chooser>

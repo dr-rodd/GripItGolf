@@ -398,7 +398,12 @@ section('The tournament door asks the shape — and match play is a shape of its
     'an ongoing knockout gets its own lean door')
   ok(flow.includes("knockout === 'standalone') return <CreateTripForm matchPlay />"),
     'a one-off knockout is the event wizard, told it is match play')
-  ok(/One-off/.test(flow) && /Ongoing/.test(flow), 'match play asks when the matches are played')
+  ok(/Standalone event/.test(flow) && /Ongoing/.test(flow) && !/One-off/.test(flow),
+    'match play asks when the matches are played — a Standalone event or Ongoing (Ross, 4 Nov 2026)')
+  const ko = read('app/dashboard/create/CreateKnockoutForm.tsx')
+  ok(ko.includes('Pick a start date for the event.') && ko.includes('Pick an end date for the event.')
+    && ko.includes('When should the final round be played by?') && ko.includes('if (v && (!endDate || endDate < v)) setEndDate(v)'),
+    '  …and an ongoing one asks its dates as prompts, the end\'s calendar opening on the start')
   const trip = read('app/dashboard/create/CreateTripForm.tsx')
   ok(trip.includes('useState<Leaderboard[]>(() => matchPlay ? knockoutBoards() : [])')
     && trip.includes("if (isTournament && matchPlay) tripRow.bracket_setup = knockoutSeed('standalone', creationPlan(draw))"),

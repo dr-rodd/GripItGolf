@@ -393,20 +393,35 @@ export default function CreateKnockoutForm() {
               />
             </div>
 
-            <div>
-              <label className={FIELD_LABEL}>The period</label>
-              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-                <DateField label="Starts" value={startDate} onChange={setStartDate} />
-                <DateField label="Finishes" value={endDate} onChange={setEndDate} />
+            {/* The period, a prompt a date (Ross, 4 Nov 2026). The end's
+                calendar opens on the start: picking a start fills the end
+                in with it, to be moved on from there, rather than leaving
+                the picker on today. */}
+            <div className="space-y-4">
+              <DateField
+                label="Pick a start date for the event."
+                value={startDate}
+                onChange={v => {
+                  setStartDate(v)
+                  if (v && (!endDate || endDate < v)) setEndDate(v)
+                }}
+              />
+              <div>
+                <label className={FIELD_LABEL}>Pick an end date for the event.</label>
+                <p className="text-ink/65 text-[13px] -mt-1 mb-2 leading-snug">
+                  When should the final round be played by?
+                </p>
+                <DateField value={endDate} onChange={setEndDate} min={startDate || undefined} />
               </div>
               {datesBackwards ? (
-                <p className="text-rust-deep text-[13px] mt-2 leading-snug">
-                  The finish cannot come before the start.
+                <p className="text-rust-deep text-[13px] leading-snug">
+                  The end cannot come before the start.
                 </p>
               ) : (
-                <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                  Players arrange their own matches, paced by round deadlines
-                  you set later.
+                <p className="text-ink/65 text-[13px] leading-snug">
+                  How many rounds there are, and so each round&apos;s deadline,
+                  depends on how many players enter. You can change these
+                  dates later in your event settings.
                 </p>
               )}
             </div>
