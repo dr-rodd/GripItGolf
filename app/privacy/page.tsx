@@ -36,7 +36,7 @@ export const metadata: Metadata = { title: `Privacy — ${SITE.name}` }
  * Strava's review — docs/run.md.
  */
 
-const UPDATED = '17 October 2026'
+const UPDATED = '4 November 2026'
 
 const B = ({ children }: { children: React.ReactNode }) => <strong className="text-ink">{children}</strong>
 
@@ -88,6 +88,10 @@ export default function PrivacyPage() {
           <li><B>Handicaps</B> — the index you or the organiser give, and the course handicap worked out from it for each round.</li>
           <li><B>Men&apos;s or ladies&apos; card</B> — only to choose the right tees, pars and stroke indexes for you.</li>
           <li><B>Scores</B>, hole by hole, and the points and results worked out from them; match play results; tee times and the tee sheet.</li>
+          <li>
+            <B>Contact details</B> — a phone number and email, only if you give them, for arranging
+            knockout matches. Shown to your opponent, or to the whole event if you choose.
+          </li>
           <li><B>Putts and fairways</B>, only when a trip switches stats on.</li>
           <li>
             <B>Scorecard photos</B> taken for the card check are sent to Anthropic&apos;s Claude service to
@@ -171,6 +175,15 @@ export default function PrivacyPage() {
           without accounts, and it is why a code should be shared only with the people it is for.
           Settings are behind the organiser&apos;s PIN, which guards against slips rather than a
           determined person. A running challenge never shows anybody&apos;s runs to anybody but them.
+        </p>
+        <p className="mt-3">
+          An organiser can start a new event from one they have run before — the same knockout
+          next year, say. With the old event&apos;s code its players&apos; names, handicaps and
+          tees come across; with its organiser PIN, so does everything else players shared with
+          it — contact details, nicknames, colours and home clubs — and its notices. So what you
+          share with an event can be used by whoever holds its organiser PIN, in other events they
+          run. In the new event it is seen exactly as before: your contact details only by the
+          people you chose.
         </p>
       </LegalSection>
 

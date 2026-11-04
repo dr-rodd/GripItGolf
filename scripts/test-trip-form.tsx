@@ -138,7 +138,8 @@ section('The itinerary replaces the rounds picker')
   ok(src.includes('<LeaderboardSetup'), 'the leaderboard picker is offered at creation')
   ok(src.includes('if (boards.length > 0) tripRow.leaderboards = boards'),
     '  …written only when boards were actually built')
-  ok(src.includes('const step3Valid = !passcodeIssue && !publicIssue && !duplicateIssue'),
+  ok(src.includes('const fieldValid = !duplicateIssue') && src.includes('const settingsValid = !passcodeIssue && !publicIssue')
+    && !/stepValid[\s\S]{0,400}boards/.test(src),
     '  …and never required — the way forward does not wait on a board')
 
   // A trip with no golf has nothing to score, so it cannot move on. It is a
@@ -238,10 +239,12 @@ section('Creation does not ask about teams')
   ok(!/teamIndex/.test(src), 'a player is not put in a team here')
   ok(src.includes('team_id: null'), 'everyone starts unassigned')
 
-  // Three steps, and the third is the last one
-  ok(src.includes("useState<1 | 2 | 3 | 'done'>(1)"), 'the wizard is three steps')
-  ok(src.includes('const isFinalStep = stepNum === 3'), 'and finishes on the third')
-  ok(!/step === 4/.test(src), 'there is no fourth step left behind')
+  // Three steps for a trip, and the third is the last one; a match play
+  // event has the field, the draw and the rest a step each (Ross, 4 Nov 2026).
+  ok(src.includes('const lastStep: Step = matchPlay ? 5 : 3'), 'the wizard is three steps — five for match play')
+  ok(src.includes('const isFinalStep = stepNum === lastStep'), 'and finishes on its last')
+  ok((src.match(/step === [45]\b/g) ?? []).length === (src.match(/step === [45] && matchPlay|matchPlay \? step === 5/g) ?? []).length,
+    'a fourth or fifth step only ever on a match play event')
 
   // The progress bar has to agree with the steps, or it stalls short of full.
   // WizardShell draws one segment per title, so the titles are the count.
@@ -249,6 +252,8 @@ section('Creation does not ask about teams')
     const list = src.match(new RegExp(`const ${name} = \\[([^\\]]+)\\]`))
     eq(list?.[1].split(',').length, 3, `the progress bar has one segment per step (${name})`)
   }
+  const matchList = src.match(/const MATCH_STEP_TITLES = \[([^\]]+)\]/)
+  eq(matchList?.[1].match(/'[^']+'/g)?.length, 5, 'and five for a match play event, one a step (MATCH_STEP_TITLES)')
   const segments = formHtml.match(/h-1 flex-1 rounded-full/g) ?? []
   eq(segments.length, 3, 'and the rendered bar has three')
 }

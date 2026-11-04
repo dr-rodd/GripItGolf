@@ -20,9 +20,12 @@ import { NO_PUBLIC_PIN, publicPinIssue, rememberEntry } from '@/lib/publicPin'
 import PublicPinField from '@/app/components/PublicPinField'
 import { todayString } from '@/lib/tripStatus'
 import CreationDraw, {
-  NO_CREATION_DRAW, creationDrawIssue, creationEntrants, creationPlan, drawKey, writeCreationDraw,
+  DRAW_INTRO, NO_CREATION_DRAW, creationDrawIssue, creationEntrants, creationPlan, drawKey, writeCreationDraw,
   type CreationDrawValue,
 } from './CreationDraw'
+import MatchPlayField from './MatchPlayField'
+import { bringAcross } from './SeedFromEvent'
+import { NO_FIELD_SEED, seedPairs, type FieldPlayer, type FieldSeed } from '@/lib/fieldSeed'
 import {
   parseHandicap, isPlusHandicap, isHandicapPending, PLUS_HANDICAP_WARNING,
   HANDICAP_PENDING_LABEL,
@@ -45,7 +48,7 @@ import WizardShell from '@/app/components/WizardShell'
 // ── Types ─────────────────────────────────────────────────────────────────
 
 type Course = DirectoryCourse
-type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F' }
+type PlayerInput = FieldPlayer
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -55,6 +58,13 @@ type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F' }
 /** Each step opens on its question — WizardShell draws it as the step's title. */
 const STEP_TITLES = ['Name your trip', 'Plan the itinerary', 'Who’s playing']
 const EVENT_STEP_TITLES = ['Name your event', 'Plan the schedule', 'Who’s playing']
+/**
+ * A match play event's: the field and the draw a step each, then the rest
+ * (Ross, 4 Nov 2026) — the same as the ongoing door's (CreateKnockoutForm).
+ */
+const MATCH_STEP_TITLES = ['Name your event', 'Plan the schedule', 'Next, let’s add the field', 'Plan the draw', 'Ready to go']
+
+type Step = 1 | 2 | 3 | 4 | 5
 
 /** Which tees a player plays: the men's card or the ladies'. */
 const GENDER_OPTIONS = [{ value: 'M', label: 'M' }, { value: 'F', label: 'F' }] as const
@@ -128,7 +138,9 @@ export default function CreateTripForm({ matchPlay = false }: {
   const noun = isTournament ? 'event' : 'trip'
   const Noun = isTournament ? 'Event' : 'Trip'
 
-  const [step, setStep] = useState<1 | 2 | 3 | 'done'>(1)
+  const [step, setStep] = useState<Step | 'done'>(1)
+  // A match play event has two steps more: the draw, and the rest after it.
+  const lastStep: Step = matchPlay ? 5 : 3
 
   // Step 1
   const [tripName, setTripName] = useState('')
@@ -152,6 +164,9 @@ export default function CreateTripForm({ matchPlay = false }: {
   const [players, setPlayers] = useState<PlayerInput[]>([
     { name: '', handicap: '', gender: 'M' },
   ])
+  // A match play event's field, seeded from another event if wanted (lib/fieldSeed.ts).
+  const [seed, setSeed] = useState<FieldSeed>(NO_FIELD_SEED)
+  const [seedWarning, setSeedWarning] = useState<string | null>(null)
 
   // The leaderboards, offered where the league wizard offers them — the
   // same LeaderboardSetup Trip Setup runs, never a second copy — but
@@ -223,7 +238,16 @@ export default function CreateTripForm({ matchPlay = false }: {
   const today = todayString(new Date())
   const drawEntrants = creationEntrants(players)
   const drawIssue = isTournament && matchPlay ? creationDrawIssue(draw, drawEntrants, today) : null
-  const step3Valid = !passcodeIssue && !publicIssue && !duplicateIssue && !drawIssue
+  const fieldValid = !duplicateIssue
+  const settingsValid = !passcodeIssue && !publicIssue
+  // A trip's (and a league-less event's) step 3 holds the field and the
+  // settings together; a match play event's are steps 3 and 5, its draw 4.
+  const stepValid = (n: Step) =>
+    n === 1 ? step1Valid
+      : n === 3 ? (matchPlay ? fieldValid : fieldValid && settingsValid)
+        : n === 4 ? !drawIssue
+          : n === 5 ? settingsValid
+            : true
 
   // ── Navigation ───────────────────────────────────────────────────────────
 
@@ -231,17 +255,14 @@ export default function CreateTripForm({ matchPlay = false }: {
   // add buttons are pinned to the bottom of that screen and a second button
   // floating underneath them was the glitch.
   function goNext() {
-    if (step === 1) {
-      setStep(2)
-    } else if (step === 3) {
-      handleSubmit()
-    }
+    if (step === 'done' || step === 2) return
+    if (step === lastStep) handleSubmit()
+    else setStep((step + 1) as Step)
   }
 
   function goBack() {
     setError(null)
-    if (step === 2) setStep(1)
-    else if (step === 3) setStep(2)
+    if (step !== 'done' && step > 1) setStep((step - 1) as Step)
   }
 
   // ── Player helpers ───────────────────────────────────────────────────────
@@ -541,6 +562,13 @@ export default function CreateTripForm({ matchPlay = false }: {
       }).catch(() => { /* the trip is created; the email is best-effort */ })
     }
 
+    // Everything brought across from the event a match play field was
+    // seeded from, when its organiser PIN was given (lib/fieldSeed.ts).
+    // Costs that alone if it fails, never the event.
+    if (isTournament && matchPlay) {
+      setSeedWarning(await bringAcross(seed, code, passcode, seedPairs(validPlayers, idFor, drawKey)))
+    }
+
     // A match play event's draw, when it is made now. A draw that fails
     // costs the draw, never the event — the organiser area makes it again.
     if (isTournament && matchPlay && draw.timing.when === 'now') {
@@ -593,6 +621,7 @@ export default function CreateTripForm({ matchPlay = false }: {
               : 'Share this code with your group to join. Next, choose leaderboard formats and teams in Trip Setup.'}
           </p>
           {drawWarning && <p className="text-rust-deep text-sm -mt-6 mb-6 leading-snug">{drawWarning}</p>}
+          {seedWarning && <p className="text-rust-deep text-sm -mt-6 mb-6 leading-snug">{seedWarning}</p>}
 
           <div className={`${cardClass()} px-4 py-8 mb-4`}>
             <p className="t-label text-ink/65 mb-4">Your {noun} code</p>
@@ -641,16 +670,16 @@ export default function CreateTripForm({ matchPlay = false }: {
 
   // ── Multi-step form ──────────────────────────────────────────────────────
 
-  const stepNum = step as 1 | 2 | 3
-  // At most one line under the step's question.
-  const stepIntro = stepNum === 3 ? `Optional. Players can join later with the ${noun} code.` : undefined
-  const isFinalStep = stepNum === 3
+  const stepNum = step as Step
+  // At most one line under the step's question. A match play field has
+  // its own box saying what to expect, and its draw a step of its own.
+  const stepIntro = stepNum === 3 && !matchPlay ? `Optional. Players can join later with the ${noun} code.`
+    : stepNum === 4 && matchPlay ? DRAW_INTRO
+      : undefined
+  const isFinalStep = stepNum === lastStep
   // Step 2 is not here: its own footer decides when the itinerary can be
   // left, and it is the only thing that knows which day is open.
-  const canProceed =
-    !submitting &&
-    !(step === 1 && !step1Valid) &&
-    !(step === 3 && !step3Valid)
+  const canProceed = !submitting && stepValid(stepNum)
 
   return (
     <div className="min-h-dvh paper text-ink">
@@ -670,7 +699,7 @@ export default function CreateTripForm({ matchPlay = false }: {
           trade for one fewer button. */}
       <WizardShell
         step={stepNum}
-        titles={isTournament ? EVENT_STEP_TITLES : STEP_TITLES}
+        titles={matchPlay ? MATCH_STEP_TITLES : isTournament ? EVENT_STEP_TITLES : STEP_TITLES}
         intro={stepIntro}
         onBack={goBack}
         footer={step !== 2 ? (<>
@@ -681,7 +710,7 @@ export default function CreateTripForm({ matchPlay = false }: {
             >
               {submitting ? 'Creating…' : isFinalStep ? `Create ${noun}` : 'Continue'}
             </button>
-            {isFinalStep && (
+            {stepNum === 3 && (
               <p className="text-center text-ink/65 text-[13px] mt-3">
                 Players without a name will be skipped
               </p>
@@ -822,9 +851,29 @@ export default function CreateTripForm({ matchPlay = false }: {
           </div>
         )}
 
-        {/* ── Step 3: Players ──────────────────────────────────────── */}
-        {step === 3 && (
+        {/* ── Step 3: Players — a match play event's own field step ── */}
+        {step === 3 && matchPlay && (
+          <MatchPlayField
+            players={players}
+            setPlayers={setPlayers}
+            organiserPlaying={organiserPlaying}
+            setOrganiserPlaying={setOrganiserPlaying}
+            duplicateIndex={duplicateIndex}
+            duplicateIssue={duplicateIssue}
+            seed={seed}
+            setSeed={setSeed}
+          />
+        )}
+
+        {/* ── Step 4: a match play event's draw, a step of its own ── */}
+        {step === 4 && matchPlay && (
+          <CreationDraw entrants={drawEntrants} value={draw} onChange={setDraw} issue={drawIssue} today={today} heading={false} />
+        )}
+
+        {/* ── Step 3: Players, then the rest; a match play event's rest is step 5 ── */}
+        {(matchPlay ? step === 5 : step === 3) && (
           <div className="space-y-4">
+            {!matchPlay && (<>
 
             {/* A tournament has an organiser, never a "lead player" — and the
                 organiser may not be playing at all. When they are, their name
@@ -931,13 +980,7 @@ export default function CreateTripForm({ matchPlay = false }: {
             >
               + Add another player
             </button>
-
-            {/* A match play event's draw — now, later or on a date */}
-            {isTournament && matchPlay && (
-              <div className="mt-8 pt-6 border-t border-line">
-                <CreationDraw entrants={drawEntrants} value={draw} onChange={setDraw} issue={drawIssue} today={today} />
-              </div>
-            )}
+            </>)}
 
             {/* ── Leaderboards, offered but never demanded ──
                 The same picker the league wizard embeds and Trip Setup
@@ -945,8 +988,9 @@ export default function CreateTripForm({ matchPlay = false }: {
                 a Trip Setup to come back to, and plenty of groups settle
                 the competition at the first tee, not at the kitchen table.
                 Nothing chosen writes nothing, so a skipped trip is exactly
-                the trip this wizard has always made. */}
-            <div className="mt-8 pt-6 border-t border-line">
+                the trip this wizard has always made. First on a match play
+                event's last step, so no rule above it. */}
+            <div className={matchPlay ? '' : 'mt-8 pt-6 border-t border-line'}>
               <p className="t-label text-ink/80 mb-2">
                 Leaderboards (optional)
               </p>

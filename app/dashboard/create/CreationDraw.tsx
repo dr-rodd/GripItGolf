@@ -66,21 +66,28 @@ export async function writeCreationDraw(
   }), { seeds, kind: 'player' })
 }
 
-export default function CreationDraw({ entrants, value, onChange, issue, today }: {
+/** What the draw offers, said under its title — the step's own, where it has one. */
+export const DRAW_INTRO = 'Make it now, leave it for later, or have it made on a date.'
+
+export default function CreationDraw({ entrants, value, onChange, issue, today, heading = true }: {
   entrants: DrawEntrant[]
   value: CreationDrawValue
   onChange: (next: CreationDrawValue) => void
   issue: string | null
   today: string
+  /** Its own title and line — off where it is a step of its own (Ross, 4 Nov 2026). */
+  heading?: boolean
 }) {
   const field = entrants.map(e => e.id)
   const draft = syncDraft(value.draft, field)
   return (
     <div className="space-y-4">
-      <div>
-        <p className="t-card text-ink">The draw</p>
-        <p className="t-cap text-ink/65 mt-0.5">Make it now, leave it for later, or have it made on a date.</p>
-      </div>
+      {heading && (
+        <div>
+          <p className="t-card text-ink">The draw</p>
+          <p className="t-cap text-ink/65 mt-0.5">{DRAW_INTRO}</p>
+        </div>
+      )}
       <DrawTiming
         value={value.timing}
         onChange={timing => onChange({ ...value, timing })}

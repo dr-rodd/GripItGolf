@@ -27,7 +27,7 @@ import { chipClass } from './ui'
  */
 export default function HandicapField({
   value, defaultValue, onChange, onCommit,
-  placeholder, className = '', rowClassName = '', disabled = false,
+  placeholder, className = '', rowClassName = '', disabled = false, id,
 }: {
   /** Controlled text. Leave unset to let the field hold its own. */
   value?: string
@@ -49,6 +49,8 @@ export default function HandicapField({
   /** Classes for the row holding the input and the button. */
   rowClassName?: string
   disabled?: boolean
+  /** The input's id — so a name box can hand the cursor on to it. */
+  id?: string
 }) {
   const [inner, setInner] = useState(defaultValue ?? '')
   const text = value ?? inner
@@ -69,6 +71,7 @@ export default function HandicapField({
     <div className={`flex gap-1.5 ${rowClassName}`}>
       <input
         {...HANDICAP_INPUT}
+        id={id}
         value={text}
         onChange={e => set(e.target.value, false)}
         onBlur={e => onCommit?.(e.target.value)}

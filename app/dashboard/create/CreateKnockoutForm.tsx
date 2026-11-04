@@ -5,8 +5,6 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 import DateField from '@/app/components/DateField'
-import Toggle from '@/app/components/Toggle'
-import HandicapField from '@/app/components/HandicapField'
 import { NO_FORMATS } from '@/lib/formats'
 import { normaliseEmail, emailWarning, MAX_EMAIL } from '@/lib/email'
 import { rememberPlayer } from '@/lib/playerCookie'
@@ -16,6 +14,7 @@ import {
 import { NO_PUBLIC_PIN, publicPinIssue, rememberEntry } from '@/lib/publicPin'
 import PublicPinField from '@/app/components/PublicPinField'
 import { parseHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
+import { NO_FIELD_SEED, seedPairs, type FieldPlayer, type FieldSeed } from '@/lib/fieldSeed'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import {
   type EventPermissions, defaultPermissions, permissionsFor, storedPermissions,
@@ -24,11 +23,13 @@ import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import { knockoutBoards, knockoutSeed } from '@/lib/bracketSetup'
 import { todayString } from '@/lib/tripStatus'
 import CreationDraw, {
-  NO_CREATION_DRAW, creationDrawIssue, creationEntrants, creationPlan, drawKey, writeCreationDraw,
+  DRAW_INTRO, NO_CREATION_DRAW, creationDrawIssue, creationEntrants, creationPlan, drawKey, writeCreationDraw,
   type CreationDrawValue,
 } from './CreationDraw'
+import MatchPlayField from './MatchPlayField'
+import { bringAcross } from './SeedFromEvent'
 import { describeError, generateCode } from './CreateTripForm'
-import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
+import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
 
 /**
@@ -50,15 +51,19 @@ import WizardShell from '@/app/components/WizardShell'
  * players. Needs migration 047, like everything the column touches.
  */
 
-/** Each step opens on its question — WizardShell draws it as the step's title. */
-const STEP_TITLES = ['Name your event', 'Who’s playing', 'Ready to go']
+/**
+ * Each step opens on its question — WizardShell draws it as the step's
+ * title. The field and the draw are a step each (Ross, 4 Nov 2026).
+ */
+const STEP_TITLES = ['Name your event', 'Next, let’s add the field', 'Plan the draw', 'Ready to go']
 /** At most one line under the question. */
-const STEP_INTROS: (string | undefined)[] = [undefined, undefined, undefined]
+const STEP_INTROS: (string | undefined)[] = [undefined, undefined, DRAW_INTRO, undefined]
+const LAST_STEP = 4
 
-type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F' }
+type Step = 1 | 2 | 3 | 4
 
 export default function CreateKnockoutForm() {
-  const [step, setStep] = useState<1 | 2 | 3 | 'done'>(1)
+  const [step, setStep] = useState<Step | 'done'>(1)
 
   // Step 1 — the event and its period
   const [name, setName] = useState('')
@@ -66,16 +71,19 @@ export default function CreateKnockoutForm() {
   const [endDate, setEndDate] = useState('')
   const [email, setEmail] = useState('')
 
-  // Step 2 — the field
+  // Step 2 — the field, seeded from another event if wanted (lib/fieldSeed.ts)
   const [organiserPlaying, setOrganiserPlaying] = useState(true)
-  // The draw: now, later or on a date (lib/bracketDraw.ts)
-  const [draw, setDraw] = useState<CreationDrawValue>(NO_CREATION_DRAW)
-  const [drawWarning, setDrawWarning] = useState<string | null>(null)
-  const [players, setPlayers] = useState<PlayerInput[]>([
+  const [players, setPlayers] = useState<FieldPlayer[]>([
     { name: '', handicap: '', gender: 'M' },
   ])
+  const [seed, setSeed] = useState<FieldSeed>(NO_FIELD_SEED)
+  const [seedWarning, setSeedWarning] = useState<string | null>(null)
 
-  // Step 3 — how collaborative, and the organiser PIN
+  // Step 3 — the draw: now, later or on a date (lib/bracketDraw.ts)
+  const [draw, setDraw] = useState<CreationDrawValue>(NO_CREATION_DRAW)
+  const [drawWarning, setDrawWarning] = useState<string | null>(null)
+
+  // Step 4 — how collaborative, and the organiser PIN
   const [perms, setPerms] = useState<EventPermissions>(defaultPermissions)
   const [passcode, setPasscode] = useState('')
   const [passcodeConfirm, setPasscodeConfirm] = useState('')
@@ -105,30 +113,21 @@ export default function CreateKnockoutForm() {
 
   const canProceed = !submitting && (
     step === 1 ? name.trim().length > 0 && !!startDate && !!endDate && !datesBackwards :
-    step === 2 ? !duplicateIssue && !drawIssue :
-    step === 3 ? !passcodeIssue && !publicIssue :
+    step === 2 ? !duplicateIssue :
+    step === 3 ? !drawIssue :
+    step === 4 ? !passcodeIssue && !publicIssue :
     false
   )
 
   function goNext() {
     if (step === 'done') return
-    if (step < 3) setStep((step + 1) as 2 | 3)
+    if (step < LAST_STEP) setStep((step + 1) as Step)
     else handleSubmit()
   }
 
   function goBack() {
     setError(null)
-    if (step !== 'done' && step > 1) setStep((step - 1) as 1 | 2)
-  }
-
-  function addPlayer() {
-    setPlayers(prev => [...prev, { name: '', handicap: '', gender: 'M' }])
-  }
-  function removePlayer(i: number) {
-    setPlayers(prev => prev.filter((_, idx) => idx !== i))
-  }
-  function updatePlayer(i: number, patch: Partial<PlayerInput>) {
-    setPlayers(prev => prev.map((p, idx) => idx === i ? { ...p, ...patch } : p))
+    if (step !== 'done' && step > 1) setStep((step - 1) as Step)
   }
 
   async function handleSubmit() {
@@ -243,7 +242,12 @@ export default function CreateKnockoutForm() {
       if (lead) rememberPlayer(code, lead.id)
     }
 
-    // 3. The draw, when it is made now. A draw that fails costs the draw,
+    // 3. Everything brought across from the event the field was seeded
+    // from, when its organiser PIN was given (lib/fieldSeed.ts). Like the
+    // draw below, a failure costs that and never the event.
+    setSeedWarning(await bringAcross(seed, code, passcode, seedPairs(validPlayers, idFor, drawKey)))
+
+    // 4. The draw, when it is made now. A draw that fails costs the draw,
     // never the event — it can be made from the organiser area.
     if (draw.timing.when === 'now') {
       try {
@@ -307,6 +311,7 @@ export default function CreateKnockoutForm() {
               : 'Share this code with the field. Next, set up the bracket in the organiser area on your Event Hub.'}
           </p>
           {drawWarning && <p className="text-rust-deep text-sm mb-6 leading-snug">{drawWarning}</p>}
+          {seedWarning && <p className="text-rust-deep text-sm mb-6 leading-snug">{seedWarning}</p>}
 
           <div className={`px-4 py-8 mb-4 ${cardClass()}`}>
             <p className="t-label text-ink/65 mb-4">Your event code</p>
@@ -349,7 +354,7 @@ export default function CreateKnockoutForm() {
 
   // ── The wizard ───────────────────────────────────────────────────────────
 
-  const stepNum = step as 1 | 2 | 3
+  const stepNum = step as Step
 
   return (
     <div className="min-h-dvh paper text-ink">
@@ -368,7 +373,7 @@ export default function CreateKnockoutForm() {
             disabled={!canProceed}
             className={buttonClass('primary')}
           >
-            {submitting ? 'Creating…' : stepNum === 3 ? 'Create event' : 'Continue'}
+            {submitting ? 'Creating…' : stepNum === LAST_STEP ? 'Create event' : 'Continue'}
           </button>
           {stepNum === 2 && (
             <p className="text-center text-ink/65 text-[13px] mt-3">
@@ -456,103 +461,25 @@ export default function CreateKnockoutForm() {
 
         {/* ── 2 · The field ── */}
         {step === 2 && (
-          <div className="space-y-4">
-            <div className={`p-4 ${cardClass()}`}>
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="text-ink text-sm font-medium">Are you playing?</p>
-                  <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                    {organiserPlaying
-                      ? 'Put your own name first below — the rest of the field follows.'
-                      : 'You run the event; the names below are the field.'}
-                  </p>
-                </div>
-                <Toggle
-                  checked={organiserPlaying}
-                  onChange={setOrganiserPlaying}
-                  label="The organiser is playing"
-                />
-              </div>
-            </div>
-
-            <p className="text-ink/65 text-sm">
-              Optional. Players can also join later with the event code.
-            </p>
-
-            {players.map((player, i) => (
-              <div key={i} className={`p-4 ${cardClass()}`}>
-                <div className="flex items-center justify-between mb-4">
-                  <span className="t-label text-ink/80">
-                    {i === 0 && organiserPlaying ? 'Organiser — you' : `Player ${i + 1}`}
-                  </span>
-                  {i > 0 && (
-                    <button
-                      onClick={() => removePlayer(i)}
-                      className="text-ink/65 hover:text-ink/80 transition-colors p-1"
-                      aria-label="Remove player"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M18 6L6 18M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    value={player.name}
-                    onChange={e => updatePlayer(i, { name: e.target.value })}
-                    placeholder="Full name"
-                    className={i === duplicateIndex
-                      ? FIELD.replace('border-line', 'border-rust/60')
-                      : FIELD}
-                  />
-                  {i === duplicateIndex && (
-                    <p className="text-rust-deep text-[13px] leading-snug">
-                      {duplicateIssue}
-                    </p>
-                  )}
-
-                  <div className="flex gap-3">
-                    <HandicapField
-                      value={player.handicap}
-                      onChange={v => updatePlayer(i, { handicap: v })}
-                      placeholder="Handicap"
-                      rowClassName="flex-1 min-w-0"
-                      className={`${FIELD} flex-1 min-w-0`}
-                    />
-                    <div className="flex gap-1.5 flex-shrink-0">
-                      {(['M', 'F'] as const).map(g => (
-                        <button
-                          key={g}
-                          onClick={() => updatePlayer(i, { gender: g })}
-                          className={`${chipClass(player.gender === g)} w-12`}
-                        >
-                          {g}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            <button
-              onClick={addPlayer}
-              className="w-full py-4 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:border-line-strong hover:text-ink/80 transition-colors"
-            >
-              + Add another player
-            </button>
-
-            <div className="pt-4">
-              <CreationDraw entrants={drawEntrants} value={draw} onChange={setDraw} issue={drawIssue} today={today} />
-            </div>
-          </div>
+          <MatchPlayField
+            players={players}
+            setPlayers={setPlayers}
+            organiserPlaying={organiserPlaying}
+            setOrganiserPlaying={setOrganiserPlaying}
+            duplicateIndex={duplicateIndex}
+            duplicateIssue={duplicateIssue}
+            seed={seed}
+            setSeed={setSeed}
+          />
         )}
 
-        {/* ── 3 · How collaborative, and the organiser PIN ── */}
+        {/* ── 3 · The draw, a step of its own ── */}
         {step === 3 && (
+          <CreationDraw entrants={drawEntrants} value={draw} onChange={setDraw} issue={drawIssue} today={today} heading={false} />
+        )}
+
+        {/* ── 4 · How collaborative, and the organiser PIN ── */}
+        {step === 4 && (
           <div className="space-y-3">
             <div className="mb-6">
               <label className={FIELD_LABEL}>How collaborative should this event be?</label>
