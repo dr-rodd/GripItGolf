@@ -10,7 +10,7 @@
 // nothing changed. Pure; app/dashboard/create/fieldTagsWrite.ts writes.
 
 import { PRESET_COLORS } from './teamColors'
-import { isMatchTally, matchTallyBoard, type Leaderboard } from './leaderboards'
+import { isMatchTally, isTagBoard, leagueTagBoard, matchTallyBoard, type Leaderboard } from './leaderboards'
 
 export type FieldTag = { key: string; name: string; colour: string }
 
@@ -110,5 +110,18 @@ export function withTagTally(boards: readonly Leaderboard[], on: boolean): Leade
   const has = boards.some(isMatchTally)
   if (on && !has) return [...boards, matchTallyBoard()]
   if (!on && has) return boards.filter(b => !isMatchTally(b))
+  return [...boards]
+}
+
+/**
+ * A league's boards with its tags board added or taken away as tags are
+ * switched on or off in the field step (`leagueTagBoard`) — on, one is
+ * added where the league has no tags board yet; off, every tags board goes,
+ * since there would be no tags for it to rank.
+ */
+export function withLeagueTagBoard(boards: readonly Leaderboard[], on: boolean): Leaderboard[] {
+  const has = boards.some(isTagBoard)
+  if (on && !has) return [...boards, leagueTagBoard()]
+  if (!on && has) return boards.filter(b => !isTagBoard(b))
   return [...boards]
 }

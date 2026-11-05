@@ -20,9 +20,10 @@ import {
   tagRoundScore, countingPlayers, tagOfTeam, tagMatchTally, matchResultSides,
 } from '../lib/tagBoards'
 import {
-  NO_FIELD_TAGS, TAGS_INTRO, activeTags, fieldTagsIssue, newTag, switchedOn, tagCounts, tagWrites, withTagTally,
+  NO_FIELD_TAGS, TAGS_INTRO, activeTags, fieldTagsIssue, newTag, switchedOn, tagCounts, tagWrites, withTagTally, withLeagueTagBoard,
 } from '../lib/fieldTags'
 import { knockoutBoards } from '../lib/bracketSetup'
+import { starterBoards } from '../lib/leagueSetup'
 import {
   MAIN_SET, daySheetId, type Membership, type TeamRow,
 } from '../lib/teamSets'
@@ -30,7 +31,7 @@ import {
   type Leaderboard, parseLeaderboards, boardTitle, boardRules, slotKey,
   isTagBoard, tagsInPlay, tagCountOf, unanswered, isComplete,
   offersTeamFormat, offersTagMode, offersTagCount, offersTeeTeams, offersCombine,
-  offersAllowance, TAG_MODES, ALL_TAG_MODES, isMatchTally, matchTallyBoard, boardFacts,
+  offersAllowance, TAG_MODES, ALL_TAG_MODES, isMatchTally, matchTallyBoard, boardFacts, leagueTagBoard,
 } from '../lib/leaderboards'
 import { buildRows } from '../lib/boardRows'
 import { buildRowContext } from '../lib/rowContext'
@@ -770,9 +771,10 @@ section('Tags in the field step: off to start with, named and coloured')
   ok(write.includes("from('teams')") && write.includes("from('team_members')") && write.includes('team_set: TAG_SET')
     && write.includes(".update({ team_id: t.id })"), '  …written as tags are anywhere: teams on the tag sheet, members, the main sheet mirror')
   const field = read('app/dashboard/create/MatchPlayField.tsx')
-  ok(field.includes('<TagsCard') && field.includes('Enable tags') && field.includes('PRESET_COLORS.map'),
+  const card = read('app/dashboard/create/FieldTags.tsx')
+  ok(field.includes('<TagsCard') && card.includes('Enable tags') && card.includes('PRESET_COLORS.map'),
     'the field step has the switch, the tags and their colours')
-  ok(field.includes("update(i, { tag: player.tag === t.key ? undefined : t.key })"), '  …and a tag to choose on each player')
+  ok(field.includes('<PlayerTagChips') && card.includes('onChange(value === t.key ? undefined : t.key)'), '  …and a tag to choose on each player')
   for (const form of ['CreateKnockoutForm', 'CreateTripForm']) {
     const src = read(`app/dashboard/create/${form}.tsx`)
     ok(src.includes('fieldTagsIssue(tags)') && src.includes('writeFieldTags(supabase'),
@@ -822,6 +824,22 @@ section('A match play event ranks its tags by matches won')
   const lbPage = read('app/trip/[tripCode]/leaderboard/page.tsx')
   ok(lbPage.includes("lb.competition === 'matchplay' || isMatchTally(lb)") && lbPage.includes('.filter(lb => !isMatchTally(lb))'),
     '  …so the leaderboard still opens the bracket, and never draws an empty tally')
+}
+
+section('A league\'s field step has tags too, and a tags board with them (Ross, 5 Nov 2026)')
+{
+  const board = leagueTagBoard()
+  const back = parseLeaderboards([board])[0]
+  ok(!!back && isTagBoard(back) && back.tagMode === 'best_cards' && tagCountOf(back) === 2 && back.scoring === 'stableford',
+    'the tags board a league is made with: each tag\'s best two cards, Stableford, added up — and it reads back')
+  eq(withLeagueTagBoard(starterBoards(), true).map(b => b.id), [...starterBoards().map(b => b.id), 'lb-tags'], 'tags switched on add it to the Finish step\'s boards')
+  eq(withLeagueTagBoard(withLeagueTagBoard(starterBoards(), true), true).length, starterBoards().length + 1, '  …once')
+  eq(withLeagueTagBoard(withLeagueTagBoard(starterBoards(), true), false).map(b => b.id), starterBoards().map(b => b.id), '  …and off take it away')
+  const league = read('app/dashboard/create/CreateLeagueForm.tsx')
+  ok(league.includes('<TagsCard') && league.includes('<PlayerTagChips') && league.includes('fieldTagsIssue(tags)')
+    && league.includes('writeFieldTags(supabase, tripId, tags, validPlayers'),
+    'the league wizard: the same tags card, a tag on each player, and the event made with them')
+  ok(read('app/dashboard/create/MatchPlayField.tsx').includes("from './FieldTags'"), '  …the one copy match play uses')
 }
 
 // ─── Result ────────────────────────────────────────────────────

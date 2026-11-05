@@ -36,6 +36,9 @@ import {
   type EventPermissions, defaultPermissions, permissionsFor, storedPermissions,
 } from '@/lib/eventPermissions'
 import CollaborationQuestion from '@/app/components/CollaborationQuestion'
+import { NO_FIELD_TAGS, fieldTagsIssue, tagCounts, withLeagueTagBoard, type FieldTags } from '@/lib/fieldTags'
+import { PlayerTagChips, TagsCard } from './FieldTags'
+import { writeFieldTags } from './fieldTagsWrite'
 import { TeeTimesQuestion } from '@/app/components/TeeTimesAccess'
 import GolfIrelandRulesForm from '@/app/components/GolfIrelandRulesForm'
 import {
@@ -86,7 +89,7 @@ const STEP_TITLES = ['Name your event', 'Where you’re playing', 'Who’s playi
 /** At most one line under the question. */
 const STEP_INTROS: (string | undefined)[] = [undefined, undefined, undefined, undefined]
 
-type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F' }
+type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F'; tag?: string }
 
 /** How a league's rounds arrive — the first question a series is asked. */
 type SeriesPlan = 'ad_hoc' | 'recurring'
@@ -240,6 +243,10 @@ export default function CreateLeagueForm({ schedule }: {
   const [players, setPlayers] = useState<PlayerInput[]>([
     { name: '', handicap: '', gender: 'M' },
   ])
+  // Tags, switched on in the field step (lib/fieldTags.ts) — on, the
+  // Finish step's leaderboards gain a tags board.
+  const [tags, setTags] = useState<FieldTags>(NO_FIELD_TAGS)
+  const [tagsWarning, setTagsWarning] = useState<string | null>(null)
 
   // Step 4 — the leaderboards, how the days relate, and the organiser PIN.
   // Seeded with the starter board so a league that never touches the picker
@@ -379,7 +386,7 @@ export default function CreateLeagueForm({ schedule }: {
   const canProceed = !submitting && (
     step === 1 ? step1Valid :
     step === 2 ? venuesComplete :
-    step === 3 ? !!entry && !duplicateIssue :
+    step === 3 ? !!entry && !duplicateIssue && !fieldTagsIssue(tags) :
     step === 4 ? boards.length > 0 && (!asksDayBoards || !!dayBoards) && !passcodeIssue && !publicIssue && !giIssue :
     false
   )
@@ -556,7 +563,7 @@ export default function CreateLeagueForm({ schedule }: {
             team_id: null,
           }))
         )
-        .select('id, handicap, is_lead')
+        .select('id, name, handicap, is_lead')
 
       if (playersErr || !insertedPlayers) {
         setError(`Event created, but the players could not be saved. ${describeError(playersErr)}`)
@@ -566,6 +573,10 @@ export default function CreateLeagueForm({ schedule }: {
       playerRows = insertedPlayers
       const lead = insertedPlayers.find(p => p.is_lead)
       if (lead) rememberPlayer(code, lead.id)
+
+      // The field step's tags — a failure costs them, never the event.
+      const idByName = new Map(insertedPlayers.map(p => [String(p.name).trim().toLowerCase(), p.id as string]))
+      setTagsWarning(await writeFieldTags(supabase, tripId, tags, validPlayers, n => idByName.get(n.trim().toLowerCase())))
     }
 
     // 3. One golf item per playing slot, through the shared row mapping —
@@ -704,6 +715,7 @@ export default function CreateLeagueForm({ schedule }: {
               ? 'Players join with this code — your Event Hub has it as a link and a QR to hold up.'
               : 'Your field is in. The leaderboard and live scoring are ready on your Event Hub.'}
           </p>
+          {tagsWarning && <p className="text-rust-deep text-sm -mt-6 mb-6 leading-snug">{tagsWarning}</p>}
 
           <div className={`px-4 py-8 mb-4 ${cardClass()}`}>
             <p className="t-label text-ink/65 mb-4">Your event code</p>
@@ -1218,6 +1230,13 @@ export default function CreateLeagueForm({ schedule }: {
               </div>
             </div>
 
+            <TagsCard
+              tags={tags}
+              setTags={next => { if (next.on !== tags.on) setBoards(b => withLeagueTagBoard(b, next.on)); setTags(next) }}
+              counts={tagCounts(tags, players)}
+              onRemove={key => setPlayers(prev => prev.map(p => (p.tag === key ? { ...p, tag: undefined } : p)))}
+            />
+
             <p className="text-ink/65 text-sm">
               {entry === 'self_join'
                 ? 'Add anyone now. Everyone else joins with the event code.'
@@ -1279,6 +1298,9 @@ export default function CreateLeagueForm({ schedule }: {
                       ))}
                     </div>
                   </div>
+
+                  <PlayerTagChips tags={tags} value={player.tag} label={`${player.name.trim() || `Player ${i + 1}`}'s tag`}
+                    onChange={tag => updatePlayer(i, { tag })} />
                 </div>
               </div>
             ))}

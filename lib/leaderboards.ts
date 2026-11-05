@@ -360,6 +360,16 @@ export function isMatchTally(lb: Partial<Pick<Leaderboard, 'audience' | 'tagMode
   return isTagBoard(lb) && lb.tagMode === 'match_wins'
 }
 
+/**
+ * The tags board a league is made with when its field has tags (Ross, 5 Nov
+ * 2026) — the platform's own first tags board: each tag's best two cards a
+ * round, Stableford, added up, so a big tag is not ahead for being big.
+ * The Finish step's leaderboards edit it from there.
+ */
+export function leagueTagBoard(): Leaderboard {
+  return { id: 'lb-tags', audience: 'team', competition: 'league', scoring: 'stableford', combine: 'total', tagMode: 'best_cards', teamSet: 'main' }
+}
+
 /** The tags tally a match play event is made with when its field has tags. */
 export function matchTallyBoard(): Leaderboard {
   return { id: 'lb-tag-wins', audience: 'team', competition: 'league', scoring: 'stableford', combine: 'total', tagMode: 'match_wins', teamSet: 'main' }
