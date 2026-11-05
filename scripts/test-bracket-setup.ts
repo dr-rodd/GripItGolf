@@ -11,18 +11,17 @@
 
 import fs from 'fs'
 import {
-  BRACKET_SIZES, BRACKET_MODES, PLAYER_ENTRIES, SEEDINGS, TOURNAMENT_FORMATS,
-  type BracketSetup,
-  roundsFor, bracketRoundNames, parseBracketSize, describeSize,
-  normalizeEventCode, validEventCode, validDeadline, deadlinesIssue,
-  unansweredSetup, isCompleteSetup, parseBracketSetup, describeSetup,
+  BRACKET_MODES, PLAYER_ENTRIES, SEEDINGS, NO_DEADLINES_ANSWER,
+  normalizeEventCode, validEventCode, validDeadline, deadlinesIssue, deadlineRoundNames, deadlineOpensAt,
+  fitDeadlines, deadlinesAnswerFrom, deadlinesAnswerIssue, storedDeadlines, parseBracketSetup, describeSetup,
   isKnockoutEvent, knockoutSeed, knockoutBoards, drawDeadlines, deadlineNote, rawDrawPlan,
 } from '../lib/bracketSetup'
 import { hasMatchplay } from '../lib/leaderboards'
 import { entryAllowed, entryCookie, publicPinIssue } from '../lib/publicPin'
 import { DRAW_TIMINGS, newDraft } from '../lib/bracketDraw'
 import { layoutFromSlots } from '../lib/bracketEditor'
-import { creationPlan, creationDrawIssue } from '../app/dashboard/create/CreationDraw'
+import { creationPlan, creationDrawIssue, creationRounds } from '../app/dashboard/create/CreationDraw'
+import { draftFromSlots, sameSlots } from '../lib/bracketDraw'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -39,33 +38,15 @@ function eq(got: unknown, want: unknown, label: string) {
 const section = (n: string) => console.log(`\n${n}`)
 const read = (p: string) => fs.readFileSync(p, 'utf-8')
 
-// ─── Sizes and their rounds ────────────────────────────────────
+// ─── More settings ─────────────────────────────────────────────
 
-section('Four sizes, each a power of two, each knowing its rounds')
+section('More settings: the old answers, each with a default (Ross, 5 Nov 2026)')
 {
-  eq([...BRACKET_SIZES], [16, 32, 64], 'the three sizes, in order — up to 64 for now')
-  eq(roundsFor(16), 4, '16 players is 4 rounds')
-  eq(roundsFor(32), 5, '32 is 5')
-  eq(roundsFor(64), 6, '64 is 6')
-  eq(roundsFor(64), 6, '64 is 6')
-
-  eq(bracketRoundNames(16),
-    ['Round of 16', 'Quarter-Final', 'Semi-Final', 'Final'],
-    'round names come from lib/matchplay.ts, first round first')
-  eq(bracketRoundNames(64)[0], 'Round of 64', 'the big draw starts at 64')
-  eq(bracketRoundNames(64).at(-1), 'Final', 'and every draw ends at the Final')
-
-  eq(parseBracketSize(32), 32, 'a real size parses')
-  eq(parseBracketSize('64'), 64, 'even as a stored string')
-  eq(parseBracketSize(8), null, 'below the floor is refused')
-  eq(parseBracketSize(256), null, 'above the ceiling too')
-  eq(parseBracketSize(24), null, 'and anything that is not a power of two on the list')
-
-  ok(describeSize(32).includes('32') && describeSize(32).includes('5'),
-    'the size describes itself with its round count')
+  eq(BRACKET_MODES.map(m => m.key), ['relaxed', 'strict'], 'strict or relaxed, relaxed first')
+  eq(PLAYER_ENTRIES.map(e => e.key), ['self_join', 'organiser'], 'players join themselves, or the organiser adds the field')
+  eq(SEEDINGS.map(x => x.key), ['random', 'seeded'], 'a qualifier drawn at random, or seeded')
+  ok([...BRACKET_MODES, ...PLAYER_ENTRIES, ...SEEDINGS].every(o => o.hint.length > 0), 'each says what it means')
 }
-
-// ─── The qualifying event code ─────────────────────────────────
 
 section('A qualifying code is held to the shape every trip code has')
 {
@@ -80,199 +61,89 @@ section('A qualifying code is held to the shape every trip code has')
 
 // ─── Deadlines ─────────────────────────────────────────────────
 
-section('A deadline is a real date, and the rounds cannot run backwards')
+section('A deadline a round, once there is a bracket — never backwards (Ross, 5 Nov 2026)')
 {
-  ok(validDeadline('2026-09-01'), 'a plain date passes')
-  ok(!validDeadline('2026-9-1'), 'unpadded is refused')
-  ok(!validDeadline('2026-02-30'), 'a date that does not exist is refused')
-  ok(!validDeadline('tomorrow'), 'words are refused')
-  ok(!validDeadline(undefined), 'absent is refused')
-
-  const four = ['2026-09-01', '2026-09-08', '2026-09-15', '2026-09-22']
-  eq(deadlinesIssue(four, 16), null, 'a full, ordered set is fine')
-  eq(deadlinesIssue(['2026-09-01', '2026-09-01', '2026-09-01', '2026-09-01'], 16),
-    null, 'rounds may share a day — a weekend settles two')
-  ok(deadlinesIssue(four.slice(0, 3), 16)!.includes('Final'),
-    'a missing round is named by its round, not its index')
-  ok(deadlinesIssue(['2026-09-08', '2026-09-01', '2026-09-15', '2026-09-22'], 16)!
-    .includes('cannot close before'),
-    'a round closing before the one feeding it is refused')
-  ok(deadlinesIssue([], 16) !== null, 'no deadlines at all is not a pass')
-}
-
-// ─── The open questions ────────────────────────────────────────
-
-section('The form cannot finish until every question is answered')
-{
-  eq(unansweredSetup({}), ['League or match play'], 'the format comes first')
-  eq(unansweredSetup({ format: 'league' }), ['A league is created as its own event'],
-    'league is a dead end here — it is created through its own door')
-
-  const missing = unansweredSetup({ format: 'match_play' })
-  eq(missing, ['Strict or relaxed', 'How big the bracket is', 'How players get in'],
-    'match play opens the mode, size and entry questions — deadlines wait for a size')
-
-  ok(unansweredSetup({
-    format: 'match_play', mode: 'strict', size: 16, entry: 'organiser',
-  }).some(q => q.includes('deadline')), 'a size brings its deadlines with it')
-
-  ok(unansweredSetup({
-    format: 'match_play', mode: 'strict', size: 16, entry: 'organiser',
-    qualifying: { eventCode: 'BAD', seeding: 'seeded' },
-  }).some(q => q.includes('qualifying')), 'an attached qualifier must carry a real code')
-
-  const done: Partial<BracketSetup> = {
-    format: 'match_play', mode: 'relaxed', size: 16, entry: 'self_join',
-    deadlines: ['2026-09-01', '2026-09-08', '2026-09-15', '2026-09-22'],
-    finalized: false,
-  }
-  eq(unansweredSetup(done), [], 'a full setup has nothing open')
-  ok(isCompleteSetup(done), 'and is complete')
-  ok(!isCompleteSetup({ ...done, finalized: undefined }),
-    'finalisation is an answer too — open is a choice, not a default')
+  ok(validDeadline('2026-11-14') && !validDeadline('2026-02-30') && !validDeadline('14/11/2026') && !validDeadline(null),
+    'a deadline is a real date')
+  eq(deadlineRoundNames(3), ['Quarter-Final', 'Semi-Final', 'Final'], 'named for the bracket\'s own rounds')
+  eq(deadlinesIssue(['2026-11-14', '', '2026-12-12'], 3), 'Choose the Semi-Final\'s deadline.', 'every round needs one, said by name')
+  eq(deadlinesIssue(['2026-11-14', '2026-11-01', '2026-12-12'], 3), 'The Semi-Final cannot close before the Quarter-Final.', '  …and none runs backwards')
+  eq(deadlinesIssue(['2026-11-14', '2026-11-14', '2026-12-12'], 3), null, '  …two may share a date')
+  eq([deadlineOpensAt(['2027-05-01', '', ''], 1, '2027-04-01'), deadlineOpensAt(['2027-05-01', '', ''], 2, '2027-04-01'), deadlineOpensAt([], 0, '2027-04-01')],
+    ['2027-05-01', '2027-05-01', '2027-04-01'],
+    'a round\'s calendar opens at the last deadline before it, the first at the event\'s start (Ross: set up months ahead)')
+  eq(fitDeadlines(['2026-11-14', '2026-12-12'], 3), ['', '2026-11-14', '2026-12-12'], 'a bracket a round taller keeps the Final\'s date, the new first round empty')
+  eq(deadlinesAnswerIssue(NO_DEADLINES_ANSWER, 3), 'Choose whether to set deadlines.', 'the question wants an answer')
+  eq([deadlinesAnswerIssue({ on: false, dates: [] }, 3), storedDeadlines({ on: false, dates: ['2026-11-14'] }, 1)], [null, null], '  …no is an answer, and stores none')
+  eq(storedDeadlines({ on: true, dates: ['2026-11-14', '2026-11-21'] }, 2), ['2026-11-14', '2026-11-21'], '  …yes stores a date a round')
+  eq(deadlinesAnswerFrom(['2026-11-14']), { on: true, dates: ['2026-11-14'] }, '  …and reads back as yes')
 }
 
 // ─── Storage ───────────────────────────────────────────────────
 
-section('Storage round-trips whole or not at all')
+section('A match play event is a whole setup from the start, unanswered questions at their defaults')
 {
-  const setup: BracketSetup = {
-    format: 'match_play', mode: 'strict', size: 32, entry: 'self_join',
-    qualifying: { eventCode: 'QX7K2P', seeding: 'seeded' },
-    deadlines: ['2026-09-01', '2026-09-08', '2026-09-15', '2026-09-22', '2026-09-29'],
-    finalized: true,
-  }
-  eq(parseBracketSetup(JSON.parse(JSON.stringify(setup))), setup,
-    'a complete setup reads back byte-for-byte')
-
-  eq(parseBracketSetup(null), null, 'null is no setup — the un-migrated column')
-  eq(parseBracketSetup('match_play'), null, 'a bare string is refused')
-  eq(parseBracketSetup([]), null, 'so is an array')
-  eq(parseBracketSetup({ format: 'league' }), null,
-    'a stored league setup is refused until league is built')
-  eq(parseBracketSetup({ ...setup, size: 24 }), null, 'a size off the list drops the lot')
-  eq(parseBracketSetup({ ...setup, mode: 'chaotic' }), null, 'an unknown mode too')
-  eq(parseBracketSetup({ ...setup, deadlines: setup.deadlines.slice(0, 4) }), null,
-    'deadlines that no longer cover the rounds drop the lot — never half an answer')
-  eq(parseBracketSetup({ ...setup, qualifying: { eventCode: 'QX7K2P' } }), null,
-    'a qualifier without its seeding is refused')
-  eq(parseBracketSetup({ ...setup, qualifying: { eventCode: 'short', seeding: 'seeded' } }),
-    null, 'a qualifier with a broken code is refused')
-
-  const noQual = parseBracketSetup({ ...setup, qualifying: undefined })
-  ok(noQual !== null && !('qualifying' in noQual!),
-    'no qualifying event is a normal setup, and the key stays off the object')
-
-  const open = parseBracketSetup({ ...setup, finalized: 'yes' })
-  eq(open?.finalized, false, 'finalized is exactly true or it is open')
-
-  const trimmed = parseBracketSetup({
-    ...setup,
-    deadlines: [...setup.deadlines, '2026-10-06'],
-  })
-  eq(trimmed?.deadlines.length, 5, 'a spare deadline beyond the rounds is trimmed')
-
-  // The shape in time. A continuous knockout is an ongoing event over a
-  // period; standalone is the absent default, kept off the object.
-  const continuous = { ...setup, schedule: 'continuous' }
-  eq(parseBracketSetup(JSON.parse(JSON.stringify(continuous))),
-    { format: 'match_play', schedule: 'continuous', ...(({ format, ...rest }) => rest)(setup) },
-    'a continuous knockout reads back whole, shape included')
-  const plainShape = parseBracketSetup({ ...setup, schedule: 'sometime' })
-  ok(plainShape !== null && !('schedule' in plainShape!),
-    'an unknown shape is dropped, not guessed at')
+  eq(parseBracketSetup(knockoutSeed('standalone')), { format: 'match_play', mode: 'relaxed', entry: 'self_join', finalized: false },
+    'the seed creation writes reads as relaxed, players joining, nothing locked')
+  eq(parseBracketSetup(knockoutSeed('continuous', null, ['2027-05-31', '2027-06-30']))?.deadlines, ['2027-05-31', '2027-06-30'],
+    '  …its deadlines carried')
+  const old = { format: 'match_play', mode: 'strict', size: 32, entry: 'organiser', deadlines: ['2026-11-01', '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05'], finalized: true,
+    qualifying: { eventCode: 'qx7k2p', seeding: 'seeded' } }
+  eq(parseBracketSetup(old), { format: 'match_play', mode: 'strict', entry: 'organiser', qualifying: { eventCode: 'QX7K2P', seeding: 'seeded' },
+    deadlines: old.deadlines, finalized: true }, 'a setup saved by the old form reads back, its field cap gone')
+  eq(parseBracketSetup({ format: 'match_play', mode: 'odd', deadlines: ['2026-11-02', '2026-11-01'], qualifying: { eventCode: 'x' } }),
+    { format: 'match_play', mode: 'relaxed', entry: 'self_join', finalized: false }, 'an answer that does not read drops to its default — the setup is never refused')
+  eq([parseBracketSetup({ format: 'league' }), parseBracketSetup(null), parseBracketSetup([])], [null, null, null], 'a league, nothing or nonsense is no match play setup')
+  eq(describeSetup(parseBracketSetup(old)!), 'Strict · deadlines set · seeded off QX7K2P · locked in', 'said in one line on the organiser card')
+  eq(describeSetup(parseBracketSetup(knockoutSeed('continuous'))!), 'Ongoing · Relaxed · no deadlines · open', '  …a fresh one too')
 }
 
-section('The shape survives the bracket form')
-{
-  ok(describeSetup({
-    format: 'match_play', schedule: 'continuous', mode: 'relaxed', size: 16,
-    entry: 'self_join',
-    deadlines: ['2026-09-01', '2026-09-08', '2026-09-15', '2026-09-22'],
-    finalized: false,
-  }).includes('continuous'), 'the organiser card says continuous')
+// ─── The bracket flow ──────────────────────────────────────────
 
-  // The continuous door seeds {format, schedule} before the bracket form
-  // has ever been filled — a partial the parser refuses. The page recovers
-  // the shape off the raw object and the form carries it into its save;
-  // without both, the first save would quietly make the event standalone.
-  const page = read('app/trip/[tripCode]/organiser/bracket/page.tsx')
-  ok(page.includes("?.schedule === 'continuous'"),
-    'the page reads the shape off the raw column, parse or no parse')
-  const form = read('app/trip/[tripCode]/organiser/bracket/BracketSetupForm.tsx')
-  ok(form.includes('initialSchedule'), 'and hands it to the form')
-  ok(form.includes('initialSetup?.schedule ?? initialSchedule'),
-    'whose save carries it through, saved setup first')
-}
-
-// ─── Naming ────────────────────────────────────────────────────
-
-section('The organiser card says the setup in one line')
-{
-  const line = describeSetup({
-    format: 'match_play', mode: 'relaxed', size: 32, entry: 'self_join',
-    qualifying: { eventCode: 'QX7K2P', seeding: 'seeded' },
-    deadlines: ['2026-09-01', '2026-09-08', '2026-09-15', '2026-09-22', '2026-09-29'],
-    finalized: false,
-  })
-  ok(line.includes('Match play'), 'the format leads')
-  ok(line.includes('relaxed'), 'the mode is in it')
-  ok(line.includes('32'), 'so is the size')
-  ok(line.includes('QX7K2P'), 'and the qualifier it seeds off')
-  ok(line.includes('open'), 'and whether it is still open')
-
-  ok(describeSetup({
-    format: 'match_play', mode: 'strict', size: 16, entry: 'organiser',
-    deadlines: ['2026-09-01', '2026-09-08', '2026-09-15', '2026-09-22'],
-    finalized: true,
-  }).includes('finalised'), 'a finalised setup says so')
-}
-
-// ─── The form offers what the model knows ──────────────────────
-
-section('Every option the form offers is one the model can read back')
-{
-  ok(TOURNAMENT_FORMATS.some(f => f.key === 'league' && !f.built),
-    'league is named and marked not-buildable-here — it is created through its own door')
-  ok(TOURNAMENT_FORMATS.some(f => f.key === 'match_play' && f.built),
-    'match play is named and built')
-  eq(BRACKET_MODES.map(m => m.key), ['strict', 'relaxed'], 'the two modes')
-  eq(PLAYER_ENTRIES.map(e => e.key), ['organiser', 'self_join'], 'the two entries')
-  eq(SEEDINGS.map(s => s.key), ['random', 'seeded'], 'the two seedings')
-}
-
-// ─── Wiring ────────────────────────────────────────────────────
-
-section('The form stands where it should and writes only what it owns')
+section('The bracket in the organiser area is creation\'s own flow (Ross, 5 Nov 2026)')
 {
   const page = read('app/trip/[tripCode]/organiser/bracket/page.tsx')
-  ok(page.includes('PasscodeGate'), 'the bracket page stands behind the organiser PIN')
-  ok(page.includes('isEvent'), 'and is events-only, like the rest of the organiser area')
-
-  // The fail-soft rule the `kind` read established: a page's main select
-  // never names a column a migration might not have added yet.
+  ok(page.includes('PasscodeGate') && page.includes('isEvent') && page.includes('<BracketFlow'), 'behind the organiser PIN, events only, the one flow')
   const mainSelect = page.match(/select\('id, trip_code[^']*'\)/)?.[0] ?? ''
-  ok(!mainSelect.includes('bracket_setup'),
-    'the main trip select never names bracket_setup — the page must survive an un-migrated database')
-  ok(page.includes("select('bracket_setup')"),
-    'the setup rides in its own query, whose failure costs only the prefill')
-
-  const form = read('app/trip/[tripCode]/organiser/bracket/BracketSetupForm.tsx')
-  ok(form.includes(".eq('id', tripId)"), 'the save is scoped to its trip')
-  ok(!form.includes('service_role') && !form.includes('SERVICE_ROLE'),
-    'no service key anywhere near the browser')
-
+  ok(!mainSelect.includes('bracket_setup') && page.includes("select('bracket_setup')"),
+    'the setup rides in its own query, never the trip\'s select')
+  ok(page.includes(".eq('trip_id', trip.id)") && page.includes("rows.filter(m => m.round_number === 1)"),
+    '  …and the draw made is read back, this event\'s alone, as its first round')
+  const flow = read('app/trip/[tripCode]/organiser/bracket/BracketFlow.tsx')
+  ok(flow.includes('<DrawPlanner') && flow.includes('<RoundDeadlines') && flow.includes("'More settings'"),
+    'Plan the draw, the deadlines, then More settings')
+  ok(flow.includes("['draw', ...(rounds > 0 ? ['deadlines' as const] : []), 'more']"),
+    '  …the deadlines only once there is a bracket (Ross: "no need to ask for dates if the user hasn\'t yet made a bracket")')
+  ok(flow.includes('draftFromSlots(existing.slots, existing.seeds, field)') && flow.includes('!sameSlots(slots, existing.slots)'),
+    '  …the draw made opens in the bracket to change, and is only made again when it changed')
+  ok(flow.includes('saveBracketSetup(supabase, tripId') && flow.includes('writeDraw(supabase, tripId'), '  …saved through the one writers')
+  ok(!flow.includes('BRACKET_SIZES') && !flow.includes('size'), '  …and no field cap: the bracket\'s own rounds decide (Ross)')
+  const store = read('lib/drawStore.ts')
+  ok(/saveBracketSetup[\s\S]*select\('bracket_setup'\)\.eq\('id', tripId\)[\s\S]*update\(\{ bracket_setup: base \}\)\.eq\('id', tripId\)/.test(store),
+    'the setup is merged into the column read fresh, scoped to its event')
   const organiser = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
-  ok(organiser.includes('/organiser/bracket'), 'the organiser area is the door in')
-
-  const organiserPage = read('app/trip/[tripCode]/organiser/page.tsx')
-  const organiserTripSelect = organiserPage.match(/select\('id, trip_code[^']*'\)/)?.[0] ?? ''
-  ok(!organiserTripSelect.includes('bracket_setup'),
-    'the organiser page keeps bracket_setup out of its main select too')
-
+  ok(organiser.includes('/organiser/bracket') && !organiser.includes('/organiser/draw') && organiser.includes("isLeague ? 'League' : 'Bracket'"),
+    'the organiser area has one Bracket row, the draw inside it')
+  ok(read('app/trip/[tripCode]/organiser/draw/page.tsx').includes('redirect(`/trip/${tripCode}/organiser/bracket`)'), '  …an old draw link lands in it')
+  ok(!fs.existsSync('app/trip/[tripCode]/organiser/bracket/BracketSetupForm.tsx'), '  …and the seven-question form is gone')
   const migration = read('supabase/migrations/20260101000047_bracket_setup.sql')
-  ok(migration.includes('ADD COLUMN IF NOT EXISTS bracket_setup jsonb'),
-    'migration 047 adds the one jsonb column, idempotently')
+  ok(migration.includes('ADD COLUMN IF NOT EXISTS bracket_setup jsonb'), 'migration 047 adds the one jsonb column, idempotently')
+
+  // A draw read back into the bracket.
+  const field = ['a', 'b', 'c', 'd', 'e']
+  const back = draftFromSlots(['a', null, 'd', 'e', 'b', null, 'c', null], [1, null, 4, 5, 2, null, 3, null], field)
+  eq([back.method, back.order, back.locked, back.edited], ['seeded', ['a', 'b', 'c', 'd', 'e'], true, true],
+    'a seeded draw comes back seeded, in its order, locked where it keeps to the best spread')
+  ok(sameSlots(['a', null], ['a', null]) && !sameSlots(['a', null], [null, 'a']), '  …and is only the same draw place for place')
+  for (const form of ['CreateKnockoutForm', 'CreateTripForm']) {
+    const src = read(`app/dashboard/create/${form}.tsx`)
+    ok(src.includes('<RoundDeadlines') && src.includes('creationRounds(draw, drawEntrants)') && src.includes('storedDeadlines(deadlines, bracketRounds)'),
+      `${form}: creation asks the same deadlines after the draw, when it makes a bracket, and stores them with the event`)
+  }
+  const ents = [{ id: 'a', name: 'A', handicap: 1 }, { id: 'b', name: 'B', handicap: 2 }, { id: 'c', name: 'C', handicap: 3 }]
+  const later = { timing: { when: 'later' as const, on: '', at: '20:00', seeding: 'random' as const }, draft: newDraft(['a', 'b', 'c']) }
+  eq([creationRounds(later, ents), creationRounds({ ...later, timing: { ...later.timing, when: 'now' } }, ents)], [0, 2],
+    '  …none while the draw is still to be allocated; the bracket\'s rounds once it is made')
 }
 
 section('A match play event is a knockout from the moment it is made')
@@ -475,8 +346,6 @@ section('The draw: made at creation, from the organiser area, or by itself on a 
   const store = read('lib/drawStore.ts')
   ok(store.includes('if (state.inPlay)') && store.includes('bracketFromSlots(slots'), 'one writer, which refuses a draw already in play')
   ok(/saveDrawPlan[\s\S]*select\('bracket_setup'\)[\s\S]*\.\.\.\(raw/.test(store), 'a plan is merged into the setup read fresh, never written from a stale copy')
-  ok(read('app/trip/[tripCode]/organiser/bracket/BracketSetupForm.tsx').includes('...(draw ? { draw } : {})'),
-    'the setup form carries the plan through its save')
   const cleanup = read('app/api/cleanup/route.ts')
   ok(cleanup.includes('runDueDraws(supabaseAdmin, new Date(), dryRun)'), 'the nightly job makes the draws whose moment has come')
   const due = read('app/api/match/dueDraws.ts')
@@ -485,8 +354,7 @@ section('The draw: made at creation, from the organiser area, or by itself on a 
     '  …once: a visit takes the job before drawing, and gives it back if the draw fails')
   ok(read('app/api/match/draw-due/route.ts').includes('makeDueDraw(admin, trip, new Date(), false)'),
     'the first visit after the moment makes it, through the same function (Ross, 5 Nov 2026)')
-  ok(read('app/trip/[tripCode]/organiser/OrganiserClient.tsx').includes('/organiser/draw'), 'the organiser area has the draw')
-  ok(read('app/trip/[tripCode]/organiser/draw/DrawClient.tsx').includes('if (state.inPlay)'), '  …which, once in play, says so rather than offering a redraw')
+  ok(read('app/trip/[tripCode]/organiser/bracket/BracketFlow.tsx').includes('The draw is in play'), 'once in play, the flow says so rather than offering a redraw')
 }
 
 section('When the draw happens — one screen, and a moment it goes live (Ross, 5 Nov 2026)')
@@ -510,7 +378,7 @@ section('When the draw happens — one screen, and a moment it goes live (Ross, 
     '  …and a date asks the time it goes live')
   const planner = read('app/components/DrawPlanner.tsx')
   ok(read('app/dashboard/create/CreationDraw.tsx').includes('export default DrawPlanner')
-    && read('app/trip/[tripCode]/organiser/draw/DrawClient.tsx').includes('<DrawPlanner')
+    && read('app/trip/[tripCode]/organiser/bracket/BracketFlow.tsx').includes('<DrawPlanner')
     && planner.includes('buildsNow(value.timing)'),
     'creation and the organiser area are one draw screen, the draw built on it now or pre-made for its date')
   const hub = read('app/trip/[tripCode]/page.tsx')

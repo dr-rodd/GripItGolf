@@ -10,6 +10,7 @@ import {
 } from './matchplay'
 import { toRow, type StoredMatch } from './matchplayStore'
 import { drawInPlay, type DrawPlan } from './bracketDraw'
+import type { BracketSetup } from './bracketSetup'
 import type { EntrantKind } from './matchplayEntrants'
 
 export type DrawState = { drawn: boolean; inPlay: boolean }
@@ -80,4 +81,35 @@ export async function saveDrawPlan(client: SupabaseClient, tripId: string, plan:
   else delete base.draw
   const { error: err } = await client.from('trips').update({ bracket_setup: base }).eq('id', tripId)
   if (err) throw new MatchplayError('Could not save when the draw is made — try again.')
+}
+
+/**
+ * The bracket's own answers — strict or relaxed, entry, the qualifier, the
+ * deadlines, the lock, and the draw plan — merged into whatever
+ * `bracket_setup` holds now, read fresh, the way `saveDrawPlan` merges: a
+ * key left out is kept as it is, a null takes it off.
+ */
+export async function saveBracketSetup(
+  client: SupabaseClient,
+  tripId: string,
+  patch: { [K in keyof Omit<BracketSetup, 'format' | 'schedule'>]?: BracketSetup[K] | null },
+): Promise<void> {
+  const { data, error } = await client.from('trips').select('bracket_setup').eq('id', tripId).single()
+  if (error) throw new MatchplayError('Could not read the event — try again.')
+  const raw = (data as { bracket_setup?: unknown } | null)?.bracket_setup
+  const base: Record<string, unknown> = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? { ...(raw as Record<string, unknown>) } : { format: 'match_play' }
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) continue
+    if (value === null || (Array.isArray(value) && value.length === 0)) delete base[key]
+    else base[key] = value
+  }
+  // The old field cap is the bracket's own rounds now (Ross, 5 Nov 2026).
+  delete base.size
+  const { error: err } = await client.from('trips').update({ bracket_setup: base }).eq('id', tripId)
+  if (err) {
+    throw new MatchplayError(/column|schema cache/i.test(err.message ?? '')
+      ? 'Could not save the bracket — a database update may not have been applied yet.'
+      : 'Could not save the bracket — try again.')
+  }
 }

@@ -228,7 +228,7 @@ async function main() {
     const trip = read('app/dashboard/create/CreateTripForm.tsx')
     const field = read('app/dashboard/create/MatchPlayField.tsx')
     const seed = read('app/dashboard/create/SeedFromEvent.tsx')
-    ok(ko.includes("'Next, let’s add the field', 'Plan the draw', 'Ready to go'")
+    ok(ko.includes("field: 'Next, let’s add the field',\n  draw: 'Plan the draw',") && ko.includes("ready: 'Ready to go'")
       && trip.includes("'Next, let’s add the field', 'Plan the draw', 'Ready to go'"),
       'both match play doors: the field, then the draw as a step of its own (Ross, 4 Nov 2026)')
     ok(ko.includes('<MatchPlayField') && trip.includes('<MatchPlayField') && (trip.match(/<CreationDraw /g) ?? []).length === 1

@@ -1,25 +1,21 @@
-// A tournament's bracket setup — the only copy of the rules.
+// A match play event's bracket setup — the only copy of the rules.
 //
-// The organiser's seven answers, taken in order on the bracket setup form
-// behind the organiser PIN: the format, how matches come about (strict or
-// relaxed), the field's ceiling, how players get in, whether a qualifying
-// event seeds the draw, when each bracket round must be finished, and
-// whether the structure is locked now or left open to joiners.
+// One flow, at creation and in the organiser area alike (Ross, 5 Nov 2026:
+// "the same as doing it at creation"): plan the draw (lib/bracketDraw.ts —
+// the bracket itself decides how many rounds there are; the old field cap
+// is gone), then, once a bracket exists, **"Do you want to set a deadline
+// for each round to be completed?"** — a date for each of its rounds — and
+// under **More settings** the rest: strict or relaxed, how the field gets
+// in, a qualifying event, and whether the setup is locked in.
 //
-// Stored whole in `trips.bracket_setup` (migration 047) — jsonb, one object,
-// written only when every question is answered. The form holds half-finished
-// drafts in its own state; the database never sees one, which is the same
-// discipline lib/leaderboards.ts keeps: the code downstream is handed
-// complete rules or nothing, never an object it has to guess at.
+// Stored in `trips.bracket_setup` (migration 047), jsonb, one object. An
+// answer nobody has given reads as its default — relaxed, players join
+// themselves, no qualifier, no deadlines, open — so the event is a whole
+// setup from the moment it is made, and every write merges into the column
+// read fresh (lib/drawStore.ts `saveBracketSetup`), never from a stale copy.
 //
-// Two things this file deliberately is not. It is not the draw: generating
-// matches, pairing players and linking courses stay with lib/matchplay.ts
-// and the matchplay board — this is the setup those will read. And league is
-// not built: the format field anticipates it so the storage shape will not
-// change when it arrives, but the parser refuses to return one, because a
-// setup nothing can score is a setup nothing should trust.
-//
-// Pure. No I/O.
+// It is not the draw: generating matches stays with lib/matchplay.ts. Pure.
+// No I/O.
 
 import { parseDrawPlan, type DrawPlan } from './bracketDraw'
 import { roundName } from './matchplay'
@@ -41,14 +37,17 @@ export function isKnockoutEvent(raw: unknown): boolean {
 
 /**
  * The seed a match play event is created with — one-off, or ongoing over a
- * period — and, when creation planned it, how the draw is to be made
- * (lib/bracketDraw.ts `DrawPlan`).
+ * period — and, when creation planned them, how the draw is to be made
+ * (lib/bracketDraw.ts `DrawPlan`) and each round's deadline.
  */
-export function knockoutSeed(schedule: 'standalone' | 'continuous', draw?: DrawPlan | null): Record<string, unknown> {
+export function knockoutSeed(
+  schedule: 'standalone' | 'continuous', draw?: DrawPlan | null, deadlines?: readonly string[] | null,
+): Record<string, unknown> {
   return {
     format: 'match_play',
     ...(schedule === 'continuous' ? { schedule: 'continuous' } : {}),
     ...(draw ? { draw } : {}),
+    ...(deadlines && deadlines.length > 0 ? { deadlines: [...deadlines] } : {}),
   }
 }
 
@@ -59,11 +58,10 @@ export function rawDrawPlan(raw: unknown): DrawPlan | null {
 }
 
 /**
- * The date each drawn round must be played by. The setup counts its
- * deadlines from its ceiling (a draw of 32 has five) while the draw is
- * shaped by the field that turned up (nine players draw 16, four rounds),
- * so the two are lined up from the Final backwards: the last deadline is
- * always the Final's. A round with no deadline left is null. Pure.
+ * The date each drawn round must be played by. Deadlines are set against
+ * the bracket as it was when they were set; a draw made again with a round
+ * more or fewer lines them up from the Final backwards, so the last
+ * deadline is always the Final's. A round with no deadline left is null.
  */
 export function drawDeadlines(deadlines: readonly string[], drawRounds: number): (string | null)[] {
   const offset = deadlines.length - drawRounds
@@ -94,96 +92,34 @@ export function knockoutBoards(): Leaderboard[] {
 
 export type TournamentFormat = 'match_play' | 'league'
 
-export const TOURNAMENT_FORMATS: {
-  key: TournamentFormat; label: string; hint: string; built: boolean
-}[] = [
-  { key: 'match_play', label: 'Match play', built: true,
-    hint: 'A knockout bracket — win and go through, lose and go home.' },
-  // `built` here means "buildable from the bracket form". A league exists
-  // now, but it is created whole through its own door — Create an Event →
-  // Golf Tournament → League (lib/leagueSetup.ts) — never assembled here,
-  // where a save would turn an existing event into a knockout.
-  { key: 'league', label: 'League', built: false,
-    hint: 'A table over the days.' },
-]
+// ─── More settings ─────────────────────────────────────────────
 
-// ─── Mode ──────────────────────────────────────────────────────
-//
 // Who decides how a match comes about. Strict: the organiser pre-determines
 // everything — who plays whom each round, and which course a round is played
 // on — and the field's job is to turn up and enter the result. Relaxed: the
-// players self-organise — they arrange their own matches, pick their own
-// course, enter their own scores and link the card to their bracket match
-// themselves. The choice is stored now; the strict-mode pairing and
-// course-linking screens are built on top of it, the way `tee_sheet` was
-// stored before the sheet existed.
-
+// players self-organise. Stored; the strict-mode fixture screens are built on
+// top of it later. Relaxed unless the organiser says otherwise (Ross).
 export type BracketMode = 'strict' | 'relaxed'
 
 export const BRACKET_MODES: { key: BracketMode; label: string; hint: string }[] = [
-  { key: 'strict', label: 'Strict', hint:
-    'You set who plays whom each round, and where.' },
   { key: 'relaxed', label: 'Relaxed', hint:
     'Players arrange their own matches and link their cards to the bracket.' },
+  { key: 'strict', label: 'Strict', hint:
+    'You set who plays whom each round, and where.' },
 ]
 
-// ─── Size ──────────────────────────────────────────────────────
-//
-// The ceiling, not a head count. A field that falls short of it is seated
-// with byes when the draw is made, exactly as lib/matchplay.ts already
-// seats one — the setup only fixes how tall the bracket is, which is what
-// the deadlines below are counted against.
-
-// Up to 64 for now — the draw's own ceiling (`MAX_BRACKET` in lib/matchplay.ts).
-export const BRACKET_SIZES = [16, 32, 64] as const
-export type BracketSize = (typeof BRACKET_SIZES)[number]
-
-export function parseBracketSize(value: unknown): BracketSize | null {
-  return (BRACKET_SIZES as readonly number[]).includes(Number(value))
-    ? Number(value) as BracketSize
-    : null
-}
-
-/** How many bracket rounds a draw of this size runs. */
-export function roundsFor(size: BracketSize): number {
-  return Math.log2(size)
-}
-
-/** Round names in playing order — "Round of 32" … "Final". */
-export function bracketRoundNames(size: BracketSize): string[] {
-  return Array.from({ length: roundsFor(size) }, (_, i) => roundName(size / 2 ** i))
-}
-
-/** "Up to 32 players — 5 rounds to the Final." */
-export function describeSize(size: BracketSize): string {
-  return `Up to ${size} players — ${roundsFor(size)} rounds to the Final.`
-}
-
-// ─── Player entry ──────────────────────────────────────────────
-//
-// How the field is assembled — never who plays whom. In strict mode players
-// can still join themselves off the link; the pairings stay the
-// organiser's either way, because entry is a roster question and the draw
-// is not.
-
+// How the field is assembled — never who plays whom.
 export type PlayerEntry = 'organiser' | 'self_join'
 
 export const PLAYER_ENTRIES: { key: PlayerEntry; label: string; hint: string }[] = [
-  { key: 'organiser', label: 'I add the field', hint:
-    'You enter every player yourself, up front.' },
   { key: 'self_join', label: 'Players join themselves', hint:
     'Share the event link or QR code and the field builds itself.' },
+  { key: 'organiser', label: 'I add the field', hint:
+    'You enter every player yourself, up front.' },
 ]
 
-// ─── Qualifying ────────────────────────────────────────────────
-//
 // A standalone event on the platform whose standings feed the seeding.
-// Named by its own six-character code — a reference, never a copy, so the
-// qualifier's board stays the one source of who finished where. `seeding`
-// says what the standings are then worth: the top finishers drawn at
-// random, or fully seeded — first plays last, standard seeding, which is
-// lib/matchplay.ts's `seedOrder`.
-
+// Named by its own six-character code — a reference, never a copy.
 export type Seeding = 'random' | 'seeded'
 
 export const SEEDINGS: { key: Seeding; label: string; hint: string }[] = [
@@ -199,11 +135,7 @@ export type Qualifying = {
   seeding: Seeding
 }
 
-/**
- * A typed code, held to the shape every trip code has — six alphanumerics,
- * upper-cased the way `/join` upper-cases. Whether it names a real event is
- * a lookup, and lookups belong to the form, not here.
- */
+/** A typed code, held to the shape every trip code has — six alphanumerics, upper-cased. */
 export function normalizeEventCode(text: string | null | undefined): string {
   return (text ?? '').replace(/\s/g, '').toUpperCase()
 }
@@ -214,12 +146,10 @@ export function validEventCode(code: string): boolean {
 
 // ─── Deadlines ─────────────────────────────────────────────────
 //
-// One date per bracket round — the day that round's matches must be
-// finished by. Both modes have them: strict fixes the fixtures and relaxed
-// does not, but a knockout in either needs the field moving at the same
-// pace or the Final waits on a straggler. Dates only, no times, and they
-// may repeat — two rounds settled over one weekend share a day — but they
-// can never run backwards.
+// Asked only once a bracket exists — "Do you want to set a deadline for
+// each round to be completed?" (Ross, 5 Nov 2026) — one date for each of
+// its rounds, first round first. Dates only; two rounds may share one, but
+// they can never run backwards.
 
 const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -229,19 +159,16 @@ export function validDeadline(value: unknown): value is string {
   return Number.isFinite(t) && new Date(t).toISOString().startsWith(value)
 }
 
-/**
- * What is wrong with these deadlines for a bracket this size, or null when
- * nothing is. Said in the round's own name, because "deadline 3" points at
- * nothing on the form.
- */
-export function deadlinesIssue(
-  deadlines: readonly (string | null | undefined)[], size: BracketSize,
-): string | null {
-  const names = bracketRoundNames(size)
+/** The rounds of a bracket this many rounds deep, in playing order — "Round of 16" … "Final". */
+export function deadlineRoundNames(rounds: number): string[] {
+  return Array.from({ length: rounds }, (_, i) => roundName(2 ** (rounds - i)))
+}
+
+/** What is wrong with a deadline for each of these rounds, or null — said in the round's own name. */
+export function deadlinesIssue(deadlines: readonly (string | null | undefined)[], rounds: number): string | null {
+  const names = deadlineRoundNames(rounds)
   for (let i = 0; i < names.length; i++) {
-    if (!validDeadline(deadlines[i])) {
-      return `The ${names[i]} needs a deadline.`
-    }
+    if (!validDeadline(deadlines[i])) return `Choose the ${names[i]}\'s deadline.`
   }
   for (let i = 1; i < names.length; i++) {
     if ((deadlines[i] as string) < (deadlines[i - 1] as string)) {
@@ -251,134 +178,120 @@ export function deadlinesIssue(
   return null
 }
 
+/**
+ * Where a round's calendar opens (Ross, 5 Nov 2026: "at the previous
+ * round's deadline, in case it is being set up months or a year in
+ * advance"): the last deadline set before it, else the event's start.
+ */
+export function deadlineOpensAt(deadlines: readonly string[], i: number, start: string | null): string | null {
+  for (let k = i - 1; k >= 0; k--) if (validDeadline(deadlines[k])) return deadlines[k]
+  return start && validDeadline(start) ? start : null
+}
+
+/** The deadline question as the form holds it: not answered yet, no, or yes with a date a round. */
+export type DeadlinesAnswer = { on: boolean | null; dates: string[] }
+
+export const NO_DEADLINES_ANSWER: DeadlinesAnswer = { on: null, dates: [] }
+
+/** The answer read back from what is stored — fitted to the bracket where it is used (`fitDeadlines`). */
+export function deadlinesAnswerFrom(stored: readonly string[] | undefined): DeadlinesAnswer {
+  return stored?.length ? { on: true, dates: [...stored] } : NO_DEADLINES_ANSWER
+}
+
+/**
+ * Dates lined up with a bracket this many rounds deep — from the Final
+ * backwards, as `drawDeadlines` reads them, so a round more or fewer keeps
+ * the Final's date and a new first round starts empty.
+ */
+export function fitDeadlines(dates: readonly string[], rounds: number): string[] {
+  const offset = dates.length - rounds
+  return Array.from({ length: rounds }, (_, i) => dates[offset + i] ?? '')
+}
+
+/** Why the deadline question cannot be left yet, or null. */
+export function deadlinesAnswerIssue(answer: DeadlinesAnswer, rounds: number): string | null {
+  if (answer.on === null) return 'Choose whether to set deadlines.'
+  return answer.on ? deadlinesIssue(fitDeadlines(answer.dates, rounds), rounds) : null
+}
+
+/** What the answer stores: a date a round, or nothing. */
+export function storedDeadlines(answer: DeadlinesAnswer, rounds: number): string[] | null {
+  return answer.on && !deadlinesAnswerIssue(answer, rounds) ? fitDeadlines(answer.dates, rounds) : null
+}
+
 // ─── The setup itself ──────────────────────────────────────────
 
 export type BracketSetup = {
-  format: TournamentFormat
+  format: 'match_play'
   /**
-   * A continuous knockout — an ongoing event occupying a period (the trip's
-   * start and finish dates), its rounds paced by the deadlines rather than
-   * fixed days of golf. Absent means standalone: the event happens at a
-   * single point in time, with its golf on the schedule. Written at
-   * creation by the continuous knockout's own door and carried through
-   * every save of this form, the keep-the-no-op-off rule as ever.
+   * A continuous knockout — an ongoing event occupying a period, its rounds
+   * paced by the deadlines rather than fixed days of golf. Absent means
+   * standalone. Written at creation and carried through every save.
    */
   schedule?: 'continuous'
   mode: BracketMode
-  size: BracketSize
   entry: PlayerEntry
-  /** Absent means no qualifying event — the draw is among whoever enters. */
+  /** Absent means no qualifying event. */
   qualifying?: Qualifying
-  /** One date per bracket round, first round first — `roundsFor(size)` long. */
-  deadlines: string[]
-  /**
-   * How and when the draw is made, when it was planned (lib/bracketDraw.ts).
-   * Carried through every save of the setup form, as the schedule is.
-   */
+  /** A date for each of the bracket's rounds, first round first — absent, none set. */
+  deadlines?: string[]
+  /** How and when the draw is made, when it was planned (lib/bracketDraw.ts). */
   draw?: DrawPlan
-  /**
-   * Locked, or still open to joiners. Finalising fixes the format and the
-   * bracket structure; until then the organiser can come back and change
-   * any answer, and the field can keep growing.
-   */
+  /** Locked in: the More settings answers fixed for good. */
   finalized: boolean
 }
 
 /**
- * The questions still unanswered, in the order the form asks them.
- *
- * The setup cannot be saved until this is empty — same rule, same shape as
- * lib/leaderboards.ts `unanswered`. Finalisation is not in the list: it has
- * no unanswered state, because "leave it open" is itself the answer.
- */
-export function unansweredSetup(draft: Partial<BracketSetup>): string[] {
-  if (!draft.format) return ['League or match play']
-  // League stops the form at step one — a league is created whole through
-  // its own door, and everything below is match play's. Listing the
-  // knockout's questions against a league would promise a way forward that
-  // does not exist on this form.
-  if (draft.format === 'league') return ['A league is created as its own event']
-
-  const missing: string[] = []
-  if (!draft.mode) missing.push('Strict or relaxed')
-  if (!draft.size) missing.push('How big the bracket is')
-  if (!draft.entry) missing.push('How players get in')
-  if (draft.qualifying && !validEventCode(draft.qualifying.eventCode)) {
-    missing.push('The qualifying event\'s code')
-  }
-  if (draft.size && deadlinesIssue(draft.deadlines ?? [], draft.size)) {
-    missing.push('A deadline for every round')
-  }
-  return missing
-}
-
-export function isCompleteSetup(draft: Partial<BracketSetup>): draft is BracketSetup {
-  return typeof draft.finalized === 'boolean' && unansweredSetup(draft).length === 0
-}
-
-// ─── Storage ───────────────────────────────────────────────────
-
-/**
- * Read whatever `trips.bracket_setup` holds. A complete match-play setup
- * comes back whole; anything else — null, an un-migrated column, a stored
- * league setup, deadlines that no longer fit the size — comes back null,
- * and the form starts from the top rather than trusting half an answer.
- * Same posture as `parseLeaderboards`: dropped, never repaired.
+ * Read whatever `trips.bracket_setup` holds: a match play event's setup,
+ * every unanswered question at its default, an answer that does not read
+ * dropped to its default rather than the setup refused — or null for
+ * anything that is not a match play event (a league's setup included).
  */
 export function parseBracketSetup(raw: unknown): BracketSetup | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const r = raw as Record<string, unknown>
-
   if (r.format !== 'match_play') return null
-  const mode = BRACKET_MODES.find(m => m.key === r.mode)?.key
-  const size = parseBracketSize(r.size)
-  const entry = PLAYER_ENTRIES.find(e => e.key === r.entry)?.key
-  if (!mode || !size || !entry) return null
+
+  const mode = BRACKET_MODES.find(m => m.key === r.mode)?.key ?? 'relaxed'
+  const entry = PLAYER_ENTRIES.find(e => e.key === r.entry)?.key ?? 'self_join'
 
   let qualifying: Qualifying | undefined
   if (r.qualifying && typeof r.qualifying === 'object' && !Array.isArray(r.qualifying)) {
     const q = r.qualifying as Record<string, unknown>
     const eventCode = normalizeEventCode(typeof q.eventCode === 'string' ? q.eventCode : '')
     const seeding = SEEDINGS.find(s => s.key === q.seeding)?.key
-    if (!validEventCode(eventCode) || !seeding) return null
-    qualifying = { eventCode, seeding }
+    if (validEventCode(eventCode) && seeding) qualifying = { eventCode, seeding }
   }
 
-  const deadlines = Array.isArray(r.deadlines) ? r.deadlines : []
-  if (deadlinesIssue(deadlines, size)) return null
+  const deadlines = Array.isArray(r.deadlines) && r.deadlines.length > 0
+    && !deadlinesIssue(r.deadlines, r.deadlines.length) ? r.deadlines as string[] : null
+  const draw = parseDrawPlan(r.draw)
 
   return {
     format: 'match_play',
     ...(r.schedule === 'continuous' ? { schedule: 'continuous' as const } : {}),
-    mode, size, entry,
-    // The key stays off the object entirely when there is no qualifier, the
-    // way lib/leaderboards.ts keeps every no-op answer off — a setup saved
-    // without one reads back byte-for-byte.
+    mode, entry,
     ...(qualifying ? { qualifying } : {}),
-    deadlines: deadlines.slice(0, roundsFor(size)) as string[],
+    ...(deadlines ? { deadlines } : {}),
+    ...(draw ? { draw } : {}),
     finalized: r.finalized === true,
-    ...(parseDrawPlan(r.draw) ? { draw: parseDrawPlan(r.draw) as DrawPlan } : {}),
   }
 }
 
 // ─── Naming ────────────────────────────────────────────────────
 
-/**
- * The one line the organiser area says about a saved setup —
- * "Match play · relaxed · up to 32 · seeded off QX7K2P · open".
- */
+/** The one line the organiser area says about a setup — "Relaxed · deadlines set · seeded off QX7K2P · open". */
 export function describeSetup(setup: BracketSetup): string {
   const parts = [
-    'Match play',
-    ...(setup.schedule === 'continuous' ? ['continuous'] : []),
-    setup.mode,
-    `up to ${setup.size}`,
+    ...(setup.schedule === 'continuous' ? ['Ongoing'] : []),
+    setup.mode === 'strict' ? 'Strict' : 'Relaxed',
+    setup.deadlines?.length ? 'deadlines set' : 'no deadlines',
   ]
   if (setup.qualifying) {
     parts.push(setup.qualifying.seeding === 'seeded'
       ? `seeded off ${setup.qualifying.eventCode}`
       : `drawn from ${setup.qualifying.eventCode}`)
   }
-  parts.push(setup.finalized ? 'finalised' : 'open')
+  parts.push(setup.finalized ? 'locked in' : 'open')
   return parts.join(' · ')
 }

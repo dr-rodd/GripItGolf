@@ -3,7 +3,7 @@ import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { needsPairings } from '@/lib/leaderboards'
 import { MAIN_SET, setOf } from '@/lib/teamSets'
 import { MAX_BRACKET } from '@/lib/matchplay'
-import { parseBracketSetup, rawDrawPlan } from '@/lib/bracketSetup'
+import { rawDrawPlan } from '@/lib/bracketSetup'
 import {
   byHandicap, drawCountIssue, drawDue, premadeSlots, reconcileOrder, shuffled, slotsFromSeeds,
 } from '@/lib/bracketDraw'
@@ -57,7 +57,7 @@ export async function makeDueDraw(admin: SupabaseClient, trip: DueTrip, now: Dat
   }
   // A pre-made draw that lost a whole half to players leaving cannot be
   // built — said, never thrown on every visit.
-  const issue = drawCountIssue(slots.filter(Boolean).length, parseBracketSetup(trip.bracket_setup)?.size ?? MAX_BRACKET)
+  const issue = drawCountIssue(slots.filter(Boolean).length, MAX_BRACKET)
     ?? slotsIssue(slots)
   if (issue) return { tripId: trip.id, outcome: 'skipped', why: issue }
   if (dryRun) return { tripId: trip.id, outcome: 'would draw' }

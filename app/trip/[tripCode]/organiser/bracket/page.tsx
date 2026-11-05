@@ -1,12 +1,17 @@
 import { supabase } from '@/lib/supabase'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
-import { parseBracketSetup, rawDrawPlan } from '@/lib/bracketSetup'
+import { isKnockoutEvent, parseBracketSetup, rawDrawPlan } from '@/lib/bracketSetup'
+import { boardsForTrip } from '@/lib/leaderboardsCompat'
+import { needsPairings } from '@/lib/leaderboards'
+import { MAIN_SET, setOf } from '@/lib/teamSets'
+import { fetchEntrants } from '@/lib/matchplayStore'
+import { readDrawState } from '@/lib/drawStore'
 import { parseLeagueSetup, describeLeagueSetup } from '@/lib/leagueSetup'
 import BackButton from '@/app/components/BackButton'
 import TripHeader from '@/app/components/TripHeader'
 import PasscodeGate from '../../setup/PasscodeGate'
-import BracketSetupForm from './BracketSetupForm'
+import BracketFlow from './BracketFlow'
 import { cardClass } from '@/app/components/ui'
 
 export const dynamic = 'force-dynamic'
@@ -31,7 +36,7 @@ export default async function BracketSetupPage({ params }: {
   const [tripResult, setupResult] = await Promise.all([
     supabase
       .from('trips')
-      .select('id, trip_code, name, kind, settings_passcode_hash')
+      .select('id, trip_code, name, kind, settings_passcode_hash, start_date, leaderboards, formats, team_scoring')
       .eq('trip_code', tripCode)
       .single(),
     supabase
@@ -69,21 +74,11 @@ export default async function BracketSetupPage({ params }: {
     )
   }
 
-  // Dropped rather than repaired if it is not a complete setup — the form
-  // would rather start again than trust half an answer.
+  // A match play event's setup, every unanswered question at its default
+  // (lib/bracketSetup.ts); a league's, its own.
   const setupRaw = (setupResult.data as { bracket_setup?: unknown } | null)?.bracket_setup
-  const initialSetup = parseBracketSetup(setupRaw)
+  const setup = parseBracketSetup(setupRaw)
   const leagueSetup = parseLeagueSetup(setupRaw)
-
-  // A continuous knockout writes its shape at creation, before the bracket
-  // form has ever been filled — a partial the parser rightly refuses. The
-  // shape is read off the raw object here so the form can carry it through
-  // its save; without this, the first save would quietly turn a summer
-  // knockout back into a standalone one.
-  const initialSchedule =
-    (setupRaw as { schedule?: unknown } | null)?.schedule === 'continuous'
-      ? ('continuous' as const)
-      : null
 
   let content: React.ReactNode
 
@@ -119,15 +114,67 @@ export default async function BracketSetupPage({ params }: {
         </div>
       </main>
     )
-  } else {
+  } else if (setup && isKnockoutEvent(setupRaw)) {
+    // The field, the draw made and how far it has got, and its first round
+    // to open the bracket on — all scoped to this event.
+    const boards = boardsForTrip(trip)
+    const board = boards.find(lb => lb.competition === 'matchplay')
+    const kind = needsPairings(boards) ? 'pair' as const : 'player' as const
+    const [entrants, state, matchesRes] = await Promise.all([
+      fetchEntrants(trip.id, kind, board ? setOf(board) : MAIN_SET).catch(() => []),
+      readDrawState(supabase, trip.id).catch(() => ({ drawn: false, inPlay: false })),
+      supabase.from('matchplay_matches')
+        .select('round_number, slot, player_a_id, player_b_id, team_a_id, team_b_id, entrant_type, seed_a, seed_b')
+        .eq('trip_id', trip.id),
+    ])
+    type Row = {
+      round_number: number; slot: number; player_a_id: string | null; player_b_id: string | null
+      team_a_id: string | null; team_b_id: string | null; entrant_type: string | null
+      seed_a: number | null; seed_b: number | null
+    }
+    const rows = (matchesRes.data ?? []) as Row[]
+    const drawnRounds = rows.reduce((n, r) => Math.max(n, r.round_number), 0)
+    let existing: { slots: (string | null)[]; seeds: (number | null)[] } | null = null
+    if (drawnRounds > 0) {
+      const slots: (string | null)[] = Array(2 ** drawnRounds).fill(null)
+      const seeds: (number | null)[] = Array(2 ** drawnRounds).fill(null)
+      for (const r of rows.filter(m => m.round_number === 1)) {
+        const pair = r.entrant_type === 'pair'
+        slots[2 * r.slot] = (pair ? r.team_a_id : r.player_a_id) ?? null
+        slots[2 * r.slot + 1] = (pair ? r.team_b_id : r.player_b_id) ?? null
+        seeds[2 * r.slot] = slots[2 * r.slot] ? r.seed_a : null
+        seeds[2 * r.slot + 1] = slots[2 * r.slot + 1] ? r.seed_b : null
+      }
+      existing = { slots, seeds }
+    }
     content = (
-      <BracketSetupForm
+      <BracketFlow
         tripId={trip.id}
         tripCode={tripCode}
-        initialSetup={initialSetup}
-        initialSchedule={initialSchedule}
-        initialDraw={rawDrawPlan(setupRaw)}
+        kind={kind}
+        entrants={entrants.map(e => ({ id: e.id, name: e.name, handicap: e.handicap }))}
+        drawn={state.drawn}
+        inPlay={state.inPlay}
+        drawnRounds={drawnRounds}
+        plan={rawDrawPlan(setupRaw)}
+        setup={setup}
+        existing={existing}
+        startDate={(trip as { start_date?: string | null }).start_date ?? null}
       />
+    )
+  } else {
+    // Neither a knockout nor a league: nothing of a bracket's to set.
+    content = (
+      <main className="min-h-dvh paper has-tabbar page-enter">
+        <TripHeader backTo={`/trip/${tripCode}/organiser`} />
+        <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
+          <h1 className="t-h1 text-ink mb-1">No bracket</h1>
+          <p className="text-ink/65 text-sm mb-6">
+            A match play event is made from Create an event, Golf tournament, Match play.
+          </p>
+          <BackButton href={`/trip/${tripCode}/organiser`} label="Organiser" />
+        </div>
+      </main>
     )
   }
 
@@ -140,7 +187,7 @@ export default async function BracketSetupPage({ params }: {
         tripCode={tripCode}
         tripName={trip.name}
         passcodeHash={trip.settings_passcode_hash as string}
-        title="Bracket setup"
+        title="The bracket"
         hint={`Enter the organiser PIN for ${trip.name}.`}
       >
         {content}

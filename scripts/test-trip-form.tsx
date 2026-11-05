@@ -241,7 +241,7 @@ section('Creation does not ask about teams')
 
   // Three steps for a trip, and the third is the last one; a match play
   // event has the field, the draw and the rest a step each (Ross, 4 Nov 2026).
-  ok(src.includes('const lastStep: Step = matchPlay ? 5 : 3'), 'the wizard is three steps — five for match play')
+  ok(src.includes('const lastStep: Step = matchPlay ? (deadlineStep ? 6 : 5) : 3'), 'the wizard is three steps — five for match play, six once its bracket asks deadlines')
   ok(src.includes('const isFinalStep = stepNum === lastStep'), 'and finishes on its last')
   ok((src.match(/step === [45]\b/g) ?? []).length === (src.match(/step === [45] && matchPlay|matchPlay \? step === 5/g) ?? []).length,
     'a fourth or fifth step only ever on a match play event')

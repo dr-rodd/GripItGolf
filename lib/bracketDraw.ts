@@ -31,8 +31,9 @@
 import { nextPowerOfTwo, seedOrder, MIN_PLAYERS, MAX_BRACKET } from './matchplay'
 import { irishInstant } from './irishTime'
 import {
-  MAX_ROUNDS, addRound, emptyLayout, filledLayout, grownTo, layoutIssue, layoutSlots, mayPlaceLocked,
-  mayRemoveRound, optimalShape, placeAt, removeRound, roundsFor, withinShape, withoutLeavers, type BracketLayout,
+  MAX_ROUNDS, addRound, emptyLayout, filledLayout, grownTo, keepsShape, layoutFromSlots, layoutIssue, layoutSlots,
+  mayPlaceLocked, mayRemoveRound, optimalShape, placeAt, removeRound, roundsFor, withinShape, withoutLeavers,
+  type BracketLayout,
 } from './bracketEditor'
 
 /** How the bracket was last filled: from a hat, by seed, or by hand from empty. */
@@ -359,6 +360,38 @@ export function withRounds(draft: DrawDraft, delta: 1 | -1, fieldSize: number): 
  */
 export function withLock(draft: DrawDraft, locked: boolean, field: readonly string[]): DrawDraft {
   return syncDraft({ ...draft, locked }, field)
+}
+
+/**
+ * A draw already laid out — a pre-made one in its plan, or the one made —
+ * read back into the builder as it was: its seed numbers kept where it was
+ * seeded, anybody who has left since gone from it, locked again only where
+ * it still keeps to the best spread.
+ */
+export function draftFromSlots(
+  stored: readonly (string | null)[], seeds: readonly (number | null)[] | null | undefined, field: readonly string[],
+): DrawDraft {
+  const slots = premadeSlots(stored, field)
+  const seeded = (seeds ?? []).some(n => n !== null)
+  const order = seeded
+    ? slots.map((id, i) => ({ id, n: seeds?.[i] ?? null }))
+      .filter((x): x is { id: string; n: number } => x.id !== null && x.n !== null)
+      .sort((a, b) => a.n - b.n).map(x => x.id)
+    : []
+  const known = new Set(order)
+  const layout = layoutFromSlots(slots)
+  return {
+    method: seeded ? 'seeded' : 'manual',
+    order: [...order, ...field.filter(id => !known.has(id))],
+    layout,
+    edited: true,
+    locked: keepsShape(layout, optimalShape(field.length)),
+  }
+}
+
+/** Whether two first rounds are the same draw, place for place. */
+export function sameSlots(a: readonly (string | null)[], b: readonly (string | null)[]): boolean {
+  return a.length === b.length && a.every((id, i) => (id ?? null) === (b[i] ?? null))
 }
 
 /** A seeded draft's seed number for a player, or null. */

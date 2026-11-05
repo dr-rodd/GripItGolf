@@ -20,7 +20,7 @@ import { NO_PUBLIC_PIN, publicPinIssue, rememberEntry } from '@/lib/publicPin'
 import PublicPinField from '@/app/components/PublicPinField'
 import { todayString } from '@/lib/tripStatus'
 import CreationDraw, {
-  DRAW_INTRO, NO_CREATION_DRAW, creationDrawIssue, creationEntrants, creationPlan, drawKey, writeCreationDraw,
+  DRAW_INTRO, NO_CREATION_DRAW, creationDrawIssue, creationEntrants, creationPlan, creationRounds, drawKey, writeCreationDraw,
   type CreationDrawValue,
 } from './CreationDraw'
 import MatchPlayField from './MatchPlayField'
@@ -37,7 +37,10 @@ import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
 import type { Leaderboard } from '@/lib/leaderboards'
-import { knockoutBoards, knockoutSeed } from '@/lib/bracketSetup'
+import {
+  NO_DEADLINES_ANSWER, deadlinesAnswerIssue, knockoutBoards, knockoutSeed, storedDeadlines, type DeadlinesAnswer,
+} from '@/lib/bracketSetup'
+import RoundDeadlines from '@/app/components/RoundDeadlines'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import {
   type EventPermissions, defaultPermissions, permissionsFor, storedPermissions,
@@ -65,8 +68,10 @@ const EVENT_STEP_TITLES = ['Name your event', 'Plan the schedule', 'Who’s play
  * (Ross, 4 Nov 2026) — the same as the ongoing door's (CreateKnockoutForm).
  */
 const MATCH_STEP_TITLES = ['Name your event', 'Plan the schedule', 'Next, let’s add the field', 'Plan the draw', 'Ready to go']
+/** …with the deadline question after the draw, once there is a bracket (Ross, 5 Nov 2026). */
+const DEADLINE_STEP_TITLE = 'Set a deadline for each round?'
 
-type Step = 1 | 2 | 3 | 4 | 5
+type Step = 1 | 2 | 3 | 4 | 5 | 6
 
 /** Which tees a player plays: the men's card or the ladies'. */
 const GENDER_OPTIONS = [{ value: 'M', label: 'M' }, { value: 'F', label: 'F' }] as const
@@ -141,8 +146,6 @@ export default function CreateTripForm({ matchPlay = false }: {
   const Noun = isTournament ? 'Event' : 'Trip'
 
   const [step, setStep] = useState<Step | 'done'>(1)
-  // A match play event has two steps more: the draw, and the rest after it.
-  const lastStep: Step = matchPlay ? 5 : 3
 
   // Step 1
   const [tripName, setTripName] = useState('')
@@ -197,6 +200,8 @@ export default function CreateTripForm({ matchPlay = false }: {
   // A match play event's draw: now, later or on a date (lib/bracketDraw.ts)
   const [draw, setDraw] = useState<CreationDrawValue>(NO_CREATION_DRAW)
   const [drawWarning, setDrawWarning] = useState<string | null>(null)
+  // And, once a bracket is being made, a deadline a round (lib/bracketSetup.ts).
+  const [deadlines, setDeadlines] = useState<DeadlinesAnswer>(NO_DEADLINES_ANSWER)
 
   // Submit state
   const [submitting, setSubmitting] = useState(false)
@@ -243,6 +248,11 @@ export default function CreateTripForm({ matchPlay = false }: {
   const today = todayString(new Date())
   const drawEntrants = creationEntrants(players)
   const drawIssue = isTournament && matchPlay ? creationDrawIssue(draw, drawEntrants, today) : null
+  // A match play event has two steps more — the draw, and the rest after it
+  // — and a third between them once a bracket is being made: its deadlines.
+  const bracketRounds = isTournament && matchPlay ? creationRounds(draw, drawEntrants) : 0
+  const deadlineStep: Step | null = matchPlay && bracketRounds > 0 ? 5 : null
+  const lastStep: Step = matchPlay ? (deadlineStep ? 6 : 5) : 3
   const fieldValid = !duplicateIssue && !(matchPlay && fieldTagsIssue(tags))
   const settingsValid = !passcodeIssue && !publicIssue
   // A trip's (and a league-less event's) step 3 holds the field and the
@@ -251,8 +261,9 @@ export default function CreateTripForm({ matchPlay = false }: {
     n === 1 ? step1Valid
       : n === 3 ? (matchPlay ? fieldValid : fieldValid && settingsValid)
         : n === 4 ? !drawIssue
-          : n === 5 ? settingsValid
-            : true
+          : n === deadlineStep ? !deadlinesAnswerIssue(deadlines, bracketRounds)
+            : n === lastStep ? settingsValid
+              : true
 
   // ── Navigation ───────────────────────────────────────────────────────────
 
@@ -376,7 +387,10 @@ export default function CreateTripForm({ matchPlay = false }: {
     // A match play event says so from the start (lib/bracketSetup.ts), so
     // its leaderboard tab opens the bracket and the organiser's Format card
     // finishes a knockout rather than asking what it is.
-    if (isTournament && matchPlay) tripRow.bracket_setup = knockoutSeed('standalone', creationPlan(draw, drawEntrants, idFor))
+    if (isTournament && matchPlay) {
+      tripRow.bracket_setup = knockoutSeed('standalone', creationPlan(draw, drawEntrants, idFor),
+        bracketRounds > 0 ? storedDeadlines(deadlines, bracketRounds) : null)
+    }
 
     // Events only, and only when a toggle was actually flipped — nothing
     // opened writes nothing, so creation still lands before migration 049.
@@ -686,8 +700,13 @@ export default function CreateTripForm({ matchPlay = false }: {
   // its own box saying what to expect, and its draw a step of its own.
   const stepIntro = stepNum === 3 && !matchPlay ? `Optional. Players can join later with the ${noun} code.`
     : stepNum === 4 && matchPlay ? DRAW_INTRO
+      : stepNum === deadlineStep ? 'Do you want to set a deadline for each round to be completed?'
       : undefined
   const isFinalStep = stepNum === lastStep
+  // A match play event's deadline question sits after its draw, while there is a bracket.
+  const wizardTitles = matchPlay
+    ? (deadlineStep ? [...MATCH_STEP_TITLES.slice(0, 4), DEADLINE_STEP_TITLE, ...MATCH_STEP_TITLES.slice(4)] : MATCH_STEP_TITLES)
+    : isTournament ? EVENT_STEP_TITLES : STEP_TITLES
   // Step 2 is not here: its own footer decides when the itinerary can be
   // left, and it is the only thing that knows which day is open.
   const canProceed = !submitting && stepValid(stepNum)
@@ -710,7 +729,7 @@ export default function CreateTripForm({ matchPlay = false }: {
           trade for one fewer button. */}
       <WizardShell
         step={stepNum}
-        titles={matchPlay ? MATCH_STEP_TITLES : isTournament ? EVENT_STEP_TITLES : STEP_TITLES}
+        titles={wizardTitles}
         intro={stepIntro}
         onBack={goBack}
         footer={step !== 2 ? (<>
@@ -887,7 +906,12 @@ export default function CreateTripForm({ matchPlay = false }: {
         )}
 
         {/* ── Step 3: Players, then the rest; a match play event's rest is step 5 ── */}
-        {(matchPlay ? step === 5 : step === 3) && (
+        {/* ── The deadlines, once there is a bracket ── */}
+        {deadlineStep !== null && step === deadlineStep && (
+          <RoundDeadlines value={deadlines} onChange={setDeadlines} rounds={bracketRounds} start={startDate || null} />
+        )}
+
+        {step === lastStep && (
           <div className="space-y-4">
             {!matchPlay && (<>
 

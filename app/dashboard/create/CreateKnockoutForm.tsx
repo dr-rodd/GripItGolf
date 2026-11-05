@@ -24,10 +24,13 @@ import {
   type EventPermissions, defaultPermissions, permissionsFor, storedPermissions,
 } from '@/lib/eventPermissions'
 import CollaborationQuestion from '@/app/components/CollaborationQuestion'
-import { knockoutBoards, knockoutSeed } from '@/lib/bracketSetup'
+import {
+  NO_DEADLINES_ANSWER, deadlinesAnswerIssue, knockoutBoards, knockoutSeed, storedDeadlines, type DeadlinesAnswer,
+} from '@/lib/bracketSetup'
+import RoundDeadlines from '@/app/components/RoundDeadlines'
 import { todayString } from '@/lib/tripStatus'
 import CreationDraw, {
-  DRAW_INTRO, NO_CREATION_DRAW, creationDrawIssue, creationEntrants, creationPlan, drawKey, writeCreationDraw,
+  DRAW_INTRO, NO_CREATION_DRAW, creationDrawIssue, creationEntrants, creationPlan, creationRounds, drawKey, writeCreationDraw,
   type CreationDrawValue,
 } from './CreationDraw'
 import MatchPlayField from './MatchPlayField'
@@ -59,15 +62,23 @@ import WizardShell from '@/app/components/WizardShell'
  * Each step opens on its question — WizardShell draws it as the step's
  * title. The field and the draw are a step each (Ross, 4 Nov 2026).
  */
-const STEP_TITLES = ['Name your event', 'Next, let’s add the field', 'Plan the draw', 'Ready to go']
+type StepKey = 'details' | 'field' | 'draw' | 'deadlines' | 'ready'
+const STEP_TITLES: Record<StepKey, string> = {
+  details: 'Name your event',
+  field: 'Next, let’s add the field',
+  draw: 'Plan the draw',
+  // Only once there is a bracket (Ross, 5 Nov 2026).
+  deadlines: 'Set a deadline for each round?',
+  ready: 'Ready to go',
+}
 /** At most one line under the question. */
-const STEP_INTROS: (string | undefined)[] = [undefined, undefined, DRAW_INTRO, undefined]
-const LAST_STEP = 4
-
-type Step = 1 | 2 | 3 | 4
+const STEP_INTROS: Partial<Record<StepKey, string>> = {
+  draw: DRAW_INTRO,
+  deadlines: 'Do you want to set a deadline for each round to be completed?',
+}
 
 export default function CreateKnockoutForm() {
-  const [step, setStep] = useState<Step | 'done'>(1)
+  const [step, setStep] = useState<number | 'done'>(1)
 
   // Step 1 — the event and its period
   const [name, setName] = useState('')
@@ -91,6 +102,8 @@ export default function CreateKnockoutForm() {
   // Step 3 — the draw: now, later or on a date (lib/bracketDraw.ts)
   const [draw, setDraw] = useState<CreationDrawValue>(NO_CREATION_DRAW)
   const [drawWarning, setDrawWarning] = useState<string | null>(null)
+  // And, once a bracket is made, a deadline a round (lib/bracketSetup.ts).
+  const [deadlines, setDeadlines] = useState<DeadlinesAnswer>(NO_DEADLINES_ANSWER)
 
   // Step 4 — how collaborative, and the organiser PIN
   const [perms, setPerms] = useState<EventPermissions>(defaultPermissions)
@@ -119,24 +132,31 @@ export default function CreateKnockoutForm() {
   const today = todayString(new Date())
   const drawEntrants = creationEntrants(players)
   const drawIssue = creationDrawIssue(draw, drawEntrants, today)
+  // The rounds of the bracket being made — none while the draw is still to
+  // be allocated, so no deadlines are asked until there is a bracket.
+  const bracketRounds = creationRounds(draw, drawEntrants)
+  const keys: StepKey[] = ['details', 'field', 'draw', ...(bracketRounds > 0 ? ['deadlines' as const] : []), 'ready']
+  const key = keys[Math.min(Number(step) || 1, keys.length) - 1]
+  const lastStep = keys.length
 
   const canProceed = !submitting && (
-    step === 1 ? name.trim().length > 0 && !!startDate && !!endDate && !datesBackwards :
-    step === 2 ? !duplicateIssue && !fieldTagsIssue(tags) :
-    step === 3 ? !drawIssue :
-    step === 4 ? !passcodeIssue && !publicIssue :
+    key === 'details' ? name.trim().length > 0 && !!startDate && !!endDate && !datesBackwards :
+    key === 'field' ? !duplicateIssue && !fieldTagsIssue(tags) :
+    key === 'draw' ? !drawIssue :
+    key === 'deadlines' ? !deadlinesAnswerIssue(deadlines, bracketRounds) :
+    key === 'ready' ? !passcodeIssue && !publicIssue :
     false
   )
 
   function goNext() {
     if (step === 'done') return
-    if (step < LAST_STEP) setStep((step + 1) as Step)
+    if (step < lastStep) setStep(step + 1)
     else handleSubmit()
   }
 
   function goBack() {
     setError(null)
-    if (step !== 'done' && step > 1) setStep((step - 1) as Step)
+    if (step !== 'done' && step > 1) setStep(step - 1)
   }
 
   async function handleSubmit() {
@@ -199,7 +219,8 @@ export default function CreateKnockoutForm() {
       // The format and the shape, seeded now so the bracket form knows what
       // it is finishing. Not a complete setup — parseBracketSetup rightly
       // returns null on it — and never claimed to be one.
-      bracket_setup: knockoutSeed('continuous', creationPlan(draw, drawEntrants, idFor)),
+      bracket_setup: knockoutSeed('continuous', creationPlan(draw, drawEntrants, idFor),
+        bracketRounds > 0 ? storedDeadlines(deadlines, bracketRounds) : null),
       // The bracket's board, so the event plays from the moment it exists —
       // without it the bracket said match play was not switched on.
       leaderboards: withTagTally(knockoutBoards(), activeTags(tags).length > 0 && tagTally),
@@ -370,7 +391,7 @@ export default function CreateKnockoutForm() {
 
   // ── The wizard ───────────────────────────────────────────────────────────
 
-  const stepNum = step as Step
+  const stepNum = Math.min(Number(step) || 1, lastStep)
 
   return (
     <div className="min-h-dvh paper text-ink">
@@ -380,8 +401,8 @@ export default function CreateKnockoutForm() {
 
       <WizardShell
         step={stepNum}
-        titles={STEP_TITLES}
-        intro={STEP_INTROS[stepNum - 1]}
+        titles={keys.map(k => STEP_TITLES[k])}
+        intro={STEP_INTROS[key]}
         onBack={goBack}
         footer={<>
           <button
@@ -389,9 +410,9 @@ export default function CreateKnockoutForm() {
             disabled={!canProceed}
             className={buttonClass('primary')}
           >
-            {submitting ? 'Creating…' : stepNum === LAST_STEP ? 'Create event' : 'Continue'}
+            {submitting ? 'Creating…' : stepNum === lastStep ? 'Create event' : 'Continue'}
           </button>
-          {stepNum === 2 && (
+          {key === 'field' && (
             <p className="text-center text-ink/65 text-[13px] mt-3">
               Players without a name will be skipped
             </p>
@@ -400,7 +421,7 @@ export default function CreateKnockoutForm() {
       >
 
         {/* ── 1 · The event and its period ── */}
-        {step === 1 && (
+        {key === 'details' && (
           <div className="space-y-6">
             <div>
               <label className={FIELD_LABEL}>Event name</label>
@@ -476,7 +497,7 @@ export default function CreateKnockoutForm() {
         )}
 
         {/* ── 2 · The field ── */}
-        {step === 2 && (
+        {key === 'field' && (
           <MatchPlayField
             players={players}
             setPlayers={setPlayers}
@@ -492,13 +513,17 @@ export default function CreateKnockoutForm() {
         )}
 
         {/* ── 3 · The draw, a step of its own ── */}
-        {step === 3 && (
+        {key === 'draw' && (
           <CreationDraw entrants={drawEntrants} value={draw} onChange={setDraw} issue={drawIssue} today={today} heading={false}
             standings={drawStandings(seed, players, drawKey)} from={seed.source?.name} />
         )}
 
         {/* ── 4 · How collaborative, and the organiser PIN ── */}
-        {step === 4 && (
+        {key === 'deadlines' && (
+          <RoundDeadlines value={deadlines} onChange={setDeadlines} rounds={bracketRounds} start={startDate || null} />
+        )}
+
+        {key === 'ready' && (
           <div className="space-y-3">
             {/* The tags' secondary leaderboard (Ross, 5 Nov 2026) — wins and
                 losses by tag, under the bracket; kept unless switched off. */}

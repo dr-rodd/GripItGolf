@@ -537,16 +537,15 @@ export default function OrganiserClient({
             {rounds.length > 1 && (
               <ListRow href={`/trip/${tripCode}/organiser/days`} label="Each day’s own format" hint={dayFormatSummary} />
             )}
-            <ListRow
-              href={`/trip/${tripCode}/organiser/bracket`}
-              label={isLeague ? 'League' : 'Bracket setup'}
-              hint={formatSummary ?? 'Mode, field size, qualifying and round deadlines.'}
-            />
-            {knockout && (
+            {/* The bracket, in creation's own flow — the draw, its
+                deadlines, then the rest (Ross, 5 Nov 2026); a league's
+                summary; nothing on an event that is neither. */}
+            {(knockout || isLeague) && (
               <ListRow
-                href={`/trip/${tripCode}/organiser/draw`}
-                label="The draw"
-                hint={drawSummary ?? 'Random, seeded or picked by hand — now, or on a date.'}
+                href={`/trip/${tripCode}/organiser/bracket`}
+                label={isLeague ? 'League' : 'Bracket'}
+                hint={isLeague ? formatSummary ?? undefined
+                  : [drawSummary, formatSummary].filter(Boolean).join(' ') || 'The draw, its deadlines and settings.'}
               />
             )}
             <ListRow

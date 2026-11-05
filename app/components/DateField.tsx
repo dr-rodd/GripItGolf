@@ -18,7 +18,7 @@ import { FIELD, FIELD_LABEL } from './ui'
  * Both fixes live here so every date field on the site behaves the same.
  */
 export default function DateField({
-  label, value, onChange, disabled, className = '', min, max,
+  label, value, onChange, disabled, className = '', min, max, openAt,
 }: {
   label?: string
   value: string
@@ -28,7 +28,16 @@ export default function DateField({
   /** The earliest and latest days the picker offers, YYYY-MM-DD. */
   min?: string
   max?: string
+  /**
+   * Where an empty field's calendar opens: tapped while empty, it takes
+   * this date to start from, so the picker opens there rather than on
+   * today (Ross, 5 Nov 2026: a round's deadline opens at the round
+   * before's, for a bracket set up months ahead). A native picker opens on
+   * its value, so the date is filled in — and stays changeable.
+   */
+  openAt?: string | null
 }) {
+  const startHere = () => { if (!value && openAt && !disabled) onChange(openAt) }
   return (
     <div className={`min-w-0 ${className}`}>
       {label && (
@@ -40,6 +49,8 @@ export default function DateField({
         type="date"
         value={value}
         onChange={e => onChange(e.target.value)}
+        onPointerDown={startHere}
+        onFocus={startHere}
         disabled={disabled}
         min={min}
         max={max}

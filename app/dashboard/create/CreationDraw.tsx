@@ -27,6 +27,16 @@ export const NO_CREATION_DRAW: CreationDrawValue = {
   draft: newDraft([]),
 }
 
+/**
+ * The rounds of the bracket creation is making — the draw made now, or
+ * pre-made for its date — or 0 while it is still to be allocated, when
+ * nobody can know its rounds and no deadline is asked (Ross, 5 Nov 2026).
+ */
+export function creationRounds(value: CreationDrawValue, entrants: readonly DrawEntrant[]): number {
+  if (!buildsNow(value.timing) || entrants.length < 2) return 0
+  return syncDraft(value.draft, entrants.map(e => e.id)).layout.rounds
+}
+
 /** A typed-in player's key in the draft. */
 export const drawKey = (name: string) => name.trim().toLowerCase()
 

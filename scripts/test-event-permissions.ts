@@ -110,7 +110,7 @@ section('Strict or relaxed, in one tap (Ross, 5 Nov 2026)')
     'every permission says what it does and its strict answer — still one line each')
   const q = read('app/components/CollaborationQuestion.tsx')
   ok(q.includes('Show each setting') && q.includes('<EventPermissionToggles'), 'a switch shows each setting, through the one set of toggles')
-  ok(read('app/trip/[tripCode]/organiser/bracket/BracketSetupForm.tsx').includes("initialSetup?.mode ?? 'relaxed'"),
+  ok(read('lib/bracketSetup.ts').includes("BRACKET_MODES.find(m => m.key === r.mode)?.key ?? 'relaxed'"),
     "the bracket setup's own strict or relaxed starts on relaxed — a different question")
 }
 

@@ -1973,7 +1973,7 @@ const WIZARDS = [
   'app/dashboard/create/CreateLeagueForm.tsx',
   'app/dashboard/create/CreateKnockoutForm.tsx',
   'app/dashboard/create/CreateRunForm.tsx',
-  'app/trip/[tripCode]/organiser/bracket/BracketSetupForm.tsx',
+  'app/trip/[tripCode]/organiser/bracket/BracketFlow.tsx',
 ]
 
 section('Every wizard is one frame')
