@@ -7,7 +7,11 @@ import { needsPairings } from '@/lib/leaderboards'
 import { MAIN_SET, setOf } from '@/lib/teamSets'
 import { fetchEntrants } from '@/lib/matchplayStore'
 import { readDrawState } from '@/lib/drawStore'
-import { parseLeagueSetup, describeLeagueSetup } from '@/lib/leagueSetup'
+import {
+  parseLeagueSetup, describeLeagueSetup, asksRoundDeadlines, leagueRounds, leagueRoundKey,
+} from '@/lib/leagueSetup'
+import { describeShortDate } from '@/lib/itinerary'
+import LeagueDeadlines from './LeagueDeadlines'
 import BackButton from '@/app/components/BackButton'
 import TripHeader from '@/app/components/TripHeader'
 import PasscodeGate from '../../setup/PasscodeGate'
@@ -88,10 +92,21 @@ export default async function BracketSetupPage({ params }: {
     // never offer the match play form, whose save would overwrite the
     // league with a bracket. Day count comes from the rounds, the one copy
     // of how many days there are.
-    const { count } = await supabase
-      .from('rounds')
-      .select('id', { count: 'exact', head: true })
-      .eq('trip_id', trip.id)
+    const [{ count }, itemsRes, roundsRes] = await Promise.all([
+      supabase.from('rounds').select('id', { count: 'exact', head: true }).eq('trip_id', trip.id),
+      supabase.from('itinerary_items').select('id, day_index, kind, course_id').eq('trip_id', trip.id),
+      supabase.from('rounds').select('id, round_number, itinerary_item_id, course_id, scheduled_date').eq('trip_id', trip.id),
+    ])
+    // A league whose rounds are played over a stretch is asked a deadline
+    // for each (Ross, 5 Nov 2026) — every round it has now, TBC ones too.
+    const startDate = (trip as { start_date?: string | null }).start_date ?? null
+    const listed = asksRoundDeadlines(leagueSetup.schedule) ? leagueRounds(
+      ((itemsRes.data ?? []) as { id: string; day_index: number; kind: string; course_id: string | null }[])
+        .map(i => ({ id: i.id, dayIndex: i.day_index, kind: i.kind, courseId: i.course_id })),
+      ((roundsRes.data ?? []) as { id: string; round_number: number; itinerary_item_id: string | null; course_id: string | null; scheduled_date: string | null }[])
+        .map(r => ({ id: r.id, roundNumber: r.round_number, itineraryItemId: r.itinerary_item_id, courseId: r.course_id, scheduledDate: r.scheduled_date })),
+      startDate,
+    ).sort((a, b) => a.number - b.number) : []
 
     content = (
       <main className="min-h-dvh paper has-tabbar page-enter">
@@ -108,6 +123,18 @@ export default async function BracketSetupPage({ params }: {
               Days, venues and field were set when the league was created.
             </p>
           </div>
+          {listed.length > 0 && (
+            <LeagueDeadlines
+              tripId={trip.id}
+              start={startDate}
+              rounds={listed.map(r => ({
+                key: leagueRoundKey(r),
+                name: `Round ${r.number}${r.date ? ` · ${describeShortDate(r.date) ?? r.date}` : ''}`,
+                date: r.date,
+                deadline: leagueSetup.deadlines?.[leagueRoundKey(r)] ?? null,
+              }))}
+            />
+          )}
           <div className="mt-6">
             <BackButton href={`/trip/${tripCode}/organiser`} label="Organiser" />
           </div>

@@ -23,7 +23,8 @@ import {
 import { buildRows, type RowContext, type ResolvedScore } from '../lib/boardRows'
 import type { RoundCard } from '../lib/golfIreland'
 import type { Leaderboard } from '../lib/leaderboards'
-import { parseBracketSetup } from '../lib/bracketSetup'
+import { parseBracketSetup, deadlinesIssue, deadlineOpensAt } from '../lib/bracketSetup'
+import { asksRoundDeadlines, leagueRoundKey } from '../lib/leagueSetup'
 import { parseLeaderboards } from '../lib/leaderboards'
 import { MAX_ROUNDS } from '../lib/tripLimits'
 
@@ -868,7 +869,7 @@ section('Every round shows; the later ones pale until the one before is played')
 
   for (const page of ['app/trip/[tripCode]/scoring/page.tsx', 'app/trip/[tripCode]/page.tsx']) {
     const src = read(page)
-    ok(src.includes('seriesListing(league, todayString(new Date()))') && src.includes('<LockedRoundTile'),
+    ok(/seriesListing\(league, (todayString\(new Date\(\)\)|today)\)/.test(src) && src.includes('<LockedRoundTile'),
       `${page.split('/').slice(-2).join('/')} draws every round, a locked one as a pale tile`)
     ok(!src.includes('more rounds'), '  …so it no longer counts the ones held back')
   }
@@ -876,6 +877,34 @@ section('Every round shows; the later ones pale until the one before is played')
   const locked = tile.slice(tile.indexOf('export function LockedRoundTile'), tile.indexOf('// ─── A round whose venue is TBC'))
   ok(locked.includes('aria-disabled="true"') && !locked.includes('<Link') && !locked.includes('onClick'),
     'a locked round is inert — no card, no venue, no gear')
+}
+
+section('A league round can carry a deadline (Ross, 5 Nov 2026)')
+{
+  eq([asksRoundDeadlines('continuous'), asksRoundDeadlines('series'), asksRoundDeadlines('standalone'), asksRoundDeadlines(undefined)],
+    [true, true, false, false], 'asked of a league whose rounds are played over a stretch, never a standalone one')
+  eq([leagueRoundKey({ itemId: 'i1', roundId: 'r1' }), leagueRoundKey({ itemId: '', roundId: 'r1' }), leagueRoundKey({ itemId: 'i2', roundId: null })],
+    ['i1', 'r1', 'i2'], 'kept by the round\'s golf item — a TBC round has one — else its round')
+  const base = { format: 'league', entry: 'organiser' }
+  eq(parseLeagueSetup({ ...base, deadlines: { i1: '2027-06-01', i2: 'soon', '': '2027-06-02' } })?.deadlines, { i1: '2027-06-01' },
+    'stored as real dates by key; anything else dropped, never the league')
+  ok(!('deadlines' in (parseLeagueSetup(base) ?? {})), '  …absent where none were set')
+  const opts = { names: ['Round 1 · Sat 5 Jun', 'Round 2 · Sat 3 Jul'], floors: ['2027-06-05', '2027-07-03'] }
+  eq(deadlinesIssue(['2027-06-01', '2027-07-10'], 2, opts), 'The Round 1 · Sat 5 Jun cannot be due before it is played.',
+    'a round is never due before it is played')
+  eq(deadlinesIssue(['2027-06-20', '2027-07-10'], 2, opts), null, '  …on or after its own date, and the next not before it, is fine')
+  eq([deadlineOpensAt(['2027-06-20', ''], 1, '2027-06-05', '2027-07-03'), deadlineOpensAt(['2027-07-20', ''], 1, null, '2027-07-03')],
+    ['2027-07-03', '2027-07-20'], 'a round\'s calendar opens at the later of its own date and the round before\'s deadline')
+  const wizard = read('app/dashboard/create/CreateLeagueForm.tsx')
+  ok(wizard.includes("...(askDeadlines ? ['deadlines' as const] : [])") && wizard.includes('<RoundDeadlines')
+    && wizard.includes('setRoundDeadlines({ tripId, deadlines: byKey })'),
+    'the league wizard asks it after its venues, and keeps each by the golf item it was saved as')
+  ok(read('app/trip/[tripCode]/organiser/bracket/page.tsx').includes('<LeagueDeadlines'), 'the organiser area sets and changes them, a round added since included')
+  ok(/setRoundDeadlines[\s\S]*parseLeagueSetup\(raw\)[\s\S]*\.eq\('id', args\.tripId\)/.test(read('lib/leagueRoundStore.ts')),
+    '  …merged into a league\'s own setup read fresh, never written over anything else')
+  ok(read('app/trip/[tripCode]/scoring/page.tsx').includes('playByLine(leagueSetup?.deadlines?.[round.itinerary_item_id ?? round.id]')
+    && read('app/trip/[tripCode]/page.tsx').includes('playBy={playBy(lr.itemId, false)}'),
+    'and said on the round\'s tile: Play by, Was due, Played by')
 }
 
 // ─── Result ────────────────────────────────────────────────────

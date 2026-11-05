@@ -267,6 +267,35 @@ export async function setCardCounts(args: {
 }
 
 /**
+ * A league's round deadlines, set whole — each round's play-by date by its
+ * key (lib/leagueSetup.ts `leagueRoundKey`), or none with null — merged into
+ * the setup read fresh, as the gear's writers merge. A league's alone.
+ */
+export async function setRoundDeadlines(args: {
+  tripId: string; deadlines: Record<string, string> | null
+}): Promise<Result> {
+  const fail: Result = { ok: false, error: 'Could not save the deadlines — try again.' }
+  const { data, error } = await supabase
+    .from('trips')
+    .select('bracket_setup')
+    .eq('id', args.tripId)
+    .single()
+  if (error || !data) return fail
+  const raw = (data as { bracket_setup?: unknown }).bracket_setup
+  if (!parseLeagueSetup(raw) || !raw || typeof raw !== 'object') return fail
+
+  const merged: Record<string, unknown> = { ...(raw as Record<string, unknown>) }
+  if (args.deadlines && Object.keys(args.deadlines).length > 0) merged.deadlines = args.deadlines
+  else delete merged.deadlines
+
+  const { error: writeError } = await supabase
+    .from('trips')
+    .update({ bracket_setup: merged })
+    .eq('id', args.tripId)
+  return writeError ? fail : { ok: true }
+}
+
+/**
  * Set one round's handicap allowance on one board — or clear it, with null,
  * back to the board's own. Stored on the board (`roundAllowances`).
  */

@@ -22,7 +22,7 @@
 //
 // Pure. No I/O.
 
-import { type PlayerEntry, PLAYER_ENTRIES } from './bracketSetup'
+import { type PlayerEntry, PLAYER_ENTRIES, validDeadline } from './bracketSetup'
 import type { Leaderboard } from './leaderboards'
 import { MAX_ROUNDS } from './tripLimits'
 import { WEEKDAY_NAMES } from './weekdays'
@@ -137,6 +137,35 @@ export type LeagueSetup = {
    * Absent, or empty, is every card counting.
    */
   cardsOff?: string[]
+  /**
+   * Each round's play-by date (Ross, 5 Nov 2026: "Do you want to set a
+   * deadline for each round to be completed?") — continuous and series
+   * leagues, whose rounds are played over a stretch rather than on one day.
+   * Keyed by `leagueRoundKey` (the round's golf item, so a round still TBC
+   * has one); a date, never before the round's own. Absent, or a round not
+   * in it, has none. Said on the round's tile; nothing is refused by it.
+   */
+  deadlines?: Record<string, string>
+}
+
+/** Whether a league of this shape is asked for round deadlines: one whose rounds are played over a stretch. */
+export function asksRoundDeadlines(schedule: LeagueSchedule | null | undefined): boolean {
+  return schedule === 'continuous' || schedule === 'series'
+}
+
+/** The key a league round's deadline is stored under — its golf item, else its round. */
+export function leagueRoundKey(r: { itemId?: string | null; roundId?: string | null }): string {
+  return r.itemId || r.roundId || ''
+}
+
+/** The deadlines that read: real dates, by key, no more than a league could hold. */
+function tidyDeadlines(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>).slice(0, MAX_LEAGUE_DAYS * 2)) {
+    if (k && validDeadline(v)) out[k] = v
+  }
+  return out
 }
 
 /** The key a card is switched off by — the one shape `RowContext` keys a player's round by. */
@@ -624,6 +653,7 @@ export function parseLeagueSetup(raw: unknown): LeagueSetup | null {
     ...(giRules && source && source !== 'live'
       ? { scoreSource: source, golfIreland: giRules } : {}),
     ...(tidyCardsOff(r.cardsOff).length > 0 ? { cardsOff: tidyCardsOff(r.cardsOff) } : {}),
+    ...(Object.keys(tidyDeadlines(r.deadlines)).length > 0 ? { deadlines: tidyDeadlines(r.deadlines) } : {}),
   }
 }
 

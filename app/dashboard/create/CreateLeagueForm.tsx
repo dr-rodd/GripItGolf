@@ -14,7 +14,7 @@ import { NO_FORMATS } from '@/lib/formats'
 import { normaliseEmail, emailWarning, MAX_EMAIL } from '@/lib/email'
 import { rememberPlayer } from '@/lib/playerCookie'
 import {
-  dayCount, dateForDay, describeDay, dayNumber, type ItineraryItem,
+  dayCount, dateForDay, describeDay, dayNumber, describeShortDate, type ItineraryItem,
 } from '@/lib/itinerary'
 import { toItemRow } from '@/lib/itinerarySync'
 import {
@@ -24,11 +24,15 @@ import { NO_PUBLIC_PIN, publicPinIssue, rememberEntry } from '@/lib/publicPin'
 import PublicPinField from '@/app/components/PublicPinField'
 import { parseHandicap, isPlusHandicap, isHandicapPending, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
-import { type PlayerEntry, PLAYER_ENTRIES } from '@/lib/bracketSetup'
+import {
+  type PlayerEntry, PLAYER_ENTRIES, NO_DEADLINES_ANSWER, deadlinesAnswerIssue, storedDeadlines, type DeadlinesAnswer,
+} from '@/lib/bracketSetup'
+import RoundDeadlines from '@/app/components/RoundDeadlines'
+import { setRoundDeadlines } from '@/lib/leagueRoundStore'
 import {
   type DayBoards, type LeagueSetup, type LeagueSchedule, type RepeatUnit, DAY_BOARDS,
   MAX_LEAGUE_DAYS, MAX_REPEAT_EVERY, REPEAT_UNITS, WEEKDAY_NAMES,
-  describeRepeat, leagueDaysIssue, seriesDates, starterBoards, weeklyDates,
+  asksRoundDeadlines, describeRepeat, leagueDaysIssue, seriesDates, starterBoards, weeklyDates,
 } from '@/lib/leagueSetup'
 import type { Leaderboard } from '@/lib/leaderboards'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
@@ -85,9 +89,19 @@ import { Stepper } from '@/app/components/ItineraryForms'
 // ── Styles shared with the trip wizard, by convention not import ─────────
 
 /** Each step opens on its question — WizardShell draws it as the step's title. */
-const STEP_TITLES = ['Name your event', 'Where you’re playing', 'Who’s playing', 'Ready to go']
+type StepKey = 'details' | 'venues' | 'deadlines' | 'field' | 'ready'
+const STEP_TITLES: Record<StepKey, string> = {
+  details: 'Name your event',
+  venues: 'Where you’re playing',
+  // Continuous and series leagues, once their rounds are made (Ross, 5 Nov 2026).
+  deadlines: 'Set a deadline for each round?',
+  field: 'Who’s playing',
+  ready: 'Ready to go',
+}
 /** At most one line under the question. */
-const STEP_INTROS: (string | undefined)[] = [undefined, undefined, undefined, undefined]
+const STEP_INTROS: Partial<Record<StepKey, string>> = {
+  deadlines: 'Do you want to set a deadline for each round to be completed?',
+}
 
 type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F'; tag?: string }
 
@@ -194,7 +208,10 @@ export default function CreateLeagueForm({ schedule }: {
     setAdded(prev => [...prev.filter(c => c.id !== course.id), course])
   }
 
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 'done'>(1)
+  const [step, setStep] = useState<number | 'done'>(1)
+  // A play-by date for each round, where the league's shape asks one.
+  const [deadlines, setDeadlines] = useState<DeadlinesAnswer>(NO_DEADLINES_ANSWER)
+  const [deadlineWarning, setDeadlineWarning] = useState<string | null>(null)
 
   // Step 1 — the event
   const [name, setName] = useState('')
@@ -383,23 +400,34 @@ export default function CreateLeagueForm({ schedule }: {
   // not all made now: one event today is the start of several.
   const asksDayBoards = slots.length > 1 || schedule === 'series'
 
+  // The deadline question, once the rounds are made — on a league whose
+  // rounds are played over a stretch, each round's name and own date.
+  const askDeadlines = asksRoundDeadlines(schedule) && slots.length > 0
+  const deadlineNames = slots.map((slot, i) => `Round ${i + 1}${slot.date ? ` · ${describeShortDate(slot.date)}` : ''}`)
+  const deadlineFloors = slots.map(slot => slot.date)
+  const deadlineOpts = { names: deadlineNames, floors: deadlineFloors }
+  const keys: StepKey[] = ['details', 'venues', ...(askDeadlines ? ['deadlines' as const] : []), 'field', 'ready']
+  const key = keys[Math.min(Number(step) || 1, keys.length) - 1]
+  const lastStep = keys.length
+
   const canProceed = !submitting && (
-    step === 1 ? step1Valid :
-    step === 2 ? venuesComplete :
-    step === 3 ? !!entry && !duplicateIssue && !fieldTagsIssue(tags) :
-    step === 4 ? boards.length > 0 && (!asksDayBoards || !!dayBoards) && !passcodeIssue && !publicIssue && !giIssue :
+    key === 'details' ? step1Valid :
+    key === 'venues' ? venuesComplete :
+    key === 'deadlines' ? !deadlinesAnswerIssue(deadlines, slots.length, deadlineOpts) :
+    key === 'field' ? !!entry && !duplicateIssue && !fieldTagsIssue(tags) :
+    key === 'ready' ? boards.length > 0 && (!asksDayBoards || !!dayBoards) && !passcodeIssue && !publicIssue && !giIssue :
     false
   )
 
   function goNext() {
     if (step === 'done') return
-    if (step < 4) setStep((step + 1) as 2 | 3 | 4)
+    if (step < lastStep) setStep(step + 1)
     else handleSubmit()
   }
 
   function goBack() {
     setError(null)
-    if (step !== 'done' && step > 1) setStep((step - 1) as 1 | 2 | 3)
+    if (step !== 'done' && step > 1) setStep(step - 1)
   }
 
   function setVenue(i: number, id: string) {
@@ -661,6 +689,19 @@ export default function CreateLeagueForm({ schedule }: {
       }
     }
 
+    // 5. Each round's deadline, by the golf item it was saved as — a failure
+    // costs the deadlines, never the league (the organiser area sets them).
+    const stored = askDeadlines ? storedDeadlines(deadlines, slots.length, deadlineOpts) : null
+    if (stored) {
+      const byKey: Record<string, string> = {}
+      items.forEach((item, i) => {
+        const id = savedBySlot.get(`${item.dayIndex}:${item.position}`)
+        if (id && stored[i]) byKey[id] = stored[i]
+      })
+      const saved = await setRoundDeadlines({ tripId, deadlines: byKey })
+      if (!saved.ok) setDeadlineWarning('The league is made, but its round deadlines could not be saved — set them in the organiser area.')
+    }
+
     try {
       localStorage.setItem(`gig-owner-${code}`, '1')
     } catch { /* localStorage unavailable */ }
@@ -716,6 +757,7 @@ export default function CreateLeagueForm({ schedule }: {
               : 'Your field is in. The leaderboard and live scoring are ready on your Event Hub.'}
           </p>
           {tagsWarning && <p className="text-rust-deep text-sm -mt-6 mb-6 leading-snug">{tagsWarning}</p>}
+          {deadlineWarning && <p className="text-rust-deep text-sm -mt-6 mb-6 leading-snug">{deadlineWarning}</p>}
 
           <div className={`px-4 py-8 mb-4 ${cardClass()}`}>
             <p className="t-label text-ink/65 mb-4">Your event code</p>
@@ -758,7 +800,7 @@ export default function CreateLeagueForm({ schedule }: {
 
   // ── The wizard ───────────────────────────────────────────────────────────
 
-  const stepNum = step as 1 | 2 | 3 | 4
+  const stepNum = Math.min(Number(step) || 1, lastStep)
 
   return (
     <div className="min-h-dvh paper text-ink">
@@ -768,8 +810,8 @@ export default function CreateLeagueForm({ schedule }: {
 
       <WizardShell
         step={stepNum}
-        titles={STEP_TITLES}
-        intro={STEP_INTROS[stepNum - 1]}
+        titles={keys.map(k => STEP_TITLES[k])}
+        intro={STEP_INTROS[key]}
         onBack={goBack}
         footer={<>
           <button
@@ -777,9 +819,9 @@ export default function CreateLeagueForm({ schedule }: {
             disabled={!canProceed}
             className={buttonClass('primary')}
           >
-            {submitting ? 'Creating…' : stepNum === 4 ? 'Create league' : 'Continue'}
+            {submitting ? 'Creating…' : stepNum === lastStep ? 'Create league' : 'Continue'}
           </button>
-          {stepNum === 3 && (
+          {key === 'field' && (
             <p className="text-center text-ink/65 text-[13px] mt-3">
               Players without a name will be skipped
             </p>
@@ -788,7 +830,7 @@ export default function CreateLeagueForm({ schedule }: {
       >
 
         {/* ── 1 · Event details ── */}
-        {step === 1 && (
+        {key === 'details' && (
           <div className="space-y-6">
             <div>
               <label className={FIELD_LABEL}>Event name</label>
@@ -1111,7 +1153,7 @@ export default function CreateLeagueForm({ schedule }: {
         )}
 
         {/* ── 2 · Venues ── */}
-        {step === 2 && (
+        {key === 'venues' && (
           <div className="space-y-5">
             {coursesLoaded && courses.length === 0 && (
               <div className={`p-4 text-ink/65 text-sm text-center ${cardClass()}`}>
@@ -1184,7 +1226,12 @@ export default function CreateLeagueForm({ schedule }: {
         )}
 
         {/* ── 3 · Players ── */}
-        {step === 3 && (
+        {key === 'deadlines' && (
+          <RoundDeadlines value={deadlines} onChange={setDeadlines} rounds={slots.length}
+            names={deadlineNames} floors={deadlineFloors} start={startDate || null} />
+        )}
+
+        {key === 'field' && (
           <div className="space-y-4">
             <div>
               <label className={FIELD_LABEL}>How does the field get in?</label>
@@ -1315,7 +1362,7 @@ export default function CreateLeagueForm({ schedule }: {
         )}
 
         {/* ── 4 · Finish ── */}
-        {step === 4 && (
+        {key === 'ready' && (
           <div className="space-y-6">
             {/* ── Where the scores come from ──
                 Live on Green Dot, read from Golf Ireland, or both. Golf

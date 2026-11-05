@@ -54,7 +54,7 @@ import { parseLeagueSetup, leagueRounds, seriesListing } from '@/lib/leagueSetup
 import { todayString } from '@/lib/tripStatus'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { describeShortDate, describeTime } from '@/lib/itinerary'
-import { LockedRoundTile, TbcRoundTile, type LeagueDoor } from './LeagueRounds'
+import { LockedRoundTile, TbcRoundTile, playByLine, type LeagueDoor } from './LeagueRounds'
 import AddToField from './AddToField'
 import { readKnockout } from './knockout'
 import { readLiveMatches } from './match/matchCards'
@@ -605,6 +605,9 @@ export default async function TripPage({ params, searchParams }: {
   // the later ones pale and inert until the one before has been played,
   // then the history newest first.
   const listing = seriesListing(league, todayString(new Date()))
+  // Each round's play-by date, where the league set them (Ross, 5 Nov 2026).
+  const leagueDeadlines = parseLeagueSetup(tripRaw.bracket_setup)?.deadlines ?? {}
+  const playBy = (key: string, finished: boolean) => playByLine(leagueDeadlines[key], todayString(new Date()), finished)
 
   const leagueSection = leagueDoor ? (
     <div className="flex flex-col gap-3">
@@ -614,6 +617,7 @@ export default async function TripPage({ params, searchParams }: {
           number={lr.number}
           date={lr.date}
           courseName={(lr.courseId && courseMap[lr.courseId]) || null}
+          playBy={playBy(lr.itemId || lr.roundId || '', false)}
         />
       ) : null) : lr.roundId ? (
         <Link
@@ -623,7 +627,7 @@ export default async function TripPage({ params, searchParams }: {
         >
           <div className="min-w-0">
             <p className="t-label text-ink/65 mb-1">
-              Round {lr.number}{lr.date ? ` · ${describeShortDate(lr.date)}` : ''}
+              Round {lr.number}{lr.date ? ` · ${describeShortDate(lr.date)}` : ''}{playBy(lr.itemId || lr.roundId || '', !!lr.date && lr.date < todayString(new Date()))}
             </p>
             <p className="t-card text-ink truncate">
               <CourseName name={(lr.courseId && courseMap[lr.courseId]) || `Round ${lr.number}`} />
@@ -645,6 +649,7 @@ export default async function TripPage({ params, searchParams }: {
           number={lr.number}
           lastVenueId={leagueLastVenue}
           fieldMaySetVenue={allowsParticipant(trip.kind, tripRaw.event_permissions, 'set_venues')}
+          playBy={playBy(lr.itemId, false)}
         />
       ) : null)}
       {/* Anything else the organiser planned — a dinner, a stay — keeps the

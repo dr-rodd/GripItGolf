@@ -164,13 +164,24 @@ export function deadlineRoundNames(rounds: number): string[] {
   return Array.from({ length: rounds }, (_, i) => roundName(2 ** (rounds - i)))
 }
 
+/**
+ * The rounds a deadline is asked of — a bracket's by default; a league's
+ * rounds carry their own names, and the date each is played on, which its
+ * deadline cannot come before.
+ */
+export type DeadlineRounds = { names?: readonly string[]; floors?: readonly (string | null)[] }
+
 /** What is wrong with a deadline for each of these rounds, or null — said in the round's own name. */
-export function deadlinesIssue(deadlines: readonly (string | null | undefined)[], rounds: number): string | null {
-  const names = deadlineRoundNames(rounds)
-  for (let i = 0; i < names.length; i++) {
+export function deadlinesIssue(
+  deadlines: readonly (string | null | undefined)[], rounds: number, opts: DeadlineRounds = {},
+): string | null {
+  const names = opts.names ?? deadlineRoundNames(rounds)
+  for (let i = 0; i < rounds; i++) {
     if (!validDeadline(deadlines[i])) return `Choose the ${names[i]}\'s deadline.`
+    const floor = opts.floors?.[i]
+    if (floor && (deadlines[i] as string) < floor) return `The ${names[i]} cannot be due before it is played.`
   }
-  for (let i = 1; i < names.length; i++) {
+  for (let i = 1; i < rounds; i++) {
     if ((deadlines[i] as string) < (deadlines[i - 1] as string)) {
       return `The ${names[i]} cannot close before the ${names[i - 1]}.`
     }
@@ -183,9 +194,14 @@ export function deadlinesIssue(deadlines: readonly (string | null | undefined)[]
  * round's deadline, in case it is being set up months or a year in
  * advance"): the last deadline set before it, else the event's start.
  */
-export function deadlineOpensAt(deadlines: readonly string[], i: number, start: string | null): string | null {
-  for (let k = i - 1; k >= 0; k--) if (validDeadline(deadlines[k])) return deadlines[k]
-  return start && validDeadline(start) ? start : null
+export function deadlineOpensAt(
+  deadlines: readonly string[], i: number, start: string | null, floor?: string | null,
+): string | null {
+  let prev: string | null = null
+  for (let k = i - 1; k >= 0 && !prev; k--) if (validDeadline(deadlines[k])) prev = deadlines[k]
+  // A league round is never due before it is played: the later of the two.
+  if (floor && validDeadline(floor) && (!prev || floor > prev)) return floor
+  return prev ?? (start && validDeadline(start) ? start : null)
 }
 
 /** The deadline question as the form holds it: not answered yet, no, or yes with a date a round. */
@@ -209,14 +225,14 @@ export function fitDeadlines(dates: readonly string[], rounds: number): string[]
 }
 
 /** Why the deadline question cannot be left yet, or null. */
-export function deadlinesAnswerIssue(answer: DeadlinesAnswer, rounds: number): string | null {
+export function deadlinesAnswerIssue(answer: DeadlinesAnswer, rounds: number, opts: DeadlineRounds = {}): string | null {
   if (answer.on === null) return 'Choose whether to set deadlines.'
-  return answer.on ? deadlinesIssue(fitDeadlines(answer.dates, rounds), rounds) : null
+  return answer.on ? deadlinesIssue(fitDeadlines(answer.dates, rounds), rounds, opts) : null
 }
 
 /** What the answer stores: a date a round, or nothing. */
-export function storedDeadlines(answer: DeadlinesAnswer, rounds: number): string[] | null {
-  return answer.on && !deadlinesAnswerIssue(answer, rounds) ? fitDeadlines(answer.dates, rounds) : null
+export function storedDeadlines(answer: DeadlinesAnswer, rounds: number, opts: DeadlineRounds = {}): string[] | null {
+  return answer.on && !deadlinesAnswerIssue(answer, rounds, opts) ? fitDeadlines(answer.dates, rounds) : null
 }
 
 // ─── The setup itself ──────────────────────────────────────────

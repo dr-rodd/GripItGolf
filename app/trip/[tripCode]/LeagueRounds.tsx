@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { describeShortDate } from '@/lib/itinerary'
+import { deadlineNote } from '@/lib/bracketSetup'
 import { cardKey, insertedRoundNumber, nextRoundIssue, parseLeagueSetup } from '@/lib/leagueSetup'
 import {
   addLeagueRound, confirmLeagueVenue, setCardCounts, setRoundAllowance,
@@ -266,11 +267,22 @@ export function AddLeagueRound({
  * the field can see what is coming, pale, and inert — no card, no venue,
  * no gear — until the round before it has happened (Ross, 26 Oct 2026).
  */
-export function LockedRoundTile({ number, date, courseName }: {
+/**
+ * A league round's play-by line (Ross, 5 Nov 2026) — " · Play by Sun 22
+ * Jun", " · Was due …" once it has passed unplayed, " · Played by …" once
+ * played — or nothing where the round has no deadline.
+ */
+export function playByLine(deadline: string | null | undefined, today: string, finished: boolean): string {
+  return deadline ? ` · ${deadlineNote(deadline, describeShortDate(deadline) ?? deadline, { today, finished })}` : ''
+}
+
+export function LockedRoundTile({ number, date, courseName, playBy = '' }: {
   number: number
   date: string
   /** The venue, or null while it is to be confirmed. */
   courseName: string | null
+  /** Its play-by line (`playByLine`), where it has a deadline. */
+  playBy?: string
 }) {
   return (
     <div
@@ -279,7 +291,7 @@ export function LockedRoundTile({ number, date, courseName }: {
     >
       <div className="min-w-0">
         <p className="t-label text-ink/50 mb-1">
-          Round {number} · {describeShortDate(date)}
+          Round {number} · {describeShortDate(date)}{playBy}
         </p>
         <p className="t-card text-ink/50 truncate">
           {courseName ? <CourseName name={courseName} /> : 'Venue TBC'}
@@ -297,7 +309,7 @@ export function LockedRoundTile({ number, date, courseName }: {
  * the "add" rows elsewhere — and the sheet it opens. Its number is the one
  * `leagueRounds` held for it, and confirming writes exactly that.
  */
-export function TbcRoundTile({ door, itemId, date, number, lastVenueId, fieldMaySetVenue }: {
+export function TbcRoundTile({ door, itemId, date, number, lastVenueId, fieldMaySetVenue, playBy = '' }: {
   door: LeagueDoor
   itemId: string
   date: string
@@ -305,6 +317,8 @@ export function TbcRoundTile({ door, itemId, date, number, lastVenueId, fieldMay
   lastVenueId: string | null
   /** `set_venues` is on: the field chooses venues without the PIN. */
   fieldMaySetVenue: boolean
+  /** Its play-by line (`playByLine`), where it has a deadline. */
+  playBy?: string
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -353,7 +367,7 @@ export function TbcRoundTile({ door, itemId, date, number, lastVenueId, fieldMay
       >
         <div className="min-w-0">
           <p className="t-label text-ink/50 mb-1">
-            Round {number} · {describeShortDate(date)}
+            Round {number} · {describeShortDate(date)}{playBy}
           </p>
           <p className="t-card text-ink/50">Venue TBC</p>
           <p className="t-cap mt-1 text-ink/50">Tap to choose the venue</p>

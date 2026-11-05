@@ -14,19 +14,21 @@ import { chipClass } from './ui'
  * (`deadlineOpensAt`), the first at the event's start. The rules are
  * lib/bracketSetup.ts's; this only asks.
  */
-export default function RoundDeadlines({ value, onChange, rounds, names, start }: {
+export default function RoundDeadlines({ value, onChange, rounds, names, floors, start }: {
   value: DeadlinesAnswer
   onChange: (next: DeadlinesAnswer) => void
   /** How many rounds there are. */
   rounds: number
   /** Each round's name, first first — a bracket's by default. */
   names?: string[]
+  /** A league round's own date, which its deadline cannot come before. */
+  floors?: (string | null)[]
   /** The event's start, where the first round's calendar opens. */
   start: string | null
 }) {
   const labels = names ?? deadlineRoundNames(rounds)
   const dates = fitDeadlines(value.dates, rounds)
-  const issue = deadlinesAnswerIssue(value, rounds)
+  const issue = deadlinesAnswerIssue(value, rounds, { names: labels, floors })
   const setDate = (i: number, date: string) => {
     const next = [...dates]
     next[i] = date
@@ -58,8 +60,8 @@ export default function RoundDeadlines({ value, onChange, rounds, names, start }
               label={label}
               value={dates[i] ?? ''}
               onChange={v => setDate(i, v)}
-              min={deadlineOpensAt(dates, i, null) ?? undefined}
-              openAt={deadlineOpensAt(dates, i, start)}
+              min={deadlineOpensAt(dates, i, null, floors?.[i]) ?? undefined}
+              openAt={deadlineOpensAt(dates, i, start, floors?.[i])}
             />
           ))}
           {issue && dates.some(Boolean) && <p className="text-rust-deep text-[13px] leading-snug">{issue}</p>}

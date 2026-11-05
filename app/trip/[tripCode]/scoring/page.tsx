@@ -14,7 +14,7 @@ import { linkedPlayerId } from '@/lib/currentPlayer'
 import { readKnockout } from '../knockout'
 import { readLiveMatches } from '../match/matchCards'
 import { KnockoutPortal } from '../KnockoutViews'
-import { AddLeagueRound, LockedRoundTile, RoundSettings, TbcRoundTile, type LeagueDoor } from '../LeagueRounds'
+import { AddLeagueRound, LockedRoundTile, RoundSettings, TbcRoundTile, playByLine, type LeagueDoor } from '../LeagueRounds'
 import { parseLeagueSetup, leagueRounds, seriesListing } from '@/lib/leagueSetup'
 import { todayString } from '@/lib/tripStatus'
 import { allowsParticipant } from '@/lib/eventPermissions'
@@ -174,7 +174,8 @@ export default async function TripCoursePortalPage({
   // What the field sees: every round — the next on top, the later ones
   // under it pale and inert until the one before has been played, then
   // the history newest first (`seriesListing`).
-  const listing = seriesListing(league, todayString(new Date()))
+  const today = todayString(new Date())
+  const listing = seriesListing(league, today)
   const door: LeagueDoor | null = series && trip.start_date ? {
     tripId: trip.id,
     tripCode,
@@ -307,7 +308,8 @@ export default async function TripCoursePortalPage({
                 ? (roundById.get(lr.roundId)?.courses as unknown as { name: string } | null)?.name ?? null
                 : null
               return lr.date ? (
-                <LockedRoundTile key={lr.roundId ?? lr.itemId} number={lr.number} date={lr.date} courseName={lockedCourse} />
+                <LockedRoundTile key={lr.roundId ?? lr.itemId} number={lr.number} date={lr.date} courseName={lockedCourse}
+                  playBy={playByLine(leagueSetup?.deadlines?.[lr.itemId || lr.roundId || ''], today, false)} />
               ) : null
             }
             if (!('round_number' in entry)) {
@@ -320,6 +322,7 @@ export default async function TripCoursePortalPage({
                   number={entry.number}
                   lastVenueId={lastVenueId}
                   fieldMaySetVenue={allowsParticipant(kind, permsRaw, 'set_venues')}
+                  playBy={playByLine(leagueSetup?.deadlines?.[entry.itemId], today, false)}
                 />
               ) : null
             }
@@ -340,6 +343,8 @@ export default async function TripCoursePortalPage({
                     {series && round.scheduled_date
                       ? `Round ${round.round_number} · ${describeShortDate(round.scheduled_date)}`
                       : `Round ${round.round_number}`}
+                    {/* A league round's play-by date (Ross, 5 Nov 2026). */}
+                    {playByLine(leagueSetup?.deadlines?.[round.itinerary_item_id ?? round.id], today, tone === 'played')}
                   </p>
                   <p className="t-card text-ink truncate">
                     <CourseName name={course?.name ?? `Round ${round.round_number}`} />
