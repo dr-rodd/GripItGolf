@@ -29,7 +29,7 @@ import { joinNames } from './matchplayEntrants'
 import { boardNames } from './displayNames'
 import { isMadeName, MAX_PARTNERSHIP } from './partnerships'
 import {
-  TAG_SET, tagRoundScore, countingPlayers, tagOfTeam,
+  TAG_SET, tagRoundScore, countingPlayers, tagOfTeam, tagMatchTally, type MatchResultSides,
 } from './tagBoards'
 import { isTagBoard, tagCountOf } from './leaderboards'
 import {
@@ -170,6 +170,8 @@ export type BoardRow = {
   isLive: boolean
   /** Whose card the scorecard sheet shows when this row is opened. */
   playerIds: string[]
+  /** A tags tally's matches won and lost (`tagMode: 'match_wins'`) — `total` is the won. */
+  record?: { won: number; lost: number }
   /** Hero mode: who carried the team, per round. */
   heroByRound?: Record<string, string | null>
 
@@ -275,6 +277,13 @@ export type RowContext = {
    * Not everyone plays every round, and a finished card is not live.
    */
   livePlayerIds: Set<string>
+  /**
+   * A knockout's played results, as the players on each side
+   * (lib/tagBoards.ts `matchResultSides`) — what a tags tally counts.
+   * Absent everywhere but where the bracket was read; a tally handed none
+   * draws no rows rather than a table of noughts.
+   */
+  matchResults?: readonly MatchResultSides[]
   /**
    * The trip's old single team-scoring setting, when these boards were
    * derived from `trips.formats` rather than chosen as leaderboards. It
@@ -1195,6 +1204,7 @@ function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
  */
 function tagRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const mode = lb.tagMode!
+  if (mode === 'match_wins') return ctx.matchResults ? tallyRows(lb, ctx, ctx.matchResults) : []
   const count = tagCountOf(lb)
   const basis: ScoringBasis = lb.scoring === 'strokes' ? 'strokes' : 'stableford'
 
@@ -1321,6 +1331,35 @@ function tagRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
     return row
   })
 
+  return sortRows(lb, rows)
+}
+
+/**
+ * A knockout's tags, ranked by matches won — the tally (lib/tagBoards.ts
+ * `tagMatchTally`). No rounds and no cards: the row's total is its wins, its
+ * record the wins and losses, and `sortRows` places it as it places any
+ * board, level tallies sharing a place.
+ */
+function tallyRows(lb: Leaderboard, ctx: RowContext, results: readonly MatchResultSides[]): BoardRow[] {
+  const tags = teamsOnSheet(ctx.teams, TAG_SET) as RowTeam[]
+  const tally = tagMatchTally(tags.map(t => t.id), ctx.memberships, results)
+  const rows: UnplacedRow[] = tags.map(tag => {
+    const memberIds = membersOf(ctx.memberships, tag.id)
+    const { won, lost } = tally.get(tag.id) ?? { won: 0, lost: 0 }
+    return {
+      id: tag.id,
+      name: tag.name,
+      color: tag.color,
+      subLabel: `${won} won · ${lost} lost`,
+      perRound: {},
+      playedRounds: [],
+      liveRounds: [],
+      total: won,
+      isLive: false,
+      playerIds: memberIds,
+      record: { won, lost },
+    }
+  }).filter(r => r.playerIds.length > 0 || r.total > 0)
   return sortRows(lb, rows)
 }
 

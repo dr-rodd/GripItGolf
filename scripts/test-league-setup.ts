@@ -416,7 +416,7 @@ section('The continuous knockout door is lean on purpose')
   ok(src.includes("kind: 'tournament'"), 'a knockout is an event')
   ok(src.includes("bracket_setup: knockoutSeed('continuous', creationPlan(draw, drawEntrants, idFor))"),
     'creation seeds the format and shape for the bracket form to finish')
-  ok(src.includes('leaderboards: knockoutBoards()'), 'and the bracket\'s board, so it plays from the start')
+  ok(src.includes('leaderboards: withTagTally(knockoutBoards(), '), 'and the bracket\'s board, so it plays from the start — its tags tally beside it where it has tags')
   ok(!src.includes("from('itinerary_items')") && !src.includes("from('rounds')"),
     'no itinerary and no rounds — matches happen when players make them happen')
   ok(src.includes('hashPasscode'), 'the organiser PIN is hashed on the device')

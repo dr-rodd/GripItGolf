@@ -15,6 +15,10 @@ import { NO_PUBLIC_PIN, publicPinIssue, rememberEntry } from '@/lib/publicPin'
 import PublicPinField from '@/app/components/PublicPinField'
 import { parseHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
 import { NO_FIELD_SEED, drawStandings, seedPairs, type FieldPlayer, type FieldSeed } from '@/lib/fieldSeed'
+import { NO_FIELD_TAGS, activeTags, fieldTagsIssue, withTagTally, type FieldTags } from '@/lib/fieldTags'
+import { boardRules, boardTitle, matchTallyBoard } from '@/lib/leaderboards'
+import Toggle from '@/app/components/Toggle'
+import { writeFieldTags } from './fieldTagsWrite'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import {
   type EventPermissions, defaultPermissions, permissionsFor, storedPermissions,
@@ -77,6 +81,11 @@ export default function CreateKnockoutForm() {
     { name: '', handicap: '', gender: 'M' },
   ])
   const [seed, setSeed] = useState<FieldSeed>(NO_FIELD_SEED)
+  // Tags, switched on in the field step (lib/fieldTags.ts).
+  const [tags, setTags] = useState<FieldTags>(NO_FIELD_TAGS)
+  const [tagsWarning, setTagsWarning] = useState<string | null>(null)
+  // The secondary leaderboard tags bring: wins and losses by tag, kept unless switched off.
+  const [tagTally, setTagTally] = useState(true)
   const [seedWarning, setSeedWarning] = useState<string | null>(null)
 
   // Step 3 — the draw: now, later or on a date (lib/bracketDraw.ts)
@@ -113,7 +122,7 @@ export default function CreateKnockoutForm() {
 
   const canProceed = !submitting && (
     step === 1 ? name.trim().length > 0 && !!startDate && !!endDate && !datesBackwards :
-    step === 2 ? !duplicateIssue :
+    step === 2 ? !duplicateIssue && !fieldTagsIssue(tags) :
     step === 3 ? !drawIssue :
     step === 4 ? !passcodeIssue && !publicIssue :
     false
@@ -193,7 +202,7 @@ export default function CreateKnockoutForm() {
       bracket_setup: knockoutSeed('continuous', creationPlan(draw, drawEntrants, idFor)),
       // The bracket's board, so the event plays from the moment it exists —
       // without it the bracket said match play was not switched on.
-      leaderboards: knockoutBoards(),
+      leaderboards: withTagTally(knockoutBoards(), activeTags(tags).length > 0 && tagTally),
       // Only when a toggle was actually flipped — nothing opened writes
       // nothing, so creation still lands before migration 049 has run.
       ...(storedPermissions(perms) ? { event_permissions: perms } : {}),
@@ -249,6 +258,9 @@ export default function CreateKnockoutForm() {
     // from, when its organiser PIN was given (lib/fieldSeed.ts). Like the
     // draw below, a failure costs that and never the event.
     setSeedWarning(await bringAcross(seed, code, passcode, seedPairs(validPlayers, idFor, drawKey)))
+
+    // The field step's tags — a failure costs them, never the event.
+    setTagsWarning(await writeFieldTags(supabase, trip.id, tags, validPlayers, n => idFor.get(drawKey(n))))
 
     // 4. The draw, when it is made now. A draw that fails costs the draw,
     // never the event — it can be made from the organiser area.
@@ -315,6 +327,7 @@ export default function CreateKnockoutForm() {
           </p>
           {drawWarning && <p className="text-rust-deep text-sm mb-6 leading-snug">{drawWarning}</p>}
           {seedWarning && <p className="text-rust-deep text-sm mb-6 leading-snug">{seedWarning}</p>}
+          {tagsWarning && <p className="text-rust-deep text-sm mb-6 leading-snug">{tagsWarning}</p>}
 
           <div className={`px-4 py-8 mb-4 ${cardClass()}`}>
             <p className="t-label text-ink/65 mb-4">Your event code</p>
@@ -473,6 +486,8 @@ export default function CreateKnockoutForm() {
             duplicateIssue={duplicateIssue}
             seed={seed}
             setSeed={setSeed}
+            tags={tags}
+            setTags={setTags}
           />
         )}
 
@@ -485,6 +500,22 @@ export default function CreateKnockoutForm() {
         {/* ── 4 · How collaborative, and the organiser PIN ── */}
         {step === 4 && (
           <div className="space-y-3">
+            {/* The tags' secondary leaderboard (Ross, 5 Nov 2026) — wins and
+                losses by tag, under the bracket; kept unless switched off. */}
+            {activeTags(tags).length > 0 && (
+              <div className="mb-6">
+                <label className={FIELD_LABEL}>Leaderboards</label>
+                <div className={`flex items-start justify-between gap-4 p-4 ${cardClass()}`}>
+                  <div className="min-w-0">
+                    <p className="text-ink text-sm font-medium">{boardTitle(matchTallyBoard())}</p>
+                    <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
+                      {boardRules(matchTallyBoard())} Shown under the bracket, and editable in the organiser area.
+                    </p>
+                  </div>
+                  <Toggle checked={tagTally} onChange={setTagTally} label="Rank the tags by match wins" />
+                </div>
+              </div>
+            )}
             <div className="mb-6">
               <label className={FIELD_LABEL}>How collaborative should this event be?</label>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">

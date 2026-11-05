@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { isKnockoutEvent } from '@/lib/bracketSetup'
 import { supabase } from '@/lib/supabase'
 import { parseFormats } from '@/lib/formats'
-import { parseLeaderboards } from '@/lib/leaderboards'
+import { isMatchTally, parseLeaderboards } from '@/lib/leaderboards'
 import { tripBoards, isLegacy } from '@/lib/leaderboardsCompat'
 import { parseTeamScoring } from '@/lib/teamScoring'
 import { fetchMemberships } from '@/lib/teamMembers'
@@ -84,7 +84,7 @@ export default async function TripLeaderboardPage({
     const own = parseLeaderboards(trip.leaderboards)
     if (isEvent((trip as { kind?: unknown }).kind)
         && isKnockoutEvent((trip as { bracket_setup?: unknown }).bracket_setup)
-        && own.length > 0 && own.every(lb => lb.competition === 'matchplay')) {
+        && own.length > 0 && own.every(lb => lb.competition === 'matchplay' || isMatchTally(lb))) {
       redirect(`/trip/${tripCode}/matchplay`)
     }
   }
@@ -160,7 +160,8 @@ export default async function TripLeaderboardPage({
   // the client only ever renders one shape.
   const stored = parseLeaderboards(trip.leaderboards)
   const teamScoring = parseTeamScoring(trip.team_scoring)
-  const boards = tripBoards(stored, parseFormats(trip.formats), teamScoring)
+  // A tags tally lives under the bracket, which alone reads the results.
+  const boards = tripBoards(stored, parseFormats(trip.formats), teamScoring).filter(lb => !isMatchTally(lb))
 
   // How an event's days relate on the board, and whether this is an event
   // at all. Both ride in on the `*` above rather than being named, so a

@@ -26,6 +26,8 @@ import CreationDraw, {
 import MatchPlayField from './MatchPlayField'
 import { bringAcross } from './SeedFromEvent'
 import { NO_FIELD_SEED, drawStandings, seedPairs, type FieldPlayer, type FieldSeed } from '@/lib/fieldSeed'
+import { NO_FIELD_TAGS, fieldTagsIssue, withTagTally, type FieldTags } from '@/lib/fieldTags'
+import { writeFieldTags } from './fieldTagsWrite'
 import {
   parseHandicap, isPlusHandicap, isHandicapPending, PLUS_HANDICAP_WARNING,
   HANDICAP_PENDING_LABEL,
@@ -166,6 +168,9 @@ export default function CreateTripForm({ matchPlay = false }: {
   ])
   // A match play event's field, seeded from another event if wanted (lib/fieldSeed.ts).
   const [seed, setSeed] = useState<FieldSeed>(NO_FIELD_SEED)
+  // A match play event's tags, switched on in its field step (lib/fieldTags.ts).
+  const [tags, setTags] = useState<FieldTags>(NO_FIELD_TAGS)
+  const [tagsWarning, setTagsWarning] = useState<string | null>(null)
   const [seedWarning, setSeedWarning] = useState<string | null>(null)
 
   // The leaderboards, offered where the league wizard offers them — the
@@ -238,7 +243,7 @@ export default function CreateTripForm({ matchPlay = false }: {
   const today = todayString(new Date())
   const drawEntrants = creationEntrants(players)
   const drawIssue = isTournament && matchPlay ? creationDrawIssue(draw, drawEntrants, today) : null
-  const fieldValid = !duplicateIssue
+  const fieldValid = !duplicateIssue && !(matchPlay && fieldTagsIssue(tags))
   const settingsValid = !passcodeIssue && !publicIssue
   // A trip's (and a league-less event's) step 3 holds the field and the
   // settings together; a match play event's are steps 3 and 5, its draw 4.
@@ -570,6 +575,8 @@ export default function CreateTripForm({ matchPlay = false }: {
     // Costs that alone if it fails, never the event.
     if (isTournament && matchPlay) {
       setSeedWarning(await bringAcross(seed, code, passcode, seedPairs(validPlayers, idFor, drawKey)))
+      // The field step's tags — a failure costs them, never the event.
+      setTagsWarning(await writeFieldTags(supabase, tripId, tags, validPlayers, n => idFor.get(drawKey(n))))
     }
 
     // A match play event's draw, when it is made now. A draw that fails
@@ -625,6 +632,7 @@ export default function CreateTripForm({ matchPlay = false }: {
           </p>
           {drawWarning && <p className="text-rust-deep text-sm -mt-6 mb-6 leading-snug">{drawWarning}</p>}
           {seedWarning && <p className="text-rust-deep text-sm -mt-6 mb-6 leading-snug">{seedWarning}</p>}
+          {tagsWarning && <p className="text-rust-deep text-sm -mt-6 mb-6 leading-snug">{tagsWarning}</p>}
 
           <div className={`${cardClass()} px-4 py-8 mb-4`}>
             <p className="t-label text-ink/65 mb-4">Your {noun} code</p>
@@ -865,6 +873,10 @@ export default function CreateTripForm({ matchPlay = false }: {
             duplicateIssue={duplicateIssue}
             seed={seed}
             setSeed={setSeed}
+            tags={tags}
+            // Switching tags on adds the tags leaderboard to the last step's
+            // boards, off takes it away (lib/fieldTags.ts withTagTally).
+            setTags={next => { if (next.on !== tags.on) setBoards(b => withTagTally(b, next.on)); setTags(next) }}
           />
         )}
 

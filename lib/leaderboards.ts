@@ -319,7 +319,7 @@ export const COMBINES: { key: Combine; label: string; hint: string }[] = [
 // copy of maths that already works.
 
 /** How a tag's score for one round is built from its players' cards. */
-export type TagMode = 'best_cards' | 'all_cards' | 'day_teams'
+export type TagMode = 'best_cards' | 'all_cards' | 'day_teams' | 'match_wins'
 
 export const TAG_MODES: { key: TagMode; label: string; hint: string }[] = [
   // Hints carry a full stop: `boardRules` joins them into the line under a
@@ -346,7 +346,24 @@ export const TAG_MODES: { key: TagMode; label: string; hint: string }[] = [
  */
 export const ALL_TAG_MODES: { key: TagMode; label: string; hint: string }[] = [
   ...TAG_MODES,
+  // A match play event's tags (Ross, 5 Nov 2026: "start with a basic
+  // wins/losses tally by tag") — no cards at all, the draw's results: a
+  // match won is a win for the winner's tag and a loss for the loser's.
+  // Made by creation's field step when tags are on; the form does not
+  // offer it beside the card modes, since it reads the bracket instead.
+  { key: 'match_wins', label: 'Match wins',
+    hint: 'Each match won is a win for the winner\'s tag, a loss for the loser\'s.' },
 ]
+
+/** A tags board that tallies a knockout's results rather than reading cards. */
+export function isMatchTally(lb: Partial<Pick<Leaderboard, 'audience' | 'tagMode'>>): boolean {
+  return isTagBoard(lb) && lb.tagMode === 'match_wins'
+}
+
+/** The tags tally a match play event is made with when its field has tags. */
+export function matchTallyBoard(): Leaderboard {
+  return { id: 'lb-tag-wins', audience: 'team', competition: 'league', scoring: 'stableford', combine: 'total', tagMode: 'match_wins', teamSet: 'main' }
+}
 
 /** How many cards count, when the mode counts a few. Absent reads as two. */
 export const DEFAULT_TAG_COUNT = 2
@@ -372,7 +389,9 @@ export function isTagBoard(lb: Partial<Pick<Leaderboard, 'audience' | 'tagMode'>
  * tag starts to mean something.
  */
 export function tagsInPlay(boards: readonly Leaderboard[]): boolean {
-  return boards.some(isTagBoard)
+  // A tally of a knockout's results reads no tee sheet and no card, so it
+  // puts nothing in play there.
+  return boards.some(b => isTagBoard(b) && !isMatchTally(b))
 }
 
 /** How many of a tag's cards count. Absent reads as the default. */
@@ -801,6 +820,7 @@ export function boardTitle(lb: Leaderboard): string {
   // never share a tab name. The scoring rather than the mode, because a tag
   // reads whole individual cards — the same thing a solo board is named
   // after.
+  if (isMatchTally(lb)) return 'Tags — Match wins'
   const base = isTagBoard(lb) ? `Tags — ${scoring}`
     : lb.audience === 'individual' ? scoring
     : `Team ${format.toLowerCase()}`
@@ -819,6 +839,7 @@ export function boardRules(lb: Leaderboard): string {
     return describeRoundLinks(lb.roundLinks ?? [], base)
   }
 
+  if (isMatchTally(lb)) return describeTagMode(lb)
   const parts: string[] = []
   // A tags board says how a tag's score is built — the count included,
   // because how many cards count is the whole of what the board is.
@@ -875,6 +896,8 @@ export function boardFacts(lb: Leaderboard): string[] {
   }
 
   const facts: string[] = []
+  // Results, not cards: nothing about scoring or rounds is true of it.
+  if (isMatchTally(lb)) return ['Tags', 'Match wins', 'Won and lost']
   if (isTagBoard(lb)) {
     if (lb.tagMode === 'best_cards') {
       const n = tagCountOf(lb)

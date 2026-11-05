@@ -210,3 +210,48 @@ export function describeTags(
   if (playerCount === 0) return `${tags} · nobody on the roster yet.`
   return `${tags} · ${taggedCount} of ${playerCount} player${playerCount === 1 ? '' : 's'} assigned.`
 }
+
+// ─── A knockout's results by tag (Ross, 5 Nov 2026) ────────────
+
+/** A match with a result that was played — never a bye — as the players on each side. */
+export type MatchResultSides = { winnerIds: string[]; loserIds: string[] }
+
+/**
+ * Wins and losses by tag — the basic tally a match play event's tags start
+ * with (`tagMode: 'match_wins'`). A match won is a win for the tag the
+ * winning side carries and a loss for the losing side's; a side of mixed
+ * tags, or none, counts for nobody (`tagOfTeam`). Every tag is in the
+ * answer, at nought where it has played nothing.
+ */
+export function tagMatchTally(
+  tagIds: readonly string[],
+  memberships: readonly Membership[],
+  results: readonly MatchResultSides[],
+): Map<string, { won: number; lost: number }> {
+  const out = new Map(tagIds.map(id => [id, { won: 0, lost: 0 }]))
+  for (const r of results) {
+    const w = tagOfTeam(r.winnerIds, memberships)
+    const l = tagOfTeam(r.loserIds, memberships)
+    if (w && out.has(w)) out.get(w)!.won++
+    if (l && out.has(l)) out.get(l)!.lost++
+  }
+  return out
+}
+
+/**
+ * A bracket's played results as sides of players: a singles side is its
+ * player, a pairs side its pairing's members. A bye, or a match with nobody
+ * through yet, is no result.
+ */
+export function matchResultSides(
+  matches: readonly {
+    winner: string | null; a: string | null; b: string | null; aIsBye: boolean; bIsBye: boolean
+  }[],
+  playersOf: (entrantId: string) => string[],
+): MatchResultSides[] {
+  return matches.flatMap(m => {
+    if (!m.winner || m.aIsBye || m.bIsBye || !m.a || !m.b) return []
+    const loser = m.winner === m.a ? m.b : m.a
+    return [{ winnerIds: playersOf(m.winner), loserIds: playersOf(loser) }]
+  })
+}

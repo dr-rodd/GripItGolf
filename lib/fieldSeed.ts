@@ -24,7 +24,11 @@ import { formatHandicap } from './handicap'
  * event the field was seeded from; `brought` marks a row the seed added, as
  * against a typed one it matched by name.
  */
-export type FieldPlayer = { name: string; handicap: string; gender: 'M' | 'F'; sourceId?: string; brought?: boolean }
+export type FieldPlayer = {
+  name: string; handicap: string; gender: 'M' | 'F'; sourceId?: string; brought?: boolean
+  /** The field step's tag for them, by its key (lib/fieldTags.ts). */
+  tag?: string
+}
 
 /** A player of the other event, as read from it. */
 export type SeedPlayer = { id: string; name: string; handicap: number | null; gender: string | null }

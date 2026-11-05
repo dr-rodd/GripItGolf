@@ -17,8 +17,12 @@
 import fs from 'fs'
 import {
   TAG_SET, eventTags, tagOf, untaggedIds, describeTags,
-  tagRoundScore, countingPlayers, tagOfTeam,
+  tagRoundScore, countingPlayers, tagOfTeam, tagMatchTally, matchResultSides,
 } from '../lib/tagBoards'
+import {
+  NO_FIELD_TAGS, TAGS_INTRO, activeTags, fieldTagsIssue, newTag, switchedOn, tagCounts, tagWrites, withTagTally,
+} from '../lib/fieldTags'
+import { knockoutBoards } from '../lib/bracketSetup'
 import {
   MAIN_SET, daySheetId, type Membership, type TeamRow,
 } from '../lib/teamSets'
@@ -26,7 +30,7 @@ import {
   type Leaderboard, parseLeaderboards, boardTitle, boardRules, slotKey,
   isTagBoard, tagsInPlay, tagCountOf, unanswered, isComplete,
   offersTeamFormat, offersTagMode, offersTagCount, offersTeeTeams, offersCombine,
-  offersAllowance, TAG_MODES, ALL_TAG_MODES,
+  offersAllowance, TAG_MODES, ALL_TAG_MODES, isMatchTally, matchTallyBoard, boardFacts,
 } from '../lib/leaderboards'
 import { buildRows } from '../lib/boardRows'
 import { buildRowContext } from '../lib/rowContext'
@@ -731,6 +735,93 @@ section('Nothing here reaches a trip')
     ok(!read(f).includes('tagBoards'),
       `${f.split('/').pop()} is untouched by tags`)
   }
+}
+
+// ─── Tags made with the field (Ross, 5 Nov 2026) ───────────────
+
+section('Tags in the field step: off to start with, named and coloured')
+{
+  ok(TAGS_INTRO.startsWith('Group players together with a common label, category or department.')
+    && TAGS_INTRO.includes('Create a secondary leaderboard to rank the field performance by their Tags.'),
+    'the switch says what tags are for, in his words')
+  eq([NO_FIELD_TAGS.on, activeTags(NO_FIELD_TAGS)], [false, []], 'off to start with, and off makes none')
+  const on = switchedOn(NO_FIELD_TAGS)
+  eq([on.tags.length, new Set(on.tags.map(t => t.colour)).size, on.tags.every(t => t.name === '')], [2, 2, true],
+    'switched on: two tags to name, in two colours')
+  eq(newTag(on.tags).colour !== on.tags[0].colour && newTag(on.tags).colour !== on.tags[1].colour, true, '  …a third takes a colour not yet used')
+  eq(fieldTagsIssue(on), 'Give every tag a name.', 'every tag needs a name before the field step goes on')
+  const named = { on: true, tags: [{ ...on.tags[0], name: 'Europe' }, { ...on.tags[1], name: ' europe ' }] }
+  eq(fieldTagsIssue(named), 'Two tags are called europe.', '  …and no two the same')
+  const ready = { on: true, tags: [{ ...on.tags[0], name: 'Europe' }, { ...on.tags[1], name: 'USA' }] }
+  eq(fieldTagsIssue(ready), null, '  …named, it is ready')
+  eq(fieldTagsIssue({ ...ready, on: false }), null, 'switched off, nothing is asked')
+  const players = [
+    { name: 'Ross', tag: on.tags[0].key }, { name: 'Kate', tag: on.tags[1].key },
+    { name: 'Dave' }, { name: '  ', tag: on.tags[0].key },
+  ]
+  eq(tagCounts(ready, players), { [on.tags[0].key]: 1, [on.tags[1].key]: 1 }, 'each tag counts its named players')
+  const ids: Record<string, string> = { Ross: 'p1', Kate: 'p2', Dave: 'p3' }
+  const w = tagWrites(ready, players, n => ids[n.trim()], k => `id-${k}`)
+  eq(w.teams.map(t => t.name), ['Europe', 'USA'], 'the event is made with a team on the main sheet per tag')
+  eq(w.members, [{ team_id: `id-${on.tags[0].key}`, player_id: 'p1' }, { team_id: `id-${on.tags[1].key}`, player_id: 'p2' }],
+    '  …each tagged player its member, the untagged in none')
+  eq(tagWrites({ ...ready, on: false }, players, n => ids[n], k => k), { teams: [], members: [] }, '  …and switched off, nothing at all')
+  const write = read('app/dashboard/create/fieldTagsWrite.ts')
+  ok(write.includes("from('teams')") && write.includes("from('team_members')") && write.includes('team_set: TAG_SET')
+    && write.includes(".update({ team_id: t.id })"), '  …written as tags are anywhere: teams on the tag sheet, members, the main sheet mirror')
+  const field = read('app/dashboard/create/MatchPlayField.tsx')
+  ok(field.includes('<TagsCard') && field.includes('Enable tags') && field.includes('PRESET_COLORS.map'),
+    'the field step has the switch, the tags and their colours')
+  ok(field.includes("update(i, { tag: player.tag === t.key ? undefined : t.key })"), '  …and a tag to choose on each player')
+  for (const form of ['CreateKnockoutForm', 'CreateTripForm']) {
+    const src = read(`app/dashboard/create/${form}.tsx`)
+    ok(src.includes('fieldTagsIssue(tags)') && src.includes('writeFieldTags(supabase'),
+      `${form}: the field step waits on the tags, and the event is made with them`)
+  }
+}
+
+section('A match play event ranks its tags by matches won')
+{
+  const tally = matchTallyBoard()
+  ok(isTagBoard(tally) && isMatchTally(tally) && !tagsInPlay([tally]),
+    'the tally is a tags board, reading the bracket — never the tee sheet\'s tag gate')
+  const back = parseLeaderboards([tally])[0]
+  ok(!!back && isMatchTally(back), '  …and reads back as one')
+  eq([boardTitle(tally), boardFacts(tally)], ['Tags — Match wins', ['Tags', 'Match wins', 'Won and lost']],
+    '  …named and described as what it is, nothing about cards')
+  ok(!TAG_MODES.some(m => m.key === 'match_wins') && ALL_TAG_MODES.some(m => m.key === 'match_wins'),
+    '  …not offered beside the card modes, but read back')
+  eq(withTagTally(knockoutBoards(), true).map(b => b.id), ['lb-matchplay', 'lb-tag-wins'], 'tags switched on bring it')
+  eq(withTagTally(withTagTally(knockoutBoards(), true), false).map(b => b.id), ['lb-matchplay'], '  …off take it away')
+
+  // Ross and Dave are Europe, John USA; Kate untagged.
+  const results = matchResultSides([
+    { winner: 'ross', a: 'ross', b: 'john', aIsBye: false, bIsBye: false },
+    { winner: 'john', a: 'dave', b: 'john', aIsBye: false, bIsBye: false },
+    { winner: 'dave', a: 'dave', b: 'kate', aIsBye: false, bIsBye: false },
+    { winner: 'ross', a: 'ross', b: null, aIsBye: false, bIsBye: true },
+    { winner: null, a: 'ross', b: 'john', aIsBye: false, bIsBye: false },
+  ], id => [id])
+  eq(results.length, 3, 'a bye, and a match not played yet, are no results')
+  eq(Object.fromEntries(tagMatchTally(['tag-eu', 'tag-us'], memberships, results)), { 'tag-eu': { won: 2, lost: 1 }, 'tag-us': { won: 1, lost: 1 } },
+    'each match won is a win for the winner\'s tag and a loss for the loser\'s; an untagged side counts for nobody')
+  eq(tagMatchTally(['tag-eu'], memberships, [{ winnerIds: ['ross', 'john'], loserIds: ['dave'] }]).get('tag-eu'), { won: 0, lost: 1 },
+    '  …a pairing of two tags counts for neither')
+  const rows = buildRows(tally, {
+    players: [], holes: [], rounds: [], resolved: [], hcpFor: new Map(), legacyTeamScoring: null,
+    liveRoundIds: new Set(), livePlayerIds: new Set(), teams, memberships, matchResults: results,
+  })
+  eq(rows.map(r => [r.name, r.place, r.record]), [['Europe', 1, { won: 2, lost: 1 }], ['USA', 2, { won: 1, lost: 1 }]],
+    'the board ranks them by wins, placed as any board is')
+  eq(buildRows(tally, {
+    players: [], holes: [], rounds: [], resolved: [], hcpFor: new Map(), legacyTeamScoring: null,
+    liveRoundIds: new Set(), livePlayerIds: new Set(), teams, memberships,
+  }), [], '  …and handed no results, it draws no rows rather than a table of noughts')
+  const page = read('app/trip/[tripCode]/matchplay/page.tsx')
+  ok(page.includes('<TagTally') && page.includes('boards.find(isMatchTally)'), 'it stands under the bracket — the event\'s leaderboard tab')
+  const lbPage = read('app/trip/[tripCode]/leaderboard/page.tsx')
+  ok(lbPage.includes("lb.competition === 'matchplay' || isMatchTally(lb)") && lbPage.includes('.filter(lb => !isMatchTally(lb))'),
+    '  …so the leaderboard still opens the bracket, and never draws an empty tally')
 }
 
 // ─── Result ────────────────────────────────────────────────────

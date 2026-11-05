@@ -1,7 +1,10 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { hasMatchplay, needsPairings, tripQuotaScale } from '@/lib/leaderboards'
+import { boardRules, boardTitle, hasMatchplay, isMatchTally, needsPairings, tripQuotaScale } from '@/lib/leaderboards'
+import { buildRows } from '@/lib/boardRows'
+import { matchResultSides } from '@/lib/tagBoards'
+import TagTally from './TagTally'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { MAIN_SET, setOf, teamsOnSheet, membersOf } from '@/lib/teamSets'
 import { commonColour } from '@/lib/matchSides'
@@ -179,6 +182,24 @@ export default async function MatchplayPage({
   const lock = isEvent(setupRow?.kind) && setupRow?.settings_passcode_hash
     ? { tripCode, passcodeHash: setupRow.settings_passcode_hash } : null
 
+  // The tags' tally, where the event keeps one: the bracket's played
+  // results as sides of players, counted by the board's own shell.
+  const tally = boards.find(isMatchTally)
+  const tallyRows = tally ? buildRows(tally, {
+    players: [], holes: [], rounds: [], resolved: [], hcpFor: new Map(), legacyTeamScoring: null,
+    liveRoundIds: new Set(), livePlayerIds: new Set(),
+    teams: (teamsRes.data ?? []).map(t => ({ ...t, color: t.color ?? '', team_set: t.team_set ?? MAIN_SET })),
+    memberships,
+    matchResults: matchResultSides(
+      (matches as { winner_player_id?: string | null; player_a_id?: string | null; player_b_id?: string | null; player_a_is_bye?: boolean; player_b_is_bye?: boolean }[])
+        .map(m => ({
+          winner: m.winner_player_id ?? null, a: m.player_a_id ?? null, b: m.player_b_id ?? null,
+          aIsBye: !!m.player_a_is_bye, bIsBye: !!m.player_b_is_bye,
+        })),
+      id => (storedAsPairs ? membersOf(memberships, id) : [id]),
+    ),
+  }) : []
+
   const readings = links.length > 0
     ? await readLinkedRounds(trip, links, matches, entrants, memberships,
         tripQuotaScale(boards))
@@ -235,6 +256,7 @@ export default async function MatchplayPage({
             lock={lock}
           />
         )}
+        {tally && <TagTally title={boardTitle(tally)} rules={boardRules(tally)} rows={tallyRows} />}
       </div>
       {/* Rendered once here rather than inside EmptyState, so a drawn bracket
           keeps the tab bar and the footer exactly like every other screen —

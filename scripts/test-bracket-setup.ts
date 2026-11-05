@@ -313,8 +313,8 @@ section('A match play event is a knockout from the moment it is made')
   const board2 = read('app/trip/[tripCode]/leaderboard/page.tsx')
   ok(board2.includes('isKnockoutEvent(') && board2.includes('redirect(`/trip/${tripCode}/matchplay`)'),
     'a match play event\'s leaderboard tab is the bracket')
-  ok(board2.includes("own.every(lb => lb.competition === 'matchplay')"),
-    '  …unless the organiser added a board beside it')
+  ok(board2.includes("own.every(lb => lb.competition === 'matchplay' || isMatchTally(lb))"),
+    '  …unless the organiser added a board beside it — a tags tally lives under the bracket, so it is not one')
   ok(read('app/components/TabBar.tsx').includes('pathname.startsWith(`${base}/matchplay`)) return \'leaderboard\''),
     'and the tab stays lit on the bracket')
 }
