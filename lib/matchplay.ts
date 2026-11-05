@@ -198,6 +198,16 @@ export function generateBracket(
  * the second, and so on down the draw. An empty slot is a **bye**: the
  * player opposite walks through.
  *
+ * **A bye can run through several rounds** (Ross, 5 Nov 2026: "giving byes
+ * through multiple rounds if that's what they want"). A match with nobody
+ * on either side is no match: it is left out of the bracket altogether, and
+ * the place it would have filled in the next round is a bye — so a player
+ * alone in a quarter of the draw walks to its semi-final. (The table never
+ * holds a match of two byes — `ck_matchplay_not_both_byes` — and now never
+ * needs to.) A bye whose opposite is still to be decided by a match waits
+ * for that result, and the winner walks through it then
+ * (lib/matchplayProgress.ts `cascade`).
+ *
  * Every way of making a draw ends here (lib/bracketDraw.ts): a seeded or
  * random draw lays its slots out by the seed order, a manual draw is the
  * organiser's own layout, and editing a draw later is editing these slots.
@@ -272,21 +282,32 @@ export function bracketFromSlots(
     match.playerBId = b?.id ?? null
     match.playerAIsBye = a === null
     match.playerBIsBye = b === null
-
-    // A match with nobody on either side is no match at all. Standard
-    // seeding never makes one (it pairs the top half with the bottom), and a
-    // manual draw is refused one rather than left with a hole in the tree.
-    if (match.playerAIsBye && match.playerBIsBye) {
-      throw new MatchplayError(
-        `${match.roundName} match ${slot + 1} has nobody in it — put a player on one side.`
-      )
-    }
   })
 
-  // 4. Award the byes and walk those players into the next round. Byes only
-  //    ever occur in the first round, so a single forward pass settles it.
+  // 4. Matches with nobody in them, round by round: a match whose two sides
+  //    are both byes is no match, and makes the place it feeds a bye.
+  const empty = new Set<string>()
+  for (let r = 0; r < rounds.length; r++) {
+    for (const match of rounds[r]) {
+      if (r > 0) {
+        const below = rounds[r - 1]
+        match.playerAIsBye = empty.has(below[match.slot * 2].id)
+        match.playerBIsBye = empty.has(below[match.slot * 2 + 1].id)
+      }
+      if (match.playerAIsBye && match.playerBIsBye) empty.add(match.id)
+    }
+  }
+  const final = rounds[rounds.length - 1][0]
+  if (empty.has(final.id) || final.playerAIsBye || final.playerBIsBye) {
+    throw new MatchplayError('Each half of the draw needs a player — or take a round off.')
+  }
+
+  // 5. Award the byes and walk those players on, round by round, for as
+  //    far as their byes go. A bye opposite a match still to be played
+  //    waits for its winner.
   const byId = new Map(rounds.flat().map(m => [m.id, m]))
   for (const match of rounds.flat()) {
+    if (empty.has(match.id)) continue
     if (!match.playerAIsBye && !match.playerBIsBye) continue
     const winner = match.playerAIsBye ? match.playerBId : match.playerAId
     if (!winner) continue
@@ -302,7 +323,9 @@ export function bracketFromSlots(
     }
   }
 
-  return rounds.flat()
+  // The empty matches are left out; nothing points into them — a feeder of
+  // one would have had to be empty too.
+  return rounds.flat().filter(m => !empty.has(m.id))
 }
 
 /**

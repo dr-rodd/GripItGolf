@@ -92,6 +92,17 @@ function cascade<T extends ProgressMatch>(
     if (current.next_slot === 'A') next.player_a_id = seat
     else                           next.player_b_id = seat
 
+    // A bye waiting for this result (a bye running through rounds — lib/
+    // matchplay.ts bracketFromSlots): whoever arrives walks straight through
+    // it, and on to the match above; nobody arriving takes them back out.
+    if (next.player_a_is_bye || next.player_b_is_bye) {
+      if (next.winner_player_id === seat) break
+      next.winner_player_id = seat
+      next.result = null
+      current = next
+      continue
+    }
+
     // Undecided: the slot change is the whole story, nothing to invalidate
     if (!next.winner_player_id) break
 

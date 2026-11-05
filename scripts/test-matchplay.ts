@@ -27,9 +27,14 @@ import {
 } from '../lib/playerColours'
 import { PRESET_COLORS, PRESET_COLOR_NAMES } from '../lib/teamColors'
 import {
-  byHandicap, drawDue, drawInPlay, drawLiveAt, emptySlots, manualIssue, moveToSeed, parseDrawPlan, placeInSlot, premadeSlots,
-  reconcileOrder, resizeSlots, shuffled, slotsFromSeeds, unplaced, drawCountIssue,
+  byHandicap, clearedDraft, draftIssue, draftSlots, drawDue, drawInPlay, drawLiveAt, drawnAtRandom, drawnBySeed, mayChangeRounds,
+  moveToSeed, newDraft, parseDrawPlan, placedInDraft, premadeSlots, reconcileOrder, shuffled, slotsFromSeeds, syncDraft,
+  withRounds, drawCountIssue,
 } from '../lib/bracketDraw'
+import {
+  addRound, emptyLayout, filledLayout, layoutFromSlots, layoutIssue, layoutPlaced, layoutSlots, matchShown, mayPlace,
+  mayRemoveRound, placeAt, placeState, removeRound, roundsFor, slotsIssue, MAX_ROUNDS,
+} from '../lib/bracketEditor'
 import { bracketFromSlots } from '../lib/matchplay'
 import { holeOutcomes, cardState, openingHole, shouldWrite, reopenBlocked, playCard, ordinal, extraCourseHole, parseExtraPlan, withExtraHole } from '../lib/matchCard'
 
@@ -741,24 +746,87 @@ guard('draw', () => {
   const tree = bracketFromSlots(six.slots.map(id => (id ? { id, name: id } : null)), { seeds: six.seeds })
   eq(tree.filter(m => m.roundNumber === 1 && (m.playerAIsBye || m.playerBIsBye)).length, 2, '  …two byes, awarded at once')
 
-  // Manual
-  let slots = emptySlots(5)
-  eq(slots.length, 8, 'a manual draw is sized off the field so far: five entered, eight places')
-  slots = placeInSlot(slots, 0, 'a')
-  slots = placeInSlot(slots, 3, 'a')
-  eq([slots[0], slots[3]], [null, 'a'], 'placing somebody again moves them — nobody is in a draw twice')
-  ok(manualIssue(slots, order)?.includes('4 players are not in the draw') ?? false, 'everybody entered must be in it')
-  slots = ['a', 'b', 'c', null, 'd', null, 'e', null]
-  eq(manualIssue(slots, order), null, 'every player placed, every match with somebody in it: ready')
-  eq(manualIssue(['a', 'b', null, null, 'c', 'd', 'e', null], order), 'Match 2 has nobody in it — move a player into it.',
-    'a match empty on both sides is refused — a bye needs somebody to walk through')
-  const manualTree = bracketFromSlots(slots.map(id => (id ? { id, name: id } : null)))
-  eq(manualTree.filter(m => m.roundNumber === 1 && m.winnerPlayerId).map(m => m.winnerPlayerId), ['c', 'd', 'e'],
-    'an empty place is a bye for the player opposite')
-  eq(manualTree.every(m => m.seedA === null && m.seedB === null), true, '  …and nobody in a manual draw carries a seed number')
-  eq(unplaced(['a', null], ['a', 'b']), ['b'], 'who is still to place')
-  eq(resizeSlots(['a', 'b', null, null], 6, ['a', 'b', 'c', 'd', 'e', 'f']), ['a', 'b', null, null, null, null, null, null],
-    'a field that grows grows the draw, keeping who is placed')
+  // The bracket, by hand (Ross, 5 Nov 2026)
+  const five = ['a', 'b', 'c', 'd', 'e']
+  eq([roundsFor(5), roundsFor(2), roundsFor(64), MAX_ROUNDS], [3, 1, 6, 6], 'the bracket the field needs: five make three rounds, eight places')
+  let lay = emptyLayout(3)
+  eq(lay.cells.map(r => r.length), [8, 4, 2], '  …eight places in the first round, four in the next, two in the Final')
+  lay = placeAt(lay, 0, 0, 'a')
+  eq(placeState(lay, 0, 1), { kind: 'open', bye: true }, 'an empty place opposite a player is a bye for them, and still takes a player')
+  eq(placeState(lay, 1, 0), { kind: 'through', id: 'a' }, '  …the place above reached on that bye')
+  lay = placeAt(lay, 0, 1, 'b')
+  eq(placeState(lay, 1, 0), { kind: 'winner' }, 'a place the result of a match fills is the winner\'s')
+  eq([mayPlace(lay, 1, 0), mayPlace(lay, 2, 0)], [false, false], '  …and takes nobody, nor does any place it feeds (Ross: "can\'t create an unworkable draw")')
+  eq(placeAt(lay, 1, 0, 'c'), lay, '  …asked to, the bracket is left as it was')
+  lay = placeAt(lay, 2, 1, 'c')
+  eq([placeState(lay, 1, 2), placeState(lay, 0, 5)].map(x => x.kind), ['hidden', 'hidden'],
+    'a player put in a later round: the places under them are not part of the draw')
+  eq([matchShown(lay, 1, 1), matchShown(lay, 0, 2), matchShown(lay, 0, 0)], [false, false, true], '  …nor their matches')
+  eq(placeState(lay, 2, 0), { kind: 'winner' }, '  …and the Final waits on the top half')
+  lay = placeAt(lay, 0, 2, 'b')
+  eq([lay.cells[0][1], lay.cells[0][2]], [null, 'b'], 'putting somebody in again moves them — nobody is in the draw twice')
+  lay = placeAt(lay, 0, 2, 'a')
+  eq([lay.cells[0][0], lay.cells[0][2]], ['b', 'a'], '  …and onto somebody, the two swap places')
+  eq(layoutPlaced(lay).sort(), ['a', 'b', 'c'], '  …everybody still in it once')
+  lay = placeAt(lay, 0, 0, null)
+  eq(lay.cells[0][0], null, 'null empties a place')
+  eq(layoutIssue(placeAt(lay, 0, 0, 'b'), five), '2 players are not in the draw yet.', 'everybody entered must be in it')
+  const full = placeAt(placeAt(placeAt(lay, 0, 0, 'b'), 0, 1, 'd'), 0, 3, 'e')
+  eq(layoutIssue(full, five), null, 'every player placed, a half each side of the Final: ready')
+  eq(layoutSlots(full), ['b', 'd', 'a', 'e', 'c', null, null, null], 'a player in a later round sits in the first slot under them')
+  const tree5 = bracketFromSlots(layoutSlots(full).map(id => (id ? { id, name: id } : null)))
+  eq(tree5.map(m => `${m.roundNumber}.${m.slot}`), ['1.0', '1.1', '1.2', '2.0', '2.1', '3.0'],
+    '  …built: the matches nobody was drawn in are left out')
+  eq(tree5.find(m => m.roundNumber === 3)?.playerBId, 'c', '  …and C walks to the Final on byes')
+  eq(layoutIssue(placeAt(placeAt(emptyLayout(2), 0, 0, 'a'), 0, 1, 'b'), ['a', 'b']), 'Each half of the draw needs a player.', 'a half of the draw with nobody in it is refused')
+  throws(() => bracketFromSlots([{ id: 'a', name: 'a' }, { id: 'b', name: 'b' }, null, null]), '  …and the builder refuses to make one')
+  eq(slotsIssue(['a', null, null, 'b']), null, '  …one each side is enough')
+
+  // A round more or fewer
+  const grown = addRound(full)
+  eq([grown.rounds, grown.cells[1], grown.cells[3]], [4, full.cells[0], full.cells[2]],
+    'a round more goes in at the start: everybody keeps their place as seen from the Final')
+  eq([0, 2, 4, 6].map(m => matchShown(grown, 0, m)), [false, false, false, false], '  …the new first round under them all byes, the draw unchanged')
+  const thin = addRound(placeAt(placeAt(emptyLayout(2), 0, 0, 'a'), 0, 2, 'b'))
+  eq([placeState(thin, 0, 0).kind, placeState(thin, 0, 2), placeState(thin, 1, 1)], ['hidden', { kind: 'open', bye: false }, { kind: 'open', bye: true }],
+    '  …and under an empty place, new places to fill')
+  eq(mayRemoveRound(full, 5), false, 'a round fewer than the field needs is refused')
+  const loose = placeAt(placeAt(placeAt(placeAt(emptyLayout(3), 0, 0, 'a'), 0, 2, 'b'), 0, 5, 'c'), 0, 7, 'd')
+  eq(mayRemoveRound(loose, 4), true, '  …allowed while no first-round match has two in it')
+  eq(removeRound(loose, 4).cells, [['a', 'b', 'c', 'd'], [null, null]], '  …each lone player moving up to the place their match fed')
+  eq(mayRemoveRound(placeAt(loose, 0, 1, 'e'), 4), false, '  …never with a match of two in the first round')
+
+  // Filled from an order: the bracket, a seeded draw's shape
+  eq(layoutSlots(filledLayout(3, ['s1', 's2', 's3', 's4', 's5', 's6'])), ['s1', null, 's4', 's5', 's2', null, 's3', 's6'],
+    'filled by seed: 1 v 8, 4 v 5, 2 v 7, 3 v 6 over eight — the byes to the top seeds')
+  eq(filledLayout(3, ['s1', 's2', 's3', 's4', 's5', 's6']).cells[1][0], 's1', '  …shown where they first play: seed 1 straight into the semi-final')
+  const deep = filledLayout(4, ['s1', 's2', 's3', 's4', 's5', 's6'])
+  eq([deep.cells[2][0], deep.cells[2][2]], ['s1', 's2'], '  …a round bigger, the top two have byes through two rounds')
+  eq(layoutFromSlots(layoutSlots(full)), { rounds: 3, cells: [['b', 'd', 'a', 'e', null, null, null, null], [null, null, null, null], [null, 'c']] },
+    'a first round read back as a bracket: each player where they first play')
+
+  // The draft the builder holds
+  let draft = newDraft(five)
+  eq([draft.method, draft.layout.rounds, layoutPlaced(draft.layout)], ['manual', 3, []], 'the builder starts on the bracket the field needs, empty (Ross: "start with a bracket")')
+  eq(draftIssue(draft, five), '5 players are not in the draw yet.', '  …which cannot be drawn until it is filled')
+  let k = 0
+  draft = drawnAtRandom(draft, five, () => [0.9, 0.1, 0.5, 0.3][k++ % 4])
+  eq([draft.method, layoutPlaced(draft.layout).length, draftIssue(draft, five)], ['random', 5, null], 'Random fills it from a hat')
+  eq(draftSlots(draft).seeds, null, '  …with no seed numbers: nobody was seeded')
+  const sixField = [...five, 'f']
+  const synced = syncDraft(draft, sixField)
+  eq([layoutPlaced(synced.layout).length, draftIssue(synced, sixField)], [6, null], '  …somebody joining is drawn in, while nobody has changed it by hand')
+  draft = drawnBySeed(draft, ['e', 'd', 'c', 'b', 'a'])
+  eq([draftSlots(draft).slots, draftSlots(draft).seeds], [['e', null, 'b', 'a', 'd', null, 'c', null], [1, null, 4, 5, 2, null, 3, null]],
+    'Seeded fills it by the numbered list, and carries the seed numbers')
+  eq([mayChangeRounds(draft, -1, 5), mayChangeRounds(draft, 1, 5)], [false, true], 'the − is off where the field would not fit, the + on')
+  eq(withRounds(draft, 1, 5).layout.cells[2].slice(0, 2), ['e', null], '  …a round more, filled by seed again: seed 1 has byes to the semi-final')
+  const edited = placedInDraft(draft, 0, 2, 'c')
+  eq([edited.edited, edited.layout.cells[0][2], edited.layout.cells[2][1]], [true, 'c', null], 'a place changed by hand: the two swap')
+  eq(syncDraft(edited, sixField).layout.cells, edited.layout.cells, '  …and from then the field changing never refills it')
+  eq(draftIssue(syncDraft(edited, sixField), sixField), '1 player is not in the draw yet.', '  …a newcomer to be placed')
+  eq(withRounds(edited, 1, 5).layout.rounds, 4, '  …a round more keeps it as laid out, under a new first round')
+  eq(clearedDraft(edited).layout, emptyLayout(3), '"By hand" empties it, its rounds kept')
   eq(drawCountIssue(1) !== null && drawCountIssue(33, 32) !== null && drawCountIssue(32, 32) === null, true,
     'a draw needs two, and no more than the setup\'s ceiling')
 

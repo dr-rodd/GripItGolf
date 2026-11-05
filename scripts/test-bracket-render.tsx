@@ -14,7 +14,7 @@ import MatchplayBracket, {
   type BracketMatchRow, type BracketEntrantRow,
 } from '../app/trip/[tripCode]/matchplay/MatchplayBracket'
 import { playerEntrant, pairEntrant } from '../lib/matchplayEntrants'
-import { generateBracket, bracketToRows, bracketShape } from '../lib/matchplay'
+import { generateBracket, bracketToRows, bracketShape, bracketFromSlots } from '../lib/matchplay'
 import { isDecidable } from '../lib/matchplayProgress'
 import type { MatchReading } from '../lib/matchResults'
 import type { MatchDecision, MatchState } from '../lib/matchDecision'
@@ -445,6 +445,27 @@ section('Every method can be named under a round heading')
     ok(html.includes('Level thru 4') && !html.includes('undefined'),
       `${method} renders with its note intact`)
   }
+}
+
+section('A draw with byes through rounds keeps every match at its place (Ross, 5 Nov 2026)')
+{
+  // Eight places: P1 alone in the top half's first quarter (a bye to the
+  // semi-final — the match under it is not written), P2 v P3, and the
+  // bottom half P4 v P5 and P6 alone.
+  const slots = ['p1', null, 'p2', 'p3', 'p4', 'p5', null, null]
+  let id = 0
+  const tree = bracketFromSlots(slots.map(x => (x ? { id: x, name: x } : null)), { makeId: () => `v${++id}` })
+  const matches = bracketToRows('trip', tree) as unknown as BracketMatchRow[]
+  const players = ['p1', 'p2', 'p3', 'p4', 'p5'].map((pid, i) => playerEntrant({ id: pid, name: `Name${i + 1}`, handicap: i }))
+  eq(matches.filter(m => m.round_number === 1).map(m => m.slot), [0, 1, 2], 'the first round is written without the match nobody was in')
+  const html = renderToStaticMarkup(React.createElement(MatchplayBracket, { matches, entrants: players }))
+  ok(!html.includes('undefined') && !html.includes('NaN'), 'it renders, nothing undefined')
+  const leftColumn = [...html.matchAll(/left:(-?\d+(?:\.\d+)?)(?:px)?;top:(\d+(?:\.\d+)?)(?:px)?[;"]/g)]
+  ok(leftColumn.length === 6, '  …its six matches drawn')
+  const firstLeft = leftColumn.length ? Number(leftColumn[0][1]) : NaN
+  const firstColumnTops = leftColumn.filter(m => Number(m[1]) === firstLeft).map(m => Number(m[2]))
+  ok(firstColumnTops.length === 3 && firstColumnTops[1] - firstColumnTops[0] === firstColumnTops[2] - firstColumnTops[1],
+    '  …the three first-round matches each at their own place, the gap where the fourth would be left at the foot')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

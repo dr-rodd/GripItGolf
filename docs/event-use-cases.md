@@ -560,10 +560,14 @@ overview, or one column at a time), not a rebuild.
    - **Seeded** — a numbered list: typing a number moves a player to it,
      dragging the handle renumbers, and it can start from handicap order
      (pending last) or be shuffled as often as liked.
-   - **Pick the matches** — the draw sized off the field so far
-     (`emptySlots`), each empty place a dropdown of the players not yet
-     placed; a place left empty is a bye; a match empty on both sides is
-     refused (`manualIssue`).
+   - **The bracket, by hand** (Ross, 5 Nov 2026, in place of "Pick the
+     matches"' dropdowns) — the bracket the field needs with a round more
+     or fewer by the − and +, Random and Seeded filling it, and every place
+     tapped to swell into the names. A player can be put in any round, with
+     byes to it, but never in a place the result of a match below will
+     fill (`lib/bracketEditor.ts`). A match with nobody in it is no match:
+     `bracketFromSlots` leaves it out and the bye runs on, as far as it
+     goes; a half of the draw with nobody in it is refused.
    Every method produces **the first round, slot by slot**, which
    `bracketFromSlots` (`lib/matchplay.ts`) turns into the tree —
    `generateBracket` is now seeds → slots → that. One writer, `writeDraw`

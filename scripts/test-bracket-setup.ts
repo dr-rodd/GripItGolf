@@ -21,6 +21,7 @@ import {
 import { hasMatchplay } from '../lib/leaderboards'
 import { entryAllowed, entryCookie, publicPinIssue } from '../lib/publicPin'
 import { DRAW_TIMINGS, newDraft } from '../lib/bracketDraw'
+import { layoutFromSlots } from '../lib/bracketEditor'
 import { creationPlan, creationDrawIssue } from '../app/dashboard/create/CreationDraw'
 
 let passed = 0, failed = 0
@@ -455,10 +456,15 @@ section('The match play card: top of the draw left, bottom right, NR, the result
 section('The draw: made at creation, from the organiser area, or by itself on a date')
 {
   const drawer = read('app/components/BracketDrawer.tsx')
-  ok(drawer.includes('DRAW_METHODS.map') && drawer.includes('Draw again'), 'random, seeded or picked by hand, a random draw drawn again')
+  ok(drawer.includes('DRAW_METHODS.map') && drawer.includes('Draw again'), 'random, seeded or by hand, a random draw drawn again')
   ok(drawer.includes('moveToSeed(order, typing.id, n)') && drawer.includes('onPointerDown') && drawer.includes('By handicap') && drawer.includes('Shuffle'),
     'seeded: type a number, drag the handle, start from handicap order or shuffle')
-  ok(drawer.includes('placeInSlot(slots, place, id)') && drawer.includes('Add a player'), 'by hand: each empty place a dropdown of the players not yet placed')
+  ok(drawer.includes('<BracketBoard') && drawer.includes('placedInDraft(value, picking.r, picking.c, id)') && drawer.includes("'Who goes here?'"),
+    'the bracket itself: any place tapped and given a player (Ross, 5 Nov 2026)')
+  ok(drawer.includes('const SEARCH_FROM = 32') && drawer.includes('entrants.length > SEARCH_FROM'), '  …with a search box once there are more than 32 names')
+  ok(drawer.includes('withRounds(value, -1, field.length)') && drawer.includes('withRounds(value, 1, field.length)'), '  …and a round fewer or more beside its count')
+  ok(drawer.includes('putt(x)') && drawer.includes('reducedMotion()') && drawer.includes('const SWELL_MS = 340'),
+    '  …the place swelling into the names on the putt curve, simply there under Reduce Motion')
   const creation = read('app/dashboard/create/CreationDraw.tsx')
   ok(creation.includes('writeCreationDraw') && creation.includes('idFor.get(key)'), 'a draw made at creation names the players by the ids the form gives them')
   for (const form of ['CreateKnockoutForm', 'CreateTripForm']) {
@@ -494,7 +500,7 @@ section('When the draw happens — one screen, and a moment it goes live (Ross, 
   const ids = new Map([['ross', 'p1'], ['kate', 'p2'], ['dave', 'p3']])
   const premade = {
     timing: { when: 'date' as const, on: '2026-12-01', at: '20:00', seeding: 'premade' as const },
-    draft: { ...newDraft(['ross', 'kate', 'dave']), method: 'manual' as const, slots: ['ross', null, 'kate', 'dave'] },
+    draft: { ...newDraft(['ross', 'kate', 'dave']), edited: true, layout: layoutFromSlots(['ross', null, 'kate', 'dave']) },
   }
   eq(creationPlan(premade, entrants, ids), { when: 'date', on: '2026-12-01', at: '20:00', seeding: 'premade', slots: ['p1', null, 'p2', 'p3'] },
     'a pre-made draw is stored with its plan, place by place by the ids the players are given, until it goes live')

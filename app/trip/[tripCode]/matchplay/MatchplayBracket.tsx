@@ -75,7 +75,7 @@ function drawnRounds(position: number, roundCount: number): [number, number] {
 }
 
 /** The bracket's own height at a position: the tallest column it draws. */
-function bracketHeight(rounds: BracketMatchRow[][], position: number): number {
+function bracketHeight(rounds: (BracketMatchRow | null)[][], position: number): number {
   const [first, last] = drawnRounds(position, rounds.length)
   let height = TILE_H
   for (let i = first; i <= last; i++) {
@@ -172,16 +172,23 @@ export default function MatchplayBracket({
     [entrants]
   )
 
-  /** Matches grouped by round, in playing order. */
+  /**
+   * Matches grouped by round, each at its slot. A draw with byes through
+   * several rounds has no match where nobody was drawn (lib/matchplay.ts
+   * `bracketFromSlots`), so a round is laid out place by place — a missing
+   * match is a gap, never the next one moved up into its place.
+   */
   const rounds = useMemo(() => {
     const numbers = [...new Set(matches.map(m => m.round_number))].sort((a, b) => a - b)
-    return numbers.map(n =>
-      matches.filter(m => m.round_number === n).sort((a, b) => a.slot - b.slot)
-    )
+    return numbers.map((n, i) => {
+      const bySlot = new Map(matches.filter(m => m.round_number === n).map(m => [m.slot, m]))
+      const count = Math.max(2 ** (numbers.length - 1 - i), ...[...bySlot.keys()].map(k => k + 1))
+      return Array.from({ length: count }, (_, slot) => bySlot.get(slot) ?? null)
+    })
   }, [matches])
 
   const roundNames = useMemo(
-    () => rounds.map(r => r[0]?.round_name ?? ''),
+    () => rounds.map(r => r.find(m => m !== null)?.round_name ?? ''),
     [rounds]
   )
 
@@ -447,13 +454,13 @@ export default function MatchplayBracket({
   // Every match in a bracket round shares one link, so the first that has a
   // reading names the method for the whole column.
   const leftMethod = rounds[leftIndex]
-    ?.map(m => readingFor.get(m.id)?.link.decidedBy)
+    ?.map(m => (m ? readingFor.get(m.id)?.link.decidedBy : undefined))
     .find(Boolean)
   const methodLabel = leftMethod ? decisionLabel(leftMethod) : null
   const leftDeadline = deadlines[leftIndex] ?? null
   const leftDeadlineNote = leftDeadline
     ? deadlineNote(leftDeadline, describeShortDate(leftDeadline) ?? leftDeadline, {
-        today, finished: (rounds[leftIndex] ?? []).every(m => !!m.winner_player_id),
+        today, finished: (rounds[leftIndex] ?? []).every(m => !m || !!m.winner_player_id),
       })
     : ''
 
@@ -489,9 +496,18 @@ export default function MatchplayBracket({
     if (slot < -1.2 || slot > 1.2) continue
 
     nextRound.forEach((target, j) => {
+      if (!target) return
       const a = rounds[roundIndex][2 * j]
       const b = rounds[roundIndex][2 * j + 1]
-      if (!a || !b) return
+      if (!a && !b) return
+      if (!a || !b) {
+        // One feeder: the other side is a bye from a match nobody was in.
+        const fromY = tileCenter(a ? 2 * j : 2 * j + 1, slot, PITCH, TILE_H) + lift
+        const toY = tileCenter(j, slot + 1, PITCH, TILE_H) + lift + (a ? -TILE_H / 4 : TILE_H / 4)
+        const midX = (feederX + targetX) / 2
+        connectors.push({ key: `${target.id}-conn`, d: `M ${feederX} ${fromY} H ${midX} V ${toY} H ${targetX}`, dim: slot < -0.05 })
+        return
+      }
       connectors.push({
         key: `${target.id}-conn`,
         d: connectorPath({
@@ -591,7 +607,7 @@ export default function MatchplayBracket({
         {visible.map(roundIndex => {
           const slot = roundIndex - position
           const x = columnX(slot, stride) + shift
-          return rounds[roundIndex].map((match, j) => (
+          return rounds[roundIndex].map((match, j) => match && (
             <MatchTile
               key={match.id}
               match={match}

@@ -12,7 +12,7 @@ import {
   recordWinner, clearWinner, isDecidable, pressOutcome, ProgressError,
   type ProgressMatch,
 } from '../lib/matchplayProgress'
-import { generateBracket, bracketToRows } from '../lib/matchplay'
+import { generateBracket, bracketToRows, bracketFromSlots } from '../lib/matchplay'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -577,6 +577,42 @@ section('Tap decides, hold corrects, neither on a bye')
     }
   }
   ok(inert, 'a bye is inert under every combination of gesture')
+}
+
+// ─── Byes through rounds (Ross, 5 Nov 2026) ───────────────────
+
+section('A winner walks through a bye waiting in a later round')
+{
+  // Sixteen places: P1 alone in the top quarter (a bye to the semi-final),
+  // P2 v P3 and P4 v P5 in the second quarter, and the bottom half P6 v P7
+  // in its first match, nobody else — so the winner of P6 v P7 has byes to
+  // the Final.
+  let id = 0
+  const slots = Array<string | null>(16).fill(null)
+  slots[0] = 'p1'; slots[4] = 'p2'; slots[5] = 'p3'; slots[6] = 'p4'; slots[7] = 'p5'; slots[8] = 'p6'; slots[9] = 'p7'
+  const tree = bracketFromSlots(slots.map(x => (x ? { id: x, name: x.toUpperCase() } : null)), { makeId: () => `b${String(++id).padStart(2, '0')}` })
+  let ms = bracketToRows('trip', tree) as unknown as M[]
+  const at = (r: number, slot: number) => ms.find(m => m.round_number === r && m.slot === slot)
+  eq(ms.filter(m => m.player_a_is_bye && m.player_b_is_bye).length, 0, 'no match of two byes is ever written (ck_matchplay_not_both_byes)')
+  eq([at(1, 1), at(1, 6), at(2, 3)].map(m => m === undefined), [true, true, true], 'the matches nobody was drawn in are not written at all')
+  eq(at(3, 0)?.player_a_id, 'p1', 'P1 is through to the semi-final on byes, at the draw')
+  eq([at(2, 2)?.player_b_is_bye, at(2, 2)?.player_a_id, at(2, 2)?.winner_player_id], [true, null, null],
+    "the bottom half's quarter-final waits on P6 v P7, opposite a bye")
+
+  ms = recordWinner(ms, at(1, 4)!.id, 'p7').matches
+  eq([at(2, 2)?.winner_player_id, at(3, 1)?.winner_player_id, at(4, 0)?.player_b_id], ['p7', 'p7', 'p7'],
+    '  …and the winner walks through every bye in a row, to the Final')
+  ok(!isDecidable(at(2, 2)!) && !isDecidable(at(3, 1)!), '  …the byes stay byes: nothing to decide on them')
+
+  const corrected = recordWinner(ms, at(1, 4)!.id, 'p6')
+  ms = corrected.matches
+  eq([at(2, 2)?.winner_player_id, at(3, 1)?.winner_player_id, at(4, 0)?.player_b_id], ['p6', 'p6', 'p6'],
+    'a corrected result walks the other player through instead')
+  eq(corrected.clearedIds, [], '  …a bye passed through is not a result cleared')
+
+  ms = clearWinner(ms, at(1, 4)!.id).matches
+  eq([at(2, 2)?.winner_player_id, at(3, 1)?.winner_player_id, at(4, 0)?.player_b_id], [null, null, null],
+    'voided, nobody walks through — the Final waits again')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

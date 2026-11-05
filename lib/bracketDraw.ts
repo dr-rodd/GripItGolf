@@ -10,9 +10,11 @@
 //   a player to it, dragging renumbers, and the list can be started from
 //   handicap order or shuffled as often as liked. Seed 1 and 2 meet only in
 //   the Final.
-// * **Manual** — the organiser's own layout: the draw is sized off the field
-//   so far, and each empty place is tapped and given a player. A place left
-//   empty is a bye.
+// * **By hand** — the bracket itself (Ross, 5 Nov 2026), sized off the
+//   field with a round more or fewer to taste, every place tapped and given
+//   a player, in any round — a player put in a later round has byes to it
+//   (lib/bracketEditor.ts, the rules). Random and seeded fill the same
+//   bracket, and any place can be changed by hand after.
 //
 // The draw can be made now, left for later, or **set for a date and a time**
 // it goes live (Ross, 5 Nov 2026) — a draw built now and kept back until
@@ -28,13 +30,18 @@
 
 import { nextPowerOfTwo, seedOrder, MIN_PLAYERS, MAX_BRACKET } from './matchplay'
 import { irishInstant } from './irishTime'
+import {
+  MAX_ROUNDS, addRound, emptyLayout, filledLayout, grownTo, layoutIssue, layoutSlots, mayRemoveRound,
+  placeAt, removeRound, roundsFor, withoutLeavers, type BracketLayout,
+} from './bracketEditor'
 
+/** How the bracket was last filled: from a hat, by seed, or by hand from empty. */
 export type DrawMethod = 'random' | 'seeded' | 'manual'
 
 export const DRAW_METHODS: { key: DrawMethod; label: string; hint: string }[] = [
-  { key: 'random', label: 'Random', hint: 'The field drawn out of a hat.' },
-  { key: 'seeded', label: 'Seeded', hint: 'You number the field — 1 and 2 can only meet in the Final.' },
-  { key: 'manual', label: 'Pick the matches', hint: 'You place each player in the draw yourself.' },
+  { key: 'random', label: 'Random', hint: 'Filled from a hat. Tap again to draw again.' },
+  { key: 'seeded', label: 'Seeded', hint: 'You number the field. 1 and 2 meet only in the Final.' },
+  { key: 'manual', label: 'By hand', hint: 'Start empty and put each player in yourself.' },
 ]
 
 /** When the draw is made. */
@@ -74,8 +81,8 @@ export type DrawPlan = {
   order?: string[]
   /** A pre-made draw's first round, place by place by player id (null a bye) — `seeding: 'premade'`. */
   slots?: (string | null)[]
-  /** Its seed numbers, place by place, where it was seeded. */
-  seeds?: number[]
+  /** Its seed numbers, place by place (null where nobody is), where it was seeded. */
+  seeds?: (number | null)[]
   /** When a visit took the job of making it (`claimDue`) — so two visits never both do. */
   claimedAt?: string
 }
@@ -93,8 +100,9 @@ export function parseDrawPlan(raw: unknown): DrawPlan | null {
   const slots = Array.isArray(r.slots) && r.slots.length >= 2 && (r.slots.length & (r.slots.length - 1)) === 0
     && r.slots.every(x => x === null || (typeof x === 'string' && x.length > 0))
     ? r.slots as (string | null)[] : null
-  const seeds = Array.isArray(r.seeds) && slots && r.seeds.length === slots.length && r.seeds.every(n => Number.isInteger(n))
-    ? r.seeds as number[] : null
+  const seeds = Array.isArray(r.seeds) && slots && r.seeds.length === slots.length
+    && r.seeds.every(n => n === null || Number.isInteger(n))
+    ? r.seeds as (number | null)[] : null
   let seeding = AUTO_SEEDINGS.find(s => s.key === r.seeding)?.key ?? 'random'
   if (seeding === 'premade' && !slots) seeding = 'random'
   return {
@@ -229,57 +237,6 @@ export function slotsFromSeeds(order: readonly string[]): { slots: (string | nul
   return { slots: seeds.map(n => order[n - 1] ?? null), seeds }
 }
 
-// ─── Manual ────────────────────────────────────────────────────
-
-/** An empty manual draw, sized off the field so far. */
-export function emptySlots(fieldSize: number): (string | null)[] {
-  return Array(nextPowerOfTwo(Math.max(fieldSize, 2))).fill(null)
-}
-
-/**
- * One player put in one place — taken out of wherever else they were, so
- * nobody is in the draw twice. Null empties the place.
- */
-export function placeInSlot(slots: readonly (string | null)[], index: number, id: string | null): (string | null)[] {
-  const out = slots.map(s => (id !== null && s === id ? null : s))
-  if (index >= 0 && index < out.length) out[index] = id
-  return out
-}
-
-/** The manual draw resized for a field that grew or shrank, keeping who is placed. */
-export function resizeSlots(slots: readonly (string | null)[], fieldSize: number, field: readonly string[]): (string | null)[] {
-  const size = nextPowerOfTwo(Math.max(fieldSize, 2))
-  const inField = new Set(field)
-  const kept = slots.map(s => (s && inField.has(s) ? s : null))
-  if (kept.length === size) return kept
-  if (kept.length < size) return [...kept, ...Array(size - kept.length).fill(null)]
-  // Smaller: keep the placed players, in their order, packed into the new size.
-  const placed = kept.filter((s): s is string => s !== null).slice(0, size)
-  return [...placed, ...Array(size - placed.length).fill(null)]
-}
-
-/** Players not yet in the manual draw. */
-export function unplaced(slots: readonly (string | null)[], field: readonly string[]): string[] {
-  const placed = new Set(slots.filter(Boolean))
-  return field.filter(id => !placed.has(id))
-}
-
-/**
- * Why this manual draw cannot be saved yet, or null. Everybody entered must
- * be in it, and no match may be empty on both sides — a place left empty is
- * a bye for the player opposite, and a bye needs somebody to walk through.
- */
-export function manualIssue(slots: readonly (string | null)[], field: readonly string[]): string | null {
-  const left = unplaced(slots, field).length
-  if (left > 0) return `${left} ${left === 1 ? 'player is' : 'players are'} not in the draw yet.`
-  for (let i = 0; i < slots.length; i += 2) {
-    if (slots[i] === null && slots[i + 1] === null) {
-      return `Match ${i / 2 + 1} has nobody in it — move a player into it.`
-    }
-  }
-  return null
-}
-
 // ─── In play ───────────────────────────────────────────────────
 
 /**
@@ -303,35 +260,92 @@ export type DrawDraft = {
   method: DrawMethod
   /** The field in order: shuffled for random, numbered for seeded. */
   order: string[]
-  /** The manual layout, place by place. */
-  slots: (string | null)[]
+  /** The bracket as laid out on screen (lib/bracketEditor.ts). */
+  layout: BracketLayout
+  /**
+   * Changed by hand since it was filled. Until then a random or seeded
+   * bracket is filled afresh from its order whenever the field or the rounds
+   * change; after, it is the organiser's and only ever changed by them.
+   */
+  edited?: boolean
 }
 
-/** A fresh draft for this field: random, in the order it was entered. */
-export function newDraft(field: readonly string[], method: DrawMethod = 'random'): DrawDraft {
-  return { method, order: [...field], slots: emptySlots(field.length) }
+/** A fresh draft for this field: the bracket it needs, empty (Ross: start with the bracket). */
+export function newDraft(field: readonly string[], method: DrawMethod = 'manual'): DrawDraft {
+  const rounds = roundsFor(field.length)
+  return { method, order: [...field], layout: method === 'manual' ? emptyLayout(rounds) : filledLayout(rounds, field) }
 }
 
-/** The draft lined up with the field as it now stands (somebody added or taken out). */
+const filledFromOrder = (d: DrawDraft) => d.method !== 'manual' && !d.edited
+
+/**
+ * The draft lined up with the field as it now stands (somebody added or
+ * taken out): never fewer places than players, and a bracket still as it
+ * was filled filled again from its order.
+ */
 export function syncDraft(draft: DrawDraft, field: readonly string[]): DrawDraft {
-  return {
-    method: draft.method,
-    order: reconcileOrder(draft.order, field),
-    slots: resizeSlots(draft.slots, field.length, field),
-  }
+  const order = reconcileOrder(draft.order, field)
+  const rounds = Math.max(draft.layout.rounds, roundsFor(field.length))
+  if (filledFromOrder(draft)) return { ...draft, order, layout: filledLayout(rounds, order) }
+  return { ...draft, order, layout: grownTo(withoutLeavers(draft.layout, field), rounds) }
+}
+
+/** The bracket filled at random, again: a new shuffle every time. */
+export function drawnAtRandom(draft: DrawDraft, field: readonly string[], rand: () => number = Math.random): DrawDraft {
+  const order = shuffled(field, rand)
+  return { method: 'random', order, layout: filledLayout(draft.layout.rounds, order), edited: false }
+}
+
+/** The bracket filled by seed, from this order. */
+export function drawnBySeed(draft: DrawDraft, order: readonly string[]): DrawDraft {
+  return { method: 'seeded', order: [...order], layout: filledLayout(draft.layout.rounds, order), edited: false }
+}
+
+/** The bracket emptied, its rounds kept, to be filled by hand. */
+export function clearedDraft(draft: DrawDraft): DrawDraft {
+  return { method: 'manual', order: draft.order, layout: emptyLayout(draft.layout.rounds), edited: false }
+}
+
+/** One place changed by hand (lib/bracketEditor.ts `placeAt`). */
+export function placedInDraft(draft: DrawDraft, r: number, c: number, id: string | null): DrawDraft {
+  const layout = placeAt(draft.layout, r, c, id)
+  return layout === draft.layout ? draft : { ...draft, layout, edited: true }
+}
+
+/** Whether the **+** or **−** beside the rounds can be pressed. */
+export function mayChangeRounds(draft: DrawDraft, delta: 1 | -1, fieldSize: number): boolean {
+  const R = draft.layout.rounds
+  if (delta > 0) return R < MAX_ROUNDS
+  if (filledFromOrder(draft)) return R > 1 && 2 ** (R - 1) >= fieldSize
+  return mayRemoveRound(draft.layout, fieldSize)
+}
+
+/**
+ * A round more or fewer. A bracket still as it was filled is filled again at
+ * the new size — a bigger one gives the top of the order byes through more
+ * rounds; one laid out by hand keeps everybody where they stand as seen from
+ * the Final (lib/bracketEditor.ts `addRound`, `removeRound`).
+ */
+export function withRounds(draft: DrawDraft, delta: 1 | -1, fieldSize: number): DrawDraft {
+  if (!mayChangeRounds(draft, delta, fieldSize)) return draft
+  if (filledFromOrder(draft)) return { ...draft, layout: filledLayout(draft.layout.rounds + delta, draft.order) }
+  return { ...draft, layout: delta > 0 ? addRound(draft.layout) : removeRound(draft.layout, fieldSize) }
+}
+
+/** A seeded draft's seed number for a player, or null. */
+export function seedOf(draft: DrawDraft, id: string | null): number | null {
+  if (draft.method !== 'seeded' || !id) return null
+  const at = draft.order.indexOf(id)
+  return at === -1 ? null : at + 1
 }
 
 /** The first round the draft makes, and its seed numbers when it is seeded. */
-export function draftSlots(draft: DrawDraft): { slots: (string | null)[]; seeds: number[] | null } {
-  if (draft.method === 'manual') return { slots: [...draft.slots], seeds: null }
-  const { slots, seeds } = slotsFromSeeds(draft.order)
-  return { slots, seeds: draft.method === 'seeded' ? seeds : null }
+export function draftSlots(draft: DrawDraft): { slots: (string | null)[]; seeds: (number | null)[] | null } {
+  const slots = layoutSlots(draft.layout)
+  return { slots, seeds: draft.method === 'seeded' ? slots.map(id => seedOf(draft, id)) : null }
 }
 
-/** Why this draft cannot be saved, or null when it can. */
+/** Why this draft cannot be saved, or null when it can. Hand it a synced draft. */
 export function draftIssue(draft: DrawDraft, field: readonly string[], ceiling: number = MAX_BRACKET): string | null {
-  const count = drawCountIssue(field.length, ceiling)
-  if (count) return count
-  if (draft.method === 'manual') return manualIssue(draft.slots, field)
-  return null
+  return drawCountIssue(field.length, ceiling) ?? layoutIssue(draft.layout, field)
 }

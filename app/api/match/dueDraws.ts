@@ -7,6 +7,7 @@ import { parseBracketSetup, rawDrawPlan } from '@/lib/bracketSetup'
 import {
   byHandicap, drawCountIssue, drawDue, premadeSlots, reconcileOrder, shuffled, slotsFromSeeds,
 } from '@/lib/bracketDraw'
+import { slotsIssue } from '@/lib/bracketEditor'
 import { fetchEntrants } from '@/lib/matchplayStore'
 import { readDrawState, writeDraw } from '@/lib/drawStore'
 
@@ -41,7 +42,7 @@ export async function makeDueDraw(admin: SupabaseClient, trip: DueTrip, now: Dat
   const field = entrants.map(e => e.id)
 
   let slots: (string | null)[]
-  let seeds: number[] | null
+  let seeds: (number | null)[] | null
   if (plan.seeding === 'premade' && plan.slots) {
     slots = premadeSlots(plan.slots, field)
     seeds = plan.seeds ?? null
@@ -54,7 +55,10 @@ export async function makeDueDraw(admin: SupabaseClient, trip: DueTrip, now: Dat
     slots = made.slots
     seeds = plan.seeding === 'random' ? null : made.seeds
   }
+  // A pre-made draw that lost a whole half to players leaving cannot be
+  // built — said, never thrown on every visit.
   const issue = drawCountIssue(slots.filter(Boolean).length, parseBracketSetup(trip.bracket_setup)?.size ?? MAX_BRACKET)
+    ?? slotsIssue(slots)
   if (issue) return { tripId: trip.id, outcome: 'skipped', why: issue }
   if (dryRun) return { tripId: trip.id, outcome: 'would draw' }
 

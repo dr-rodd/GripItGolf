@@ -5,13 +5,14 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
-  describeDrawPlan, draftIssue, draftSlots, newDraft, syncDraft,
-  type DrawEntrant, type DrawPlan,
+  describeDrawPlan, draftIssue, draftSlots, newDraft, premadeSlots, syncDraft,
+  type DrawDraft, type DrawEntrant, type DrawPlan,
 } from '@/lib/bracketDraw'
 import { describeShortDate, describeTime } from '@/lib/itinerary'
 import { todayString } from '@/lib/tripStatus'
 import type { EntrantKind } from '@/lib/matchplayEntrants'
 import type { DrawState } from '@/lib/drawStore'
+import { layoutFromSlots } from '@/lib/bracketEditor'
 import { buildsNow } from '@/app/components/BracketDrawer'
 import DrawPlanner, { type DrawPlannerValue } from '@/app/components/DrawPlanner'
 import { buttonClass, cardClass } from '@/app/components/ui'
@@ -42,9 +43,7 @@ export default function DrawClient({ tripId, tripCode, kind, entrants, ceiling, 
       at: plan?.at ?? '20:00',
       seeding: plan?.seeding ?? 'random',
     },
-    draft: plan?.seeding === 'premade' && plan.slots
-      ? { method: 'manual', order: [...field], slots: plan.slots.map(id => (id && field.includes(id) ? id : null)) }
-      : newDraft(field),
+    draft: plan?.seeding === 'premade' && plan.slots ? premadeDraft(plan, field) : newDraft(field),
   }))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -155,4 +154,25 @@ export default function DrawClient({ tripId, tripCode, kind, entrants, ceiling, 
       {error && <p className="text-rust-deep text-sm leading-snug">{error}</p>}
     </div>
   )
+}
+
+/**
+ * A pre-made draw read back into the bracket, as it was laid out — its seed
+ * numbers kept where it was seeded, anybody who has left since gone from it.
+ */
+function premadeDraft(plan: DrawPlan, field: string[]): DrawDraft {
+  const slots = premadeSlots(plan.slots ?? [], field)
+  const seeded = (plan.seeds ?? []).some(n => n !== null)
+  const order = seeded
+    ? slots.map((id, i) => ({ id, n: plan.seeds?.[i] ?? null }))
+      .filter((x): x is { id: string; n: number } => x.id !== null && x.n !== null)
+      .sort((a, b) => a.n - b.n).map(x => x.id)
+    : []
+  const known = new Set(order)
+  return {
+    method: seeded ? 'seeded' : 'manual',
+    order: [...order, ...field.filter(id => !known.has(id))],
+    layout: layoutFromSlots(slots),
+    edited: true,
+  }
 }
