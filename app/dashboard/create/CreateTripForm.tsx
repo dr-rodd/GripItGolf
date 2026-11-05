@@ -325,6 +325,12 @@ export default function CreateTripForm({ matchPlay = false }: {
     }
 
     // 1. Trip
+    // The players' ids, given now — before the trip row, which carries a
+    // match play event's pre-made draw by them (CreationDraw `creationPlan`),
+    // and so a draw made now can name the players.
+    const validPlayers = players.filter(p => p.name.trim())
+    const idFor = new Map(validPlayers.map(p => [drawKey(p.name), crypto.randomUUID()]))
+
     const tripRow: Record<string, unknown> = {
       name: tripName.trim(),
       slug: code.toLowerCase(),
@@ -365,7 +371,7 @@ export default function CreateTripForm({ matchPlay = false }: {
     // A match play event says so from the start (lib/bracketSetup.ts), so
     // its leaderboard tab opens the bracket and the organiser's Format card
     // finishes a knockout rather than asking what it is.
-    if (isTournament && matchPlay) tripRow.bracket_setup = knockoutSeed('standalone', creationPlan(draw))
+    if (isTournament && matchPlay) tripRow.bracket_setup = knockoutSeed('standalone', creationPlan(draw, drawEntrants, idFor))
 
     // Events only, and only when a toggle was actually flipped — nothing
     // opened writes nothing, so creation still lands before migration 049.
@@ -412,9 +418,6 @@ export default function CreateTripForm({ matchPlay = false }: {
     // the field is anything but a player.
     const firstIsOrganiser = !isTournament || organiserPlaying
 
-    const validPlayers = players.filter(p => p.name.trim())
-    // Ids given here, so a draw made now can name the players (CreationDraw).
-    const idFor = new Map(validPlayers.map(p => [drawKey(p.name), crypto.randomUUID()]))
     // `handicap` is nullable now: a box left empty is a handicap nobody has
     // given yet, not scratch — see `isHandicapPending`. It used to be
     // `?? 0`, which turned the one player the organiser was least sure

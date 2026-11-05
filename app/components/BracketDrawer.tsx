@@ -268,17 +268,24 @@ function Side({ name, seed, bye, right = false }: { name: string; seed: number |
 
 // ─── When ──────────────────────────────────────────────────────
 
-export type DrawTimingValue = { when: DrawWhen; on: string; seeding: AutoSeeding }
+export type DrawTimingValue = { when: DrawWhen; on: string; at: string; seeding: AutoSeeding }
+
+/** A draw that is built on screen now: drawn now, or pre-made for its date. */
+export const buildsNow = (t: Pick<DrawTimingValue, 'when' | 'seeding'>) =>
+  t.when === 'now' || (t.when === 'date' && t.seeding === 'premade')
 
 /**
- * When the draw is made — now, later from the organiser area, or by itself
- * overnight on a date, at random, by handicap or in the order set here.
- * `now` is offered only where there is a field to draw from.
+ * When the draw is made (Ross, 5 Nov 2026) — **Draw now**, from the current
+ * field; **Draw later**, leaving time for more players to enter; or **Set
+ * date**, a day and the time it goes live, pre-made now or allocated then
+ * from whoever has joined. `now` is offered only where there is a field to
+ * draw from; `later` and a date only where nothing is drawn yet.
  */
-export function DrawTiming({ value, onChange, allowNow = true, allowOrder = false, min }: {
+export function DrawTiming({ value, onChange, allowNow = true, allowLater = true, allowOrder = false, min }: {
   value: DrawTimingValue
   onChange: (next: DrawTimingValue) => void
   allowNow?: boolean
+  allowLater?: boolean
   /** "My order" is offered when a seeded order has been set. */
   allowOrder?: boolean
   min?: string
@@ -286,7 +293,7 @@ export function DrawTiming({ value, onChange, allowNow = true, allowOrder = fals
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-2" role="radiogroup" aria-label="When the draw is made">
-        {DRAW_TIMINGS.filter(t => allowNow || t.key !== 'now').map(t => (
+        {DRAW_TIMINGS.filter(t => (allowNow || t.key !== 'now') && (allowLater || t.key === 'now')).map(t => (
           <button
             key={t.key}
             type="button"
@@ -302,7 +309,20 @@ export function DrawTiming({ value, onChange, allowNow = true, allowOrder = fals
       </div>
       {value.when === 'date' && (
         <div className="space-y-3">
-          <DateField label="The day of the draw" value={value.on} onChange={on => onChange({ ...value, on })} min={min} />
+          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+            <DateField label="The day of the draw" value={value.on} onChange={on => onChange({ ...value, on })} min={min} />
+            <div className="min-w-0">
+              <label className={FIELD_LABEL} htmlFor="draw-live-at">Goes live at</label>
+              <input
+                id="draw-live-at"
+                type="time"
+                value={value.at}
+                onChange={e => onChange({ ...value, at: e.target.value })}
+                className={`${FIELD} min-w-0 max-w-full`}
+              />
+            </div>
+          </div>
+          <p className="t-cap text-ink/65 -mt-1">Irish time. The event&apos;s home screen counts down to it.</p>
           <div>
             <p className={FIELD_LABEL}>How it is drawn</p>
             <div className="flex flex-wrap gap-1.5">

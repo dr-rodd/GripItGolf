@@ -5,21 +5,23 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
-  describeDrawPlan, draftIssue, draftSlots, newDraft,
-  type DrawDraft, type DrawEntrant, type DrawPlan,
+  describeDrawPlan, draftIssue, draftSlots, newDraft, syncDraft,
+  type DrawEntrant, type DrawPlan,
 } from '@/lib/bracketDraw'
-import { describeShortDate } from '@/lib/itinerary'
+import { describeShortDate, describeTime } from '@/lib/itinerary'
 import { todayString } from '@/lib/tripStatus'
 import type { EntrantKind } from '@/lib/matchplayEntrants'
 import type { DrawState } from '@/lib/drawStore'
-import BracketDrawer, { DrawTiming, type DrawTimingValue } from '@/app/components/BracketDrawer'
-import { SectionHeader, buttonClass, cardClass } from '@/app/components/ui'
+import { buildsNow } from '@/app/components/BracketDrawer'
+import DrawPlanner, { type DrawPlannerValue } from '@/app/components/DrawPlanner'
+import { buttonClass, cardClass } from '@/app/components/ui'
 
 /**
- * The organiser's draw: made now from the field as it stands — random,
- * seeded, or placed by hand — or planned for a date and made overnight
- * (lib/bracketDraw.ts). A draw not yet in play can be made again, which
- * replaces it; one in play is not touched from here.
+ * The organiser's draw — the same screen creation shows (`DrawPlanner`;
+ * Ross, 5 Nov 2026): **Draw now** from the field as it stands, **Draw
+ * later**, or **Set date** for the moment it goes live, pre-made now or
+ * allocated then. One button, saying what it does. A draw not yet in play
+ * can be made again, which replaces it; one in play is not touched from here.
  */
 export default function DrawClient({ tripId, tripCode, kind, entrants, ceiling, state, plan }: {
   tripId: string
@@ -32,20 +34,33 @@ export default function DrawClient({ tripId, tripCode, kind, entrants, ceiling, 
 }) {
   const router = useRouter()
   const field = entrants.map(e => e.id)
-  const [draft, setDraft] = useState<DrawDraft>(() => newDraft(field))
-  const [timing, setTiming] = useState<DrawTimingValue>({
-    when: plan?.when === 'date' ? 'date' : 'later',
-    on: plan?.on ?? '',
-    seeding: plan?.seeding ?? 'random',
-  })
+  const today = todayString(new Date())
+  const [value, setValue] = useState<DrawPlannerValue>(() => ({
+    timing: {
+      when: state.drawn || field.length < 2 ? (state.drawn ? 'now' : 'later') : plan?.when === 'date' ? 'date' : 'later',
+      on: plan?.on ?? '',
+      at: plan?.at ?? '20:00',
+      seeding: plan?.seeding ?? 'random',
+    },
+    draft: plan?.seeding === 'premade' && plan.slots
+      ? { method: 'manual', order: [...field], slots: plan.slots.map(id => (id && field.includes(id) ? id : null)) }
+      : newDraft(field),
+  }))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
-  const issue = draftIssue(draft, field, ceiling)
+  const t = value.timing
+  const draft = syncDraft(value.draft, field)
+  const draftProblem = buildsNow(t) ? draftIssue(draft, field, ceiling) : null
+  const dateProblem = t.when !== 'date' ? null
+    : !t.on ? 'Choose the day of the draw.'
+      : t.on < today ? 'The day of the draw has passed.'
+        : !t.at ? 'Choose the time it goes live.' : null
+  const issue = draftProblem ?? dateProblem
   const byId = new Map(entrants.map(e => [e.id, e]))
+  const describe = (p: DrawPlan | null) => describeDrawPlan(p, d => describeShortDate(d) ?? d, describeTime)
 
   async function makeDraw() {
-    if (issue) return
     if (state.drawn && !window.confirm('Make the draw again? The draw already made is replaced.')) return
     setBusy(true)
     setError(null)
@@ -65,19 +80,23 @@ export default function DrawClient({ tripId, tripCode, kind, entrants, ceiling, 
   }
 
   async function savePlan() {
-    const next: DrawPlan | null = timing.when === 'date'
-      ? {
-          when: 'date', on: timing.on, seeding: timing.seeding,
-          ...(timing.seeding === 'order' ? { order: draft.order } : {}),
-        }
-      : { when: 'later' }
-    if (next.when === 'date' && !next.on) { setError('Choose the day of the draw.'); return }
+    let next: DrawPlan
+    if (t.when === 'date') {
+      const { slots, seeds } = draftSlots(draft)
+      next = {
+        when: 'date', on: t.on, at: t.at, seeding: t.seeding,
+        ...(t.seeding === 'order' ? { order: draft.order } : {}),
+        ...(t.seeding === 'premade' ? { slots, ...(seeds ? { seeds } : {}) } : {}),
+      }
+    } else {
+      next = { when: 'later' }
+    }
     setBusy(true)
     setError(null)
     try {
       const { saveDrawPlan } = await import('@/lib/drawStore')
       await saveDrawPlan(supabase, tripId, next)
-      setSaved(describeDrawPlan(next, d => describeShortDate(d) ?? d))
+      setSaved(describe(next))
       router.refresh()
     } catch (e) {
       setError((e as Error).message || 'Could not save when the draw is made — try again.')
@@ -100,48 +119,39 @@ export default function DrawClient({ tripId, tripCode, kind, entrants, ceiling, 
   }
 
   return (
-    <div className="space-y-8">
-      {state.drawn && (
+    <div className="space-y-6">
+      {state.drawn ? (
         <p className={`p-4 text-sm text-ink/80 leading-snug ${cardClass('flat')}`}>
           A draw is made and nothing has been played yet. Making it again replaces it.{' '}
           <Link href={`/trip/${tripCode}/matchplay`} className="text-accent-deep">See it →</Link>
         </p>
+      ) : (
+        <p className="text-ink/65 text-sm leading-snug">
+          {entrants.length} {entrants.length === 1 ? 'entrant' : 'entrants'} so far. {plan ? describe(plan) : ''}
+        </p>
       )}
 
-      <section>
-        <SectionHeader hint={`${entrants.length} ${entrants.length === 1 ? 'entrant' : 'entrants'} so far.`}>
-          Make the draw now
-        </SectionHeader>
-        {entrants.length < 2 ? (
-          <p className="text-ink/65 text-sm leading-snug">Nobody to draw yet — the field needs at least two.</p>
-        ) : (
-          <>
-            <BracketDrawer entrants={entrants} value={draft} onChange={setDraft} />
-            {issue && <p className="t-cap text-rust-deep mt-3">{issue}</p>}
-            <button type="button" disabled={busy || !!issue} onClick={makeDraw} className={`${buttonClass('primary')} mt-4`}>
-              {busy ? 'Drawing…' : state.drawn ? 'Make the draw again' : 'Make the draw'}
-            </button>
-          </>
-        )}
-      </section>
+      <DrawPlanner
+        entrants={entrants}
+        value={value}
+        onChange={v => { setValue(v); setSaved(null) }}
+        issue={issue}
+        today={today}
+        heading={false}
+        allowLater={!state.drawn}
+        allowOrder={draft.method === 'seeded'}
+      />
 
-      {!state.drawn && (
-        <section>
-          <SectionHeader hint={describeDrawPlan(plan, d => describeShortDate(d) ?? d)}>Or make it later</SectionHeader>
-          <DrawTiming
-            value={timing}
-            onChange={v => { setTiming(v); setSaved(null) }}
-            allowNow={false}
-            allowOrder={draft.method === 'seeded'}
-            min={todayString(new Date())}
-          />
-          <button type="button" disabled={busy} onClick={savePlan} className={`${buttonClass('secondary')} mt-4`}>
-            Save when the draw is made
-          </button>
-          {saved && <p className="t-cap text-accent-deep mt-2">Saved. {saved}</p>}
-        </section>
+      {t.when === 'now' ? (
+        <button type="button" disabled={busy || !!issue || field.length < 2} onClick={makeDraw} className={buttonClass('primary')}>
+          {busy ? 'Drawing…' : state.drawn ? 'Make the draw again' : 'Make the draw'}
+        </button>
+      ) : (
+        <button type="button" disabled={busy || !!issue} onClick={savePlan} className={buttonClass('primary')}>
+          {busy ? 'Saving…' : 'Save'}
+        </button>
       )}
-
+      {saved && <p className="t-cap text-accent-deep">Saved. {saved}</p>}
       {error && <p className="text-rust-deep text-sm leading-snug">{error}</p>}
     </div>
   )

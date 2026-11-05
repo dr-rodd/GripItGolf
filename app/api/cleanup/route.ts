@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-admin"
 import { readAllRows } from "@/lib/allRows"
-import { todayString } from "@/lib/tripStatus"
 import { runDueDraws } from "@/app/api/match/dueDraws"
 import {
   cardsToClose, deadScoreKeys, activityKey,
@@ -167,12 +166,14 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // ── 3. Draws planned for today ──
-  // A match play event whose draw was set for a date (lib/bracketDraw.ts).
-  // Its own try: a draw that fails costs that draw, never the cleanup.
+  // ── 3. Draws whose moment has come ──
+  // A match play event whose draw was set for a date and time (lib/
+  // bracketDraw.ts) that no visit has made yet — the backstop to the first
+  // visit after it. Its own try: a draw that fails costs that draw, never
+  // the cleanup.
   let draws: Awaited<ReturnType<typeof runDueDraws>> = []
   try {
-    draws = await runDueDraws(supabaseAdmin, todayString(new Date()), dryRun)
+    draws = await runDueDraws(supabaseAdmin, new Date(), dryRun)
   } catch (e) {
     console.error("due draws failed:", e)
   }

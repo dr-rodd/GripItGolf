@@ -53,7 +53,7 @@ import { cardClass } from '@/app/components/ui'
 import { parseLeagueSetup, leagueRounds, seriesListing } from '@/lib/leagueSetup'
 import { todayString } from '@/lib/tripStatus'
 import { allowsParticipant } from '@/lib/eventPermissions'
-import { describeShortDate } from '@/lib/itinerary'
+import { describeShortDate, describeTime } from '@/lib/itinerary'
 import { LockedRoundTile, TbcRoundTile, type LeagueDoor } from './LeagueRounds'
 import AddToField from './AddToField'
 import { readKnockout } from './knockout'
@@ -62,7 +62,9 @@ import { myNextMatch } from '@/lib/knockoutPortal'
 import { NextMatchCard } from './KnockoutViews'
 import MatchDetails from './MatchDetails'
 import { readContacts } from './matchContacts'
-import { isKnockoutEvent } from '@/lib/bracketSetup'
+import { isKnockoutEvent, rawDrawPlan } from '@/lib/bracketSetup'
+import { drawLiveAt } from '@/lib/bracketDraw'
+import DrawCountdown from './DrawCountdown'
 import CourseName from '@/app/components/CourseName'
 import { IconChevronRight } from '@/app/components/icons'
 
@@ -836,6 +838,20 @@ export default async function TripPage({ params, searchParams }: {
           noun={isEvent ? 'event' : 'trip'}
         />
 
+        {/* A draw set for a date and a time, counted down to while it is
+            still to come (Ross, 5 Nov 2026) — at nought it is made, and the
+            next-match card below takes over. */}
+        {koView && koView.view.matches.length === 0 && (() => {
+          const plan = rawDrawPlan((trip as { bracket_setup?: unknown }).bracket_setup)
+          const live = drawLiveAt(plan)
+          return live && plan?.on ? (
+            <DrawCountdown
+              tripCode={tripCode}
+              liveAt={live.toISOString()}
+              when={`${describeShortDate(plan.on) ?? plan.on}${plan.at ? ` at ${describeTime(plan.at)}` : ''}`}
+            />
+          ) : null
+        })()}
         {koView && <NextMatchCard tripCode={tripCode} view={koView.view} live={koView.live} today={todayString(new Date())} />}
         {koView && me && myDetails && (
           <MatchDetails

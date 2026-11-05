@@ -16,7 +16,10 @@ import {
 import { readScores, readLiveScores, readRoundHandicaps } from '@/lib/scoreReads'
 import { readBracket, type MatchReading } from '@/lib/matchResults'
 import { type QuotaScale } from '@/lib/quota'
-import { drawDeadlines, isKnockoutEvent, parseBracketSetup } from '@/lib/bracketSetup'
+import { drawDeadlines, isKnockoutEvent, parseBracketSetup, rawDrawPlan } from '@/lib/bracketSetup'
+import { drawLiveAt } from '@/lib/bracketDraw'
+import { describeShortDate, describeTime } from '@/lib/itinerary'
+import DrawCountdown from '../DrawCountdown'
 import { todayString } from '@/lib/tripStatus'
 import { isEvent } from '@/lib/eventHub'
 import BackButton from '@/app/components/BackButton'
@@ -200,6 +203,17 @@ export default async function MatchplayPage({
             title="Match play isn't switched on"
             body="Turn it on in Trip Setup, then draw the bracket."
             tripCode={tripCode}
+          />
+        ) : matches.length === 0 && drawLiveAt(rawDrawPlan(rawSetup)) ? (
+          // A draw set for its moment: counted down to here as on the home
+          // screen, and made when it comes (Ross, 5 Nov 2026).
+          <DrawCountdown
+            tripCode={tripCode}
+            liveAt={drawLiveAt(rawDrawPlan(rawSetup))!.toISOString()}
+            when={(() => {
+              const plan = rawDrawPlan(rawSetup)!
+              return `${describeShortDate(plan.on!) ?? plan.on}${plan.at ? ` at ${describeTime(plan.at)}` : ''}`
+            })()}
           />
         ) : matches.length === 0 ? (
           <EmptyState

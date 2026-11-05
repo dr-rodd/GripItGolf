@@ -85,7 +85,7 @@ section('The draw seeded from that event\'s leaderboard (Ross, 4 Nov 2026)')
   ok(route.includes("lb.audience === 'individual' && lb.competition === 'league'") && route.includes('buildRows(lb, ctx).map(r => r.id)')
     && route.includes('publicHash &&'),
     'the standings are each individual table\'s own order, from the board\'s own rows, behind the event\'s public PIN where it has one')
-  const draw = read('app/dashboard/create/CreationDraw.tsx')
+  const draw = read('app/components/DrawPlanner.tsx')
   ok(draw.includes('Seed from {from ?? \'the other event\'}&apos;s leaderboard') && draw.includes("method: 'seeded', order: byStandings(draft.order, board.order)")
     && draw.includes('Pick which leaderboard'),
     'the draw step offers it, a leaderboard to pick where there are several, and seeds the list from it')

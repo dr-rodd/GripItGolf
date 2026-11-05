@@ -167,6 +167,11 @@ export default function CreateKnockoutForm() {
     // 1. The trip row. No rounds and no itinerary follow — the golf comes
     // later, when bracket rounds are linked to real days — so the row is
     // the whole of the structure this door creates.
+    // The players' ids, given now — before the event row, which carries a
+    // pre-made draw's places by them (CreationDraw `creationPlan`).
+    const validPlayers = players.filter(p => p.name.trim())
+    const idFor = new Map(validPlayers.map(p => [drawKey(p.name), crypto.randomUUID()]))
+
     const tripRow: Record<string, unknown> = {
       name: name.trim(),
       slug: code.toLowerCase(),
@@ -185,7 +190,7 @@ export default function CreateKnockoutForm() {
       // The format and the shape, seeded now so the bracket form knows what
       // it is finishing. Not a complete setup — parseBracketSetup rightly
       // returns null on it — and never claimed to be one.
-      bracket_setup: knockoutSeed('continuous', creationPlan(draw)),
+      bracket_setup: knockoutSeed('continuous', creationPlan(draw, drawEntrants, idFor)),
       // The bracket's board, so the event plays from the moment it exists —
       // without it the bracket said match play was not switched on.
       leaderboards: knockoutBoards(),
@@ -211,8 +216,6 @@ export default function CreateKnockoutForm() {
 
     // 2. Players — same shape as every creation door; no round_handicaps
     // because there are no rounds yet.
-    const validPlayers = players.filter(p => p.name.trim())
-    const idFor = new Map(validPlayers.map(p => [drawKey(p.name), crypto.randomUUID()]))
     if (validPlayers.length > 0) {
       const { data: insertedPlayers, error: playersErr } = await supabase
         .from('players')

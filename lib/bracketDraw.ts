@@ -14,15 +14,20 @@
 //   so far, and each empty place is tapped and given a player. A place left
 //   empty is a bye.
 //
-// The draw can be made at creation, left for later, or made **on a date** by
-// the nightly job (`drawDue`) — random, or seeded by the field's handicaps,
-// or by an order the organiser already set with late joiners after it.
+// The draw can be made now, left for later, or **set for a date and a time**
+// it goes live (Ross, 5 Nov 2026) — a draw built now and kept back until
+// then (`premade`), or one made at that moment from whoever has joined: at
+// random, by handicap, or in an order the organiser set with late joiners
+// after it. The first visit after the moment makes it (`/api/match/draw-due`,
+// one visit only — `claimDue`), the nightly job is the backstop, and the
+// event's home screen counts down to it (`drawLiveAt`).
 //
 // **Editing a draw later is editing its first-round slots** (the next phase:
 // docs/event-use-cases.md) — which is why every method produces slots
 // rather than a finished tree. Pure. No I/O.
 
 import { nextPowerOfTwo, seedOrder, MIN_PLAYERS, MAX_BRACKET } from './matchplay'
+import { irishInstant } from './irishTime'
 
 export type DrawMethod = 'random' | 'seeded' | 'manual'
 
@@ -36,17 +41,21 @@ export const DRAW_METHODS: { key: DrawMethod; label: string; hint: string }[] = 
 export type DrawWhen = 'now' | 'later' | 'date'
 
 export const DRAW_TIMINGS: { key: DrawWhen; label: string; hint: string }[] = [
-  { key: 'now', label: 'Make the draw now', hint: 'From the players entered so far.' },
-  { key: 'later', label: 'Later', hint: 'From the organiser area, once the field is in.' },
-  { key: 'date', label: 'On a date', hint: 'Made by itself overnight, from whoever has joined by then.' },
+  { key: 'now', label: 'Draw now', hint: 'Use the current field.' },
+  { key: 'later', label: 'Draw later', hint: 'Allows time for more players to enter.' },
+  { key: 'date', label: 'Set date', hint: 'A pre-made draw or random allocation will go live at a time of your choosing.' },
 ]
 
-/** How a draw made on its own, on a date, orders the field. */
-export type AutoSeeding = 'random' | 'handicap' | 'order'
+/**
+ * How a draw set for a date is made: built now and kept back until then
+ * (`premade`), or made at that moment from whoever has joined.
+ */
+export type AutoSeeding = 'premade' | 'random' | 'handicap' | 'order'
 
 export const AUTO_SEEDINGS: { key: AutoSeeding; label: string; hint: string }[] = [
-  { key: 'random', label: 'Random', hint: 'Drawn out of a hat on the night.' },
-  { key: 'handicap', label: 'By handicap', hint: 'Lowest handicap seeded first.' },
+  { key: 'premade', label: 'Pre-made', hint: 'Build the draw now — it stays hidden until it goes live.' },
+  { key: 'random', label: 'Random allocation', hint: 'Drawn at random from whoever has joined by then.' },
+  { key: 'handicap', label: 'By handicap', hint: 'Seeded by handicap, lowest first, from whoever has joined by then.' },
   { key: 'order', label: 'My order', hint: 'The numbering you set, late joiners after by handicap.' },
 ]
 
@@ -56,37 +65,87 @@ export const AUTO_SEEDINGS: { key: AutoSeeding; label: string; hint: string }[] 
  */
 export type DrawPlan = {
   when: 'later' | 'date'
-  /** The day the nightly job makes it — `when: 'date'` only. */
+  /** The day it goes live — `when: 'date'` only. */
   on?: string
+  /** The time it goes live that day, Irish time ("20:00"). Absent is the start of the day. */
+  at?: string
   seeding?: AutoSeeding
   /** Player ids in seed order, for `seeding: 'order'`. */
   order?: string[]
+  /** A pre-made draw's first round, place by place by player id (null a bye) — `seeding: 'premade'`. */
+  slots?: (string | null)[]
+  /** Its seed numbers, place by place, where it was seeded. */
+  seeds?: number[]
+  /** When a visit took the job of making it (`claimDue`) — so two visits never both do. */
+  claimedAt?: string
 }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 
-/** The stored plan, or null — never half of one. */
+/** The stored plan, or null — never half of one. A pre-made one without its draw reads as random. */
 export function parseDrawPlan(raw: unknown): DrawPlan | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const r = raw as Record<string, unknown>
   if (r.when === 'later') return { when: 'later' }
   if (r.when !== 'date' || typeof r.on !== 'string' || !DATE.test(r.on)) return null
-  const seeding = AUTO_SEEDINGS.find(s => s.key === r.seeding)?.key ?? 'random'
   const order = Array.isArray(r.order) ? r.order.filter((x): x is string => typeof x === 'string' && x.length > 0) : []
-  return { when: 'date', on: r.on, seeding, ...(seeding === 'order' && order.length > 0 ? { order } : {}) }
+  const slots = Array.isArray(r.slots) && r.slots.length >= 2 && (r.slots.length & (r.slots.length - 1)) === 0
+    && r.slots.every(x => x === null || (typeof x === 'string' && x.length > 0))
+    ? r.slots as (string | null)[] : null
+  const seeds = Array.isArray(r.seeds) && slots && r.seeds.length === slots.length && r.seeds.every(n => Number.isInteger(n))
+    ? r.seeds as number[] : null
+  let seeding = AUTO_SEEDINGS.find(s => s.key === r.seeding)?.key ?? 'random'
+  if (seeding === 'premade' && !slots) seeding = 'random'
+  return {
+    when: 'date', on: r.on,
+    ...(typeof r.at === 'string' && TIME.test(r.at) ? { at: r.at } : {}),
+    seeding,
+    ...(seeding === 'order' && order.length > 0 ? { order } : {}),
+    ...(seeding === 'premade' && slots ? { slots, ...(seeds ? { seeds } : {}) } : {}),
+    ...(typeof r.claimedAt === 'string' && !Number.isNaN(Date.parse(r.claimedAt)) ? { claimedAt: r.claimedAt } : {}),
+  }
 }
 
-/** Is a dated draw due tonight? Only when nothing has been drawn yet. */
-export function drawDue(plan: DrawPlan | null, today: string, alreadyDrawn: boolean): boolean {
-  return !alreadyDrawn && plan?.when === 'date' && !!plan.on && plan.on <= today
+/** The moment a dated draw goes live — its day and time, Irish time (lib/irishTime.ts). */
+export function drawLiveAt(plan: DrawPlan | null): Date | null {
+  if (plan?.when !== 'date' || !plan.on) return null
+  return irishInstant(plan.on, plan.at ?? '00:00')
 }
 
-/** "Drawn on Sat 14 Nov, by handicap". */
-export function describeDrawPlan(plan: DrawPlan | null, shortDate: (d: string) => string): string {
+/** How long a visit has to make a draw it took on before another may. */
+export const CLAIM_MS = 5 * 60_000
+
+/**
+ * Is a dated draw due to be made? Once its moment has come, only while
+ * nothing is drawn, and not while a visit that took it on in the last few
+ * minutes may still be making it.
+ */
+export function drawDue(plan: DrawPlan | null, now: Date, alreadyDrawn: boolean): boolean {
+  const live = drawLiveAt(plan)
+  if (alreadyDrawn || !live || now < live) return false
+  const claimed = plan?.claimedAt ? Date.parse(plan.claimedAt) : NaN
+  return Number.isNaN(claimed) || now.getTime() - claimed >= CLAIM_MS
+}
+
+/** "Goes live on Sat 14 Nov at 8:00 pm, at random". */
+export function describeDrawPlan(
+  plan: DrawPlan | null, shortDate: (d: string) => string, clock: (t: string) => string = t => t,
+): string {
   if (!plan || plan.when === 'later') return 'Not drawn yet — made from the organiser area.'
-  const how = plan.seeding === 'handicap' ? 'by handicap'
-    : plan.seeding === 'order' ? 'in your order' : 'at random'
-  return `Drawn by itself on ${shortDate(plan.on as string)}, ${how}.`
+  const how = plan.seeding === 'premade' ? 'as you made it'
+    : plan.seeding === 'handicap' ? 'by handicap'
+      : plan.seeding === 'order' ? 'in your order' : 'at random'
+  return `Goes live on ${shortDate(plan.on as string)}${plan.at ? ` at ${clock(plan.at)}` : ''}, ${how}.`
+}
+
+/**
+ * A pre-made draw's places as the field now stands — anybody who has left
+ * since it was made is a bye, never a ghost in the draw.
+ */
+export function premadeSlots(slots: readonly (string | null)[], field: readonly string[]): (string | null)[] {
+  const inField = new Set(field)
+  return slots.map(id => (id && inField.has(id) ? id : null))
 }
 
 // ─── The field ─────────────────────────────────────────────────

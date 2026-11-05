@@ -20,6 +20,8 @@ import {
 } from '../lib/bracketSetup'
 import { hasMatchplay } from '../lib/leaderboards'
 import { entryAllowed, entryCookie, publicPinIssue } from '../lib/publicPin'
+import { DRAW_TIMINGS, newDraft } from '../lib/bracketDraw'
+import { creationPlan, creationDrawIssue } from '../app/dashboard/create/CreationDraw'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -470,11 +472,48 @@ section('The draw: made at creation, from the organiser area, or by itself on a 
   ok(read('app/trip/[tripCode]/organiser/bracket/BracketSetupForm.tsx').includes('...(draw ? { draw } : {})'),
     'the setup form carries the plan through its save')
   const cleanup = read('app/api/cleanup/route.ts')
-  ok(cleanup.includes('runDueDraws(supabaseAdmin, todayString(new Date()), dryRun)'), 'the nightly job makes the draws due today')
+  ok(cleanup.includes('runDueDraws(supabaseAdmin, new Date(), dryRun)'), 'the nightly job makes the draws whose moment has come')
   const due = read('app/api/match/dueDraws.ts')
-  ok(due.includes('drawDue(plan, today, state.drawn)') && due.includes('writeDraw(admin'), '  …only where nothing is drawn yet, through the one writer')
+  ok(due.includes('drawDue(plan, now, state.drawn)') && due.includes('writeDraw(admin'), '  …only where nothing is drawn yet, through the one writer')
+  ok(due.includes("q.is('bracket_setup->draw->>claimedAt', null)") && due.includes('await releaseClaim(admin, trip.id, now)'),
+    '  …once: a visit takes the job before drawing, and gives it back if the draw fails')
+  ok(read('app/api/match/draw-due/route.ts').includes('makeDueDraw(admin, trip, new Date(), false)'),
+    'the first visit after the moment makes it, through the same function (Ross, 5 Nov 2026)')
   ok(read('app/trip/[tripCode]/organiser/OrganiserClient.tsx').includes('/organiser/draw'), 'the organiser area has the draw')
   ok(read('app/trip/[tripCode]/organiser/draw/DrawClient.tsx').includes('if (state.inPlay)'), '  …which, once in play, says so rather than offering a redraw')
+}
+
+section('When the draw happens — one screen, and a moment it goes live (Ross, 5 Nov 2026)')
+{
+  eq(DRAW_TIMINGS.map(t => [t.label, t.hint]), [
+    ['Draw now', 'Use the current field.'],
+    ['Draw later', 'Allows time for more players to enter.'],
+    ['Set date', 'A pre-made draw or random allocation will go live at a time of your choosing.'],
+  ], 'the three answers, in his words')
+  const entrants = [{ id: 'ross', name: 'Ross', handicap: 10 }, { id: 'kate', name: 'Kate', handicap: 18 }, { id: 'dave', name: 'Dave', handicap: 4 }]
+  const ids = new Map([['ross', 'p1'], ['kate', 'p2'], ['dave', 'p3']])
+  const premade = {
+    timing: { when: 'date' as const, on: '2026-12-01', at: '20:00', seeding: 'premade' as const },
+    draft: { ...newDraft(['ross', 'kate', 'dave']), method: 'manual' as const, slots: ['ross', null, 'kate', 'dave'] },
+  }
+  eq(creationPlan(premade, entrants, ids), { when: 'date', on: '2026-12-01', at: '20:00', seeding: 'premade', slots: ['p1', null, 'p2', 'p3'] },
+    'a pre-made draw is stored with its plan, place by place by the ids the players are given, until it goes live')
+  eq(creationPlan({ ...premade, timing: { ...premade.timing, seeding: 'random' } }, entrants, ids), { when: 'date', on: '2026-12-01', at: '20:00', seeding: 'random' },
+    '  …a random allocation keeps only its moment')
+  eq(creationDrawIssue({ ...premade, timing: { ...premade.timing, at: '' } }, entrants, '2026-11-05'), 'Choose the time it goes live.',
+    '  …and a date asks the time it goes live')
+  const planner = read('app/components/DrawPlanner.tsx')
+  ok(read('app/dashboard/create/CreationDraw.tsx').includes('export default DrawPlanner')
+    && read('app/trip/[tripCode]/organiser/draw/DrawClient.tsx').includes('<DrawPlanner')
+    && planner.includes('buildsNow(value.timing)'),
+    'creation and the organiser area are one draw screen, the draw built on it now or pre-made for its date')
+  const hub = read('app/trip/[tripCode]/page.tsx')
+  const bracket = read('app/trip/[tripCode]/matchplay/page.tsx')
+  ok(hub.includes('<DrawCountdown') && hub.includes('koView.view.matches.length === 0') && bracket.includes('<DrawCountdown'),
+    'the home screen and the bracket count down to it while it is to come')
+  const countdown = read('app/trip/[tripCode]/DrawCountdown.tsx')
+  ok(countdown.includes("fetch('/api/match/draw-due'") && countdown.includes('router.refresh()'),
+    '  …and at nought ask for it to be made, and show it')
 }
 
 // ─── The public PIN ────────────────────────────────────────────

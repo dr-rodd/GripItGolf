@@ -27,7 +27,7 @@ import {
 } from '../lib/playerColours'
 import { PRESET_COLORS, PRESET_COLOR_NAMES } from '../lib/teamColors'
 import {
-  byHandicap, drawDue, drawInPlay, emptySlots, manualIssue, moveToSeed, parseDrawPlan, placeInSlot,
+  byHandicap, drawDue, drawInPlay, drawLiveAt, emptySlots, manualIssue, moveToSeed, parseDrawPlan, placeInSlot, premadeSlots,
   reconcileOrder, resizeSlots, shuffled, slotsFromSeeds, unplaced, drawCountIssue,
 } from '../lib/bracketDraw'
 import { bracketFromSlots } from '../lib/matchplay'
@@ -768,8 +768,23 @@ guard('draw', () => {
   eq(parseDrawPlan({ when: 'date', on: '2026-11-14', seeding: 'order', order: ['a', 3] }), { when: 'date', on: '2026-11-14', seeding: 'order', order: ['a'] },
     '  …an order of ids only')
   const plan = parseDrawPlan({ when: 'date', on: '2026-11-14' })
-  eq([drawDue(plan, '2026-11-13', false), drawDue(plan, '2026-11-14', false), drawDue(plan, '2026-11-20', false), drawDue(plan, '2026-11-14', true)],
-    [false, true, true, false], 'a dated draw is made on its day or after a missed night — and never over a draw already made')
+  const at = (iso: string) => new Date(iso)
+  eq([drawDue(plan, at('2026-11-13T23:00:00Z'), false), drawDue(plan, at('2026-11-14T00:30:00Z'), false), drawDue(plan, at('2026-11-20T09:00:00Z'), false), drawDue(plan, at('2026-11-14T09:00:00Z'), true)],
+    [false, true, true, false], 'a dated draw with no time is due from the start of its day, or after a missed night — never over a draw already made')
+  // A go-live time (Ross, 5 Nov 2026), Irish time — 8 pm on 14 Nov is 20:00 UTC in winter.
+  const timed = parseDrawPlan({ when: 'date', on: '2026-11-14', at: '20:00', seeding: 'random' })
+  eq(timed?.at, '20:00', 'a dated plan keeps its go-live time')
+  eq(drawLiveAt(timed)?.toISOString(), '2026-11-14T20:00:00.000Z', '  …the moment it goes live, Irish time')
+  eq([drawDue(timed, at('2026-11-14T19:59:00Z'), false), drawDue(timed, at('2026-11-14T20:00:00Z'), false)], [false, true],
+    '  …due from that minute and not before')
+  const claimed = parseDrawPlan({ when: 'date', on: '2026-11-14', at: '20:00', claimedAt: '2026-11-14T20:00:10Z' })
+  eq([drawDue(claimed, at('2026-11-14T20:01:00Z'), false), drawDue(claimed, at('2026-11-14T20:06:00Z'), false)], [false, true],
+    '  …not while a visit that took it on may still be making it, and free again once that visit has plainly died')
+  const premade = parseDrawPlan({ when: 'date', on: '2026-11-14', seeding: 'premade', slots: ['a', null, 'b', 'c'], seeds: [1, 4, 3, 2] })
+  eq([premade?.seeding, premade?.slots, premade?.seeds], ['premade', ['a', null, 'b', 'c'], [1, 4, 3, 2]], 'a pre-made draw keeps its places and seeds')
+  eq(parseDrawPlan({ when: 'date', on: '2026-11-14', seeding: 'premade', slots: ['a', 'b', 'c'] })?.seeding, 'random',
+    '  …and one without a whole draw reads as random rather than half a draw')
+  eq(premadeSlots(['a', null, 'b', 'gone'], ['a', 'b']), ['a', null, 'b', null], '  …anybody who has left since a bye, never a ghost')
 
   // In play
   eq(drawInPlay([{ winner: 'a', aIsBye: false, bIsBye: true }], 0), false, 'a bye is awarded, not played — not in play')
