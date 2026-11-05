@@ -459,7 +459,7 @@ section('The draw: made at creation, from the organiser area, or by itself on a 
   ok(drawer.includes('DRAW_METHODS.map') && drawer.includes('Draw again'), 'random, seeded or by hand, a random draw drawn again')
   ok(drawer.includes('moveToSeed(order, typing.id, n)') && drawer.includes('onPointerDown') && drawer.includes('By handicap') && drawer.includes('Shuffle'),
     'seeded: type a number, drag the handle, start from handicap order or shuffle')
-  ok(drawer.includes('<BracketBoard') && drawer.includes('placedInDraft(value, picking.r, picking.c, id)') && drawer.includes("'Who goes here?'"),
+  ok(drawer.includes('<BracketBoard') && drawer.includes('placedInDraft(value, picking.r, picking.c, id, field.length)') && drawer.includes("'Who goes here?'"),
     'the bracket itself: any place tapped and given a player (Ross, 5 Nov 2026)')
   ok(drawer.includes('const SEARCH_FROM = 32') && drawer.includes('entrants.length > SEARCH_FROM'), '  …with a search box once there are more than 32 names')
   ok(drawer.includes('withRounds(value, -1, field.length)') && drawer.includes('withRounds(value, 1, field.length)'), '  …and a round fewer or more beside its count')

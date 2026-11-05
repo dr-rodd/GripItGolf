@@ -12,7 +12,7 @@ import { describeShortDate, describeTime } from '@/lib/itinerary'
 import { todayString } from '@/lib/tripStatus'
 import type { EntrantKind } from '@/lib/matchplayEntrants'
 import type { DrawState } from '@/lib/drawStore'
-import { layoutFromSlots } from '@/lib/bracketEditor'
+import { keepsShape, layoutFromSlots, optimalShape } from '@/lib/bracketEditor'
 import { buildsNow } from '@/app/components/BracketDrawer'
 import DrawPlanner, { type DrawPlannerValue } from '@/app/components/DrawPlanner'
 import { buttonClass, cardClass } from '@/app/components/ui'
@@ -169,10 +169,14 @@ function premadeDraft(plan: DrawPlan, field: string[]): DrawDraft {
       .sort((a, b) => a.n - b.n).map(x => x.id)
     : []
   const known = new Set(order)
+  const layout = layoutFromSlots(slots)
   return {
     method: seeded ? 'seeded' : 'manual',
     order: [...order, ...field.filter(id => !known.has(id))],
-    layout: layoutFromSlots(slots),
+    layout,
     edited: true,
+    // Locked again only where it still keeps to the best spread — a draw laid
+    // out by hand opens as it was made.
+    locked: keepsShape(layout, optimalShape(field.length)),
   }
 }

@@ -31,8 +31,8 @@
 import { nextPowerOfTwo, seedOrder, MIN_PLAYERS, MAX_BRACKET } from './matchplay'
 import { irishInstant } from './irishTime'
 import {
-  MAX_ROUNDS, addRound, emptyLayout, filledLayout, grownTo, layoutIssue, layoutSlots, mayRemoveRound,
-  placeAt, removeRound, roundsFor, withoutLeavers, type BracketLayout,
+  MAX_ROUNDS, addRound, emptyLayout, filledLayout, grownTo, layoutIssue, layoutSlots, mayPlaceLocked,
+  mayRemoveRound, optimalShape, placeAt, removeRound, roundsFor, withinShape, withoutLeavers, type BracketLayout,
 } from './bracketEditor'
 
 /** How the bracket was last filled: from a hat, by seed, or by hand from empty. */
@@ -268,12 +268,22 @@ export type DrawDraft = {
    * change; after, it is the organiser's and only ever changed by them.
    */
   edited?: boolean
+  /**
+   * Locked to the best spread (Ross, 5 Nov 2026: "a lock symbol, default
+   * locked") — the fewest rounds and only the places a seeded draw's byes
+   * leave (lib/bracketEditor.ts `optimalShape`). Unlocked, any place in any
+   * round, and a round more or fewer. Absent is unlocked.
+   */
+  locked?: boolean
 }
 
-/** A fresh draft for this field: the bracket it needs, empty (Ross: start with the bracket). */
+/** A fresh draft for this field: the bracket it needs, empty and locked (Ross: start with the bracket). */
 export function newDraft(field: readonly string[], method: DrawMethod = 'manual'): DrawDraft {
   const rounds = roundsFor(field.length)
-  return { method, order: [...field], layout: method === 'manual' ? emptyLayout(rounds) : filledLayout(rounds, field) }
+  return {
+    method, order: [...field], locked: true,
+    layout: method === 'manual' ? emptyLayout(rounds) : filledLayout(rounds, field),
+  }
 }
 
 const filledFromOrder = (d: DrawDraft) => d.method !== 'manual' && !d.edited
@@ -285,6 +295,13 @@ const filledFromOrder = (d: DrawDraft) => d.method !== 'manual' && !d.edited
  */
 export function syncDraft(draft: DrawDraft, field: readonly string[]): DrawDraft {
   const order = reconcileOrder(draft.order, field)
+  if (draft.locked) {
+    // Locked keeps to the spread for the field as it now stands: refilled
+    // where it was filled, else everybody outside its places taken out.
+    const shape = optimalShape(field.length)
+    if (filledFromOrder(draft)) return { ...draft, order, layout: filledLayout(shape.rounds, order) }
+    return { ...draft, order, layout: withinShape(withoutLeavers(draft.layout, field), shape) }
+  }
   const rounds = Math.max(draft.layout.rounds, roundsFor(field.length))
   if (filledFromOrder(draft)) return { ...draft, order, layout: filledLayout(rounds, order) }
   return { ...draft, order, layout: grownTo(withoutLeavers(draft.layout, field), rounds) }
@@ -293,30 +310,33 @@ export function syncDraft(draft: DrawDraft, field: readonly string[]): DrawDraft
 /** The bracket filled at random, again: a new shuffle every time. */
 export function drawnAtRandom(draft: DrawDraft, field: readonly string[], rand: () => number = Math.random): DrawDraft {
   const order = shuffled(field, rand)
-  return { method: 'random', order, layout: filledLayout(draft.layout.rounds, order), edited: false }
+  return { ...draft, method: 'random', order, layout: filledLayout(draft.layout.rounds, order), edited: false }
 }
 
 /** The bracket filled by seed, from this order. */
 export function drawnBySeed(draft: DrawDraft, order: readonly string[]): DrawDraft {
-  return { method: 'seeded', order: [...order], layout: filledLayout(draft.layout.rounds, order), edited: false }
+  return { ...draft, method: 'seeded', order: [...order], layout: filledLayout(draft.layout.rounds, order), edited: false }
 }
 
 /** The bracket emptied, its rounds kept, to be filled by hand. */
 export function clearedDraft(draft: DrawDraft): DrawDraft {
-  return { method: 'manual', order: draft.order, layout: emptyLayout(draft.layout.rounds), edited: false }
+  return { ...draft, method: 'manual', layout: emptyLayout(draft.layout.rounds), edited: false }
 }
 
 /** One place changed by hand (lib/bracketEditor.ts `placeAt`). */
-export function placedInDraft(draft: DrawDraft, r: number, c: number, id: string | null): DrawDraft {
+export function placedInDraft(draft: DrawDraft, r: number, c: number, id: string | null, fieldSize?: number): DrawDraft {
+  if (draft.locked && !mayPlaceLocked(draft.layout, optimalShape(fieldSize ?? draft.order.length), r, c)) return draft
   const layout = placeAt(draft.layout, r, c, id)
   return layout === draft.layout ? draft : { ...draft, layout, edited: true }
 }
 
 /** Whether the **+** or **−** beside the rounds can be pressed. */
 export function mayChangeRounds(draft: DrawDraft, delta: 1 | -1, fieldSize: number): boolean {
+  // Locked is the fewest rounds, by definition.
+  if (draft.locked) return false
   const R = draft.layout.rounds
   if (delta > 0) return R < MAX_ROUNDS
-  if (filledFromOrder(draft)) return R > 1 && 2 ** (R - 1) >= fieldSize
+  if (filledFromOrder(draft)) return R > roundsFor(fieldSize)
   return mayRemoveRound(draft.layout, fieldSize)
 }
 
@@ -330,6 +350,15 @@ export function withRounds(draft: DrawDraft, delta: 1 | -1, fieldSize: number): 
   if (!mayChangeRounds(draft, delta, fieldSize)) return draft
   if (filledFromOrder(draft)) return { ...draft, layout: filledLayout(draft.layout.rounds + delta, draft.order) }
   return { ...draft, layout: delta > 0 ? addRound(draft.layout) : removeRound(draft.layout, fieldSize) }
+}
+
+/**
+ * The lock, turned. Unlocking keeps the bracket exactly as it is; locking
+ * brings it back to the best spread — refilled where it was filled, else
+ * anybody outside the spread's places taken out to be placed again.
+ */
+export function withLock(draft: DrawDraft, locked: boolean, field: readonly string[]): DrawDraft {
+  return syncDraft({ ...draft, locked }, field)
 }
 
 /** A seeded draft's seed number for a player, or null. */

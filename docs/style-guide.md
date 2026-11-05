@@ -310,6 +310,7 @@ and the named rules below say what replaces each.
 | Sheet up (`sheet-up`) | A sheet opens | 280ms | ease-out | Instant |
 | Scoring card slide | Next / previous player | 260ms | ease-out | Instant |
 | Place swell | Tapping a place in the draw's bracket, or Seeded | 340ms: the screen of names opened out of the place, and back into it | putt | Simply there, and gone |
+| Seed drag | Dragging a seed by its handle | Follows the finger, floating; the rows it passes slide aside in 200ms, and on letting go it settles into the gap in 200ms | putt | Follows the finger; the rest move and it drops at once |
 | Tee time lift | Releasing a tee sheet + | 340ms scroll to the top, under the header; the time raised to `shadow-floating` | putt | At once |
 | Bracket swipe | Sideways swipe, arrows, dots | Follows the finger; settles in up to 340ms, one round a swipe, the point under the finger held still inside the bracket's box — the page never scrolled while it moves, only once at rest | ease-out | Settles instantly; the drag still follows the finger |
 | Score flash | A live score changed | 400ms colour only | ease-out | Instant |

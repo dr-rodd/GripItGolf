@@ -29,12 +29,14 @@ import { PRESET_COLORS, PRESET_COLOR_NAMES } from '../lib/teamColors'
 import {
   byHandicap, clearedDraft, draftIssue, draftSlots, drawDue, drawInPlay, drawLiveAt, drawnAtRandom, drawnBySeed, mayChangeRounds,
   moveToSeed, newDraft, parseDrawPlan, placedInDraft, premadeSlots, reconcileOrder, shuffled, slotsFromSeeds, syncDraft,
-  withRounds, drawCountIssue,
+  withLock, withRounds, drawCountIssue,
 } from '../lib/bracketDraw'
 import {
   addRound, emptyLayout, filledLayout, layoutFromSlots, layoutIssue, layoutPlaced, layoutSlots, matchShown, mayPlace,
   mayRemoveRound, placeAt, placeState, removeRound, roundsFor, slotsIssue, MAX_ROUNDS,
+  entryNote, keepsShape, lockedState, optimalShape, withinShape,
 } from '../lib/bracketEditor'
+import { dropIndex, makeRoom, settleOffset } from '../lib/dragReorder'
 import { bracketFromSlots } from '../lib/matchplay'
 import { holeOutcomes, cardState, openingHole, shouldWrite, reopenBlocked, playCard, ordinal, extraCourseHole, parseExtraPlan, withExtraHole } from '../lib/matchCard'
 
@@ -790,11 +792,29 @@ guard('draw', () => {
   const thin = addRound(placeAt(placeAt(emptyLayout(2), 0, 0, 'a'), 0, 2, 'b'))
   eq([placeState(thin, 0, 0).kind, placeState(thin, 0, 2), placeState(thin, 1, 1)], ['hidden', { kind: 'open', bye: false }, { kind: 'open', bye: true }],
     '  …and under an empty place, new places to fill')
-  eq(mayRemoveRound(full, 5), false, 'a round fewer than the field needs is refused')
+  eq(mayRemoveRound(full, 5), false, 'a round fewer than the fewest the field fits in is refused')
+  eq([mayRemoveRound(grown, 5), removeRound(grown, 5)], [true, full], '  …the round added comes off again while nobody is in it')
   const loose = placeAt(placeAt(placeAt(placeAt(emptyLayout(3), 0, 0, 'a'), 0, 2, 'b'), 0, 5, 'c'), 0, 7, 'd')
-  eq(mayRemoveRound(loose, 4), true, '  …allowed while no first-round match has two in it')
-  eq(removeRound(loose, 4).cells, [['a', 'b', 'c', 'd'], [null, null]], '  …each lone player moving up to the place their match fed')
-  eq(mayRemoveRound(placeAt(loose, 0, 1, 'e'), 4), false, '  …never with a match of two in the first round')
+  eq(mayRemoveRound(loose, 4), false, '  …and never with anybody in it (Ross: "as long as there is nobody in it")')
+
+  // Locked: the best spread (Ross, 5 Nov 2026)
+  eq(entryNote(22), '22 players: 12 play in the Round of 32, 10 start in the Round of 16.',
+    'the best spread, said: twenty-two is twelve in the Round of 32 and ten a round later')
+  eq(entryNote(16), 'All 16 start in the Round of 16.', '  …a field that fills its round starts together')
+  const s22 = optimalShape(22)
+  const firsts = [...s22.places].filter(k => k.startsWith('0:'))
+  eq([s22.rounds, firsts.length, [...s22.places].filter(k => k.startsWith('1:')).length], [5, 12, 10],
+    '  …the fewest rounds, twelve places in the Round of 32 and ten in the Round of 16')
+  const field22 = Array.from({ length: 22 }, (_, i) => `p${i + 1}`)
+  ok(keepsShape(filledLayout(5, field22), s22) && keepsShape(filledLayout(5, shuffled(field22)), s22),
+    '  …which a seeded fill keeps to, and a random one')
+  const bare = emptyLayout(5)
+  const playedC = Number(firsts[0].split(':')[1])
+  eq([lockedState(bare, s22, 0, 0).kind, lockedState(bare, s22, 1, 0), lockedState(bare, s22, 1, playedC >> 1).kind, lockedState(bare, s22, 2, 0).kind],
+    ['hidden', { kind: 'open', bye: false }, 'winner', 'winner'],
+    '  …locked, a bye\'s first-round place is not there, its place a round on takes a player, and every other place is a result\'s')
+  eq(withinShape(placeAt(placeAt(bare, 0, 4, 'x'), 1, 0, 'y'), s22).cells.flat().filter(Boolean), ['y'],
+    '  …brought to the spread, anybody outside its places is taken out')
 
   // Filled from an order: the bracket, a seeded draw's shape
   eq(layoutSlots(filledLayout(3, ['s1', 's2', 's3', 's4', 's5', 's6'])), ['s1', null, 's4', 's5', 's2', null, 's3', 's6'],
@@ -805,13 +825,14 @@ guard('draw', () => {
   eq(layoutFromSlots(layoutSlots(full)), { rounds: 3, cells: [['b', 'd', 'a', 'e', null, null, null, null], [null, null, null, null], [null, 'c']] },
     'a first round read back as a bracket: each player where they first play')
 
-  // The draft the builder holds
+  // The draft the builder holds — locked to the best spread to start with
   let draft = newDraft(five)
-  eq([draft.method, draft.layout.rounds, layoutPlaced(draft.layout)], ['manual', 3, []], 'the builder starts on the bracket the field needs, empty (Ross: "start with a bracket")')
+  eq([draft.method, draft.locked, draft.layout.rounds, layoutPlaced(draft.layout)], ['manual', true, 3, []],
+    'the builder starts on the bracket the field needs, empty and locked (Ross: "default locked")')
   eq(draftIssue(draft, five), '5 players are not in the draw yet.', '  …which cannot be drawn until it is filled')
   let k = 0
   draft = drawnAtRandom(draft, five, () => [0.9, 0.1, 0.5, 0.3][k++ % 4])
-  eq([draft.method, layoutPlaced(draft.layout).length, draftIssue(draft, five)], ['random', 5, null], 'Random fills it from a hat')
+  eq([draft.method, draft.locked, layoutPlaced(draft.layout).length, draftIssue(draft, five)], ['random', true, 5, null], 'Random fills it from a hat, still locked')
   eq(draftSlots(draft).seeds, null, '  …with no seed numbers: nobody was seeded')
   const sixField = [...five, 'f']
   const synced = syncDraft(draft, sixField)
@@ -819,14 +840,30 @@ guard('draw', () => {
   draft = drawnBySeed(draft, ['e', 'd', 'c', 'b', 'a'])
   eq([draftSlots(draft).slots, draftSlots(draft).seeds], [['e', null, 'b', 'a', 'd', null, 'c', null], [1, null, 4, 5, 2, null, 3, null]],
     'Seeded fills it by the numbered list, and carries the seed numbers')
-  eq([mayChangeRounds(draft, -1, 5), mayChangeRounds(draft, 1, 5)], [false, true], 'the − is off where the field would not fit, the + on')
-  eq(withRounds(draft, 1, 5).layout.cells[2].slice(0, 2), ['e', null], '  …a round more, filled by seed again: seed 1 has byes to the semi-final')
-  const edited = placedInDraft(draft, 0, 2, 'c')
+  eq([mayChangeRounds(draft, -1, 5), mayChangeRounds(draft, 1, 5)], [false, false], 'locked, it is the fewest rounds: no − or +')
+  eq(placedInDraft(draft, 0, 0, 'c', 5), draft, '  …and a place outside the spread takes nobody')
+  const free = withLock(draft, false, five)
+  eq([free.locked, free.layout], [false, draft.layout], 'unlocking keeps the bracket exactly as it is')
+  eq([mayChangeRounds(free, -1, 5), mayChangeRounds(free, 1, 5)], [false, true], '  …the − off at the fewest rounds the field fits in, the + on')
+  const bigger = withRounds(free, 1, 5)
+  eq([bigger.layout.cells[2].slice(0, 2), mayChangeRounds(bigger, -1, 5)], [['e', null], true],
+    '  …a round more, filled by seed again: seed 1 has byes to the semi-final; and the − takes it off')
+  const edited = placedInDraft(free, 0, 2, 'c')
   eq([edited.edited, edited.layout.cells[0][2], edited.layout.cells[2][1]], [true, 'c', null], 'a place changed by hand: the two swap')
   eq(syncDraft(edited, sixField).layout.cells, edited.layout.cells, '  …and from then the field changing never refills it')
   eq(draftIssue(syncDraft(edited, sixField), sixField), '1 player is not in the draw yet.', '  …a newcomer to be placed')
-  eq(withRounds(edited, 1, 5).layout.rounds, 4, '  …a round more keeps it as laid out, under a new first round')
+  const more = withRounds(edited, 1, 5)
+  eq([more.layout.rounds, mayChangeRounds(more, -1, 5)], [4, true], '  …a round more keeps it as laid out, under a new first round, off again while nobody is in it')
   eq(clearedDraft(edited).layout, emptyLayout(3), '"By hand" empties it, its rounds kept')
+  const relocked = withLock(placedInDraft(more, 0, 0, 'f'), true, sixField)
+  eq([relocked.layout.rounds, keepsShape(relocked.layout, optimalShape(6))], [3, true], 'locked again, it comes back to the spread')
+
+  // The seed list's drag (lib/dragReorder.ts): four rows of 60
+  const boxes = { tops: [0, 60, 120, 180], heights: [60, 60, 60, 60] }
+  eq([dropIndex(boxes, 0, 20), dropIndex(boxes, 0, 70), dropIndex(boxes, 0, 130), dropIndex(boxes, 3, -130)], [0, 1, 2, 1],
+    'a dragged seed lands past the middle of the row it has crossed')
+  eq([0, 1, 2, 3].map(i => makeRoom(boxes, 0, 2, i)), [0, -60, -60, 0], '  …the rows it passes slide up to open its gap')
+  eq([settleOffset(boxes, 0, 2), settleOffset(boxes, 3, 1)], [120, -120], '  …and let go, it settles into the gap')
   eq(drawCountIssue(1) !== null && drawCountIssue(33, 32) !== null && drawCountIssue(32, 32) === null, true,
     'a draw needs two, and no more than the setup\'s ceiling')
 

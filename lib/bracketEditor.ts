@@ -21,7 +21,7 @@
 // in it counted from the top. Place (r, c) is fed by the match of places
 // (r − 1, 2c) and (r − 1, 2c + 1), and feeds place (r + 1, c >> 1). Pure.
 
-import { MAX_BRACKET, nextPowerOfTwo, seedOrder } from './matchplay'
+import { MAX_BRACKET, nextPowerOfTwo, roundName, seedOrder } from './matchplay'
 
 export type BracketLayout = {
   /** Rounds in the draw: 2^rounds places in the first, two in the Final. */
@@ -148,27 +148,29 @@ export function addRound(layout: BracketLayout): BracketLayout {
 }
 
 /**
- * Whether the first round can go (the **−**): never the last round, never
- * fewer places than players, and only while no first-round match has two
- * players in it — a lone player moves up to the place their match fed.
+ * Whether the first round can go (the **−**; Ross, 5 Nov 2026: "deletes the
+ * last round as long as there is nobody in it"): only while nobody is in
+ * it, and never below the fewest rounds the whole field fits in.
  */
 export function mayRemoveRound(layout: BracketLayout, fieldSize: number): boolean {
-  if (layout.rounds <= 1 || 2 ** (layout.rounds - 1) < fieldSize) return false
-  const first = layout.cells[0]
-  for (let m = 0; m < first.length; m += 2) if (first[m] && first[m + 1]) return false
-  return true
+  return layout.rounds > roundsFor(fieldSize) && layout.cells[0].every(id => id === null)
 }
 
 /** The draw a round shorter (see `mayRemoveRound`), or as it was where it cannot be. */
 export function removeRound(layout: BracketLayout, fieldSize: number): BracketLayout {
   if (!mayRemoveRound(layout, fieldSize)) return layout
-  const cells = layout.cells.slice(1).map(row => [...row])
-  const first = layout.cells[0]
-  for (let m = 0; m < first.length / 2; m++) {
-    const lone = first[2 * m] ?? first[2 * m + 1]
-    if (lone) cells[0][m] = lone
-  }
-  return { rounds: layout.rounds - 1, cells }
+  return { rounds: layout.rounds - 1, cells: layout.cells.slice(1).map(row => [...row]) }
+}
+
+/**
+ * The bracket at exactly this many rounds: a round more goes in at the
+ * start (`addRound`); a round fewer takes the first round away, anybody in
+ * it out of the draw.
+ */
+export function atRounds(layout: BracketLayout, rounds: number): BracketLayout {
+  let out = grownTo(layout, rounds)
+  while (out.rounds > Math.max(1, rounds)) out = { rounds: out.rounds - 1, cells: out.cells.slice(1).map(row => [...row]) }
+  return out
 }
 
 /** The bracket grown to at least this many rounds, everybody in it kept. */
@@ -246,4 +248,91 @@ export function layoutIssue(layout: BracketLayout, field: readonly string[]): st
   const left = field.filter(id => !placed.has(id)).length
   if (left > 0) return `${left} ${left === 1 ? 'player is' : 'players are'} not in the draw yet.`
   return slotsIssue(layoutSlots(layout))
+}
+
+// ─── Locked: the best spread (Ross, 5 Nov 2026) ────────────────
+//
+// Locked — the bracket's starting state — offers only the places the best
+// draw for the field has: the fewest rounds it fits in, the byes spread as a
+// seeded draw spreads them, so the round of byes and the round played are
+// the only rounds with places in them. Twenty-two players: twelve play in the
+// Round of 32 and ten start in the Round of 16. Unlocked, it is the free
+// bracket above.
+
+/** Which places a locked bracket offers, keyed `${r}:${c}`, over its rounds. */
+export type BracketShape = { rounds: number; places: ReadonlySet<string> }
+
+const placeKey = (r: number, c: number) => `${r}:${c}`
+
+/** The best spread for this many: a first-round match where a seeded draw has one, else its bye's place a round on. */
+export function optimalShape(fieldSize: number): BracketShape {
+  const rounds = roundsFor(fieldSize)
+  const size = 2 ** rounds
+  const order = seedOrder(size)
+  const places = new Set<string>()
+  for (let m = 0; m < size / 2; m++) {
+    const a = order[2 * m] <= fieldSize
+    const b = order[2 * m + 1] <= fieldSize
+    if (a && b) { places.add(placeKey(0, 2 * m)); places.add(placeKey(0, 2 * m + 1)) }
+    else if ((a || b) && rounds > 1) places.add(placeKey(1, m))
+  }
+  return { rounds, places }
+}
+
+/** How the field spreads over its first two rounds. */
+export function entrySplit(fieldSize: number): { rounds: number; playIn: number; byes: number } {
+  const rounds = roundsFor(fieldSize)
+  const byes = 2 ** rounds - fieldSize
+  return { rounds, playIn: fieldSize - byes, byes }
+}
+
+/** "22 players: 12 play in the Round of 32, 10 start in the Round of 16." */
+export function entryNote(fieldSize: number): string {
+  const { rounds, playIn, byes } = entrySplit(fieldSize)
+  const first = roundName(2 ** rounds)
+  if (byes === 0) return `All ${fieldSize} start in the ${first}.`
+  return `${fieldSize} players: ${playIn} play in the ${first}, ${byes} start in the ${roundName(2 ** (rounds - 1))}.`
+}
+
+/**
+ * What a place shows on a locked bracket: a first-round place outside the
+ * spread is not there at all, and any other place outside it is a winner's
+ * — filled by a result, never by a tap.
+ */
+export function lockedState(layout: BracketLayout, shape: BracketShape, r: number, c: number): PlaceState {
+  const offered = shape.places.has(placeKey(r, c))
+  if (r === 0 && !offered) return { kind: 'hidden' }
+  const s = placeState(layout, r, c)
+  if (s.kind === 'open') return offered ? { kind: 'open', bye: false } : { kind: 'winner' }
+  return s
+}
+
+/** Whether a match is drawn on a locked bracket: a first-round one only where the spread plays it. */
+export function lockedMatchShown(layout: BracketLayout, shape: BracketShape, r: number, m: number): boolean {
+  return r === 0 ? shape.places.has(placeKey(0, 2 * m)) : matchShown(layout, r, m)
+}
+
+/** Whether a player can be put in (r, c) on a locked bracket. */
+export function mayPlaceLocked(layout: BracketLayout, shape: BracketShape, r: number, c: number): boolean {
+  return shape.places.has(placeKey(r, c)) && mayPlace(layout, r, c)
+}
+
+/** The bracket brought to the spread: its rounds, and nobody outside the places it offers. */
+export function withinShape(layout: BracketLayout, shape: BracketShape): BracketLayout {
+  const fitted = atRounds(layout, shape.rounds)
+  return {
+    rounds: fitted.rounds,
+    cells: fitted.cells.map((row, r) => row.map((id, c) => (id && shape.places.has(placeKey(r, c)) ? id : null))),
+  }
+}
+
+/** Whether a bracket already keeps to the spread — every player in a place it offers. */
+export function keepsShape(layout: BracketLayout, shape: BracketShape): boolean {
+  return layout.rounds === shape.rounds
+    && layout.cells.every((row, r) => row.every((id, c) => !id || shape.places.has(placeKey(r, c))))
+}
+
+/** The last round with places on a locked bracket — the rounds after it are only results. */
+export function lastEntryRound(shape: BracketShape): number {
+  return [...shape.places].some(k => k.startsWith('1:')) ? 1 : 0
 }
