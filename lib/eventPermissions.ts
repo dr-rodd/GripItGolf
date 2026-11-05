@@ -46,6 +46,8 @@ export const EVENT_PERMISSIONS: {
   label: string
   hint: string
   dflt: boolean
+  /** What it lets the field do, for a style's advice: "Players can …", "Only you …". */
+  does: string
   /**
    * Only means anything on a series, so only a series is asked it
    * (`permissionsFor`). Stored and parsed like every other key regardless —
@@ -57,19 +59,24 @@ export const EVENT_PERMISSIONS: {
   /** Said under the toggle while it is off — what switching it off costs. */
   offWarning?: string
   /**
+   * Its answer on a **Strict** event (Ross, 5 Nov 2026: "ynnyny" down the
+   * match play list). **Relaxed** is every one on, so it needs no column.
+   */
+  strict: boolean
+  /**
    * Asked as the event's tee times question rather than among the toggles
    * (`TEE_SHEET_PERMISSIONS`; Ross, 26 Oct 2026) — two answers that only
    * mean anything together with the sheets themselves.
    */
   teeSheet?: true
 }[] = [
-  { key: 'add_courses', dflt: false,
+  { key: 'add_courses', dflt: false, does: 'add a missing course', strict: true,
     label: 'Participants can add new courses',
     hint: 'Let the field add a missing course to the platform.' },
-  { key: 'add_players', dflt: false,
+  { key: 'add_players', dflt: false, does: 'add players to the field', strict: false,
     label: 'Participants can add new players',
     hint: 'Let anyone with the code put a new name on the roster.' },
-  { key: 'edit_scores', dflt: false,
+  { key: 'edit_scores', dflt: false, does: 'fix a finished scorecard', strict: false,
     label: 'Participants can edit leaderboard entries',
     hint: 'Let players rework a finished scorecard; live scoring stays open either way.' },
   // Placing players — on by default, "medium security" (Ross, 26 Oct 2026):
@@ -77,37 +84,37 @@ export const EVENT_PERMISSIONS: {
   // move or remove only those (`tee_assignments.booked_by`, migration 065);
   // the organiser removes anybody. Off, the organiser places everybody and
   // the sheet is read-only to the rest (lib/teeSheet.ts `mayRemoveBooking`).
-  { key: 'edit_tee_sheet', dflt: true, teeSheet: true,
+  { key: 'edit_tee_sheet', dflt: true, teeSheet: true, does: 'book their own tee times', strict: true,
     label: 'Players book their own tee times',
     hint: 'Each player books themselves and anyone they bring, and can change only those. Off, you place everyone and the sheet is read-only to the rest.' },
   // Making the sheets: off, the wizard asks for the PIN; on, anyone with
   // the code may make or change a round's sheet — a casual event nobody
   // runs, with an Edit button on the Tee times tab.
-  { key: 'set_tee_sheets', dflt: false, teeSheet: true,
+  { key: 'set_tee_sheets', dflt: false, teeSheet: true, does: 'open the tee sheets', strict: false,
     label: 'Anyone can open the tee sheets',
     hint: 'For a casual event nobody runs: open or change a round\'s tee sheet without the PIN.' },
   // Joining a tag is a different verb from forming a team: a tag board's
   // `teamPick: 'self'` cousin lets the field CREATE teams on that board's
   // sheet, while this only lets a claimed player join one of the tags the
   // organiser has already made (lib/tagBoards.ts). Both stay, deliberately.
-  { key: 'assign_tag', dflt: false,
+  { key: 'assign_tag', dflt: false, does: 'pick their own tag', strict: true,
     label: 'Participants can pick their own tag',
     hint: 'Let claimed players join one of your tags for the event.' },
   // A league's rounds can arrive as they are played: somebody adds the
   // day's round on the Scoring tab when the group turns up. The organiser
   // can always do it with the PIN; this lets the field do it without.
-  { key: 'add_rounds', dflt: false, seriesOnly: true,
+  { key: 'add_rounds', dflt: false, seriesOnly: true, does: 'add the next round', strict: false,
     label: 'Participants can add the next round',
     hint: 'Let anyone add the league\'s next round on the Scoring tab, without the PIN.' },
   // A round may be made with its venue to be confirmed, and it cannot be
   // played until somebody chooses one — on the Scoring tab or the hub.
-  { key: 'set_venues', dflt: false, seriesOnly: true,
+  { key: 'set_venues', dflt: false, seriesOnly: true, does: 'choose a round\'s venue', strict: false,
     label: 'Participants can choose a round\'s venue',
     hint: 'Let anyone pick a venue still to be confirmed, without the PIN.' },
   // A match play card: on, anybody with the code can take a match live and
   // score every hole; off, only the players in it, and the organiser with
   // the admin PIN. The one permission on by default.
-  { key: 'score_matches', dflt: true, knockoutOnly: true,
+  { key: 'score_matches', dflt: true, knockoutOnly: true, does: 'score any match', strict: false,
     label: 'Participants can score any match',
     hint: 'Let anyone take a match live and score it. Off, only its players can — and you, with the PIN.' },
   // A player's own handicap — on by default (Ross, 4 Nov 2026): each player
@@ -115,7 +122,7 @@ export const EVENT_PERMISSIONS: {
   // amends it on their match page until the match is under way. Off, the
   // handicaps are the organiser's alone (Trip Setup, with the PIN), which
   // has a cost the toggle says.
-  { key: 'edit_handicaps', dflt: true,
+  { key: 'edit_handicaps', dflt: true, does: 'set their own handicaps', strict: true,
     label: 'Participants can set their own handicaps',
     hint: 'Each player fills in their own handicap, and can change it until they play.',
     offWarning: 'Only you can change a handicap. Players who join by invite link will need you to set theirs, and anyone without a handicap can’t start a round.' },
@@ -152,6 +159,70 @@ export function teeSheetAccess(raw: unknown): { anyoneOpens: boolean; playersPic
 }
 
 export type EventPermissions = Record<EventPermissionKey, boolean>
+
+// ─── Strict or relaxed (Ross, 5 Nov 2026) ──────────────────────
+//
+// The collaboration question answered in one tap, before any toggle: a
+// **Relaxed** event the field runs with the organiser (every permission
+// asked, on), a **Strict** one the organiser runs (each permission's
+// `strict` answer — a missing course and their own handicap and tag the
+// field's, the field, the results and a league's rounds the organiser's).
+// Choosing one says what it means in a few lines; the toggles stay one tap
+// away for anybody who wants their own mix. Only the toggles asked are
+// touched — the tee times question keeps its own answers. Leagues answer it
+// the same way, their rounds and venues among the strict "only you"s.
+
+export type CollabStyle = 'relaxed' | 'strict'
+
+export const COLLAB_STYLES: { key: CollabStyle; label: string; hint: string; vibe: string }[] = [
+  { key: 'relaxed', label: 'Relaxed', hint: 'The field runs it with you.',
+    vibe: 'For friends and societies who trust each other: everybody pitches in, and nothing waits on you.' },
+  { key: 'strict', label: 'Strict', hint: 'You run it. Players look after their own details.',
+    vibe: 'For a competition with something on it: the field and the results are yours.' },
+]
+
+const styleValue = (style: CollabStyle, p: { strict: boolean }) => style === 'relaxed' || p.strict
+
+/** The answers with a style applied to the permissions asked here — the rest kept as they are. */
+export function withCollabStyle(
+  perms: EventPermissions, style: CollabStyle, registry: readonly (typeof EVENT_PERMISSIONS)[number][],
+): EventPermissions {
+  const out = { ...perms }
+  for (const p of registry) out[p.key] = styleValue(style, p)
+  return out
+}
+
+/** Which style the answers asked here are, or null for a mix of the organiser's own. */
+export function collabStyleOf(
+  perms: EventPermissions, registry: readonly (typeof EVENT_PERMISSIONS)[number][],
+): CollabStyle | null {
+  return COLLAB_STYLES.find(s => registry.every(p => perms[p.key] === styleValue(s.key, p)))?.key ?? null
+}
+
+/** "a, b and c" */
+const listed = (items: string[]) =>
+  items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+
+/**
+ * What a style means, in a few lines: the feel of it, what the field can
+ * do, what only the organiser does — over the permissions asked here, so a
+ * league says its rounds and a match play event its matches.
+ */
+export function collabAdvice(
+  style: CollabStyle, registry: readonly (typeof EVENT_PERMISSIONS)[number][],
+): string[] {
+  const s = COLLAB_STYLES.find(x => x.key === style)!
+  const can = registry.filter(p => styleValue(style, p)).map(p => p.does)
+  const yours = registry.filter(p => !styleValue(style, p)).map(p => p.does)
+  return [
+    s.vibe,
+    ...(can.length ? [`Players can ${listed(can)}.`] : []),
+    ...(yours.length ? [`Only you can ${listed(yours)}, with the PIN.`] : []),
+    style === 'relaxed'
+      ? `The PIN still keeps ${registry.some(p => p.knockoutOnly) ? 'the draw, ' : ''}notices and settings yours.`
+      : 'Anything here can be changed later in the organiser area.',
+  ]
+}
 
 /** Every permission at its registry default — a fresh, conservative event. */
 export function defaultPermissions(): EventPermissions {

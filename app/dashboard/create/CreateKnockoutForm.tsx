@@ -19,7 +19,7 @@ import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import {
   type EventPermissions, defaultPermissions, permissionsFor, storedPermissions,
 } from '@/lib/eventPermissions'
-import EventPermissionToggles from '@/app/components/EventPermissionToggles'
+import CollaborationQuestion from '@/app/components/CollaborationQuestion'
 import { knockoutBoards, knockoutSeed } from '@/lib/bracketSetup'
 import { todayString } from '@/lib/tripStatus'
 import CreationDraw, {
@@ -488,9 +488,9 @@ export default function CreateKnockoutForm() {
             <div className="mb-6">
               <label className={FIELD_LABEL}>How collaborative should this event be?</label>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-                What the field can do for itself. Editable in the organiser area.
+                Choose a style, or set each one. Editable in the organiser area.
               </p>
-              <EventPermissionToggles value={perms} onChange={setPerms} registry={permissionsFor(false, true)} />
+              <CollaborationQuestion value={perms} onChange={setPerms} registry={permissionsFor(false, true)} />
             </div>
 
             <div className={`px-4 py-4 ${cardClass()}`}>

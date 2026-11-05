@@ -40,7 +40,7 @@ import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import {
   type EventPermissions, defaultPermissions, permissionsFor, storedPermissions,
 } from '@/lib/eventPermissions'
-import EventPermissionToggles from '@/app/components/EventPermissionToggles'
+import CollaborationQuestion from '@/app/components/CollaborationQuestion'
 import { TeeTimesQuestion } from '@/app/components/TeeTimesAccess'
 import { ChoiceChips, CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
@@ -1035,9 +1035,9 @@ export default function CreateTripForm({ matchPlay = false }: {
                   How collaborative should this event be?
                 </p>
                 <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-                  What the field can do for itself. Editable in the organiser area.
+                  Choose a style, or set each one. Editable in the organiser area.
                 </p>
-                <EventPermissionToggles value={perms} onChange={setPerms} registry={permissionsFor(false, !!matchPlay)} />
+                <CollaborationQuestion value={perms} onChange={setPerms} registry={permissionsFor(false, !!matchPlay)} />
               </div>
             )}
 

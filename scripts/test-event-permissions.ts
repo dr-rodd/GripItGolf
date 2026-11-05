@@ -15,6 +15,7 @@ import {
   EVENT_PERMISSIONS, TEE_SHEET_PERMISSIONS, type EventPermissions,
   defaultPermissions, parseEventPermissions, allowsParticipant,
   storedPermissions, describePermissions, permissionsFor,
+  COLLAB_STYLES, collabAdvice, collabStyleOf, withCollabStyle,
 } from '../lib/eventPermissions'
 import { confirmationHtml, confirmationText } from '../lib/confirmationEmail'
 
@@ -78,6 +79,39 @@ section('Adding a fourth permission is one line, structurally')
   const toggles = read('app/components/EventPermissionToggles.tsx')
   ok(toggles.includes('registry = EVENT_PERMISSIONS') && toggles.includes('registry.map(p =>'),
     'the toggles render the registry — golf\'s by default — so a new permission appears untouched')
+}
+
+section('Strict or relaxed, in one tap (Ross, 5 Nov 2026)')
+{
+  const ko = permissionsFor(false, true)
+  eq(ko.map(p => p.key), ['add_courses', 'add_players', 'edit_scores', 'assign_tag', 'score_matches', 'edit_handicaps'],
+    'the match play list, in the order creation asks it')
+  const strict = withCollabStyle(defaultPermissions(), 'strict', ko)
+  eq(ko.map(p => (strict[p.key] ? 'y' : 'n')).join(''), 'ynnyny', 'Strict is "ynnyny" down it, as Ross gave it')
+  const relaxed = withCollabStyle(defaultPermissions(), 'relaxed', ko)
+  ok(ko.every(p => relaxed[p.key]), 'Relaxed is every one on')
+  eq([relaxed.edit_tee_sheet, relaxed.set_tee_sheets], [true, false], '  …the tee times question keeping its own answers')
+  eq([collabStyleOf(strict, ko), collabStyleOf(relaxed, ko), collabStyleOf(defaultPermissions(), ko)], ['strict', 'relaxed', null],
+    'the style is read off the answers — a mix of your own is neither')
+  const league = permissionsFor(true)
+  const strictLeague = withCollabStyle(defaultPermissions(), 'strict', league)
+  eq([strictLeague.add_rounds, strictLeague.set_venues, strictLeague.edit_handicaps], [false, false, true],
+    'a league answers it too: strict keeps its rounds and venues yours')
+  eq(collabStyleOf(withCollabStyle(defaultPermissions(), 'relaxed', league), league), 'relaxed', '  …relaxed opens them')
+  eq(collabAdvice('strict', ko), [
+    COLLAB_STYLES[1].vibe,
+    'Players can add a missing course, pick their own tag and set their own handicaps.',
+    'Only you can add players to the field, fix a finished scorecard and score any match, with the PIN.',
+    'Anything here can be changed later in the organiser area.',
+  ], 'a style says what it means: the feel of it, what the field can do, what only you do')
+  ok(collabAdvice('relaxed', ko).some(l => l.includes('the draw')) && !collabAdvice('relaxed', league).some(l => l.includes('the draw')),
+    '  …the draw named only where there is one')
+  ok(EVENT_PERMISSIONS.every(p => p.does.length > 0 && typeof p.strict === 'boolean'),
+    'every permission says what it does and its strict answer — still one line each')
+  const q = read('app/components/CollaborationQuestion.tsx')
+  ok(q.includes('Show each setting') && q.includes('<EventPermissionToggles'), 'a switch shows each setting, through the one set of toggles')
+  ok(read('app/trip/[tripCode]/organiser/bracket/BracketSetupForm.tsx').includes("initialSetup?.mode ?? 'relaxed'"),
+    "the bracket setup's own strict or relaxed starts on relaxed — a different question")
 }
 
 // ─── Reading what is stored ────────────────────────────────────
@@ -184,8 +218,8 @@ section('Every event door asks how collaborative, and writes only real answers')
     const src = read(f)
     ok(src.includes('How collaborative should this event be?'),
       `${f.split('/').pop()} asks the question`)
-    ok(src.includes('<EventPermissionToggles'),
-      '  …with the shared toggles, never a second copy')
+    ok(src.includes('<CollaborationQuestion'),
+      '  …through the shared question — strict or relaxed, then the toggles — never a second copy')
     ok(/storedPermissions\((perms|finalPerms)\)/.test(src),
       '  …and writes only when a toggle was flipped')
   }
@@ -210,7 +244,7 @@ section('The organiser page is the admin portal')
     'the overview counts in headers, not bodies')
 
   const client = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
-  ok(client.includes('<EventPermissionToggles'), 'the same toggles, editable')
+  ok(client.includes('<CollaborationQuestion') && client.includes('settingsOpen'), 'the same question, editable, every setting showing')
   ok(/update\(\{ event_permissions: next \}\)[\s\S]{0,80}\.eq\('id', tripId\)/.test(client),
     'saves scoped to the trip')
   ok(client.includes('setPerms(prev)'), 'and reverts when the save is refused')

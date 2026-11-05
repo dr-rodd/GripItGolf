@@ -12,7 +12,7 @@ import {
 import {
   type EventPermissions, describePermissions, permissionsFor,
 } from '@/lib/eventPermissions'
-import EventPermissionToggles from '@/app/components/EventPermissionToggles'
+import CollaborationQuestion from '@/app/components/CollaborationQuestion'
 import Toggle from '@/app/components/Toggle'
 import TeeTimesAccess from '@/app/components/TeeTimesAccess'
 import TeeSheetRoundControls from '../teesheet/TeeSheetRoundControls'
@@ -323,7 +323,7 @@ export default function OrganiserClient({
           <p className="text-ink/65 text-[13px] mb-3 leading-snug">
             Changes land on the field&apos;s phones straight away.
           </p>
-          <EventPermissionToggles value={perms} onChange={savePermissions} registry={permRegistry} />
+          <CollaborationQuestion value={perms} onChange={savePermissions} registry={permRegistry} settingsOpen />
           {permsError && (
             <p className="text-rust-deep text-sm mt-3 leading-snug">{permsError}</p>
           )}

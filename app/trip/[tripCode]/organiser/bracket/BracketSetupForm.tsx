@@ -145,7 +145,8 @@ export default function BracketSetupForm({
 }) {
   // ── The seven answers, prefilled from a saved-but-open setup ─────────────
   const [format, setFormat] = useState<TournamentFormat | null>(initialSetup?.format ?? null)
-  const [mode, setMode] = useState<BracketMode | null>(initialSetup?.mode ?? null)
+  // Relaxed until the organiser says otherwise (Ross, 5 Nov 2026).
+  const [mode, setMode] = useState<BracketMode | null>(initialSetup?.mode ?? 'relaxed')
   const [size, setSize] = useState<BracketSize | null>(initialSetup?.size ?? null)
   const [entry, setEntry] = useState<PlayerEntry | null>(initialSetup?.entry ?? null)
   const [qualifyingOn, setQualifyingOn] = useState(!!initialSetup?.qualifying)

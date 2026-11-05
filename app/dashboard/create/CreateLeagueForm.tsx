@@ -35,7 +35,7 @@ import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import {
   type EventPermissions, defaultPermissions, permissionsFor, storedPermissions,
 } from '@/lib/eventPermissions'
-import EventPermissionToggles from '@/app/components/EventPermissionToggles'
+import CollaborationQuestion from '@/app/components/CollaborationQuestion'
 import { TeeTimesQuestion } from '@/app/components/TeeTimesAccess'
 import GolfIrelandRulesForm from '@/app/components/GolfIrelandRulesForm'
 import {
@@ -1399,9 +1399,9 @@ export default function CreateLeagueForm({ schedule }: {
             <div>
               <label className={FIELD_LABEL}>How collaborative should this event be?</label>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-                What the field can do for itself. Editable in the organiser area.
+                Choose a style, or set each one. Editable in the organiser area.
               </p>
-              <EventPermissionToggles
+              <CollaborationQuestion
                 value={perms}
                 onChange={setPerms}
                 registry={permissionsFor(schedule === 'series')}
