@@ -18,7 +18,7 @@ import Itinerary from '../app/trip/[tripCode]/Itinerary'
 import type { ItineraryItem } from '../lib/itinerary'
 import {
   upNext, nextActivity, describeCountdown, describeGroups, momentOf, orderedItems, dayArrived,
-  firstTeeTarget,
+  firstTeeTarget, nothingNext,
 } from '../lib/upNext'
 import { nextMatch, describeNextMatch, type DrawMatch } from '../lib/nextMatch'
 import { stayRuns, travelLegs, describeStayRun } from '../lib/stays'
@@ -115,6 +115,22 @@ section('Up next picks the next thing that has not happened')
 }
 
 // ─── Activities are mentioned, never promoted ──────────────
+
+section('Nothing next is complete only where rounds were played (Ross, 5 Nov 2026)')
+{
+  const after = new Date(2026, 7, 30, 9, 0)
+  const played = [golf('g0', 0, 0, '09:00')]
+  eq([upNext(played, START, DATES, COURSES, after), nothingNext(played)], [null, 'finished'],
+    'every round in the past: the trip is complete')
+  eq([upNext([], START, DATES, COURSES, after), nothingNext([])], [null, 'unscheduled'],
+    'an event just made, no round on it: not complete — nothing scheduled yet')
+  eq(nothingNext([stay('s0', 0, 0, 'The Shandon')]), 'unscheduled', '  …a stay alone is not a round')
+  const block = fs.readFileSync('app/trip/[tripCode]/StatusBlock.tsx', 'utf-8')
+  ok(block.includes("why === 'finished' ? <TripOver noun={noun} /> : <NothingScheduled noun={noun} />")
+    && block.includes("(next || why === 'finished' || !knockout)"),
+    '  …the card says so, and on a match play event with no round says nothing about rounds')
+  ok(fs.readFileSync('app/trip/[tripCode]/page.tsx', 'utf-8').includes('knockout={!!koView}'), '  …told which it is by the hub')
+}
 
 section('An activity never takes the card from golf')
 {

@@ -165,6 +165,17 @@ export function upNext(
 }
 
 /**
+ * Why nothing is next, when `upNext` finds nothing (Ross, 5 Nov 2026): every
+ * round is in, or there has never been a round on the schedule at all. Only
+ * golf having been on it makes a trip or an event complete — one just made,
+ * a league whose rounds are still to be set, or a knockout whose matches its
+ * players arrange, is not over before it has started.
+ */
+export function nothingNext(items: readonly ItineraryItem[]): 'finished' | 'unscheduled' {
+  return items.some(i => i.kind === 'golf') ? 'finished' : 'unscheduled'
+}
+
+/**
  * The next activity still to come, for the quiet line under the card.
  *
  * Separate from `upNext` rather than folded into it, because it answers a

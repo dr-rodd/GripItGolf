@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { forgetPlayer } from '@/lib/playerCookie'
 import { type ItineraryItem, describeDay } from '@/lib/itinerary'
 import {
-  upNext, nextActivity, describeCountdown, describeGroups, type RoundDates,
+  upNext, nextActivity, nothingNext, describeCountdown, describeGroups, type RoundDates,
 } from '@/lib/upNext'
 import { useMinute } from '@/app/components/useMinute'
 import CourseWeather from '@/app/components/CourseWeather'
@@ -68,6 +68,7 @@ export default function StatusBlock({
   roundNumbers,
   courseNames,
   noun = 'trip',
+  knockout = false,
 }: {
   tripCode: string
   /** Null when this device is not linked to anybody on this trip. */
@@ -81,6 +82,12 @@ export default function StatusBlock({
   courseNames: Record<string, string>
   /** "trip" or "event" — what the finished card calls it. */
   noun?: 'trip' | 'event'
+  /**
+   * A match play event — whose matches its players arrange, so with no
+   * round on the schedule the card says nothing about rounds at all: the
+   * draw's countdown and the next-match card under it carry what is next.
+   */
+  knockout?: boolean
 }) {
   const router = useRouter()
   const now = useMinute()
@@ -103,6 +110,9 @@ export default function StatusBlock({
   // What else is booked. Deliberately not part of `next`: golf is what the
   // trip is for and keeps the card, and this is the line underneath it.
   const activity = nextActivity(items, startDate, dates, courseNames, now, next)
+  // Nothing next: complete only where rounds were played, else nothing on
+  // the schedule yet — never "All rounds in" before a round exists.
+  const why = next ? null : nothingNext(items)
   // The day is only worth saying when it is not the one already named above
   // — "Friday · Friday, 7:30 pm" is the card telling you twice. On the same
   // day the time alone is the whole answer, and an activity with no time
@@ -142,6 +152,7 @@ export default function StatusBlock({
       {/* ── Up next ──
           Golf links through to its round summary; a stay or a journey has
           no page to open and stays plain. */}
+      {(next || why === 'finished' || !knockout) && (
       <div className="mt-3.5 pt-3.5 border-t border-line">
         {next ? (
           nextRoundNumber != null ? (
@@ -154,7 +165,7 @@ export default function StatusBlock({
           ) : (
             <UpNextLines next={next} countdown={countdown} />
           )
-        ) : <TripOver noun={noun} />}
+        ) : why === 'finished' ? <TripOver noun={noun} /> : <NothingScheduled noun={noun} />}
 
         {/* What else is booked.
             Outside the <Link> above rather than inside it, which is the
@@ -176,6 +187,7 @@ export default function StatusBlock({
           </p>
         )}
       </div>
+      )}
 
       {/* ── Standing ──
           Omitted rather than zeroed. "0 points, last of 12" before a ball is
@@ -294,6 +306,27 @@ function TripOver({ noun }: { noun: 'trip' | 'event' }) {
           {noun === 'event' ? 'Event complete' : 'Trip complete'}
         </p>
         <p className="t-cap text-ink/65 mt-0.5">All rounds in. Standings are final.</p>
+      </div>
+    </div>
+  )
+}
+
+/** No round on the schedule yet — a trip or an event just made, or a league's rounds still to be set. */
+function NothingScheduled({ noun }: { noun: 'trip' | 'event' }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="flex-shrink-0 w-10 h-10 rounded-tile bg-tint text-bark flex items-center justify-center">
+        <IconFlag size={18} />
+      </span>
+      <div className="min-w-0">
+        <p className="text-[17px] font-medium leading-snug text-ink">
+          {noun === 'event' ? 'No rounds scheduled yet' : 'Nothing planned yet'}
+        </p>
+        <p className="t-cap text-ink/65 mt-0.5">
+          {noun === 'event'
+            ? 'They show here once the organiser adds them.'
+            : 'Rounds and plans show here once they are on the itinerary.'}
+        </p>
       </div>
     </div>
   )

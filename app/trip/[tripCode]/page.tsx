@@ -836,6 +836,7 @@ export default async function TripPage({ params, searchParams }: {
           roundNumbers={roundNumbers}
           courseNames={courseMap}
           noun={isEvent ? 'event' : 'trip'}
+          knockout={!!koView}
         />
 
         {/* A draw set for a date and a time, counted down to while it is
@@ -844,12 +845,16 @@ export default async function TripPage({ params, searchParams }: {
         {koView && koView.view.matches.length === 0 && (() => {
           const plan = rawDrawPlan((trip as { bracket_setup?: unknown }).bracket_setup)
           const live = drawLiveAt(plan)
+          // Its own card under the name's, with the gap every card on the
+          // hub keeps (Ross, 5 Nov 2026: it sat hard against the name).
           return live && plan?.on ? (
-            <DrawCountdown
-              tripCode={tripCode}
-              liveAt={live.toISOString()}
-              when={`${describeShortDate(plan.on) ?? plan.on}${plan.at ? ` at ${describeTime(plan.at)}` : ''}`}
-            />
+            <div className="mt-4">
+              <DrawCountdown
+                tripCode={tripCode}
+                liveAt={live.toISOString()}
+                when={`${describeShortDate(plan.on) ?? plan.on}${plan.at ? ` at ${describeTime(plan.at)}` : ''}`}
+              />
+            </div>
           ) : null
         })()}
         {koView && <NextMatchCard tripCode={tripCode} view={koView.view} live={koView.live} today={todayString(new Date())} />}
