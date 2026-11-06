@@ -14,9 +14,10 @@ import {
 import { roundName } from '@/lib/matchplay'
 import { formatHandicap } from '@/lib/handicap'
 import { putt, reducedMotion } from '@/lib/motion'
+import { SWELL_CARD_RADIUS, SWELL_MAX_H, swellBox, swellCard, swellFades, swellRadius, swellWidth, type Box, type SwellView } from '@/lib/swell'
 import { dropIndex, makeRoom, settleOffset, type RowBoxes } from '@/lib/dragReorder'
 import DateField from './DateField'
-import { FIELD, FIELD_LABEL, IconButton, ListGroup, ListRow, buttonClass, cardClass, chipClass, optionClass } from './ui'
+import { FIELD, FIELD_LABEL, IconButton, buttonClass, cardClass, chipClass, optionClass } from './ui'
 
 /**
  * Making a knockout's draw (lib/bracketDraw.ts) — the same builder at
@@ -27,8 +28,8 @@ import { FIELD, FIELD_LABEL, IconButton, ListGroup, ListRow, buttonClass, cardCl
  *   (the **−** and **+**);
  * * **Random** fills it from a hat, again as often as tapped; **Seeded**
  *   opens the numbered list and fills it by seed; **By hand** empties it;
- * * **any place can be tapped**, and swells into the names to choose from
- *   (a search box once there are more than 32). A player put in a later
+ * * **any place can be tapped**, and swells into a card of the names to
+ *   choose from, a search bar at its head (Ross, 6 Nov 2026). A player put in a later
  *   round has byes to it; a place the result of a match will fill takes
  *   nobody (lib/bracketEditor.ts, the rules).
  *
@@ -140,7 +141,7 @@ export default function BracketDrawer({ entrants, value, onChange }: {
       )}
 
       {seeding && (
-        <Swell from={seeding.from} label="Seed the field" closing={!!seeding.closing} onClose={closeSeeds} onClosed={() => setSeeding(null)}>
+        <Swell fill from={seeding.from} label="Seed the field" closing={!!seeding.closing} onClose={closeSeeds} onClosed={() => setSeeding(null)}>
           <SwellFrame
             title="Seed the field"
             onCancel={closeSeeds}
@@ -322,9 +323,11 @@ function RoundButton({ label, caption, disabled, onClick, plus }: {
 
 // ─── Choosing who goes in a place ──────────────────────────────
 
-/** A search box once the names outgrow a scroll (Ross, 5 Nov 2026). */
-const SEARCH_FROM = 32
-
+/**
+ * The place swollen into the names (Ross, 6 Nov 2026): a card over the
+ * bracket with a search bar at its head whatever the field's size — the
+ * keyboard only when the bar is tapped — and the names scrolling under it.
+ */
 function PlacePicker({ layout, at, entrants, nameOf, seedOf: seedFor, onPick, onCancel }: {
   layout: BracketLayout
   at: { r: number; c: number }
@@ -347,52 +350,72 @@ function PlacePicker({ layout, at, entrants, nameOf, seedOf: seedFor, onPick, on
     seedFor(e.id) !== null ? `Seed ${seedFor(e.id)}` : null,
     e.handicap === null ? 'Handicap to come' : `Handicap ${formatHandicap(e.handicap)}`,
   ].filter(Boolean).join(' · ')
+  const row = 'flex flex-col justify-center w-full min-h-14 px-4 py-2.5 text-left press hover:bg-tint'
 
   return (
-    <SwellFrame title={here ? `${nameOf(here)}'s place` : 'Who goes here?'} sub={round} onCancel={onCancel}>
-      {entrants.length > SEARCH_FROM && (
+    <>
+      <div className="flex items-start gap-2 pl-4 pr-1.5 pt-3">
+        <div className="flex-1 min-w-0 pt-1">
+          <p className="t-card text-ink truncate">{here ? `${nameOf(here)}'s place` : 'Who goes here?'}</p>
+          <p className="t-cap text-ink/65">{round}</p>
+        </div>
+        <IconButton label="Close" dense onClick={onCancel}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </IconButton>
+      </div>
+      <div className="px-4 pt-2 pb-3">
         <input
           type="search"
           value={query}
           onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && shown.length === 1) onPick(shown[0].id) }}
+          enterKeyHint="search"
           placeholder="Search the field"
           aria-label="Search the field"
-          className={`${FIELD} mb-4`}
+          className={FIELD}
         />
-      )}
-      {here && (
-        <button type="button" onClick={() => onPick(null)} className={`${buttonClass('secondary')} mb-5`}>
-          Leave this place empty
-        </button>
-      )}
-      {free.length > 0 && (
-        <>
-          <p className={FIELD_LABEL}>Not in the draw yet</p>
-          <ListGroup className="mb-5">
-            {free.map(e => <ListRow key={e.id} label={<span className="font-serif">{e.name}</span>} hint={describe(e)} onClick={() => onPick(e.id)} chevron={false} />)}
-          </ListGroup>
-        </>
-      )}
-      {placed.length > 0 && (
-        <>
-          <p className={FIELD_LABEL}>In the draw</p>
-          <ListGroup>
-            {placed.map(e => (
-              <ListRow
-                key={e.id}
-                label={<span className="font-serif">{e.name}</span>}
-                hint={`${roundName(2 ** (layout.rounds - (where.get(e.id) ?? 0)))} · ${here ? `swaps with ${nameOf(here)}` : 'moves here'}`}
-                onClick={() => onPick(e.id)}
-                chevron={false}
-              />
-            ))}
-          </ListGroup>
-        </>
-      )}
-      {free.length === 0 && placed.length === 0 && (
-        <p className="text-ink/65 text-sm">{q ? 'Nobody in the field by that name.' : 'Everybody else is in the draw.'}</p>
-      )}
-    </SwellFrame>
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain border-t border-line pb-2">
+        {here && (
+          <button type="button" onClick={() => onPick(null)} className={`${row} border-b border-line`}>
+            <span className="text-accent-deep font-medium">Leave this place empty</span>
+          </button>
+        )}
+        {free.length > 0 && (
+          <>
+            <p className="t-label text-ink/80 px-4 pt-3 pb-1">Not in the draw yet</p>
+            <div className="divide-y divide-line">
+              {free.map(e => (
+                <button key={e.id} type="button" onClick={() => onPick(e.id)} className={row}>
+                  <span className="font-serif text-ink text-[17px] truncate">{e.name}</span>
+                  <span className="t-cap text-ink/65">{describe(e)}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {placed.length > 0 && (
+          <>
+            <p className="t-label text-ink/80 px-4 pt-3 pb-1">In the draw</p>
+            <div className="divide-y divide-line">
+              {placed.map(e => (
+                <button key={e.id} type="button" onClick={() => onPick(e.id)} className={row}>
+                  <span className="font-serif text-ink text-[17px] truncate">{e.name}</span>
+                  <span className="t-cap text-ink/65">
+                    {roundName(2 ** (layout.rounds - (where.get(e.id) ?? 0)))} · {here ? `swaps with ${nameOf(here)}` : 'moves here'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {free.length === 0 && placed.length === 0 && (
+          <p className="text-ink/65 text-sm px-4 pt-3">{q ? 'Nobody in the field by that name.' : 'Everybody else is in the draw.'}</p>
+        )}
+      </div>
+    </>
   )
 }
 
@@ -400,63 +423,142 @@ function PlacePicker({ layout, at, entrants, nameOf, seedOf: seedFor, onPick, on
 
 const SWELL_MS = 340
 
+/** The phone's safe areas, read off a probe — `env()` has no script reader. */
+function safeInsets(): { insetTop: number; insetBottom: number } {
+  const probe = document.createElement('div')
+  probe.style.cssText = 'position:fixed;top:0;left:0;visibility:hidden;pointer-events:none;'
+    + 'padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)'
+  document.body.appendChild(probe)
+  const s = getComputedStyle(probe)
+  const out = { insetTop: parseFloat(s.paddingTop) || 0, insetBottom: parseFloat(s.paddingBottom) || 0 }
+  probe.remove()
+  return out
+}
+
 /**
- * A tapped place growing into the screen of names it opens (Ross, 5 Nov
- * 2026: "the cell swells into a background where the names are there to
- * scroll through") — the screen clipped to the place and opened out to the
- * whole of it on the putt curve, and back into it on the way out.
- * Under Reduce Motion it is simply there, and simply gone
- * (docs/style-guide.md §6, "Place swell").
+ * A tapped box growing into what it opens (Ross, 5 and 6 Nov 2026: "I want
+ * the tapped box to swell to become the name selector and sit on top") —
+ * a card centred on the place, over the page dimmed behind it, back into
+ * the place on a tap outside it, Escape or its ✕. `fill` grows it to the
+ * whole screen instead, for the seed list. What it holds is laid out once
+ * at its final size and clipped by the growing box, never reflowed; the
+ * words fade out first on the way back, and the box lands blank and melts
+ * into the place (lib/swell.ts has the geometry and why). Under Reduce
+ * Motion it is simply there, and simply gone (docs/style-guide.md §6,
+ * "Place swell").
  */
-function Swell({ from, label, closing, onClose, onClosed, children }: {
+function Swell({ from, label, closing, onClose, onClosed, fill = false, children }: {
   from: DOMRect
   label: string
   /** Set to go back into the place; `onClosed` once it has. */
   closing: boolean
-  /** Asked for by Escape. */
+  /** Asked for by a tap outside it and by Escape. */
   onClose: () => void
   onClosed: () => void
+  /** The whole screen rather than a card. */
+  fill?: boolean
   children: React.ReactNode
 }) {
-  const panel = useRef<HTMLDivElement>(null)
+  const shell = useRef<HTMLDivElement>(null)
+  const inner = useRef<HTMLDivElement>(null)
+  const scrim = useRef<HTMLDivElement>(null)
   const frame = useRef(0)
+  // How far open it is (0 the place, 1 the card), where it is going, and
+  // how tall what it holds wants to be.
+  const progress = useRef(0)
+  const target = useRef<Box | null>(null)
+  const natural = useRef(0)
   // Only ever opened by a tap, so always in a browser — said, for the portal.
   const inBrowser = useSyncExternalStore(() => () => {}, () => true, () => false)
+  const start: Box = { left: from.left, top: from.top, width: from.width, height: from.height }
 
-  const clip = (t: number) => {
-    const w = window.innerWidth
-    const h = window.innerHeight
-    const lerp = (a: number, b: number) => a + (b - a) * t
-    return `inset(${lerp(from.top, 0)}px ${lerp(w - from.right, 0)}px ${lerp(h - from.bottom, 0)}px ${lerp(from.left, 0)}px round ${lerp(12, 0)}px)`
+  function view(): SwellView {
+    const vv = window.visualViewport
+    return {
+      width: vv?.width ?? window.innerWidth,
+      height: vv?.height ?? window.innerHeight,
+      top: vv?.offsetTop ?? 0,
+      left: vv?.offsetLeft ?? 0,
+      ...safeInsets(),
+    }
+  }
+  const aim = (): Box => (fill
+    ? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
+    : swellCard(start, view(), natural.current))
+
+  // Everything moves here, never through a style prop, which a re-render
+  // (a seed dragged, a name picked) would put back.
+  function paint(t: number) {
+    const s = shell.current
+    const i = inner.current
+    const end = target.current
+    if (!s || !i || !end) return
+    const box = swellBox(start, end, t)
+    const shows = swellFades(t)
+    s.style.left = `${box.left}px`
+    s.style.top = `${box.top}px`
+    s.style.width = `${box.width}px`
+    s.style.height = `${box.height}px`
+    s.style.borderRadius = `${swellRadius(t, fill ? 0 : SWELL_CARD_RADIUS)}px`
+    s.style.opacity = String(shows.box)
+    i.style.width = `${end.width}px`
+    i.style.height = `${end.height}px`
+    i.style.opacity = String(shows.content)
+    i.style.transform = t === 1 ? '' : `translate(${end.left - box.left}px, ${end.top - box.top}px)`
+    if (scrim.current) scrim.current.style.opacity = String(shows.scrim)
   }
 
-  function run(forward: boolean, done?: () => void) {
-    const el = panel.current
+  function run(to: 0 | 1, done?: () => void) {
     cancelAnimationFrame(frame.current)
-    if (!el || reducedMotion()) { if (el) el.style.clipPath = ''; done?.(); return }
-    const start = performance.now()
+    const begin = progress.current
+    if (reducedMotion() || begin === to) { progress.current = to; paint(to); done?.(); return }
+    const at = performance.now()
     const step = (now: number) => {
-      const x = Math.min(1, (now - start) / SWELL_MS)
-      const t = forward ? putt(x) : 1 - putt(x)
-      el.style.clipPath = clip(t)
+      const x = Math.min(1, (now - at) / SWELL_MS)
+      progress.current = begin + (to - begin) * putt(x)
+      paint(progress.current)
       if (x < 1) frame.current = requestAnimationFrame(step)
-      else { if (forward) el.style.clipPath = ''; done?.() }
+      else done?.()
     }
-    el.style.clipPath = clip(forward ? 0 : 1)
     frame.current = requestAnimationFrame(step)
   }
 
-  // Opened from the place it was tapped in, before the first paint (so it
-  // never flashes whole); the page under it held still. Set here rather than
-  // as a style, which a re-render with the window resized would re-apply.
+  // Before the first paint: what it holds measured at the card's width (so
+  // a short list makes a short card), the box set on the place, empty, and
+  // then opened out. The page under it held still.
   useLayoutEffect(() => {
-    run(true)
+    const i = inner.current
+    if (i && !fill) {
+      i.style.width = `${swellWidth(view())}px`
+      i.style.height = 'auto'
+      i.style.maxHeight = `${SWELL_MAX_H}px`
+      natural.current = i.offsetHeight
+      i.style.maxHeight = ''
+    }
+    target.current = aim()
+    paint(0)
+    run(1)
     const { overflow } = document.body.style
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = overflow; cancelAnimationFrame(frame.current) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { if (closing) run(false, onClosed) }, [closing]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (closing) run(0, onClosed) }, [closing]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A keyboard coming up, or the phone turned: the card moves to stay in
+  // the part of the screen that can be seen.
+  useEffect(() => {
+    const refit = () => { target.current = aim(); if (progress.current === 1) paint(1) }
+    const vv = window.visualViewport
+    vv?.addEventListener('resize', refit)
+    vv?.addEventListener('scroll', refit)
+    window.addEventListener('resize', refit)
+    return () => {
+      vv?.removeEventListener('resize', refit)
+      vv?.removeEventListener('scroll', refit)
+      window.removeEventListener('resize', refit)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -466,14 +568,20 @@ function Swell({ from, label, closing, onClose, onClosed, children }: {
 
   if (!inBrowser) return null
   return createPortal(
-    <div
-      ref={panel}
-      role="dialog"
-      aria-modal="true"
-      aria-label={label}
-      className="fixed inset-0 z-50 paper flex flex-col"
-    >
-      {children}
+    <div className="fixed inset-0 z-50">
+      <div ref={scrim} className="absolute inset-0 bg-ink/40" style={{ opacity: 0 }} onClick={closing ? undefined : onClose} aria-hidden="true" />
+      <div
+        ref={shell}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        className={`fixed overflow-hidden ${fill ? 'paper' : 'bg-surface border border-line shadow-floating'}`}
+        style={{ opacity: 0 }}
+      >
+        <div ref={inner} className="absolute left-0 top-0 flex flex-col" style={{ opacity: 0 }}>
+          {children}
+        </div>
+      </div>
     </div>,
     document.body,
   )

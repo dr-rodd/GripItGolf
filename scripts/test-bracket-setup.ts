@@ -22,6 +22,7 @@ import { DRAW_TIMINGS, newDraft } from '../lib/bracketDraw'
 import { layoutFromSlots } from '../lib/bracketEditor'
 import { creationPlan, creationDrawIssue, creationRounds } from '../app/dashboard/create/CreationDraw'
 import { draftFromSlots, sameSlots } from '../lib/bracketDraw'
+import { SWELL_GUTTER, SWELL_MAX_H, SWELL_MAX_W, swellBox, swellCard, swellFades } from '../lib/swell'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -324,6 +325,30 @@ section('The match play card: top of the draw left, bottom right, NR, the result
 
 // ─── The draw ──────────────────────────────────────────────────
 
+section('The place swell: a card on top, back into the place with nothing showing (Ross, 6 Nov 2026)')
+{
+  const view = { width: 390, height: 844, top: 0, left: 0, insetTop: 0, insetBottom: 0 }
+  const place = { left: 17, top: 400, width: 130, height: 37 }
+  const card = swellCard(place, view, 300)
+  ok(card.width === Math.min(SWELL_MAX_W, 390 - 2 * SWELL_GUTTER) && card.height === 300, 'as wide as the screen allows, as tall as what it holds')
+  ok(card.left === SWELL_GUTTER && Math.abs(card.top + card.height / 2 - (place.top + place.height / 2)) < 0.01,
+    'centred on the place it grew from, kept inside the gutter')
+  ok(swellCard(place, view, 2000).height === SWELL_MAX_H, 'a long list is capped and scrolls inside the card')
+  const low = swellCard({ left: 200, top: 800, width: 130, height: 37 }, view, 400)
+  ok(low.top + low.height <= 844 - SWELL_GUTTER && low.left + low.width <= 390 - SWELL_GUTTER, 'a place at the foot of the screen: the card kept on it')
+  const keyboard = swellCard(place, { ...view, height: 480 }, 520)
+  ok(keyboard.top >= SWELL_GUTTER && keyboard.top + keyboard.height <= 480 - SWELL_GUTTER, 'a keyboard up: moved and shortened to the part that can be seen')
+  const notch = swellCard({ ...place, top: 20 }, { ...view, insetTop: 47 }, 300)
+  ok(notch.top >= 47 + 8, 'clear of the notch')
+  ok(JSON.stringify(swellBox(place, card, 0)) === JSON.stringify(place) && JSON.stringify(swellBox(place, card, 1)) === JSON.stringify(card),
+    'the box starts on the place and ends on the card')
+  ok(swellFades(0).box === 0 && swellFades(0).content === 0 && swellFades(1).box === 1 && swellFades(1).content === 1, 'nothing at the place, everything on the card')
+  let wordsWhileSmall = false
+  for (let t = 0; t <= 0.5; t += 0.01) if (swellFades(t).content > 0) wordsWhileSmall = true
+  ok(!wordsWhileSmall, 'no words in the box for the last half of its way back — the frames of text at the end are gone')
+  ok(swellFades(0.1).box < 1 && swellFades(0.2).box === 1, 'the box melts into the place as it lands')
+}
+
 section('The draw: made at creation, from the organiser area, or by itself on a date')
 {
   const drawer = read('app/components/BracketDrawer.tsx')
@@ -332,7 +357,13 @@ section('The draw: made at creation, from the organiser area, or by itself on a 
     'seeded: type a number, drag the handle, start from handicap order or shuffle')
   ok(drawer.includes('<BracketBoard') && drawer.includes('placedInDraft(value, picking.r, picking.c, id, field.length)') && drawer.includes("'Who goes here?'"),
     'the bracket itself: any place tapped and given a player (Ross, 5 Nov 2026)')
-  ok(drawer.includes('const SEARCH_FROM = 32') && drawer.includes('entrants.length > SEARCH_FROM'), '  …with a search box once there are more than 32 names')
+  ok(!drawer.includes('SEARCH_FROM') && /<input\s+type="search"/.test(drawer) && drawer.includes("placeholder=\"Search the field\""),
+    '  …with a search bar at the head of the names whatever the field (Ross, 6 Nov 2026)')
+  ok(drawer.includes('swellCard(start, view(), natural.current)') && drawer.includes('<Swell fill from={seeding.from}') && !/<Swell from=\{picking\.from\}[^>]*fill/.test(drawer),
+    '  …the place swelling into a card on top, the seed list into the whole screen')
+  ok(drawer.includes('onClick={closing ? undefined : onClose}') && drawer.includes('bg-ink/40'), '  …a tap outside the card shrinks it back')
+  ok(drawer.includes('i.style.opacity = String(shows.content)') && drawer.includes('s.style.opacity = String(shows.box)'),
+    '  …its words fading before it lands, the box melting into the place')
   ok(drawer.includes('withRounds(value, -1, field.length)') && drawer.includes('withRounds(value, 1, field.length)'), '  …and a round fewer or more beside its count')
   ok(drawer.includes('putt(x)') && drawer.includes('reducedMotion()') && drawer.includes('const SWELL_MS = 340'),
     '  …the place swelling into the names on the putt curve, simply there under Reduce Motion')

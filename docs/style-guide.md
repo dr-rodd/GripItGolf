@@ -309,7 +309,7 @@ and the named rules below say what replaces each.
 | Progress fill | A step completes | 340ms colour | putt | Instant |
 | Sheet up (`sheet-up`) | A sheet opens | 280ms | ease-out | Instant |
 | Scoring card slide | Next / previous player | 260ms | ease-out | Instant |
-| Place swell | Tapping a place in the draw's bracket, or Seeded | 340ms: the screen of names opened out of the place, and back into it | putt | Simply there, and gone |
+| Place swell | Tapping a place in the draw's bracket, or Seeded | 340ms: the place grows into a card of names on top, over the page dimmed (`bg-ink/40`); the seed list into the whole screen. Back into the place on a tap outside, Escape or ✕ — the words fade in the second half of the way out and are gone in the first half of the way back, and the box melts into the place as it lands (`lib/swell.ts`) | putt | Simply there, and gone |
 | Seed drag | Dragging a seed by its handle | Follows the finger, floating; the rows it passes slide aside in 200ms, and on letting go it settles into the gap in 200ms | putt | Follows the finger; the rest move and it drops at once |
 | Tee time lift | Releasing a tee sheet + | 340ms scroll to the top, under the header; the time raised to `shadow-floating` | putt | At once |
 | Bracket swipe | Sideways swipe, arrows, dots | Follows the finger; settles in up to 340ms, one round a swipe, the point under the finger held still inside the bracket's box — the page never scrolled while it moves, only once at rest | ease-out | Settles instantly; the drag still follows the finger |
