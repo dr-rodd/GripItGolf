@@ -22,11 +22,11 @@
 //
 // Pure. No I/O.
 
-import { type PlayerEntry, PLAYER_ENTRIES, validDeadline } from './bracketSetup'
+import { type PlayerEntry, PLAYER_ENTRIES, deadlineNote, validDeadline } from './bracketSetup'
 import type { Leaderboard } from './leaderboards'
 import { MAX_ROUNDS } from './tripLimits'
 import { WEEKDAY_NAMES } from './weekdays'
-import { dateForDay, describeDay } from './itinerary'
+import { dateForDay, describeDay, describeShortDate } from './itinerary'
 import {
   type GolfIrelandRules, type ScoreSource, SCORE_SOURCES,
   parseGolfIrelandRules, readsGolfIreland,
@@ -156,6 +156,20 @@ export function asksRoundDeadlines(schedule: LeagueSchedule | null | undefined):
 /** The key a league round's deadline is stored under — its golf item, else its round. */
 export function leagueRoundKey(r: { itemId?: string | null; roundId?: string | null }): string {
   return r.itemId || r.roundId || ''
+}
+
+/**
+ * A league round's play-by line (Ross, 5 Nov 2026) — " · Play by Sun 22
+ * Jun", " · Was due …" once it has passed unplayed, " · Played by …" once
+ * played — or nothing where the round has no deadline.
+ *
+ * Here and never in a 'use client' file: the hub and the Scoring tab call
+ * it while they render on the server, and a function exported from a
+ * client file is only a reference there — calling it throws, and took both
+ * pages down for a day (7 Nov 2026). `test:league-setup` scans for another.
+ */
+export function playByLine(deadline: string | null | undefined, today: string, finished: boolean): string {
+  return deadline ? ` · ${deadlineNote(deadline, describeShortDate(deadline) ?? deadline, { today, finished })}` : ''
 }
 
 /** The deadlines that read: real dates, by key, no more than a league could hold. */

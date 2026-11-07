@@ -4,6 +4,12 @@
 
 Dynamic route params and searchParams are now Promises. Server components must destructure via `const { x } = await params` — synchronous access returns 404s on all dynamic routes. Applies to every `[slug]`, `[id]`, `[tripCode]`, `[roundNumber]`, `[sessionId]` segment.
 
+## A function in a client file, called by a server page
+
+7 November 2026: the hub and the Scoring tab showed "Could not load this page" a day after a release that passed every test, the type check and the build. `playByLine` — the round tile's "Play by" line — had been written in `app/trip/[tripCode]/LeagueRounds.tsx`, beside the tiles, and that file starts `'use client'`. Both pages are server components and called it while rendering. **Everything a client file exports is a client reference on the server**: a component is fine, because the browser draws it; a plain function throws "Attempted to call playByLine() from the server but playByLine is on the client". The Scoring tab called it on every round tile, so it took trips down as well as leagues.
+
+Nothing static notices — the import type-checks and bundles. It surfaces only when a page renders the call, which a creation-wizard browser check never does. The rule: **a rule or helper a page uses goes in `lib/`, which both sides may import; a client file exports components**. `test:client-boundary` scans every server module under `app/` and `lib/` for a camelCase or ALL_CAPS import from a client file and fails on one. The fix moved `playByLine` to `lib/leagueSetup.ts`; the failure was reproduced first against a stand-in database to be sure it was the cause.
+
 ## iOS Safari stacking context gotcha
 
 A `transform: translateX(0)` animation on a slide container combined with `overflow-hidden` on the parent breaks tap hit-testing until the first scroll. Use `margin-left` transitions instead. Never use transform for horizontal slide animations inside an overflow-hidden parent.

@@ -24,7 +24,7 @@ import { buildRows, type RowContext, type ResolvedScore } from '../lib/boardRows
 import type { RoundCard } from '../lib/golfIreland'
 import type { Leaderboard } from '../lib/leaderboards'
 import { parseBracketSetup, deadlinesIssue, deadlineOpensAt } from '../lib/bracketSetup'
-import { asksRoundDeadlines, leagueRoundKey } from '../lib/leagueSetup'
+import { asksRoundDeadlines, leagueRoundKey, playByLine } from '../lib/leagueSetup'
 import { parseLeaderboards } from '../lib/leaderboards'
 import { MAX_ROUNDS } from '../lib/tripLimits'
 
@@ -905,6 +905,10 @@ section('A league round can carry a deadline (Ross, 5 Nov 2026)')
   ok(read('app/trip/[tripCode]/scoring/page.tsx').includes('playByLine(leagueSetup?.deadlines?.[round.itinerary_item_id ?? round.id]')
     && read('app/trip/[tripCode]/page.tsx').includes('playBy={playBy(lr.itemId, false)}'),
     'and said on the round\'s tile: Play by, Was due, Played by')
+  eq([playByLine('2026-11-30', '2026-11-07', false), playByLine(null, '2026-11-07', false)].map(s => s.startsWith(' · Play by') || s === ''),
+    [true, true], '  …a line that reads "Play by" before the date, nothing without one')
+  ok(/export function playByLine/.test(read('lib/leagueSetup.ts')) && !/export function playByLine/.test(read('app/trip/[tripCode]/LeagueRounds.tsx')),
+    '  …kept in lib/, never the client file the server pages cannot call into (7 Nov 2026)')
 }
 
 // ─── Result ────────────────────────────────────────────────────

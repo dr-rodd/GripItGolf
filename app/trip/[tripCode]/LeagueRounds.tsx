@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { describeShortDate } from '@/lib/itinerary'
-import { deadlineNote } from '@/lib/bracketSetup'
 import { cardKey, insertedRoundNumber, nextRoundIssue, parseLeagueSetup } from '@/lib/leagueSetup'
 import {
   addLeagueRound, confirmLeagueVenue, setCardCounts, setRoundAllowance,
@@ -267,15 +266,6 @@ export function AddLeagueRound({
  * the field can see what is coming, pale, and inert — no card, no venue,
  * no gear — until the round before it has happened (Ross, 26 Oct 2026).
  */
-/**
- * A league round's play-by line (Ross, 5 Nov 2026) — " · Play by Sun 22
- * Jun", " · Was due …" once it has passed unplayed, " · Played by …" once
- * played — or nothing where the round has no deadline.
- */
-export function playByLine(deadline: string | null | undefined, today: string, finished: boolean): string {
-  return deadline ? ` · ${deadlineNote(deadline, describeShortDate(deadline) ?? deadline, { today, finished })}` : ''
-}
-
 export function LockedRoundTile({ number, date, courseName, playBy = '' }: {
   number: number
   date: string
