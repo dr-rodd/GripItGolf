@@ -19,6 +19,7 @@
 //
 // Pure. No I/O — the caller does the queries and hands the rows in.
 
+import type { LeaguePeriod, PeriodRule } from './leagueSetup'
 import type {
   ResolvedScore, RowHole, RowRound, RowContext, RowPlayer, RowTeam,
 } from './boardRows'
@@ -260,6 +261,13 @@ export type RowContextInput = {
    * server, which alone can read them (app/golf/[root]/[tripCode]/golfIreland.ts).
    */
   roundCards?: readonly RoundCard[]
+  /**
+   * A continuous league's periods and their rule (lib/leagueSetup.ts) —
+   * every board then reads one round a period. Pass the rounds with their
+   * `scheduled_date`, or no card can be filed into one.
+   */
+  periods?: readonly LeaguePeriod[]
+  periodRule?: PeriodRule
 }
 
 /**
@@ -316,5 +324,6 @@ export function buildRowContext(input: RowContextInput): RowContext {
     legacyTeamScoring: input.legacyTeamScoring,
     ...(input.cardsOff?.length ? { cardsOff: new Set(input.cardsOff) } : {}),
     ...(input.roundCards?.length ? { roundCards: input.roundCards } : {}),
+    ...(input.periods?.length ? { periods: input.periods, ...(input.periodRule ? { periodRule: input.periodRule } : {}) } : {}),
   }
 }

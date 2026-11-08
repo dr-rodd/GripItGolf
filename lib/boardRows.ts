@@ -18,6 +18,8 @@ import { FULL_ALLOWANCE, allowanceFor, allowanceOf, allowedHandicap, variesByRou
 import { shotsReceived } from './handicap'
 import type { RoundCard } from './golfIreland'
 import { quotaPoints, quotaTarget, quotaScaleOf } from './quota'
+import { type LeaguePeriod, type PeriodRule, periodOf, periodRoundId } from './leagueSetup'
+import { type PeriodCard, compositeBase, pickPeriodCard } from './periodCards'
 import {
   setOf, sheetForBoard, teamsOnSheet, membersOf, daySheetId, type Membership,
 } from './teamSets'
@@ -87,6 +89,11 @@ export type RowRound = {
   casual?: boolean
   /** Whether a casual round's cards still feed the stats. Boards never read it. */
   casual_stats?: boolean
+  /**
+   * The day it was played. Read only by a league of periods, which files a
+   * card into the period its date falls in; absent everywhere else.
+   */
+  scheduled_date?: string | null
 }
 
 /** A score resolved from either the committed or the in-progress table. */
@@ -292,6 +299,15 @@ export type RowContext = {
    * scoring the way it always has.
    */
   legacyTeamScoring: TeamScoring | null
+  /**
+   * A continuous league's periods (lib/leagueSetup.ts), in date order, and
+   * its rule for which card counts in one. Present only on a league of
+   * periods: every board then reads one round per period, built in
+   * `withPeriods` from the cards dated inside it. Absent everywhere else,
+   * which is every board before them.
+   */
+  periods?: readonly LeaguePeriod[]
+  periodRule?: PeriodRule
 }
 
 // ─── Handicap arithmetic ───────────────────────────────────────
@@ -510,12 +526,159 @@ export function buildRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   // which is right, and is what the two filters in this order say.
   // A card switched off goes first of all: it is out of every board,
   // the round's own included.
-  const counted = withOnlyRounds(withoutCasualRounds(withoutCardsOff(ctx)), lb.roundIds)
+  const narrowed = withOnlyRounds(withoutCasualRounds(withoutCardsOff(ctx)), lb.roundIds)
+  // A league of periods reads one round a period, built from the cards in
+  // it by the league's rule — after every filter above, so a card switched
+  // off or a casual round never competes, and before the shells, so they
+  // read a period exactly as they read a round.
+  const [board, counted] = withPeriods(lb, narrowed)
   // A tags board is a team board by audience — every predicate on the
   // platform treats it as one — but its rows are built from whole cards
   // rather than a composite one, so it takes its own shell.
-  if (isTagBoard(lb)) return tagRows(lb, counted)
-  return lb.audience === 'team' ? teamRows(lb, counted) : individualRows(lb, counted)
+  if (isTagBoard(board)) return tagRows(board, counted)
+  return board.audience === 'team' ? teamRows(board, counted) : individualRows(board, counted)
+}
+
+/**
+ * A league of periods, read as one round a period — the only place that
+ * happens (lib/periodCards.ts decides; this builds).
+ *
+ * Each player's cards dated inside a period are measured as this board
+ * reads them — points at each card's own handicap and allowance, nett
+ * strokes, a quota against its own target — and the league's rule picks
+ * the best card, or the best on each hole. The period's round is then that
+ * pick, with every figure **already the board's**: the points restated,
+ * the handicap the one allowed, so the board is handed back without its
+ * allowance and nothing downstream restates anything a second time. On a
+ * composite, a hole taken from a card at another handicap has its gross
+ * moved by the difference in shots, so its nett is exactly what it was on
+ * its own card while the round reads at one handicap.
+ *
+ * A Golf Ireland card filed to the period competes as a whole card: where
+ * it beats the pick, the period is that card, read as the round always
+ * reads one (`perPlayerRounds`).
+ *
+ * A card outside every period counts for nothing, and is not here.
+ */
+function withPeriods(lb: Leaderboard, ctx: RowContext): [Leaderboard, RowContext] {
+  const periods = ctx.periods
+  if (!periods || periods.length === 0) return [lb, ctx]
+
+  const strokes = lb.scoring === 'strokes'
+  const quota = lb.scoring === 'quota'
+  const scored = scoresForBoard(lb, ctx)
+  const allowanceAt = allowanceFor(lb)
+  const holeById = new Map(ctx.holes.map(h => [h.id, h]))
+  const periodRound = new Map<string, LeaguePeriod>()
+  for (const r of ctx.rounds) {
+    const p = periodOf(r.scheduled_date, periods)
+    if (p) periodRound.set(r.id, p)
+  }
+  const courseOf = (roundId: string) => {
+    const s = scored.find(x => x.roundId === roundId)
+    return s ? holeById.get(s.holeId)?.course_id ?? null : null
+  }
+  const imported = new Map((ctx.roundCards ?? []).map(c => [`${c.roundId}:${c.playerId}`, c]))
+
+  const byPlayerRound = new Map<string, ResolvedScore[]>()
+  for (const s of scored) {
+    if (!periodRound.has(s.roundId)) continue
+    if (strokes && s.gross == null) continue
+    const k = `${s.playerId}:${s.roundId}`
+    const list = byPlayerRound.get(k)
+    if (list) list.push(s); else byPlayerRound.set(k, [s])
+  }
+
+  const resolved: ResolvedScore[] = []
+  const hcpFor = new Map<string, number>()
+  const liveRoundIds = new Set<string>()
+  const roundCards: RoundCard[] = []
+
+  for (const p of ctx.players) {
+    for (const period of periods) {
+      const pid = periodRoundId(period.key)
+      const ah = (roundId: string) => boardHandicap(ctx, roundId, p.id, p.handicap, allowanceAt(roundId))
+      const cards: (PeriodCard & { scores: ResolvedScore[] })[] = []
+      for (const r of ctx.rounds) {
+        if (periodRound.get(r.id) !== period) continue
+        const mine = byPlayerRound.get(`${p.id}:${r.id}`)
+        if (!mine || mine.length === 0) continue
+        const h = ah(r.id)
+        cards.push({
+          roundId: r.id,
+          date: r.scheduled_date ?? '',
+          courseId: courseOf(r.id),
+          scores: mine,
+          holes: mine.map(s => {
+            const hole = holeById.get(s.holeId)
+            return {
+              n: s.holeNumber,
+              v: strokes
+                ? (s.gross ?? 0) - (hole ? shotsReceived(h, effectiveSI(hole, p.gender)) : 0)
+                : s.points,
+            }
+          }),
+          offset: quota ? -quotaTarget(h) : 0,
+        })
+      }
+
+      const pick = pickPeriodCard(cards, ctx.periodRule, { lowerWins: strokes, compositeAllowed: !quota })
+      const gi = imported.get(`${pid}:${p.id}`)
+      const giValue = gi ? importedRound(lb, pid, gi, allowanceAt(pid))?.score : undefined
+
+      // What the pick is worth, to set against a Golf Ireland card.
+      let pickValue: number | null = null
+      let chosen: ResolvedScore[] = []
+      let baseHcp: number | null = null
+      if (pick?.kind === 'card') {
+        const c = cards.find(x => x.roundId === pick.roundId)!
+        chosen = c.scores
+        baseHcp = ah(c.roundId)
+        pickValue = c.holes.reduce((t, h) => t + h.v, 0) + (c.offset ?? 0)
+      } else if (pick?.kind === 'composite') {
+        const base = compositeBase(pick, cards)
+        baseHcp = ah(base)
+        pickValue = 0
+        for (const [n, roundId] of pick.byHole) {
+          const c = cards.find(x => x.roundId === roundId)!
+          const s = c.scores.find(x => x.holeNumber === n)!
+          pickValue += c.holes.find(h => h.n === n)!.v
+          const hole = holeById.get(s.holeId)
+          const shift = hole && s.gross != null && roundId !== base
+            ? shotsReceived(baseHcp, effectiveSI(hole, p.gender)) - shotsReceived(ah(roundId), effectiveSI(hole, p.gender))
+            : 0
+          chosen.push(shift === 0 ? s : { ...s, gross: (s.gross as number) + shift })
+        }
+      }
+
+      const giWins = giValue != null && (pickValue == null || (strokes ? giValue < pickValue : giValue > pickValue))
+      if (giWins && gi) {
+        roundCards.push(gi)
+        continue
+      }
+      if (chosen.length === 0) continue
+      for (const s of chosen) {
+        if (s.live) liveRoundIds.add(pid)
+        resolved.push({ ...s, roundId: pid })
+      }
+      if (baseHcp != null) hcpFor.set(`${pid}:${p.id}`, baseHcp)
+      for (const s of chosen) if (ctx.liveRoundIds.has(s.roundId)) liveRoundIds.add(pid)
+    }
+  }
+
+  // Every figure above is already this board's, allowance and all — so the
+  // board goes on without one, or the shells would take it off twice.
+  const { handicapAllowance: _a, roundAllowances: _r, ...rest } = lb
+  void _a; void _r
+  return [rest as Leaderboard, {
+    ...ctx,
+    rounds: periods.map((period, i) => ({ id: periodRoundId(period.key), round_number: i + 1 })),
+    resolved,
+    hcpFor,
+    exactHcpFor: undefined,
+    liveRoundIds,
+    roundCards,
+  }]
 }
 
 /**
@@ -536,7 +699,11 @@ function withoutCardsOff(ctx: RowContext): RowContext {
 
 /** The Golf Ireland cards on these rounds only — beside the scores, in each narrowing. */
 const cardsIn = (ctx: RowContext, counted: ReadonlySet<string>) =>
-  ctx.roundCards ? { roundCards: ctx.roundCards.filter(c => counted.has(c.roundId)) } : {}
+  ctx.roundCards
+    // A card filed to a period stands on no round of its own, so narrowing
+    // the rounds never takes it — narrowing the periods does.
+    ? { roundCards: ctx.roundCards.filter(c => counted.has(c.roundId) || c.roundId.startsWith('period:')) }
+    : {}
 
 /**
  * The context with casual rounds — and their scores — taken out.
@@ -581,6 +748,20 @@ export function withOnlyRounds(
 ): RowContext {
   if (!roundIds || roundIds.length === 0) return ctx
   const wanted = new Set(roundIds)
+  // A league of periods is narrowed by period: the periods asked for, and
+  // the cards dated inside them — the board then builds just those.
+  if (ctx.periods && roundIds.some(id => id.startsWith('period:'))) {
+    const periods = ctx.periods.filter(p => wanted.has(periodRoundId(p.key)))
+    const rounds = ctx.rounds.filter(r => periodOf(r.scheduled_date, periods))
+    const counted = new Set(rounds.map(r => r.id))
+    return {
+      ...ctx,
+      periods,
+      rounds,
+      resolved: ctx.resolved.filter(s => counted.has(s.roundId)),
+      ...(ctx.roundCards ? { roundCards: ctx.roundCards.filter(c => wanted.has(c.roundId)) } : {}),
+    }
+  }
   const rounds = ctx.rounds.filter(r => wanted.has(r.id))
   if (rounds.length === ctx.rounds.length) return ctx
   const counted = new Set(rounds.map(r => r.id))

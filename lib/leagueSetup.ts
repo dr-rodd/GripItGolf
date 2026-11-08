@@ -146,10 +146,33 @@ export type LeagueSetup = {
    * in it, has none. Said on the round's tile; nothing is refused by it.
    */
   deadlines?: Record<string, string>
+  /**
+   * Continuous, redefined (Ross, 8 Nov 2026) — the league's rounds are
+   * **periods of time**, and players hand in cards whenever and wherever
+   * they play inside one. In date order, never overlapping. Present only on
+   * a continuous league made since; one without is the old continuous
+   * (playing days picked inside a period) and reads exactly as it did.
+   */
+  periods?: LeaguePeriod[]
+  /** Periods only — which of a player's cards in a period counts. Absent is the best card. */
+  periodRule?: PeriodRule
+  /**
+   * Periods only — the courses a card may be played on. Absent is any
+   * course. Course ids; the picker offers these and nothing else.
+   */
+  courseIds?: string[]
 }
 
-/** Whether a league of this shape is asked for round deadlines: one whose rounds are played over a stretch. */
-export function asksRoundDeadlines(schedule: LeagueSchedule | null | undefined): boolean {
+/**
+ * Whether a league of this shape is asked for round deadlines: one whose
+ * rounds are played over a stretch. **Not a league of periods** — there the
+ * period's own end is the rule, and a deadline beside it would only repeat
+ * it, less exactly.
+ */
+export function asksRoundDeadlines(
+  schedule: LeagueSchedule | null | undefined, periods = false,
+): boolean {
+  if (periods) return false
   return schedule === 'continuous' || schedule === 'series'
 }
 
@@ -203,6 +226,165 @@ export function tidyCardsOff(raw: unknown): string[] {
 export function cardsOffWith(list: readonly string[], key: string, off: boolean): string[] {
   const rest = tidyCardsOff(list).filter(k => k !== key)
   return off ? tidyCardsOff([...rest, key]) : rest
+}
+
+// ─── Periods ───────────────────────────────────────────────────
+//
+// A continuous league's rounds are periods (Ross, 8 Nov 2026: "rounds are
+// periods; players hand in a card any time in each one"). A period has no
+// course, no `rounds` row and no itinerary item: a card is an ordinary round
+// — one course, one date — and which period it belongs to is worked out
+// from its date on every read (`periodOf`), never stored, so moving a
+// period's dates re-files its cards with nothing to migrate. A card dated
+// outside every period counts for nothing.
+//
+// Which of a player's cards in a period counts is the league's rule
+// (`PeriodRule`), applied by lib/boardRows.ts through lib/periodCards.ts.
+
+export type LeaguePeriod = {
+  /** Stable — kept when the period's dates move, so its id never changes under it. */
+  key: string
+  /** The first day of the period, a date. */
+  start: string
+  /** The last day of the period, inclusive. */
+  end: string
+}
+
+export type PeriodRule = 'best_card' | 'composite'
+
+export const PERIOD_RULES: { key: PeriodRule; label: string; hint: string }[] = [
+  { key: 'best_card', label: 'Best card',
+    hint: 'Each player\u2019s best card in the period counts.' },
+  { key: 'composite', label: 'Best composite card',
+    hint: 'Each player\u2019s best score on every hole, across their cards in the period.' },
+]
+
+/** The most periods a league holds — the same ceiling as a series' rounds. */
+export const MAX_PERIODS = 30
+
+/** How long the equal run's periods are offered, at most. */
+export const MAX_PERIOD_EVERY = 12
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const isDate = (v: unknown): v is string =>
+  typeof v === 'string' && DATE_RE.test(v) && Number.isFinite(Date.parse(`${v}T00:00:00Z`))
+
+/** A date moved by whole days. */
+export function addDays(date: string, days: number): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
+}
+
+/**
+ * The date a whole number of months on, the day of the month kept and
+ * clamped to the month's last — 31 January plus one month is 28 (or 29)
+ * February, never 3 March.
+ */
+export function addMonths(date: string, months: number): string {
+  const d = new Date(Date.parse(`${date}T00:00:00Z`))
+  const y = d.getUTCFullYear(), m = d.getUTCMonth() + months, day = d.getUTCDate()
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate()
+  return new Date(Date.UTC(y, m, Math.min(day, last))).toISOString().slice(0, 10)
+}
+
+/**
+ * The equal run: `count` periods back to back from `first`, each `every`
+ * weeks or months long, each ending the day before the next begins. Keys
+ * `p1`, `p2` … — made once here, and kept by every later change of date.
+ * Empty when anything is malformed.
+ */
+export function equalPeriods(first: string, every: number, unit: RepeatUnit, count: number): LeaguePeriod[] {
+  if (!isDate(first)) return []
+  if (!Number.isInteger(every) || every < 1 || every > MAX_PERIOD_EVERY) return []
+  if (!Number.isInteger(count) || count < 1) return []
+  const n = Math.min(count, MAX_PERIODS)
+  const starts = Array.from({ length: n + 1 }, (_, k) =>
+    unit === 'week' ? addDays(first, k * every * 7) : addMonths(first, k * every))
+  return Array.from({ length: n }, (_, k) => ({
+    key: `p${k + 1}`, start: starts[k], end: addDays(starts[k + 1], -1),
+  }))
+}
+
+/**
+ * Why these periods cannot be stored, or null when they can: at least one,
+ * no more than the ceiling, each a real start on or before its end, in
+ * order, and none overlapping the one before.
+ */
+export function periodsIssue(periods: readonly LeaguePeriod[]): string | null {
+  if (periods.length === 0) return 'A league needs at least one period.'
+  if (periods.length > MAX_PERIODS) return `A league can hold at most ${MAX_PERIODS} periods.`
+  const keys = new Set<string>()
+  for (let i = 0; i < periods.length; i++) {
+    const p = periods[i]
+    if (!isDate(p.start) || !isDate(p.end)) return `Period ${i + 1} needs a start and a finish.`
+    if (p.end < p.start) return `Period ${i + 1} finishes before it starts.`
+    if (i > 0 && p.start <= periods[i - 1].end) return `Period ${i + 1} starts before period ${i} has finished.`
+    if (!p.key || keys.has(p.key)) return 'Two periods share a key.'
+    keys.add(p.key)
+  }
+  return null
+}
+
+/** The periods a stored setup holds, or none at all when they do not read. */
+export function tidyPeriods(raw: unknown): LeaguePeriod[] {
+  if (!Array.isArray(raw)) return []
+  const periods = raw.map(p => {
+    const r = (p && typeof p === 'object' ? p : {}) as Record<string, unknown>
+    return {
+      key: typeof r.key === 'string' ? r.key.slice(0, 40) : '',
+      start: typeof r.start === 'string' ? r.start : '',
+      end: typeof r.end === 'string' ? r.end : '',
+    }
+  })
+  return periodsIssue(periods) ? [] : periods
+}
+
+/** A league of periods — continuous, as redefined. Everything else reads as it always has. */
+export function isPeriodLeague(setup: LeagueSetup | null | undefined): setup is LeagueSetup & { periods: LeaguePeriod[] } {
+  return !!setup && setup.schedule === 'continuous' && (setup.periods?.length ?? 0) > 0
+}
+
+/** The period a date falls in, or null — a card outside every period counts for nothing. */
+export function periodOf<P extends LeaguePeriod>(date: string | null | undefined, periods: readonly P[]): P | null {
+  if (!date) return null
+  return periods.find(p => p.start <= date && date <= p.end) ?? null
+}
+
+/** Where a league of periods stands today: the one open, or the next to open, or none left. */
+export function periodNow<P extends LeaguePeriod>(today: string, periods: readonly P[]): {
+  open: P | null
+  next: P | null
+} {
+  return {
+    open: periodOf(today, periods),
+    next: periods.find(p => p.start > today) ?? null,
+  }
+}
+
+/**
+ * Why a card cannot be dated this day, or null when it can: never in the
+ * future, and inside a period. Said in a sentence for the Start a card sheet.
+ */
+export function periodCardIssue(date: string, today: string, periods: readonly LeaguePeriod[]): string | null {
+  if (!isDate(date)) return 'Pick the day it was played.'
+  if (date > today) return 'A card can\u2019t be dated in the future.'
+  if (!periodOf(date, periods)) return 'That day is outside every period of the league.'
+  return null
+}
+
+/** The id a period goes by on a leaderboard, where it stands in for a round. */
+export const periodRoundId = (key: string) => `period:${key}`
+
+/** The period's name on screen — "Period 2". Its place in the list, which is date order. */
+export function periodLabel(periods: readonly LeaguePeriod[], key: string): string {
+  const i = periods.findIndex(p => p.key === key)
+  return i < 0 ? 'Period' : `Period ${i + 1}`
+}
+
+/** "1 Dec – 28 Dec", for a period's line. */
+export function describePeriod(p: LeaguePeriod): string {
+  const a = describeShortDate(p.start) ?? p.start
+  const b = describeShortDate(p.end) ?? p.end
+  return p.start === p.end ? a : `${a} \u2013 ${b}`
 }
 
 // ─── Days ──────────────────────────────────────────────────────
@@ -668,6 +850,25 @@ export function parseLeagueSetup(raw: unknown): LeagueSetup | null {
       ? { scoreSource: source, golfIreland: giRules } : {}),
     ...(tidyCardsOff(r.cardsOff).length > 0 ? { cardsOff: tidyCardsOff(r.cardsOff) } : {}),
     ...(Object.keys(tidyDeadlines(r.deadlines)).length > 0 ? { deadlines: tidyDeadlines(r.deadlines) } : {}),
+    // Periods are continuous's alone, and dropped — never the league — when
+    // they do not read: a league that parsed as nothing would be offered
+    // the knockout form, and a save there would overwrite it. The rule and
+    // the courses only ever ride with periods.
+    ...periodFields(schedule, r),
+  }
+}
+
+function periodFields(schedule: LeagueSchedule | null, r: Record<string, unknown>): Partial<LeagueSetup> {
+  if (schedule !== 'continuous') return {}
+  const periods = tidyPeriods(r.periods)
+  if (periods.length === 0) return {}
+  const courseIds = Array.isArray(r.courseIds)
+    ? [...new Set(r.courseIds.filter((c): c is string => typeof c === 'string' && c.length > 0 && c.length <= 64))].slice(0, 50)
+    : []
+  return {
+    periods,
+    ...(r.periodRule === 'composite' ? { periodRule: 'composite' as const } : {}),
+    ...(courseIds.length > 0 ? { courseIds } : {}),
   }
 }
 
@@ -690,7 +891,11 @@ export function describeLeagueSetup(
   const parts = ['League']
   // The shape is worth a word when it is not the plain one — and a weekly
   // repeat is the better word for a continuous league that has one.
-  if (setup.schedule === 'continuous') {
+  if (isPeriodLeague(setup)) {
+    parts.push('continuous')
+    parts.push(setup.periods.length === 1 ? 'one period' : `${setup.periods.length} periods`)
+    parts.push(setup.periodRule === 'composite' ? 'best composite card' : 'best card')
+  } else if (setup.schedule === 'continuous') {
     parts.push(setup.repeatWeekday != null
       ? `every ${WEEKDAY_NAMES[setup.repeatWeekday]}`
       : 'continuous')
@@ -701,9 +906,11 @@ export function describeLeagueSetup(
     if (setup.repeat) parts.push(describeRepeat(setup.repeat, firstDate))
     else if (firstDate) parts.push('rounds added ad hoc')
   }
-  parts.push(setup.schedule === 'series'
-    ? (days === 1 ? 'one round' : `${days} rounds`)
-    : (days === 1 ? 'one day' : `${days} days`))
+  if (!isPeriodLeague(setup)) {
+    parts.push(setup.schedule === 'series'
+      ? (days === 1 ? 'one round' : `${days} rounds`)
+      : (days === 1 ? 'one day' : `${days} days`))
+  }
   // Said in the card's own words rather than the form buttons' — "I add the
   // field" is a thing an organiser taps, not a fact a summary states.
   const entry = setup.entry === 'organiser'
