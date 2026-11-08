@@ -31,8 +31,10 @@ import RoundDeadlines from '@/app/components/RoundDeadlines'
 import { setRoundDeadlines } from '@/lib/leagueRoundStore'
 import {
   type DayBoards, type LeagueSetup, type LeagueSchedule, type RepeatUnit, DAY_BOARDS,
-  MAX_LEAGUE_DAYS, MAX_REPEAT_EVERY, REPEAT_UNITS, WEEKDAY_NAMES,
-  asksRoundDeadlines, describeRepeat, leagueDaysIssue, seriesDates, weeklyDates,
+  MAX_LEAGUE_DAYS, MAX_REPEAT_EVERY, REPEAT_UNITS,
+  asksRoundDeadlines, describeRepeat, leagueDaysIssue, seriesDates,
+  type LeaguePeriod, type PeriodRule, PERIOD_RULES, MAX_PERIODS, MAX_PERIOD_EVERY,
+  equalPeriods, periodsIssue, describePeriod,
 } from '@/lib/leagueSetup'
 import type { Leaderboard } from '@/lib/leaderboards'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
@@ -235,11 +237,18 @@ export default function CreateLeagueForm({ schedule, onExit }: {
   // created before this question existed was.
   const [restDays, setRestDays] = useState<number[]>([])
 
-  // Continuous — the playing days inside the period: every week on one
-  // day, or picked by hand.
-  const [repeatOn, setRepeatOn] = useState(false)
-  const [weekday, setWeekday] = useState<number | null>(null)
-  const [manualDates, setManualDates] = useState<string[]>([''])
+  // Continuous — the league's periods (Ross, 8 Nov 2026): an equal run from
+  // `startDate`, then each period's dates adjusted by hand. Any change to
+  // the run starts the adjustments again from the run it now makes.
+  const continuous = schedule === 'continuous'
+  const [periodEvery, setPeriodEvery] = useState(4)
+  const [periodUnit, setPeriodUnit] = useState<RepeatUnit>('week')
+  const [periodCount, setPeriodCount] = useState(6)
+  const [periodEdits, setPeriodEdits] = useState<LeaguePeriod[] | null>(null)
+  // Which card counts in a period, and where a card may be played.
+  const [periodRule, setPeriodRule] = useState<PeriodRule>('best_card')
+  const [anyCourse, setAnyCourse] = useState<boolean | null>(null)
+  const [cardCourses, setCardCourses] = useState<string[]>([''])
 
   // Series — how the rounds arrive, and for a recurring one how often and
   // how many. The first round's date is `startDate`.
@@ -314,16 +323,12 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     : 1
   const runTooLong = runLength > MAX_LEAGUE_DAYS
 
-  // A continuous league's playing days: every week on one day, or picked
-  // by hand — deduped and sorted either way, because the running order is
-  // the order the days happen, not the order they were typed.
-  const playDates = schedule !== 'continuous'
-    ? []
-    : repeatOn
-      ? (weekday !== null && periodSet ? weeklyDates(startDate, endDate, weekday) : [])
-      : [...new Set(manualDates.filter(Boolean))].sort()
-  const manualOutside = schedule === 'continuous' && !repeatOn && periodSet
-    && manualDates.some(d => d && (d < startDate || d > endDate))
+  // A continuous league's periods — the run as made, or as adjusted.
+  const periods: LeaguePeriod[] = !continuous ? []
+    : periodEdits ?? equalPeriods(startDate, periodEvery, periodUnit, periodCount)
+  const periodsProblem = !continuous ? null
+    : !startDate ? 'Pick when the first period starts.'
+    : periodsIssue(periods)
 
   /**
    * The playing slots — what a round will be made from, whatever the
@@ -340,11 +345,10 @@ export default function CreateLeagueForm({ schedule, onExit }: {
       ? Array.from({ length: multiDay ? runLength : 1 }, (_, i) => i)
           .filter(i => !restDays.includes(i))
           .map(i => ({ dayIndex: i, date: dateForDay(startDate || null, i) }))
-      : schedule === 'continuous'
-        ? playDates.map(d => ({
-            dayIndex: (dayNumber(d)! - dayNumber(startDate)!) / 86_400_000,
-            date: d,
-          }))
+      // A league of periods makes no rounds at creation: a card is a round,
+      // made when a player starts one inside a period.
+      : continuous
+        ? []
         : !startDate || !seriesPlan
           ? []
           : (seriesPlan === 'recurring'
@@ -355,7 +359,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
               date: d,
             }))
 
-  const daysIssue = leagueDaysIssue(slots.length, schedule)
+  const daysIssue = continuous ? null : leagueDaysIssue(slots.length, schedule)
 
   // One slot is asked with the single picker, which writes `venues[0]` —
   // so one slot reads it back from there, whatever the shape keys by.
@@ -365,7 +369,9 @@ export default function CreateLeagueForm({ schedule, onExit }: {
       : schedule !== 'standalone' && slot.date
         ? dateVenues[slot.date]
         : venues[i]) ?? ''
-  const venuesComplete = slots.length > 0 && slots.every((s, i) => venueFor(s, i) !== '')
+  const venuesComplete = continuous
+    ? anyCourse === true || (anyCourse === false && cardCourses.some(Boolean))
+    : slots.length > 0 && slots.every((s, i) => venueFor(s, i) !== '')
 
   const duplicateIndex = firstDuplicateIndex(players.map(p => p.name))
   const duplicateIssue = duplicateIndex === -1
@@ -392,9 +398,8 @@ export default function CreateLeagueForm({ schedule, onExit }: {
       ? multiDay !== null && (multiDay
           ? !!startDate && !!endDate && !datesBackwards && !runTooLong && !daysIssue
           : !!startDate)
-      : schedule === 'continuous'
-        ? periodSet && !manualOutside && slots.length > 0 && !daysIssue
-          && (!repeatOn || weekday !== null)
+      : continuous
+        ? periodsProblem === null
         : !!seriesPlan && !!startDate && slots.length > 0 && !daysIssue)
 
   /** The course a slot is played at, or null while it is to be confirmed. */
@@ -406,11 +411,11 @@ export default function CreateLeagueForm({ schedule, onExit }: {
   // How the days relate is asked of anything with more than one day — and
   // of every series, whose events are added after creation if they were
   // not all made now: one event today is the start of several.
-  const asksDayBoards = slots.length > 1 || schedule === 'series'
+  const asksDayBoards = !continuous && (slots.length > 1 || schedule === 'series')
 
   // The deadline question, once the rounds are made — on a league whose
   // rounds are played over a stretch, each round's name and own date.
-  const askDeadlines = asksRoundDeadlines(schedule) && slots.length > 0
+  const askDeadlines = asksRoundDeadlines(schedule, continuous) && slots.length > 0
   const deadlineNames = slots.map((slot, i) => `Round ${i + 1}${slot.date ? ` · ${describeShortDate(slot.date)}` : ''}`)
   const deadlineFloors = slots.map(slot => slot.date)
   const deadlineOpts = { names: deadlineNames, floors: deadlineFloors }
@@ -452,8 +457,18 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     setDateVenues(prev => ({ ...prev, [date]: id }))
   }
 
-  function setManualDate(i: number, value: string) {
-    setManualDates(prev => prev.map((d, idx) => (idx === i ? value : d)))
+  /** One period's start or finish moved by hand — the run keeps its keys. */
+  function setPeriodDate(i: number, end: 'start' | 'end', value: string) {
+    setPeriodEdits(periods.map((p, idx) => (idx === i ? { ...p, [end]: value } : p)))
+  }
+
+  /** The run's own answers: any change makes the run afresh. */
+  function setRun(patch: { every?: number; unit?: RepeatUnit; count?: number; start?: string }) {
+    if (patch.every !== undefined) setPeriodEvery(patch.every)
+    if (patch.unit !== undefined) setPeriodUnit(patch.unit)
+    if (patch.count !== undefined) setPeriodCount(patch.count)
+    if (patch.start !== undefined) setStartDate(patch.start)
+    setPeriodEdits(null)
   }
 
   // ── Player helpers — the trip wizard's, same shapes ─────────────────────
@@ -510,8 +525,13 @@ export default function CreateLeagueForm({ schedule, onExit }: {
       format: 'league',
       // Standalone is the absent default — the keep-the-no-op-off rule.
       ...(schedule !== 'standalone' ? { schedule } : {}),
-      ...(schedule === 'continuous' && repeatOn && weekday !== null
-        ? { repeatWeekday: weekday } : {}),
+      // A league of periods: the periods, the rule (best card the absent
+      // default), and the courses a card may be played on (absent is any).
+      ...(continuous ? {
+        periods,
+        ...(periodRule === 'composite' ? { periodRule } : {}),
+        ...(anyCourse === false ? { courseIds: [...new Set(cardCourses.filter(Boolean))] } : {}),
+      } : {}),
       // A recurring series says so; as you go is the absent answer.
       ...(schedule === 'series' && seriesPlan === 'recurring'
         ? { repeat: { every: repeatEvery, unit: repeatUnit } } : {}),
@@ -533,8 +553,9 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     // writes one date to both), a continuous event carries its period, and
     // a series runs from its first event to its last made so far — adding
     // the next event on the Scoring tab moves the end on with it.
-    const tripStart = startDate
-    const tripEnd = schedule === 'series' ? (slots.at(-1)?.date ?? startDate)
+    const tripStart = continuous ? periods[0].start : startDate
+    const tripEnd = continuous ? periods.at(-1)!.end
+      : schedule === 'series' ? (slots.at(-1)?.date ?? startDate)
       : schedule === 'standalone' && !multiDay ? startDate
       : endDate
     // Tee times off leaves both of its answers at their defaults, whatever
@@ -633,10 +654,13 @@ export default function CreateLeagueForm({ schedule, onExit }: {
       teeCount: 1,
     }))
 
-    const { data: savedItems, error: itinErr } = await supabase
-      .from('itinerary_items')
-      .insert(items.map(item => toItemRow(tripId, item)))
-      .select('id, day_index, position, kind')
+    // None on a league of periods — its rounds are made card by card.
+    const { data: savedItems, error: itinErr } = items.length > 0
+      ? await supabase
+        .from('itinerary_items')
+        .insert(items.map(item => toItemRow(tripId, item)))
+        .select('id, day_index, position, kind')
+      : { data: [] as { id: string; day_index: number; position: number; kind: string }[], error: null }
 
     if (itinErr) {
       setError(`Event created, but the schedule could not be saved. ${describeError(itinErr)}`)
@@ -682,7 +706,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     // stands in until a tee is chosen, exactly as on a trip, and a pending
     // player gets no row at all, as on a trip (CreateTripForm says why).
     const ratedPlayers = playerRows.filter(p => !isHandicapPending(p.handicap))
-    if (ratedPlayers.length > 0) {
+    if (ratedPlayers.length > 0 && insertedRounds.length > 0) {
       const hcpRows = insertedRounds.flatMap(round =>
         ratedPlayers.map(player => ({
           round_id: round.id,
@@ -819,7 +843,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
 
       <WizardShell
         step={stepNum}
-        titles={keys.map(k => STEP_TITLES[k])}
+        titles={keys.map(k => k === 'venues' && continuous ? 'Where cards are played' : STEP_TITLES[k])}
         intro={STEP_INTROS[key]}
         onBack={goBack}
         backOnFirst={!!onExit}
@@ -971,104 +995,73 @@ export default function CreateLeagueForm({ schedule, onExit }: {
               </>
             )}
 
-            {schedule === 'continuous' && (
+            {continuous && (
               <>
+                {/* The periods (Ross, 8 Nov 2026): an equal run, then each
+                    one's dates adjusted by hand. A period is a round of the
+                    league — cards are handed in any time inside one. */}
+                <DateField label="The first period starts" value={startDate}
+                  onChange={v => setRun({ start: v })} />
+
                 <div>
-                  <label className={FIELD_LABEL}>The period</label>
-                  <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-                    <DateField label="Starts" value={startDate} onChange={setStartDate} />
-                    <DateField label="Finishes" value={endDate} onChange={setEndDate} />
+                  <Stepper
+                    label="Each period lasts"
+                    value={periodEvery}
+                    min={1}
+                    max={MAX_PERIOD_EVERY}
+                    unit={n => periodUnit === 'week'
+                      ? (n === 1 ? 'week' : 'weeks')
+                      : (n === 1 ? 'month' : 'months')}
+                    onChange={n => setRun({ every: n })}
+                  />
+                  <div className="mt-3">
+                    <Chips options={REPEAT_UNITS} chosen={periodUnit} onChoose={u => setRun({ unit: u })} />
                   </div>
-                  {datesBackwards && (
-                    <p className="text-rust-deep text-[13px] mt-2 leading-snug">
-                      The finish cannot come before the start.
-                    </p>
-                  )}
                 </div>
 
-                {periodSet && (
-                  <>
-                    <div className={`flex items-start justify-between gap-4 p-4 ${cardClass()}`}>
-                      <div className="min-w-0">
-                        <p className="text-ink text-sm font-medium">Repeats weekly</p>
-                        <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                          The same day every week, like every Wednesday.
-                        </p>
-                      </div>
-                      <Toggle checked={repeatOn} onChange={setRepeatOn} label="Repeats weekly" />
-                    </div>
+                <Stepper
+                  label="How many periods?"
+                  value={periodCount}
+                  min={1}
+                  max={MAX_PERIODS}
+                  unit={n => (n === 1 ? 'period' : 'periods')}
+                  onChange={n => setRun({ count: n })}
+                />
 
-                    {repeatOn ? (
-                      <div>
-                        <label className={FIELD_LABEL}>Which day?</label>
-                        {/* Monday first on screen; stored as the JS 0–6 the
-                            repeat keeps. */}
-                        <div className="grid grid-cols-7 gap-1">
-                          {[1, 2, 3, 4, 5, 6, 0].map(d => (
-                            <button
-                              key={d}
-                              onClick={() => setWeekday(d)}
-                              aria-pressed={weekday === d}
-                              className={`${chipClass(weekday === d)}`}
-                            >
-                              {WEEKDAY_NAMES[d].slice(0, 3)}
-                            </button>
-                          ))}
-                        </div>
-                        {weekday !== null && (
-                          daysIssue
-                            ? <p className="text-rust-deep text-[13px] mt-2 leading-snug">{daysIssue}</p>
-                            : <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                                {playDates.length === 0
-                                  ? `No ${WEEKDAY_NAMES[weekday]} falls inside the period.`
-                                  : `${playDates.length} ${WEEKDAY_NAMES[weekday]}${playDates.length === 1 ? '' : 's'} between the dates — a round each.`}
-                              </p>
-                        )}
-                      </div>
-                    ) : (
-                      <div>
-                        <label className={FIELD_LABEL}>Playing days</label>
-                        <div className="space-y-2">
-                          {manualDates.map((d, i) => (
-                            <div key={i} className="flex items-center gap-2">
-                              <DateField value={d} onChange={v => setManualDate(i, v)} className="flex-1" />
-                              {manualDates.length > 1 && (
-                                <button
-                                  onClick={() => setManualDates(prev => prev.filter((_, idx) => idx !== i))}
-                                  className="text-ink/65 hover:text-ink/80 transition-colors p-2 flex-shrink-0"
-                                  aria-label="Remove this day"
-                                >
-                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M18 6L6 18M6 6l12 12" />
-                                  </svg>
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                        <button
-                          onClick={() => setManualDates(prev => [...prev, ''])}
-                          disabled={manualDates.length >= MAX_LEAGUE_DAYS}
-                          className="w-full mt-2 py-3 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:border-line-strong hover:text-ink/80 transition-colors disabled:opacity-40"
-                        >
-                          + Add a day
-                        </button>
-                        {manualOutside && (
-                          <p className="text-rust-deep text-[13px] mt-2 leading-snug">
-                            Every playing day must fall inside the period.
+                {startDate && periods.length > 0 && (
+                  <div>
+                    <label className={FIELD_LABEL}>The periods</label>
+                    <p className="text-ink/65 text-[13px] mb-3 leading-snug">
+                      Change any dates that need it, like a break over Christmas.
+                    </p>
+                    <div className="space-y-3">
+                      {periods.map((p, i) => (
+                        <div key={p.key} className={`p-4 ${cardClass()}`}>
+                          <p className="text-ink text-sm font-medium mb-2">
+                            Period {i + 1}
+                            <span className="text-ink/65 font-normal"> · {describePeriod(p)}</span>
                           </p>
-                        )}
-                        {!manualOutside && daysIssue && manualDates.some(Boolean) && (
-                          <p className="text-rust-deep text-[13px] mt-2 leading-snug">{daysIssue}</p>
-                        )}
-                        {!manualOutside && !daysIssue && playDates.length > 1 && (
-                          <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                            {playDates.length} days, a round each — they need not be in a row.
-                          </p>
-                        )}
-                      </div>
+                          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                            <DateField label="Starts" value={p.start} onChange={v => setPeriodDate(i, 'start', v)} />
+                            <DateField label="Finishes" value={p.end} onChange={v => setPeriodDate(i, 'end', v)} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {periodEdits && (
+                      <button
+                        type="button"
+                        onClick={() => setPeriodEdits(null)}
+                        className="mt-2 text-accent-deep text-[13px] font-medium"
+                      >
+                        Back to equal periods
+                      </button>
                     )}
-                  </>
+                  </div>
+                )}
+
+                {startDate && periodsProblem && (
+                  <p className="text-rust-deep text-[13px] leading-snug">{periodsProblem}</p>
                 )}
               </>
             )}
@@ -1163,7 +1156,62 @@ export default function CreateLeagueForm({ schedule, onExit }: {
         )}
 
         {/* ── 2 · Venues ── */}
-        {key === 'venues' && (
+        {key === 'venues' && continuous && (
+          <div className="space-y-5">
+            <div className="space-y-2">
+              {[
+                { any: true, label: 'Any course', hint: 'Players hand in a card from wherever they play.' },
+                { any: false, label: 'Only these courses', hint: 'Cards count only from the courses you pick.' },
+              ].map(o => (
+                <button
+                  key={o.label}
+                  onClick={() => setAnyCourse(o.any)}
+                  aria-pressed={anyCourse === o.any}
+                  className={optionClass(anyCourse === o.any)}
+                >
+                  <p className="text-[17px] font-medium leading-snug text-ink">{o.label}</p>
+                  <p className="t-cap text-ink/65 mt-0.5">{o.hint}</p>
+                </button>
+              ))}
+            </div>
+
+            {anyCourse === false && (
+              <div className="space-y-4">
+                {cardCourses.map((id, i) => (
+                  <div key={i}>
+                    <div className="flex items-center justify-between">
+                      <label className={FIELD_LABEL}>Course {i + 1}</label>
+                      {cardCourses.length > 1 && (
+                        <button
+                          onClick={() => setCardCourses(prev => prev.filter((_, idx) => idx !== i))}
+                          className="text-ink/65 hover:text-ink/80 text-[13px] mb-2"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <VenuePicker
+                      courses={courses}
+                      value={id}
+                      onChange={v => setCardCourses(prev => prev.map((c, idx) => (idx === i ? v : c)))}
+                      onCourseAdded={onCourseAdded}
+                      allowTbc={false}
+                    />
+                  </div>
+                ))}
+                <button
+                  onClick={() => setCardCourses(prev => [...prev, ''])}
+                  disabled={cardCourses.length >= 20}
+                  className="w-full py-3 border border-dashed border-line-strong rounded-xl text-ink/65 text-sm hover:text-ink/80 transition-colors disabled:opacity-40"
+                >
+                  + Add another course
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {key === 'venues' && !continuous && (
           <div className="space-y-5">
             {coursesLoaded && courses.length === 0 && (
               <div className={`p-4 text-ink/65 text-sm text-center ${cardClass()}`}>
@@ -1417,6 +1465,30 @@ export default function CreateLeagueForm({ schedule, onExit }: {
                 score, and Finish waits for at least one. Teams are
                 apportioned after creation on the teams screen, the same
                 as a trip, so a team board here starts unassigned. */}
+            {continuous && (
+              <div>
+                <label className={FIELD_LABEL}>Which card counts in a period?</label>
+                <div className="space-y-2">
+                  {PERIOD_RULES.map(r => (
+                    <button
+                      key={r.key}
+                      onClick={() => setPeriodRule(r.key)}
+                      aria-pressed={periodRule === r.key}
+                      className={optionClass(periodRule === r.key)}
+                    >
+                      <p className="text-[17px] font-medium leading-snug text-ink">{r.label}</p>
+                      <p className="t-cap text-ink/65 mt-0.5">{r.hint}</p>
+                    </button>
+                  ))}
+                </div>
+                {periodRule === 'composite' && (
+                  <p className="text-ink/65 text-[13px] mt-2 leading-snug">
+                    On a strokes leaderboard a composite needs one course, so a player whose cards are on different courses keeps their best card.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div>
               <label className={FIELD_LABEL}>Leaderboards</label>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
@@ -1466,12 +1538,14 @@ export default function CreateLeagueForm({ schedule, onExit }: {
                 Its own question (Ross, 26 Oct 2026): on, every round gets a
                 tee sheet, and the two answers — who makes the sheets, who
                 places players — are asked here rather than as toggles. */}
-            <TeeTimesQuestion
-              on={teeTimes}
-              onToggle={setTeeTimes}
-              value={{ anyoneMakes: perms.set_tee_sheets, playersPick: perms.edit_tee_sheet }}
-              onChange={v => setPerms({ ...perms, set_tee_sheets: v.anyoneMakes, edit_tee_sheet: v.playersPick })}
-            />
+            {!continuous && (
+              <TeeTimesQuestion
+                on={teeTimes}
+                onToggle={setTeeTimes}
+                value={{ anyoneMakes: perms.set_tee_sheets, playersPick: perms.edit_tee_sheet }}
+                onChange={v => setPerms({ ...perms, set_tee_sheets: v.anyoneMakes, edit_tee_sheet: v.playersPick })}
+              />
+            )}
 
             {/* ── How collaborative? ──
                 One question, three toggles, all off until the organiser

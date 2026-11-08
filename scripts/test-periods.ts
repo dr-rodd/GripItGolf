@@ -278,6 +278,30 @@ section('Wired in one place')
   ok(read('lib/rowContext.ts').includes('periods: input.periods'), 'the context carries the periods through')
 }
 
+section('Creation makes a league of periods, and no rounds')
+{
+  const form = read('app/dashboard/create/CreateLeagueForm.tsx')
+  ok(form.includes('periodEdits ?? equalPeriods(startDate, periodEvery, periodUnit, periodCount)'),
+    'the periods are the equal run, or the run as adjusted')
+  ok(form.includes('setPeriodEdits(null)') && form.includes("setPeriodDate(i, 'start', v)"),
+    '  …a change to the run makes it afresh; a date changed by hand keeps the run\'s keys')
+  ok(form.includes('? periodsProblem === null'), '  …and step one waits for periods that store')
+  ok(form.includes('periods,\n') && form.includes("periodRule === 'composite' ? { periodRule } : {}")
+    && form.includes('courseIds: [...new Set(cardCourses.filter(Boolean))]'),
+    'the setup carries the periods, the rule and the courses')
+  ok(form.includes('      : continuous\n        ? []'), 'no rounds are made at creation — a card is a round')
+  ok(form.includes('items.length > 0') && form.includes('insertedRounds.length > 0'),
+    '  …so nothing empty is ever written')
+  ok(form.includes('const tripStart = continuous ? periods[0].start') && form.includes('const tripEnd = continuous ? periods.at(-1)!.end'),
+    'the event runs from the first period\'s start to the last one\'s finish')
+  ok(form.includes('asksRoundDeadlines(schedule, continuous)'), 'no deadlines — a period\'s end is the rule')
+  ok(form.includes("'Where cards are played'") && form.includes("label: 'Any course'") && form.includes("label: 'Only these courses'"),
+    'the venues step asks where a card may be played')
+  ok(form.includes('Which card counts in a period?') && form.includes('PERIOD_RULES.map'), 'the last step asks which card counts')
+  ok(form.includes('{!continuous && (\n              <TeeTimesQuestion'), 'and no tee times — nobody shares a round to book')
+  ok(!form.includes('repeatWeekday') && !form.includes('weeklyDates'), 'the old day-picking face is gone from creation')
+}
+
 console.log(`\n${'─'.repeat(56)}`)
 if (failed === 0) console.log(`✓ all ${passed} checks passed`)
 else {
