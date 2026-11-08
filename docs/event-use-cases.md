@@ -12,7 +12,8 @@ work still to do, and each section says which parts are built.
 ## The three shapes, as decided October 2026
 
 A tournament is asked its shape in time before anything else
-(`LeagueSchedule` in `lib/leagueSetup.ts`). Writing the winter league down
+(`LeagueSchedule` in `lib/leagueSetup.ts`; the chooser that asks it was
+reshaped in November, below). Writing the winter league down
 settled what two of the three shapes mean:
 
 - **Series**: a run of **distinct events**, each with its own result, that
@@ -30,6 +31,43 @@ repeating playing days is a series (each Wednesday is its own event), and
 continuous loses its day picker. **The series half is built** (stage 1,
 below); continuous keeps its day picker until stage 6. No real league had
 been created when this was decided, so nothing live needs carrying over.
+
+## The chooser, as decided November 2026
+
+Ross, 8 November 2026 (D22 to D28 in `docs/design-brief.md`): the
+tournament door asks **when** before **what**.
+
+```
+Golf tournament
+├─ Standalone   one day, or a run of days together
+│  ├─ League       → CreateLeagueForm schedule="standalone"
+│  └─ Match play   → CreateTripForm matchPlay
+└─ Ongoing      over weeks or a season
+   ├─ Series       → CreateLeagueForm schedule="series"
+   ├─ Continuous   → coming soon (stage 6, redefined below)
+   └─ Match play   → CreateKnockoutForm
+```
+
+The top answer is **Ongoing**, so the league type keeps the name
+Continuous. Stored values are unchanged: `LeagueSchedule` is still
+`'standalone' | 'continuous' | 'series'`, and a knockout's `schedule:
+'continuous'` still reads "Ongoing". The answers ride in the address
+(`?type=tournament&when=…&format=…`, `lib/createChoice.ts`), so the
+phone's back gesture and the arrow on a wizard's first step both return to
+the chooser it came from.
+
+**Continuous, redefined.** The organiser sets **rounds that are time
+periods**. Within a period players submit cards whenever and wherever they
+play, ranked by the rules set (for example, best card that round), each
+period with its own result and the periods adding up to the overall. A
+club winter league where members hand in a card each "round" for their
+tag, with no fixed day of play. This replaces October's "no leaderboard
+but the overall" and is stage 6, not built. Until it is, the chooser shows
+Continuous as coming soon and opens no wizard: the continuous league
+wizard still in `CreateLeagueForm` builds the old meaning (playing days
+picked inside a period), so anything made with it would need converting.
+Leagues already made with it keep working; `parseLeagueSetup` and
+`describeLeagueSetup` still read them.
 
 ## 1. A winter league (series)
 

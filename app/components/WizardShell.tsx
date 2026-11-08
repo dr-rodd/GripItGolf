@@ -23,7 +23,7 @@ import { TABBAR_SPACE } from './tabbarMetrics'
  *     hiding under it.
  */
 export default function WizardShell({
-  step, titles, intro, onBack, footer, children, aboveTabBar = false,
+  step, titles, intro, onBack, footer, children, aboveTabBar = false, backOnFirst = false,
 }: {
   /** 1-based. */
   step: number
@@ -40,9 +40,15 @@ export default function WizardShell({
    * just above it rather than at the foot of the screen, behind it.
    */
   aboveTabBar?: boolean
+  /**
+   * The way back shows on step 1 too, for a wizard opened from a chooser it
+   * can return to (the tournament door's — CreateFlow). Absent, step 1 hides
+   * it, as every other wizard always has.
+   */
+  backOnFirst?: boolean
 }) {
   const total = titles.length
-  const first = step <= 1
+  const first = step <= 1 && !backOnFirst
 
   return (
     <>

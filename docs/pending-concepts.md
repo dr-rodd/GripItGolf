@@ -6,6 +6,26 @@ why it came up, what it would touch, and the questions to settle first.
 When one is built, move its decisions into the doc that owns that area and
 delete it from here.
 
+## Golfer of the Year for clubs
+
+**Where it came from.** The November 2026 session on the tournament create
+flow (Ross, 8 Nov): a series covers a society's season or a club's Golfer
+of the Year, and a club product would want the second built for it.
+
+**What it is.** If Green Dot is ever a product for clubs, link the club's
+competitions for the year as a series, the organiser marking each
+competition eligible or ineligible, so a Golfer of the Year standing builds
+itself from the eligible ones.
+
+**What it builds on.** The series (`LeagueSetup.repeat`, ad hoc rounds, a
+round that does not count via `rounds.casual`) and Golf Ireland's cards
+filed to rounds by date and venue (`roundForCard` in
+`lib/golfIrelandCards.ts`).
+
+**Questions first.** How a club's competition list arrives (Golf Ireland,
+or entered by hand); whether eligibility is per competition or by rule (all
+medals, no opens); points by position or Stableford totals.
+
 ## Handicap cuts between rounds
 
 **Where it came from.** The winter league (`docs/event-use-cases.md`, use

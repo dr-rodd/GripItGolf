@@ -78,7 +78,13 @@ const STEP_INTROS: Partial<Record<StepKey, string>> = {
   deadlines: 'Do you want to set a deadline for each round to be completed?',
 }
 
-export default function CreateKnockoutForm() {
+export default function CreateKnockoutForm({ onExit }: {
+  /**
+   * Back to the tournament door's chooser, from step 1 (CreateFlow). Absent
+   * — the trip door — step 1 has no way back but the header mark, as ever.
+   */
+  onExit?: () => void
+} = {}) {
   const [step, setStep] = useState<number | 'done'>(1)
 
   // Step 1 — the event and its period
@@ -159,6 +165,7 @@ export default function CreateKnockoutForm() {
 
   function goBack() {
     setError(null)
+    if (step === 1 && onExit) { onExit(); return }
     if (step !== 'done' && step > 1) setStep(step - 1)
   }
 
@@ -407,6 +414,7 @@ export default function CreateKnockoutForm() {
         titles={keys.map(k => STEP_TITLES[k])}
         intro={STEP_INTROS[key]}
         onBack={goBack}
+        backOnFirst={!!onExit}
         footer={<>
           <button
             onClick={goNext}

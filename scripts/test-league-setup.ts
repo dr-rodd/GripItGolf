@@ -4,7 +4,7 @@
  * Two halves. The rules in lib/leagueSetup.ts are checked directly — the
  * day ceiling, the starter board, what survives of a stored setup, and that
  * the two tournament formats can never misread each other's column. Then
- * the wiring: the tournament door asks league-or-match-play first, the
+ * the wiring: the tournament door asks when then what, the
  * league wizard reuses the proven pieces rather than restating them, and a
  * league event's organiser area describes its format rather than offering
  * a form that would overwrite it.
@@ -27,6 +27,7 @@ import { parseBracketSetup, deadlinesIssue, deadlineOpensAt } from '../lib/brack
 import { asksRoundDeadlines, leagueRoundKey, playByLine } from '../lib/leagueSetup'
 import { parseLeaderboards } from '../lib/leaderboards'
 import { MAX_ROUNDS } from '../lib/tripLimits'
+import { FORMATS_FOR, choiceSearch, parentChoice, parseChoice } from '../lib/createChoice'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -375,32 +376,100 @@ section('The organiser card says the league in one line')
 
 // ─── Wiring ────────────────────────────────────────────────────
 
-section('The tournament door asks the shape — and match play is a shape of its own')
+section('The tournament door asks when, then what (Ross, 8 Nov 2026)')
 {
   const page = read('app/dashboard/create/page.tsx')
   ok(page.includes('CreateFlow'), 'the create route renders the flow switch')
+  ok(!page.includes('searchParams') && !page.includes('force-dynamic'),
+    'and stays static — the choices are read in the browser, never on the server')
 
   const flow = read('app/dashboard/create/CreateFlow.tsx')
   ok(flow.includes('CreateLeagueForm') && flow.includes('CreateTripForm')
     && flow.includes('CreateKnockoutForm'),
     'which can reach all three forms')
-  // The ?type read names three doors now — trip, tournament, run — and only
-  // the tournament door falls through to the shape and format questions.
+  // The ?type read names three doors — trip, tournament, run — and only the
+  // tournament door falls through to the choosers.
   ok(flow.includes("t === 'tournament' || t === 'run'") &&
      flow.includes("if (type !== 'tournament') return <CreateTripForm />"),
     'and only asks the questions through the tournament door')
-  for (const shape of ['Standalone', 'Continuous', 'Series', 'Match play']) {
-    ok(flow.includes(`>${'\n'}            ${shape}`) || flow.includes(shape),
-      `the shape question offers ${shape}`)
+
+  ok(flow.includes('title="Golf tournament" sub="When does it happen?"'), 'the first question is when')
+  ok(flow.includes('title="Standalone" line="One day, or a few days together."')
+    && flow.includes('title="Ongoing" line="Over weeks or a season."'),
+    '  …Standalone or Ongoing')
+  ok(flow.includes('title="Standalone" sub="What format?"'), 'Standalone asks the format')
+  ok(flow.includes('title="Ongoing" sub="What kind of event?"'), 'Ongoing asks the kind of event')
+  for (const t of ['League', 'Match play', 'Series', 'Continuous']) {
+    ok(flow.includes(`title="${t}"`), `  …offering ${t}`)
   }
-  ok(flow.includes("if (shape && shape !== 'match_play') return <CreateLeagueForm schedule={shape} />"),
-    'standalone, continuous and series are leagues — no format question')
-  ok(flow.includes("knockout === 'continuous') return <CreateKnockoutForm />"),
-    'an ongoing knockout gets its own lean door')
-  ok(flow.includes("knockout === 'standalone') return <CreateTripForm matchPlay />"),
-    'a one-off knockout is the event wizard, told it is match play')
-  ok(/Standalone event/.test(flow) && /Ongoing/.test(flow) && !/One-off/.test(flow),
-    'match play asks when the matches are played — a Standalone event or Ongoing (Ross, 4 Nov 2026)')
+
+  // Each wizard reached with exactly the props it had before the chooser changed.
+  ok(flow.includes(`if (when === 'standalone' && format === 'league') return <CreateLeagueForm schedule="standalone" onExit={exit} />`),
+    'Standalone → League is the standalone league wizard')
+  ok(flow.includes(`if (when === 'standalone' && format === 'match_play') return <CreateTripForm matchPlay onExit={exit} />`),
+    'Standalone → Match play is the event wizard, told it is match play')
+  ok(flow.includes(`if (when === 'ongoing' && format === 'series') return <CreateLeagueForm schedule="series" onExit={exit} />`),
+    'Ongoing → Series is the series league wizard')
+  ok(flow.includes(`if (when === 'ongoing' && format === 'match_play') return <CreateKnockoutForm onExit={exit} />`),
+    'Ongoing → Match play is the lean knockout door')
+
+  // Continuous is named, not built: no wizard, no button.
+  ok(!flow.includes('schedule="continuous"') && !flow.includes("schedule={'continuous'}"),
+    'Continuous opens no wizard — the old one builds the old meaning')
+  const cont = flow.slice(flow.indexOf('<ComingSoon title="Continuous"'))
+  ok(flow.includes('<ComingSoon title="Continuous"') && !cont.slice(0, cont.indexOf('/>')).includes('onClick'),
+    '  …it is a Coming soon card with nothing to tap')
+  const soon = flow.slice(flow.indexOf('function ComingSoon'), flow.indexOf('export default function CreateFlow'))
+  ok(soon.includes('Coming soon') && soon.includes('opacity-60') && !soon.includes('<button') && !soon.includes('<Link'),
+    '  …drawn the way /golf draws Personal usage')
+
+  // The answers live in the address, so back works.
+  ok(flow.includes("window.addEventListener('popstate', onChange)"),
+    'the choices are re-read on the back gesture')
+  ok(flow.includes('window.history.pushState({ [PUSHED]: true }'),
+    '  …each tap is its own history entry, never spreading Next\'s state into it')
+  ok(flow.includes('window.history.back()') && flow.includes("window.history.replaceState(null, '', url)"),
+    '  …and going back stays on the site even after a reload')
+
+  // A wizard's step 1 goes back to the chooser only when opened from one.
+  const shell = read('app/components/WizardShell.tsx')
+  ok(shell.includes('backOnFirst = false') && shell.includes('const first = step <= 1 && !backOnFirst'),
+    'WizardShell hides the step-1 arrow unless told otherwise')
+  for (const f of ['CreateLeagueForm', 'CreateTripForm', 'CreateKnockoutForm']) {
+    const src = read(`app/dashboard/create/${f}.tsx`)
+    ok(src.includes('if (step === 1 && onExit) { onExit(); return }') && src.includes('backOnFirst={!!onExit}'),
+      `  …${f} goes back to the chooser from step 1 when handed onExit`)
+  }
+  ok(!read('app/dashboard/create/CreateRunForm.tsx').includes('backOnFirst'),
+    '  …and the run wizard is untouched')
+}
+
+section('The chooser\'s answers read from the address')
+{
+  eq(parseChoice(''), { when: null, format: null }, 'nothing chosen is the first question')
+  eq(parseChoice('?type=tournament&when=standalone'), { when: 'standalone', format: null }, 'a when alone is its screen')
+  eq(parseChoice('?type=tournament&when=standalone&format=league'), { when: 'standalone', format: 'league' }, 'standalone league')
+  eq(parseChoice('?when=standalone&format=match_play'), { when: 'standalone', format: 'match_play' }, 'standalone match play')
+  eq(parseChoice('?when=ongoing&format=series'), { when: 'ongoing', format: 'series' }, 'ongoing series')
+  eq(parseChoice('?when=ongoing&format=continuous'), { when: 'ongoing', format: 'continuous' }, 'ongoing continuous reads (the flow shows it as coming soon)')
+  eq(parseChoice('?when=ongoing&format=match_play'), { when: 'ongoing', format: 'match_play' }, 'ongoing match play')
+  eq(parseChoice('?when=standalone&format=series'), { when: 'standalone', format: null }, 'a format its when does not offer falls back to the when')
+  eq(parseChoice('?when=ongoing&format=league'), { when: 'ongoing', format: null }, '  …either way round')
+  eq(parseChoice('?when=ongoing&format=banana'), { when: 'ongoing', format: null }, '  …and an unknown one too')
+  eq(parseChoice('?when=sometime&format=series'), { when: null, format: null }, 'an unknown when is the first question')
+  eq(parseChoice('?format=series'), { when: null, format: null }, '  …and so is a format with no when')
+  eq(choiceSearch('?type=tournament', { when: 'ongoing', format: 'series' }), '?type=tournament&when=ongoing&format=series',
+    'a choice keeps ?type and adds its own')
+  eq(choiceSearch('?type=tournament&when=ongoing&format=series', { when: null, format: null }), '?type=tournament',
+    '  …and clearing it leaves ?type alone')
+  eq(parentChoice({ when: 'ongoing', format: 'series' }), { when: 'ongoing', format: null }, 'up from a format is its when')
+  eq(parentChoice({ when: 'ongoing', format: null }), { when: null, format: null }, 'up from a when is the first question')
+  eq(FORMATS_FOR.standalone, ['league', 'match_play'], 'Standalone offers League and Match play')
+  eq(FORMATS_FOR.ongoing, ['series', 'continuous', 'match_play'], 'Ongoing offers Series, Continuous and Match play')
+}
+
+section('The match play wizards, as before')
+{
   const ko = read('app/dashboard/create/CreateKnockoutForm.tsx')
   ok(ko.includes('Pick a start date for the event.') && ko.includes('Pick an end date for the event.')
     && ko.includes('When should the final round be played by?') && ko.includes('if (v && (!endDate || endDate < v)) setEndDate(v)'),

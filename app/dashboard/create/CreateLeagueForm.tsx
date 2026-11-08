@@ -181,7 +181,7 @@ function VenuePicker({ courses, value, onChange, onCourseAdded, allowTbc }: {
   )
 }
 
-export default function CreateLeagueForm({ schedule }: {
+export default function CreateLeagueForm({ schedule, onExit }: {
   /**
    * The shape chosen on the tournament door — standalone (a single point
    * in time, one day or a run), continuous (a period with the playing days
@@ -192,6 +192,11 @@ export default function CreateLeagueForm({ schedule }: {
    * same underneath whichever it is.
    */
   schedule: LeagueSchedule
+  /**
+   * Back to the tournament door's chooser, from step 1 (CreateFlow). Absent
+   * — the trip door — step 1 has no way back but the header mark, as ever.
+   */
+  onExit?: () => void
 }) {
   // The platform course list, fetched while the event is being named —
   // venues are step two, so it loads behind the first screen exactly as it
@@ -430,6 +435,7 @@ export default function CreateLeagueForm({ schedule }: {
 
   function goBack() {
     setError(null)
+    if (step === 1 && onExit) { onExit(); return }
     if (step !== 'done' && step > 1) setStep(step - 1)
   }
 
@@ -816,6 +822,7 @@ export default function CreateLeagueForm({ schedule }: {
         titles={keys.map(k => STEP_TITLES[k])}
         intro={STEP_INTROS[key]}
         onBack={goBack}
+        backOnFirst={!!onExit}
         footer={<>
           <button
             onClick={goNext}

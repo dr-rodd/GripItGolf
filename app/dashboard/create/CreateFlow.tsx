@@ -1,41 +1,48 @@
 'use client'
 
-import { useState, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
 import TripHeader from '@/app/components/TripHeader'
 import BackButton from '@/app/components/BackButton'
-import type { LeagueSchedule } from '@/lib/leagueSetup'
+import {
+  choiceSearch, parentChoice, parseChoice, type TournamentChoice,
+} from '@/lib/createChoice'
 import CreateTripForm from './CreateTripForm'
 import CreateLeagueForm from './CreateLeagueForm'
 import CreateKnockoutForm from './CreateKnockoutForm'
 import CreateRunForm from './CreateRunForm'
-import { cardClass } from '@/app/components/ui'
+import { Pill, cardClass } from '@/app/components/ui'
 
 /**
  * Which form the create route shows.
  *
  * A trip goes straight to the trip wizard, as ever. A tournament is asked
- * its shape first, because that decides which build it is
- * (docs/event-use-cases.md):
+ * when it happens, then what it is (Ross, 8 Nov 2026 — docs/event-use-cases.md):
  *
- *   Standalone  — a league at a single point in time, one day or a run of
- *                 days → the league wizard.
- *   Continuous  — a league over a period, like a summer → its continuous
- *                 branch.
- *   Series      — a league of rounds on separate dates → its series branch.
- *   Match play  — a knockout, its own shape since story 2, then asked when
- *                 the matches are played: a Standalone event (a day or a
- *                 run of days) → the event wizard made with the bracket on;
- *                 Ongoing (a period, paced by the deadlines) → the lean
- *                 knockout door. Described casually, for whoever is setting
- *                 one up for the first time (Ross, 4 Nov 2026).
+ *   Standalone — one day, or a few days together
+ *     League      → the league wizard, standalone.
+ *     Match play  → the event wizard made with the bracket on.
+ *   Ongoing — over weeks or a season
+ *     Series      → the league wizard, series: rounds played together on
+ *                   set days, adding up to an overall.
+ *     Continuous  → coming soon. Rounds are periods and players hand in a
+ *                   card any time in each; not built, and the old
+ *                   continuous wizard builds the old meaning, so it is not
+ *                   offered.
+ *     Match play  → the lean knockout door, paced by the deadlines.
+ *
+ * The top answer is "Ongoing", not "Continuous", so the league type keeps
+ * its name. Stored values are unchanged: a knockout's `schedule:
+ * 'continuous'` still reads "Ongoing".
  *
  * A run challenge (`?type=run`, from the sport chooser at /create) is a
  * different sport altogether and goes straight to its own wizard.
  *
- * The `?type` read is the same hydration trick the wizard itself uses: the
- * server has no URL, so it renders the trip form and the browser corrects
- * on arrival — which keeps this route static, and a dynamic route cannot
- * be prefetched whole.
+ * The answers ride in the address (lib/createChoice.ts), each tap a history
+ * entry, so the phone's back gesture and a wizard's step-1 arrow both land on
+ * the chooser it came from. Read the same hydration way as `?type`: the
+ * server has no URL, so it renders the trip form and the browser corrects on
+ * arrival — which keeps this route static, and a dynamic route cannot be
+ * prefetched whole.
  */
 
 const subscribe = () => () => {}
@@ -45,6 +52,47 @@ const readType = (): CreateType => {
   return t === 'tournament' || t === 'run' ? t : 'trip'
 }
 const readOnServer = (): CreateType => 'trip'
+
+/** Heard by the chooser's own pushes; popstate covers the back gesture. */
+const CHOICE_EVENT = 'gd-create-choice'
+const subscribeChoice = (onChange: () => void) => {
+  window.addEventListener('popstate', onChange)
+  window.addEventListener(CHOICE_EVENT, onChange)
+  return () => {
+    window.removeEventListener('popstate', onChange)
+    window.removeEventListener(CHOICE_EVENT, onChange)
+  }
+}
+const readSearch = () => window.location.search
+const readSearchOnServer = () => ''
+
+/** Marks a history entry as one the chooser pushed, so going back stays on this page. */
+const PUSHED = 'gdCreateChoice'
+
+function go(choice: TournamentChoice) {
+  const url = window.location.pathname + choiceSearch(window.location.search, choice)
+  // A fresh object, never the current state spread: Next's router copies its
+  // own markers in only when they are absent, and skips a push that already
+  // carries them.
+  window.history.pushState({ [PUSHED]: true }, '', url)
+  window.dispatchEvent(new Event(CHOICE_EVENT))
+}
+
+/**
+ * Back up one question. Through history when the chooser made this entry —
+ * so back and the gesture are the same thing — and otherwise (a reload, a
+ * shared link) in place, never off the site.
+ */
+function exit() {
+  if (window.history.state?.[PUSHED]) {
+    window.history.back()
+    return
+  }
+  const here = parseChoice(window.location.search)
+  const url = window.location.pathname + choiceSearch(window.location.search, parentChoice(here))
+  window.history.replaceState(null, '', url)
+  window.dispatchEvent(new Event(CHOICE_EVENT))
+}
 
 const CARD = `block w-full text-left p-5 ${cardClass('raised', true)}`
 
@@ -75,89 +123,78 @@ function Chooser({ title, sub, onBack, children }: {
   )
 }
 
+function Choice({ title, line, onClick }: { title: string; line: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className={CARD}>
+      <p className="t-card text-ink">{title}</p>
+      <p className="text-ink/65 text-sm mt-1 leading-snug">{line}</p>
+    </button>
+  )
+}
+
+/** Named before it is built, so nobody taps into a dead end — /golf's Personal usage. */
+function ComingSoon({ title, line }: { title: string; line: string }) {
+  return (
+    <div className={`block p-5 opacity-60 ${cardClass()}`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="t-card text-ink">{title}</p>
+        <Pill className="flex-shrink-0">Coming soon</Pill>
+      </div>
+      <p className="text-ink/65 text-sm mt-1 leading-snug">{line}</p>
+    </div>
+  )
+}
+
 export default function CreateFlow() {
   const type = useSyncExternalStore(subscribe, readType, readOnServer)
-  const [shape, setShape] = useState<LeagueSchedule | 'match_play' | null>(null)
-  const [knockout, setKnockout] = useState<'standalone' | 'continuous' | null>(null)
+  const search = useSyncExternalStore(subscribeChoice, readSearch, readSearchOnServer)
 
   if (type === 'run') return <CreateRunForm />
   if (type !== 'tournament') return <CreateTripForm />
 
-  // Standalone, continuous and series are leagues; match play is its own
-  // shape, asked one-off or ongoing next (docs/event-use-cases.md, story 2).
-  if (shape && shape !== 'match_play') return <CreateLeagueForm schedule={shape} />
-  if (shape === 'match_play' && knockout === 'standalone') return <CreateTripForm matchPlay />
-  if (shape === 'match_play' && knockout === 'continuous') return <CreateKnockoutForm />
+  const { when, format } = parseChoice(search)
 
-  // ── First question: the shape of the event ──
-  if (!shape) {
+  // ── The wizards, each handed exactly what it was before ──
+  if (when === 'standalone' && format === 'league') return <CreateLeagueForm schedule="standalone" onExit={exit} />
+  if (when === 'standalone' && format === 'match_play') return <CreateTripForm matchPlay onExit={exit} />
+  if (when === 'ongoing' && format === 'series') return <CreateLeagueForm schedule="series" onExit={exit} />
+  if (when === 'ongoing' && format === 'match_play') return <CreateKnockoutForm onExit={exit} />
+  // Continuous opens nothing yet: its address falls back to the Ongoing screen.
+
+  // ── Second question: what format ──
+  if (when === 'standalone') {
     return (
-      <Chooser title="Golf tournament" sub="What shape is the event?">
-        <button onClick={() => setShape('standalone')} className={CARD}>
-          <p className="t-card text-ink">
-            Standalone
-          </p>
-          <p className="text-ink/65 text-sm mt-1 leading-snug">
-            One day, or a run of days together, on a leaderboard.
-          </p>
-        </button>
-
-        <button onClick={() => setShape('continuous')} className={CARD}>
-          <p className="t-card text-ink">
-            Continuous
-          </p>
-          <p className="text-ink/65 text-sm mt-1 leading-snug">
-            An ongoing event over a period, like a summer.
-          </p>
-        </button>
-
-        <button onClick={() => setShape('series')} className={CARD}>
-          <p className="t-card text-ink">
-            Series
-          </p>
-          <p className="text-ink/65 text-sm mt-1 leading-snug">
-            Rounds on separate days feeding one overall league, planned ahead or ad hoc.
-          </p>
-        </button>
-
-        <button onClick={() => setShape('match_play')} className={CARD}>
-          <p className="t-card text-ink">
-            Match play
-          </p>
-          <p className="text-ink/65 text-sm mt-1 leading-snug">
-            A knockout bracket, up to 64 players. Win and go through.
-          </p>
-        </button>
+      <Chooser title="Standalone" sub="What format?" onBack={exit}>
+        <Choice title="League" line="Everyone plays, and a leaderboard ranks them."
+          onClick={() => go({ when, format: 'league' })} />
+        <Choice title="Match play" line="A knockout bracket, played out on the day."
+          onClick={() => go({ when, format: 'match_play' })} />
       </Chooser>
     )
   }
 
-  // ── Second question, for match play: when it is played ──
-  return (
-    <Chooser
-      title="Match play"
-      sub="When are the matches played?"
-      onBack={() => setShape(null)}
-    >
-      <button onClick={() => setKnockout('standalone')} className={CARD}>
-        <p className="t-card text-ink">
-          Standalone event
-        </p>
-        <p className="text-ink/65 text-sm mt-1 leading-snug">
-          One day, or a few days together. You set when the golf is and
-          everyone plays on the day.
-        </p>
-      </button>
+  if (when === 'ongoing') {
+    return (
+      <Chooser title="Ongoing" sub="What kind of event?" onBack={exit}>
+        <Choice title="Series"
+          line="Rounds played together on set days, adding up to an overall. A society season or Golfer of the Year."
+          onClick={() => go({ when, format: 'series' })} />
+        <ComingSoon title="Continuous"
+          line="Rounds are periods. Players hand in a card any time in each one." />
+        <Choice title="Match play"
+          line="Players arrange their own matches, with a date to play each round by."
+          onClick={() => go({ when, format: 'match_play' })} />
+      </Chooser>
+    )
+  }
 
-      <button onClick={() => setKnockout('continuous')} className={CARD}>
-        <p className="t-card text-ink">
-          Ongoing
-        </p>
-        <p className="text-ink/65 text-sm mt-1 leading-snug">
-          Over a few weeks or a season. Players sort out their own matches,
-          with a date to play each round by.
-        </p>
-      </button>
+  // ── First question: when it happens ──
+  return (
+    <Chooser title="Golf tournament" sub="When does it happen?">
+      <Choice title="Standalone" line="One day, or a few days together."
+        onClick={() => go({ when: 'standalone', format: null })} />
+      <Choice title="Ongoing" line="Over weeks or a season."
+        onClick={() => go({ when: 'ongoing', format: null })} />
     </Chooser>
   )
 }

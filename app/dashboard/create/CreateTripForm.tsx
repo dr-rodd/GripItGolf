@@ -122,13 +122,18 @@ export function generateCode(): string {
 
 // ── Root component ────────────────────────────────────────────────────────
 
-export default function CreateTripForm({ matchPlay = false }: {
+export default function CreateTripForm({ matchPlay = false, onExit }: {
   /**
-   * A one-off match play event (the tournament door's Match play → One-off):
+   * A standalone match play event (the tournament door's Standalone → Match play):
    * the same wizard, made with the bracket's board and the match play seed
    * so the bracket is on from the start (docs/event-use-cases.md, story 2).
    */
   matchPlay?: boolean
+  /**
+   * Back to the tournament door's chooser, from step 1 (CreateFlow). Absent
+   * — the trip door — step 1 has no way back but the header mark, as ever.
+   */
+  onExit?: () => void
 } = {}) {
   /**
    * The platform course list, fetched here rather than handed down.
@@ -279,6 +284,7 @@ export default function CreateTripForm({ matchPlay = false }: {
 
   function goBack() {
     setError(null)
+    if (step === 1 && onExit) { onExit(); return }
     if (step !== 'done' && step > 1) setStep((step - 1) as Step)
   }
 
@@ -733,6 +739,7 @@ export default function CreateTripForm({ matchPlay = false }: {
         titles={wizardTitles}
         intro={stepIntro}
         onBack={goBack}
+        backOnFirst={!!onExit}
         footer={step !== 2 ? (<>
             <button
               onClick={goNext}

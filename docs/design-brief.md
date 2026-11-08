@@ -202,3 +202,16 @@ From the October 2026 design session (`docs/refresh-plan.md` §8), all built:
 | D19 | Lab fonts load lazily through `@font-face` from `public/fonts/lab/`; house fonts stay on `next/font`; nothing lab-related in `globals.css` |
 | D20 | A lab setup becomes the house style only through Claude Code, with tests and fit checks, never a switch |
 | D21 | The "lab is on" indicator is a pill in the existing header, not a banner, so no layout shifts. Clash Display is not offered, having been rejected |
+
+From the November 2026 session on the tournament create flow (Ross, 8 Nov;
+`docs/event-use-cases.md`, "The chooser, as decided November 2026"):
+
+| # | Decision | Status |
+|---|---|---|
+| D22 | A golf tournament is asked **Standalone** or **Ongoing** first | Built |
+| D23 | Standalone offers **League** or **Match play**; single or multi-day is asked inside the wizard | Built |
+| D24 | Ongoing offers **Series**, **Continuous** and **Match play** | Built; Continuous shows as coming soon |
+| D25 | Series: rounds played together on a day, each with its own leaderboard, linked into an overall; recurring or manual | Already built |
+| D26 | Continuous: rounds are time periods, cards submitted within them, ranked by the rules set (best card that round), tags for team leagues | Decided; stage 6, model to confirm |
+| D27 | The top answer is "Ongoing"; the league type keeps "Continuous"; stored values unchanged | Built |
+| D28 | Chooser answers live in the URL; step 1 of a tournament wizard goes back to the chooser | Built |
