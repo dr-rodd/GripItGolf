@@ -832,7 +832,7 @@ section('A league\'s field step has tags too, and a tags board with them (Ross, 
   const back = parseLeaderboards([board])[0]
   ok(!!back && isTagBoard(back) && back.tagMode === 'best_cards' && tagCountOf(back) === 2 && back.scoring === 'stableford',
     'the tags board a league is made with: each tag\'s best two cards, Stableford, added up — and it reads back')
-  eq(withLeagueTagBoard(starterBoards(), true).map(b => b.id), [...starterBoards().map(b => b.id), 'lb-tags'], 'tags switched on add it to the Finish step\'s boards')
+  eq(withLeagueTagBoard(starterBoards(), true).map(b => b.id), [...starterBoards().map(b => b.id), 'lb-tags'], 'withLeagueTagBoard adds it to a set of boards (no longer called when tags are switched on — Ross, 8 Nov 2026)')
   eq(withLeagueTagBoard(withLeagueTagBoard(starterBoards(), true), true).length, starterBoards().length + 1, '  …once')
   eq(withLeagueTagBoard(withLeagueTagBoard(starterBoards(), true), false).map(b => b.id), starterBoards().map(b => b.id), '  …and off take it away')
   const league = read('app/dashboard/create/CreateLeagueForm.tsx')

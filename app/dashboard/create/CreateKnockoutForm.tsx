@@ -96,7 +96,9 @@ export default function CreateKnockoutForm() {
   const [tags, setTags] = useState<FieldTags>(NO_FIELD_TAGS)
   const [tagsWarning, setTagsWarning] = useState<string | null>(null)
   // The secondary leaderboard tags bring: wins and losses by tag, kept unless switched off.
-  const [tagTally, setTagTally] = useState(true)
+  // Off until the organiser switches it on (Ross, 8 Nov 2026: leaderboards
+  // are set by hand, never pre-filled — the bracket alone, which is the event).
+  const [tagTally, setTagTally] = useState(false)
   const [seedWarning, setSeedWarning] = useState<string | null>(null)
 
   // Step 3 — the draw: now, later or on a date (lib/bracketDraw.ts)
@@ -526,7 +528,7 @@ export default function CreateKnockoutForm() {
         {key === 'ready' && (
           <div className="space-y-3">
             {/* The tags' secondary leaderboard (Ross, 5 Nov 2026) — wins and
-                losses by tag, under the bracket; kept unless switched off. */}
+                losses by tag, under the bracket; off until switched on. */}
             {activeTags(tags).length > 0 && (
               <div className="mb-6">
                 <label className={FIELD_LABEL}>Leaderboards</label>

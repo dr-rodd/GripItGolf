@@ -440,7 +440,11 @@ section('The league wizard reuses the proven pieces rather than restating them')
   ok(src.includes('<CourseSelect'), 'venues come from the shared course picker')
   ok(src.includes('<HandicapField'), 'handicaps from the shared field')
   ok(src.includes('firstDuplicateIndex'), 'and the no-two-same-names rule is the roster\'s')
-  ok(src.includes('starterBoards()'), 'the starter board comes from lib/leagueSetup.ts')
+  ok(!src.includes('starterBoards()') && src.includes('useState<Leaderboard[]>([])'),
+    'no leaderboard chosen for the organiser — they set them by hand (Ross, 8 Nov 2026)')
+  ok(/key === 'ready' \? boards\.length > 0/.test(src), '  …and Finish waits for at least one')
+  ok(!src.includes('setBoards(b => withLeagueTagBoard(b, next.on))') && src.includes('setBoards(b => withLeagueTagBoard(b, false))'),
+    '  …switching tags on adds no tags board; switching them off takes one away')
 
   // Leaderboard selection is built into creation — as Trip Setup's own
   // picker, seeded with the starter, never a second copy of the grid. What

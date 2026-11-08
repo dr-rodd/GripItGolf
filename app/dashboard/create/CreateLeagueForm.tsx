@@ -32,7 +32,7 @@ import { setRoundDeadlines } from '@/lib/leagueRoundStore'
 import {
   type DayBoards, type LeagueSetup, type LeagueSchedule, type RepeatUnit, DAY_BOARDS,
   MAX_LEAGUE_DAYS, MAX_REPEAT_EVERY, REPEAT_UNITS, WEEKDAY_NAMES,
-  asksRoundDeadlines, describeRepeat, leagueDaysIssue, seriesDates, starterBoards, weeklyDates,
+  asksRoundDeadlines, describeRepeat, leagueDaysIssue, seriesDates, weeklyDates,
 } from '@/lib/leagueSetup'
 import type { Leaderboard } from '@/lib/leaderboards'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
@@ -270,7 +270,9 @@ export default function CreateLeagueForm({ schedule }: {
   // still plays from the moment it exists; the picker itself is the same
   // LeaderboardSetup Trip Setup runs, so creation can offer exactly the
   // competitions the platform can score and not one more.
-  const [boards, setBoards] = useState<Leaderboard[]>(() => starterBoards())
+  // Nothing chosen for the organiser (Ross, 8 Nov 2026): the leaderboards
+  // are set by hand, and Finish waits for at least one.
+  const [boards, setBoards] = useState<Leaderboard[]>([])
   const [dayBoards, setDayBoards] = useState<DayBoards | null>(null)
   // How collaborative the event is — all off until the organiser opts in
   // (lib/eventPermissions.ts, the one registry).
@@ -1279,7 +1281,10 @@ export default function CreateLeagueForm({ schedule }: {
 
             <TagsCard
               tags={tags}
-              setTags={next => { if (next.on !== tags.on) setBoards(b => withLeagueTagBoard(b, next.on)); setTags(next) }}
+              // Tags switched off take any tags board with them — there would be
+              // nothing for it to rank. Switched on, nothing is added: the
+              // organiser picks a tags board on the Finish step if they want one.
+              setTags={next => { if (tags.on && !next.on) setBoards(b => withLeagueTagBoard(b, false)); setTags(next) }}
               counts={tagCounts(tags, players)}
               onRemove={key => setPlayers(prev => prev.map(p => (p.tag === key ? { ...p, tag: undefined } : p)))}
             />
@@ -1398,16 +1403,16 @@ export default function CreateLeagueForm({ schedule }: {
             )}
 
             {/* ── The leaderboards ──
-                The same LeaderboardSetup Trip Setup runs, seeded with the
-                starter individual-Stableford board — so creation offers
-                exactly the competitions the platform can score, and an
-                organiser who wants only the default taps nothing. Teams
-                are apportioned after creation on the teams screen, the
-                same as a trip, so a team board here starts unassigned. */}
+                The same LeaderboardSetup Trip Setup runs, starting empty
+                (Ross, 8 Nov 2026: set by hand, never pre-filled) — so
+                creation offers exactly the competitions the platform can
+                score, and Finish waits for at least one. Teams are
+                apportioned after creation on the teams screen, the same
+                as a trip, so a team board here starts unassigned. */}
             <div>
               <label className={FIELD_LABEL}>Leaderboards</label>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-                Starts on individual Stableford, added up. Change it or add more.
+                How the field is ranked. Add at least one.
               </p>
               <LeaderboardSetup
                 boards={boards}
@@ -1418,9 +1423,8 @@ export default function CreateLeagueForm({ schedule }: {
                 onChange={setBoards}
               />
               {boards.length === 0 && (
-                <p className="text-rust-deep text-[13px] mt-3 leading-snug">
-                  An event needs at least one leaderboard — otherwise what&apos;s
-                  being played for?
+                <p className="t-cap text-ink/65 mt-3 leading-snug">
+                  Add a leaderboard to finish — it is what the event is played for.
                 </p>
               )}
             </div>

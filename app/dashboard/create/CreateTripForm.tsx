@@ -26,7 +26,7 @@ import CreationDraw, {
 import MatchPlayField from './MatchPlayField'
 import { bringAcross } from './SeedFromEvent'
 import { NO_FIELD_SEED, drawStandings, seedPairs, type FieldPlayer, type FieldSeed } from '@/lib/fieldSeed'
-import { NO_FIELD_TAGS, fieldTagsIssue, withTagTally, type FieldTags } from '@/lib/fieldTags'
+import { NO_FIELD_TAGS, activeTags, fieldTagsIssue, withTagTally, type FieldTags } from '@/lib/fieldTags'
 import { writeFieldTags } from './fieldTagsWrite'
 import {
   parseHandicap, isPlusHandicap, isHandicapPending, PLUS_HANDICAP_WARNING,
@@ -36,7 +36,7 @@ import HandicapField from '@/app/components/HandicapField'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
-import type { Leaderboard } from '@/lib/leaderboards'
+import { boardRules, boardTitle, isMatchTally, matchTallyBoard, type Leaderboard } from '@/lib/leaderboards'
 import {
   NO_DEADLINES_ANSWER, deadlinesAnswerIssue, knockoutBoards, knockoutSeed, storedDeadlines, type DeadlinesAnswer,
 } from '@/lib/bracketSetup'
@@ -893,9 +893,10 @@ export default function CreateTripForm({ matchPlay = false }: {
             seed={seed}
             setSeed={setSeed}
             tags={tags}
-            // Switching tags on adds the tags leaderboard to the last step's
-            // boards, off takes it away (lib/fieldTags.ts withTagTally).
-            setTags={next => { if (next.on !== tags.on) setBoards(b => withTagTally(b, next.on)); setTags(next) }}
+            // Switching tags off takes the tags leaderboard away — nothing
+            // left for it to rank. On adds nothing (Ross, 8 Nov 2026: set by
+            // hand): the last step offers it as a switch, off to start with.
+            setTags={next => { if (tags.on && !next.on) setBoards(b => withTagTally(b, false)); setTags(next) }}
           />
         )}
 
@@ -1039,6 +1040,24 @@ export default function CreateTripForm({ matchPlay = false }: {
                   ? 'Skip for now and choose later in the organiser area.'
                   : 'Skip for now and choose later in Trip Setup.'}
               </p>
+              {/* The tags' wins and losses — a board the picker below
+                  cannot make, so offered as its own switch while there are
+                  tags, off to start with (Ross, 8 Nov 2026). */}
+              {matchPlay && activeTags(tags).length > 0 && (
+                <div className={`flex items-start justify-between gap-4 p-4 mb-3 ${cardClass()}`}>
+                  <div className="min-w-0">
+                    <p className="text-ink text-sm font-medium">{boardTitle(matchTallyBoard())}</p>
+                    <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
+                      {boardRules(matchTallyBoard())} Shown under the bracket.
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={boards.some(isMatchTally)}
+                    onChange={on => setBoards(b => withTagTally(b, on))}
+                    label="Rank the tags by match wins"
+                  />
+                </div>
+              )}
               <LeaderboardSetup
                 boards={boards}
                 playerCount={players.filter(p => p.name.trim()).length}
