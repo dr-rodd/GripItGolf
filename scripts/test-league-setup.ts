@@ -486,13 +486,13 @@ section('The league wizard reuses the proven pieces rather than restating them')
 
 section('A league event\'s organiser area describes its format, never re-forms it')
 {
-  const page = read('app/trip/[tripCode]/organiser/bracket/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/organiser/bracket/page.tsx')
   ok(page.includes('parseLeagueSetup'), 'the format screen knows a league when it reads one')
   // The guard that matters: the league branch renders a summary, and the
   // match play form only renders when the column does not hold a league.
   ok(/if \(leagueSetup\)/.test(page), 'and branches on it before the form')
 
-  const organiser = read('app/trip/[tripCode]/organiser/page.tsx')
+  const organiser = read('app/golf/[root]/[tripCode]/organiser/page.tsx')
   ok(organiser.includes('parseLeagueSetup'),
     'the organiser card reads both formats from the one column')
 }
@@ -556,11 +556,11 @@ section('A day board says which golf it counts')
 
 section('The day editor is a door on the organiser page, events only')
 {
-  const page = read('app/trip/[tripCode]/organiser/days/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/organiser/days/page.tsx')
   ok(page.includes('isEvent(trip.kind)'), 'a trip is pointed at Trip Setup')
   ok(page.includes('PasscodeGate'), 'behind the organiser PIN like the rest of the area')
 
-  const client = read('app/trip/[tripCode]/organiser/days/DayBoardsClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/organiser/days/DayBoardsClient.tsx')
   ok(client.includes('scope={[round.id]}'),
     'the cascade is told which day it is making a board for')
   ok(client.includes('<LeaderboardSetup'),
@@ -572,7 +572,7 @@ section('The day editor is a door on the organiser page, events only')
   ok(form.includes('setDraft({ ...fresh, audience: a.key })'),
     '  …and survives the cascade being restarted, or a day board would lose its day')
 
-  const organiser = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
+  const organiser = read('app/golf/[root]/[tripCode]/organiser/OrganiserClient.tsx')
   ok(organiser.includes('/organiser/days'), 'the organiser page carries the door')
   ok(organiser.includes('rounds.length > 1'),
     'and only when there is more than one day to tell apart')
@@ -580,7 +580,7 @@ section('The day editor is a door on the organiser page, events only')
 
 section('A league grows from the Scoring tab and the hub, one round at a time')
 {
-  const page = read('app/trip/[tripCode]/scoring/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/scoring/page.tsx')
   ok(page.includes("const series = leagueSetup?.schedule === 'series' && !!trip.start_date"),
     'the door is a dated league\'s alone — an undated series keeps the running order')
   ok(page.includes("allowsParticipant(kind, permsRaw, 'add_rounds')"),
@@ -598,13 +598,13 @@ section('A league grows from the Scoring tab and the hub, one round at a time')
      && page.includes('lastPlayedDate={lastPlayedDate}'),
     'a new round is told the whole league and the last round played')
 
-  const hub = read('app/trip/[tripCode]/page.tsx')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
   ok(hub.includes('leagueRounds(') && hub.includes('<TbcRoundTile'),
     'the hub lists the same rounds the same way')
   ok(hub.includes("allowsParticipant(trip.kind, tripRaw.event_permissions, 'set_venues')"),
     'behind the same permission')
 
-  const doors = read('app/trip/[tripCode]/LeagueRounds.tsx')
+  const doors = read('app/golf/[root]/[tripCode]/LeagueRounds.tsx')
   ok(doors.includes('const rules = { startDate: door.startDate, roundDates, lastPlayedDate }')
      && doors.includes('nextRoundIssue(date, rules)'),
     'the date is checked by the one copy of the rule')
@@ -651,7 +651,7 @@ section('A league grows from the Scoring tab and the hub, one round at a time')
 
 section('Every round has its own leaderboard; a round can stop counting')
 {
-  const board = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const board = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   ok(board.includes('const showRounds = isEvent && series && roundOptions.length > 1'),
     'a league reads its board overall or one round at a time')
   ok(board.includes('const showCourses = isEvent && !series && courses.length > 1'),
@@ -665,7 +665,7 @@ section('Every round has its own leaderboard; a round can stop counting')
   ok(board.includes("(r.casual !== true || r.id === shownRound?.id)"),
     'the overall still draws no column for it')
 
-  const page = read('app/trip/[tripCode]/leaderboard/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/leaderboard/page.tsx')
   ok(page.includes("const series = leagueSetup?.schedule === 'series'") && page.includes('series={series}'),
     'the page tells the board it is a league, off the stored shape')
 
@@ -673,23 +673,23 @@ section('Every round has its own leaderboard; a round can stop counting')
   ok(rows.includes('withOnlyRounds(withoutCasualRounds(withoutCardsOff(ctx)), lb.roundIds)'),
     'and the overall skips it through the one rule in buildRows, untouched')
 
-  const doors = read('app/trip/[tripCode]/LeagueRounds.tsx')
+  const doors = read('app/golf/[root]/[tripCode]/LeagueRounds.tsx')
   ok(doors.includes(".update({ casual: !next })") && doors.includes(".eq('trip_id', door.tripId)"),
     'the gear writes the casual flag, scoped by trip — never the scores')
   ok(doors.includes("if (!organiser) { setError('Changing a round needs the organiser PIN.')"),
     'and it is the organiser\'s, with the PIN asked in place')
 
-  const tab = read('app/trip/[tripCode]/scoring/page.tsx')
+  const tab = read('app/golf/[root]/[tripCode]/scoring/page.tsx')
   ok(tab.includes('rounds(*, courses(name, location))'),
     'the tab reads the flag without naming a column migration 031 adds')
   ok(tab.indexOf('</Link>') < tab.indexOf('<RoundSettings'),
     'the gear sits beside the tile, outside its link')
 
-  const hub = read('app/trip/[tripCode]/page.tsx')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
   ok(hub.includes("supabase.from('rounds').select('id, casual')"),
     'the hub reads it in its own fail-soft query')
 
-  const summary = read('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
+  const summary = read('app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx')
   ok(summary.includes("(event ? ' · doesn’t count' : ' · casual')"),
     'and a round\'s own page says it in an event\'s words')
 }
@@ -754,9 +754,9 @@ section('A player\'s card in a round can be switched off, and back on')
     'the hub\'s cheap standing drops it too, so it cannot disagree with the board')
   ok(hub.includes('fetchLeagueCards(tripId,') && hub.includes('cardsOff: league.cardsOff,'),
     '  …and its full path, both reading it fail-soft in their own batch')
-  ok(read('app/trip/[tripCode]/leaderboard/page.tsx').includes('cardsOff={leagueSetup?.cardsOff}'),
+  ok(read('app/golf/[root]/[tripCode]/leaderboard/page.tsx').includes('cardsOff={leagueSetup?.cardsOff}'),
     'the leaderboard is handed it')
-  ok(read('app/trip/[tripCode]/export/page.tsx').includes('cardsOff: leagueSetup?.cardsOff,'),
+  ok(read('app/golf/[root]/[tripCode]/export/page.tsx').includes('cardsOff: leagueSetup?.cardsOff,'),
     'and the export, so paper agrees with the screen')
 
   const store = read('lib/leagueRoundStore.ts')
@@ -766,7 +766,7 @@ section('A player\'s card in a round can be switched off, and back on')
   ok(store.includes('withRoundAllowance(raw[index]'),
     'a round\'s allowance is merged into the stored board the same way')
 
-  const gear = read('app/trip/[tripCode]/LeagueRounds.tsx')
+  const gear = read('app/golf/[root]/[tripCode]/LeagueRounds.tsx')
   ok(gear.includes("{ value: 'round', label: 'Round' }, { value: 'rules', label: 'Rules' }"),
     'the gear opens on the round, with the rules on their own tab')
   ok(gear.includes("if (!organiser) { setError('Changing a round needs the organiser PIN.')"),
@@ -836,8 +836,8 @@ section('A Golf Ireland card played as a round counts as that round, and switche
 
   const rc = read('lib/rowContext.ts')
   ok(rc.includes('roundCards: input.roundCards'), 'the one assembly carries them')
-  for (const f of ['app/trip/[tripCode]/leaderboard/page.tsx', 'app/trip/[tripCode]/export/page.tsx',
-                   'lib/hubStanding.ts', 'app/trip/[tripCode]/scoring/page.tsx']) {
+  for (const f of ['app/golf/[root]/[tripCode]/leaderboard/page.tsx', 'app/golf/[root]/[tripCode]/export/page.tsx',
+                   'lib/hubStanding.ts', 'app/golf/[root]/[tripCode]/scoring/page.tsx']) {
     ok(read(f).includes('readRoundCards('), `${f} reads them through the one reader`)
   }
   const reader = read('lib/golfIrelandCards.ts')
@@ -845,10 +845,10 @@ section('A Golf Ireland card played as a round counts as that round, and switche
     'and that reader asks nothing before it knows the league reads Golf Ireland')
   ok(read('lib/hubStanding.ts').includes('if (readsGolfIreland(setup?.scoreSource)) return fullPlacing('),
     'the hub\'s cheap standing hands a Golf Ireland league to the full path, which reads the cards')
-  const gear = read('app/trip/[tripCode]/LeagueRounds.tsx')
+  const gear = read('app/golf/[root]/[tripCode]/LeagueRounds.tsx')
   ok(gear.includes('golfIreland: describeRoundCard(gi)'), 'the gear lists a Golf Ireland card beside the live ones')
   ok(!/from '@\/lib\/golfIrelandCards'/.test(gear), '  …handed it by the page — the browser never reads the closed table')
-  const tiles = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const tiles = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   ok(tiles.includes("imported ? 'Golf Ireland card'") && tiles.includes('disabled={imported}'),
     'the leaderboard\'s round tile says so, and opens no empty scorecard')
 }
@@ -871,13 +871,13 @@ section('Every round shows; the later ones pale until the one before is played')
     [2, 3, 4, 1, 1], 'a round with no date is history, at the foot')
   eq(seriesListing([], '2026-11-01'), [], 'no rounds, nothing to show')
 
-  for (const page of ['app/trip/[tripCode]/scoring/page.tsx', 'app/trip/[tripCode]/page.tsx']) {
+  for (const page of ['app/golf/[root]/[tripCode]/scoring/page.tsx', 'app/golf/[root]/[tripCode]/page.tsx']) {
     const src = read(page)
     ok(/seriesListing\(league, (todayString\(new Date\(\)\)|today)\)/.test(src) && src.includes('<LockedRoundTile'),
       `${page.split('/').slice(-2).join('/')} draws every round, a locked one as a pale tile`)
     ok(!src.includes('more rounds'), '  …so it no longer counts the ones held back')
   }
-  const tile = read('app/trip/[tripCode]/LeagueRounds.tsx')
+  const tile = read('app/golf/[root]/[tripCode]/LeagueRounds.tsx')
   const locked = tile.slice(tile.indexOf('export function LockedRoundTile'), tile.indexOf('// ─── A round whose venue is TBC'))
   ok(locked.includes('aria-disabled="true"') && !locked.includes('<Link') && !locked.includes('onClick'),
     'a locked round is inert — no card, no venue, no gear')
@@ -903,15 +903,15 @@ section('A league round can carry a deadline (Ross, 5 Nov 2026)')
   ok(wizard.includes("...(askDeadlines ? ['deadlines' as const] : [])") && wizard.includes('<RoundDeadlines')
     && wizard.includes('setRoundDeadlines({ tripId, deadlines: byKey })'),
     'the league wizard asks it after its venues, and keeps each by the golf item it was saved as')
-  ok(read('app/trip/[tripCode]/organiser/bracket/page.tsx').includes('<LeagueDeadlines'), 'the organiser area sets and changes them, a round added since included')
+  ok(read('app/golf/[root]/[tripCode]/organiser/bracket/page.tsx').includes('<LeagueDeadlines'), 'the organiser area sets and changes them, a round added since included')
   ok(/setRoundDeadlines[\s\S]*parseLeagueSetup\(raw\)[\s\S]*\.eq\('id', args\.tripId\)/.test(read('lib/leagueRoundStore.ts')),
     '  …merged into a league\'s own setup read fresh, never written over anything else')
-  ok(read('app/trip/[tripCode]/scoring/page.tsx').includes('playByLine(leagueSetup?.deadlines?.[round.itinerary_item_id ?? round.id]')
-    && read('app/trip/[tripCode]/page.tsx').includes('playBy={playBy(lr.itemId, false)}'),
+  ok(read('app/golf/[root]/[tripCode]/scoring/page.tsx').includes('playByLine(leagueSetup?.deadlines?.[round.itinerary_item_id ?? round.id]')
+    && read('app/golf/[root]/[tripCode]/page.tsx').includes('playBy={playBy(lr.itemId, false)}'),
     'and said on the round\'s tile: Play by, Was due, Played by')
   eq([playByLine('2026-11-30', '2026-11-07', false), playByLine(null, '2026-11-07', false)].map(s => s.startsWith(' · Play by') || s === ''),
     [true, true], '  …a line that reads "Play by" before the date, nothing without one')
-  ok(/export function playByLine/.test(read('lib/leagueSetup.ts')) && !/export function playByLine/.test(read('app/trip/[tripCode]/LeagueRounds.tsx')),
+  ok(/export function playByLine/.test(read('lib/leagueSetup.ts')) && !/export function playByLine/.test(read('app/golf/[root]/[tripCode]/LeagueRounds.tsx')),
     '  …kept in lib/, never the client file the server pages cannot call into (7 Nov 2026)')
 }
 

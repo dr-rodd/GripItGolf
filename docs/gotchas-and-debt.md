@@ -3,7 +3,7 @@
 ## A proxy.ts took the site down (8 November 2026)
 
 Moving events to `/event/<code>` was built with a `proxy.ts` (Next 16's name
-for middleware) that served `/event/…` from the `app/trip/[tripCode]` pages by
+for middleware) that served `/event/…` from the `app/golf/[root]/[tripCode]` pages by
 rewrite and set two request headers for the layout to redirect old links. It
 passed every test, the type check, the build, and a production build run
 locally against a stand-in database — and on Vercel greendot.live answered
@@ -12,12 +12,17 @@ locally against a stand-in database — and on Vercel greendot.live answered
 to bf936c0 byte for byte); the cause was never confirmed, because nothing in
 this container can reach greendot.live or a Vercel deployment.
 
-The rule it leaves: **nothing that runs in front of every request — a
-`proxy.ts`/`middleware.ts`, a rewrite, a redirect in a layout — goes to
+The rule it leaves: **no `proxy.ts`/`middleware.ts` and no rewrite goes to
 `master` without being opened on a Vercel preview deployment first.** A local
-`next start` is not Vercel's router. If `/event` is attempted again, prefer
-the plainest moving parts (Next's own `rewrites()` in `next.config`, links
-built from the kind) over request headers set by a proxy.
+`next start` is not Vercel's router.
+
+Done again the same day the plain way, at Ross's addresses — `/golf/trip/<code>`
+and `/golf/event/<code>`: the pages moved into `app/golf/[root]/[tripCode]`,
+where `root` is a real route segment, so both addresses are ordinary pages;
+the old `/trip/` and `/event/` addresses go through `redirects()` in
+`next.config.ts`; an event opened at its trip address is put right in the
+address bar by `AddressFix` (`history.replaceState`), never by a redirect.
+`test:trip-paths` fails if a proxy, middleware or rewrite comes back.
 
 The same push carried a spectator mode (a "View as a spectator" button and a
 cookie). Ross did not want it — "just allow them to look around, no special
@@ -31,7 +36,7 @@ Dynamic route params and searchParams are now Promises. Server components must d
 
 ## A function in a client file, called by a server page
 
-7 November 2026: the hub and the Scoring tab showed "Could not load this page" a day after a release that passed every test, the type check and the build. `playByLine` — the round tile's "Play by" line — had been written in `app/trip/[tripCode]/LeagueRounds.tsx`, beside the tiles, and that file starts `'use client'`. Both pages are server components and called it while rendering. **Everything a client file exports is a client reference on the server**: a component is fine, because the browser draws it; a plain function throws "Attempted to call playByLine() from the server but playByLine is on the client". The Scoring tab called it on every round tile, so it took trips down as well as leagues.
+7 November 2026: the hub and the Scoring tab showed "Could not load this page" a day after a release that passed every test, the type check and the build. `playByLine` — the round tile's "Play by" line — had been written in `app/golf/[root]/[tripCode]/LeagueRounds.tsx`, beside the tiles, and that file starts `'use client'`. Both pages are server components and called it while rendering. **Everything a client file exports is a client reference on the server**: a component is fine, because the browser draws it; a plain function throws "Attempted to call playByLine() from the server but playByLine is on the client". The Scoring tab called it on every round tile, so it took trips down as well as leagues.
 
 Nothing static notices — the import type-checks and bundles. It surfaces only when a page renders the call, which a creation-wizard browser check never does. The rule: **a rule or helper a page uses goes in `lib/`, which both sides may import; a client file exports components**. `test:client-boundary` scans every server module under `app/` and `lib/` for a camelCase or ALL_CAPS import from a client file and fails on one. The fix moved `playByLine` to `lib/leagueSetup.ts`; the failure was reproduced first against a stand-in database to be sure it was the cause.
 
@@ -102,7 +107,7 @@ In GripItGolf's multi-tenant model, this pattern needs scoping per-trip: `editio
 | # | Rule | Status | Reference |
 |---|------|--------|-----------|
 | 1 | iOS: `translateX` inside `overflow-hidden` breaks tap hit-testing | ⚠️ TODO | `app/scoring/LiveScoringFlow.tsx:921` — `translateX` inside `overflow-x-hidden` div. Not `overflow-hidden` exactly but adjacent enough to revisit before iOS testing. |
-| 2 | Leaderboard merges uncommitted `live_scores` + committed `scores` | ✅ Fixed (trip pages) | `app/trip/[tripCode]/leaderboard/` fetches both and merges — committed always wins per hole. In-progress rounds show a pulsing dot. The legacy DM `app/leaderboard/` still queries `scores` only. |
+| 2 | Leaderboard merges uncommitted `live_scores` + committed `scores` | ✅ Fixed (trip pages) | `app/golf/[root]/[tripCode]/leaderboard/` fetches both and merges — committed always wins per hole. In-progress rounds show a pulsing dot. The legacy DM `app/leaderboard/` still queries `scores` only. |
 | 3 | Offline queue stamps `trip_id` at enqueue, not flush | N/A | Feature not built. No offline queue exists in this codebase. |
 | 4 | WHS formula: `PH = HI × Slope/113 + (CR − Par)`, no 95%, no truncation | ✅ Compliant | Verified 2026-04-24. `calcPlayingHandicap` in `LiveScoringFlow.tsx`, `LiveClient.tsx`, `LeaderboardClient.tsx`. |
 | 5 | Ladies tees applied on all courses, not just one | ✅ Fixed | commit `a320b53` + `be82e21` (2026-04-24). `ST_PATRICKS_COURSE_ID` gate removed from all 4 files; missed call site fixed. |
@@ -262,8 +267,8 @@ The general lesson is the one `docs/course-import.md` already names: eighteen pa
 
 The reason it was not fixed with the admin side is that the picker has no hole data at all. `DirectoryCourse` (`lib/courseDirectory.ts`) carries id, name, location, county, website and `card_verified`, and all three callers feed it a plain `courses` select with no join:
 
-- `app/trip/[tripCode]/setup/page.tsx`
-- `app/trip/[tripCode]/scoring/page.tsx`
+- `app/golf/[root]/[tripCode]/setup/page.tsx`
+- `app/golf/[root]/[tripCode]/scoring/page.tsx`
 - `app/dashboard/create/CreateTripForm.tsx`
 
 So closing it means adding a hole count to `DirectoryCourse` and to those three fetches. The tidy way is PostgREST's nested aggregate — `.select('*, holes(count)')` — which is one query and no schema change, but it is syntax this repo does not use anywhere yet and there is no database in the container to try it against. It was left rather than shipped blind into three trip-facing screens.

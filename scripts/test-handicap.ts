@@ -157,8 +157,8 @@ section('Reading one back off a keypad')
   ok(field.includes('{...HANDICAP_INPUT}'), 'the shared field spreads them')
   for (const f of [
     'app/dashboard/create/CreateTripForm.tsx',
-    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
-    'app/trip/[tripCode]/players/PlayersClient.tsx',
+    'app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx',
+    'app/golf/[root]/[tripCode]/players/PlayersClient.tsx',
   ]) {
     const src = fs.readFileSync(f, 'utf-8')
     ok(!src.includes('HANDICAP_INPUT'),
@@ -191,8 +191,8 @@ section('Nothing writes a plus handicap without asking')
   const fs = require('fs') as typeof import('fs')
   const WRITERS = [
     'app/dashboard/create/CreateTripForm.tsx',
-    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
-    'app/trip/[tripCode]/players/PlayersClient.tsx',
+    'app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx',
+    'app/golf/[root]/[tripCode]/players/PlayersClient.tsx',
   ]
   const asksIn = (src: string) =>
     (src.match(/isPlusHandicap\([^\n]*\)[\s\S]{0,120}?PLUS_HANDICAP_WARNING/g) ?? []).length
@@ -227,8 +227,8 @@ section('Every screen writes a handicap the way golf writes one')
   const screens = [
     'app/scoring/LiveScoringFlow.tsx',
     'app/scoring/LiveLeaderboardPanel.tsx',
-    'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
-    'app/trip/[tripCode]/players/PlayersClient.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
+    'app/golf/[root]/[tripCode]/players/PlayersClient.tsx',
     'app/score-entry/ScoreEntryForm.tsx',
   ]
   for (const f of screens) {
@@ -369,8 +369,8 @@ section('Where a pending handicap is written and shown')
   // Shown as pending on the trip dash and in the roster, through the one
   // label rather than a dash each screen invented for itself.
   for (const f of [
-    'app/trip/[tripCode]/page.tsx',
-    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
+    'app/golf/[root]/[tripCode]/page.tsx',
+    'app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx',
     'app/scoring/LiveScoringFlow.tsx',
   ]) {
     const src = readFileSync(f, 'utf-8')
@@ -380,7 +380,7 @@ section('Where a pending handicap is written and shown')
 
   // And the organiser can actually leave it blank in both places they type
   // one — a required field is what forced the guess in the first place.
-  const setup = readFileSync('app/trip/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
+  const setup = readFileSync('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
   ok(setup.includes('disabled={busy || !newName.trim()}'),
     'Add player waits on a name, not on a handicap')
   ok(/readHandicapField\(newHandicap\)/.test(setup),

@@ -428,9 +428,9 @@ section('Nothing polls a screen nobody is reading')
 
 section('Nothing loads on the scoring path that the screen does not draw')
 {
-  const picker = read('app/trip/[tripCode]/scoring/page.tsx')
-  const roundPage = read('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')
-  const sheet = read('app/trip/[tripCode]/scoring/AddRound.tsx')
+  const picker = read('app/golf/[root]/[tripCode]/scoring/page.tsx')
+  const roundPage = read('app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx')
+  const sheet = read('app/golf/[root]/[tripCode]/scoring/AddRound.tsx')
   const catalogue = read('app/components/usePlatformCourses.ts')
 
   // The Scoring tab is a list of rounds. It carried three things for a sheet

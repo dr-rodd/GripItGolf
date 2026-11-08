@@ -257,7 +257,7 @@ export type RowContextInput = {
   cardsOff?: readonly string[]
   /**
    * A league's Golf Ireland cards placed on their rounds — fetched on the
-   * server, which alone can read them (app/trip/[tripCode]/golfIreland.ts).
+   * server, which alone can read them (app/golf/[root]/[tripCode]/golfIreland.ts).
    */
   roundCards?: readonly RoundCard[]
 }

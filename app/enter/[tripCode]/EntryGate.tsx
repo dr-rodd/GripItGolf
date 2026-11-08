@@ -16,8 +16,10 @@ import LegalLinks from '@/app/components/LegalLinks'
  * The same soft lock as the admin PIN: the browser compares hashes the
  * server already sent (lib/passcode.ts's note holds).
  */
-export default function EntryGate({ tripCode, eventName, publicHash, adminHash }: {
+export default function EntryGate({ tripCode, home, eventName, publicHash, adminHash }: {
   tripCode: string
+  /** Where the event lives once entered — `/event/X` (lib/tripPaths.ts). */
+  home: string
   eventName: string
   publicHash: string
   adminHash: string | null
@@ -48,7 +50,7 @@ export default function EntryGate({ tripCode, eventName, publicHash, adminHash }
     }
     rememberEntry(tripCode, publicHash)
     if (asAdmin) rememberUnlock(tripCode)
-    router.replace(`/trip/${tripCode}`)
+    router.replace(home)
     router.refresh()
   }
 

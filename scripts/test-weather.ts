@@ -572,7 +572,7 @@ section('The hub line stays out of the link it sits inside')
 {
   const fs = require('fs') as typeof import('fs')
   const comp = fs.readFileSync('app/components/CourseWeather.tsx', 'utf-8')
-  const hub = fs.readFileSync('app/trip/[tripCode]/StatusBlock.tsx', 'utf-8')
+  const hub = fs.readFileSync('app/golf/[root]/[tripCode]/StatusBlock.tsx', 'utf-8')
 
   // `StatusBlock` wraps the whole up-next block in a <Link> to the round page
   // whenever the next item is golf — which is exactly when the weather line

@@ -84,7 +84,7 @@ section('A tag is a team on the main sheet — the decision the dots rest on')
   ok(/update\(\{ team_id: teamId \}\)/.test(writer),
     '  …so a tag assignment lands on the mirror by itself')
 
-  const roster = read('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')
+  const roster = read('app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx')
   ok(roster.includes('teams(name, color)'),
     'the live scoring roster still joins straight through that mirror')
   // A player's own colour (lib/playerColours.ts) is only ever worked out
@@ -615,7 +615,7 @@ section('A tags board scored from real cards')
 
 section('The portal writes through the one membership writer')
 {
-  const client = read('app/trip/[tripCode]/organiser/tags/TagPortalClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/organiser/tags/TagPortalClient.tsx')
   ok(client.includes("setTeam(tripId, playerId, TAG_SET, tagId)"),
     'assignment goes through setTeam on the tag sheet — never a raw insert')
   ok(!/from\('team_members'\)/.test(client),
@@ -628,7 +628,7 @@ section('The portal writes through the one membership writer')
     'every write is optimistic and reverts when refused')
   ok(client.includes('PRESET_COLORS'), 'tags colour from the one palette')
 
-  const page = read('app/trip/[tripCode]/organiser/tags/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/organiser/tags/page.tsx')
   ok(page.includes('isEvent(trip.kind)'), 'events only — a trip is pointed at Trip Setup')
   ok(page.includes('PasscodeGate'), 'behind the same organiser PIN as the rest of the area')
   ok(page.includes("select('event_permissions')"),
@@ -639,7 +639,7 @@ section('The palette is one copy, wherever a team comes from')
 {
   const lib = read('lib/teamColors.ts')
   ok(lib.includes('#DC2626'), 'the twelve live in lib/teamColors.ts')
-  const editor = read('app/trip/[tripCode]/teams/TripTeamsClient.tsx')
+  const editor = read('app/golf/[root]/[tripCode]/teams/TripTeamsClient.tsx')
   ok(editor.includes("from '@/lib/teamColors'"),
     'the drag editor imports them rather than holding its own')
   ok(!/const PRESET_COLORS = \[/.test(editor),
@@ -650,12 +650,12 @@ section('The palette is one copy, wherever a team comes from')
 
 section('The organiser dashboard carries the door')
 {
-  const client = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/organiser/OrganiserClient.tsx')
   ok(client.includes('/organiser/tags'), 'a card links to the portal')
   ok(client.includes('label="Tags" hint={tagsSummary}'), 'a row in the organiser\'s list, called Tags')
   ok(client.includes('{tagsSummary}'), 'showing where tagging stands')
 
-  const page = read('app/trip/[tripCode]/organiser/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/organiser/page.tsx')
   ok(page.includes('describeTags('), 'summarised on the server, through the one copy')
   ok(page.includes("{ count: 'exact', head: true }") && page.includes("eq('team_set', TAG_SET)"),
     'counted in headers, scoped to the tag sheet')
@@ -663,14 +663,14 @@ section('The organiser dashboard carries the door')
 
 section('The field only picks its own tag when the organiser says so')
 {
-  const page = read('app/trip/[tripCode]/teams/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/teams/page.tsx')
   ok(page.includes('assign_tag'), 'the teams screen reads the permission')
   ok(page.includes('tags.length > 0'),
     'and offers nothing until there are tags to pick from')
   ok(page.includes('{mayPickTag && (') && page.includes('<TeamsClient'),
     'joining a tag is its own card above the teams — neither grant speaks for the other')
 
-  const join = read('app/trip/[tripCode]/teams/TagJoinClient.tsx')
+  const join = read('app/golf/[root]/[tripCode]/teams/TagJoinClient.tsx')
   ok(join.includes('setTeam(tripId, viewer.id, TAG_SET, tagId)'),
     'the field writes through the same one writer')
   ok(!/from\('teams'\)/.test(join),
@@ -697,13 +697,13 @@ section('The board is offered where boards are made, and only on events')
   ok(form.includes('squatters'),
     'and an ordinary team board sitting on the tag sheet is moved off, never left sharing')
 
-  const setupPage = read('app/trip/[tripCode]/setup/page.tsx')
+  const setupPage = read('app/golf/[root]/[tripCode]/setup/page.tsx')
   ok(setupPage.includes('askTags={isEvent(trip.kind)}'),
     'Trip Setup asks only for an event')
   const league = read('app/dashboard/create/CreateLeagueForm.tsx')
   ok(league.includes('askTags'), 'and so does league creation')
 
-  const portal = read('app/trip/[tripCode]/organiser/tags/TagPortalClient.tsx')
+  const portal = read('app/golf/[root]/[tripCode]/organiser/tags/TagPortalClient.tsx')
   ok(portal.includes('<LeaderboardSetup'),
     'the portal offers the same cascade, never a second smaller copy')
   ok(portal.includes('tagsInPlay(boards)'),
@@ -711,7 +711,7 @@ section('The board is offered where boards are made, and only on events')
 
   // A tags board is a league board, so the leaderboard page tabs it like
   // any other without knowing tags exist.
-  const client = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   ok(client.includes("b.competition === 'league'"),
     'the leaderboard tabs every league board — a tags board rides in unchanged')
   ok(client.includes('No tags yet — they are set in the organiser area.'),
@@ -729,9 +729,9 @@ section('Nothing here reaches a trip')
     'the rules are pure — no I/O to leak into a trip screen')
 
   for (const f of [
-    'app/trip/[tripCode]/teams/TripTeamsClient.tsx',
-    'app/trip/[tripCode]/teams/TeamsClient.tsx',
-    'app/trip/[tripCode]/teams/pick/TeamPickerWizard.tsx',
+    'app/golf/[root]/[tripCode]/teams/TripTeamsClient.tsx',
+    'app/golf/[root]/[tripCode]/teams/TeamsClient.tsx',
+    'app/golf/[root]/[tripCode]/teams/pick/TeamPickerWizard.tsx',
   ]) {
     ok(!read(f).includes('tagBoards'),
       `${f.split('/').pop()} is untouched by tags`)
@@ -819,9 +819,9 @@ section('A match play event ranks its tags by matches won')
     players: [], holes: [], rounds: [], resolved: [], hcpFor: new Map(), legacyTeamScoring: null,
     liveRoundIds: new Set(), livePlayerIds: new Set(), teams, memberships,
   }), [], '  …and handed no results, it draws no rows rather than a table of noughts')
-  const page = read('app/trip/[tripCode]/matchplay/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/matchplay/page.tsx')
   ok(page.includes('<TagTally') && page.includes('boards.find(isMatchTally)'), 'it stands under the bracket — the event\'s leaderboard tab')
-  const lbPage = read('app/trip/[tripCode]/leaderboard/page.tsx')
+  const lbPage = read('app/golf/[root]/[tripCode]/leaderboard/page.tsx')
   ok(lbPage.includes("lb.competition === 'matchplay' || isMatchTally(lb)") && lbPage.includes('.filter(lb => !isMatchTally(lb))'),
     '  …so the leaderboard still opens the bracket, and never draws an empty tally')
 }

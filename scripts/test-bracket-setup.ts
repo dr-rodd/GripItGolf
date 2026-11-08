@@ -103,14 +103,14 @@ section('A match play event is a whole setup from the start, unanswered question
 
 section('The bracket in the organiser area is creation\'s own flow (Ross, 5 Nov 2026)')
 {
-  const page = read('app/trip/[tripCode]/organiser/bracket/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/organiser/bracket/page.tsx')
   ok(page.includes('PasscodeGate') && page.includes('isEvent') && page.includes('<BracketFlow'), 'behind the organiser PIN, events only, the one flow')
   const mainSelect = page.match(/select\('id, trip_code[^']*'\)/)?.[0] ?? ''
   ok(!mainSelect.includes('bracket_setup') && page.includes("select('bracket_setup')"),
     'the setup rides in its own query, never the trip\'s select')
   ok(page.includes(".eq('trip_id', trip.id)") && page.includes("rows.filter(m => m.round_number === 1)"),
     '  …and the draw made is read back, this event\'s alone, as its first round')
-  const flow = read('app/trip/[tripCode]/organiser/bracket/BracketFlow.tsx')
+  const flow = read('app/golf/[root]/[tripCode]/organiser/bracket/BracketFlow.tsx')
   ok(flow.includes('<DrawPlanner') && flow.includes('<RoundDeadlines') && flow.includes("'More settings'"),
     'Plan the draw, the deadlines, then More settings')
   ok(flow.includes("['draw', ...(rounds > 0 ? ['deadlines' as const] : []), 'more']"),
@@ -122,11 +122,11 @@ section('The bracket in the organiser area is creation\'s own flow (Ross, 5 Nov 
   const store = read('lib/drawStore.ts')
   ok(/saveBracketSetup[\s\S]*select\('bracket_setup'\)\.eq\('id', tripId\)[\s\S]*update\(\{ bracket_setup: base \}\)\.eq\('id', tripId\)/.test(store),
     'the setup is merged into the column read fresh, scoped to its event')
-  const organiser = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
+  const organiser = read('app/golf/[root]/[tripCode]/organiser/OrganiserClient.tsx')
   ok(organiser.includes('/organiser/bracket') && !organiser.includes('/organiser/draw') && organiser.includes("isLeague ? 'League' : 'Bracket'"),
     'the organiser area has one Bracket row, the draw inside it')
-  ok(read('app/trip/[tripCode]/organiser/draw/page.tsx').includes('redirect(`/trip/${tripCode}/organiser/bracket`)'), '  …an old draw link lands in it')
-  ok(!fs.existsSync('app/trip/[tripCode]/organiser/bracket/BracketSetupForm.tsx'), '  …and the seven-question form is gone')
+  ok(read('app/golf/[root]/[tripCode]/organiser/draw/page.tsx').includes('redirect(`${tripHome}/organiser/bracket`)'), '  …an old draw link lands in it')
+  ok(!fs.existsSync('app/golf/[root]/[tripCode]/organiser/bracket/BracketSetupForm.tsx'), '  …and the seven-question form is gone')
   const migration = read('supabase/migrations/20260101000047_bracket_setup.sql')
   ok(migration.includes('ADD COLUMN IF NOT EXISTS bracket_setup jsonb'), 'migration 047 adds the one jsonb column, idempotently')
 
@@ -174,16 +174,16 @@ section('A match play event is a knockout from the moment it is made')
   eq(deadlineNote('2026-11-14', 'Sat 14 Nov', { today: '2026-11-15', finished: false }), 'Was due Sat 14 Nov', 'past it, a match still open')
   eq(deadlineNote('2026-11-14', 'Sat 14 Nov', { today: '2026-11-15', finished: true }), 'Played by Sat 14 Nov', 'a finished round says only its date')
 
-  const bracket = read('app/trip/[tripCode]/matchplay/MatchplayBracket.tsx')
+  const bracket = read('app/golf/[root]/[tripCode]/matchplay/MatchplayBracket.tsx')
   ok(bracket.includes('leftDeadlineNote') && !bracket.includes('aria-label="Dates each round is played by"'),
     'a round\'s play-by date sits under its name — no row of round chips across the top')
-  const page = read('app/trip/[tripCode]/matchplay/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/matchplay/page.tsx')
   ok(page.includes("from('trips').select('bracket_setup, kind, settings_passcode_hash').eq('id', trip.id).maybeSingle()"),
     '  …read in their own fail-soft query, never the trip\'s select')
   ok(page.includes('drawDeadlines(parseBracketSetup(rawSetup)?.deadlines ?? [], drawnRounds)'),
     '  …lined up with the rounds actually drawn')
-  const board2 = read('app/trip/[tripCode]/leaderboard/page.tsx')
-  ok(board2.includes('isKnockoutEvent(') && board2.includes('redirect(`/trip/${tripCode}/matchplay`)'),
+  const board2 = read('app/golf/[root]/[tripCode]/leaderboard/page.tsx')
+  ok(board2.includes('isKnockoutEvent(') && board2.includes('redirect(`${tripHome}/matchplay`)'),
     'a match play event\'s leaderboard tab is the bracket')
   ok(board2.includes("own.every(lb => lb.competition === 'matchplay' || isMatchTally(lb))"),
     '  …unless the organiser added a board beside it — a tags tally lives under the bracket, so it is not one')
@@ -193,23 +193,23 @@ section('A match play event is a knockout from the moment it is made')
 
 section('A match play event reads from the player\'s side: the hub\'s card, the Scoring tab\'s portal, a match\'s page')
 {
-  const hub = read('app/trip/[tripCode]/page.tsx')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
   ok(hub.includes('isKnockoutEvent(') && hub.includes('<NextMatchCard'), 'the hub carries the next-match card on a match play event')
   ok(hub.includes("nextMatch: koView ? '' : nextMatchLine"), '  …in place of the one-line caption, which a trip keeps')
-  const scoring = read('app/trip/[tripCode]/scoring/page.tsx')
+  const scoring = read('app/golf/[root]/[tripCode]/scoring/page.tsx')
   ok(scoring.includes('<KnockoutPortal') && scoring.includes('const knockout = event && isKnockoutEvent('),
     'the Scoring tab is the bracket\'s portal on a match play event')
-  const views = read('app/trip/[tripCode]/KnockoutViews.tsx')
+  const views = read('app/golf/[root]/[tripCode]/KnockoutViews.tsx')
   ok(views.includes("cardClass('chosen', true)") && views.includes('opacity-60'),
     '  …your own match active and the rest listed, inactive')
-  ok(views.includes('href={matchHref(tripCode, m.id)}') && !/m\.mine \? \(\s*<Link[\s\S]*?\) : \(\s*<Link/.test(views),
+  ok(views.includes('href={matchHref(tripHome, m.id)}') && !/m\.mine \? \(\s*<Link[\s\S]*?\) : \(\s*<Link/.test(views),
     '  …and only your own opens')
-  const helper = read('app/trip/[tripCode]/knockout.ts')
+  const helper = read('app/golf/[root]/[tripCode]/knockout.ts')
   ok(helper.includes("teamFor(memberships, meId, setOf(draw)"), 'a pairs draw\'s entrant is the pairing on the draw\'s own sheet')
   ok(helper.includes("drawDeadlines(parseBracketSetup(rawSetup)?.deadlines ?? [], drawnRounds)"), 'every view lines the deadlines up the same way')
-  const match = read('app/trip/[tripCode]/match/[matchId]/page.tsx')
+  const match = read('app/golf/[root]/[tripCode]/match/[matchId]/page.tsx')
   ok(match.includes('<MyHandicap') && match.includes("me.claimed === true"), 'a claimed player in the match amends their own handicap there')
-  const mine = read('app/trip/[tripCode]/match/[matchId]/MyHandicap.tsx')
+  const mine = read('app/golf/[root]/[tripCode]/match/[matchId]/MyHandicap.tsx')
   ok(mine.includes(".eq('id', playerId).eq('trip_id', tripId)") && mine.includes('syncRoundHandicaps('),
     '  …written where Trip Setup writes it, scoped to the trip')
 }
@@ -226,7 +226,7 @@ section('Arranging a match: venue, tees, shots, contacts, a walkover — and the
     && !/TO anon/.test(sql),
     '  …and contact details in a table closed to the browser, the server\'s grant only')
 
-  const match = read('app/trip/[tripCode]/match/[matchId]/page.tsx')
+  const match = read('app/golf/[root]/[tripCode]/match/[matchId]/page.tsx')
   ok(match.includes("select('course_id, played_on, tees')") && match.includes('const arrangeable = !arrangedRes.error'),
     'the match page reads the arrangement in its own fail-soft query')
   ok(match.includes('matchStrokes(') && match.includes('allowanceOf(draw)') && match.includes('shotHoles('),
@@ -234,7 +234,7 @@ section('Arranging a match: venue, tees, shots, contacts, a walkover — and the
   ok(match.includes('contactShown(c, {'), '  …shows contact details only as each player said')
   ok(match.includes('walkoverChoices(match, view.entrantId, false)') && match.includes('<MatchWalkover'),
     '  …and offers the walkover')
-  const actions = read('app/trip/[tripCode]/match/[matchId]/MatchActions.tsx')
+  const actions = read('app/golf/[root]/[tripCode]/match/[matchId]/MatchActions.tsx')
   ok(actions.includes(".eq('id', matchId).eq('trip_id', tripId)"), 'arranging writes the one match, scoped to the event')
   ok(actions.includes('persistWinner(all, matchId, winnerId, WALKOVER)'), 'a walkover goes through the bracket\'s own writer, cascade and all')
   ok(actions.includes("if (!organiser && !conceding) { setError('Awarding a walkover needs the admin PIN.')"),
@@ -243,16 +243,16 @@ section('Arranging a match: venue, tees, shots, contacts, a walkover — and the
   const route = read('app/api/match/contact/route.ts')
   ok(route.includes('readPlayerId(jar.get(playerCookieName(tripCode))?.value)') && route.includes(".eq('trip_id', trip.id)"),
     'contact details are saved only for the player this phone claimed')
-  const reader = read('app/trip/[tripCode]/matchContacts.ts')
+  const reader = read('app/golf/[root]/[tripCode]/matchContacts.ts')
   ok(reader.includes('createAdminClient()') && reader.includes(".eq('trip_id', tripId)"), '  …and read on the server, scoped to the event')
-  ok(!/from '@\/lib\/supabase-admin'|matchContacts/.test(read('app/trip/[tripCode]/MatchDetails.tsx')),
+  ok(!/from '@\/lib\/supabase-admin'|matchContacts/.test(read('app/golf/[root]/[tripCode]/MatchDetails.tsx')),
     '  …never from the browser')
-  ok(read('app/trip/[tripCode]/page.tsx').includes('<MatchDetails'), 'the hub carries your home club and contact')
+  ok(read('app/golf/[root]/[tripCode]/page.tsx').includes('<MatchDetails'), 'the hub carries your home club and contact')
 
-  const bracket = read('app/trip/[tripCode]/matchplay/MatchplayBracket.tsx')
+  const bracket = read('app/golf/[root]/[tripCode]/matchplay/MatchplayBracket.tsx')
   ok(bracket.includes('pin={sheet.correcting && lock && !unlocked ? lock : null}'),
     'on an event, a result already in is changed only with the admin PIN')
-  const mpage = read('app/trip/[tripCode]/matchplay/page.tsx')
+  const mpage = read('app/golf/[root]/[tripCode]/matchplay/page.tsx')
   ok(mpage.includes('isEvent(setupRow?.kind) && setupRow?.settings_passcode_hash'), '  …a trip\'s bracket stays open')
 }
 
@@ -262,7 +262,7 @@ section('The match play card: top of the draw left, bottom right, NR, the result
   ok(sql.includes('PRIMARY KEY (match_id, player_id, hole_number)') && sql.includes('PRIMARY KEY (match_id, hole_number)'),
     'migration 058: a score a player a hole, a concession a hole — two phones interleave, never clobber')
   ok(sql.includes("CHECK (conceded_by IN ('A', 'B'))"), '  …a concession says which side gave it')
-  const client = read('app/trip/[tripCode]/match/[matchId]/card/MatchCardClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/match/[matchId]/card/MatchCardClient.tsx')
   ok(/sideColumn\('A', a\)\}\s*\{sideColumn\('B', b\)/.test(client), 'the top of the draw on the left, the bottom on the right')
   ok(!client.includes('Concede hole') && client.includes('setGross(p.id, current, isNR ? undefined : null)'),
     'no concede button: each player has NR, saved as a score with no gross (migration 062)')
@@ -274,7 +274,7 @@ section('The match play card: top of the draw left, bottom right, NR, the result
     'previous and next move between holes — no grid of numbered holes')
   ok(client.includes('backgroundColor: holeFill(o, isNow)'), 'the strip marks each hole in the colour of the side that won it')
   ok(client.includes('usePoll(load, 15_000, true)') && !client.includes('setInterval'), 'the other phone shows up, through the one poller')
-  const finishSheet = read('app/trip/[tripCode]/match/[matchId]/card/MatchFinish.tsx')
+  const finishSheet = read('app/golf/[root]/[tripCode]/match/[matchId]/card/MatchFinish.tsx')
   ok(client.includes("finish?.phase ?? (asking && awaitingFinal ? 'confirm' : null)")
     && client.includes("{finaliseHere ? 'Finalise match' : '→'}"),
     'the end of a match never interrupts scoring — the next button becomes Finalise match on the hole that settles it')
@@ -284,7 +284,7 @@ section('The match play card: top of the draw left, bottom right, NR, the result
   ok(finishSheet.includes('Yes — finalise the match') && finishSheet.includes('No — go back and amend the scores')
     && finishSheet.includes('Keep scoring — play out the 18'),
     '  …the sheet showing the last score and asking whether it is right')
-  const scorecard = read('app/trip/[tripCode]/match/[matchId]/card/MatchScorecard.tsx')
+  const scorecard = read('app/golf/[root]/[tripCode]/match/[matchId]/card/MatchScorecard.tsx')
   ok(finishSheet.includes('<MatchScoresTable') && scorecard.includes('aria-label="Scores hole by hole"')
     && scorecard.includes('backgroundColor: fillOf(o)'),
     '  …then the card hole by hole, each marked in the colour of whoever won it')
@@ -294,33 +294,33 @@ section('The match play card: top of the draw left, bottom right, NR, the result
   ok(client.includes('persistWinner(all, matchId, winnerId as string, state.result)'), '  …through the bracket\'s own writer')
   ok(client.includes('const canEdit = !decided && (organiser || inMatch || anyoneScores)'),
     'anybody scores an open match unless kept to its players; once it is in, nobody — it is reopened first')
-  ok(read('app/trip/[tripCode]/match/[matchId]/card/page.tsx').includes("'score_matches'"),
+  ok(read('app/golf/[root]/[tripCode]/match/[matchId]/card/page.tsx').includes("'score_matches'"),
     '  …the page asking the event\'s permission')
   ok(client.includes("await persistWinner(all, matchId, null, null)") && client.includes('reopenBlocked(next.round_name')
     && client.includes('decided && organiser'),
     '  …the organiser reopens it with the PIN, taking it out of the draw, unless the match it fed has begun')
-  const page = read('app/trip/[tripCode]/match/[matchId]/card/page.tsx')
-  const cards = read('app/trip/[tripCode]/match/matchCards.ts')
+  const page = read('app/golf/[root]/[tripCode]/match/[matchId]/card/page.tsx')
+  const cards = read('app/golf/[root]/[tripCode]/match/matchCards.ts')
   ok(page.includes('readCardSetups(') && cards.includes('matchStrokes(') && page.includes("Arrange the match first"),
     'the card takes its shots from the arrangement, or sends you to arrange it')
   ok(client.includes('playCard(') && client.includes('Extra holes'), 'level after 18 the card grows extra holes')
   ok(client.includes('<select') && client.includes('value={extraCourseHole(current, plan)}')
     && /update\(\{ extra_holes: next \}\)\.eq\('id', matchId\)\.eq\('trip_id', tripId\)/.test(client),
     '  …each with a dropdown for the hole it is played off, saved for both phones')
-  ok(read('app/trip/[tripCode]/match/matchCards.ts').includes(".select('id, extra_holes')"),
+  ok(read('app/golf/[root]/[tripCode]/match/matchCards.ts').includes(".select('id, extra_holes')"),
     '  …read in its own query, so a database without migration 061 keeps the card\'s shots')
 
   // The live board: the Scoring tab reads every open match's card through the
   // same setup the card page draws from, so the two cannot disagree.
   ok(cards.includes('export async function readLiveMatches') && /readCardSetups\(trip, view, players, started\)/.test(cards),
     'live matches are read off their cards through the card\'s own setup')
-  const scoringPage = read('app/trip/[tripCode]/scoring/page.tsx')
+  const scoringPage = read('app/golf/[root]/[tripCode]/scoring/page.tsx')
   ok(scoringPage.includes('readLiveMatches(trip, view, roster)') && scoringPage.includes('live={knockoutRead?.live ?? []}'),
     'the Scoring tab hands the portal its live matches')
-  const views = read('app/trip/[tripCode]/KnockoutViews.tsx')
+  const views = read('app/golf/[root]/[tripCode]/KnockoutViews.tsx')
   ok(views.includes('<LiveBoard') && views.includes('dot-live') && !views.includes('setInterval'),
     'the portal draws a live board, refreshed through the one poller')
-  ok(read('app/trip/[tripCode]/match/[matchId]/page.tsx').includes("'Score this match'"), 'the match page opens the card')
+  ok(read('app/golf/[root]/[tripCode]/match/[matchId]/page.tsx').includes("'Score this match'"), 'the match page opens the card')
 }
 
 // ─── The draw ──────────────────────────────────────────────────
@@ -385,7 +385,7 @@ section('The draw: made at creation, from the organiser area, or by itself on a 
     '  …once: a visit takes the job before drawing, and gives it back if the draw fails')
   ok(read('app/api/match/draw-due/route.ts').includes('makeDueDraw(admin, trip, new Date(), false)'),
     'the first visit after the moment makes it, through the same function (Ross, 5 Nov 2026)')
-  ok(read('app/trip/[tripCode]/organiser/bracket/BracketFlow.tsx').includes('The draw is in play'), 'once in play, the flow says so rather than offering a redraw')
+  ok(read('app/golf/[root]/[tripCode]/organiser/bracket/BracketFlow.tsx').includes('The draw is in play'), 'once in play, the flow says so rather than offering a redraw')
 }
 
 section('When the draw happens — one screen, and a moment it goes live (Ross, 5 Nov 2026)')
@@ -409,14 +409,14 @@ section('When the draw happens — one screen, and a moment it goes live (Ross, 
     '  …and a date asks the time it goes live')
   const planner = read('app/components/DrawPlanner.tsx')
   ok(read('app/dashboard/create/CreationDraw.tsx').includes('export default DrawPlanner')
-    && read('app/trip/[tripCode]/organiser/bracket/BracketFlow.tsx').includes('<DrawPlanner')
+    && read('app/golf/[root]/[tripCode]/organiser/bracket/BracketFlow.tsx').includes('<DrawPlanner')
     && planner.includes('buildsNow(value.timing)'),
     'creation and the organiser area are one draw screen, the draw built on it now or pre-made for its date')
-  const hub = read('app/trip/[tripCode]/page.tsx')
-  const bracket = read('app/trip/[tripCode]/matchplay/page.tsx')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
+  const bracket = read('app/golf/[root]/[tripCode]/matchplay/page.tsx')
   ok(hub.includes('<DrawCountdown') && hub.includes('koView.view.matches.length === 0') && bracket.includes('<DrawCountdown'),
     'the home screen and the bracket count down to it while it is to come')
-  const countdown = read('app/trip/[tripCode]/DrawCountdown.tsx')
+  const countdown = read('app/golf/[root]/[tripCode]/DrawCountdown.tsx')
   ok(countdown.includes("fetch('/api/match/draw-due'") && countdown.includes('router.refresh()'),
     '  …and at nought ask for it to be made, and show it')
 }
@@ -438,12 +438,12 @@ section('The public PIN: entry to the event, beside the admin PIN')
   ok(publicPinIssue(draft('5678', '5679'), '1234') !== null, 'two that differ are refused')
   ok(publicPinIssue(draft('12'), '1234') !== null, 'and the admin PIN\'s own length rules hold')
 
-  const layout = read('app/trip/[tripCode]/layout.tsx')
+  const layout = read('app/golf/[root]/[tripCode]/layout.tsx')
   ok(/fetchEntryLock\(tripCode\)/.test(layout) && layout.includes('redirect(`/enter/${tripCode}`)'),
     'the trip layout sends a phone that has not entered to the door')
   ok(/Promise\.all\(\[\s*fetchTripKind\(tripCode\), fetchEntryLock\(tripCode\)/.test(layout),
     '  …asked alongside the kind, never after it')
-  const kind = read('app/trip/[tripCode]/kind.ts')
+  const kind = read('app/golf/[root]/[tripCode]/kind.ts')
   ok(kind.includes(".select('public_passcode_hash')") && /if \(error\) return null/.test(kind),
     '  …in its own query, fail-soft — before migration 060 there is no lock')
   const gate = read('app/enter/[tripCode]/EntryGate.tsx')
@@ -456,7 +456,7 @@ section('The public PIN: entry to the event, beside the admin PIN')
       && /public_passcode_hash/.test(src) && src.includes('!publicIssue'),
       `${form} offers the public PIN, writes it only when set, and lets its own device in`)
   }
-  ok(read('app/trip/[tripCode]/organiser/page.tsx').includes('<PublicPinCard'), 'the organiser can change or take it off')
+  ok(read('app/golf/[root]/[tripCode]/organiser/page.tsx').includes('<PublicPinCard'), 'the organiser can change or take it off')
 }
 
 // ─── Result ────────────────────────────────────────────────────

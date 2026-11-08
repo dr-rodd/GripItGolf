@@ -7,6 +7,7 @@ import { fetchBoardRuns, runsUnavailableMessage } from '../runs'
 import { standingsOf } from '../standings'
 import { ChallengeNotFound, Notice } from '../RunPieces'
 import RunBoardClient, { type BoardView } from './RunBoardClient'
+import { tripBase } from '@/lib/tripPaths'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +38,7 @@ export default async function RunLeaderboardPage({ params }: {
   const { tripCode } = await params
   const challenge = await fetchRunChallenge(tripCode)
   if (!challenge) return <ChallengeNotFound />
-  if (!isRunChallenge(challenge.kind)) redirect(`/trip/${challenge.code}/leaderboard`)
+  if (!isRunChallenge(challenge.kind)) redirect(`${tripBase(challenge.code, challenge.kind)}/leaderboard`)
 
   // Who is looking first — the cookie alone, no database — so their own runs
   // can be read fresh over the server's few-minutes copy (../runs.ts).

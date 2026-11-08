@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { fetchTripKind } from '@/app/trip/[tripCode]/kind'
+import { fetchTripKind } from '@/app/golf/[root]/[tripCode]/kind'
 import { MAIN_SET } from '@/lib/teamSets'
 import {
   type RunSetup, type RunPermissions,

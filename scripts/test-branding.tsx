@@ -61,7 +61,7 @@ function uiFiles(): string[] {
       else if (/\.tsx?$/.test(e.name)) out.push(p)
     }
   }
-  for (const d of ['app/trip', 'app/components', 'app/join', 'app/dashboard', 'app/admin', 'app/golf', 'app/create', 'app/run', 'app/privacy', 'app/terms', 'app/enter']) walk(d)
+  for (const d of ['app/components', 'app/join', 'app/dashboard', 'app/admin', 'app/golf', 'app/create', 'app/run', 'app/privacy', 'app/terms', 'app/enter']) walk(d)
   out.push('app/page.tsx', 'app/layout.tsx', 'app/Landing.tsx', 'app/[code]/page.tsx')
   // The scoring screens a trip actually uses (refresh plan, Phase 6). The
   // legacy portal beside them — ScoringClient, CoursePortalClient and the
@@ -386,7 +386,7 @@ section('Names and numbers on a board ask for the serif by name')
   // are where that would show first. The before/after was checked element
   // by element against the pre-refresh build: no name or number moved.
   const has = (f: string, re: RegExp, label: string) => ok(re.test(read(f)), label)
-  const LB = 'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx'
+  const LB = 'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx'
   has(LB, /className=\{`font-serif flex items-center \$\{GAP\}/, 'the trip leaderboard: each row')
   ok(!/textClassName="font-\[family-name:var\(--font-display\)\]/.test(read(LB)),
     '  …and its names inherit it rather than asking for the title face')
@@ -400,13 +400,13 @@ section('Names and numbers on a board ask for the serif by name')
   ok(!/const (NAME|SCORE) = 'font-\[family-name:var\(--font-display\)\]/.test(read(RUN)),
     '  …whose names and scores inherit it')
   has('app/run/[tripCode]/page.tsx', /className="font-serif flex items-center gap-3"/, 'the run hub\'s standings')
-  has('app/trip/[tripCode]/StatusBlock.tsx', /className="font-serif font-bold text-\[30px\][^"]*">\s*\{player\.placing/,
+  has('app/golf/[root]/[tripCode]/StatusBlock.tsx', /className="font-serif font-bold text-\[30px\][^"]*">\s*\{player\.placing/,
     'the hub\'s standing')
-  has('app/trip/[tripCode]/round/[roundNumber]/page.tsx', /className=\{`font-serif flex items-center gap-3 px-4 py-3/,
+  has('app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx', /className=\{`font-serif flex items-center gap-3 px-4 py-3/,
     'a round\'s podium')
-  has('app/trip/[tripCode]/StatsPanel.tsx', /font-serif text-3xl t-num/, 'the hub\'s stats headline')
-  has('app/trip/[tripCode]/stats/StatsClient.tsx', /<tbody className="font-serif">/, 'the stats tables')
-  ok((read('app/trip/[tripCode]/stats/charts.tsx').match(/h-auto font-serif/g) ?? []).length === 3,
+  has('app/golf/[root]/[tripCode]/StatsPanel.tsx', /font-serif text-3xl t-num/, 'the hub\'s stats headline')
+  has('app/golf/[root]/[tripCode]/stats/StatsClient.tsx', /<tbody className="font-serif">/, 'the stats tables')
+  ok((read('app/golf/[root]/[tripCode]/stats/charts.tsx').match(/h-auto font-serif/g) ?? []).length === 3,
     '  …and all three charts')
 
   // `font-serif` is a Tailwind utility, in a layer; the t-* scale classes
@@ -546,7 +546,7 @@ section('Titles come from the scale, hairlines from the mixes')
   const handSet = uiFiles().filter(f => read(f).includes('font-[family-name:var(--font-display)]'))
   eq(handSet.sort(), [
     'app/components/CourseWeather.tsx',
-    'app/trip/[tripCode]/TripCountdown.tsx',
+    'app/golf/[root]/[tripCode]/TripCountdown.tsx',
   ], 'no title is set in the display font by hand')
 
   // The hairline, the field border and the flat wash each have a name
@@ -694,7 +694,7 @@ section('Dark mode is the same tokens with night values')
   // The gear is on every hub, claimed or not — a phone that went dark must
   // always have the way back (Ross, 25 Oct 2026). The nickname is a
   // claimed player\'s, so only the player is conditional.
-  const hub = read('app/trip/[tripCode]/page.tsx')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
   ok(hub.includes('<PlayerSettings'), 'the hub carries the preferences gear')
   ok(!/preferences = me &&/.test(hub), '  …for every phone, not only a claimed one')
   ok(/playerId=\{me && isConfirmed\(me\) \? me\.id : null\}/.test(hub),
@@ -786,7 +786,7 @@ section('Type is big enough to read')
     'and body copy is within a step of them, not three')
 
   // Ad-hoc sizes bypass the scale, so they get the same floor
-  const BRACKET = 'app/trip/[tripCode]/matchplay/MatchplayBracket.tsx'
+  const BRACKET = 'app/golf/[root]/[tripCode]/matchplay/MatchplayBracket.tsx'
   const tooSmall: string[] = []
   for (const f of uiFiles()) {
     // The one exception, named rather than hidden: a knockout bracket is a
@@ -941,17 +941,17 @@ section('The bottom tab bar')
   // rendered by a page unmounts when that page does: tapping a tab tore the
   // bar off the screen and drew a new one once the next page's queries came
   // back. The layout outlives the page, so now it does not move.
-  ok(read('app/trip/[tripCode]/layout.tsx').includes('<TabBar'),
+  ok(read('app/golf/[root]/[tripCode]/layout.tsx').includes('<TabBar'),
     'the trip layout draws the tab bar')
 
   const carriers = [
-    'app/trip/[tripCode]/page.tsx',
-    'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/scoring/page.tsx',
-    'app/trip/[tripCode]/teams/page.tsx',
-    'app/trip/[tripCode]/players/page.tsx',
-    'app/trip/[tripCode]/matchplay/page.tsx',
-    'app/trip/[tripCode]/stats/page.tsx',
+    'app/golf/[root]/[tripCode]/page.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/page.tsx',
+    'app/golf/[root]/[tripCode]/scoring/page.tsx',
+    'app/golf/[root]/[tripCode]/teams/page.tsx',
+    'app/golf/[root]/[tripCode]/players/page.tsx',
+    'app/golf/[root]/[tripCode]/matchplay/page.tsx',
+    'app/golf/[root]/[tripCode]/stats/page.tsx',
   ]
   for (const f of carriers) {
     ok(!read(f).includes('<TabBar'),
@@ -970,14 +970,14 @@ section('The footer is sitewide, once inside a trip')
   // never showed it at all. Settings has no tab bar of its own, but it still
   // carries the footer.
   const carriers = [
-    'app/trip/[tripCode]/page.tsx',
-    'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/scoring/page.tsx',
-    'app/trip/[tripCode]/teams/page.tsx',
-    'app/trip/[tripCode]/players/page.tsx',
-    'app/trip/[tripCode]/matchplay/page.tsx',
-    'app/trip/[tripCode]/stats/page.tsx',
-    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
+    'app/golf/[root]/[tripCode]/page.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/page.tsx',
+    'app/golf/[root]/[tripCode]/scoring/page.tsx',
+    'app/golf/[root]/[tripCode]/teams/page.tsx',
+    'app/golf/[root]/[tripCode]/players/page.tsx',
+    'app/golf/[root]/[tripCode]/matchplay/page.tsx',
+    'app/golf/[root]/[tripCode]/stats/page.tsx',
+    'app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx',
   ]
   for (const f of carriers) {
     ok(read(f).includes('<SupportLink'), `${f.split('/').slice(-2).join('/')} carries the footer`)
@@ -985,7 +985,7 @@ section('The footer is sitewide, once inside a trip')
 
   // The one screen it must never sit near: the guide is explicit that it
   // "must not sit anywhere near someone entering a score."
-  const scoring = read('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')
+  const scoring = read('app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx')
   ok(!scoring.includes('SupportLink'), 'the live scoring dashboard does not carry it')
   const dashboard = read('app/scoring/[slug]/CourseDashboardClient.tsx')
   ok(!dashboard.includes('SupportLink'), 'nor does the shared scoring client behind it')
@@ -993,7 +993,7 @@ section('The footer is sitewide, once inside a trip')
   // A drawn bracket used to lose both the tab bar and the footer at once —
   // TabBar lived inside the matchplay page's EmptyState, so it vanished the
   // moment there was a real bracket to show instead.
-  const matchplay = read('app/trip/[tripCode]/matchplay/page.tsx')
+  const matchplay = read('app/golf/[root]/[tripCode]/matchplay/page.tsx')
   const emptyState = matchplay.slice(matchplay.indexOf('function EmptyState'))
   ok(!emptyState.includes('<TabBar'), 'the tab bar no longer hides inside the empty state')
   ok(!emptyState.includes('<SupportLink'), 'and neither does the footer')
@@ -1018,20 +1018,20 @@ section('The mark is the header, and the way back')
 
   // The board's own sticky row has to clear it, or the column headings
   // slide underneath the logo as you scroll.
-  const board = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const board = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   ok(board.includes('HEADER_H'), 'the leaderboard offsets its own sticky row by that height')
   ok(!board.includes('sticky top-0 z-10'), 'rather than pinning it to zero')
 
   // Every trip screen has it, so the way back is in the same place everywhere
   const carriers = [
-    'app/trip/[tripCode]/page.tsx',
-    'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/scoring/page.tsx',
-    'app/trip/[tripCode]/scoring/[roundNumber]/page.tsx',
-    'app/trip/[tripCode]/teams/page.tsx',
-    'app/trip/[tripCode]/players/page.tsx',
-    'app/trip/[tripCode]/matchplay/page.tsx',
-    'app/trip/[tripCode]/stats/page.tsx',
+    'app/golf/[root]/[tripCode]/page.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/page.tsx',
+    'app/golf/[root]/[tripCode]/scoring/page.tsx',
+    'app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx',
+    'app/golf/[root]/[tripCode]/teams/page.tsx',
+    'app/golf/[root]/[tripCode]/players/page.tsx',
+    'app/golf/[root]/[tripCode]/matchplay/page.tsx',
+    'app/golf/[root]/[tripCode]/stats/page.tsx',
   ]
   for (const f of carriers) {
     ok(read(f).includes('<TripHeader'), `${f.split('/').slice(-2).join('/')} carries the mark`)
@@ -1115,10 +1115,10 @@ section('The collapse happens on leaving the landing page, and nowhere else')
   // Every other screen is settled from the first pixel, and says nothing
   // about progress at all
   for (const f of [
-    'app/trip/[tripCode]/page.tsx',
-    'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/scoring/page.tsx',
-    'app/trip/[tripCode]/scoring/[roundNumber]/page.tsx',
+    'app/golf/[root]/[tripCode]/page.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/page.tsx',
+    'app/golf/[root]/[tripCode]/scoring/page.tsx',
+    'app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx',
   ]) {
     // The prop, not the word — "in-progress scores" is a different thing
     ok(!/progress=/.test(read(f)),
@@ -1651,7 +1651,7 @@ section('Motion is calm, and can be switched off')
   ok(travelMs[0] > 2000,
     `slower than a breath on purpose, so a glance mostly lands on a name at rest (${travelMs[0]}ms)`)
 
-  const anchor = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const anchor = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
     .match(/const NAME_SCROLL_MS = ([\d_]+)/)
   ok(!!anchor, 'the component names that duration too, for the phase anchor')
   ok(Number((anchor?.[1] ?? '0').replace(/_/g, '')) === travelMs[0],
@@ -1706,13 +1706,13 @@ section('One count-up, one celebration, and never on a board')
     .filter(f => !f.endsWith(`components/${name}.tsx`))
     .filter(f => new RegExp(`import ${name} from`).test(read(f))).sort()
   eq(users('CountUp'), [
+    'app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx',
     'app/run/[tripCode]/add/page.tsx',
-    'app/trip/[tripCode]/round/[roundNumber]/page.tsx',
   ], 'a total counts up in two places: your run total, and your signed round')
   eq(users('DotBloom'), [
+    'app/golf/[root]/[tripCode]/match/[matchId]/card/MatchFinish.tsx',
     'app/run/[tripCode]/add/RunAddClient.tsx',
     'app/scoring/LiveScoringFlow.tsx',
-    'app/trip/[tripCode]/match/[matchId]/card/MatchFinish.tsx',
   ], 'the dot blooms in three: a run logged, a card signed, a match finalised')
 
   const cu = stripComments(read('app/components/CountUp.tsx'))
@@ -1898,14 +1898,15 @@ section('The screens before a trip wear the same header')
   ok(shell.includes('const first = step <= 1') && /inert=\{first\}[\s\S]{0,80}<BackButton onClick=\{onBack\}/.test(shell),
     'shown only where there is a step to go back to')
 
-  // Every screen inside a trip points its mark at the trip hub, and nothing
-  // points at a trip code that no longer travels as its own prop
+  // Every screen inside a trip points its mark at the trip hub — at its home,
+  // /trip/X or an event's /event/X (lib/tripPaths.ts) — and nothing points at
+  // a trip code that no longer travels as its own prop
   for (const f of [
-    'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/scoring/page.tsx',
-    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/page.tsx',
+    'app/golf/[root]/[tripCode]/scoring/page.tsx',
+    'app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx',
   ]) {
-    ok(/<TripHeader backTo=\{`\/trip\/\$\{[\w.]+\}`\}/.test(read(f)),
+    ok(/<TripHeader backTo=\{tripHome\}/.test(read(f)),
       `${f.split('/').slice(-2).join('/')} points its mark at the trip`)
   }
   eq(uiFiles().filter(f => /<TripHeader[^>]*tripCode=/.test(read(f))), [],
@@ -1916,7 +1917,7 @@ section('The screens before a trip wear the same header')
   // of the site instead, and Home on the tab bar is what comes back here.
   // (Matched on the backTo alone: the hub's header also carries the
   // preferences gear in its action slot.)
-  ok(/<TripHeader backTo="\/"/.test(read('app/trip/[tripCode]/page.tsx')),
+  ok(/<TripHeader backTo="\/"/.test(read('app/golf/[root]/[tripCode]/page.tsx')),
     'the hub points its mark at the start of the site, not at itself')
 
   // A tap target with only a logo in it has to say where it goes
@@ -1973,7 +1974,7 @@ const WIZARDS = [
   'app/dashboard/create/CreateLeagueForm.tsx',
   'app/dashboard/create/CreateKnockoutForm.tsx',
   'app/dashboard/create/CreateRunForm.tsx',
-  'app/trip/[tripCode]/organiser/bracket/BracketFlow.tsx',
+  'app/golf/[root]/[tripCode]/organiser/bracket/BracketFlow.tsx',
 ]
 
 section('Every wizard is one frame')
@@ -2084,15 +2085,15 @@ section('The tab bar is on every screen inside a trip')
   // reserved inside the card's own height so the Next button comes to rest
   // above it rather than beneath it.
   const tabbed = [
-    'app/trip/[tripCode]/page.tsx',
-    'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/scoring/page.tsx',
-    'app/trip/[tripCode]/teams/page.tsx',
-    'app/trip/[tripCode]/players/page.tsx',
-    'app/trip/[tripCode]/matchplay/page.tsx',
-    'app/trip/[tripCode]/stats/page.tsx',
-    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
-    'app/trip/[tripCode]/settings/page.tsx',
+    'app/golf/[root]/[tripCode]/page.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/page.tsx',
+    'app/golf/[root]/[tripCode]/scoring/page.tsx',
+    'app/golf/[root]/[tripCode]/teams/page.tsx',
+    'app/golf/[root]/[tripCode]/players/page.tsx',
+    'app/golf/[root]/[tripCode]/matchplay/page.tsx',
+    'app/golf/[root]/[tripCode]/stats/page.tsx',
+    'app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx',
+    'app/golf/[root]/[tripCode]/settings/page.tsx',
   ]
   for (const f of tabbed) {
     const src = read(f)
@@ -2152,7 +2153,7 @@ section('The tab bar is on every screen inside a trip')
   // Score entry is the one that has to reserve the room itself: its shell
   // sizes the card against the window, so padding added outside it would make
   // the page taller than the screen and pull the card up off the Next button.
-  const scoring = read('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')
+  const scoring = read('app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx')
   ok(!/<TabBar/.test(scoring), 'score entry leaves the bar to the layout too')
   ok(/bottomInset=\{TABBAR_SPACE\}/.test(scoring),
     '  …and reserves the room for it inside the card, not around it')
@@ -2190,7 +2191,7 @@ section('A full-screen overlay covers the tab bar, never ties with it')
   // A scrim tied with the bar leaves it bright and tappable behind a modal
   // that is meant to be blocking the screen.
   for (const f of [
-    'app/trip/[tripCode]/setup/ItineraryEditor.tsx',
+    'app/golf/[root]/[tripCode]/setup/ItineraryEditor.tsx',
     'app/components/PlayerSettings.tsx',
   ]) {
     const src = read(f)
@@ -2252,7 +2253,7 @@ section('The scoring shell stacks under the site header, not behind it')
   // someone reaching for a constant, so what is pinned here is that nobody
   // reaches for one again.
   const shell = read('app/scoring/[slug]/CourseDashboardClient.tsx')
-  const page  = read('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')
+  const page  = read('app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx')
 
   ok(page.includes('stickyTop={HEADER_H}'),
     'the trip round route tells the shell how much chrome is above it')
@@ -2373,10 +2374,10 @@ section('A page can name itself in the header')
 
   // Which page wears which
   const wears: [string, string][] = [
-    ['app/trip/[tripCode]/leaderboard/page.tsx', 'leaderboard'],
-    ['app/trip/[tripCode]/scoring/page.tsx', 'scoring'],
-    ['app/trip/[tripCode]/scoring/[roundNumber]/page.tsx', 'scoring'],
-    ['app/trip/[tripCode]/setup/TripSetupClient.tsx', 'settings'],
+    ['app/golf/[root]/[tripCode]/leaderboard/page.tsx', 'leaderboard'],
+    ['app/golf/[root]/[tripCode]/scoring/page.tsx', 'scoring'],
+    ['app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx', 'scoring'],
+    ['app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx', 'settings'],
   ]
   for (const [file, name] of wears) {
     ok(read(file).includes(`title="${name}"`),
@@ -2384,11 +2385,11 @@ section('A page can name itself in the header')
   }
 
   // The hub keeps the mark — "trip." is drawn but not in use yet
-  ok(!read('app/trip/[tripCode]/page.tsx').includes('title="trip"'),
+  ok(!read('app/golf/[root]/[tripCode]/page.tsx').includes('title="trip"'),
     'the trip hub still shows the green dot, not its own name')
 
   // The old text heading is gone from settings, or the page says it twice
-  ok(!read('app/trip/[tripCode]/setup/TripSetupClient.tsx').includes('>Trip Setup<'),
+  ok(!read('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx').includes('>Trip Setup<'),
     'and settings does not also spell its name out in type')
 }
 
@@ -2467,8 +2468,8 @@ section('A bare code is an address')
   const short = read('app/[code]/page.tsx')
   ok(/\^\[A-Za-z0-9\]\{6\}\$/.test(short), 'only a code shape earns a lookup')
   ok(short.includes('code.toUpperCase()'), 'a typed lowercase code still finds its event')
-  ok(short.includes('redirect(`/trip/${data.trip_code}`)'),
-    'and lands on the hub, which stays the one canonical address')
+  ok(short.includes("redirect(isRunChallenge(kind) ? `/run/${data.trip_code}` : tripBase(data.trip_code, kind))"),
+    'and lands on the hub, which stays the one canonical address — /trip/, an event\'s /event/ or a challenge\'s /run/')
   ok(short.includes('notFound()'), 'anything else is a plain 404')
   ok(/Event not found/.test(short), 'a code nobody owns gets the calm answer, not a 404')
 }
@@ -2531,7 +2532,7 @@ section('The edit-permission toggle says what it did')
   // it is a fact about the trip rather than about the golf. The block runs
   // from its own heading to the end of the sheet, which is nothing but
   // closing tags — the itinerary editor is the next thing rendered.
-  const setup = read('app/trip/[tripCode]/setup/TripSetupClient.tsx')
+  const setup = read('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx')
   const section_ = setup.slice(setup.indexOf('{/* ── Who can edit ──'))
   const block = section_.slice(0, section_.indexOf('{itineraryOpen && ('))
   ok(block.length > 0 && block.length < section_.length,
@@ -2565,7 +2566,7 @@ section('Nothing has to be finalised before it can be played')
   // draft meant Live Scoring and the Leaderboard were locked on the hub. The
   // button is gone, so the state it set has to go with it — leaving one
   // behind would have made every new trip permanently unable to score.
-  const setup = stripComments(read('app/trip/[tripCode]/setup/TripSetupClient.tsx'))
+  const setup = stripComments(read('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx'))
   // "Go Live" rather than the whole label: the ampersand can be written as an
   // entity, and `finaliseBlockedReason` is legitimately imported into this
   // file, so neither "Finalise" nor the exact string is a reliable needle.
@@ -2573,7 +2574,7 @@ section('Nothing has to be finalised before it can be played')
   ok(!/isDraft/.test(setup), 'and nothing on that screen asks whether the trip is a draft')
   ok(!/setup_status/.test(setup), 'nor writes the flag it used to set')
 
-  const hub = stripComments(read('app/trip/[tripCode]/page.tsx'))
+  const hub = stripComments(read('app/golf/[root]/[tripCode]/page.tsx'))
   ok(!/isDraft/.test(hub), 'the hub does not ask either')
   ok(!hub.includes('Scoring opens when the trip is finalised'),
     'and never says scoring is waiting on something')
@@ -2582,7 +2583,7 @@ section('Nothing has to be finalised before it can be played')
   // links straight through on every screen. So the picker itself has to be
   // the one that says there is nothing to score, rather than throwing or
   // rendering an empty list under "Choose a round".
-  const picker = read('app/trip/[tripCode]/scoring/page.tsx')
+  const picker = read('app/golf/[root]/[tripCode]/scoring/page.tsx')
   ok(/\(rounds \?\? \[\]\)\.length === 0\)? &&/.test(picker),
     'the round picker answers for a trip with no rounds')
   ok(picker.includes("No rounds set up for this ${event ? 'event' : 'trip'} yet"),
@@ -2598,7 +2599,7 @@ section('Nothing has to be finalised before it can be played')
   // round has scores. A course change would orphan real data, which no flag
   // was ever needed to know. Per round, not per trip — the rest of the golf
   // stays editable and new rounds can be added mid-trip.
-  const page = stripComments(read('app/trip/[tripCode]/setup/page.tsx'))
+  const page = stripComments(read('app/golf/[root]/[tripCode]/setup/page.tsx'))
   ok(/lockedRoundIds\.has\(r\.id\) && r\.itinerary_item_id/.test(page),
     'a round with scores locks its own golf item, and only its own')
 }
@@ -2632,7 +2633,7 @@ section('The progress row shows a position, not a scale')
 
 section('The scorecard opens as a card on the board, not over it')
 {
-  const board = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const board = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   const sheet = board.slice(board.indexOf('export function ScorecardSheet'))
 
   ok(sheet.includes('${SC_CARD}'),
@@ -2652,7 +2653,7 @@ section('A screen names itself once')
   // repeating the word above it.
   // Comments stripped: the note explaining why "Open →" went would match a
   // check looking for it.
-  const picker = stripComments(read('app/trip/[tripCode]/scoring/page.tsx'))
+  const picker = stripComments(read('app/golf/[root]/[tripCode]/scoring/page.tsx'))
   ok(/<TripHeader[^>]*title="scoring"/.test(picker), 'the round picker is named in the header')
   ok(!/Live scoring<\/h1>/.test(picker), 'and does not say it again underneath')
 
@@ -2664,7 +2665,7 @@ section('A screen names itself once')
   // The leaderboard is the one page that is all table, and a band across the
   // top carrying the trip's own name cost it a fixed slice of every screen —
   // to say something you knew, on the screen you reached it from.
-  const board = stripComments(read('app/trip/[tripCode]/leaderboard/page.tsx'))
+  const board = stripComments(read('app/golf/[root]/[tripCode]/leaderboard/page.tsx'))
   ok(!board.includes('{trip.name}'), 'the leaderboard does not band the trip name across the top')
   ok(/<TripHeader[^>]*title="leaderboard"/.test(board), 'the header names it instead')
 }

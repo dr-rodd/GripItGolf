@@ -1,12 +1,13 @@
 import { redirect } from 'next/navigation'
 import BackButton from '@/app/components/BackButton'
-import PasscodeGate from '@/app/trip/[tripCode]/setup/PasscodeGate'
+import PasscodeGate from '@/app/golf/[root]/[tripCode]/setup/PasscodeGate'
 import { describeRange } from '@/lib/confirmationEmail'
 import { todayString } from '@/lib/tripStatus'
 import { isLocked } from '@/lib/passcode'
 import { isRunChallenge, describeProgress } from '@/lib/runChallenge'
 import { fetchRunChallenge } from '../data'
 import RunOrganiserClient from './RunOrganiserClient'
+import { tripBase } from '@/lib/tripPaths'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +41,7 @@ export default async function RunOrganiserPage({ params }: {
       </main>
     )
   }
-  if (!isRunChallenge(challenge.kind)) redirect(`/trip/${challenge.code}/organiser`)
+  if (!isRunChallenge(challenge.kind)) redirect(`${tripBase(challenge.code, challenge.kind)}/organiser`)
 
   const client = (
     <RunOrganiserClient

@@ -2,6 +2,7 @@
 
 import Link, { useLinkStatus } from 'next/link'
 import { usePathname } from 'next/navigation'
+import { rehomed } from '@/lib/tripPaths'
 import { useState } from 'react'
 import {
   IconHome, IconTrophy, IconClipboardList, IconSettings, IconChartBar, IconBracket, IconClock,
@@ -36,7 +37,7 @@ import { RUN_TABS, runActiveKey } from './runTabs'
  * event records them, else nothing (lib/eventHub.ts `eventFourthTab`) —
  * both on, Tee times has the tab and Stats goes back to the home screen.
  *
- * Rendered once, by `app/trip/[tripCode]/layout.tsx`, and never by a page.
+ * Rendered once, by `app/golf/[root]/[tripCode]/layout.tsx`, and never by a page.
  * That is what keeps it on screen through a navigation instead of unmounting
  * with the page that drew it — see the note in that file.
  *
@@ -50,11 +51,11 @@ import { RUN_TABS, runActiveKey } from './runTabs'
  */
 
 const ITEMS = [
-  { key: 'home',        label: 'Home',        icon: IconHome,          path: (t: string) => `/trip/${t}` },
-  { key: 'scoring',     label: 'Scoring',     icon: IconClipboardList, path: (t: string) => `/trip/${t}/scoring` },
-  { key: 'leaderboard', label: 'Leaderboard', icon: IconTrophy,        path: (t: string) => `/trip/${t}/leaderboard` },
-  { key: 'stats',       label: 'Stats',       icon: IconChartBar,      path: (t: string) => `/trip/${t}/stats` },
-  { key: 'settings',    label: 'Trip Setup',  icon: IconSettings,      path: (t: string) => `/trip/${t}/setup` },
+  { key: 'home',        label: 'Home',        icon: IconHome,          path: (b: string) => b },
+  { key: 'scoring',     label: 'Scoring',     icon: IconClipboardList, path: (b: string) => `${b}/scoring` },
+  { key: 'leaderboard', label: 'Leaderboard', icon: IconTrophy,        path: (b: string) => `${b}/leaderboard` },
+  { key: 'stats',       label: 'Stats',       icon: IconChartBar,      path: (b: string) => `${b}/stats` },
+  { key: 'settings',    label: 'Trip Setup',  icon: IconSettings,      path: (b: string) => `${b}/setup` },
 ] as const
 
 /**
@@ -64,15 +65,15 @@ const ITEMS = [
  * the tab.
  */
 const EVENT_SETTINGS =
-  { key: 'settings',    label: 'Settings',    icon: IconSettings,      path: (t: string) => `/trip/${t}/settings` }
+  { key: 'settings',    label: 'Settings',    icon: IconSettings,      path: (b: string) => `${b}/settings` }
 
 /** An event's fourth tab, while a round starts from a tee sheet. */
 const TEE_TIMES_ITEM =
-  { key: 'teetimes',    label: 'Tee times',   icon: IconClock,         path: (t: string) => `/trip/${t}/teesheet` }
+  { key: 'teetimes',    label: 'Tee times',   icon: IconClock,         path: (b: string) => `${b}/teesheet` }
 
 /** A match play event's middle tab: the draw is its leaderboard. */
 const BRACKET_ITEM =
-  { key: 'leaderboard', label: 'Bracket', icon: IconBracket, path: (t: string) => `/trip/${t}/matchplay` }
+  { key: 'leaderboard', label: 'Bracket', icon: IconBracket, path: (b: string) => `${b}/matchplay` }
 
 /**
  * What one tab looks like, once it knows whether it is the page you are on
@@ -149,8 +150,10 @@ function Tab({
   )
 }
 
-export default function TabBar({ tripCode, isEvent = false, bracket = false, fourth = null, sport = 'golf' }: {
+export default function TabBar({ tripCode, base: baseProp, isEvent = false, bracket = false, fourth = null, sport = 'golf' }: {
   tripCode: string
+  /** Where a golf trip or event lives — `/golf/trip/X` or `/golf/event/X`, from the layout (lib/tripPaths.ts). */
+  base?: string
   /** The tab between the leaderboard and the last — Tee times, Stats or none (`fourthTab`). */
   fourth?: FourthTab | null
   /**
@@ -170,8 +173,14 @@ export default function TabBar({ tripCode, isEvent = false, bracket = false, fou
   /** A run challenge's bar: running's five tabs, under /run/. */
   sport?: 'golf' | 'run'
 }) {
-  const pathname = usePathname() ?? ''
-  const base = `/trip/${tripCode}`
+  // Read against this trip's own home, whichever root the page was opened at
+  // — an event reached by an old /trip/ link is lit the same as at its own
+  // address, before and after `AddressFix` puts the bar right.
+  const opened = usePathname() ?? ''
+  // A golf tab's address hangs off the base the layout hands in —
+  // /golf/trip/X or, for an event, /golf/event/X (lib/tripPaths.ts).
+  const base = baseProp ?? `/golf/trip/${tripCode}`
+  const pathname = sport === 'run' ? opened : rehomed(opened, base) ?? opened
 
   // An event has its four or five; a trip keeps its five. A run challenge
   // has its own five.
@@ -245,7 +254,7 @@ export default function TabBar({ tripCode, isEvent = false, bracket = false, fou
           return (
             <li key={item.key}>
               <Link
-                href={item.path(tripCode)}
+                href={item.path(sport === 'run' ? tripCode : base)}
                 aria-current={active ? 'page' : undefined}
                 // Left on the default, which warms the loading skeleton and
                 // the layout around it and stops there.

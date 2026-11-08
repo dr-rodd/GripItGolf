@@ -8,7 +8,7 @@
 // rather than any one trip — seeing it once anywhere is seeing it.
 //
 // No cookie means a newcomer. The trip hub reads the jar on the server
-// (cookies().has, in app/trip/[tripCode]/page.tsx) so the intro is in the
+// (cookies().has, in app/golf/[root]/[tripCode]/page.tsx) so the intro is in the
 // first paint rather than popping in after hydration, and the first skip or
 // finish writes the cookie — either one counts as seen, deliberately:
 // somebody who skipped did not ask to be re-invited next visit.

@@ -338,7 +338,7 @@ section('Both screens that change the field say so')
   // sheet's table is measured against its own teams. Individual boards are
   // not asked at all — their field is the players, and no player arrived or
   // left when a team was added.
-  const teams = read('app/trip/[tripCode]/teams/TripTeamsClient.tsx')
+  const teams = read('app/golf/[root]/[tripCode]/teams/TripTeamsClient.tsx')
   ok(teams.includes('TEAM_POINTS_MISMATCH'), 'the team sheet warns when the count stops matching')
   ok(/audience === 'team' && \(b\.teamSet \?\? MAIN_SET\) === sheet/.test(teams),
     '  …about this sheet\'s team boards and no others')
@@ -348,7 +348,7 @@ section('Both screens that change the field say so')
   // The roster. `players.length + 1` because `setPlayers` is queued and has
   // not settled on the line that reads it — counting the old roster would
   // mean the warning arrives one player late, every time.
-  const setup = read('app/trip/[tripCode]/setup/TripSetupClient.tsx')
+  const setup = read('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx')
   ok(setup.includes('PLAYER_POINTS_MISMATCH'), 'the roster warns when a player is added')
   ok(/players: players\.length \+ 1/.test(setup),
     '  …counting the player being added, who is not in state yet')

@@ -110,29 +110,29 @@ section('Players pick only where the board says so — through the team picker')
   ok(lib.includes("selfPick: here.some(b => b.teamPick === 'self')"), 'a list reads the board\'s answer')
   ok(lib.includes('cap: teamSizeLimit(here)'), 'room is the one copy of the cap')
 
-  const page = read('app/trip/[tripCode]/teams/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/teams/page.tsx')
   ok(page.includes('linkedPlayerId(tripCode)'),
     'the viewer is the claim cookie — personalises, never authorises')
   ok(page.includes('<PasscodeGate'),
     'the drag editor keeps its gate on an event exactly as it was')
 
-  const client = read('app/trip/[tripCode]/teams/TeamsClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teams/TeamsClient.tsx')
   ok(client.includes('Claim your spot'), 'a stranger is pointed at the players screen, calmly')
   ok(client.includes('hasUnlocked(tripCode)') && client.includes('<InlineUnlock'),
     'the organiser is recognised by the same session unlock, one inline PIN away')
 
-  const writes = read('app/trip/[tripCode]/teams/teamWrites.ts')
+  const writes = read('app/golf/[root]/[tripCode]/teams/teamWrites.ts')
   ok(writes.includes('setTeam(tripId, id, sheet, teamId, addedBy)'),
     'joins, leaves and picks go through the one membership writer')
   ok(writes.includes('madeTeamName(after)'), 'a team is named from its members — Ross & Dave')
 
-  const wizard = read('app/trip/[tripCode]/teams/pick/TeamPickerWizard.tsx')
+  const wizard = read('app/golf/[root]/[tripCode]/teams/pick/TeamPickerWizard.tsx')
   ok(wizard.includes('PRESET_COLORS'), 'picked teams colour from the same twelve as everyone else')
 }
 
 section('The trip editor scales without losing its drag')
 {
-  const client = read('app/trip/[tripCode]/teams/TripTeamsClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teams/TripTeamsClient.tsx')
   ok(client.includes('async function assignPlayer('),
     'one assign path — the drag and the search share it')
   ok(client.includes('await assignPlayer(active.id as string'),

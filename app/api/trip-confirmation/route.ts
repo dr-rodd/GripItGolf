@@ -8,6 +8,7 @@ import {
   CONFIRMATION_FROM, QR_CID,
   confirmationSubject, confirmationHtml, confirmationText, describeRange,
 } from '@/lib/confirmationEmail'
+import { tripBase } from '@/lib/tripPaths'
 
 // The one confirmation email, sent.
 //
@@ -123,7 +124,9 @@ export async function POST(req: NextRequest) {
   // A run challenge lives under /run/, with its own organiser area and its
   // own words; it is organiser-run like any event, so it gets the block too.
   const run = isRunChallenge(kindResult.data?.kind)
-  const tripUrl = `${origin}/${run ? 'run' : 'trip'}/${trip.trip_code}`
+  // An event lives under /event/ (Ross, 8 Nov 2026), a trip under /trip/
+  // (lib/tripPaths.ts).
+  const tripUrl = `${origin}${run ? `/run/${trip.trip_code}` : tripBase(trip.trip_code, kindResult.data?.kind)}`
 
   // An event's message carries the organiser block: the admin link, and the
   // reminder that the PIN is the one set at creation. Never the PIN itself —

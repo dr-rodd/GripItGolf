@@ -123,7 +123,7 @@ section('A module is on the home screen only while it is active')
 
 section('The hub is the Event Hub only for a tournament')
 {
-  const hub = read('app/trip/[tripCode]/page.tsx')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
   ok(hub.includes('isEventKind(trip.kind)'),
     'the hub asks lib/eventHub what it is, off the row it already has')
   // The rounds query must not name start_format on a database that has no
@@ -139,7 +139,7 @@ section('The hub is the Event Hub only for a tournament')
   ok(hub.includes('startLines={startLines}'),
     'the start lines reach the schedule tiles')
 
-  const itin = read('app/trip/[tripCode]/Itinerary.tsx')
+  const itin = read('app/golf/[root]/[tripCode]/Itinerary.tsx')
   ok(itin.includes('startLines?.[item.id] ?? detail'),
     'a chosen start overrides the tee-time line, and nothing else changes')
 }
@@ -148,14 +148,14 @@ section('The hub is the Event Hub only for a tournament')
 
 section('The organiser area stands behind the one PIN')
 {
-  const page = read('app/trip/[tripCode]/organiser/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/organiser/page.tsx')
   ok(page.includes('<PasscodeGate'), 'the gate stands in front')
   ok(page.includes('title="Organiser area"'), 'wearing the organiser\'s words')
   ok(page.includes('!isEvent(trip.kind)'), 'a trip is pointed to Trip Setup instead')
   ok(page.includes("export const dynamic = 'force-dynamic'"),
     'the page is dynamic like every trip route')
 
-  const client = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/organiser/OrganiserClient.tsx')
   // Every write the organiser can make names its trip. The count is the
   // check: post has the insert's trip_id, and remove, format and time all
   // filter by it.
@@ -172,12 +172,12 @@ section('The organiser area stands behind the one PIN')
   ok(/patchRound\(round\.id, \{ teeTime: prev \}\)/.test(client),
     'and so is a refused time')
 
-  const panel = read('app/trip/[tripCode]/NoticesPanel.tsx')
+  const panel = read('app/golf/[root]/[tripCode]/NoticesPanel.tsx')
   ok(!panel.includes('Nothing from the organiser yet'),
     'the notices carry no empty state — the hub never draws them empty')
   ok(!panel.includes('<Link'), '  …and no door: the organiser\'s is on the Settings tab')
-  const settings = read('app/trip/[tripCode]/settings/page.tsx')
-  ok(settings.includes('href={`/trip/${tripCode}/organiser`}'),
+  const settings = read('app/golf/[root]/[tripCode]/settings/page.tsx')
+  ok(settings.includes('href={`${tripHome}/organiser`}'),
     'the event\'s Settings tab links into the organiser area')
   ok(/mounted &&/.test(panel),
     'timestamps wait for the reader\'s own clock rather than hydrating UTC')
@@ -211,14 +211,14 @@ section('An event hides Trip Setup from the field')
     eventFourthTab({ teeTimes: false, stats: false }),
   ], ['teeTimes', 'teeTimes', 'stats', null],
     'tee times win the fourth tab when both are on; stats have it alone; neither, the bar is four')
-  const layout4 = read('app/trip/[tripCode]/layout.tsx')
+  const layout4 = read('app/golf/[root]/[tripCode]/layout.tsx')
   ok(layout4.includes('fetchTabExtras(tripCode)') && layout4.includes('fourth={fourthTab(isEvent(kind), extras)}'),
     'the layout reads it alongside the kind')
   eq([fourthTab(false, { teeTimes: true, stats: false }), fourthTab(false, { teeTimes: false, stats: false })],
     ['teeTimes', 'stats'], 'a trip keeps Stats as its fourth tab until tee times take its place (26 Oct 2026)')
   ok(bar.includes("fourth === 'teeTimes' ? [ITEMS[0], ITEMS[1], ITEMS[2], TEE_TIMES_ITEM, ITEMS[4]]"),
     '  …Trip Setup still last')
-  const hub4 = read('app/trip/[tripCode]/page.tsx')
+  const hub4 = read('app/golf/[root]/[tripCode]/page.tsx')
   ok(hub4.includes("const statsOnHome = !isEvent || fourthTab === 'teeTimes'")
      && hub4.includes('stats: statsOnHome && !!statsCover'),
     'stats come back to the home screen only while the tee times hold the tab')
@@ -226,7 +226,7 @@ section('An event hides Trip Setup from the field')
   ok(bar.includes("items.length === 4 ? 'grid-cols-4' : 'grid-cols-5'"),
     'and the grid matches the count, so Settings sits at the right edge')
 
-  const layout = read('app/trip/[tripCode]/layout.tsx')
+  const layout = read('app/golf/[root]/[tripCode]/layout.tsx')
   ok(layout.includes('isEvent={isEvent(kind)}'),
     'the layout decides, being the one place that knows before first paint')
   ok(layout.includes('fetchTripKind'), 'off the shared kind lookup')
@@ -234,29 +234,29 @@ section('An event hides Trip Setup from the field')
   // The lookup is one copy, cached per request, and fails soft — a named
   // `kind` inside a page's own select would break that page on a database
   // that has not run migration 046.
-  const kindSrc = read('app/trip/[tripCode]/kind.ts')
+  const kindSrc = read('app/golf/[root]/[tripCode]/kind.ts')
   ok(kindSrc.includes('cache(') && kindSrc.includes("select('kind')"),
     'the kind lookup is one cached column, asked once per request')
 
-  const scoring = read('app/trip/[tripCode]/scoring/page.tsx')
+  const scoring = read('app/golf/[root]/[tripCode]/scoring/page.tsx')
   ok(scoring.includes('fetchTripKind') && /\{!event && \(\s*<AddRound/.test(scoring),
     'the scoring picker offers no add-round on an event')
 
-  const roundPage = read('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
+  const roundPage = read('app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx')
   ok(/\{!event && \(\s*<CasualToggle/.test(roundPage),
     'nor does an event round offer the casual switch')
 
-  const teams = read('app/trip/[tripCode]/teams/page.tsx')
+  const teams = read('app/golf/[root]/[tripCode]/teams/page.tsx')
   ok(teams.includes('<PasscodeGate') && teams.includes('title="Organisers only"'),
     'and the drag-and-drop teams editor stands behind the PIN on an event')
-  ok(read('app/trip/[tripCode]/teams/TeamsClient.tsx').includes('const organiser = isTrip || unlocked || !isLocked(passcodeHash)'),
+  ok(read('app/golf/[root]/[tripCode]/teams/TeamsClient.tsx').includes('const organiser = isTrip || unlocked || !isLocked(passcodeHash)'),
     '  …while the team picker\'s list changes nothing for the field without the PIN or the organiser\'s say-so')
 
-  const organiser = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
-  ok(/href=\{`\/trip\/\$\{tripCode\}\/setup`\}/.test(organiser),
+  const organiser = read('app/golf/[root]/[tripCode]/organiser/OrganiserClient.tsx')
+  ok(/href=\{`\$\{tripHome\}\/setup`\}/.test(organiser),
     'the organiser area is the one door left into setup')
 
-  const setup = read('app/trip/[tripCode]/setup/page.tsx')
+  const setup = read('app/golf/[root]/[tripCode]/setup/page.tsx')
   ok(setup.includes("title: 'Organisers only'"),
     'and setup\'s own gate speaks to the organiser on an event')
 }
@@ -281,7 +281,7 @@ section('A player picks their own colour while the event has no sides')
   ok(/ADD COLUMN IF NOT EXISTS colour text/.test(migration) && /players_colour_hex/.test(migration),
     'migration 063 adds players.colour, held to a hex by a check')
 
-  const settings = read('app/trip/[tripCode]/settings/page.tsx')
+  const settings = read('app/golf/[root]/[tripCode]/settings/page.tsx')
   ok(/colourPicker = !teamsError && ownColoursOffered\(true, teams/.test(settings),
     'the Settings tab offers the picker only while the event has no sides, and not on a failed read')
   ok(settings.includes('colourPicker={colourPicker}'), '  …and hands that answer to the preferences')
@@ -293,34 +293,34 @@ section('A player picks their own colour while the event has no sides')
     'the picker is the palette, one answer at a time')
   ok(/setColour\(before\)/.test(prefs) && prefs.includes('Could not save your colour'),
     '  …and a save that does not land is put back and said so')
-  ok(!read('app/trip/[tripCode]/page.tsx').includes('colourPicker'),
+  ok(!read('app/golf/[root]/[tripCode]/page.tsx').includes('colourPicker'),
     'a trip\'s gear never offers it')
 
   // Every read of the column is its own query: naming it in a wider select
   // fails the whole screen before migration 063 has run.
   const readers = [
-    'app/trip/[tripCode]/knockout.ts',
-    'app/trip/[tripCode]/matchplay/page.tsx',
-    'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/scoring/[roundNumber]/page.tsx',
+    'app/golf/[root]/[tripCode]/knockout.ts',
+    'app/golf/[root]/[tripCode]/matchplay/page.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/page.tsx',
+    'app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx',
   ]
   for (const f of readers) {
     const src = read(f)
     ok(src.includes("select('id, colour')"), `${f.split('/').slice(-2).join('/')} reads the picks on their own`)
   }
   const wide = /select\(\s*'[^']*\bcolour\b[^']*'\s*\)/g
-  for (const f of [...readers, 'app/components/PlayerSettings.tsx', 'app/trip/[tripCode]/settings/page.tsx']) {
+  for (const f of [...readers, 'app/components/PlayerSettings.tsx', 'app/golf/[root]/[tripCode]/settings/page.tsx']) {
     const bad = (read(f).match(wide) ?? []).filter(m => !/'(id, )?colour'/.test(m))
     ok(bad.length === 0, `  …never inside a wider select (${f.split('/').pop()})`)
   }
 
-  ok(read('app/trip/[tripCode]/knockout.ts').includes('playerColourOf(')
-     && read('app/trip/[tripCode]/matchplay/page.tsx').includes('playerColourOf('),
+  ok(read('app/golf/[root]/[tripCode]/knockout.ts').includes('playerColourOf(')
+     && read('app/golf/[root]/[tripCode]/matchplay/page.tsx').includes('playerColourOf('),
     'the match card, the live board and the bracket colour a side from the one rule')
-  const board = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const board = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   ok(board.includes('row.color ?? colourById.get(row.id)'),
     'an individual board\'s dot is the player\'s colour')
-  ok(/if \(event\) \{\s*const colourOf = playerColourOf/.test(read('app/trip/[tripCode]/leaderboard/page.tsx')),
+  ok(/if \(event\) \{\s*const colourOf = playerColourOf/.test(read('app/golf/[root]/[tripCode]/leaderboard/page.tsx')),
     '  …on an event only — a trip\'s board is as it was')
   const flow = read('app/scoring/LiveScoringFlow.tsx')
   ok(!flow.includes('player.teams.color') && flow.includes('p.colour ?? p.teams?.color'),

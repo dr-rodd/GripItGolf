@@ -407,9 +407,9 @@ section('A round is in play only while somebody is locked on a card')
   // answer starts to drift from the other four.
   for (const page of [
     'lib/hubStanding.ts',
-    'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/scoring/page.tsx',
-    'app/trip/[tripCode]/matchplay/page.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/page.tsx',
+    'app/golf/[root]/[tripCode]/scoring/page.tsx',
+    'app/golf/[root]/[tripCode]/matchplay/page.tsx',
   ]) {
     const src = fs.readFileSync(page, 'utf-8')
     ok(src.includes('liveRoundPresence('),

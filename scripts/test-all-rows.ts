@@ -371,8 +371,8 @@ section('No trip-wide score read goes round lib/scoreReads.ts')
   }
 
   const screens = [
-    'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/matchplay/page.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/page.tsx',
+    'app/golf/[root]/[tripCode]/matchplay/page.tsx',
     'lib/hubStanding.ts',
   ]
   for (const s of screens) {
@@ -380,12 +380,12 @@ section('No trip-wide score read goes round lib/scoreReads.ts')
     ok(/readScores</.test(src) && /readLiveScores</.test(src) && /readRoundHandicaps</.test(src),
       `${s} reads scores, live scores and handicaps whole`)
   }
-  ok(/readScores</.test(read('app/trip/[tripCode]/export/page.tsx')), 'the export page reads its scores whole')
+  ok(/readScores</.test(read('app/golf/[root]/[tripCode]/export/page.tsx')), 'the export page reads its scores whole')
   ok(/readLiveScores</.test(read('app/scoring/LiveLeaderboardPanel.tsx')), 'the in-play board reads its round whole')
   ok(/readLiveScores</.test(read('app/scoring/[slug]/CourseDashboardClient.tsx')),
     'the scorecard list reads its holes whole')
 
-  const setup = read('app/trip/[tripCode]/setup/page.tsx')
+  const setup = read('app/golf/[root]/[tripCode]/setup/page.tsx')
   ok(/roundsWithScores\(/.test(setup), 'Trip Setup counts per round which rounds are played')
   ok(!/from\('scores'\)\.select\('round_id'\)/.test(setup), 'and no longer reads every score to find out')
 }
@@ -410,7 +410,7 @@ section('The whole-table jobs and the runs read in pages')
     "stravaApi's runs select is scoped to one runner")
 
   ok(/readAllRows</.test(read('app/components/usePlatformCourses.ts')), 'the course catalogue reads in pages')
-  ok(/readAllRows</.test(read('app/trip/[tripCode]/teesheet/page.tsx')), 'the tee sheet reads its seats in pages')
+  ok(/readAllRows</.test(read('app/golf/[root]/[tripCode]/teesheet/page.tsx')), 'the tee sheet reads its seats in pages')
 }
 
 // ─── Report ────────────────────────────────────────────────────

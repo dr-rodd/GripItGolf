@@ -18,7 +18,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import fs from 'fs'
 import ScoreShape, { NoReturnShape } from '../app/components/ScoreShape'
-import { ScorecardSheet } from '../app/trip/[tripCode]/leaderboard/TripLeaderboardClient'
+import { ScorecardSheet } from '../app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient'
 import { cardClass } from '../app/components/ui'
 import { roundTone, ROUND_TILE, ROUND_NOTE } from '../lib/roundState'
 import { shotsReceived } from '../lib/handicap'
@@ -110,7 +110,7 @@ section('Every card in the app draws the same shape')
   const cards = [
     'app/scoring/LiveScoringFlow.tsx',
     'app/scoring/LiveLeaderboardPanel.tsx',
-    'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
     'app/scorecard/[playerId]/ScorecardClient.tsx',
   ]
   for (const f of cards) {
@@ -151,7 +151,7 @@ section('Every figure on a card is set from one size, and the shapes match it')
   // Both cards go through the constant rather than writing the old size out.
   for (const f of [
     'app/scoring/LiveLeaderboardPanel.tsx',
-    'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
   ]) {
     const src = read(f)
     ok(src.includes('SC_NUM'), `${f.split('/').pop()} sets its figures from SC_NUM`)
@@ -166,7 +166,7 @@ section('Every figure on a card is set from one size, and the shapes match it')
 
 section('The column headings stay above the board')
 {
-  const src = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const src = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
 
   // position: sticky measures its offset from the nearest scroll container.
   // An ancestor with `overflow-x: auto` is one — on BOTH axes, which is the
@@ -215,7 +215,7 @@ section('The column headings stay above the board')
 section('Scorecards are brown and cream, not green')
 {
   const cards = [
-    'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
     'app/scoring/LiveScoringFlow.tsx',
     'app/scoring/LiveLeaderboardPanel.tsx',
   ]
@@ -243,7 +243,7 @@ section('Scorecards are brown and cream, not green')
 
   // Every card reads them rather than rolling its own
   for (const f of [
-    'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
     'app/scoring/LiveLeaderboardPanel.tsx',
     'app/scoring/LiveScoringFlow.tsx',
   ]) {
@@ -538,8 +538,8 @@ section('A round tile says what has happened on it')
 
   // Both screens read the shared rule rather than rolling their own
   for (const f of [
-    'app/trip/[tripCode]/scoring/page.tsx',
-    'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
+    'app/golf/[root]/[tripCode]/scoring/page.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
   ]) {
     ok(read(f).includes("from '@/lib/roundState'"),
       `${f.split('/').slice(-2).join('/')} reads the shared round states`)
@@ -549,7 +549,7 @@ section('A round tile says what has happened on it')
   // The picker judges by what is actually recorded, not by rounds.status —
   // that column is set by hand and drifts, and this is the screen someone
   // checks on the way to the first tee.
-  const picker = read('app/trip/[tripCode]/scoring/page.tsx')
+  const picker = read('app/golf/[root]/[tripCode]/scoring/page.tsx')
   ok(picker.includes("from('live_rounds')"), 'the picker asks which cards are open')
   ok(/anyRows\('scores', id\)/.test(picker), '  …and which rounds have scores')
 
@@ -627,8 +627,8 @@ section('A scorecard survives being left and reopened')
     'app/scoring/LiveScoringFlow.tsx',
     'app/scoring/LiveLeaderboardPanel.tsx',
     'app/scoring/[slug]/CourseDashboardClient.tsx',
-    'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/scoring/page.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/page.tsx',
+    'app/golf/[root]/[tripCode]/scoring/page.tsx',
   ]) {
     const src = read(f)
     const selects = [...src.matchAll(/from\(["']live_scores["']\)[\s\S]{0,200}?\.select\(["']([^"']*)["']/g)]

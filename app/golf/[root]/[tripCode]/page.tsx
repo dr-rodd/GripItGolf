@@ -1,0 +1,1142 @@
+import { cache } from 'react'
+import type { Metadata } from 'next'
+import { supabase } from '@/lib/supabase'
+import Link from 'next/link'
+import { hasMatchplay, needsPairings, primary } from '@/lib/leaderboards'
+import { boardsForTrip, isLegacy } from '@/lib/leaderboardsCompat'
+import { parseLeaderboards } from '@/lib/leaderboards'
+import { parseTeamScoring } from '@/lib/teamScoring'
+import { MAIN_SET, setOf, teamFor } from '@/lib/teamSets'
+import { fetchMemberships } from '@/lib/teamMembers'
+import { cookies } from 'next/headers'
+import { currentPlayer } from '@/lib/currentPlayer'
+import { INTRO_COOKIE } from '@/lib/intro'
+import SiteIntro from '@/app/components/SiteIntro'
+import { isHandicapPending, HANDICAP_PENDING_LABEL } from '@/lib/handicap'
+import { isConfirmed, confirmedCount as countConfirmed } from '@/lib/roster'
+import { ROUND_TILE } from '@/lib/roundState'
+import { fetchPlacing, fetchTripStats } from '@/lib/hubStanding'
+import {
+  coverage, statsFor, type PlayerStats, type Coverage,
+} from '@/lib/holeStats'
+import { describePlacing } from '@/lib/standing'
+import { nextMatch, describeNextMatch, type DrawMatch } from '@/lib/nextMatch'
+import { firstTeeTarget } from '@/lib/upNext'
+// "13–16 August" — one copy, shared with the confirmation email.
+import { describeRange } from '@/lib/confirmationEmail'
+import { SectionStack } from '@/app/components/Section'
+import {
+  isEvent as isEventKind, parseStartFormat, describeStart,
+  activeHubModules, teeSheetInUse, eventFourthTab,
+} from '@/lib/eventHub'
+import { hubTeeRound, myTee, roundSheet, sheetClock, sheetIsOpen } from '@/lib/teeSheet'
+import { readSheetSettings } from './teesheet/sheets'
+import { readAllRows } from '@/lib/allRows'
+import NoticesPanel, { type Notice } from './NoticesPanel'
+import TeeTimesPanel from './TeeTimesPanel'
+import TripCountdown from './TripCountdown'
+import TripDescription from './TripDescription'
+import StatusBlock from './StatusBlock'
+import TravelStays from './TravelStays'
+import StatsPanel from './StatsPanel'
+import TripHeader from '@/app/components/TripHeader'
+import PlayerSettings from '@/app/components/PlayerSettings'
+import Itinerary from './Itinerary'
+import { type ItemKind, type ItineraryItem, dayCount } from '@/lib/itinerary'
+import BackButton from '@/app/components/BackButton'
+import SupportLink from '@/app/components/SupportLink'
+import LegalLinks from '@/app/components/LegalLinks'
+import ShareTrip from './ShareTrip'
+import { golfIrelandLinkedIds } from './golfIreland'
+import { LinkedBadge } from '@/app/components/LinkMark'
+import { cardClass } from '@/app/components/ui'
+import { parseLeagueSetup, leagueRounds, playByLine, seriesListing } from '@/lib/leagueSetup'
+import { todayString } from '@/lib/tripStatus'
+import { allowsParticipant } from '@/lib/eventPermissions'
+import { describeShortDate, describeTime } from '@/lib/itinerary'
+import { LockedRoundTile, TbcRoundTile, type LeagueDoor } from './LeagueRounds'
+import AddToField from './AddToField'
+import { readKnockout } from './knockout'
+import { readLiveMatches } from './match/matchCards'
+import { myNextMatch } from '@/lib/knockoutPortal'
+import { NextMatchCard } from './KnockoutViews'
+import MatchDetails from './MatchDetails'
+import { readContacts } from './matchContacts'
+import { isKnockoutEvent, rawDrawPlan } from '@/lib/bracketSetup'
+import { drawLiveAt } from '@/lib/bracketDraw'
+import DrawCountdown from './DrawCountdown'
+import CourseName from '@/app/components/CourseName'
+import { IconChevronRight } from '@/app/components/icons'
+import { tripHomeAt } from '@/lib/tripPaths'
+
+export const dynamic = 'force-dynamic'
+
+/** "Friday 17 April" — the day matters as much as the date on a golf trip. */
+function formatDay(d: string | null | undefined) {
+  if (!d) return null
+  // Parsed as a plain date, not a moment in time: a round on the 17th is on
+  // the 17th wherever you happen to be reading this.
+  const [y, m, day] = d.split('-').map(Number)
+  if (!y || !m || !day) return null
+  return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString('en-IE', {
+    weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC',
+  })
+}
+
+function formatDate(d: string | null) {
+  if (!d) return null
+  return new Date(d).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+/**
+ * The trip, once per request. `generateMetadata` and the page both need the
+ * row and run separately, so without `cache` the link-preview metadata would
+ * cost this screen a second copy of its first query.
+ */
+const fetchTrip = cache(async (tripCode: string) => {
+  const { data, error } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('trip_code', tripCode)
+    .single()
+  if (error) console.error('TripPage trip query failed:', error)
+  return data
+})
+
+/**
+ * What a trip link unfurls into when it is pasted into WhatsApp or a text:
+ * the trip's name, its dates, and the invitation. This is the other half of
+ * the Share trip button — the link it sends arrives looking like an invite
+ * rather than a bare URL. WhatsApp's fetcher runs no JavaScript, so this is
+ * server-side metadata or it is nothing. The image is the one site-wide
+ * brand card from the root layout, restated because Next replaces the
+ * openGraph object per page rather than merging it.
+ */
+export async function generateMetadata(
+  { params }: { params: Promise<{ tripCode: string }> },
+): Promise<Metadata> {
+  const { tripCode } = await params
+  const trip = await fetchTrip(tripCode)
+  if (!trip) return {}
+
+  const description = [
+    describeRange(trip.start_date ?? null, trip.end_date ?? null),
+    'You’re invited — tap to join on Green Dot.',
+  ].filter(Boolean).join(' · ')
+
+  return {
+    title: trip.name,
+    description,
+    openGraph: {
+      siteName: 'Green Dot',
+      title: trip.name,
+      description,
+      type: 'website',
+      images: '/og-image.png',
+    },
+  }
+}
+
+export default async function TripPage({ params, searchParams }: {
+  params: Promise<{ root: string; tripCode: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const { root, tripCode } = await params
+  // Where this lives — /trip/X or, for an event, /event/X (lib/tripPaths.ts).
+  const tripHome = tripHomeAt(root, tripCode)
+
+  const trip = await fetchTrip(tripCode)
+
+  if (!trip) {
+    return (
+      <main className="min-h-dvh flex flex-col items-center justify-center paper px-6">
+        <p className="t-h2 text-ink mb-3">Trip not found</p>
+        <p className="text-ink/65 text-sm mb-8">Check the code and try again.</p>
+        <BackButton href="/" label="Home" />
+      </main>
+    )
+  }
+
+  // An event wears this screen as the Event Hub. Read fail-soft: a database
+  // that has not run migration 046 has no `kind`, and no kind is a trip.
+  const isEvent = isEventKind(trip.kind)
+
+  const [
+    roundsResult, playersResult, itineraryResult, endTimesResult, coursesResult,
+    noticesResult, giLinked, casualResult, teeSettingsResult, teeRowsResult,
+  ] = await Promise.all([
+    // `itinerary_item_id` is the join that makes a countdown possible: the
+    // date lives here and the tee time lives on the itinerary item, and this
+    // is the only column tying the two together. `start_format` rides along
+    // for the Event Hub's schedule; selecting a column migration 046 adds
+    // would fail the whole query on an un-migrated database, but a trip
+    // cannot be an event there either, so it is only asked for when it is.
+    supabase
+      .from('rounds')
+      .select(`id, round_number, course_id, scheduled_date, itinerary_item_id${isEvent ? ', start_format' : ''}`)
+      .eq('trip_id', trip.id)
+      .order('round_number'),
+    supabase
+      .from('players')
+      .select('id, name, handicap, claimed, team_id, is_lead, gender')
+      .eq('trip_id', trip.id)
+      // A composite is a synthetic scorecard, not a person.
+      .eq('is_composite', false)
+      .order('name'),
+    supabase
+      .from('itinerary_items')
+      .select('id, day_index, position, kind, course_id, tee_time, tee_count, ' +
+              'stay_name, travel_mode, from_place, to_place, duration_mins, ' +
+                'activity_name, activity_time')
+      .eq('trip_id', trip.id)
+      .order('day_index')
+      .order('position'),
+    // End times ride in their own query, never the select above — naming a
+    // column migration 048 adds would fail the whole hub on an un-migrated
+    // database, while failing this costs only the ranges on the day plan.
+    supabase
+      .from('itinerary_items')
+      .select('id, end_time')
+      .eq('trip_id', trip.id),
+    // The courses this trip could be playing, in the same breath rather than
+    // after — the trip's own, and the platform's.
+    //
+    // This used to be a fourth serial round trip gated on `courseIds`, which
+    // meant collecting the ids off the rounds and the itinerary and waiting
+    // for both. It does not need to be, and asking up front removes a whole
+    // hop from the screen every tab press comes back to.
+    //
+    // **But `courses` is not scoped by `trip_id` like everything else, and
+    // that is the whole trap here.** The 26 platform courses are migration
+    // rows carrying `trip_id IS NULL` — they belong to no trip because they
+    // belong to all of them. Asked for `.eq('trip_id', trip.id)` alone this
+    // returns nothing at all for a trip playing them, which is every trip:
+    // `courseMap` comes back empty, and every golf tile on the hub and in Up
+    // next falls back to the bare word "Golf" with the course name gone. No
+    // error, no empty state — the page renders perfectly and says nothing.
+    //
+    // Every other reader gets this right by asking a different question:
+    // by id (the round page, the stats page) or `.is('trip_id', null)` for
+    // the picker in Trip Setup. This one has to ask for both halves.
+    //
+    // `courseMap` below is only ever read by id, so the platform courses this
+    // trip does not play are never looked up.
+    supabase.from('courses').select('id, name')
+      .or(`trip_id.eq.${trip.id},trip_id.is.null`),
+    // The organiser's notices — events only, newest first. The same
+    // conditional-promise shape the stats fetch uses, so the batch stays
+    // one Promise.all whichever kind this is.
+    isEvent
+      ? supabase
+          .from('event_messages')
+          .select('id, body, created_at')
+          .eq('trip_id', trip.id)
+          .order('created_at', { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
+    // A Golf Ireland league's linked players, for the mark beside their
+    // names. Asks nothing unless the league reads Golf Ireland; the setup
+    // rides in on the `*` above, absent on an un-migrated database.
+    golfIrelandLinkedIds(trip.id, (trip as { bracket_setup?: unknown }).bracket_setup),
+    // Which of a league's rounds do not count — its own query, never the
+    // rounds select above, so a database without migration 031 loses the
+    // "Doesn't count" note and nothing else. Only a dated event asks.
+    isEvent && trip.start_date
+      ? supabase.from('rounds').select('id, casual').eq('trip_id', trip.id)
+      : Promise.resolve({ data: [], error: null }),
+    // The tee times module's two reads — an event's or a trip's, since tee
+    // times reached trips — in the same breath rather than after the rounds
+    // say whether a tee sheet is in play, so the module costs this screen
+    // no hop. Both fail soft, as on the sheet: before the migrations each
+    // round's sheet reads as vacant and nobody is on one. The start formats
+    // ride in the settings read, so a trip's main select never names one.
+    // The assignments are read whole for the same reason the sheet reads
+    // them whole (lib/allRows.ts).
+    readSheetSettings(trip.id),
+    readAllRows<{ round_id: string; player_id: string; slot_index: number }>(
+      () => supabase
+        .from('tee_assignments')
+        .select('round_id, player_id, slot_index', { count: 'exact' })
+        .eq('trip_id', trip.id)
+        .order('created_at').order('round_id').order('player_id'),
+      a => `${a.round_id}|${a.player_id}`,
+    ),
+  ])
+
+  if (roundsResult.error) console.error('TripPage rounds query failed:', roundsResult.error)
+  if (itineraryResult.error) console.error('TripPage itinerary query failed:', itineraryResult.error)
+  if (playersResult.error) console.error('TripPage players query failed:', playersResult.error)
+  if (coursesResult.error) console.error('TripPage courses query failed:', coursesResult.error)
+  if (noticesResult.error) console.error('TripPage notices query failed:', noticesResult.error)
+
+  type RoundRow = {
+    id: string; round_number: number; course_id: string; scheduled_date: string | null
+    itinerary_item_id: string | null
+    /** Only selected for events; absent on a trip's query. */
+    start_format?: string | null
+  }
+  const rounds  = (roundsResult.data ?? []) as unknown as RoundRow[]
+  const players = playersResult.data ?? []
+  const leadName = players.find(p => p.is_lead === true)?.name.split(' ')[0] ?? null
+  const notices = (noticesResult.data ?? []) as Notice[]
+
+  type ItinRow = {
+    id: string; day_index: number; position: number; kind: ItemKind
+    course_id: string | null; tee_time: string | null; tee_count: number | null
+    stay_name: string | null; travel_mode: 'car' | 'flight' | 'train' | null
+    from_place: string | null; to_place: string | null; duration_mins: number | null
+    activity_name: string | null; activity_time: string | null
+  }
+  // Error swallowed deliberately — pre-migration-048 the column does not
+  // exist, the map stays empty, and every item simply has no end time.
+  const endTimes = new Map(
+    ((endTimesResult.data ?? []) as { id: string; end_time: string | null }[])
+      .map(r => [r.id, r.end_time]),
+  )
+
+  const itinerary: ItineraryItem[] = ((itineraryResult.data ?? []) as unknown as ItinRow[])
+    .map(r => ({
+      id: r.id, dayIndex: r.day_index, position: r.position, kind: r.kind,
+      courseId: r.course_id, teeTime: r.tee_time, teeCount: r.tee_count,
+      stayName: r.stay_name, travelMode: r.travel_mode,
+      fromPlace: r.from_place, toPlace: r.to_place, durationMins: r.duration_mins,
+      activityName: r.activity_name, activityTime: r.activity_time,
+      ...(endTimes.get(r.id) ? { endTime: endTimes.get(r.id) } : {}),
+    }))
+
+  // Which round each golf item became, so the up-next card can put the
+  // round's date beside the item's tee time.
+  const roundDates: [string, string | null][] = rounds
+    .filter(r => r.itinerary_item_id)
+    .map(r => [r.itinerary_item_id as string, r.scheduled_date as string | null])
+
+  // And which round *number*, so a golf item opens its own summary page.
+  // Only golf items appear here — a stay or a journey has no page and is not
+  // tappable, which is the difference the itinerary reads off this map.
+  const roundNumbers: Record<string, number> = Object.fromEntries(
+    rounds
+      .filter(r => r.itinerary_item_id)
+      .map(r => [r.itinerary_item_id as string, r.round_number as number]),
+  )
+
+  // Courses for both the rounds list and the itinerary's golf tiles
+  const courseMap = Object.fromEntries((coursesResult.data ?? []).map(c => [c.id, c.name]))
+
+  // An event round with a chosen start format writes its own line onto the
+  // schedule's golf tile — "Shotgun start 9:30 am", "Tee sheet". The format
+  // is the round's, the time is the itinerary item's, and lib/eventHub is
+  // where the two become one sentence.
+  const teeTimeByItem = new Map(itinerary.map(i => [i.id, i.teeTime ?? null]))
+  const startLines: Record<string, string> = {}
+  for (const r of rounds) {
+    const format = parseStartFormat(r.start_format)
+    if (!format || !r.itinerary_item_id) continue
+    const line = describeStart(format, teeTimeByItem.get(r.itinerary_item_id))
+    if (line) startLines[r.itinerary_item_id] = line
+  }
+
+  // ── The tee times module ──
+  //
+  // On while any round starts from a tee sheet; it speaks for one of them
+  // (lib/teeSheet.ts `hubTeeRound`). Who this phone is comes later, so the
+  // place on the sheet is worked out once `me` is known.
+  // Each round's start format — an event's main select has it, a trip's
+  // comes from the settings read.
+  const startFormatOf = (r: { id: string; start_format?: unknown }) =>
+    r.start_format ?? teeSettingsResult.get(r.id)?.startFormat ?? null
+  const teeSheet = teeSheetInUse(rounds.map(startFormatOf))
+  // The bar's fourth tab (lib/eventHub.ts). Stats with a tab of their own
+  // are not on the home screen too — only when the tee times have it.
+  const fourthTab = isEvent ? eventFourthTab({ teeTimes: teeSheet, stats: trip.track_stats === true }) : null
+  const statsOnHome = !isEvent || fourthTab === 'teeTimes'
+  const teeRound = teeSheet ? hubTeeRound(
+    rounds
+      .filter(r => parseStartFormat(startFormatOf(r)) === 'tee_sheet')
+      .map(r => ({
+        id: r.id,
+        roundNumber: r.round_number,
+        date: r.scheduled_date,
+        courseName: courseMap[r.course_id] ?? null,
+        startTime: r.itinerary_item_id ? teeTimeByItem.get(r.itinerary_item_id) ?? null : null,
+      })),
+    todayString(new Date()),
+  ) : null
+  const teeRows = teeRound
+    ? ((teeRowsResult.data ?? []) as { round_id: string; player_id: string; slot_index: number }[])
+        .filter(a => a.round_id === teeRound.id)
+    : []
+  // That round's sheet — a vacant one (no rules made yet) has nothing to
+  // say on the home screen, so the module waits for the wizard.
+  const teeStored = teeRound ? teeSettingsResult.get(teeRound.id) : undefined
+  const teeRoundSheet = teeRound ? roundSheet({
+    rules: teeStored?.rules,
+    startTime: teeRound.startTime,
+    intervalMins: teeStored?.intervalMins,
+    groupSize: teeStored?.groupSize,
+    hasAssignments: teeRows.length > 0,
+  }) : null
+
+  // Grouped by the day they are played, so a two-round day reads as one day
+  // with two courses rather than as two unrelated entries. Only reached by a
+  // trip made before the itinerary existed.
+  const days: { key: string; label: string | null; courses: string[] }[] = []
+  for (const r of rounds) {
+    const name = courseMap[r.course_id]
+    if (!name) continue
+    const key = r.scheduled_date ?? `round-${r.round_number}`
+    const existing = days.find(d => d.key === key)
+    if (existing) existing.courses.push(name)
+    else days.push({ key, label: formatDay(r.scheduled_date), courses: [name] })
+  }
+
+  const dateRange  = [formatDate(trip.start_date), formatDate(trip.end_date)].filter(Boolean).join(' – ')
+
+  // A player is confirmed once a real person has claimed that slot;
+  // organiser-created placeholders stay pending until someone does.
+  const confirmedCount = countConfirmed(players)
+  const pendingCount   = players.length - confirmedCount
+
+  // What the trip plays for, read off its boards. `primary` is the first one
+  // — the board the trip is about, and the one the standing line quotes. The
+  // titles are no longer printed as a line under the dates; what is left of
+  // this is the lead board, which the standing depends on.
+  const boards = boardsForTrip(trip)
+  const lead = primary(boards)
+
+  // ── Do we know who this is? ──
+  //
+  // A cookie left on this device when they joined, matched against this
+  // trip's own roster so a stale or copied one finds nobody rather than
+  // greeting a stranger. Nothing below is fetched until it turns out to name
+  // somebody real, so a first-time visitor pays nothing for a personalised
+  // page they will not see.
+  const me = await currentPlayer(tripCode, players)
+
+  // ── A match play event: the draw from this player's side ──
+  //
+  // The next-match card under the status block (docs/event-use-cases.md,
+  // story 2). Started now and awaited at the render, so it rides beside
+  // the standing rather than after it; a failed read costs the card only.
+  const knockoutView = isEventKind(trip.kind) && isKnockoutEvent((trip as { bracket_setup?: unknown }).bracket_setup)
+    ? readKnockout(trip, (trip as { bracket_setup?: unknown }).bracket_setup, me?.id ?? null, players)
+        .then(async view => {
+          if (!view) return null
+          // Your own match, when it is being played now, says so on the card.
+          const next = myNextMatch(view.matches, view.entrantId)
+          const live = next
+            ? (await readLiveMatches(trip, { ...view, matches: view.matches.filter(m => m.id === next.id) },
+                players as { id: string; name: string; handicap: number | null; gender: string }[]))[0] ?? null
+            : null
+          return { view, live }
+        })
+        .catch(e => { console.error('TripPage knockout read failed:', e); return null })
+    : Promise.resolve(null)
+  // And this player's own details for it — home club (migration 057, read
+  // on its own and fail-soft) and contact (the closed table, on the server).
+  const myMatchDetails = me && isConfirmed(me) && isEventKind(trip.kind)
+      && isKnockoutEvent((trip as { bracket_setup?: unknown }).bracket_setup)
+    ? Promise.all([
+        supabase.from('players').select('home_course_id, courses:home_course_id(name)')
+          .eq('id', me.id).eq('trip_id', trip.id).maybeSingle(),
+        readContacts(trip.id, [me.id]),
+      ]).then(([homeRes, contacts]) => {
+        if (homeRes.error) return null
+        const row = homeRes.data as { home_course_id: string | null; courses: { name: string } | { name: string }[] | null } | null
+        const named = Array.isArray(row?.courses) ? row?.courses[0] : row?.courses
+        return {
+          homeCourseId: row?.home_course_id ?? null,
+          homeCourseName: named?.name ?? null,
+          contact: contacts.get(me.id) ?? null,
+        }
+      }).catch(() => null)
+    : Promise.resolve(null)
+
+  // ── Has this device been shown around? ──
+  //
+  // Decided here, on the server, rather than in the browser after hydration:
+  // the page is force-dynamic and already reads the jar for the player
+  // cookie, so the check is free. The cookie is written by the intro itself,
+  // on skip and finish alike (lib/intro.ts) — once per DEVICE, not per trip,
+  // which is why a second trip on the same phone shows nothing.
+  //
+  // `?intro` on the hub URL overrides the cookie: the tour runs again, for
+  // showing a mate or for testing on a phone that has already seen it.
+  // Harmless to leave in a shared link — finishing just rewrites the cookie.
+  const showIntro =
+    'intro' in (await searchParams) || !(await cookies()).has(INTRO_COOKIE)
+
+  let placingLine = ''
+  let nextMatchLine = ''
+  let standingError: string | null = null
+  let myStats: PlayerStats | null = null
+  let statsCover: Coverage | null = null
+
+  if (me) {
+    const [placingResult, draw, tripStats] = await Promise.all([
+      // Gated exactly as the leaderboard page gates it. A trip that has
+      // chosen real boards must not be scored on the old trip-wide options,
+      // or this screen and that one disagree about who is where.
+      fetchPlacing(
+        trip.id, lead, me.id,
+        isLegacy(parseLeaderboards(trip.leaderboards))
+          ? parseTeamScoring(trip.team_scoring)
+          : null,
+      ),
+      hasMatchplay(boards)
+        ? supabase
+            .from('matchplay_matches')
+            .select('round_number, round_name, player_a_id, player_b_id, ' +
+                    'player_a_is_bye, player_b_is_bye, ' +
+                    'team_a_id, team_b_id, winner_player_id, winner_team_id, entrant_type')
+            .eq('trip_id', trip.id)
+            .order('round_number')
+        : Promise.resolve({ data: [], error: null }),
+      // Only for a trip that asked for stats, and only alongside the standing
+      // rather than after it — the two are the same nine queries twice, so
+      // stacking them would double the wait rather than the load.
+      // An event whose stats have the tab does not draw them here, so
+      // does not pay for them either.
+      trip.track_stats === true && statsOnHome
+        ? fetchTripStats(trip.id)
+        : Promise.resolve(null),
+    ])
+
+    placingLine = describePlacing(placingResult.placing)
+    standingError = placingResult.error
+
+    if (tripStats && !tripStats.error) {
+      statsCover = coverage(tripStats.stats)
+      myStats = statsFor(tripStats.stats, me.id)
+    }
+
+    if (draw.error) {
+      console.error('TripPage matchplay query failed:', draw.error)
+      standingError = standingError ?? 'Could not read the match play draw.'
+    }
+
+    // The board leading decides what the standing line is. A knockout has no
+    // table, so it shows the next match alone; anything else shows the
+    // position, and the next match underneath when a draw is also running.
+    const drawBoard = boards.find(b => b.competition === 'matchplay')
+    if (drawBoard) {
+      type Row = {
+        round_number: number; round_name: string
+        player_a_id: string | null; player_b_id: string | null
+        player_a_is_bye: boolean;   player_b_is_bye: boolean
+        team_a_id: string | null;   team_b_id: string | null
+        winner_player_id: string | null; winner_team_id: string | null
+      }
+      const rows = (draw.data ?? []) as unknown as Row[]
+
+      // In a pairs draw the entrant is the PAIRING, not the player — and the
+      // pairing is their place on that draw's sheet, which need not be the
+      // team they play the league in.
+      //
+      // Both halves of that come from the same place and neither waits on the
+      // other: the memberships say which pairing this player is, the teams
+      // say what a pairing is called. They were awaited one after the other,
+      // which is two round trips for a single line of text on the hub.
+      const pairs = needsPairings(boards)
+      const [memberships, teamsRes] = pairs
+        ? await Promise.all([
+            fetchMemberships(trip.id),
+            supabase.from('teams').select('id, name').eq('trip_id', trip.id),
+          ])
+        : [[], null]
+      const entrantId = pairs
+        ? teamFor(memberships, me.id, drawBoard ? setOf(drawBoard) : MAIN_SET)
+        : me.id
+
+      const asDraw: DrawMatch[] = rows.map(m => ({
+        roundNumber: m.round_number,
+        roundName: m.round_name,
+        sideA: pairs ? m.team_a_id : m.player_a_id,
+        sideB: pairs ? m.team_b_id : m.player_b_id,
+        aIsBye: m.player_a_is_bye,
+        bIsBye: m.player_b_is_bye,
+        winner: pairs ? m.winner_team_id : m.winner_player_id,
+      }))
+
+      // Naming the opponent: a player on a singles draw, a pairing on a
+      // pairs one. Teams are only fetched when there is a draw to name.
+      let nameOf: (id: string) => string | null = id =>
+        players.find(p => p.id === id)?.name ?? null
+      if (pairs && teamsRes) {
+        const byId = new Map((teamsRes.data ?? []).map(t => [t.id as string, t.name as string]))
+        nameOf = id => byId.get(id) ?? null
+      }
+
+      nextMatchLine = describeNextMatch(nextMatch(entrantId, asDraw), nameOf)
+    }
+
+    // A knockout is the whole story when it leads. No stroke position beside
+    // it — there may not even be a board with one.
+    if (lead?.competition === 'matchplay') placingLine = ''
+  }
+
+  // ── A league's rounds, when it has dates ──
+  //
+  // A dated series reads as its rounds rather than as a calendar: each one
+  // with its date and venue, in order, opening its own summary, and a round
+  // whose venue is still to be confirmed paler and asking for one
+  // (docs/event-use-cases.md). The setup, the PIN and the permissions all
+  // ride in on the trip's own `*`, so this costs no query.
+  const tripRaw = trip as { bracket_setup?: unknown; event_permissions?: unknown; settings_passcode_hash?: string | null }
+  const leagueDated = isEvent && !!trip.start_date
+    && parseLeagueSetup(tripRaw.bracket_setup)?.schedule === 'series'
+  const league = leagueDated ? leagueRounds(
+    itinerary.map(i => ({ id: i.id, dayIndex: i.dayIndex, kind: i.kind, courseId: i.courseId ?? null })),
+    rounds.map(r => ({
+      id: r.id, roundNumber: r.round_number, itineraryItemId: r.itinerary_item_id,
+      courseId: r.course_id, scheduledDate: r.scheduled_date,
+    })),
+    trip.start_date ?? null,
+  ) : []
+  const leagueDoor: LeagueDoor | null = leagueDated && trip.start_date ? {
+    tripId: trip.id,
+    tripCode,
+    startDate: trip.start_date,
+    passcodeHash: tripRaw.settings_passcode_hash ?? null,
+    fieldMayAddCourses: allowsParticipant(trip.kind, tripRaw.event_permissions, 'add_courses'),
+  } : null
+  const leagueLastVenue = [...league].reverse().find(r => r.courseId)?.courseId ?? null
+  const offLeague = new Set(
+    ((casualResult.data ?? []) as { id: string; casual?: boolean | null }[])
+      .filter(r => r.casual === true).map(r => r.id),
+  )
+  const otherItems = itinerary.filter(i => i.kind !== 'golf')
+  // The same reading the Scoring tab gives: every round, the next on top,
+  // the later ones pale and inert until the one before has been played,
+  // then the history newest first.
+  const listing = seriesListing(league, todayString(new Date()))
+  // Each round's play-by date, where the league set them (Ross, 5 Nov 2026).
+  const leagueDeadlines = parseLeagueSetup(tripRaw.bracket_setup)?.deadlines ?? {}
+  const playBy = (key: string, finished: boolean) => playByLine(leagueDeadlines[key], todayString(new Date()), finished)
+
+  const leagueSection = leagueDoor ? (
+    <div className="flex flex-col gap-3">
+      {listing.map(({ round: lr, locked }) => locked ? (lr.date ? (
+        <LockedRoundTile
+          key={lr.roundId ?? lr.itemId}
+          number={lr.number}
+          date={lr.date}
+          courseName={(lr.courseId && courseMap[lr.courseId]) || null}
+          playBy={playBy(lr.itemId || lr.roundId || '', false)}
+        />
+      ) : null) : lr.roundId ? (
+        <Link
+          key={lr.roundId}
+          href={`${tripHome}/round/${lr.number}`}
+          className={`flex items-center justify-between w-full px-5 py-4 press ${cardClass('raised', true)}`}
+        >
+          <div className="min-w-0">
+            <p className="t-label text-ink/65 mb-1">
+              Round {lr.number}{lr.date ? ` · ${describeShortDate(lr.date)}` : ''}{playBy(lr.itemId || lr.roundId || '', !!lr.date && lr.date < todayString(new Date()))}
+            </p>
+            <p className="t-card text-ink truncate">
+              <CourseName name={(lr.courseId && courseMap[lr.courseId]) || `Round ${lr.number}`} />
+            </p>
+            {offLeague.has(lr.roundId) && (
+              <p className="t-cap text-ink/65 mt-1">Doesn’t count towards the league</p>
+            )}
+          </div>
+          <span className="flex-shrink-0 ml-4 text-ink/50" aria-hidden="true">
+            <IconChevronRight size={20} />
+          </span>
+        </Link>
+      ) : lr.date ? (
+        <TbcRoundTile
+          key={lr.itemId}
+          door={leagueDoor}
+          itemId={lr.itemId}
+          date={lr.date}
+          number={lr.number}
+          lastVenueId={leagueLastVenue}
+          fieldMaySetVenue={allowsParticipant(trip.kind, tripRaw.event_permissions, 'set_venues')}
+          playBy={playBy(lr.itemId, false)}
+        />
+      ) : null)}
+      {/* Anything else the organiser planned — a dinner, a stay — keeps the
+          schedule it always had, under the rounds. */}
+      {otherItems.length > 0 && (
+        <div className="mt-3">
+          <Itinerary
+            items={otherItems}
+            startDate={trip.start_date ?? null}
+            courseNames={courseMap}
+            days={dayCount(trip.start_date ?? null, trip.end_date ?? null)}
+            tripCode={tripCode}
+            roundNumbers={{}}
+            startLines={{}}
+            timescale
+          />
+        </div>
+      )}
+    </div>
+  ) : null
+
+  // ── The itinerary, or the list of rounds a pre-itinerary trip has ──
+  const itinerarySection = leagueSection ?? (itinerary.length > 0 ? (
+    <Itinerary
+      items={itinerary}
+      startDate={trip.start_date ?? null}
+      courseNames={courseMap}
+      // The items decide too, not just the dates: a series event carries no
+      // dates at all — dayCount(null, null) is 1 — but its numbered days
+      // are real and every one must render.
+      days={Math.max(
+        dayCount(trip.start_date ?? null, trip.end_date ?? null),
+        itinerary.reduce((max, i) => Math.max(max, i.dayIndex + 1), 0),
+      )}
+      tripCode={tripCode}
+      roundNumbers={roundNumbers}
+      startLines={startLines}
+      timescale={isEvent}
+    />
+  ) : days.length > 0 ? (
+    <ul className="flex flex-col gap-2">
+      {days.map((d, i) => (
+        <li key={d.key} className={`px-4 py-3 ${cardClass()}`}>
+          <p className="t-label text-ink/80">
+            {d.label ?? `Round ${i + 1}`}
+          </p>
+          <div className="mt-1.5 flex flex-col gap-0.5">
+            {d.courses.map((name, j) => (
+              <p key={j} className="t-card text-ink">{name}</p>
+            ))}
+          </div>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p className="t-cap text-ink/65 text-center py-2">
+      Nothing on the itinerary yet.
+    </p>
+  ))
+
+  // The gear in the header's corner — this phone's OWN preferences, on
+  // every trip's hub: appearance is the device's (light, dark, system), and
+  // a phone that went dark must always have the way back. The nickname
+  // inside it is a claimed player's, so it is handed the player only when
+  // there is one. Not a second door to Trip Setup, which stays on the tab
+  // bar. An event has none: its Settings tab carries the same preferences
+  // (`/trip/[code]/settings`), and a gear here would be a second door.
+  const preferences = isEvent
+    ? undefined
+    : <PlayerSettings tripId={trip.id} playerId={me && isConfirmed(me) ? me.id : null} />
+
+  // The home screen's modules, each there only while it is active
+  // (lib/eventHub.ts). A trip has no notices and no tee sheet, and its
+  // itinerary is not a module — it always shows — so for a trip this is
+  // Stats or nothing, on the gate it always had.
+  const modules = activeHubModules({
+    noticeCount: notices.length,
+    // A sheet opened for later says nothing here until it opens.
+    teeSheet: !!teeRoundSheet && teeRoundSheet.state !== 'vacant'
+      && (teeRoundSheet.state !== 'active' || sheetIsOpen(teeRoundSheet.rules, teeRound?.date ?? null, new Date())),
+    // Anything on it — the itinerary, or the rounds of an event made before
+    // the itinerary existed. Only an empty one is left off.
+    schedule: isEvent && (itinerary.length > 0 || days.length > 0),
+    stats: statsOnHome && !!statsCover && statsCover.level !== 'none',
+  })
+  const showSchedule = !isEvent || modules.includes('schedule')
+
+  // Which section is open on arrival. A trip opens on its itinerary, as it
+  // always has. An event opens on its news, else its schedule, else its
+  // tee times — the first of those it is showing, or none of them.
+  const openOnArrival = !isEvent ? 'itinerary'
+    : modules.includes('notices') ? 'notices'
+    : modules.includes('schedule') ? 'itinerary'
+    : modules.includes('teeTimes') ? 'teetimes'
+    : undefined
+  const fieldNameOf = (id: string) => players.find(p => p.id === id)?.name ?? null
+  const mineOnSheet = teeRoundSheet
+    ? myTee(teeRows, me && isConfirmed(me) ? me.id : null, teeRoundSheet, fieldNameOf)
+    : null
+  const firstTee = teeRoundSheet ? sheetClock(teeRoundSheet, 0) : null
+
+  const [koView, myDetails] = await Promise.all([knockoutView, myMatchDetails])
+
+  return (
+    <main className="min-h-dvh paper has-tabbar page-enter">
+
+      {/* Settled from the first pixel. The collapse lives on the landing
+          page: this screen is opened to be read, and the brand performing on
+          the way in only delays it. The mark goes to the start of the site,
+          not to this page — this IS the trip hub. */}
+      <TripHeader backTo="/" action={preferences} />
+
+      <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
+
+        {/* ── Trip name, dates, and what it is played for ── */}
+        {/* Left-aligned, the one hero every hub shares (refresh plan, 4.1):
+            the name and its dot, when it runs, who runs it, and the way to
+            hand it on. */}
+        <div className="flex flex-col items-start text-left pt-2 pb-7">
+          <h1 className="t-h1 text-bark text-balance" style={{ fontSize: 'clamp(26px, 8vw, 34px)' }}>
+            {trip.name}<span className="t-title-dot" aria-hidden="true" />
+          </h1>
+          {/* When it runs, in the display face at reading size rather than
+              as a caption. It was 13px UI type at 65% ink, which is the
+              treatment this app gives to notes and asides — and a trip's
+              dates are the second thing anybody wants off this screen after
+              its name. */}
+          {dateRange && (
+            <p className="text-[17px] font-semibold leading-snug text-ink/80 mt-2.5">{dateRange}</p>
+          )}
+
+          {/* Who runs it, by first name. A trip's lead player; an event's
+              organiser only when they are playing — not playing, there is
+              no player row for them and nothing to say. */}
+          {leadName && (
+            <p className="text-[17px] leading-snug text-ink/80 mt-1">
+              {isEvent ? 'Organised by' : 'Led by'} {leadName}
+            </p>
+          )}
+
+          {/* And how long until it. Inside the title rather than below it:
+              the name, the dates and the countdown are three lines of one
+              heading, all answering what this trip is and when.
+
+              Counting to the first tee, not to the start date. A bare date
+              parses as midnight, so the timer hit zero and vanished the
+              night before anybody was due on a course — thirteen hours of
+              trip morning with nothing left to count. The tee time is on
+              the running order; the date without it is the fallback,
+              because a date is then all that is actually known. */}
+          <TripCountdown
+            target={
+              firstTeeTarget(itinerary, trip.start_date ?? null, new Map(roundDates))
+              ?? trip.start_date ?? null
+            }
+          />
+
+          {/* What the lead player wrote about it — the heading's fourth
+              line, on the cream. Three lines then an ellipsis; the
+              paragraph itself is the tap that opens the rest. */}
+          <TripDescription text={trip.description} />
+
+          {/* The trip, handed on. Under the heading rather than in it: the
+              name and dates are what a visitor reads, this is what the lead
+              player does next. The whole URL travels, so the person on the
+              other end taps once instead of typing a code. */}
+          <div className="mt-6">
+            <ShareTrip tripCode={tripCode} tripName={trip.name} noun={isEvent ? 'event' : 'trip'} />
+          </div>
+        </div>
+
+        {/* What the trip plays for used to print here, under the dates —
+            every board's title joined by a dot. It is settings written on
+            the hub: a reader either already knows the format or is about to
+            be shown it by the leaderboard, which names its own boards. */}
+
+        {/* ── Who this device is, and what happens next ── */}
+        <StatusBlock
+          tripCode={tripCode}
+          player={me ? {
+            firstName: me.name.split(' ')[0],
+            placing: placingLine,
+            // A match play event says it in the card below, with the way in.
+            nextMatch: koView ? '' : nextMatchLine,
+          } : null}
+          items={itinerary}
+          startDate={trip.start_date ?? null}
+          roundDates={roundDates}
+          roundNumbers={roundNumbers}
+          courseNames={courseMap}
+          noun={isEvent ? 'event' : 'trip'}
+          knockout={!!koView}
+        />
+
+        {/* A draw set for a date and a time, counted down to while it is
+            still to come (Ross, 5 Nov 2026) — at nought it is made, and the
+            next-match card below takes over. */}
+        {koView && koView.view.matches.length === 0 && (() => {
+          const plan = rawDrawPlan((trip as { bracket_setup?: unknown }).bracket_setup)
+          const live = drawLiveAt(plan)
+          // Its own card under the name's, with the gap every card on the
+          // hub keeps (Ross, 5 Nov 2026: it sat hard against the name).
+          return live && plan?.on ? (
+            <div className="mt-4">
+              <DrawCountdown
+                tripCode={tripCode}
+                liveAt={live.toISOString()}
+                when={`${describeShortDate(plan.on) ?? plan.on}${plan.at ? ` at ${describeTime(plan.at)}` : ''}`}
+              />
+            </div>
+          ) : null
+        })()}
+        {koView && <NextMatchCard tripCode={tripCode} view={koView.view} live={koView.live} today={todayString(new Date())} />}
+        {koView && me && myDetails && (
+          <MatchDetails
+            tripId={trip.id}
+            tripCode={tripCode}
+            playerId={me.id}
+            homeCourseId={myDetails.homeCourseId}
+            homeCourseName={myDetails.homeCourseName}
+            contact={myDetails.contact}
+            allowAddCourse={allowsParticipant(trip.kind, (trip as { event_permissions?: unknown }).event_permissions, 'add_courses')}
+          />
+        )}
+
+        {standingError && (
+          <p className="text-rust-deep text-sm text-center mt-3 leading-snug">{standingError}</p>
+        )}
+
+        {/* Three large buttons — Live Scoring, Leaderboard, Players — used to
+            sit here, and two of them were the tab bar written out a second
+            time. A screen offering the same journey twice in two different
+            shapes makes the reader work out whether they are the same
+            journey, and they were: the bar carries Leaderboard and Scoring on
+            every screen in the trip, this one included.
+
+            Players was not a duplicate — no tab claims it — so its door moved
+            into the roster below rather than closing. Claiming is prompted by
+            the status block above anyway, in the one state that needs it: a
+            phone that is nobody yet gets "Claim your spot" as the loudest
+            thing on the screen. */}
+
+        {/* ── The rest, one heading at a time ──
+            The margin is here rather than inside `SectionStack`, because it
+            is a relationship between the status card and the stack — a fact
+            about this page, not about the component. Without it the first
+            section's own `border-t` butts straight up against the card
+            above, and the rule reads as the card's own bottom edge rather
+            than as the start of something new. */}
+        <div className="mt-6">
+        <SectionStack
+          initial={openOnArrival}
+          sections={[
+            /* Notices lead an event: the organiser's line to the field is
+               the hub's news, and it opens first. A module — there only
+               while a notice is up, never a heading with nothing under it.
+               A trip has no organiser and no section. */
+            ...(modules.includes('notices') ? [{
+              key: 'notices',
+              title: 'Notices',
+              meta: `${notices.length}`,
+              content: <NoticesPanel notices={notices} />,
+            }] : []),
+            /* The tee times, while a round starts from a tee sheet — the
+               reader's own time on the heading, so a closed section still
+               answers the question. It was the event's fifth tab. */
+            ...(modules.includes('teeTimes') && teeRound ? [{
+              key: 'teetimes',
+              title: 'Tee times',
+              meta: mineOnSheet?.clock ?? (firstTee ? `From ${firstTee}` : undefined),
+              content: <TeeTimesPanel
+                tripHome={tripHome}
+                round={teeRound}
+                mine={mineOnSheet}
+                firstClock={firstTee}
+                booked={new Set(teeRows.map(a => a.player_id)).size}
+                fieldSize={players.length}
+                claimed={!!me && isConfirmed(me)}
+              />,
+            }] : []),
+            /* "Itinerary" — it was "Your Itinerary", for the player
+               reading it rather than the leader filing it; the refresh
+               (plan 4.1) settled on the plain noun, with the progress
+               ("10 of 10 done") beside it saying whose trip it is. An
+               event's is the Schedule — a standalone day has no itinerary
+               in any sense a traveller would recognise — and a module:
+               there whenever anything is on it, golf included, and gone
+               while it is empty. A trip's always shows. */
+            ...(showSchedule ? [{
+              key: 'itinerary',
+              title: isEvent ? 'Schedule' : 'Itinerary',
+              content: itinerarySection,
+            }] : []),
+            /* A standalone event has no travel to speak of, so the heading
+               only appears when somebody actually planned a stay or a
+               journey — which a multi-day event still might. */
+            ...(!isEvent || itinerary.some(i => i.kind === 'stay' || i.kind === 'travel') ? [{
+              key: 'travel',
+              title: 'Travel & accommodation',
+              content: <TravelStays items={itinerary} startDate={trip.start_date ?? null} />,
+            }] : []),
+            {
+              key: 'players',
+              /* An event's players are its field — the word a golf event
+                 uses, and Ross's. A trip's are its players, as ever. */
+              title: isEvent ? 'The Field' : 'Players',
+              meta: players.length > 0 ? `${confirmedCount} of ${players.length} in` : undefined,
+              content: <PlayersPanel
+                players={players}
+                pendingCount={pendingCount}
+                tripCode={tripCode}
+                tripHome={tripHome}
+                noun={isEvent ? 'event' : 'trip'}
+                linkedIds={giLinked}
+                add={isEvent ? (
+                  <AddToField
+                    tripId={trip.id}
+                    tripCode={tripCode}
+                    roundIds={rounds.map(r => r.id)}
+                    players={players}
+                    fieldMayAdd={allowsParticipant(trip.kind, tripRaw.event_permissions, 'add_players')}
+                    fieldSetsHandicaps={allowsParticipant(trip.kind, tripRaw.event_permissions, 'edit_handicaps')}
+                    passcodeHash={tripRaw.settings_passcode_hash ?? null}
+                  />
+                ) : null}
+              />,
+            },
+            /* Stats, last, and only when there is something behind the
+               heading. Two conditions, and neither on its own is enough: the
+               trip has to have asked for stats, and a card has to have
+               recorded one. A trip that switched them on this morning gets no
+               heading until the first hole comes in.
+
+               That is the rule the deleted Points / Level / Rounds / Matches
+               tiles left behind, kept rather than dropped — see
+               docs/features.md. `initial` still opens the itinerary, so a hub
+               with stats on looks exactly like one without until it is
+               tapped. On an event this is the Stats module, and the only way
+               to the stats hub: the tab is gone, and the organiser adds it
+               from the organiser area's Home screen card. */
+            ...(modules.includes('stats') && statsCover && statsCover.level !== 'none' ? [{
+              key: 'stats',
+              title: 'Stats',
+              meta: `${statsCover.holes} holes`,
+              content: <StatsPanel
+                mine={myStats}
+                tripHome={tripHome}
+                thin={statsCover.level === 'thin'}
+              />,
+            }] : []),
+          ]}
+        />
+        </div>
+
+      </div>
+
+      <SupportLink className="px-6 pb-8" />
+
+      <div className="px-6 pb-6 flex justify-center">
+        <BackButton href="/" label="All trips" />
+      </div>
+
+      <LegalLinks className="px-6 pb-10" />
+
+      {/* A newcomer's guided lap — over everything, pointing at the tab
+          bar, gone for good once skipped or finished. */}
+      {showIntro && <SiteIntro tripName={trip.name} />}
+
+    </main>
+  )
+}
+
+/**
+ * The roster, as the hub shows it.
+ *
+ * Confirmed carries the hard brown edge a finished round carries and pending
+ * the barely-there outline of one nothing has happened on — the same two
+ * treatments, from the same file, as the join list. Both states were drawn
+ * identically before Phase 1, with the ternaries still in place claiming
+ * otherwise.
+ */
+function PlayersPanel({
+  players, pendingCount, tripCode, tripHome, noun, linkedIds, add,
+}: {
+  players: { id: string; name: string; handicap: number | null; claimed?: boolean | null }[]
+  /** A Golf Ireland league's confirmed links — the mark beside those names. */
+  linkedIds: string[]
+  pendingCount: number
+  tripCode: string
+  tripHome: string
+  /** "trip" or "event" — the hub knows which it is wearing. */
+  noun: 'trip' | 'event'
+  /** An event's door for adding to the field (`AddToField`), or nothing. */
+  add?: React.ReactNode
+}) {
+  if (players.length === 0) {
+    return (
+      <div className="max-w-xs mx-auto">
+        <p className="t-cap text-ink/65 text-center py-2">
+          Nobody has joined this {noun} yet.
+        </p>
+        {add}
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-xs mx-auto">
+      {/* Legend — and it has to be telling the truth. */}
+      <div className="flex items-center gap-4 mb-4">
+        <span className="flex items-center gap-1.5">
+          <span className={`w-2.5 h-2.5 rounded-sm ${ROUND_TILE.played}`} aria-hidden="true" />
+          <span className="t-label text-ink/65">Confirmed</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className={`w-2.5 h-2.5 rounded-sm ${ROUND_TILE.empty}`} aria-hidden="true" />
+          <span className="t-label text-ink/65">Pending</span>
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {players.map(p => {
+          const confirmed = isConfirmed(p)
+          return (
+            <div
+              key={p.id}
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+                confirmed ? ROUND_TILE.played : ROUND_TILE.empty
+              }`}
+            >
+              <span className="flex-1 min-w-0">
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-ink text-sm truncate">{p.name}</span>
+                  {linkedIds.includes(p.id) && <LinkedBadge size={16} />}
+                </span>
+                <span
+                  className={`block t-cap mt-0.5 ${
+                    confirmed ? 'text-ink/80' : 'text-ink/50'
+                  }`}
+                >
+                  {confirmed ? 'Confirmed' : 'Pending'}
+                </span>
+              </span>
+              {/* The handicap, or the fact that nobody has given one yet.
+                  Two different pendings sit on this tile — the label above
+                  is about the *name* being unclaimed — so this one carries
+                  its HCP, in the roster's quiet ink rather than the accent
+                  the real figure gets: it is a thing outstanding, not a
+                  score. See `HANDICAP_PENDING_LABEL`. */}
+              {isHandicapPending(p.handicap) ? (
+                <span className="t-cap text-ink/65 leading-none flex-shrink-0">
+                  {HANDICAP_PENDING_LABEL}
+                </span>
+              ) : (
+                <span className="font-serif font-bold text-accent-deep text-base leading-none tabular-nums flex-shrink-0">
+                  {p.handicap}
+                </span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {add}
+
+      {pendingCount > 0 && (
+        <p className="text-ink/50 text-[13px] mt-4 leading-relaxed">
+          Share the code <span className="text-accent">{tripCode}</span> with
+          the {pendingCount} {pendingCount === 1 ? 'player' : 'players'} still to join.
+        </p>
+      )}
+
+      {/* The way to the join list, and now the only one on this screen for a
+          phone that has already claimed. It used to be a button up beside
+          Leaderboard and Live Scoring; it belongs with the roster, which is
+          what a reader is looking at when the question occurs to them. No tab
+          carries Players, so without this the route would be reachable only
+          by a device that is nobody yet. */}
+      <Link
+        href={`${tripHome}/players`}
+        className="block text-center mt-5 t-label text-accent-deep hover:text-accent transition-colors"
+      >
+        Claim your spot
+      </Link>
+    </div>
+  )
+}

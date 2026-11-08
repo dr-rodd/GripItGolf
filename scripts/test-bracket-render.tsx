@@ -12,7 +12,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import MatchplayBracket, {
   type BracketMatchRow, type BracketEntrantRow,
-} from '../app/trip/[tripCode]/matchplay/MatchplayBracket'
+} from '../app/golf/[root]/[tripCode]/matchplay/MatchplayBracket'
 import { playerEntrant, pairEntrant } from '../lib/matchplayEntrants'
 import { generateBracket, bracketToRows, bracketShape, bracketFromSlots } from '../lib/matchplay'
 import { isDecidable } from '../lib/matchplayProgress'

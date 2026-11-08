@@ -199,10 +199,10 @@ section('A series-only permission is asked of a series alone')
   const league = read('app/dashboard/create/CreateLeagueForm.tsx')
   ok(league.includes("registry={permissionsFor(schedule === 'series')}"),
     'the league wizard asks by its shape')
-  const organiser = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
+  const organiser = read('app/golf/[root]/[tripCode]/organiser/OrganiserClient.tsx')
   ok(organiser.includes('registry={permRegistry}') && organiser.includes('describePermissions(perms, permRegistry)'),
     'and the organiser area edits and sums up the same list')
-  ok(read('app/trip/[tripCode]/organiser/page.tsx').includes("series={leagueSetup?.schedule === 'series'}"),
+  ok(read('app/golf/[root]/[tripCode]/organiser/page.tsx').includes("series={leagueSetup?.schedule === 'series'}"),
     'told by the stored shape')
 }
 
@@ -236,14 +236,14 @@ section('Every event door asks how collaborative, and writes only real answers')
 
 section('The organiser page is the admin portal')
 {
-  const page = read('app/trip/[tripCode]/organiser/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/organiser/page.tsx')
   ok(page.includes('parseEventPermissions'), 'it reads the stored answers')
   ok(page.includes("select('event_permissions')"),
     'in their own query — the fail-soft rule, never the main select')
   ok(page.includes("{ count: 'exact', head: true }"),
     'the overview counts in headers, not bodies')
 
-  const client = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/organiser/OrganiserClient.tsx')
   ok(client.includes('<CollaborationQuestion') && client.includes('settingsOpen'), 'the same question, editable, every setting showing')
   ok(/update\(\{ event_permissions: next \}\)[\s\S]{0,80}\.eq\('id', tripId\)/.test(client),
     'saves scoped to the trip')
@@ -256,16 +256,16 @@ section('The organiser page is the admin portal')
 
 section('A participant\'s screens change to match')
 {
-  const playersPage = read('app/trip/[tripCode]/players/page.tsx')
+  const playersPage = read('app/golf/[root]/[tripCode]/players/page.tsx')
   ok(playersPage.includes("'add_players'"), 'the players page asks add_players')
   ok(playersPage.includes('allowsParticipant('), 'through the one gate helper')
-  const playersClient = read('app/trip/[tripCode]/players/PlayersClient.tsx')
+  const playersClient = read('app/golf/[root]/[tripCode]/players/PlayersClient.tsx')
   ok(playersClient.includes('{!canAddPlayers ?'),
     'off, the add form is not rendered — nothing to see or reach')
   ok(playersClient.includes('Ask the event organiser to add you'),
     'and the screen says why, calmly')
 
-  const scoringPage = read('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')
+  const scoringPage = read('app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx')
   ok(scoringPage.includes("'edit_scores'"), 'the scoring page asks edit_scores')
   const flow = read('app/scoring/LiveScoringFlow.tsx')
   ok(flow.includes('{allowScoreEdits && ('),
@@ -278,14 +278,14 @@ section('A participant\'s screens change to match')
 
 section('The field is added to on the hub — by anyone, or behind the PIN')
 {
-  const hub = read('app/trip/[tripCode]/page.tsx')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
   ok(hub.includes("title: isEvent ? 'The Field' : 'Players'"),
     'an event\'s players are its field; a trip\'s stay its players')
   ok(hub.includes("fieldMayAdd={allowsParticipant(trip.kind, tripRaw.event_permissions, 'add_players')}"),
     'adding is the field\'s exactly when add_players says so')
   ok(hub.includes('add={isEvent ? ('), 'and the door is an event\'s alone — a trip\'s hub is untouched')
 
-  const door = read('app/trip/[tripCode]/AddToField.tsx')
+  const door = read('app/golf/[root]/[tripCode]/AddToField.tsx')
   ok(door.includes('<InlineUnlock') && door.includes('hasUnlocked(tripCode)'),
     'otherwise the organiser\'s PIN is asked in place')
   ok(door.includes('readHandicapField(handicap)') && door.includes('if (hcp !== null)'),
@@ -356,18 +356,18 @@ section('Migration 049 is the one column the model promised')
 
 section('Handicaps: the field\'s own, or the organiser\'s (Ross, 4 Nov 2026)')
 {
-  const page = read('app/trip/[tripCode]/players/page.tsx')
-  const client = read('app/trip/[tripCode]/players/PlayersClient.tsx')
+  const page = read('app/golf/[root]/[tripCode]/players/page.tsx')
+  const client = read('app/golf/[root]/[tripCode]/players/PlayersClient.tsx')
   ok(page.includes("askHandicap={!isEvent(kind) ? true : handicapsOpen ? 'pending' : false}") && page.includes('ownHandicap={handicapsOpen}')
     && page.includes("'edit_handicaps',"),
     'an event whose players set their own handicaps asks one of a name left without, and of somebody joining')
   ok(client.includes("askHandicap === 'pending' && isHandicapPending(player.handicap)")
     && client.includes('const handicap = ownHandicap ? parseHandicap(addHandicap) : null'),
     '  …and where the organiser keeps them, somebody joining comes in pending, never asked')
-  const match = read('app/trip/[tripCode]/match/[matchId]/page.tsx')
+  const match = read('app/golf/[root]/[tripCode]/match/[matchId]/page.tsx')
   ok(match.includes("!underWay && allowsParticipant(kind, perms, 'edit_handicaps')") && match.includes("from('match_scores').select('match_id', { count: 'exact', head: true })"),
     'a player changes their own on their match page only while the field may, and until the card is under way')
-  const add = read('app/trip/[tripCode]/AddToField.tsx')
+  const add = read('app/golf/[root]/[tripCode]/AddToField.tsx')
   ok(add.includes('const maySetHandicap = fieldSetsHandicaps || unlocked || !isLocked(passcodeHash)'),
     'adding a name to the field gives its handicap only where the field may — or the organiser, with the PIN')
   const toggles = read('app/components/EventPermissionToggles.tsx')

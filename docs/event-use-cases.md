@@ -183,7 +183,7 @@ Each stage tested on greendot.live before the next, as with Green Dot Run.
    `round_number` = date position, leaving a TBC round's number free.
 
    The Scoring tab and the hub's Schedule both list the league's rounds
-   (`app/trip/[tripCode]/LeagueRounds.tsx`): a TBC round paler and dashed,
+   (`app/golf/[root]/[tripCode]/LeagueRounds.tsx`): a TBC round paler and dashed,
    "Tap to choose the venue" (`TbcRoundTile`), and **Add round** on the
    Scoring tab — a date after the last round (`nextRoundIssue`), the last
    venue presumed, or TBC. Both write through `lib/leagueRoundStore.ts`, not
@@ -200,7 +200,7 @@ Each stage tested on greendot.live before the next, as with Green Dot Run.
    (`addRounds` in `lib/itineraryStore.ts`).
    **The Field — built, October 2026.** On an event the hub's Players
    section is **The Field**, and under the names sits **Add a player**
-   (`app/trip/[tripCode]/AddToField.tsx`): somebody else's name, unclaimed,
+   (`app/golf/[root]/[tripCode]/AddToField.tsx`): somebody else's name, unclaimed,
    for its owner to claim — the join screen is still where a player adds
    themselves. Anyone may when `add_players` is on, the organiser with the
    PIN asked in place otherwise. A blank handicap is pending; a given one is
@@ -445,7 +445,7 @@ overview, or one column at a time), not a rebuild.
    (pure: `portalRounds` — every bracket round with its play-by date and
    "n of m played", the player's own match first, byes not listed as
    matches; `currentRound`, `myNextMatch`, `describeProgress`,
-   `describeResult`), fed by `readKnockout` (`app/trip/[tripCode]/
+   `describeResult`), fed by `readKnockout` (`app/golf/[root]/[tripCode]/
    knockout.ts`: the rows in one shape for singles and pairs, a pairs
    entrant being the pairing on the draw's own sheet). **The hub** carries
    `NextMatchCard` on a match play event — "Your next match · Quarter-Final",
@@ -528,7 +528,7 @@ overview, or one column at a time), not a rebuild.
    **Built (stage 4, with Ross's 21 October additions):** the live board
    — every open match with anything on its card, read on the server through
    the card's own setup (`readLiveMatches` in
-   `app/trip/[tripCode]/match/matchCards.ts`), a **Live now** section at the
+   `app/golf/[root]/[tripCode]/match/matchCards.ts`), a **Live now** section at the
    top of the Scoring tab's portal (each opens its card, read-only to anyone
    not in it), a green Live line on a match in the round lists and on the
    hub's next-match card when it is yours; refreshed through `usePoll`.

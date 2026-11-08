@@ -118,7 +118,7 @@ section('Pairs always play together, and are never asked')
     '  …and a three that plays apart is a team, not a partnership')
   ok(!isPairs(tags, PAIR) && !isPairs(solo, PAIR), 'the event\'s tags and individuals are never pairs')
 
-  const wizard = read('app/trip/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
+  const wizard = read('app/golf/[root]/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
   ok(wizard.includes('const pairsFirstTime = !live && unitSize === PAIR'),
     'a pairs round\'s first sheet is counted in pairs — two to a tee time, a group of four')
 }
@@ -237,10 +237,10 @@ section('A round that makes its own partnerships starts from the last round\'s')
   eq(carriedPartnerships({ roundId: 'r2', rounds, sheet: 'set-2', teams, memberships: ms, sheetOf }), [],
     'partnerships for the whole event are already the same every round — nothing to carry')
 
-  const setup = read('app/trip/[tripCode]/teesheet/[roundId]/setup/page.tsx')
+  const setup = read('app/golf/[root]/[tripCode]/teesheet/[roundId]/setup/page.tsx')
   ok(setup.includes("partnership?.isDay && sheet.state === 'vacant'"),
     'carried when a round\'s sheet is first opened, and only then')
-  const wizard = read('app/trip/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
+  const wizard = read('app/golf/[root]/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
   ok(wizard.includes('setTeam(tripId, id, carried.sheet'), '  …through the one membership writer')
 }
 
@@ -248,18 +248,18 @@ section('A round that makes its own partnerships starts from the last round\'s')
 
 section('The tee sheet and its wizard read the one copy')
 {
-  const page = read('app/trip/[tripCode]/teesheet/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
   ok(page.includes('roundPartnership(boards, r.id') && page.includes('partnershipName('),
     'the sheet groups a round by its partnerships, each named as one')
   ok(!page.includes('teamBoardForRound'), '  …and the old take-the-first-team-board lookup is gone')
 
-  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes('const together = !!roundTeamInfo && !roundTeamInfo.isDay'),
     'a partnership is offered as one stuck-together card wherever the round has them')
 
-  const setup = read('app/trip/[tripCode]/teesheet/[roundId]/setup/page.tsx')
+  const setup = read('app/golf/[root]/[tripCode]/teesheet/[roundId]/setup/page.tsx')
   ok(setup.includes('playTogetherQuestion(boards, round.id'), 'the wizard asks the one question')
-  const wizard = read('app/trip/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
+  const wizard = read('app/golf/[root]/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
   ok(wizard.includes('Do players play in their teams?'), '  …in Ross\'s words')
   ok(wizard.includes('withPlayTogether('), '  …and stores the answer through the one writer')
 

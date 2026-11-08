@@ -14,6 +14,7 @@ import { ChallengeNotFound, Notice } from '../RunPieces'
 import StravaCard from '../StravaCard'
 import RunAddClient from './RunAddClient'
 import { buttonClass, cardClass } from '@/app/components/ui'
+import { tripBase } from '@/lib/tripPaths'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +36,7 @@ export default async function RunAddPage({ params, searchParams }: {
   const [{ tripCode }, { strava }] = await Promise.all([params, searchParams])
   const challenge = await fetchRunChallenge(tripCode)
   if (!challenge) return <ChallengeNotFound />
-  if (!isRunChallenge(challenge.kind)) redirect(`/trip/${challenge.code}`)
+  if (!isRunChallenge(challenge.kind)) redirect(tripBase(challenge.code, challenge.kind))
 
   const roster = rosterOf(challenge)
   // The viewer first — the cookie alone, no database — so their own runs are

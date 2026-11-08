@@ -186,7 +186,7 @@ Ireland") and `LinkHeading` (the top of each Golf Ireland card).
 
 **The badge is beside a confirmed player's name** on the league's join
 screen, the hub's Players list and the leaderboard (individual rows),
-each fed by `golfIrelandLinkedIds` in `app/trip/[tripCode]/golfIreland.ts`,
+each fed by `golfIrelandLinkedIds` in `app/golf/[root]/[tripCode]/golfIreland.ts`,
 which asks nothing unless the league reads Golf Ireland.
 
 **The preview** (`app/components/GolfIrelandTour.tsx`) is a hands-on mimic
@@ -266,7 +266,7 @@ the next.
    or refuse (`GolfIrelandRequests`, `/confirm` — behind the organiser
    PIN, the same soft gate as every organiser write). The routes share
    `app/api/golf-ireland/league.ts`; the pages read the closed tables
-   through `app/trip/[tripCode]/golfIreland.ts`, on the service role,
+   through `app/golf/[root]/[tripCode]/golfIreland.ts`, on the service role,
    fail-soft. Still to do: filling in the handicap index on confirmation.
 5. Reading the cards: nightly, plus a "Fetch my scores" button and one for
    the organiser. The players-choose list, each card with its reason when

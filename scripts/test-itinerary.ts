@@ -381,7 +381,7 @@ section('Migration 048 and the end time describe the same table')
 
   // The hub reads the column in its own query, so an un-migrated database
   // costs the ranges and nothing else — the kind read's fail-soft rule.
-  const hub = fs.readFileSync('app/trip/[tripCode]/page.tsx', 'utf-8')
+  const hub = fs.readFileSync('app/golf/[root]/[tripCode]/page.tsx', 'utf-8')
   const mainSelect = hub.match(/select\('id, day_index[^)]*\)/)?.[0] ?? ''
   ok(!mainSelect.includes('end_time'),
     'the hub\'s main itinerary select never names end_time')
@@ -743,7 +743,7 @@ section('Migration 027 and lib/itinerary.ts describe the same table')
   // mapping instead of one per reader — so their pin is on the shared
   // helper doing the mapping and on each page using it.
   {
-    const src = fs.readFileSync('app/trip/[tripCode]/page.tsx', 'utf-8')
+    const src = fs.readFileSync('app/golf/[root]/[tripCode]/page.tsx', 'utf-8')
     ok(src.includes('activity_name, activity_time'),
       'the hub selects the new columns')
     ok(src.includes('activityName: r.activity_name'),
@@ -759,8 +759,8 @@ section('Migration 027 and lib/itinerary.ts describe the same table')
   // The check is the same either way: selected, and mapped through the shared
   // helper rather than by hand.
   for (const page of [
-    'app/trip/[tripCode]/setup/page.tsx',
-    'app/trip/[tripCode]/scoring/AddRound.tsx',
+    'app/golf/[root]/[tripCode]/setup/page.tsx',
+    'app/golf/[root]/[tripCode]/scoring/AddRound.tsx',
   ]) {
     const src = fs.readFileSync(page, 'utf-8')
     ok(src.includes('activity_name, activity_time'),
@@ -772,7 +772,7 @@ section('Migration 027 and lib/itinerary.ts describe the same table')
   // And the page it left does not still carry them, which is the way this
   // gets quietly undone: a copy left behind loads on every visit and the
   // check above passes on the other file.
-  const portal = fs.readFileSync('app/trip/[tripCode]/scoring/page.tsx', 'utf-8')
+  const portal = fs.readFileSync('app/golf/[root]/[tripCode]/scoring/page.tsx', 'utf-8')
   // A league draws its rounds from their golf items — a round still TBC has
   // no round row — so the tab reads five narrow columns, for a league only,
   // in the same batch as its live cards. Never the sheet's whole itinerary.
@@ -853,7 +853,7 @@ section('Moving the trip re-dates its rounds')
   // Trip Settings is where the dates are edited, so that is where it runs —
   // and only when the *start* date moved: the end date sets how many days
   // there are, not which date each one is.
-  const setup = fs.readFileSync('app/trip/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
+  const setup = fs.readFileSync('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
   const saveDates = setup.slice(setup.indexOf('async function saveDates'))
   ok(saveDates.includes('rescheduleRounds(trip.id'),
     'saving the dates re-dates the rounds')
@@ -892,7 +892,7 @@ section('The itinerary store scopes every write by trip and fails closed')
   // And the editor never deletes on one tap: a save that drops golf opens a
   // confirm that names the trip and each round, with its own button — Save
   // itself goes inert while it is open, so a double-tap cannot fall through.
-  const editor = fs.readFileSync('app/trip/[tripCode]/setup/ItineraryEditor.tsx', 'utf-8')
+  const editor = fs.readFileSync('app/golf/[root]/[tripCode]/setup/ItineraryEditor.tsx', 'utf-8')
   ok(editor.includes('removedGolf.length > 0') && editor.includes('setConfirmOpen(true)'),
     'a save that removes golf opens the confirm instead of writing')
   ok(editor.includes('|| confirmOpen'),

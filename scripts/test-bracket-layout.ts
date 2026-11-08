@@ -461,7 +461,7 @@ section('Held without scrolling the page while it moves')
     'just past the heading, lowered no further than the box is above the screen')
 
   // And the bracket itself: the page is moved in one place, at rest.
-  const src = readFileSync('app/trip/[tripCode]/matchplay/MatchplayBracket.tsx', 'utf8')
+  const src = readFileSync('app/golf/[root]/[tripCode]/matchplay/MatchplayBracket.tsx', 'utf8')
   ok(!src.includes('scrollBy('), 'the bracket never scrolls the page by a frame\'s drift')
   ok((src.match(/window\.scrollTo\(/g) ?? []).length === 1 && src.includes('pageTargetRef.current = window.scrollY - l'),
     '  …only once, handing the lift over at rest')

@@ -89,7 +89,7 @@ section('The lead player is on the list too')
 {
   // They were excluded outright, so the organiser could never link a second
   // device to their own trip. The query asks for the whole roster now.
-  const page = read('app/trip/[tripCode]/players/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/players/page.tsx')
   ok(!page.includes("eq('is_lead', false)"), 'the join query no longer excludes the lead')
   ok(!page.includes("claimed.is.null,claimed.eq.false"),
     '  …and no longer excludes confirmed players')
@@ -131,12 +131,12 @@ section('Every name path checks it')
   // through the same rule, from the same file.
   for (const f of [
     'app/dashboard/create/CreateTripForm.tsx',
-    'app/trip/[tripCode]/players/PlayersClient.tsx',
-    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
+    'app/golf/[root]/[tripCode]/players/PlayersClient.tsx',
+    'app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx',
   ]) {
     ok(read(f).includes("from '@/lib/roster'"), `${f.split('/').pop()} reads the shared name rule`)
   }
-  const setup = read('app/trip/[tripCode]/setup/TripSetupClient.tsx')
+  const setup = read('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx')
   eq((setup.match(/duplicateName\(/g) ?? []).length, 3,
     'settings checks on add, on rename, and once more as a backstop')
 }
@@ -173,19 +173,19 @@ section('Every write that can hit it says the same thing')
   // already had — a persistent inline error on the join screen, a flash in
   // settings — and each says exactly what the pre-check says.
   for (const f of [
-    'app/trip/[tripCode]/players/PlayersClient.tsx',
-    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
+    'app/golf/[root]/[tripCode]/players/PlayersClient.tsx',
+    'app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx',
   ]) {
     const src = code(f)
     ok(src.includes('isDuplicateNameError'), `${f.split('/').pop()} recognises the refusal`)
     ok(!/23505/.test(src), '  …by name rather than by pasting the code in')
   }
 
-  const client = code('app/trip/[tripCode]/players/PlayersClient.tsx')
+  const client = code('app/golf/[root]/[tripCode]/players/PlayersClient.tsx')
   ok(/isDuplicateNameError\(err\)[\s\S]{0,120}duplicateNameError\(name\)/.test(client),
     'the join screen answers with the same sentence as its own pre-check')
 
-  const setup = code('app/trip/[tripCode]/setup/TripSetupClient.tsx')
+  const setup = code('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx')
   eq((setup.match(/isDuplicateNameError\(/g) ?? []).length, 2,
     'settings catches it on both the insert and the rename')
   ok(/flashError\(isDuplicateNameError/.test(setup),
@@ -197,10 +197,10 @@ section('All three checks cover the same people')
   // The join screen always excluded composites; settings did not, so its
   // no-two-same-names check compared against machine-generated names the
   // other check never saw and the constraint deliberately does not cover.
-  const setupPage = code('app/trip/[tripCode]/setup/page.tsx')
+  const setupPage = code('app/golf/[root]/[tripCode]/setup/page.tsx')
   ok(setupPage.includes("eq('is_composite', false)"),
     'settings loads the roster without composites')
-  const joinPage = code('app/trip/[tripCode]/players/page.tsx')
+  const joinPage = code('app/golf/[root]/[tripCode]/players/page.tsx')
   ok(joinPage.includes("eq('is_composite', false)"), 'as the join screen always did')
   const migration = read('supabase/migrations/20260101000025_unique_player_names.sql')
   ok(/is_composite\s*=\s*false/.test(migration), 'and as the constraint does')
@@ -219,7 +219,7 @@ section('A cookie recognises somebody on this trip, or nobody')
 
 section('Linking a device changes nothing about who is confirmed')
 {
-  const client = code('app/trip/[tripCode]/players/PlayersClient.tsx')
+  const client = code('app/golf/[root]/[tripCode]/players/PlayersClient.tsx')
 
   // Tapping a confirmed name is how a second handset gets linked. It writes
   // a cookie and NOTHING else — claimed is already true and stays true.
@@ -248,7 +248,7 @@ section('Linking a device changes nothing about who is confirmed')
   // "Not you?" reassigns a handset. The player it forgets stays confirmed.
   // It lives on the status block now — the card it used to sit on was
   // replaced when the hub was restructured.
-  const status = code('app/trip/[tripCode]/StatusBlock.tsx')
+  const status = code('app/golf/[root]/[tripCode]/StatusBlock.tsx')
   ok(status.includes('forgetPlayer'), 'Not you? forgets this device')
   ok(!status.includes('claimed'), '  …without un-confirming anybody')
   ok(status.includes('/players'), '  …and lands on the list, where they can pick a name')
@@ -272,8 +272,8 @@ section('Changing who this device is throws away the pages that said otherwise')
   // have to call it, and both have to call it BEFORE the push — after, and
   // the stale page is rendered first and corrected a moment later, which is
   // the same bug with a flicker in front of it.
-  const client = code('app/trip/[tripCode]/players/PlayersClient.tsx')
-  const status = code('app/trip/[tripCode]/StatusBlock.tsx')
+  const client = code('app/golf/[root]/[tripCode]/players/PlayersClient.tsx')
+  const status = code('app/golf/[root]/[tripCode]/StatusBlock.tsx')
 
   const link = client.slice(client.indexOf('function linkDevice'), client.indexOf('async function handleClaim'))
   ok(link.includes('router.refresh()'), 'linking a device clears the router cache')
@@ -308,9 +308,9 @@ section('Nothing prefetches a page that has a name in it')
   // The three that read the cookie on the server. If a fourth appears, it is
   // subject to the same rule and this list should say so.
   const personalised = [
-    'app/trip/[tripCode]/page.tsx',
-    'app/trip/[tripCode]/stats/page.tsx',
-    'app/trip/[tripCode]/round/[roundNumber]/page.tsx',
+    'app/golf/[root]/[tripCode]/page.tsx',
+    'app/golf/[root]/[tripCode]/stats/page.tsx',
+    'app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx',
   ]
   for (const f of personalised) {
     ok(code(f).includes('currentPlayer'),
@@ -328,8 +328,8 @@ section('Confirmed and pending are visibly different')
   ok(ROUND_TILE.played !== ROUND_TILE.empty, 'the two treatments are not the same string')
 
   for (const f of [
-    'app/trip/[tripCode]/page.tsx',
-    'app/trip/[tripCode]/players/PlayersClient.tsx',
+    'app/golf/[root]/[tripCode]/page.tsx',
+    'app/golf/[root]/[tripCode]/players/PlayersClient.tsx',
   ]) {
     const src = read(f)
     ok(src.includes("from '@/lib/roundState'"), `${f.split('/').pop()} reads the shared treatment`)
@@ -342,7 +342,7 @@ section('Confirmed and pending are visibly different')
   }
 
   // The hub's legend draws the same two things the rows draw.
-  const hub = read('app/trip/[tripCode]/page.tsx')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
   eq((hub.match(/ROUND_TILE\.played/g) ?? []).length, 2, 'the hub draws confirmed twice: legend and row')
   eq((hub.match(/ROUND_TILE\.empty/g) ?? []).length, 2, 'and pending twice, the same way')
 }
@@ -351,7 +351,7 @@ section('Confirmed and pending are visibly different')
 
 section('Claiming a name stops to check the handicap')
 {
-  const client = code('app/trip/[tripCode]/players/PlayersClient.tsx')
+  const client = code('app/golf/[root]/[tripCode]/players/PlayersClient.tsx')
 
   // The roster is the lead player's recollection of everybody's handicap.
   // Claiming is the one moment the right person is holding the phone, so
@@ -405,7 +405,7 @@ section('Claiming a name stops to check the handicap')
   ok(/askHandicap === true \|\| \(askHandicap === 'pending' && isHandicapPending\(player\.handicap\)\)\) setChecking/.test(client)
     && /else handleClaim\(player, null\)/.test(client),
     '  …and a screen that does not ask claims straight through')
-  const page = code('app/trip/[tripCode]/players/page.tsx')
+  const page = code('app/golf/[root]/[tripCode]/players/page.tsx')
   ok(/askHandicap=\{!isEvent\(kind\) \? true : handicapsOpen \? 'pending' : false\}/.test(page),
     'the page asks on a trip; on an event only of a name without a handicap, and only while players set their own')
 }
@@ -426,12 +426,12 @@ section('A player who joins late gets their round handicaps')
   // Settings has always written these on a handicap edit; the join screen
   // never did, so a straggler was scored off nothing. One call, both places.
   for (const f of [
-    'app/trip/[tripCode]/players/PlayersClient.tsx',
-    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
+    'app/golf/[root]/[tripCode]/players/PlayersClient.tsx',
+    'app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx',
   ]) {
     ok(read(f).includes('syncRoundHandicaps'), `${f.split('/').pop()} writes them through the shared call`)
   }
-  ok(!read('app/trip/[tripCode]/setup/TripSetupClient.tsx').includes("from('round_handicaps')"),
+  ok(!read('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx').includes("from('round_handicaps')"),
     'and settings no longer rolls its own upsert')
 }
 

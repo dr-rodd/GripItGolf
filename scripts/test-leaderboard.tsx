@@ -12,7 +12,7 @@ import React from 'react'
 import fs from 'fs'
 import TripLeaderboardClient, {
   CourseTiles,
-} from '../app/trip/[tripCode]/leaderboard/TripLeaderboardClient'
+} from '../app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient'
 import type { BoardRow } from '../lib/boardRows'
 import { parseFormats, type TripFormats } from '../lib/formats'
 import {
@@ -267,7 +267,7 @@ section('Stableford')
 
 section('The Discard switch starts off, and moves the whole board at once')
 {
-  const src = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const src = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
 
   ok(src.includes('const [discarding, setDiscarding] = useState(false)'),
     'the switch is off until it is tapped')
@@ -772,7 +772,7 @@ section('A board with columns off the edge says so')
   // be a shadow cast by nothing.
   ok(!many.includes('scroll-shade-l'),
     'nothing is hidden to the left until the board has been scrolled')
-  const boardSrc = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const boardSrc = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   ok(/scroll-shade-l/.test(boardSrc), '  …but the left-hand shade exists to be shown')
   ok(/setMoreLeft\(el\.scrollLeft > 1\)/.test(boardSrc),
     '  …once the scroller has moved off the start')
@@ -787,7 +787,7 @@ section('A board with columns off the edge says so')
 
 section('The board is one scroller, and the rows are one element')
 {
-  const src = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const src = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   const board = src.slice(src.indexOf('function Board('), src.indexOf('* The draw, as a chip'))
 
   // The whole point. Twelve scrollers synchronised by hand could be made
@@ -860,7 +860,7 @@ section('The board is one scroller, and the rows are one element')
 
 section('Nothing about the scroll can spring or lag')
 {
-  const src = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const src = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   // Comments stripped: the notes in here explain what the old mechanisms
   // did and why they went, and a prose mention would match the checks that
   // they are gone.
@@ -893,7 +893,7 @@ const NAME_SCROLL_MS_IN = (src: string) =>
 
 section('A long name shows itself, and a short one holds still')
 {
-  const src = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const src = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   // The function body alone — the next `/**` is useBoardScroll's note, and it
   // discusses `overflow-x: auto` at length, which the last check here forbids.
   const cmpFrom = src.indexOf('function ScrollingName(')
@@ -1598,7 +1598,7 @@ section('Narrowing to a course is the same rule a day board goes through')
     'one exported copy of narrowing a context to some rounds')
   ok(/const counted = withOnlyRounds\(withoutCasualRounds\(withoutCardsOff\(ctx\)\), lb\.roundIds\)/.test(src),
     'a board\'s own scope goes through it, after the casual filter')
-  const client = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   // A league's round switch narrows through the same call; `base` is the
   // context itself unless a round that does not count is being shown on
   // its own, when that one round's casual flag is cleared first.
@@ -1615,7 +1615,7 @@ section('The board card keeps its rounded corners')
   // backgrounds to the card's edge; unclipped, they sat over the card's top
   // corners (Ross's phone, 19 Oct). The row clips itself, at the card's 20px
   // less its 1px border. The card itself must never clip: see above.
-  const client = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   ok(client.includes('className="sticky z-20 bg-surface border-b border-line rounded-t-[19px] overflow-hidden"'),
     'the heading row is clipped to the card\'s inner corners')
   ok(client.includes('rounded-b-[19px]'), '  …and the foot matches them')

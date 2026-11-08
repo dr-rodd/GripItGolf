@@ -215,7 +215,7 @@ section('A matchplay record counts matches, not byes')
 
 section('A recognised player is greeted by name, and nothing more')
 {
-  const status = fs.readFileSync('app/trip/[tripCode]/StatusBlock.tsx', 'utf-8')
+  const status = fs.readFileSync('app/golf/[root]/[tripCode]/StatusBlock.tsx', 'utf-8')
 
   ok(status.includes('firstName'), 'they are greeted by their first name')
   ok(status.includes('Not you?'), 'with a way to say it is not them, for a shared phone')
@@ -232,7 +232,7 @@ section('A recognised player is greeted by name, and nothing more')
 
 section('A device nobody has claimed is told what to do')
 {
-  const status = fs.readFileSync('app/trip/[tripCode]/StatusBlock.tsx', 'utf-8')
+  const status = fs.readFileSync('app/golf/[root]/[tripCode]/StatusBlock.tsx', 'utf-8')
 
   ok(status.includes('Claim your spot'), 'an unlinked device is asked to claim a spot')
   ok(status.includes('/players'), '  …and pointed at the player list')

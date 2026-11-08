@@ -20,7 +20,7 @@
 // sheet is simply the trip's team sheet, exactly as it always was — no
 // trip screen imports this file.
 //
-// Pure. No I/O — the tags portal (app/trip/[tripCode]/organiser/tags) and
+// Pure. No I/O — the tags portal (app/golf/[root]/[tripCode]/organiser/tags) and
 // the teams screen do the fetching and writing.
 
 import {

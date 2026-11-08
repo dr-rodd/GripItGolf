@@ -27,7 +27,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import fs from 'fs'
 import path from 'path'
-import TripLeaderboardClient from '../app/trip/[tripCode]/leaderboard/TripLeaderboardClient'
+import TripLeaderboardClient from '../app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient'
 import type { Leaderboard } from '../lib/leaderboards'
 import type { TeamScoring } from '../lib/teamScoring'
 

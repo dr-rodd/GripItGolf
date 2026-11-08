@@ -180,7 +180,7 @@ Bottom tab bar, `app/components/TabBar.tsx` — Home · Scoring · **Leaderboard
 
 Deliberately **absent from the scoring flow**, where the bottom of the screen is score entry and a nav bar under it is a mis-tap waiting to happen.
 
-**Drawn once, by `app/trip/[tripCode]/layout.tsx`, and never by a page.** It was ten copies, one per page, and a component rendered by a page unmounts when that page does — so tapping a tab tore the bar off the screen and drew a new one once the next page's queries came back. Pages still carry `has-tabbar`, because the page is what scrolls. `test:branding` pins both halves: the layout has the bar, no page does.
+**Drawn once, by `app/golf/[root]/[tripCode]/layout.tsx`, and never by a page.** It was ten copies, one per page, and a component rendered by a page unmounts when that page does — so tapping a tab tore the bar off the screen and drew a new one once the next page's queries came back. Pages still carry `has-tabbar`, because the page is what scrolls. `test:branding` pins both halves: the layout has the bar, no page does.
 
 **A tab lights on the touch, not on arrival.** `active` comes from the pathname, and the pathname does not change until the destination has rendered on the server — which on these screens is a database round trip away. Lighting on `active` alone meant a tap looked like nothing at all for as long as the query took, and what that earns is a second tap. So a tab is lit when it is `active` **or** `pending` (`useLinkStatus`), and while it is pending it breathes at 900ms. The press itself is a `scale(0.94)` transform rather than a colour, because the colour is already carrying "you are here" and a second meaning on the same property reads as neither.
 

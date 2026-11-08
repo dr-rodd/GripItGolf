@@ -49,6 +49,7 @@ import CollaborationQuestion from '@/app/components/CollaborationQuestion'
 import { TeeTimesQuestion } from '@/app/components/TeeTimesAccess'
 import { ChoiceChips, CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
+import { tripBase } from '@/lib/tripPaths'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -683,7 +684,7 @@ export default function CreateTripForm({ matchPlay = false }: {
           </button>
 
           <Link
-            href={`/trip/${resultCode}`}
+            href={tripBase(resultCode, isTournament ? 'tournament' : null)}
             className={buttonClass('primary')}
           >
             Go to your {noun}

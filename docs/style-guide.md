@@ -286,7 +286,7 @@ That is why parts take parameters (`dense`, `compact`, `shape`, `variant`).
   "Locked by another user" under them in `t-cap` — nothing else. The
   booker sees "Time to complete booking · 1:42" above Save, counting down
   two minutes; an edit shows no countdown.
-  `app/trip/[tripCode]/teesheet/TeeSeats.tsx`.
+  `app/golf/[root]/[tripCode]/teesheet/TeeSeats.tsx`.
 
 ---
 

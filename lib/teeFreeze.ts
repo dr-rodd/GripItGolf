@@ -21,7 +21,7 @@
 // the same instant are settled here — the earlier freeze wins, the same on
 // every phone — and Save checks the database before writing anyway.
 //
-// Pure. `app/trip/[tripCode]/teesheet/useTeeFreeze.ts` is the wiring.
+// Pure. `app/golf/[root]/[tripCode]/teesheet/useTeeFreeze.ts` is the wiring.
 
 /** One phone's freeze on one tee time. */
 export type Freeze = {

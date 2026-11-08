@@ -538,7 +538,7 @@ with a rule beside it is what the screen now says; **Ross** items are unchanged.
 
 ## §4 — Trip hub (`/trip/{code}`)
 
-**H-01 · Bad code** · `app/trip/[tripCode]/page.tsx:59,60`
+**H-01 · Bad code** · `app/golf/[root]/[tripCode]/page.tsx:59,60`
 - Now: Trip not found  /  Check the code and try again.
 - New:
 
@@ -629,7 +629,7 @@ with a rule beside it is what the screen now says; **Ross** items are unchanged.
 
 ## §5 — Claiming a place (`/trip/{code}/players`)
 
-**P-01 · Heading** · `app/trip/[tripCode]/players/page.tsx:84`
+**P-01 · Heading** · `app/golf/[root]/[tripCode]/players/page.tsx:84`
 - Now: Who are you?
 - New: Join the trip!
 - Today: {trip name} as the heading, "Join the trip" under it; on an event now "Join the event" *(naming)*
@@ -691,19 +691,19 @@ with a rule beside it is what the screen now says; **Ross** items are unchanged.
 
 ## §5b — The hub's other screens
 
-**HB-01 · Under "Claim your spot"** · `app/trip/[tripCode]/StatusBlock.tsx`
+**HB-01 · Under "Claim your spot"** · `app/golf/[root]/[tripCode]/StatusBlock.tsx`
 - Now: Pick your name, or add it if it is not there. This phone then remembers you — your scores, your standing, and what is on next.
 - New: Pick or add your name, and this phone remembers you. *(rule 1)*
 
-**HB-02 · Share button** · `app/trip/[tripCode]/ShareTrip.tsx`
+**HB-02 · Share button** · `app/golf/[root]/[tripCode]/ShareTrip.tsx`
 - Now: Share trip
 - New: Share trip (an event: Share event) *(naming)*
 
-**HB-03 · QR page line** · `app/trip/[tripCode]/share/page.tsx`
+**HB-03 · QR page line** · `app/golf/[root]/[tripCode]/share/page.tsx`
 - Now: Scan to join the trip
 - New: Scan to join the {trip / event} *(naming)*
 
-**HB-04 · Expanding the description (screen readers)** · `app/trip/[tripCode]/TripDescription.tsx`
+**HB-04 · Expanding the description (screen readers)** · `app/golf/[root]/[tripCode]/TripDescription.tsx`
 - Now: Expand the trip description  /  Collapse the trip description
 - New: Expand the description  /  Collapse the description *(naming)*
 
@@ -723,7 +723,7 @@ with a rule beside it is what the screen now says; **Ross** items are unchanged.
 - Now: Save space on the leaderboard — your player name doesn’t change, the board just prints this shorter one. Leave it blank and it shows your first name.
 - New: Saves space on the board. Your player name doesn’t change. *(rules 1, 6)*
 
-**HB-09 · Handicap check, none on file** · `app/trip/[tripCode]/players/PlayersClient.tsx`
+**HB-09 · Handicap check, none on file** · `app/golf/[root]/[tripCode]/players/PlayersClient.tsx`
 - Now: We don’t have a handicap for you yet. Enter it before you go on — every score you make is counted off it.
 - New: Every score is counted off this, so enter it to go on. *(rule 1)*
 
@@ -1585,11 +1585,11 @@ settings and is also what a new trip meets first.
 
 ## §11b — Stats (`/trip/{code}/stats`)
 
-**ST-01 · Hub stats, field comparison not ready** · `app/trip/[tripCode]/StatsPanel.tsx`
+**ST-01 · Hub stats, field comparison not ready** · `app/golf/[root]/[tripCode]/StatsPanel.tsx`
 - Now: No hole has had enough cards on it yet to compare against the field.
 - New: Not enough cards on any hole yet to compare against the field. *(rule 1)*
 
-**ST-02 · Approach panel hint** · `app/trip/[tripCode]/stats/panels.tsx`
+**ST-02 · Approach panel hint** · `app/golf/[root]/[tripCode]/stats/panels.tsx`
 - Now: Greens found, split by where the tee shot finished — the gap is what a miss costs.
 - New: Greens found, split by where the tee shot finished. *(rules 1, 6: "A miss costs" is its own line in Off the tee)*
 
@@ -1605,7 +1605,7 @@ settings and is also what a new trip meets first.
 - Now: Honours as they stand — these move while the trip is being played.
 - New: Honours as they stand. These can still change. *(naming: events show it too; rule 2)*
 
-**ST-06 · Advanced setting hint** · `app/trip/[tripCode]/stats/StatsClient.tsx`
+**ST-06 · Advanced setting hint** · `app/golf/[root]/[tripCode]/stats/StatsClient.tsx`
 - Now: How the net figures divide your handicap between the green and everything before it. Splits only — no total moves.
 - New: Moves the net split between putting and the rest, never a total. *(rules 1, 6)*
 
@@ -1617,11 +1617,11 @@ settings and is also what a new trip meets first.
 - Now: Two shots of par — half on a par 4, two fifths on a par 5. Reads naturally, credits putting generously.
 - New: 2 shots of par, so half on a par 4. Generous to putting. *(rules 1, 7)*
 
-**ST-09 · Stats switched off** · `app/trip/[tripCode]/stats/page.tsx`
+**ST-09 · Stats switched off** · `app/golf/[root]/[tripCode]/stats/page.tsx`
 - Now: Stats are switched off for this trip. Turn them on in Trip Setup and the scorecard starts asking.
 - New: Stats are switched off for this {trip / event}. Turn them on in Trip Setup and the scorecard starts asking. *(naming)*
 
-**ST-10 · The guide, "trip" for the field** · `app/trip/[tripCode]/stats/guide/page.tsx`
+**ST-10 · The guide, "trip" for the field** · `app/golf/[root]/[tripCode]/stats/guide/page.tsx`
 - Now: the whole trip can lose to the course · add up to exactly zero across the trip · the whole trip can be positive at once
 - New: the whole field can lose to the course · add up to exactly zero across the field · everyone can be positive at once *(naming; the two rewritten sentences lose their em-dash, rule 2)*
 
@@ -1743,7 +1743,7 @@ New screens, not in the August sheet: the organiser area and its doors
 (Formats by day, Bracket setup / League, Tags), the participant permissions
 the creation doors share, the tee sheet and the export. Already changed where
 a rule decided it; **Ross** marks a question. Paths are under
-`app/trip/[tripCode]/` unless they start with `lib/`. ~~On screen a tag is a
+`app/golf/[root]/[tripCode]/` unless they start with `lib/`. ~~On screen a tag is a
 **side**; "tags" stays only in the portal's name ("Teams and tags" row, the
 "Tags" page) so it is recognisable.~~ **Decided 27 Oct 2026 (Ross): on screen
 a tag is a tag** — the row and the page are "Tags", and every "side" below

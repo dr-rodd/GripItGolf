@@ -726,7 +726,7 @@ section('No scoring surface filters tees by gender on its own')
   // picker, and the two listing the same course's tees in different orders is
   // exactly the inconsistency this was asked to end. It was by course rating,
   // which usually agrees with slope and is not the same thing.
-  const summary = readFileSync('app/trip/[tripCode]/round/[roundNumber]/page.tsx', 'utf-8')
+  const summary = readFileSync('app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx', 'utf-8')
   ok(/\.order\('slope', \{ ascending: false, nullsFirst: false \}\)/.test(summary),
     'the round summary lists tees hardest first too, with unrated ones last')
   ok(!/\.order\('course_rating'/.test(summary),

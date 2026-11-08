@@ -100,7 +100,7 @@ section('A nickname wins, on every board, and stands outside the tie question')
 
 section('The nickname belongs to the player, not to team selection')
 {
-  const teams = read('app/trip/[tripCode]/teams/TripTeamsClient.tsx')
+  const teams = read('app/golf/[root]/[tripCode]/teams/TripTeamsClient.tsx')
   ok(!teams.includes('renamePlayer'), 'team selection no longer renames players')
   ok(!teams.includes('window.prompt'), '  …and carries no prompt for it')
 
@@ -117,11 +117,11 @@ section('The nickname belongs to the player, not to team selection')
 
 section('The board prints the display name; the sheet keeps the full one')
 {
-  const page = read('app/trip/[tripCode]/leaderboard/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/leaderboard/page.tsx')
   ok(page.includes("select('id, nickname')"),
     'the page fetches nicknames on their own, fail-soft')
 
-  const client = read('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   ok(client.includes('boardNames('), 'the client asks lib/displayNames')
   ok(client.includes('boardNameById.get(row.id) ?? row.name'),
     'a player row prints its board name; a team row keeps its own')
@@ -140,13 +140,13 @@ section('Every leaderboard reads the same rule')
   ok(panel.includes('boardNames('), 'the in-play panel asks lib/displayNames')
   ok(panel.includes('displayNameById.get(player.id) ?? player.name'),
     '  …and prints the board name, falling back to the real one')
-  const scoringPage = read('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')
+  const scoringPage = read('app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx')
   ok(scoringPage.includes("select('id, nickname')"),
     'the scoring page fetches nicknames on their own, fail-soft')
 
   // A round's result is a leaderboard too — and only rows that ARE a
   // player go through the rule; a team's name is nobody's to shorten.
-  const roundPage = read('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
+  const roundPage = read('app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx')
   ok(roundPage.includes('nicknamesPromise'), 'the round result gets nicknames off the critical path')
   ok(roundPage.includes('r.playerIds.length === 1 && r.playerIds[0] === r.id'),
     '  …and shortens only player rows, never team names')
@@ -157,7 +157,7 @@ section('Every leaderboard reads the same rule')
   ok(!/lengthNeeded/.test(entrants), '  …the old cousin of the growth rule is gone')
   ok(entrants.includes('normalizeNickname(p.nickname) ?? firstName(p.name)'),
     'a nickname wins on a singles tile')
-  ok(read('app/trip/[tripCode]/matchplay/page.tsx').includes("select('id, nickname')"),
+  ok(read('app/golf/[root]/[tripCode]/matchplay/page.tsx').includes("select('id, nickname')"),
     'the draw page fetches nicknames fail-soft')
   ok(read('lib/matchplayStore.ts').includes("select('id, nickname')"),
     'and so does the store behind the bracket')

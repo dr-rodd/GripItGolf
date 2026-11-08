@@ -145,14 +145,14 @@ section('Medium security: a player changes only themselves and those they booked
   ok(!mayRemoveBooking({ organiser: false, meId: null, playersBook: true }, { playerId: 'x', bookedBy: null }),
     'and a phone that is nobody changes nothing')
 
-  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes('const mayBookOthers = organiser || (selfPick && bookerRecorded)'),
     'a player brings others only once who booked them can be recorded (migration 065)')
   ok(client.includes('...(bookerRecorded ? { booked_by: meId ?? null } : {})'),
     '  …and every booking records who made it, named only once the column exists')
   ok(client.includes('if (!mayRemove(cell.player.id)) return null') && client.includes('!block.every(mayRemove)) return null'),
     'each ✕ asks the one rule — a linked team only when every member is yours to move')
-  const page = read('app/trip/[tripCode]/teesheet/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
   ok(page.includes("select('round_id, player_id, booked_by', { count: 'exact' })") && page.includes('bookerRecorded={!bookersResult.error}'),
     'who booked whom is read on its own, fail-soft — before 065 the sheet stands, players booking themselves')
   ok(fs.readFileSync('supabase/migrations/20260101000065_tee_booked_by.sql', 'utf-8').includes('ADD COLUMN IF NOT EXISTS booked_by uuid REFERENCES players(id) ON DELETE SET NULL'),
@@ -166,17 +166,17 @@ section('Trips have tee times too, under the same rules (Ross, 26 Oct 2026)')
   eq(teeSheetAccess({ set_tee_sheets: true, edit_tee_sheet: true }), { anyoneOpens: true, playersPick: true },
     '  …and the stored answers are read as given — on a trip as on an event, never opened wholesale for a trip')
 
-  const sheetPage = read('app/trip/[tripCode]/teesheet/page.tsx')
+  const sheetPage = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
   ok(!sheetPage.includes('This is a trip'), 'the Tee times tab no longer turns a trip away')
   ok(sheetPage.includes('isTrip={!isEvent(kind)}'), '  …and speaks of a trip\'s lead player and passcode')
-  const wizPage = read('app/trip/[tripCode]/teesheet/[roundId]/setup/page.tsx')
-  ok(!wizPage.includes('This is a trip') && wizPage.includes("from === 'setup' ? `/trip/${tripCode}/setup`"),
+  const wizPage = read('app/golf/[root]/[tripCode]/teesheet/[roundId]/setup/page.tsx')
+  ok(!wizPage.includes('This is a trip') && wizPage.includes("from === 'setup' ? `${tripHome}/setup`"),
     'nor does the wizard, which sends a trip back to Trip Setup')
 
-  const setup = read('app/trip/[tripCode]/setup/page.tsx')
+  const setup = read('app/golf/[root]/[tripCode]/setup/page.tsx')
   ok(setup.includes('if (!isEvent(trip.kind) && rounds.length > 0)') && setup.includes('<TripTeeTimes'),
     'Trip Setup carries a trip\'s Tee times section — an event keeps its own in the organiser area')
-  const section = read('app/trip/[tripCode]/setup/TripTeeTimes.tsx')
+  const section = read('app/golf/[root]/[tripCode]/setup/TripTeeTimes.tsx')
   ok(section.includes("update({ start_format: next ? 'tee_sheet' : null }).eq('trip_id', tripId)")
      && section.includes(".eq('start_format', 'tee_sheet')"),
     '  …on puts every round on a tee sheet; off takes them off and deletes nothing')
@@ -196,7 +196,7 @@ section('Trips have tee times too, under the same rules (Ross, 26 Oct 2026)')
   ok(/\.\.\.\(teeSheet \? \{ start_format: 'tee_sheet' \} : \{\}\)/.test(store),
     'a round added to a trip later follows it onto a tee sheet')
 
-  const hub = read('app/trip/[tripCode]/page.tsx')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
   ok(/\/\/ them whole \(lib\/allRows\.ts\)\.\s*readSheetSettings\(trip\.id\),/.test(hub),
     'a trip\'s home screen reads its tee sheets as an event\'s does')
 }
@@ -233,32 +233,32 @@ section('A sheet may open later: days before the round, or on a date, Irish time
   eq(teeSheetSummary(legacy, null, new Date()), '10 minutes between groups, groups of up to 4', '  …and a legacy sheet as it always read')
   eq(teeSheetSummary({ state: 'vacant' }, null, new Date()), null, '  …and a vacant one not at all')
 
-  const wiz = read('app/trip/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
+  const wiz = read('app/golf/[root]/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
   ok(wiz.includes("'When does it open?'") && wiz.includes('Some days before the round') && wiz.includes('On a date'),
     'the wizard asks when it opens: now, days before the round, or a date')
   ok(/\{roundDate && \(\s*<div className=\{optionClass\(openMode === 'before'\)\}/.test(wiz),
     '  …days before only for a round with a date')
   ok(wiz.includes("live ? 'Save changes' : 'Open tee sheet'"), 'making a sheet is opening it (Ross, 26 Oct 2026)')
 
-  const page = read('app/trip/[tripCode]/teesheet/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
   ok(page.includes('!sheetIsOpen(sheet.rules, r.scheduled_date, now)'), 'the tab works out, per round, whether it has opened')
-  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes('const fieldBarred = notYetOpen && !organiser') && client.includes('tee sheet opens {round.opensLabel}'),
     '  …the field told when, and nothing more')
   ok(client.includes('const selfPick = selfPickAllowed && !notYetOpen'), '  …nobody picking a time before it opens')
   ok(client.includes('Until then only you can see it.'), '  …while the organiser sees it and may place players early')
-  ok(read('app/trip/[tripCode]/page.tsx').includes("sheetIsOpen(teeRoundSheet.rules, teeRound?.date ?? null, new Date())"),
+  ok(read('app/golf/[root]/[tripCode]/page.tsx').includes("sheetIsOpen(teeRoundSheet.rules, teeRound?.date ?? null, new Date())"),
     'and the home screen says nothing of it until it opens')
 }
 
 section('A sheet can be deleted, or cleared of its players')
 {
-  const wiz = read('app/trip/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
+  const wiz = read('app/golf/[root]/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
   ok(wiz.includes('Delete this tee sheet') && /\{live && \(/.test(wiz), 'an open sheet can be deleted from its wizard')
   ok(/from\('tee_assignments'\)\s*\.delete\(\)\s*\.eq\('trip_id', tripId\)\s*\.eq\('round_id', roundId\)/.test(wiz)
      && wiz.includes('.update({ tee_sheet: null })'),
     '  …taking its bookings and its rules, scoped — as if it was never opened')
-  const controls = read('app/trip/[tripCode]/teesheet/TeeSheetRoundControls.tsx')
+  const controls = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetRoundControls.tsx')
   ok(controls.includes('Clear the tee sheet') && /from\('tee_assignments'\)\s*\.delete\(\)\s*\.eq\('trip_id', tripId\)\s*\.eq\('round_id', roundId\)/.test(controls),
     'the organiser can clear a sheet: everybody off it, scoped to the round')
   ok(!controls.includes('tee_sheet:'), '  …and the times stay')
@@ -267,7 +267,7 @@ section('A sheet can be deleted, or cleared of its players')
 
 section('A sheet is made in its own wizard, behind the PIN unless the event is open')
 {
-  const page = read('app/trip/[tripCode]/teesheet/[roundId]/setup/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/teesheet/[roundId]/setup/page.tsx')
   ok(/teeSheetAccess\([\s\S]{0,120}\.anyoneOpens/.test(page) && /!openToAll && isLocked\(/.test(page),
     'the wizard asks for the PIN unless anyone may open the sheets — on a trip, its passcode')
   ok(page.includes(".from('rounds')") && page.includes(".eq('id', roundId)") && page.includes(".eq('trip_id', trip.id)"),
@@ -276,7 +276,7 @@ section('A sheet is made in its own wizard, behind the PIN unless the event is o
   ok(page.includes('draftRules(sheet, startTime, fieldSize, item?.tee_count)'),
     'it opens on the draft lib/teeSheet.ts makes')
 
-  const wiz = read('app/trip/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
+  const wiz = read('app/golf/[root]/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
   ok(wiz.includes('<WizardShell') && wiz.includes('aboveTabBar'),
     'it wears the wizard frame, its Continue bar above the tab bar')
   ok(/tee_sheet: rules,\s*start_format: 'tee_sheet'/.test(wiz),
@@ -492,7 +492,7 @@ section('The tee times are a tab, and your time is on the home screen too')
     'the bar carries Tee times, straight to the sheet')
   ok(bar.includes("fourth === 'teeTimes' ? [TEE_TIMES_ITEM]"), '  …as the fourth tab, when it is the fourth tab')
 
-  const hub = read('app/trip/[tripCode]/page.tsx')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
   ok(hub.includes("modules.includes('teeTimes')"),
     'the hub draws the tee times while they are active')
   ok(hub.includes("teeSheet: !!teeRoundSheet && teeRoundSheet.state !== 'vacant'"),
@@ -507,14 +507,14 @@ section('The tee times are a tab, and your time is on the home screen too')
   ok(!mainRounds.includes('tee_interval'),
     'the hub\'s rounds select never names a migration-050 column')
 
-  const panel = read('app/trip/[tripCode]/TeeTimesPanel.tsx')
-  ok(panel.includes('href={`/trip/${tripCode}/teesheet`}'),
+  const panel = read('app/golf/[root]/[tripCode]/TeeTimesPanel.tsx')
+  ok(panel.includes('href={`${tripHome}/teesheet`}'),
     'and the module is the way to the whole sheet')
 }
 
 section('The sheet reads fail-soft and writes scoped')
 {
-  const page = read('app/trip/[tripCode]/teesheet/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
   ok(page.includes('fetchTripKind'), 'the kind rides alongside, cached')
   ok(page.includes('isEvent(kind)'), 'and gates the page to events')
   const mainRounds = page.match(/select\('id, round_number[^']*'\)/)?.[0] ?? ''
@@ -522,7 +522,7 @@ section('The sheet reads fail-soft and writes scoped')
     'the main rounds select never names a migration-050 column')
   ok(page.includes('readSheetSettings(trip.id)'),
     'the settings ride in their own fail-soft queries')
-  const sheets = read('app/trip/[tripCode]/teesheet/sheets.ts')
+  const sheets = read('app/golf/[root]/[tripCode]/teesheet/sheets.ts')
   ok(sheets.includes("select('id, tee_sheet')") && sheets.includes("select('id, tee_interval_mins, tee_group_size, start_format')"),
     '  …the wizard\'s rules and the older two apart, so one missing migration costs only its own')
   ok(page.includes('teeSheetAccess(') && page.includes('fieldMayEdit={access.playersPick}') && page.includes('fieldMaySet={access.anyoneOpens}'),
@@ -532,7 +532,7 @@ section('The sheet reads fail-soft and writes scoped')
   ok(page.includes('roundSheet({') && page.includes('hasAssignments: assignedRounds.has(r.id)'),
     '  …each vacant, live or legacy by lib/teeSheet.ts')
 
-  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes('hasUnlocked(tripCode)'),
     'the organiser\'s right is the PIN unlock this device already holds')
   ok(client.includes('useEffect(() => { setUnlocked(hasUnlocked(tripCode)) }'),
@@ -547,7 +547,7 @@ section('The sheet reads fail-soft and writes scoped')
     'the maths comes from lib/teeSheet.ts, never re-derived')
   ok(!client.includes('Pick teams') && !client.includes('IconUsers'),
     'no Pick teams card above the sheet — the partnerships are made on it (Ross, 1 Nov 2026)')
-  ok(fs.existsSync('app/trip/[tripCode]/teesheet/loading.tsx'),
+  ok(fs.existsSync('app/golf/[root]/[tripCode]/teesheet/loading.tsx'),
     'the tab answers instantly — the loading.tsx rule')
 
   // The linked team through the picker and out again — stuck together
@@ -562,7 +562,7 @@ section('The sheet reads fail-soft and writes scoped')
 
 section('A vacant round offers the wizard; players pick their own time when allowed')
 {
-  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes("isn&apos;t open yet") && client.includes('Open the tee sheet'),
     'a round with no sheet yet says so and offers the wizard — never an empty heading')
   ok(/!fieldMaySet && isLocked\(passcodeHash\) && !unlocked/.test(client) && client.includes('Asks for the organiser PIN.'),
@@ -588,7 +588,7 @@ section('A write that does not land says so where it was asked for')
   // picker. The write was being refused and the reason rendered at the foot
   // of the sheet — a scroll away from the tap on any real field, so the
   // message may as well not have existed.
-  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(/error\?\.slot === i/.test(client), 'the message renders in the slot it belongs to')
   ok(!/\{error && \(\s*<p className="text-rust-deep text-sm mt-4/.test(client),
     '  …and no longer only at the foot of the list')
@@ -609,7 +609,7 @@ section('A write that does not land says so where it was asked for')
     'and a read that fails too falls back to putting the row back')
 
   // Nowhere to save is knowable before the first tap.
-  const page = read('app/trip/[tripCode]/teesheet/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
   ok(page.includes('storageReady={!assignmentsResult.error}'),
     'the page tells the sheet whether it has anywhere to save')
   ok(client.includes('!storageReady && ('), 'and the sheet says so up front')
@@ -630,16 +630,16 @@ section('The organiser is never locked out of their own sheet')
     ok(read(f).includes('rememberUnlock('),
       `${f.split('/').pop()} remembers the unlock at creation`)
   }
-  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes('<InlineUnlock'), 'the sheet offers the PIN inline')
-  const page = read('app/trip/[tripCode]/teesheet/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
   ok(page.includes('settings_passcode_hash'), 'with the hash the page already has')
 }
 
 section('The organiser reaches the wizard where the start is chosen')
 {
-  const client = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
-  const controls = read('app/trip/[tripCode]/teesheet/TeeSheetRoundControls.tsx')
+  const client = read('app/golf/[root]/[tripCode]/organiser/OrganiserClient.tsx')
+  const controls = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetRoundControls.tsx')
   ok(client.includes('<TeeSheetRoundControls') && client.includes('from="organiser"')
      && controls.includes('/teesheet/${roundId}/setup?from=${from}'),
     'a tee-sheet round\'s card is the way into its wizard, and back')
@@ -663,7 +663,7 @@ section('The tee-teams question is asked exactly where an event is asking')
     'the league wizard asks')
   ok(read('app/dashboard/create/CreateTripForm.tsx').includes('askTeeTeams={isTournament}'),
     'the trip wizard asks only through the tournament door')
-  ok(read('app/trip/[tripCode]/setup/page.tsx').includes('askTeeTeams={isEvent(trip.kind)}'),
+  ok(read('app/golf/[root]/[tripCode]/setup/page.tsx').includes('askTeeTeams={isEvent(trip.kind)}'),
     'and settings asks only for an event')
 }
 
@@ -716,7 +716,7 @@ section('A team card counts towards one tag, so a team is of one')
 
 section('The gate refuses an add, and never evicts')
 {
-  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(/if \(playingForTags\) \{[\s\S]{0,200}tagGateReason/.test(client),
     'the check runs inside addPlayers, before the write')
   ok(/tagGateReason[\s\S]{0,200}setError\(\{ slot: slotIndex/.test(client),
@@ -776,7 +776,7 @@ section('A board scoped to one day plays that day\'s teams')
 
 section('Partnerships are made at the sheet, through the one writer')
 {
-  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes('setTeam(tripId, id, info.sheet, teamId,'),
     'joining a partnership goes through setTeam, like every membership write')
   ok(client.includes('createTeam(tripId, info.sheet,'),
@@ -788,7 +788,7 @@ section('Partnerships are made at the sheet, through the one writer')
   ok(client.includes('const next = await leaveTeams(slotIndex, playerIds, info.teamOf, info)') && client.includes("if (!info?.isDay) return"),
     'and taking somebody off a round\'s own time takes them out of its team')
 
-  const page = read('app/trip/[tripCode]/teesheet/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
   ok(page.includes('roundPartnership(boards, r.id'),
     'whose partnerships a round groups by is asked per round, through the one copy')
   ok(!/boards\.find\(b => b\.audience === 'team'\)/.test(page),
@@ -864,7 +864,7 @@ section('A tee time is seats, two across — partners one ticket (Ross, 31 Oct 2
   eq(shape(seatGrid([{ teamId: null, teamName: null, players: [pp('a')] }], 4, 'separate')), [['a', 'open'], ['open', 'open']],
     'separate: nobody partners anybody, so nothing is joined')
 
-  const seats = read('app/trip/[tripCode]/teesheet/TeeSeats.tsx')
+  const seats = read('app/golf/[root]/[tripCode]/teesheet/TeeSeats.tsx')
   ok(!/linear-gradient|radial-gradient|maskImage|mask-image/.test(seats) && seats.includes('clipPath: seatClip(joins, notched, concave)'),
     'the half-moons are cut with a clip path — no gradient or mask')
   ok(seats.includes('const BITE = 5.5') && seats.includes('<path d={CUT_EDGE}') && seats.includes('<path d={CONCAVE_EDGE}') && !seats.includes('relative overflow-hidden'),
@@ -872,12 +872,12 @@ section('A tee time is seats, two across — partners one ticket (Ross, 31 Oct 2
   ok(seats.includes("{onTicket ? 'Join' : 'Add'}"), 'a + says Join on a partnership\'s empty end, Add where it starts one (Ross, 1 Nov 2026)')
   ok(seats.includes("borderRightColor: seam") && seats.includes("const seam = 'var(--color-line)'"),
     '  …and the seam between partners is a faint line (Ross, 1 Nov 2026)')
-  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes('seatGrid(groupSlot(slotPlayers, teamMap), seatsOnTime, mode)') && client.includes('grid-cols-[3.75rem_minmax(0,1fr)]'),
     'every tee time is a calendar row — the time in the gutter, its seats beside it')
   ok(client.includes(`<ol className={\`divide-y divide-line \${cardClass()}\`}>`),
     '  …on a card, as the sheet always was')
-  const page = read('app/trip/[tripCode]/teesheet/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
   ok(page.includes("select('id, name, claimed, handicap')"), 'each seat carries its player\'s handicap')
 }
 

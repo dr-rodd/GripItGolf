@@ -171,35 +171,35 @@ section('One writer, and the column named only once it is there')
   ok(sql.includes('ADD COLUMN IF NOT EXISTS added_by uuid REFERENCES players(id) ON DELETE SET NULL'),
     'migration 066 adds who put each player in, safe to re-paste')
 
-  for (const f of ['app/trip/[tripCode]/teams/page.tsx', 'app/trip/[tripCode]/teams/pick/page.tsx']) {
+  for (const f of ['app/golf/[root]/[tripCode]/teams/page.tsx', 'app/golf/[root]/[tripCode]/teams/pick/page.tsx']) {
     const src = read(f)
     ok(src.includes("select('team_set, player_id, added_by'") && src.includes('addedRecorded={!addedRes.error}'),
       `${f.split('/').slice(-2).join('/')} reads it in its own query, failing soft`)
   }
 
-  const wizard = read('app/trip/[tripCode]/teams/pick/TeamPickerWizard.tsx')
+  const wizard = read('app/golf/[root]/[tripCode]/teams/pick/TeamPickerWizard.tsx')
   ok(wizard.includes("addedBy: addedRecorded ? (organiser ? null : meId) : undefined"),
     'the organiser\'s placings carry nobody, a player\'s carry them')
   ok(wizard.includes("'Who’s in the team?', 'Check the team'"), 'two steps: who is in it, then the check')
   ok(wizard.includes('<WizardShell'), '  …in the one wizard shell')
 
-  const page = read('app/trip/[tripCode]/teams/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/teams/page.tsx')
   ok(page.includes("view === 'drag'") && page.includes('<TripTeamsClient'),
     'the drag-and-drop editor is kept, behind its own link (Ross: may yet be reinstituted)')
-  const client = read('app/trip/[tripCode]/teams/TeamsClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teams/TeamsClient.tsx')
   ok(client.includes('?view=drag') && client.includes('Drag and drop instead'), '  …offered to the organiser')
 
-  const organiserArea = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
-  ok(organiserArea.includes('href={`/trip/${tripCode}/teams`} label="Teams"'),
+  const organiserArea = read('app/golf/[root]/[tripCode]/organiser/OrganiserClient.tsx')
+  ok(organiserArea.includes('href={`${tripHome}/teams`} label="Teams"'),
     'the organiser area has a door to the teams — they were hard to find')
 }
 
 section('Partnerships made on the tee sheet, not by a trip to the picker')
 {
-  const pick = read('app/trip/[tripCode]/teams/pick/page.tsx')
+  const pick = read('app/golf/[root]/[tripCode]/teams/pick/page.tsx')
   ok(!pick.includes('readTeeTime') && !pick.includes('slot'),
     'the picker no longer takes a tee time — the sheet books and links in place (Ross, 1 Nov 2026)')
-  const sheet = read('app/trip/[tripCode]/teesheet/page.tsx')
+  const sheet = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
   ok(sheet.includes('roundPickerSheet(boards, r.id, largestOn, false)?.cap'), 'the sheet reads a team\'s size limit from the one copy')
 }
 

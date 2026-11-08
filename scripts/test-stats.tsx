@@ -263,7 +263,7 @@ section('The control asks, and never insists')
   ok(/trackStats = false/.test(code('app/scoring/[slug]/CourseDashboardClient.tsx')),
     'the legacy scoring route gets the card it always had')
   ok(/trackStats = false/.test(flow), '  …and so does anything else that omits it')
-  ok(/track_stats/.test(code('app/trip/[tripCode]/scoring/[roundNumber]/page.tsx')),
+  ok(/track_stats/.test(code('app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx')),
     'the trip route reads the column')
 }
 
@@ -1115,8 +1115,8 @@ section('The honours go to whoever earned them, and to nobody early')
 
 section('The lab reads the derivation and does none of its own')
 {
-  const client = code('app/trip/[tripCode]/stats/StatsClient.tsx')
-  const page = code('app/trip/[tripCode]/stats/page.tsx')
+  const client = code('app/golf/[root]/[tripCode]/stats/StatsClient.tsx')
+  const page = code('app/golf/[root]/[tripCode]/stats/page.tsx')
 
   ok(/from '@\/lib\/holeStats'/.test(client), 'the screen imports the derivation')
   // Everything printed comes out of that module, so a figure here and the
@@ -1146,8 +1146,8 @@ section('The lab reads the derivation and does none of its own')
   ok(!/putts|fairway_hit|true\)/.test(boardFetch),
     '  …and a board does not')
   for (const f of [
-    'app/trip/[tripCode]/leaderboard/page.tsx',
-    'app/trip/[tripCode]/scoring/[roundNumber]/page.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/page.tsx',
+    'app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx',
   ]) {
     const q = code(f).match(/from\('trips'\)[\s\S]{0,80}?\.select\(([^)]*)\)/)?.[1] ?? ''
     ok(q.length > 0 && !/track_stats/.test(q),
@@ -1158,7 +1158,7 @@ section('The lab reads the derivation and does none of its own')
   // name too; restated here so a failure names this feature.
   //
   // `<TabBar` is not in the list any more, and its absence is the check: the
-  // bar is rendered once by app/trip/[tripCode]/layout.tsx so that it stays
+  // bar is rendered once by app/golf/[root]/[tripCode]/layout.tsx so that it stays
   // on screen through a navigation instead of unmounting with the page. The
   // room for it is still the page's own business, because the page is what
   // scrolls.
@@ -1174,9 +1174,9 @@ section('The lab reads the derivation and does none of its own')
   // The Courses view is the course alone. The who-owns-this-course ranking
   // that used to lead was another leaderboard, and the leaderboard has a
   // tab — deleted whole, by request, not hidden.
-  ok(!/CourseField/.test(client) && !/CourseField/.test(code('app/trip/[tripCode]/stats/panels.tsx')),
+  ok(!/CourseField/.test(client) && !/CourseField/.test(code('app/golf/[root]/[tripCode]/stats/panels.tsx')),
     'the courses view is the course, not another leaderboard')
-  ok(code('app/trip/[tripCode]/stats/loading.tsx').includes('title="statsHub"'),
+  ok(code('app/golf/[root]/[tripCode]/stats/loading.tsx').includes('title="statsHub"'),
     '  …and the skeleton already says it')
   ok(code('app/components/TitleMark.tsx').includes('statsHub'),
     '  …from the one register of title marks')
@@ -1190,7 +1190,7 @@ section('The lab reads the derivation and does none of its own')
   ok(/cover\.level === 'none'/.test(page),
     'and nothing entered gets an empty state rather than a table of dashes')
 
-  const panels = code('app/trip/[tripCode]/stats/panels.tsx')
+  const panels = code('app/golf/[root]/[tripCode]/stats/panels.tsx')
 
   // Rust is for a loss, and losing shots to the field is one. Nothing else
   // on these screens may use it.
@@ -1219,7 +1219,7 @@ section('The lab reads the derivation and does none of its own')
   // one-player idiom, not the cramped five-column table it replaced.
   ok(/\{ value: 'players', label: 'Players' \}, \{ value: 'courses', label: 'Courses' \}/.test(client),
     'the first choice on the page is players or courses')
-  ok(/'everyone'/.test(client) && />[\s]*Everyone[\s]*</.test(read('app/trip/[tripCode]/stats/StatsClient.tsx')),
+  ok(/'everyone'/.test(client) && />[\s]*Everyone[\s]*</.test(read('app/golf/[root]/[tripCode]/stats/StatsClient.tsx')),
     'the field is a chip at the head of the player list')
   ok(/meId \?\? 'everyone'/.test(client),
     '  …and the device\'s player opens their own numbers')
@@ -1248,7 +1248,7 @@ section('The lab reads the derivation and does none of its own')
   // per-round bars everywhere — the panel copy was retired with it.
   ok(/PentagonChart/.test(client) && /GainedByRoundChart bars=\{trend\}/.test(client),
     '  …as a pentagon with a per-round bar trend')
-  ok(!/TrendChart/.test(client) && !/TrendChart/.test(code('app/trip/[tripCode]/stats/charts.tsx')),
+  ok(!/TrendChart/.test(client) && !/TrendChart/.test(code('app/golf/[root]/[tripCode]/stats/charts.tsx')),
     '  …and the line chart is gone, not kept beside the bars')
   ok(/\(v \/ g\.holes\) \* 18/.test(client),
     '  …per 18 holes, so a nine-hole evening compares honestly')
@@ -1265,7 +1265,7 @@ section('The lab reads the derivation and does none of its own')
     '  …while "vs your handicap" stays, points-based by definition')
 
   // ── The hero is named, floored, and scaled ──
-  const charts2 = code('app/trip/[tripCode]/stats/charts.tsx')
+  const charts2 = code('app/golf/[root]/[tripCode]/stats/charts.tsx')
   ok(/Skill profile/i.test(client) && !/shape of your game/i.test(client),
     'the hero is the Skill Profile, by name')
   ok(/const R_FLOOR = \d/.test(charts2) && /R_FLOOR \+ \(R - R_FLOOR\)/.test(charts2),
@@ -1307,12 +1307,12 @@ section('The lab reads the derivation and does none of its own')
   const awards = code('lib/tripAwards.ts')
   ok(/Pin hunter/.test(awards) && !/Flag hunter/.test(awards),
     'the greens award is the Pin hunter')
-  ok(/Extra shots to the green/.test(code('app/trip/[tripCode]/stats/panels.tsx'))
-    && !/Leak to the green/.test(code('app/trip/[tripCode]/stats/panels.tsx')),
+  ok(/Extra shots to the green/.test(code('app/golf/[root]/[tripCode]/stats/panels.tsx'))
+    && !/Leak to the green/.test(code('app/golf/[root]/[tripCode]/stats/panels.tsx')),
     'the leak line says what it is — extra shots to the green')
 
   // ── The Everyone view's two yardsticks ──
-  const panelsSrc = code('app/trip/[tripCode]/stats/panels.tsx')
+  const panelsSrc = code('app/golf/[root]/[tripCode]/stats/panels.tsx')
   ok(/title="Vs the field"/.test(panelsSrc), 'the field card is named Vs the field')
   ok(/p\.netVsPar\.total/.test(panelsSrc) && /netVsPar\.toGreen/.test(panelsSrc),
     '  …and Vs handicap is net strokes, split tee and putt like the field card')
@@ -1322,7 +1322,7 @@ section('The lab reads the derivation and does none of its own')
   // The panels carry no explainers; the guide at the foot carries the
   // equations instead, so losing the hints never lost the maths.
   ok(/stats\/guide/.test(client), 'the guide is linked from the foot of the page')
-  const guide = code('app/trip/[tripCode]/stats/guide/page.tsx')
+  const guide = code('app/golf/[root]/[tripCode]/stats/guide/page.tsx')
   ok(/to green = score − putts/.test(guide) && /penalty/.test(guide)
     && /share of hole/.test(guide),
     '  …and the guide carries the equations the panels no longer explain')
@@ -1352,7 +1352,7 @@ section('The lab reads the derivation and does none of its own')
     '  …and the honours render at the foot of Everyone')
 
   // ── The charts ──
-  const charts = code('app/trip/[tripCode]/stats/charts.tsx')
+  const charts = code('app/golf/[root]/[tripCode]/stats/charts.tsx')
 
   // Hand-drawn SVG, and dumb: values arrive computed, drawn as given.
   ok(/<svg/.test(charts), 'the charts are drawn by hand')
@@ -1381,9 +1381,9 @@ section('The lab reads the derivation and does none of its own')
 
 section('A heading only where there is something behind it')
 {
-  const hub = code('app/trip/[tripCode]/page.tsx')
-  const panel = code('app/trip/[tripCode]/StatsPanel.tsx')
-  const board = code('app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  const hub = code('app/golf/[root]/[tripCode]/page.tsx')
+  const panel = code('app/golf/[root]/[tripCode]/StatsPanel.tsx')
+  const board = code('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
 
   // Two conditions, and neither on its own is enough.
   ok(/trip\.track_stats === true/.test(hub), 'the trip has to have asked for stats')

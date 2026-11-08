@@ -662,8 +662,8 @@ section('A pass over the league: each confirmed member\'s cards read, checked an
   ok(sync.includes('linkReadable(l, clubOf.get(l.clubId))'), 'only confirmed links whose club stands are read')
   ok(sync.includes("league.setup.schedule === 'series' ? { rounds: venues }"),
     'a league of rounds checks every card against its rounds')
-  ok(read('app/trip/[tripCode]/players/GolfIrelandLinkCard.tsx').includes("post('fetch', { scope: 'mine' })")
-    && read('app/trip/[tripCode]/organiser/GolfIrelandRequests.tsx').includes("scope: 'all'"),
+  ok(read('app/golf/[root]/[tripCode]/players/GolfIrelandLinkCard.tsx').includes("post('fetch', { scope: 'mine' })")
+    && read('app/golf/[root]/[tripCode]/organiser/GolfIrelandRequests.tsx').includes("scope: 'all'"),
     'the player\'s button and the organiser\'s both go through it')
 }
 
@@ -744,8 +744,8 @@ section('No Golf Ireland branding: a plain link stands in for their logo')
   ok(!/#[0-9a-f]{3,8}\b/i.test(mark.replace(/\/\*[\s\S]*?\*\//g, '')), 'and in our own colours, never a hex of theirs')
   const screens = [
     'app/components/GolfIrelandRulesForm.tsx',
-    'app/trip/[tripCode]/players/GolfIrelandLinkCard.tsx',
-    'app/trip/[tripCode]/organiser/GolfIrelandRequests.tsx',
+    'app/golf/[root]/[tripCode]/players/GolfIrelandLinkCard.tsx',
+    'app/golf/[root]/[tripCode]/organiser/GolfIrelandRequests.tsx',
     'app/components/GolfIrelandTour.tsx',
     'app/demo/golf-ireland/DemoClient.tsx',
   ]
@@ -776,14 +776,14 @@ section('A linked player carries the mark wherever the league names them')
   // fed from the server's one read of confirmed links, none asking unless
   // the league reads Golf Ireland.
   for (const f of [
-    'app/trip/[tripCode]/players/PlayersClient.tsx',
-    'app/trip/[tripCode]/page.tsx',
-    'app/trip/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
+    'app/golf/[root]/[tripCode]/players/PlayersClient.tsx',
+    'app/golf/[root]/[tripCode]/page.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
   ]) ok(/<LinkedBadge\b/.test(read(f)), `${f} shows the mark`)
-  for (const f of ['app/trip/[tripCode]/page.tsx', 'app/trip/[tripCode]/leaderboard/page.tsx']) {
+  for (const f of ['app/golf/[root]/[tripCode]/page.tsx', 'app/golf/[root]/[tripCode]/leaderboard/page.tsx']) {
     ok(read(f).includes('golfIrelandLinkedIds('), `${f} reads the links through the one helper`)
   }
-  const helper = read('app/trip/[tripCode]/golfIreland.ts')
+  const helper = read('app/golf/[root]/[tripCode]/golfIreland.ts')
   const body = helper.slice(helper.indexOf('export async function golfIrelandLinkedIds'))
   ok(body.indexOf('readsGolfIreland') >= 0 && body.indexOf('readsGolfIreland') < body.indexOf('createAdminClient'),
     'and that helper asks nothing before it knows the league reads Golf Ireland')

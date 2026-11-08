@@ -12,7 +12,7 @@ import React from 'react'
 import fs from 'fs'
 import DateField from '../app/components/DateField'
 import CreateTripForm from '../app/dashboard/create/CreateTripForm'
-import TripSetupClient from '../app/trip/[tripCode]/setup/TripSetupClient'
+import TripSetupClient from '../app/golf/[root]/[tripCode]/setup/TripSetupClient'
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime'
 import {
   MIN_ROUNDS, MAX_ROUNDS, roundCountError, isRoundCountValid,
@@ -332,7 +332,7 @@ section('The trip setup page uses the same field')
   ok(!html.includes('type="date"'), 'setup does not put date fields on the page itself')
   ok(html.includes('Trip Settings'), 'it offers them behind a named row')
 
-  const src = fs.readFileSync('app/trip/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
+  const src = fs.readFileSync('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
   ok(src.includes('<DateField'), 'and still uses the shared date field inside the sheet')
   ok(src.includes("repeat(2, minmax(0, 1fr))"), 'in the same two-column row')
   ok(src.includes('setDetailsOpen'), 'which the gear opens and closes')
@@ -376,7 +376,7 @@ section('The gear says what is behind it')
   // trip rather than about the golf — it decides who may open any of this —
   // so it belongs with them, and it is closed until the row is tapped.
   ok(!html.includes('Who can edit'), 'who can edit is not on the page body')
-  const src = fs.readFileSync('app/trip/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
+  const src = fs.readFileSync('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
   const sheet = src.slice(src.indexOf('{detailsOpen && ('), src.indexOf('{itineraryOpen && ('))
   ok(sheet.includes('Who can edit'), 'it is inside the details sheet')
   ok(sheet.includes('savePermission'), 'and still saves from there')
@@ -398,7 +398,7 @@ section('The gear says what is behind it')
 
 section('The old decision tree is gone from settings')
 {
-  const src = fs.readFileSync('app/trip/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
+  const src = fs.readFileSync('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
 
   // Seven of its eight cards asked what the leaderboard cards now ask
   // properly — who competes, league or matchplay, scoring, discard, the
@@ -453,8 +453,8 @@ section('Handicap inputs bring up a keypad')
   // in step 1's markup, so the source is what to check.
   const files = [
     'app/dashboard/create/CreateTripForm.tsx',
-    'app/trip/[tripCode]/setup/TripSetupClient.tsx',
-    'app/trip/[tripCode]/players/PlayersClient.tsx',
+    'app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx',
+    'app/golf/[root]/[tripCode]/players/PlayersClient.tsx',
   ]
   for (const f of files) {
     const src = require('fs').readFileSync(f, 'utf-8')
@@ -614,7 +614,7 @@ async function main() {
       'creation writes the normalised description')
     ok(createSrc.includes('MAX_TRIP_DESCRIPTION'),
       'and the box caps typing at the shared limit')
-    const setupSrc = require('fs').readFileSync('app/trip/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
+    const setupSrc = require('fs').readFileSync('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
     ok(setupSrc.includes('normalizeDescription(description)'),
       'trip settings writes the normalised description')
     ok(setupSrc.includes('MAX_TRIP_DESCRIPTION'),
@@ -625,13 +625,13 @@ async function main() {
     // building that prop never included the column, so Trip Settings opened
     // blank on every trip that had a description and the only way to change
     // one was to type it out again.
-    const setupPage = require('fs').readFileSync('app/trip/[tripCode]/setup/page.tsx', 'utf-8')
+    const setupPage = require('fs').readFileSync('app/golf/[root]/[tripCode]/setup/page.tsx', 'utf-8')
     ok(/description:\s*trip\.description/.test(setupPage),
       'the setup page hands the stored description down to the settings drawer')
 
     // The hub shows it clamped: three lines, the browser’s own ellipsis,
     // and the paragraph as the tap that opens the rest.
-    const hubSrc = require('fs').readFileSync('app/trip/[tripCode]/TripDescription.tsx', 'utf-8')
+    const hubSrc = require('fs').readFileSync('app/golf/[root]/[tripCode]/TripDescription.tsx', 'utf-8')
     ok(hubSrc.includes('line-clamp-3'), 'the hub clamps to three lines')
     ok(hubSrc.includes('aria-expanded'), 'the toggle says which state it is in')
 
@@ -648,7 +648,7 @@ async function main() {
     // re-runs on it; held in a ref, the observer watches a detached one.
     ok(!hubSrc.includes('useRef'),
       'the paragraph is held in state, so the observer follows it into the button')
-    const hubPage = require('fs').readFileSync('app/trip/[tripCode]/page.tsx', 'utf-8')
+    const hubPage = require('fs').readFileSync('app/golf/[root]/[tripCode]/page.tsx', 'utf-8')
     ok(hubPage.includes('<TripDescription'), 'the hub renders the description')
     ok(hubPage.indexOf('<TripDescription') > hubPage.indexOf('<TripCountdown'),
       'under the countdown, where it belongs')

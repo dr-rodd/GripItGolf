@@ -198,13 +198,13 @@ section('The draft is drawn as it will be saved')
 
 section('The sheet books in place')
 {
-  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes('seatTargets(') && client.includes('bookingPlan('), 'the sheet places its + signs and saves through the rules')
   ok(!client.includes('Pick your team') && !client.includes('Make this group a team') && !client.includes('Pick a team from this time'),
     'the seats do the linking — no team picker trip, no make-a-team buttons')
   ok(client.includes('liftTo(') && client.includes('reducedMotion()') && client.includes('putt(t)'),
     'the time lifts to the top on the putt curve, at once under Reduce Motion')
-  const seats = read('app/trip/[tripCode]/teesheet/TeeSeats.tsx')
+  const seats = read('app/golf/[root]/[tripCode]/teesheet/TeeSeats.tsx')
   ok(seats.includes('press rounded-tile border border-dashed border-line-strong'), 'a + pushes down under the thumb')
   ok(!seats.includes("'Partner'") && !seats.includes("'Next'") && !client.includes("'Partner'") && !client.includes("? 'Next'")
     && seats.includes("{onTicket ? 'Join' : 'Add'}") && (seats.match(/const words = plus\(/g) ?? []).length === 2,
@@ -219,19 +219,19 @@ section('The sheet books in place')
 
 section('Leaving a partnership happens at your tee time (stage 2)')
 {
-  const teamsPage = read('app/trip/[tripCode]/teams/page.tsx')
+  const teamsPage = read('app/golf/[root]/[tripCode]/teams/page.tsx')
   ok(teamsPage.includes(".from('tee_assignments').select('round_id, slot_index').eq('trip_id', trip.id).eq('player_id', viewerPlayerId)"),
     'the Teams page asks where this player stands on the tee sheets')
   ok(teamsPage.includes('r.scheduled_date.slice(0, 10) < today') && teamsPage.includes('roundPartnership(boards, r.id'),
     '  …for the next round to come, on the list that round\'s partnerships are kept on')
-  const teams = read('app/trip/[tripCode]/teams/TeamsClient.tsx')
+  const teams = read('app/golf/[root]/[tripCode]/teams/TeamsClient.tsx')
   ok(teams.includes('/teesheet?round=${encodeURIComponent(myTeeTimes[sheet.id].roundId)}&edit=${myTeeTimes[sheet.id].slot}'),
     'Leave on a booked partnership goes to the tee time (Ross, 1 Nov 2026)')
   ok(teams.includes('onClick={() => leave(sheet, myTeam)}'), '  …and is the same Leave as ever where none is booked')
 
-  const sheetPage = read('app/trip/[tripCode]/teesheet/page.tsx')
+  const sheetPage = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
   ok(sheetPage.includes('editSlot={editSlot}'), 'the sheet takes the tee time to open')
-  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes("start: onTime(rows), purpose: 'leave' })") && client.includes('Take yourself off with your ✕'),
     '  …opens it, lifted, saying how')
   ok(client.includes('const { draft: after, off } = vacate(draft, k)') && client.includes('mayTakeOut: seat => takeOff(here, seat) !== null'),
@@ -267,7 +267,7 @@ section('A time is frozen while a phone books it (Ross, 1 Nov 2026)')
   eq(readFreezes({ a: [{ round: 'r1', slot: 2, since: 5, until: 6 }], b: [{ round: 'r1', slot: -1, since: 5, until: 6 }], c: [{ slot: 2 }], d: [] }),
     [{ key: 'a', round: 'r1', slot: 2, since: 5, until: 6 }], 'a freeze is another phone talking — anything malformed is dropped')
 
-  const client = read('app/trip/[tripCode]/teesheet/TeeSheetClient.tsx')
+  const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes('if (!round || frozen.has(slot)) return false') && client.includes('freeze.hold(round.id, slot, timed)'),
     'opening a time freezes it, and a frozen one will not open')
   ok(client.includes('role="status">Locked by another user</p>') && client.includes('const targets = mayBook && !isFrozen'),
@@ -283,7 +283,7 @@ section('A time is frozen while a phone books it (Ross, 1 Nov 2026)')
     'while this phone books a time, the sheet\'s ✕s wait — one would let go of the booking\'s lock')
   ok(client.includes("if (t < timedUntil || savingNow.current) return") && client.includes("'Your two minutes ran out — tap the time again to carry on.'"),
     '  …and at nought the booking closes and the time unlocks, never mid-save')
-  const hookSrc = read('app/trip/[tripCode]/teesheet/useTeeFreeze.ts')
+  const hookSrc = read('app/golf/[root]/[tripCode]/teesheet/useTeeFreeze.ts')
   ok(hookSrc.includes('if (f && !f.timed) send({ ...f, until: Date.now() + LOCK_MS })'),
     '  …an edit\'s lock kept alive by each change, a booking\'s running its two minutes')
   ok(/freeze\.hold\(round\.id, slotIndex\)[\s\S]{0,400}finally \{\s*freeze\.release\(\)/.test(client),
@@ -293,7 +293,7 @@ section('A time is frozen while a phone books it (Ross, 1 Nov 2026)')
   ok(save.indexOf('const fresh = await resyncRound()') >= 0 && save.indexOf('const fresh = await resyncRound()') < save.indexOf('deleteAssignments('),
     'Save asks the database before writing anything…')
   ok(client.includes("'This time changed while you were booking — here it is now.'"), '  …and writes nothing if the time changed meanwhile')
-  const hook = read('app/trip/[tripCode]/teesheet/useTeeFreeze.ts')
+  const hook = read('app/golf/[root]/[tripCode]/teesheet/useTeeFreeze.ts')
   ok(hook.includes("supabase.channel(`tee-sheet:${tripId}`, { config: { presence: { key } } })") && !/from\('/.test(hook),
     'the freezes are presence on one channel per event — nothing stored')
   ok(/visibilityState === 'hidden'[\s\S]{0,250}channel\.untrack\(\)/.test(hook)

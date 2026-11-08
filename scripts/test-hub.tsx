@@ -14,7 +14,7 @@
 import fs from 'fs'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import Itinerary from '../app/trip/[tripCode]/Itinerary'
+import Itinerary from '../app/golf/[root]/[tripCode]/Itinerary'
 import type { ItineraryItem } from '../lib/itinerary'
 import {
   upNext, nextActivity, describeCountdown, describeGroups, momentOf, orderedItems, dayArrived,
@@ -125,11 +125,11 @@ section('Nothing next is complete only where rounds were played (Ross, 5 Nov 202
   eq([upNext([], START, DATES, COURSES, after), nothingNext([])], [null, 'unscheduled'],
     'an event just made, no round on it: not complete — nothing scheduled yet')
   eq(nothingNext([stay('s0', 0, 0, 'The Shandon')]), 'unscheduled', '  …a stay alone is not a round')
-  const block = fs.readFileSync('app/trip/[tripCode]/StatusBlock.tsx', 'utf-8')
+  const block = fs.readFileSync('app/golf/[root]/[tripCode]/StatusBlock.tsx', 'utf-8')
   ok(block.includes("why === 'finished' ? <TripOver noun={noun} /> : <NothingScheduled noun={noun} />")
     && block.includes("(next || why === 'finished' || !knockout)"),
     '  …the card says so, and on a match play event with no round says nothing about rounds')
-  ok(fs.readFileSync('app/trip/[tripCode]/page.tsx', 'utf-8').includes('knockout={!!koView}'), '  …told which it is by the hub')
+  ok(fs.readFileSync('app/golf/[root]/[tripCode]/page.tsx', 'utf-8').includes('knockout={!!koView}'), '  …told which it is by the hub')
 }
 
 section('An activity never takes the card from golf')
@@ -252,7 +252,7 @@ section('The line looks no further out than the headline\'s own day')
 
 section('The hub draws the activity under the card, not inside it')
 {
-  const src = code('app/trip/[tripCode]/StatusBlock.tsx')
+  const src = code('app/golf/[root]/[tripCode]/StatusBlock.tsx')
 
   ok(src.includes('nextActivity('), 'the hub asks for the next activity')
   // Inside the <Link> it would be a tap target that opens the round page —
@@ -308,7 +308,7 @@ section('The card describes the trip, never the player')
   eq(describeGroups(1, '9:20 am'), '1 group from 9:20 am', 'one group reads singular')
   eq(describeGroups(null, '9:20 am'), '', 'and a non-golf item claims no groups')
 
-  const status = code('app/trip/[tripCode]/StatusBlock.tsx')
+  const status = code('app/golf/[root]/[tripCode]/StatusBlock.tsx')
   ok(!/your tee time|you tee off at|Your group/i.test(status),
     'and nothing on the card claims a personal tee time')
 }
@@ -660,7 +660,7 @@ section('The hub gates the old team setting the way the leaderboard does')
     'hubStanding does not parse the column itself any more')
   ok(hub.includes('legacyTeamScoring: TeamScoring | null'),
     '  …it is handed the setting, already decided')
-  const hubPage = code('app/trip/[tripCode]/page.tsx')
+  const hubPage = code('app/golf/[root]/[tripCode]/page.tsx')
   ok(/isLegacy\(parseLeaderboards\(trip\.leaderboards\)\)/.test(hubPage),
     'and the hub page gates it on isLegacy, the same expression the leaderboard page uses')
 }
@@ -713,7 +713,7 @@ section('The next match, in all four states it can be in')
 
 section('A pairs draw is between pairings, not players')
 {
-  const hub = code('app/trip/[tripCode]/page.tsx')
+  const hub = code('app/golf/[root]/[tripCode]/page.tsx')
   ok(hub.includes('needsPairings'), 'the hub asks whether the draw is between pairings')
   ok(hub.includes('teamFor'), '  …and resolves the entrant to their pairing when it is')
   ok(hub.includes('setOf'), '  …on that draw\'s own sheet, not whichever team they play the league in')
@@ -812,8 +812,8 @@ section('Journeys carry their mode')
     '  …which is why every kind is answered before that fallback is reached')
 
   for (const f of [
-    'app/trip/[tripCode]/TravelStays.tsx',
-    'app/trip/[tripCode]/Itinerary.tsx',
+    'app/golf/[root]/[tripCode]/TravelStays.tsx',
+    'app/golf/[root]/[tripCode]/Itinerary.tsx',
   ]) {
     const src = code(f)
     ok(src.includes('itineraryIcon'), `${f.split('/').pop()} asks the shared map`)
@@ -824,7 +824,7 @@ section('Journeys carry their mode')
   // Centred, like the section below draws the same stay and the same
   // journey. Left-aligned they were a fourth column of text starting where
   // the golf tiles' text starts, which read as a card missing its border.
-  ok(code('app/trip/[tripCode]/Itinerary.tsx').includes('justify-center'),
+  ok(code('app/golf/[root]/[tripCode]/Itinerary.tsx').includes('justify-center'),
     'a stay or a journey is centred between the rounds it sits between')
 }
 
@@ -867,7 +867,7 @@ section('A live score counts only while its card is open')
 
   // The round picker applies the same rule, or a tile says "Scores in" on a
   // round the board shows as empty.
-  const picker = code('app/trip/[tripCode]/scoring/page.tsx')
+  const picker = code('app/golf/[root]/[tripCode]/scoring/page.tsx')
   ok(/openRounds\.has\(id\)/.test(picker),
     'the round picker counts uncommitted scores only against an open card')
 }
@@ -908,7 +908,7 @@ section('A podium reads places off the shared order, and never sorts')
   // No comparator anywhere on the page or in the reader.
   const standing = code('lib/standing.ts')
   ok(!/\.sort\(/.test(standing), 'lib/standing.ts sorts nothing')
-  const page = code('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
+  const page = code('app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx')
   ok(!/\.sort\(/.test(page), 'and neither does the round summary')
   ok(page.includes('podium('), '  …it reads the shared one')
   ok(page.includes('fetchRoundRows'), '  …built through the shared assembly')
@@ -987,9 +987,9 @@ section('The card is one set of numbers, never two')
   // Yardages exist as columns and have never held a value. No empty column.
   // Comments stripped: explaining why there is no yardage row is fine, and
   // is worth keeping. Rendering one is not.
-  const cardFile = code('app/trip/[tripCode]/round/[roundNumber]/RoundCard.tsx')
+  const cardFile = code('app/golf/[root]/[tripCode]/round/[roundNumber]/RoundCard.tsx')
   ok(!/yardage/i.test(cardFile), 'and no yardage row anywhere')
-  const summary = code('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
+  const summary = code('app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx')
   ok(!/yardage/i.test(summary), '  …on the page either')
 
   // Nor a total par. Each nine prints its own at the end of its row, and a
@@ -1005,7 +1005,7 @@ section('The card is one set of numbers, never two')
 
 section('The round summary reuses, and invents nothing')
 {
-  const page = read('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx')
 
   for (const [what, token] of [
     ['who is holding the phone', 'currentPlayer'],
@@ -1052,21 +1052,21 @@ section('The round summary reuses, and invents nothing')
 
 section('Only golf opens a page')
 {
-  const itin = code('app/trip/[tripCode]/Itinerary.tsx')
+  const itin = code('app/golf/[root]/[tripCode]/Itinerary.tsx')
   ok(itin.includes('roundNumbers'), 'the itinerary is told which items became rounds')
   ok(/kind !== 'golf'[\s\S]{0,200}SubtleRow/.test(itin),
     'a stay or a journey is still the plain row it was')
   ok(/roundNumber != null \?[\s\S]{0,200}Link/.test(itin),
     'and a golf item with a round behind it becomes a link')
 
-  const status = code('app/trip/[tripCode]/StatusBlock.tsx')
+  const status = code('app/golf/[root]/[tripCode]/StatusBlock.tsx')
   ok(/next\?\.item\.kind === 'golf'/.test(status),
     'up next links through only when the next thing is golf')
 }
 
 section('The itinerary reads at the size a plan deserves')
 {
-  const itin = code('app/trip/[tripCode]/Itinerary.tsx')
+  const itin = code('app/golf/[root]/[tripCode]/Itinerary.tsx')
 
   // The course name is what the card is for, so it is the one thing that
   // must never be cut off. These are the longest names on the platform —
@@ -1109,7 +1109,7 @@ section('The itinerary reads at the size a plan deserves')
 
 section('Up next is set as the headline of the hub')
 {
-  const status = code('app/trip/[tripCode]/StatusBlock.tsx')
+  const status = code('app/golf/[root]/[tripCode]/StatusBlock.tsx')
 
   // The card whose job is to say where you are going was naming it at tile
   // weight with an ellipsis. Section-heading size now, wrapping — the page
@@ -1126,8 +1126,8 @@ section('Up next is set as the headline of the hub')
 
 section('The hub is the sections it should be, and nothing else')
 {
-  const hub = read('app/trip/[tripCode]/page.tsx')
-  const hubCode = code('app/trip/[tripCode]/page.tsx')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
+  const hubCode = code('app/golf/[root]/[tripCode]/page.tsx')
 
   ok(hub.includes('SectionStack'), 'the collapsible sections are one shared component')
   // A trip opens on the itinerary; an event opens on its news, else its
@@ -1161,7 +1161,7 @@ section('The hub is the sections it should be, and nothing else')
 
   // "The plan" was what the itinerary called itself. It is Itinerary now,
   // everywhere a reader can see it.
-  for (const f of ['app/trip/[tripCode]/page.tsx', 'app/trip/[tripCode]/Itinerary.tsx']) {
+  for (const f of ['app/golf/[root]/[tripCode]/page.tsx', 'app/golf/[root]/[tripCode]/Itinerary.tsx']) {
     ok(!/The plan/.test(read(f)), `"The plan" is gone from ${f.split('/').pop()}`)
   }
 
@@ -1237,7 +1237,7 @@ section('The big countdown counts to the first tee, not to midnight')
 
   // The wiring: the hub hands the countdown this, with the bare date only
   // as the fallback.
-  const hub = read('app/trip/[tripCode]/page.tsx')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
   ok(/firstTeeTarget\(itinerary, trip\.start_date \?\? null, new Map\(roundDates\)\)/.test(hub),
     'the hub asks for the first tee')
   ok(/firstTeeTarget[\s\S]{0,120}\?\? trip\.start_date \?\? null/.test(hub),
@@ -1246,7 +1246,7 @@ section('The big countdown counts to the first tee, not to midnight')
 
 section('The countdown is the first thing under the trip name')
 {
-  const hub = read('app/trip/[tripCode]/page.tsx')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
 
   // It used to sit below the status block, wrapped around the three buttons,
   // which put the headline act of a trip that has not started yet a long way
@@ -1274,7 +1274,7 @@ section('The countdown is the first thing under the trip name')
 
 section('The countdown is brown, and quiet')
 {
-  const timer = read('app/trip/[tripCode]/TripCountdown.tsx')
+  const timer = read('app/golf/[root]/[tripCode]/TripCountdown.tsx')
 
   // It came from Donegal as four emerald figures at 48px with a glow behind
   // them and a black drop shadow under them — the loudest thing on a screen
@@ -1290,7 +1290,7 @@ section('The countdown is brown, and quiet')
   // that has not started this is the line being looked for. It sits between
   // the trip's name and its dates: not the heading, not an aside.
   const px = Number(timer.match(/text-\[(\d+)px\]/)?.[1] ?? 0)
-  const title = Number(read('app/trip/[tripCode]/page.tsx')
+  const title = Number(read('app/golf/[root]/[tripCode]/page.tsx')
     .match(/clamp\((\d+)px/)?.[1] ?? 0)
   ok(px >= 24, `the figures carry the block (${px}px)`)
   ok(px < title, `  …without outranking the trip's own name (${title}px at its smallest)`)
@@ -1299,7 +1299,7 @@ section('The countdown is brown, and quiet')
   // The dates above it are the second thing anybody wants off this screen
   // after the name, and were 13px UI type at 65% ink — the treatment this
   // app gives to asides.
-  const hub = read('app/trip/[tripCode]/page.tsx')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
   // 17px semibold at 80% — the hero's second line in the refresh (4.1).
   ok(/className="text-\[17px\] font-semibold leading-snug text-ink\/80 mt-2\.5">\{dateRange\}/.test(hub),
     'the dates read at body size, semibold, never as a caption')
@@ -1314,7 +1314,7 @@ section('The countdown is brown, and quiet')
 
 section('The hub does not repeat the tab bar')
 {
-  const hub  = code('app/trip/[tripCode]/page.tsx')
+  const hub  = code('app/golf/[root]/[tripCode]/page.tsx')
   const tabs = code('app/components/TabBar.tsx')
 
   // Live Scoring and Leaderboard were large buttons here as well as tabs —
@@ -1331,7 +1331,7 @@ section('The hub does not repeat the tab bar')
   // its button without leaving a door would have stranded the join list on
   // any phone that has already claimed — ClaimSpot only shows to a device
   // that is nobody yet.
-  ok(/href=\{`\/trip\/\$\{tripCode\}\/players`\}/.test(hub),
+  ok(/href=\{`\$\{tripHome\}\/players`\}/.test(hub),
     'the join list is still reachable from the hub')
   ok(hub.indexOf('/players`}') > hub.indexOf('<SectionStack'),
     '  …from the roster, below, rather than as a button up top')
@@ -1339,7 +1339,7 @@ section('The hub does not repeat the tab bar')
 
 section('There is one door to the settings, not two')
 {
-  const hub = code('app/trip/[tripCode]/page.tsx')
+  const hub = code('app/golf/[root]/[tripCode]/page.tsx')
   const tabs = code('app/components/TabBar.tsx')
 
   // The tab bar carries Settings on every screen in the trip. A gear in the
@@ -1396,7 +1396,7 @@ section('A platform course belongs to no trip, so it cannot be asked for by one'
   // the bare kind, and every golf tile on the hub and in Up next read "Golf"
   // with the course name gone. A page that renders perfectly and says
   // nothing is the failure mode worth a pin.
-  const hub = read('app/trip/[tripCode]/page.tsx')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
   const coursesQuery = hub.slice(hub.indexOf("from('courses')"))
     .slice(0, 200)
   ok(coursesQuery.length > 0, 'the hub asks for courses')
@@ -1410,7 +1410,7 @@ section('A platform course belongs to no trip, so it cannot be asked for by one'
 
   // The other readers, each getting there a different way. Pinned together
   // so the next person changing one can see what the others do.
-  const round = read('app/trip/[tripCode]/round/[roundNumber]/page.tsx')
+  const round = read('app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx')
   ok(/from\('courses'\)[\s\S]{0,120}\.eq\('id', round\.course_id\)/.test(round),
     'the round page asks by id, which needs no scope at all')
   // The picker's own list. It used to be fetched by Trip Setup and the
@@ -1425,8 +1425,8 @@ section('A platform course belongs to no trip, so it cannot be asked for by one'
     'and the picker asks for the platform list explicitly')
 
   // …and nowhere else, because a second copy is how the three diverged.
-  const copies = ['app/trip/[tripCode]/setup/page.tsx',
-                  'app/trip/[tripCode]/scoring/page.tsx',
+  const copies = ['app/golf/[root]/[tripCode]/setup/page.tsx',
+                  'app/golf/[root]/[tripCode]/scoring/page.tsx',
                   'app/dashboard/create/CreateTripForm.tsx']
     .filter(f => /from\('courses'\)[\s\S]{0,160}\.is\('trip_id', null\)/.test(read(f)))
   ok(copies.length === 0,

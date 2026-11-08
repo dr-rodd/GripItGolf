@@ -358,7 +358,7 @@ board, in score entry, or on a leaderboard moves.
 | Where | Trigger | From → to |
 |---|---|---|
 | Run Add tab, your total (`app/run/[tripCode]/add/RunAddClient.tsx`) | The save succeeds (`setSaved(true)`) | Your total before the run → after it |
-| Round summary, your total (`app/trip/[tripCode]/round/[roundNumber]/page.tsx`) | The first view after your card is signed | 0 → the round's total, once |
+| Round summary, your total (`app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx`) | The first view after your card is signed | 0 → the round's total, once |
 
 - 400ms, `--gd-ease`, `tabular-nums` so the width never jumps; whole numbers
   only (a decimal run total counts in tenths).
