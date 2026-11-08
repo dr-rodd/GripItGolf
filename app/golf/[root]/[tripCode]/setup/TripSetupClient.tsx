@@ -160,6 +160,7 @@ export default function TripSetupClient({
   askTeeTeams = false,
   askTags = false,
   teeTimes = null,
+  event = false,
 }: {
   trip: Trip
   teams: Team[]
@@ -181,6 +182,8 @@ export default function TripSetupClient({
   askTeeTeams?: boolean
   /** Events only — offer a board that ranks tags (lib/tagBoards.ts). */
   askTags?: boolean
+  /** An event: its schedule offers golf and activities, never a stay or journey. */
+  event?: boolean
   /**
    * A trip's Tee times section, drawn by the page (`TripTeeTimes`) — an
    * event keeps its tee times in the organiser area instead.
@@ -750,6 +753,7 @@ export default function TripSetupClient({
           trackStats={trackStats}
           players={players}
           onClose={() => setItineraryOpen(false)}
+          event={event}
         />
       )}
 

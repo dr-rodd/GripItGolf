@@ -216,6 +216,29 @@ section('A single-day event has no Day 1 and golf leads it')
     'all three non-golf sheets carry the switch')
   ok(b.includes('grid-cols-4'), 'while multi-day keeps its four buttons, unchanged')
 
+  const read = (f: string) => fs.readFileSync(f, 'utf-8')
+  // An event's schedule is golf and activities — no stay or journey offered
+  // (Ross, 8 Nov 2026) — and nothing already stored is ever filtered out of
+  // the list: the editor's save deletes whatever the builder hands back
+  // without, so hiding a stay would destroy it.
+  ok(b.includes("const EVENT_KINDS: ItemKind[] = ['golf', 'activity']")
+    && b.includes('const kinds = event ? EVENT_KINDS : KINDS') && b.includes('{kinds.map(kind =>'),
+    'an event is offered golf and activities only')
+  ok(b.includes("event = false,") && b.includes("const KINDS: ItemKind[] = ['golf', 'stay', 'travel', 'activity']"),
+    '  …a trip, by default, all four, unchanged')
+  ok((b.match(/singleDay && !event && <KindSwitch/g) ?? []).length === 3,
+    '  …and an event\'s Add activity sheet has nothing to switch between')
+  ok(!/items\.filter\([^)]*kind[^)]*(stay|travel)/.test(b) && !/EVENT_KINDS\.includes\(\w+\.kind\)/.test(b),
+    '  …while the items it is handed are never filtered by kind, so a stored stay survives a save')
+  ok(read('app/dashboard/create/CreateTripForm.tsx').includes('event={isTournament}'),
+    '  …creation tells the builder when it is an event')
+  const setupPage = read('app/golf/[root]/[tripCode]/setup/page.tsx')
+  const setupClient = read('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx')
+  const editorSrc = read('app/golf/[root]/[tripCode]/setup/ItineraryEditor.tsx')
+  ok(setupPage.includes('event={isEvent(trip.kind)}') && setupClient.includes('event={event}')
+    && editorSrc.includes('event={event}'),
+    '  …and so does the event\'s own schedule editor, from Trip Setup')
+
   // The golf tile says when the course gives the day back — five hours from
   // the last tee time — so an activity timed inside the window reads as
   // deliberate. The rule itself lives in lib/itinerary.ts, one copy.

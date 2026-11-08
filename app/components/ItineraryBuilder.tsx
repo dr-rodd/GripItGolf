@@ -58,6 +58,16 @@ const KIND_LABEL = { golf: 'Golf', stay: 'Stay', travel: 'Travel', activity: 'Ac
  */
 const KINDS: ItemKind[] = ['golf', 'stay', 'travel', 'activity']
 
+/**
+ * An event's schedule is its golf and what happens around it on the day — a
+ * prize-giving, a dinner — never a bed or a journey: those are a trip's
+ * (Ross, 8 Nov 2026). Only what is *offered* narrows. Items already stored
+ * are never filtered out, because the editor's save diffs what it is handed
+ * back against what is stored, and a stay hidden from the list would be
+ * deleted by the next save.
+ */
+const EVENT_KINDS: ItemKind[] = ['golf', 'activity']
+
 // ─── A tile ────────────────────────────────────────────────────
 
 function Tile({
@@ -204,7 +214,7 @@ function KindSwitch({ current, onSwitch }: {
 
 export default function ItineraryBuilder({
   startDate, endDate, courses, items, onChange, onContinue, blockedReason = null,
-  lockedGolfIds, trackStats = false, continueLabel = 'Continue to players',
+  lockedGolfIds, trackStats = false, continueLabel = 'Continue to players', event = false,
 }: {
   startDate: string | null
   endDate: string | null
@@ -236,7 +246,13 @@ export default function ItineraryBuilder({
    * stats has nothing to ask.
    */
   trackStats?: boolean
+  /**
+   * An event (a tournament), not a trip: golf and activities only, no stay
+   * or journey offered. Absent, everything a trip has.
+   */
+  event?: boolean
 }) {
+  const kinds = event ? EVENT_KINDS : KINDS
   const days = dayCount(startDate, endDate)
   /**
    * A single-day event wears a different face on the same model. There is
@@ -447,7 +463,7 @@ export default function ItineraryBuilder({
               ? 'Set the venue, then build the day around it.'
               : 'Press and hold to move a tile. Times can overlap the golf.')
             : (dayItems.length === 0
-              ? 'Add golf, a stay, a journey or an activity below.'
+              ? (event ? 'Add golf or an activity below.' : 'Add golf, a stay, a journey or an activity below.')
               : 'Press and hold a tile to move it.')}
         </p>
 
@@ -535,8 +551,8 @@ export default function ItineraryBuilder({
               <span className="t-label">Add activity</span>
             </button>
           ) : (
-          <div className="grid grid-cols-4 gap-2">
-            {KINDS.map(kind => {
+          <div className={`grid ${kinds.length === 2 ? 'grid-cols-2' : 'grid-cols-4'} gap-2`}>
+            {kinds.map(kind => {
               const Icon = KIND_ICON[kind]
               return (
                 <button
@@ -589,7 +605,7 @@ export default function ItineraryBuilder({
 
       {sheet === 'stay' && (
         <Sheet title="Add a stay" onClose={() => setSheet(null)} onAdd={commit} addLabel="Add stay" error={error}>
-          {singleDay && <KindSwitch current="stay" onSwitch={switchKind} />}
+          {singleDay && !event && <KindSwitch current="stay" onSwitch={switchKind} />}
           <div>
             <label className={FIELD_LABEL} htmlFor="it-stay">Accommodation</label>
             <input
@@ -619,7 +635,7 @@ export default function ItineraryBuilder({
 
       {sheet === 'travel' && (
         <Sheet title="Add a journey" onClose={() => setSheet(null)} onAdd={commit} addLabel="Add journey" error={error}>
-          {singleDay && <KindSwitch current="travel" onSwitch={switchKind} />}
+          {singleDay && !event && <KindSwitch current="travel" onSwitch={switchKind} />}
           <div>
             <label className={FIELD_LABEL}>How</label>
             <div className="grid grid-cols-3 gap-2">
@@ -666,7 +682,7 @@ export default function ItineraryBuilder({
 
       {sheet === 'activity' && (
         <Sheet title="Add an activity" onClose={() => setSheet(null)} onAdd={commit} addLabel="Add activity" error={error}>
-          {singleDay && <KindSwitch current="activity" onSwitch={switchKind} />}
+          {singleDay && !event && <KindSwitch current="activity" onSwitch={switchKind} />}
           <div>
             <label className={FIELD_LABEL} htmlFor="it-activity">What is it?</label>
             <input

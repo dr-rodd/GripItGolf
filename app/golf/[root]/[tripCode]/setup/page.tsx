@@ -240,6 +240,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       // a trip has no sheet and is never asked (fail-soft over kind).
       askTeeTeams={isEvent(trip.kind)}
       askTags={isEvent(trip.kind)}
+      event={isEvent(trip.kind)}
       teeTimes={teeTimes}
     />
   )

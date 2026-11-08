@@ -215,3 +215,4 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D26 | Continuous: rounds are time periods, cards submitted within them, ranked by the rules set (best card that round), tags for team leagues | Decided; stage 6, model to confirm |
 | D27 | The top answer is "Ongoing"; the league type keeps "Continuous"; stored values unchanged | Built |
 | D28 | Chooser answers live in the URL; step 1 of a tournament wizard goes back to the chooser | Built |
+| D29 | An event's schedule is golf and activities; travel and stays are a trip's. Stored ones are kept | Built |

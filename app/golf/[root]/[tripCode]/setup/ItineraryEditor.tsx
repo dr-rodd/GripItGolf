@@ -40,7 +40,7 @@ import { courseLabel } from '@/lib/courseDirectory'
  * out is the X, not the nav underneath.
  */
 export default function ItineraryEditor({
-  tripId, tripName, startDate, endDate, initialItems, lockedGolfItemIds, trackStats, players, onClose,
+  tripId, tripName, startDate, endDate, initialItems, lockedGolfItemIds, trackStats, players, onClose, event = false,
 }: {
   tripId: string
   /** Named in the header and in the removal confirm, so what is being edited
@@ -62,6 +62,8 @@ export default function ItineraryEditor({
   trackStats: boolean
   players: { id: string; handicap: number | null }[]
   onClose: () => void
+  /** An event's schedule offers golf and activities only — no stay or journey. */
+  event?: boolean
 }) {
   const router = useRouter()
   // The picker's list, loaded here rather than handed down from Trip Setup.
@@ -202,6 +204,7 @@ export default function ItineraryEditor({
           lockedGolfIds={lockedGolfItemIds}
           trackStats={trackStats}
           continueLabel={saving ? 'Saving…' : 'Done'}
+          event={event}
         />
       </div>
     </div>

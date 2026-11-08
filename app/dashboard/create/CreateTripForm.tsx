@@ -885,6 +885,7 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
               onChange={setItinerary}
               onContinue={() => setStep(3)}
               blockedReason={itineraryBlocked}
+              event={isTournament}
             />
           </div>
         )}
