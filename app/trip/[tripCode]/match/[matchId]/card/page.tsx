@@ -12,6 +12,7 @@ import { buttonClass, cardClass } from '@/app/components/ui'
 import { readKnockout } from '../../../knockout'
 import { readCardSetups } from '../../matchCards'
 import MatchCardClient from './MatchCardClient'
+import { fetchTripBase } from '../../../kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +31,7 @@ export default async function MatchCardPage({
   params: Promise<{ tripCode: string; matchId: string }>
 }) {
   const { tripCode, matchId } = await params
+  const tripHome = await fetchTripBase(tripCode)
 
   const { data: trip } = await supabase.from('trips').select('*').eq('trip_code', tripCode).single()
   if (!trip) notFound()
@@ -52,11 +54,11 @@ export default async function MatchCardPage({
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={`/trip/${tripCode}`} />
+      <TripHeader backTo={tripHome} />
       <div className="max-w-lg mx-auto px-4 pt-3 pb-8">
         {card ? (
           <MatchCardClient
-            backHref={`/trip/${tripCode}/match/${matchId}`}
+            backHref={`${tripHome}/match/${matchId}`}
             roundName={match.roundName}
             club={named?.club ?? null}
             tripId={trip.id}
@@ -86,7 +88,7 @@ export default async function MatchCardPage({
           {/* The way back on a card at the left, the round and club centred. */}
           <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-3">
             <Link
-              href={`/trip/${tripCode}/match/${matchId}`}
+              href={`${tripHome}/match/${matchId}`}
               className={`justify-self-start h-10 pl-2 pr-3 inline-flex items-center gap-0.5 t-label text-ink/80 ${cardClass('raised', true)}`}
             >
               <IconChevronLeft size={18} /> Back
@@ -106,7 +108,7 @@ export default async function MatchCardPage({
                   ? 'This course has no scorecard yet, so the match cannot be scored here.'
                   : 'Arrange the match first — the course and each player’s tees — so the shots can be worked out.'}
             </p>
-            <Link href={`/trip/${tripCode}/match/${matchId}`} className={`${buttonClass('secondary')} mt-4`}>
+            <Link href={`${tripHome}/match/${matchId}`} className={`${buttonClass('secondary')} mt-4`}>
               Back to the match
             </Link>
           </div>

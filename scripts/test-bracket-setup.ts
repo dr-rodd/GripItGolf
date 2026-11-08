@@ -125,7 +125,7 @@ section('The bracket in the organiser area is creation\'s own flow (Ross, 5 Nov 
   const organiser = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
   ok(organiser.includes('/organiser/bracket') && !organiser.includes('/organiser/draw') && organiser.includes("isLeague ? 'League' : 'Bracket'"),
     'the organiser area has one Bracket row, the draw inside it')
-  ok(read('app/trip/[tripCode]/organiser/draw/page.tsx').includes('redirect(`/trip/${tripCode}/organiser/bracket`)'), '  …an old draw link lands in it')
+  ok(read('app/trip/[tripCode]/organiser/draw/page.tsx').includes('redirect(`${tripHome}/organiser/bracket`)'), '  …an old draw link lands in it')
   ok(!fs.existsSync('app/trip/[tripCode]/organiser/bracket/BracketSetupForm.tsx'), '  …and the seven-question form is gone')
   const migration = read('supabase/migrations/20260101000047_bracket_setup.sql')
   ok(migration.includes('ADD COLUMN IF NOT EXISTS bracket_setup jsonb'), 'migration 047 adds the one jsonb column, idempotently')
@@ -183,7 +183,7 @@ section('A match play event is a knockout from the moment it is made')
   ok(page.includes('drawDeadlines(parseBracketSetup(rawSetup)?.deadlines ?? [], drawnRounds)'),
     '  …lined up with the rounds actually drawn')
   const board2 = read('app/trip/[tripCode]/leaderboard/page.tsx')
-  ok(board2.includes('isKnockoutEvent(') && board2.includes('redirect(`/trip/${tripCode}/matchplay`)'),
+  ok(board2.includes('isKnockoutEvent(') && board2.includes('redirect(`${tripHome}/matchplay`)'),
     'a match play event\'s leaderboard tab is the bracket')
   ok(board2.includes("own.every(lb => lb.competition === 'matchplay' || isMatchTally(lb))"),
     '  …unless the organiser added a board beside it — a tags tally lives under the bracket, so it is not one')
@@ -202,7 +202,7 @@ section('A match play event reads from the player\'s side: the hub\'s card, the 
   const views = read('app/trip/[tripCode]/KnockoutViews.tsx')
   ok(views.includes("cardClass('chosen', true)") && views.includes('opacity-60'),
     '  …your own match active and the rest listed, inactive')
-  ok(views.includes('href={matchHref(tripCode, m.id)}') && !/m\.mine \? \(\s*<Link[\s\S]*?\) : \(\s*<Link/.test(views),
+  ok(views.includes('href={matchHref(tripHome, m.id)}') && !/m\.mine \? \(\s*<Link[\s\S]*?\) : \(\s*<Link/.test(views),
     '  …and only your own opens')
   const helper = read('app/trip/[tripCode]/knockout.ts')
   ok(helper.includes("teamFor(memberships, meId, setOf(draw)"), 'a pairs draw\'s entrant is the pairing on the draw\'s own sheet')

@@ -19,6 +19,7 @@ import TeeSheetRoundControls from '../teesheet/TeeSheetRoundControls'
 import { ChoiceChips, FIELD, FIELD_LABEL, ListGroup, ListRow, SectionHeader, buttonClass, cardClass, iconButtonClass } from '@/app/components/ui'
 import { courseLabel } from '@/lib/courseDirectory'
 import GolfIrelandRequests, { type LinkRequest } from './GolfIrelandRequests'
+import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * What the organiser can actually do, once past the PIN.
@@ -101,6 +102,7 @@ export default function OrganiserClient({
   /** `trips.track_stats` — whether the event records stats, and so shows them. */
   initialTrackStats?: boolean
 }) {
+  const tripHome = useTripBase(tripCode)
   const permRegistry = permissionsFor(series, knockout)
   // A change to the stats or a round's start can change the bar's fourth
   // tab, which the layout reads — so a landed save refreshes the router.
@@ -257,7 +259,7 @@ export default function OrganiserClient({
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={`/trip/${tripCode}`} />
+      <TripHeader backTo={tripHome} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
 
@@ -528,28 +530,28 @@ export default function OrganiserClient({
         <section className="mt-10">
           <SectionHeader className="mb-4">Running the event</SectionHeader>
           <ListGroup>
-            <ListRow href={`/trip/${tripCode}/organiser/tags`} label="Tags" hint={tagsSummary} />
+            <ListRow href={`${tripHome}/organiser/tags`} label="Tags" hint={tagsSummary} />
             {/* The team picker — the teams and partnerships the leaderboards
                 play in (Ross, 27 Oct 2026: they were hard to find). */}
             {hasTeamBoards && (
-              <ListRow href={`/trip/${tripCode}/teams`} label="Teams" hint="Pick the teams, or see the ones players have made." />
+              <ListRow href={`${tripHome}/teams`} label="Teams" hint="Pick the teams, or see the ones players have made." />
             )}
             {rounds.length > 1 && (
-              <ListRow href={`/trip/${tripCode}/organiser/days`} label="Each day’s own format" hint={dayFormatSummary} />
+              <ListRow href={`${tripHome}/organiser/days`} label="Each day’s own format" hint={dayFormatSummary} />
             )}
             {/* The bracket, in creation's own flow — the draw, its
                 deadlines, then the rest (Ross, 5 Nov 2026); a league's
                 summary; nothing on an event that is neither. */}
             {(knockout || isLeague) && (
               <ListRow
-                href={`/trip/${tripCode}/organiser/bracket`}
+                href={`${tripHome}/organiser/bracket`}
                 label={isLeague ? 'League' : 'Bracket'}
                 hint={isLeague ? formatSummary ?? undefined
                   : [drawSummary, formatSummary].filter(Boolean).join(' ') || 'The draw, its deadlines and settings.'}
               />
             )}
             <ListRow
-              href={`/trip/${tripCode}/setup`}
+              href={`${tripHome}/setup`}
               label="Formats, players and teams"
               hint="Leaderboards, the field, the running order."
             />

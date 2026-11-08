@@ -6,6 +6,7 @@ import { TAG_SET, tagOf } from '@/lib/tagBoards'
 import { membersOf, type Membership, type TeamRow } from '@/lib/teamSets'
 import { setTeam } from '@/lib/teamMembers'
 import { buttonClass, cardClass } from '@/app/components/ui'
+import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * Players picking their own tag — the field's side of tags.
@@ -41,6 +42,7 @@ export default function TagJoinClient({
   /** The claimed player this device carries, or null for a stranger. */
   viewerPlayerId: string | null
 }) {
+  const tripHome = useTripBase(tripCode)
   const [memberships, setMemberships] = useState<Membership[]>(initialMemberships)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -85,7 +87,7 @@ export default function TagJoinClient({
             Claim your spot on the players screen, then pick your tag.
           </p>
           <Link
-            href={`/trip/${tripCode}/players`}
+            href={`${tripHome}/players`}
             className="inline-block mt-3 t-label text-accent-deep hover:text-accent transition-colors"
           >
             Claim your spot →

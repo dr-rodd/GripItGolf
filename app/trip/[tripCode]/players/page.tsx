@@ -4,7 +4,7 @@ import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
 import { sortForClaiming, confirmedCount } from '@/lib/roster'
-import { fetchTripKind } from '../kind'
+import { fetchTripKind, fetchTripBase } from '../kind'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { isEvent } from '@/lib/eventHub'
 import { linkedPlayerId } from '@/lib/currentPlayer'
@@ -15,6 +15,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function PlayersPage({ params }: { params: Promise<{ tripCode: string }> }) {
   const { tripCode } = await params
+  const tripHome = await fetchTripBase(tripCode)
 
   // The kind and the permissions ride alongside the page's own query, each
   // fail-soft in its own request — an un-migrated database simply reads as
@@ -111,7 +112,7 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={`/trip/${tripCode}`} />
+      <TripHeader backTo={tripHome} />
 
       <div className="max-w-md mx-auto px-6 py-10">
 
@@ -173,7 +174,7 @@ export default async function PlayersPage({ params }: { params: Promise<{ tripCo
         />
 
         <div className="mt-12">
-          <BackButton href={`/trip/${tripCode}`} label={noun === 'event' ? 'Event' : 'Trip'} />
+          <BackButton href={tripHome} label={noun === 'event' ? 'Event' : 'Trip'} />
         </div>
 
       </div>

@@ -14,6 +14,7 @@ import { sideColours, sideTint, type SideColour } from '@/lib/matchSides'
 import { usePoll } from '@/app/scoring/usePoll'
 import { cardClass } from '@/app/components/ui'
 import { IconChevronRight } from '@/app/components/icons'
+import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * A knockout from the player's side (docs/event-use-cases.md, story 2):
@@ -22,7 +23,7 @@ import { IconChevronRight } from '@/app/components/icons'
  * opens its own page, `/trip/[code]/match/[id]`.
  */
 
-const matchHref = (tripCode: string, id: string) => `/trip/${tripCode}/match/${id}`
+const matchHref = (tripHome: string, id: string) => `${tripHome}/match/${id}`
 
 /** "Play by Sat 14 Nov" for an open round, or nothing when no date is set. */
 function roundDate(deadline: string | null, today: string, finished: boolean): string {
@@ -45,6 +46,7 @@ export function NextMatchCard({ tripCode, view, live = null, today }: {
   live?: LiveMatch | null
   today: string
 }) {
+  const tripHome = useTripBase(tripCode)
   const rounds = portalRounds(view.matches, view.entrantId, view.deadlines)
   if (rounds.length === 0) return null
   const now = currentRound(rounds)
@@ -57,7 +59,7 @@ export function NextMatchCard({ tripCode, view, live = null, today }: {
   return (
     <div className="mt-4">
       {next && (
-        <Link href={matchHref(tripCode, next.id)} className={`block px-5 py-4 ${cardClass('raised', true)}`}>
+        <Link href={matchHref(tripHome, next.id)} className={`block px-5 py-4 ${cardClass('raised', true)}`}>
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               {/* In play, the live tag takes the "your next match" line. */}
@@ -110,6 +112,7 @@ export function KnockoutPortal({ tripCode, view, live = [], today, anyoneScores 
   /** Anybody may score any match — every match opens, not only your own. */
   anyoneScores?: boolean
 }) {
+  const tripHome = useTripBase(tripCode)
   const rounds = portalRounds(view.matches, view.entrantId, view.deadlines)
   const [open, setOpen] = useState<number | null>(() => currentRound(rounds)?.roundNumber ?? null)
   const nameOf = (id: string | null) => (id ? view.names[id] ?? null : null)
@@ -197,14 +200,14 @@ export function KnockoutPortal({ tripCode, view, live = [], today, anyoneScores 
                     <li key={m.id}>
                       {m.mine ? (
                         <Link
-                          href={matchHref(tripCode, m.id)}
+                          href={matchHref(tripHome, m.id)}
                           className={`flex items-center justify-between gap-3 px-4 py-3 ${cardClass('chosen', true)}`}
                         >
                           {body}
                         </Link>
                       ) : opens ? (
                         <Link
-                          href={matchHref(tripCode, m.id)}
+                          href={matchHref(tripHome, m.id)}
                           className={`flex items-center justify-between gap-3 px-4 py-3 ${cardClass('flat', true)}`}
                         >
                           {body}
@@ -226,7 +229,7 @@ export function KnockoutPortal({ tripCode, view, live = [], today, anyoneScores 
         )
       })}
       <p className="t-cap text-ink/65 text-center">
-        <Link href={`/trip/${tripCode}/matchplay`} className="text-accent-deep hover:text-accent">See the whole bracket →</Link>
+        <Link href={`${tripHome}/matchplay`} className="text-accent-deep hover:text-accent">See the whole bracket →</Link>
       </p>
     </div>
   )
@@ -285,6 +288,7 @@ function liveLine(l: LiveMatch, nameOf: (id: string | null) => string | null): s
  * red, bottom blue — the same on every phone; green says live.
  */
 function LiveBoard({ tripCode, view, live }: { tripCode: string; view: KnockoutView; live: LiveMatch[] }) {
+  const tripHome = useTripBase(tripCode)
   const nameOf = (id: string | null) => (id ? view.names[id] ?? null : null)
   return (
     <section className={cardClass()} aria-label="Live matches">
@@ -306,7 +310,7 @@ function LiveBoard({ tripCode, view, live }: { tripCode: string; view: KnockoutV
           return (
             <li key={l.id}>
               <Link
-                href={`${matchHref(tripCode, l.id)}/card`}
+                href={`${matchHref(tripHome, l.id)}/card`}
                 className={`flex items-center justify-between gap-3 px-4 py-3 ${cardClass(mine ? 'chosen' : 'flat', true)}`}
               >
                 <span className="min-w-0">

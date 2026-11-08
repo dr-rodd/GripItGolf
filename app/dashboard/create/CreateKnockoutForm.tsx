@@ -38,6 +38,7 @@ import { bringAcross } from './SeedFromEvent'
 import { describeError, generateCode } from './CreateTripForm'
 import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
+import { tripBase } from '@/lib/tripPaths'
 
 /**
  * Creating a continuous knockout — an ongoing match play event occupying a
@@ -381,7 +382,7 @@ export default function CreateKnockoutForm() {
           </button>
 
           <Link
-            href={`/trip/${resultCode}`}
+            href={tripBase(resultCode, 'tournament')}
             className={buttonClass('primary')}
           >
             Go to your event

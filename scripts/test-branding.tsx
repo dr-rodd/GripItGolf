@@ -1898,14 +1898,15 @@ section('The screens before a trip wear the same header')
   ok(shell.includes('const first = step <= 1') && /inert=\{first\}[\s\S]{0,80}<BackButton onClick=\{onBack\}/.test(shell),
     'shown only where there is a step to go back to')
 
-  // Every screen inside a trip points its mark at the trip hub, and nothing
-  // points at a trip code that no longer travels as its own prop
+  // Every screen inside a trip points its mark at the trip hub — at its home,
+  // /trip/X or an event's /event/X (lib/tripPaths.ts) — and nothing points at
+  // a trip code that no longer travels as its own prop
   for (const f of [
     'app/trip/[tripCode]/leaderboard/page.tsx',
     'app/trip/[tripCode]/scoring/page.tsx',
     'app/trip/[tripCode]/setup/TripSetupClient.tsx',
   ]) {
-    ok(/<TripHeader backTo=\{`\/trip\/\$\{[\w.]+\}`\}/.test(read(f)),
+    ok(/<TripHeader backTo=\{tripHome\}/.test(read(f)),
       `${f.split('/').slice(-2).join('/')} points its mark at the trip`)
   }
   eq(uiFiles().filter(f => /<TripHeader[^>]*tripCode=/.test(read(f))), [],
@@ -2467,8 +2468,8 @@ section('A bare code is an address')
   const short = read('app/[code]/page.tsx')
   ok(/\^\[A-Za-z0-9\]\{6\}\$/.test(short), 'only a code shape earns a lookup')
   ok(short.includes('code.toUpperCase()'), 'a typed lowercase code still finds its event')
-  ok(short.includes('redirect(`/trip/${data.trip_code}`)'),
-    'and lands on the hub, which stays the one canonical address')
+  ok(short.includes("redirect(isRunChallenge(kind) ? `/run/${data.trip_code}` : tripBase(data.trip_code, kind))"),
+    'and lands on the hub, which stays the one canonical address — /trip/, an event\'s /event/ or a challenge\'s /run/')
   ok(short.includes('notFound()'), 'anything else is a plain 404')
   ok(/Event not found/.test(short), 'a code nobody owns gets the calm answer, not a 404')
 }

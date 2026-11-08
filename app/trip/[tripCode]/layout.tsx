@@ -1,10 +1,12 @@
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import TabBar from '@/app/components/TabBar'
 import { fourthTab, isEvent } from '@/lib/eventHub'
 import { isRunChallenge } from '@/lib/runChallenge'
 import { entryAllowed, entryCookie } from '@/lib/publicPin'
+import { PATH_HEADER, ROOT_HEADER, rerooted, rootOf, tripBase } from '@/lib/tripPaths'
 import { fetchEntryLock, fetchIsKnockout, fetchTabExtras, fetchTripKind } from './kind'
+import { TripBaseProvider } from './TripBase'
 
 /**
  * Everything under `/trip/[tripCode]`, with the bottom bar around it.
@@ -63,21 +65,33 @@ export default async function TripLayout({
   params: Promise<{ tripCode: string }>
 }) {
   const { tripCode } = await params
-  const [kind, lock, knockout, extras, jar] = await Promise.all([
-    fetchTripKind(tripCode), fetchEntryLock(tripCode), fetchIsKnockout(tripCode), fetchTabExtras(tripCode), cookies(),
+  const [kind, lock, knockout, extras, jar, head] = await Promise.all([
+    fetchTripKind(tripCode), fetchEntryLock(tripCode), fetchIsKnockout(tripCode), fetchTabExtras(tripCode), cookies(), headers(),
   ])
   if (isRunChallenge(kind)) redirect(`/run/${tripCode}`)
   if (!entryAllowed(lock, jar.get(entryCookie(tripCode))?.value)) redirect(`/enter/${tripCode}`)
 
+  // An event lives at /event/, a trip at /trip/ (Ross, 8 Nov 2026). A phone
+  // that asked for the other one — an event's old link, a bookmark, a QR
+  // code — is sent to the right address with the rest of it kept. proxy.ts
+  // says what was asked; without its headers (they are always there in the
+  // tree it matches) nothing is redirected.
+  const want = rootOf(kind)
+  const asked = head.get(ROOT_HEADER)
+  const path = head.get(PATH_HEADER)
+  if (asked && path && asked !== want) redirect(rerooted(path, want))
+  const base = tripBase(tripCode, kind)
+
   return (
-    <>
+    <TripBaseProvider base={base}>
       {children}
       <TabBar
         tripCode={tripCode}
+        base={base}
         isEvent={isEvent(kind)}
         bracket={isEvent(kind) && knockout}
         fourth={fourthTab(isEvent(kind), extras)}
       />
-    </>
+    </TripBaseProvider>
   )
 }

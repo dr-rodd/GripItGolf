@@ -10,7 +10,7 @@ import TripHeader from '@/app/components/TripHeader'
 import BackButton from '@/app/components/BackButton'
 import { PreferencesPanel } from '@/app/components/PlayerSettings'
 import { SectionTitle, cardClass } from '@/app/components/ui'
-import { fetchTripKind } from '../kind'
+import { fetchTripKind, fetchTripBase } from '../kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +36,7 @@ export default async function EventSettingsPage({ params }: {
   params: Promise<{ tripCode: string }>
 }) {
   const { tripCode } = await params
+  const tripHome = await fetchTripBase(tripCode)
 
   // The kind alongside, never inside the select — the kind.ts rule. The
   // field rides in as an embed, one hop rather than two.
@@ -59,7 +60,7 @@ export default async function EventSettingsPage({ params }: {
     )
   }
 
-  if (!isEvent(kind)) redirect(`/trip/${tripCode}/setup`)
+  if (!isEvent(kind)) redirect(`${tripHome}/setup`)
 
   type Row = { id: string; name: string; claimed: boolean | null; is_composite: boolean | null }
   // A composite is a synthetic scorecard, not a person.
@@ -79,7 +80,7 @@ export default async function EventSettingsPage({ params }: {
 
   return (
     <main className="min-h-dvh paper has-tabbar">
-      <TripHeader backTo={`/trip/${tripCode}`} title="settings" />
+      <TripHeader backTo={tripHome} title="settings" />
       <div className="max-w-lg mx-auto px-4 pt-6 pb-16 page-enter space-y-8">
 
         <section>
@@ -90,7 +91,7 @@ export default async function EventSettingsPage({ params }: {
                 <p className="text-ink text-sm font-medium">{claimed.name}</p>
                 <p className="text-ink/65 text-[13px] mt-0.5">Playing in {trip.name}</p>
                 <Link
-                  href={`/trip/${tripCode}/players`}
+                  href={`${tripHome}/players`}
                   className="inline-block t-cap text-accent-deep hover:text-accent transition-colors mt-3"
                 >
                   Not you? Switch name
@@ -100,7 +101,7 @@ export default async function EventSettingsPage({ params }: {
               <>
                 <p className="text-ink/80 text-sm">This phone has not claimed a name in the event.</p>
                 <Link
-                  href={`/trip/${tripCode}/players`}
+                  href={`${tripHome}/players`}
                   className="inline-block t-cap text-accent-deep hover:text-accent transition-colors mt-3"
                 >
                   Claim your spot →
@@ -120,7 +121,7 @@ export default async function EventSettingsPage({ params }: {
         <section>
           <SectionTitle className="mb-3">Organiser</SectionTitle>
           <Link
-            href={`/trip/${tripCode}/organiser`}
+            href={`${tripHome}/organiser`}
             className={`flex items-center justify-between gap-4 p-4 ${cardClass('raised', true)}`}
           >
             <span className="min-w-0">

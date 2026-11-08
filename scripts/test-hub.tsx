@@ -1331,7 +1331,7 @@ section('The hub does not repeat the tab bar')
   // its button without leaving a door would have stranded the join list on
   // any phone that has already claimed — ClaimSpot only shows to a device
   // that is nobody yet.
-  ok(/href=\{`\/trip\/\$\{tripCode\}\/players`\}/.test(hub),
+  ok(/href=\{`\$\{tripHome\}\/players`\}/.test(hub),
     'the join list is still reachable from the hub')
   ok(hub.indexOf('/players`}') > hub.indexOf('<SectionStack'),
     '  …from the roster, below, rather than as a button up top')

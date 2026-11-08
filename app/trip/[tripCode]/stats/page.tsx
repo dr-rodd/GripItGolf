@@ -9,6 +9,7 @@ import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
 import { EmptyState } from '@/app/components/ui'
 import StatsClient from './StatsClient'
+import { fetchTripBase } from '../kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +30,7 @@ export default async function StatsPage({
   params: Promise<{ tripCode: string }>
 }) {
   const { tripCode } = await params
+  const tripHome = await fetchTripBase(tripCode)
 
   const { data: trip, error: tripError } = await supabase
     .from('trips')
@@ -63,7 +65,7 @@ export default async function StatsPage({
 
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
-      <TripHeader backTo={`/trip/${tripCode}`} title="statsHub" />
+      <TripHeader backTo={tripHome} title="statsHub" />
 
       {/* No page-title row: the header's "stats hub." artwork is the title,
           and it already carries the way back. */}
@@ -88,7 +90,7 @@ export default async function StatsPage({
                   : 'Stats are switched off for this trip. Turn them on in Trip Setup and the scorecard starts asking.'
             }
             actionLabel={trip.track_stats ? undefined : isEvent(trip.kind) ? 'Organiser area' : 'Trip Setup'}
-            actionHref={trip.track_stats ? undefined : `/trip/${tripCode}/${isEvent(trip.kind) ? 'organiser' : 'setup'}`}
+            actionHref={trip.track_stats ? undefined : `${tripHome}/${isEvent(trip.kind) ? 'organiser' : 'setup'}`}
           />
         ) : (
           <StatsClient

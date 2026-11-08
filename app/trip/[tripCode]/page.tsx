@@ -67,6 +67,7 @@ import { drawLiveAt } from '@/lib/bracketDraw'
 import DrawCountdown from './DrawCountdown'
 import CourseName from '@/app/components/CourseName'
 import { IconChevronRight } from '@/app/components/icons'
+import { fetchTripBase } from './kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -141,6 +142,8 @@ export default async function TripPage({ params, searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { tripCode } = await params
+  // Where this lives — /trip/X or, for an event, /event/X (lib/tripPaths.ts).
+  const tripHome = await fetchTripBase(tripCode)
 
   const trip = await fetchTrip(tripCode)
 
@@ -622,7 +625,7 @@ export default async function TripPage({ params, searchParams }: {
       ) : null) : lr.roundId ? (
         <Link
           key={lr.roundId}
-          href={`/trip/${tripCode}/round/${lr.number}`}
+          href={`${tripHome}/round/${lr.number}`}
           className={`flex items-center justify-between w-full px-5 py-4 press ${cardClass('raised', true)}`}
         >
           <div className="min-w-0">
@@ -921,7 +924,7 @@ export default async function TripPage({ params, searchParams }: {
               title: 'Tee times',
               meta: mineOnSheet?.clock ?? (firstTee ? `From ${firstTee}` : undefined),
               content: <TeeTimesPanel
-                tripCode={tripCode}
+                tripHome={tripHome}
                 round={teeRound}
                 mine={mineOnSheet}
                 firstClock={firstTee}
@@ -961,6 +964,7 @@ export default async function TripPage({ params, searchParams }: {
                 players={players}
                 pendingCount={pendingCount}
                 tripCode={tripCode}
+                tripHome={tripHome}
                 noun={isEvent ? 'event' : 'trip'}
                 linkedIds={giLinked}
                 add={isEvent ? (
@@ -995,7 +999,7 @@ export default async function TripPage({ params, searchParams }: {
               meta: `${statsCover.holes} holes`,
               content: <StatsPanel
                 mine={myStats}
-                tripCode={tripCode}
+                tripHome={tripHome}
                 thin={statsCover.level === 'thin'}
               />,
             }] : []),
@@ -1031,13 +1035,14 @@ export default async function TripPage({ params, searchParams }: {
  * otherwise.
  */
 function PlayersPanel({
-  players, pendingCount, tripCode, noun, linkedIds, add,
+  players, pendingCount, tripCode, tripHome, noun, linkedIds, add,
 }: {
   players: { id: string; name: string; handicap: number | null; claimed?: boolean | null }[]
   /** A Golf Ireland league's confirmed links — the mark beside those names. */
   linkedIds: string[]
   pendingCount: number
   tripCode: string
+  tripHome: string
   /** "trip" or "event" — the hub knows which it is wearing. */
   noun: 'trip' | 'event'
   /** An event's door for adding to the field (`AddToField`), or nothing. */
@@ -1127,7 +1132,7 @@ function PlayersPanel({
           carries Players, so without this the route would be reachable only
           by a device that is nobody yet. */}
       <Link
-        href={`/trip/${tripCode}/players`}
+        href={`${tripHome}/players`}
         className="block text-center mt-5 t-label text-accent-deep hover:text-accent transition-colors"
       >
         Claim your spot

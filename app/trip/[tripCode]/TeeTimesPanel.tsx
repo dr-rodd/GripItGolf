@@ -4,6 +4,7 @@ import { joinNames } from '@/lib/matchplayEntrants'
 import { describeShortDate } from '@/lib/itinerary'
 import CourseName from '@/app/components/CourseName'
 import { cardClass } from '@/app/components/ui'
+import { fetchTripBase } from './kind'
 
 /**
  * The tee times, as the Event Hub shows them — a home screen module, there
@@ -20,9 +21,10 @@ import { cardClass } from '@/app/components/ui'
  * `hubTeeRound`'s and the place is `myTee`'s, both in lib/teeSheet.ts.
  */
 export default function TeeTimesPanel({
-  tripCode, round, mine, firstClock, booked, fieldSize, claimed,
+  tripHome, round, mine, firstClock, booked, fieldSize, claimed,
 }: {
-  tripCode: string
+  /** Where the trip or event lives — `/trip/X` or `/event/X` (lib/tripPaths.ts). */
+  tripHome: string
   round: { roundNumber: number; courseName: string | null; date: string | null }
   /** This phone's place on the sheet, or null when it has none. */
   mine: MyTee | null
@@ -69,7 +71,7 @@ export default function TeeTimesPanel({
 
       {/* A link, not a button — the hub already has its one emerald action. */}
       <Link
-        href={`/trip/${tripCode}/teesheet`}
+        href={`${tripHome}/teesheet`}
         className="inline-block mt-4 t-label text-accent-deep hover:text-accent transition-colors duration-150"
       >
         See the tee sheet →

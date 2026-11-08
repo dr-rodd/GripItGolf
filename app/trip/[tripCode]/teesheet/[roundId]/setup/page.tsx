@@ -11,6 +11,7 @@ import TripHeader from '@/app/components/TripHeader'
 import PasscodeGate from '../../../setup/PasscodeGate'
 import { readSheetSettings } from '../../sheets'
 import TeeSheetWizard from './TeeSheetWizard'
+import { fetchTripBase } from '../../../kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +35,7 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
   searchParams: Promise<{ from?: string }>
 }) {
   const [{ tripCode, roundId }, { from }] = await Promise.all([params, searchParams])
+  const tripHome = await fetchTripBase(tripCode)
 
   const { data: trip, error } = await supabase
     .from('trips')
@@ -42,16 +44,16 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
     .single()
   if (error) console.error('TeeSheetSetupPage trip query failed:', error)
 
-  const sheetHref = `/trip/${tripCode}/teesheet?round=${roundId}`
-  const backHref = from === 'organiser' ? `/trip/${tripCode}/organiser`
-    : from === 'setup' ? `/trip/${tripCode}/setup`
+  const sheetHref = `${tripHome}/teesheet?round=${roundId}`
+  const backHref = from === 'organiser' ? `${tripHome}/organiser`
+    : from === 'setup' ? `${tripHome}/setup`
     : sheetHref
 
   const notHere = (title: string, body: string) => (
     <main className="min-h-dvh has-tabbar flex flex-col items-center justify-center paper px-6 text-center">
       <p className="t-h2 text-ink mb-3">{title}</p>
       <p className="text-ink/65 text-sm mb-8 max-w-[22rem] leading-relaxed">{body}</p>
-      <BackButton href={trip ? `/trip/${tripCode}/teesheet` : '/'} label={trip ? 'Tee times' : 'Home'} />
+      <BackButton href={trip ? `${tripHome}/teesheet` : '/'} label={trip ? 'Tee times' : 'Home'} />
     </main>
   )
 

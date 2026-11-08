@@ -1,6 +1,8 @@
 import { cache } from 'react'
 import { supabase } from '@/lib/supabase'
 import { teeSheetInUse } from '@/lib/eventHub'
+import { headers } from 'next/headers'
+import { ROOT_HEADER, tripBase } from '@/lib/tripPaths'
 
 /**
  * The trip's kind, once per request — the one copy of this lookup.
@@ -75,4 +77,17 @@ export const fetchTabExtras = cache(async (tripCode: string): Promise<{ teeTimes
     teeTimes: teeSheetInUse((row.rounds ?? []).map(r => r.start_format)),
     stats: row.track_stats === true,
   }
+})
+
+/**
+ * Where this trip or event lives — `/trip/X` or `/event/X` (lib/tripPaths.ts)
+ * — for a server page's links, once per request.
+ */
+export const fetchTripBase = cache(async (tripCode: string): Promise<string> => {
+  // The root the phone asked for, which the layout has already put right —
+  // a page is only ever sent alongside a layout that did not redirect — so
+  // no query at all. Without proxy.ts's header, the kind decides.
+  const asked = (await headers()).get(ROOT_HEADER)
+  if (asked === 'trip' || asked === 'event') return `/${asked}/${tripCode}`
+  return tripBase(tripCode, await fetchTripKind(tripCode))
 })

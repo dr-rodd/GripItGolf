@@ -16,6 +16,7 @@ import {
 } from '@/lib/leaderboards'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
+import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * The tags portal — making tags and giving players theirs.
@@ -49,6 +50,7 @@ export default function TagPortalClient({
   /** What the event plays for — is anything ranking the tags yet? */
   initialBoards: Leaderboard[]
 }) {
+  const tripHome = useTripBase(tripCode)
   const [teams, setTeams] = useState<Team[]>(initialTeams)
   const [memberships, setMemberships] = useState<Membership[]>(initialMemberships)
   const [error, setError] = useState<string | null>(null)
@@ -202,7 +204,7 @@ export default function TagPortalClient({
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={`/trip/${tripCode}/organiser`} />
+      <TripHeader backTo={`${tripHome}/organiser`} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
         <h1 className="t-h1 text-ink mb-1">

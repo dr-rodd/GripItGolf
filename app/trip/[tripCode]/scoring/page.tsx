@@ -6,7 +6,7 @@ import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
 import { roundTone, ROUND_TILE, ROUND_NOTE, ROUND_NOTE_TONE } from '@/lib/roundState'
 import { isEvent } from '@/lib/eventHub'
-import { fetchTripKind } from '../kind'
+import { fetchTripKind, fetchTripBase } from '../kind'
 import AddRound from './AddRound'
 import { readRoundCards } from '@/lib/golfIrelandCards'
 import { isKnockoutEvent } from '@/lib/bracketSetup'
@@ -30,6 +30,7 @@ export default async function TripCoursePortalPage({
   params: Promise<{ tripCode: string }>
 }) {
   const { tripCode } = await params
+  const tripHome = await fetchTripBase(tripCode)
 
   // The trip and its rounds in one request rather than two, one after the
   // other. Every trip page starts by looking a trip up by its code and then
@@ -241,7 +242,7 @@ export default async function TripCoursePortalPage({
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
 
-      <TripHeader backTo={`/trip/${tripCode}`} title="scoring" />
+      <TripHeader backTo={tripHome} title="scoring" />
 
       <div className="max-w-lg mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-4">
@@ -335,7 +336,7 @@ export default async function TripCoursePortalPage({
             const tile = (
               <Link
                 key={round.id}
-                href={`/trip/${tripCode}/scoring/${round.round_number}`}
+                href={`${tripHome}/scoring/${round.round_number}`}
                 className={`flex items-center justify-between ${series ? 'flex-1 min-w-0' : 'w-full'} px-5 py-4 rounded-card press ${ROUND_TILE[tone]}`}
               >
                 <div className="min-w-0">

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { buttonClass } from '@/app/components/ui'
 import { IconShare, IconQrcode } from '@/app/components/icons'
+import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * The way a trip travels: one tap hands the full trip URL to the phone's own
@@ -36,6 +37,7 @@ export default function ShareTrip({
   /** "trip" or "event" — what the button calls the thing being shared. */
   noun?: 'trip' | 'event'
 }) {
+  const tripHome = useTripBase(tripCode)
   const [copied, setCopied] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -44,7 +46,7 @@ export default function ShareTrip({
   }, [])
 
   async function share() {
-    const url = `${window.location.origin}/trip/${tripCode}`
+    const url = `${window.location.origin}${tripHome}`
 
     if (navigator.share) {
       try {
@@ -79,7 +81,7 @@ export default function ShareTrip({
 
       {qrLink && (
         <Link
-          href={`/trip/${tripCode}/share`}
+          href={`${tripHome}/share`}
           className="inline-flex items-center gap-1.5 t-cap text-accent-deep hover:text-accent transition-colors duration-150"
         >
           <IconQrcode size={18} />

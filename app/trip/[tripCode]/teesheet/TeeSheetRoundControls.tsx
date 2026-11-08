@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { buttonClass } from '@/app/components/ui'
+import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * One tee-sheet round, from the organiser's side — the organiser area's
@@ -33,6 +34,7 @@ export default function TeeSheetRoundControls({
   /** Where the wizard sends the way back. */
   from: 'organiser' | 'setup'
 }) {
+  const tripHome = useTripBase(tripCode)
   const router = useRouter()
   const [asking, setAsking] = useState(false)
   const [clearing, setClearing] = useState(false)
@@ -64,7 +66,7 @@ export default function TeeSheetRoundControls({
           : 'Not open yet — the round shows an empty slot on the Tee times tab until it is.'}
       </p>
       <Link
-        href={`/trip/${tripCode}/teesheet/${roundId}/setup?from=${from}`}
+        href={`${tripHome}/teesheet/${roundId}/setup?from=${from}`}
         className={`${buttonClass('secondary')} mt-3`}
       >
         {state === 'vacant' ? 'Open the tee sheet' : 'Change the tee sheet'}
@@ -72,7 +74,7 @@ export default function TeeSheetRoundControls({
       {state !== 'vacant' && (
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mt-2">
           <Link
-            href={`/trip/${tripCode}/teesheet?round=${roundId}`}
+            href={`${tripHome}/teesheet?round=${roundId}`}
             className="t-cap text-accent-deep hover:text-accent transition-colors py-1"
           >
             See the tee sheet →

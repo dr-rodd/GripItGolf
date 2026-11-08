@@ -177,7 +177,7 @@ section('The organiser area stands behind the one PIN')
     'the notices carry no empty state — the hub never draws them empty')
   ok(!panel.includes('<Link'), '  …and no door: the organiser\'s is on the Settings tab')
   const settings = read('app/trip/[tripCode]/settings/page.tsx')
-  ok(settings.includes('href={`/trip/${tripCode}/organiser`}'),
+  ok(settings.includes('href={`${tripHome}/organiser`}'),
     'the event\'s Settings tab links into the organiser area')
   ok(/mounted &&/.test(panel),
     'timestamps wait for the reader\'s own clock rather than hydrating UTC')
@@ -253,7 +253,7 @@ section('An event hides Trip Setup from the field')
     '  …while the team picker\'s list changes nothing for the field without the PIN or the organiser\'s say-so')
 
   const organiser = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
-  ok(/href=\{`\/trip\/\$\{tripCode\}\/setup`\}/.test(organiser),
+  ok(/href=\{`\$\{tripHome\}\/setup`\}/.test(organiser),
     'the organiser area is the one door left into setup')
 
   const setup = read('app/trip/[tripCode]/setup/page.tsx')

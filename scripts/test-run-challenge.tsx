@@ -356,7 +356,7 @@ section('Every golf door hands a run challenge to /run/')
   ok(layout.includes('if (isRunChallenge(kind)) redirect(`/run/${tripCode}`)'),
     'the trip layout — which every join path reaches — sends it on')
   const hub = read('app/run/[tripCode]/page.tsx')
-  ok(hub.includes('if (!isRunChallenge(challenge.kind)) redirect(`/trip/${challenge.code}`)'),
+  ok(hub.includes('if (!isRunChallenge(challenge.kind)) redirect(tripBase(challenge.code, challenge.kind))'),
     'and the run hub sends a golf trip back, so either address lands right')
   ok(read('app/run/[tripCode]/organiser/page.tsx').includes('<PasscodeGate'),
     'the organiser area stands behind the same PIN gate as golf\'s')
@@ -384,7 +384,7 @@ section('The email says challenge, and golf\'s never changes')
   eq(confirmationSubject('North West 26'), 'North West 26 is booked on Green Dot', 'and keeps its subject')
 
   const route = read('app/api/trip-confirmation/route.ts')
-  ok(route.includes("const tripUrl = `${origin}/${run ? 'run' : 'trip'}/${trip.trip_code}`"),
+  ok(route.includes("const tripUrl = `${origin}${run ? `/run/${trip.trip_code}` : tripBase(trip.trip_code, kindResult.data?.kind)}`"),
     'the route links a run challenge to /run/')
   ok(route.includes('const event = isEvent(kindResult.data?.kind) || run'),
     'and gives it the organiser block, like any organiser-run event')

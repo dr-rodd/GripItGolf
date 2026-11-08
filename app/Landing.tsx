@@ -176,7 +176,9 @@ export default function Landing() {
       }
 
       setChecking(false)
-      depart(`/trip/${data.trip_code}`)
+      // The short link sends a code to wherever it lives — /trip/, /event/
+      // or /run/ — so this page need not know the kind (app/[code]/page.tsx).
+      depart(`/${data.trip_code}`)
     } catch {
       setError('Could not check the code — try again')
       setChecking(false)

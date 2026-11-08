@@ -17,6 +17,7 @@ import TripHeader from '@/app/components/TripHeader'
 import { golfIrelandLinkedIds } from '../golfIreland'
 import { readRoundCards } from '@/lib/golfIrelandCards'
 import { picksFrom, playerColourOf } from '@/lib/playerColours'
+import { fetchTripBase } from '../kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,6 +45,7 @@ export default async function TripLeaderboardPage({
   params: Promise<{ tripCode: string }>
 }) {
   const { tripCode } = await params
+  const tripHome = await fetchTripBase(tripCode)
 
   // The trip and its rounds in one request.
   //
@@ -85,7 +87,7 @@ export default async function TripLeaderboardPage({
     if (isEvent((trip as { kind?: unknown }).kind)
         && isKnockoutEvent((trip as { bracket_setup?: unknown }).bracket_setup)
         && own.length > 0 && own.every(lb => lb.competition === 'matchplay' || isMatchTally(lb))) {
-      redirect(`/trip/${tripCode}/matchplay`)
+      redirect(`${tripHome}/matchplay`)
     }
   }
 
@@ -200,7 +202,7 @@ export default async function TripLeaderboardPage({
       {/* The trip's own name used to sit in a band under this, which cost a
           fixed slice of the screen on the one page that is all table. The
           header names the page, and you arrived here from the trip. */}
-      <TripHeader backTo={`/trip/${tripCode}`} title="leaderboard" />
+      <TripHeader backTo={tripHome} title="leaderboard" />
 
       <Poller isActive={hasActiveRound} />
 

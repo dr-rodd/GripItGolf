@@ -16,6 +16,7 @@ import {
 } from '@/lib/roster'
 import { FIELD, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import { LinkedBadge } from '@/app/components/LinkMark'
+import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 type Player = {
   id: string
@@ -226,6 +227,7 @@ export default function PlayersClient({
   /** A Golf Ireland league's confirmed links — a badge beside each name. */
   linkedIds?: string[]
 }) {
+  const tripHome = useTripBase(tripCode)
   const router = useRouter()
   const [claimingId, setClaimingId] = useState<string | null>(null)
   /** The player whose handicap is being checked, if the sheet is open. */
@@ -261,7 +263,7 @@ export default function PlayersClient({
     // stale page is rendered first and corrected a moment later, which is
     // the same bug with a flicker in front of it.
     router.refresh()
-    router.push(`/trip/${tripCode}`)
+    router.push(tripHome)
   }
 
   /**
@@ -400,7 +402,7 @@ export default function PlayersClient({
       )
       return
     }
-    router.push(`/trip/${tripCode}`)
+    router.push(tripHome)
   }
 
   return (

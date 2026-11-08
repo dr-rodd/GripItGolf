@@ -8,6 +8,7 @@ import { parseLeaderboards } from '@/lib/leaderboards'
 import BackButton from '@/app/components/BackButton'
 import PasscodeGate from '../../setup/PasscodeGate'
 import TagPortalClient from './TagPortalClient'
+import { fetchTripBase } from '../../kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +26,7 @@ export default async function TagsPage({ params }: {
   params: Promise<{ tripCode: string }>
 }) {
   const { tripCode } = await params
+  const tripHome = await fetchTripBase(tripCode)
 
   const { data: trip, error } = await supabase
     .from('trips')
@@ -53,7 +55,7 @@ export default async function TagsPage({ params }: {
           Tags belong to events. A trip&apos;s teams are picked in Trip
           Setup, on the tab bar below.
         </p>
-        <BackButton href={`/trip/${tripCode}`} label="Trip" />
+        <BackButton href={tripHome} label="Trip" />
       </main>
     )
   }

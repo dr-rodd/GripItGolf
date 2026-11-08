@@ -4,6 +4,7 @@ import { useCallback, useState, useSyncExternalStore } from 'react'
 import BackButton from '@/app/components/BackButton'
 import { verifyPasscode, rememberUnlock, hasUnlocked, MAX_PASSCODE } from '@/lib/passcode'
 import { FIELD, buttonClass } from '@/app/components/ui'
+import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * Stands in front of trip settings when the trip was created with a passcode.
@@ -28,6 +29,7 @@ export default function PasscodeGate({
   title?: string
   hint?: string
 }) {
+  const tripHome = useTripBase(tripCode)
   // sessionStorage is browser-only, so it is read through an external store
   // rather than an effect: the server renders locked, and the client corrects
   // it on hydration. Failing closed is the right way round for a lock.
@@ -103,7 +105,7 @@ export default function PasscodeGate({
         </form>
 
         <div className="mt-8">
-          <BackButton href={`/trip/${tripCode}`} label="Trip" />
+          <BackButton href={tripHome} label="Trip" />
         </div>
       </div>
     </main>

@@ -16,7 +16,7 @@ import BackButton from '@/app/components/BackButton'
 import PasscodeGate from '../setup/PasscodeGate'
 import OrganiserClient from './OrganiserClient'
 import PublicPinCard from './PublicPinCard'
-import { fetchEntryLock } from '../kind'
+import { fetchEntryLock, fetchTripBase } from '../kind'
 import { golfIrelandRequests } from '../golfIreland'
 
 export const dynamic = 'force-dynamic'
@@ -41,6 +41,7 @@ export default async function OrganiserPage({ params }: {
   params: Promise<{ tripCode: string }>
 }) {
   const { tripCode } = await params
+  const tripHome = await fetchTripBase(tripCode)
 
   const { data: trip, error } = await supabase
     .from('trips')
@@ -69,7 +70,7 @@ export default async function OrganiserPage({ params }: {
           The organiser area belongs to events. A trip is run from Trip
           Setup, on the tab bar below.
         </p>
-        <BackButton href={`/trip/${tripCode}`} label="Trip" />
+        <BackButton href={tripHome} label="Trip" />
       </main>
     )
   }

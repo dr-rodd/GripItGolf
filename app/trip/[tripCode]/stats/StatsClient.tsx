@@ -20,6 +20,7 @@ import {
 import type { RowHole, RowRound } from '@/lib/boardRows'
 import { Segmented, cardClass, chipClass } from '@/app/components/ui'
 import { courseLabel } from '@/lib/courseDirectory'
+import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * The stats hub: an instrument, not a printout.
@@ -74,6 +75,7 @@ export default function StatsClient({
   /** Past its end date, so the honours read as final rather than as it stands. */
   tripOver?: boolean
 }) {
+  const tripHome = useTripBase(tripCode)
   const [view, setView] = useState<View>('players')
   // Somebody this phone knows opens on their own numbers; a stranger opens
   // on the field, because a page about nobody is a page about everybody.
@@ -430,7 +432,7 @@ export default function StatsClient({
       {/* The manual, for anyone who wants the equations — which is why the
           panels themselves carry no explainers. */}
       <Link
-        href={`/trip/${tripCode}/stats/guide`}
+        href={`${tripHome}/stats/guide`}
         className="block text-center mt-6 t-label text-accent-deep hover:text-accent transition-colors"
       >
         How the numbers work

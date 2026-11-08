@@ -137,7 +137,7 @@ export default async function AdminTripsPage({
                       <td className="px-4 py-3 t-card">
                         {t.trip_code ? (
                           <Link
-                            href={`/trip/${t.trip_code}`}
+                            href={`/${t.trip_code}`}
                             className="hover:text-accent-deep transition-colors"
                           >
                             {t.name}
@@ -182,7 +182,7 @@ export default async function AdminTripsPage({
                     <div className="min-w-0">
                       <p className="t-card truncate">
                         {t.trip_code ? (
-                          <Link href={`/trip/${t.trip_code}`} className="hover:text-accent-deep transition-colors">
+                          <Link href={`/${t.trip_code}`} className="hover:text-accent-deep transition-colors">
                             {t.name}
                           </Link>
                         ) : (

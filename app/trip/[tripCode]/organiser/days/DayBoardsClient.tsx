@@ -10,6 +10,7 @@ import {
 import { type DayBoards, DAY_BOARDS, boardGrouping } from '@/lib/leagueSetup'
 import { cardClass } from '@/app/components/ui'
 import { courseLabel } from '@/lib/courseDirectory'
+import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * A format for each day.
@@ -39,6 +40,7 @@ export default function DayBoardsClient({
   /** How the event said its days relate, for the line at the top. */
   dayBoards?: DayBoards
 }) {
+  const tripHome = useTripBase(tripCode)
   const [boards, setBoards] = useState<Leaderboard[]>(initialBoards)
   const [openFor, setOpenFor] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -65,7 +67,7 @@ export default function DayBoardsClient({
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={`/trip/${tripCode}/organiser`} />
+      <TripHeader backTo={`${tripHome}/organiser`} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
         <h1 className="t-h1 text-ink mb-1">

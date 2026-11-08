@@ -16,5 +16,9 @@ export async function revalidateLeaderboards() {
  * The layout scope covers the leaderboard, the teams screen and setup at once.
  */
 export async function revalidateTrip(tripCode: string) {
+  // Both addresses: one set of pages answers to /trip/ and, for an event,
+  // /event/ (lib/tripPaths.ts), and the router keeps what it showed by the
+  // address it showed it at.
   revalidatePath(`/trip/${tripCode}`, "layout")
+  revalidatePath(`/event/${tripCode}`, "layout")
 }

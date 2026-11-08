@@ -24,6 +24,7 @@ import { MAX_BRACKET } from '@/lib/matchplay'
 import { todayString } from '@/lib/tripStatus'
 import type { EntrantKind } from '@/lib/matchplayEntrants'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
+import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * The bracket, from the organiser area — the same flow as at creation
@@ -75,6 +76,7 @@ export default function BracketFlow({
   /** The event's start, where the first round's calendar opens. */
   startDate: string | null
 }) {
+  const tripHome = useTripBase(tripCode)
   const router = useRouter()
   const field = entrants.map(e => e.id)
   const today = todayString(new Date())
@@ -184,13 +186,13 @@ export default function BracketFlow({
   if (done) {
     return (
       <main className="min-h-dvh paper has-tabbar page-enter">
-        <TripHeader backTo={`/trip/${tripCode}/organiser`} />
+        <TripHeader backTo={`${tripHome}/organiser`} />
         <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
           <h1 className="t-h1 text-ink mb-1">Bracket saved</h1>
           <p className="text-ink/65 text-sm mb-6">{done}</p>
           <div className="space-y-3">
-            <Link href={`/trip/${tripCode}/matchplay`} className={buttonClass('primary')}>See the bracket</Link>
-            <Link href={`/trip/${tripCode}/organiser`} className={buttonClass('secondary')}>Back to the organiser area</Link>
+            <Link href={`${tripHome}/matchplay`} className={buttonClass('primary')}>See the bracket</Link>
+            <Link href={`${tripHome}/organiser`} className={buttonClass('secondary')}>Back to the organiser area</Link>
           </div>
         </div>
       </main>
@@ -199,13 +201,13 @@ export default function BracketFlow({
 
   return (
     <main className="min-h-dvh paper has-tabbar">
-      <TripHeader backTo={`/trip/${tripCode}/organiser`} />
+      <TripHeader backTo={`${tripHome}/organiser`} />
       <div className="page-enter">
         <WizardShell
           step={index + 1}
           titles={keys.map(k => STEP_TITLES[k])}
           intro={INTROS[step]}
-          onBack={() => { setError(null); if (index > 0) setIndex(index - 1); else router.push(`/trip/${tripCode}/organiser`) }}
+          onBack={() => { setError(null); if (index > 0) setIndex(index - 1); else router.push(`${tripHome}/organiser`) }}
           aboveTabBar
           footer={(
             <button

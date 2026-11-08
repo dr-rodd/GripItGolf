@@ -13,6 +13,7 @@ import CourseWeather from '@/app/components/CourseWeather'
 import { IconArrowRight, IconFlag, IconHome, IconCar, IconPlane, IconTrain, IconFork, IconUsers } from '@/app/components/icons'
 import { cardClass } from '@/app/components/ui'
 import CourseName from '@/app/components/CourseName'
+import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * The top of the trip hub: what this device is, and what happens next.
@@ -89,6 +90,7 @@ export default function StatusBlock({
    */
   knockout?: boolean
 }) {
+  const tripHome = useTripBase(tripCode)
   const router = useRouter()
   const now = useMinute()
   const [dismissed, setDismissed] = useState(false)
@@ -141,7 +143,7 @@ export default function StatusBlock({
             // navigation. Clearing the cache is what makes "Not you?" outlast
             // the tap; see the note in players/PlayersClient.tsx.
             router.refresh()
-            router.push(`/trip/${tripCode}/players`)
+            router.push(`${tripHome}/players`)
           }}
           className="flex-shrink-0 t-label text-accent-deep hover:text-accent transition-colors duration-150"
         >
@@ -157,7 +159,7 @@ export default function StatusBlock({
         {next ? (
           nextRoundNumber != null ? (
             <Link
-              href={`/trip/${tripCode}/round/${nextRoundNumber}`}
+              href={`${tripHome}/round/${nextRoundNumber}`}
               className="block press"
             >
               <UpNextLines next={next} countdown={countdown} />
@@ -208,7 +210,7 @@ export default function StatusBlock({
                 )}
               </p>
               <Link
-                href={`/trip/${tripCode}/leaderboard`}
+                href={`${tripHome}/leaderboard`}
                 className="flex-shrink-0 t-label text-accent-deep hover:text-accent transition-colors duration-150"
               >
                 Leaderboard →
@@ -357,10 +359,11 @@ function NothingScheduled({ noun }: { noun: 'trip' | 'event' }) {
  * reason to tap and reads as part of the button.
  */
 function ClaimSpot({ tripCode }: { tripCode: string }) {
+  const tripHome = useTripBase(tripCode)
   return (
     <div>
       <Link
-        href={`/trip/${tripCode}/players`}
+        href={`${tripHome}/players`}
         className={`flex items-center gap-3 w-full px-4 py-4 ${cardClass('raised', true)}`}
       >
         <span className="flex-shrink-0 w-10 h-10 rounded-tile bg-accent-tint text-accent-deep flex items-center justify-center">

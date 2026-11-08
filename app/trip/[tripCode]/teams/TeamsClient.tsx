@@ -13,6 +13,7 @@ import {
 import InlineUnlock from '@/app/components/InlineUnlock'
 import { ListGroup, ListRow, SectionHeader, buttonClass, cardClass } from '@/app/components/ui'
 import { type TeamRow, moveMembers, refreshTeamName, deleteTeam } from './teamWrites'
+import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * The teams page — every leaderboard's teams, one list a sheet, for
@@ -45,6 +46,7 @@ export default function TeamsClient({
   /** Per list, the tee time this player's partnership is booked on, for the next round to come. */
   myTeeTimes?: Record<string, { roundId: string; slot: number; roundNumber: number }>
 }) {
+  const tripHome = useTripBase(tripCode)
   const router = useRouter()
   // The organiser's PIN unlock, read after mount — sessionStorage does not
   // exist on the server, and a render that reads it would tear hydration.
@@ -68,7 +70,7 @@ export default function TeamsClient({
     partnershipName(team, ids.map(id => ({ id, name: nameOf.get(id) ?? '' })), shortOf)
 
   const pickHref = (sheet: string, teamId?: string) =>
-    `/trip/${tripCode}/teams/pick?sheet=${encodeURIComponent(sheet)}${teamId ? `&team=${teamId}` : ''}`
+    `${tripHome}/teams/pick?sheet=${encodeURIComponent(sheet)}${teamId ? `&team=${teamId}` : ''}`
 
   /** This phone's player into a team with room — themselves, and only themselves. */
   async function join(sheet: PickerSheet, team: TeamRow) {
@@ -184,7 +186,7 @@ export default function TeamsClient({
                       (Ross, 1 Nov 2026). Otherwise Leave is here. */}
                   {sheet.together && myTeeTimes[sheet.id] ? (
                     <Link
-                      href={`/trip/${tripCode}/teesheet?round=${encodeURIComponent(myTeeTimes[sheet.id].roundId)}&edit=${myTeeTimes[sheet.id].slot}`}
+                      href={`${tripHome}/teesheet?round=${encodeURIComponent(myTeeTimes[sheet.id].roundId)}&edit=${myTeeTimes[sheet.id].slot}`}
                       className={buttonClass('quiet', false, true)}
                     >
                       Leave
@@ -268,7 +270,7 @@ export default function TeamsClient({
                   Claim your spot on the players screen, then pick your {sheet.noun.one}.
                 </p>
                 <Link
-                  href={`/trip/${tripCode}/players`}
+                  href={`${tripHome}/players`}
                   className="inline-block mt-3 t-label text-accent-deep hover:text-accent transition-colors"
                 >
                   Claim your spot →
@@ -294,7 +296,7 @@ export default function TeamsClient({
           event, no use for a large one). */}
       {organiser && (
         <Link
-          href={`/trip/${tripCode}/teams?view=drag`}
+          href={`${tripHome}/teams?view=drag`}
           className="t-cap text-ink/65 hover:text-ink/80 transition-colors self-center"
         >
           Drag and drop instead

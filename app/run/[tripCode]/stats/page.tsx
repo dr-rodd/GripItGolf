@@ -3,6 +3,7 @@ import TripHeader from '@/app/components/TripHeader'
 import { isRunChallenge } from '@/lib/runChallenge'
 import { fetchRunChallenge } from '../data'
 import { ChallengeNotFound } from '../RunPieces'
+import { tripBase } from '@/lib/tripPaths'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +17,7 @@ export default async function RunStatsPage({ params }: {
   const { tripCode } = await params
   const challenge = await fetchRunChallenge(tripCode)
   if (!challenge) return <ChallengeNotFound />
-  if (!isRunChallenge(challenge.kind)) redirect(`/trip/${challenge.code}/stats`)
+  if (!isRunChallenge(challenge.kind)) redirect(`${tripBase(challenge.code, challenge.kind)}/stats`)
 
   return (
     <main className="min-h-dvh paper has-tabbar">

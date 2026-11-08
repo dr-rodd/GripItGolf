@@ -19,6 +19,7 @@ import TripExportClient, {
   type ExportBoard, type ExportDay, type ExportPlayer,
   type ExportRound, type ExportTeam,
 } from './TripExportClient'
+import { fetchTripBase } from '../kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,7 @@ export default async function TripExportPage({
   params: Promise<{ tripCode: string }>
 }) {
   const { tripCode } = await params
+  const tripHome = await fetchTripBase(tripCode)
 
   const { data: trip } = await supabase
     .from('trips')
@@ -199,7 +201,7 @@ export default async function TripExportPage({
       {/* The mark, not a page title — the title artworks are hand-drawn and
           this page's name is on the document itself, one line down. */}
       <div className="print:hidden">
-        <TripHeader backTo={`/trip/${tripCode}`} />
+        <TripHeader backTo={tripHome} />
       </div>
 
       <TripExportClient
