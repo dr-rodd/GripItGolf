@@ -16,8 +16,9 @@
 import fs from 'fs'
 import {
   playerCookieName, isPlayerId, readPlayerId, buildCookie, clearCookie,
-  COOKIE_DAYS,
+  COOKIE_DAYS, watchCookieName, readWatching,
 } from '../lib/playerCookie'
+import { EVENT_PERMISSIONS } from '../lib/eventPermissions'
 import {
   standings, standingFor, matchRecord, describePosition, formatRelative, ordinal,
   type SummaryScore, type SummaryMatch,
@@ -256,6 +257,41 @@ section('A device nobody has claimed is told what to do')
   const linkEnd = claim.indexOf('</Link>')
   ok(linkEnd > 0 && /remembers you/.test(claim.slice(linkEnd)),
     '  …with what claiming gets you under the card, outside the link')
+}
+
+section('A spectator watches without claiming a name (Ross, 8 Nov 2026)')
+{
+  eq(watchCookieName('abc123'), 'gg_watch_ABC123', 'one watch cookie per trip or event, named like the player\'s')
+  ok(watchCookieName('ABC123') !== playerCookieName('ABC123'), '  …and never the player\'s')
+  eq([readWatching('1'), readWatching(' 1 '), readWatching(''), readWatching(undefined), readWatching('yes')],
+    [true, true, false, false, false], 'only its own value says watching')
+  const cookieSrc = fs.readFileSync('lib/playerCookie.ts', 'utf-8')
+  const remember = cookieSrc.slice(cookieSrc.indexOf('export function rememberPlayer'), cookieSrc.indexOf('export function watchAsSpectator'))
+  const watch = cookieSrc.slice(cookieSrc.indexOf('export function watchAsSpectator'))
+  ok(remember.includes('clearCookie(watchCookieName(tripCode)'), 'claiming a name makes a phone a player, a spectator no longer')
+  ok(watch.includes('clearCookie(playerCookieName(tripCode)'), '  …and choosing to watch lets go of a name, as "Not you?" does')
+
+  const status = fs.readFileSync('app/trip/[tripCode]/StatusBlock.tsx', 'utf-8')
+  const claim = status.slice(status.indexOf('function ClaimSpot'))
+  ok(claim.includes('Claim your spot') && claim.includes("cardClass('raised', true)") && claim.includes('<WatchAsSpectator'),
+    'the claim card stays whole, with "Just watching? View as a spectator" under it')
+  ok(/if \(\(!player && !spectator\) \|\| dismissed\)/.test(status) && status.includes('>Spectating</p>')
+    && status.includes('Playing? Claim your spot'),
+    'a spectator\'s card leads with what is on next, the way to claim kept on it')
+  ok(/\{player && \(player\.placing \|\| player\.nextMatch\)/.test(status), '  …and no standing — a spectator has none')
+  const hub = fs.readFileSync('app/trip/[tripCode]/page.tsx', 'utf-8')
+  ok(hub.includes('isSpectating(tripCode)') && hub.includes('spectator={!me && spectating}'),
+    'the hub reads the cookie on the server, so the right card is in the first paint')
+  ok(fs.readFileSync('app/trip/[tripCode]/players/PlayersClient.tsx', 'utf-8').includes('<WatchAsSpectator tripCode={tripCode} goTo={tripHome}'),
+    'the claim screen offers it too, and goes back to the home screen')
+  ok(fs.readFileSync('app/trip/[tripCode]/settings/page.tsx', 'utf-8').includes(') : spectating ? ('),
+    'an event\'s Settings tab says this phone is spectating')
+  const scoreAny = EVENT_PERMISSIONS.find(p => p.key === 'score_matches')
+  ok(!!scoreAny && scoreAny.dflt === true && scoreAny.strict === false,
+    'a relaxed match play event lets anybody with the code score a match — spectators too — and strict keeps it to the players')
+  const card = fs.readFileSync('app/trip/[tripCode]/match/[matchId]/card/MatchCardClient.tsx', 'utf-8')
+  ok(card.includes('const canEdit = !decided && (organiser || inMatch || anyoneScores)'),
+    '  …the card needing no claimed name to score when it is on')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

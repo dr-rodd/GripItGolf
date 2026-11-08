@@ -13,6 +13,7 @@ import CourseWeather from '@/app/components/CourseWeather'
 import { IconArrowRight, IconFlag, IconHome, IconCar, IconPlane, IconTrain, IconFork, IconUsers } from '@/app/components/icons'
 import { cardClass } from '@/app/components/ui'
 import CourseName from '@/app/components/CourseName'
+import WatchAsSpectator from './WatchAsSpectator'
 import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
@@ -70,10 +71,18 @@ export default function StatusBlock({
   courseNames,
   noun = 'trip',
   knockout = false,
+  spectator = false,
 }: {
   tripCode: string
   /** Null when this device is not linked to anybody on this trip. */
   player: StatusPlayer | null
+  /**
+   * Nobody claimed, and this phone chose to watch (Ross, 8 Nov 2026): the
+   * card leads with what is on next, as it does for a player, with the way
+   * to claim a spot kept on it. Without it an unclaimed phone is asked to
+   * claim, or to watch.
+   */
+  spectator?: boolean
   items: ItineraryItem[]
   startDate: string | null
   /** Round date by the itinerary item that made it — the date half of the join. */
@@ -95,7 +104,7 @@ export default function StatusBlock({
   const now = useMinute()
   const [dismissed, setDismissed] = useState(false)
 
-  if (!player || dismissed) {
+  if ((!player && !spectator) || dismissed) {
     return <ClaimSpot tripCode={tripCode} />
   }
 
@@ -129,7 +138,19 @@ export default function StatusBlock({
   return (
     <div className={`w-full px-4 py-4 ${cardClass()}`}>
 
-      {/* ── Greeting. One line, and the way out of it. ── */}
+      {/* ── Greeting. One line, and the way out of it — for a spectator,
+          the way in: claiming a spot (Ross, 8 Nov 2026). ── */}
+      {!player ? (
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="t-card text-ink min-w-0 truncate">Spectating</p>
+        <Link
+          href={`${tripHome}/players`}
+          className="flex-shrink-0 t-label text-accent-deep hover:text-accent transition-colors duration-150"
+        >
+          Playing? Claim your spot
+        </Link>
+      </div>
+      ) : (
       <div className="flex items-baseline justify-between gap-3">
         <p className="t-card text-ink min-w-0 truncate">{player.firstName}</p>
         <button
@@ -150,6 +171,7 @@ export default function StatusBlock({
           Not you?
         </button>
       </div>
+      )}
 
       {/* ── Up next ──
           Golf links through to its round summary; a stay or a journey has
@@ -194,7 +216,7 @@ export default function StatusBlock({
       {/* ── Standing ──
           Omitted rather than zeroed. "0 points, last of 12" before a ball is
           struck is a worse thing to read than nothing at all. */}
-      {(player.placing || player.nextMatch) && (
+      {player && (player.placing || player.nextMatch) && (
         <div className="mt-3.5 pt-3.5 border-t border-line flex flex-col gap-1">
           {player.placing && (
             // The place is the number worth reading, so it is the big one —
@@ -379,6 +401,10 @@ function ClaimSpot({ tripCode }: { tripCode: string }) {
       <p className="mt-2.5 px-1 t-cap text-ink/65">
         Pick or add your name, and this phone remembers you.
       </p>
+
+      {/* Or just watch (Ross, 8 Nov 2026): the card above stays exactly as
+          it was; this is the second door, quieter, under the note. */}
+      <WatchAsSpectator tripCode={tripCode} className="mt-1.5 px-1" />
     </div>
   )
 }

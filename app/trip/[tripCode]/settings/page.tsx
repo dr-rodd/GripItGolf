@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { isEvent } from '@/lib/eventHub'
-import { currentPlayer } from '@/lib/currentPlayer'
+import { currentPlayer, isSpectating } from '@/lib/currentPlayer'
 import { isConfirmed } from '@/lib/roster'
 import { ownColoursOffered } from '@/lib/playerColours'
 import { SITE } from '@/config/site'
@@ -11,6 +11,7 @@ import BackButton from '@/app/components/BackButton'
 import { PreferencesPanel } from '@/app/components/PlayerSettings'
 import { SectionTitle, cardClass } from '@/app/components/ui'
 import { fetchTripKind, fetchTripBase } from '../kind'
+import WatchAsSpectator from '../WatchAsSpectator'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,8 +70,9 @@ export default async function EventSettingsPage({ params }: {
   // colour picker. Its own query rather than an embed — players point at
   // teams too, so `teams(...)` on trips could be read two ways — taken
   // beside the cookie read.
-  const [me, { data: teams, error: teamsError }] = await Promise.all([
+  const [me, spectating, { data: teams, error: teamsError }] = await Promise.all([
     currentPlayer(tripCode, roster),
+    isSpectating(tripCode),
     supabase.from('teams').select('id, name, team_set').eq('trip_id', trip.id),
   ])
   if (teamsError) console.error('EventSettingsPage teams query failed:', teamsError)
@@ -97,6 +99,17 @@ export default async function EventSettingsPage({ params }: {
                   Not you? Switch name
                 </Link>
               </>
+            ) : spectating ? (
+              <>
+                <p className="text-ink text-sm font-medium">Spectating</p>
+                <p className="text-ink/65 text-[13px] mt-0.5">Watching {trip.name}</p>
+                <Link
+                  href={`${tripHome}/players`}
+                  className="inline-block t-cap text-accent-deep hover:text-accent transition-colors mt-3"
+                >
+                  Playing? Claim your spot →
+                </Link>
+              </>
             ) : (
               <>
                 <p className="text-ink/80 text-sm">This phone has not claimed a name in the event.</p>
@@ -106,6 +119,7 @@ export default async function EventSettingsPage({ params }: {
                 >
                   Claim your spot →
                 </Link>
+                <WatchAsSpectator tripCode={tripCode} className="mt-2" />
               </>
             )}
           </div>

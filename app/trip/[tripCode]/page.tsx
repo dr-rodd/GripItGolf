@@ -9,7 +9,7 @@ import { parseTeamScoring } from '@/lib/teamScoring'
 import { MAIN_SET, setOf, teamFor } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { cookies } from 'next/headers'
-import { currentPlayer } from '@/lib/currentPlayer'
+import { currentPlayer, isSpectating } from '@/lib/currentPlayer'
 import { INTRO_COOKIE } from '@/lib/intro'
 import SiteIntro from '@/app/components/SiteIntro'
 import { isHandicapPending, HANDICAP_PENDING_LABEL } from '@/lib/handicap'
@@ -409,7 +409,7 @@ export default async function TripPage({ params, searchParams }: {
   // greeting a stranger. Nothing below is fetched until it turns out to name
   // somebody real, so a first-time visitor pays nothing for a personalised
   // page they will not see.
-  const me = await currentPlayer(tripCode, players)
+  const [me, spectating] = await Promise.all([currentPlayer(tripCode, players), isSpectating(tripCode)])
 
   // ── A match play event: the draw from this player's side ──
   //
@@ -832,6 +832,7 @@ export default async function TripPage({ params, searchParams }: {
         {/* ── Who this device is, and what happens next ── */}
         <StatusBlock
           tripCode={tripCode}
+          spectator={!me && spectating}
           player={me ? {
             firstName: me.name.split(' ')[0],
             placing: placingLine,

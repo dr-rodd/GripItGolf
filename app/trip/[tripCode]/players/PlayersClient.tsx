@@ -17,6 +17,7 @@ import {
 import { FIELD, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import { LinkedBadge } from '@/app/components/LinkMark'
 import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
+import WatchAsSpectator from '@/app/trip/[tripCode]/WatchAsSpectator'
 
 type Player = {
   id: string
@@ -526,6 +527,10 @@ export default function PlayersClient({
         </form>
       </section>
       )}
+
+      {/* Not playing at all (Ross, 8 Nov 2026): watch instead, and go back
+          to the home screen, which then leads with what is on next. */}
+      <WatchAsSpectator tripCode={tripCode} goTo={tripHome} className="text-center" />
 
     </div>
   )
