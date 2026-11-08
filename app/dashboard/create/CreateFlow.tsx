@@ -10,7 +10,7 @@ import CreateTripForm from './CreateTripForm'
 import CreateLeagueForm from './CreateLeagueForm'
 import CreateKnockoutForm from './CreateKnockoutForm'
 import CreateRunForm from './CreateRunForm'
-import { Pill, cardClass } from '@/app/components/ui'
+import { cardClass } from '@/app/components/ui'
 
 /**
  * Which form the create route shows.
@@ -24,10 +24,9 @@ import { Pill, cardClass } from '@/app/components/ui'
  *   Ongoing — over weeks or a season
  *     Series      → the league wizard, series: rounds played together on
  *                   set days, adding up to an overall.
- *     Continuous  → coming soon. Rounds are periods and players hand in a
- *                   card any time in each; not built, and the old
- *                   continuous wizard builds the old meaning, so it is not
- *                   offered.
+ *     Continuous  → the league wizard, continuous: rounds are periods of
+ *                   time, and players hand in a card any time in each
+ *                   (lib/leagueSetup.ts `periods`).
  *     Match play  → the lean knockout door, paced by the deadlines.
  *
  * The top answer is "Ongoing", not "Continuous", so the league type keeps
@@ -132,19 +131,6 @@ function Choice({ title, line, onClick }: { title: string; line: string; onClick
   )
 }
 
-/** Named before it is built, so nobody taps into a dead end — /golf's Personal usage. */
-function ComingSoon({ title, line }: { title: string; line: string }) {
-  return (
-    <div className={`block p-5 opacity-60 ${cardClass()}`}>
-      <div className="flex items-center justify-between gap-3">
-        <p className="t-card text-ink">{title}</p>
-        <Pill className="flex-shrink-0">Coming soon</Pill>
-      </div>
-      <p className="text-ink/65 text-sm mt-1 leading-snug">{line}</p>
-    </div>
-  )
-}
-
 export default function CreateFlow() {
   const type = useSyncExternalStore(subscribe, readType, readOnServer)
   const search = useSyncExternalStore(subscribeChoice, readSearch, readSearchOnServer)
@@ -158,8 +144,8 @@ export default function CreateFlow() {
   if (when === 'standalone' && format === 'league') return <CreateLeagueForm schedule="standalone" onExit={exit} />
   if (when === 'standalone' && format === 'match_play') return <CreateTripForm matchPlay onExit={exit} />
   if (when === 'ongoing' && format === 'series') return <CreateLeagueForm schedule="series" onExit={exit} />
+  if (when === 'ongoing' && format === 'continuous') return <CreateLeagueForm schedule="continuous" onExit={exit} />
   if (when === 'ongoing' && format === 'match_play') return <CreateKnockoutForm onExit={exit} />
-  // Continuous opens nothing yet: its address falls back to the Ongoing screen.
 
   // ── Second question: what format ──
   if (when === 'standalone') {
@@ -179,8 +165,9 @@ export default function CreateFlow() {
         <Choice title="Series"
           line="Rounds played together on set days, adding up to an overall. A society season or Golfer of the Year."
           onClick={() => go({ when, format: 'series' })} />
-        <ComingSoon title="Continuous"
-          line="Rounds are periods. Players hand in a card any time in each one." />
+        <Choice title="Continuous"
+          line="Rounds are periods. Players hand in a card any time in each one."
+          onClick={() => go({ when, format: 'continuous' })} />
         <Choice title="Match play"
           line="Players arrange their own matches, with a date to play each round by."
           onClick={() => go({ when, format: 'match_play' })} />

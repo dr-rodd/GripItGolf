@@ -4,7 +4,7 @@ import { isLocked } from '@/lib/passcode'
 import { parseBracketSetup, describeSetup, isKnockoutEvent, rawDrawPlan } from '@/lib/bracketSetup'
 import { describeDrawPlan } from '@/lib/bracketDraw'
 import { describeShortDate, describeTime } from '@/lib/itinerary'
-import { parseLeagueSetup, describeLeagueSetup } from '@/lib/leagueSetup'
+import { parseLeagueSetup, describeLeagueSetup, isPeriodLeague } from '@/lib/leagueSetup'
 import { parseEventPermissions } from '@/lib/eventPermissions'
 import { TAG_SET, describeTags } from '@/lib/tagBoards'
 import { roundSheet, teeSheetSummary } from '@/lib/teeSheet'
@@ -252,6 +252,7 @@ export default async function OrganiserPage({ params }: {
       isLeague={!!leagueSetup}
       initialTrackStats={trip.track_stats === true}
       series={leagueSetup?.schedule === 'series'}
+      periods={isPeriodLeague(leagueSetup)}
       tagsSummary={describeTags(
         tagsResult.count ?? 0,
         taggedResult.count ?? 0,

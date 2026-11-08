@@ -1144,8 +1144,8 @@ section('The hub is the sections it should be, and nothing else')
   // nothing under it. A trip's itinerary always shows.
   ok(hub.includes("const showSchedule = !isEvent || modules.includes('schedule')"),
     'a trip always shows its itinerary; an event only a schedule with something on it')
-  ok(hub.includes('schedule: isEvent && (itinerary.length > 0 || days.length > 0)'),
-    '  …golf counting as much as anything else')
+  ok(hub.includes('schedule: isEvent && (itinerary.length > 0 || days.length > 0 || !!periodsLeague)'),
+    '  …golf counting as much as anything else, and a league of periods always having its periods')
   ok(/\.\.\.\(showSchedule \? \[\{\s*key: 'itinerary'/.test(hub),
     '  …and the section is drawn only then')
 

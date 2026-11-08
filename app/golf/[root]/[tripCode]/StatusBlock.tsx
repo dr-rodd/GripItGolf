@@ -70,6 +70,7 @@ export default function StatusBlock({
   courseNames,
   noun = 'trip',
   knockout = false,
+  periodLine = null,
 }: {
   tripCode: string
   /** Null when this device is not linked to anybody on this trip. */
@@ -89,6 +90,11 @@ export default function StatusBlock({
    * draw's countdown and the next-match card under it carry what is next.
    */
   knockout?: boolean
+  /**
+   * A league of periods (lib/leagueSetup.ts `periodNowLine`): no golf to count
+   * down to, so the card says which period is open and until when instead.
+   */
+  periodLine?: string | null
 }) {
   const tripHome = useTripBase(tripCode)
   const router = useRouter()
@@ -154,7 +160,11 @@ export default function StatusBlock({
       {/* ── Up next ──
           Golf links through to its round summary; a stay or a journey has
           no page to open and stays plain. */}
-      {(next || why === 'finished' || !knockout) && (
+      {periodLine ? (
+        <div className="mt-3.5 pt-3.5 border-t border-line">
+          <p className="t-body text-ink">{periodLine}</p>
+        </div>
+      ) : (next || why === 'finished' || !knockout) && (
       <div className="mt-3.5 pt-3.5 border-t border-line">
         {next ? (
           nextRoundNumber != null ? (

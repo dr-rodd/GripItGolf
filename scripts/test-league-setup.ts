@@ -413,15 +413,11 @@ section('The tournament door asks when, then what (Ross, 8 Nov 2026)')
   ok(flow.includes(`if (when === 'ongoing' && format === 'match_play') return <CreateKnockoutForm onExit={exit} />`),
     'Ongoing → Match play is the lean knockout door')
 
-  // Continuous is named, not built: no wizard, no button.
-  ok(!flow.includes('schedule="continuous"') && !flow.includes("schedule={'continuous'}"),
-    'Continuous opens no wizard — the old one builds the old meaning')
-  const cont = flow.slice(flow.indexOf('<ComingSoon title="Continuous"'))
-  ok(flow.includes('<ComingSoon title="Continuous"') && !cont.slice(0, cont.indexOf('/>')).includes('onClick'),
-    '  …it is a Coming soon card with nothing to tap')
-  const soon = flow.slice(flow.indexOf('function ComingSoon'), flow.indexOf('export default function CreateFlow'))
-  ok(soon.includes('Coming soon') && soon.includes('opacity-60') && !soon.includes('<button') && !soon.includes('<Link'),
-    '  …drawn the way /golf draws Personal usage')
+  // Continuous is live now its cards have somewhere to go (Ross, 8 Nov 2026).
+  ok(flow.includes(`if (when === 'ongoing' && format === 'continuous') return <CreateLeagueForm schedule="continuous" onExit={exit} />`),
+    'Ongoing → Continuous is the league wizard, as a league of periods')
+  ok(!flow.includes('Coming soon') && flow.includes(`onClick={() => go({ when, format: 'continuous' })}`),
+    '  …a card like the others, no longer coming soon')
 
   // The answers live in the address, so back works.
   ok(flow.includes("window.addEventListener('popstate', onChange)"),
@@ -721,9 +717,9 @@ section('A league grows from the Scoring tab and the hub, one round at a time')
 section('Every round has its own leaderboard; a round can stop counting')
 {
   const board = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
-  ok(board.includes('const showRounds = isEvent && series && roundOptions.length > 1'),
-    'a league reads its board overall or one round at a time')
-  ok(board.includes('const showCourses = isEvent && !series && courses.length > 1'),
+  ok(board.includes('const showRounds = isEvent && (series || !!periodRounds) && roundOptions.length > 1'),
+    'a league reads its board overall or one round at a time — a league of periods one period at a time')
+  ok(board.includes('const showCourses = isEvent && !series && !periods?.length && courses.length > 1'),
     '  …in the course switch\'s place, never beside it')
   ok(board.includes('? [shownRound.id]') && board.includes('return withOnlyRounds(base, courseRoundIds)'),
     'a round\'s board is the league\'s own boards narrowed by the one copy — never a stored second board')

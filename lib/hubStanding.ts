@@ -27,7 +27,7 @@ import {
   type OpenCard, type ScoreRow, type LiveScoreRow, type HandicapRow,
 } from './rowContext'
 import { readScores, readLiveScores, readRoundHandicaps } from './scoreReads'
-import { cardKey, parseLeagueSetup, type LeagueSetup } from './leagueSetup'
+import { cardKey, parseLeagueSetup, isPeriodLeague, type LeagueSetup, type LeaguePeriod, type PeriodRule } from './leagueSetup'
 import { readsGolfIreland, type RoundCard } from './golfIreland'
 import { readRoundCards } from './golfIrelandCards'
 
@@ -50,9 +50,14 @@ async function fetchLeague(tripId: string): Promise<LeagueSetup | null> {
 /** The setup, and its Golf Ireland cards on these rounds — one hop more only for a league reading them. */
 async function fetchLeagueCards(
   tripId: string, rounds: readonly { id: string; scheduled_date?: string | null; course_id?: string | null }[],
-): Promise<{ cardsOff: string[]; roundCards: RoundCard[] }> {
+): Promise<{ cardsOff: string[]; roundCards: RoundCard[]; periods?: LeaguePeriod[]; periodRule?: PeriodRule }> {
   const setup = await fetchLeague(tripId)
-  return { cardsOff: setup?.cardsOff ?? [], roundCards: await readRoundCards(tripId, setup, rounds) }
+  return {
+    cardsOff: setup?.cardsOff ?? [],
+    roundCards: await readRoundCards(tripId, setup, rounds),
+    // A league of periods reads one round a period, on every board.
+    ...(isPeriodLeague(setup) ? { periods: setup.periods, periodRule: setup.periodRule } : {}),
+  }
 }
 
 export type PlacingResult = {
@@ -85,11 +90,16 @@ export async function fetchPlacing(
    * not, so the two could put a player in different places.
    */
   legacyTeamScoring: TeamScoring | null,
+  /**
+   * A league of periods: the board counts one card a period, which the
+   * cheap path — a sum of every card — would get wrong. Always the full path.
+   */
+  periods = false,
 ): Promise<PlacingResult> {
   // A knockout is not a table. The next-match line carries that board.
   if (!lead || lead.competition === 'matchplay') return NONE
 
-  return usesSimpleStandings(lead)
+  return usesSimpleStandings(lead) && !periods
     ? simplePlacing(tripId, lead, playerId)
     : fullPlacing(tripId, lead, playerId, legacyTeamScoring)
 }
@@ -226,7 +236,9 @@ export async function fetchRoundRows(
   // dropped: a round's result is that round's result, whether or not the
   // trip is counting it. `buildRows` would otherwise return an empty board
   // for a casual round, and its page would read as never played.
-  const own = { ...ctx, rounds: ctx.rounds.map(r => ({ ...r, casual: false })) }
+  // And a card in a league of periods is that card's result here, not its
+  // period's: the periods come off, so the board reads this one round.
+  const own = { ...ctx, rounds: ctx.rounds.map(r => ({ ...r, casual: false })), periods: undefined }
   return { rows: buildRows({ ...lead, discardWorst: 0 }, own), error: null }
 }
 
@@ -376,6 +388,7 @@ export async function fetchTripContext(
       round_number: r.round_number,
       casual: r.casual === true,
       casual_stats: r.casual_stats === true,
+      scheduled_date: (r as { scheduled_date?: string | null }).scheduled_date ?? null,
     })),
     courseByRound: new Map(roundRows.map(r => [r.id as string, r.course_id as string])),
     scores: scoresRes.data ?? [],
@@ -387,6 +400,8 @@ export async function fetchTripContext(
     legacyTeamScoring,
     cardsOff: league.cardsOff,
     roundCards: league.roundCards,
+    periods: league.periods,
+    periodRule: league.periodRule,
   })
 
   return {

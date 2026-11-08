@@ -8,10 +8,11 @@ import { MAIN_SET, setOf } from '@/lib/teamSets'
 import { fetchEntrants } from '@/lib/matchplayStore'
 import { readDrawState } from '@/lib/drawStore'
 import {
-  parseLeagueSetup, describeLeagueSetup, asksRoundDeadlines, leagueRounds, leagueRoundKey,
+  parseLeagueSetup, describeLeagueSetup, asksRoundDeadlines, leagueRounds, leagueRoundKey, isPeriodLeague,
 } from '@/lib/leagueSetup'
 import { describeShortDate } from '@/lib/itinerary'
 import LeagueDeadlines from './LeagueDeadlines'
+import LeaguePeriods from './LeaguePeriods'
 import BackButton from '@/app/components/BackButton'
 import TripHeader from '@/app/components/TripHeader'
 import PasscodeGate from '../../setup/PasscodeGate'
@@ -102,7 +103,8 @@ export default async function BracketSetupPage({ params }: {
     // A league whose rounds are played over a stretch is asked a deadline
     // for each (Ross, 5 Nov 2026) — every round it has now, TBC ones too.
     const startDate = (trip as { start_date?: string | null }).start_date ?? null
-    const listed = asksRoundDeadlines(leagueSetup.schedule) ? leagueRounds(
+    const periodsLeague = isPeriodLeague(leagueSetup) ? leagueSetup : null
+    const listed = asksRoundDeadlines(leagueSetup.schedule, !!periodsLeague) ? leagueRounds(
       ((itemsRes.data ?? []) as { id: string; day_index: number; kind: string; course_id: string | null }[])
         .map(i => ({ id: i.id, dayIndex: i.day_index, kind: i.kind, courseId: i.course_id })),
       ((roundsRes.data ?? []) as { id: string; round_number: number; itinerary_item_id: string | null; course_id: string | null; scheduled_date: string | null }[])
@@ -122,9 +124,12 @@ export default async function BracketSetupPage({ params }: {
           </p>
           <div className={`p-4 ${cardClass()}`}>
             <p className="text-ink/65 text-[13px] leading-snug">
-              Days, venues and field were set when the league was created.
+              {periodsLeague
+                ? 'The rule, the courses and the field were set when the league was created. The periods’ dates can be moved below.'
+                : 'Days, venues and field were set when the league was created.'}
             </p>
           </div>
+          {periodsLeague && <LeaguePeriods tripId={trip.id} periods={periodsLeague.periods} />}
           {listed.length > 0 && (
             <LeagueDeadlines
               tripId={trip.id}

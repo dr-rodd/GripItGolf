@@ -70,7 +70,7 @@ type Overview = {
 export default function OrganiserClient({
   tripId, tripCode, initialNotices, initialRounds, formatSummary, isLeague,
   initialPermissions, overview, tagsSummary, dayFormatSummary, golfIreland, accessCard, knockout = false, drawSummary = null,
-  series = false, initialTrackStats = false, hasTeamBoards = false,
+  series = false, periods = false, initialTrackStats = false, hasTeamBoards = false,
 }: {
   /** A leaderboard plays in teams — the team picker gets a row of its own. */
   hasTeamBoards?: boolean
@@ -99,11 +99,13 @@ export default function OrganiserClient({
   golfIreland?: { rulesLine: string; connected: boolean; links: LinkRequest[] } | null
   /** A series league — asked the series-only permissions too (`permissionsFor`). */
   series?: boolean
+  /** A continuous league of periods — asked whether players start their own cards. */
+  periods?: boolean
   /** `trips.track_stats` — whether the event records stats, and so shows them. */
   initialTrackStats?: boolean
 }) {
   const tripHome = useTripBase(tripCode)
-  const permRegistry = permissionsFor(series, knockout)
+  const permRegistry = permissionsFor(series, knockout, periods)
   // A change to the stats or a round's start can change the bar's fourth
   // tab, which the layout reads — so a landed save refreshes the router.
   const router = useRouter()

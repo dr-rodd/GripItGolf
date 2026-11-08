@@ -4,9 +4,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { describeShortDate } from '@/lib/itinerary'
-import { cardKey, insertedRoundNumber, nextRoundIssue, parseLeagueSetup } from '@/lib/leagueSetup'
 import {
-  addLeagueRound, confirmLeagueVenue, setCardCounts, setRoundAllowance,
+  cardKey, insertedRoundNumber, nextRoundIssue, parseLeagueSetup,
+  type LeaguePeriod, periodCardIssue, periodNow, describePeriod,
+} from '@/lib/leagueSetup'
+import {
+  addLeagueRound, confirmLeagueVenue, setCardCounts, setRoundAllowance, startPeriodCard,
 } from '@/lib/leagueRoundStore'
 import { type Leaderboard, boardTitle, offersAllowance, parseLeaderboards } from '@/lib/leaderboards'
 import { ALLOWANCE_PRESETS, allowanceOf } from '@/lib/handicapAllowance'
@@ -23,6 +26,7 @@ import CourseName from '@/app/components/CourseName'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import { FIELD_LABEL, IconButton, Segmented, cardClass, chipClass } from '@/app/components/ui'
 import { IconPlus, IconSettings } from '@/app/components/icons'
+import { useTripBase } from './TripBase'
 
 /**
  * A league's rounds, where the field can touch them — the Scoring tab and
@@ -252,6 +256,129 @@ export function AddLeagueRound({
               <p className="text-ink text-sm">Venue to be confirmed</p>
               <Toggle checked={tbc} onChange={setTbc} label="Venue to be confirmed" />
             </div>
+          </div>
+        </Sheet>
+      )}
+    </>
+  )
+}
+
+// ─── Start a card ──────────────────────────────────────────────
+
+/**
+ * A league of periods' one door (Ross, 8 Nov 2026): a card on the course
+ * and the day it was played, inside an open period — today by default,
+ * never the future. It finds or makes that day's round there
+ * (`startPeriodCard`) and opens its scoring, where the group is picked as
+ * on any round. The field's while `submit_cards` is on (the default), the
+ * organiser's with the PIN otherwise. A league that names its courses
+ * offers those and no others, and adding one is never offered there.
+ */
+export function StartPeriodCard({ door, periods, courseIds, fieldMayStart }: {
+  door: Pick<LeagueDoor, 'tripId' | 'tripCode' | 'passcodeHash' | 'fieldMayAddCourses'>
+  periods: LeaguePeriod[]
+  /** The league's courses, or null for any course. */
+  courseIds: string[] | null
+  /** `submit_cards` is on: the field starts cards without the PIN. */
+  fieldMayStart: boolean
+}) {
+  const router = useRouter()
+  const tripHome = useTripBase(door.tripCode)
+  const [open, setOpen] = useState(false)
+  const [unlocked, setUnlocked] = useState(false)
+  const [today, setToday] = useState('')
+  const [date, setDate] = useState('')
+  const [courseId, setCourseId] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const { courses: all, upsert } = useCourses(open)
+  const courses = useMemo(
+    () => courseIds ? all.filter(c => courseIds.includes(c.id)) : all,
+    [all, courseIds],
+  )
+
+  const organiser = unlocked || !isLocked(door.passcodeHash)
+  const mayStart = fieldMayStart || organiser
+
+  function openSheet() {
+    // Read on tap, never during render: the unlock lives in sessionStorage
+    // and the date on the device's own calendar.
+    setUnlocked(hasUnlocked(door.tripCode))
+    const t = localToday()
+    setToday(t)
+    setDate(periodCardIssue(t, t, periods) ? '' : t)
+    setCourseId(courseIds?.length === 1 ? courseIds[0] : '')
+    setError(null)
+    setOpen(true)
+  }
+
+  async function start() {
+    if (!mayStart) { setError('Starting a card needs the organiser PIN.'); return }
+    const issue = periodCardIssue(date, today, periods)
+    if (issue) { setError(issue); return }
+    if (!courseId) { setError('Pick the course it was played on.'); return }
+    if (courseIds && !courseIds.includes(courseId)) { setError('That course doesn’t count in this league.'); return }
+    setSaving(true)
+    setError(null)
+    const result = await startPeriodCard({ tripId: door.tripId, courseId, date })
+    setSaving(false)
+    if (!result.ok) { setError(result.error); return }
+    setOpen(false)
+    router.refresh()
+    router.push(`${tripHome}/scoring/${result.roundNumber}`)
+  }
+
+  const now = today ? periodNow(today, periods) : null
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={openSheet}
+        className={`flex-shrink-0 flex items-center gap-2 pl-3.5 pr-4 py-2.5 -mr-1 hover:border-accent ${cardClass('raised', true)}`}
+      >
+        <span className="text-accent-deep"><IconPlus size={16} /></span>
+        <span className="t-label text-ink">Start a card</span>
+      </button>
+
+      {open && (
+        <Sheet
+          title="Start a card"
+          onClose={() => !saving && setOpen(false)}
+          onAdd={start}
+          addLabel={saving ? 'Starting…' : 'Start card'}
+          error={error}
+        >
+          {!mayStart && (
+            <OrganiserOnly door={door as LeagueDoor} what="starts the cards" onUnlocked={() => setUnlocked(true)} />
+          )}
+
+          {now && !now.open && (
+            <p className="t-cap text-ink/65 leading-snug">
+              {now.next
+                ? `No period is open today. The next runs ${describePeriod(now.next)}.`
+                : 'Every period has finished — a card can still go in for a day that was inside one.'}
+            </p>
+          )}
+
+          <DateField label="The day it was played" value={date} onChange={setDate}
+            min={periods[0]?.start} max={today || undefined} />
+
+          <div>
+            <label className={FIELD_LABEL}>Course</label>
+            <CourseSelect
+              courses={courses}
+              value={courseId}
+              onChange={setCourseId}
+              onCourseAdded={upsert}
+              allowAdd={!courseIds && (organiser || door.fieldMayAddCourses)}
+            />
+            {courseIds && (
+              <p className="t-cap text-ink/65 mt-2 leading-snug">
+                Only the league’s courses count.
+              </p>
+            )}
           </div>
         </Sheet>
       )}

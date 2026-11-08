@@ -12,7 +12,9 @@ import {
   equalPeriods, periodsIssue, tidyPeriods, parseLeagueSetup, periodOf, periodNow,
   periodCardIssue, asksRoundDeadlines, isPeriodLeague, describeLeagueSetup,
   periodRoundId, periodLabel, addMonths, starterBoards, type LeaguePeriod,
+  periodListing, periodNowLine, periodRuleFact,
 } from '../lib/leagueSetup'
+import { EVENT_PERMISSIONS, permissionsFor, allowsParticipant } from '../lib/eventPermissions'
 import { pickPeriodCard, bestCard } from '../lib/periodCards'
 import { buildRows, withOnlyRounds, type RowContext, type ResolvedScore, type RowHole } from '../lib/boardRows'
 import type { Leaderboard } from '../lib/leaderboards'
@@ -300,6 +302,90 @@ section('Creation makes a league of periods, and no rounds')
   ok(form.includes('Which card counts in a period?') && form.includes('PERIOD_RULES.map'), 'the last step asks which card counts')
   ok(form.includes('{!continuous && (\n              <TeeTimesQuestion'), 'and no tee times — nobody shares a round to book')
   ok(!form.includes('repeatWeekday') && !form.includes('weeklyDates'), 'the old day-picking face is gone from creation')
+}
+
+section('The periods as the field reads them')
+{
+  const ps = equalPeriods('2026-11-01', 4, 'week', 4)   // to 20 Feb
+  const cards = [
+    { id: 'a', date: '2026-11-03' }, { id: 'b', date: '2026-12-02' }, { id: 'c', date: '2026-12-10' },
+    { id: 'z', date: '2026-10-01' },
+  ]
+  const { groups, outside } = periodListing(ps, cards, '2026-12-05')
+  eq(groups.map(g => [g.number, g.state]), [[2, 'open'], [3, 'next'], [4, 'later'], [1, 'closed']],
+    'the open period on top, then the next and later ones, then the closed newest first')
+  eq(groups[0].cards.map(c => c.id), ['c', 'b'], '  …each with its cards, newest first')
+  eq(outside.map(c => c.id), ['z'], 'a card no period covers comes back apart, to be said so')
+  eq(periodListing(ps, [], '2026-10-01').groups.map(g => g.state), ['next', 'later', 'later', 'later'], 'before the league, the first is next')
+  eq(periodNowLine(ps, '2026-12-05'), 'Period 2 is open — cards until Sat 26 Dec.', 'the hub says the open period and when it shuts')
+  ok(periodNowLine(ps, '2026-10-01').startsWith('Period 1 opens '), '  …or when the next one opens')
+  eq(periodNowLine(ps, '2027-06-01'), 'Every period has finished.', '  …or that it is over')
+  eq(periodRuleFact('composite'), 'Best composite card a period', 'a board says which card counts')
+}
+
+section('Starting a card')
+{
+  const submit = EVENT_PERMISSIONS.find(p => p.key === 'submit_cards')!
+  ok(submit.dflt === true && submit.strict === false && submit.periodsOnly === true,
+    'anybody in the field starts their own cards by default; Strict makes it the organiser\'s')
+  ok(permissionsFor(false, false, true).includes(submit) && !permissionsFor(true).includes(submit),
+    '  …asked of a league of periods and nothing else')
+  ok(allowsParticipant('tournament', null, 'submit_cards'), '  …open on an event that stored nothing')
+
+  const store = read('lib/leagueRoundStore.ts')
+  const fn = store.slice(store.indexOf('export async function startPeriodCard'))
+  ok(fn.includes(".eq('course_id', args.courseId)") && fn.includes(".eq('scheduled_date', args.date)"),
+    'a card finds the round for its course and day first — a fourball shares one')
+  ok(fn.includes("error.code !== '23505'") && fn.includes('attempt < 4'),
+    '  …and a lost race for the next number looks again, never fails at once')
+  ok(!fn.slice(0, fn.indexOf('\n}\n')).includes('itinerary_item') && !fn.slice(0, fn.indexOf('\n}\n')).includes('round_handicaps'),
+    '  …with no schedule item and no snapshot of the field: the card locks its own players')
+
+  const sheet = read('app/golf/[root]/[tripCode]/LeagueRounds.tsx')
+  ok(sheet.includes('export function StartPeriodCard') && sheet.includes('periodCardIssue(date, today, periods)'),
+    'the sheet refuses a day in the future or outside every period')
+  ok(sheet.includes('courseIds ? all.filter(c => courseIds.includes(c.id)) : all')
+    && sheet.includes('allowAdd={!courseIds && (organiser || door.fieldMayAddCourses)}'),
+    '  …offers only the league\'s courses where it names them, and never adding one there')
+  ok(sheet.includes("router.push(`${tripHome}/scoring/${result.roundNumber}`)"), '  …and opens the card\'s scoring')
+
+  const scoring = read('app/golf/[root]/[tripCode]/scoring/page.tsx')
+  ok(scoring.includes('<StartPeriodCard') && scoring.includes("allowsParticipant(kind, permsRaw, 'submit_cards')"),
+    'the Scoring tab carries the door, by the permission')
+  ok(scoring.includes('periodListing(periodsLeague.periods') && scoring.includes('<PeriodList'),
+    '  …and lists the cards under their periods')
+  ok(scoring.includes('if (!counts(id)) return { id, scored: true }'),
+    '  …counting only the cards that can still change, so hundreds of cards cost nothing')
+}
+
+section('The hub, the standing and the leaderboard read the periods')
+{
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
+  ok(hub.includes('periodSection ?? (leagueDoor') && hub.includes("openEmpty=\"No cards yet — start one on the Scoring tab.\""),
+    'the hub\'s Schedule is the periods and their cards')
+  ok(hub.includes('|| days.length > 0 || !!periodsLeague)'), '  …shown from the start, before any card exists')
+  ok(hub.includes('periodLine={periodsLeague ? periodNowLine('), '  …and the status card names the open period instead of a countdown')
+  ok(hub.includes('isEvent && isPeriodLeague(parseLeagueSetup('), 'the standing takes the full path on a league of periods')
+  const standing = read('lib/hubStanding.ts')
+  ok(standing.includes('usesSimpleStandings(lead) && !periods'), '  …never the cheap sum of every card')
+  ok(standing.includes('periods: league.periods') && standing.includes('scheduled_date:'),
+    '  …and its context carries the periods and every card\'s day')
+  ok(standing.includes('periods: undefined }'), 'a card\'s own page shows that card, not its period')
+
+  const client = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  ok(client.includes('periods.map((p, i) => ({ id: periodRoundId(p.key), round_number: i + 1, courses: null }))'),
+    'the leaderboard\'s rounds are the periods — the switch and the columns alike')
+  ok(client.includes("`${periodRounds ? 'Period' : 'Round'} ${r.round_number}`"), '  …named Period 1, Period 2')
+  ok(client.includes("if (!round.id.startsWith('period:')) setCard({ row, round })"),
+    '  …and a period\'s cell opens no single card, because it may be several')
+  ok(read('app/golf/[root]/[tripCode]/leaderboard/page.tsx').includes('periods={isPeriodLeague(leagueSetup) ? leagueSetup.periods : undefined}'),
+    'the page hands the periods over')
+  const org = read('app/golf/[root]/[tripCode]/organiser/bracket/page.tsx')
+  ok(org.includes('<LeaguePeriods tripId={trip.id} periods={periodsLeague.periods} />')
+    && org.includes('asksRoundDeadlines(leagueSetup.schedule, !!periodsLeague)'),
+    'the organiser moves the periods\' dates, and is asked no deadlines')
+  ok(read('lib/leagueRoundStore.ts').includes('if (args.periods.map(p => p.key).join() !== keys) return fail'),
+    '  …the same periods, by key — moved, never added or lost there')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

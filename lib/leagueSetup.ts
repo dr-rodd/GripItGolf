@@ -371,6 +371,11 @@ export function periodCardIssue(date: string, today: string, periods: readonly L
   return null
 }
 
+/** The rule as a board's fact — "Best card a period". */
+export function periodRuleFact(rule: PeriodRule | undefined): string {
+  return rule === 'composite' ? 'Best composite card a period' : 'Best card a period'
+}
+
 /** The id a period goes by on a leaderboard, where it stands in for a round. */
 export const periodRoundId = (key: string) => `period:${key}`
 
@@ -378,6 +383,46 @@ export const periodRoundId = (key: string) => `period:${key}`
 export function periodLabel(periods: readonly LeaguePeriod[], key: string): string {
   const i = periods.findIndex(p => p.key === key)
   return i < 0 ? 'Period' : `Period ${i + 1}`
+}
+
+/** Where a period stands today. */
+export type PeriodState = 'open' | 'next' | 'later' | 'closed'
+
+export type PeriodGroup<C> = { period: LeaguePeriod; number: number; state: PeriodState; cards: C[] }
+
+/**
+ * A league of periods as the field reads it — the Scoring tab and the hub,
+ * one copy. The open period on top, then the next and the later ones, then
+ * the closed ones newest first; each with its cards, newest first. Cards
+ * dated outside every period (a period moved since they were played) come
+ * back apart, to be said so rather than lost.
+ */
+export function periodListing<C extends { date: string | null }>(
+  periods: readonly LeaguePeriod[], cards: readonly C[], today: string,
+): { groups: PeriodGroup<C>[]; outside: C[] } {
+  const byNewest = (a: C, b: C) => (b.date ?? '').localeCompare(a.date ?? '')
+  const firstAhead = periods.find(p => p.start > today)
+  const groups = periods.map((period, i): PeriodGroup<C> => ({
+    period,
+    number: i + 1,
+    state: period.start <= today && today <= period.end ? 'open'
+      : period.end < today ? 'closed'
+      : period === firstAhead ? 'next' : 'later',
+    cards: cards.filter(c => periodOf(c.date, [period])).sort(byNewest),
+  }))
+  const rank: Record<PeriodState, number> = { open: 0, next: 1, later: 2, closed: 3 }
+  groups.sort((a, b) => rank[a.state] - rank[b.state]
+    || (a.state === 'closed' ? b.number - a.number : a.number - b.number))
+  return { groups, outside: cards.filter(c => !periodOf(c.date, periods)).sort(byNewest) }
+}
+
+/** The hub's line for a league of periods, in place of a countdown to golf. */
+export function periodNowLine(periods: readonly LeaguePeriod[], today: string): string {
+  const { open, next } = periodNow(today, periods)
+  const n = (p: LeaguePeriod) => periods.indexOf(p) + 1
+  if (open) return `Period ${n(open)} is open — cards until ${describeShortDate(open.end) ?? open.end}.`
+  if (next) return `Period ${n(next)} opens ${describeShortDate(next.start) ?? next.start}.`
+  return 'Every period has finished.'
 }
 
 /** "1 Dec – 28 Dec", for a period's line. */

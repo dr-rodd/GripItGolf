@@ -8,7 +8,7 @@ import { parseTeamScoring } from '@/lib/teamScoring'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { liveRoundPresence, type OpenCard } from '@/lib/rowContext'
 import { isEvent } from '@/lib/eventHub'
-import { parseLeagueSetup } from '@/lib/leagueSetup'
+import { parseLeagueSetup, isPeriodLeague } from '@/lib/leagueSetup'
 import Poller from '@/app/components/Poller'
 import { readScores, readLiveScores, readRoundHandicaps } from '@/lib/scoreReads'
 import TripLeaderboardClient, { type Score, type LiveScore, type RoundHcp } from './TripLeaderboardClient'
@@ -226,6 +226,8 @@ export default async function TripLeaderboardPage({
         playerColours={playerColours}
         dayBoards={dayBoards}
         series={series}
+        periods={isPeriodLeague(leagueSetup) ? leagueSetup.periods : undefined}
+        periodRule={isPeriodLeague(leagueSetup) ? leagueSetup.periodRule : undefined}
         cardsOff={leagueSetup?.cardsOff}
         roundCards={roundCards}
         linkedIds={giLinked}

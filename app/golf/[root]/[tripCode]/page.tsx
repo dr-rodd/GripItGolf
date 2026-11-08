@@ -50,7 +50,8 @@ import ShareTrip from './ShareTrip'
 import { golfIrelandLinkedIds } from './golfIreland'
 import { LinkedBadge } from '@/app/components/LinkMark'
 import { cardClass } from '@/app/components/ui'
-import { parseLeagueSetup, leagueRounds, playByLine, seriesListing } from '@/lib/leagueSetup'
+import { parseLeagueSetup, leagueRounds, playByLine, seriesListing, isPeriodLeague, periodListing, periodNowLine } from '@/lib/leagueSetup'
+import PeriodList from './PeriodList'
 import { todayString } from '@/lib/tripStatus'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { describeShortDate, describeTime } from '@/lib/itinerary'
@@ -480,6 +481,9 @@ export default async function TripPage({ params, searchParams }: {
         isLegacy(parseLeaderboards(trip.leaderboards))
           ? parseTeamScoring(trip.team_scoring)
           : null,
+        // A league of periods counts one card a period, which only the
+        // board itself knows how to pick — never the cheap sum of every card.
+        isEvent && isPeriodLeague(parseLeagueSetup((trip as { bracket_setup?: unknown }).bracket_setup)),
       ),
       hasMatchplay(boards)
         ? supabase
@@ -612,7 +616,36 @@ export default async function TripPage({ params, searchParams }: {
   const leagueDeadlines = parseLeagueSetup(tripRaw.bracket_setup)?.deadlines ?? {}
   const playBy = (key: string, finished: boolean) => playByLine(leagueDeadlines[key], todayString(new Date()), finished)
 
-  const leagueSection = leagueDoor ? (
+  // A league of periods reads as its periods, each with its cards opening
+  // their own summary (lib/leagueSetup.ts `periodListing`, the one order).
+  const periodSetup = isEvent ? parseLeagueSetup(tripRaw.bracket_setup) : null
+  const periodsLeague = isPeriodLeague(periodSetup) ? periodSetup : null
+  const periodSection = periodsLeague ? (() => {
+    const { groups, outside } = periodListing(periodsLeague.periods,
+      rounds.map(r => ({ ...r, date: r.scheduled_date })), todayString(new Date()))
+    return (
+      <PeriodList
+        groups={groups}
+        outside={outside}
+        openEmpty="No cards yet — start one on the Scoring tab."
+        renderCard={r => (
+          <Link
+            key={r.id}
+            href={`${tripHome}/round/${r.round_number}`}
+            className={`flex items-center justify-between w-full px-5 py-4 press ${cardClass('raised', true)}`}
+          >
+            <div className="min-w-0">
+              <p className="t-label text-ink/65 mb-1">{r.scheduled_date ? describeShortDate(r.scheduled_date) : 'Card'}</p>
+              <p className="t-card text-ink truncate"><CourseName name={courseMap[r.course_id] ?? 'Card'} /></p>
+            </div>
+            <span className="flex-shrink-0 ml-4 text-ink/50" aria-hidden="true"><IconChevronRight size={20} /></span>
+          </Link>
+        )}
+      />
+    )
+  })() : null
+
+  const leagueSection = periodSection ?? (leagueDoor ? (
     <div className="flex flex-col gap-3">
       {listing.map(({ round: lr, locked }) => locked ? (lr.date ? (
         <LockedRoundTile
@@ -672,7 +705,7 @@ export default async function TripPage({ params, searchParams }: {
         </div>
       )}
     </div>
-  ) : null
+  ) : null)
 
   // ── The itinerary, or the list of rounds a pre-itinerary trip has ──
   const itinerarySection = leagueSection ?? (itinerary.length > 0 ? (
@@ -735,7 +768,7 @@ export default async function TripPage({ params, searchParams }: {
       && (teeRoundSheet.state !== 'active' || sheetIsOpen(teeRoundSheet.rules, teeRound?.date ?? null, new Date())),
     // Anything on it — the itinerary, or the rounds of an event made before
     // the itinerary existed. Only an empty one is left off.
-    schedule: isEvent && (itinerary.length > 0 || days.length > 0),
+    schedule: isEvent && (itinerary.length > 0 || days.length > 0 || !!periodsLeague),
     stats: statsOnHome && !!statsCover && statsCover.level !== 'none',
   })
   const showSchedule = !isEvent || modules.includes('schedule')
@@ -845,6 +878,7 @@ export default async function TripPage({ params, searchParams }: {
           courseNames={courseMap}
           noun={isEvent ? 'event' : 'trip'}
           knockout={!!koView}
+          periodLine={periodsLeague ? periodNowLine(periodsLeague.periods, todayString(new Date())) : null}
         />
 
         {/* A draw set for a date and a time, counted down to while it is

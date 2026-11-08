@@ -14,8 +14,9 @@ import { linkedPlayerId } from '@/lib/currentPlayer'
 import { readKnockout } from '../knockout'
 import { readLiveMatches } from '../match/matchCards'
 import { KnockoutPortal } from '../KnockoutViews'
-import { AddLeagueRound, LockedRoundTile, RoundSettings, TbcRoundTile, type LeagueDoor } from '../LeagueRounds'
-import { parseLeagueSetup, leagueRounds, playByLine, seriesListing } from '@/lib/leagueSetup'
+import { AddLeagueRound, LockedRoundTile, RoundSettings, StartPeriodCard, TbcRoundTile, type LeagueDoor } from '../LeagueRounds'
+import { parseLeagueSetup, leagueRounds, playByLine, seriesListing, isPeriodLeague, periodListing, periodOf } from '@/lib/leagueSetup'
+import PeriodList from '../PeriodList'
 import { todayString } from '@/lib/tripStatus'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { describeShortDate } from '@/lib/itinerary'
@@ -97,6 +98,9 @@ export default async function TripCoursePortalPage({
   const setupRow = setupRes.data as { bracket_setup?: unknown; settings_passcode_hash?: string | null } | null
   const leagueSetup = event ? parseLeagueSetup(setupRow?.bracket_setup) : null
   const series = leagueSetup?.schedule === 'series' && !!trip.start_date
+  // A continuous league of periods: its rounds are cards, listed under the
+  // periods they fall in, and started from here (lib/leagueSetup.ts).
+  const periodsLeague = isPeriodLeague(leagueSetup) ? leagueSetup : null
   // A match play event's Scoring tab is the bracket's portal: its rounds,
   // each opening its matches, this player's own on top (story 2).
   const knockout = event && isKnockoutEvent(setupRow?.bracket_setup)
@@ -217,8 +221,18 @@ export default async function TripCoursePortalPage({
   // Which is also why `live_scores` is only asked about for a round that is
   // open: on every other round the answer could not change the tile, so the
   // request would be one nobody could read the result of.
+  // A league of periods may hold hundreds of cards, so only those that can
+  // still change are counted — the open period's and any with a card open;
+  // the rest are past cards, and read as played.
+  const openPeriod = periodsLeague ? periodOf(todayString(new Date()), periodsLeague.periods) : null
+  const counts = (id: string) => {
+    if (!periodsLeague || openRounds.has(id)) return true
+    const date = rounds.find(r => r.id === id)?.scheduled_date ?? null
+    return !!openPeriod && !!periodOf(date, [openPeriod])
+  }
   const played = await Promise.all(
     roundIds.map(async id => {
+      if (!counts(id)) return { id, scored: true }
       const [committed, live] = await Promise.all([
         anyRows('scores', id),
         openRounds.has(id) ? anyRows('live_scores', id) : Promise.resolve(false),
@@ -266,6 +280,18 @@ export default async function TripCoursePortalPage({
           )}
           {/* A league's own door — the next round, on the day it is played.
               The organiser's with the PIN, the field's when they allow it. */}
+          {periodsLeague && (
+            <StartPeriodCard
+              door={{
+                tripId: trip.id, tripCode,
+                passcodeHash: setupRow?.settings_passcode_hash ?? null,
+                fieldMayAddCourses: allowsParticipant(kind, permsRaw, 'add_courses'),
+              }}
+              periods={periodsLeague.periods}
+              courseIds={periodsLeague.courseIds ?? null}
+              fieldMayStart={allowsParticipant(kind, permsRaw, 'submit_cards')}
+            />
+          )}
           {door && (
             <AddLeagueRound
               door={door}
@@ -285,7 +311,46 @@ export default async function TripCoursePortalPage({
           </div>
         )}
 
-        {!knockoutView && (series ? league.length === 0 : (rounds ?? []).length === 0) && (
+        {periodsLeague && (() => {
+          const { groups, outside } = periodListing(periodsLeague.periods,
+            rounds.map(r => ({ ...r, date: r.scheduled_date })), today)
+          return (
+            <PeriodList
+              groups={groups}
+              outside={outside}
+              openEmpty="No cards yet — start one above."
+              renderCard={round => {
+                const course = round.courses as unknown as { name: string; location: string | null } | null
+                const tone = roundTone(scoredRounds.has(round.id), openRounds.has(round.id))
+                return (
+                  <Link
+                    key={round.id}
+                    href={`${tripHome}/scoring/${round.round_number}`}
+                    className={`flex items-center justify-between w-full px-5 py-4 rounded-card press ${ROUND_TILE[tone]}`}
+                  >
+                    <div className="min-w-0">
+                      <p className="t-label text-ink/65 mb-1">
+                        {round.scheduled_date ? describeShortDate(round.scheduled_date) : `Card ${round.round_number}`}
+                      </p>
+                      <p className="t-card text-ink truncate">
+                        <CourseName name={course?.name ?? 'Card'} />
+                      </p>
+                      <p className={`t-cap mt-1 truncate ${ROUND_NOTE_TONE[tone]}`}>{ROUND_NOTE[tone]}</p>
+                    </div>
+                    {tone === 'live' && (
+                      <span className="flex-shrink-0 ml-4 w-1.5 h-1.5 rounded-full bg-accent dot-live" aria-hidden="true" />
+                    )}
+                    {tone === 'played' && (
+                      <span className="flex-shrink-0 ml-4 text-ink/50" aria-hidden="true"><IconChevronRight size={20} /></span>
+                    )}
+                  </Link>
+                )
+              }}
+            />
+          )
+        })()}
+
+        {!knockoutView && !periodsLeague && (series ? league.length === 0 : (rounds ?? []).length === 0) && (
           <p className="text-ink/65 text-sm py-8 text-center">
             {series
               ? 'No rounds yet — add the first one above.'
@@ -293,7 +358,7 @@ export default async function TripCoursePortalPage({
           </p>
         )}
 
-        <div className="flex flex-col gap-3">
+        {!periodsLeague && <div className="flex flex-col gap-3">
           {/* A league lists every round — the next on top, the later ones
               pale and inert, then its history newest first, a TBC one in
               its place and paler; anything else lists its rounds as it
@@ -388,7 +453,7 @@ export default async function TripCoursePortalPage({
               </div>
             ) : tile
           })}
-        </div>
+        </div>}
 
       </div>
       <SupportLink className="px-4 pb-12" />

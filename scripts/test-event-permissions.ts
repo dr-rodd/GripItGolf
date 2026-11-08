@@ -39,10 +39,10 @@ const read = (p: string) => fs.readFileSync(p, 'utf-8')
 section('Three seeded permissions, conservative by default')
 {
   eq(EVENT_PERMISSIONS.map(p => p.key),
-    ['add_courses', 'add_players', 'edit_scores', 'edit_tee_sheet', 'set_tee_sheets', 'assign_tag', 'add_rounds', 'set_venues', 'score_matches', 'edit_handicaps'],
-    'the three seeded keys, then the tee sheet\'s two, the tag, a league\'s rounds and venues, scoring a match and handicaps — each the promised one-line addition')
-  ok(EVENT_PERMISSIONS.every(p => p.dflt === (p.key === 'score_matches' || p.key === 'edit_tee_sheet' || p.key === 'edit_handicaps')),
-    'every default is off — the organiser opts in — except scoring a match, open unless the organiser closes it, players booking their own tee times (Ross, 26 Oct 2026: the medium level is the default) and setting their own handicaps (Ross, 4 Nov 2026)')
+    ['add_courses', 'add_players', 'edit_scores', 'edit_tee_sheet', 'set_tee_sheets', 'assign_tag', 'add_rounds', 'set_venues', 'score_matches', 'edit_handicaps', 'submit_cards'],
+    'the three seeded keys, then the tee sheet\'s two, the tag, a league\'s rounds and venues, scoring a match, handicaps and starting a card — each the promised one-line addition')
+  ok(EVENT_PERMISSIONS.every(p => p.dflt === (p.key === 'score_matches' || p.key === 'edit_tee_sheet' || p.key === 'edit_handicaps' || p.key === 'submit_cards')),
+    'every default is off — the organiser opts in — except scoring a match, open unless the organiser closes it, players booking their own tee times (Ross, 26 Oct 2026: the medium level is the default), setting their own handicaps (Ross, 4 Nov 2026) and starting their own cards in a continuous league (Ross, 8 Nov 2026)')
   const hcp = EVENT_PERMISSIONS.find(p => p.key === 'edit_handicaps')!
   ok(!!hcp.offWarning?.includes('invite link') && hcp.offWarning.includes('start a round'),
     '  …switching that one off says what it costs: invite-link players need you, and no handicap means no round')
@@ -133,7 +133,7 @@ section('Storage reads whole, falls soft, and never nulls')
   const full: EventPermissions = {
     add_courses: true, add_players: false, edit_scores: true, edit_tee_sheet: false,
     set_tee_sheets: true, assign_tag: true, add_rounds: true, set_venues: false, score_matches: false,
-    edit_handicaps: false,
+    edit_handicaps: false, submit_cards: false,
   }
   eq(parseEventPermissions(JSON.parse(JSON.stringify(full))), full,
     'a full map reads back whole')
@@ -175,7 +175,7 @@ section('The admin card sums it up')
   const two = {
     add_courses: true, add_players: true, edit_scores: false, edit_tee_sheet: false,
     set_tee_sheets: false, assign_tag: false, add_rounds: false, set_venues: false, score_matches: false,
-    edit_handicaps: false,
+    edit_handicaps: false, submit_cards: false,
   }
   ok(describePermissions(two, permissionsFor(false)).includes('2 of 5'),
     'partial says the count, out of what this event is asked')
@@ -190,14 +190,19 @@ section('A series-only permission is asked of a series alone')
   ok(permissionsFor(true).some(p => p.key === 'add_rounds')
     && permissionsFor(true).some(p => p.key === 'set_venues'),
     'a series is')
-  eq(permissionsFor(true).map(p => p.key), EVENT_PERMISSIONS.filter(p => !p.knockoutOnly && !p.teeSheet).map(p => p.key),
-    'a series is asked the whole registry but match play\'s and the tee times question\'s, in order')
+  eq(permissionsFor(true).map(p => p.key), EVENT_PERMISSIONS.filter(p => !p.knockoutOnly && !p.teeSheet && !p.periodsOnly).map(p => p.key),
+    'a series is asked the whole registry but match play\'s, a league of periods\' and the tee times question\'s, in order')
+  ok(!permissionsFor(false).some(p => p.key === 'submit_cards') && !permissionsFor(true).some(p => p.key === 'submit_cards'),
+    'starting a card is asked of a league of periods alone')
+  ok(permissionsFor(false, false, true).some(p => p.key === 'submit_cards')
+    && !permissionsFor(false, false, true).some(p => p.key === 'add_rounds'),
+    '  …which is not asked a series\' rounds and venues')
   ok(!allowsParticipant('tournament', null, 'add_rounds')
     && !allowsParticipant('tournament', null, 'set_venues'),
     'off until the organiser opens it, like every other')
 
   const league = read('app/dashboard/create/CreateLeagueForm.tsx')
-  ok(league.includes("registry={permissionsFor(schedule === 'series')}"),
+  ok(league.includes("registry={permissionsFor(schedule === 'series', false, continuous)}"),
     'the league wizard asks by its shape')
   const organiser = read('app/golf/[root]/[tripCode]/organiser/OrganiserClient.tsx')
   ok(organiser.includes('registry={permRegistry}') && organiser.includes('describePermissions(perms, permRegistry)'),

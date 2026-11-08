@@ -19,7 +19,7 @@ import { supabase } from './supabase'
 import { isHandicapPending } from './handicap'
 import { toItemRow } from './itinerarySync'
 import { dayNumber, type ItineraryItem } from './itinerary'
-import { cardKey, cardsOffWith, parseLeagueSetup, tidyCardsOff } from './leagueSetup'
+import { cardKey, cardsOffWith, parseLeagueSetup, tidyCardsOff, isPeriodLeague, periodsIssue, type LeaguePeriod } from './leagueSetup'
 import { withRoundAllowance } from './handicapAllowance'
 import { teeSheetInUse } from './eventHub'
 
@@ -319,6 +319,98 @@ export async function setRoundAllowance(args: {
   const { error: writeError } = await supabase
     .from('trips')
     .update({ leaderboards: next })
+    .eq('id', args.tripId)
+  return writeError ? fail : { ok: true }
+}
+
+// ─── A card in a league of periods ─────────────────────────────
+
+/**
+ * Start a card in a league of periods (Ross, 8 Nov 2026) — the round for
+ * this course on this day, **found or made**, so a fourball playing
+ * together shares one round and its cards as any round does. Its number is
+ * the next free one; the database's UNIQUE (trip, round number) is the
+ * referee when two phones race, and the loser looks again — somebody else
+ * may just have made this very round.
+ *
+ * No itinerary item, and no handicap snapshot for the field: a card is not
+ * a day on the schedule, and the players on it get their snapshot when the
+ * card locks them (`lockPlayers`), which is the only time one is needed.
+ * Whether the day is inside a period, the course allowed and the person
+ * allowed is the caller's to have asked (lib/leagueSetup.ts
+ * `periodCardIssue`, the league's `courseIds`, `submit_cards`).
+ */
+export async function startPeriodCard(args: {
+  tripId: string; courseId: string; date: string
+}): Promise<{ ok: true; roundNumber: number } | { ok: false; error: string }> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { data: found, error: findError } = await supabase
+      .from('rounds')
+      .select('round_number')
+      .eq('trip_id', args.tripId)
+      .eq('course_id', args.courseId)
+      .eq('scheduled_date', args.date)
+      .order('round_number')
+      .limit(1)
+    if (findError) return { ok: false, error: 'Could not start the card — try again.' }
+    if (found && found.length > 0) return { ok: true, roundNumber: (found[0] as { round_number: number }).round_number }
+
+    const { data: last, error: lastError } = await supabase
+      .from('rounds')
+      .select('round_number')
+      .eq('trip_id', args.tripId)
+      .order('round_number', { ascending: false })
+      .limit(1)
+    if (lastError) return { ok: false, error: 'Could not start the card — try again.' }
+    const number = ((last?.[0] as { round_number: number } | undefined)?.round_number ?? 0) + 1
+
+    const { error } = await supabase.from('rounds').insert({
+      trip_id: args.tripId,
+      course_id: args.courseId,
+      round_number: number,
+      status: 'upcoming',
+      scheduled_date: args.date,
+    })
+    if (!error) return { ok: true, roundNumber: number }
+    // Anything but a lost race is a real failure, said once.
+    if (error.code !== '23505') return { ok: false, error: 'Could not start the card — try again.' }
+  }
+  return { ok: false, error: 'Somebody else is starting cards just now — try again.' }
+}
+
+/**
+ * A league of periods' dates, moved by the organiser (Ross, 8 Nov 2026:
+ * "each period's dates can then be adjusted by hand"). The same periods,
+ * keys kept — a card is filed by its date on every read, so moving a
+ * period re-files its cards with nothing else to write. The stored setup is
+ * read fresh and merged, and the event's own dates follow the periods.
+ */
+export async function setLeaguePeriods(args: {
+  tripId: string; periods: LeaguePeriod[]
+}): Promise<Result> {
+  const issue = periodsIssue(args.periods)
+  if (issue) return { ok: false, error: issue }
+  const fail: Result = { ok: false, error: 'Could not save the periods — try again.' }
+  const { data, error } = await supabase
+    .from('trips')
+    .select('bracket_setup')
+    .eq('id', args.tripId)
+    .single()
+  if (error || !data) return fail
+  const raw = (data as { bracket_setup?: unknown }).bracket_setup
+  const setup = parseLeagueSetup(raw)
+  if (!isPeriodLeague(setup) || !raw || typeof raw !== 'object') return fail
+  // The same periods, by key — dates move, periods are never added or lost here.
+  const keys = setup.periods.map(p => p.key).join()
+  if (args.periods.map(p => p.key).join() !== keys) return fail
+
+  const { error: writeError } = await supabase
+    .from('trips')
+    .update({
+      bracket_setup: { ...(raw as Record<string, unknown>), periods: args.periods },
+      start_date: args.periods[0].start,
+      end_date: args.periods.at(-1)!.end,
+    })
     .eq('id', args.tripId)
   return writeError ? fail : { ok: true }
 }

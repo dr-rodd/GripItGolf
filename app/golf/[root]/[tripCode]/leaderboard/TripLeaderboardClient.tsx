@@ -1,5 +1,6 @@
 'use client'
 
+import { type LeaguePeriod, type PeriodRule, periodRoundId, periodRuleFact } from '@/lib/leagueSetup'
 import { placeClass } from '@/lib/leaderboardStyle'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -44,6 +45,8 @@ import { useTripBase } from '@/app/golf/[root]/[tripCode]/TripBase'
 type Course = { id: string; name: string }
 type Round  = {
   id: string; round_number: number; status?: string; courses: Course | null
+  /** The day it was played — what files a card into a league's period. */
+  scheduled_date?: string | null
   /** A casual round — scored as usual, kept off every board and column. */
   casual?: boolean
 }
@@ -132,6 +135,12 @@ interface Props {
    * a time, through the round switch, rather than one course at a time.
    */
   series?: boolean
+  /**
+   * A continuous league of periods (lib/leagueSetup.ts): every board reads
+   * one round a period, and the switch reads Overall · Period 1 · Period 2.
+   */
+  periods?: LeaguePeriod[]
+  periodRule?: PeriodRule
   /** A league's switched-off cards — out of every board (`withoutCardsOff`). */
   cardsOff?: string[]
   /**
@@ -1468,7 +1477,7 @@ function MatchplayTab({ tripCode }: { tripCode: string }) {
 export default function TripLeaderboardClient({
   tripCode, boards, activeRoundIds, livePlayerIds, legacyTeamScoring, rounds,
   teams, memberships, players, holes, scores, liveScores, roundHandicaps,
-  tees = [], nicknames = [], isEvent = false, dayBoards, linkedIds, series = false, cardsOff, roundCards,
+  tees = [], nicknames = [], isEvent = false, dayBoards, linkedIds, series = false, periods, periodRule, cardsOff, roundCards,
   playerColours,
 }: Props) {
   const linked = useMemo(() => new Set(linkedIds ?? []), [linkedIds])
@@ -1508,7 +1517,7 @@ export default function TripLeaderboardClient({
   }, [rounds])
   // Nothing to switch between on a single-course event, so nothing is drawn.
   // A league switches by round instead — below — so it never draws this.
-  const showCourses = isEvent && !series && courses.length > 1
+  const showCourses = isEvent && !series && !periods?.length && courses.length > 1
 
   // ── One round, or the league ────────────────────────────────
   //
@@ -1520,11 +1529,19 @@ export default function TripLeaderboardClient({
   // (`rounds.casual`) is still offered: its own result is shown, greyed,
   // while the overall goes on skipping it.
   const [roundChoice, setRoundChoice] = useState<string | null>(null)
-  const roundOptions = useMemo(
-    () => [...rounds].sort((a, b) => a.round_number - b.round_number),
-    [rounds],
+  // A league of periods switches by period: each stands in for a round, on
+  // the board and in the columns (lib/boardRows.ts `withPeriods`).
+  const periodRounds: Round[] | null = useMemo(
+    () => periods?.length
+      ? periods.map((p, i) => ({ id: periodRoundId(p.key), round_number: i + 1, courses: null }))
+      : null,
+    [periods],
   )
-  const showRounds = isEvent && series && roundOptions.length > 1
+  const roundOptions = useMemo(
+    () => periodRounds ?? [...rounds].sort((a, b) => a.round_number - b.round_number),
+    [rounds, periodRounds],
+  )
+  const showRounds = isEvent && (series || !!periodRounds) && roundOptions.length > 1
   const shownRound = showRounds ? roundOptions.find(r => r.id === roundChoice) ?? null : null
 
   const shownCourse = showCourses ? courseId : null
@@ -1574,8 +1591,11 @@ export default function TripLeaderboardClient({
     legacyTeamScoring,
     cardsOff,
     roundCards,
+    periods,
+    periodRule,
   }), [players, teams, memberships, holes, rounds, scores, liveScores,
-       roundHandicaps, tees, activeRoundIds, livePlayerIds, legacyTeamScoring, cardsOff, roundCards])
+       roundHandicaps, tees, activeRoundIds, livePlayerIds, legacyTeamScoring, cardsOff, roundCards,
+       periods, periodRule])
 
   const resolved = rowContext.resolved
   // The same order the board columns them in, on the fuller row this screen
@@ -1586,10 +1606,13 @@ export default function TripLeaderboardClient({
   // Narrowed with the rows, and by the same answer, or the table would
   // draw a column for golf its totals were no longer counting.
   const sortedRounds = useMemo(
-    () => sortRounds(rounds.filter(r =>
-      (r.casual !== true || r.id === shownRound?.id)
-      && (!courseRoundIds || courseRoundIds.includes(r.id)))),
-    [rounds, courseRoundIds, shownRound],
+    () => periodRounds
+      // The columns of a league of periods are its periods.
+      ? periodRounds.filter(r => !shownRound || r.id === shownRound.id)
+      : sortRounds(rounds.filter(r =>
+        (r.casual !== true || r.id === shownRound?.id)
+        && (!courseRoundIds || courseRoundIds.includes(r.id)))),
+    [rounds, courseRoundIds, shownRound, periodRounds],
   )
 
   // A round counts as in play when a scorecard is actually open on it, not
@@ -1731,7 +1754,7 @@ export default function TripLeaderboardClient({
       onChange={v => setRoundChoice(v === 'all' ? null : v)}
       options={[
         { value: 'all', label: 'Overall' },
-        ...roundOptions.map(r => ({ value: r.id, label: `Round ${r.round_number}` })),
+        ...roundOptions.map(r => ({ value: r.id, label: `${periodRounds ? 'Period' : 'Round'} ${r.round_number}` })),
       ]}
     />
   )
@@ -1773,6 +1796,8 @@ export default function TripLeaderboardClient({
   const rules: string[] = boardFacts(shownRound
     ? { ...activeBoard, handicapAllowance: allowanceOf(activeBoard, shownRound.id) }
     : activeBoard)
+  // A league of periods says which card counts — a fact of every board on it.
+  if (periodRounds) rules.push(periodRuleFact(periodRule))
   if (paysByPosition) {
     rules.push(describeCustomTable(resolveCustomPoints(
       activeBoard.customPoints ?? [],
@@ -1789,7 +1814,9 @@ export default function TripLeaderboardClient({
       rounds={boardRounds}
       playerById={playerById}
       boardNameById={boardNameById}
-      onOpenCard={(row, round) => setCard({ row, round })}
+      // A period is not one card — it may be a composite of several — so
+      // its cell opens nothing; each card opens from the Scoring tab.
+      onOpenCard={(row, round) => { if (!round.id.startsWith('period:')) setCard({ row, round }) }}
       linked={linked}
       colourById={colourById}
     />

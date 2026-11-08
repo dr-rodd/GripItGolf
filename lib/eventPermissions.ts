@@ -40,6 +40,7 @@ export type EventPermissionKey =
   | 'set_venues'
   | 'score_matches'
   | 'edit_handicaps'
+  | 'submit_cards'
 
 export const EVENT_PERMISSIONS: {
   key: EventPermissionKey
@@ -56,6 +57,8 @@ export const EVENT_PERMISSIONS: {
   seriesOnly?: true
   /** Only means anything on a match play event (`permissionsFor`). */
   knockoutOnly?: true
+  /** Only means anything on a continuous league of periods (`permissionsFor`). */
+  periodsOnly?: true
   /** Said under the toggle while it is off — what switching it off costs. */
   offWarning?: string
   /**
@@ -126,6 +129,13 @@ export const EVENT_PERMISSIONS: {
     label: 'Participants can set their own handicaps',
     hint: 'Each player fills in their own handicap, and can change it until they play.',
     offWarning: 'Only you can change a handicap. Players who join by invite link will need you to set theirs, and anyone without a handicap can’t start a round.' },
+  // A continuous league's cards (Ross, 8 Nov 2026): on, anybody in the field
+  // starts a card inside an open period, on a course the league allows —
+  // the league is cards handed in by its players. Off, the organiser
+  // starts each one with the PIN; the players still score their own.
+  { key: 'submit_cards', dflt: true, periodsOnly: true, does: 'start a card in a period', strict: false,
+    label: 'Participants can start their own cards',
+    hint: 'Let anyone in the field start a card inside an open period, without the PIN.' },
 ]
 
 /**
@@ -135,9 +145,9 @@ export const EVENT_PERMISSIONS: {
  * the admin page and its summary line all read this, so a permission is
  * never offered where it would do nothing, nor twice.
  */
-export function permissionsFor(series: boolean, knockout = false): typeof EVENT_PERMISSIONS {
+export function permissionsFor(series: boolean, knockout = false, periods = false): typeof EVENT_PERMISSIONS {
   return EVENT_PERMISSIONS.filter(p =>
-    (series || !p.seriesOnly) && (knockout || !p.knockoutOnly) && !p.teeSheet)
+    (series || !p.seriesOnly) && (knockout || !p.knockoutOnly) && (periods || !p.periodsOnly) && !p.teeSheet)
 }
 
 /** The tee times question's two answers, in the order they are asked. */

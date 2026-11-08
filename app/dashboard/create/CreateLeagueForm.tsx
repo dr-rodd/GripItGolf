@@ -1559,7 +1559,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
               <CollaborationQuestion
                 value={perms}
                 onChange={setPerms}
-                registry={permissionsFor(schedule === 'series')}
+                registry={permissionsFor(schedule === 'series', false, continuous)}
               />
             </div>
 
