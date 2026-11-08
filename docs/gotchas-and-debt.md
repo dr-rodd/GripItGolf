@@ -1,5 +1,30 @@
 # Gotchas and debt
 
+## A proxy.ts took the site down (8 November 2026)
+
+Moving events to `/event/<code>` was built with a `proxy.ts` (Next 16's name
+for middleware) that served `/event/…` from the `app/trip/[tripCode]` pages by
+rewrite and set two request headers for the layout to redirect old links. It
+passed every test, the type check, the build, and a production build run
+locally against a stand-in database — and on Vercel greendot.live answered
+`ERR_CONNECTION_REFUSED` for events, and through the layout's redirect of old
+`/trip/` links, every event. Reverted within the hour (95eefc5, the code back
+to bf936c0 byte for byte); the cause was never confirmed, because nothing in
+this container can reach greendot.live or a Vercel deployment.
+
+The rule it leaves: **nothing that runs in front of every request — a
+`proxy.ts`/`middleware.ts`, a rewrite, a redirect in a layout — goes to
+`master` without being opened on a Vercel preview deployment first.** A local
+`next start` is not Vercel's router. If `/event` is attempted again, prefer
+the plainest moving parts (Next's own `rewrites()` in `next.config`, links
+built from the kind) over request headers set by a proxy.
+
+The same push carried a spectator mode (a "View as a spectator" button and a
+cookie). Ross did not want it — "just allow them to look around, no special
+accommodations" — and nothing ever compelled a visitor to claim a name: the
+leaderboard and every tab open for anyone with the code. It went with the
+revert and is not to come back.
+
 ## Next.js 16 gotcha
 
 Dynamic route params and searchParams are now Promises. Server components must destructure via `const { x } = await params` — synchronous access returns 404s on all dynamic routes. Applies to every `[slug]`, `[id]`, `[tripCode]`, `[roundNumber]`, `[sessionId]` segment.
