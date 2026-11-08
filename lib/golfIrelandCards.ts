@@ -1,9 +1,9 @@
 import { createAdminClient } from './supabase-admin'
 import { readAllRows } from './allRows'
 import {
-  cardsOnRounds, readsGolfIreland, type HeldCard, type RoundCard, type RoundVenue,
+  cardsInPeriods, cardsOnRounds, readsGolfIreland, type HeldCard, type RoundCard, type RoundVenue,
 } from './golfIreland'
-import type { LeagueSetup } from './leagueSetup'
+import { isPeriodLeague, type LeagueSetup } from './leagueSetup'
 
 /**
  * A league's Golf Ireland cards, placed on their rounds, for a board to
@@ -27,7 +27,26 @@ export async function readRoundCards(
   setup: LeagueSetup | null | undefined,
   rounds: readonly { id: string; scheduled_date?: string | null; course_id?: string | null }[],
 ): Promise<RoundCard[]> {
-  if (!setup?.golfIreland || !readsGolfIreland(setup.scoreSource) || rounds.length === 0) return []
+  if (!setup?.golfIreland || !readsGolfIreland(setup.scoreSource)) return []
+  // A league of periods files its cards by the day alone — a period has no
+  // venue and no round of its own (lib/golfIreland.ts `cardsInPeriods`).
+  if (isPeriodLeague(setup)) {
+    try {
+      const admin = createAdminClient()
+      const cardsRes = await readAllRows<CardRow>(
+        () => admin.from('golf_ireland_cards').select(CARD_COLS, { count: 'exact' })
+          .eq('trip_id', tripId)
+          .order('player_id').order('card_id'),
+        r => `${r.player_id}|${r.card_id}`,
+      )
+      if (cardsRes.error) throw cardsRes.error
+      return cardsInPeriods(cardsRes.data.map(heldCard), setup.periods)
+    } catch (e) {
+      console.error('readRoundCards failed:', e)
+      return []
+    }
+  }
+  if (rounds.length === 0) return []
   const courseIds = [...new Set(rounds.map(r => r.course_id).filter((c): c is string => !!c))]
   if (courseIds.length === 0) return []
   try {

@@ -18,7 +18,7 @@ import { EVENT_PERMISSIONS, permissionsFor, allowsParticipant } from '../lib/eve
 import { pickPeriodCard, bestCard } from '../lib/periodCards'
 import { buildRows, withOnlyRounds, type RowContext, type ResolvedScore, type RowHole } from '../lib/boardRows'
 import type { Leaderboard } from '../lib/leaderboards'
-import type { RoundCard } from '../lib/golfIreland'
+import { type RoundCard, type GolfIrelandCard, cardsInPeriods, cardIssue, defaultRules } from '../lib/golfIreland'
 import fs from 'fs'
 
 let passed = 0, failed = 0
@@ -386,6 +386,38 @@ section('The hub, the standing and the leaderboard read the periods')
     'the organiser moves the periods\' dates, and is asked no deadlines')
   ok(read('lib/leagueRoundStore.ts').includes('if (args.periods.map(p => p.key).join() !== keys) return fail'),
     '  …the same periods, by key — moved, never added or lost there')
+}
+
+section('Golf Ireland cards, filed into the periods')
+{
+  const ps = equalPeriods('2026-11-01', 4, 'week', 2)
+  const held = (cardId: string, playerId: string, playedOn: string, points: number) =>
+    ({ cardId, playerId, playedOn, courseId: 'gi-1', holesPlayed: 18 as const, stablefordPoints: points, grossTotal: 80, courseHandicap: 9 })
+  const filed = cardsInPeriods([held('c2', 'p1', '2026-11-10', 30), held('c1', 'p1', '2026-11-03', 34),
+    held('c3', 'p1', '2026-12-01', 20), held('c4', 'p1', '2027-03-01', 40)], ps)
+  eq(filed.map(c => [c.cardId, c.roundId]), [['c1', 'period:p1'], ['c2', 'period:p1'], ['c3', 'period:p2']],
+    'each card on its period by the day it was played — every one of them, and none outside')
+
+  // Two in period one: the board takes the better against the live card.
+  const c = ctx([{ id: 'r1', date: '2026-11-02' }], card('r1', 'p1', fives), { roundCards: filed })
+  eq(row(stableford, c, 'p1')!.perRound, { 'period:p1': 34, 'period:p2': 20 },
+    'several Golf Ireland cards in a period: the best of them, set against the card here')
+
+  const card1: GolfIrelandCard = { cardId: 'x', playedOn: '2026-12-27', holesPlayed: 18, courseId: 'gi-1', courseName: 'A',
+    grossTotal: 80, stablefordPoints: 30, handicapIndex: 9, courseHandicap: 9, holeScores: null }
+  const gap = [ps[0], { ...ps[1], start: '2027-01-02', end: '2027-01-29' }]
+  const base = { from: '2026-11-01', to: '2027-01-29', venueCourseIds: [], source: 'golf_ireland' as const }
+  eq(cardIssue(card1, defaultRules(['club']), { ...base, periods: gap }), 'Not played inside one of the league\'s periods.',
+    'a card played in a break between periods does not count, and says why')
+  eq(cardIssue({ ...card1, playedOn: '2027-01-05' }, defaultRules(['club']), { ...base, periods: gap }), null,
+    '  …one inside a period does')
+
+  const reader = read('lib/golfIrelandCards.ts')
+  ok(reader.includes('if (isPeriodLeague(setup))') && reader.includes('cardsInPeriods(cardsRes.data.map(heldCard), setup.periods)'),
+    'the reader files a league of periods\' cards by day, with no rounds needed')
+  const sync = read('app/api/golf-ireland/sync.ts')
+  ok(sync.includes('...(periods ? { periods: periods.periods } : {})') && sync.includes('...(periods?.courseIds ?? [])'),
+    'the sync checks each card against the periods, and the league\'s own courses as its venues')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

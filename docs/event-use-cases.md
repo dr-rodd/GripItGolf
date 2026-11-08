@@ -44,7 +44,7 @@ Golf tournament
 │  └─ Match play   → CreateTripForm matchPlay
 └─ Ongoing      over weeks or a season
    ├─ Series       → CreateLeagueForm schedule="series"
-   ├─ Continuous   → coming soon (stage 6, redefined below)
+   ├─ Continuous   → CreateLeagueForm schedule="continuous" (a league of periods)
    └─ Match play   → CreateKnockoutForm
 ```
 
@@ -56,18 +56,42 @@ Continuous. Stored values are unchanged: `LeagueSchedule` is still
 phone's back gesture and the arrow on a wizard's first step both return to
 the chooser it came from.
 
-**Continuous, redefined.** The organiser sets **rounds that are time
-periods**. Within a period players submit cards whenever and wherever they
-play, ranked by the rules set (for example, best card that round), each
-period with its own result and the periods adding up to the overall. A
-club winter league where members hand in a card each "round" for their
-tag, with no fixed day of play. This replaces October's "no leaderboard
-but the overall" and is stage 6, not built. Until it is, the chooser shows
-Continuous as coming soon and opens no wizard: the continuous league
-wizard still in `CreateLeagueForm` builds the old meaning (playing days
-picked inside a period), so anything made with it would need converting.
-Leagues already made with it keep working; `parseLeagueSetup` and
-`describeLeagueSetup` still read them.
+**Continuous, redefined, and built** (stage 6, 8 November 2026). The
+organiser sets **rounds that are time periods**; within a period players
+hand in cards whenever and wherever they play, and the league's rule picks
+what a period is worth to each player — **best card**, or **best composite
+card** (each hole's best across their cards in the period). Each period has
+its own result and the periods add up to the overall, with tags where the
+league uses them. How it is built:
+
+- **The periods** are `LeagueSetup.periods` (key, start, end), made at
+  creation as an equal run (first start, every N weeks or months, how many)
+  and then adjusted by hand, at creation or on the organiser's League page
+  (`setLeaguePeriods`, keys kept). The event's dates follow them. No rounds,
+  items, deadlines or tee times are made at creation.
+- **A card is an ordinary round**: one course, one date. **Start a card** on
+  the Scoring tab (`StartPeriodCard`, the `submit_cards` permission, on by
+  default) finds or makes the round for that course and day
+  (`startPeriodCard`), so a fourball shares one, and opens its scoring. A
+  day must be inside a period and not in the future (`periodCardIssue`); a
+  league that names its courses (`courseIds`) offers only those.
+- **Which period a card is in is worked out from its date on every read**
+  (`periodOf`), never stored: moving a period re-files its cards. A card
+  outside every period counts for nothing and is listed apart.
+- **Every board reads one round a period** (`withPeriods` in
+  lib/boardRows.ts, deciding through lib/periodCards.ts): each card is
+  measured as the board measures any round, allowance taken once, and the
+  rule picks. On points the composite works across courses; on strokes it
+  needs one course, else the best card; a quota takes the best card. The
+  leaderboard switches Overall · Period 1 · Period 2, its columns the
+  periods; a period's cell opens no single card. The hub's standing always
+  takes the full path; a card's own page shows that card alone.
+- **Golf Ireland cards** file into a period by day (`cardsInPeriods`); every
+  card a player has in a period competes, the best on the board set against
+  their live pick. `cardIssue` refuses a card played between periods, and
+  the league's courses are its venues where it counts venues only.
+- Leagues made with the old continuous wizard (no `periods`) read exactly as
+  before; `parseLeagueSetup` and `describeLeagueSetup` still read them.
 
 ## 1. A winter league (series)
 

@@ -578,7 +578,15 @@ function withPeriods(lb: Leaderboard, ctx: RowContext): [Leaderboard, RowContext
     const s = scored.find(x => x.roundId === roundId)
     return s ? holeById.get(s.holeId)?.course_id ?? null : null
   }
-  const imported = new Map((ctx.roundCards ?? []).map(c => [`${c.roundId}:${c.playerId}`, c]))
+  // A player may have several Golf Ireland cards in a period; each is a
+  // candidate, and the best of them on this board is the one set against
+  // the live pick below.
+  const imported = new Map<string, RoundCard[]>()
+  for (const c of ctx.roundCards ?? []) {
+    const k = `${c.roundId}:${c.playerId}`
+    const list = imported.get(k)
+    if (list) list.push(c); else imported.set(k, [c])
+  }
 
   const byPlayerRound = new Map<string, ResolvedScore[]>()
   for (const s of scored) {
@@ -623,8 +631,13 @@ function withPeriods(lb: Leaderboard, ctx: RowContext): [Leaderboard, RowContext
       }
 
       const pick = pickPeriodCard(cards, ctx.periodRule, { lowerWins: strokes, compositeAllowed: !quota })
-      const gi = imported.get(`${pid}:${p.id}`)
-      const giValue = gi ? importedRound(lb, pid, gi, allowanceAt(pid))?.score : undefined
+      let gi: RoundCard | undefined
+      let giValue: number | undefined
+      for (const c of imported.get(`${pid}:${p.id}`) ?? []) {
+        const v = importedRound(lb, pid, c, allowanceAt(pid))?.score
+        if (v == null) continue
+        if (giValue === undefined || (strokes ? v < giValue : v > giValue)) { gi = c; giValue = v }
+      }
 
       // What the pick is worth, to set against a Golf Ireland card.
       let pickValue: number | null = null

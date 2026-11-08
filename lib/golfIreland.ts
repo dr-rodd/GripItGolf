@@ -46,6 +46,7 @@
 //     2026), and their standing re-tells without them. A club withdrawing
 //     does the same for every one of its members.
 
+import type { LeaguePeriod } from './leagueSetup'
 import { WEEKDAY_NAMES, weekdayOf } from './weekdays'
 
 // Reading numbers out of what Golf Ireland sent — a figure outside sense
@@ -550,6 +551,11 @@ export type CardContext = {
    * any other league, whose cards are read against the window alone.
    */
   rounds?: readonly RoundVenue[]
+  /**
+   * A league of periods (lib/leagueSetup.ts): a card counts only inside one
+   * of them. Absent for any other league.
+   */
+  periods?: readonly LeaguePeriod[]
 }
 
 /**
@@ -603,6 +609,12 @@ export function cardIssue(card: GolfIrelandCard, rules: GolfIrelandRules, ctx: C
         ? 'That round\'s venue is not matched to Golf Ireland yet.'
         : 'Not played at that round\'s venue.'
     }
+  }
+
+  // A league of periods: a card inside a period, or nothing — a break
+  // between two periods is a break.
+  if (ctx.periods && !ctx.periods.some(p => p.start <= card.playedOn && card.playedOn <= p.end)) {
+    return 'Not played inside one of the league\'s periods.'
   }
 
   // Scored both ways: a player who scored the day live here has that card
@@ -680,6 +692,28 @@ export function cardsOnRounds(cards: readonly HeldCard[], rounds: readonly Round
     })
   }
   return [...out.values()]
+}
+
+/**
+ * Stored cards filed into a league's periods by the day they were played
+ * (Ross, 8 Nov 2026) — every card a player has in a period, each standing
+ * as a whole card on the period's round (`period:<key>`, as
+ * lib/leagueSetup.ts `periodRoundId` names it). Which one counts is the
+ * board's to decide, against the player's live cards in the same period
+ * (lib/boardRows.ts `withPeriods`). Worked out on every read: a period
+ * moved re-files its cards.
+ */
+export function cardsInPeriods(cards: readonly HeldCard[], periods: readonly LeaguePeriod[]): RoundCard[] {
+  const out: RoundCard[] = []
+  for (const c of [...cards].sort((a, b) => a.cardId.localeCompare(b.cardId))) {
+    const p = periods.find(x => x.start <= c.playedOn && c.playedOn <= x.end)
+    if (!p) continue
+    out.push({
+      roundId: `period:${p.key}`, playerId: c.playerId, cardId: c.cardId, holes: c.holesPlayed,
+      points: c.stablefordPoints, gross: c.grossTotal, courseHandicap: c.courseHandicap,
+    })
+  }
+  return out
 }
 
 // ─── What a sync should do ─────────────────────────────────────

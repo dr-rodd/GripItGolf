@@ -1,3 +1,4 @@
+import { isPeriodLeague } from '@/lib/leagueSetup'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   golfIrelandConfig, leagueWindow, linkReadable,
@@ -46,7 +47,14 @@ export async function syncLeague(
   if (window.from > window.to) return empty
 
   const rounds = (roundsRes.data ?? []) as { id: string; scheduled_date: string | null; course_id: string | null }[]
-  const courseIds = [...new Set(rounds.map(r => r.course_id).filter((c): c is string => !!c))]
+  // A league of periods names its courses in its setup, not on rounds made
+  // in advance — those are the venues a card must be played at, where the
+  // league counts its venues only.
+  const periods = isPeriodLeague(league.setup) ? league.setup : null
+  const courseIds = [...new Set([
+    ...rounds.map(r => r.course_id),
+    ...(periods?.courseIds ?? []),
+  ].filter((c): c is string => !!c))]
   const roundIds = rounds.map(r => r.id)
   const both = league.setup.scoreSource === 'both'
 
@@ -84,10 +92,14 @@ export async function syncLeague(
   const base: CardContext = {
     from: span.from,
     to: span.to,
-    venueCourseIds: [...new Set(venues.map(v => v.venueId).filter((v): v is string => !!v))],
+    venueCourseIds: periods
+      ? [...new Set((periods.courseIds ?? []).map(id => venueOf.get(id)).filter((v): v is string => !!v))]
+      : [...new Set(venues.map(v => v.venueId).filter((v): v is string => !!v))],
     source: league.setup.scoreSource ?? 'live',
     // A league of rounds: a card is one of its rounds or nothing.
     ...(league.setup.schedule === 'series' ? { rounds: venues } : {}),
+    // A league of periods: a card inside a period, or nothing.
+    ...(periods ? { periods: periods.periods } : {}),
   }
 
   return syncCards({
