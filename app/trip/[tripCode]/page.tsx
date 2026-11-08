@@ -9,7 +9,7 @@ import { parseTeamScoring } from '@/lib/teamScoring'
 import { MAIN_SET, setOf, teamFor } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { cookies } from 'next/headers'
-import { currentPlayer, isSpectating } from '@/lib/currentPlayer'
+import { currentPlayer } from '@/lib/currentPlayer'
 import { INTRO_COOKIE } from '@/lib/intro'
 import SiteIntro from '@/app/components/SiteIntro'
 import { isHandicapPending, HANDICAP_PENDING_LABEL } from '@/lib/handicap'
@@ -67,7 +67,6 @@ import { drawLiveAt } from '@/lib/bracketDraw'
 import DrawCountdown from './DrawCountdown'
 import CourseName from '@/app/components/CourseName'
 import { IconChevronRight } from '@/app/components/icons'
-import { fetchTripBase } from './kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -142,8 +141,6 @@ export default async function TripPage({ params, searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { tripCode } = await params
-  // Where this lives — /trip/X or, for an event, /event/X (lib/tripPaths.ts).
-  const tripHome = await fetchTripBase(tripCode)
 
   const trip = await fetchTrip(tripCode)
 
@@ -409,7 +406,7 @@ export default async function TripPage({ params, searchParams }: {
   // greeting a stranger. Nothing below is fetched until it turns out to name
   // somebody real, so a first-time visitor pays nothing for a personalised
   // page they will not see.
-  const [me, spectating] = await Promise.all([currentPlayer(tripCode, players), isSpectating(tripCode)])
+  const me = await currentPlayer(tripCode, players)
 
   // ── A match play event: the draw from this player's side ──
   //
@@ -625,7 +622,7 @@ export default async function TripPage({ params, searchParams }: {
       ) : null) : lr.roundId ? (
         <Link
           key={lr.roundId}
-          href={`${tripHome}/round/${lr.number}`}
+          href={`/trip/${tripCode}/round/${lr.number}`}
           className={`flex items-center justify-between w-full px-5 py-4 press ${cardClass('raised', true)}`}
         >
           <div className="min-w-0">
@@ -832,7 +829,6 @@ export default async function TripPage({ params, searchParams }: {
         {/* ── Who this device is, and what happens next ── */}
         <StatusBlock
           tripCode={tripCode}
-          spectator={!me && spectating}
           player={me ? {
             firstName: me.name.split(' ')[0],
             placing: placingLine,
@@ -925,7 +921,7 @@ export default async function TripPage({ params, searchParams }: {
               title: 'Tee times',
               meta: mineOnSheet?.clock ?? (firstTee ? `From ${firstTee}` : undefined),
               content: <TeeTimesPanel
-                tripHome={tripHome}
+                tripCode={tripCode}
                 round={teeRound}
                 mine={mineOnSheet}
                 firstClock={firstTee}
@@ -965,7 +961,6 @@ export default async function TripPage({ params, searchParams }: {
                 players={players}
                 pendingCount={pendingCount}
                 tripCode={tripCode}
-                tripHome={tripHome}
                 noun={isEvent ? 'event' : 'trip'}
                 linkedIds={giLinked}
                 add={isEvent ? (
@@ -1000,7 +995,7 @@ export default async function TripPage({ params, searchParams }: {
               meta: `${statsCover.holes} holes`,
               content: <StatsPanel
                 mine={myStats}
-                tripHome={tripHome}
+                tripCode={tripCode}
                 thin={statsCover.level === 'thin'}
               />,
             }] : []),
@@ -1036,14 +1031,13 @@ export default async function TripPage({ params, searchParams }: {
  * otherwise.
  */
 function PlayersPanel({
-  players, pendingCount, tripCode, tripHome, noun, linkedIds, add,
+  players, pendingCount, tripCode, noun, linkedIds, add,
 }: {
   players: { id: string; name: string; handicap: number | null; claimed?: boolean | null }[]
   /** A Golf Ireland league's confirmed links — the mark beside those names. */
   linkedIds: string[]
   pendingCount: number
   tripCode: string
-  tripHome: string
   /** "trip" or "event" — the hub knows which it is wearing. */
   noun: 'trip' | 'event'
   /** An event's door for adding to the field (`AddToField`), or nothing. */
@@ -1133,7 +1127,7 @@ function PlayersPanel({
           carries Players, so without this the route would be reachable only
           by a device that is nobody yet. */}
       <Link
-        href={`${tripHome}/players`}
+        href={`/trip/${tripCode}/players`}
         className="block text-center mt-5 t-label text-accent-deep hover:text-accent transition-colors"
       >
         Claim your spot

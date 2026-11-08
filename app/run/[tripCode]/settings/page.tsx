@@ -11,7 +11,6 @@ import { ChallengeNotFound, SectionTitle } from '../RunPieces'
 import RunShare from '../RunShare'
 import HelpAndPrivacy from './HelpAndPrivacy'
 import { cardClass } from '@/app/components/ui'
-import { tripBase } from '@/lib/tripPaths'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +29,7 @@ export default async function RunSettingsPage({ params }: {
   const { tripCode } = await params
   const challenge = await fetchRunChallenge(tripCode)
   if (!challenge) return <ChallengeNotFound />
-  if (!isRunChallenge(challenge.kind)) redirect(`${tripBase(challenge.code, challenge.kind)}/setup`)
+  if (!isRunChallenge(challenge.kind)) redirect(`/trip/${challenge.code}/setup`)
 
   const viewer = await currentPlayer(challenge.code, rosterOf(challenge))
   const stravaStatus = await fetchStravaStatus(challenge.id, viewer?.id ?? null)

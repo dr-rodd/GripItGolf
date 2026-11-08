@@ -1,5 +1,4 @@
 import TripHeader from '@/app/components/TripHeader'
-import { fetchTripBase } from '../../kind'
 
 /**
  * How the stats are worked out, for anyone who wants the equations.
@@ -40,11 +39,10 @@ export default async function StatsGuidePage({
   params: Promise<{ tripCode: string }>
 }) {
   const { tripCode } = await params
-  const tripHome = await fetchTripBase(tripCode)
 
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
-      <TripHeader backTo={`${tripHome}/stats`} title="statsHub" />
+      <TripHeader backTo={`/trip/${tripCode}/stats`} title="statsHub" />
 
       <div className="max-w-lg mx-auto px-4 py-6">
         <h1 className="t-h1 text-ink mb-2">How the numbers work</h1>

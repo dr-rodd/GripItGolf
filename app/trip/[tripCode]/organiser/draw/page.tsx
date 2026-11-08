@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation'
-import { fetchTripBase } from '../../kind'
 
 /**
  * The draw used to be its own page; it is the first step of the bracket's
@@ -7,6 +6,5 @@ import { fetchTripBase } from '../../kind'
  */
 export default async function DrawPage({ params }: { params: Promise<{ tripCode: string }> }) {
   const { tripCode } = await params
-  const tripHome = await fetchTripBase(tripCode)
-  redirect(`${tripHome}/organiser/bracket`)
+  redirect(`/trip/${tripCode}/organiser/bracket`)
 }

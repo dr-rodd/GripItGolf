@@ -46,24 +46,6 @@ export function playerCookieName(tripCode: string): string {
 }
 
 /**
- * The cookie saying this phone watches a trip or event as a spectator (Ross,
- * 8 Nov 2026: "allow a spectator to access the event as a viewer"). Per trip,
- * like the player's, and just as harmless: it changes which card the home
- * screen leads with and grants nothing — a spectator sees what anybody with
- * the code already can. A player cookie wins over it.
- */
-export function watchCookieName(tripCode: string): string {
-  return WATCH_PREFIX + String(tripCode ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
-}
-
-const WATCH_PREFIX = 'gg_watch_'
-
-/** Whether a watch cookie's value says this phone is spectating. */
-export function readWatching(raw: string | null | undefined): boolean {
-  return raw?.trim() === '1'
-}
-
-/**
  * Whether a stored value could be a player id.
  *
  * Player ids are UUIDs. Checking the shape means a stale, truncated or
@@ -113,7 +95,7 @@ export function clearCookie(name: string, opts: { https: boolean }): string {
 const isHttps = () =>
   typeof location !== 'undefined' && location.protocol === 'https:'
 
-/** Remember this player on this device, for this trip — a spectator no longer. */
+/** Remember this player on this device, for this trip. */
 export function rememberPlayer(tripCode: string, playerId: string): void {
   if (typeof document === 'undefined' || !isPlayerId(playerId)) return
   try {
@@ -121,24 +103,8 @@ export function rememberPlayer(tripCode: string, playerId: string): void {
       days: COOKIE_DAYS,
       https: isHttps(),
     })
-    document.cookie = clearCookie(watchCookieName(tripCode), { https: isHttps() })
   } catch {
     // Cookies blocked. Nothing here is essential — the trip works either way.
-  }
-}
-
-/**
- * This phone watches this trip or event as a spectator, for as long as a
- * player's cookie would last — and is no longer whoever it had claimed, as
- * "Not you?" does: choosing to watch is choosing not to be them here.
- */
-export function watchAsSpectator(tripCode: string): void {
-  if (typeof document === 'undefined') return
-  try {
-    document.cookie = buildCookie(watchCookieName(tripCode), '1', { days: COOKIE_DAYS, https: isHttps() })
-    document.cookie = clearCookie(playerCookieName(tripCode), { https: isHttps() })
-  } catch {
-    /* cookies blocked — the home screen simply keeps asking */
   }
 }
 

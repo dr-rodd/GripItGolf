@@ -17,7 +17,6 @@ import TripHeader from '@/app/components/TripHeader'
 import PasscodeGate from '../../setup/PasscodeGate'
 import BracketFlow from './BracketFlow'
 import { cardClass } from '@/app/components/ui'
-import { fetchTripBase } from '../../kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +36,6 @@ export default async function BracketSetupPage({ params }: {
   params: Promise<{ tripCode: string }>
 }) {
   const { tripCode } = await params
-  const tripHome = await fetchTripBase(tripCode)
 
   const [tripResult, setupResult] = await Promise.all([
     supabase
@@ -75,7 +73,7 @@ export default async function BracketSetupPage({ params }: {
           Bracket setup belongs to events. A trip&apos;s knockout is set up in
           Trip Setup, on the tab bar below.
         </p>
-        <BackButton href={tripHome} label="Trip" />
+        <BackButton href={`/trip/${tripCode}`} label="Trip" />
       </main>
     )
   }
@@ -112,7 +110,7 @@ export default async function BracketSetupPage({ params }: {
 
     content = (
       <main className="min-h-dvh paper has-tabbar page-enter">
-        <TripHeader backTo={`${tripHome}/organiser`} />
+        <TripHeader backTo={`/trip/${tripCode}/organiser`} />
         <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
           <h1 className="t-h1 text-ink mb-1">
             League
@@ -138,7 +136,7 @@ export default async function BracketSetupPage({ params }: {
             />
           )}
           <div className="mt-6">
-            <BackButton href={`${tripHome}/organiser`} label="Organiser" />
+            <BackButton href={`/trip/${tripCode}/organiser`} label="Organiser" />
           </div>
         </div>
       </main>
@@ -195,13 +193,13 @@ export default async function BracketSetupPage({ params }: {
     // Neither a knockout nor a league: nothing of a bracket's to set.
     content = (
       <main className="min-h-dvh paper has-tabbar page-enter">
-        <TripHeader backTo={`${tripHome}/organiser`} />
+        <TripHeader backTo={`/trip/${tripCode}/organiser`} />
         <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
           <h1 className="t-h1 text-ink mb-1">No bracket</h1>
           <p className="text-ink/65 text-sm mb-6">
             A match play event is made from Create an event, Golf tournament, Match play.
           </p>
-          <BackButton href={`${tripHome}/organiser`} label="Organiser" />
+          <BackButton href={`/trip/${tripCode}/organiser`} label="Organiser" />
         </div>
       </main>
     )

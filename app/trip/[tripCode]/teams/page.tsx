@@ -17,7 +17,7 @@ import { isLocked } from '@/lib/passcode'
 import { isEvent } from '@/lib/eventHub'
 import { parseEventPermissions } from '@/lib/eventPermissions'
 import { eventTags } from '@/lib/tagBoards'
-import { fetchTripKind, fetchTripBase } from '../kind'
+import { fetchTripKind } from '../kind'
 import { linkedPlayerId } from '@/lib/currentPlayer'
 
 export const dynamic = 'force-dynamic'
@@ -42,7 +42,6 @@ export default async function TripTeamsPage({
   searchParams: Promise<{ view?: string }>
 }) {
   const [{ tripCode }, { view }] = await Promise.all([params, searchParams])
-  const tripHome = await fetchTripBase(tripCode)
 
   // The kind alongside, not inside: a named `kind` would fail this select
   // on an un-migrated database — the note on fetchTripKind.
@@ -118,10 +117,10 @@ export default async function TripTeamsPage({
   if (view === 'drag') {
     const screen = (
       <div className="min-h-dvh paper has-tabbar page-enter text-ink">
-        <TripHeader backTo={tripHome} />
+        <TripHeader backTo={`/trip/${tripCode}`} />
         <div className="paper border-b border-line">
           <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
-            <BackButton href={`${tripHome}/teams`} />
+            <BackButton href={`/trip/${tripCode}/teams`} />
             <div className="min-w-0 text-center">
               <h1 className="t-card text-ink">
                 Teams
@@ -208,10 +207,10 @@ export default async function TripTeamsPage({
 
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
-      <TripHeader backTo={tripHome} />
+      <TripHeader backTo={`/trip/${tripCode}`} />
       <div className="paper border-b border-line">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
-          <BackButton href={event ? tripHome : `${tripHome}/setup`} />
+          <BackButton href={event ? `/trip/${tripCode}` : `/trip/${tripCode}/setup`} />
           <div className="min-w-0 text-center">
             <h1 className="t-card text-ink">
               Teams

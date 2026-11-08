@@ -11,7 +11,6 @@ import { TABBAR_SPACE } from '@/app/components/tabbarMetrics'
 import { courseLabel } from '@/lib/courseDirectory'
 import { isEvent } from '@/lib/eventHub'
 import { hasTags, picksFrom, resolvePlayerColour } from '@/lib/playerColours'
-import { fetchTripBase } from '../../kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,7 +20,6 @@ export default async function TripCoursePage({
   params: Promise<{ tripCode: string; roundNumber: string }>
 }) {
   const { tripCode, roundNumber } = await params
-  const tripHome = await fetchTripBase(tripCode)
   const roundNum = parseInt(roundNumber)
   if (isNaN(roundNum)) notFound()
 
@@ -130,7 +128,7 @@ export default async function TripCoursePage({
     // card's height instead. The Next button comes to rest just above the bar
     // rather than beneath it.
     <div className="min-h-dvh paper page-enter">
-      <TripHeader backTo={tripHome} title="scoring" />
+      <TripHeader backTo={`/trip/${tripCode}`} title="scoring" />
       <CourseDashboardClient
         courseName={courseLabel((thisRound.courses as any).name)}
         courseId={courseId}
@@ -139,7 +137,7 @@ export default async function TripCoursePage({
         holes={(holesRes.data ?? []) as any}
         tees={(teesRes.data ?? []) as any}
         roundHandicaps={hcpsRes.data ?? []}
-        backHref={`${tripHome}/scoring`}
+        backHref={`/trip/${tripCode}/scoring`}
         roundId={thisRound.id}
         // For the card check on the pick-player screen: a correction re-scores
         // this trip's committed cards on this course, and nothing outside it.

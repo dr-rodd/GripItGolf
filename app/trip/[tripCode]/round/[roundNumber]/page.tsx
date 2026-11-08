@@ -25,7 +25,7 @@ import RoundCard from './RoundCard'
 import CasualToggle from './CasualToggle'
 import CourseWeather from '@/app/components/CourseWeather'
 import { isEvent } from '@/lib/eventHub'
-import { fetchTripKind, fetchTripBase } from '../../kind'
+import { fetchTripKind } from '../../kind'
 import { boardNames } from '@/lib/displayNames'
 import { buttonClass, cardClass } from '@/app/components/ui'
 import { splitCourseName } from '@/lib/courseDirectory'
@@ -46,7 +46,6 @@ export default async function RoundSummaryPage({
   params: Promise<{ tripCode: string; roundNumber: string }>
 }) {
   const { tripCode, roundNumber } = await params
-  const tripHome = await fetchTripBase(tripCode)
   const roundNum = parseInt(roundNumber, 10)
   if (!Number.isFinite(roundNum)) notFound()
 
@@ -200,7 +199,7 @@ export default async function RoundSummaryPage({
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={tripHome} />
+      <TripHeader backTo={`/trip/${tripCode}`} />
 
       {/* The way back, top left, where a phone puts one.
           This page is opened from the itinerary to read one thing — a tee
@@ -209,7 +208,7 @@ export default async function RoundSummaryPage({
           reads as "back", and a page reached by tapping a round should be
           leavable without hunting for how. */}
       <div className="max-w-lg mx-auto px-4 pt-4">
-        <BackButton href={tripHome} label="Trip" />
+        <BackButton href={`/trip/${tripCode}`} label="Trip" />
       </div>
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-6 flex flex-col gap-8">
@@ -366,7 +365,7 @@ export default async function RoundSummaryPage({
 
         {/* ── Into the card ── */}
         <Link
-          href={`${tripHome}/scoring/${round.round_number}`}
+          href={`/trip/${tripCode}/scoring/${round.round_number}`}
           className={buttonClass('primary')}
         >
           <IconClipboardList size={20} />
@@ -438,7 +437,7 @@ async function RoundPodium({
   meId: string | null
   roundId: string
 }) {
-  const [{ rows, error }, nicknameRows, tripHome] = await Promise.all([promise, nicknames, fetchTripBase(tripCode)])
+  const [{ rows, error }, nicknameRows] = await Promise.all([promise, nicknames])
   const top = podium(rows, 3)
   // Only a player's own card: on a team board the row is the team's.
   const mine = meId ? rows.find(r => r.id === meId && r.playerIds.length === 1) ?? null : null
@@ -488,7 +487,7 @@ async function RoundPodium({
         ))}
       </div>
       <Link
-        href={`${tripHome}/leaderboard`}
+        href={`/trip/${tripCode}/leaderboard`}
         className="mt-3 inline-flex items-center gap-1.5 t-label text-accent-deep hover:text-accent transition-colors duration-150"
       >
         <IconTrophy size={14} />

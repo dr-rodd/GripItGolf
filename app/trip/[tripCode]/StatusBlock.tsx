@@ -13,8 +13,6 @@ import CourseWeather from '@/app/components/CourseWeather'
 import { IconArrowRight, IconFlag, IconHome, IconCar, IconPlane, IconTrain, IconFork, IconUsers } from '@/app/components/icons'
 import { cardClass } from '@/app/components/ui'
 import CourseName from '@/app/components/CourseName'
-import WatchAsSpectator from './WatchAsSpectator'
-import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * The top of the trip hub: what this device is, and what happens next.
@@ -71,18 +69,10 @@ export default function StatusBlock({
   courseNames,
   noun = 'trip',
   knockout = false,
-  spectator = false,
 }: {
   tripCode: string
   /** Null when this device is not linked to anybody on this trip. */
   player: StatusPlayer | null
-  /**
-   * Nobody claimed, and this phone chose to watch (Ross, 8 Nov 2026): the
-   * card leads with what is on next, as it does for a player, with the way
-   * to claim a spot kept on it. Without it an unclaimed phone is asked to
-   * claim, or to watch.
-   */
-  spectator?: boolean
   items: ItineraryItem[]
   startDate: string | null
   /** Round date by the itinerary item that made it — the date half of the join. */
@@ -99,12 +89,11 @@ export default function StatusBlock({
    */
   knockout?: boolean
 }) {
-  const tripHome = useTripBase(tripCode)
   const router = useRouter()
   const now = useMinute()
   const [dismissed, setDismissed] = useState(false)
 
-  if ((!player && !spectator) || dismissed) {
+  if (!player || dismissed) {
     return <ClaimSpot tripCode={tripCode} />
   }
 
@@ -138,19 +127,7 @@ export default function StatusBlock({
   return (
     <div className={`w-full px-4 py-4 ${cardClass()}`}>
 
-      {/* ── Greeting. One line, and the way out of it — for a spectator,
-          the way in: claiming a spot (Ross, 8 Nov 2026). ── */}
-      {!player ? (
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="t-card text-ink min-w-0 truncate">Spectating</p>
-        <Link
-          href={`${tripHome}/players`}
-          className="flex-shrink-0 t-label text-accent-deep hover:text-accent transition-colors duration-150"
-        >
-          Playing? Claim your spot
-        </Link>
-      </div>
-      ) : (
+      {/* ── Greeting. One line, and the way out of it. ── */}
       <div className="flex items-baseline justify-between gap-3">
         <p className="t-card text-ink min-w-0 truncate">{player.firstName}</p>
         <button
@@ -164,14 +141,13 @@ export default function StatusBlock({
             // navigation. Clearing the cache is what makes "Not you?" outlast
             // the tap; see the note in players/PlayersClient.tsx.
             router.refresh()
-            router.push(`${tripHome}/players`)
+            router.push(`/trip/${tripCode}/players`)
           }}
           className="flex-shrink-0 t-label text-accent-deep hover:text-accent transition-colors duration-150"
         >
           Not you?
         </button>
       </div>
-      )}
 
       {/* ── Up next ──
           Golf links through to its round summary; a stay or a journey has
@@ -181,7 +157,7 @@ export default function StatusBlock({
         {next ? (
           nextRoundNumber != null ? (
             <Link
-              href={`${tripHome}/round/${nextRoundNumber}`}
+              href={`/trip/${tripCode}/round/${nextRoundNumber}`}
               className="block press"
             >
               <UpNextLines next={next} countdown={countdown} />
@@ -216,7 +192,7 @@ export default function StatusBlock({
       {/* ── Standing ──
           Omitted rather than zeroed. "0 points, last of 12" before a ball is
           struck is a worse thing to read than nothing at all. */}
-      {player && (player.placing || player.nextMatch) && (
+      {(player.placing || player.nextMatch) && (
         <div className="mt-3.5 pt-3.5 border-t border-line flex flex-col gap-1">
           {player.placing && (
             // The place is the number worth reading, so it is the big one —
@@ -232,7 +208,7 @@ export default function StatusBlock({
                 )}
               </p>
               <Link
-                href={`${tripHome}/leaderboard`}
+                href={`/trip/${tripCode}/leaderboard`}
                 className="flex-shrink-0 t-label text-accent-deep hover:text-accent transition-colors duration-150"
               >
                 Leaderboard →
@@ -381,11 +357,10 @@ function NothingScheduled({ noun }: { noun: 'trip' | 'event' }) {
  * reason to tap and reads as part of the button.
  */
 function ClaimSpot({ tripCode }: { tripCode: string }) {
-  const tripHome = useTripBase(tripCode)
   return (
     <div>
       <Link
-        href={`${tripHome}/players`}
+        href={`/trip/${tripCode}/players`}
         className={`flex items-center gap-3 w-full px-4 py-4 ${cardClass('raised', true)}`}
       >
         <span className="flex-shrink-0 w-10 h-10 rounded-tile bg-accent-tint text-accent-deep flex items-center justify-center">
@@ -401,10 +376,6 @@ function ClaimSpot({ tripCode }: { tripCode: string }) {
       <p className="mt-2.5 px-1 t-cap text-ink/65">
         Pick or add your name, and this phone remembers you.
       </p>
-
-      {/* Or just watch (Ross, 8 Nov 2026): the card above stays exactly as
-          it was; this is the second door, quieter, under the note. */}
-      <WatchAsSpectator tripCode={tripCode} className="mt-1.5 px-1" />
     </div>
   )
 }

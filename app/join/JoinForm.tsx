@@ -47,9 +47,7 @@ export default function JoinForm() {
       return
     }
 
-    // The short link sends a code to wherever it lives — /trip/, /event/ or
-    // /run/ (app/[code]/page.tsx).
-    router.push(`/${data.trip_code}`)
+    router.push(`/trip/${data.trip_code}`)
   }
 
   return (

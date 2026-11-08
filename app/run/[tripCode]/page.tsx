@@ -15,7 +15,6 @@ import { TeamsList, RulesSummary, SectionTitle, ChallengeNotFound } from './RunP
 import RunShare from './RunShare'
 import LegalLinks from '@/app/components/LegalLinks'
 import { buttonClass, cardClass } from '@/app/components/ui'
-import { tripBase } from '@/lib/tripPaths'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +46,7 @@ export default async function RunHubPage({ params }: {
   const challenge = await fetchRunChallenge(tripCode)
 
   if (!challenge) return <ChallengeNotFound />
-  if (!isRunChallenge(challenge.kind)) redirect(tripBase(challenge.code, challenge.kind))
+  if (!isRunChallenge(challenge.kind)) redirect(`/trip/${challenge.code}`)
 
   const today = todayString(new Date())
   const dates = describeRange(challenge.startDate, challenge.endDate)

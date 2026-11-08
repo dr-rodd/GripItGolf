@@ -6,9 +6,8 @@ import { linkedPlayerId } from '@/lib/currentPlayer'
 import { readAllRows } from '@/lib/allRows'
 import BackButton from '@/app/components/BackButton'
 import TripHeader from '@/app/components/TripHeader'
-import { fetchTripKind, fetchTripBase } from '../../kind'
+import { fetchTripKind } from '../../kind'
 import TeamPickerWizard from './TeamPickerWizard'
-import { insideTrip } from '@/lib/tripPaths'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,11 +26,9 @@ export default async function TeamPickPage({ params, searchParams }: {
   searchParams: Promise<{ sheet?: string; team?: string; back?: string }>
 }) {
   const [{ tripCode }, query] = await Promise.all([params, searchParams])
-  const tripHome = await fetchTripBase(tripCode)
-  const teamsHref = `${tripHome}/teams`
-  // Only ever back into this trip — a link is a suggestion, never a redirect
-  // elsewhere — under either root (lib/tripPaths.ts), the layout putting it right.
-  const back = query.back && insideTrip(query.back, tripCode) ? query.back : teamsHref
+  const teamsHref = `/trip/${tripCode}/teams`
+  // Only ever back into this trip — a link is a suggestion, never a redirect elsewhere.
+  const back = query.back && query.back.startsWith(`/trip/${tripCode}/`) ? query.back : teamsHref
 
   const [kind, { data: trip, error }] = await Promise.all([
     fetchTripKind(tripCode),

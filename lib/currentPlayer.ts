@@ -20,7 +20,7 @@
 // Server only: `next/headers` reads the request being rendered.
 
 import { cookies } from 'next/headers'
-import { playerCookieName, readPlayerId, readWatching, watchCookieName } from './playerCookie'
+import { playerCookieName, readPlayerId } from './playerCookie'
 
 /** The least a row needs for the roster match. */
 export type Rostered = { id: string }
@@ -50,16 +50,6 @@ export function playerFromRoster<T extends Rostered>(
 export async function linkedPlayerId(tripCode: string): Promise<string | null> {
   const jar = await cookies()
   return readPlayerId(jar.get(playerCookieName(tripCode))?.value)
-}
-
-/**
- * Whether this device watches this trip or event as a spectator (a cookie,
- * lib/playerCookie.ts) — asked only where nobody is claimed, since a player
- * is never also a spectator.
- */
-export async function isSpectating(tripCode: string): Promise<boolean> {
-  const jar = await cookies()
-  return readWatching(jar.get(watchCookieName(tripCode))?.value)
 }
 
 /**

@@ -7,7 +7,6 @@ import { isLocked } from '@/lib/passcode'
 import { isRunChallenge, describeProgress } from '@/lib/runChallenge'
 import { fetchRunChallenge } from '../data'
 import RunOrganiserClient from './RunOrganiserClient'
-import { tripBase } from '@/lib/tripPaths'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,7 +40,7 @@ export default async function RunOrganiserPage({ params }: {
       </main>
     )
   }
-  if (!isRunChallenge(challenge.kind)) redirect(`${tripBase(challenge.code, challenge.kind)}/organiser`)
+  if (!isRunChallenge(challenge.kind)) redirect(`/trip/${challenge.code}/organiser`)
 
   const client = (
     <RunOrganiserClient

@@ -190,7 +190,7 @@ section('One writer, and the column named only once it is there')
   ok(client.includes('?view=drag') && client.includes('Drag and drop instead'), '  …offered to the organiser')
 
   const organiserArea = read('app/trip/[tripCode]/organiser/OrganiserClient.tsx')
-  ok(organiserArea.includes('href={`${tripHome}/teams`} label="Teams"'),
+  ok(organiserArea.includes('href={`/trip/${tripCode}/teams`} label="Teams"'),
     'the organiser area has a door to the teams — they were hard to find')
 }
 

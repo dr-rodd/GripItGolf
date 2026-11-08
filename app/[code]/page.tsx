@@ -1,8 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { isRunChallenge } from '@/lib/runChallenge'
-import { tripBase } from '@/lib/tripPaths'
-import { fetchTripKind } from '@/app/trip/[tripCode]/kind'
 import BackButton from '@/app/components/BackButton'
 
 export const dynamic = 'force-dynamic'
@@ -20,8 +17,8 @@ export const dynamic = 'force-dynamic'
  *
  * Anything code-shaped is looked up (case-insensitively — a typed URL is
  * usually lowercase) and sent on to the trip hub, which stays the one
- * canonical address: shared links and the QR keep their /trip/ or /event/
- * form, where the invite unfurl metadata lives. Anything else is a plain 404.
+ * canonical address: shared links and the QR keep their /trip/ form, where
+ * the invite unfurl metadata lives. Anything else is a plain 404.
  */
 export default async function ShortCodePage({ params }: {
   params: Promise<{ code: string }>
@@ -33,18 +30,13 @@ export default async function ShortCodePage({ params }: {
   if (!/^[A-Za-z0-9]{6}$/.test(code)) notFound()
 
   const tripCode = code.toUpperCase()
-  const [{ data }, kind] = await Promise.all([
-    supabase
-      .from('trips')
-      .select('trip_code')
-      .eq('trip_code', tripCode)
-      .single(),
-    // Its own fail-soft read, as everywhere (kind.ts): where the code lives —
-    // a run challenge under /run/, an event under /event/, a trip /trip/.
-    fetchTripKind(tripCode),
-  ])
+  const { data } = await supabase
+    .from('trips')
+    .select('trip_code')
+    .eq('trip_code', tripCode)
+    .single()
 
-  if (data) redirect(isRunChallenge(kind) ? `/run/${data.trip_code}` : tripBase(data.trip_code, kind))
+  if (data) redirect(`/trip/${data.trip_code}`)
 
   // Code-shaped but nobody's: the same calm answer the join box gives,
   // because a mistyped character is the likely story.

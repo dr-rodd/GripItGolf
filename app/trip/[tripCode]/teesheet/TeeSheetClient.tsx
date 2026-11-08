@@ -33,7 +33,6 @@ import { useTeeFreeze } from './useTeeFreeze'
 import { FIELD, buttonClass, cardClass, optionClass } from '@/app/components/ui'
 import { courseLabel } from '@/lib/courseDirectory'
 import TeeSeats from './TeeSeats'
-import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * The tee sheet on a phone reads like a day on a calendar (Ross, 31 Oct
@@ -189,7 +188,6 @@ export default function TeeSheetClient({
   /** False when the assignments table could not be read — nothing will save. */
   storageReady?: boolean
 }) {
-  const tripHome = useTripBase(tripCode)
   const [roundId, setRoundId] = useState<string | null>(
     rounds.find(r => r.id === initialRoundId)?.id ?? rounds[0]?.id ?? null,
   )
@@ -623,7 +621,7 @@ export default function TeeSheetClient({
 
   // This phone's own place.
   const mine = live ? myTee(roundAssignments, meId, live, id => nameOf.get(id) ?? null) : null
-  const setupHref = round ? `${tripHome}/teesheet/${round.id}/setup` : null
+  const setupHref = round ? `/trip/${tripCode}/teesheet/${round.id}/setup` : null
 
   // Who may take a name off, and who may book somebody else on: the
   // organiser anybody; a player booking their own times themselves and
@@ -854,7 +852,7 @@ export default function TeeSheetClient({
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={tripHome} />
+      <TripHeader backTo={`/trip/${tripCode}`} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
 
@@ -874,7 +872,7 @@ export default function TeeSheetClient({
         </p>
         {fieldMayEdit && !meId && !organiser && (
           <Link
-            href={`${tripHome}/players`}
+            href={`/trip/${tripCode}/players`}
             className="inline-block mb-2 t-cap text-accent-deep hover:text-accent transition-colors"
           >
             Claim your spot →
@@ -910,7 +908,7 @@ export default function TeeSheetClient({
               {untagged.map(id => nameOf.get(id)).filter(Boolean).join(' · ')}
             </p>
             <Link
-              href={`${tripHome}/organiser/tags`}
+              href={`/trip/${tripCode}/organiser/tags`}
               className="inline-block mt-2 t-cap text-accent-deep hover:text-accent transition-colors"
             >
               Set tags →

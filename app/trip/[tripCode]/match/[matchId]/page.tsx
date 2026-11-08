@@ -21,7 +21,6 @@ import {
 } from '@/lib/matchArrangements'
 import MyHandicap from './MyHandicap'
 import { MatchArrange, MatchWalkover } from './MatchActions'
-import { fetchTripBase } from '../../kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +45,6 @@ export default async function MatchPage({
   params: Promise<{ tripCode: string; matchId: string }>
 }) {
   const { tripCode, matchId } = await params
-  const tripHome = await fetchTripBase(tripCode)
 
   const { data: trip } = await supabase
     .from('trips')
@@ -194,9 +192,9 @@ export default async function MatchPage({
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={tripHome} />
+      <TripHeader backTo={`/trip/${tripCode}`} />
       <div className="max-w-lg mx-auto px-4 pt-4">
-        <BackButton href={`${tripHome}/scoring`} label="Scoring" />
+        <BackButton href={`/trip/${tripCode}/scoring`} label="Scoring" />
       </div>
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10 flex flex-col gap-4">
@@ -261,7 +259,7 @@ export default async function MatchPage({
 
         {/* The match card — once the shots are known (stage 4). */}
         {arrangeable && course && strokes && (
-          <Link href={`${tripHome}/match/${match.id}/card`} className={buttonClass('primary')}>
+          <Link href={`/trip/${tripCode}/match/${match.id}/card`} className={buttonClass('primary')}>
             {result ? 'See the match card' : 'Score this match'}
           </Link>
         )}
@@ -289,7 +287,7 @@ export default async function MatchPage({
           The result goes on the bracket — hold the match there to record it.
         </p>
         <p className="text-center">
-          <Link href={`${tripHome}/matchplay`} className="t-cap text-accent-deep hover:text-accent">
+          <Link href={`/trip/${tripCode}/matchplay`} className="t-cap text-accent-deep hover:text-accent">
             See the whole bracket →
           </Link>
         </p>

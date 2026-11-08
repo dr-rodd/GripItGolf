@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * The trip URL as a scannable code, held up rather than sent: round brown
@@ -38,7 +37,6 @@ const MODULE_TYPE: 'dots' | 'square' = 'dots'
 const DRAW_SIZE = 600
 
 export default function TripQr({ tripCode }: { tripCode: string }) {
-  const tripHome = useTripBase(tripCode)
   const box = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -56,7 +54,7 @@ export default function TripQr({ tripCode }: { tripCode: string }) {
         type: 'svg',
         width: DRAW_SIZE,
         height: DRAW_SIZE,
-        data: `${window.location.origin}${tripHome}`,
+        data: `${window.location.origin}/trip/${tripCode}`,
         qrOptions: { errorCorrectionLevel: 'H' },
         margin: 0,
         backgroundOptions: { color: '#FFFFFF' },

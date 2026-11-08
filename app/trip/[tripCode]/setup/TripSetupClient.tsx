@@ -39,7 +39,6 @@ import { syncRoundHandicaps } from '@/lib/roundHandicaps'
 import { rescheduleRounds } from '@/lib/itineraryStore'
 import { normalizeDescription, MAX_TRIP_DESCRIPTION } from '@/lib/tripLimits'
 import { FIELD, FIELD_LABEL, ListGroup, Pill, SectionHeader, buttonClass, cardClass, chipClass } from '@/app/components/ui'
-import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -187,7 +186,6 @@ export default function TripSetupClient({
    */
   teeTimes?: React.ReactNode
 }) {
-  const tripHome = useTripBase(trip.trip_code)
   const router = useRouter()
 
   // Trip fields
@@ -536,7 +534,7 @@ export default function TripSetupClient({
 
       {/* The page names itself in the header, the way the leaderboard and
           the scoring screens do. Tapping the mark is the way back. */}
-      <TripHeader backTo={tripHome} title="settings" />
+      <TripHeader backTo={`/trip/${trip.trip_code}`} title="settings" />
 
       {/* The trip's own details sit behind the gear rather than at the top of
           the page. They are set once and almost never touched again, so they
@@ -856,7 +854,7 @@ export default function TripSetupClient({
                 here across boards that may not share them. */}
             {canArrange && (
               <Link
-                href={`${tripHome}/teams`}
+                href={`/trip/${trip.trip_code}/teams`}
                 className={buttonClass('secondary')}
               >
                 {pickedSheets.length > 0
@@ -1163,7 +1161,7 @@ export default function TripSetupClient({
             nothing. */}
         <div className="text-center">
           <Link
-            href={`${tripHome}/export`}
+            href={`/trip/${trip.trip_code}/export`}
             className="inline-block px-4 py-2.5 t-label text-ink/65 hover:text-ink"
           >
             Export trip (PDF)

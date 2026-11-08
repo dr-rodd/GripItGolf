@@ -11,7 +11,6 @@ import { MAIN_SET, setOf } from '@/lib/teamSets'
 import { pairsBlockedReason, teamNoun } from '@/lib/teamLimits'
 import type { MemberLike, TeamLike } from '@/lib/teamLimits'
 import { Pill, buttonClass, cardClass } from '@/app/components/ui'
-import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * Settings for the matchplay format. Appears when the trip runs a knockout;
@@ -32,7 +31,6 @@ export default function MatchplayPanel({
   teams: TeamLike[]
   players: MemberLike[]
 }) {
-  const tripHome = useTripBase(tripCode)
   // A pairs draw is between pairings, so it is drawn from the team sheet
   // rather than the roster — and cannot be drawn from a broken one.
   const pairs = needsPairings(boards)
@@ -210,7 +208,7 @@ export default function MatchplayPanel({
 
       {exists && (
         <Link
-          href={`${tripHome}/matchplay`}
+          href={`/trip/${tripCode}/matchplay`}
           className="block text-center t-label text-accent-deep mt-3 hover:text-accent transition-colors"
         >
           View the draw →

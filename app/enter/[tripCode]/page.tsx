@@ -3,7 +3,6 @@ import { notFound, redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { entryAllowed, entryCookie } from '@/lib/publicPin'
 import EntryGate from './EntryGate'
-import { tripBase } from '@/lib/tripPaths'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,16 +22,14 @@ export default async function EnterPage({ params }: { params: Promise<{ tripCode
     supabase.from('trips').select('*').eq('trip_code', tripCode).maybeSingle(),
     cookies(),
   ])
-  const trip = data as { name: string; kind?: string | null; public_passcode_hash?: string | null; settings_passcode_hash?: string | null } | null
+  const trip = data as { name: string; public_passcode_hash?: string | null; settings_passcode_hash?: string | null } | null
   if (!trip) notFound()
   const lock = trip.public_passcode_hash ?? null
-  const home = tripBase(tripCode, trip.kind)
-  if (entryAllowed(lock, jar.get(entryCookie(tripCode))?.value)) redirect(home)
+  if (entryAllowed(lock, jar.get(entryCookie(tripCode))?.value)) redirect(`/trip/${tripCode}`)
 
   return (
     <EntryGate
       tripCode={tripCode}
-      home={home}
       eventName={trip.name}
       publicHash={lock as string}
       adminHash={trip.settings_passcode_hash ?? null}

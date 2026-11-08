@@ -170,7 +170,7 @@ section('Trips have tee times too, under the same rules (Ross, 26 Oct 2026)')
   ok(!sheetPage.includes('This is a trip'), 'the Tee times tab no longer turns a trip away')
   ok(sheetPage.includes('isTrip={!isEvent(kind)}'), '  …and speaks of a trip\'s lead player and passcode')
   const wizPage = read('app/trip/[tripCode]/teesheet/[roundId]/setup/page.tsx')
-  ok(!wizPage.includes('This is a trip') && wizPage.includes("from === 'setup' ? `${tripHome}/setup`"),
+  ok(!wizPage.includes('This is a trip') && wizPage.includes("from === 'setup' ? `/trip/${tripCode}/setup`"),
     'nor does the wizard, which sends a trip back to Trip Setup')
 
   const setup = read('app/trip/[tripCode]/setup/page.tsx')
@@ -508,7 +508,7 @@ section('The tee times are a tab, and your time is on the home screen too')
     'the hub\'s rounds select never names a migration-050 column')
 
   const panel = read('app/trip/[tripCode]/TeeTimesPanel.tsx')
-  ok(panel.includes('href={`${tripHome}/teesheet`}'),
+  ok(panel.includes('href={`/trip/${tripCode}/teesheet`}'),
     'and the module is the way to the whole sheet')
 }
 

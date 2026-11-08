@@ -9,7 +9,6 @@ import { IconChevronRight, IconFlag, itineraryIcon } from '@/app/components/icon
 import { useMinute } from '@/app/components/useMinute'
 import CourseName from '@/app/components/CourseName'
 import { cardClass } from '@/app/components/ui'
-import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 /**
  * The trip's running order on the hub, dimming as it happens.
@@ -135,7 +134,6 @@ function GolfTile({
   tripCode: string
   stretch?: boolean
 }) {
-  const tripHome = useTripBase(tripCode)
   // A raised card like every card that opens something; on the day, the
   // emerald wash with a deep edge. Golf is still the only thing in the list
   // that gets a card at all.
@@ -187,7 +185,7 @@ function GolfTile({
   // trip whose itinerary was edited after its rounds were made — stays a
   // plain tile rather than a link to nowhere.
   return roundNumber != null ? (
-    <Link href={`${tripHome}/round/${roundNumber}`} className={`${tile} press`}>
+    <Link href={`/trip/${tripCode}/round/${roundNumber}`} className={`${tile} press`}>
       {inside}
     </Link>
   ) : (

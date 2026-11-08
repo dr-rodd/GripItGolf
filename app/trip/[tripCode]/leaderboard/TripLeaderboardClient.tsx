@@ -37,7 +37,6 @@ import CourseName from '@/app/components/CourseName'
 import { courseLabel, splitCourseName } from '@/lib/courseDirectory'
 import { IconChevronRight } from '@/app/components/icons'
 import { watchFontChanges } from '@/lib/styleLab'
-import { useTripBase } from '@/app/trip/[tripCode]/TripBase'
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -1452,10 +1451,9 @@ function Board({
  * rest, and nobody is misled by a tap that opens the draw.
  */
 function MatchplayTab({ tripCode }: { tripCode: string }) {
-  const tripHome = useTripBase(tripCode)
   return (
     <Link
-      href={`${tripHome}/matchplay`}
+      href={`/trip/${tripCode}/matchplay`}
       className={`${chipClass(false)} flex-shrink-0`}
     >
       Match play

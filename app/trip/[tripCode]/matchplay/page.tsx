@@ -32,7 +32,6 @@ import MatchplayBracket, {
   type BracketMatchRow, type BracketEntrantRow,
 } from './MatchplayBracket'
 import { buttonClass } from '@/app/components/ui'
-import { fetchTripBase } from '../kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,7 +48,6 @@ export default async function MatchplayPage({
   params: Promise<{ tripCode: string }>
 }) {
   const { tripCode } = await params
-  const tripHome = await fetchTripBase(tripCode)
 
   const { data: trip, error: tripError } = await supabase
     .from('trips')
@@ -209,10 +207,10 @@ export default async function MatchplayPage({
 
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
-      <TripHeader backTo={tripHome} />
+      <TripHeader backTo={`/trip/${tripCode}`} />
       <div className="paper border-b border-line">
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
-          {knockout ? <div className="w-11" /> : <BackButton href={`${tripHome}/leaderboard`} />}
+          {knockout ? <div className="w-11" /> : <BackButton href={`/trip/${tripCode}/leaderboard`} />}
           <h1 className="t-h2 text-ink truncate px-2">
             Match play
           </h1>
@@ -225,7 +223,7 @@ export default async function MatchplayPage({
           <EmptyState
             title="Match play isn't switched on"
             body="Turn it on in Trip Setup, then draw the bracket."
-            tripHome={tripHome}
+            tripCode={tripCode}
           />
         ) : matches.length === 0 && drawLiveAt(rawDrawPlan(rawSetup)) ? (
           // A draw set for its moment: counted down to here as on the home
@@ -246,7 +244,7 @@ export default async function MatchplayPage({
                 ? 'Pick the pairings in Trip Setup, then draw the bracket there.'
                 : 'Draw the bracket in Trip Setup.'
             }
-            tripHome={tripHome}
+            tripCode={tripCode}
           />
         ) : (
           <MatchplayBracket
@@ -368,12 +366,11 @@ async function readLinkedRounds(
 }
 
 function EmptyState({
-  title, body, tripHome,
+  title, body, tripCode,
 }: {
   title: string
   body: string
-  /** Where the trip or event lives (lib/tripPaths.ts). */
-  tripHome: string
+  tripCode: string
 }) {
   return (
     <div className="border border-line rounded-sm px-6 py-14 text-center">
@@ -382,7 +379,7 @@ function EmptyState({
       </p>
       <p className="text-ink/65 text-sm leading-relaxed mb-8 max-w-xs mx-auto">{body}</p>
       <Link
-        href={`${tripHome}/setup`}
+        href={`/trip/${tripCode}/setup`}
         className={buttonClass('secondary', false)}
       >
         Trip Setup

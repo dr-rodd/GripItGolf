@@ -6,7 +6,6 @@ import { parseLeagueSetup } from '@/lib/leagueSetup'
 import BackButton from '@/app/components/BackButton'
 import PasscodeGate from '../../setup/PasscodeGate'
 import DayBoardsClient from './DayBoardsClient'
-import { fetchTripBase } from '../../kind'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +24,6 @@ export default async function DayBoardsPage({ params }: {
   params: Promise<{ tripCode: string }>
 }) {
   const { tripCode } = await params
-  const tripHome = await fetchTripBase(tripCode)
 
   const { data: trip, error } = await supabase
     .from('trips')
@@ -54,7 +52,7 @@ export default async function DayBoardsPage({ params }: {
           Per-day formats belong to events. A trip&apos;s leaderboards are
           set in Trip Setup, on the tab bar below.
         </p>
-        <BackButton href={tripHome} label="Trip" />
+        <BackButton href={`/trip/${tripCode}`} label="Trip" />
       </main>
     )
   }

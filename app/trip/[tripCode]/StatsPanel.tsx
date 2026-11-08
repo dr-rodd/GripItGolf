@@ -3,7 +3,6 @@ import {
   formatGained, formatRate, formatAverage, type PlayerStats,
 } from '@/lib/holeStats'
 import { cardClass } from '@/app/components/ui'
-import { fetchTripBase } from './kind'
 
 /**
  * The player's own trip, at a glance, on the hub.
@@ -25,12 +24,11 @@ import { fetchTripBase } from './kind'
  * Server component. No state.
  */
 export default function StatsPanel({
-  mine, tripHome, thin,
+  mine, tripCode, thin,
 }: {
   /** Null when this player has a card but nothing tracked on it yet. */
   mine: PlayerStats | null
-  /** Where the trip or event lives — `/trip/X` or `/event/X` (lib/tripPaths.ts). */
-  tripHome: string
+  tripCode: string
   thin: boolean
 }) {
   return (
@@ -98,7 +96,7 @@ export default function StatsPanel({
 
       {/* A link, not a button. The hub already has its one emerald action. */}
       <Link
-        href={`${tripHome}/stats`}
+        href={`/trip/${tripCode}/stats`}
         className="inline-block mt-4 t-label text-accent-deep hover:text-accent transition-colors duration-150"
       >
         Open the stats hub →

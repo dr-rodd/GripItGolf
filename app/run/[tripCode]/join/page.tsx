@@ -6,7 +6,6 @@ import { todayString } from '@/lib/tripStatus'
 import { isRunChallenge, challengeFinished, joinChoices } from '@/lib/runChallenge'
 import { fetchRunChallenge, rosterOf } from '../data'
 import RunJoinClient from './RunJoinClient'
-import { tripBase } from '@/lib/tripPaths'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +39,7 @@ export default async function RunJoinPage({ params }: {
       </main>
     )
   }
-  if (!isRunChallenge(challenge.kind)) redirect(`${tripBase(challenge.code, challenge.kind)}/players`)
+  if (!isRunChallenge(challenge.kind)) redirect(`/trip/${challenge.code}/players`)
 
   const roster = rosterOf(challenge)
   const viewer = await currentPlayer(challenge.code, roster)

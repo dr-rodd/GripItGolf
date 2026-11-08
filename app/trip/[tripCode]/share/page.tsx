@@ -3,7 +3,7 @@ import TripHeader from '@/app/components/TripHeader'
 import BackButton from '@/app/components/BackButton'
 import ShareTrip from '../ShareTrip'
 import TripQr from './TripQr'
-import { fetchTripKind, fetchTripBase } from '../kind'
+import { fetchTripKind } from '../kind'
 import { isEvent } from '@/lib/eventHub'
 
 export const dynamic = 'force-dynamic'
@@ -22,7 +22,6 @@ export const dynamic = 'force-dynamic'
  */
 export default async function SharePage({ params }: { params: Promise<{ tripCode: string }> }) {
   const { tripCode } = await params
-  const tripHome = await fetchTripBase(tripCode)
 
   // The kind rides alongside, fail-soft in its own request — an event says
   // event on this screen, and an un-migrated database simply reads as a trip.
@@ -50,7 +49,7 @@ export default async function SharePage({ params }: { params: Promise<{ tripCode
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={tripHome} />
+      <TripHeader backTo={`/trip/${tripCode}`} />
 
       <div className="max-w-lg mx-auto px-4 pt-6 pb-10 flex flex-col items-center text-center">
 

@@ -50,11 +50,11 @@ import { RUN_TABS, runActiveKey } from './runTabs'
  */
 
 const ITEMS = [
-  { key: 'home',        label: 'Home',        icon: IconHome,          path: (b: string) => b },
-  { key: 'scoring',     label: 'Scoring',     icon: IconClipboardList, path: (b: string) => `${b}/scoring` },
-  { key: 'leaderboard', label: 'Leaderboard', icon: IconTrophy,        path: (b: string) => `${b}/leaderboard` },
-  { key: 'stats',       label: 'Stats',       icon: IconChartBar,      path: (b: string) => `${b}/stats` },
-  { key: 'settings',    label: 'Trip Setup',  icon: IconSettings,      path: (b: string) => `${b}/setup` },
+  { key: 'home',        label: 'Home',        icon: IconHome,          path: (t: string) => `/trip/${t}` },
+  { key: 'scoring',     label: 'Scoring',     icon: IconClipboardList, path: (t: string) => `/trip/${t}/scoring` },
+  { key: 'leaderboard', label: 'Leaderboard', icon: IconTrophy,        path: (t: string) => `/trip/${t}/leaderboard` },
+  { key: 'stats',       label: 'Stats',       icon: IconChartBar,      path: (t: string) => `/trip/${t}/stats` },
+  { key: 'settings',    label: 'Trip Setup',  icon: IconSettings,      path: (t: string) => `/trip/${t}/setup` },
 ] as const
 
 /**
@@ -64,15 +64,15 @@ const ITEMS = [
  * the tab.
  */
 const EVENT_SETTINGS =
-  { key: 'settings',    label: 'Settings',    icon: IconSettings,      path: (b: string) => `${b}/settings` }
+  { key: 'settings',    label: 'Settings',    icon: IconSettings,      path: (t: string) => `/trip/${t}/settings` }
 
 /** An event's fourth tab, while a round starts from a tee sheet. */
 const TEE_TIMES_ITEM =
-  { key: 'teetimes',    label: 'Tee times',   icon: IconClock,         path: (b: string) => `${b}/teesheet` }
+  { key: 'teetimes',    label: 'Tee times',   icon: IconClock,         path: (t: string) => `/trip/${t}/teesheet` }
 
 /** A match play event's middle tab: the draw is its leaderboard. */
 const BRACKET_ITEM =
-  { key: 'leaderboard', label: 'Bracket', icon: IconBracket, path: (b: string) => `${b}/matchplay` }
+  { key: 'leaderboard', label: 'Bracket', icon: IconBracket, path: (t: string) => `/trip/${t}/matchplay` }
 
 /**
  * What one tab looks like, once it knows whether it is the page you are on
@@ -149,10 +149,8 @@ function Tab({
   )
 }
 
-export default function TabBar({ tripCode, base: baseProp, isEvent = false, bracket = false, fourth = null, sport = 'golf' }: {
+export default function TabBar({ tripCode, isEvent = false, bracket = false, fourth = null, sport = 'golf' }: {
   tripCode: string
-  /** Where a golf trip or event lives — `/trip/X` or `/event/X`, from the layout (lib/tripPaths.ts). */
-  base?: string
   /** The tab between the leaderboard and the last — Tee times, Stats or none (`fourthTab`). */
   fourth?: FourthTab | null
   /**
@@ -173,9 +171,7 @@ export default function TabBar({ tripCode, base: baseProp, isEvent = false, brac
   sport?: 'golf' | 'run'
 }) {
   const pathname = usePathname() ?? ''
-  // A golf tab's address hangs off the base the layout hands in — /trip/X
-  // or, for an event, /event/X (lib/tripPaths.ts).
-  const base = baseProp ?? `/trip/${tripCode}`
+  const base = `/trip/${tripCode}`
 
   // An event has its four or five; a trip keeps its five. A run challenge
   // has its own five.
@@ -249,7 +245,7 @@ export default function TabBar({ tripCode, base: baseProp, isEvent = false, brac
           return (
             <li key={item.key}>
               <Link
-                href={item.path(sport === 'run' ? tripCode : base)}
+                href={item.path(tripCode)}
                 aria-current={active ? 'page' : undefined}
                 // Left on the default, which warms the loading skeleton and
                 // the layout around it and stops there.
