@@ -56,6 +56,12 @@ import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass, optio
 import WizardShell from '@/app/components/WizardShell'
 import { Stepper } from '@/app/components/ItineraryForms'
 import { tripBase } from '@/lib/tripPaths'
+import { DynamicQuestion, SessionList, OverallSetup } from './SessionPicker'
+import {
+  type SessionDraft, type OverallRanks, type SessionFeed, type OverallRules,
+  sessionsIssue, resolvedFormats, inRunningOrder, sessionBoard, overallBoard, feedFor,
+} from '@/lib/sessions'
+import { daySheetId } from '@/lib/teamSets'
 
 /**
  * Creating a league event — the league branch of the tournament door.
@@ -92,9 +98,13 @@ import { tripBase } from '@/lib/tripPaths'
 // ── Styles shared with the trip wizard, by convention not import ─────────
 
 /** Each step opens on its question — WizardShell draws it as the step's title. */
-type StepKey = 'details' | 'venues' | 'deadlines' | 'field' | 'ready'
+type StepKey = 'details' | 'venues' | 'deadlines' | 'field' | 'dynamic' | 'sessions' | 'overall' | 'ready'
 const STEP_TITLES: Record<StepKey, string> = {
   details: 'Name your event',
+  // A standalone league's first leaderboard decision (Ross, 9 Nov 2026, D35).
+  dynamic: 'Enable Dynamic Overall Leaderboard?',
+  sessions: 'Set the running order',
+  overall: 'Finalise the Overall',
   venues: 'Where you’re playing',
   // Continuous and series leagues, once their rounds are made (Ross, 5 Nov 2026).
   deadlines: 'Set a deadline for each round?',
@@ -104,6 +114,9 @@ const STEP_TITLES: Record<StepKey, string> = {
 /** At most one line under the question. */
 const STEP_INTROS: Partial<Record<StepKey, string>> = {
   deadlines: 'Do you want to set a deadline for each round to be completed?',
+  dynamic: 'If the format of the golf changes over the course of the event, add each round as individual sessions with its own format and set the rules on how they feed the overall leaderboard.',
+  sessions: 'Each session is one round of golf, in its own format.',
+  overall: 'Who it ranks, and how each session feeds it.',
 }
 
 type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F'; tag?: string }
@@ -288,6 +301,12 @@ export default function CreateLeagueForm({ schedule, onExit }: {
   // Nothing chosen for the organiser (Ross, 8 Nov 2026): the leaderboards
   // are set by hand, and Finish waits for at least one.
   const [boards, setBoards] = useState<Leaderboard[]>([])
+  // The Dynamic Overall Leaderboard (lib/sessions.ts): a standalone
+  // league's first leaderboard question, its sessions and the Overall's rules.
+  const [dynamic, setDynamic] = useState<boolean | null>(null)
+  const [sessions, setSessions] = useState<SessionDraft[]>([])
+  const [overallRanks, setOverallRanks] = useState<OverallRanks | null>(null)
+  const [feeds, setFeeds] = useState<Record<string, SessionFeed>>({})
   const [dayBoards, setDayBoards] = useState<DayBoards | null>(null)
   // How collaborative the event is — all off until the organiser opts in
   // (lib/eventPermissions.ts, the one registry).
@@ -416,7 +435,26 @@ export default function CreateLeagueForm({ schedule, onExit }: {
   // How the days relate is asked of anything with more than one day — and
   // of every series, whose events are added after creation if they were
   // not all made now: one event today is the start of several.
-  const asksDayBoards = !continuous && (slots.length > 1 || schedule === 'series')
+  // Only a standalone league is asked about the Dynamic Overall Leaderboard.
+  const asksDynamic = schedule === 'standalone'
+  const isDynamic = asksDynamic && dynamic === true
+  // The run's playing days, for a session's day.
+  const playingDays = slots.map(s => ({ index: s.dayIndex, label: describeDay(s.date, s.dayIndex) }))
+  // The sessions as the rounds they become: running order, a position each
+  // within its day so two sessions on one day are two golf items.
+  const orderedSessions = inRunningOrder(sessions)
+  const sessionSlots = orderedSessions.map((sess, i) => ({
+    dayIndex: sess.dayIndex,
+    date: dateForDay(startDate || null, sess.dayIndex),
+    position: orderedSessions.slice(0, i).filter(o => o.dayIndex === sess.dayIndex).length,
+    courseId: sess.courseId,
+  }))
+  const sessionsProblem = isDynamic ? sessionsIssue(orderedSessions) : null
+  const ranks: OverallRanks = overallRanks ?? (tags.on ? 'tags' : 'individuals')
+  const overallEntrants = ranks === 'tags' ? Math.max(2, tags.tags?.length ?? 2)
+    : ranks === 'individuals' ? Math.max(1, players.filter(p => p.name.trim()).length) : 4
+
+  const asksDayBoards = !continuous && !isDynamic && (slots.length > 1 || schedule === 'series')
 
   // The deadline question, once the rounds are made — on a league whose
   // rounds are played over a stretch, each round's name and own date.
@@ -424,7 +462,13 @@ export default function CreateLeagueForm({ schedule, onExit }: {
   const deadlineNames = slots.map((slot, i) => `Round ${i + 1}${slot.date ? ` · ${describeShortDate(slot.date)}` : ''}`)
   const deadlineFloors = slots.map(slot => slot.date)
   const deadlineOpts = { names: deadlineNames, floors: deadlineFloors }
-  const keys: StepKey[] = ['details', 'venues', ...(askDeadlines ? ['deadlines' as const] : []), 'field', 'ready']
+  // A standalone league asks the field first, then the question, then the
+  // running order: venues a day, or (Yes) sessions and the Overall — so the
+  // back arrow from the Overall returns to the sessions and from there to
+  // the question (Ross, 9 Nov 2026).
+  const keys: StepKey[] = asksDynamic
+    ? ['details', 'field', 'dynamic', ...(isDynamic ? ['sessions' as const, 'overall' as const] : ['venues' as const]), 'ready']
+    : ['details', 'venues', ...(askDeadlines ? ['deadlines' as const] : []), 'field', 'ready']
   const key = keys[Math.min(Number(step) || 1, keys.length) - 1]
   const lastStep = keys.length
 
@@ -433,9 +477,32 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     key === 'venues' ? venuesComplete :
     key === 'deadlines' ? !deadlinesAnswerIssue(deadlines, slots.length, deadlineOpts) :
     key === 'field' ? !!entry && !duplicateIssue && !fieldTagsIssue(tags) :
-    key === 'ready' ? boards.length > 0 && (!asksDayBoards || !!dayBoards) && !passcodeIssue && !publicIssue && !giIssue :
+    key === 'dynamic' ? dynamic !== null :
+    key === 'sessions' ? sessionsProblem === null :
+    key === 'overall' ? (ranks !== 'tags' || tags.on) :
+    key === 'ready' ? (isDynamic || boards.length > 0) && (!asksDayBoards || !!dayBoards) && !passcodeIssue && !publicIssue && !giIssue :
     false
   )
+
+  /** Yes chosen: the running order starts with one session. */
+  function chooseDynamic(on: boolean) {
+    setDynamic(on)
+    if (on && sessions.length === 0) {
+      setSessions([{
+        key: 's-first',
+        dayIndex: slots[0]?.dayIndex ?? 0,
+        courseId: venues[0] ?? '',
+        format: { kind: 'stroke', audience: 'individual', scoring: 'stableford' },
+      }])
+    }
+  }
+
+  /** Yes → No: each day keeps its first session's venue as a plain round. */
+  function sessionsToVenues() {
+    const next = slots.map(slot => orderedSessions.find(sess => sess.dayIndex === slot.dayIndex)?.courseId ?? '')
+    setVenues(next)
+    setSameVenue(next.length > 1 && next.every(v => v === next[0]))
+  }
 
   function goNext() {
     if (step === 'done') return
@@ -526,6 +593,30 @@ export default function CreateLeagueForm({ schedule, onExit }: {
       }
     }
 
+    // The Dynamic Overall Leaderboard's boards, written with the trip: each
+    // session's round is given its id here so its board can name it before
+    // the round row exists (lib/sessions.ts). TBC sessions get no board.
+    const roundIds = isDynamic ? sessionSlots.map(() => crypto.randomUUID()) : []
+    const storedBoards: Leaderboard[] = isDynamic ? (() => {
+      const formats = resolvedFormats(orderedSessions)
+      const sessionBoards = formats.flatMap((f, i) => f ? [sessionBoard(f, roundIds[i], daySheetId(roundIds[i]))] : [])
+      const rules: OverallRules = { ranks }
+      const storedFeeds: Record<string, SessionFeed> = {}
+      const names: Record<string, string> = {}
+      orderedSessions.forEach((sess, i) => {
+        const rid = roundIds[i]
+        const board = sessionBoards.find(b => b.roundIds?.[0] === rid) ?? null
+        if (board) {
+          const own = feeds[sess.key]
+          storedFeeds[rid] = feedFor({ ranks, ...(own ? { feeds: { [rid]: own } } : {}) }, rid, board, overallEntrants)
+        }
+        if (sess.name?.trim()) names[rid] = sess.name.trim()
+      })
+      if (Object.keys(storedFeeds).length > 0) rules.feeds = storedFeeds
+      if (Object.keys(names).length > 0) rules.names = names
+      return [overallBoard(rules), ...sessionBoards, ...boards]
+    })() : boards
+
     const setup: LeagueSetup = {
       format: 'league',
       // Standalone is the absent default — the keep-the-no-op-off rule.
@@ -582,7 +673,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
         league: { ...NO_FORMATS.league },
         matchplay: { ...NO_FORMATS.matchplay },
       },
-      leaderboards: boards,
+      leaderboards: storedBoards,
       bracket_setup: setup,
       // Only when a toggle was actually flipped — nothing opened writes
       // nothing, so creation still lands before migration 049 has run.
@@ -647,14 +738,18 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     // A continuous league's day_index is its calendar offset inside the
     // period, and a series' its offset from the first event, so the
     // schedule and the countdown keep reading true dates.
-    const items: ItineraryItem[] = slots.map((slot, i) => ({
+    // A dynamic league's slots are its sessions, several to a day.
+    const playSlots = isDynamic
+      ? sessionSlots
+      : slots.map((slot, i) => ({ ...slot, position: 0, courseId: courseOf(slot, i) }))
+    const items: ItineraryItem[] = playSlots.map((slot, i) => ({
       id: `tmp-day-${i}`,
       dayIndex: slot.dayIndex,
-      position: 0,
+      position: slot.position,
       kind: 'golf',
       // A venue to be confirmed is a golf item with no course — and, below,
       // no round until somebody chooses one.
-      courseId: courseOf(slot, i),
+      courseId: slot.courseId || null,
       teeTime: null,
       teeCount: 1,
     }))
@@ -684,8 +779,10 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     const roundRows = items.flatMap((item, i) => {
       if (!item.courseId) return []
       // The slot's own date — every shape has one now.
-      const date = slots[i].date
+      const date = playSlots[i].date
       return [{
+        // A session's round carries the id its board was written with.
+        ...(isDynamic ? { id: roundIds[i] } : {}),
         trip_id: tripId,
         course_id: item.courseId,
         round_number: i + 1,
@@ -1216,6 +1313,47 @@ export default function CreateLeagueForm({ schedule, onExit }: {
           </div>
         )}
 
+        {/* ── The first leaderboard decision (D35) ── */}
+        {key === 'dynamic' && (
+          <DynamicQuestion
+            value={dynamic}
+            onChange={chooseDynamic}
+            sessionCount={sessions.length}
+            onConfirmOff={sessionsToVenues}
+          />
+        )}
+
+        {/* ── The running order: sessions, a format each ── */}
+        {key === 'sessions' && (
+          <div className="space-y-4">
+            <SessionList
+              sessions={sessions}
+              onChange={setSessions}
+              days={playingDays}
+              renderVenue={(value, onChange) => (
+                <VenuePicker courses={courses} value={value} onChange={onChange}
+                  onCourseAdded={onCourseAdded} allowTbc={false} />
+              )}
+            />
+            {sessionsProblem && sessions.length > 0 && (
+              <p className="text-ink/65 text-[13px] leading-snug">{sessionsProblem}</p>
+            )}
+          </div>
+        )}
+
+        {/* ── Finalise the Overall ── */}
+        {key === 'overall' && (
+          <OverallSetup
+            sessions={orderedSessions}
+            ranks={ranks}
+            onRanks={setOverallRanks}
+            feeds={feeds}
+            onFeeds={setFeeds}
+            tagsOn={tags.on}
+            entrants={overallEntrants}
+          />
+        )}
+
         {key === 'venues' && !continuous && (
           <div className="space-y-5">
             {coursesLoaded && courses.length === 0 && (
@@ -1495,9 +1633,11 @@ export default function CreateLeagueForm({ schedule, onExit }: {
             )}
 
             <div>
-              <label className={FIELD_LABEL}>Leaderboards</label>
+              <label className={FIELD_LABEL}>{isDynamic ? 'Secondary leaderboards' : 'Leaderboards'}</label>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-                How the field is ranked. Add at least one.
+                {isDynamic
+                  ? 'The Overall is set. Add any other leaderboard you want beside it, or none.'
+                  : 'How the field is ranked. Add at least one.'}
               </p>
               <LeaderboardSetup
                 boards={boards}
@@ -1507,7 +1647,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
                 askTags
                 onChange={setBoards}
               />
-              {boards.length === 0 && (
+              {boards.length === 0 && !isDynamic && (
                 <p className="t-cap text-ink/65 mt-3 leading-snug">
                   Add a leaderboard to finish — it is what the event is played for.
                 </p>

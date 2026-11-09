@@ -521,6 +521,9 @@ export function teamCardHolePoints(
  */
 export function buildRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   if (lb.competition === 'matchplay') return []
+  // A session's matches and the Overall read results, not cards — their rows
+  // are `overallRows` and the session's match list (lib/sessions.ts).
+  if (lb.competition === 'matches' || lb.competition === 'overall') return []
   // Casual first, then the board's own scope: a casual round does not
   // count on any board, so a day board pointed at one counts nothing —
   // which is right, and is what the two filters in this order say.

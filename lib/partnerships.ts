@@ -57,7 +57,11 @@ export function governingBoard(
   roundId: string,
 ): Leaderboard | null {
   return dayBoardFor(boards, roundId)
-    ?? boards.find(b => !b.roundIds?.length || b.roundIds.includes(roundId))
+    // A session's matches govern their round like a day's own board.
+    ?? boards.find(b => b.competition === 'matches' && b.roundIds?.length === 1 && b.roundIds[0] === roundId)
+    // The Overall ranks; it never governs a round (lib/sessions.ts) — or a
+    // session left TBC would take its partnership rules from it.
+    ?? boards.find(b => b.competition !== 'overall' && (!b.roundIds?.length || b.roundIds.includes(roundId)))
     ?? null
 }
 
@@ -84,7 +88,7 @@ function candidate(
 ): Leaderboard | null {
   const board = governingBoard(boards, roundId)
   if (!board || board.audience !== 'team' || board.tagMode) return null
-  if (board.competition === 'matchplay') return board
+  if (board.competition === 'matchplay' || board.competition === 'matches') return board
   const size = board.teamPick === 'self' ? board.teamSize ?? null : null
   if ((size ?? 0) > MAX_PARTNERSHIP || largestTeam > MAX_PARTNERSHIP) return null
   return board
@@ -99,7 +103,8 @@ function candidate(
  */
 export function isPairs(board: Leaderboard, largestTeam = 0): boolean {
   if (board.audience !== 'team' || board.tagMode) return false
-  if (board.competition === 'matchplay') return true
+  // A knockout's pairs, and a fourball or foursomes session's.
+  if (board.competition === 'matchplay' || board.competition === 'matches') return true
   if (board.teamPick === 'self') return board.teamSize === PAIR
   return largestTeam === PAIR
 }

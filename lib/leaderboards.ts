@@ -33,9 +33,19 @@ import {
   type QuotaScale, parseQuotaScale, quotaScaleOf, quotaScaleLabel,
 } from './quota'
 import { DEFAULT_TEAM_SCORING, MAX_COUNTING_SCORES, lastHoles } from './teamScoring'
+import {
+  type MatchFormat, type OverallRules, MATCH_FORMATS, isMatchFormat, parseOverallRules,
+  OVERALL_RANKS,
+} from './sessions'
 
 export type Audience = 'individual' | 'team'
-export type Competition = 'league' | 'matchplay'
+/**
+ * `league` is a table of cards; `matchplay` is the Knockout (a bracket);
+ * `matches` is match play counted on a leaderboard — a session's matches,
+ * never a bracket (D34); `overall` is the Dynamic Overall Leaderboard, which
+ * reads its sessions' results rather than cards (lib/sessions.ts).
+ */
+export type Competition = 'league' | 'matchplay' | 'matches' | 'overall'
 
 /** How a round is scored. */
 export type Scoring = 'stableford' | 'strokes' | 'quota'
@@ -234,6 +244,19 @@ export type Leaderboard = {
    * column for it, which is the honest thing rather than a repair.
    */
   roundIds?: string[]
+
+  /**
+   * A session's own format — the board a Dynamic Overall Leaderboard reads
+   * that session through (lib/sessions.ts). Scoped to exactly one round.
+   * Absent on every other board.
+   */
+  session?: boolean
+
+  /** `competition: 'matches'` only — singles, fourball or foursomes. */
+  matchFormat?: MatchFormat
+
+  /** `competition: 'overall'` only — what it ranks and how each session feeds it. */
+  overall?: OverallRules
 }
 
 /** The size bounds a self-picked team may take — see `teamSize`. */
@@ -435,6 +458,11 @@ export function describeTagMode(lb: Pick<Partial<Leaderboard>, 'tagMode' | 'tagC
  */
 export function slotKey(lb: Pick<Leaderboard, 'audience' | 'competition' | 'scoring' | 'teamFormat' | 'combine' | 'teamSet' | 'tagMode' | 'roundIds'>): string {
   if (lb.competition === 'matchplay') return 'matchplay'
+  // One Overall an event; a session's matches are its round's own.
+  if (lb.competition === 'overall') return 'overall'
+  if (lb.competition === 'matches') {
+    return `matches:${lb.roundIds?.length ? [...lb.roundIds].sort().join('+') : '-'}`
+  }
   return [
     lb.audience,
     'league',
@@ -823,6 +851,10 @@ export function boardTitle(lb: Leaderboard): string {
   if (lb.competition === 'matchplay') {
     return lb.audience === 'team' ? 'Pairs knockout' : 'Knockout'
   }
+  if (lb.competition === 'overall') return 'Overall'
+  if (lb.competition === 'matches') {
+    return `${MATCH_FORMATS.find(m => m.key === lb.matchFormat)?.label ?? 'Match'} matches`
+  }
   const scoring = SCORINGS.find(s => s.key === lb.scoring)?.label ?? 'League'
   const format = ALL_TEAM_FORMATS.find(f => f.key === lb.teamFormat)?.label ?? 'Team'
   // A tags board is named for what it ranks, then how: "Tags — Stableford
@@ -848,6 +880,7 @@ export function boardRules(lb: Leaderboard): string {
       : 'Knockout between players, drawn at random'
     return describeRoundLinks(lb.roundLinks ?? [], base)
   }
+  if (lb.competition === 'overall' || lb.competition === 'matches') return boardFacts(lb).join(' · ') + '.'
 
   if (isMatchTally(lb)) return describeTagMode(lb)
   const parts: string[] = []
@@ -902,6 +935,16 @@ export function boardFacts(lb: Leaderboard): string[] {
         ? `Decided on ${decisionLabel(links[0].decidedBy).toLowerCase()}`
         : `${links.length} rounds linked`)
     }
+    return facts
+  }
+  if (lb.competition === 'overall') {
+    const ranks = OVERALL_RANKS.find(o => o.key === lb.overall?.ranks)?.label ?? 'Overall'
+    return [ranks, 'Points from every session']
+  }
+  if (lb.competition === 'matches') {
+    const facts = [MATCH_FORMATS.find(m => m.key === lb.matchFormat)?.label ?? 'Match', 'Matches']
+    const allowance = allowanceOf(lb)
+    if (allowance !== FULL_ALLOWANCE) facts.push(`${allowance}% handicap`)
     return facts
   }
 
@@ -1007,8 +1050,51 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
 
     const audience = r.audience === 'team' ? 'team' : r.audience === 'individual' ? 'individual' : null
     const competition = r.competition === 'matchplay' ? 'matchplay'
-      : r.competition === 'league' ? 'league' : null
+      : r.competition === 'league' ? 'league'
+      : r.competition === 'matches' ? 'matches'
+      : r.competition === 'overall' ? 'overall' : null
     if (!audience || !competition) continue
+
+    // A session's matches (lib/sessions.ts): a format, one round, an
+    // allowance. Never a bracket — nothing else of a draw is read.
+    if (competition === 'matches') {
+      if (!isMatchFormat(r.matchFormat)) continue
+      const scope = roundIdList(r.roundIds)
+      if (scope.length !== 1) continue
+      const lb: Leaderboard = {
+        id: typeof r.id === 'string' && r.id ? r.id : `lb-${out.length}`,
+        audience: r.matchFormat === 'singles' ? 'individual' : 'team',
+        competition,
+        matchFormat: r.matchFormat,
+      }
+      if (lb.audience === 'team') lb.teamSet = typeof r.teamSet === 'string' && r.teamSet ? r.teamSet : 'main'
+      const allowance = clampAllowance(r.handicapAllowance)
+      if (allowance !== FULL_ALLOWANCE) lb.handicapAllowance = allowance
+      lb.roundIds = scope
+      lb.session = true
+      if (!isSlotFree(out, lb)) continue
+      out.push(lb)
+      continue
+    }
+
+    // The Dynamic Overall Leaderboard: its rules and nothing else.
+    if (competition === 'overall') {
+      const rules = parseOverallRules(r.overall)
+      if (!rules) continue
+      const lb: Leaderboard = {
+        id: typeof r.id === 'string' && r.id ? r.id : `lb-${out.length}`,
+        audience: rules.ranks === 'individuals' ? 'individual' : 'team',
+        competition,
+        overall: rules,
+      }
+      if (lb.audience === 'team') {
+        lb.teamSet = rules.ranks === 'tags' ? 'main'
+          : typeof r.teamSet === 'string' && r.teamSet ? r.teamSet : 'overall'
+      }
+      if (!isSlotFree(out, lb)) continue
+      out.push(lb)
+      continue
+    }
 
     const lb: Leaderboard = {
       id: typeof r.id === 'string' && r.id ? r.id : `lb-${out.length}`,
@@ -1183,6 +1269,8 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
     if (competition === 'league') {
       const scope = roundIdList(r.roundIds)
       if (scope.length > 0) lb.roundIds = scope
+      // A session's own format is scoped to exactly its round.
+      if (r.session === true && scope.length === 1) lb.session = true
     }
 
     // One draw only, whichever arrives first

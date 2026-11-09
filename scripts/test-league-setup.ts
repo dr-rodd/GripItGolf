@@ -515,7 +515,7 @@ section('The league wizard reuses the proven pieces rather than restating them')
   ok(src.includes('firstDuplicateIndex'), 'and the no-two-same-names rule is the roster\'s')
   ok(!src.includes('starterBoards()') && src.includes('useState<Leaderboard[]>([])'),
     'no leaderboard chosen for the organiser — they set them by hand (Ross, 8 Nov 2026)')
-  ok(/key === 'ready' \? boards\.length > 0/.test(src), '  …and Finish waits for at least one')
+  ok(/key === 'ready' \? \(isDynamic \|\| boards\.length > 0\)/.test(src), '  …and Finish waits for at least one — the Overall being one (D37)')
   ok(!src.includes('setBoards(b => withLeagueTagBoard(b, next.on))') && src.includes('setBoards(b => withLeagueTagBoard(b, false))'),
     '  …switching tags on adds no tags board; switching them off takes one away')
 
@@ -525,9 +525,9 @@ section('The league wizard reuses the proven pieces rather than restating them')
   // event.
   ok(src.includes('<LeaderboardSetup'),
     'the leaderboard picker is the platform\'s own, embedded whole')
-  ok(src.includes('leaderboards: boards'),
-    'creation writes the boards the organiser built')
-  ok(src.includes('boards.length > 0 && (!asksDayBoards'),
+  ok(src.includes('leaderboards: storedBoards') && src.includes('})() : boards'),
+    'creation writes the boards the organiser built (and with an Overall, it and its sessions first)')
+  ok(src.includes('(isDynamic || boards.length > 0) && (!asksDayBoards'),
     'and an event cannot be created without at least one board')
   ok(src.includes("kind: 'tournament'"), 'a league is an event')
   ok(src.includes('team_id: null'), 'everyone starts unassigned, as everywhere')
