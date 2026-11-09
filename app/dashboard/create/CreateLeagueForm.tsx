@@ -14,7 +14,7 @@ import { NO_FORMATS } from '@/lib/formats'
 import { normaliseEmail, emailWarning, MAX_EMAIL } from '@/lib/email'
 import { rememberPlayer } from '@/lib/playerCookie'
 import {
-  dayCount, dateForDay, describeDay, dayNumber, describeShortDate, type ItineraryItem,
+  dayCount, dateForDay, describeDay, dayNumber, describeShortDate, isWholeDate, type ItineraryItem,
 } from '@/lib/itinerary'
 import { toItemRow } from '@/lib/itinerarySync'
 import {
@@ -311,8 +311,11 @@ export default function CreateLeagueForm({ schedule, onExit }: {
 
   // ── Derived shape ────────────────────────────────────────────────────────
 
-  const datesBackwards = !!(startDate && endDate && endDate < startDate)
-  const periodSet = !!(startDate && endDate && !datesBackwards)
+  // A date half-typed or scrolled past (year 0202) is no date yet
+  // (`isWholeDate`) — read as such, nothing is built from it.
+  const datesWhole = isWholeDate(startDate) && isWholeDate(endDate)
+  const datesBackwards = !!(datesWhole && endDate < startDate)
+  const periodSet = datesWhole && !datesBackwards
 
   // The standalone run's length in days — how many days the event spans,
   // which is no longer the same question as how many rounds it plays.
@@ -342,7 +345,9 @@ export default function CreateLeagueForm({ schedule, onExit }: {
    */
   const slots: { dayIndex: number; date: string | null }[] =
     schedule === 'standalone'
-      ? Array.from({ length: multiDay ? runLength : 1 }, (_, i) => i)
+      // Built only once the run is a length the form accepts: before the
+      // guard, a half-typed year made this hundreds of thousands long.
+      ? Array.from({ length: !multiDay ? 1 : runTooLong ? 0 : runLength }, (_, i) => i)
           .filter(i => !restDays.includes(i))
           .map(i => ({ dayIndex: i, date: dateForDay(startDate || null, i) }))
       // A league of periods makes no rounds at creation: a card is a round,
@@ -396,8 +401,8 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     name.trim().length > 0 &&
     (schedule === 'standalone'
       ? multiDay !== null && (multiDay
-          ? !!startDate && !!endDate && !datesBackwards && !runTooLong && !daysIssue
-          : !!startDate)
+          ? periodSet && !runTooLong && !daysIssue
+          : isWholeDate(startDate))
       : continuous
         ? periodsProblem === null
         : !!seriesPlan && !!startDate && slots.length > 0 && !daysIssue)

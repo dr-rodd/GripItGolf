@@ -16,6 +16,7 @@ import {
   type ItineraryItem,
   addItem, removeItem, moveItem, itemsForDay, renumber, golfItems,
   dayCount, dateForDay, describeDay, describeDuration, describeTime,
+  dayNumber, isWholeDate, MAX_SPAN_DAYS,
   describeItem, itemState, tripProgress, itemError,
   addStay, nightsAvailable,
   MAX_TEE_TIMES, MAX_NIGHTS, MAX_ACTIVITY_NAME,
@@ -157,6 +158,36 @@ section('How many days a trip runs')
 
   ok(describeDay('2026-07-31', 1).startsWith('Friday'), 'a day is named by its weekday')
   eq(describeDay(null, 2), 'Day 3', 'and falls back to its number when undated')
+}
+
+section('A half-typed date never freezes the page (Ross, 9 Nov 2026)')
+{
+  // A date box passes through 0002, 0020, 0202 on the way to 2026, and an
+  // iPhone wheel scrolls through every year between. The span once came to
+  // hundreds of thousands of days and every render built an array that long.
+  ok(dayCount('2026-07-30', '2526-07-30') <= MAX_SPAN_DAYS, 'a 500-year span counts no more than the cap')
+  eq(dayCount('2026-07-30', '2526-07-30'), 1, '  …because its far end is no plausible year, so no date yet')
+  eq(dayCount('2000-01-01', '2099-12-31'), MAX_SPAN_DAYS, 'the widest plausible span is clamped to the cap')
+  ok(dayCount('2026-01-01', '2099-12-31') <= MAX_SPAN_DAYS, '  …and so is the longest span two plausible years make')
+  ok(Array.from({ length: dayCount('2026-07-30', '2526-07-30') }).length <= MAX_SPAN_DAYS,
+    '  …so no per-day array built from it is longer than the cap')
+  eq(dayCount('0202-07-30', '2026-08-02'), 1, 'a half-typed start year is no date yet')
+  eq(dayCount('2026-07-30', '0002-08-02'), 1, '  …and nor is a half-typed end year')
+  eq(dayNumber('0202-07-30'), null, 'a year outside the plausible window reads as unset')
+  eq(dayNumber('2026-13-01'), null, '  …and so does a month that does not exist')
+  ok(!isWholeDate('0020-01-01') && isWholeDate('2026-01-01'), 'isWholeDate says which is which')
+  eq(dateForDay('0202-07-30', 3), null, 'a half-typed start dates no day')
+  eq(dayCount('2026-07-30', '2026-08-02'), 4, 'a real run is untouched by the cap')
+
+  // The two places a typed date became a per-day list both read the cap.
+  const league = fs.readFileSync('app/dashboard/create/CreateLeagueForm.tsx', 'utf-8')
+  ok(league.includes('runTooLong ? 0 : runLength'),
+    'the league form builds its playing days only once the run is a length it accepts')
+  ok(league.includes('isWholeDate(startDate) && isWholeDate(endDate)'),
+    '  …and reads a half-typed date as no date')
+  const builder = fs.readFileSync('app/components/ItineraryBuilder.tsx', 'utf-8')
+  ok(/const days = dayCount\(startDate, endDate\)/.test(builder),
+    'the itinerary builder counts its days through the capped dayCount')
 }
 
 // ─── Reading an item ───────────────────────────────────────────

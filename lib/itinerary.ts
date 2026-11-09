@@ -197,12 +197,40 @@ export function moveItem(
 
 // ─── Days ──────────────────────────────────────────────────────
 
-/** How many days a trip covers. Always at least one. */
+/**
+ * The longest run of days anything here will lay out one entry a day for —
+ * the only copy of that cap. Three years: past any trip, event or season the
+ * platform makes, and short enough that a day strip, a playing-days list or
+ * an export built from it stays cheap.
+ *
+ * It exists because a date box passes through nonsense on its way to a real
+ * date: typing a year on a desktop goes 0002, 0020, 0202, 2026, and an iPhone
+ * wheel scrolls through every year between. Somewhere in there the span came
+ * to hundreds of thousands of days, every render built and dated an array
+ * that long, and the page froze until it was refreshed (Ross, 9 Nov 2026).
+ * `dayCount` clamps to it before anybody builds anything.
+ */
+export const MAX_SPAN_DAYS = 3 * 366
+
+/**
+ * The years a date must fall in to count as a date at all. A year outside
+ * them is half-typed or scrolled past, and is read as no date until it is
+ * whole — which is also what stops `Date.UTC` quietly turning year 2 into 1902.
+ */
+export const MIN_YEAR = 2000
+export const MAX_YEAR = 2099
+
+/** How many days a trip covers. Always at least one, never more than MAX_SPAN_DAYS. */
 export function dayCount(startDate: string | null, endDate: string | null): number {
   const a = dayNumber(startDate)
   const b = dayNumber(endDate)
   if (a === null || b === null) return 1
-  return Math.max(1, Math.round((b - a) / 86_400_000) + 1)
+  return Math.min(MAX_SPAN_DAYS, Math.max(1, Math.round((b - a) / 86_400_000) + 1))
+}
+
+/** Whether a date box holds a whole date — a real day in a plausible year. */
+export function isWholeDate(d: string | null | undefined): boolean {
+  return dayNumber(d) !== null
 }
 
 /** The calendar date of a given day of the trip, or null with no start date. */
@@ -225,6 +253,7 @@ export function dayNumber(d: string | null | undefined): number | null {
   if (!d) return null
   const [y, m, day] = d.slice(0, 10).split('-').map(Number)
   if (!y || !m || !day) return null
+  if (y < MIN_YEAR || y > MAX_YEAR || m > 12 || day > 31) return null
   return Date.UTC(y, m - 1, day)
 }
 

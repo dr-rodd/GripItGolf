@@ -1,5 +1,11 @@
 # Gotchas and debt
 
+## A half-typed year froze the creation form (9 November 2026)
+
+Ross: a standalone multi-day league's dates "wouldn't allow further editing and the page had to be refreshed". A date box passes through nonsense on its way to a real date — typing a year on a desktop goes 0002, 0020, 0202, 2026, and an iPhone wheel scrolls every year between — and `dayCount('0202-11-14', '2026-11-16')` was **666,206 days**. `CreateLeagueForm` built its playing-day slots from that count *before* its "too long for one run" guard applied, so every render built and dated an array that long and the page locked. `ItineraryBuilder` (trips, the match play door) had the same exposure with no guard at all.
+
+The fix is one cap and one rule, both in `lib/itinerary.ts`: **`MAX_SPAN_DAYS`** (three years) clamps `dayCount` before anybody builds anything, and **`dayNumber` reads a year outside `MIN_YEAR`–`MAX_YEAR` (2000–2099), or a month or day that cannot exist, as no date** — `isWholeDate` — which also stops `Date.UTC` quietly turning year 2 into 1902. The league form now builds its slots only once the run is a length it accepts. `test:itinerary` holds all of it. **Any new per-day list goes through `dayCount`**, never its own subtraction of two dates.
+
 ## A proxy.ts took the site down (8 November 2026)
 
 Moving events to `/event/<code>` was built with a `proxy.ts` (Next 16's name
