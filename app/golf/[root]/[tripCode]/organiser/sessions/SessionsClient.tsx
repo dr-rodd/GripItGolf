@@ -9,7 +9,7 @@ import {
   type SessionFormat, type OverallRanks, OVERALL_RANKS,
   overallOf, sessionBoardFor, formatOfBoard, describeFormat, feedFor, sessionName,
   withSessionFormat, withSessionName, withSessionFeed, withOverallRules, withOverallOn, withOverallOff,
-  MAX_SESSION_NAME, formatIssue,
+  MAX_SESSION_NAME, formatIssue, sameFormat, formatKey,
 } from '@/lib/sessions'
 import { daySheetId } from '@/lib/teamSets'
 import { courseLabel } from '@/lib/courseDirectory'
@@ -38,6 +38,10 @@ export default function SessionsClient({ tripId, tripCode, rounds, initialBoards
   const [askOff, setAskOff] = useState(false)
   const overall = overallOf(boards)
   const rules = overall?.overall
+  // Every format a session of this event plays, once each — the tiles.
+  const usedFormats = rounds
+    .map(r => { const b = sessionBoardFor(boards, r.id); return b ? formatOfBoard(b) : null })
+    .filter((f, i, all): f is SessionFormat => !!f && all.findIndex(g => sameFormat(g, f)) === i)
   const entrants = rules?.ranks === 'tags' ? Math.max(2, tagCount) : Math.max(1, playerCount)
 
   async function save(next: Leaderboard[]) {
@@ -122,33 +126,50 @@ export default function SessionsClient({ tripId, tripCode, rounds, initialBoards
                         Set the matches →
                       </Link>
                     )}
-                    {!open ? (
-                      <button type="button" className={`${buttonClass('secondary', false)} mt-3`}
-                        onClick={() => setEditing({ roundId: r.id, format: format ?? STROKE })}>
-                        Change format
+                    {/* The event's formats as tiles — a tap is the answer —
+                        then TBC, and a new format under them (Ross, 9 Nov
+                        2026: never an awkward extra button first). */}
+                    <div className="mt-3 space-y-2">
+                      {usedFormats.map(f => {
+                        const on = sameFormat(f, format)
+                        return (
+                          <button key={formatKey(f)} type="button" className={optionClass(on)} aria-pressed={on}
+                            onClick={() => { if (!on) { save(withSessionFormat(boards, r.id, f, daySheetId(r.id))); setEditing(null) } }}>
+                            <p className="text-ink text-[15px] font-medium">{describeFormat(f)}</p>
+                          </button>
+                        )
+                      })}
+                      <button type="button" className={optionClass(!format)} aria-pressed={!format}
+                        onClick={() => { if (format) { save(withSessionFormat(boards, r.id, null, daySheetId(r.id))); setEditing(null) } }}>
+                        <p className="text-ink text-[15px] font-medium">Format TBC</p>
+                        <p className="t-cap text-ink/65 mt-0.5">Counts nothing until it is set.</p>
                       </button>
-                    ) : (
-                      <div className={`mt-3 p-3 ${cardClass('flat')}`}>
-                        <FormatPicker value={editing.format} onChange={f => setEditing({ roundId: r.id, format: f })} />
-                        {formatIssue(editing.format) && (
-                          <p className="t-cap text-ink/65 mt-3">{formatIssue(editing.format)}</p>
-                        )}
-                        <div className="flex gap-2 mt-4 flex-wrap">
-                          <button type="button" className={buttonClass('primary', false, true)}
-                            disabled={!!formatIssue(editing.format)}
-                            onClick={() => { save(withSessionFormat(boards, r.id, editing.format, daySheetId(r.id))); setEditing(null) }}>
-                            Save format
-                          </button>
-                          <button type="button" className={buttonClass('secondary', false, true)}
-                            onClick={() => { save(withSessionFormat(boards, r.id, null, daySheetId(r.id))); setEditing(null) }}>
-                            Make it TBC
-                          </button>
-                          <button type="button" className={buttonClass('quiet', false, true)} onClick={() => setEditing(null)}>
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                    </div>
+                    <div className={`mt-3 p-3 ${cardClass('flat')}`}>
+                      <p className="t-label text-ink mb-3">Or a new format</p>
+                      <FormatPicker
+                        idle={!open}
+                        value={open ? editing.format : format ?? STROKE}
+                        onChange={f => setEditing({ roundId: r.id, format: f })}
+                      />
+                      {open && (
+                        <>
+                          {formatIssue(editing.format) && (
+                            <p className="t-cap text-ink/65 mt-3">{formatIssue(editing.format)}</p>
+                          )}
+                          <div className="flex gap-2 mt-4 flex-wrap">
+                            <button type="button" className={buttonClass('primary', false, true)}
+                              disabled={!!formatIssue(editing.format)}
+                              onClick={() => { save(withSessionFormat(boards, r.id, editing.format, daySheetId(r.id))); setEditing(null) }}>
+                              Save this format
+                            </button>
+                            <button type="button" className={buttonClass('quiet', false, true)} onClick={() => setEditing(null)}>
+                              Cancel
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
 
                     <p className={`${FIELD_LABEL} mt-4`}>Feeds the Overall</p>
                     <FeedEditor

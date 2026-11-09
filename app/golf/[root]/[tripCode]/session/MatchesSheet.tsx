@@ -47,7 +47,7 @@ type Player = { id: string; name: string; handicap: number | null }
 type Tag = { id: string; name: string; color: string }
 
 export default function MatchesSheet({
-  tripId, tripCode, roundId, title, format, matches, clocks, players, tags, tagOfPlayer,
+  tripId, tripCode, roundId, title, format, matches: saved, clocks, players, tags, tagOfPlayer,
   myId, passcodeHash, playersPick, opensLabel = null, isTrip = false,
 }: {
   /** A trip's: its passcode and lead player, never a PIN and organiser. */
@@ -82,6 +82,31 @@ export default function MatchesSheet({
   const twoTags = tags.length === 2 ? tags : null
   const tagged = tags.length > 0
   const tagOf = (pid: string) => tagOfPlayer[pid] ?? null
+
+  // A pick shows in its seat the moment it is made (Ross, 9 Nov 2026: the
+  // player was not put in until the next time had been picked — the sheet
+  // waited for the save and a full refresh). Held here until the refreshed
+  // sheet says the same, and taken back if the save is refused.
+  const [pending, setPending] = useState<Record<number, { sideA: string[]; sideB: string[] }>>({})
+  useEffect(() => {
+    setPending(prev => {
+      const keep = Object.entries(prev).filter(([slot, p]) => {
+        const m = saved.find(x => x.slot === Number(slot))
+        const same = (a: string[], b: string[]) => a.length === b.length && a.every((id, k) => id === b[k])
+        return !(m ? same(m.sideA, p.sideA) && same(m.sideB, p.sideB) : p.sideA.length + p.sideB.length === 0)
+      })
+      return keep.length === Object.keys(prev).length ? prev : Object.fromEntries(keep)
+    })
+  }, [saved])
+  const matches = useMemo(() => {
+    const out = saved.map(m => (pending[m.slot] ? { ...m, ...pending[m.slot] } : m))
+    for (const [slot, p] of Object.entries(pending)) {
+      if (!saved.some(m => m.slot === Number(slot))) {
+        out.push({ id: `pending-${slot}`, roundId, slot: Number(slot), sideA: p.sideA, sideB: p.sideB, result: null })
+      }
+    }
+    return out.filter(m => m.sideA.length + m.sideB.length > 0 || saved.some(x => x.slot === m.slot && (x.result || x.live)))
+  }, [saved, pending, roundId])
 
   // Rows: the tee sheet's times, else every match set and one more.
   const [extraRows, setExtraRows] = useState(0)
@@ -144,10 +169,22 @@ export default function MatchesSheet({
   async function write(slot: number, side: 'a' | 'b', next: string[]) {
     setBusy(true)
     setRowError(e => ({ ...e, [slot]: '' }))
+    // In the seat at once; the picker shuts with it.
+    const m = bySlot.get(slot)
+    setPending(prev => ({ ...prev, [slot]: {
+      sideA: side === 'a' ? next : m?.sideA ?? [],
+      sideB: side === 'b' ? next : m?.sideB ?? [],
+    } }))
+    setPicking(null)
+    setQuery('')
     if (clocks && !freeze.held) freeze.hold(roundId, slot)
     const res = await setMatchSide(supabase, { tripId, roundId, slot, side, next, organiser, teeSheet: !!clocks })
     setBusy(false)
-    if (!res.ok) setRowError(e => ({ ...e, [slot]: res.reason }))
+    if (!res.ok) {
+      // Refused: the seat goes back to what the sheet holds, and says why there.
+      setPending(prev => { const { [slot]: _gone, ...rest } = prev; void _gone; return rest })
+      setRowError(e => ({ ...e, [slot]: res.reason }))
+    }
     close()
     router.refresh()
   }

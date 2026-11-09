@@ -363,7 +363,7 @@ export function StartPeriodCard({ door, periods, courseIds, fieldMayStart }: {
           )}
 
           <DateField label="The day it was played" value={date} onChange={setDate}
-            min={periods[0]?.start} max={today || undefined} />
+            min={periods[0]?.start} max={today || undefined} openAt={today || null} />
 
           <div>
             <label className={FIELD_LABEL}>Course</label>

@@ -369,7 +369,7 @@ export default function CreateRunForm() {
               <label className={FIELD_LABEL}>The period</label>
               <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
                 <DateField label="Starts" value={startDate} onChange={setStartDate} />
-                <DateField label="Finishes" value={endDate} onChange={setEndDate} />
+                <DateField label="Finishes" value={endDate} onChange={setEndDate} openAt={startDate || null} />
               </div>
               {datesIssue ? (
                 <p className="text-rust-deep text-[13px] mt-2 leading-snug">{datesIssue}</p>

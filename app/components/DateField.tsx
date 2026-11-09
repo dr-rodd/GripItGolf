@@ -34,10 +34,17 @@ export default function DateField({
    * today (Ross, 5 Nov 2026: a round's deadline opens at the round
    * before's, for a bracket set up months ahead). A native picker opens on
    * its value, so the date is filled in — and stays changeable.
+   *
+   * Sitewide (Ross, 9 Nov 2026: no scrolling through the calendar from
+   * today): a date that follows another — an end after its start, a
+   * period after the one before — opens on that earlier date. Absent, a
+   * field with a `min` opens there, the earliest day it can be. Only on a
+   * tap: an untouched field stays empty.
    */
   openAt?: string | null
 }) {
-  const startHere = () => { if (!value && openAt && !disabled) onChange(openAt) }
+  const from = openAt ?? min ?? null
+  const startHere = () => { if (!value && from && !disabled) onChange(from) }
   return (
     <div className={`min-w-0 ${className}`}>
       {label && (

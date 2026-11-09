@@ -386,6 +386,29 @@ section('Trips follow events, every existing trip unchanged (stage 8, D47)')
   ok(!read('app/golf/[root]/[tripCode]/leaderboard/page.tsx').includes('event && overallOf(boards)'), '  …and the leaderboard')
 }
 
+section('Small things Ross found (9 Nov 2026)')
+{
+  const dateField = read('app/components/DateField.tsx')
+  ok(dateField.includes('const from = openAt ?? min ?? null'), 'an empty date field opens on the date before it, else its earliest day — only when tapped')
+  for (const [file, what] of [
+    ['app/dashboard/create/CreateTripForm.tsx', 'a trip’s end date'],
+    ['app/dashboard/create/CreateLeagueForm.tsx', 'a league’s last day'],
+    ['app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx', 'Trip Setup’s end date'],
+    ['app/dashboard/create/CreateRunForm.tsx', 'a challenge’s finish'],
+  ] as const) ok(/openAt=\{(startDate|from) \|\| null\}/.test(read(file)), `  …${what} opens on its start`)
+  const focus = read('lib/focusNext.ts')
+  ok(focus.includes("if (e.key !== 'Enter') return") && focus.includes('next.focus()'), 'Enter on a name goes on to the handicap')
+  for (const file of ['app/dashboard/create/CreateLeagueForm.tsx', 'app/dashboard/create/CreateTripForm.tsx',
+    'app/dashboard/create/MatchPlayField.tsx', 'app/golf/[root]/[tripCode]/AddToField.tsx',
+    'app/golf/[root]/[tripCode]/players/PlayersClient.tsx', 'app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx']) {
+    ok(read(file).includes('onKeyDown={enterGoesTo('), `  …in ${file.split('/').pop()}`)
+  }
+  const sheet = read('app/golf/[root]/[tripCode]/session/MatchesSheet.tsx')
+  ok(sheet.includes('setPending(prev => ({ ...prev, [slot]: {') && sheet.indexOf('setPending(prev => ({ ...prev, [slot]: {') < sheet.indexOf('await setMatchSide('),
+    'a pick is in its seat before the save comes back, not after the next tap')
+  ok(sheet.includes('Refused: the seat goes back'), '  …and taken back if the save is refused')
+}
+
 // ─── The wizard ────────────────────────────────────────────────
 
 section('The creation wizard asks, and No is today’s flow')
@@ -404,8 +427,12 @@ section('The creation wizard asks, and No is today’s flow')
   ok(form.includes('...(isDynamic ? { id: roundIds[i] } : {})'), 'a session’s round carries the id its board names; No’s rounds as before')
   const picker = read('app/dashboard/create/SessionPicker.tsx')
   ok(picker.includes('Turn the Dynamic Overall Leaderboard off?'), 'Yes → No with sessions set asks first')
-  ok(picker.includes('Same as Session 1') && picker.includes('Format TBC') && picker.includes('Change format'),
-    'later sessions start "Same as Session 1", with Change format and TBC')
+  ok(picker.includes('Same as Session 1') && picker.includes('Format TBC') && picker.includes('Or a new format'),
+    'later sessions start "Same as Session 1", the formats used and TBC as tiles, a new format under them')
+  ok(!picker.includes('Change format') && !read('app/golf/[root]/[tripCode]/organiser/sessions/SessionsClient.tsx').includes('Change format'),
+    '  …never behind a Change format button, at creation or after (Ross, 9 Nov 2026)')
+  ok(picker.includes("onChange={f => set(i, { format: sameFormat(f, formats[0]) ? 'same' : f })}"),
+    '  …an answer that lands on Session 1’s format choosing that tile')
   ok(!/^export (const|function) [a-z]/m.test(picker), 'the picker exports components only (test:client-boundary)')
   const organiser = read('app/golf/[root]/[tripCode]/organiser/OrganiserClient.tsx')
   ok(organiser.includes('label="Session formats"'), 'the organiser area has a Session formats row')

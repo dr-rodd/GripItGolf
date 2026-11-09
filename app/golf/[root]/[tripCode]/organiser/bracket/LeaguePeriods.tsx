@@ -51,8 +51,10 @@ export default function LeaguePeriods({ tripId, periods: initial }: {
               Period {i + 1}<span className="text-ink/65 font-normal"> · {describePeriod(p)}</span>
             </p>
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-              <DateField label="Starts" value={p.start} onChange={v => setDate(i, 'start', v)} />
-              <DateField label="Finishes" value={p.end} onChange={v => setDate(i, 'end', v)} />
+              <DateField label="Starts" value={p.start} onChange={v => setDate(i, 'start', v)}
+                openAt={periods[i - 1]?.end || null} />
+              <DateField label="Finishes" value={p.end} onChange={v => setDate(i, 'end', v)}
+                openAt={p.start || null} />
             </div>
           </div>
         ))}

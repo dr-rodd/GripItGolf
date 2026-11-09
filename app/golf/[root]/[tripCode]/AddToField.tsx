@@ -1,5 +1,6 @@
 'use client'
 
+import { enterGoesTo } from '@/lib/focusNext'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -149,6 +150,8 @@ export default function AddToField({
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
+              onKeyDown={enterGoesTo('field-add-hcp')}
+              enterKeyHint="next"
               placeholder="Full name"
               autoComplete="off"
               className={FIELD}
@@ -158,7 +161,7 @@ export default function AddToField({
           {maySetHandicap ? (
             <div>
               <label className={FIELD_LABEL}>Handicap</label>
-              <HandicapField value={handicap} onChange={setHandicap} placeholder="Leave blank if unknown" className={FIELD} />
+              <HandicapField id="field-add-hcp" value={handicap} onChange={setHandicap} placeholder="Leave blank if unknown" className={FIELD} />
               <p className="t-cap text-ink/65 mt-2 leading-snug">
                 Blank is pending, not scratch. They can add it when they claim their name.
               </p>

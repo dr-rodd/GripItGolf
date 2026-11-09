@@ -236,7 +236,7 @@ async function main() {
       '  …one field step for both, and the draw no longer inside it')
     ok(field.includes('New players can be added up until the draw') && field.includes('until the') && field.includes('day of play'),
       'the field step says what to expect, in a box at the top')
-    ok(field.includes("document.getElementById(`field-hcp-${i}`)?.focus()") && field.includes('id={`field-hcp-${i}`}'),
+    ok(field.includes('onKeyDown={enterGoesTo(`field-hcp-${i}`)}') && field.includes('id={`field-hcp-${i}`}'),
       'Enter after a name goes on to that player\'s handicap')
     ok(seed.includes('Seed the field from another event') && seed.includes("'Enter'") && seed.includes('<IconCheck')
       && seed.includes('public_passcode_hash') && seed.includes('Bring across everything (optional)'),

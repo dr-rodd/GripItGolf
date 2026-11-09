@@ -529,7 +529,7 @@ export default function TeeSheetWizard({
               </button>
               {openMode === 'date' && (
                 <div className="flex flex-col gap-4 mt-4">
-                  <DateField label="Date" value={openDate} onChange={setOpenDate} max={roundDate ?? undefined} />
+                  <DateField label="Date" value={openDate} onChange={setOpenDate} max={roundDate ?? undefined} openAt={roundDate ?? null} />
                   <div>
                     <label className={FIELD_LABEL} htmlFor="tee-open-time-date">At</label>
                     <input

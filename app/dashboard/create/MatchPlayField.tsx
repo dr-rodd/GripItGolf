@@ -1,5 +1,6 @@
 'use client'
 
+import { enterGoesTo } from '@/lib/focusNext'
 import type { Dispatch, SetStateAction } from 'react'
 import Toggle from '@/app/components/Toggle'
 import HandicapField from '@/app/components/HandicapField'
@@ -100,11 +101,7 @@ export default function MatchPlayField({
               value={player.name}
               onChange={e => update(i, { name: e.target.value })}
               // Enter goes on to the handicap (Ross, 4 Nov 2026).
-              onKeyDown={e => {
-                if (e.key !== 'Enter') return
-                e.preventDefault()
-                document.getElementById(`field-hcp-${i}`)?.focus()
-              }}
+              onKeyDown={enterGoesTo(`field-hcp-${i}`)}
               enterKeyHint="next"
               placeholder="Full name"
               // Swapped, not appended: two border-colour classes in one

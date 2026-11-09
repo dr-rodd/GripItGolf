@@ -1,5 +1,6 @@
 'use client'
 
+import { enterGoesTo } from '@/lib/focusNext'
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -1022,6 +1023,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
                         <DateField
                           label="Last day"
                           value={endDate}
+                          openAt={startDate || null}
                           onChange={v => { setEndDate(v); setRestDays([]) }}
                         />
                       </div>
@@ -1144,8 +1146,10 @@ export default function CreateLeagueForm({ schedule, onExit }: {
                             <span className="text-ink/65 font-normal"> · {describePeriod(p)}</span>
                           </p>
                           <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-                            <DateField label="Starts" value={p.start} onChange={v => setPeriodDate(i, 'start', v)} />
-                            <DateField label="Finishes" value={p.end} onChange={v => setPeriodDate(i, 'end', v)} />
+                            <DateField label="Starts" value={p.start} onChange={v => setPeriodDate(i, 'start', v)}
+                              openAt={periods[i - 1]?.end || startDate || null} />
+                            <DateField label="Finishes" value={p.end} onChange={v => setPeriodDate(i, 'end', v)}
+                              openAt={p.start || null} />
                           </div>
                         </div>
                       ))}
@@ -1518,6 +1522,8 @@ export default function CreateLeagueForm({ schedule, onExit }: {
                     type="text"
                     value={player.name}
                     onChange={e => updatePlayer(i, { name: e.target.value })}
+                    onKeyDown={enterGoesTo(`league-hcp-${i}`)}
+                    enterKeyHint="next"
                     placeholder="Full name"
                     className={i === duplicateIndex
                       ? FIELD.replace('border-line', 'border-rust/60')
@@ -1531,6 +1537,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
 
                   <div className="flex gap-3">
                     <HandicapField
+                      id={`league-hcp-${i}`}
                       value={player.handicap}
                       onChange={v => updatePlayer(i, { handicap: v })}
                       placeholder="Handicap"

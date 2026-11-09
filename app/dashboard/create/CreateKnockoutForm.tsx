@@ -464,7 +464,7 @@ export default function CreateKnockoutForm({ onExit }: {
                 <p className="text-ink/65 text-[13px] -mt-1 mb-2 leading-snug">
                   When should the final round be played by?
                 </p>
-                <DateField value={endDate} onChange={setEndDate} min={startDate || undefined} />
+                <DateField value={endDate} onChange={setEndDate} min={startDate || undefined} openAt={startDate || null} />
               </div>
               {datesBackwards ? (
                 <p className="text-rust-deep text-[13px] leading-snug">

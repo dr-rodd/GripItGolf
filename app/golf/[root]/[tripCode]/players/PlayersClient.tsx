@@ -1,5 +1,6 @@
 'use client'
 
+import { enterGoesTo } from '@/lib/focusNext'
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
@@ -482,12 +483,15 @@ export default function PlayersClient({
             type="text"
             value={addName}
             onChange={(e) => setAddName(e.target.value)}
+            onKeyDown={enterGoesTo('players-add-hcp')}
+            enterKeyHint={ownHandicap ? 'next' : undefined}
             placeholder="Your name"
             required
             className={FIELD}
           />
           {ownHandicap ? (
             <HandicapField
+              id="players-add-hcp"
               value={addHandicap}
               onChange={setAddHandicap}
               placeholder="Handicap (e.g. 14.2)"

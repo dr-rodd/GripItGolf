@@ -67,7 +67,7 @@ export default function RunDatesEditor({ tripId, start, end }: {
     <div>
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
         <DateField label="Starts" value={from} onChange={v => { setFrom(v); setMessage(null) }} />
-        <DateField label="Finishes" value={to} onChange={v => { setTo(v); setMessage(null) }} />
+        <DateField label="Finishes" value={to} onChange={v => { setTo(v); setMessage(null) }} openAt={from || null} />
       </div>
       {!unchanged && issue && (
         <p className="text-rust-deep text-sm mt-3 leading-snug">{issue}</p>

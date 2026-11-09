@@ -77,23 +77,25 @@ export function DynamicQuestion({ value, onChange, sessionCount, onConfirmOff }:
 const STROKE_DEFAULT: SessionFormat = { kind: 'stroke', audience: 'individual', scoring: 'stableford' }
 
 /** The leaderboard form's format questions only — no total-or-position, no discard, no overall tie. */
-export function FormatPicker({ value, onChange }: {
+export function FormatPicker({ value, onChange, idle = false }: {
   value: SessionFormat
   onChange: (f: SessionFormat) => void
+  /** Nothing shown as chosen — a tile above is the answer until one here is given. */
+  idle?: boolean
 }) {
-  const kind = value.kind
+  const kind = idle ? null : value.kind
   return (
     <div className="space-y-4">
       <div>
         <p className={FIELD_LABEL}>How is it played?</p>
         <div className="flex gap-2">
           <button type="button" className={`${chipClass(kind === 'stroke')} flex-1`}
-            onClick={() => kind !== 'stroke' && onChange(STROKE_DEFAULT)}>
+            onClick={() => kind !== 'stroke' && onChange(value.kind === 'stroke' ? value : STROKE_DEFAULT)}>
             Stroke play
           </button>
           <button type="button" className={`${chipClass(kind === 'matches')} flex-1`}
             disabled={!MATCHES_READY}
-            onClick={() => kind !== 'matches' && onChange({ kind: 'matches', match: 'singles' })}>
+            onClick={() => kind !== 'matches' && onChange(value.kind === 'matches' ? value : { kind: 'matches', match: 'singles' })}>
             Matches
           </button>
         </div>
@@ -108,7 +110,7 @@ export function FormatPicker({ value, onChange }: {
             <p className={FIELD_LABEL}>Who is ranked?</p>
             <div className="flex gap-2">
               {(['individual', 'team'] as Audience[]).map(a => (
-                <button key={a} type="button" className={`${chipClass(value.audience === a)} flex-1`}
+                <button key={a} type="button" className={`${chipClass(!idle && value.audience === a)} flex-1`}
                   onClick={() => onChange({
                     ...value, audience: a,
                     scoring: a === 'team' && value.scoring === 'quota' ? 'stableford' : value.scoring,
@@ -123,7 +125,7 @@ export function FormatPicker({ value, onChange }: {
             <p className={FIELD_LABEL}>Scoring</p>
             <div className="flex gap-2 flex-wrap">
               {SCORINGS.filter(s => s.key !== 'quota' || value.audience === 'individual').map(s => (
-                <button key={s.key} type="button" className={chipClass(value.scoring === s.key)}
+                <button key={s.key} type="button" className={chipClass(!idle && value.scoring === s.key)}
                   onClick={() => onChange({ ...value, scoring: s.key as Scoring })}>
                   {s.label}
                 </button>
@@ -135,7 +137,7 @@ export function FormatPicker({ value, onChange }: {
               <p className={FIELD_LABEL}>How a team&apos;s scores count</p>
               <div className="space-y-2">
                 {TEAM_FORMATS.map(t => (
-                  <button key={t.key} type="button" className={optionClass(value.teamFormat === t.key)}
+                  <button key={t.key} type="button" className={optionClass(!idle && value.teamFormat === t.key)}
                     onClick={() => onChange({ ...value, teamFormat: t.key as TeamFormat })}>
                     <p className="text-ink text-[15px] font-medium">{t.label}</p>
                     <p className="t-cap text-ink/65 mt-0.5">{t.hint}</p>
@@ -153,7 +155,7 @@ export function FormatPicker({ value, onChange }: {
           <div className="space-y-2">
             {MATCH_FORMATS.map(m => (
               <button key={m.key} type="button" disabled={!m.available}
-                className={`${optionClass(value.match === m.key)} disabled:opacity-60 disabled:cursor-not-allowed`}
+                className={`${optionClass(!idle && value.match === m.key)} disabled:opacity-60 disabled:cursor-not-allowed`}
                 onClick={() => onChange({ kind: 'matches', match: m.key as MatchFormat })}>
                 <span className="flex items-center justify-between gap-2">
                   <span className="text-ink text-[15px] font-medium">{m.label}</span>
@@ -198,7 +200,6 @@ export function SessionList({ sessions, onChange, days, renderVenue }: {
   days: { index: number; label: string }[]
   renderVenue: (value: string, onChange: (id: string) => void) => React.ReactNode
 }) {
-  const [changing, setChanging] = useState<string | null>(null)
   const formats = resolvedFormats(sessions)
   const used = usedFormats(sessions)
   const set = (i: number, patch: Partial<SessionDraft>) =>
@@ -219,7 +220,6 @@ export function SessionList({ sessions, onChange, days, renderVenue }: {
       {sessions.map((s, i) => {
         const format = formats[i]
         const isFirst = i === 0
-        const open = changing === s.key
         return (
           <div key={s.key} className={`p-4 ${cardClass()}`}>
             <div className="flex items-center justify-between gap-3">
@@ -273,47 +273,45 @@ export function SessionList({ sessions, onChange, days, renderVenue }: {
                   />
                 ) : (
                   <>
-                    <p className="text-ink text-[15px]">
-                      {s.format === 'same' ? 'Same as Session 1' : s.format === 'tbc' ? 'Format TBC' : 'Its own format'}
-                    </p>
-                    <p className="t-cap text-ink/65 mt-0.5">
-                      {s.format === 'tbc' ? 'Counts nothing until its format is set.' : describeFormat(format)}
-                    </p>
-                    {!open ? (
-                      <button type="button" className={`${buttonClass('secondary', false)} mt-3`} onClick={() => setChanging(s.key)}>
-                        Change format
+                    {/* The formats already used, as tiles to tap — Session
+                        1's first — and TBC; a new format is the questions
+                        underneath, which this session takes the moment one
+                        is answered (Ross, 9 Nov 2026). */}
+                    <div className="space-y-2">
+                      <button type="button" className={optionClass(s.format === 'same')}
+                        aria-pressed={s.format === 'same'}
+                        onClick={() => set(i, { format: 'same' })}>
+                        <p className="text-ink text-[15px] font-medium">Same as Session 1</p>
+                        <p className="t-cap text-ink/65 mt-0.5">{describeFormat(formats[0])}</p>
                       </button>
-                    ) : (
-                      <div className="mt-3 space-y-2">
-                        <button type="button" className={optionClass(s.format === 'same')}
-                          onClick={() => { set(i, { format: 'same' }); setChanging(null) }}>
-                          <p className="text-ink text-[15px] font-medium">Same as Session 1</p>
-                          <p className="t-cap text-ink/65 mt-0.5">{describeFormat(formats[0])}</p>
-                        </button>
-                        {used.filter(f => !sameFormat(f, formats[0])).map(f => (
-                          <button key={describeFormat(f)} type="button"
-                            className={optionClass(s.format !== 'same' && s.format !== 'tbc' && sameFormat(f, format))}
-                            onClick={() => { set(i, { format: f }); setChanging(null) }}>
+                      {used.filter(f => !sameFormat(f, formats[0])).map(f => {
+                        const on = s.format !== 'same' && s.format !== 'tbc' && sameFormat(f, format)
+                        return (
+                          <button key={describeFormat(f)} type="button" className={optionClass(on)}
+                            aria-pressed={on} onClick={() => set(i, { format: f })}>
                             <p className="text-ink text-[15px] font-medium">{describeFormat(f)}</p>
                           </button>
-                        ))}
-                        <button type="button" className={optionClass(s.format === 'tbc')}
-                          onClick={() => { set(i, { format: 'tbc' }); setChanging(null) }}>
-                          <p className="text-ink text-[15px] font-medium">Format TBC</p>
-                          <p className="t-cap text-ink/65 mt-0.5">Set it later in the organiser area.</p>
-                        </button>
-                        <div className={`p-3 ${cardClass('flat')}`}>
-                          <p className="t-label text-ink mb-3">A new format</p>
-                          <FormatPicker
-                            value={s.format !== 'same' && s.format !== 'tbc' ? s.format : (format ?? STROKE_DEFAULT)}
-                            onChange={f => set(i, { format: f })}
-                          />
-                          <button type="button" className={`${buttonClass('secondary', false, true)} mt-3`} onClick={() => setChanging(null)}>
-                            Done
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                        )
+                      })}
+                      <button type="button" className={optionClass(s.format === 'tbc')}
+                        aria-pressed={s.format === 'tbc'}
+                        onClick={() => set(i, { format: 'tbc' })}>
+                        <p className="text-ink text-[15px] font-medium">Format TBC</p>
+                        <p className="t-cap text-ink/65 mt-0.5">Counts nothing until it is set in the organiser area.</p>
+                      </button>
+                    </div>
+                    <div className={`mt-3 p-3 ${cardClass('flat')}`}>
+                      <p className="t-label text-ink mb-3">Or a new format</p>
+                      <FormatPicker
+                        // Unanswered while a tile is chosen: any answer here
+                        // is this session's new format, started from the one
+                        // it was playing.
+                        idle={s.format === 'same' || s.format === 'tbc' || formats.slice(0, i).some(f => sameFormat(f, format))}
+                        value={s.format !== 'same' && s.format !== 'tbc' ? s.format : (format ?? formats[0] ?? STROKE_DEFAULT)}
+                        // An answer that lands on Session 1's format is that tile.
+                        onChange={f => set(i, { format: sameFormat(f, formats[0]) ? 'same' : f })}
+                      />
+                    </div>
                   </>
                 )}
               </div>

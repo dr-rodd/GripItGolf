@@ -1,5 +1,6 @@
 'use client'
 
+import { enterGoesTo } from '@/lib/focusNext'
 import { isOverallBoard, isSessionBoard } from '@/lib/sessions'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -614,7 +615,7 @@ export default function TripSetupClient({
                 <DateField label="Start date" value={startDate}
                   onChange={v => saveDates(v, endDate)} disabled={locked} />
                 <DateField label="End date" value={endDate}
-                  onChange={v => saveDates(startDate, v)} disabled={locked} />
+                  onChange={v => saveDates(startDate, v)} disabled={locked} openAt={startDate || null} />
               </div>
               <div>
                 <label className={FIELD_LABEL}>About the trip</label>
@@ -984,11 +985,14 @@ export default function TripSetupClient({
                           updatePlayer(player.id, { name: v })
                         }}
                         aria-label="Player name"
+                        onKeyDown={enterGoesTo(`setup-hcp-${player.id}`)}
+                        enterKeyHint="next"
                         disabled={locked}
                         className={FIELD}
                       />
                       <div className="flex gap-2">
                         <HandicapField
+                          id={`setup-hcp-${player.id}`}
                           defaultValue={player.handicap == null ? '' : formatHandicap(player.handicap)}
                           onCommit={text => {
                             // Three answers, not two — see `readHandicapField`.
@@ -1094,11 +1098,14 @@ export default function TripSetupClient({
                     type="text"
                     value={newName}
                     onChange={e => setNewName(e.target.value)}
+                    onKeyDown={enterGoesTo('setup-new-hcp')}
+                    enterKeyHint="next"
                     placeholder="Player name"
                     className={FIELD}
                   />
                   <div className="flex gap-2">
                     <HandicapField
+                      id="setup-new-hcp"
                       value={newHandicap}
                       onChange={setNewHandicap}
                       placeholder="Handicap — or blank"

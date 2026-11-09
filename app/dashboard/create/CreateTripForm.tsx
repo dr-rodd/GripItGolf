@@ -1,5 +1,6 @@
 'use client'
 
+import { enterGoesTo } from '@/lib/focusNext'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -805,7 +806,7 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
                  pushing the second column off the right of the page. */
               <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
                 <DateField label="Start date" value={startDate} onChange={setStartDate} />
-                <DateField label="End date"   value={endDate}   onChange={setEndDate} />
+                <DateField label="End date"   value={endDate}   onChange={setEndDate} openAt={startDate || null} />
               </div>
             )}
 
@@ -977,6 +978,8 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
                     type="text"
                     value={player.name}
                     onChange={e => updatePlayer(i, { name: e.target.value })}
+                    onKeyDown={enterGoesTo(`trip-hcp-${i}`)}
+                    enterKeyHint="next"
                     placeholder="Full name"
                     // Swapped, not appended: two border-colour classes in one
                     // string leaves which one wins up to stylesheet order.
@@ -992,6 +995,7 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
 
                   <div className="flex gap-3">
                     <HandicapField
+                      id={`trip-hcp-${i}`}
                       value={player.handicap}
                       onChange={v => updatePlayer(i, { handicap: v })}
                       placeholder="Handicap (or leave blank)"

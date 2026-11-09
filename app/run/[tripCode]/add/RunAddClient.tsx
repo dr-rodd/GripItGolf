@@ -196,7 +196,7 @@ export default function RunAddClient({
           )}
 
           <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-            <DateField label="Day" value={day} onChange={setDate} min={start ?? undefined} max={latest || undefined} />
+            <DateField label="Day" value={day} onChange={setDate} min={start ?? undefined} max={latest || undefined} openAt={latest || null} />
             <div className="min-w-0">
               <label className={FIELD_LABEL} htmlFor="run-km">Distance (km)</label>
               <input
