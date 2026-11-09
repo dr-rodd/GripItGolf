@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { overallOf } from '@/lib/sessions'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
 import { parseBracketSetup, describeSetup, isKnockoutEvent, rawDrawPlan } from '@/lib/bracketSetup'
@@ -250,6 +251,9 @@ export default async function OrganiserPage({ params }: {
         : null
       }
       isLeague={!!leagueSetup}
+      // A standalone league may run a Dynamic Overall Leaderboard; an event
+      // that has one keeps the door whatever its shape (lib/sessions.ts).
+      sessions={overallOf(boards) ? 'on' : leagueSetup && !leagueSetup.schedule ? 'off' : null}
       initialTrackStats={trip.track_stats === true}
       series={leagueSetup?.schedule === 'series'}
       periods={isPeriodLeague(leagueSetup)}

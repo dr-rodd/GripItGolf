@@ -484,6 +484,7 @@ export default async function TripPage({ params, searchParams }: {
         // A league of periods counts one card a period, which only the
         // board itself knows how to pick — never the cheap sum of every card.
         isEvent && isPeriodLeague(parseLeagueSetup((trip as { bracket_setup?: unknown }).bracket_setup)),
+        { boards: parseLeaderboards(trip.leaderboards) },
       ),
       hasMatchplay(boards)
         ? supabase

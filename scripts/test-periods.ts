@@ -376,7 +376,7 @@ section('The hub, the standing and the leaderboard read the periods')
   ok(client.includes('periods.map((p, i) => ({ id: periodRoundId(p.key), round_number: i + 1, courses: null }))'),
     'the leaderboard\'s rounds are the periods — the switch and the columns alike')
   ok(client.includes("`${periodRounds ? 'Period' : 'Round'} ${r.round_number}`"), '  …named Period 1, Period 2')
-  ok(client.includes("if (!round.id.startsWith('period:')) setCard({ row, round })"),
+  ok(client.includes("if (!round.id.startsWith('period:') && activeBoard.competition !== 'overall') setCard({ row, round })"),
     '  …and a period\'s cell opens no single card, because it may be several')
   ok(read('app/golf/[root]/[tripCode]/leaderboard/page.tsx').includes('periods={isPeriodLeague(leagueSetup) ? leagueSetup.periods : undefined}'),
     'the page hands the periods over')

@@ -391,55 +391,13 @@ export function OverallSetup({ sessions, ranks, onRanks, feeds, onFeeds, tagsOn,
               <div key={s.key} className={`p-4 ${cardClass()}`}>
                 <p className="t-card text-ink">{sessionLabel(s, i)}</p>
                 <p className="t-cap text-ink/65 mt-0.5">{describeFormat(f)}</p>
-                {!f ? (
-                  <p className="text-ink/65 text-[13px] mt-2 leading-snug">Counts nothing until its format is set.</p>
-                ) : (
-                  <>
-                    <div className="flex gap-2 mt-3">
-                      <button type="button" className={`${chipClass(feed.kind !== 'none')} flex-1`}
-                        onClick={() => feed.kind === 'none' && setFeed(s.key, f.kind === 'matches'
-                          ? DEFAULT_MATCH_FEED : { kind: 'position', points: defaultPositionPoints(entrants) })}>
-                        Counts
-                      </button>
-                      <button type="button" className={`${chipClass(feed.kind === 'none')} flex-1`}
-                        onClick={() => setFeed(s.key, { kind: 'none' })}>
-                        Doesn&apos;t count
-                      </button>
-                    </div>
-                    {feed.kind === 'match' && (
-                      <div className="grid grid-cols-3 gap-2 mt-3">
-                        {(['win', 'half', 'loss'] as const).map(k => (
-                          <label key={k} className="block">
-                            <span className="t-cap text-ink/65">{k === 'win' ? 'Win' : k === 'half' ? 'Half' : 'Loss'}</span>
-                            <input
-                              type="number" inputMode="decimal" step={0.5} min={0} max={100}
-                              className={`${FIELD} mt-1`}
-                              value={feed[k]}
-                              onChange={e => setFeed(s.key, { ...feed, [k]: Math.max(0, Math.round((Number(e.target.value) || 0) * 2) / 2) })}
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    )}
-                    {feed.kind === 'position' && (
-                      <div className="mt-3">
-                        <span className="t-cap text-ink/65">Points for 1st, 2nd, 3rd…</span>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          className={`${FIELD} mt-1`}
-                          defaultValue={feed.points.map(formatPoints).join(', ')}
-                          onBlur={e => {
-                            const points = e.target.value.split(/[,\s]+/).map(Number).filter(n => Number.isFinite(n) && n >= 0).slice(0, 64)
-                            if (points.length > 0) setFeed(s.key, { kind: 'position', points })
-                          }}
-                          aria-label={`Points by position for ${sessionLabel(s, i)}`}
-                        />
-                      </div>
-                    )}
-                    <p className="t-cap text-ink/65 mt-2">{describeFeed(feed)}</p>
-                  </>
-                )}
+                <FeedEditor
+                  format={f}
+                  feed={feed}
+                  entrants={entrants}
+                  label={sessionLabel(s, i)}
+                  onChange={next => setFeed(s.key, next)}
+                />
               </div>
             )
           })}
@@ -452,5 +410,65 @@ export function OverallSetup({ sessions, ranks, onRanks, feeds, onFeeds, tagsOn,
         </p>
       )}
     </div>
+  )
+}
+
+/** How one session feeds the Overall — counts or not, and what it pays. */
+export function FeedEditor({ format, feed, entrants, label, onChange }: {
+  format: SessionFormat | null
+  feed: SessionFeed
+  entrants: number
+  label: string
+  onChange: (next: SessionFeed) => void
+}) {
+  if (!format) {
+    return <p className="text-ink/65 text-[13px] mt-2 leading-snug">Format TBC — counts nothing until its format is set.</p>
+  }
+  return (
+    <>
+      <div className="flex gap-2 mt-3">
+        <button type="button" className={`${chipClass(feed.kind !== 'none')} flex-1`}
+          onClick={() => feed.kind === 'none' && onChange(format.kind === 'matches'
+            ? DEFAULT_MATCH_FEED : { kind: 'position', points: defaultPositionPoints(entrants) })}>
+          Counts
+        </button>
+        <button type="button" className={`${chipClass(feed.kind === 'none')} flex-1`}
+          onClick={() => onChange({ kind: 'none' })}>
+          Doesn&apos;t count
+        </button>
+      </div>
+      {feed.kind === 'match' && (
+        <div className="grid grid-cols-3 gap-2 mt-3">
+          {(['win', 'half', 'loss'] as const).map(k => (
+            <label key={k} className="block">
+              <span className="t-cap text-ink/65">{k === 'win' ? 'Win' : k === 'half' ? 'Half' : 'Loss'}</span>
+              <input
+                type="number" inputMode="decimal" step={0.5} min={0} max={100}
+                className={`${FIELD} mt-1`}
+                value={feed[k]}
+                onChange={e => onChange({ ...feed, [k]: Math.max(0, Math.round((Number(e.target.value) || 0) * 2) / 2) })}
+              />
+            </label>
+          ))}
+        </div>
+      )}
+      {feed.kind === 'position' && (
+        <div className="mt-3">
+          <span className="t-cap text-ink/65">Points for 1st, 2nd, 3rd…</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            className={`${FIELD} mt-1`}
+            defaultValue={feed.points.map(formatPoints).join(', ')}
+            onBlur={e => {
+              const points = e.target.value.split(/[,\s]+/).map(Number).filter(n => Number.isFinite(n) && n >= 0).slice(0, 64)
+              if (points.length > 0) onChange({ kind: 'position', points })
+            }}
+            aria-label={`Points by position for ${label}`}
+          />
+        </div>
+      )}
+      <p className="t-cap text-ink/65 mt-2">{describeFeed(feed)}</p>
+    </>
   )
 }

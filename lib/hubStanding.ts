@@ -9,6 +9,8 @@
 // budget, and is only taken for a board the cheap one would get wrong — a
 // strokes board, a team board, or a prize table. Most trips never reach it.
 
+import type { SessionMatchResult } from './sessions'
+import { overallRows } from './overallRows'
 import { supabase } from './supabase'
 import { type Leaderboard } from './leaderboards'
 import { type TeamScoring } from './teamScoring'
@@ -95,9 +97,22 @@ export async function fetchPlacing(
    * cheap path — a sum of every card — would get wrong. Always the full path.
    */
   periods = false,
+  /**
+   * An event with a Dynamic Overall Leaderboard: every board (the sessions'
+   * own are read from it) and its sessions' matches. The Overall always
+   * takes the full path (lib/overallRows.ts).
+   */
+  overall?: { boards: readonly Leaderboard[]; sessionMatches?: readonly SessionMatchResult[] },
 ): Promise<PlacingResult> {
   // A knockout is not a table. The next-match line carries that board.
-  if (!lead || lead.competition === 'matchplay') return NONE
+  if (!lead || lead.competition === 'matchplay' || lead.competition === 'matches') return NONE
+  if (lead.competition === 'overall') {
+    if (!overall) return NONE
+    const { ctx, error } = await fetchTripContext(tripId, legacyTeamScoring)
+    if (error || !ctx) return { placing: null, error }
+    const rows = overallRows(lead, overall.boards, { ...ctx, sessionMatches: overall.sessionMatches })
+    return { placing: placingFromRows([playerId], rows), error: null }
+  }
 
   return usesSimpleStandings(lead) && !periods
     ? simplePlacing(tripId, lead, playerId)
@@ -228,8 +243,9 @@ export async function fetchRoundRows(
   lead: Leaderboard | null,
   legacyTeamScoring: TeamScoring | null,
 ): Promise<{ rows: BoardRow[]; error: string | null }> {
-  // A knockout is not a table, so it has no podium.
-  if (!lead || lead.competition === 'matchplay') return { rows: [], error: null }
+  // A knockout is not a table, so it has no podium — nor are the Overall
+  // and a session's matches, which read results rather than cards.
+  if (!lead || lead.competition === 'matchplay' || lead.competition === 'matches' || lead.competition === 'overall') return { rows: [], error: null }
   const { ctx, error } = await fetchTripContext(tripId, legacyTeamScoring, [roundId])
   if (error || !ctx) return { rows: [], error }
   // The casual flag is cleared for the same reason the discard rule is

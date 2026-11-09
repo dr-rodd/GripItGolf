@@ -68,7 +68,7 @@ type Overview = {
 }
 
 export default function OrganiserClient({
-  tripId, tripCode, initialNotices, initialRounds, formatSummary, isLeague,
+  tripId, tripCode, initialNotices, initialRounds, formatSummary, isLeague, sessions,
   initialPermissions, overview, tagsSummary, dayFormatSummary, golfIreland, accessCard, knockout = false, drawSummary = null,
   series = false, periods = false, initialTrackStats = false, hasTeamBoards = false,
 }: {
@@ -82,6 +82,8 @@ export default function OrganiserClient({
   formatSummary: string | null
   /** A league event — the format card describes rather than invites setup. */
   isLeague: boolean
+  /** The Dynamic Overall Leaderboard: on, offered (a standalone league), or not offered. */
+  sessions?: 'on' | 'off' | null
   /** The stored participant permissions, defaults filled (lib/eventPermissions.ts). */
   initialPermissions: EventPermissions
   /** Who can see the event — the public PIN card, drawn by the page. */
@@ -538,12 +540,22 @@ export default function OrganiserClient({
             {hasTeamBoards && (
               <ListRow href={`${tripHome}/teams`} label="Teams" hint="Pick the teams, or see the ones players have made." />
             )}
-            {rounds.length > 1 && (
+            {/* With an Overall, a day's format is its session's, set on Session formats. */}
+            {rounds.length > 1 && sessions !== 'on' && (
               <ListRow href={`${tripHome}/organiser/days`} label="Each day’s own format" hint={dayFormatSummary} />
             )}
             {/* The bracket, in creation's own flow — the draw, its
                 deadlines, then the rest (Ross, 5 Nov 2026); a league's
                 summary; nothing on an event that is neither. */}
+            {sessions && (
+              <ListRow
+                href={`${tripHome}/organiser/sessions`}
+                label="Session formats"
+                hint={sessions === 'on'
+                  ? 'Each session’s format, and how it feeds the Overall.'
+                  : 'Dynamic Overall Leaderboard is off. Turn it on here.'}
+              />
+            )}
             {(knockout || isLeague) && (
               <ListRow
                 href={`${tripHome}/organiser/bracket`}

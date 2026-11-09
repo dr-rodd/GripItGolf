@@ -1,0 +1,81 @@
+import { supabase } from '@/lib/supabase'
+import { isEvent } from '@/lib/eventHub'
+import { isLocked } from '@/lib/passcode'
+import { parseLeaderboards } from '@/lib/leaderboards'
+import BackButton from '@/app/components/BackButton'
+import PasscodeGate from '../../setup/PasscodeGate'
+import SessionsClient from './SessionsClient'
+import { tripHomeAt } from '@/lib/tripPaths'
+
+export const dynamic = 'force-dynamic'
+
+/**
+ * Session formats — the Dynamic Overall Leaderboard after creation (Ross,
+ * 9 Nov 2026; lib/sessions.ts): each session's format (or TBC), its name,
+ * how it feeds the Overall and what the Overall ranks, and turning the
+ * Overall on or off. Behind the organiser PIN, events only.
+ */
+export default async function SessionsPage({ params }: {
+  params: Promise<{ root: string; tripCode: string }>
+}) {
+  const { root, tripCode } = await params
+  const tripHome = tripHomeAt(root, tripCode)
+
+  const { data: trip, error } = await supabase
+    .from('trips')
+    .select('id, trip_code, name, kind, settings_passcode_hash, leaderboards')
+    .eq('trip_code', tripCode)
+    .single()
+  if (error) console.error('SessionsPage trip query failed:', error)
+
+  if (!trip || !isEvent(trip.kind)) {
+    return (
+      <main className="min-h-dvh has-tabbar flex flex-col items-center justify-center paper px-6 text-center">
+        <p className="t-h2 text-ink mb-3">{trip ? 'This is a trip' : 'Event not found'}</p>
+        <p className="text-ink/65 text-sm mb-8 max-w-[22rem] leading-relaxed">
+          {trip ? 'Session formats belong to events.' : 'Check the code and try again.'}
+        </p>
+        <BackButton href={trip ? tripHome : '/'} label={trip ? 'Trip' : 'Home'} />
+      </main>
+    )
+  }
+
+  const [roundsRes, playersRes, tagsRes] = await Promise.all([
+    supabase.from('rounds').select('id, round_number, courses(name)').eq('trip_id', trip.id).order('round_number'),
+    supabase.from('players').select('id', { count: 'exact', head: true }).eq('trip_id', trip.id).eq('is_composite', false),
+    supabase.from('teams').select('id', { count: 'exact', head: true }).eq('trip_id', trip.id).eq('team_set', 'main'),
+  ])
+  if (roundsRes.error) console.error('SessionsPage rounds query failed:', roundsRes.error)
+
+  type RoundRow = { id: string; round_number: number; courses: { name: string } | { name: string }[] | null }
+  const rounds = ((roundsRes.data ?? []) as unknown as RoundRow[]).map(r => {
+    const course = Array.isArray(r.courses) ? r.courses[0] : r.courses
+    return { id: r.id, roundNumber: r.round_number, courseName: course?.name ?? null }
+  })
+
+  const content = (
+    <SessionsClient
+      tripId={trip.id}
+      tripCode={tripCode}
+      rounds={rounds}
+      initialBoards={parseLeaderboards(trip.leaderboards)}
+      playerCount={playersRes.count ?? 0}
+      tagCount={tagsRes.count ?? 0}
+    />
+  )
+
+  if (isLocked(trip.settings_passcode_hash)) {
+    return (
+      <PasscodeGate
+        tripCode={tripCode}
+        tripName={trip.name}
+        passcodeHash={trip.settings_passcode_hash as string}
+        title="Session formats"
+        hint={`Enter the organiser PIN for ${trip.name}.`}
+      >
+        {content}
+      </PasscodeGate>
+    )
+  }
+  return content
+}

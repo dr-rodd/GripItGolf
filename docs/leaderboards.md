@@ -397,3 +397,16 @@ This supersedes Donegal Masters rule 6 ("best-2-of-3") for trip pages — best-2
 **Future:** Skins, Nassau, Best Ball, Scramble, bracketed (rather than round-robin) matchplay.
 
 The per-day board editor makes a board for one round at a time; a format spanning some-but-not-all rounds is expressible in the model (`roundIds` takes a list) and has no screen yet.
+
+## The Dynamic Overall Leaderboard and Matches (9 November 2026)
+
+`lib/sessions.ts` holds the rules, `lib/overallRows.ts` builds the rows; `docs/sessions-plan.md` has the plan and the reader audit.
+
+- **A session** is a round of an event whose golf changes format. Its format is a board scoped to that round alone, marked `session: true` — an ordinary `league` board for a stroke format, a `matches` board for match play counted on a leaderboard. **Format TBC is no board**, and counts nothing.
+- **The Overall** is `competition: 'overall'`, its rules on `overall`: what it ranks (`tags`, `individuals`, `teams`), each session's feed keyed by round id, and the sessions' names. One an event. `buildRows` returns nothing for it; `overallRows(overall, boards, ctx)` does the work.
+- **A stroke session pays by finishing position** — its board read for what the Overall ranks (a tags Overall reads the tag's best N cards, or for a team format its day teams'; an individual Overall gives each member a team's place; a teams Overall reads a team board on its own sheet) and placed through `placeRound`, level entrants sharing the prizes their places cover. The default table is the field down to one.
+- **A Matches session pays per match** — default 1 / ½ / 0 — to the tag a side carries (a mixed side counts for nobody), each player on it, or the team it is. Results arrive as `RowContext.sessionMatches`.
+- **Ties on the Overall are shared.** Two level are both 1st. No "holder retains".
+- **The Overall never governs a round** — `governingBoard` skips it, so a TBC session takes no partnership rules from it.
+- On the leaderboard the Overall is the first tab and carries **Overall · Session 1 · …**; a session opens in its own format (a table, or its list of matches), never as points. A session's own board is never a tab. A round summary on such an event is its session's result; the hub's standing reads the Overall on the full path.
+- Halves on any board are written as golf writes them: 7½, never 7.5.

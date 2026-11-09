@@ -393,7 +393,7 @@ section('A countback pays the two it split, and the board says which stretch')
 
   // Left alone, the same round pools the two prizes and claims nothing
   const even = render([CU([10, 5, 3])], one)
-  ok(even.includes('>7.5<'), 'an even split pools ten and five into seven and a half')
+  ok(even.includes('>7½<'), 'an even split pools ten and five into seven and a half, written 7½ as golf writes it')
   eq(rowsFor(CU([10, 5, 3]), one).board.map(r => r.tieBadgeByRound), [undefined, undefined, undefined],
     'and no row claims a countback, because no card decided it')
 
@@ -1619,6 +1619,23 @@ section('The board card keeps its rounded corners')
   ok(client.includes('className="sticky z-20 bg-surface border-b border-line rounded-t-[19px] overflow-hidden"'),
     'the heading row is clipped to the card\'s inner corners')
   ok(client.includes('rounded-b-[19px]'), '  …and the foot matches them')
+}
+
+section('The Dynamic Overall Leaderboard (D37, D39)')
+{
+  // Two stroke sessions over the fixture rounds; the Overall pays 3, 2, 1.
+  const s1: Leaderboard = { id: 'lb-session-r1', audience: 'individual', competition: 'league', scoring: 'stableford', combine: 'total', roundIds: ['r1'], session: true }
+  const s2: Leaderboard = { id: 'lb-session-r2', audience: 'individual', competition: 'league', scoring: 'stableford', combine: 'total', roundIds: ['r2'], session: true }
+  const overall: Leaderboard = { id: 'lb-overall', audience: 'individual', competition: 'overall',
+    overall: { ranks: 'individuals', feeds: { r1: { kind: 'position', points: [3, 2, 1] }, r2: { kind: 'position', points: [3, 2, 1] } }, names: { r1: 'Friday fourball' } } }
+  const html = render([overall, s1, s2])
+  ok(html.includes('aria-label="Which session"') && html.includes('Friday fourball') && html.includes('Session 2'),
+    'the Overall carries a session switch, named sessions and numbered ones')
+  ok(!html.includes('>Stableford Points<'), 'a session’s own board is never a tab of its own')
+  // Alice: 1st then 3rd = 4; Bob 2nd twice = 4; Cara 3rd then 1st = 4 — all level, all 1st.
+  ok((html.match(/>4</g) ?? []).length >= 3, 'each row’s total is its points from both sessions')
+  const plain = render([s1, s2])
+  ok(!plain.includes('Which session'), 'without an Overall the board is exactly as it was')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

@@ -369,6 +369,42 @@ export function targetLine(
   return `${formatPoints(total / 2 + 0.5)} to win`
 }
 
+// ─── A session match's result ─────────────────────────────────
+
+/**
+ * One match in a Matches session, as the Overall and the session's list read
+ * it: the players on each side, and the result once the card is finalised —
+ * `a`, `b` or `halved` (a session match may end halved, D44). `live` while
+ * the card has a score and no result.
+ */
+export type SessionMatchResult = {
+  id: string
+  roundId: string
+  /** Its tee time's or order-of-play position, from 0. */
+  slot: number
+  sideA: string[]
+  sideB: string[]
+  result: 'a' | 'b' | 'halved' | null
+  /** "3&2", "1 UP", "A/S" — the margin once finished, the standing while live. */
+  margin?: string | null
+  live?: boolean
+}
+
+/**
+ * A match's line: "Europe won 3&2", "Halved", "USA 2 UP thru 11", "Not started".
+ * `names` are each side's label — the tag where the side is one tag, else
+ * its players.
+ */
+export function matchLine(m: SessionMatchResult, names: { a: string; b: string }): string {
+  if (m.result === 'halved') return 'Halved'
+  if (m.result === 'a' || m.result === 'b') {
+    const who = m.result === 'a' ? names.a : names.b
+    return m.margin ? `${who} won ${m.margin}` : `${who} won`
+  }
+  if (m.live && m.margin) return m.margin
+  return m.live ? 'In play' : 'Not started'
+}
+
 // ─── Storage ───────────────────────────────────────────────────
 
 const num = (v: unknown, lo: number, hi: number): number | null => {
@@ -467,4 +503,77 @@ export function overallBoard(rules: OverallRules): Leaderboard {
     ...(rules.ranks === 'tags' ? { teamSet: 'main' } : rules.ranks === 'teams' ? { teamSet: 'overall' } : {}),
     overall: rules,
   }
+}
+
+// ─── Changing an event's sessions after creation ───────────────
+//
+// The organiser area's Session formats page. Each returns the whole boards
+// list with one thing changed, never touching a score: the Overall's points
+// are worked out on every read, so a changed format re-tells them at once.
+
+/** A session's format set — or, with null, made TBC (its board removed). */
+export function withSessionFormat(
+  boards: readonly Leaderboard[], roundId: string, format: SessionFormat | null, daySheet: string,
+): Leaderboard[] {
+  const rest = boards.filter(b => !(isSessionBoard(b) && b.roundIds?.length === 1 && b.roundIds[0] === roundId))
+  if (!format) return rest
+  const at = boards.findIndex(b => isSessionBoard(b) && b.roundIds?.[0] === roundId)
+  const next = sessionBoard(format, roundId, daySheet)
+  if (at === -1) return [...rest, next]
+  const out = [...rest]
+  out.splice(Math.min(at, out.length), 0, next)
+  return out
+}
+
+/** The Overall's rules changed, the rest of the list as it was. */
+export function withOverallRules(
+  boards: readonly Leaderboard[], change: (rules: OverallRules) => OverallRules,
+): Leaderboard[] {
+  return boards.map(b => (isOverallBoard(b) && b.overall ? { ...overallBoard(change(b.overall)), id: b.id } : b))
+}
+
+/** A session's name: blank goes back to "Session n". */
+export function withSessionName(boards: readonly Leaderboard[], roundId: string, name: string): Leaderboard[] {
+  return withOverallRules(boards, rules => {
+    const names = { ...(rules.names ?? {}) }
+    const tidy = name.trim().slice(0, MAX_SESSION_NAME)
+    if (tidy) names[roundId] = tidy
+    else delete names[roundId]
+    const { names: _drop, ...restRules } = rules
+    void _drop
+    return Object.keys(names).length > 0 ? { ...restRules, names } : restRules
+  })
+}
+
+/** How a session feeds the Overall. */
+export function withSessionFeed(boards: readonly Leaderboard[], roundId: string, feed: SessionFeed): Leaderboard[] {
+  return withOverallRules(boards, rules => ({ ...rules, feeds: { ...(rules.feeds ?? {}), [roundId]: feed } }))
+}
+
+/**
+ * Turning the Overall on for an event made with a primary board: every round
+ * becomes a session playing the event's first stroke board's format (TBC
+ * where there is none), and every existing board stays as a secondary one.
+ * A round that already has a session board keeps it.
+ */
+export function withOverallOn(
+  boards: readonly Leaderboard[], roundIds: readonly string[], ranks: OverallRanks,
+  daySheetOf: (roundId: string) => string,
+): Leaderboard[] {
+  if (overallOf(boards)) return [...boards]
+  const first = boards.find(b => b.competition === 'league' && !b.tagMode && !isSessionBoard(b))
+  const base = first ? formatOfBoard({ ...first, handicapAllowance: first.handicapAllowance }) : null
+  const sessions = roundIds
+    .filter(id => !sessionBoardFor(boards, id))
+    .flatMap(id => base ? [sessionBoard(base, id, daySheetOf(id))] : [])
+  return [overallBoard({ ranks }), ...boards, ...sessions]
+}
+
+/**
+ * Turning it off removes the Overall board and nothing else — no session's
+ * board, no score. Its sessions' stroke boards read on as each day's own
+ * format; turned back on, the Overall finds them again.
+ */
+export function withOverallOff(boards: readonly Leaderboard[]): Leaderboard[] {
+  return withoutOverall(boards)
 }

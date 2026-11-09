@@ -14,6 +14,7 @@
 // Pure. No I/O, no React.
 
 import type { Leaderboard } from './leaderboards'
+import type { SessionMatchResult } from './sessions'
 import { FULL_ALLOWANCE, allowanceFor, allowanceOf, allowedHandicap, variesByRound } from './handicapAllowance'
 import { shotsReceived } from './handicap'
 import type { RoundCard } from './golfIreland'
@@ -308,6 +309,11 @@ export type RowContext = {
    */
   periods?: readonly LeaguePeriod[]
   periodRule?: PeriodRule
+  /**
+   * Matches sessions' matches (lib/sessions.ts) — what the Overall counts a
+   * Matches session from. Absent everywhere but an event with an Overall.
+   */
+  sessionMatches?: readonly SessionMatchResult[]
 }
 
 // ─── Handicap arithmetic ───────────────────────────────────────

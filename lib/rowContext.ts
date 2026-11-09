@@ -19,6 +19,7 @@
 //
 // Pure. No I/O — the caller does the queries and hands the rows in.
 
+import type { SessionMatchResult } from './sessions'
 import type { LeaguePeriod, PeriodRule } from './leagueSetup'
 import type {
   ResolvedScore, RowHole, RowRound, RowContext, RowPlayer, RowTeam,
@@ -268,6 +269,8 @@ export type RowContextInput = {
    */
   periods?: readonly LeaguePeriod[]
   periodRule?: PeriodRule
+  /** Matches sessions' matches, for an event's Overall (lib/sessions.ts). */
+  sessionMatches?: readonly SessionMatchResult[]
 }
 
 /**
@@ -325,5 +328,6 @@ export function buildRowContext(input: RowContextInput): RowContext {
     ...(input.cardsOff?.length ? { cardsOff: new Set(input.cardsOff) } : {}),
     ...(input.roundCards?.length ? { roundCards: input.roundCards } : {}),
     ...(input.periods?.length ? { periods: input.periods, ...(input.periodRule ? { periodRule: input.periodRule } : {}) } : {}),
+    ...(input.sessionMatches?.length ? { sessionMatches: input.sessionMatches } : {}),
   }
 }

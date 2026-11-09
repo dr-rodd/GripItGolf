@@ -14,6 +14,9 @@ import {
   buildRows, scoresForBoard, boardHandicapFor, effectivePar, effectiveSI,
   orderRowsUndiscarded, teamCardHolePoints, withOnlyRounds,
 } from '@/lib/boardRows'
+import { overallOf, overallTabs, sessionBoardFor, sessionName, formatPoints, type SessionMatchResult } from '@/lib/sessions'
+import { overallRows } from '@/lib/overallRows'
+import SessionMatchList from './SessionMatchList'
 import {
   type DayBoards, boardGrouping, describeScope,
 } from '@/lib/leagueSetup'
@@ -154,6 +157,12 @@ interface Props {
    * empty everywhere else.
    */
   linkedIds?: string[]
+  /**
+   * Matches sessions' matches, read on the server — what the Overall counts
+   * a Matches session from, and that session's own list. Empty everywhere
+   * but an event with an Overall.
+   */
+  sessionMatches?: SessionMatchResult[]
 }
 
 // Every scorecard in the app wears the same clothes — see
@@ -193,9 +202,11 @@ function countbackNote(segment: Segment): string {
   return `Back ${segment}`
 }
 
-/** Whole numbers stay plain; a shared position shows its half. */
+/** Whole numbers stay plain; a half is written as golf writes it (14½). */
 function formatScore(n: number): string {
-  return Number.isInteger(n) ? String(n) : n.toFixed(1)
+  if (Number.isInteger(n)) return String(n)
+  if (Math.abs(n * 2 - Math.round(n * 2)) < 1e-9) return formatPoints(n)
+  return n.toFixed(1)
 }
 
 /**
@@ -1478,7 +1489,7 @@ export default function TripLeaderboardClient({
   tripCode, boards, activeRoundIds, livePlayerIds, legacyTeamScoring, rounds,
   teams, memberships, players, holes, scores, liveScores, roundHandicaps,
   tees = [], nicknames = [], isEvent = false, dayBoards, linkedIds, series = false, periods, periodRule, cardsOff, roundCards,
-  playerColours,
+  playerColours, sessionMatches,
 }: Props) {
   const linked = useMemo(() => new Set(linkedIds ?? []), [linkedIds])
   const colourById = useMemo(() => new Map(Object.entries(playerColours ?? {})), [playerColours])
@@ -1490,6 +1501,10 @@ export default function TripLeaderboardClient({
   // aside. `boardGrouping` is the one copy of what that answer means —
   // this only lays out what it returns.
   const tabs = useMemo(() => {
+    // An event with a Dynamic Overall Leaderboard: the Overall, then its
+    // secondary boards. A session's own board is reached through the
+    // Overall's session switch, never as a tab (lib/sessions.ts).
+    if (overallOf(boards)) return overallTabs(boards)
     const league = boards.filter(b => b.competition === 'league')
     const { overall, byDay } = boardGrouping(league, dayBoards)
     return [...overall, ...byDay]
@@ -1517,7 +1532,8 @@ export default function TripLeaderboardClient({
   }, [rounds])
   // Nothing to switch between on a single-course event, so nothing is drawn.
   // A league switches by round instead — below — so it never draws this.
-  const showCourses = isEvent && !series && !periods?.length && courses.length > 1
+  const hasOverall = useMemo(() => !!overallOf(boards), [boards])
+  const showCourses = isEvent && !series && !periods?.length && !hasOverall && courses.length > 1
 
   // ── One round, or the league ────────────────────────────────
   //
@@ -1593,9 +1609,10 @@ export default function TripLeaderboardClient({
     roundCards,
     periods,
     periodRule,
+    sessionMatches,
   }), [players, teams, memberships, holes, rounds, scores, liveScores,
        roundHandicaps, tees, activeRoundIds, livePlayerIds, legacyTeamScoring, cardsOff, roundCards,
-       periods, periodRule])
+       periods, periodRule, sessionMatches])
 
   const resolved = rowContext.resolved
   // The same order the board columns them in, on the fuller row this screen
@@ -1653,25 +1670,46 @@ export default function TripLeaderboardClient({
   }, [rowContext, courseRoundIds, shownRound])
 
   const rowsByBoard = useMemo(
-    () => new Map(tabs.map(b => [b.id, buildRows(b, shownContext)])),
-    [tabs, shownContext]
+    () => new Map(tabs.map(b => [b.id, b.competition === 'overall'
+      ? overallRows(b, boards, shownContext)
+      : buildRows(b, shownContext)])),
+    [tabs, boards, shownContext]
   )
+
+  // ── The Overall's sessions ──────────────────────────────────
+  //
+  // Overall · Session 1 · Session 2 — the series' pattern. A session is
+  // ranked in its own format, by its own board, never by points (D39).
+  const [sessionChoice, setSessionChoice] = useState<string | null>(null)
+  const overallActive = activeBoard?.competition === 'overall' ? activeBoard : null
+  const sessionRounds = useMemo(
+    () => (overallActive ? [...rounds].sort((a, b) => a.round_number - b.round_number) : []),
+    [overallActive, rounds],
+  )
+  const shownSession = overallActive ? sessionRounds.find(r => r.id === sessionChoice) ?? null : null
+  const sessionView = shownSession ? sessionBoardFor(boards, shownSession.id) : null
+  const sessionRows = useMemo(
+    () => (sessionView && sessionView.competition === 'league' ? buildRows(sessionView, rowContext) : []),
+    [sessionView, rowContext],
+  )
+  // The board whose cards a row opens: the session's on a session, else the tab's.
+  const viewBoard = shownSession ? sessionView : activeBoard
 
   // What the scorecard sheet shows when a row is opened: the same cards the
   // active board is scoring, restated at the allowance that board plays off.
   const cardScores = useMemo(
-    () => (activeBoard ? scoresForBoard(activeBoard, rowContext) : resolved),
-    [activeBoard, rowContext, resolved]
+    () => (viewBoard && viewBoard.competition === 'league' ? scoresForBoard(viewBoard, rowContext) : resolved),
+    [viewBoard, rowContext, resolved]
   )
 
   // And on a team card, the team's own figure per hole under the board's
   // format — best 1, best 2, the hero's card — rather than a sum of everyone,
   // which is only what aggregate means. Null everywhere else.
   const cardTeamPoints = useMemo(
-    () => (card && activeBoard
-      ? teamCardHolePoints(activeBoard, rowContext, card.round.id, card.row.playerIds)
+    () => (card && viewBoard && viewBoard.competition === 'league'
+      ? teamCardHolePoints(viewBoard, rowContext, card.round.id, card.row.playerIds)
       : null),
-    [card, activeBoard, rowContext]
+    [card, viewBoard, rowContext]
   )
 
   // ── Render ──────────────────────────────────────────────────
@@ -1759,6 +1797,20 @@ export default function TripLeaderboardClient({
     />
   )
 
+  /** Overall, or one session — the Overall's switch (D39). */
+  const sessionStrip = overallActive && sessionRounds.length > 0 && (
+    <Segmented
+      label="Which session"
+      className="mb-4"
+      value={shownSession?.id ?? 'all'}
+      onChange={v => setSessionChoice(v === 'all' ? null : v)}
+      options={[
+        { value: 'all', label: 'Overall' },
+        ...sessionRounds.map(r => ({ value: r.id, label: sessionName(overallActive.overall, r.id, r.round_number) })),
+      ]}
+    />
+  )
+
   // Matchplay lives on its own page, so a matchplay-only trip legitimately
   // has no table here — the strip above is what it came for.
   if (!activeBoard) {
@@ -1783,7 +1835,11 @@ export default function TripLeaderboardClient({
   // day board are both team boards by audience but are filled in from two
   // different screens, and "Set teams in Trip Setup" points at neither.
   const emptyMessage =
-    activeBoard.audience !== 'team' ? 'No scores yet.'
+    activeBoard.competition === 'overall'
+      ? (activeBoard.overall?.ranks === 'tags' ? 'No tags yet — they are set in the organiser area.'
+        : activeBoard.overall?.ranks === 'teams' ? 'No teams yet — they are made on the teams screen.'
+        : 'No players yet.')
+    : activeBoard.audience !== 'team' ? 'No scores yet.'
     : activeBoard.tagMode ? 'No tags yet — they are set in the organiser area.'
     : activeBoard.roundIds?.length ? 'No teams for this day yet — they are picked on the tee sheet.'
     : 'Set teams in Trip Setup'
@@ -1815,11 +1871,53 @@ export default function TripLeaderboardClient({
       playerById={playerById}
       boardNameById={boardNameById}
       // A period is not one card — it may be a composite of several — so
-      // its cell opens nothing; each card opens from the Scoring tab.
-      onOpenCard={(row, round) => { if (!round.id.startsWith('period:')) setCard({ row, round }) }}
+      // its cell opens nothing; each card opens from the Scoring tab. Nor
+      // is an Overall's cell a card: it is a session's points.
+      onOpenCard={(row, round) => {
+        if (!round.id.startsWith('period:') && activeBoard.competition !== 'overall') setCard({ row, round })
+      }}
       linked={linked}
       colourById={colourById}
     />
+  )
+
+  // One session of the Overall, ranked in its own format (D39): a stroke
+  // session is its own board over its own round; a Matches session its
+  // list of matches; a TBC session says so.
+  const sessionContent = shownSession && (
+    !sessionView ? (
+      <EmptyState message="Format TBC — this session counts nothing until its format is set." />
+    ) : sessionView.competition === 'matches' ? (
+      <SessionMatchList
+        matches={(sessionMatches ?? []).filter(m => m.roundId === shownSession.id)}
+        players={players}
+        teams={teams}
+        memberships={memberships}
+        tripCode={tripCode}
+      />
+    ) : (
+      <>
+        <div className={`px-4 py-3 mb-3 ${cardClass()}`}>
+          <p className="t-card text-ink">{boardTitle(sessionView)}</p>
+          <p className="t-cap text-ink/65 mt-1">{boardFacts(sessionView).join(' · ')}</p>
+        </div>
+        {sessionRows.length === 0
+          ? <EmptyState message={sessionView.audience === 'team' ? 'No teams for this session yet — they are picked on the tee sheet.' : 'No scores yet.'} />
+          : (
+            <Board
+              key={sessionView.id}
+              board={sessionView}
+              rows={sessionRows}
+              rounds={[shownSession]}
+              playerById={playerById}
+              boardNameById={boardNameById}
+              onOpenCard={(row, round) => setCard({ row, round })}
+              linked={linked}
+              colourById={colourById}
+            />
+          )}
+      </>
+    )
   )
 
   // Team cards show every member side by side; individual tabs show one column
@@ -1836,6 +1934,9 @@ export default function TripLeaderboardClient({
 
       {roundStrip}
 
+      {sessionStrip}
+
+      {sessionContent || (<>
       {/* A round that does not count, said before its board — which is
           greyed under it, so the result reads as a record, not a standing. */}
       {shownRound?.casual && (
@@ -1890,6 +1991,7 @@ export default function TripLeaderboardClient({
           Swipe to switch round.
         </p>
       )}
+      </>)}
 
       {card && cardPlayers.length > 0 && (
         <ScorecardSheet
@@ -1904,7 +2006,7 @@ export default function TripLeaderboardClient({
           resolved={cardScores}
           teamHolePoints={cardTeamPoints}
           handicapFor={pid =>
-            activeBoard ? boardHandicapFor(activeBoard, rowContext, card.round.id, pid) : null}
+            viewBoard && viewBoard.competition === 'league' ? boardHandicapFor(viewBoard, rowContext, card.round.id, pid) : null}
           onClose={() => setCard(null)}
         />
       )}

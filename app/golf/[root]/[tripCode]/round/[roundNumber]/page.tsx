@@ -1,4 +1,5 @@
 import { Fragment, Suspense } from 'react'
+import { overallOf, sessionBoardFor } from '@/lib/sessions'
 import { placeClass } from '@/lib/leaderboardStyle'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -85,7 +86,9 @@ export default async function RoundSummaryPage({
   // trip is already in hand — so it can be settled above the batch, and the
   // question can go out with it.
   const boards = boardsForTrip(trip)
-  const lead = primary(boards)
+  // On an event with an Overall, a round is a session: its result is its own
+  // board's (lib/sessions.ts), never the Overall's points.
+  const lead = overallOf(boards) ? sessionBoardFor(boards, round.id) : primary(boards)
 
   // **Started, deliberately not awaited.** `fetchRoundRows` needs `trip.id`
   // and `round.id` and nothing else, both known by now — but it is not one

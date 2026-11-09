@@ -727,8 +727,8 @@ section('Every round has its own leaderboard; a round can stop counting')
   const board = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   ok(board.includes('const showRounds = isEvent && (series || !!periodRounds) && roundOptions.length > 1'),
     'a league reads its board overall or one round at a time — a league of periods one period at a time')
-  ok(board.includes('const showCourses = isEvent && !series && !periods?.length && courses.length > 1'),
-    '  …in the course switch\'s place, never beside it')
+  ok(board.includes('const showCourses = isEvent && !series && !periods?.length && !hasOverall && courses.length > 1'),
+    '  …in the course switch\'s place, never beside it, nor beside the Overall\'s session switch')
   ok(board.includes('? [shownRound.id]') && board.includes('return withOnlyRounds(base, courseRoundIds)'),
     'a round\'s board is the league\'s own boards narrowed by the one copy — never a stored second board')
   ok(board.includes('r.id === shownRound.id ? { ...r, casual: false } : r'),
