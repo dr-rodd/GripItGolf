@@ -552,6 +552,15 @@ export function defaultMatchSlots(fieldSize: number, format: MatchFormat): numbe
   return Math.min(MAX_MATCH_SLOTS, Math.max(1, n))
 }
 
+/**
+ * The fewest matches a session can be cut to: one past the last with
+ * anybody in it — taking a match away never takes its players with it.
+ */
+export function slotFloor(matches: readonly { slot: number; sideA: readonly string[]; sideB: readonly string[] }[]): number {
+  const filled = matches.filter(m => m.sideA.length + m.sideB.length > 0).map(m => m.slot + 1)
+  return Math.max(1, ...filled)
+}
+
 /** How many matches a session holds: the number set, else every match set so far. */
 export function matchSlotsFor(
   rules: OverallRules | undefined, roundId: string, matches: readonly { roundId: string; slot: number }[],

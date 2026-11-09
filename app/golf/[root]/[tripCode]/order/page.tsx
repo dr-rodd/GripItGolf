@@ -4,10 +4,10 @@ import { supabase } from '@/lib/supabase'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { teeSheetAccess } from '@/lib/eventPermissions'
-import { overallOf, sessionBoardFor, sessionName } from '@/lib/sessions'
+import { overallOf, sessionBoardFor, sessionName, matchSlotsFor } from '@/lib/sessions'
 import { eventTags } from '@/lib/tagBoards'
 import TripHeader from '@/app/components/TripHeader'
-import MatchesSheet from '../session/MatchesSheet'
+import OrderOfPlayList from './OrderOfPlayList'
 import { readSessionCards, readSessionMatchRows } from '../session/sessionMatches'
 import { tripHomeAt } from '@/lib/tripPaths'
 
@@ -17,7 +17,8 @@ export const dynamic = 'force-dynamic'
  * The order of play (Ross, 9 Nov 2026, D41): a Matches session's matches
  * without tee times — the same rows as its tee sheet would be, numbered
  * "Match 1, Match 2…" in place of times. One sheet a Matches session, in
- * running order. lib/sessions.ts has the rules.
+ * running order, one open at a time (`?round=` opens that one), each with
+ * − and + for how many matches it holds. lib/sessions.ts has the rules.
  */
 export default async function OrderOfPlayPage({ params, searchParams }: {
   params: Promise<{ root: string; tripCode: string }>
@@ -48,11 +49,19 @@ export default async function OrderOfPlayPage({ params, searchParams }: {
 
   const sessions = rounds
     .map(r => ({ round: r, board: sessionBoardFor(boards, r.id) }))
-    .filter(s => s.board?.competition === 'matches' && (!onlyRound || s.round.id === onlyRound))
+    .filter(s => s.board?.competition === 'matches')
 
   const rows = await readSessionMatchRows(trip.id)
   const { results } = await readSessionCards(trip, boards, players, { teams, memberships }, rows)
   const access = teeSheetAccess((trip as { event_permissions?: unknown }).event_permissions)
+  const slotsOf = (roundId: string) => matchSlotsFor(overall?.overall, roundId, results)
+  // Open on the session asked for, else the one in play, else the next to finish.
+  const initialOpen = (
+    sessions.find(s => s.round.id === onlyRound)
+    ?? sessions.find(s => results.some(m => m.roundId === s.round.id && m.live && !m.result))
+    ?? sessions.find(s => results.filter(m => m.roundId === s.round.id && m.result).length < Math.max(1, slotsOf(s.round.id)))
+    ?? sessions[0]
+  )?.round.id ?? null
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
@@ -64,25 +73,27 @@ export default async function OrderOfPlayPage({ params, searchParams }: {
         </p>
         {!overall || sessions.length === 0 ? (
           <p className={`text-ink/65 text-sm`}>No session plays matches yet. The organiser sets each session&apos;s format.</p>
-        ) : sessions.map(({ round, board }) => (
-          <MatchesSheet
-            key={round.id}
-            tripId={trip.id}
-            tripCode={tripCode}
-            roundId={round.id}
-            title={sessionName(overall.overall, round.id, round.round_number)}
-            format={board!.matchFormat!}
-            matches={results.filter(m => m.roundId === round.id)}
-            players={players}
-            tags={tags}
-            tagOfPlayer={tagOfPlayer}
-            myId={me?.id ?? null}
-            passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null}
-            playersPick={access.playersPick}
-            isTrip={!isEvent((trip as { kind?: unknown }).kind)}
-            slots={overall.overall?.slots?.[round.id] ?? 0}
+        ) : (
+          <OrderOfPlayList
+            initialOpen={initialOpen}
+            sheets={sessions.map(({ round, board }) => ({
+              tripId: trip.id,
+              tripCode,
+              roundId: round.id,
+              title: sessionName(overall.overall, round.id, round.round_number),
+              format: board!.matchFormat!,
+              matches: results.filter(m => m.roundId === round.id),
+              players,
+              tags,
+              tagOfPlayer,
+              myId: me?.id ?? null,
+              passcodeHash: (trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null,
+              playersPick: access.playersPick,
+              isTrip: !isEvent((trip as { kind?: unknown }).kind),
+              slots: slotsOf(round.id),
+            }))}
           />
-        ))}
+        )}
       </div>
     </main>
   )

@@ -31,9 +31,10 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { hasUnlocked, isLocked } from '@/lib/passcode'
 import {
-  type MatchFormat, type SessionMatchResult, matchLine, matchSidesIssue, sideSize, nextSlot,
+  type MatchFormat, type SessionMatchResult, matchLine, matchSidesIssue, sideSize, slotFloor, MAX_MATCH_SLOTS,
 } from '@/lib/sessions'
-import { setMatchSide, removeMatch } from '@/lib/sessionMatchStore'
+import { setMatchSide, removeMatch, setSessionSlots } from '@/lib/sessionMatchStore'
+import { IconChevronDown } from '@/app/components/icons'
 import { sideColours } from '@/lib/matchSides'
 import { formatHandicap } from '@/lib/handicap'
 import { boardNames } from '@/lib/displayNames'
@@ -48,8 +49,14 @@ type Tag = { id: string; name: string; color: string }
 
 export default function MatchesSheet({
   tripId, tripCode, roundId, title, format, matches: saved, clocks, players, tags, tagOfPlayer,
-  myId, passcodeHash, playersPick, opensLabel = null, isTrip = false, slots = 0,
+  myId, passcodeHash, playersPick, opensLabel = null, isTrip = false, slots = 0, open: expanded, onToggle,
 }: {
+  /**
+   * The order of play's sessions open one at a time (Ross, 9 Nov 2026):
+   * with `onToggle` the heading opens and closes this one.
+   */
+  open?: boolean
+  onToggle?: () => void
   /** A trip's: its passcode and lead player, never a PIN and organiser. */
   isTrip?: boolean
   /** How many matches the session holds — the order of play's rows at least. */
@@ -110,9 +117,24 @@ export default function MatchesSheet({
     return out.filter(m => m.sideA.length + m.sideB.length > 0 || saved.some(x => x.slot === m.slot && (x.result || x.live)))
   }, [saved, pending, roundId])
 
-  // Rows: the tee sheet’s times, else the session’s match count, every match set and one more.
-  const [extraRows, setExtraRows] = useState(0)
-  const rowCount = clocks?.length ?? Math.max(slots + extraRows, nextSlot(matches) + extraRows, matches.length ? Math.max(...matches.map(m => m.slot)) + 1 : 1)
+  // Rows: the tee sheet’s times, else the session’s match count — set with
+  // − and + by the organiser, never fewer than the last match with anybody
+  // in it. A vacant match is still a point up for grabs on the ticker.
+  const [count, setCount] = useState(slots)
+  useEffect(() => { setCount(slots) }, [slots])
+  const [countError, setCountError] = useState<string | null>(null)
+  const floor = slotFloor(matches)
+  const rowCount = clocks?.length ?? Math.max(count, floor, ...matches.map(m => m.slot + 1))
+  async function changeCount(next: number) {
+    const n = Math.max(floor, Math.min(MAX_MATCH_SLOTS, next))
+    if (n === rowCount) return
+    const prev = count
+    setCount(n)
+    setCountError(null)
+    const res = await setSessionSlots(supabase, tripId, roundId, n)
+    if (!res.ok) { setCount(prev); setCountError(res.reason); return }
+    router.refresh()
+  }
   const bySlot = useMemo(() => new Map(matches.map(m => [m.slot, m])), [matches])
   const [picking, setPicking] = useState<{ slot: number; side: 'a' | 'b' } | null>(null)
   const [query, setQuery] = useState('')
@@ -259,9 +281,31 @@ export default function MatchesSheet({
   }
   const colours = sideColours(twoTags?.[0].color, twoTags?.[1].color)
 
+  const setCountOf = matches.filter(m => m.sideA.length === size && m.sideB.length === size).length
+  const shut = !!onToggle && !expanded
+  const stepBtn = 'w-11 h-11 flex-shrink-0 rounded-button border border-line bg-surface shadow-raised text-ink press ' +
+    'flex items-center justify-center text-xl leading-none hover:border-line-strong ' +
+    'disabled:bg-disabled-bg disabled:text-disabled-fg disabled:border-transparent disabled:shadow-none disabled:cursor-not-allowed'
+
   return (
-    <section className="mb-8">
-      <h2 className="t-h2 text-ink mb-1">{title}</h2>
+    <section className={onToggle ? 'border-t border-line first:border-t-0' : 'mb-8'}>
+      {onToggle ? (
+        <h2>
+          <button type="button" onClick={onToggle} aria-expanded={!!expanded}
+            className="w-full flex items-center gap-3 py-4 text-left">
+            <span className="t-h2 text-ink flex-1 min-w-0 truncate">{title}</span>
+            <span className="t-cap text-ink/65 tabular-nums flex-shrink-0">
+              {setCountOf} of {rowCount} set
+            </span>
+            <span className={`flex-shrink-0 text-ink/65 transition-transform duration-300 ease-out ${expanded ? 'rotate-180' : ''}`}>
+              <IconChevronDown size={18} />
+            </span>
+          </button>
+        </h2>
+      ) : (
+        <h2 className="t-h2 text-ink mb-1">{title}</h2>
+      )}
+      {!shut && <div className={onToggle ? 'pb-6' : ''}>
       <p className="t-cap text-ink/65 mb-3">
         {clocks ? 'Each tee time is one match.' : 'The order of play — each row is one match.'}
         {size > 1 ? ' Two players a side.' : ' One player a side.'}
@@ -279,6 +323,18 @@ export default function MatchesSheet({
       )}
 
       {!(opensLabel && !organiser) && <>
+      {/* How many matches: − takes the last empty one away, + adds one. */}
+      {!clocks && organiser && (
+        <div className={`mb-3 px-3 py-2 flex items-center gap-3 ${cardClass('flat')}`}>
+          <p className="t-label text-ink flex-1">Matches in this session</p>
+          <button type="button" className={stepBtn} disabled={rowCount <= floor}
+            aria-label="One match fewer" onClick={() => void changeCount(rowCount - 1)}>−</button>
+          <span className="t-h2 text-ink tabular-nums w-8 text-center" aria-live="polite">{rowCount}</span>
+          <button type="button" className={stepBtn} disabled={rowCount >= MAX_MATCH_SLOTS}
+            aria-label="One match more" onClick={() => void changeCount(rowCount + 1)}>+</button>
+        </div>
+      )}
+      {countError && <p className="t-cap text-rust-deep mb-3">{countError}</p>}
       {/* The two tags, one each side, staying put while the matches scroll. */}
       {twoTags && (
         <div className="sticky top-[52px] z-10 paper border-b border-line -mx-4 px-4 py-2 mb-2 grid grid-cols-[3.5rem_1fr_2rem_1fr] items-center gap-2">
@@ -364,12 +420,8 @@ export default function MatchesSheet({
         })}
       </ol>
 
-      {!clocks && organiser && (
-        <button type="button" className={`${buttonClass('secondary')} mt-3`} onClick={() => setExtraRows(n => n + 1)}>
-          + Add a match
-        </button>
-      )}
       </>}
+      </div>}
     </section>
   )
 }

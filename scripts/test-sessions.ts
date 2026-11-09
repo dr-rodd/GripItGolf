@@ -24,7 +24,7 @@ import { playSessionCard, sessionResult, type CardHole } from '../lib/matchCard'
 import { foursomesStrokes } from '../lib/matchArrangements'
 import { eventFourthTab, fourthTab } from '../lib/eventHub'
 import { faceOff, tickFills, matchStatus, matchPool, sessionPool, MAX_TICKS } from '../lib/faceOff'
-import { defaultMatchSlots, matchSlotsFor, withSessionSlots, MAX_MATCH_SLOTS } from '../lib/sessions'
+import { defaultMatchSlots, matchSlotsFor, withSessionSlots, MAX_MATCH_SLOTS, slotFloor } from '../lib/sessions'
 import fs from 'fs'
 
 let passed = 0, failed = 0
@@ -542,8 +542,39 @@ section('Two tags facing off: the ticker (Ross, 9 Nov 2026)')
   ok(read('app/dashboard/create/CreateLeagueForm.tsx').includes('rules.slots = slots'), '  …and stores it on the Overall')
   ok(read('app/golf/[root]/[tripCode]/organiser/sessions/SessionsClient.tsx').includes('withSessionSlots(boards, r.id, n)'),
     '  …changed in the organiser area')
-  ok(read('app/golf/[root]/[tripCode]/order/page.tsx').includes('slots={overall.overall?.slots?.[round.id] ?? 0}'),
+  ok(read('app/golf/[root]/[tripCode]/order/page.tsx').includes('slots: slotsOf(round.id)'),
     'the order of play has a row for every match')
+}
+
+section('The order of play: − and +, one session open at a time (Ross, 9 Nov 2026)')
+{
+  const m = (slot: number, a: string[] = [], b: string[] = []) => ({ slot, sideA: a, sideB: b })
+  eq(slotFloor([]), 1, 'a session holds at least one match')
+  eq(slotFloor([m(0, ['x']), m(3, [], ['y'])]), 4, '− never takes away a match with anybody in it')
+  eq(slotFloor([m(0, ['x']), m(5)]), 1, '  …an empty one goes')
+  // Vacant matches are points up for grabs.
+  const rules = { ranks: 'tags' as const, slots: { s1: 6 } }
+  const boards: Leaderboard[] = [overallBoard(rules), sessionBoard({ kind: 'matches', match: 'singles' }, 's1', 'day:s1')]
+  const face = faceOff({
+    rules, tags: [{ id: 'l', name: 'L' }, { id: 'r', name: 'R' }], rows: [], rounds: [{ id: 's1' }],
+    boards, sessionBoardFor, matches: [], tagOf: () => null,
+  })!
+  eq(face.total, 6, 'a vacant match counts in the ticker’s total')
+  const sheet = read('app/golf/[root]/[tripCode]/session/MatchesSheet.tsx')
+  ok(sheet.includes('aria-label="One match fewer"') && sheet.includes('aria-label="One match more"'), 'the order of play has − and + for its matches')
+  ok(sheet.includes('disabled={rowCount <= floor}'), '  …− stopping at the last match with players in it')
+  ok(sheet.includes('{!clocks && organiser && ('), '  …the organiser’s, and never on a tee sheet, whose times decide')
+  ok(!sheet.includes('+ Add a match'), '  …in place of Add a match')
+  ok(sheet.includes('setSessionSlots(supabase, tripId, roundId, n)'), '  …saved as the session’s count')
+  const store = read('lib/sessionMatchStore.ts')
+  ok(store.includes("select('leaderboards').eq('id', tripId)") && store.includes('withSessionSlots(parseLeaderboards('),
+    '  …read fresh and merged, nothing else on the leaderboards put back')
+  const list = read('app/golf/[root]/[tripCode]/order/OrderOfPlayList.tsx')
+  ok(list.includes('open={openId === sheet.roundId}') && list.includes('setOpenId(id => (id === sheet.roundId ? null : sheet.roundId))'),
+    'one session open at a time, its heading opening and closing it')
+  ok(!/^export (const|function) [a-z]/m.test(list), '  …the list exports components only')
+  const page = read('app/golf/[root]/[tripCode]/order/page.tsx')
+  ok(page.includes('sessions.find(s => s.round.id === onlyRound)'), '  …opening on the session asked for, else the one in play')
 }
 
 console.log(`\n${'─'.repeat(56)}`)
