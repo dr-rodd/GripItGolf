@@ -204,7 +204,7 @@ export default async function BracketSetupPage({ params }: {
         <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
           <h1 className="t-h1 text-ink mb-1">No bracket</h1>
           <p className="text-ink/65 text-sm mb-6">
-            A match play event is made from Create an event, Golf tournament, Match play.
+            A knockout is made from Create an event, Golf tournament, then Knockout.
           </p>
           <BackButton href={`${tripHome}/organiser`} label="Organiser" />
         </div>

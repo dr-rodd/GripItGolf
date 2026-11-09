@@ -900,10 +900,10 @@ function Builder({
           />
           <Choice
             on={draft.competition === 'matchplay'}
-            label="Match play"
+            label="Knockout"
             hint={drawTaken
-              ? 'Only one match play bracket can be created at a time.'
-              : 'A knockout bracket.'}
+              ? 'Only one knockout bracket can be made at a time.'
+              : 'A bracket. Win your match and go through.'}
             taken={drawTaken}
             onClick={() => set({ competition: 'matchplay' })}
           />

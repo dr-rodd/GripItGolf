@@ -151,9 +151,10 @@ export default function CreateFlow() {
   if (when === 'standalone') {
     return (
       <Chooser title="Standalone" sub="What format?" onBack={exit}>
-        <Choice title="League" line="Everyone plays, and a leaderboard ranks them."
+        <Choice title="League"
+          line="Everyone plays every round, ranked on a leaderboard. Stroke play, Stableford, or team matches like the Ryder Cup."
           onClick={() => go({ when, format: 'league' })} />
-        <Choice title="Match play" line="A knockout bracket, played out on the day."
+        <Choice title="Knockout" line="A bracket. Win your match and go through to the next round."
           onClick={() => go({ when, format: 'match_play' })} />
       </Chooser>
     )
@@ -168,7 +169,7 @@ export default function CreateFlow() {
         <Choice title="Continuous"
           line="Rounds are periods. Players hand in a card any time in each one."
           onClick={() => go({ when, format: 'continuous' })} />
-        <Choice title="Match play"
+        <Choice title="Knockout"
           line="Players arrange their own matches, with a date to play each round by."
           onClick={() => go({ when, format: 'match_play' })} />
       </Chooser>

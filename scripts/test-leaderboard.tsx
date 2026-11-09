@@ -700,7 +700,7 @@ section('Matchplay')
   const strip = stripOf(three)
   ok(strip.includes('Stableford') && strip.includes('Strokes'),
     'every league board is a chip')
-  ok(strip.includes('Match play'), 'and so is the draw')
+  ok(strip.includes('Knockout'), 'and so is the draw')
   ok(strip.includes('/trip/ABC123/matchplay'),
     'which links out to its own page rather than switching the table below')
 

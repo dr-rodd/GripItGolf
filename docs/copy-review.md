@@ -2000,6 +2000,24 @@ left whole and the long ones are asked about below rather than cut.
 
 ---
 
+## Knockout and Matches (Ross, 9 Nov 2026 — D34, D46)
+
+Two things that were both "match play" on screen are now two words, and "match play" alone is no longer used for either:
+
+- **Knockout** — the bracket: win your match and go through. The chooser's cards (Standalone and Ongoing), the leaderboard form's competition answer, a bracket board's tab ("Knockout", "Pairs knockout"), the leaderboard's chip to the bracket, the bracket page's title, Trip Setup's panel, the organiser area's row (was "Bracket"), and the draw's error messages.
+- **Matches** — match play results counted on a leaderboard (a Ryder Cup session's matches), never drawn as a bracket.
+
+The golf formats keep their names — "Stableford match play" and "Strokes match play · nett" are how a match is *decided*, not what the event is. The privacy notice's "match play results" covers both and stays.
+
+| Where | Was | Now |
+|---|---|---|
+| Chooser, Standalone | League — "Everyone plays, and a leaderboard ranks them." | League — "Everyone plays every round, ranked on a leaderboard. Stroke play, Stableford, or team matches like the Ryder Cup." |
+| Chooser, Standalone | Match play — "A knockout bracket, played out on the day." | Knockout — "A bracket. Win your match and go through to the next round." |
+| Chooser, Ongoing | Match play | Knockout (line unchanged) |
+| Organiser area | Bracket | Knockout |
+
+---
+
 ## Appendix — screens not on the platform
 
 These files still carry copy but nothing on a trip links to them. They're the

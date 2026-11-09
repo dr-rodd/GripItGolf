@@ -564,7 +564,7 @@ export function freeTeamFormats(
  */
 export function unanswered(draft: Partial<Leaderboard>): string[] {
   if (!draft.audience) return ['Who is being ranked']
-  if (!draft.competition) return ['League or match play']
+  if (!draft.competition) return ['League or knockout']
 
   // A draw has nothing else to decide: the bracket is drawn at random and the
   // entrants come from the roster or the pairings.
@@ -821,7 +821,7 @@ export function needsPairings(boards: readonly Leaderboard[]): boolean {
 /** "Team better ball", "Strokes", "Pairs match play" — a board's tab. */
 export function boardTitle(lb: Leaderboard): string {
   if (lb.competition === 'matchplay') {
-    return lb.audience === 'team' ? 'Pairs match play' : 'Match play'
+    return lb.audience === 'team' ? 'Pairs knockout' : 'Knockout'
   }
   const scoring = SCORINGS.find(s => s.key === lb.scoring)?.label ?? 'League'
   const format = ALL_TEAM_FORMATS.find(f => f.key === lb.teamFormat)?.label ?? 'Team'

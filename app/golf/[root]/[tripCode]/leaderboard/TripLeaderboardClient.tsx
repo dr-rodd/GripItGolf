@@ -1467,7 +1467,7 @@ function MatchplayTab({ tripCode }: { tripCode: string }) {
       href={`${tripHome}/matchplay`}
       className={`${chipClass(false)} flex-shrink-0`}
     >
-      Match play
+      Knockout
     </Link>
   )
 }

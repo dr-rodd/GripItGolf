@@ -80,7 +80,7 @@ export default function MatchplayPanel({
   if (loading) {
     return (
       <section className={SECTION}>
-        <p className="t-card text-ink mb-3">Match play</p>
+        <p className="t-card text-ink mb-3">Knockout</p>
         <p className="text-ink/65 text-sm">Checking…</p>
       </section>
     )
@@ -102,7 +102,7 @@ export default function MatchplayPanel({
     <section className={SECTION}>
       <div className="flex items-center justify-between mb-1">
         <p className="t-card text-ink">
-          {pairs ? 'Pairs match play' : 'Match play'}
+          {pairs ? 'Pairs knockout' : 'Knockout'}
         </p>
         {exists && <Pill tone="win">Bracket drawn</Pill>}
       </div>
@@ -203,7 +203,7 @@ export default function MatchplayPanel({
             disabled={busy || !!blocked}
             className={buttonClass('primary')}
           >
-            {busy ? 'Drawing…' : 'Create match play'}
+            {busy ? 'Drawing…' : 'Make the knockout'}
           </button>
         )
       )}

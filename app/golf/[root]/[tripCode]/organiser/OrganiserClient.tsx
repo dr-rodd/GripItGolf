@@ -547,7 +547,7 @@ export default function OrganiserClient({
             {(knockout || isLeague) && (
               <ListRow
                 href={`${tripHome}/organiser/bracket`}
-                label={isLeague ? 'League' : 'Bracket'}
+                label={isLeague ? 'League' : 'Knockout'}
                 hint={isLeague ? formatSummary ?? undefined
                   : [drawSummary, formatSummary].filter(Boolean).join(' ') || 'The draw, its deadlines and settings.'}
               />

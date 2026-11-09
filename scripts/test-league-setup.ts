@@ -399,7 +399,7 @@ section('The tournament door asks when, then what (Ross, 8 Nov 2026)')
     '  …Standalone or Ongoing')
   ok(flow.includes('title="Standalone" sub="What format?"'), 'Standalone asks the format')
   ok(flow.includes('title="Ongoing" sub="What kind of event?"'), 'Ongoing asks the kind of event')
-  for (const t of ['League', 'Match play', 'Series', 'Continuous']) {
+  for (const t of ['League', 'Knockout', 'Series', 'Continuous']) {
     ok(flow.includes(`title="${t}"`), `  …offering ${t}`)
   }
 
@@ -460,6 +460,14 @@ section('The chooser\'s answers read from the address')
     '  …and clearing it leaves ?type alone')
   eq(parentChoice({ when: 'ongoing', format: 'series' }), { when: 'ongoing', format: null }, 'up from a format is its when')
   eq(parentChoice({ when: 'ongoing', format: null }), { when: null, format: null }, 'up from a when is the first question')
+  eq(parseChoice('?when=standalone&format=knockout'), { when: 'standalone', format: 'match_play' }, 'format=knockout reads as the stored match_play (D46)')
+  eq(parseChoice('?when=ongoing&format=knockout'), { when: 'ongoing', format: 'match_play' }, '  …on the Ongoing door too')
+  {
+    const flow = fs.readFileSync('app/dashboard/create/CreateFlow.tsx', 'utf-8')
+    ok(flow.includes('title="Knockout" line="A bracket. Win your match and go through to the next round."'), 'the standalone bracket card is Knockout, with its line')
+    ok(flow.includes('Stroke play, Stableford, or team matches like the Ryder Cup.'), 'the League card says what it covers')
+    ok(!/title="Match play"/.test(flow), 'no chooser card says Match play')
+  }
   eq(FORMATS_FOR.standalone, ['league', 'match_play'], 'Standalone offers League and Match play')
   eq(FORMATS_FOR.ongoing, ['series', 'continuous', 'match_play'], 'Ongoing offers Series, Continuous and Match play')
 }

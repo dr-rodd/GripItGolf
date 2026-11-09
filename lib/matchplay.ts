@@ -118,10 +118,10 @@ export function bracketShape(playerCount: number): BracketShape {
  */
 export function bracketBlockedReason(playerCount: number): string | null {
   if (playerCount < MIN_PLAYERS) {
-    return `Match play needs at least ${MIN_PLAYERS} players. This trip has ${playerCount}.`
+    return `A knockout needs at least ${MIN_PLAYERS} players. This trip has ${playerCount}.`
   }
   if (playerCount > MAX_BRACKET) {
-    return `Match play currently supports up to ${MAX_BRACKET} players. This trip has ${playerCount}.`
+    return `A knockout currently takes up to ${MAX_BRACKET} players. This trip has ${playerCount}.`
   }
   return null
 }
@@ -141,12 +141,12 @@ function assertPlayerCount(playerCount: number) {
   }
   if (playerCount < MIN_PLAYERS) {
     throw new MatchplayError(
-      `A match play bracket needs at least ${MIN_PLAYERS} players. This trip has ${playerCount}.`
+      `A knockout needs at least ${MIN_PLAYERS} players. This trip has ${playerCount}.`
     )
   }
   if (nextPowerOfTwo(playerCount) > MAX_BRACKET) {
     throw new MatchplayError(
-      `Match play currently supports up to ${MAX_BRACKET} players. This trip has ${playerCount}.`
+      `A knockout currently takes up to ${MAX_BRACKET} players. This trip has ${playerCount}.`
     )
   }
 }
@@ -222,11 +222,11 @@ export function bracketFromSlots(
     throw new MatchplayError(`A draw has a power of two places, not ${bracketSize}.`)
   }
   if (bracketSize > MAX_BRACKET) {
-    throw new MatchplayError(`Match play currently supports up to ${MAX_BRACKET} players.`)
+    throw new MatchplayError(`A knockout currently takes up to ${MAX_BRACKET} players.`)
   }
   const placed = slots.filter((p): p is BracketPlayer => p !== null)
   if (placed.length < MIN_PLAYERS) {
-    throw new MatchplayError(`A match play bracket needs at least ${MIN_PLAYERS} players.`)
+    throw new MatchplayError(`A knockout needs at least ${MIN_PLAYERS} players.`)
   }
   if (new Set(placed.map(p => p.id)).size !== placed.length) {
     throw new MatchplayError('The same player appears twice in the bracket.')

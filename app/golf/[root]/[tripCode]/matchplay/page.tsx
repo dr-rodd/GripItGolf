@@ -214,7 +214,7 @@ export default async function MatchplayPage({
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
           {knockout ? <div className="w-11" /> : <BackButton href={`${tripHome}/leaderboard`} />}
           <h1 className="t-h2 text-ink truncate px-2">
-            Match play
+            Knockout
           </h1>
           <div className="w-11" />
         </div>
@@ -223,8 +223,8 @@ export default async function MatchplayPage({
       <div className="max-w-lg mx-auto px-4 py-6">
         {!enabled ? (
           <EmptyState
-            title="Match play isn't switched on"
-            body="Turn it on in Trip Setup, then draw the bracket."
+            title="There's no knockout yet"
+            body="Add a knockout leaderboard in Trip Setup, then draw the bracket."
             tripHome={tripHome}
           />
         ) : matches.length === 0 && drawLiveAt(rawDrawPlan(rawSetup)) ? (

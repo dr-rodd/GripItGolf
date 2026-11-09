@@ -3,8 +3,13 @@
  * copy of which answers make sense together (Ross, 8 Nov 2026).
  *
  *   Golf tournament
- *   ├─ Standalone   → League · Match play
- *   └─ Ongoing      → Series · Continuous · Match play
+ *   ├─ Standalone   → League · Knockout
+ *   └─ Ongoing      → Series · Continuous · Knockout
+ *
+ * On screen the bracket is **Knockout** (Ross, 9 Nov 2026, D34/D46): "match
+ * play" alone now means nothing on screen, because Matches — match play
+ * results counted on a leaderboard — are a different thing. The stored value
+ * stays `match_play`, and `format=knockout` in an address reads as it.
  *
  * `?type=tournament&when=…&format=…`. Kept in the URL rather than in state so
  * the phone's own back gesture, and the arrow on a wizard's first step, both
@@ -38,7 +43,8 @@ export function parseChoice(search: string): TournamentChoice {
   const q = new URLSearchParams(search)
   const when = q.get('when')
   if (when !== 'standalone' && when !== 'ongoing') return { when: null, format: null }
-  const format = q.get('format')
+  const asked = q.get('format')
+  const format = asked === 'knockout' ? 'match_play' : asked
   const offered = FORMATS_FOR[when] as readonly string[]
   return {
     when,

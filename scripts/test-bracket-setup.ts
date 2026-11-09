@@ -123,8 +123,8 @@ section('The bracket in the organiser area is creation\'s own flow (Ross, 5 Nov 
   ok(/saveBracketSetup[\s\S]*select\('bracket_setup'\)\.eq\('id', tripId\)[\s\S]*update\(\{ bracket_setup: base \}\)\.eq\('id', tripId\)/.test(store),
     'the setup is merged into the column read fresh, scoped to its event')
   const organiser = read('app/golf/[root]/[tripCode]/organiser/OrganiserClient.tsx')
-  ok(organiser.includes('/organiser/bracket') && !organiser.includes('/organiser/draw') && organiser.includes("isLeague ? 'League' : 'Bracket'"),
-    'the organiser area has one Bracket row, the draw inside it')
+  ok(organiser.includes('/organiser/bracket') && !organiser.includes('/organiser/draw') && organiser.includes("isLeague ? 'League' : 'Knockout'"),
+    'the organiser area has one Knockout row (D34), the draw inside it')
   ok(read('app/golf/[root]/[tripCode]/organiser/draw/page.tsx').includes('redirect(`${tripHome}/organiser/bracket`)'), '  …an old draw link lands in it')
   ok(!fs.existsSync('app/golf/[root]/[tripCode]/organiser/bracket/BracketSetupForm.tsx'), '  …and the seven-question form is gone')
   const migration = read('supabase/migrations/20260101000047_bracket_setup.sql')

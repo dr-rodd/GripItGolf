@@ -514,7 +514,7 @@ export default async function TripPage({ params, searchParams }: {
 
     if (draw.error) {
       console.error('TripPage matchplay query failed:', draw.error)
-      standingError = standingError ?? 'Could not read the match play draw.'
+      standingError = standingError ?? 'Could not read the knockout draw.'
     }
 
     // The board leading decides what the standing line is. A knockout has no
