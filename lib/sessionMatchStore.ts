@@ -42,6 +42,44 @@ async function hasScores(client: SupabaseClient, tripId: string, matchId: string
  */
 export async function setMatchSide(
   client: SupabaseClient,
+  opts: {
+    tripId: string; roundId: string; slot: number; side: Side; next: string[]; organiser: boolean
+    /** A tee-sheet round: the players' tee times follow their match (`mirrorTeeTimes`). */
+    teeSheet?: boolean
+  },
+): Promise<StoreResult> {
+  const result = await writeSide(client, opts)
+  if (result.ok && opts.teeSheet) await mirrorTeeTimes(client, opts.tripId, opts.roundId)
+  return result
+}
+
+/**
+ * A Matches session's tee sheet is its matches, so each player's tee time
+ * is their match's (slot i is tee time i) — written into `tee_assignments`
+ * so everything that reads a tee time (the home screen's "your time", the
+ * hub module) reads it as it always has. Best effort: a match is saved
+ * whether or not this lands, and the next change puts it right.
+ */
+export async function mirrorTeeTimes(client: SupabaseClient, tripId: string, roundId: string): Promise<void> {
+  const { data, error } = await client.from('session_matches')
+    .select('slot, side_a, side_b').eq('trip_id', tripId).eq('round_id', roundId)
+  if (error) return
+  const wanted = new Map<string, number>()
+  for (const m of (data ?? []) as { slot: number; side_a: string[]; side_b: string[] }[]) {
+    for (const pid of [...m.side_a, ...m.side_b]) wanted.set(pid, m.slot)
+  }
+  const { data: had } = await client.from('tee_assignments')
+    .select('player_id, slot_index').eq('trip_id', tripId).eq('round_id', roundId)
+  const gone = ((had ?? []) as { player_id: string; slot_index: number }[])
+    .filter(a => !wanted.has(a.player_id)).map(a => a.player_id)
+  if (gone.length) await client.from('tee_assignments').delete().eq('trip_id', tripId).eq('round_id', roundId).in('player_id', gone)
+  const rows = [...wanted].filter(([, slot]) => slot < 64)
+    .map(([player_id, slot_index]) => ({ trip_id: tripId, round_id: roundId, player_id, slot_index }))
+  if (rows.length) await client.from('tee_assignments').upsert(rows, { onConflict: 'round_id,player_id' })
+}
+
+async function writeSide(
+  client: SupabaseClient,
   opts: { tripId: string; roundId: string; slot: number; side: Side; next: string[]; organiser: boolean },
 ): Promise<StoreResult> {
   const { tripId, roundId, slot, side, next, organiser } = opts
@@ -78,6 +116,15 @@ export async function setMatchSide(
 
 /** Take a match away altogether — only one nobody has scored, unless the organiser. */
 export async function removeMatch(
+  client: SupabaseClient,
+  opts: { tripId: string; roundId: string; slot: number; organiser: boolean; teeSheet?: boolean },
+): Promise<StoreResult> {
+  const result = await deleteMatch(client, opts)
+  if (result.ok && opts.teeSheet) await mirrorTeeTimes(client, opts.tripId, opts.roundId)
+  return result
+}
+
+async function deleteMatch(
   client: SupabaseClient,
   opts: { tripId: string; roundId: string; slot: number; organiser: boolean },
 ): Promise<StoreResult> {

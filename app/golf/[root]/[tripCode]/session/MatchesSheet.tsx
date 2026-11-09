@@ -18,6 +18,11 @@
  * anybody; a player, where the field books its own tee times, puts
  * themselves on their own side and takes only themselves off. A match with a
  * score keeps its players; with a result, it shows it in the side colours.
+ *
+ * On a tee sheet the time being set is **frozen on every other phone** for
+ * the two minutes, counted down for the booker — the tee sheet's own lock
+ * (lib/teeFreeze.ts, `useTeeFreeze`). The write itself is still a
+ * compare-and-set, so presence is never trusted as a lock.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -31,17 +36,22 @@ import {
 import { setMatchSide, removeMatch } from '@/lib/sessionMatchStore'
 import { sideColours } from '@/lib/matchSides'
 import { formatHandicap } from '@/lib/handicap'
+import { boardNames } from '@/lib/displayNames'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import { buttonClass, cardClass, FIELD, LiveDot } from '@/app/components/ui'
 import { useTripBase } from '../TripBase'
+import { useTeeFreeze } from '../teesheet/useTeeFreeze'
+import { frozenSlots, lockClock } from '@/lib/teeFreeze'
 
 type Player = { id: string; name: string; handicap: number | null }
 type Tag = { id: string; name: string; color: string }
 
 export default function MatchesSheet({
   tripId, tripCode, roundId, title, format, matches, clocks, players, tags, tagOfPlayer,
-  myId, passcodeHash, playersPick,
+  myId, passcodeHash, playersPick, opensLabel = null,
 }: {
+  /** A tee sheet not open to the field yet: when it opens. The organiser sees it and may set matches early. */
+  opensLabel?: string | null
   tripId: string
   tripCode: string
   roundId: string
@@ -80,7 +90,35 @@ export default function MatchesSheet({
   const [rowError, setRowError] = useState<Record<number, string>>({})
   const [busy, setBusy] = useState(false)
 
+  // The tee sheet's freeze: the time this phone is setting is locked on every
+  // other phone; another's lifting means the sheet reads itself again.
+  const freeze = useTeeFreeze(
+    tripId, !!clocks,
+    () => router.refresh(),
+    slot => { setPicking(null); setRowError(e => ({ ...e, [slot]: 'Locked by another user' })) },
+  )
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!freeze.held) return
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [freeze.held])
+  const frozen = clocks ? frozenSlots(freeze.freezes, roundId, freeze.key, now) : new Set<number>()
+  // Two minutes up: the booking closes and the time unlocks — never mid-save.
+  const msLeft = freeze.held ? freeze.held.until - now : null
+  useEffect(() => {
+    if (msLeft !== null && msLeft <= 0 && !busy) { setPicking(null); freeze.release() }
+  }, [msLeft, busy, freeze])
+  const open = (slot: number, side: 'a' | 'b') => {
+    setPicking({ slot, side }); setQuery('')
+    if (clocks) freeze.hold(roundId, slot, true)
+  }
+  const close = () => { setPicking(null); setQuery(''); freeze.release() }
+
   const nameOf = (pid: string) => players.find(p => p.id === pid)?.name ?? 'A player'
+  // What a seat prints: the board's short name — first name, the surname
+  // only where two clash (lib/displayNames.ts).
+  const shortOf = useMemo(() => boardNames(players.map(p => ({ id: p.id, name: p.name, nickname: null }))), [players])
   const hcpOf = (pid: string) => {
     const h = players.find(p => p.id === pid)?.handicap
     return h == null ? 'HCP pending' : `HCP ${formatHandicap(h)}`
@@ -89,6 +127,7 @@ export default function MatchesSheet({
 
   /** Whether this phone may put somebody on this side of this match. */
   const mayAdd = (m: SessionMatchResult | undefined, side: 'a' | 'b') => {
+    if (m && frozen.has(m.slot)) return false
     if (m?.result || m?.live) return organiser
     if (organiser) return true
     if (!playersPick || !myId) return false
@@ -98,16 +137,16 @@ export default function MatchesSheet({
     return !t || tagOf(myId) === t.id
   }
   const mayRemove = (m: SessionMatchResult, pid: string) =>
-    organiser || (!m.result && !m.live && playersPick && pid === myId)
+    !frozen.has(m.slot) && (organiser || (!m.result && !m.live && playersPick && pid === myId))
 
   async function write(slot: number, side: 'a' | 'b', next: string[]) {
     setBusy(true)
     setRowError(e => ({ ...e, [slot]: '' }))
-    const res = await setMatchSide(supabase, { tripId, roundId, slot, side, next, organiser })
+    if (clocks && !freeze.held) freeze.hold(roundId, slot)
+    const res = await setMatchSide(supabase, { tripId, roundId, slot, side, next, organiser, teeSheet: !!clocks })
     setBusy(false)
     if (!res.ok) setRowError(e => ({ ...e, [slot]: res.reason }))
-    setPicking(null)
-    setQuery('')
+    close()
     router.refresh()
   }
 
@@ -147,7 +186,7 @@ export default function MatchesSheet({
             {pid ? (
               <>
                 <span className="min-w-0 flex-1">
-                  <span className="block font-serif font-semibold text-[15px] leading-tight text-ink truncate">{nameOf(pid)}</span>
+                  <span className="block font-serif font-semibold text-[15px] leading-tight text-ink truncate">{shortOf.get(pid) ?? nameOf(pid)}</span>
                   <span className="block t-cap text-ink/65">{hcpOf(pid)}</span>
                 </span>
                 {m && mayRemove(m, pid) && (
@@ -158,7 +197,7 @@ export default function MatchesSheet({
               </>
             ) : mayAdd(m, side) ? (
               <button type="button" disabled={busy} className="w-full h-full t-label text-accent-deep text-left"
-                onClick={() => { setPicking({ slot, side }); setQuery('') }}>
+                onClick={() => open(slot, side)}>
                 + {organiser ? 'Add' : 'Join'}
               </button>
             ) : (
@@ -187,12 +226,17 @@ export default function MatchesSheet({
         {size > 1 ? ' Two players a side.' : ' One player a side.'}
       </p>
 
+      {opensLabel && !organiser && (
+        <p className={`p-4 text-ink/65 text-sm ${cardClass('flat')}`}>Opens {opensLabel}.</p>
+      )}
+
       {!organiser && passcodeHash && (
         <div className="mb-3">
           <InlineUnlock tripCode={tripCode} passcodeHash={passcodeHash} onUnlocked={() => setUnlocked(true)} />
         </div>
       )}
 
+      {!(opensLabel && !organiser) && <>
       {/* The two tags, one each side, staying put while the matches scroll. */}
       {twoTags && (
         <div className="sticky top-[52px] z-10 paper border-b border-line -mx-4 px-4 py-2 mb-2 grid grid-cols-[3.5rem_1fr_2rem_1fr] items-center gap-2">
@@ -208,7 +252,7 @@ export default function MatchesSheet({
           const m = bySlot.get(slot)
           const winner = m?.result === 'a' ? colours.A : m?.result === 'b' ? colours.B : null
           return (
-            <li key={slot} className="py-3">
+            <li key={slot} className={`py-3 ${frozen.has(slot) ? 'opacity-60' : ''}`}>
               <div className="grid grid-cols-[3.5rem_1fr_2rem_1fr] items-center gap-2">
                 <p className="t-data text-ink/80 tabular-nums self-start pt-3">
                   {clocks ? clocks[slot] : `Match ${slot + 1}`}
@@ -218,8 +262,13 @@ export default function MatchesSheet({
                 {seatColumn(slot, 'b')}
               </div>
 
+              {frozen.has(slot) && <p className="t-cap text-ink/65 mt-2 pl-[4rem]">Locked by another user</p>}
+
               {picking?.slot === slot && (
                 <div className={`mt-2 p-3 ${cardClass('flat')}`}>
+                  {msLeft !== null && clocks && (
+                    <p className="t-cap text-ink/65 mb-2 tabular-nums">Time to complete booking · {lockClock(msLeft)}</p>
+                  )}
                   <input type="search" className={FIELD} placeholder="Search players" value={query}
                     onChange={e => setQuery(e.target.value)} aria-label="Search players" />
                   <ul className="mt-2 max-h-60 overflow-y-auto">
@@ -237,13 +286,13 @@ export default function MatchesSheet({
                       </li>
                     )}
                   </ul>
-                  <button type="button" className={`${buttonClass('quiet', false, true)} mt-1`} onClick={() => setPicking(null)}>Cancel</button>
+                  <button type="button" className={`${buttonClass('quiet', false, true)} mt-1`} onClick={close}>Cancel</button>
                 </div>
               )}
 
               {rowError[slot] && <p className="t-cap text-rust-deep mt-2">{rowError[slot]}</p>}
 
-              {m && m.sideA.length > 0 && m.sideB.length > 0 && (
+              {m && m.sideA.length === size && m.sideB.length === size && (
                 <div className="mt-2 flex items-center justify-between gap-2 pl-[4rem]">
                   <p className="t-label flex items-center gap-1.5">
                     {m.live && !m.result && <LiveDot />}
@@ -260,7 +309,7 @@ export default function MatchesSheet({
                 <div className="pl-[4rem] mt-1">
                   <button type="button" className="t-cap text-ink/65 underline" disabled={busy}
                     onClick={async () => {
-                      const res = await removeMatch(supabase, { tripId, roundId, slot, organiser })
+                      const res = await removeMatch(supabase, { tripId, roundId, slot, organiser, teeSheet: !!clocks })
                       if (!res.ok) setRowError(e => ({ ...e, [slot]: res.reason }))
                       router.refresh()
                     }}>
@@ -278,6 +327,7 @@ export default function MatchesSheet({
           + Add a match
         </button>
       )}
+      </>}
     </section>
   )
 }

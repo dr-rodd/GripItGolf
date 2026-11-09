@@ -878,7 +878,7 @@ section('A tee time is seats, two across — partners one ticket (Ross, 31 Oct 2
   ok(client.includes(`<ol className={\`divide-y divide-line \${cardClass()}\`}>`),
     '  …on a card, as the sheet always was')
   const page = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
-  ok(page.includes("select('id, name, claimed, handicap')"), 'each seat carries its player\'s handicap')
+  ok(page.includes("select('id, name, claimed, handicap, gender')"), 'each seat carries its player\'s handicap (and gender, for a Matches session\'s tees)')
 }
 
 // ─── Result ────────────────────────────────────────────────────

@@ -200,8 +200,8 @@ section('An event hides Trip Setup from the field')
     '  …never Trip Setup')
   ok(/ITEMS\[0\], ITEMS\[1\], bracket \? BRACKET_ITEM : ITEMS\[2\],/.test(eventItems),
     'Home bottom left, then Scoring, then the leaderboard or the bracket')
-  ok(eventItems.includes("fourth === 'teeTimes' ? [TEE_TIMES_ITEM] : fourth === 'stats' ? [ITEMS[3]] : []"),
-    '  …then Tee times, else Stats, else nothing')
+  ok(eventItems.includes("fourth === 'teeTimes' ? [TEE_TIMES_ITEM] : fourth === 'orderOfPlay' ? [ORDER_ITEM] : fourth === 'stats' ? [ITEMS[3]] : []"),
+    '  …then Tee times, else the Order of play (a Matches session without tee times), else Stats, else nothing')
   ok(eventItems.trim().endsWith('EVENT_SETTINGS,'), 'Settings is the rightmost tab')
   ok(/: isEvent \? \[[\s\S]*\]\s*: ITEMS/.test(bar), 'a trip keeps its five')
   eq([

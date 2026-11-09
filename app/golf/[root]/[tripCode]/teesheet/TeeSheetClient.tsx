@@ -142,8 +142,14 @@ export default function TeeSheetClient({
   roundTeams, tagOf, playingForTags = false,
   fieldMayEdit, fieldMaySet = false, passcodeHash = null,
   storageReady = true, meId = null, initialRoundId = null, isTrip = false, bookerRecorded = false,
-  addedRecorded = false, editSlot = null,
+  addedRecorded = false, editSlot = null, matchSessions = null,
 }: {
+  /**
+   * A Dynamic Overall Leaderboard's Matches sessions, drawn first as
+   * matches — each tee time one match (lib/sessions.ts, D40). The rounds
+   * handed in above are the stroke sessions, whose sheet is exactly today's.
+   */
+  matchSessions?: React.ReactNode
   tripId: string
   tripCode: string
   rounds: Round[]
@@ -961,8 +967,10 @@ export default function TeeSheetClient({
           </div>
         )}
 
+        {matchSessions}
+
         {!round ? (
-          <p className="t-cap text-ink/65 text-center py-8">
+          matchSessions ? null : <p className="t-cap text-ink/65 text-center py-8">
             No round starts from a tee sheet yet.
           </p>
         ) : !live ? (

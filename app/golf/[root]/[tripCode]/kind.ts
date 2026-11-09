@@ -1,4 +1,6 @@
 import { cache } from 'react'
+import { parseLeaderboards } from '@/lib/leaderboards'
+import { overallOf } from '@/lib/sessions'
 import { supabase } from '@/lib/supabase'
 import { teeSheetInUse } from '@/lib/eventHub'
 
@@ -63,16 +65,19 @@ export const fetchIsKnockout = cache(async (tripCode: string): Promise<boolean> 
  * formats and nothing else — and fail-soft like the rest: a failed read is
  * neither, and the bar is four.
  */
-export const fetchTabExtras = cache(async (tripCode: string): Promise<{ teeTimes: boolean; stats: boolean }> => {
+export const fetchTabExtras = cache(async (tripCode: string): Promise<{ teeTimes: boolean; stats: boolean; orderOfPlay: boolean }> => {
   const { data, error } = await supabase
     .from('trips')
-    .select('track_stats, rounds(start_format)')
+    .select('track_stats, leaderboards, rounds(start_format)')
     .eq('trip_code', tripCode)
     .maybeSingle()
-  if (error || !data) return { teeTimes: false, stats: false }
-  const row = data as { track_stats?: boolean | null; rounds?: { start_format: string | null }[] | null }
+  if (error || !data) return { teeTimes: false, stats: false, orderOfPlay: false }
+  const row = data as { track_stats?: boolean | null; leaderboards?: unknown; rounds?: { start_format: string | null }[] | null }
+  const boards = parseLeaderboards(row.leaderboards)
   return {
     teeTimes: teeSheetInUse((row.rounds ?? []).map(r => r.start_format)),
     stats: row.track_stats === true,
+    // A Matches session is set on the Order of play when there are no tee times.
+    orderOfPlay: !!overallOf(boards) && boards.some(b => b.competition === 'matches'),
   }
 })

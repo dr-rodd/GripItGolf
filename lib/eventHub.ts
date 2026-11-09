@@ -94,15 +94,22 @@ export function describeStart(
 // and the bar is four. Both on, Tee times takes the tab and Stats goes
 // back to the home screen as a module.
 
-export type FourthTab = 'teeTimes' | 'stats'
+export type FourthTab = 'teeTimes' | 'stats' | 'orderOfPlay'
 
-export function eventFourthTab({ teeTimes, stats }: {
+export function eventFourthTab({ teeTimes, stats, orderOfPlay = false }: {
   /** `teeSheetInUse` over the rounds. */
   teeTimes: boolean
   /** `trips.track_stats`. */
   stats: boolean
+  /**
+   * A Dynamic Overall Leaderboard with a Matches session (lib/sessions.ts):
+   * without tee times its matches are set on the Order of play, which then
+   * takes the Tee times tab's place (Ross, 9 Nov 2026, D41). With tee times,
+   * the Tee times tab is where its matches are set.
+   */
+  orderOfPlay?: boolean
 }): FourthTab | null {
-  return teeTimes ? 'teeTimes' : stats ? 'stats' : null
+  return teeTimes ? 'teeTimes' : orderOfPlay ? 'orderOfPlay' : stats ? 'stats' : null
 }
 
 /**
@@ -111,7 +118,7 @@ export function eventFourthTab({ teeTimes, stats }: {
  * sheet, when Tee times takes its place and the stats stay on the trip's
  * home screen (Ross, 26 Oct 2026: tee times on trips, under the same rule).
  */
-export function fourthTab(event: boolean, extras: { teeTimes: boolean; stats: boolean }): FourthTab | null {
+export function fourthTab(event: boolean, extras: { teeTimes: boolean; stats: boolean; orderOfPlay?: boolean }): FourthTab | null {
   return event ? eventFourthTab(extras) : extras.teeTimes ? 'teeTimes' : 'stats'
 }
 

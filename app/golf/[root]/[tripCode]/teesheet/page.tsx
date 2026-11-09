@@ -1,4 +1,10 @@
 import { supabase } from '@/lib/supabase'
+import { overallOf, sessionBoardFor, sessionName } from '@/lib/sessions'
+import { eventTags } from '@/lib/tagBoards'
+import { teeClocks, sheetClock } from '@/lib/teeSheet'
+import { describeTime } from '@/lib/itinerary'
+import MatchesSheet from '../session/MatchesSheet'
+import { readSessionCards, readSessionMatchRows } from '../session/sessionMatches'
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
 import { parseLeaderboards, tagsInPlay } from '@/lib/leaderboards'
@@ -96,7 +102,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
       .eq('kind', 'golf'),
     supabase
       .from('players')
-      .select('id, name, claimed, handicap')
+      .select('id, name, claimed, handicap, gender')
       .eq('trip_id', trip.id)
       .eq('is_composite', false)
       .order('name'),
@@ -205,7 +211,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
   const access = teeSheetAccess((permsResult.data as { event_permissions?: unknown } | null)?.event_permissions)
 
   // Who this phone is — the player who may pick their own time.
-  const roster = (playersResult.data ?? []) as { id: string; name: string; claimed: boolean | null; handicap: number | null }[]
+  const roster = (playersResult.data ?? []) as { id: string; name: string; claimed: boolean | null; handicap: number | null; gender?: string | null }[]
   const me = await currentPlayer(tripCode, roster)
 
   const allTeams = (teamsResult.data ?? []) as {
@@ -294,11 +300,56 @@ export default async function TeeSheetPage({ params, searchParams }: {
     }
   }
 
+  // A Dynamic Overall Leaderboard's Matches sessions with a live sheet: each
+  // tee time is one match, drawn as matches (D40). Every other round — a
+  // stroke session, any trip's or event's round — keeps today's sheet.
+  const overall = overallOf(boards)
+  const matchRounds = overall
+    ? rounds.filter(r => sessionBoardFor(boards, r.id)?.competition === 'matches' && r.sheet.state !== 'vacant')
+    : []
+  const sheetRounds = rounds.filter(r => !matchRounds.includes(r))
+  const matchResults = matchRounds.length > 0
+    ? (await readSessionCards(trip, boards, roster.map(p => ({ ...p, gender: p.gender ?? 'M' })),
+        { teams: allTeams, memberships }, await readSessionMatchRows(trip.id))).results
+    : []
+  const tags = eventTags(allTeams)
+  const tagIdOf = Object.fromEntries(memberships.filter(m => m.team_set === TAG_SET).map(m => [m.player_id, m.team_id]))
+  const matchSessions = matchRounds.length > 0 ? (
+    <>
+      {matchRounds.map(r => {
+        const sheet = r.sheet
+        const clocks = sheet.state === 'active'
+          ? teeClocks(sheet.rules).map(t => describeTime(t))
+          : Array.from({ length: Math.max(1, matchResults.filter(m => m.roundId === r.id).length + 1) }, (_, i) => sheetClock(sheet, i) ?? `Match ${i + 1}`)
+        return (
+          <MatchesSheet
+            key={r.id}
+            tripId={trip.id}
+            tripCode={tripCode}
+            roundId={r.id}
+            title={sessionName(overall!.overall, r.id, r.roundNumber)}
+            format={sessionBoardFor(boards, r.id)!.matchFormat!}
+            matches={matchResults.filter(m => m.roundId === r.id)}
+            clocks={clocks}
+            opensLabel={r.opensLabel}
+            players={roster.map(p => ({ id: p.id, name: p.name, handicap: p.handicap }))}
+            tags={tags}
+            tagOfPlayer={tagIdOf}
+            myId={me && isConfirmed(me) ? me.id : null}
+            passcodeHash={(trip.settings_passcode_hash as string | null) ?? null}
+            playersPick={access.playersPick}
+          />
+        )
+      })}
+    </>
+  ) : null
+
   return (
     <TeeSheetClient
       tripId={trip.id}
       tripCode={tripCode}
-      rounds={rounds}
+      rounds={sheetRounds}
+      matchSessions={matchSessions}
       players={roster.map(p => ({ id: p.id, name: p.name, handicap: p.handicap }))}
       initialAssignments={
         ((assignmentsResult.data ?? []) as {

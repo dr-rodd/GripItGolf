@@ -1691,6 +1691,16 @@ export default function CreateLeagueForm({ schedule, onExit }: {
                 onChange={v => setPerms({ ...perms, set_tee_sheets: v.anyoneMakes, edit_tee_sheet: v.playersPick })}
               />
             )}
+            {/* A Matches session: the tee times — or the order of play —
+                are where its matches are made (Ross, 9 Nov 2026, D42). */}
+            {isDynamic && resolvedFormats(orderedSessions).some(f => f?.kind === 'matches') && (
+              <div className={`p-4 ${cardClass('flat')}`}>
+                <p className="text-ink text-sm font-medium">Tee times decide the matches.</p>
+                <p className="text-ink/65 text-[13px] mt-1 leading-snug">
+                  In a match play session, each tee time is one match: put one side on the left and the other on the right. Without tee times, you set the matches in the order of play.
+                </p>
+              </div>
+            )}
 
             {/* ── How collaborative? ──
                 One question, three toggles, all off until the organiser

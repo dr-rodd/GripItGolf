@@ -21,6 +21,7 @@ import { governingBoard, isPairs } from '../lib/partnerships'
 import { buildRows, type RowContext, type ResolvedScore, type RowHole } from '../lib/boardRows'
 import { overallRows } from '../lib/overallRows'
 import { playSessionCard, sessionResult, type CardHole } from '../lib/matchCard'
+import { eventFourthTab } from '../lib/eventHub'
 import fs from 'fs'
 
 let passed = 0, failed = 0
@@ -317,6 +318,34 @@ section('Knockout and Matches never meet (D34)')
   ok(read('supabase/migrations/20260101000067_session_matches.sql').includes('REFERENCES rounds(id)'),
     'migration 067: a session match belongs to its round, never to a draw')
   ok(!hasMatchplay([sessionBoard({ kind: 'matches', match: 'singles' }, 'r', 'day:r')]), 'a Matches board is not a draw to any bracket reader')
+}
+
+section('Tee times as matches, and the order of play (D40–D42)')
+{
+  eq(eventFourthTab({ teeTimes: false, stats: true, orderOfPlay: true }), 'orderOfPlay',
+    'without tee times a Matches session’s event has the Order of play as its fourth tab')
+  eq(eventFourthTab({ teeTimes: true, stats: true, orderOfPlay: true }), 'teeTimes', '  …with tee times, the Tee times tab is where its matches are set')
+  eq(eventFourthTab({ teeTimes: false, stats: true }), 'stats', '  …and every other event is as it was')
+  const bar = read('app/components/TabBar.tsx')
+  ok(bar.includes("label: 'Order of play'") && bar.includes("fourth === 'orderOfPlay' ? [ORDER_ITEM]"), 'the bar carries Order of play in that place')
+  const page = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
+  ok(page.includes("sessionBoardFor(boards, r.id)?.competition === 'matches'") && page.includes('rounds={sheetRounds}'),
+    'only a Matches session’s sheet is drawn as matches; every other round goes to the sheet as before')
+  ok(page.includes('const matchRounds = overall'), '  …and only on an event with an Overall')
+  const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
+  ok(client.includes('matchSessions ? null : <p className="t-cap text-ink/65 text-center py-8">'),
+    '  …the stroke sheet’s own words untouched when there are no matches')
+  const sheet = read('app/golf/[root]/[tripCode]/session/MatchesSheet.tsx')
+  ok(sheet.includes('const twoTags = tags.length === 2 ? tags : null') && sheet.includes('sticky top-[52px]'),
+    'with exactly two tags, a header names them and stays put')
+  ok(sheet.includes('>vs<'), 'each row reads left side, vs, right side')
+  ok(sheet.includes('useTeeFreeze(') && sheet.includes('Locked by another user') && sheet.includes('Time to complete booking'),
+    'a time being set is frozen on other phones, the booker counting down two minutes')
+  ok(sheet.includes("clocks ? clocks[slot] : `Match ${slot + 1}`"), 'the order of play numbers its rows where the sheet has times')
+  ok(read('lib/sessionMatchStore.ts').includes("from('tee_assignments')"),
+    'a tee-sheet match puts its players on their tee time, so “your time” reads as ever')
+  ok(read('app/dashboard/create/CreateLeagueForm.tsx').includes('Tee times decide the matches.'),
+    'creation says tee times (or the order of play) decide the matches')
 }
 
 // ─── The wizard ────────────────────────────────────────────────

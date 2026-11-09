@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { rehomed } from '@/lib/tripPaths'
 import { useState } from 'react'
 import {
-  IconHome, IconTrophy, IconClipboardList, IconSettings, IconChartBar, IconBracket, IconClock,
+  IconHome, IconTrophy, IconClipboardList, IconSettings, IconChartBar, IconBracket, IconClock, IconUsers,
 } from './icons'
 import type { FourthTab } from '@/lib/eventHub'
 import { RUN_TABS, runActiveKey } from './runTabs'
@@ -70,6 +70,10 @@ const EVENT_SETTINGS =
 /** An event's fourth tab, while a round starts from a tee sheet. */
 const TEE_TIMES_ITEM =
   { key: 'teetimes',    label: 'Tee times',   icon: IconClock,         path: (b: string) => `${b}/teesheet` }
+
+/** The fourth tab of an event whose Matches sessions have no tee times (D41). */
+const ORDER_ITEM =
+  { key: 'order',       label: 'Order of play', icon: IconUsers, path: (b: string) => `${b}/order` }
 
 /** A match play event's middle tab: the draw is its leaderboard. */
 const BRACKET_ITEM =
@@ -188,7 +192,7 @@ export default function TabBar({ tripCode, base: baseProp, isEvent = false, brac
     sport === 'run' ? RUN_TABS
       : isEvent ? [
           ITEMS[0], ITEMS[1], bracket ? BRACKET_ITEM : ITEMS[2],
-          ...(fourth === 'teeTimes' ? [TEE_TIMES_ITEM] : fourth === 'stats' ? [ITEMS[3]] : []),
+          ...(fourth === 'teeTimes' ? [TEE_TIMES_ITEM] : fourth === 'orderOfPlay' ? [ORDER_ITEM] : fourth === 'stats' ? [ITEMS[3]] : []),
           EVENT_SETTINGS,
         ]
       // A trip's five, Tee times in Stats' place while it uses tee sheets.
@@ -215,6 +219,7 @@ export default function TabBar({ tripCode, base: baseProp, isEvent = false, brac
       return fourth === 'stats' || (!isEvent && fourth !== 'teeTimes') ? 'stats' : null
     }
     if (pathname.startsWith(`${base}/teesheet`)) return fourth === 'teeTimes' ? 'teetimes' : null
+    if (pathname.startsWith(`${base}/order`)) return fourth === 'orderOfPlay' ? 'order' : null
     if (pathname.startsWith(`${base}/setup`) || pathname.startsWith(`${base}/teams`)) return 'settings'
     // An event's Settings is the door to the organiser area, so the area
     // and everything behind it keep Settings lit.
