@@ -338,6 +338,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
             myId={me && isConfirmed(me) ? me.id : null}
             passcodeHash={(trip.settings_passcode_hash as string | null) ?? null}
             playersPick={access.playersPick}
+            isTrip={!isEvent(kind)}
           />
         )
       })}

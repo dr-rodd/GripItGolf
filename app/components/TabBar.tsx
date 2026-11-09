@@ -197,6 +197,7 @@ export default function TabBar({ tripCode, base: baseProp, isEvent = false, brac
         ]
       // A trip's five, Tee times in Stats' place while it uses tee sheets.
       : fourth === 'teeTimes' ? [ITEMS[0], ITEMS[1], ITEMS[2], TEE_TIMES_ITEM, ITEMS[4]]
+      : fourth === 'orderOfPlay' ? [ITEMS[0], ITEMS[1], ITEMS[2], ORDER_ITEM, ITEMS[4]]
       : ITEMS
 
   /**
@@ -216,7 +217,7 @@ export default function TabBar({ tripCode, base: baseProp, isEvent = false, brac
     // An event's stats and tee times light their tab while they have one,
     // and nothing otherwise, like the players list.
     if (pathname.startsWith(`${base}/stats`)) {
-      return fourth === 'stats' || (!isEvent && fourth !== 'teeTimes') ? 'stats' : null
+      return fourth === 'stats' || (!isEvent && fourth !== 'teeTimes' && fourth !== 'orderOfPlay') ? 'stats' : null
     }
     if (pathname.startsWith(`${base}/teesheet`)) return fourth === 'teeTimes' ? 'teetimes' : null
     if (pathname.startsWith(`${base}/order`)) return fourth === 'orderOfPlay' ? 'order' : null

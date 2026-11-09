@@ -217,3 +217,19 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D28 | Chooser answers live in the URL; step 1 of a tournament wizard goes back to the chooser | Built |
 | D29 | An event's schedule is golf and activities; travel and stays are a trip's. Stored ones are kept | Built |
 | D30 | Continuous is a league of periods: cards handed in any time inside a period, ranked by best card or best composite card, each period its own result adding to the overall; anyone in the field starts a card by default; periods an equal run adjusted by hand | Built |
+| D34 | **Knockout** (a bracket) and **Matches** (match play results on a leaderboard) are separate in data, readers and words | Built |
+| D35 | The first leaderboard question is **"Enable Dynamic Overall Leaderboard?"**, off by default; Yes runs the sessions, then back to finalise the Overall | Built |
+| D36 | A round in a dynamic event is a **session** with its own format; later sessions start "Same as Session 1"; Format TBC counts nothing until set | Built |
+| D37 | Main leaderboard = Primary (today's) or the Dynamic Overall Leaderboard ("Overall" on screen); secondary boards as before | Built |
+| D38 | Sessions feed the Overall by finishing position (stroke) or per match result (Matches, default 1 / ½ / 0); the Ryder Cup scores per match to the tag | Built |
+| D39 | A session is ranked in its own format; a Matches session shows its matches with results | Built |
+| D40 | In a Matches session a tee time is a match: two tags get a fixed header in their colours, one tag a side, a pair stacked, "vs" between | Built |
+| D41 | Without tee times the same layout is the **Order of play** ("Match 1, Match 2…"), the fourth tab | Built |
+| D42 | The creation form says tee times (or the order of play) decide the matches | Built |
+| D43 | Foursomes: one ball a side off 50% of the combined handicaps | Built (stage 7) |
+| D44 | A session match can be halved; no extra holes | Built |
+| D45 | Session matches have their own scoring permission (Strict: the players and the organiser) | Built |
+| D46 | Standalone cards are **League** and **Knockout**; the Ongoing bracket card is Knockout too | Built |
+| D47 | Events first; trips follow, every existing trip unchanged | Built |
+| D48 | The date-span freeze is fixed first, in the league form and the itinerary builder | Built |
+| D49 | No spectator mode; strict events control who scores matches | Built |

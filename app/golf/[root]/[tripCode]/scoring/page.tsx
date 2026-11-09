@@ -142,7 +142,8 @@ export default async function TripCoursePortalPage({
   // An event with a Dynamic Overall Leaderboard: its sessions, and a
   // Matches session's matches from this phone's side (lib/sessions.ts).
   const sessionBoards = boardsForTrip(trip)
-  const overall = event ? overallOf(sessionBoards) : null
+  // Trips too (stage 8): an Overall is what turns a round into a session.
+  const overall = overallOf(sessionBoards)
   const hasMatchSessions = !!overall && sessionBoards.some(b => b.competition === 'matches')
   const [{ data: openData, error: openErr }, itemsRes, roundCards, knockoutRead, sessionRead] = await Promise.all([
     roundIds.length > 0

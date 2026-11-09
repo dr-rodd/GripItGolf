@@ -21,7 +21,9 @@ type Round = { id: string; roundNumber: number; courseName: string | null }
 
 const STROKE: SessionFormat = { kind: 'stroke', audience: 'individual', scoring: 'stableford' }
 
-export default function SessionsClient({ tripId, tripCode, rounds, initialBoards, playerCount, tagCount }: {
+export default function SessionsClient({ tripId, tripCode, rounds, initialBoards, playerCount, tagCount, isTrip = false }: {
+  /** A trip: back to Trip Setup, and said as a trip (the lead player's). */
+  isTrip?: boolean
   tripId: string
   tripCode: string
   rounds: Round[]
@@ -51,7 +53,7 @@ export default function SessionsClient({ tripId, tripCode, rounds, initialBoards
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={`${tripHome}/organiser`} />
+      <TripHeader backTo={isTrip ? `${tripHome}/setup` : `${tripHome}/organiser`} />
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
         <h1 className="t-h1 text-ink mb-1">Session formats</h1>
         <p className="text-ink/65 text-sm mb-6 leading-snug">
@@ -64,7 +66,7 @@ export default function SessionsClient({ tripId, tripCode, rounds, initialBoards
           <div className={`p-4 ${cardClass()}`}>
             <p className="t-card text-ink">The Dynamic Overall Leaderboard is off</p>
             <p className="t-cap text-ink/65 mt-1 leading-snug">
-              Turn it on and each round becomes a session, playing the event&apos;s leaderboard format to start with.
+              Turn it on and each round becomes a session, playing the {isTrip ? 'trip' : 'event'}&apos;s leaderboard format to start with.
               Your leaderboards stay, beside the Overall.
             </p>
             <button type="button" className={`${buttonClass('primary')} mt-4`}

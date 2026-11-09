@@ -48,8 +48,10 @@ type Tag = { id: string; name: string; color: string }
 
 export default function MatchesSheet({
   tripId, tripCode, roundId, title, format, matches, clocks, players, tags, tagOfPlayer,
-  myId, passcodeHash, playersPick, opensLabel = null,
+  myId, passcodeHash, playersPick, opensLabel = null, isTrip = false,
 }: {
+  /** A trip's: its passcode and lead player, never a PIN and organiser. */
+  isTrip?: boolean
   /** A tee sheet not open to the field yet: when it opens. The organiser sees it and may set matches early. */
   opensLabel?: string | null
   tripId: string
@@ -232,7 +234,8 @@ export default function MatchesSheet({
 
       {!organiser && passcodeHash && (
         <div className="mb-3">
-          <InlineUnlock tripCode={tripCode} passcodeHash={passcodeHash} onUnlocked={() => setUnlocked(true)} />
+          <InlineUnlock tripCode={tripCode} passcodeHash={passcodeHash} onUnlocked={() => setUnlocked(true)}
+            {...(isTrip ? { prompt: 'Lead player? Enter the passcode to edit.' } : {})} />
         </div>
       )}
 

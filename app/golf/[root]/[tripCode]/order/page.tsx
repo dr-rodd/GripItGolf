@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import { isEvent } from '@/lib/eventHub'
 import { supabase } from '@/lib/supabase'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
@@ -78,6 +79,7 @@ export default async function OrderOfPlayPage({ params, searchParams }: {
             myId={me?.id ?? null}
             passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null}
             playersPick={access.playersPick}
+            isTrip={!isEvent((trip as { kind?: unknown }).kind)}
           />
         ))}
       </div>

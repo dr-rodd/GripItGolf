@@ -201,7 +201,7 @@ export default async function TripLeaderboardPage({
 
   // A Dynamic Overall Leaderboard's Matches sessions: each match and where
   // it stands, read on the server — what the Overall counts them from.
-  const sessionMatches = event && overallOf(boards) && boards.some(b => b.competition === 'matches')
+  const sessionMatches = overallOf(boards) && boards.some(b => b.competition === 'matches')
     ? await readSessionResults(trip, boards,
         (playersRes.data ?? []) as { id: string; name: string; handicap: number | null; gender: string }[],
         { teams: (teamsRes.data ?? []) as { id: string; name: string }[], memberships })

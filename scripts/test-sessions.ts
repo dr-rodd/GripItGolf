@@ -22,7 +22,7 @@ import { buildRows, type RowContext, type ResolvedScore, type RowHole } from '..
 import { overallRows } from '../lib/overallRows'
 import { playSessionCard, sessionResult, type CardHole } from '../lib/matchCard'
 import { foursomesStrokes } from '../lib/matchArrangements'
-import { eventFourthTab } from '../lib/eventHub'
+import { eventFourthTab, fourthTab } from '../lib/eventHub'
 import fs from 'fs'
 
 let passed = 0, failed = 0
@@ -364,6 +364,26 @@ section('Tee times as matches, and the order of play (D40–D42)')
     'a tee-sheet match puts its players on their tee time, so “your time” reads as ever')
   ok(read('app/dashboard/create/CreateLeagueForm.tsx').includes('Tee times decide the matches.'),
     'creation says tee times (or the order of play) decide the matches')
+}
+
+section('Trips follow events, every existing trip unchanged (stage 8, D47)')
+{
+  eq(fourthTab(false, { teeTimes: false, stats: true }), 'stats', 'a trip keeps Stats in fourth place, as ever')
+  eq(fourthTab(false, { teeTimes: true, stats: true }), 'teeTimes', '  …and Tee times in its place while it uses tee sheets')
+  eq(fourthTab(false, { teeTimes: false, stats: true, orderOfPlay: true }), 'orderOfPlay',
+    '  …and the Order of play once a session of its Overall plays Matches')
+  const setup = read('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx')
+  ok(setup.includes('boards={boards.filter(b => !isOverallBoard(b) && !isSessionBoard(b))}')
+    && setup.includes('...boards.filter(b => isOverallBoard(b) || isSessionBoard(b)),'),
+    'Trip Setup’s leaderboards never show the Overall or a session’s board, and never drop them on save')
+  ok(setup.includes('`${tripHome}/setup/sessions`'), 'Trip Setup has the Session formats door')
+  const page = read('app/golf/[root]/[tripCode]/organiser/sessions/page.tsx')
+  ok(!page.includes('!isEvent(trip.kind)') && page.includes('isTrip={!event}'), 'one Session formats page serves a trip and an event')
+  ok(read('app/golf/[root]/[tripCode]/setup/sessions/page.tsx').includes("export { default } from '../../organiser/sessions/page'"),
+    '  …reached on a trip from Trip Setup')
+  ok(read('app/golf/[root]/[tripCode]/scoring/page.tsx').includes('const overall = overallOf(sessionBoards)'),
+    'the Scoring tab reads a trip’s sessions too')
+  ok(!read('app/golf/[root]/[tripCode]/leaderboard/page.tsx').includes('event && overallOf(boards)'), '  …and the leaderboard')
 }
 
 // ─── The wizard ────────────────────────────────────────────────

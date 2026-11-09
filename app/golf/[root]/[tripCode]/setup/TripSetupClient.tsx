@@ -1,5 +1,6 @@
 'use client'
 
+import { isOverallBoard, isSessionBoard } from '@/lib/sessions'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -778,15 +779,31 @@ export default function TripSetupClient({
           <LeaderboardSetup
             title="Leaderboards"
             hint="Add as many as you like."
-            boards={boards}
+            // The Overall and its sessions' own boards are set on Session
+            // formats, never here (lib/sessions.ts) — kept aside and put
+            // back on every save, so nothing here can drop them.
+            boards={boards.filter(b => !isOverallBoard(b) && !isSessionBoard(b))}
             playerCount={players.length}
             teamCount={teams.length}
             rounds={rounds}
             readOnly={!canArrange}
             askTeeTeams={askTeeTeams}
             askTags={askTags}
-            onChange={saveBoards}
+            onChange={next => saveBoards([
+              ...boards.filter(b => isOverallBoard(b) || isSessionBoard(b)),
+              ...next,
+            ])}
           />
+          {/* The Dynamic Overall Leaderboard's own door (Ross, 9 Nov 2026):
+              each round a session in its own format, feeding one Overall. */}
+          <Link href={`${tripHome}/setup/sessions`} className={`mt-3 block px-4 py-3 ${cardClass('raised', true)}`}>
+            <p className="t-label text-ink">Session formats</p>
+            <p className="t-cap text-ink/65 mt-0.5">
+              {boards.some(isOverallBoard)
+                ? 'Each session’s format, and how it feeds the Overall.'
+                : 'Dynamic Overall Leaderboard is off — for golf that changes format round to round.'}
+            </p>
+          </Link>
           {boards.length > 0 && needsTeams(boards) && teams.length === 0 && (
             <p className="t-cap text-rust-deep mt-3">
               {needsPairings(boards)

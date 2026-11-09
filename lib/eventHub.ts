@@ -119,7 +119,8 @@ export function eventFourthTab({ teeTimes, stats, orderOfPlay = false }: {
  * home screen (Ross, 26 Oct 2026: tee times on trips, under the same rule).
  */
 export function fourthTab(event: boolean, extras: { teeTimes: boolean; stats: boolean; orderOfPlay?: boolean }): FourthTab | null {
-  return event ? eventFourthTab(extras) : extras.teeTimes ? 'teeTimes' : 'stats'
+  return event ? eventFourthTab(extras)
+    : extras.teeTimes ? 'teeTimes' : extras.orderOfPlay ? 'orderOfPlay' : 'stats'
 }
 
 // ─── The home screen's modules ─────────────────────────────────

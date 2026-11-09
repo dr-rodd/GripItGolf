@@ -666,3 +666,24 @@ overview, or one column at a time), not a rebuild.
      `round_number` (and the deadlines line up from the Final back, as
      `drawDeadlines` already does), and the stored `roundLinks` by number
      need shifting with it — the one awkward part, to be designed then.
+
+
+---
+
+## 3. The Ryder Cup (sessions, Matches and the Dynamic Overall Leaderboard)
+
+### The story
+
+Twenty-four players in two tags, USA and Europe. Five sessions over three days — foursomes, fourball, foursomes, fourball, singles — the pairings changing every session, set by the captains. Each match is worth a point, a half ½, and the tags' points add up to an overall. A strict event, watched mostly by people with the code. The same machinery serves smaller events: Stableford on day one, a fourball better ball on day two, one overall at the end.
+
+### What is built (9 November 2026, stages 1–8 of `docs/sessions-plan.md`)
+
+- **Creation**: a standalone league asks "Enable Dynamic Overall Leaderboard?" after the field. Yes sets the running order as sessions (day, venue, name, format — "Same as Session 1", Change format, Format TBC) and then finalises the Overall: what it ranks (tags, individuals, teams) and how each session feeds it. The tee times question says that tee times — or the order of play — decide the matches.
+- **The Overall** (`lib/overallRows.ts`): stroke sessions pay by position, Matches sessions per match (1 / ½ / 0), TBC nothing; ties shared; "14½ to win" when every session is Matches. On the leaderboard: Overall · Session 1 · …, each session in its own format.
+- **Matches** (migration 067): a match is a `session_matches` row, set on the tee sheet (each tee time a match) or the Order of play; scored on the match card's session mode — eighteen holes, a half a result. Foursomes is one ball a side off half the combined handicaps.
+- **Session formats** in the organiser area (and Trip Setup on a trip): change a format or make it TBC, rename, set feeds, turn the Overall on or off.
+
+### Open, for later
+
+- Changing a stroke session's tee sheet into a Matches one after players are booked keeps their bookings but not as matches — the organiser re-sets the matches.
+- No "holder retains"; ties on the Overall are shared, by decision.

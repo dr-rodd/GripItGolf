@@ -13,7 +13,9 @@ export const dynamic = 'force-dynamic'
  * Session formats — the Dynamic Overall Leaderboard after creation (Ross,
  * 9 Nov 2026; lib/sessions.ts): each session's format (or TBC), its name,
  * how it feeds the Overall and what the Overall ranks, and turning the
- * Overall on or off. Behind the organiser PIN, events only.
+ * Overall on or off. Behind the organiser PIN on an event, the Trip Setup
+ * passcode on a trip (stage 8 — trips follow events, D47); reached on a trip
+ * at /setup/sessions, which is this page.
  */
 export default async function SessionsPage({ params }: {
   params: Promise<{ root: string; tripCode: string }>
@@ -28,17 +30,16 @@ export default async function SessionsPage({ params }: {
     .single()
   if (error) console.error('SessionsPage trip query failed:', error)
 
-  if (!trip || !isEvent(trip.kind)) {
+  if (!trip) {
     return (
       <main className="min-h-dvh has-tabbar flex flex-col items-center justify-center paper px-6 text-center">
-        <p className="t-h2 text-ink mb-3">{trip ? 'This is a trip' : 'Event not found'}</p>
-        <p className="text-ink/65 text-sm mb-8 max-w-[22rem] leading-relaxed">
-          {trip ? 'Session formats belong to events.' : 'Check the code and try again.'}
-        </p>
-        <BackButton href={trip ? tripHome : '/'} label={trip ? 'Trip' : 'Home'} />
+        <p className="t-h2 text-ink mb-3">Not found</p>
+        <p className="text-ink/65 text-sm mb-8 max-w-[22rem] leading-relaxed">Check the code and try again.</p>
+        <BackButton href="/" label="Home" />
       </main>
     )
   }
+  const event = isEvent(trip.kind)
 
   const [roundsRes, playersRes, tagsRes] = await Promise.all([
     supabase.from('rounds').select('id, round_number, courses(name)').eq('trip_id', trip.id).order('round_number'),
@@ -61,6 +62,7 @@ export default async function SessionsPage({ params }: {
       initialBoards={parseLeaderboards(trip.leaderboards)}
       playerCount={playersRes.count ?? 0}
       tagCount={tagsRes.count ?? 0}
+      isTrip={!event}
     />
   )
 
@@ -71,7 +73,7 @@ export default async function SessionsPage({ params }: {
         tripName={trip.name}
         passcodeHash={trip.settings_passcode_hash as string}
         title="Session formats"
-        hint={`Enter the organiser PIN for ${trip.name}.`}
+        hint={event ? `Enter the organiser PIN for ${trip.name}.` : `Enter the passcode for ${trip.name}.`}
       >
         {content}
       </PasscodeGate>

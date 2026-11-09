@@ -69,6 +69,8 @@ Session matches live in their own table and their boards are `'matches'`, never 
 
 ## Stages
 
+**All eight shipped on 9 November 2026** — 1 `8da50c7`, 2 `879132a`, 3 `2664413`, 4 `355d04b`, 5 `5eb19ea`, 6 `41ca5fa`, 7 `644cac2`, 8 this commit. Two departures from the plan as written: **no migration 068** — a Matches session's tee sheet reads its matches from `session_matches` and mirrors each player's tee time into `tee_assignments`, so `tee_assignments` needed no `side` column; and stages 5 and 6 share one sheet (`session/MatchesSheet.tsx`), the order of play from the start.
+
 Each stage ships alone. Every stage keeps the brief's section 8 tests green, including "No answers today's flow byte for byte" (golden tests on an event made without an Overall).
 
 1. ~~**The date freeze.**~~ Shipped.

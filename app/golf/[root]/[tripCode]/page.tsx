@@ -349,8 +349,15 @@ export default async function TripPage({ params, searchParams }: {
   const teeSheet = teeSheetInUse(rounds.map(startFormatOf))
   // The bar's fourth tab (lib/eventHub.ts). Stats with a tab of their own
   // are not on the home screen too — only when the tee times have it.
-  const fourthTab = isEvent ? eventFourthTab({ teeTimes: teeSheet, stats: trip.track_stats === true }) : null
-  const statsOnHome = !isEvent || fourthTab === 'teeTimes'
+  // The Order of play holds the fourth tab while a Matches session has no
+  // tee times (lib/sessions.ts); the stats then live on the home screen, as
+  // they do behind Tee times.
+  const hasOrderOfPlay = (() => {
+    const b = parseLeaderboards(trip.leaderboards)
+    return !!overallOf(b) && b.some(x => x.competition === 'matches')
+  })()
+  const fourthTab = isEvent ? eventFourthTab({ teeTimes: teeSheet, stats: trip.track_stats === true, orderOfPlay: hasOrderOfPlay }) : null
+  const statsOnHome = !isEvent || fourthTab === 'teeTimes' || fourthTab === 'orderOfPlay'
   const teeRound = teeSheet ? hubTeeRound(
     rounds
       .filter(r => parseStartFormat(startFormatOf(r)) === 'tee_sheet')
@@ -478,7 +485,7 @@ export default async function TripPage({ params, searchParams }: {
   // next match is drawn from them (lib/sessions.ts).
   const hubBoards = parseLeaderboards(trip.leaderboards)
   const hubSessions: { boards: typeof hubBoards; sessionMatches?: Awaited<ReturnType<typeof readSessionResults>> } =
-    isEvent && overallOf(hubBoards) && hubBoards.some(b => b.competition === 'matches')
+    overallOf(hubBoards) && hubBoards.some(b => b.competition === 'matches')
       ? await (async () => {
           const [pl, tm, mb] = await Promise.all([
             supabase.from('players').select('id, name, handicap, gender').eq('trip_id', trip.id).eq('is_composite', false),
