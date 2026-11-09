@@ -4,7 +4,7 @@ import { readRoundHandicaps } from '@/lib/scoreReads'
 import type { Leaderboard } from '@/lib/leaderboards'
 import { allowanceOf } from '@/lib/handicapAllowance'
 import { teesForPlayer } from '@/lib/courseHandicap'
-import { matchStrokes, parseMatchTees } from '@/lib/matchArrangements'
+import { matchStrokes, foursomesStrokes, parseMatchTees } from '@/lib/matchArrangements'
 import { playSessionCard, type CardHole, type CardSideView } from '@/lib/matchCard'
 import { sessionBoardFor, defaultTeeIndex, type SessionMatchResult, type MatchFormat } from '@/lib/sessions'
 import { tagOfTeam } from '@/lib/tagBoards'
@@ -147,24 +147,51 @@ export async function readSessionCards(
       setups.set(row.id, { ...base, blocked: 'sides' }); results.push(result); continue
     }
     const allowance = board ? allowanceOf(board) : 100
-    const strokes = matchStrokes(ids.map(pid => {
+    const asPlayer = (pid: string) => {
       const t = tees.find(x => x.id === teeOf[pid])
       const rated = t && t.slope != null && t.course_rating != null && t.par != null
         ? { slope: t.slope, course_rating: t.course_rating, par: t.par } : null
       return { playerId: pid, index: playerById.get(pid)?.handicap ?? null, tee: rated }
-    }), allowance)
+    }
     const holes = round ? (holesOf.get(round.course_id) ?? []).slice(0, 18) : []
-    if (!strokes) { setups.set(row.id, { ...base, blocked: 'handicaps' }); results.push(result); continue }
+    // Foursomes: one ball a side, off half the partners' combined handicaps
+    // (`foursomesStrokes`) — the side is one entry on the card, its score
+    // kept under its first player (D43, stage 7).
+    const foursomes = format === 'foursomes'
+      ? foursomesStrokes([
+          { key: 'A', players: row.side_a.map(asPlayer) },
+          { key: 'B', players: row.side_b.map(asPlayer) },
+        ], allowance)
+      : null
+    const strokes = format === 'foursomes' ? null : matchStrokes(ids.map(asPlayer), allowance)
+    if (format === 'foursomes' ? !foursomes : !strokes) { setups.set(row.id, { ...base, blocked: 'handicaps' }); results.push(result); continue }
     if (holes.length < 18) { setups.set(row.id, { ...base, blocked: 'scorecard' }); results.push(result); continue }
-    const receives = new Map(strokes.map(s => [s.playerId, s.receives]))
-    const side = (key: 'A' | 'B', sideIds: string[]): CardSideView => ({
-      id: `${row.id}:${key}`,
-      name: sideName(sideIds, players, ctx.teams, ctx.memberships),
-      players: sideIds.flatMap(pid => {
-        const p = playerById.get(pid)
-        return p ? [{ id: pid, name: p.name, gender: p.gender, receives: receives.get(pid) ?? 0 }] : []
-      }),
-    })
+    const receives = new Map((strokes ?? []).map(s => [s.playerId, s.receives]))
+    const side = (key: 'A' | 'B', sideIds: string[]): CardSideView => {
+      const name = sideName(sideIds, players, ctx.teams, ctx.memberships)
+      if (foursomes) {
+        const lead = playerById.get(sideIds[0])
+        const both = sideIds.map(id => playerById.get(id)?.name.split(' ')[0] ?? 'A player').join(' & ')
+        return {
+          id: `${row.id}:${key}`,
+          name,
+          // A mixed pair plays the men's stroke index unless both are women.
+          players: lead ? [{
+            id: lead.id, name: both,
+            gender: sideIds.every(id => playerById.get(id)?.gender === 'F') ? 'F' : 'M',
+            receives: foursomes.find(f => f.key === key)?.receives ?? 0,
+          }] : [],
+        }
+      }
+      return {
+        id: `${row.id}:${key}`,
+        name,
+        players: sideIds.flatMap(pid => {
+          const p = playerById.get(pid)
+          return p ? [{ id: pid, name: p.name, gender: p.gender, receives: receives.get(pid) ?? 0 }] : []
+        }),
+      }
+    }
     const card = { a: side('A', row.side_a), b: side('B', row.side_b), holes }
     setups.set(row.id, { ...base, card })
     const scores = scoresOf.get(row.id)

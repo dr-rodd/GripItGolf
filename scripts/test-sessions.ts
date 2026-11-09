@@ -21,6 +21,7 @@ import { governingBoard, isPairs } from '../lib/partnerships'
 import { buildRows, type RowContext, type ResolvedScore, type RowHole } from '../lib/boardRows'
 import { overallRows } from '../lib/overallRows'
 import { playSessionCard, sessionResult, type CardHole } from '../lib/matchCard'
+import { foursomesStrokes } from '../lib/matchArrangements'
 import { eventFourthTab } from '../lib/eventHub'
 import fs from 'fs'
 
@@ -65,14 +66,31 @@ section('A session’s format')
     ['y', 'z', 'x'], 'the running order is by day, then as listed')
 }
 
-section('Foursomes and, until stage 5, Matches are offered but not pickable')
+section('Matches, foursomes included, can be picked (stages 5 and 7)')
 {
-  const four = MATCH_FORMATS.find(m => m.key === 'foursomes')
-  ok(!!four && !four.available, 'foursomes is in the list, not available (D43)')
-  if (!MATCHES_READY) {
-    ok(/coming soon/.test(sessionsIssue([draft('a', 0, singles)]) ?? ''), 'a Matches session cannot be saved before the card can score one')
-  }
-  ok(/coming soon/.test(sessionsIssue([draft('a', 0, { kind: 'matches', match: 'foursomes' })]) ?? ''), 'nor can foursomes')
+  ok(MATCHES_READY, 'Matches are pickable now the card scores them')
+  ok(MATCH_FORMATS.every(m => m.available), '  …singles, fourball and foursomes alike (D43, built at stage 7)')
+  eq(sessionsIssue([draft('a', 0, { kind: 'matches', match: 'foursomes' })]), null, 'a foursomes session can be saved')
+  eq(sessionBoard({ kind: 'matches', match: 'foursomes' }, 'r', 'day:r').handicapAllowance, 50,
+    '  …at the usual 50% unless the organiser says otherwise')
+}
+
+section('Foursomes: half the partners’ combined handicaps, rounded once')
+{
+  const tee = { slope: 113, course_rating: 72, par: 72 }
+  const p = (playerId: string, index: number) => ({ playerId, index, tee })
+  // A: 10.4 + 5.3 = 15.7 → 50% = 7.85 → 8. B: 20.6 + 3.3 = 23.9 → 11.95 → 12.
+  eq(foursomesStrokes([{ key: 'A', players: [p('a1', 10.4), p('a2', 5.3)] }, { key: 'B', players: [p('b1', 20.6), p('b2', 3.3)] }], 50),
+    [{ key: 'A', playing: 8, receives: 0 }, { key: 'B', playing: 12, receives: 4 }],
+    'each side plays off half its combined handicap; the higher receives the difference')
+  // 5.3 and 5.3: halves rounded apart are 3 + 3 = 6; the half of the sum is 5.3 → 5.
+  eq(foursomesStrokes([{ key: 'A', players: [p('a1', 5.3), p('a2', 5.3)] }, { key: 'B', players: [p('b1', 0), p('b2', 0)] }], 50)?.[0].playing, 5,
+    '  …the sum taken first and rounded once, never two halves rounded apart')
+  eq(foursomesStrokes([{ key: 'A', players: [{ playerId: 'x', index: null, tee }] }, { key: 'B', players: [p('b', 1)] }], 50), null,
+    '  …and nothing while a handicap is pending')
+  const reader = read('app/golf/[root]/[tripCode]/session/sessionMatches.ts')
+  ok(reader.includes("format === 'foursomes'") && reader.includes('foursomesStrokes(['),
+    'a foursomes match is scored one ball a side, off the combined figure')
 }
 
 // ─── Boards ────────────────────────────────────────────────────

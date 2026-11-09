@@ -122,9 +122,10 @@ export function allowedHandicap(courseHandicap: number, allowance: number): numb
  * hero, cut the dead weight — which is four-ball in everything but name, so it
  * takes the four-ball figure.
  *
- * Two allowances in those tables have nowhere to land yet. Foursomes is 50% of
- * the partners' *combined* handicaps, and this platform has no alternate-shot
- * format to attach that to. Four-ball match play is 90% of the difference from
+ * Two allowances in those tables live elsewhere. Foursomes is 50% of the
+ * partners' *combined* handicaps — a session's foursomes matches, worked out
+ * by `foursomesStrokes` in lib/matchArrangements.ts (the sum taken first,
+ * rounded once), never a board's per-player figure. Four-ball match play is 90% of the difference from
  * the lowest player, which is a different shape of calculation altogether —
  * matchplay here is scored hole by hole off each player's own card, so the
  * draw is left at full and says so.

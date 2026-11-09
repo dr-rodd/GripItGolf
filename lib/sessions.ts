@@ -41,7 +41,7 @@ export const MATCH_FORMATS: {
 }[] = [
   { key: 'singles', label: 'Singles', hint: 'One against one.', side: 1, available: true },
   { key: 'fourball', label: 'Fourball', hint: 'Two against two, the better ball of each pair on every hole.', side: 2, available: true },
-  { key: 'foursomes', label: 'Foursomes', hint: 'Two against two, one ball a side, hitting alternate shots.', side: 2, available: false },
+  { key: 'foursomes', label: 'Foursomes', hint: 'Two against two, one ball a side, hitting alternate shots. Off half the partners’ combined handicaps.', side: 2, available: true },
 ]
 
 /**

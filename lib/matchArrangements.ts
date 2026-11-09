@@ -170,3 +170,27 @@ export function walkoverChoices(
   if (m.winner !== null || !viewerEntrant || !isMine(m, viewerEntrant)) return []
   return [m.sideA === viewerEntrant ? m.sideB : m.sideA]
 }
+
+/**
+ * Foursomes: one ball a side, hitting alternate shots (Ross, 9 Nov 2026,
+ * D43; docs/sessions-plan.md, stage 7). Each side plays off the allowance —
+ * 50% by the WHS tables — of its partners' **combined** course handicaps,
+ * taken off the unrounded figures and rounded once, never per player (two
+ * halves rounded separately can be a shot from the half of the sum). The
+ * side with more receives the difference, as every match does.
+ *
+ * Null while any player's handicap or tee is unknown.
+ */
+export function foursomesStrokes(
+  sides: readonly { key: string; players: readonly MatchPlayer[] }[],
+  allowance: number,
+): { key: string; playing: number; receives: number }[] | null {
+  if (sides.length !== 2) return null
+  if (sides.some(s => s.players.length === 0 || s.players.some(p => p.index === null || p.tee === null))) return null
+  const rows = sides.map(s => {
+    const combined = s.players.reduce((sum, p) => sum + exactCourseHandicap(p.index as number, p.tee as TeeRating), 0)
+    return { key: s.key, playing: allowedHandicap(combined, allowance) }
+  })
+  const lowest = Math.min(...rows.map(r => r.playing))
+  return rows.map(r => ({ ...r, receives: r.playing - lowest }))
+}
