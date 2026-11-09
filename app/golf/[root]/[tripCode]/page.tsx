@@ -1,4 +1,6 @@
 import { cache } from 'react'
+import { readSessionResults } from './session/sessionMatches'
+import { overallOf, sessionName, bySlot } from '@/lib/sessions'
 import type { Metadata } from 'next'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
@@ -471,6 +473,29 @@ export default async function TripPage({ params, searchParams }: {
   let myStats: PlayerStats | null = null
   let statsCover: Coverage | null = null
 
+  // A Dynamic Overall Leaderboard's Matches sessions: every match and where
+  // it stands — the Overall's standing reads them, and the player's own
+  // next match is drawn from them (lib/sessions.ts).
+  const hubBoards = parseLeaderboards(trip.leaderboards)
+  const hubSessions: { boards: typeof hubBoards; sessionMatches?: Awaited<ReturnType<typeof readSessionResults>> } =
+    isEvent && overallOf(hubBoards) && hubBoards.some(b => b.competition === 'matches')
+      ? await (async () => {
+          const [pl, tm, mb] = await Promise.all([
+            supabase.from('players').select('id, name, handicap, gender').eq('trip_id', trip.id).eq('is_composite', false),
+            supabase.from('teams').select('id, name').eq('trip_id', trip.id),
+            supabase.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id),
+          ])
+          const sessionMatches = await readSessionResults(trip,
+            hubBoards, (pl.data ?? []) as { id: string; name: string; handicap: number | null; gender: string }[],
+            { teams: (tm.data ?? []) as { id: string; name: string }[], memberships: (mb.data ?? []) as { team_id: string; team_set: string; player_id: string }[] })
+            .catch(() => [])
+          return { boards: hubBoards, sessionMatches }
+        })()
+      : { boards: hubBoards }
+  const mySessionMatch = me
+    ? bySlot((hubSessions.sessionMatches ?? []).filter(m => !m.result && (m.sideA.includes(me.id) || m.sideB.includes(me.id))))[0] ?? null
+    : null
+
   if (me) {
     const [placingResult, draw, tripStats] = await Promise.all([
       // Gated exactly as the leaderboard page gates it. A trip that has
@@ -484,7 +509,7 @@ export default async function TripPage({ params, searchParams }: {
         // A league of periods counts one card a period, which only the
         // board itself knows how to pick — never the cheap sum of every card.
         isEvent && isPeriodLeague(parseLeagueSetup((trip as { bracket_setup?: unknown }).bracket_setup)),
-        { boards: parseLeaderboards(trip.leaderboards) },
+        hubSessions,
       ),
       hasMatchplay(boards)
         ? supabase
@@ -901,6 +926,22 @@ export default async function TripPage({ params, searchParams }: {
           ) : null
         })()}
         {koView && <NextMatchCard tripCode={tripCode} view={koView.view} live={koView.live} today={todayString(new Date())} />}
+        {/* A session match of this player's still to finish (D-brief 5.4). */}
+        {mySessionMatch && (
+          <Link
+            href={`${tripHome}/session/${mySessionMatch.roundId}/match/${mySessionMatch.slot}/card`}
+            className={`block mb-4 px-4 py-3 ${cardClass('raised', true)}`}
+          >
+            <p className="t-cap text-ink/65">Your match</p>
+            <p className="t-card text-ink mt-0.5">
+              {sessionName(overallOf(hubBoards)?.overall, mySessionMatch.roundId,
+                rounds.find(r => r.id === mySessionMatch.roundId)?.round_number ?? 1)} · Match {mySessionMatch.slot + 1}
+            </p>
+            <p className={`t-label mt-1 ${mySessionMatch.live ? 'text-accent-deep' : 'text-ink/65'}`}>
+              {mySessionMatch.live ? (mySessionMatch.progress ?? 'In play') : 'Not started'} →
+            </p>
+          </Link>
+        )}
         {koView && me && myDetails && (
           <MatchDetails
             tripId={trip.id}

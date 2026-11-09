@@ -39,6 +39,7 @@ export type EventPermissionKey =
   | 'add_rounds'
   | 'set_venues'
   | 'score_matches'
+  | 'score_session_matches'
   | 'edit_handicaps'
   | 'submit_cards'
 
@@ -59,6 +60,8 @@ export const EVENT_PERMISSIONS: {
   knockoutOnly?: true
   /** Only means anything on a continuous league of periods (`permissionsFor`). */
   periodsOnly?: true
+  /** Only means anything on an event with a Dynamic Overall Leaderboard (`permissionsFor`). */
+  sessionsOnly?: true
   /** Said under the toggle while it is off — what switching it off costs. */
   offWarning?: string
   /**
@@ -120,6 +123,12 @@ export const EVENT_PERMISSIONS: {
   { key: 'score_matches', dflt: true, knockoutOnly: true, does: 'score any match', strict: false,
     label: 'Participants can score any match',
     hint: 'Let anyone take a match live and score it. Off, only its players can — and you, with the PIN.' },
+  // A session's matches (Ross, 9 Nov 2026, D45) — its own permission, apart
+  // from the Knockout's: Strict, a match is scored by its players and the
+  // organiser; Relaxed, by anyone with the code.
+  { key: 'score_session_matches', dflt: true, sessionsOnly: true, does: 'score any session match', strict: false,
+    label: 'Participants can score any session match',
+    hint: 'Let anyone take a session’s match live and score it. Off, only its players can — and you, with the PIN.' },
   // A player's own handicap — on by default (Ross, 4 Nov 2026): each player
   // fills theirs in on claiming a name left without one, or joining, and
   // amends it on their match page until the match is under way. Off, the
@@ -145,9 +154,10 @@ export const EVENT_PERMISSIONS: {
  * the admin page and its summary line all read this, so a permission is
  * never offered where it would do nothing, nor twice.
  */
-export function permissionsFor(series: boolean, knockout = false, periods = false): typeof EVENT_PERMISSIONS {
+export function permissionsFor(series: boolean, knockout = false, periods = false, sessions = false): typeof EVENT_PERMISSIONS {
   return EVENT_PERMISSIONS.filter(p =>
-    (series || !p.seriesOnly) && (knockout || !p.knockoutOnly) && (periods || !p.periodsOnly) && !p.teeSheet)
+    (series || !p.seriesOnly) && (knockout || !p.knockoutOnly) && (periods || !p.periodsOnly)
+    && (sessions || !p.sessionsOnly) && !p.teeSheet)
 }
 
 /** The tee times question's two answers, in the order they are asked. */
@@ -291,6 +301,7 @@ export function storedPermissions(perms: EventPermissions): EventPermissions | n
 const OPEN_BY_DEFAULT: Partial<Record<EventPermissionKey, string>> = {
   edit_handicaps: 'players set their own handicaps',
   score_matches: 'anyone can score a match',
+  score_session_matches: 'anyone can score a session match',
 }
 
 /** "2 of 3 on" — the admin card's one-line summary, over what this event is asked. */

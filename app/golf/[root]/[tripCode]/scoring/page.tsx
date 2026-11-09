@@ -1,4 +1,9 @@
 import Link from 'next/link'
+import { boardsForTrip } from '@/lib/leaderboardsCompat'
+import { boardFacts } from '@/lib/leaderboards'
+import { overallOf, sessionBoardFor, sessionName } from '@/lib/sessions'
+import SessionMatchList from '../leaderboard/SessionMatchList'
+import { readSessionResults } from '../session/sessionMatches'
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { liveRoundPresence, type OpenCard } from '@/lib/rowContext'
@@ -134,7 +139,12 @@ export default async function TripCoursePortalPage({
   //
   // So do its Golf Ireland cards, each placed on the round it was played
   // as — nothing asked unless the league reads them (lib/golfIrelandCards.ts).
-  const [{ data: openData, error: openErr }, itemsRes, roundCards, knockoutRead] = await Promise.all([
+  // An event with a Dynamic Overall Leaderboard: its sessions, and a
+  // Matches session's matches from this phone's side (lib/sessions.ts).
+  const sessionBoards = boardsForTrip(trip)
+  const overall = event ? overallOf(sessionBoards) : null
+  const hasMatchSessions = !!overall && sessionBoards.some(b => b.competition === 'matches')
+  const [{ data: openData, error: openErr }, itemsRes, roundCards, knockoutRead, sessionRead] = await Promise.all([
     roundIds.length > 0
       ? supabase.from('live_rounds').select('round_id, live_player_locks(player_id)')
           .eq('status', 'active').in('round_id', roundIds)
@@ -157,6 +167,20 @@ export default async function TripCoursePortalPage({
           const live = view ? await readLiveMatches(trip, view, roster) : []
           return view ? { view, live } : null
         }).catch(e => { console.error('TripCoursePortal knockout read failed:', e); return null })
+      : Promise.resolve(null),
+    hasMatchSessions
+      ? Promise.all([
+          supabase.from('players').select('id, name, handicap, gender').eq('trip_id', trip.id).eq('is_composite', false),
+          supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
+          supabase.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id),
+          linkedPlayerId(tripCode),
+        ]).then(async ([playersRes, teamsRes, membersRes, meId]) => {
+          const roster = (playersRes.data ?? []) as { id: string; name: string; handicap: number | null; gender: string }[]
+          const teams = (teamsRes.data ?? []) as { id: string; name: string; color: string }[]
+          const memberships = (membersRes.data ?? []) as { team_id: string; team_set: string; player_id: string }[]
+          const results = await readSessionResults(trip, sessionBoards, roster, { teams, memberships })
+          return { roster, teams, memberships, results, me: roster.some(p => p.id === meId) ? meId : null }
+        }).catch(e => { console.error('TripCoursePortal session read failed:', e); return null })
       : Promise.resolve(null),
   ])
   if (openErr) console.error('TripCoursePortal live rounds query failed:', openErr)
@@ -394,6 +418,31 @@ export default async function TripCoursePortalPage({
               ) : null
             }
             const round = entry
+            // A Matches session is its matches, never a stroke card: each
+            // opens the match card, this phone's own on top (D-brief 5.4).
+            const session = overall ? sessionBoardFor(sessionBoards, round.id) : null
+            if (overall && session?.competition === 'matches') {
+              const mine = sessionRead?.me ?? null
+              const matches = (sessionRead?.results ?? []).filter(m => m.roundId === round.id)
+                .sort((x, y) => Number(!!mine && (y.sideA.includes(mine) || y.sideB.includes(mine)))
+                  - Number(!!mine && (x.sideA.includes(mine) || x.sideB.includes(mine))) || x.slot - y.slot)
+              return (
+                <section key={round.id} className="mb-2">
+                  <div className="flex items-baseline justify-between gap-3 mb-2">
+                    <p className="t-card text-ink">{sessionName(overall.overall, round.id, round.round_number)}</p>
+                    <Link href={`${tripHome}/order?round=${round.id}`} className="t-label text-accent-deep">Set the matches</Link>
+                  </div>
+                  <p className="t-cap text-ink/65 mb-2">{boardFacts(session).join(' · ')}</p>
+                  <SessionMatchList
+                    matches={matches}
+                    players={sessionRead?.roster ?? []}
+                    teams={sessionRead?.teams ?? []}
+                    memberships={sessionRead?.memberships ?? []}
+                    tripCode={tripCode}
+                  />
+                </section>
+              )
+            }
             const course = round.courses as unknown as { name: string; location: string | null } | null
             const tone = roundTone(scoredRounds.has(round.id), openRounds.has(round.id))
             // A league round switched off still plays and keeps its scores;
@@ -407,7 +456,9 @@ export default async function TripCoursePortalPage({
               >
                 <div className="min-w-0">
                   <p className="t-label text-ink/65 mb-1">
-                    {series && round.scheduled_date
+                    {overall
+                      ? sessionName(overall.overall, round.id, round.round_number)
+                      : series && round.scheduled_date
                       ? `Round ${round.round_number} · ${describeShortDate(round.scheduled_date)}`
                       : `Round ${round.round_number}`}
                     {/* A league round's play-by date (Ross, 5 Nov 2026). */}

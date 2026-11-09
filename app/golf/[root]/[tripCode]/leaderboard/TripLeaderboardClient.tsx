@@ -14,7 +14,9 @@ import {
   buildRows, scoresForBoard, boardHandicapFor, effectivePar, effectiveSI,
   orderRowsUndiscarded, teamCardHolePoints, withOnlyRounds,
 } from '@/lib/boardRows'
-import { overallOf, overallTabs, sessionBoardFor, sessionName, formatPoints, type SessionMatchResult } from '@/lib/sessions'
+import {
+  overallOf, overallTabs, sessionBoardFor, sessionName, formatPoints, feedFor, targetLine, type SessionMatchResult,
+} from '@/lib/sessions'
 import { overallRows } from '@/lib/overallRows'
 import SessionMatchList from './SessionMatchList'
 import {
@@ -1854,6 +1856,19 @@ export default function TripLeaderboardClient({
     : activeBoard)
   // A league of periods says which card counts — a fact of every board on it.
   if (periodRounds) rules.push(periodRuleFact(periodRule))
+  // "14½ to win" — only when every session is Matches with fixed points and
+  // two sides are ranked (lib/sessions.ts `targetLine`).
+  if (activeBoard.competition === 'overall' && activeBoard.overall) {
+    const sides = activeBoard.overall.ranks === 'tags' ? currentRows.length : 0
+    const line = targetLine(sessionRounds.map(r => {
+      const board = sessionBoardFor(boards, r.id)
+      return {
+        feed: feedFor(activeBoard.overall!, r.id, board, sides),
+        matches: board?.competition === 'matches' ? (sessionMatches ?? []).filter(m => m.roundId === r.id).length : 0,
+      }
+    }), sides)
+    if (line) rules.push(line)
+  }
   if (paysByPosition) {
     rules.push(describeCustomTable(resolveCustomPoints(
       activeBoard.customPoints ?? [],

@@ -1,0 +1,283 @@
+'use client'
+
+/**
+ * A Matches session's matches, laid out as its tee sheet or its order of
+ * play (Ross, 9 Nov 2026, D40–D41; lib/sessions.ts the rules,
+ * lib/sessionMatchStore.ts the one writer).
+ *
+ * **Each row is one match**: the time in the gutter (or "Match 1" without
+ * tee times), the left tag's side on the left, "vs", the right tag's on the
+ * right. With exactly two tags a header names them in their colours and
+ * stays put while the matches scroll. A pair's seats are stacked on its own
+ * side as one block — the tee sheet's ticket turned upright. A seat on the
+ * left takes only the left tag's players and the right only the right's
+ * (`matchSidesIssue`, the tag gate per side); nobody plays twice in a
+ * session. A refused write says so in the row it was refused in.
+ *
+ * The organiser (the PIN this phone holds, or an event without one) sets
+ * anybody; a player, where the field books its own tee times, puts
+ * themselves on their own side and takes only themselves off. A match with a
+ * score keeps its players; with a result, it shows it in the side colours.
+ */
+
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import { hasUnlocked, isLocked } from '@/lib/passcode'
+import {
+  type MatchFormat, type SessionMatchResult, matchLine, matchSidesIssue, sideSize, nextSlot,
+} from '@/lib/sessions'
+import { setMatchSide, removeMatch } from '@/lib/sessionMatchStore'
+import { sideColours } from '@/lib/matchSides'
+import { formatHandicap } from '@/lib/handicap'
+import InlineUnlock from '@/app/components/InlineUnlock'
+import { buttonClass, cardClass, FIELD, LiveDot } from '@/app/components/ui'
+import { useTripBase } from '../TripBase'
+
+type Player = { id: string; name: string; handicap: number | null }
+type Tag = { id: string; name: string; color: string }
+
+export default function MatchesSheet({
+  tripId, tripCode, roundId, title, format, matches, clocks, players, tags, tagOfPlayer,
+  myId, passcodeHash, playersPick,
+}: {
+  tripId: string
+  tripCode: string
+  roundId: string
+  /** "Friday fourball" — the session's name. */
+  title: string
+  format: MatchFormat
+  matches: SessionMatchResult[]
+  /** A tee time per row on a tee sheet; absent is the order of play. */
+  clocks?: string[]
+  players: Player[]
+  /** The event's tags, in order; exactly two gives the header and a tag a side. */
+  tags: Tag[]
+  /** Player id → their tag id. */
+  tagOfPlayer: Record<string, string>
+  myId: string | null
+  passcodeHash: string | null
+  /** Whether a player may put themselves on a side (`edit_tee_sheet`). */
+  playersPick: boolean
+}) {
+  const router = useRouter()
+  const tripHome = useTripBase(tripCode)
+  const [unlocked, setUnlocked] = useState(false)
+  useEffect(() => { setUnlocked(hasUnlocked(tripCode)) }, [tripCode])
+  const organiser = unlocked || !isLocked(passcodeHash)
+  const size = sideSize(format)
+  const twoTags = tags.length === 2 ? tags : null
+  const tagged = tags.length > 0
+  const tagOf = (pid: string) => tagOfPlayer[pid] ?? null
+
+  // Rows: the tee sheet's times, else every match set and one more.
+  const [extraRows, setExtraRows] = useState(0)
+  const rowCount = clocks?.length ?? Math.max(nextSlot(matches) + extraRows, matches.length ? Math.max(...matches.map(m => m.slot)) + 1 : 1)
+  const bySlot = useMemo(() => new Map(matches.map(m => [m.slot, m])), [matches])
+  const [picking, setPicking] = useState<{ slot: number; side: 'a' | 'b' } | null>(null)
+  const [query, setQuery] = useState('')
+  const [rowError, setRowError] = useState<Record<number, string>>({})
+  const [busy, setBusy] = useState(false)
+
+  const nameOf = (pid: string) => players.find(p => p.id === pid)?.name ?? 'A player'
+  const hcpOf = (pid: string) => {
+    const h = players.find(p => p.id === pid)?.handicap
+    return h == null ? 'HCP pending' : `HCP ${formatHandicap(h)}`
+  }
+  const sideTag = (side: 'a' | 'b'): Tag | null => (twoTags ? (side === 'a' ? twoTags[0] : twoTags[1]) : null)
+
+  /** Whether this phone may put somebody on this side of this match. */
+  const mayAdd = (m: SessionMatchResult | undefined, side: 'a' | 'b') => {
+    if (m?.result || m?.live) return organiser
+    if (organiser) return true
+    if (!playersPick || !myId) return false
+    // A player puts themselves in, once, on their own tag's side.
+    if (matches.some(x => x.sideA.includes(myId) || x.sideB.includes(myId))) return false
+    const t = sideTag(side)
+    return !t || tagOf(myId) === t.id
+  }
+  const mayRemove = (m: SessionMatchResult, pid: string) =>
+    organiser || (!m.result && !m.live && playersPick && pid === myId)
+
+  async function write(slot: number, side: 'a' | 'b', next: string[]) {
+    setBusy(true)
+    setRowError(e => ({ ...e, [slot]: '' }))
+    const res = await setMatchSide(supabase, { tripId, roundId, slot, side, next, organiser })
+    setBusy(false)
+    if (!res.ok) setRowError(e => ({ ...e, [slot]: res.reason }))
+    setPicking(null)
+    setQuery('')
+    router.refresh()
+  }
+
+  function choose(slot: number, side: 'a' | 'b', pid: string) {
+    const m = bySlot.get(slot)
+    const sideA = side === 'a' ? [...(m?.sideA ?? []), pid] : m?.sideA ?? []
+    const sideB = side === 'b' ? [...(m?.sideB ?? []), pid] : m?.sideB ?? []
+    const others = matches.filter(x => x.slot !== slot)
+    const issue = matchSidesIssue(format, sideA, sideB, others, tagged ? tagOf : null)
+    if (issue) { setRowError(e => ({ ...e, [slot]: issue })); return }
+    void write(slot, side, side === 'a' ? sideA : sideB)
+  }
+
+  /** Who the picker offers: nobody already playing this session, on the side's tag. */
+  const offered = (side: 'a' | 'b') => {
+    const playing = new Set(matches.flatMap(m => [...m.sideA, ...m.sideB]))
+    const t = sideTag(side)
+    return players
+      .filter(p => !playing.has(p.id))
+      .filter(p => !t || tagOf(p.id) === t.id)
+      .filter(p => organiser || p.id === myId)
+      .filter(p => !query.trim() || p.name.toLowerCase().includes(query.trim().toLowerCase()))
+  }
+
+  const seatColumn = (slot: number, side: 'a' | 'b') => {
+    const m = bySlot.get(slot)
+    const ids = side === 'a' ? m?.sideA ?? [] : m?.sideB ?? []
+    const t = sideTag(side)
+    const edge = t ? t.color : 'var(--color-line-strong)'
+    const seats = Array.from({ length: size }, (_, i) => ids[i] ?? null)
+    return (
+      // A pair's seats are one block, stacked: the ticket turned upright.
+      <div className={`rounded-tile border overflow-hidden ${ids.length ? 'bg-surface' : ''}`}
+        style={{ borderColor: ids.length ? edge : 'var(--color-line-strong)', borderStyle: ids.length ? 'solid' : 'dashed' }}>
+        {seats.map((pid, i) => (
+          <div key={i} className={`min-h-14 px-2.5 py-1.5 flex items-center gap-2 ${i > 0 ? 'border-t border-line' : ''} ${pid && pid === myId ? 'bg-accent-tint' : ''}`}>
+            {pid ? (
+              <>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-serif font-semibold text-[15px] leading-tight text-ink truncate">{nameOf(pid)}</span>
+                  <span className="block t-cap text-ink/65">{hcpOf(pid)}</span>
+                </span>
+                {m && mayRemove(m, pid) && (
+                  <button type="button" disabled={busy} aria-label={`Take ${nameOf(pid)} off`}
+                    className="-m-1 p-1 text-ink/65 t-label"
+                    onClick={() => void write(slot, side, ids.filter(x => x !== pid))}>✕</button>
+                )}
+              </>
+            ) : mayAdd(m, side) ? (
+              <button type="button" disabled={busy} className="w-full h-full t-label text-accent-deep text-left"
+                onClick={() => { setPicking({ slot, side }); setQuery('') }}>
+                + {organiser ? 'Add' : 'Join'}
+              </button>
+            ) : (
+              <span className="t-cap text-ink/65">Open</span>
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  const lineOf = (m: SessionMatchResult) => {
+    const names = {
+      a: sideTag('a')?.name ?? m.sideA.map(id => nameOf(id).split(' ')[0]).join(' & '),
+      b: sideTag('b')?.name ?? m.sideB.map(id => nameOf(id).split(' ')[0]).join(' & '),
+    }
+    return matchLine(m, names)
+  }
+  const colours = sideColours(twoTags?.[0].color, twoTags?.[1].color)
+
+  return (
+    <section className="mb-8">
+      <h2 className="t-h2 text-ink mb-1">{title}</h2>
+      <p className="t-cap text-ink/65 mb-3">
+        {clocks ? 'Each tee time is one match.' : 'The order of play — each row is one match.'}
+        {size > 1 ? ' Two players a side.' : ' One player a side.'}
+      </p>
+
+      {!organiser && passcodeHash && (
+        <div className="mb-3">
+          <InlineUnlock tripCode={tripCode} passcodeHash={passcodeHash} onUnlocked={() => setUnlocked(true)} />
+        </div>
+      )}
+
+      {/* The two tags, one each side, staying put while the matches scroll. */}
+      {twoTags && (
+        <div className="sticky top-[52px] z-10 paper border-b border-line -mx-4 px-4 py-2 mb-2 grid grid-cols-[3.5rem_1fr_2rem_1fr] items-center gap-2">
+          <span aria-hidden="true" />
+          <p className="t-card truncate" style={{ color: twoTags[0].color }}>{twoTags[0].name}</p>
+          <span aria-hidden="true" />
+          <p className="t-card truncate text-right" style={{ color: twoTags[1].color }}>{twoTags[1].name}</p>
+        </div>
+      )}
+
+      <ol className="divide-y divide-line">
+        {Array.from({ length: rowCount }, (_, slot) => {
+          const m = bySlot.get(slot)
+          const winner = m?.result === 'a' ? colours.A : m?.result === 'b' ? colours.B : null
+          return (
+            <li key={slot} className="py-3">
+              <div className="grid grid-cols-[3.5rem_1fr_2rem_1fr] items-center gap-2">
+                <p className="t-data text-ink/80 tabular-nums self-start pt-3">
+                  {clocks ? clocks[slot] : `Match ${slot + 1}`}
+                </p>
+                {seatColumn(slot, 'a')}
+                <p className="t-label text-ink/65 text-center">vs</p>
+                {seatColumn(slot, 'b')}
+              </div>
+
+              {picking?.slot === slot && (
+                <div className={`mt-2 p-3 ${cardClass('flat')}`}>
+                  <input type="search" className={FIELD} placeholder="Search players" value={query}
+                    onChange={e => setQuery(e.target.value)} aria-label="Search players" />
+                  <ul className="mt-2 max-h-60 overflow-y-auto">
+                    {offered(picking.side).map(p => (
+                      <li key={p.id}>
+                        <button type="button" disabled={busy} className="w-full text-left py-2 t-label text-ink"
+                          onClick={() => choose(slot, picking.side, p.id)}>
+                          {p.name} <span className="t-cap text-ink/65">{hcpOf(p.id)}</span>
+                        </button>
+                      </li>
+                    ))}
+                    {offered(picking.side).length === 0 && (
+                      <li className="t-cap text-ink/65 py-2">
+                        {sideTag(picking.side) ? `Nobody from ${sideTag(picking.side)!.name} is free.` : 'Nobody is free.'}
+                      </li>
+                    )}
+                  </ul>
+                  <button type="button" className={`${buttonClass('quiet', false, true)} mt-1`} onClick={() => setPicking(null)}>Cancel</button>
+                </div>
+              )}
+
+              {rowError[slot] && <p className="t-cap text-rust-deep mt-2">{rowError[slot]}</p>}
+
+              {m && m.sideA.length > 0 && m.sideB.length > 0 && (
+                <div className="mt-2 flex items-center justify-between gap-2 pl-[4rem]">
+                  <p className="t-label flex items-center gap-1.5">
+                    {m.live && !m.result && <LiveDot />}
+                    {winner
+                      ? <span className="px-2 py-0.5 rounded-full" style={{ background: winner.fill, color: winner.on }}>{lineOf(m)}</span>
+                      : <span className={m.live ? 'text-accent-deep' : 'text-ink/65'}>{lineOf(m)}</span>}
+                  </p>
+                  <Link href={`${tripHome}/session/${roundId}/match/${slot}/card`} className="t-label text-accent-deep">
+                    {m.result ? 'Card' : m.live ? 'Score' : 'Start'} →
+                  </Link>
+                </div>
+              )}
+              {m && organiser && !m.result && !m.live && m.sideA.length + m.sideB.length > 0 && (
+                <div className="pl-[4rem] mt-1">
+                  <button type="button" className="t-cap text-ink/65 underline" disabled={busy}
+                    onClick={async () => {
+                      const res = await removeMatch(supabase, { tripId, roundId, slot, organiser })
+                      if (!res.ok) setRowError(e => ({ ...e, [slot]: res.reason }))
+                      router.refresh()
+                    }}>
+                    Clear this match
+                  </button>
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ol>
+
+      {!clocks && organiser && (
+        <button type="button" className={`${buttonClass('secondary')} mt-3`} onClick={() => setExtraRows(n => n + 1)}>
+          + Add a match
+        </button>
+      )}
+    </section>
+  )
+}

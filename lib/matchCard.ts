@@ -301,3 +301,38 @@ export function reopenBlocked(nextRound: string, nextDecided: boolean, nextScore
   if (nextScored) return `Scores are already in for the ${nextRound} match this fed, so this one can no longer be reopened.`
   return null
 }
+
+// ─── A session's match: eighteen holes, and a half is a result ─────────
+//
+// A Matches session (lib/sessions.ts, D44) needs no winner: level after 18
+// the match is halved, so no 19th and no extra holes. The holes, the shots
+// and who won each are the card's own rules, unchanged.
+
+export type SessionCardState = CardState & {
+  /** All square after eighteen — a result in its own right. */
+  halved: boolean
+}
+
+/** A session match's card: the eighteen, its outcomes, and where it stands. */
+export function playSessionCard(
+  holes: readonly CardHole[], a: CardSide, b: CardSide, scores: CardScores,
+): { holes: CardHole[]; outcomes: HoleOutcome[]; state: SessionCardState } {
+  const list = [...holes].sort((x, y) => x.holeNumber - y.holeNumber).slice(0, REGULATION_HOLES)
+  const outcomes = holeOutcomes(list, a, b, scores, new Map())
+  const state = cardState(outcomes)
+  if (state.extra) {
+    return {
+      holes: list, outcomes,
+      state: { ...state, extra: false, settled: true, halved: true, leader: null, result: 'A/S', progress: 'All square after 18' },
+    }
+  }
+  return { holes: list, outcomes, state: { ...state, halved: false } }
+}
+
+/** What a finalised session card writes: the result and its margin. */
+export function sessionResult(state: SessionCardState): { result: 'a' | 'b' | 'halved'; margin: string } | null {
+  if (!state.settled) return null
+  if (state.halved) return { result: 'halved', margin: 'A/S' }
+  if (!state.leader || !state.result) return null
+  return { result: state.leader === 'A' ? 'a' : 'b', margin: state.result }
+}

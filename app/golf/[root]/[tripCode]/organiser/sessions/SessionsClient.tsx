@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 import type { Leaderboard } from '@/lib/leaderboards'
@@ -113,6 +114,11 @@ export default function SessionsClient({ tripId, tripCode, rounds, initialBoards
                     <p className="text-ink text-[15px]">{describeFormat(format)}</p>
                     {!format && (
                       <p className="t-cap text-ink/65 mt-0.5">This session counts nothing until its format is set.</p>
+                    )}
+                    {format?.kind === 'matches' && (
+                      <Link href={`${tripHome}/order?round=${r.id}`} className="t-label text-accent-deep mt-1 inline-block">
+                        Set the matches →
+                      </Link>
                     )}
                     {!open ? (
                       <button type="button" className={`${buttonClass('secondary', false)} mt-3`}

@@ -49,7 +49,7 @@ export const MATCH_FORMATS: {
  * card can score a session match (docs/sessions-plan.md, stage 5) — shown,
  * "Coming soon", so a Ryder Cup can be laid out before it can be played.
  */
-export const MATCHES_READY = false
+export const MATCHES_READY = true
 
 export const isMatchFormat = (v: unknown): v is MatchFormat =>
   MATCH_FORMATS.some(f => f.key === v)
@@ -142,6 +142,8 @@ export function sessionBoard(format: SessionFormat, roundId: string, daySheet: s
   const allowance = format.handicapAllowance != null && format.handicapAllowance !== 100
     ? { handicapAllowance: format.handicapAllowance } : {}
   if (format.kind === 'matches') {
+    // A match format's usual allowance unless the organiser set another.
+    const pct = format.handicapAllowance ?? defaultMatchAllowance(format.match)
     const team = sideSize(format.match) > 1
     return {
       id: `lb-session-${roundId}`,
@@ -149,7 +151,7 @@ export function sessionBoard(format: SessionFormat, roundId: string, daySheet: s
       competition: 'matches',
       matchFormat: format.match,
       ...(team ? { teamSet: daySheet } : {}),
-      ...allowance,
+      ...(pct !== 100 ? { handicapAllowance: pct } : {}),
       roundIds: [roundId],
       session: true,
     }
@@ -385,9 +387,13 @@ export type SessionMatchResult = {
   sideA: string[]
   sideB: string[]
   result: 'a' | 'b' | 'halved' | null
-  /** "3&2", "1 UP", "A/S" — the margin once finished, the standing while live. */
+  /** "3&2", "1 UP", "A/S" — the margin once finished. */
   margin?: string | null
+  /** A card with a score on it and no result yet. */
   live?: boolean
+  /** While live: who is up, and by how much — "2 up thru 11", "All square thru 9". */
+  leader?: 'a' | 'b' | null
+  progress?: string | null
 }
 
 /**
@@ -401,8 +407,61 @@ export function matchLine(m: SessionMatchResult, names: { a: string; b: string }
     const who = m.result === 'a' ? names.a : names.b
     return m.margin ? `${who} won ${m.margin}` : `${who} won`
   }
-  if (m.live && m.margin) return m.margin
-  return m.live ? 'In play' : 'Not started'
+  if (m.live) {
+    if (!m.progress) return 'In play'
+    if (m.leader) return `${m.leader === 'a' ? names.a : names.b} ${m.progress}`
+    return m.progress
+  }
+  return 'Not started'
+}
+
+// ─── Setting a match's sides ──────────────────────────────────
+
+/**
+ * Why these sides cannot be a match in this session, or null. A side may be
+ * part-filled while it is being set; `full` asks for the whole match.
+ *
+ * · a side holds at most the format's players (one, or a pair);
+ * · nobody plays on both sides, or in two matches of one session;
+ * · with tags in play a side is one tag (the tee sheet's gate, per side —
+ *   `tagOf` gives a player's tag, null for none).
+ */
+export function matchSidesIssue(
+  format: MatchFormat,
+  sideA: readonly string[], sideB: readonly string[],
+  others: readonly { sideA: readonly string[]; sideB: readonly string[] }[],
+  tagOf: ((playerId: string) => string | null) | null,
+  full = false,
+): string | null {
+  const size = sideSize(format)
+  if (sideA.length > size || sideB.length > size) return size === 1 ? 'One player a side.' : 'Two players a side.'
+  if (full && (sideA.length < size || sideB.length < size)) return 'Both sides need their players.'
+  const here = [...sideA, ...sideB]
+  if (new Set(here).size !== here.length) return 'A player can only play once in a match.'
+  const elsewhere = new Set(others.flatMap(o => [...o.sideA, ...o.sideB]))
+  if (here.some(id => elsewhere.has(id))) return 'That player already has a match in this session.'
+  if (tagOf) {
+    for (const side of [sideA, sideB]) {
+      const tags = new Set(side.map(tagOf))
+      if (tags.has(null)) return 'Every player needs a tag first.'
+      if (tags.size > 1) return 'A side is one tag.'
+    }
+    if (sideA.length && sideB.length && tagOf(sideA[0]) === tagOf(sideB[0])) return 'The two sides are from the same tag.'
+  }
+  return null
+}
+
+/** Every match listed by slot, a gap left where none is set. */
+export function bySlot<T extends { slot: number }>(matches: readonly T[]): T[] {
+  return [...matches].sort((a, b) => a.slot - b.slot)
+}
+
+/** The next free slot in a session's order of play. */
+export function nextSlot(matches: readonly { slot: number }[]): number {
+  const used = new Set(matches.map(m => m.slot))
+  let n = 0
+  while (used.has(n)) n++
+  return n
 }
 
 // ─── Storage ───────────────────────────────────────────────────
@@ -576,4 +635,13 @@ export function withOverallOn(
  */
 export function withOverallOff(boards: readonly Leaderboard[]): Leaderboard[] {
   return withoutOverall(boards)
+}
+
+/**
+ * The tee a session match player plays off when nobody has said: the one
+ * the round recorded for them, else the middle of their own tees, hardest
+ * first (`teesForPlayer`'s order) — the white of blue, white and yellow.
+ */
+export function defaultTeeIndex(count: number): number {
+  return count <= 0 ? -1 : Math.floor((count - 1) / 2)
 }

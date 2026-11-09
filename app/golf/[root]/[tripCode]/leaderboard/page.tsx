@@ -1,4 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
+import { overallOf } from '@/lib/sessions'
+import { readSessionResults } from '../session/sessionMatches'
 import { isKnockoutEvent } from '@/lib/bracketSetup'
 import { supabase } from '@/lib/supabase'
 import { parseFormats } from '@/lib/formats'
@@ -197,6 +199,15 @@ export default async function TripLeaderboardPage({
   const hasActiveRound =
     activeRoundIds.length > 0 || rounds.some(r => r.status === 'active')
 
+  // A Dynamic Overall Leaderboard's Matches sessions: each match and where
+  // it stands, read on the server — what the Overall counts them from.
+  const sessionMatches = event && overallOf(boards) && boards.some(b => b.competition === 'matches')
+    ? await readSessionResults(trip, boards,
+        (playersRes.data ?? []) as { id: string; name: string; handicap: number | null; gender: string }[],
+        { teams: (teamsRes.data ?? []) as { id: string; name: string }[], memberships })
+        .catch(e => { console.error('Leaderboard session matches read failed:', e); return [] })
+    : []
+
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
       {/* The trip's own name used to sit in a band under this, which cost a
@@ -231,6 +242,7 @@ export default async function TripLeaderboardPage({
         cardsOff={leagueSetup?.cardsOff}
         roundCards={roundCards}
         linkedIds={giLinked}
+        sessionMatches={sessionMatches}
       />
 
       {/* Below the board, after everything worth reading */}

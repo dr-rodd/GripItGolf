@@ -13,13 +13,14 @@ import {
   resolvedFormats, usedFormats, sessionsIssue, inRunningOrder, sessionBoard, overallBoard,
   feedFor, defaultPositionPoints, DEFAULT_MATCH_FEED, matchPoints, formatPoints, targetLine,
   parseOverallRules, parseFeed, sessionBoardFor, overallOf, overallTabs, allOneFormat,
-  describeFormat, sameFormat, isSessionBoard,
+  describeFormat, sameFormat, isSessionBoard, matchSidesIssue, matchLine, nextSlot, defaultTeeIndex,
   withSessionFormat, withSessionName, withSessionFeed, withOverallOn, withOverallOff, formatOfBoard,
 } from '../lib/sessions'
 import { parseLeaderboards, hasMatchplay, boardTitle, boardFacts, type Leaderboard } from '../lib/leaderboards'
 import { governingBoard, isPairs } from '../lib/partnerships'
 import { buildRows, type RowContext, type ResolvedScore, type RowHole } from '../lib/boardRows'
 import { overallRows } from '../lib/overallRows'
+import { playSessionCard, sessionResult, type CardHole } from '../lib/matchCard'
 import fs from 'fs'
 
 let passed = 0, failed = 0
@@ -100,7 +101,7 @@ section('The boards a session plays, and the Overall')
     ['lb-overall', 'x'], 'the leaderboard’s tabs are the Overall, then secondary boards — never a session’s own')
   eq(boardTitle(stored[0]), 'Overall', 'the Overall is called Overall on screen (D37)')
   eq(boardTitle(stored[3]), 'Fourball matches', 'a Matches board names its format')
-  eq(boardFacts(stored[3]), ['Fourball', 'Matches'], '  …in facts')
+  eq(boardFacts(stored[3]), ['Fourball', 'Matches', '90% handicap'], '  …in facts, a fourball at its usual 90%')
   eq(buildRows(stored[0], { players: [], teams: [], memberships: [], holes: [], rounds: [], resolved: [], hcpFor: new Map(), liveRoundIds: new Set(), livePlayerIds: new Set(), legacyTeamScoring: null }),
     [], 'buildRows never reads the Overall as a table of cards')
   eq(parseLeaderboards([{ ...overall, overall: { ranks: 'nobody' } }]), [], 'an Overall with rules that do not read is dropped')
@@ -252,6 +253,70 @@ section('Session formats after creation — nothing deleted without asking, no s
   eq(withOverallOff(on).map(b => b.id), ['p', 'lb-session-r1', 'lb-session-r2'],
     'turning it off takes the Overall and nothing else')
   eq(withOverallOn(on, ['r1'], 'tags', id => id), on, 'turning on what is on changes nothing')
+}
+
+section('A session match: eighteen holes, and a half is a result (D44)')
+{
+  const holes18: CardHole[] = Array.from({ length: 18 }, (_, i) => ({ holeNumber: i + 1, par: 4, strokeIndex: i + 1 }))
+  const A = { id: 'A', players: [{ id: 'pa', gender: 'M', receives: 0 }] }
+  const B = { id: 'B', players: [{ id: 'pb', gender: 'M', receives: 0 }] }
+  const card = (a: number[], b: number[]) => new Map([
+    ['pa', new Map(a.map((g, i) => [i + 1, g]))], ['pb', new Map(b.map((g, i) => [i + 1, g]))],
+  ])
+  const level = playSessionCard(holes18, A, B, card(Array(18).fill(4), Array(18).fill(4)))
+  ok(level.state.settled && level.state.halved, 'all square after 18 is settled, and halved')
+  eq(level.holes.length, 18, '  …with no 19th hole')
+  eq(sessionResult(level.state), { result: 'halved', margin: 'A/S' }, '  …and writes a half')
+  const won = playSessionCard(holes18, A, B, card([3, 3, 3, ...Array(13).fill(4)], Array(16).fill(4)))
+  eq(sessionResult(won.state), { result: 'a', margin: '3&2' }, 'a match won early writes its side and margin')
+  const going = playSessionCard(holes18, A, B, card([3, 4], [4, 4]))
+  ok(!going.state.settled && sessionResult(going.state) === null, 'a match still in play writes nothing')
+}
+
+section('Setting a match’s sides')
+{
+  const tagOf = (id: string) => ({ e1: 'eu', e2: 'eu', u1: 'us', u2: 'us', x: null } as Record<string, string | null>)[id] ?? null
+  eq(matchSidesIssue('singles', ['e1'], ['u1'], [], tagOf, true), null, 'one each side, one tag each: a match')
+  ok(/One player/.test(matchSidesIssue('singles', ['e1', 'e2'], [], [], tagOf) ?? ''), 'singles is one a side')
+  ok(/same tag/.test(matchSidesIssue('singles', ['e1'], ['e2'], [], tagOf) ?? ''), 'two from the same tag are not a match')
+  ok(/one tag/.test(matchSidesIssue('fourball', ['e1', 'u1'], [], [], tagOf) ?? ''), 'a side is one tag when tags are in play')
+  ok(/tag first/.test(matchSidesIssue('singles', ['x'], [], [], tagOf) ?? ''), 'an untagged player cannot go on a side')
+  ok(/already has a match/.test(matchSidesIssue('singles', ['e1'], [], [{ sideA: ['e1'], sideB: [] }], tagOf) ?? ''),
+    'nobody plays twice in a session')
+  eq(matchSidesIssue('fourball', ['e1', 'e2'], ['u1'], [], null), null, 'without tags anybody may pair, and a side may be part-filled')
+  ok(/Both sides/.test(matchSidesIssue('fourball', ['e1', 'e2'], ['u1'], [], null, true) ?? ''), '  …but not a whole match')
+  eq(nextSlot([{ slot: 0 }, { slot: 2 }]), 1, 'the next free row in the order of play')
+  eq([defaultTeeIndex(3), defaultTeeIndex(1), defaultTeeIndex(0)], [1, 0, -1], 'the default tee is the middle of a player’s own')
+  const m = { id: 'm', roundId: 'r', slot: 0, sideA: ['e1'], sideB: ['u1'] }
+  eq(matchLine({ ...m, result: 'a', margin: '3&2' }, { a: 'Europe', b: 'USA' }), 'Europe won 3&2', 'a result reads "Europe won 3&2"')
+  eq(matchLine({ ...m, result: 'halved', margin: 'A/S' }, { a: 'Europe', b: 'USA' }), 'Halved', '  …a half "Halved"')
+  eq(matchLine({ ...m, result: null, live: true, leader: 'b', progress: '2 up thru 11' }, { a: 'Europe', b: 'USA' }), 'USA 2 up thru 11',
+    '  …and a match in play its standing')
+  eq(matchLine({ ...m, result: null }, { a: 'Europe', b: 'USA' }), 'Not started', '  …and one not begun says so')
+}
+
+section('Knockout and Matches never meet (D34)')
+{
+  const sessionFiles = [
+    'lib/sessionMatchStore.ts', 'app/golf/[root]/[tripCode]/session/sessionMatches.ts',
+    'app/golf/[root]/[tripCode]/session/MatchesSheet.tsx',
+    'app/golf/[root]/[tripCode]/session/[roundId]/match/[slot]/card/page.tsx',
+    'app/golf/[root]/[tripCode]/order/page.tsx', 'lib/overallRows.ts',
+  ]
+  for (const f of sessionFiles) ok(!read(f).includes('matchplay_matches'), `${f} never reads the bracket’s table`)
+  const bracketFiles = [
+    'lib/drawStore.ts', 'lib/matchplayStore.ts', 'app/golf/[root]/[tripCode]/knockout.ts',
+    'app/golf/[root]/[tripCode]/matchplay/page.tsx', 'app/api/match/dueDraws.ts',
+  ]
+  for (const f of bracketFiles) ok(!read(f).includes('session_matches'), `${f} never reads a session’s matches`)
+  const card = read('app/golf/[root]/[tripCode]/match/[matchId]/card/MatchCardClient.tsx')
+  ok(card.includes("session ? 'session_match_scores' : 'match_scores'") && card.includes("from('session_matches')"),
+    'the one match card serves both, a session’s writing its own tables')
+  ok(card.includes('playSessionCard(baseHoles') && card.includes('stored.winner === null'),
+    '  …a session’s card never going down the 19th, finalising a half like a win')
+  ok(read('supabase/migrations/20260101000067_session_matches.sql').includes('REFERENCES rounds(id)'),
+    'migration 067: a session match belongs to its round, never to a draw')
+  ok(!hasMatchplay([sessionBoard({ kind: 'matches', match: 'singles' }, 'r', 'day:r')]), 'a Matches board is not a draw to any bracket reader')
 }
 
 // ─── The wizard ────────────────────────────────────────────────

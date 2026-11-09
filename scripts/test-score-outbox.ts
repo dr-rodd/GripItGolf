@@ -447,9 +447,12 @@ section('Nothing loads on the scoring path that the screen does not draw')
   // matches and works out the live ones' shots, so the field's names,
   // handicaps and genders — four columns — ride in the same batch, and
   // only there.
-  ok((picker.match(/from\('players'\)/g) ?? []).length === 1
-    && /knockout\n\s*\? Promise\.all\(\[\n\s*supabase\.from\('players'\)\.select\('id, name, handicap, gender'\)/.test(picker),
-    'and no players — beyond a match play event\'s names, for its portal')
+  // And, the same exception again, a Dynamic Overall Leaderboard's Matches
+  // sessions: their portal names each side and works out where it stands.
+  ok((picker.match(/from\('players'\)/g) ?? []).length === 2
+    && /knockout\n\s*\? Promise\.all\(\[\n\s*supabase\.from\('players'\)\.select\('id, name, handicap, gender'\)/.test(picker)
+    && /hasMatchSessions\n\s*\? Promise\.all\(\[\n\s*supabase\.from\('players'\)\.select\('id, name, handicap, gender'\)/.test(picker),
+    'and no players — beyond a match play event\'s names, and a Matches session\'s, for their portals')
   ok(/usePlatformCourses\(open\)/.test(sheet),
     'and the course catalogue waits for the sheet to be opened')
   ok(/if \(!enabled\) return/.test(catalogue),

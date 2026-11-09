@@ -107,7 +107,7 @@ export default function OrganiserClient({
   initialTrackStats?: boolean
 }) {
   const tripHome = useTripBase(tripCode)
-  const permRegistry = permissionsFor(series, knockout, periods)
+  const permRegistry = permissionsFor(series, knockout, periods, sessions === 'on')
   // A change to the stats or a round's start can change the bar's fourth
   // tab, which the layout reads — so a landed save refreshes the router.
   const router = useRouter()

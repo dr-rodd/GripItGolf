@@ -7,7 +7,8 @@ import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { hasUnlocked, isLocked } from '@/lib/passcode'
 import {
-  REGULATION_HOLES, extraCourseHole, openingHole, ordinal, parseExtraPlan, playCard, reopenBlocked, shotsOn, shouldWrite,
+  REGULATION_HOLES, extraCourseHole, openingHole, ordinal, parseExtraPlan, playCard, playSessionCard, reopenBlocked,
+  sessionResult, shotsOn, shouldWrite,
   withExtraHole, type CardHole, type CardSideKey, type CardSideView, type ExtraHolePlan,
 } from '@/lib/matchCard'
 import { DEFAULT_SIDE_COLOURS, type SideColour } from '@/lib/matchSides'
@@ -48,6 +49,11 @@ import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
  * 20th off the 2nd — until a hole is won (`playCard`). A dropdown on each
  * extra hole changes which course hole it is played off (`extra_holes`,
  * migration 061); the ones after follow on from it.
+ *
+ * **A session's match is the same card** (lib/sessions.ts, D44): with
+ * `session` it reads and writes `session_match_scores` (migration 067),
+ * stops at 18 — all square there is a half, a result in its own right — and
+ * Finalise writes the result onto its `session_matches` row, never a bracket.
  */
 
 /** Player → hole → gross; null is an NR. */
@@ -59,7 +65,10 @@ const MAX_GROSS = 20
 export default function MatchCardClient({
   tripId, tripCode, matchId, a, b, holes: baseHoles, extraPlan: planInitial = {}, mySide, passcodeHash,
   stored: storedInitial, colours = DEFAULT_SIDE_COLOURS, anyoneScores = true, backHref, roundName, club = null,
+  session = false,
 }: {
+  /** A session's match (`session_matches`), not a Knockout's. */
+  session?: boolean
   /** The header: the way back, and the round and club in the middle. */
   backHref: string
   roundName: string
@@ -114,13 +123,20 @@ export default function MatchCardClient({
   const load = useCallback(async () => {
     // A write in flight would be overwritten by an older read; skip a turn.
     if (dirty.current > 0) return
-    const [s, c, x] = await Promise.all([
-      supabase.from('match_scores').select('player_id, hole_number, gross').eq('trip_id', tripId).eq('match_id', matchId),
-      supabase.from('match_concessions').select('hole_number, conceded_by').eq('trip_id', tripId).eq('match_id', matchId),
-      // Its own read, fail-soft: before migration 061 there is no column,
-      // and the extra holes simply run on from the 1st.
-      supabase.from('matchplay_matches').select('extra_holes').eq('trip_id', tripId).eq('id', matchId).maybeSingle(),
-    ])
+    const [s, c, x] = session
+      // A session's card: its own scores, no concessions, no extra holes.
+      ? await Promise.all([
+        supabase.from('session_match_scores').select('player_id, hole_number, gross').eq('trip_id', tripId).eq('match_id', matchId),
+        Promise.resolve({ data: [], error: null }),
+        Promise.resolve({ data: null, error: null }),
+      ])
+      : await Promise.all([
+        supabase.from('match_scores').select('player_id, hole_number, gross').eq('trip_id', tripId).eq('match_id', matchId),
+        supabase.from('match_concessions').select('hole_number, conceded_by').eq('trip_id', tripId).eq('match_id', matchId),
+        // Its own read, fail-soft: before migration 061 there is no column,
+        // and the extra holes simply run on from the 1st.
+        supabase.from('matchplay_matches').select('extra_holes').eq('trip_id', tripId).eq('id', matchId).maybeSingle(),
+      ])
     if (s.error || c.error) {
       console.error('Match card read failed:', s.error ?? c.error)
       // Before migration 058 the tables are not there at all.
@@ -140,7 +156,7 @@ export default function MatchCardClient({
     if (!x.error && x.data) setPlan(parseExtraPlan((x.data as { extra_holes?: unknown }).extra_holes))
     setLoaded(true)
     setUnavailable(false)
-  }, [tripId, matchId, loaded])
+  }, [tripId, matchId, loaded, session])
   usePoll(load, 15_000, true)
 
   // ── The card, worked out ──
@@ -148,12 +164,15 @@ export default function MatchCardClient({
     A: { id: a.id, players: a.players.map(p => ({ id: p.id, gender: p.gender, receives: p.receives })) },
     B: { id: b.id, players: b.players.map(p => ({ id: p.id, gender: p.gender, receives: p.receives })) },
   }), [a, b])
-  const { holes, outcomes, state } = useMemo(() => playCard(
-    baseHoles, sides.A, sides.B,
-    new Map(Object.entries(scores).map(([pid, hs]) => [pid, new Map(Object.entries(hs).map(([h, g]) => [Number(h), g]))])),
-    new Map(Object.entries(conceded).map(([h, side]) => [Number(h), side])),
-    plan,
-  ), [baseHoles, sides, scores, conceded, plan])
+  const { holes, outcomes, state } = useMemo(() => {
+    const byPlayer = new Map(Object.entries(scores).map(([pid, hs]) => [pid, new Map(Object.entries(hs).map(([h, g]) => [Number(h), g]))]))
+    return session
+      ? playSessionCard(baseHoles, sides.A, sides.B, byPlayer)
+      : playCard(baseHoles, sides.A, sides.B, byPlayer,
+        new Map(Object.entries(conceded).map(([h, side]) => [Number(h), side])), plan)
+  }, [baseHoles, sides, scores, conceded, plan, session])
+  // A session match may finish halved — a result with no winner (D44).
+  const halved = session && 'halved' in state && (state as { halved: boolean }).halved
   const current = hole ?? (loaded ? openingHole(outcomes) : 1)
   const h = holes.find(x => x.holeNumber === current) ?? holes[0]
   const outcome = outcomes.find(o => o.holeNumber === current)
@@ -203,10 +222,11 @@ export default function MatchCardClient({
       if (value === undefined) delete mine[n]; else mine[n] = value
       return { ...prev, [playerId]: mine }
     })
+    const table = session ? 'session_match_scores' : 'match_scores'
     queue(`s:${playerId}:${n}`, n, () => value === undefined
-      ? supabase.from('match_scores').delete().eq('trip_id', tripId).eq('match_id', matchId)
+      ? supabase.from(table).delete().eq('trip_id', tripId).eq('match_id', matchId)
           .eq('player_id', playerId).eq('hole_number', n)
-      : supabase.from('match_scores').upsert({
+      : supabase.from(table).upsert({
           match_id: matchId, trip_id: tripId, player_id: playerId, hole_number: n, gross: value,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'match_id,player_id,hole_number' }))
@@ -241,6 +261,18 @@ export default function MatchCardClient({
     setSaving(true)
     setError(null)
     try {
+      if (session) {
+        // Onto the session's own row, never a bracket.
+        const res = sessionResult(state as Parameters<typeof sessionResult>[0])
+        if (!res) return false
+        const { error: err } = await supabase.from('session_matches')
+          .update({ result: res.result, margin: res.margin, updated_at: new Date().toISOString() })
+          .eq('id', matchId).eq('trip_id', tripId)
+        if (err) throw err
+        setStored({ winner: res.result === 'halved' ? 'halved' : winnerId, result: res.margin })
+        router.refresh()
+        return true
+      }
       const { loadBracket, persistWinner } = await import('@/lib/matchplayStore')
       const all = await loadBracket(tripId)
       await persistWinner(all, matchId, winnerId as string, state.result)
@@ -255,7 +287,7 @@ export default function MatchCardClient({
       writing.current = false
       setSaving(false)
     }
-  }, [state.result, winnerId, tripId, matchId, router])
+  }, [state, winnerId, tripId, matchId, router, session])
 
   // ── The end of the match: confirm, finalise, then the card ──
   // Nothing interrupts while scores are going in (Ross, 26 Oct 2026: the
@@ -266,7 +298,9 @@ export default function MatchCardClient({
   const [finish, setFinish] = useState<{ phase: 'done'; bloom: boolean } | null>(null)
   const [asking, setAsking] = useState(false)
   const playedOut = outcomes.filter(o => o.holeNumber <= REGULATION_HOLES).every(o => o.winner !== null)
-  const awaitingFinal = loaded && canEdit && shouldWrite(state, winnerId, stored, false)
+  const awaitingFinal = loaded && canEdit && (session
+    ? state.settled && stored.winner === null
+    : shouldWrite(state, winnerId, stored, false))
   // The hole that settled it: holes are scored in order, so the
   // `played`-th finished hole.
   const settleHole = state.settled
@@ -290,6 +324,17 @@ export default function MatchCardClient({
     setReopening(true)
     setError(null)
     try {
+      if (session) {
+        // A session match feeds no later match: it simply opens again.
+        const { error: err } = await supabase.from('session_matches')
+          .update({ result: null, margin: null, updated_at: new Date().toISOString() })
+          .eq('id', matchId).eq('trip_id', tripId)
+        if (err) throw err
+        setStored({ winner: null, result: null })
+        setAsking(false)
+        router.refresh()
+        return
+      }
       const { loadBracket, persistWinner } = await import('@/lib/matchplayStore')
       const all = await loadBracket(tripId)
       const me = all.find(m => m.id === matchId)
@@ -326,7 +371,8 @@ export default function MatchCardClient({
   }
 
   const nameOf = (key: CardSideKey) => (key === 'A' ? a.name : b.name)
-  const status = state.settled && state.leader
+  const status = halved ? 'Halved'
+    : state.settled && state.leader
     ? `${nameOf(state.leader)} wins ${state.result}`
     : state.extra ? `${state.progress} — down the ${ordinal(state.played + 1)}`
       : state.leader ? `${nameOf(state.leader)} ${state.progress}` : state.progress

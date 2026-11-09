@@ -278,7 +278,7 @@ section('The match play card: top of the draw left, bottom right, NR, the result
   ok(client.includes("finish?.phase ?? (asking && awaitingFinal ? 'confirm' : null)")
     && client.includes("{finaliseHere ? 'Finalise match' : '→'}"),
     'the end of a match never interrupts scoring — the next button becomes Finalise match on the hole that settles it')
-  ok(client.includes('const awaitingFinal = loaded && canEdit && shouldWrite(state, winnerId, stored, false)')
+  ok(client.includes('const awaitingFinal = loaded && canEdit && (session') && client.includes(': shouldWrite(state, winnerId, stored, false))')
     && !client.includes('writeResult()\n  }, [loaded'),
     'a settled card asks before its result goes into an empty match — never by itself')
   ok(finishSheet.includes('Yes — finalise the match') && finishSheet.includes('No — go back and amend the scores')
