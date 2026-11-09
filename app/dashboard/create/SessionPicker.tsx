@@ -13,7 +13,9 @@ import {
   MATCH_FORMATS, MATCHES_READY, OVERALL_RANKS, MAX_SESSION_NAME, MAX_SESSIONS,
   describeFormat, describeFeed, resolvedFormats, usedFormats, sameFormat, sessionLabel,
   defaultMatchAllowance, defaultPositionPoints, DEFAULT_MATCH_FEED, allOneFormat, formatPoints,
+  defaultMatchSlots, MAX_MATCH_SLOTS,
 } from '@/lib/sessions'
+import { Stepper } from '@/app/components/ItineraryForms'
 import { SCORINGS, TEAM_FORMATS, type Audience, type Scoring, type TeamFormat } from '@/lib/leaderboards'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass, optionClass, Pill } from '@/app/components/ui'
 
@@ -193,9 +195,11 @@ export function FormatPicker({ value, onChange, idle = false }: {
 
 // ─── The running order ─────────────────────────────────────────
 
-export function SessionList({ sessions, onChange, days, renderVenue }: {
+export function SessionList({ sessions, onChange, days, renderVenue, fieldSize = 0 }: {
   sessions: SessionDraft[]
   onChange: (next: SessionDraft[]) => void
+  /** Players in the field so far — what a Matches session's count starts from. */
+  fieldSize?: number
   /** The event's playing days, as index and label — one means no day picker. */
   days: { index: number; label: string }[]
   renderVenue: (value: string, onChange: (id: string) => void) => React.ReactNode
@@ -315,6 +319,19 @@ export function SessionList({ sessions, onChange, days, renderVenue }: {
                   </>
                 )}
               </div>
+
+              {/* A Matches session's slots: the order of play's rows and
+                  the points the Overall's ticker counts (Ross, 9 Nov 2026). */}
+              {format?.kind === 'matches' && (
+                <Stepper
+                  label="How many matches?"
+                  value={s.matches ?? defaultMatchSlots(fieldSize, format.match)}
+                  min={1}
+                  max={MAX_MATCH_SLOTS}
+                  unit={n => (n === 1 ? 'match' : 'matches')}
+                  onChange={n => set(i, { matches: n })}
+                />
+              )}
             </div>
           </div>
         )

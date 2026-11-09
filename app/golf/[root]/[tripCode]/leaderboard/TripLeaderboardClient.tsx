@@ -16,9 +16,14 @@ import {
 } from '@/lib/boardRows'
 import {
   overallOf, overallTabs, sessionBoardFor, sessionName, formatPoints, feedFor, targetLine, type SessionMatchResult,
+  matchSlotsFor, MATCH_FORMATS,
 } from '@/lib/sessions'
 import { overallRows } from '@/lib/overallRows'
+import { faceOff } from '@/lib/faceOff'
+import { eventTags, tagOfTeam } from '@/lib/tagBoards'
+import { sideColours } from '@/lib/matchSides'
 import SessionMatchList from './SessionMatchList'
+import FaceOffTicker from './FaceOffTicker'
 import {
   type DayBoards, boardGrouping, describeScope,
 } from '@/lib/leagueSetup'
@@ -37,7 +42,7 @@ import {
   SC_CARD, SC_SF, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_HEAD_TIGHT, SC_LABEL,
   SC_MUTED, SC_DARK, SC_NUM, scRow, scPoints,
 } from '@/app/components/scorecardStyle'
-import { Pill, Segmented, cardClass, chipClass } from '@/app/components/ui'
+import { FIELD, Pill, Segmented, cardClass, chipClass } from '@/app/components/ui'
 import Toggle from '@/app/components/Toggle'
 import CourseName from '@/app/components/CourseName'
 import { courseLabel, splitCourseName } from '@/lib/courseDirectory'
@@ -1688,7 +1693,48 @@ export default function TripLeaderboardClient({
     () => (overallActive ? [...rounds].sort((a, b) => a.round_number - b.round_number) : []),
     [overallActive, rounds],
   )
-  const shownSession = overallActive ? sessionRounds.find(r => r.id === sessionChoice) ?? null : null
+
+  // Two tags facing off (Ross, 9 Nov 2026): the Overall is a ticker of the
+  // points up for grabs, a session picked from a dropdown under it — the
+  // session in play to start with — and its matches listed under that.
+  const tagTeams = useMemo(() => eventTags(teams), [teams])
+  const face = useMemo(() => (overallActive?.overall
+    ? faceOff({
+        rules: overallActive.overall,
+        tags: tagTeams,
+        rows: rowsByBoard.get(overallActive.id) ?? [],
+        rounds: sessionRounds,
+        boards,
+        sessionBoardFor,
+        matches: sessionMatches ?? [],
+        tagOf: ids => tagOfTeam([...ids], memberships),
+      })
+    : null), [overallActive, tagTeams, rowsByBoard, sessionRounds, boards, sessionMatches, memberships])
+  const faceColours = useMemo(
+    () => (face ? sideColours(tagTeams[0]?.color, tagTeams[1]?.color) : null),
+    [face, tagTeams],
+  )
+  const sessionSlots = useCallback(
+    (roundId: string) => matchSlotsFor(overallActive?.overall, roundId, sessionMatches ?? []),
+    [overallActive, sessionMatches],
+  )
+  const currentSession = useMemo(() => {
+    if (!face) return null
+    const ms = sessionMatches ?? []
+    const live = sessionRounds.find(r => ms.some(m => m.roundId === r.id && m.live && !m.result))
+    if (live) return live.id
+    const open = sessionRounds.find(r => {
+      const b = sessionBoardFor(boards, r.id)
+      if (!b) return false
+      if (b.competition !== 'matches') return r.status !== 'completed'
+      const slots = sessionSlots(r.id)
+      return slots === 0 || ms.filter(m => m.roundId === r.id && m.result).length < slots
+    })
+    return (open ?? sessionRounds.at(-1))?.id ?? null
+  }, [face, sessionMatches, sessionRounds, boards, sessionSlots])
+  const shownSession = overallActive
+    ? sessionRounds.find(r => r.id === (sessionChoice ?? currentSession)) ?? null
+    : null
   const sessionView = shownSession ? sessionBoardFor(boards, shownSession.id) : null
   const sessionRows = useMemo(
     () => (sessionView && sessionView.competition === 'league' ? buildRows(sessionView, rowContext) : []),
@@ -1800,7 +1846,7 @@ export default function TripLeaderboardClient({
   )
 
   /** Overall, or one session — the Overall's switch (D39). */
-  const sessionStrip = overallActive && sessionRounds.length > 0 && (
+  const sessionStrip = overallActive && !face && sessionRounds.length > 0 && (
     <Segmented
       label="Which session"
       className="mb-4"
@@ -1909,6 +1955,9 @@ export default function TripLeaderboardClient({
         teams={teams}
         memberships={memberships}
         tripCode={tripCode}
+        slots={sessionSlots(shownSession.id)}
+        tags={face ? tagTeams : []}
+        nameById={boardNameById}
       />
     ) : (
       <>
@@ -1935,6 +1984,36 @@ export default function TripLeaderboardClient({
     )
   )
 
+  /** A session's line in the dropdown: its name and what it plays. */
+  const sessionOption = (r: Round) => {
+    const b = sessionBoardFor(boards, r.id)
+    const what = !b ? 'Format TBC'
+      : b.competition === 'matches' ? `${MATCH_FORMATS.find(f => f.key === b.matchFormat)?.label ?? 'Match'} matches`
+      : boardTitle(b)
+    return `${sessionName(overallActive?.overall, r.id, r.round_number)} · ${what}`
+  }
+
+  // Two tags facing off: the ticker, the session dropdown, its matches.
+  const faceOffView = face && faceColours && (
+    <>
+      <FaceOffTicker face={face} left={faceColours.A} right={faceColours.B} />
+      {sessionRounds.length > 0 && (
+        <div className="mb-4">
+          <label htmlFor="faceoff-session" className="t-label text-ink/65 block mb-1.5">Session</label>
+          <select
+            id="faceoff-session"
+            className={FIELD}
+            value={shownSession?.id ?? ''}
+            onChange={e => setSessionChoice(e.target.value)}
+          >
+            {sessionRounds.map(r => <option key={r.id} value={r.id}>{sessionOption(r)}</option>)}
+          </select>
+        </div>
+      )}
+      {sessionContent}
+    </>
+  )
+
   // Team cards show every member side by side; individual tabs show one column
   const cardPlayers = card
     ? card.row.playerIds.map(id => playerById.get(id)).filter(Boolean) as Player[]
@@ -1951,7 +2030,7 @@ export default function TripLeaderboardClient({
 
       {sessionStrip}
 
-      {sessionContent || (<>
+      {faceOffView || sessionContent || (<>
       {/* A round that does not count, said before its board — which is
           greyed under it, so the result reads as a record, not a standing. */}
       {shownRound?.casual && (

@@ -9,8 +9,9 @@ import {
   type SessionFormat, type OverallRanks, OVERALL_RANKS,
   overallOf, sessionBoardFor, formatOfBoard, describeFormat, feedFor, sessionName,
   withSessionFormat, withSessionName, withSessionFeed, withOverallRules, withOverallOn, withOverallOff,
-  MAX_SESSION_NAME, formatIssue, sameFormat, formatKey,
+  MAX_SESSION_NAME, formatIssue, sameFormat, formatKey, withSessionSlots, defaultMatchSlots, MAX_MATCH_SLOTS,
 } from '@/lib/sessions'
+import { Stepper } from '@/app/components/ItineraryForms'
 import { daySheetId } from '@/lib/teamSets'
 import { courseLabel } from '@/lib/courseDirectory'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, optionClass } from '@/app/components/ui'
@@ -125,6 +126,20 @@ export default function SessionsClient({ tripId, tripCode, rounds, initialBoards
                       <Link href={`${tripHome}/order?round=${r.id}`} className="t-label text-accent-deep mt-1 inline-block">
                         Set the matches →
                       </Link>
+                    )}
+                    {/* How many matches: the order of play's rows and the
+                        points the Overall's ticker counts. */}
+                    {format?.kind === 'matches' && (
+                      <div className="mt-4">
+                        <Stepper
+                          label="How many matches?"
+                          value={rules?.slots?.[r.id] ?? defaultMatchSlots(playerCount, format.match)}
+                          min={1}
+                          max={MAX_MATCH_SLOTS}
+                          unit={n => (n === 1 ? 'match' : 'matches')}
+                          onChange={n => save(withSessionSlots(boards, r.id, n))}
+                        />
+                      </div>
                     )}
                     {/* The event's formats as tiles — a tap is the answer —
                         then TBC, and a new format under them (Ross, 9 Nov

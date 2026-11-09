@@ -48,10 +48,12 @@ type Tag = { id: string; name: string; color: string }
 
 export default function MatchesSheet({
   tripId, tripCode, roundId, title, format, matches: saved, clocks, players, tags, tagOfPlayer,
-  myId, passcodeHash, playersPick, opensLabel = null, isTrip = false,
+  myId, passcodeHash, playersPick, opensLabel = null, isTrip = false, slots = 0,
 }: {
   /** A trip's: its passcode and lead player, never a PIN and organiser. */
   isTrip?: boolean
+  /** How many matches the session holds — the order of play's rows at least. */
+  slots?: number
   /** A tee sheet not open to the field yet: when it opens. The organiser sees it and may set matches early. */
   opensLabel?: string | null
   tripId: string
@@ -108,9 +110,9 @@ export default function MatchesSheet({
     return out.filter(m => m.sideA.length + m.sideB.length > 0 || saved.some(x => x.slot === m.slot && (x.result || x.live)))
   }, [saved, pending, roundId])
 
-  // Rows: the tee sheet's times, else every match set and one more.
+  // Rows: the tee sheet’s times, else the session’s match count, every match set and one more.
   const [extraRows, setExtraRows] = useState(0)
-  const rowCount = clocks?.length ?? Math.max(nextSlot(matches) + extraRows, matches.length ? Math.max(...matches.map(m => m.slot)) + 1 : 1)
+  const rowCount = clocks?.length ?? Math.max(slots + extraRows, nextSlot(matches) + extraRows, matches.length ? Math.max(...matches.map(m => m.slot)) + 1 : 1)
   const bySlot = useMemo(() => new Map(matches.map(m => [m.slot, m])), [matches])
   const [picking, setPicking] = useState<{ slot: number; side: 'a' | 'b' } | null>(null)
   const [query, setQuery] = useState('')

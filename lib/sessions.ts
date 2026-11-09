@@ -208,6 +208,8 @@ export type SessionDraft = {
    * yet, counting nothing. Otherwise its own format.
    */
   format: SessionFormat | 'same' | 'tbc'
+  /** A Matches session: how many matches it holds — the order of play's slots. */
+  matches?: number
 }
 
 /** Each session's format as it will be stored — "same" resolved, TBC null. */
@@ -291,6 +293,12 @@ export type OverallRules = {
   names?: Record<string, string>
   /** `ranks: 'tags'` — how many of a tag's cards count in a stroke session. Absent is 2. */
   tagCount?: number
+  /**
+   * Round id → how many matches a Matches session holds (Ross, 9 Nov 2026):
+   * the order of play's slots and the points the face-off ticker counts.
+   * Absent is the matches set so far.
+   */
+  slots?: Record<string, number>
 }
 
 export const DEFAULT_MATCH_FEED: SessionFeed = { kind: 'match', win: 1, half: 0.5, loss: 0 }
@@ -394,6 +402,9 @@ export type SessionMatchResult = {
   /** While live: who is up, and by how much — "2 up thru 11", "All square thru 9". */
   leader?: 'a' | 'b' | null
   progress?: string | null
+  /** While live: holes up (0 all square) and the furthest hole with a result. */
+  up?: number
+  thru?: number
 }
 
 /**
@@ -511,6 +522,14 @@ export function parseOverallRules(raw: unknown): OverallRules | null {
     }
     if (Object.keys(names).length > 0) out.names = names
   }
+  if (r.slots && typeof r.slots === 'object' && !Array.isArray(r.slots)) {
+    const slots: Record<string, number> = {}
+    for (const [id, n] of Object.entries(r.slots as Record<string, unknown>)) {
+      const v = Math.round(Number(n))
+      if (id && Number.isFinite(v) && v >= 1) slots[id] = Math.min(MAX_MATCH_SLOTS, v)
+    }
+    if (Object.keys(slots).length > 0) out.slots = slots
+  }
   if (ranks === 'tags' && Number.isFinite(Number(r.tagCount))) {
     const n = Math.min(12, Math.max(1, Math.round(Number(r.tagCount))))
     if (n !== DEFAULT_TAG_CARDS) out.tagCount = n
@@ -519,6 +538,29 @@ export function parseOverallRules(raw: unknown): OverallRules | null {
 }
 
 export const MAX_SESSION_NAME = 40
+
+/** Enough matches for any session; a Ryder Cup's singles are twelve. */
+export const MAX_MATCH_SLOTS = 32
+
+/**
+ * A Matches session's usual count: everybody playing, one match for each
+ * two sides' worth of players — twenty-four players are twelve singles or
+ * six fourballs. Never fewer than one.
+ */
+export function defaultMatchSlots(fieldSize: number, format: MatchFormat): number {
+  const n = Math.floor(Math.max(0, fieldSize) / (2 * sideSize(format)))
+  return Math.min(MAX_MATCH_SLOTS, Math.max(1, n))
+}
+
+/** How many matches a session holds: the number set, else every match set so far. */
+export function matchSlotsFor(
+  rules: OverallRules | undefined, roundId: string, matches: readonly { roundId: string; slot: number }[],
+): number {
+  const set = rules?.slots?.[roundId]
+  const own = matches.filter(m => m.roundId === roundId)
+  const used = own.length ? Math.max(own.length, ...own.map(m => m.slot + 1)) : 0
+  return Math.max(set ?? 0, used)
+}
 
 // ─── Reading an event's sessions ───────────────────────────────
 
@@ -602,6 +644,12 @@ export function withSessionName(boards: readonly Leaderboard[], roundId: string,
     void _drop
     return Object.keys(names).length > 0 ? { ...restRules, names } : restRules
   })
+}
+
+/** How many matches a Matches session holds. */
+export function withSessionSlots(boards: readonly Leaderboard[], roundId: string, count: number): Leaderboard[] {
+  const n = Math.min(MAX_MATCH_SLOTS, Math.max(1, Math.round(count)))
+  return withOverallRules(boards, rules => ({ ...rules, slots: { ...(rules.slots ?? {}), [roundId]: n } }))
 }
 
 /** How a session feeds the Overall. */

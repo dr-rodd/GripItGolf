@@ -23,6 +23,8 @@ import { overallRows } from '../lib/overallRows'
 import { playSessionCard, sessionResult, type CardHole } from '../lib/matchCard'
 import { foursomesStrokes } from '../lib/matchArrangements'
 import { eventFourthTab, fourthTab } from '../lib/eventHub'
+import { faceOff, tickFills, matchStatus, matchPool, sessionPool, MAX_TICKS } from '../lib/faceOff'
+import { defaultMatchSlots, matchSlotsFor, withSessionSlots, MAX_MATCH_SLOTS } from '../lib/sessions'
 import fs from 'fs'
 
 let passed = 0, failed = 0
@@ -446,6 +448,102 @@ section('The creation wizard asks, and No is today’s flow')
   const round = read('app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx')
   ok(round.includes('overallOf(boards) ? sessionBoardFor(boards, round.id) : primary(boards)'),
     'a round summary on an event with an Overall is its session’s result')
+}
+
+// ─── Two tags facing off ──────────────────────────────────────
+
+section('Two tags facing off: the ticker (Ross, 9 Nov 2026)')
+{
+  // How many matches a session holds.
+  eq(defaultMatchSlots(24, 'singles'), 12, 'twenty-four players are twelve singles')
+  eq(defaultMatchSlots(24, 'fourball'), 6, '  …or six fourballs')
+  eq(defaultMatchSlots(0, 'foursomes'), 1, '  …and never fewer than one')
+  eq(defaultMatchSlots(500, 'singles'), MAX_MATCH_SLOTS, '  …nor more than the most a session holds')
+  eq(parseOverallRules({ ranks: 'tags', slots: { r1: 4, r2: 0, r3: 'x', r4: 99 } })?.slots, { r1: 4, r4: MAX_MATCH_SLOTS },
+    'a stored count reads fail-soft, a bad one dropped')
+  const ms = (roundId: string, slot: number) => ({ roundId, slot })
+  eq(matchSlotsFor({ ranks: 'tags', slots: { r1: 4 } }, 'r1', [ms('r1', 0)]), 4, 'the count set is the session’s slots')
+  eq(matchSlotsFor({ ranks: 'tags', slots: { r1: 2 } }, 'r1', [ms('r1', 0), ms('r1', 4)]), 5, '  …never fewer than the matches set')
+  eq(matchSlotsFor({ ranks: 'tags' }, 'r1', []), 0, '  …and none set is none')
+  const withSlots = withSessionSlots([overallBoard({ ranks: 'tags' })], 'r1', 6)
+  eq(overallOf(withSlots)?.overall?.slots, { r1: 6 }, 'the organiser area sets a session’s count')
+
+  // The points up for grabs.
+  eq(matchPool(DEFAULT_MATCH_FEED), 1, 'a match is one point between the sides')
+  eq(sessionPool(DEFAULT_MATCH_FEED, 12), 12, '  …twelve singles twelve')
+  eq(sessionPool({ kind: 'position', points: [2, 1] }, 0), 3, 'a stroke session is its top two places')
+  eq(sessionPool({ kind: 'none' }, 4), 0, 'a session that does not count adds nothing')
+
+  // A Ryder Cup in miniature: four fourballs, four singles; one fourball each, a half, two in play.
+  const L = 'tag-eu', R = 'tag-us'
+  const tags = [{ id: L, name: 'Europe' }, { id: R, name: 'USA' }]
+  const rules = { ranks: 'tags' as const, slots: { s1: 4, s2: 4 } }
+  const boards: Leaderboard[] = [
+    overallBoard(rules),
+    sessionBoard({ kind: 'matches', match: 'fourball' }, 's1', 'day:s1'),
+    sessionBoard({ kind: 'matches', match: 'singles' }, 's2', 'day:s2'),
+  ]
+  const side = (t: string) => [t + '-p']
+  const match = (slot: number, result: 'a' | 'b' | 'halved' | null, extra: Partial<{ live: boolean; leader: 'a' | 'b' | null; up: number }> = {}) => ({
+    id: `m${slot}`, roundId: 's1', slot, sideA: side(L), sideB: side(R), result, ...extra,
+  })
+  const matches = [
+    match(0, 'a'), match(1, 'b'), match(2, 'halved'),
+    match(3, null, { live: true, leader: 'b', up: 2 }),
+    { ...match(0, null, { live: true, leader: null, up: 0 }), id: 'x', roundId: 's2', sideA: side(R), sideB: side(L) },
+  ]
+  const tagOf = (ids: readonly string[]) => (ids[0]?.startsWith(L) ? L : ids[0]?.startsWith(R) ? R : null)
+  const face = faceOff({
+    rules, tags, rows: [{ id: L, total: 1.5 }, { id: R, total: 1.5 }],
+    rounds: [{ id: 's1' }, { id: 's2' }], boards, sessionBoardFor, matches, tagOf,
+  })!
+  eq(face.total, 8, 'every slot in order of play is a point up for grabs')
+  eq(face.toWin, 4.5, '  …and more than half wins it')
+  eq([face.left.points, face.right.points], [1.5, 1.5], 'the banked points are the Overall’s own')
+  eq([face.left.projected, face.right.projected], [2, 3], 'a match in play counts as it stands: USA 2 up a point, all square a half each')
+  eq(face.live, 2, '  …two matches in play')
+  eq(face.winner, null, 'nobody has won yet')
+  eq(face.ticks.length, 8, 'a mark a point')
+  eq(face.ticks[0], { leftWon: 1, leftLive: 0, rightLive: 0, rightWon: 0 }, 'the left tag fills in from the left edge')
+  eq(face.ticks[1], { leftWon: 0.5, leftLive: 0.5, rightLive: 0, rightWon: 0 }, '  …a half shares a mark, the softened part in play')
+  eq(face.ticks[7], { leftWon: 0, leftLive: 0, rightLive: 0, rightWon: 1 }, 'the right tag fills in from the right edge')
+  eq(face.ticks[5], { leftWon: 0, leftLive: 0, rightLive: 1, rightWon: 0 }, '  …its match in play softened, inside its banked points')
+  eq(face.ticks[2], { leftWon: 0, leftLive: 0, rightLive: 0, rightWon: 0 }, 'what nobody holds yet stays empty in the middle')
+  eq(faceOff({ rules: { ranks: 'individuals' }, tags, rows: [], rounds: [], boards, sessionBoardFor, matches, tagOf }), null,
+    'only an Overall of tags is a face-off')
+  eq(faceOff({ rules, tags: tags.slice(0, 1), rows: [], rounds: [], boards, sessionBoardFor, matches, tagOf }), null,
+    '  …and only with two of them')
+  const won = faceOff({ rules, tags, rows: [{ id: L, total: 5 }, { id: R, total: 1 }], rounds: [{ id: 's1' }, { id: 's2' }], boards, sessionBoardFor, matches: [], tagOf })!
+  eq(won.winner, 'left', 'past halfway the left tag has won it')
+  eq(tickFills(200, { points: 0, projected: 0 }, { points: 0, projected: 0 }).length <= MAX_TICKS, true, 'a big event shares the marks out, a mark more than a point')
+
+  // A match's pill.
+  eq(matchStatus({ id: 'a', roundId: 's', slot: 0, sideA: [], sideB: [], result: 'a', margin: '3&2' }),
+    { main: '3&2', sub: 'Final', tone: 'a', final: true }, 'a finished match: its margin, solid in the winner’s colour')
+  eq(matchStatus({ id: 'a', roundId: 's', slot: 0, sideA: [], sideB: [], result: 'b', margin: '1 up' }).main, '1 UP', '  …"1 UP" a match that went the distance')
+  eq(matchStatus({ id: 'a', roundId: 's', slot: 0, sideA: [], sideB: [], result: 'halved' }).tone, 'half', 'a half is the brown')
+  eq(matchStatus({ id: 'a', roundId: 's', slot: 0, sideA: [], sideB: [], result: null, live: true, leader: 'b', up: 2, thru: 11 }),
+    { main: '2 UP', sub: 'Thru 11', tone: 'b', final: false }, 'in play: softened in the leader’s colour, and how far through')
+  eq(matchStatus({ id: 'a', roundId: 's', slot: 0, sideA: [], sideB: [], result: null }).tone, 'none', 'not started has no colour')
+
+  // The screens.
+  const client = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
+  ok(client.includes('{faceOffView || sessionContent ||'), 'two tags facing off draw the ticker in the table’s place')
+  ok(client.includes('id="faceoff-session"') && client.includes('sessionRounds.map(r => <option'), '  …with a dropdown of the sessions')
+  ok(client.includes("const sessionStrip = overallActive && !face &&"), '  …in place of the session switch')
+  const list = read('app/golf/[root]/[tripCode]/leaderboard/SessionMatchList.tsx')
+  ok(list.includes('/session/${m.roundId}/match/${m.slot}/card'), 'each match row opens its card')
+  ok(list.includes("To be set"), '  …and a slot with no match yet says so')
+  const ticker = read('app/golf/[root]/[tripCode]/leaderboard/FaceOffTicker.tsx')
+  ok(ticker.includes('points up for grabs') && ticker.includes('to win'), 'the ticker says the points up for grabs and what wins')
+  ok(!/^export (const|function) [a-z]/m.test(ticker) && !/^export (const|function) [a-z]/m.test(list), 'the ticker and list export components only')
+  const picker = read('app/dashboard/create/SessionPicker.tsx')
+  ok(picker.includes('label="How many matches?"'), 'creation asks how many matches a Matches session holds')
+  ok(read('app/dashboard/create/CreateLeagueForm.tsx').includes('rules.slots = slots'), '  …and stores it on the Overall')
+  ok(read('app/golf/[root]/[tripCode]/organiser/sessions/SessionsClient.tsx').includes('withSessionSlots(boards, r.id, n)'),
+    '  …changed in the organiser area')
+  ok(read('app/golf/[root]/[tripCode]/order/page.tsx').includes('slots={overall.overall?.slots?.[round.id] ?? 0}'),
+    'the order of play has a row for every match')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

@@ -60,7 +60,7 @@ import { tripBase } from '@/lib/tripPaths'
 import { DynamicQuestion, SessionList, OverallSetup } from './SessionPicker'
 import {
   type SessionDraft, type OverallRanks, type SessionFeed, type OverallRules,
-  sessionsIssue, resolvedFormats, inRunningOrder, sessionBoard, overallBoard, feedFor,
+  sessionsIssue, resolvedFormats, inRunningOrder, sessionBoard, overallBoard, feedFor, defaultMatchSlots,
 } from '@/lib/sessions'
 import { daySheetId } from '@/lib/teamSets'
 
@@ -451,6 +451,8 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     courseId: sess.courseId,
   }))
   const sessionsProblem = isDynamic ? sessionsIssue(orderedSessions) : null
+  // Named players so far — what a Matches session's count starts from.
+  const fieldCount = players.filter(p => p.name.trim()).length
   const ranks: OverallRanks = overallRanks ?? (tags.on ? 'tags' : 'individuals')
   const overallEntrants = ranks === 'tags' ? Math.max(2, tags.tags?.length ?? 2)
     : ranks === 'individuals' ? Math.max(1, players.filter(p => p.name.trim()).length) : 4
@@ -604,6 +606,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
       const rules: OverallRules = { ranks }
       const storedFeeds: Record<string, SessionFeed> = {}
       const names: Record<string, string> = {}
+      const slots: Record<string, number> = {}
       orderedSessions.forEach((sess, i) => {
         const rid = roundIds[i]
         const board = sessionBoards.find(b => b.roundIds?.[0] === rid) ?? null
@@ -612,9 +615,12 @@ export default function CreateLeagueForm({ schedule, onExit }: {
           storedFeeds[rid] = feedFor({ ranks, ...(own ? { feeds: { [rid]: own } } : {}) }, rid, board, overallEntrants)
         }
         if (sess.name?.trim()) names[rid] = sess.name.trim()
+        const f = formats[i]
+        if (f?.kind === 'matches') slots[rid] = sess.matches ?? defaultMatchSlots(fieldCount, f.match)
       })
       if (Object.keys(storedFeeds).length > 0) rules.feeds = storedFeeds
       if (Object.keys(names).length > 0) rules.names = names
+      if (Object.keys(slots).length > 0) rules.slots = slots
       return [overallBoard(rules), ...sessionBoards, ...boards]
     })() : boards
 
@@ -1333,6 +1339,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
             <SessionList
               sessions={sessions}
               onChange={setSessions}
+              fieldSize={fieldCount}
               days={playingDays}
               renderVenue={(value, onChange) => (
                 <VenuePicker courses={courses} value={value} onChange={onChange}

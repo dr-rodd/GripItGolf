@@ -200,6 +200,8 @@ export async function readSessionCards(
       result.live = true
       result.leader = state.leader === 'A' ? 'a' : state.leader === 'B' ? 'b' : null
       result.progress = state.progress
+      result.up = state.up
+      result.thru = state.thru
     }
     results.push(result)
   }

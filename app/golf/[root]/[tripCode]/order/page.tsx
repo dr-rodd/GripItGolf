@@ -80,6 +80,7 @@ export default async function OrderOfPlayPage({ params, searchParams }: {
             passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null}
             playersPick={access.playersPick}
             isTrip={!isEvent((trip as { kind?: unknown }).kind)}
+            slots={overall.overall?.slots?.[round.id] ?? 0}
           />
         ))}
       </div>
