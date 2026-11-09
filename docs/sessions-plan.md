@@ -104,6 +104,10 @@ Each stage ships alone. Every stage keeps the brief's section 8 tests green, inc
 7. **Foursomes.** One ball a side off 50% of the combined handicap, and a per-side score on the card.
 8. **Trips.** The same model in Trip Setup; every existing trip byte-identical.
 
+## After the stages: two tags facing off (9 Nov 2026)
+
+An Overall that ranks exactly two tags is drawn as a ticker instead of a table (D50): every point up for grabs a mark, each tag filling in from its own edge, a match in play softened in the colour of whoever is ahead; a Session dropdown under it; the session's matches one tappable row each. The points up for grabs come from **a match count per Matches session**, asked at creation and changed on the Session formats page — `OverallRules.slots`, in `trips.leaderboards`, so no migration. `lib/faceOff.ts` holds the sums; `test:sessions` the rules and the wiring.
+
 ## For Ross
 
 **Nothing above needs a decision before stage 2.** These are the points worth a look:

@@ -233,3 +233,4 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D47 | Events first; trips follow, every existing trip unchanged | Built |
 | D48 | The date-span freeze is fixed first, in the league form and the itinerary builder | Built |
 | D49 | No spectator mode; strict events control who scores matches | Built |
+| D50 | Two tags facing off: the Overall is a ticker of every point up for grabs (each tag filling in from its own edge, matches in play softened in the leader's colour), a session dropdown, and the session's matches one tappable row each; a Matches session's match count asked at creation | Built |
