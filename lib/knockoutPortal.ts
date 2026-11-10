@@ -108,3 +108,27 @@ export function describeResult(m: PortalMatch, nameOf: (id: string) => string | 
   const name = nameOf(m.winner) ?? 'Decided'
   return m.result ? `${name} won ${m.result}` : `${name} won`
 }
+
+/**
+ * The bracket's way into scoring (Ross, 10 Nov 2026: "anyone who can edit
+ * the match, incl. admin, should go directly into scoring"): every match
+ * still to finish with both sides known and no bye has an address — its
+ * card where the match is arranged (a course chosen), else its own page to
+ * arrange it — and `mine` the ones this phone's side plays in. Whether a
+ * phone may use an address is the card's own rule (`canEdit`): its players,
+ * the organiser, or anybody while `score_matches` is on.
+ */
+export function bracketScoreLinks(
+  view: { matches: readonly PortalMatch[]; entrantId: string | null },
+  arranged: ReadonlySet<string>,
+  base: string,
+): { mine: string[]; hrefs: Record<string, string> } {
+  const hrefs: Record<string, string> = {}
+  const mine: string[] = []
+  for (const m of view.matches) {
+    if (m.winner !== null || !m.sideA || !m.sideB || m.aIsBye || m.bIsBye) continue
+    hrefs[m.id] = arranged.has(m.id) ? `${base}/match/${m.id}/card` : `${base}/match/${m.id}`
+    if (view.entrantId && (m.sideA === view.entrantId || m.sideB === view.entrantId)) mine.push(m.id)
+  }
+  return { mine, hrefs }
+}

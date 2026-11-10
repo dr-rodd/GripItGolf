@@ -134,17 +134,26 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
   // round_id to build a set of a few ids, and past Supabase's 1,000-row cap
   // the set could miss a played round and offer its course up for changing.
   const roundIds = rounds.map(r => r.id)
-  const [scored, liveRes] = roundIds.length > 0
+  const [scored, liveRes, sessionRes] = roundIds.length > 0
     ? await Promise.all([
         roundsWithScores(supabase, roundIds),
         supabase.from('live_rounds').select('round_id').in('round_id', roundIds),
+        // A session match's card plays the round's course too (Ross, 10 Nov
+        // 2026: a course changed under a card in play transplanted its
+        // scores) — each match's count of scores, embedded. Fail-soft:
+        // before migration 067 there are no session matches.
+        supabase.from('session_matches').select('round_id, session_match_scores(count)').eq('trip_id', trip.id),
       ])
-    : [{ data: new Set<string>(), error: null }, { data: [], error: null }]
+    : [{ data: new Set<string>(), error: null }, { data: [], error: null }, { data: [], error: null }]
   if (scored.error) console.error('TripSetupPage scores count failed:', scored.error)
   if (liveRes.error) console.error('TripSetupPage live rounds query failed:', liveRes.error)
+  const sessionScored = ((sessionRes.error ? [] : sessionRes.data ?? []) as { round_id: string; session_match_scores?: { count: number }[] }[])
+    .filter(m => (m.session_match_scores?.[0]?.count ?? 0) > 0)
+    .map(m => m.round_id)
   const lockedRoundIds = new Set([
     ...scored.data,
     ...(liveRes.data ?? []).map(r => r.round_id as string),
+    ...sessionScored,
   ])
   const lockedGolfItemIds = rounds
     .filter(r => lockedRoundIds.has(r.id) && r.itinerary_item_id)

@@ -3,6 +3,8 @@
 import { useUnlocked } from '@/app/components/useUnlocked'
 import { sideColours, sideTint, type SideColour } from '@/lib/matchSides'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { isLocked } from '@/lib/passcode'
 import {
   tileTop, tileCenter, columnX, columnHeight,
   connectorPath, roundHeaderLabel, clampPosition, easeOut, centringShift,
@@ -90,7 +92,25 @@ function bracketHeight(rounds: (BracketMatchRow | null)[][], position: number): 
 
 export default function MatchplayBracket({
   matches: initialMatches, entrants, readings = [], deadlines = [], today = '', lock = null, details = {},
+  scoring = null,
 }: {
+  /**
+   * Who goes straight to a match's card to score it (Ross, 10 Nov 2026: "in
+   * the bracket, anyone who can edit the match, incl. admin, should go
+   * directly into scoring") — the card's own rule, `canEdit` in
+   * MatchCardClient: a match still to finish with both sides known, for its
+   * players, the organiser, or anybody while `score_matches` is on. `hrefs`
+   * holds those matches' addresses, the card where the match is arranged,
+   * else its page to arrange it. Everyone else opens the card to read.
+   */
+  scoring?: {
+    tripCode: string
+    passcodeHash: string | null
+    anyoneScores: boolean
+    /** The matches this phone's player (or pairing) plays in. */
+    mine: string[]
+    hrefs: Record<string, string>
+  } | null
   /**
    * Each match's card hole by hole, where anything is on it — a tap opens it
    * over the draw (Ross, 10 Nov 2026: a viewer opens the card in place,
@@ -131,7 +151,18 @@ export default function MatchplayBracket({
   const [sheet, setSheet] = useState<{ match: BracketMatchRow; correcting: boolean } | null>(null)
   const [viewing, setViewing] = useState<BracketMatchRow | null>(null)
   // This device's organiser unlock — sessionStorage, read after mount.
-  const [unlocked, setUnlocked] = useUnlocked(lock?.tripCode ?? '')
+  const [unlocked, setUnlocked] = useUnlocked(lock?.tripCode ?? scoring?.tripCode ?? '')
+  // Where a tap is taking this phone — the router is asked only then, by
+  // `Navigate`, so the bracket still renders without one (test:bracket-render).
+  const [going, setGoing] = useState<string | null>(null)
+  const mineSet = useMemo(() => new Set(scoring?.mine ?? []), [scoring])
+  const organiser = unlocked || !isLocked(scoring?.passcodeHash ?? lock?.passcodeHash ?? null)
+  // The card to score, where this phone may score the match — null otherwise.
+  const scoreHref = (m: BracketMatchRow): string | null => {
+    const href = scoring?.hrefs[m.id]
+    if (!href || m.winner_player_id) return null
+    return organiser || scoring!.anyoneScores || mineSet.has(m.id) ? href : null
+  }
 
   const readingFor = useMemo(
     () => new Map(readings.map(r => [r.matchId, r])),
@@ -628,6 +659,7 @@ export default function MatchplayBracket({
               faded={slot < -0.05 || slot > 1.05}
               onOpen={correcting => setSheet({ match, correcting })}
               onView={details[match.id] ? () => setViewing(match) : undefined}
+              onScore={(() => { const href = scoreHref(match); return href ? () => setGoing(href) : undefined })()}
             />
           ))
         })}
@@ -649,8 +681,12 @@ export default function MatchplayBracket({
       </div>
 
       <p className="text-ink/50 text-[13px] text-center mt-4">
-        Swipe to move between rounds · hold a finished match to change it
+        {scoring && (organiser || scoring.anyoneScores || scoring.mine.length > 0)
+          ? 'Tap a match to score it · hold one to record or change its result'
+          : 'Swipe to move between rounds · hold a finished match to change it'}
       </p>
+
+      {going && <Navigate href={going} onGone={() => setGoing(null)} />}
 
       {viewing && (
         <CardSheet
@@ -739,8 +775,10 @@ function TileNote({ reading, decided }: { reading: MatchReading | null; decided:
 }
 
 function MatchTile({
-  match, reading, playerById, x, y, faded, onOpen, onView,
+  match, reading, playerById, x, y, faded, onOpen, onView, onScore,
 }: {
+  /** This phone may score the match: a tap goes straight to its card. */
+  onScore?: () => void
   /** The match has a card: a tap opens it to read. */
   onView?: () => void
   match: BracketMatchRow
@@ -804,14 +842,16 @@ function MatchTile({
       swallowClick.current = false
       clearTimer()
       setFeedback('holding')
-      // Holding reopens a finished match. Only a decided one can be corrected.
-      if (decided) {
+      // Holding reopens a finished match. Only a decided one can be corrected
+      // — and for somebody whose tap goes to the card to score, a hold on a
+      // match still to finish records its result by hand (a paper card).
+      if (decided || onScore) {
         timer.current = setTimeout(() => {
           if (press.current && !press.current.moved) {
             press.current.fired = true
             swallowClick.current = true
             pop()
-            onOpen(true)
+            onOpen(decided)
           }
         }, LONG_PRESS_MS)
       }
@@ -840,8 +880,14 @@ function MatchTile({
         heldMs: Date.now() - p.at,
         longPressMs: LONG_PRESS_MS,
       })
-      // A match with a card opens it to read; recording a result by hand is
-      // inside it. A hold on a finished one still changes its result.
+      // Somebody who may score the match goes straight to its card. Anyone
+      // else: a match with a card opens it to read, recording a result by
+      // hand inside it. A hold on a finished one still changes its result.
+      if (onScore && outcome === 'decide') {
+        swallowClick.current = true
+        onScore()
+        return
+      }
       if (onView && outcome !== 'correct') {
         swallowClick.current = true
         onView()
@@ -1043,6 +1089,13 @@ function Side({
  * still to finish offers the way to record its result by hand; a finished
  * one says how to change it.
  */
+/** Goes to `href` once mounted — the router asked only when a tap needs it. */
+function Navigate({ href, onGone }: { href: string; onGone: () => void }) {
+  const router = useRouter()
+  useEffect(() => { router.push(href); onGone() }, [router, href, onGone])
+  return null
+}
+
 function CardSheet({ match, detail, playerById, onClose, onDecide }: {
   match: BracketMatchRow
   detail: MatchCardDetail | undefined

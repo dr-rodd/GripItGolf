@@ -258,6 +258,7 @@ export default async function MatchPage({
                   courseId={arranged?.course_id ?? null}
                   playedOn={arranged?.played_on ?? null}
                   tees={tees}
+                  underWay={underWay}
                 />
               </div>
             )}

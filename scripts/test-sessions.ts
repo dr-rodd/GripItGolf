@@ -27,6 +27,8 @@ import { faceOff, tickFills, matchStatus, matchPool, sessionPool, MAX_TICKS } fr
 import { defaultMatchSlots, matchSlotsFor, withSessionSlots, MAX_MATCH_SLOTS, slotFloor, itinerarySessions, sessionSlotCount } from '../lib/sessions'
 import { buildMatchSheets, clocksOf } from '../app/golf/[root]/[tripCode]/session/matchSheetPlan'
 import fs from 'fs'
+import { bracketScoreLinks } from '../lib/knockoutPortal'
+import { voidMatchCard, cardHasScores } from '../lib/matchCardVoid'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -794,10 +796,109 @@ section('Viewers open a card in place, sitewide (Ross, 10 Nov 2026)')
   ok(read(base + 'matchplay/page.tsx').includes('readMatchDetails(trip, view,'), '  …read on the server with the draw')
 }
 
-console.log(`\n${'─'.repeat(56)}`)
-if (failed === 0) console.log(`✓ all ${passed} checks passed`)
-else {
-  console.log(`✗ ${failed} of ${passed + failed} checks failed:`)
-  for (const f of failures) console.log(`   · ${f}`)
-  process.exitCode = 1
+section('The bracket goes straight into scoring; a match card is voided before its course or tees change (Ross, 10 Nov 2026)')
+{
+  const m = (id: string, o: Partial<{ sideA: string | null; sideB: string | null; winner: string | null; aIsBye: boolean; bIsBye: boolean }> = {}) => ({
+    id, roundNumber: 1, roundName: 'Round 1', slot: 0, sideA: 'p1', sideB: 'p2', aIsBye: false, bIsBye: false, winner: null, result: null, ...o,
+  })
+  const links = bracketScoreLinks({
+    entrantId: 'p1',
+    matches: [m('a'), m('b', { sideA: 'p3', sideB: 'p4' }), m('c', { winner: 'p1' }), m('d', { sideB: null }), m('e', { bIsBye: true })],
+  }, new Set(['a']), '/golf/event/ABC123')
+  eq(links.hrefs.a, '/golf/event/ABC123/match/a/card', 'an arranged match goes to its card to score')
+  eq(links.hrefs.b, '/golf/event/ABC123/match/b', '  …one still to arrange to its page, to choose the course and tees')
+  eq(Object.keys(links.hrefs).sort(), ['a', 'b'], '  …a finished match, one with a side to come and a bye go nowhere new')
+  eq(links.mine, ['a'], '  …and the matches this phone plays in are known')
+
+  const bracket = read('app/golf/[root]/[tripCode]/matchplay/MatchplayBracket.tsx')
+  ok(bracket.includes("if (onScore && outcome === 'decide') {") && bracket.indexOf("if (onScore && outcome === 'decide') {") < bracket.indexOf("if (onView && outcome !== 'correct') {"),
+    'a tap from anybody who may score the match goes to the card before any viewer')
+  ok(bracket.includes("return organiser || scoring!.anyoneScores || mineSet.has(m.id) ? href : null"),
+    '  …the card’s own rule: its players, the organiser, or anybody while score_matches is on')
+  ok(bracket.includes('if (decided || onScore) {') && bracket.includes('onOpen(decided)'),
+    '  …a hold on a match still to finish records its result by hand')
+
+  const arrange = read('app/golf/[root]/[tripCode]/match/[matchId]/MatchActions.tsx')
+  ok(arrange.includes("update(scored ? { played_on: day || null } : { course_id: course, played_on: day || null, tees: kept })"),
+    'a match under way changes its day only, never its course or tees')
+  ok(arrange.includes("await cardHasScores(supabase, 'knockout', tripId, matchId)"), '  …asked afresh before a course or tee is written')
+  ok(read('app/golf/[root]/[tripCode]/match/[matchId]/page.tsx').includes('underWay={underWay}'), '  …the page saying whether the card is under way')
+  const tees = read('app/golf/[root]/[tripCode]/session/[roundId]/match/[slot]/card/SessionTees.tsx')
+  ok(tees.includes('{open && !fixed && (') && tees.includes("voidMatchCard(supabase, 'session', tripId, matchId)"),
+    'a session match’s tees are fixed once its card has a score, until the card is voided')
+  ok(read('app/golf/[root]/[tripCode]/setup/page.tsx').includes("select('round_id, session_match_scores(count)')"),
+    'Trip Setup locks a round’s course while a session match on it has a card')
 }
+
+
+/** A stand-in for the database: the rows by table, and every delete and update made. */
+function fakeDb(rows: Record<string, Record<string, unknown>[]>) {
+  const log: string[] = []
+  const client = {
+    from(table: string) {
+      const filters: [string, unknown][] = []
+      let op: 'select' | 'delete' | 'update' = 'select'
+      let head = false
+      let patch: unknown = null
+      const match = () => (rows[table] ?? []).filter(r => filters.every(([k, v]) => r[k] === v))
+      const q = {
+        select(_cols: string, opts?: { head?: boolean }) { head = !!opts?.head; return q },
+        delete() { op = 'delete'; return q },
+        update(p: unknown) { op = 'update'; patch = p; return q },
+        eq(k: string, v: unknown) { filters.push([k, v]); return q },
+        maybeSingle() { return Promise.resolve({ data: match()[0] ?? null, error: null }) },
+        then(res: (v: unknown) => void) {
+          if (op === 'delete') {
+            const gone = new Set(match())
+            rows[table] = (rows[table] ?? []).filter(r => !gone.has(r))
+            log.push(`delete ${table} ${gone.size}`)
+            return res({ error: null })
+          }
+          if (op === 'update') { log.push(`update ${table} ${JSON.stringify(patch)}`); return res({ error: null }) }
+          return res(head ? { count: match().length, error: null } : { data: match(), error: null })
+        },
+      }
+      return q
+    },
+  }
+  return { client: client as never, log, rows }
+}
+
+async function voidChecks() {
+  section('Voiding a match card (lib/matchCardVoid.ts)')
+  const db = fakeDb({
+    matchplay_matches: [{ id: 'm1', trip_id: 't', winner_player_id: null }, { id: 'm2', trip_id: 't', winner_player_id: 'p1' }],
+    match_scores: [
+      { trip_id: 't', match_id: 'm1', hole_number: 1 }, { trip_id: 't', match_id: 'm1', hole_number: 2 },
+      { trip_id: 't', match_id: 'm2', hole_number: 1 },
+    ],
+    match_concessions: [{ trip_id: 't', match_id: 'm1', hole_number: 3 }],
+  })
+  eq(await cardHasScores(db.client, 'knockout', 't', 'm1'), true, 'a card with a score is under way')
+  eq(await voidMatchCard(db.client, 'knockout', 't', 'm1'), { ok: true }, 'voiding a live card')
+  eq(await cardHasScores(db.client, 'knockout', 't', 'm1'), false, '  …leaves nothing on it')
+  eq(db.rows.match_concessions.length, 0, '  …its conceded holes gone too')
+  ok(db.log.includes('update matchplay_matches {"extra_holes":{}}'), '  …and where its extra holes were played off')
+  eq(db.rows.match_scores.length, 1, '  …and no other match’s card touched')
+  const done = await voidMatchCard(db.client, 'knockout', 't', 'm2')
+  eq(done.ok, false, 'a match with a result is never voided from here')
+  eq(db.rows.match_scores.length, 1, '  …its card kept')
+
+  const s = fakeDb({
+    session_matches: [{ id: 's1', trip_id: 't', result: null }, { id: 's2', trip_id: 't', result: 'halved' }],
+    session_match_scores: [{ trip_id: 't', match_id: 's1' }, { trip_id: 't', match_id: 's2' }],
+  })
+  eq(await voidMatchCard(s.client, 'session', 't', 's1'), { ok: true }, 'a session match’s card voids the same way')
+  eq((await voidMatchCard(s.client, 'session', 't', 's2')).ok, false, '  …never once it has a result')
+  eq(s.rows.session_match_scores.map(r => r.match_id), ['s2'], '  …only the voided card’s scores gone')
+}
+
+void voidChecks().then(() => {
+  console.log(`\n${'─'.repeat(56)}`)
+  if (failed === 0) console.log(`✓ all ${passed} checks passed`)
+  else {
+    console.log(`✗ ${failed} of ${passed + failed} checks failed:`)
+    for (const f of failures) console.log(`   · ${f}`)
+    process.exitCode = 1
+  }
+})

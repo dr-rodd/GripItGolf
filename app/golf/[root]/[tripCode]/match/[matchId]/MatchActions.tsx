@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { isLocked } from '@/lib/passcode'
 import { teesForPlayer } from '@/lib/courseHandicap'
 import { WALKOVER, withTee, type MatchTees } from '@/lib/matchArrangements'
+import { cardHasScores, voidMatchCard } from '@/lib/matchCardVoid'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
 import { Sheet } from '@/app/components/ItineraryForms'
@@ -21,7 +22,10 @@ import { FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components
  * tee, from which the server works out the shots — and a walkover.
  *
  * Arranging is for the players in the match, or the organiser with the
- * admin PIN asked in place. A walkover is conceded by a player in the match
+ * admin PIN asked in place. **Once the card has a score the course and tees
+ * are fixed** (Ross, 10 Nov 2026) — the shots and holes come off them — and
+ * the way to change them is to void the card first (lib/matchCardVoid.ts),
+ * then change them, then start again. The day stays free. A walkover is conceded by a player in the match
  * (to the other side) or awarded by the organiser (to either, and over a
  * result already in — changing a result is theirs). Both write the match
  * row the bracket reads, through the anon client as the bracket does.
@@ -41,8 +45,10 @@ function useOrganiser(tripCode: string, passcodeHash: string | null) {
 
 export function MatchArrange({
   tripId, tripCode, matchId, passcodeHash, inMatch, allowAddCourse, people,
-  courseId, playedOn, tees,
+  courseId, playedOn, tees, underWay = false,
 }: {
+  /** The card has a score on it: the course and tees are fixed until it is voided. */
+  underWay?: boolean
   tripId: string
   tripCode: string
   matchId: string
@@ -64,7 +70,12 @@ export function MatchArrange({
   const [courseTees, setCourseTees] = useState<TeeOption[]>([])
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const { courses } = usePlatformCourses(open)
+  // The card under way, as last known here — voiding it frees the course and tees.
+  const [scored, setScored] = useState(underWay)
+  useEffect(() => { setScored(underWay) }, [underWay])
+  const [confirmVoid, setConfirmVoid] = useState(false)
+  const [voiding, setVoiding] = useState(false)
+  const { courses } = usePlatformCourses(open && !scored)
   const [added, setAdded] = useState<DirectoryCourse[]>([])
   const allCourses = useMemo(() => {
     const known = new Set(courses.map(c => c.id))
@@ -75,7 +86,7 @@ export function MatchArrange({
 
   // The tees of the course chosen, read when it changes (tees are readable).
   useEffect(() => {
-    if (!open || !course) { setCourseTees([]); return }
+    if (!open || !course || scored) { setCourseTees([]); return }
     let live = true
     supabase.from('tees').select('id, name, gender, slope, course_id').eq('course_id', course)
       .then(({ data, error: err }) => {
@@ -84,7 +95,7 @@ export function MatchArrange({
         setCourseTees((data ?? []) as TeeOption[])
       })
     return () => { live = false }
-  }, [open, course])
+  }, [open, course, scored])
 
   // The home clubs of the players in the match, offered first.
   const homes = [...new Map(people
@@ -96,19 +107,40 @@ export function MatchArrange({
     setDay(playedOn ?? '')
     setChosen(tees)
     setError(null)
+    setConfirmVoid(false)
     setOpen(true)
+  }
+
+  async function voidCard() {
+    if (!mayArrange) { setError('Voiding the card needs the admin PIN.'); return }
+    setVoiding(true)
+    setError(null)
+    const res = await voidMatchCard(supabase, 'knockout', tripId, matchId)
+    setVoiding(false)
+    setConfirmVoid(false)
+    if (!res.ok) { setError(res.reason); return }
+    setScored(false)
+    router.refresh()
   }
 
   async function save() {
     if (!mayArrange) { setError('Arranging this match needs the admin PIN.'); return }
-    if (!course) { setError('Choose the course first.'); return }
+    if (!scored && !course) { setError('Choose the course first.'); return }
     setSaving(true)
     setError(null)
+    // A card started meanwhile on another phone fixes the course and tees
+    // too: asked afresh before they are written.
+    if (!scored && await cardHasScores(supabase, 'knockout', tripId, matchId)) {
+      setSaving(false)
+      setScored(true)
+      setError('Somebody has started scoring this match — void the card to change the course or tees.')
+      return
+    }
     // Only tees that belong to this course survive a change of course.
     const valid = new Set(courseTees.map(t => t.id))
     const kept = Object.fromEntries(Object.entries(chosen).filter(([, t]) => valid.has(t)))
     const { error: err } = await supabase.from('matchplay_matches')
-      .update({ course_id: course, played_on: day || null, tees: kept })
+      .update(scored ? { played_on: day || null } : { course_id: course, played_on: day || null, tees: kept })
       .eq('id', matchId).eq('trip_id', tripId)
     setSaving(false)
     if (err) {
@@ -144,6 +176,34 @@ export function MatchArrange({
             </div>
           )}
 
+          {scored && (
+            <div className={`p-4 ${cardClass('flat')}`}>
+              <p className="t-label text-ink">This match is under way</p>
+              <p className="t-cap text-ink/65 mt-0.5 leading-snug">
+                Its card has scores on it, so the course and tees are fixed. To change either, void the card:
+                every score on it is deleted and the match starts again from the 1st.
+              </p>
+              {confirmVoid ? (
+                <div className="mt-3">
+                  <p className="t-label text-ink mb-2">Void the card? Every score on it is deleted.</p>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => void voidCard()} disabled={voiding || !mayArrange} className={buttonClass('danger', false, true)}>
+                      {voiding ? 'Voiding…' : 'Void it'}
+                    </button>
+                    <button type="button" onClick={() => setConfirmVoid(false)} disabled={voiding} className={buttonClass('secondary', false, true)}>
+                      Keep it
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setConfirmVoid(true)} disabled={!mayArrange} className={`${buttonClass('secondary', false, true)} mt-3`}>
+                  Void the card
+                </button>
+              )}
+            </div>
+          )}
+
+          {!scored && (
           <div>
             <label className={FIELD_LABEL}>Course</label>
             {homes.length > 0 && (
@@ -172,10 +232,11 @@ export function MatchArrange({
               allowAdd={allowAddCourse}
             />
           </div>
+          )}
 
           <DateField label="Day (if arranged)" value={day} onChange={setDay} />
 
-          {course && (
+          {course && !scored && (
             <div className="space-y-3">
               <p className={FIELD_LABEL}>Tees</p>
               {courseTees.length === 0 && (

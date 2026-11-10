@@ -81,7 +81,14 @@ export default async function SessionMatchCardPage({ params, searchParams }: {
     )
   }
 
-  const { setups } = await readSessionCards(trip, boards, players, { teams, memberships }, [row])
+  const [{ setups }, scoredRes] = await Promise.all([
+    readSessionCards(trip, boards, players, { teams, memberships }, [row]),
+    // Whether the card is under way — the tees are fixed once it is.
+    supabase.from('session_match_scores').select('match_id', { count: 'exact', head: true })
+      .eq('trip_id', trip.id).eq('match_id', row.id),
+  ])
+  // A failed count reads as under way: the safer answer, it only locks the tees.
+  const underWay = !!scoredRes.error || (scoredRes.count ?? 0) > 0
   const setup = setups.get(row.id)!
   const card = setup.card
   const named = setup.courseName ? splitCourseName(setup.courseName) : null
@@ -111,6 +118,11 @@ export default async function SessionMatchCardPage({ params, searchParams }: {
               players={[...row.side_a, ...row.side_b].map(id => ({ id, name: players.find(p => p.id === id)?.name ?? 'A player' }))}
               tees={setup.tees}
               choices={setup.teeChoices}
+              underWay={underWay}
+              finished={!!row.result}
+              tripCode={tripCode}
+              passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null}
+              inMatch={mySide !== null}
             />
             <MatchCardClient
               startOn={view === 'scorecard' ? 'scorecard' : 'card'}

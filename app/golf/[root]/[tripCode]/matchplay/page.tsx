@@ -1,6 +1,9 @@
 import { notFound } from 'next/navigation'
 import { readKnockout } from '../knockout'
 import { readMatchDetails } from '../match/matchCards'
+import { linkedPlayerId } from '@/lib/currentPlayer'
+import { bracketScoreLinks } from '@/lib/knockoutPortal'
+import { allowsParticipant } from '@/lib/eventPermissions'
 import OrganiserLock from '@/app/components/OrganiserLock'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -210,14 +213,36 @@ export default async function MatchplayPage({
   // a viewer never leaves for the card to score). Fail-soft: no view, no
   // cards, the draw as ever.
   const cardRoster = (playersRes.data ?? []) as { id: string; name: string; handicap: number | null; gender: string | null }[]
-  const [readings, details] = await Promise.all([
+  // And who goes straight to a match's card to score it (Ross, 10 Nov
+  // 2026): this phone's player, read off the cookie, and which matches are
+  // arranged — `course_id` in its own fail-soft query (migration 057).
+  const [readings, cardRead, arrangedRes, permsRes] = await Promise.all([
     links.length > 0
       ? readLinkedRounds(trip, links, matches, entrants, memberships, tripQuotaScale(boards))
       : Promise.resolve([]),
-    readKnockout(trip, rawSetup, null, cardRoster)
-      .then(view => (view ? readMatchDetails(trip, view, cardRoster.map(p => ({ ...p, gender: p.gender ?? 'M' }))) : {}))
-      .catch(e => { console.error('MatchplayPage card read failed:', e); return {} }),
+    linkedPlayerId(tripCode)
+      .then(async id => {
+        const me = cardRoster.some(p => p.id === id) ? id : null
+        const view = await readKnockout(trip, rawSetup, me, cardRoster)
+        const details = view ? await readMatchDetails(trip, view, cardRoster.map(p => ({ ...p, gender: p.gender ?? 'M' }))) : {}
+        return { view, details }
+      })
+      .catch(e => { console.error('MatchplayPage card read failed:', e); return { view: null, details: {} } }),
+    supabase.from('matchplay_matches').select('id, course_id').eq('trip_id', trip.id),
+    // Whether anybody may score a match (`score_matches`), on its own and
+    // fail-soft — never in the trip's select (migration 049).
+    supabase.from('trips').select('event_permissions').eq('id', trip.id).maybeSingle(),
   ])
+  const details = cardRead.details
+  const arranged = new Set(((arrangedRes.error ? [] : arrangedRes.data ?? []) as { id: string; course_id: string | null }[])
+    .filter(r => r.course_id).map(r => r.id))
+  const scoreLinks = cardRead.view ? bracketScoreLinks(cardRead.view, arranged, tripHome) : null
+  const scoring = scoreLinks ? {
+    tripCode,
+    passcodeHash: setupRow?.settings_passcode_hash ?? null,
+    anyoneScores: allowsParticipant(setupRow?.kind, (permsRes.data as { event_permissions?: unknown } | null)?.event_permissions, 'score_matches'),
+    ...scoreLinks,
+  } : null
 
   // The organiser's lock, at the header's right edge (OrganiserLock).
   const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={lock ? lock.passcodeHash : null} />
@@ -269,6 +294,7 @@ export default async function MatchplayPage({
             entrants={coloured as BracketEntrantRow[]}
             readings={readings}
             details={details}
+            scoring={scoring}
             deadlines={deadlines}
             today={todayString(new Date())}
             lock={lock}
