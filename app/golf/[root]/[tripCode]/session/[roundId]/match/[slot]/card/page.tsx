@@ -26,10 +26,12 @@ export const dynamic = 'force-dynamic'
  * match's own row. Its sides are the session's left and right, coloured by
  * their tags where they have them (lib/matchSides.ts).
  */
-export default async function SessionMatchCardPage({ params }: {
+export default async function SessionMatchCardPage({ params, searchParams }: {
   params: Promise<{ root: string; tripCode: string; roundId: string; slot: string }>
+  /** `view=scorecard` — from the leaderboard: the match hole by hole, not the card to score. */
+  searchParams: Promise<{ view?: string }>
 }) {
-  const { root, tripCode, roundId, slot } = await params
+  const [{ root, tripCode, roundId, slot }, { view }] = await Promise.all([params, searchParams])
   const tripHome = tripHomeAt(root, tripCode)
   const slotNo = Number(slot)
   if (!Number.isInteger(slotNo) || slotNo < 0) notFound()
@@ -111,6 +113,7 @@ export default async function SessionMatchCardPage({ params }: {
               choices={setup.teeChoices}
             />
             <MatchCardClient
+              startOn={view === 'scorecard' ? 'scorecard' : 'card'}
               session
               backHref={back}
               roundName={`${label} · ${format}`}

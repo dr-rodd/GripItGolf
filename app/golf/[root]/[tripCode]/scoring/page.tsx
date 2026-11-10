@@ -455,6 +455,7 @@ export default async function TripCoursePortalPage({
                     slots={sessionSlotCount(overall.overall, session, round.id, sessionRead?.results ?? [], sessionRead?.roster.length ?? 0)}
                     tags={sessionTags.length === 2 ? sessionTags : []}
                     nameById={sessionNames}
+                    toScore
                   />
                 </section>
               )

@@ -7,7 +7,7 @@
  * the match stands: solid in the winner's colour once it is over, softened
  * in the colour of whoever is ahead while it is in play, the brown for all
  * square (lib/faceOff.ts `matchStatus`). The side ahead is washed in its
- * colour. Each row opens its card; a slot with no match yet says so and
+ * colour. Each row opens the match — hole by hole from the leaderboard, its card to score from the Scoring tab; a slot with no match yet says so and
  * opens nothing. Never gold (D39).
  */
 
@@ -24,8 +24,14 @@ type P = { id: string; name: string }
 type T = { id: string; name: string; color: string }
 
 export default function SessionMatchList({
-  matches, players, teams, memberships, tripCode, slots = 0, tags = [], nameById,
+  matches, players, teams, memberships, tripCode, slots = 0, tags = [], nameById, toScore = false,
 }: {
+  /**
+   * The Scoring tab's list: a match opens its card to score. Elsewhere — the
+   * leaderboard — it opens the match hole by hole, its scorecard (Ross, 10
+   * Nov 2026: "rather than reverting to the scoring screen").
+   */
+  toScore?: boolean
   matches: SessionMatchResult[]
   players: P[]
   teams: T[]
@@ -115,7 +121,7 @@ export default function SessionMatchList({
         return (
           <li key={slot} className={slot > 0 ? 'border-t border-line' : ''}>
             {m && m.sideA.length > 0 && m.sideB.length > 0 ? (
-              <Link href={`${tripHome}/session/${m.roundId}/match/${m.slot}/card`}
+              <Link href={`${tripHome}/session/${m.roundId}/match/${m.slot}/card${toScore ? '' : '?view=scorecard'}`}
                 className="block active:bg-tint"
                 aria-label={`Match ${slot + 1}: ${leftIds.map(nameOf).join(' & ')} v ${rightIds.map(nameOf).join(' & ')}, ${status?.main === 'vs' ? 'not started' : status?.main}`}>
                 {row}

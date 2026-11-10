@@ -28,11 +28,13 @@ export const dynamic = 'force-dynamic'
  * so a match not yet arranged is sent back there).
  */
 export default async function MatchCardPage({
-  params,
+  params, searchParams,
 }: {
   params: Promise<{ root: string; tripCode: string; matchId: string }>
+  /** `view=scorecard` opens on the match hole by hole, not the card to score. */
+  searchParams: Promise<{ view?: string }>
 }) {
-  const { root, tripCode, matchId } = await params
+  const [{ root, tripCode, matchId }, { view: opensOn }] = await Promise.all([params, searchParams])
   const tripHome = tripHomeAt(root, tripCode)
 
   const { data: trip } = await supabase.from('trips').select('*').eq('trip_code', tripCode).single()
@@ -63,6 +65,7 @@ export default async function MatchCardPage({
       <div className="max-w-lg mx-auto px-4 pt-3 pb-8">
         {card ? (
           <MatchCardClient
+            startOn={opensOn === 'scorecard' ? 'scorecard' : 'card'}
             backHref={`${tripHome}/match/${matchId}`}
             roundName={match.roundName}
             club={named?.club ?? null}

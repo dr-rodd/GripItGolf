@@ -14,6 +14,12 @@ import type { SideColour } from '@/lib/matchSides'
  * winner's colour — the brown for a half, nothing while the hole is still
  * being played — and where the match stood after it. Gross totals at the
  * foot, over the holes each player has scored.
+ *
+ * **It fits the screen, four players and all** (Ross, 10 Nov 2026: no
+ * sideways scroll for a fourball): a fixed layout, the hole, par, dot and
+ * standing columns at set narrow widths and the players sharing what is
+ * left equally, each name cut to its column and each score box shrinking
+ * to fit rather than pushing the table past the edge.
  */
 export function MatchScoresTable({ a, b, colours, holes, outcomes, scores, finishedOnly = false }: {
   a: CardSideView
@@ -58,19 +64,26 @@ export function MatchScoresTable({ a, b, colours, holes, outcomes, scores, finis
   }
 
   return (
-    <table className="w-full text-center border-separate border-spacing-y-1" aria-label="Scores hole by hole">
+    <table className="w-full table-fixed text-center border-separate border-spacing-y-1" aria-label="Scores hole by hole">
+      <colgroup>
+        <col style={{ width: many ? '2.25rem' : '2.75rem' }} />
+        <col style={{ width: many ? '1.75rem' : '2.25rem' }} />
+        {players.map(p => <col key={p.id} />)}
+        <col style={{ width: many ? '1rem' : '1.5rem' }} />
+        <col style={{ width: many ? '2.75rem' : '3rem' }} />
+      </colgroup>
       <thead>
         <tr className="t-eyebrow text-ink/65">
-          <th className="font-normal text-left pl-2 w-11">Hole</th>
-          <th className="font-normal w-9">Par</th>
+          <th className="font-normal text-left pl-2">Hole</th>
+          <th className="font-normal">Par</th>
           {players.map(p => (
-            <th key={p.id} className="font-normal px-1">
+            <th key={p.id} className="font-normal px-0.5">
               <span className="block h-1 rounded-full mb-1" style={{ backgroundColor: colours[p.side].fill }} aria-hidden="true" />
-              <span className={`block truncate normal-case tracking-normal t-cap font-semibold text-ink ${many ? 'max-w-[16vw]' : ''}`}>{p.name}</span>
+              <span className="block truncate normal-case tracking-normal t-cap font-semibold text-ink">{many ? p.name.split(' ')[0] : p.name}</span>
             </th>
           ))}
-          <th className="w-6"><span className="sr-only">Won by</span></th>
-          <th className="font-normal w-12 pr-2">Thru</th>
+          <th><span className="sr-only">Won by</span></th>
+          <th className="font-normal pr-2">Thru</th>
         </tr>
       </thead>
       <tbody>
@@ -84,9 +97,9 @@ export function MatchScoresTable({ a, b, colours, holes, outcomes, scores, finis
               {players.map(p => {
                 const won = o?.winner === p.side
                 return (
-                  <td key={p.id} className="px-1">
+                  <td key={p.id} className="px-0.5">
                     <span
-                      className={`inline-flex items-center justify-center min-w-9 h-8 px-1.5 rounded-lg font-serif text-lg tabular-nums ${won ? 'font-semibold' : 'text-ink/80'}`}
+                      className={`inline-flex items-center justify-center ${many ? 'w-full max-w-9' : 'min-w-9 px-1.5'} h-8 rounded-lg font-serif text-lg tabular-nums ${won ? 'font-semibold' : 'text-ink/80'}`}
                       style={won ? { backgroundColor: colours[p.side].fill, color: colours[p.side].on } : undefined}
                     >
                       {o?.conceded && o.winner !== p.side ? '–' : scoreOf(p.id, h.holeNumber)}
@@ -103,7 +116,7 @@ export function MatchScoresTable({ a, b, colours, holes, outcomes, scores, finis
                   />
                 )}
               </td>
-              <td className="rounded-r-lg pr-2 t-cap font-semibold" style={leader ? { color: colours[leader].fill } : undefined}>
+              <td className="rounded-r-lg pr-2 t-cap font-semibold whitespace-nowrap" style={leader ? { color: colours[leader].fill } : undefined}>
                 {after === undefined ? '' : after === 0 ? <span className="text-ink/65 font-normal">AS</span> : `${Math.abs(after)} up`}
               </td>
             </tr>

@@ -66,8 +66,14 @@ const MAX_GROSS = 20
 export default function MatchCardClient({
   tripId, tripCode, matchId, a, b, holes: baseHoles, extraPlan: planInitial = {}, mySide, passcodeHash,
   stored: storedInitial, colours = DEFAULT_SIDE_COLOURS, anyoneScores = true, backHref, roundName, club = null,
-  session = false,
+  session = false, startOn = 'card',
 }: {
+  /**
+   * Which face it opens on: the card for scoring, or the scorecard — the
+   * match hole by hole — for somebody arriving from the leaderboard to see
+   * how it stands (Ross, 10 Nov 2026).
+   */
+  startOn?: 'card' | 'scorecard'
   /** A session's match (`session_matches`), not a Knockout's. */
   session?: boolean
   /** The header: the way back, and the round and club in the middle. */
@@ -104,7 +110,7 @@ export default function MatchCardClient({
   // The card and its scorecard side by side, slid between like trip
   // scoring's live board; both stay live. At rest, the one off screen
   // folds to no height so it adds no scroll to the one being read.
-  const [panel, setPanel] = useState<'card' | 'scorecard'>('card')
+  const [panel, setPanel] = useState<'card' | 'scorecard'>(startOn)
   const [atRest, setAtRest] = useState(true)
   const showPanel = (next: 'card' | 'scorecard') => {
     if (next === panel) return
@@ -534,20 +540,10 @@ export default function MatchCardClient({
         </button>
       </header>
 
-      <div style={{ overflowX: 'clip' }}>
-      <div
-        className="flex items-start transition-transform duration-300 ease-out motion-reduce:transition-none"
-        style={{ width: '200%', transform: panel === 'scorecard' ? 'translateX(-50%)' : 'translateX(0)' }}
-        onTransitionEnd={e => { if (e.target === e.currentTarget) setAtRest(true) }}
-      >
-      <div
-        className={`w-1/2 min-w-0 flex flex-col gap-3 ${panel !== 'card' && atRest ? 'h-0 overflow-hidden' : ''}`}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        aria-hidden={panel !== 'card'}
-      >
       {/* Every hole: a mark each, filled in the colour of whoever won it,
-          the hole being played the long one — trip scoring's strip. */}
+          the hole being played the long one — trip scoring's strip. Above
+          both panels, so it stays put on the scorecard too (Ross, 10 Nov
+          2026: the ticker persists). */}
       <div className="flex items-center gap-3" aria-hidden="true">
         <div className="flex-1 flex gap-[3px] items-center">
           {holes.map(x => {
@@ -567,8 +563,20 @@ export default function MatchCardClient({
         </div>
       </div>
 
+      <div style={{ overflowX: 'clip' }}>
+      <div
+        className="flex items-start transition-transform duration-300 ease-out motion-reduce:transition-none"
+        style={{ width: '200%', transform: panel === 'scorecard' ? 'translateX(-50%)' : 'translateX(0)' }}
+        onTransitionEnd={e => { if (e.target === e.currentTarget) setAtRest(true) }}
+      >
+      <div
+        className={`w-1/2 min-w-0 flex flex-col gap-3 ${panel !== 'card' && atRest ? 'h-0 overflow-hidden' : ''}`}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        aria-hidden={panel !== 'card'}
+      >
       {/* Everything about the hole being played slides in from the side it
-          was swiped from; the strip above it stays put. */}
+          was swiped from; the strip above the panels stays put. */}
       <div key={current} className={`flex flex-col gap-3 ${slide}`}>
       {/* The match as it stands on the left; the hole being played,
           large, on the right */}
@@ -753,7 +761,7 @@ export default function MatchCardClient({
         }}
         aria-hidden={panel !== 'scorecard'}
       >
-        <p className="t-label text-ink flex items-center gap-2" aria-live="polite">
+        <p className="t-card text-ink flex items-center gap-2" aria-live="polite">
           {loaded && state.leader && (
             <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colours[state.leader].fill }} aria-hidden="true" />
           )}
