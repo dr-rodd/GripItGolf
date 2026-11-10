@@ -743,6 +743,25 @@ section('Every Matches session alike: its matches in order of play, vacant until
   }
 }
 
+section('A match from the leaderboard opens hole by hole; the ticker stays; a fourball fits (Ross, 10 Nov 2026)')
+{
+  const base = 'app/golf/[root]/[tripCode]/'
+  const list = read(base + 'leaderboard/SessionMatchList.tsx')
+  ok(list.includes("/card${toScore ? '' : '?view=scorecard'}`}"), 'a match tapped on the leaderboard opens its scorecard, not the card to score')
+  ok(read(base + 'scoring/page.tsx').includes('toScore\n'), '  …while the Scoring tab still opens the card to score')
+  for (const page of ['match/[matchId]/card/page.tsx', 'session/[roundId]/match/[slot]/card/page.tsx']) {
+    ok(/startOn=\{\w+ === 'scorecard' \? 'scorecard' : 'card'\}/.test(read(base + page)), `  …${page.split('/')[0]}'s card page reads ?view=scorecard`)
+  }
+  const card = read(base + 'match/[matchId]/card/MatchCardClient.tsx')
+  ok(card.includes("useState<'card' | 'scorecard'>(startOn)"), 'the card opens on the face it is asked for')
+  const strip = card.indexOf('{/* Every hole: a mark each')
+  const track = card.indexOf("<div style={{ overflowX: 'clip' }}>")
+  ok(strip > 0 && strip < track, 'the hole strip sits above both faces, so the ticker stays on the scorecard')
+  const table = read(base + 'match/[matchId]/card/MatchScorecard.tsx')
+  ok(table.includes('w-full table-fixed') && table.includes('<colgroup>'), 'the hole-by-hole table is a fixed layout, four players sharing the width')
+  ok(table.includes("${many ? 'w-full max-w-9' : 'min-w-9 px-1.5'}"), '  …each score box shrinking to its column, never pushing past the edge')
+}
+
 console.log(`\n${'─'.repeat(56)}`)
 if (failed === 0) console.log(`✓ all ${passed} checks passed`)
 else {

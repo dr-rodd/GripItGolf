@@ -66,8 +66,8 @@ export function MatchScoresTable({ a, b, colours, holes, outcomes, scores, finis
   return (
     <table className="w-full table-fixed text-center border-separate border-spacing-y-1" aria-label="Scores hole by hole">
       <colgroup>
-        <col style={{ width: many ? '2.25rem' : '2.75rem' }} />
-        <col style={{ width: many ? '1.75rem' : '2.25rem' }} />
+        <col style={{ width: '2.75rem' }} />
+        <col style={{ width: many ? '2.25rem' : '2.5rem' }} />
         {players.map(p => <col key={p.id} />)}
         <col style={{ width: many ? '1rem' : '1.5rem' }} />
         <col style={{ width: many ? '2.75rem' : '3rem' }} />
