@@ -532,7 +532,7 @@ section('Two tags facing off: the ticker (Ross, 9 Nov 2026)')
   ok(client.includes('id="faceoff-session"') && client.includes('sessionRounds.map(r => <option'), '  …with a dropdown of the sessions')
   ok(client.includes("const sessionStrip = overallActive && !face &&"), '  …in place of the session switch')
   const list = read('app/golf/[root]/[tripCode]/leaderboard/SessionMatchList.tsx')
-  ok(list.includes('/session/${m.roundId}/match/${m.slot}/card'), 'each match row opens its card')
+  ok(list.includes('/session/${m!.roundId}/match/${m!.slot}/card'), 'a match row on the Scoring tab opens its card')
   ok(list.includes("To be set"), '  …and a slot with no match yet says so')
   const ticker = read('app/golf/[root]/[tripCode]/leaderboard/FaceOffTicker.tsx')
   ok(ticker.includes('points up for grabs') && ticker.includes('to win'), 'the ticker says the points up for grabs and what wins')
@@ -747,8 +747,18 @@ section('A match from the leaderboard opens hole by hole; the ticker stays; a fo
 {
   const base = 'app/golf/[root]/[tripCode]/'
   const list = read(base + 'leaderboard/SessionMatchList.tsx')
-  ok(list.includes("/card${toScore ? '' : '?view=scorecard'}`}"), 'a match tapped on the leaderboard opens its scorecard, not the card to score')
-  ok(read(base + 'scoring/page.tsx').includes('toScore\n'), '  …while the Scoring tab still opens the card to score')
+  ok(list.includes('onClick={() => toggle(slot)} aria-expanded={isOpen}') && list.includes("gridTemplateRows: isOpen ? '1fr' : '0fr'"),
+    'the leaderboard is a viewer: a match slides open beneath its row, never leaving for the card to score')
+  ok(list.includes('<MatchStrip holes={m!.detail.holes}') && list.includes('<MatchScoresTable a={m!.detail.a}'),
+    '  …the strip of marks and the scores hole by hole')
+  ok(list.includes('/card`}') && read(base + 'scoring/page.tsx').includes('toScore\n'), '  …while the Scoring tab still opens the card to score')
+  const reads = read(base + 'session/sessionMatches.ts')
+  ok(reads.includes('result.detail = {'), 'each match with anything on its card carries it hole by hole, for the viewer')
+  const board = read(base + 'leaderboard/TripLeaderboardClient.tsx')
+  ok(board.includes('{renderCard && rounds.length === 1 ? (') && board.includes('<ScorecardSheet\n        inline'),
+    'a board of one round opens a row’s card in place beneath it; several rounds keep their tiles and the pop-up')
+  ok(read(base + 'match/[matchId]/card/MatchCardClient.tsx').includes('<MatchStrip holes={holes} outcomes={outcomes} colours={colours} current={current} />'),
+    'the card and the leaderboard draw one strip')
   for (const page of ['match/[matchId]/card/page.tsx', 'session/[roundId]/match/[slot]/card/page.tsx']) {
     ok(/startOn=\{\w+ === 'scorecard' \? 'scorecard' : 'card'\}/.test(read(base + page)), `  …${page.split('/')[0]}'s card page reads ?view=scorecard`)
   }

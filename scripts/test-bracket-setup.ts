@@ -272,7 +272,9 @@ section('The match play card: top of the draw left, bottom right, NR, the result
     'the first tap of − or + lands on two points, nett par, as on a trip')
   ok(client.includes('aria-label="Previous hole"') && client.includes("'Next hole'") && !client.includes('grid-cols-9'),
     'previous and next move between holes — no grid of numbered holes')
-  ok(client.includes('backgroundColor: holeFill(o, isNow)'), 'the strip marks each hole in the colour of the side that won it')
+  ok(client.includes('<MatchStrip holes={holes} outcomes={outcomes} colours={colours} current={current} />')
+    && read('app/golf/[root]/[tripCode]/match/[matchId]/card/MatchStrip.tsx').includes('backgroundColor: fill(o, isNow)'),
+    'the strip marks each hole in the colour of the side that won it')
   ok(client.includes('usePoll(load, 15_000, true)') && !client.includes('setInterval'), 'the other phone shows up, through the one poller')
   const finishSheet = read('app/golf/[root]/[tripCode]/match/[matchId]/card/MatchFinish.tsx')
   ok(client.includes("finish?.phase ?? (asking && awaitingFinal ? 'confirm' : null)")

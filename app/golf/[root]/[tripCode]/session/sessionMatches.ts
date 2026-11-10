@@ -195,13 +195,24 @@ export async function readSessionCards(
     const card = { a: side('A', row.side_a), b: side('B', row.side_b), holes }
     setups.set(row.id, { ...base, card })
     const scores = scoresOf.get(row.id)
-    if (!row.result && scores && scores.size > 0) {
-      const { state } = playSessionCard(holes, card.a, card.b, scores)
-      result.live = true
-      result.leader = state.leader === 'A' ? 'a' : state.leader === 'B' ? 'b' : null
-      result.progress = state.progress
-      result.up = state.up
-      result.thru = state.thru
+    if (scores && scores.size > 0) {
+      const played = playSessionCard(holes, card.a, card.b, scores)
+      if (!row.result) {
+        const { state } = played
+        result.live = true
+        result.leader = state.leader === 'A' ? 'a' : state.leader === 'B' ? 'b' : null
+        result.progress = state.progress
+        result.up = state.up
+        result.thru = state.thru
+      }
+      // The card hole by hole, for the leaderboard to open beneath the row.
+      result.detail = {
+        holes: played.holes,
+        outcomes: played.outcomes,
+        a: card.a,
+        b: card.b,
+        scores: Object.fromEntries([...scores].map(([pid, byHole]) => [pid, Object.fromEntries(byHole)])),
+      }
     }
     results.push(result)
   }

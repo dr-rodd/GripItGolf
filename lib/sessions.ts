@@ -24,6 +24,7 @@
  * which is the one place that reads cards.
  */
 
+import type { CardHole, CardSideView, HoleOutcome } from './matchCard'
 import type { Leaderboard, Scoring, TeamFormat, Audience } from './leaderboards'
 
 // ─── Match formats ─────────────────────────────────────────────
@@ -405,6 +406,22 @@ export type SessionMatchResult = {
   /** While live: holes up (0 all square) and the furthest hole with a result. */
   up?: number
   thru?: number
+  /**
+   * The match hole by hole, once anything is on its card — what the
+   * leaderboard opens beneath the row (Ross, 10 Nov 2026: the leaderboard is
+   * a viewer; one card opens as a slider below its row).
+   */
+  detail?: SessionMatchDetail
+}
+
+/** A session match's card as a viewer reads it: the holes, who won each, and every score. */
+export type SessionMatchDetail = {
+  holes: CardHole[]
+  outcomes: HoleOutcome[]
+  a: CardSideView
+  b: CardSideView
+  /** Player id → hole → gross; null is an NR. */
+  scores: Record<string, Record<number, number | null>>
 }
 
 /**

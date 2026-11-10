@@ -277,8 +277,14 @@ function Row({ children, className = '' }: { children: React.ReactNode; classNam
  */
 export function ScorecardSheet({
   title, subtitle, players, round, holes, resolved, handicapFor, onClose,
-  teamHolePoints = null,
+  teamHolePoints = null, inline = false,
 }: {
+  /**
+   * Drawn in place, under the row it belongs to, rather than over the page
+   * (Ross, 10 Nov 2026): one card to show opens as a slider below its row;
+   * a pop-up is for one card picked from several rounds.
+   */
+  inline?: boolean
   title: string
   subtitle: string
   players: Player[]
@@ -447,30 +453,8 @@ export function ScorecardSheet({
     </Row>
   )
 
-  return (
-    // A card on the page, not a takeover of it. It used to be a sheet pinned
-    // to the bottom edge, full-bleed and 90vh tall, which reads as leaving the
-    // leaderboard rather than looking closer at one row of it — and the board
-    // it came from disappeared entirely behind it.
-    //
-    // Same clothes as the live leaderboard's card, which is the other place in
-    // the app that shows a card inside a list: white, hairline border,
-    // rounded-2xl. Inset on every side so the board stays visible around it,
-    // which is also what makes tapping outside to close an obvious thing to
-    // try. See app/components/scorecardStyle.ts.
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{
-        paddingTop: 'max(env(safe-area-inset-top), 16px)',
-        paddingBottom: 'max(env(safe-area-inset-bottom), 16px)',
-      }}
-      onClick={onClose}
-    >
-      <div className="absolute inset-0 bg-ink/50 page-enter" />
-      <div
-        className={`relative w-full max-w-lg flex flex-col max-h-full overflow-hidden page-enter ${SC_CARD}`}
-        onClick={e => e.stopPropagation()}
-      >
+  const body = (
+    <>
         {/* Title — never scrolls */}
         <div className="flex-shrink-0 flex items-center justify-between px-4 pt-5 pb-3">
           <div className="min-w-0 flex items-baseline gap-3 flex-wrap">
@@ -604,8 +588,42 @@ export function ScorecardSheet({
             )}
           </div>
         </div>
+    </>
+  )
+
+  return (
+    // A card on the page, not a takeover of it. It used to be a sheet pinned
+    // to the bottom edge, full-bleed and 90vh tall, which reads as leaving the
+    // leaderboard rather than looking closer at one row of it — and the board
+    // it came from disappeared entirely behind it.
+    //
+    // Same clothes as the live leaderboard's card, which is the other place in
+    // the app that shows a card inside a list: white, hairline border,
+    // rounded-2xl. Inset on every side so the board stays visible around it,
+    // which is also what makes tapping outside to close an obvious thing to
+    // try. See app/components/scorecardStyle.ts.
+    inline ? (
+      <div className={`relative w-full flex flex-col overflow-hidden ${SC_CARD}`}>
+        {body}
+      </div>
+    ) : (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{
+        paddingTop: 'max(env(safe-area-inset-top), 16px)',
+        paddingBottom: 'max(env(safe-area-inset-bottom), 16px)',
+      }}
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-ink/50 page-enter" />
+      <div
+        className={`relative w-full max-w-lg flex flex-col max-h-full overflow-hidden page-enter ${SC_CARD}`}
+        onClick={e => e.stopPropagation()}
+      >
+        {body}
       </div>
     </div>
+    )
   )
 }
 
@@ -1052,8 +1070,15 @@ function TeamName({ row, byPlayers, memberNames }: {
 }
 
 function Board({
-  board, rows: allRows, rounds, playerById, boardNameById, onOpenCard, linked, colourById,
+  board, rows: allRows, rounds, playerById, boardNameById, onOpenCard, linked, colourById, renderCard,
 }: {
+  /**
+   * The card drawn in place under a row — the site's rule (Ross, 10 Nov
+   * 2026): one card to show opens as a slider below its row; several rounds
+   * open their tiles below and the card picked as a pop-up. Only a board of
+   * one round, and only where a cell is a card, is handed this.
+   */
+  renderCard?: (row: BoardRow, round: Round, close: () => void) => React.ReactNode
   board: Leaderboard
   rows: BoardRow[]
   rounds: Round[]
@@ -1422,12 +1447,16 @@ function Board({
                 // type; measuring it in JavaScript would be the same number
                 // arriving a frame later and needing a resize listener.
                 <div className={`board-wide sticky left-0 ${!isLast ? 'border-b border-line' : ''}`}>
-                  <CourseTiles
-                    row={row}
-                    rounds={rounds}
-                    playerById={playerById}
-                    onTileClick={round => onOpenCard(row, round)}
-                  />
+                  {renderCard && rounds.length === 1 ? (
+                    <div className="p-2">{renderCard(row, rounds[0], () => setExpandedId(null))}</div>
+                  ) : (
+                    <CourseTiles
+                      row={row}
+                      rounds={rounds}
+                      playerById={playerById}
+                      onTileClick={round => onOpenCard(row, round)}
+                    />
+                  )}
                 </div>
               )}
             </Fragment>
@@ -1924,6 +1953,26 @@ export default function TripLeaderboardClient({
   }
   const factsLine = rules.filter(Boolean).join(' · ')
 
+  /** A row's own card, drawn in place under it — a board of one round. */
+  const inlineCard = (row: BoardRow, round: Round, close: () => void) => {
+    const onCard = row.playerIds.map(id => playerById.get(id)).filter(Boolean) as Player[]
+    if (!viewBoard || viewBoard.competition !== 'league' || onCard.length === 0) return null
+    return (
+      <ScorecardSheet
+        inline
+        title={row.name}
+        subtitle={round.courses?.name ? courseLabel(round.courses.name) : `Round ${round.round_number}`}
+        players={onCard}
+        round={round}
+        holes={holes}
+        resolved={cardScores}
+        teamHolePoints={teamCardHolePoints(viewBoard, rowContext, round.id, row.playerIds)}
+        handicapFor={pid => boardHandicapFor(viewBoard, rowContext, round.id, pid)}
+        onClose={close}
+      />
+    )
+  }
+
   const board = (
     <Board
       key={activeBoard.id}
@@ -1938,6 +1987,8 @@ export default function TripLeaderboardClient({
       onOpenCard={(row, round) => {
         if (!round.id.startsWith('period:') && activeBoard.competition !== 'overall') setCard({ row, round })
       }}
+      // One round on the board: a row's card slides open beneath it.
+      renderCard={activeBoard.competition === 'league' && !boardRounds.some(r => r.id.startsWith('period:')) ? inlineCard : undefined}
       linked={linked}
       colourById={colourById}
     />
@@ -1977,6 +2028,7 @@ export default function TripLeaderboardClient({
               playerById={playerById}
               boardNameById={boardNameById}
               onOpenCard={(row, round) => setCard({ row, round })}
+              renderCard={inlineCard}
               linked={linked}
               colourById={colourById}
             />

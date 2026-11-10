@@ -7,12 +7,21 @@
  * the match stands: solid in the winner's colour once it is over, softened
  * in the colour of whoever is ahead while it is in play, the brown for all
  * square (lib/faceOff.ts `matchStatus`). The side ahead is washed in its
- * colour. Each row opens the match — hole by hole from the leaderboard, its card to score from the Scoring tab; a slot with no match yet says so and
- * opens nothing. Never gold (D39).
+ * colour. A slot with no match yet says so and opens nothing. Never gold
+ * (D39).
+ *
+ * **The leaderboard is a viewer** (Ross, 10 Nov 2026): there a row slides
+ * its match open beneath it, hole by hole — the strip of marks and the
+ * scores — the site's rule for one card to show; it never leaves for the
+ * card to score. The Scoring tab's list (`toScore`) is where a match opens
+ * its card to score.
  */
 
+import { useState } from 'react'
 import Link from 'next/link'
 import type { SessionMatchResult } from '@/lib/sessions'
+import MatchStrip from '@/app/golf/[root]/[tripCode]/match/[matchId]/card/MatchStrip'
+import { MatchScoresTable } from '@/app/golf/[root]/[tripCode]/match/[matchId]/card/MatchScorecard'
 import { matchStatus, softened } from '@/lib/faceOff'
 import { sideColours, sideTint, type SideColour } from '@/lib/matchSides'
 import { tagOfTeam } from '@/lib/tagBoards'
@@ -45,6 +54,14 @@ export default function SessionMatchList({
   nameById?: Map<string, string>
 }) {
   const tripHome = useTripBase(tripCode)
+  // The one match open beneath its row, and every one opened so far — kept
+  // drawn so closing slides as opening does.
+  const [openSlot, setOpenSlot] = useState<number | null>(null)
+  const [opened, setOpened] = useState<ReadonlySet<number>>(new Set())
+  const toggle = (slot: number) => {
+    setOpenSlot(o => (o === slot ? null : slot))
+    setOpened(prev => (prev.has(slot) ? prev : new Set([...prev, slot])))
+  }
   const nameOf = (id: string) => nameById?.get(id) ?? players.find(p => p.id === id)?.name.split(' ')[0] ?? '—'
   const tagOf = (ids: string[]) => {
     const id = ids.length ? tagOfTeam(ids, memberships) : null
@@ -118,15 +135,48 @@ export default function SessionMatchList({
             </div>
           </div>
         )
+        const set = !!m && m.sideA.length > 0 && m.sideB.length > 0
+        const label = `Match ${slot + 1}: ${leftIds.map(nameOf).join(' & ')} v ${rightIds.map(nameOf).join(' & ')}, ${status?.main === 'vs' ? 'not started' : status?.main}`
+        const isOpen = openSlot === slot
+        // The card's own sides are A and B as stored; their colours follow
+        // the tags' way round the row is drawn.
+        const cardColours = flip ? { A: colours.B, B: colours.A } : colours
         return (
           <li key={slot} className={slot > 0 ? 'border-t border-line' : ''}>
-            {m && m.sideA.length > 0 && m.sideB.length > 0 ? (
-              <Link href={`${tripHome}/session/${m.roundId}/match/${m.slot}/card${toScore ? '' : '?view=scorecard'}`}
-                className="block active:bg-tint"
-                aria-label={`Match ${slot + 1}: ${leftIds.map(nameOf).join(' & ')} v ${rightIds.map(nameOf).join(' & ')}, ${status?.main === 'vs' ? 'not started' : status?.main}`}>
+            {!set ? row : toScore ? (
+              <Link href={`${tripHome}/session/${m!.roundId}/match/${m!.slot}/card`}
+                className="block active:bg-tint" aria-label={label}>
                 {row}
               </Link>
-            ) : row}
+            ) : (
+              <>
+                <button type="button" onClick={() => toggle(slot)} aria-expanded={isOpen} aria-label={label}
+                  className="block w-full text-left active:bg-tint">
+                  {row}
+                </button>
+                {/* The match hole by hole, sliding open beneath its row. */}
+                <div className="grid transition-[grid-template-rows] duration-300 ease-out"
+                  style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }} aria-hidden={!isOpen}>
+                  <div className="min-h-0 overflow-hidden">
+                    {opened.has(slot) && (
+                      <div className="px-3 pb-3 pt-2 border-t border-line bg-tint">
+                        {m!.detail ? (
+                          <>
+                            <MatchStrip holes={m!.detail.holes} outcomes={m!.detail.outcomes} colours={cardColours} />
+                            <div className="mt-2">
+                              <MatchScoresTable a={m!.detail.a} b={m!.detail.b} colours={cardColours}
+                                holes={m!.detail.holes} outcomes={m!.detail.outcomes} scores={m!.detail.scores} />
+                            </div>
+                          </>
+                        ) : (
+                          <p className="t-cap text-ink/65 text-center py-2">Not started — nothing on its card yet.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </li>
         )
       })}

@@ -17,6 +17,7 @@ import { usePoll } from '@/app/scoring/usePoll'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import MatchFinish from './MatchFinish'
 import { MatchScoresTable } from './MatchScorecard'
+import MatchStrip from './MatchStrip'
 import { IconChevronLeft } from '@/app/components/icons'
 import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
 
@@ -383,22 +384,6 @@ export default function MatchCardClient({
     : state.extra ? `${state.progress} — down the ${ordinal(state.played + 1)}`
       : state.leader ? `${nameOf(state.leader)} ${state.progress}` : state.progress
 
-  /**
-   * A hole's mark on the strip: the winner's colour, the brown for a half,
-   * faint for one still to play. The hole being played is the long mark,
-   * in a lighter version of its own colour — light green while it has no
-   * result yet. No black (Ross, 25 Oct 2026).
-   */
-  const lighter = (c: string) => `color-mix(in srgb, ${c} 45%, transparent)`
-  const holeFill = (o: (typeof outcomes)[number] | undefined, isNow: boolean): string => {
-    const base = o?.winner === 'A' ? colours.A.fill
-      : o?.winner === 'B' ? colours.B.fill
-        : o?.winner === 'halved' ? 'var(--color-bark)'
-          : null
-    if (isNow) return lighter(base ?? 'var(--color-accent)')
-    if (!base) return 'var(--color-tint)'
-    return o?.winner === 'halved' ? lighter(base) : base
-  }
 
   // Swipe between holes: left for the next, right for the previous — a
   // sideways stroke only, so scrolling the page never moves the hole.
@@ -544,24 +529,7 @@ export default function MatchCardClient({
           the hole being played the long one — trip scoring's strip. Above
           both panels, so it stays put on the scorecard too (Ross, 10 Nov
           2026: the ticker persists). */}
-      <div className="flex items-center gap-3" aria-hidden="true">
-        <div className="flex-1 flex gap-[3px] items-center">
-          {holes.map(x => {
-            const isNow = x.holeNumber === current
-            const o = outcomes.find(y => y.holeNumber === x.holeNumber)
-            return (
-              <div
-                key={x.holeNumber}
-                className="h-1.5 rounded-full transition-all duration-300 ease-out"
-                style={{
-                  flexGrow: isNow ? 1.6 : 1, flexBasis: 0, minWidth: isNow ? 18 : 0,
-                  backgroundColor: holeFill(o, isNow),
-                }}
-              />
-            )
-          })}
-        </div>
-      </div>
+      <MatchStrip holes={holes} outcomes={outcomes} colours={colours} current={current} />
 
       <div style={{ overflowX: 'clip' }}>
       <div
