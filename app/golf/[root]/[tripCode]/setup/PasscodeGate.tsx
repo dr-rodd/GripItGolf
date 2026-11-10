@@ -5,6 +5,7 @@ import BackButton from '@/app/components/BackButton'
 import { verifyPasscode, rememberUnlock, hasUnlocked, MAX_PASSCODE } from '@/lib/passcode'
 import { FIELD, buttonClass } from '@/app/components/ui'
 import { useTripBase } from '@/app/golf/[root]/[tripCode]/TripBase'
+import { enterEvent } from '@/lib/entryClient'
 
 /**
  * Stands in front of trip settings when the trip was created with a passcode.
@@ -23,14 +24,14 @@ export default function PasscodeGate({
   /**
    * What the locked screen calls itself. The defaults are Trip Setup's; the
    * organiser area hands in its own words and the same lock does the work —
-   * one gate, one sessionStorage memory, so unlocking either unlocks both,
+   * one gate, one memory on this phone, so unlocking either unlocks both,
    * which is the point of one PIN.
    */
   title?: string
   hint?: string
 }) {
   const tripHome = useTripBase(tripCode)
-  // sessionStorage is browser-only, so it is read through an external store
+  // this phone's storage is browser-only, so it is read through an external store
   // rather than an effect: the server renders locked, and the client corrects
   // it on hydration. Failing closed is the right way round for a lock.
   const remembered = useSyncExternalStore(
@@ -52,6 +53,7 @@ export default function PasscodeGate({
     const ok = await verifyPasscode(code, passcodeHash)
     if (ok) {
       rememberUnlock(tripCode)
+      void enterEvent(tripCode, { adminPin: code })
       setJustUnlocked(true)
     } else {
       setError('Incorrect code.')

@@ -26,6 +26,7 @@ import {
 import { describeError, generateCode } from './CreateTripForm'
 import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
+import { enterEvent } from '@/lib/entryClient'
 
 /**
  * Creating a Green Dot Run challenge — an ongoing team running competition.
@@ -229,6 +230,7 @@ export default function CreateRunForm() {
         return
       }
       rememberPlayer(code, lead.id)
+      void enterEvent(code, { playerId: lead.id })
 
       const team = insertedTeams.find(t => t.name === pickedTeam)
       if (team) {
@@ -248,6 +250,7 @@ export default function CreateRunForm() {
 
     // The device that just set the PIN plainly knows it.
     rememberUnlock(code)
+    void enterEvent(code, { adminPin: passcode })
 
     setResultCode(code)
     setStep('done')

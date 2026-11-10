@@ -30,7 +30,7 @@ export const dynamic = 'force-dynamic'
  * organiser and, where the field picks its own, for players). Open to look
  * at for everybody; who may change what is the browser's call
  * (lib/teamPicker.ts), because the organiser's PIN unlock lives in
- * sessionStorage.
+ * this phone's storage.
  *
  * `?view=drag` is the organiser's drag-and-drop editor, kept while the
  * picker proves itself — quicker for a small event, no use for a large one

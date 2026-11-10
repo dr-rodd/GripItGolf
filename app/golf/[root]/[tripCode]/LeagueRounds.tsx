@@ -173,7 +173,7 @@ export function AddLeagueRound({
     : door.startDate
 
   function openSheet() {
-    // Read on tap, never during render: the unlock lives in sessionStorage
+    // Read on tap, never during render: the unlock lives in this phone's storage
     // and the date on the device's own calendar.
     setUnlocked(hasUnlocked(door.tripCode))
     const today = localToday()
@@ -303,7 +303,7 @@ export function StartPeriodCard({ door, periods, courseIds, fieldMayStart }: {
   const mayStart = fieldMayStart || organiser
 
   function openSheet() {
-    // Read on tap, never during render: the unlock lives in sessionStorage
+    // Read on tap, never during render: the unlock lives in this phone's storage
     // and the date on the device's own calendar.
     setUnlocked(hasUnlocked(door.tripCode))
     const t = localToday()

@@ -18,6 +18,8 @@ import {
   COLLAB_STYLES, collabAdvice, collabStyleOf, withCollabStyle,
 } from '../lib/eventPermissions'
 import { confirmationHtml, confirmationText } from '../lib/confirmationEmail'
+import { ORGANISER_HOURS, ORGANISER_MS } from '../lib/membership'
+import { unlockExpiry, unlockOpen } from '../lib/passcode'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -321,12 +323,24 @@ section('The event email carries the admin link, never the PIN')
   ok(html.includes('Event code:'), 'an event calls its code an event code')
 
   // How organiser access works on a phone (Ross, 26 Oct 2026): the way in
-  // from Settings, and how long it lasts — lib/passcode.ts's session.
+  // from Settings, and how long it lasts — twelve hours from the PIN on that
+  // phone (Ross, 10 Nov 2026), the same constant the unlock and the server's
+  // organiser grant both read.
   ok(html.includes('tap Settings, then Organiser area, and enter your PIN')
-     && html.includes('organiser access on every page until the browser or app is closed'),
+     && html.includes(`organiser access on every page for ${ORGANISER_HOURS} hours, after which it asks for the PIN again`),
     'the message says how to run the event from a phone, and for how long')
-  ok(read('lib/passcode.ts').includes('sessionStorage.setItem'),
-    '  …which is the session the unlock is kept in, so the sentence stays true')
+  ok(!html.includes('until the browser or app is closed'),
+    '  …and no longer promises the old close-the-browser lock')
+  ok(ORGANISER_HOURS === 12, '  …which is twelve hours')
+  ok(read('lib/passcode.ts').includes('localStorage.setItem(key(tripCode), unlockExpiry(')
+     && read('lib/passcode.ts').includes('ORGANISER_MS'),
+    '  …and the unlock on the phone is kept for exactly that long, so the sentence stays true')
+  {
+    const t0 = Date.UTC(2026, 10, 10, 9, 0)
+    ok(unlockOpen(unlockExpiry(t0), t0 + ORGANISER_MS - 1), '  an unlock is open a moment before twelve hours')
+    ok(!unlockOpen(unlockExpiry(t0), t0 + ORGANISER_MS), '  …and shut at twelve hours')
+    ok(!unlockOpen('1', t0) && !unlockOpen(null, t0), '  …and anything unreadable is shut')
+  }
 
   const text = confirmationText(eventDetails)
   ok(text.includes(eventDetails.adminUrl), 'the text version carries the link too')

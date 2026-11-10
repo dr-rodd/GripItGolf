@@ -1,4 +1,5 @@
 import TabBar from '@/app/components/TabBar'
+import EnsureMember from '@/app/components/EnsureMember'
 
 /**
  * Everything under `/run/[tripCode]`, with the bottom bar around it — the
@@ -22,6 +23,7 @@ export default async function RunLayout({
   const { tripCode } = await params
   return (
     <>
+      <EnsureMember tripCode={tripCode} />
       {children}
       <TabBar tripCode={tripCode} sport="run" />
     </>

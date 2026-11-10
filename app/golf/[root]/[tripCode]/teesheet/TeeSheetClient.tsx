@@ -51,7 +51,7 @@ import { useTripBase } from '@/app/golf/[root]/[tripCode]/TripBase'
  * in which case a live sheet carries an Edit button into the wizard too.
  *
  * Who places players (Ross, 26 Oct 2026): the organiser, whoever has
- * unlocked the PIN in this session — read from the same sessionStorage the
+ * unlocked the PIN in this session — read from the same storage on this phone the
  * PasscodeGate writes, after mount, because the server cannot see it and
  * deciding during render would tear hydration — puts anybody anywhere.
  * When the event lets players book their own times (`edit_tee_sheet`, the
@@ -211,7 +211,7 @@ export default function TeeSheetClient({
   const [search, setSearch] = useState('')
   const slotRefs = useRef(new Map<number, HTMLLIElement>())
 
-  // The organiser's PIN unlock, read after mount — sessionStorage does not
+  // The organiser's PIN unlock, read after mount — this phone's storage does not
   // exist on the server, and a render that reads it would tear hydration.
   const [unlocked] = useUnlocked(tripCode)
   // The organiser places anybody — the PIN unlocked here, or an event

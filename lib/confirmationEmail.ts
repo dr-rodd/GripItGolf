@@ -24,6 +24,8 @@
 //   image form that renders reliably. QR_CID is the agreed name; the route
 //   attaches a PNG under it.
 
+import { ORGANISER_HOURS } from './membership'
+
 export const CONFIRMATION_FROM = 'Green Dot <trips@greendot.live>'
 
 /** The cid: the HTML references and the route attaches the QR PNG under. */
@@ -101,13 +103,15 @@ export type ConfirmationDetails = {
  */
 /**
  * How organiser access works on a phone (Ross, 26 Oct 2026): the way in
- * from any phone, and how long it lasts — until the browser or app is
- * closed, which is lib/passcode.ts's sessionStorage, said plainly so it
- * is never a surprise.
+ * from any phone, and how long it lasts — twelve hours from the PIN, on
+ * that phone (Ross, 10 Nov 2026; lib/passcode.ts and lib/membership.ts,
+ * ORGANISER_HOURS), said plainly so it is never a surprise. It used to say
+ * "until the browser or app is closed", which was true of the old
+ * sessionStorage unlock.
  */
 const MANAGE = (thing: string) =>
   `To run the ${thing} from a phone, open it, tap Settings, then Organiser area, and enter your PIN. `
-  + 'That phone then has organiser access on every page until the browser or app is closed.'
+  + `That phone then has organiser access on every page for ${ORGANISER_HOURS} hours, after which it asks for the PIN again.`
 
 function wordsFor(d: ConfirmationDetails) {
   if (d.sport === 'run') {

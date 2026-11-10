@@ -12,8 +12,13 @@
 // │ moments. Hashing keeps it out of plain sight, nothing more.         │
 // │                                                                     │
 // │ When auth lands, this should be replaced by real ownership rather   │
-// │ than hardened.                                                      │
+// │ than hardened. It is landing: from row-level security stage 1 the   │
+// │ PIN is also checked on the server (/api/entry), which records the   │
+// │ phone as organiser for twelve hours; stage 2 stops sending the hash │
+// │ to the browser at all.                                              │
 // └─────────────────────────────────────────────────────────────────────┘
+
+import { ORGANISER_MS } from './membership'
 
 export const MIN_PASSCODE = 4
 export const MAX_PASSCODE = 8
@@ -58,6 +63,14 @@ export function isLocked(hash: string | null | undefined): boolean {
 }
 
 // ─── Remembering an unlock on this device ──────────────────────
+//
+// Twelve hours from the moment the PIN was entered, on this phone (Ross,
+// 10 Nov 2026) — the same twelve hours the server's organiser grant lasts
+// (lib/membership.ts, ORGANISER_HOURS), and what the confirmation email says.
+// Closing the browser no longer ends it; tapping the header's lock shut does.
+// It used to live in sessionStorage, ending when the browser closed; an
+// unlock written there before this change is still honoured until it does.
+
 
 const key = (tripCode: string) => `gig-settings-unlocked-${tripCode}`
 
@@ -72,18 +85,32 @@ function announce() {
   try { window.dispatchEvent(new Event(UNLOCK_EVENT)) } catch { /* no window */ }
 }
 
+/** When an unlock written at `now` runs out, as stored: milliseconds since 1970. */
+export function unlockExpiry(now: number): string {
+  return String(now + ORGANISER_MS)
+}
+
+/** Whether a stored unlock is still open at `now`. Anything unreadable is locked. */
+export function unlockOpen(stored: string | null, now: number): boolean {
+  const until = Number(stored)
+  return Number.isFinite(until) && until > now
+}
+
 export function rememberUnlock(tripCode: string) {
-  try { sessionStorage.setItem(key(tripCode), '1') } catch { /* unavailable */ }
+  try { localStorage.setItem(key(tripCode), unlockExpiry(Date.now())) } catch { /* unavailable */ }
   announce()
 }
 
 /** Locked again by hand — the header's lock tapped shut. */
 export function forgetUnlock(tripCode: string) {
+  try { localStorage.removeItem(key(tripCode)) } catch { /* unavailable */ }
   try { sessionStorage.removeItem(key(tripCode)) } catch { /* unavailable */ }
   announce()
 }
 
-/** Cleared when the tab closes, so a shared phone does not stay unlocked. */
+/** Open for twelve hours from the PIN, on this phone only. */
 export function hasUnlocked(tripCode: string): boolean {
+  try { if (unlockOpen(localStorage.getItem(key(tripCode)), Date.now())) return true } catch { /* unavailable */ }
+  // Written before the twelve hours, while the browser that wrote it is open.
   try { return sessionStorage.getItem(key(tripCode)) === '1' } catch { return false }
 }

@@ -7,6 +7,7 @@ import { MAX_PASSCODE, hashPasscode, rememberUnlock } from '@/lib/passcode'
 import { rememberEntry } from '@/lib/publicPin'
 import { FIELD, buttonClass } from '@/app/components/ui'
 import LegalLinks from '@/app/components/LegalLinks'
+import { enterEvent } from '@/lib/entryClient'
 
 /**
  * The public PIN, asked once per phone. The event's own PIN lets the field
@@ -50,6 +51,8 @@ export default function EntryGate({ tripCode, home, eventName, publicHash, admin
     }
     rememberEntry(tripCode, publicHash)
     if (asAdmin) rememberUnlock(tripCode)
+    // Told to the server too (row-level security, stage 1) — silently.
+    void enterEvent(tripCode, asAdmin ? { adminPin: code } : { publicPin: code })
     router.replace(home)
     router.refresh()
   }

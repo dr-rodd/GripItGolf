@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic'
  * — the teams page unless the caller says otherwise (the tee sheet, next).
  *
  * Who may change what is decided in the browser (lib/teamPicker.ts): the
- * organiser's PIN unlock lives in sessionStorage, which only it can see.
+ * organiser's PIN unlock lives in this phone's storage, which only it can see.
  */
 export default async function TeamPickPage({ params, searchParams }: {
   params: Promise<{ root: string; tripCode: string }>

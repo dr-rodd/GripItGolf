@@ -39,6 +39,7 @@ import { describeError, generateCode } from './CreateTripForm'
 import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
 import { tripBase } from '@/lib/tripPaths'
+import { enterEvent } from '@/lib/entryClient'
 
 /**
  * Creating a continuous knockout — an ongoing match play event occupying a
@@ -282,7 +283,7 @@ export default function CreateKnockoutForm({ onExit }: {
         return
       }
       const lead = insertedPlayers.find(p => p.is_lead)
-      if (lead) rememberPlayer(code, lead.id)
+      if (lead) { rememberPlayer(code, lead.id); void enterEvent(code, { playerId: lead.id }) }
     }
 
     // 3. Everything brought across from the event the field was seeded
@@ -321,6 +322,7 @@ export default function CreateKnockoutForm({ onExit }: {
     // unlock now, so the organiser's own tee sheet and organiser area
     // are editable without being asked for the code they just typed.
     rememberUnlock(code)
+    void enterEvent(code, { adminPin: passcode })
     if (publicHash) rememberEntry(code, publicHash)
 
     setResultCode(code)

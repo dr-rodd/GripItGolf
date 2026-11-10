@@ -18,6 +18,7 @@ import {
 import { FIELD, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import { LinkedBadge } from '@/app/components/LinkMark'
 import { useTripBase } from '@/app/golf/[root]/[tripCode]/TripBase'
+import { enterEvent } from '@/lib/entryClient'
 
 type Player = {
   id: string
@@ -247,6 +248,7 @@ export default function PlayersClient({
     // should leave no trace. If cookies are blocked this does nothing and
     // the trip is unaffected; they simply arrive as a stranger each visit.
     rememberPlayer(tripCode, playerId)
+    void enterEvent(tripCode, { playerId })
 
     // ── And throw away every page the old cookie rendered ──
     //
@@ -395,6 +397,7 @@ export default function PlayersClient({
     // Linked either way: the player exists and is theirs, whatever happened
     // to the snapshots.
     rememberPlayer(tripCode, data.id)
+    void enterEvent(tripCode, { playerId: data.id })
     if (hcpErr) {
       setAdding(false)
       setError(

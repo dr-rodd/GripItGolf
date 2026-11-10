@@ -51,6 +51,7 @@ import { TeeTimesQuestion } from '@/app/components/TeeTimesAccess'
 import { ChoiceChips, CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
 import { tripBase } from '@/lib/tripPaths'
+import { enterEvent } from '@/lib/entryClient'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -483,7 +484,7 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
       // position — relying on insert order returning unchanged is a bet that
       // costs nothing to avoid.
       const lead = insertedPlayers.find(p => p.is_lead)
-      if (lead) rememberPlayer(code, lead.id)
+      if (lead) { rememberPlayer(code, lead.id); void enterEvent(code, { playerId: lead.id }) }
     }
 
     // 3. The itinerary, and the rounds that come out of it.
@@ -614,7 +615,7 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
 
     // The device that set a passcode plainly knows it — remember the
     // unlock, so the creator is not asked for the code they just typed.
-    if (lockOn) rememberUnlock(code)
+    if (lockOn) { rememberUnlock(code); void enterEvent(code, { adminPin: passcode }) }
     if (publicHash) rememberEntry(code, publicHash)
 
     setResultCode(code)

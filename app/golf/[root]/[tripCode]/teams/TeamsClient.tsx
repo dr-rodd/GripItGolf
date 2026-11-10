@@ -48,7 +48,7 @@ export default function TeamsClient({
 }) {
   const tripHome = useTripBase(tripCode)
   const router = useRouter()
-  // The organiser's PIN unlock, read after mount — sessionStorage does not
+  // The organiser's PIN unlock, read after mount — this phone's storage does not
   // exist on the server, and a render that reads it would tear hydration.
   const [unlocked] = useUnlocked(tripCode)
   const organiser = isTrip || unlocked || !isLocked(passcodeHash)

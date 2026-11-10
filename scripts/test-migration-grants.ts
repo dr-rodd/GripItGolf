@@ -18,9 +18,18 @@
  *     with RLS off is the whole table, read and write, to anybody with the
  *     site's public key.
  *
- * Green Dot has no logins, so `authenticated` is neither required nor
- * refused. The template in CLAUDE.md ("New tables need grants") is held
- * to the same check, so the rule and the example can never disagree.
+ * From row-level security stage 1 (migration 068) every phone is signed in
+ * silently as a Supabase anonymous user — and a signed-in phone is the
+ * `authenticated` role, not `anon`. So a third rule:
+ *
+ *   · `authenticated` is held to the same RLS rule as `anon`; and
+ *   · a table granted to `anon` in any of these migrations must be granted
+ *     to `authenticated` in one of them too, or a signed-in phone is refused
+ *     what an unsigned one gets. 058 and 067 granted their match play card
+ *     tables to `anon` alone; 068 is the migration that makes this pass.
+ *
+ * The template in CLAUDE.md ("New tables need grants") is held to the same
+ * check, so the rule and the example can never disagree.
  */
 
 import fs from 'fs'
@@ -103,6 +112,9 @@ export function grantIssues(sql: string): string[] {
     if (roles.has('anon') && !rlsOn(sql, t)) {
       issues.push(`${t}: granted to anon with RLS never enabled — the whole table, to anybody with the public key`)
     }
+    if (roles.has('authenticated') && !rlsOn(sql, t)) {
+      issues.push(`${t}: granted to authenticated with RLS never enabled — every signed-in phone, and every phone signs in`)
+    }
   }
   return issues
 }
@@ -160,6 +172,32 @@ section('Grants read the way Postgres reads them')
     'a migration that creates no table has nothing to grant')
 }
 
+/**
+ * Tables granted to `anon` somewhere in these migrations and never to
+ * `authenticated` in any of them — reachable before a phone signs in and
+ * refused after. Read across files, because the fix for one file's table
+ * (068 for 058's and 067's) lives in a later one.
+ */
+export function signedInGaps(sqls: string[]): string[] {
+  const anon = new Set<string>(), signedIn = new Set<string>()
+  for (const sql of sqls) {
+    for (const [t, roles] of grants(sql)) {
+      if (roles.has('anon')) anon.add(t)
+      if (roles.has('authenticated')) signedIn.add(t)
+    }
+  }
+  return [...anon].filter(t => !signedIn.has(t)).sort()
+}
+
+section('A signed-in phone is granted whatever an unsigned one is')
+{
+  const open = 'CREATE TABLE f (id int); ALTER TABLE f ENABLE ROW LEVEL SECURITY; GRANT SELECT ON f TO anon, service_role;'
+  eq(signedInGaps([open]), ['f'], 'granted to anon alone: a signed-in phone would be refused')
+  eq(signedInGaps([open, 'GRANT SELECT ON public.f TO authenticated;']), [], '  …put right by a later migration')
+  eq(grantIssues('CREATE TABLE g (id int); GRANT SELECT ON g TO authenticated, service_role;').length, 1,
+    'granted to authenticated with RLS off: refused, as anon is')
+}
+
 // ─── CLAUDE.md's template passes its own rule ──────────────────
 
 section('The template in CLAUDE.md is a migration this check accepts')
@@ -185,6 +223,8 @@ section(`Every migration from ${FIRST_CHECKED.slice(-3)} on grants its tables`)
     ok(issues.length === 0, `${f}${issues.length ? `\n          ${issues.join('\n          ')}` : ''}`)
   }
   console.log(`  (${checked.length} checked; ${files.length - checked.length} earlier ones keep Supabase's automatic grants)`)
+  const gaps = signedInGaps(checked.map(f => fs.readFileSync(path.join(dir, f), 'utf-8')))
+  eq(gaps, [], 'every table granted to anon is granted to authenticated too — signed-in phones are not refused')
 }
 
 // ─── Result ────────────────────────────────────────────────────

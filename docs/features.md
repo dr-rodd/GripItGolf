@@ -48,9 +48,9 @@ live cards page is the manual one, for the glitch that cannot wait for 03:00.
 | | Trip settings passcode | Admin password |
 |---|---|---|
 | Guards | one trip's settings | every trip, and organisers' email addresses |
-| Checked | in the browser | on the server |
+| Checked | in the browser; from RLS stage 1 also on the server (`/api/entry`, with a retry limit), recorded but not yet enforced | on the server |
 | Secret | SHA-256 hash in a public column | `ADMIN_PASSWORD` env var, never `NEXT_PUBLIC_` |
-| Session | `sessionStorage` flag | HMAC-signed httpOnly cookie, 12h |
+| Session | 12h on the phone (`localStorage` expiry) and 12h on the server (`trip_members.organiser_until`) | HMAC-signed httpOnly cookie, 12h |
 
 A client-side check here would ship the password in the JS bundle and fetch the data with the anon key — no protection at all. The trip query sits below the cookie check, so a failed login never touches the data. The cookie is signed with the password itself, so it cannot be forged and changing the password logs everyone out. An unset `ADMIN_PASSWORD` fails **closed** — a misconfigured deploy is locked, not open.
 

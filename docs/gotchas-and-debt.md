@@ -76,6 +76,21 @@ Inherited from Donegal Masters, where `NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY` wa
 - **Trip code in a request header**, read in policies via `current_setting('request.headers')`. Cheap, and enforces exactly the access model already documented — no more, no less. But **Supabase Realtime does not evaluate PostgREST request headers**, so every such policy denies on the realtime channel: the live leaderboard's `postgres_changes` subscription on `live_scores` goes dark and falls back to its 15-second poll.
 - **Supabase anonymous sign-in.** Each device silently gets a real identity with no login screen, policies key on it, realtime keeps working. Bigger, touches scoring, and is the foundation a paid product needs anyway.
 
+**The design chosen (Ross, 10 Nov 2026): Supabase anonymous sign-in.** Every phone signs in silently; entering an event writes a `trip_members` row (user, trip, field role, optional player, `organiser_until`) through `/api/entry`, which checks the code and the PINs on the server; policies on every trip table will key on that membership. Four roles — organiser (12 hours from the PIN), player, guest (entered with the code; may score), spectator (reserved for a watch link). Rules: `lib/membership.ts`. Built in eight stages, each one deploy checked on a phone, **nothing enforced until stage 3 and the scoring tables last**:
+
+1. **Every phone gets an identity, nothing enforced — built.** Migration 068 (`trip_members`, `entry_attempts`, and the `authenticated` grants on the four match card tables, which only `anon` had), `/api/entry`, `lib/entryClient.ts`, `EnsureMember` in the trip and run layouts, every PIN, claim and create door calling the route. The organiser's unlock became a fixed 12 hours. Nobody signs in until the server says 068 is in, so the deploy and the migration cannot be put in the wrong order. The dead legacy clients (`app/live`, `app/score-entry`, the legacy `TeamsClient`, `app/tee-times`, `ScoringClient`) were deleted first.
+2. **The server stops using the browser's key.** About 38 server files read with `lib/supabase.ts`; under the policies they would read nothing. They move to a server reader that **takes one event and cannot return another event's rows**. Code lookups, PIN checks and creation move into routes; pages pass "locked: yes/no" instead of hashes. This is also what keeps finished trips with no members (North West 26) readable by code.
+3. **First lock** — members read and write the setup tables.
+4. **Roles** — organiser-only and player-themselves writes.
+5. **Hide the secrets.** Recommended: move `settings_passcode_hash`, `public_passcode_hash` and `lead_email` into a closed table rather than revoking columns on `trips` — several pages select every column of `trips`, and a column revoke turns each of those into "permission denied" (stage 1's hand-back has the reasoning).
+6. **Score safety, nothing new enforced** — the outbox recovers a lost sign-in instead of dropping holes after a day, and refused updates and deletes (which RLS reports as "0 rows", not as an error) count as failures.
+7. **The match play card tables.**
+8. **The stroke scoring tables, last**, applied only when `/admin` shows no open card.
+
+`scripts/rls-check.sql` holds the queries run by hand after each stage, including whether `live_scores` is on the realtime channel at all.
+
+**Anonymous users do not expire on their own.** Supabase keeps them until deleted; the nightly cleanup will need a rule for them (stage 1's hand-back proposes one), and must never delete a phone that belongs to an event still being played.
+
 **The trap, named once.** Enabling RLS with `USING (true)` write policies turns the advisor green and changes nothing about who can delete your data. If the remaining warnings are ever "fixed" quickly, that is what happened. Nothing outside the service role has any business writing to `courses`, `holes` or `tees`, so a write policy on those three is always wrong.
 
 ## Multi-year architecture (inherited from Donegal Masters 2026 archive work)

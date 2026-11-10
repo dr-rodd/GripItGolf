@@ -63,6 +63,7 @@ import {
   sessionsIssue, resolvedFormats, inRunningOrder, sessionBoard, overallBoard, feedFor, defaultMatchSlots,
 } from '@/lib/sessions'
 import { daySheetId } from '@/lib/teamSets'
+import { enterEvent } from '@/lib/entryClient'
 
 /**
  * Creating a league event — the league branch of the tournament door.
@@ -733,7 +734,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
       }
       playerRows = insertedPlayers
       const lead = insertedPlayers.find(p => p.is_lead)
-      if (lead) rememberPlayer(code, lead.id)
+      if (lead) { rememberPlayer(code, lead.id); void enterEvent(code, { playerId: lead.id }) }
 
       // The field step's tags — a failure costs them, never the event.
       const idByName = new Map(insertedPlayers.map(p => [String(p.name).trim().toLowerCase(), p.id as string]))
@@ -863,6 +864,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     // unlock now, so the organiser's own tee sheet and organiser area
     // are editable without being asked for the code they just typed.
     rememberUnlock(code)
+    void enterEvent(code, { adminPin: passcode })
     if (publicHash) rememberEntry(code, publicHash)
 
     setResultCode(code)

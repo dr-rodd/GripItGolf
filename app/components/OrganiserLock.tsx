@@ -5,6 +5,7 @@ import { verifyPasscode, rememberUnlock, forgetUnlock, isLocked, MAX_PASSCODE } 
 import { useUnlocked } from './useUnlocked'
 import { IconLock, IconLockOpen } from './icons'
 import { FIELD, buttonClass, cardClass } from './ui'
+import { enterEvent } from '@/lib/entryClient'
 
 /**
  * The organiser's lock, at the header's right edge on every page that has
@@ -15,7 +16,7 @@ import { FIELD, buttonClass, cardClass } from './ui'
  * left unlocked by accident.
  *
  * One memory, the same soft lock as ever (lib/passcode.ts): the unlock is
- * this tab's sessionStorage, and `useUnlocked` tells every control on the
+ * this phone's storage, and `useUnlocked` tells every control on the
  * page the moment it changes. An event or trip with no PIN has nothing to
  * unlock, so draws no lock at all.
  */
@@ -68,6 +69,7 @@ export default function OrganiserLock({ tripCode, passcodeHash, isTrip = false }
     setWobble(n => n + 1)
     if (ok) {
       rememberUnlock(tripCode)
+      void enterEvent(tripCode, { adminPin: code })
       setOpen(false)
       setCode('')
     } else {

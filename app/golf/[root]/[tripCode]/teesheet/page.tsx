@@ -38,7 +38,7 @@ export const dynamic = 'force-dynamic'
  * Who may do what is decided on the client, deliberately: the field's
  * rights come from two permissions (read here) — picking their own time,
  * and making the sheets — and the organiser's from the PIN unlock this
- * device already holds, which lives in sessionStorage and only the
+ * device already holds, which lives in this phone's storage and only the
  * browser can see.
  */
 export default async function TeeSheetPage({ params, searchParams }: {

@@ -61,7 +61,7 @@ export default function AddToField({
   const maySetHandicap = fieldSetsHandicaps || unlocked || !isLocked(passcodeHash)
 
   function openSheet() {
-    // The unlock lives in sessionStorage — read on tap, never in render.
+    // The unlock lives in this phone's storage — read on tap, never in render.
     setUnlocked(hasUnlocked(tripCode))
     setName('')
     setHandicap('')

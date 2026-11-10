@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { verifyPasscode, rememberUnlock, MAX_PASSCODE } from '@/lib/passcode'
 import { FIELD, buttonClass } from './ui'
+import { enterEvent } from '@/lib/entryClient'
 
 /**
  * The organiser PIN, asked in place rather than as a wall.
@@ -10,7 +11,7 @@ import { FIELD, buttonClass } from './ui'
  * PasscodeGate stands in front of whole screens; this sits inside one — the
  * tee sheet, the teams join screen — where the page is for everybody and
  * only the *editing* is the organiser's. A quiet row offers the unlock, the
- * PIN opens inline, and success writes the same sessionStorage memory the
+ * PIN opens inline, and success writes the same memory on this phone the
  * gate writes (`rememberUnlock`), so unlocking here unlocks everything for
  * the session — one PIN, one memory.
  *
@@ -37,6 +38,7 @@ export default function InlineUnlock({
     const ok = await verifyPasscode(code, passcodeHash)
     if (ok) {
       rememberUnlock(tripCode)
+      void enterEvent(tripCode, { adminPin: code })
       onUnlocked()
     } else {
       setError('Incorrect code.')

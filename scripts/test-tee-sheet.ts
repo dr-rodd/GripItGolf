@@ -537,7 +537,7 @@ section('The sheet reads fail-soft and writes scoped')
     'the organiser\'s right is the PIN unlock this device already holds, following the header\'s lock')
   const hook = read('app/components/useUnlocked.ts')
   ok(/useEffect\(\(\) => \{\s*const read = \(\) => setUnlocked\(hasUnlocked\(tripCode\)\)/.test(hook),
-    '  …read after mount, because sessionStorage would tear hydration')
+    '  …read after mount, because this phone\'s storage would tear hydration')
   // One batch insert — a single INSERT statement — so a race with another
   // phone books all of a linked team or none of it, never half.
   ok(/insert\(next\.map\(a => \(\{ trip_id: tripId, \.\.\.a \}\)\)\)/.test(client),

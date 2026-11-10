@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 import TabBar from '@/app/components/TabBar'
+import EnsureMember from '@/app/components/EnsureMember'
 import { fourthTab, isEvent } from '@/lib/eventHub'
 import { isRunChallenge } from '@/lib/runChallenge'
 import { entryAllowed, entryCookie } from '@/lib/publicPin'
@@ -84,6 +85,8 @@ export default async function TripLayout({
   return (
     <TripBaseProvider base={base}>
       <AddressFix base={base} />
+      {/* After the public PIN door above, so only a phone let in is entered. */}
+      <EnsureMember tripCode={tripCode} />
       {children}
       <TabBar
         tripCode={tripCode}

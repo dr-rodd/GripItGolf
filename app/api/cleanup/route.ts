@@ -178,10 +178,29 @@ export async function GET(req: NextRequest) {
     console.error("due draws failed:", e)
   }
 
+  // ── 4. Wrong-PIN counts a day old ──
+  // /api/entry's retry limit (migration 068, lib/membership.ts) needs at
+  // most an hour of them; a day is plenty, and the hashed address goes with
+  // them. Its own try: before 068 the table does not exist, and that costs
+  // this step, never the cleanup.
+  let staleAttempts = 0
+  try {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const q = dryRun
+      ? supabaseAdmin.from("entry_attempts").select("key", { count: "exact", head: true }).lt("window_started", cutoff)
+      : supabaseAdmin.from("entry_attempts").delete({ count: "exact" }).lt("window_started", cutoff)
+    const { count, error } = await q
+    if (error) throw error
+    staleAttempts = count ?? 0
+  } catch (e) {
+    console.error("entry attempts cleanup failed:", e)
+  }
+
   return NextResponse.json({
     ok: true,
     dryRun,
     draws,
+    staleAttempts,
     closedEmpty,
     closedAbandoned,
     // On a dry run nothing is deleted, so report what would have been.

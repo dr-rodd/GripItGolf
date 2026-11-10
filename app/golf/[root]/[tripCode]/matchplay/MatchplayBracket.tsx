@@ -150,7 +150,7 @@ export default function MatchplayBracket({
 
   const [sheet, setSheet] = useState<{ match: BracketMatchRow; correcting: boolean } | null>(null)
   const [viewing, setViewing] = useState<BracketMatchRow | null>(null)
-  // This device's organiser unlock — sessionStorage, read after mount.
+  // This device's organiser unlock — this phone's storage, read after mount.
   const [unlocked, setUnlocked] = useUnlocked(lock?.tripCode ?? scoring?.tripCode ?? '')
   // Where a tap is taking this phone — the router is asked only then, by
   // `Navigate`, so the bracket still renders without one (test:bracket-render).

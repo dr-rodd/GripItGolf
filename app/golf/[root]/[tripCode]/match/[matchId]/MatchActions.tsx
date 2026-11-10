@@ -36,7 +36,7 @@ type TeeOption = { id: string; name: string | null; gender: string; slope: numbe
 
 /** The admin PIN: open when none is set, else this device's unlock or the PIN asked now. */
 function useOrganiser(tripCode: string, passcodeHash: string | null) {
-  // The unlock lives in sessionStorage, and follows the header's lock.
+  // The unlock lives in this phone's storage, and follows the header's lock.
   const [unlocked, setUnlocked] = useUnlocked(tripCode)
   return { organiser: unlocked || !isLocked(passcodeHash), unlock: () => setUnlocked(true) }
 }

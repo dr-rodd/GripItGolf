@@ -15,6 +15,7 @@ import {
 } from '@/lib/runChallenge'
 import type { RunRosterEntry } from '../data'
 import { FIELD, buttonClass, cardClass, optionClass } from '@/app/components/ui'
+import { enterEvent } from '@/lib/entryClient'
 
 /**
  * The join screen's two steps: who you are, then which team.
@@ -80,6 +81,7 @@ export default function RunJoinClient({
   /** Remember them here, throw away pages rendered for the old cookie, go home. */
   function finish(playerId: string) {
     rememberPlayer(code, playerId)
+    void enterEvent(code, { playerId })
     router.refresh()
     router.push(`/run/${code}`)
   }
@@ -201,6 +203,7 @@ export default function RunJoinClient({
       // The runner exists now — keep them, and let the retry only pick the
       // team, so nobody is created twice.
       rememberPlayer(code, playerId)
+      void enterEvent(code, { playerId })
       setWho({ kind: 'claim', entry: { id: playerId, name: who.kind === 'new' ? who.name : who.entry.name, claimed: true, isLead: false, teamId: null } })
       setChoice({ kind: 'existing', id: teamId })
       setBusy(false)
