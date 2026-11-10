@@ -709,7 +709,6 @@ section('No scoring surface filters tees by gender on its own')
   // reopen silently — the failure is a disabled button, not an error.
   for (const path of [
     'app/scoring/LiveScoringFlow.tsx',
-    'app/score-entry/ScoreEntryForm.tsx',
   ]) {
     const src = readFileSync(path, 'utf-8')
     ok(src.includes('teesForPlayer'), `${path} goes through teesForPlayer`)

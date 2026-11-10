@@ -27,12 +27,10 @@ export const CHROME_VAR = "--scoring-chrome"
 /**
  * The fallback: the shell's title row on its own, with nothing above it.
  *
- * Used by the legacy `/scoring` route (ScoringClient), which renders
- * LiveScoringFlow without CourseDashboardClient around it and so never
- * publishes the property. That route's own header is shorter than this
- * (py-2, not py-4), so the fallback is not exact there — it is the number
- * that route was already using before the property existed, kept as-is so
- * this change leaves that screen exactly where it was.
+ * Used wherever LiveScoringFlow renders without CourseDashboardClient
+ * around it to publish the property. The legacy `/scoring` screen that
+ * first needed it (ScoringClient) is deleted; the number is kept as it was
+ * so nothing that still falls back to it moves.
  */
 export const LEGACY_CHROME = 77
 

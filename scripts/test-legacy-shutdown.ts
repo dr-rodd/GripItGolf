@@ -51,6 +51,20 @@ for (const page of LEGACY_PAGES) {
     `  …and mounts no client component`)
 }
 
+section('The legacy clients stay deleted')
+{
+  // The redirects above keep the routes shut; these were the screens behind
+  // them, still in the tree and still writing across every trip. Deleted
+  // before row-level security, so nothing can mount one again by accident.
+  for (const f of [
+    'app/live/LiveClient.tsx',
+    'app/score-entry/ScoreEntryForm.tsx',
+    'app/teams/TeamsClient.tsx',
+    'app/tee-times/TeeTimesClient.tsx',
+    'app/scoring/ScoringClient.tsx',
+  ]) ok(!fs.existsSync(f), `${f} does not exist`)
+}
+
 section('The platform-wide reset modal stays deleted')
 {
   ok(!fs.existsSync('app/components/SettingsModal.tsx'),

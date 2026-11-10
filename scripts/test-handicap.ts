@@ -229,7 +229,6 @@ section('Every screen writes a handicap the way golf writes one')
     'app/scoring/LiveLeaderboardPanel.tsx',
     'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
     'app/golf/[root]/[tripCode]/players/PlayersClient.tsx',
-    'app/score-entry/ScoreEntryForm.tsx',
   ]
   for (const f of screens) {
     const src = readFileSync(f, 'utf-8')
