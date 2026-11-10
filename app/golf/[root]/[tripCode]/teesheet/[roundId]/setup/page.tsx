@@ -6,7 +6,7 @@ import { parseLeaderboards } from '@/lib/leaderboards'
 import { roundPartnership, playTogetherQuestion, carriedPartnerships } from '@/lib/partnerships'
 import { sheetForBoard } from '@/lib/teamSets'
 import { draftRules, roundSheet } from '@/lib/teeSheet'
-import { overallOf, sessionBoardFor, matchSlotsFor, defaultMatchSlots, sideSize } from '@/lib/sessions'
+import { overallOf, sessionBoardFor, sessionSlotCount, defaultMatchSlots, sideSize } from '@/lib/sessions'
 import { readSessionMatchRows } from '../../../session/sessionMatches'
 import BackButton from '@/app/components/BackButton'
 import TripHeader from '@/app/components/TripHeader'
@@ -145,7 +145,7 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
   const matchSession = matchBoard?.competition === 'matches' && matchBoard.matchFormat ? matchBoard.matchFormat : null
   const matchRows = matchSession ? (await readSessionMatchRows(trip.id)).filter(m => m.round_id === round.id) : []
   const matchCount = matchSession
-    ? matchSlotsFor(overall?.overall, round.id, matchRows.map(m => ({ roundId: m.round_id, slot: m.slot })))
+    ? sessionSlotCount(overall?.overall, matchBoard, round.id, matchRows.map(m => ({ roundId: m.round_id, slot: m.slot })), fieldSize)
     : 0
   const asked = matchSession ? null : playTogetherQuestion(boards, round.id)
   const largest = asked ? largestOn(sheetForBoard(asked)) : 0

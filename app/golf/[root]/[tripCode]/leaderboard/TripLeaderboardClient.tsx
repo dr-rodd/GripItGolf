@@ -16,7 +16,7 @@ import {
 } from '@/lib/boardRows'
 import {
   overallOf, overallTabs, sessionBoardFor, sessionName, formatPoints, feedFor, targetLine, type SessionMatchResult,
-  matchSlotsFor, MATCH_FORMATS,
+  sessionSlotCount, MATCH_FORMATS,
 } from '@/lib/sessions'
 import { overallRows } from '@/lib/overallRows'
 import { faceOff } from '@/lib/faceOff'
@@ -1708,15 +1708,16 @@ export default function TripLeaderboardClient({
         sessionBoardFor,
         matches: sessionMatches ?? [],
         tagOf: ids => tagOfTeam([...ids], memberships),
+        fieldSize: players.length,
       })
-    : null), [overallActive, tagTeams, rowsByBoard, sessionRounds, boards, sessionMatches, memberships])
+    : null), [overallActive, tagTeams, rowsByBoard, sessionRounds, boards, sessionMatches, memberships, players.length])
   const faceColours = useMemo(
     () => (face ? sideColours(tagTeams[0]?.color, tagTeams[1]?.color) : null),
     [face, tagTeams],
   )
   const sessionSlots = useCallback(
-    (roundId: string) => matchSlotsFor(overallActive?.overall, roundId, sessionMatches ?? []),
-    [overallActive, sessionMatches],
+    (roundId: string) => sessionSlotCount(overallActive?.overall, sessionBoardFor(boards, roundId), roundId, sessionMatches ?? [], players.length),
+    [overallActive, sessionMatches, boards, players.length],
   )
   const currentSession = useMemo(() => {
     if (!face) return null

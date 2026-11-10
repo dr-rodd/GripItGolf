@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { teeSheetAccess } from '@/lib/eventPermissions'
-import { overallOf, matchSlotsFor } from '@/lib/sessions'
+import { overallOf, sessionBoardFor, sessionSlotCount } from '@/lib/sessions'
 import { eventTags } from '@/lib/tagBoards'
 import TripHeader from '@/app/components/TripHeader'
 import OrderOfPlayList from './OrderOfPlayList'
@@ -55,9 +55,9 @@ export default async function OrderOfPlayPage({ params, searchParams }: {
   // A session whose round has tee times shows them on its rows; every
   // session shows its matches either way (session/matchSheets.ts).
   const times = await readSessionTimes(trip.id, rid => `${tripHome}/teesheet/${rid}/setup?from=order`,
-    rid => matchSlotsFor(overall?.overall, rid, results))
+    rid => sessionSlotCount(overall?.overall, sessionBoardFor(boards, rid), rid, results, players.length))
   const { sheets, initialOpen } = buildMatchSheets({
-    boards, rounds, results, times, onlyRound,
+    boards, rounds, results, times, onlyRound, fieldSize: players.length,
     common: {
       tripId: trip.id,
       tripCode,

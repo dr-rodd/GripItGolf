@@ -2,7 +2,9 @@ import Link from 'next/link'
 import OrganiserLock from '@/app/components/OrganiserLock'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { boardFacts } from '@/lib/leaderboards'
-import { overallOf, sessionBoardFor, sessionName } from '@/lib/sessions'
+import { overallOf, sessionBoardFor, sessionName, sessionSlotCount } from '@/lib/sessions'
+import { eventTags } from '@/lib/tagBoards'
+import { boardNames } from '@/lib/displayNames'
 import SessionMatchList from '../leaderboard/SessionMatchList'
 import { readSessionResults } from '../session/sessionMatches'
 import { notFound } from 'next/navigation'
@@ -178,7 +180,7 @@ export default async function TripCoursePortalPage({
           linkedPlayerId(tripCode),
         ]).then(async ([playersRes, teamsRes, membersRes, meId]) => {
           const roster = (playersRes.data ?? []) as { id: string; name: string; handicap: number | null; gender: string }[]
-          const teams = (teamsRes.data ?? []) as { id: string; name: string; color: string }[]
+          const teams = (teamsRes.data ?? []) as { id: string; name: string; color: string; team_set: string | null }[]
           const memberships = (membersRes.data ?? []) as { team_id: string; team_set: string; player_id: string }[]
           const results = await readSessionResults(trip, sessionBoards, roster, { teams, memberships })
           return { roster, teams, memberships, results, me: roster.some(p => p.id === meId) ? meId : null }
@@ -187,6 +189,10 @@ export default async function TripCoursePortalPage({
   ])
   if (openErr) console.error('TripCoursePortal live rounds query failed:', openErr)
   const knockoutView = knockoutRead?.view ?? null
+  // A Matches session's rows the leaderboard's way round: the two tags left
+  // and right, each player by the board's short name.
+  const sessionTags = sessionRead ? eventTags(sessionRead.teams) : []
+  const sessionNames = boardNames((sessionRead?.roster ?? []).map(p => ({ id: p.id, name: p.name, nickname: null })))
   if (itemsRes.error) console.error('TripCoursePortal league items query failed:', itemsRes.error)
   const items = (itemsRes.data ?? []) as {
     id: string; day_index: number; position: number; kind: string; course_id: string | null
@@ -438,12 +444,17 @@ export default async function TripCoursePortalPage({
                     <Link href={`${tripHome}/order?round=${round.id}`} className="t-label text-accent-deep">Set the matches</Link>
                   </div>
                   <p className="t-cap text-ink/65 mb-2">{boardFacts(session).join(' · ')}</p>
+                  {/* Every session the same (Ross, 10 Nov 2026): its matches
+                      in order of play, a row each, vacant until they are set. */}
                   <SessionMatchList
                     matches={matches}
                     players={sessionRead?.roster ?? []}
                     teams={sessionRead?.teams ?? []}
                     memberships={sessionRead?.memberships ?? []}
                     tripCode={tripCode}
+                    slots={sessionSlotCount(overall.overall, session, round.id, sessionRead?.results ?? [], sessionRead?.roster.length ?? 0)}
+                    tags={sessionTags.length === 2 ? sessionTags : []}
+                    nameById={sessionNames}
                   />
                 </section>
               )

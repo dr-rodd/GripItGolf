@@ -1,6 +1,6 @@
 import { Fragment, Suspense } from 'react'
 import OrganiserLock from '@/app/components/OrganiserLock'
-import { overallOf, sessionBoardFor, sessionName, describeFormat, formatOfBoard, matchSlotsFor, slotFloor } from '@/lib/sessions'
+import { overallOf, sessionBoardFor, sessionName, describeFormat, formatOfBoard, sessionSlotCount, slotFloor } from '@/lib/sessions'
 import { parseStartFormat } from '@/lib/eventHub'
 import { readSessionMatchRows } from '../../session/sessionMatches'
 import RoundOrganiser from './RoundOrganiser'
@@ -102,7 +102,6 @@ export default async function RoundSummaryPage({
     storedName: overallRules.names?.[round.id] ?? '',
     format: describeFormat(lead ? formatOfBoard(lead) : null),
     matches: matchesSession,
-    slots: matchSlotsFor(overallRules, round.id, sessionMatchRows.map(m => ({ roundId: m.round_id, slot: m.slot }))),
     floor: slotFloor(sessionMatchRows.map(m => ({ slot: m.slot, sideA: m.side_a, sideB: m.side_b }))),
   } : null
 
@@ -196,6 +195,9 @@ export default async function RoundSummaryPage({
   const tees    = (teesRes.data ?? []) as unknown as TeeRow[]
   const item    = itemRes.data as { day_index: number; tee_time: string | null; tee_count: number | null } | null
   const players = playersRes.data ?? []
+  // A Matches session's count — the field's usual number where none was set.
+  const sessionSlots = sessionInfo ? sessionSlotCount(overallRules, lead, round.id,
+    sessionMatchRows.map(m => ({ roundId: m.round_id, slot: m.slot })), players.length) : 0
 
   // Whose card to print. A visitor this device does not recognise gets the
   // men's, which is what the course prints by default.
@@ -414,7 +416,7 @@ export default async function RoundSummaryPage({
             order: `${tripHome}/order?round=${round.id}`,
             more: event ? `${tripHome}/organiser` : `${tripHome}/setup`,
           }}
-          session={sessionInfo}
+          session={sessionInfo ? { ...sessionInfo, slots: sessionSlots } : null}
         />
       </div>
 

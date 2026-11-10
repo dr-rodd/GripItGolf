@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react'
 import type { Leaderboard } from '@/lib/leaderboards'
 import {
-  type SessionMatchResult, overallOf, sessionBoardFor, sessionName, matchSlotsFor,
+  type SessionMatchResult, overallOf, sessionBoardFor, sessionName, sessionSlotCount,
 } from '@/lib/sessions'
 import { describeTime } from '@/lib/itinerary'
 import { type RoundSheet, sheetClock, teeClocks } from '@/lib/teeSheet'
@@ -59,6 +59,8 @@ export function buildMatchSheets(input: {
   times: Map<string, SessionTimes>
   common: Omit<MatchSheetProps, 'roundId' | 'title' | 'format' | 'matches' | 'slots' | 'clocks' | 'opensLabel' | 'setupHref'>
   onlyRound?: string | null
+  /** The field's size — a session never given a count holds its usual number. */
+  fieldSize?: number
 }): { sheets: MatchSheetProps[]; initialOpen: string | null } {
   const overall = overallOf(input.boards)
   if (!overall) return { sheets: [], initialOpen: null }
@@ -66,7 +68,8 @@ export function buildMatchSheets(input: {
     .sort((a, b) => a.round_number - b.round_number)
     .map(r => ({ round: r, board: sessionBoardFor(input.boards, r.id) }))
     .filter(s => s.board?.competition === 'matches' && s.board.matchFormat)
-  const slotsOf = (roundId: string) => matchSlotsFor(overall.overall, roundId, input.results)
+  const slotsOf = (roundId: string) =>
+    sessionSlotCount(overall.overall, sessionBoardFor(input.boards, roundId), roundId, input.results, input.fieldSize ?? 0)
   const sheets = sessions.map(({ round, board }) => {
     const t = input.times.get(round.id)
     return {

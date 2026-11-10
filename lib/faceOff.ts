@@ -15,7 +15,7 @@
 
 import {
   type OverallRules, type SessionFeed, type SessionMatchResult,
-  feedFor, matchSlotsFor, matchPoints,
+  feedFor, sessionSlotCount, matchPoints,
 } from './sessions'
 import type { Leaderboard } from './leaderboards'
 
@@ -112,6 +112,8 @@ export function faceOff(input: {
   sessionBoardFor: (boards: readonly Leaderboard[], roundId: string) => Leaderboard | null
   matches: readonly SessionMatchResult[]
   tagOf: (ids: readonly string[]) => string | null
+  /** The field's size — a session never given a count holds its usual number. */
+  fieldSize?: number
 }): FaceOff | null {
   const { rules, tags, rows, rounds, boards, matches, tagOf } = input
   if (rules.ranks !== 'tags' || tags.length !== 2) return null
@@ -125,7 +127,7 @@ export function faceOff(input: {
     const board = input.sessionBoardFor(boards, round.id)
     const feed = feedFor(rules, round.id, board, 2)
     if (!board || feed.kind === 'none') continue
-    const slots = board.competition === 'matches' ? matchSlotsFor(rules, round.id, matches) : 0
+    const slots = sessionSlotCount(rules, board, round.id, matches, input.fieldSize ?? 0)
     total += sessionPool(feed, slots)
     if (feed.kind !== 'match') continue
     for (const m of matches) {

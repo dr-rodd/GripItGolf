@@ -561,14 +561,37 @@ export function slotFloor(matches: readonly { slot: number; sideA: readonly stri
   return Math.max(1, ...filled)
 }
 
-/** How many matches a session holds: the number set, else every match set so far. */
+/**
+ * How many matches a session holds: the number set, else `fallback`, and
+ * never fewer than the matches set so far.
+ */
 export function matchSlotsFor(
   rules: OverallRules | undefined, roundId: string, matches: readonly { roundId: string; slot: number }[],
+  fallback = 0,
 ): number {
   const set = rules?.slots?.[roundId]
   const own = matches.filter(m => m.roundId === roundId)
   const used = own.length ? Math.max(own.length, ...own.map(m => m.slot + 1)) : 0
-  return Math.max(set ?? 0, used)
+  return Math.max(set ?? fallback, used)
+}
+
+/**
+ * A Matches session's slots wherever they are read — the order of play,
+ * the Scoring tab, the leaderboard, the ticker (Ross, 10 Nov 2026: "there
+ * should be no difference between these sessions"). A session never given a
+ * count — one made before creation asked — holds the field's usual number
+ * for its format (`defaultMatchSlots`), every one of them vacant until it is
+ * set, rather than nothing. Not a Matches session: none.
+ */
+export function sessionSlotCount(
+  rules: OverallRules | undefined,
+  board: Pick<Leaderboard, 'competition' | 'matchFormat'> | null | undefined,
+  roundId: string,
+  matches: readonly { roundId: string; slot: number }[],
+  fieldSize: number,
+): number {
+  if (board?.competition !== 'matches' || !board.matchFormat) return 0
+  return matchSlotsFor(rules, roundId, matches, defaultMatchSlots(fieldSize, board.matchFormat))
 }
 
 // ─── Reading an event's sessions ───────────────────────────────

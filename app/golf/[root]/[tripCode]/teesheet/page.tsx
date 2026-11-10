@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { overallOf, sessionBoardFor, matchSlotsFor } from '@/lib/sessions'
+import { overallOf, sessionBoardFor, sessionSlotCount } from '@/lib/sessions'
 import { tripHomeAt } from '@/lib/tripPaths'
 import { eventTags } from '@/lib/tagBoards'
 import OrderOfPlayList from '../order/OrderOfPlayList'
@@ -326,9 +326,10 @@ export default async function TeeSheetPage({ params, searchParams }: {
         times: sessionTimes(
           rounds.filter(r => isMatchSession(r.id)),
           rid => `${tripHome}/teesheet/${rid}/setup`,
-          rid => matchSlotsFor(overall?.overall, rid, matchResults),
+          rid => sessionSlotCount(overall?.overall, sessionBoardFor(boards, rid), rid, matchResults, roster.length),
         ),
         onlyRound: initialRoundId ?? null,
+        fieldSize: roster.length,
         common: {
           tripId: trip.id,
           tripCode,

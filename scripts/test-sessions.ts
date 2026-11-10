@@ -24,7 +24,7 @@ import { playSessionCard, sessionResult, type CardHole } from '../lib/matchCard'
 import { foursomesStrokes } from '../lib/matchArrangements'
 import { eventFourthTab, fourthTab } from '../lib/eventHub'
 import { faceOff, tickFills, matchStatus, matchPool, sessionPool, MAX_TICKS } from '../lib/faceOff'
-import { defaultMatchSlots, matchSlotsFor, withSessionSlots, MAX_MATCH_SLOTS, slotFloor, itinerarySessions } from '../lib/sessions'
+import { defaultMatchSlots, matchSlotsFor, withSessionSlots, MAX_MATCH_SLOTS, slotFloor, itinerarySessions, sessionSlotCount } from '../lib/sessions'
 import { buildMatchSheets, clocksOf } from '../app/golf/[root]/[tripCode]/session/matchSheetPlan'
 import fs from 'fs'
 
@@ -712,7 +712,35 @@ section('The organiser’s lock, and a round’s own settings (Ross, 10 Nov 2026
     '  …a session’s name and how many matches it holds')
   ok(ro.includes('Change the format →') && ro.includes('Set the matches →'), '  …and the way to its format and its matches')
   const rp = read(base + 'round/[roundNumber]/page.tsx')
-  ok(rp.includes('<RoundOrganiser') && rp.includes('session={sessionInfo}'), 'the round summary draws them')
+  ok(rp.includes('<RoundOrganiser') && rp.includes('session={sessionInfo ? { ...sessionInfo, slots: sessionSlots } : null}'), 'the round summary draws them')
+}
+
+section('Every Matches session alike: its matches in order of play, vacant until set (Ross, 10 Nov 2026)')
+{
+  const fourball = sessionBoard({ kind: 'matches', match: 'fourball' }, 'r1', 'day:r1')
+  const foursomes = sessionBoard({ kind: 'matches', match: 'foursomes' }, 'r2', 'day:r2')
+  const singles = sessionBoard({ kind: 'matches', match: 'singles' }, 'r3', 'day:r3')
+  const stroke = sessionBoard({ kind: 'stroke', audience: 'individual', scoring: 'stableford' }, 'r4', 'day:r4')
+  const rules = { ranks: 'tags' as const }
+  eq(sessionSlotCount(rules, foursomes, 'r2', [], 16), 4, 'a session never given a count holds the field’s usual number — sixteen are four foursomes')
+  eq(sessionSlotCount(rules, singles, 'r3', [], 16), 8, '  …or eight singles')
+  eq(sessionSlotCount({ ranks: 'tags', slots: { r1: 3 } }, fourball, 'r1', [], 16), 3, 'a count set is the count')
+  eq(sessionSlotCount(rules, fourball, 'r1', [{ roundId: 'r1', slot: 5 }], 16), 6, '  …never fewer than the matches set')
+  eq(sessionSlotCount(rules, stroke, 'r4', [], 16), 0, 'a stroke session holds no matches')
+  eq(sessionSlotCount(rules, null, 'r5', [], 16), 0, '  …nor does a TBC one')
+  const face = faceOff({
+    rules, tags: [{ id: 'l', name: 'L' }, { id: 'r', name: 'R' }], rows: [], rounds: [{ id: 'r2' }],
+    boards: [overallBoard(rules), foursomes], sessionBoardFor, matches: [], tagOf: () => null, fieldSize: 16,
+  })!
+  eq(face.total, 4, 'the ticker counts those vacant matches as points up for grabs')
+  const scoring = read('app/golf/[root]/[tripCode]/scoring/page.tsx')
+  ok(scoring.includes('slots={sessionSlotCount(overall.overall, session, round.id,'),
+    'the Scoring tab draws every Matches session’s rows, set or vacant — never "No matches yet"')
+  ok(scoring.includes('tags={sessionTags.length === 2 ? sessionTags : []}'), '  …the two tags left and right, as on the leaderboard')
+  for (const f of ['leaderboard/TripLeaderboardClient.tsx', 'session/matchSheetPlan.ts', 'teesheet/page.tsx', 'order/page.tsx',
+    'teesheet/[roundId]/setup/page.tsx', 'round/[roundNumber]/page.tsx']) {
+    ok(read('app/golf/[root]/[tripCode]/' + f).includes('sessionSlotCount('), `  …and ${f} reads the same count`)
+  }
 }
 
 console.log(`\n${'─'.repeat(56)}`)
