@@ -1,6 +1,6 @@
 import { cache } from 'react'
 import { readSessionResults } from './session/sessionMatches'
-import { overallOf, sessionName, bySlot } from '@/lib/sessions'
+import { overallOf, sessionName, bySlot, itinerarySessions } from '@/lib/sessions'
 import type { Metadata } from 'next'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
@@ -484,6 +484,9 @@ export default async function TripPage({ params, searchParams }: {
   // it stands — the Overall's standing reads them, and the player's own
   // next match is drawn from them (lib/sessions.ts).
   const hubBoards = parseLeaderboards(trip.leaderboards)
+  // A Dynamic Overall Leaderboard's sessions on the schedule: the session's
+  // name where the venue was, a Matches session opening the Scoring tab.
+  const scheduleSessions = itinerarySessions(hubBoards, rounds)
   const hubSessions: { boards: typeof hubBoards; sessionMatches?: Awaited<ReturnType<typeof readSessionResults>> } =
     overallOf(hubBoards) && hubBoards.some(b => b.competition === 'matches')
       ? await (async () => {
@@ -756,6 +759,7 @@ export default async function TripPage({ params, searchParams }: {
       tripCode={tripCode}
       roundNumbers={roundNumbers}
       startLines={startLines}
+      sessions={scheduleSessions}
       timescale={isEvent}
     />
   ) : days.length > 0 ? (
@@ -909,6 +913,7 @@ export default async function TripPage({ params, searchParams }: {
           roundDates={roundDates}
           roundNumbers={roundNumbers}
           courseNames={courseMap}
+          sessions={scheduleSessions}
           noun={isEvent ? 'event' : 'trip'}
           knockout={!!koView}
           periodLine={periodsLeague ? periodNowLine(periodsLeague.periods, todayString(new Date())) : null}

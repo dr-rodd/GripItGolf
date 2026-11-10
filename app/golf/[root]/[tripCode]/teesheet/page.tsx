@@ -1,9 +1,9 @@
 import { supabase } from '@/lib/supabase'
-import { overallOf, sessionBoardFor, sessionName } from '@/lib/sessions'
+import { overallOf, sessionBoardFor, matchSlotsFor } from '@/lib/sessions'
+import { tripHomeAt } from '@/lib/tripPaths'
 import { eventTags } from '@/lib/tagBoards'
-import { teeClocks, sheetClock } from '@/lib/teeSheet'
-import { describeTime } from '@/lib/itinerary'
-import MatchesSheet from '../session/MatchesSheet'
+import OrderOfPlayList from '../order/OrderOfPlayList'
+import { buildMatchSheets, sessionTimes } from '../session/matchSheets'
 import { readSessionCards, readSessionMatchRows } from '../session/sessionMatches'
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
@@ -42,10 +42,11 @@ export const dynamic = 'force-dynamic'
  * browser can see.
  */
 export default async function TeeSheetPage({ params, searchParams }: {
-  params: Promise<{ tripCode: string }>
+  params: Promise<{ root: string; tripCode: string }>
   searchParams: Promise<{ round?: string; edit?: string }>
 }) {
-  const [{ tripCode }, { round: initialRoundId, edit }] = await Promise.all([params, searchParams])
+  const [{ root, tripCode }, { round: initialRoundId, edit }] = await Promise.all([params, searchParams])
+  const tripHome = tripHomeAt(root, tripCode)
   // A tee time to open for changing, from the Teams page (stage 2).
   const editSlot = initialRoundId && edit && /^\d{1,3}$/.test(edit) ? Number(edit) : null
 
@@ -300,50 +301,50 @@ export default async function TeeSheetPage({ params, searchParams }: {
     }
   }
 
-  // A Dynamic Overall Leaderboard's Matches sessions with a live sheet: each
-  // tee time is one match, drawn as matches (D40). Every other round — a
-  // stroke session, any trip's or event's round — keeps today's sheet.
+  // A Dynamic Overall Leaderboard's Matches sessions: every one of them,
+  // drawn as matches (D40) — with its tee times on the rows where its round
+  // starts from a tee sheet that is open, and as its order of play where it
+  // does not (Ross, 10 Nov 2026: tee times add times to the matches already
+  // set, and a session without tee times still shows). Every other round —
+  // a stroke session, any trip's or event's round — keeps today's sheet.
   const overall = overallOf(boards)
-  const matchRounds = overall
-    ? rounds.filter(r => sessionBoardFor(boards, r.id)?.competition === 'matches' && r.sheet.state !== 'vacant')
-    : []
-  const sheetRounds = rounds.filter(r => !matchRounds.includes(r))
-  const matchResults = matchRounds.length > 0
+  const isMatchSession = (roundId: string) => !!overall && sessionBoardFor(boards, roundId)?.competition === 'matches'
+  const allRounds = ((roundsResult.data ?? []) as unknown as RoundRow[]).map(r => ({ id: r.id, round_number: r.round_number }))
+  const hasMatchSessions = allRounds.some(r => isMatchSession(r.id))
+  const sheetRounds = rounds.filter(r => !isMatchSession(r.id))
+  const matchResults = hasMatchSessions
     ? (await readSessionCards(trip, boards, roster.map(p => ({ ...p, gender: p.gender ?? 'M' })),
         { teams: allTeams, memberships }, await readSessionMatchRows(trip.id))).results
     : []
   const tags = eventTags(allTeams)
   const tagIdOf = Object.fromEntries(memberships.filter(m => m.team_set === TAG_SET).map(m => [m.player_id, m.team_id]))
-  const matchSessions = matchRounds.length > 0 ? (
-    <>
-      {matchRounds.map(r => {
-        const sheet = r.sheet
-        const clocks = sheet.state === 'active'
-          ? teeClocks(sheet.rules).map(t => describeTime(t))
-          : Array.from({ length: Math.max(1, matchResults.filter(m => m.roundId === r.id).length + 1) }, (_, i) => sheetClock(sheet, i) ?? `Match ${i + 1}`)
-        return (
-          <MatchesSheet
-            key={r.id}
-            tripId={trip.id}
-            tripCode={tripCode}
-            roundId={r.id}
-            title={sessionName(overall!.overall, r.id, r.roundNumber)}
-            format={sessionBoardFor(boards, r.id)!.matchFormat!}
-            matches={matchResults.filter(m => m.roundId === r.id)}
-            clocks={clocks}
-            opensLabel={r.opensLabel}
-            players={roster.map(p => ({ id: p.id, name: p.name, handicap: p.handicap }))}
-            tags={tags}
-            tagOfPlayer={tagIdOf}
-            myId={me && isConfirmed(me) ? me.id : null}
-            passcodeHash={(trip.settings_passcode_hash as string | null) ?? null}
-            playersPick={access.playersPick}
-            isTrip={!isEvent(kind)}
-          />
-        )
-      })}
-    </>
-  ) : null
+  const { sheets: matchSheets, initialOpen: matchOpen } = hasMatchSessions
+    ? buildMatchSheets({
+        boards,
+        rounds: allRounds,
+        results: matchResults,
+        times: sessionTimes(
+          rounds.filter(r => isMatchSession(r.id)),
+          rid => `${tripHome}/teesheet/${rid}/setup`,
+          rid => matchSlotsFor(overall?.overall, rid, matchResults),
+        ),
+        onlyRound: initialRoundId ?? null,
+        common: {
+          tripId: trip.id,
+          tripCode,
+          players: roster.map(p => ({ id: p.id, name: p.name, handicap: p.handicap })),
+          tags,
+          tagOfPlayer: tagIdOf,
+          myId: me && isConfirmed(me) ? me.id : null,
+          passcodeHash: (trip.settings_passcode_hash as string | null) ?? null,
+          playersPick: access.playersPick,
+          isTrip: !isEvent(kind),
+        },
+      })
+    : { sheets: [], initialOpen: null }
+  const matchSessions = matchSheets.length > 0
+    ? <OrderOfPlayList sheets={matchSheets} initialOpen={matchOpen} />
+    : null
 
   return (
     <TeeSheetClient

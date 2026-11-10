@@ -8,6 +8,8 @@ import Link from 'next/link'
 import { IconChevronRight, IconFlag, itineraryIcon } from '@/app/components/icons'
 import { useMinute } from '@/app/components/useMinute'
 import CourseName from '@/app/components/CourseName'
+import { courseLabel } from '@/lib/courseDirectory'
+import type { ItinerarySession } from '@/lib/sessions'
 import { cardClass } from '@/app/components/ui'
 import { useTripBase } from '@/app/golf/[root]/[tripCode]/TripBase'
 
@@ -125,8 +127,15 @@ function ActivityRow({
  * two can never disagree about what a round looks like.
  */
 function GolfTile({
-  item, state, title, detailLine, roundNumber, tripCode, stretch = false,
+  item, state, title, detailLine, roundNumber, tripCode, stretch = false, session,
 }: {
+  /**
+   * The round is a session of a Dynamic Overall Leaderboard (Ross, 10 Nov
+   * 2026): its name stands where the venue was, the venue in small letters
+   * under it, and a Matches session opens the Scoring tab — its matches —
+   * never a round page whose way in is a stroke scorecard.
+   */
+  session?: ItinerarySession
   item: ItineraryItem
   state: 'past' | 'now' | 'future'
   title: string
@@ -136,6 +145,7 @@ function GolfTile({
   stretch?: boolean
 }) {
   const tripHome = useTripBase(tripCode)
+  const venueLine = session ? courseLabel(title) : null
   // A raised card like every card that opens something; on the day, the
   // emerald wash with a deep edge. Golf is still the only thing in the list
   // that gets a card at all.
@@ -166,10 +176,10 @@ function GolfTile({
             state === 'past' ? 'text-ink/80 line-through decoration-ink/25' : 'text-ink'
           }`}
         >
-          <CourseName name={title} />
+          {session ? session.name : <CourseName name={title} />}
         </span>
-        {detailLine && (
-          <span className="block t-cap text-ink/65 truncate mt-0.5">{detailLine}</span>
+        {(venueLine || detailLine) && (
+          <span className="block t-cap text-ink/65 truncate mt-0.5">{venueLine || detailLine}</span>
         )}
       </span>
 
@@ -187,7 +197,7 @@ function GolfTile({
   // trip whose itinerary was edited after its rounds were made — stays a
   // plain tile rather than a link to nowhere.
   return roundNumber != null ? (
-    <Link href={`${tripHome}/round/${roundNumber}`} className={`${tile} press`}>
+    <Link href={session?.matches ? `${tripHome}/scoring` : `${tripHome}/round/${roundNumber}`} className={`${tile} press`}>
       {inside}
     </Link>
   ) : (
@@ -218,8 +228,9 @@ const PX_PER_MIN = 1.1
  * is lib/itinerary.ts's `dayTimeline` — this only multiplies by pixels.
  */
 function DayPlan({
-  plan, date, now, courseNames, roundNumbers, startLines, tripCode,
+  plan, date, now, courseNames, roundNumbers, startLines, tripCode, sessions,
 }: {
+  sessions?: Record<string, ItinerarySession>
   plan: DayTimeline
   date: string | null
   now: Date | null
@@ -273,6 +284,7 @@ function DayPlan({
                   detailLine={startLines?.[e.item.id] ?? detail}
                   roundNumber={roundNumbers[e.item.id]}
                   tripCode={tripCode}
+                  session={sessions?.[e.item.id]}
                   stretch
                 />
               ) : (
@@ -300,8 +312,10 @@ function DayPlan({
 }
 
 export default function Itinerary({
-  items, startDate, courseNames, days, tripCode, roundNumbers, startLines, timescale = false,
+  items, startDate, courseNames, days, tripCode, roundNumbers, startLines, timescale = false, sessions,
 }: {
+  /** Itinerary item id → the session its round is, on an event with a Dynamic Overall Leaderboard. */
+  sessions?: Record<string, ItinerarySession>
   items: ItineraryItem[]
   startDate: string | null
   /** Course id → name. Resolved on the server, where the query already was. */
@@ -409,6 +423,7 @@ export default function Itinerary({
                         detailLine={startLines?.[item.id] ?? detail}
                         roundNumber={roundNumbers[item.id]}
                         tripCode={tripCode}
+                        session={sessions?.[item.id]}
                       />
                     </li>
                   )
@@ -429,6 +444,7 @@ export default function Itinerary({
                         roundNumbers={roundNumbers}
                         startLines={startLines}
                         tripCode={tripCode}
+                        sessions={sessions}
                       />
                       {plan.untimed.length > 0 && (
                         <ul className="flex flex-col gap-1.5 mt-2">

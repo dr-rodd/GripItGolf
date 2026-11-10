@@ -50,7 +50,13 @@ type Tag = { id: string; name: string; color: string }
 export default function MatchesSheet({
   tripId, tripCode, roundId, title, format, matches: saved, clocks, players, tags, tagOfPlayer,
   myId, passcodeHash, playersPick, opensLabel = null, isTrip = false, slots = 0, open: expanded, onToggle,
+  setupHref,
 }: {
+  /**
+   * Tee times are on for this session's round and its sheet is not open
+   * yet: the way to the tee sheet wizard. Its matches show meanwhile.
+   */
+  setupHref?: string
   /**
    * The order of play's sessions open one at a time (Ross, 9 Nov 2026):
    * with `onToggle` the heading opens and closes this one.
@@ -124,7 +130,11 @@ export default function MatchesSheet({
   useEffect(() => { setCount(slots) }, [slots])
   const [countError, setCountError] = useState<string | null>(null)
   const floor = slotFloor(matches)
-  const rowCount = clocks?.length ?? Math.max(count, floor, ...matches.map(m => m.slot + 1))
+  // Tee times add a time to each match, never take one away (Ross, 10 Nov
+  // 2026): a session with its count set keeps that many rows whatever its
+  // sheet holds, the first ones timed; one never counted has its tee times.
+  const rowCount = Math.max(count > 0 ? count : clocks?.length ?? 0, floor, ...matches.map(m => m.slot + 1))
+  const timed = (slot: number) => !!clocks && slot < clocks.length
   async function changeCount(next: number) {
     const n = Math.max(floor, Math.min(MAX_MATCH_SLOTS, next))
     if (n === rowCount) return
@@ -307,7 +317,7 @@ export default function MatchesSheet({
       )}
       {!shut && <div className={onToggle ? 'pb-6' : ''}>
       <p className="t-cap text-ink/65 mb-3">
-        {clocks ? 'Each tee time is one match.' : 'The order of play — each row is one match.'}
+        {clocks ? 'Each tee time is one match.' : setupHref ? 'Each row is one match — its tee time once the tee sheet is open.' : 'The order of play — each row is one match.'}
         {size > 1 ? ' Two players a side.' : ' One player a side.'}
       </p>
 
@@ -322,9 +332,18 @@ export default function MatchesSheet({
         </div>
       )}
 
+      {/* Tee times on, the sheet not open yet: the matches stand as they
+          are, and the organiser has the way to put times on them. */}
+      {setupHref && organiser && (
+        <div className={`mb-3 p-3 flex items-center gap-3 ${cardClass('flat')}`}>
+          <p className="t-cap text-ink/65 flex-1 leading-snug">Tee times aren’t set for this session yet.</p>
+          <Link href={setupHref} className="t-label text-accent-deep flex-shrink-0">Open the tee sheet →</Link>
+        </div>
+      )}
+
       {!(opensLabel && !organiser) && <>
       {/* How many matches: − takes the last empty one away, + adds one. */}
-      {!clocks && organiser && (
+      {organiser && (
         <div className={`mb-3 px-3 py-2 flex items-center gap-3 ${cardClass('flat')}`}>
           <p className="t-label text-ink flex-1">Matches in this session</p>
           <button type="button" className={stepBtn} disabled={rowCount <= floor}
@@ -335,6 +354,11 @@ export default function MatchesSheet({
         </div>
       )}
       {countError && <p className="t-cap text-rust-deep mb-3">{countError}</p>}
+      {clocks && organiser && rowCount > clocks.length && (
+        <p className="t-cap text-ink/65 mb-3 leading-snug">
+          {rowCount - clocks.length === 1 ? 'The last match has' : `The last ${rowCount - clocks.length} matches have`} no tee time yet — add tee times on the tee sheet.
+        </p>
+      )}
       {/* The two tags, one each side, staying put while the matches scroll. */}
       {twoTags && (
         <div className="sticky top-[52px] z-10 paper border-b border-line -mx-4 px-4 py-2 mb-2 grid grid-cols-[3.5rem_1fr_2rem_1fr] items-center gap-2">
@@ -353,7 +377,7 @@ export default function MatchesSheet({
             <li key={slot} className={`py-3 ${frozen.has(slot) ? 'opacity-60' : ''}`}>
               <div className="grid grid-cols-[3.5rem_1fr_2rem_1fr] items-center gap-2">
                 <p className="t-data text-ink/80 tabular-nums self-start pt-3">
-                  {clocks ? clocks[slot] : `Match ${slot + 1}`}
+                  {timed(slot) ? clocks![slot] : `Match ${slot + 1}`}
                 </p>
                 {seatColumn(slot, 'a')}
                 <p className="t-label text-ink/65 text-center">vs</p>

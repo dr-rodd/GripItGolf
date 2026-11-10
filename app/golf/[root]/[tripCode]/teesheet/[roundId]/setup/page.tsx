@@ -6,6 +6,8 @@ import { parseLeaderboards } from '@/lib/leaderboards'
 import { roundPartnership, playTogetherQuestion, carriedPartnerships } from '@/lib/partnerships'
 import { sheetForBoard } from '@/lib/teamSets'
 import { draftRules, roundSheet } from '@/lib/teeSheet'
+import { overallOf, sessionBoardFor, matchSlotsFor, defaultMatchSlots, sideSize } from '@/lib/sessions'
+import { readSessionMatchRows } from '../../../session/sessionMatches'
 import BackButton from '@/app/components/BackButton'
 import TripHeader from '@/app/components/TripHeader'
 import PasscodeGate from '../../../setup/PasscodeGate'
@@ -47,6 +49,7 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
   const sheetHref = `${tripHome}/teesheet?round=${roundId}`
   const backHref = from === 'organiser' ? `${tripHome}/organiser`
     : from === 'setup' ? `${tripHome}/setup`
+    : from === 'order' ? `${tripHome}/order?round=${roundId}`
     : sheetHref
 
   const notHere = (title: string, body: string) => (
@@ -132,10 +135,22 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
     }
     return Math.max(0, ...counts.values())
   }
-  const asked = playTogetherQuestion(boards, round.id)
+  // A Matches session (lib/sessions.ts): its tee times are put on the
+  // matches already set (Ross, 10 Nov 2026) — a time a match, two sides to
+  // a time, starting with as many times as the session has matches. Its
+  // sides are its pairs, so nothing is asked about teams and nothing is
+  // carried over from another round.
+  const overall = overallOf(boards)
+  const matchBoard = overall ? sessionBoardFor(boards, round.id) : null
+  const matchSession = matchBoard?.competition === 'matches' && matchBoard.matchFormat ? matchBoard.matchFormat : null
+  const matchRows = matchSession ? (await readSessionMatchRows(trip.id)).filter(m => m.round_id === round.id) : []
+  const matchCount = matchSession
+    ? matchSlotsFor(overall?.overall, round.id, matchRows.map(m => ({ roundId: m.round_id, slot: m.slot })))
+    : 0
+  const asked = matchSession ? null : playTogetherQuestion(boards, round.id)
   const largest = asked ? largestOn(sheetForBoard(asked)) : 0
   const togetherBoard = asked && playTogetherQuestion(boards, round.id, largest)
-  const partnership = roundPartnership(boards, round.id, largest)
+  const partnership = matchSession ? null : roundPartnership(boards, round.id, largest)
   const teamSize = partnership?.size ?? null
 
   // Each round, carried over (Ross, 27 Oct 2026): a round that makes its
@@ -154,6 +169,16 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
       })
     : []
 
+  // A Matches session's first sheet: a time for each match it holds.
+  const vacantDraft = draftRules(sheet, startTime, fieldSize)
+  const matchDraft = matchSession && sheet.state === 'vacant'
+    ? {
+        ...vacantDraft,
+        batches: [{ ...vacantDraft.batches[0], count: matchCount > 0 ? matchCount : defaultMatchSlots(fieldSize, matchSession) }],
+        groupSize: 2 * sideSize(matchSession),
+      }
+    : null
+
   const course = Array.isArray(round.courses) ? round.courses[0] : round.courses
   const content = (
     <main className="min-h-dvh paper has-tabbar">
@@ -165,10 +190,11 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
         courseName={course?.name ?? null}
         roundDate={round.scheduled_date}
         itineraryItemId={round.itinerary_item_id}
-        initial={draftRules(sheet, startTime, fieldSize, item?.tee_count)}
+        initial={matchDraft ?? draftRules(sheet, startTime, fieldSize, item?.tee_count)}
         live={sheet.state !== 'vacant'}
         fieldSize={fieldSize}
-        lastAssignedSlot={assigned.reduce((m, a) => Math.max(m, a.slot_index), -1)}
+        lastAssignedSlot={Math.max(assigned.reduce((m, a) => Math.max(m, a.slot_index), -1), ...matchRows.map(m => m.slot))}
+        matchSession={!!matchSession}
         teamSize={teamSize}
         playTogether={togetherBoard
           ? {

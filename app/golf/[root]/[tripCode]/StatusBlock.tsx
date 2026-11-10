@@ -13,6 +13,7 @@ import CourseWeather from '@/app/components/CourseWeather'
 import { IconArrowRight, IconFlag, IconHome, IconCar, IconPlane, IconTrain, IconFork, IconUsers } from '@/app/components/icons'
 import { cardClass } from '@/app/components/ui'
 import CourseName from '@/app/components/CourseName'
+import type { ItinerarySession } from '@/lib/sessions'
 import { useTripBase } from '@/app/golf/[root]/[tripCode]/TripBase'
 
 /**
@@ -68,6 +69,7 @@ export default function StatusBlock({
   roundDates,
   roundNumbers,
   courseNames,
+  sessions,
   noun = 'trip',
   knockout = false,
   periodLine = null,
@@ -82,6 +84,11 @@ export default function StatusBlock({
   /** Itinerary item id → round number, for the golf items that have a page. */
   roundNumbers: Record<string, number>
   courseNames: Record<string, string>
+  /**
+   * Itinerary item id → its round's session (lib/sessions.ts). A Matches
+   * session's up-next opens the Scoring tab, never a stroke scorecard's way in.
+   */
+  sessions?: Record<string, ItinerarySession>
   /** "trip" or "event" — what the finished card calls it. */
   noun?: 'trip' | 'event'
   /**
@@ -169,7 +176,7 @@ export default function StatusBlock({
         {next ? (
           nextRoundNumber != null ? (
             <Link
-              href={`${tripHome}/round/${nextRoundNumber}`}
+              href={next && sessions?.[next.item.id]?.matches ? `${tripHome}/scoring` : `${tripHome}/round/${nextRoundNumber}`}
               className="block press"
             >
               <UpNextLines next={next} countdown={countdown} />

@@ -24,7 +24,8 @@ import { playSessionCard, sessionResult, type CardHole } from '../lib/matchCard'
 import { foursomesStrokes } from '../lib/matchArrangements'
 import { eventFourthTab, fourthTab } from '../lib/eventHub'
 import { faceOff, tickFills, matchStatus, matchPool, sessionPool, MAX_TICKS } from '../lib/faceOff'
-import { defaultMatchSlots, matchSlotsFor, withSessionSlots, MAX_MATCH_SLOTS, slotFloor } from '../lib/sessions'
+import { defaultMatchSlots, matchSlotsFor, withSessionSlots, MAX_MATCH_SLOTS, slotFloor, itinerarySessions } from '../lib/sessions'
+import { buildMatchSheets, clocksOf } from '../app/golf/[root]/[tripCode]/session/matchSheetPlan'
 import fs from 'fs'
 
 let passed = 0, failed = 0
@@ -349,9 +350,8 @@ section('Tee times as matches, and the order of play (D40–D42)')
   const bar = read('app/components/TabBar.tsx')
   ok(bar.includes("label: 'Order of play'") && bar.includes("fourth === 'orderOfPlay' ? [ORDER_ITEM]"), 'the bar carries Order of play in that place')
   const page = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
-  ok(page.includes("sessionBoardFor(boards, r.id)?.competition === 'matches'") && page.includes('rounds={sheetRounds}'),
-    'only a Matches session’s sheet is drawn as matches; every other round goes to the sheet as before')
-  ok(page.includes('const matchRounds = overall'), '  …and only on an event with an Overall')
+  ok(page.includes("!!overall && sessionBoardFor(boards, roundId)?.competition === 'matches'") && page.includes('rounds={sheetRounds}'),
+    'only a Matches session’s sheet is drawn as matches, and only with an Overall; every other round goes to the sheet as before')
   const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes('matchSessions ? null : <p className="t-cap text-ink/65 text-center py-8">'),
     '  …the stroke sheet’s own words untouched when there are no matches')
@@ -361,7 +361,7 @@ section('Tee times as matches, and the order of play (D40–D42)')
   ok(sheet.includes('>vs<'), 'each row reads left side, vs, right side')
   ok(sheet.includes('useTeeFreeze(') && sheet.includes('Locked by another user') && sheet.includes('Time to complete booking'),
     'a time being set is frozen on other phones, the booker counting down two minutes')
-  ok(sheet.includes("clocks ? clocks[slot] : `Match ${slot + 1}`"), 'the order of play numbers its rows where the sheet has times')
+  ok(sheet.includes("timed(slot) ? clocks![slot] : `Match ${slot + 1}`"), 'a row reads its tee time where it has one, else its match number')
   ok(read('lib/sessionMatchStore.ts').includes("from('tee_assignments')"),
     'a tee-sheet match puts its players on their tee time, so “your time” reads as ever')
   ok(read('app/dashboard/create/CreateLeagueForm.tsx').includes('Tee times decide the matches.'),
@@ -542,7 +542,7 @@ section('Two tags facing off: the ticker (Ross, 9 Nov 2026)')
   ok(read('app/dashboard/create/CreateLeagueForm.tsx').includes('rules.slots = slots'), '  …and stores it on the Overall')
   ok(read('app/golf/[root]/[tripCode]/organiser/sessions/SessionsClient.tsx').includes('withSessionSlots(boards, r.id, n)'),
     '  …changed in the organiser area')
-  ok(read('app/golf/[root]/[tripCode]/order/page.tsx').includes('slots: slotsOf(round.id)'),
+  ok(read('app/golf/[root]/[tripCode]/session/matchSheetPlan.ts').includes('slots: slotsOf(round.id)'),
     'the order of play has a row for every match')
 }
 
@@ -563,7 +563,7 @@ section('The order of play: − and +, one session open at a time (Ross, 9 Nov 2
   const sheet = read('app/golf/[root]/[tripCode]/session/MatchesSheet.tsx')
   ok(sheet.includes('aria-label="One match fewer"') && sheet.includes('aria-label="One match more"'), 'the order of play has − and + for its matches')
   ok(sheet.includes('disabled={rowCount <= floor}'), '  …− stopping at the last match with players in it')
-  ok(sheet.includes('{!clocks && organiser && ('), '  …the organiser’s, and never on a tee sheet, whose times decide')
+  ok(sheet.includes("{/* How many matches: − takes the last empty one away, + adds one. */}\n      {organiser && ("), '  …the organiser’s, on the order of play and the tee sheet alike')
   ok(!sheet.includes('+ Add a match'), '  …in place of Add a match')
   ok(sheet.includes('setSessionSlots(supabase, tripId, roundId, n)'), '  …saved as the session’s count')
   const store = read('lib/sessionMatchStore.ts')
@@ -573,8 +573,106 @@ section('The order of play: − and +, one session open at a time (Ross, 9 Nov 2
   ok(list.includes('open={openId === sheet.roundId}') && list.includes('setOpenId(id => (id === sheet.roundId ? null : sheet.roundId))'),
     'one session open at a time, its heading opening and closing it')
   ok(!/^export (const|function) [a-z]/m.test(list), '  …the list exports components only')
-  const page = read('app/golf/[root]/[tripCode]/order/page.tsx')
-  ok(page.includes('sessions.find(s => s.round.id === onlyRound)'), '  …opening on the session asked for, else the one in play')
+  const plan = read('app/golf/[root]/[tripCode]/session/matchSheetPlan.ts')
+  ok(plan.includes('sessions.find(s => s.round.id === input.onlyRound)'), '  …opening on the session asked for, else the one in play')
+}
+
+section('Tee times add times to the matches already set (Ross, 10 Nov 2026)')
+{
+  const s1 = 's1', s2 = 's2', s3 = 's3'
+  const rules = { ranks: 'tags' as const, slots: { s1: 3, s2: 2, s3: 2 } }
+  const boards: Leaderboard[] = [
+    overallBoard(rules),
+    sessionBoard({ kind: 'matches', match: 'singles' }, s1, 'day:s1'),
+    sessionBoard({ kind: 'matches', match: 'fourball' }, s2, 'day:s2'),
+    sessionBoard({ kind: 'matches', match: 'singles' }, s3, 'day:s3'),
+  ]
+  const results = [
+    { id: 'a', roundId: s1, slot: 0, sideA: ['p1'], sideB: ['p2'], result: null },
+    { id: 'b', roundId: s1, slot: 2, sideA: ['p3'], sideB: ['p4'], result: null },
+    { id: 'c', roundId: s2, slot: 0, sideA: ['p1', 'p3'], sideB: ['p2', 'p4'], result: null },
+  ]
+  const times = new Map([
+    [s1, { clocks: ['8:00 am', '8:10 am'] }],
+    [s2, { setupHref: '/x/teesheet/s2/setup' }],
+  ])
+  const common = {
+    tripId: 't', tripCode: 'ABCDEF', players: [], tags: [], tagOfPlayer: {}, myId: null,
+    passcodeHash: null, playersPick: true, isTrip: false,
+  }
+  const { sheets, initialOpen } = buildMatchSheets({
+    boards, rounds: [{ id: s3, round_number: 3 }, { id: s1, round_number: 1 }, { id: s2, round_number: 2 }, { id: 'stroke', round_number: 4 }],
+    results, times, common,
+  })
+  eq(sheets.map(x => x.roundId), [s1, s2, s3], 'every Matches session is drawn, in running order — timed, waiting on its sheet, or neither')
+  eq(sheets[0].matches.map(m => m.slot), [0, 2], 'a session’s matches set before its tee times are all still there')
+  eq(sheets[0].clocks, ['8:00 am', '8:10 am'], '  …the open sheet’s times on its rows')
+  eq(sheets[0].slots, 3, '  …and its three matches kept though the sheet has two times')
+  eq(sheets[1].setupHref, '/x/teesheet/s2/setup', 'a session whose sheet is not open shows its matches, the organiser offered the tee sheet')
+  eq(sheets[1].clocks, undefined, '  …with no times yet')
+  eq(sheets[2].clocks === undefined && sheets[2].setupHref === undefined, true, 'a session without tee times is its order of play, as before')
+  eq(initialOpen, s1, 'it opens on the next session to finish')
+  eq(buildMatchSheets({ boards, rounds: [{ id: s1, round_number: 1 }, { id: s2, round_number: 2 }], results, times, common, onlyRound: s2 }).initialOpen,
+    s2, '  …or the one asked for')
+  eq(buildMatchSheets({ boards: boards.slice(1), rounds: [{ id: s1, round_number: 1 }], results, times, common }).sheets, [],
+    'no Overall, no Matches sessions')
+  eq(clocksOf({ state: 'vacant' } as never, 3), undefined, 'a sheet not open yet puts no times on the matches')
+
+  const sheet = read('app/golf/[root]/[tripCode]/session/MatchesSheet.tsx')
+  ok(sheet.includes('Math.max(count > 0 ? count : clocks?.length ?? 0, floor, ...matches.map(m => m.slot + 1))'),
+    'a sheet’s rows are its matches, never cut to its tee times')
+  ok(sheet.includes('no tee time yet — add tee times on the tee sheet'), '  …a match past the last time says it has none yet')
+  ok(sheet.includes('Open the tee sheet →'), '  …and a session waiting on its sheet offers the organiser the way')
+  const tee = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
+  ok(tee.includes('<OrderOfPlayList sheets={matchSheets} initialOpen={matchOpen} />') && tee.includes('rounds: allRounds'),
+    'the Tee times tab draws every Matches session, tee times or not, one open at a time')
+  const order = read('app/golf/[root]/[tripCode]/order/page.tsx')
+  ok(order.includes('readSessionTimes(') && order.includes('buildMatchSheets('), 'the Order of play draws the same sheets, with their times')
+  const setup = read('app/golf/[root]/[tripCode]/teesheet/[roundId]/setup/page.tsx')
+  ok(setup.includes('const asked = matchSession ? null : playTogetherQuestion('), 'a Matches session’s sheet asks nothing about teams')
+  ok(setup.includes('const partnership = matchSession ? null :'), '  …and carries no partnerships over from another round')
+  ok(setup.includes("count: matchCount > 0 ? matchCount : defaultMatchSlots(fieldSize, matchSession)") && setup.includes('groupSize: 2 * sideSize(matchSession)'),
+    '  …starting with a time for each match, two sides a time')
+  ok(setup.includes('...matchRows.map(m => m.slot))'), '  …and warns before a shorter sheet leaves a match without a time')
+  ok(read('app/golf/[root]/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx').includes('if (matchSession) await mirrorTeeTimes(supabase, tripId, roundId)'),
+    'opening the sheet gives the players already in a match their time')
+}
+
+section('The home screen: sessions on the schedule, Matches through Scoring (Ross, 10 Nov 2026)')
+{
+  const boards: Leaderboard[] = [
+    overallBoard({ ranks: 'tags', names: { r1: 'Friday fourballs' } }),
+    sessionBoard({ kind: 'matches', match: 'fourball' }, 'r1', 'day:r1'),
+    sessionBoard({ kind: 'stroke', audience: 'individual', scoring: 'stableford' }, 'r2', 'day:r2'),
+  ]
+  const rounds = [
+    { id: 'r1', round_number: 1, itinerary_item_id: 'i1' },
+    { id: 'r2', round_number: 2, itinerary_item_id: 'i2' },
+    { id: 'r3', round_number: 3, itinerary_item_id: null },
+  ]
+  eq(itinerarySessions(boards, rounds), {
+    i1: { name: 'Friday fourballs', matches: true },
+    i2: { name: 'Session 2', matches: false },
+  }, 'each golf item knows its session’s name, and whether it plays matches')
+  eq(itinerarySessions(boards.slice(1), rounds), {}, '  …and without an Overall, nothing: every tile as it was')
+
+  const it = read('app/golf/[root]/[tripCode]/Itinerary.tsx')
+  ok(it.includes('{session ? session.name : <CourseName name={title} />}'), 'the schedule names the session where the venue was')
+  ok(it.includes('const venueLine = session ? courseLabel(title) : null') && it.includes('{venueLine || detailLine}'),
+    '  …the venue small underneath, where "Tee sheet" was')
+  ok(it.includes('href={session?.matches ? `${tripHome}/scoring` : `${tripHome}/round/${roundNumber}`}'),
+    'a Matches session’s tile opens the Scoring tab, never a round page with a stroke card behind it')
+  ok(read('app/golf/[root]/[tripCode]/StatusBlock.tsx').includes('sessions?.[next.item.id]?.matches ? `${tripHome}/scoring`'),
+    '  …and so does its up-next')
+  const hub = read('app/golf/[root]/[tripCode]/page.tsx')
+  ok(hub.includes('const scheduleSessions = itinerarySessions(hubBoards, rounds)') && hub.includes('sessions={scheduleSessions}'),
+    'the hub hands the schedule its sessions')
+  const round = read('app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx')
+  ok(round.includes('href={matchesSession ? `${tripHome}/scoring` : `${tripHome}/scoring/${round.round_number}`}'),
+    'a Matches session’s round page goes to its matches, not Live scoring')
+  const card = read('app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx')
+  ok(card.includes("sessionBoardFor(boards, thisRound.id)?.competition === 'matches'") && card.includes('redirect(`${tripHome}/scoring`)'),
+    '  …and any door still landing on its stroke card is sent to the Scoring tab')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

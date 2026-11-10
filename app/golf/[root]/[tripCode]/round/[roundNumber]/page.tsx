@@ -89,6 +89,7 @@ export default async function RoundSummaryPage({
   // On an event with an Overall, a round is a session: its result is its own
   // board's (lib/sessions.ts), never the Overall's points.
   const lead = overallOf(boards) ? sessionBoardFor(boards, round.id) : primary(boards)
+  const matchesSession = lead?.competition === 'matches'
 
   // **Started, deliberately not awaited.** `fetchRoundRows` needs `trip.id`
   // and `round.id` and nothing else, both known by now — but it is not one
@@ -368,13 +369,16 @@ export default async function RoundSummaryPage({
           />
         )}
 
-        {/* ── Into the card ── */}
+        {/* ── Into the card ──
+            A Matches session is its matches, never a stroke scorecard: the
+            way in goes through the Scoring tab, which lists them (Ross,
+            10 Nov 2026). */}
         <Link
-          href={`${tripHome}/scoring/${round.round_number}`}
+          href={matchesSession ? `${tripHome}/scoring` : `${tripHome}/scoring/${round.round_number}`}
           className={buttonClass('primary')}
         >
           <IconClipboardList size={20} />
-          Live scoring
+          {matchesSession ? 'See the matches' : 'Live scoring'}
         </Link>
       </div>
 

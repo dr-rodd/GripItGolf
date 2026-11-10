@@ -14,6 +14,7 @@ import {
 } from '@/lib/teeSheet'
 import { type CarriedPartnership, PAIR, withPlayTogether } from '@/lib/partnerships'
 import { setTeam } from '@/lib/teamMembers'
+import { mirrorTeeTimes } from '@/lib/sessionMatchStore'
 import DateField from '@/app/components/DateField'
 import WizardShell from '@/app/components/WizardShell'
 import { Stepper } from '@/app/components/ItineraryForms'
@@ -58,7 +59,7 @@ function toDraft(b: TeeBatch): Draft {
 
 export default function TeeSheetWizard({
   tripId, roundId, roundNumber, courseName, roundDate, itineraryItemId, initial, live,
-  fieldSize, lastAssignedSlot, teamSize, playTogether = null, carried = null, backHref, doneHref,
+  fieldSize, lastAssignedSlot, teamSize, playTogether = null, carried = null, backHref, doneHref, matchSession = false,
 }: {
   tripId: string
   roundId: string
@@ -73,6 +74,11 @@ export default function TeeSheetWizard({
   /** Whether the sheet is live already — a change rather than a first save. */
   live: boolean
   fieldSize: number
+  /**
+   * A Matches session's sheet: each tee time is one of its matches, so on
+   * saving, the players already set in a match take its time.
+   */
+  matchSession?: boolean
   /** The highest slot anybody stands in, or -1. */
   lastAssignedSlot: number
   /** Players in a team, where whole teams may share a tee time; else null. */
@@ -244,6 +250,10 @@ export default function TeeSheetWizard({
         return
       }
     }
+    // A Matches session's matches set before its tee times take their
+    // times now, so "your time" reads the moment the sheet opens. Best
+    // effort, like every mirror: the next change to a match puts it right.
+    if (matchSession) await mirrorTeeTimes(supabase, tripId, roundId)
     router.push(doneHref)
     router.refresh()
   }

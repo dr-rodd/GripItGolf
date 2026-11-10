@@ -4,11 +4,12 @@ import { supabase } from '@/lib/supabase'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { teeSheetAccess } from '@/lib/eventPermissions'
-import { overallOf, sessionBoardFor, sessionName, matchSlotsFor } from '@/lib/sessions'
+import { overallOf, matchSlotsFor } from '@/lib/sessions'
 import { eventTags } from '@/lib/tagBoards'
 import TripHeader from '@/app/components/TripHeader'
 import OrderOfPlayList from './OrderOfPlayList'
 import { readSessionCards, readSessionMatchRows } from '../session/sessionMatches'
+import { buildMatchSheets, readSessionTimes } from '../session/matchSheets'
 import { tripHomeAt } from '@/lib/tripPaths'
 
 export const dynamic = 'force-dynamic'
@@ -47,21 +48,27 @@ export default async function OrderOfPlayPage({ params, searchParams }: {
   const tagOfPlayer = Object.fromEntries(memberships.filter(m => m.team_set === 'main').map(m => [m.player_id, m.team_id]))
   const me = await currentPlayer(tripCode, players)
 
-  const sessions = rounds
-    .map(r => ({ round: r, board: sessionBoardFor(boards, r.id) }))
-    .filter(s => s.board?.competition === 'matches')
-
   const rows = await readSessionMatchRows(trip.id)
   const { results } = await readSessionCards(trip, boards, players, { teams, memberships }, rows)
   const access = teeSheetAccess((trip as { event_permissions?: unknown }).event_permissions)
-  const slotsOf = (roundId: string) => matchSlotsFor(overall?.overall, roundId, results)
-  // Open on the session asked for, else the one in play, else the next to finish.
-  const initialOpen = (
-    sessions.find(s => s.round.id === onlyRound)
-    ?? sessions.find(s => results.some(m => m.roundId === s.round.id && m.live && !m.result))
-    ?? sessions.find(s => results.filter(m => m.roundId === s.round.id && m.result).length < Math.max(1, slotsOf(s.round.id)))
-    ?? sessions[0]
-  )?.round.id ?? null
+  // A session whose round has tee times shows them on its rows; every
+  // session shows its matches either way (session/matchSheets.ts).
+  const times = await readSessionTimes(trip.id, rid => `${tripHome}/teesheet/${rid}/setup?from=order`,
+    rid => matchSlotsFor(overall?.overall, rid, results))
+  const { sheets, initialOpen } = buildMatchSheets({
+    boards, rounds, results, times, onlyRound,
+    common: {
+      tripId: trip.id,
+      tripCode,
+      players,
+      tags,
+      tagOfPlayer,
+      myId: me?.id ?? null,
+      passcodeHash: (trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null,
+      playersPick: access.playersPick,
+      isTrip: !isEvent((trip as { kind?: unknown }).kind),
+    },
+  })
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
@@ -71,28 +78,10 @@ export default async function OrderOfPlayPage({ params, searchParams }: {
         <p className="text-ink/65 text-sm mb-6 leading-snug">
           Each row is one match{tags.length === 2 ? `: ${tags[0].name} on the left, ${tags[1].name} on the right` : ''}.
         </p>
-        {!overall || sessions.length === 0 ? (
+        {sheets.length === 0 ? (
           <p className={`text-ink/65 text-sm`}>No session plays matches yet. The organiser sets each session&apos;s format.</p>
         ) : (
-          <OrderOfPlayList
-            initialOpen={initialOpen}
-            sheets={sessions.map(({ round, board }) => ({
-              tripId: trip.id,
-              tripCode,
-              roundId: round.id,
-              title: sessionName(overall.overall, round.id, round.round_number),
-              format: board!.matchFormat!,
-              matches: results.filter(m => m.roundId === round.id),
-              players,
-              tags,
-              tagOfPlayer,
-              myId: me?.id ?? null,
-              passcodeHash: (trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null,
-              playersPick: access.playersPick,
-              isTrip: !isEvent((trip as { kind?: unknown }).kind),
-              slots: slotsOf(round.id),
-            }))}
-          />
+          <OrderOfPlayList initialOpen={initialOpen} sheets={sheets} />
         )}
       </div>
     </main>

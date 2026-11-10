@@ -588,6 +588,32 @@ export function sessionName(rules: OverallRules | undefined, roundId: string, ro
   return rules?.names?.[roundId] ?? `Session ${roundNumber}`
 }
 
+/** A golf item's session, as the home screen's schedule reads it. */
+export type ItinerarySession = { name: string; matches: boolean }
+
+/**
+ * Itinerary item id → its round's session (Ross, 10 Nov 2026): on the
+ * schedule a session's name stands where the venue was, and a Matches
+ * session opens the Scoring tab. Empty without an Overall — every tile as
+ * it always was.
+ */
+export function itinerarySessions(
+  boards: readonly Leaderboard[],
+  rounds: readonly { id: string; round_number: number; itinerary_item_id?: string | null }[],
+): Record<string, ItinerarySession> {
+  const overall = overallOf(boards)
+  if (!overall) return {}
+  const out: Record<string, ItinerarySession> = {}
+  for (const r of rounds) {
+    if (!r.itinerary_item_id) continue
+    out[r.itinerary_item_id] = {
+      name: sessionName(overall.overall, r.id, r.round_number),
+      matches: sessionBoardFor(boards, r.id)?.competition === 'matches',
+    }
+  }
+  return out
+}
+
 /**
  * The boards the leaderboard offers as tabs on an event with an Overall: the
  * Overall first, then every secondary board — never a session's own board,

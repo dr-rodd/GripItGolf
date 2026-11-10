@@ -1,4 +1,5 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { overallOf, sessionBoardFor } from '@/lib/sessions'
 import { supabase } from '@/lib/supabase'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { allowanceCycle } from '@/lib/handicapAllowance'
@@ -51,6 +52,13 @@ export default async function TripCoursePage({
 
   const thisRound = allRounds.find(r => r.round_number === roundNum)
   if (!thisRound || !(thisRound.courses as any)?.id) notFound()
+
+  // A Matches session has no stroke scorecard: each match has its own card,
+  // reached from the Scoring tab's list of them. Any door that still lands
+  // here — an old link, a bookmark — is sent there (Ross, 10 Nov 2026).
+  if (overallOf(boards) && sessionBoardFor(boards, thisRound.id)?.competition === 'matches') {
+    redirect(`${tripHome}/scoring`)
+  }
 
   // This round's own allowances, where a league's round sets one (its gear
   // on the Scoring tab) — the card shows what the boards will score it off.
