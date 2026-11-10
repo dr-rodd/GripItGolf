@@ -1,5 +1,6 @@
 'use client'
 
+import { useUnlocked } from '@/app/components/useUnlocked'
 import { sideColours, sideTint, type SideColour } from '@/lib/matchSides'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -12,7 +13,6 @@ import { type MatchReading, pendingResults } from '@/lib/matchResults'
 import { decisionLabel } from '@/lib/matchDecision'
 import { deadlineNote } from '@/lib/bracketSetup'
 import { describeShortDate } from '@/lib/itinerary'
-import { hasUnlocked } from '@/lib/passcode'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, optionClass } from '@/app/components/ui'
 
@@ -120,8 +120,7 @@ export default function MatchplayBracket({
 
   const [sheet, setSheet] = useState<{ match: BracketMatchRow; correcting: boolean } | null>(null)
   // This device's organiser unlock — sessionStorage, read after mount.
-  const [unlocked, setUnlocked] = useState(false)
-  useEffect(() => { if (lock) setUnlocked(hasUnlocked(lock.tripCode)) }, [lock])
+  const [unlocked, setUnlocked] = useUnlocked(lock?.tripCode ?? '')
 
   const readingFor = useMemo(
     () => new Map(readings.map(r => [r.matchId, r])),

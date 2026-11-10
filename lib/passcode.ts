@@ -61,8 +61,26 @@ export function isLocked(hash: string | null | undefined): boolean {
 
 const key = (tripCode: string) => `gig-settings-unlocked-${tripCode}`
 
+/**
+ * Said on the window whenever this device's unlock changes, so every
+ * organiser control on the page — and the lock in the header — opens or
+ * closes together (`useUnlocked`, `OrganiserLock`).
+ */
+export const UNLOCK_EVENT = 'gd-organiser-unlock'
+
+function announce() {
+  try { window.dispatchEvent(new Event(UNLOCK_EVENT)) } catch { /* no window */ }
+}
+
 export function rememberUnlock(tripCode: string) {
   try { sessionStorage.setItem(key(tripCode), '1') } catch { /* unavailable */ }
+  announce()
+}
+
+/** Locked again by hand — the header's lock tapped shut. */
+export function forgetUnlock(tripCode: string) {
+  try { sessionStorage.removeItem(key(tripCode)) } catch { /* unavailable */ }
+  announce()
 }
 
 /** Cleared when the tab closes, so a shared phone does not stay unlocked. */

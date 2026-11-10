@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation'
+import { isEvent } from '@/lib/eventHub'
+import OrganiserLock from '@/app/components/OrganiserLock'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { currentPlayer } from '@/lib/currentPlayer'
@@ -194,7 +196,7 @@ export default async function MatchPage({
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={tripHome} />
+      <TripHeader backTo={tripHome} action={<OrganiserLock tripCode={tripCode} passcodeHash={passcodeHash} isTrip={!isEvent(kind)} />} />
       <div className="max-w-lg mx-auto px-4 pt-4">
         <BackButton href={`${tripHome}/scoring`} label="Scoring" />
       </div>

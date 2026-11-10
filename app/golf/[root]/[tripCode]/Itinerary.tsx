@@ -132,8 +132,9 @@ function GolfTile({
   /**
    * The round is a session of a Dynamic Overall Leaderboard (Ross, 10 Nov
    * 2026): its name stands where the venue was, the venue in small letters
-   * under it, and a Matches session opens the Scoring tab — its matches —
-   * never a round page whose way in is a stroke scorecard.
+   * under it. The tile opens the round's summary as any round's does —
+   * the card and the weather — whose way into scoring goes through the
+   * Scoring tab.
    */
   session?: ItinerarySession
   item: ItineraryItem
@@ -197,7 +198,7 @@ function GolfTile({
   // trip whose itinerary was edited after its rounds were made — stays a
   // plain tile rather than a link to nowhere.
   return roundNumber != null ? (
-    <Link href={session?.matches ? `${tripHome}/scoring` : `${tripHome}/round/${roundNumber}`} className={`${tile} press`}>
+    <Link href={`${tripHome}/round/${roundNumber}`} className={`${tile} press`}>
       {inside}
     </Link>
   ) : (

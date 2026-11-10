@@ -1,4 +1,5 @@
 import { cache } from 'react'
+import OrganiserLock from '@/app/components/OrganiserLock'
 import { readSessionResults } from './session/sessionMatches'
 import { overallOf, sessionName, bySlot, itinerarySessions } from '@/lib/sessions'
 import type { Metadata } from 'next'
@@ -833,7 +834,7 @@ export default async function TripPage({ params, searchParams }: {
           page: this screen is opened to be read, and the brand performing on
           the way in only delays it. The mark goes to the start of the site,
           not to this page — this IS the trip hub. */}
-      <TripHeader backTo="/" action={preferences} />
+      <TripHeader backTo="/" action={<><OrganiserLock tripCode={tripCode} passcodeHash={tripRaw.settings_passcode_hash ?? null} isTrip={!isEvent} />{preferences}</>} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
 
@@ -913,7 +914,6 @@ export default async function TripPage({ params, searchParams }: {
           roundDates={roundDates}
           roundNumbers={roundNumbers}
           courseNames={courseMap}
-          sessions={scheduleSessions}
           noun={isEvent ? 'event' : 'trip'}
           knockout={!!koView}
           periodLine={periodsLeague ? periodNowLine(periodsLeague.periods, todayString(new Date())) : null}

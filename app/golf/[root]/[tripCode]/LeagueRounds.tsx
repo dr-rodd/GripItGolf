@@ -1,5 +1,6 @@
 'use client'
 
+import { useUnlocked } from '@/app/components/useUnlocked'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -151,7 +152,7 @@ export function AddLeagueRound({
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [unlocked, setUnlocked] = useState(false)
+  const [unlocked, setUnlocked] = useUnlocked(door.tripCode)
   const [date, setDate] = useState('')
   const [courseId, setCourseId] = useState('')
   const [tbc, setTbc] = useState(false)
@@ -285,7 +286,7 @@ export function StartPeriodCard({ door, periods, courseIds, fieldMayStart }: {
   const router = useRouter()
   const tripHome = useTripBase(door.tripCode)
   const [open, setOpen] = useState(false)
-  const [unlocked, setUnlocked] = useState(false)
+  const [unlocked, setUnlocked] = useUnlocked(door.tripCode)
   const [today, setToday] = useState('')
   const [date, setDate] = useState('')
   const [courseId, setCourseId] = useState('')
@@ -439,7 +440,7 @@ export function TbcRoundTile({ door, itemId, date, number, lastVenueId, fieldMay
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [unlocked, setUnlocked] = useState(false)
+  const [unlocked, setUnlocked] = useUnlocked(door.tripCode)
   const [courseId, setCourseId] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -561,7 +562,7 @@ export function RoundSettings({ door, roundId, number, casual, golfIrelandCards 
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'round' | 'rules'>('round')
-  const [unlocked, setUnlocked] = useState(false)
+  const [unlocked, setUnlocked] = useUnlocked(door.tripCode)
   const [counts, setCounts] = useState(!casual)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)

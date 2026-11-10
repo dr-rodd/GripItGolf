@@ -1,12 +1,13 @@
 'use client'
 
+import OrganiserLock from '@/app/components/OrganiserLock'
+import { useUnlocked } from '@/app/components/useUnlocked'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
-import InlineUnlock from '@/app/components/InlineUnlock'
-import { hasUnlocked, isLocked } from '@/lib/passcode'
+import { isLocked } from '@/lib/passcode'
 import {
   type SlotPlayer, type RoundSheet, type SeatCell, type SeatTarget, type PickerUnit,
   SEATS_ACROSS, groupSlot, seatGrid, seatTargets, listName, pickerUnits, unitMatches,
@@ -212,8 +213,7 @@ export default function TeeSheetClient({
 
   // The organiser's PIN unlock, read after mount — sessionStorage does not
   // exist on the server, and a render that reads it would tear hydration.
-  const [unlocked, setUnlocked] = useState(false)
-  useEffect(() => { setUnlocked(hasUnlocked(tripCode)) }, [tripCode])
+  const [unlocked] = useUnlocked(tripCode)
   // The organiser places anybody — the PIN unlocked here, or an event
   // with no PIN at all, the soft lock's fail-open. A player picking their
   // own time places themselves and nobody else.
@@ -860,7 +860,7 @@ export default function TeeSheetClient({
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={tripHome} />
+      <TripHeader backTo={tripHome} action={<OrganiserLock tripCode={tripCode} passcodeHash={passcodeHash} isTrip={isTrip} />} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
 
@@ -926,18 +926,8 @@ export default function TeeSheetClient({
 
         {/* The reported bug, closed: an organiser whose session had not
             passed the PasscodeGate saw a read-only sheet with no way in.
-            The unlock is offered here, in place — same PIN, same session
-            memory as every other gate. */}
-        {!organiser && passcodeHash && (
-          <div className="mb-4">
-            <InlineUnlock
-              tripCode={tripCode}
-              passcodeHash={passcodeHash}
-              onUnlocked={() => setUnlocked(true)}
-              prompt={isTrip ? 'Lead player? Enter the passcode to place players.' : 'Organiser? Enter your PIN to place players.'}
-            />
-          </div>
-        )}
+            The way in is the lock in the header now (OrganiserLock) — same
+            PIN, same session memory as every other gate. */}
         {organiser && <div className="mb-3" /> }
 
         {/* One sheet per round; a one-round event skips the chips. */}

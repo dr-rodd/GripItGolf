@@ -1,11 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useUnlocked } from '@/app/components/useUnlocked'
+import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
-import { hasUnlocked, isLocked } from '@/lib/passcode'
+import { isLocked } from '@/lib/passcode'
 import {
   REGULATION_HOLES, extraCourseHole, openingHole, ordinal, parseExtraPlan, playCard, playSessionCard, reopenBlocked,
   sessionResult, shotsOn, shouldWrite,
@@ -110,8 +111,7 @@ export default function MatchCardClient({
     setAtRest(false)
     setPanel(next)
   }
-  const [unlocked, setUnlocked] = useState(false)
-  useEffect(() => { setUnlocked(hasUnlocked(tripCode)) }, [tripCode])
+  const [unlocked, setUnlocked] = useUnlocked(tripCode)
   const organiser = unlocked || !isLocked(passcodeHash)
 
   const inMatch = mySide !== null

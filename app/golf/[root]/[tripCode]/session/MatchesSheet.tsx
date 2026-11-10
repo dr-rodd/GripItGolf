@@ -25,11 +25,12 @@
  * compare-and-set, so presence is never trusted as a lock.
  */
 
+import { useUnlocked } from '@/app/components/useUnlocked'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { hasUnlocked, isLocked } from '@/lib/passcode'
+import { isLocked } from '@/lib/passcode'
 import {
   type MatchFormat, type SessionMatchResult, matchLine, matchSidesIssue, sideSize, slotFloor, MAX_MATCH_SLOTS,
 } from '@/lib/sessions'
@@ -38,7 +39,6 @@ import { IconChevronDown } from '@/app/components/icons'
 import { sideColours } from '@/lib/matchSides'
 import { formatHandicap } from '@/lib/handicap'
 import { boardNames } from '@/lib/displayNames'
-import InlineUnlock from '@/app/components/InlineUnlock'
 import { buttonClass, cardClass, FIELD, LiveDot } from '@/app/components/ui'
 import { useTripBase } from '../TripBase'
 import { useTeeFreeze } from '../teesheet/useTeeFreeze'
@@ -49,7 +49,7 @@ type Tag = { id: string; name: string; color: string }
 
 export default function MatchesSheet({
   tripId, tripCode, roundId, title, format, matches: saved, clocks, players, tags, tagOfPlayer,
-  myId, passcodeHash, playersPick, opensLabel = null, isTrip = false, slots = 0, open: expanded, onToggle,
+  myId, passcodeHash, playersPick, opensLabel = null, slots = 0, open: expanded, onToggle,
   setupHref,
 }: {
   /**
@@ -90,8 +90,7 @@ export default function MatchesSheet({
 }) {
   const router = useRouter()
   const tripHome = useTripBase(tripCode)
-  const [unlocked, setUnlocked] = useState(false)
-  useEffect(() => { setUnlocked(hasUnlocked(tripCode)) }, [tripCode])
+  const [unlocked] = useUnlocked(tripCode)
   const organiser = unlocked || !isLocked(passcodeHash)
   const size = sideSize(format)
   const twoTags = tags.length === 2 ? tags : null
@@ -325,12 +324,6 @@ export default function MatchesSheet({
         <p className={`p-4 text-ink/65 text-sm ${cardClass('flat')}`}>Opens {opensLabel}.</p>
       )}
 
-      {!organiser && passcodeHash && (
-        <div className="mb-3">
-          <InlineUnlock tripCode={tripCode} passcodeHash={passcodeHash} onUnlocked={() => setUnlocked(true)}
-            {...(isTrip ? { prompt: 'Lead player? Enter the passcode to edit.' } : {})} />
-        </div>
-      )}
 
       {/* Tee times on, the sheet not open yet: the matches stand as they
           are, and the organiser has the way to put times on them. */}

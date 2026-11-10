@@ -660,16 +660,17 @@ section('The home screen: sessions on the schedule, Matches through Scoring (Ros
   ok(it.includes('{session ? session.name : <CourseName name={title} />}'), 'the schedule names the session where the venue was')
   ok(it.includes('const venueLine = session ? courseLabel(title) : null') && it.includes('{venueLine || detailLine}'),
     '  …the venue small underneath, where "Tee sheet" was')
-  ok(it.includes('href={session?.matches ? `${tripHome}/scoring` : `${tripHome}/round/${roundNumber}`}'),
-    'a Matches session’s tile opens the Scoring tab, never a round page with a stroke card behind it')
-  ok(read('app/golf/[root]/[tripCode]/StatusBlock.tsx').includes('sessions?.[next.item.id]?.matches ? `${tripHome}/scoring`'),
-    '  …and so does its up-next')
+  ok(it.includes('<Link href={`${tripHome}/round/${roundNumber}`}') && !it.includes('session?.matches ?'),
+    'every golf tile opens its round summary, the card and the weather — a session’s too (Ross, 10 Nov 2026)')
+  ok(read('app/golf/[root]/[tripCode]/StatusBlock.tsx').includes('href={`${tripHome}/round/${nextRoundNumber}`}'),
+    '  …and so does up-next')
   const hub = read('app/golf/[root]/[tripCode]/page.tsx')
   ok(hub.includes('const scheduleSessions = itinerarySessions(hubBoards, rounds)') && hub.includes('sessions={scheduleSessions}'),
     'the hub hands the schedule its sessions')
   const round = read('app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx')
-  ok(round.includes('href={matchesSession ? `${tripHome}/scoring` : `${tripHome}/scoring/${round.round_number}`}'),
-    'a Matches session’s round page goes to its matches, not Live scoring')
+  ok(round.includes('<Link href={`${tripHome}/scoring`} className={buttonClass(\'primary\')}>') && !round.includes('/scoring/${round.round_number}'),
+    'the round summary goes into scoring through the Scoring tab, never straight into a card')
+  ok(round.includes("{matchesSession ? 'See the matches' : 'Go to scoring'}"), '  …a Matches session’s button saying it is its matches')
   const card = read('app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx')
   ok(card.includes("sessionBoardFor(boards, thisRound.id)?.competition === 'matches'") && card.includes('redirect(`${tripHome}/scoring`)'),
     '  …and any door still landing on its stroke card is sent to the Scoring tab')

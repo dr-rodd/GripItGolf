@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import OrganiserLock from '@/app/components/OrganiserLock'
 import { isEvent } from '@/lib/eventHub'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { pickerSheets, type PickerMember } from '@/lib/teamPicker'
@@ -103,7 +104,7 @@ export default async function TeamPickPage({ params, searchParams }: {
 
   return (
     <main className="min-h-dvh paper has-tabbar">
-      <TripHeader backTo={back} />
+      <TripHeader backTo={back} action={<OrganiserLock tripCode={tripCode} passcodeHash={(trip.settings_passcode_hash as string | null) ?? null} isTrip={!isEvent(kind)} />} />
       <TeamPickerWizard
         tripId={trip.id}
         tripCode={tripCode}

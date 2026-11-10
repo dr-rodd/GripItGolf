@@ -1,4 +1,5 @@
 import { Fragment, Suspense } from 'react'
+import OrganiserLock from '@/app/components/OrganiserLock'
 import { overallOf, sessionBoardFor } from '@/lib/sessions'
 import { placeClass } from '@/lib/leaderboardStyle'
 import Link from 'next/link'
@@ -58,7 +59,7 @@ export default async function RoundSummaryPage({
     fetchTripKind(tripCode),
     supabase
       .from('trips')
-      .select('id, name, start_date, formats, leaderboards, team_scoring, track_stats')
+      .select('id, name, start_date, formats, leaderboards, team_scoring, track_stats, settings_passcode_hash')
       .eq('trip_code', tripCode)
       .single(),
   ])
@@ -205,7 +206,7 @@ export default async function RoundSummaryPage({
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={tripHome} />
+      <TripHeader backTo={tripHome} action={<OrganiserLock tripCode={tripCode} passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null} isTrip={!event} />} />
 
       {/* The way back, top left, where a phone puts one.
           This page is opened from the itinerary to read one thing — a tee
@@ -369,16 +370,14 @@ export default async function RoundSummaryPage({
           />
         )}
 
-        {/* ── Into the card ──
-            A Matches session is its matches, never a stroke scorecard: the
-            way in goes through the Scoring tab, which lists them (Ross,
-            10 Nov 2026). */}
-        <Link
-          href={matchesSession ? `${tripHome}/scoring` : `${tripHome}/scoring/${round.round_number}`}
-          className={buttonClass('primary')}
-        >
+        {/* ── Into scoring ──
+            Through the Scoring tab, never straight into a card (Ross, 10
+            Nov 2026): there a stroke round's card and a Matches session's
+            matches are each one tap away, and a Matches session has no
+            stroke card to land in by mistake. */}
+        <Link href={`${tripHome}/scoring`} className={buttonClass('primary')}>
           <IconClipboardList size={20} />
-          {matchesSession ? 'See the matches' : 'Live scoring'}
+          {matchesSession ? 'See the matches' : 'Go to scoring'}
         </Link>
       </div>
 

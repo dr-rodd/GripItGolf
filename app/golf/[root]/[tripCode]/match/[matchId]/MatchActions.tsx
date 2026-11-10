@@ -1,9 +1,10 @@
 'use client'
 
+import { useUnlocked } from '@/app/components/useUnlocked'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { hasUnlocked, isLocked } from '@/lib/passcode'
+import { isLocked } from '@/lib/passcode'
 import { teesForPlayer } from '@/lib/courseHandicap'
 import { WALKOVER, withTee, type MatchTees } from '@/lib/matchArrangements'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
@@ -31,9 +32,8 @@ type TeeOption = { id: string; name: string | null; gender: string; slope: numbe
 
 /** The admin PIN: open when none is set, else this device's unlock or the PIN asked now. */
 function useOrganiser(tripCode: string, passcodeHash: string | null) {
-  const [unlocked, setUnlocked] = useState(false)
-  // The unlock lives in sessionStorage — read after mount, never in render.
-  useEffect(() => { setUnlocked(hasUnlocked(tripCode)) }, [tripCode])
+  // The unlock lives in sessionStorage, and follows the header's lock.
+  const [unlocked, setUnlocked] = useUnlocked(tripCode)
   return { organiser: unlocked || !isLocked(passcodeHash), unlock: () => setUnlocked(true) }
 }
 

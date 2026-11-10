@@ -1,9 +1,10 @@
 'use client'
 
+import { useUnlocked } from '@/app/components/useUnlocked'
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { hasUnlocked, isLocked } from '@/lib/passcode'
+import { isLocked } from '@/lib/passcode'
 import { boardNames } from '@/lib/displayNames'
 import { partnershipName, isMadeName } from '@/lib/partnerships'
 import { PRESET_COLORS } from '@/lib/teamColors'
@@ -48,8 +49,7 @@ export default function TeamPickerWizard({
   backHref: string
 }) {
   const router = useRouter()
-  const [unlocked, setUnlocked] = useState(false)
-  useEffect(() => { setUnlocked(hasUnlocked(tripCode)) }, [tripCode])
+  const [unlocked, setUnlocked] = useUnlocked(tripCode)
   const organiser = isTrip || unlocked || !isLocked(passcodeHash)
   const viewer: PickerViewer = { organiser, meId, selfPick: sheet.selfPick, addedRecorded }
 

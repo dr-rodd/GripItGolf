@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import OrganiserLock from '@/app/components/OrganiserLock'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { boardFacts } from '@/lib/leaderboards'
 import { overallOf, sessionBoardFor, sessionName } from '@/lib/sessions'
@@ -282,7 +283,7 @@ export default async function TripCoursePortalPage({
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
 
-      <TripHeader backTo={tripHome} title="scoring" />
+      <TripHeader backTo={tripHome} title="scoring" action={<OrganiserLock tripCode={tripCode} passcodeHash={setupRow?.settings_passcode_hash ?? null} isTrip={!event} />} />
 
       <div className="max-w-lg mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-4">

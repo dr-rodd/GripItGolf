@@ -496,6 +496,20 @@ html.dark .only-light { display: none; }
 }
 .score-flash { animation: gdScoreFlash 400ms ease-out; }
 
+/* The organiser's lock, tapped (Ross, 10 Nov 2026): a little wobble on its
+   shackle, quick and settling, never past where it rests. A one-shot inside
+   the ceiling; under Reduce Motion the block below takes it to nothing and
+   the lock simply changes. */
+@keyframes gdLockWobble {
+  0%   { transform: rotate(0deg); }
+  20%  { transform: rotate(-14deg); }
+  45%  { transform: rotate(10deg); }
+  70%  { transform: rotate(-5deg); }
+  85%  { transform: rotate(2deg); }
+  100% { transform: rotate(0deg); }
+}
+.lock-wobble { animation: gdLockWobble 360ms ease-out; transform-origin: 50% 30%; }
+
 /* The live indicator. A slow breath, not a blink — it should read as
    alive rather than as something demanding attention. */
 @keyframes gdPulse {

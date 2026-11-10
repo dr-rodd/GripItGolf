@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import OrganiserLock from '@/app/components/OrganiserLock'
 import { supabase } from '@/lib/supabase'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { MAIN_SET } from '@/lib/teamSets'
@@ -209,7 +210,7 @@ export default async function TripTeamsPage({
 
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
-      <TripHeader backTo={tripHome} />
+      <TripHeader backTo={tripHome} action={<OrganiserLock tripCode={tripCode} passcodeHash={(trip.settings_passcode_hash as string | null) ?? null} isTrip={!event} />} />
       <div className="paper border-b border-line">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <BackButton href={event ? tripHome : `${tripHome}/setup`} />

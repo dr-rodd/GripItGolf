@@ -1,16 +1,16 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useUnlocked } from '@/app/components/useUnlocked'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { hasUnlocked, isLocked } from '@/lib/passcode'
+import { isLocked } from '@/lib/passcode'
 import { boardNames } from '@/lib/displayNames'
 import { partnershipName } from '@/lib/partnerships'
 import {
   type PickerSheet, type PickerMember, type PickerViewer,
-  mayPick, mayAddOthers, hasRoom,
+  mayAddOthers, hasRoom,
 } from '@/lib/teamPicker'
-import InlineUnlock from '@/app/components/InlineUnlock'
 import { ListGroup, ListRow, SectionHeader, buttonClass, cardClass } from '@/app/components/ui'
 import { type TeamRow, moveMembers, refreshTeamName, deleteTeam } from './teamWrites'
 import { useTripBase } from '@/app/golf/[root]/[tripCode]/TripBase'
@@ -50,8 +50,7 @@ export default function TeamsClient({
   const router = useRouter()
   // The organiser's PIN unlock, read after mount — sessionStorage does not
   // exist on the server, and a render that reads it would tear hydration.
-  const [unlocked, setUnlocked] = useState(false)
-  useEffect(() => { setUnlocked(hasUnlocked(tripCode)) }, [tripCode])
+  const [unlocked] = useUnlocked(tripCode)
   const organiser = isTrip || unlocked || !isLocked(passcodeHash)
 
   const [teams, setTeams] = useState(initialTeams)
@@ -141,8 +140,6 @@ export default function TeamsClient({
       </div>
     )
   }
-
-  const anyPick = sheets.some(s => mayPick({ organiser, meId, selfPick: s.selfPick, addedRecorded }))
 
   return (
     <div className="flex flex-col gap-10">
@@ -303,14 +300,6 @@ export default function TeamsClient({
         </Link>
       )}
 
-      {!organiser && passcodeHash && (
-        <InlineUnlock
-          tripCode={tripCode}
-          passcodeHash={passcodeHash}
-          onUnlocked={() => setUnlocked(true)}
-          prompt={anyPick ? 'Organiser? Enter your PIN to change any team.' : 'Organiser? Enter your PIN to pick the teams.'}
-        />
-      )}
     </div>
   )
 }

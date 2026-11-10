@@ -1,5 +1,6 @@
 'use client'
 
+import { useUnlocked } from '@/app/components/useUnlocked'
 import { enterGoesTo } from '@/lib/focusNext'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -49,7 +50,7 @@ export default function AddToField({
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [unlocked, setUnlocked] = useState(false)
+  const [unlocked, setUnlocked] = useUnlocked(tripCode)
   const [name, setName] = useState('')
   const [handicap, setHandicap] = useState('')
   const [gender, setGender] = useState<'M' | 'F'>('M')

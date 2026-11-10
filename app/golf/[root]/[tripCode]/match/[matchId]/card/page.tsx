@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation'
+import { isEvent } from '@/lib/eventHub'
+import OrganiserLock from '@/app/components/OrganiserLock'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { currentPlayer } from '@/lib/currentPlayer'
@@ -54,7 +56,7 @@ export default async function MatchCardPage({
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={tripHome} />
+      <TripHeader backTo={tripHome} action={<OrganiserLock tripCode={tripCode} passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null} isTrip={!isEvent((trip as { kind?: unknown }).kind)} />} />
       <div className="max-w-lg mx-auto px-4 pt-3 pb-8">
         {card ? (
           <MatchCardClient

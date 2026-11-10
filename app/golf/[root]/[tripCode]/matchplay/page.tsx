@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import OrganiserLock from '@/app/components/OrganiserLock'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { boardRules, boardTitle, hasMatchplay, isMatchTally, needsPairings, tripQuotaScale } from '@/lib/leaderboards'
@@ -209,7 +210,7 @@ export default async function MatchplayPage({
 
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
-      <TripHeader backTo={tripHome} />
+      <TripHeader backTo={tripHome} action={<OrganiserLock tripCode={tripCode} passcodeHash={lock ? lock.passcodeHash : null} />} />
       <div className="paper border-b border-line">
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
           {knockout ? <div className="w-11" /> : <BackButton href={`${tripHome}/leaderboard`} />}
