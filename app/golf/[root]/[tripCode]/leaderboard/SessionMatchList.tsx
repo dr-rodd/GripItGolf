@@ -13,8 +13,10 @@
  * **The leaderboard is a viewer** (Ross, 10 Nov 2026): there a row slides
  * its match open beneath it, hole by hole — the strip of marks and the
  * scores — the site's rule for one card to show; it never leaves for the
- * card to score. The Scoring tab's list (`toScore`) is where a match opens
- * its card to score.
+ * card to score. The Scoring tab's list (`toScore`) goes into scoring for a
+ * phone that may alter the match's score (`mayScoreCard`: its players, the
+ * organiser with the lock open, or anybody while `score_session_matches` is
+ * on) — every other phone gets the same scorecard slider as the leaderboard.
  */
 
 import { useState } from 'react'
@@ -25,6 +27,9 @@ import { matchStatus, softened } from '@/lib/faceOff'
 import { sideColours, sideTint, type SideColour } from '@/lib/matchSides'
 import { tagOfTeam } from '@/lib/tagBoards'
 import type { Membership } from '@/lib/teamSets'
+import { mayScoreCard } from '@/lib/matchCard'
+import { isLocked } from '@/lib/passcode'
+import { useUnlocked } from '@/app/components/useUnlocked'
 import { cardClass } from '@/app/components/ui'
 import { useTripBase } from '@/app/golf/[root]/[tripCode]/TripBase'
 
@@ -32,14 +37,17 @@ type P = { id: string; name: string }
 type T = { id: string; name: string; color: string }
 
 export default function SessionMatchList({
-  matches, players, teams, memberships, tripCode, slots = 0, tags = [], nameById, toScore = false,
+  matches, players, teams, memberships, tripCode, slots = 0, tags = [], nameById, toScore = false, scoring = null,
 }: {
   /**
-   * The Scoring tab's list: a match opens its card to score. Elsewhere — the
-   * leaderboard — it opens the match hole by hole, its scorecard (Ross, 10
-   * Nov 2026: "rather than reverting to the scoring screen").
+   * The Scoring tab's list: a match opens its card to score, for a phone
+   * that may (`scoring`). Elsewhere — the leaderboard — it opens the match
+   * hole by hole, its scorecard (Ross, 10 Nov 2026: "rather than reverting
+   * to the scoring screen").
    */
   toScore?: boolean
+  /** The Scoring tab's rule for who scores: this phone's player, the PIN, the permission. */
+  scoring?: { me: string | null; passcodeHash: string | null; anyoneScores: boolean } | null
   matches: SessionMatchResult[]
   players: P[]
   teams: T[]
@@ -53,6 +61,8 @@ export default function SessionMatchList({
   nameById?: Map<string, string>
 }) {
   const tripHome = useTripBase(tripCode)
+  const [unlocked] = useUnlocked(tripCode)
+  const organiser = unlocked || !isLocked(scoring?.passcodeHash ?? null)
   // The one match open beneath its row, and every one opened so far — kept
   // drawn so closing slides as opening does.
   const [openSlot, setOpenSlot] = useState<number | null>(null)
@@ -137,12 +147,19 @@ export default function SessionMatchList({
         const set = !!m && m.sideA.length > 0 && m.sideB.length > 0
         const label = `Match ${slot + 1}: ${leftIds.map(nameOf).join(' & ')} v ${rightIds.map(nameOf).join(' & ')}, ${status?.main === 'vs' ? 'not started' : status?.main}`
         const isOpen = openSlot === slot
+        // Into scoring for a phone that may alter the score; else the card.
+        const goesToScore = toScore && !!m && mayScoreCard({
+          decided: !!m.result,
+          organiser,
+          inMatch: !!scoring?.me && (m.sideA.includes(scoring.me) || m.sideB.includes(scoring.me)),
+          anyoneScores: scoring?.anyoneScores ?? true,
+        })
         // The card's own sides are A and B as stored; their colours follow
         // the tags' way round the row is drawn.
         const cardColours = flip ? { A: colours.B, B: colours.A } : colours
         return (
           <li key={slot} className={slot > 0 ? 'border-t border-line' : ''}>
-            {!set ? row : toScore ? (
+            {!set ? row : goesToScore ? (
               <Link href={`${tripHome}/session/${m!.roundId}/match/${m!.slot}/card`}
                 className="block active:bg-tint" aria-label={label}>
                 {row}

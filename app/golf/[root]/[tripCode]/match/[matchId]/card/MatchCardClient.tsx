@@ -8,7 +8,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { isLocked } from '@/lib/passcode'
 import {
-  REGULATION_HOLES, extraCourseHole, openingHole, ordinal, parseExtraPlan, playCard, playSessionCard, reopenBlocked,
+  REGULATION_HOLES, extraCourseHole, mayScoreCard, openingHole, ordinal, parseExtraPlan, playCard, playSessionCard, reopenBlocked,
   sessionResult, shotsOn, shouldWrite,
   withExtraHole, type CardHole, type CardSideKey, type CardSideView, type ExtraHolePlan,
 } from '@/lib/matchCard'
@@ -123,7 +123,7 @@ export default function MatchCardClient({
 
   const inMatch = mySide !== null
   const decided = stored.winner !== null
-  const canEdit = !decided && (organiser || inMatch || anyoneScores)
+  const canEdit = mayScoreCard({ decided, organiser, inMatch, anyoneScores })
 
   // ── Reading the card ──
   const dirty = useRef(0)

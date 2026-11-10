@@ -351,3 +351,17 @@ export function sessionResult(state: SessionCardState): { result: 'a' | 'b' | 'h
   if (!state.leader || !state.result) return null
   return { result: state.leader === 'A' ? 'a' : 'b', margin: state.result }
 }
+
+/**
+ * Who may alter a match card's scores — the only copy (Ross, 10 Nov 2026).
+ * The card itself, the bracket and the Scoring tab's lists all ask it: a
+ * phone that may goes into scoring when it taps a match; every other phone
+ * is shown the card as a scorecard to read. A finished match is nobody's to
+ * score (the organiser reopens it on the card). `organiser` is the unlock
+ * this device holds, or an event with no PIN; `inMatch` that this phone's
+ * player (or pairing) plays in the match; `anyoneScores` the event's
+ * `score_matches` / `score_session_matches` permission.
+ */
+export function mayScoreCard(o: { decided: boolean; organiser: boolean; inMatch: boolean; anyoneScores: boolean }): boolean {
+  return !o.decided && (o.organiser || o.inMatch || o.anyoneScores)
+}

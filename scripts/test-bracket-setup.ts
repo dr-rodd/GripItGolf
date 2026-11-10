@@ -200,7 +200,7 @@ section('A match play event reads from the player\'s side: the hub\'s card, the 
   ok(scoring.includes('<KnockoutPortal') && scoring.includes('const knockout = event && isKnockoutEvent('),
     'the Scoring tab is the bracket\'s portal on a match play event')
   const views = read('app/golf/[root]/[tripCode]/KnockoutViews.tsx')
-  ok(views.includes("cardClass('chosen', true)") && views.includes('opacity-60'),
+  ok(views.includes("cardClass(m.mine ? 'chosen' : 'flat', true)") && views.includes('opacity-60'),
     '  …your own match active and the rest listed, inactive')
   ok(views.includes('href={matchHref(tripHome, m.id)}') && !/m\.mine \? \(\s*<Link[\s\S]*?\) : \(\s*<Link/.test(views),
     '  …and only your own opens')
@@ -294,7 +294,7 @@ section('The match play card: top of the draw left, bottom right, NR, the result
     && client.includes("translateX(-50%)"),
     'the same card, live, a slide away from the score — anybody may look')
   ok(client.includes('persistWinner(all, matchId, winnerId as string, state.result)'), '  …through the bracket\'s own writer')
-  ok(client.includes('const canEdit = !decided && (organiser || inMatch || anyoneScores)'),
+  ok(client.includes('const canEdit = mayScoreCard({ decided, organiser, inMatch, anyoneScores })'),
     'anybody scores an open match unless kept to its players; once it is in, nobody — it is reopened first')
   ok(read('app/golf/[root]/[tripCode]/match/[matchId]/card/page.tsx').includes("'score_matches'"),
     '  …the page asking the event\'s permission')

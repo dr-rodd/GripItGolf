@@ -7,8 +7,11 @@ import { useRouter } from 'next/navigation'
 import { describeShortDate } from '@/lib/itinerary'
 import { deadlineNote } from '@/lib/bracketSetup'
 import {
-  currentRound, describeProgress, describeResult, myNextMatch, opponentOf, portalRounds,
+  bracketScoreLinks, currentRound, describeProgress, describeResult, myNextMatch, opponentOf, portalRounds,
 } from '@/lib/knockoutPortal'
+import { mayScoreCard, type MatchCardDetail } from '@/lib/matchCard'
+import { isLocked } from '@/lib/passcode'
+import { useUnlocked } from '@/app/components/useUnlocked'
 import type { KnockoutView } from './knockout'
 import type { LiveMatch } from './match/matchCards'
 import { sideColours, sideTint, type SideColour } from '@/lib/matchSides'
@@ -99,21 +102,78 @@ export function NextMatchCard({ tripCode, view, live = null, today }: {
 // ─── The Scoring tab ───────────────────────────────────────────
 
 /**
- * The bracket's rounds on the Scoring tab, the one being played open. In
- * each, this player's own match sits on top, chosen; the rest open too
- * while anybody may score a match (`score_matches`), and are listed
- * inactive when only their players may.
+ * What a tap on a match does (Ross, 10 Nov 2026): a phone that may alter
+ * its score — `mayScoreCard`, the card's own rule: its players, the
+ * organiser with the lock open, or anybody while `score_matches` is on —
+ * goes into scoring; every other phone gets the scorecard, sliding open
+ * beneath the row. `scoring` is null where nobody scores from here.
  */
-export function KnockoutPortal({ tripCode, view, live = [], today, anyoneScores = true }: {
+export type PortalScoring = {
+  passcodeHash: string | null
+  anyoneScores: boolean
+  /** Every match with a card, hole by hole — the viewer's. */
+  details: Record<string, MatchCardDetail>
+  /** Matches already arranged (a course chosen), whose card is ready to score. */
+  arranged: string[]
+}
+
+/** Which of a row's two faces this phone gets. */
+function useMayScore(tripCode: string, scoring: PortalScoring | null) {
+  const [unlocked] = useUnlocked(tripCode)
+  const organiser = unlocked || !isLocked(scoring?.passcodeHash ?? null)
+  return (decided: boolean, inMatch: boolean) =>
+    mayScoreCard({ decided, organiser, inMatch, anyoneScores: scoring?.anyoneScores ?? true })
+}
+
+/**
+ * A match row that slides its scorecard open beneath it — the site's rule
+ * for one card to show. `children` is the row's face.
+ */
+function ViewerRow({ rowClass, detail, colours, children }: {
+  rowClass: string
+  detail: MatchCardDetail | undefined
+  colours: Record<'A' | 'B', SideColour>
+  children: React.ReactNode
+}) {
+  const [isOpen, setOpen] = useState(false)
+  const [opened, setOpened] = useState(false)
+  return (
+    <>
+      <button type="button" className={rowClass} aria-expanded={isOpen}
+        onClick={() => { setOpen(o => !o); setOpened(true) }}>
+        {children}
+      </button>
+      <div className="grid transition-[grid-template-rows] duration-300 ease-out"
+        style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }} aria-hidden={!isOpen}>
+        <div className="min-h-0 overflow-hidden">
+          {opened && (
+            <div className="px-1 pt-2 pb-1">
+              <MatchDetailView detail={detail} colours={colours} />
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+/**
+ * The bracket's rounds on the Scoring tab, the one being played open. In
+ * each, a match this phone may score goes into scoring (this player's own
+ * on top, chosen); anybody else's slides its scorecard open beneath the
+ * row, and a match with nothing on its card yet is listed inactive.
+ */
+export function KnockoutPortal({ tripCode, view, live = [], today, scoring = null }: {
   tripCode: string
   view: KnockoutView
   /** The matches being played now, off their cards (`readLiveMatches`). */
   live?: LiveMatch[]
   today: string
-  /** Anybody may score any match — every match opens, not only your own. */
-  anyoneScores?: boolean
+  scoring?: PortalScoring | null
 }) {
   const tripHome = useTripBase(tripCode)
+  const mayScore = useMayScore(tripCode, scoring)
+  const links = bracketScoreLinks(view, new Set(scoring?.arranged ?? []), tripHome)
   const rounds = portalRounds(view.matches, view.entrantId, view.deadlines)
   const [open, setOpen] = useState<number | null>(() => currentRound(rounds)?.roundNumber ?? null)
   const nameOf = (id: string | null) => (id ? view.names[id] ?? null : null)
@@ -138,7 +198,7 @@ export function KnockoutPortal({ tripCode, view, live = [], today, anyoneScores 
 
   return (
     <div className="space-y-3">
-      {live.length > 0 && <LiveBoard tripCode={tripCode} view={view} live={live} />}
+      {live.length > 0 && <LiveBoard tripCode={tripCode} view={view} live={live} scoring={scoring} />}
       {rounds.map(round => {
         const isOpen = open === round.roundNumber
         const finished = round.total > 0 && round.played === round.total
@@ -172,9 +232,11 @@ export function KnockoutPortal({ tripCode, view, live = [], today, anyoneScores 
                   const b = nameOf(m.sideB) ?? 'To be decided'
                   const result = describeResult(m, nameOf)
                   const now = liveById.get(m.id)
-                  // Anybody can score an open match, so every one with both
-                  // sides known opens — yours still sits on top, chosen.
-                  const opens = !m.mine && anyoneScores && !!m.sideA && !!m.sideB && !m.aIsBye && !m.bIsBye
+                  // Scoring for a phone that may alter the score; else the
+                  // card to read, where there is one on it.
+                  const scoreHref = mayScore(m.winner !== null, m.mine) ? links.hrefs[m.id] ?? null : null
+                  const detail = scoring?.details[m.id]
+                  const reads = !scoreHref && !!detail
                   const body = (
                     <>
                       <span className="min-w-0">
@@ -192,27 +254,21 @@ export function KnockoutPortal({ tripCode, view, live = [], today, anyoneScores 
                           </span>
                         )}
                       </span>
-                      {(m.mine || opens) && (
+                      {(scoreHref || m.mine) && (
                         <span className="text-ink/50 flex-shrink-0" aria-hidden="true"><IconChevronRight size={20} /></span>
                       )}
                     </>
                   )
+                  const rowClass = `flex items-center justify-between gap-3 px-4 py-3 w-full text-left ${cardClass(m.mine ? 'chosen' : 'flat', true)}`
                   return (
                     <li key={m.id}>
-                      {m.mine ? (
-                        <Link
-                          href={matchHref(tripHome, m.id)}
-                          className={`flex items-center justify-between gap-3 px-4 py-3 ${cardClass('chosen', true)}`}
-                        >
-                          {body}
-                        </Link>
-                      ) : opens ? (
-                        <Link
-                          href={matchHref(tripHome, m.id)}
-                          className={`flex items-center justify-between gap-3 px-4 py-3 ${cardClass('flat', true)}`}
-                        >
-                          {body}
-                        </Link>
+                      {scoreHref ? (
+                        <Link href={scoreHref} className={rowClass}>{body}</Link>
+                      ) : reads ? (
+                        <ViewerRow rowClass={rowClass} detail={detail} colours={coloursOf(view, m.sideA, m.sideB)}>{body}</ViewerRow>
+                      ) : m.mine ? (
+                        // Your own, nothing to score or read yet: its page.
+                        <Link href={matchHref(tripHome, m.id)} className={rowClass}>{body}</Link>
                       ) : (
                         <div className={`flex items-center justify-between gap-3 px-4 py-3 opacity-60 ${cardClass('flat')}`}>
                           {body}
@@ -284,15 +340,15 @@ function liveLine(l: LiveMatch, nameOf: (id: string | null) => string | null): s
 
 /**
  * The matches being played now, at the top of the Scoring tab — the match
- * play live leaderboard. Your own match opens its card to score; anybody
- * else's slides open beneath its row, hole by hole (Ross, 10 Nov 2026: a
- * viewer never leaves for the card to score). The standing wears the colour of the side ahead — top of the draw
+ * play live leaderboard. A phone that may alter a score goes into scoring
+ * (`mayScoreCard`); every other slides the match open beneath its row, hole
+ * by hole (Ross, 10 Nov 2026: a viewer never leaves for the card to score). The standing wears the colour of the side ahead — top of the draw
  * red, bottom blue — the same on every phone; green says live.
  */
-function LiveBoard({ tripCode, view, live }: { tripCode: string; view: KnockoutView; live: LiveMatch[] }) {
+function LiveBoard({ tripCode, view, live, scoring }: { tripCode: string; view: KnockoutView; live: LiveMatch[]; scoring: PortalScoring | null }) {
   const tripHome = useTripBase(tripCode)
+  const mayScore = useMayScore(tripCode, scoring)
   const nameOf = (id: string | null) => (id ? view.names[id] ?? null : null)
-  const [openId, setOpenId] = useState<string | null>(null)
   return (
     <section className={cardClass()} aria-label="Live matches">
       <div className="px-5 pt-4 pb-2 flex items-center gap-2">
@@ -327,25 +383,15 @@ function LiveBoard({ tripCode, view, live }: { tripCode: string; view: KnockoutV
                   </>
                 )
                 const rowClass = `flex items-center justify-between gap-3 px-4 py-3 w-full text-left ${cardClass(mine ? 'chosen' : 'flat', true)}`
-                if (mine) {
+                // A phone that may alter the score goes into scoring; every
+                // other gets the scorecard, sliding open beneath the row.
+                if (mayScore(false, mine)) {
                   return <Link href={`${matchHref(tripHome, l.id)}/card`} className={rowClass}>{inner}</Link>
                 }
-                const isOpen = openId === l.id
                 return (
-                  <>
-                    <button type="button" className={rowClass} aria-expanded={isOpen}
-                      onClick={() => setOpenId(o => (o === l.id ? null : l.id))}>
-                      {inner}
-                    </button>
-                    <div className="grid transition-[grid-template-rows] duration-300 ease-out"
-                      style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }} aria-hidden={!isOpen}>
-                      <div className="min-h-0 overflow-hidden">
-                        <div className="px-1 pt-2 pb-1">
-                          <MatchDetailView detail={l.detail} colours={coloursOf(view, l.sideA, l.sideB)} />
-                        </div>
-                      </div>
-                    </div>
-                  </>
+                  <ViewerRow rowClass={rowClass} detail={l.detail} colours={coloursOf(view, l.sideA, l.sideB)}>
+                    {inner}
+                  </ViewerRow>
                 )
               })()}
             </li>

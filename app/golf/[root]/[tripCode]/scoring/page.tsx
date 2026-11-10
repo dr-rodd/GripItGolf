@@ -20,7 +20,7 @@ import { readRoundCards } from '@/lib/golfIrelandCards'
 import { isKnockoutEvent } from '@/lib/bracketSetup'
 import { linkedPlayerId } from '@/lib/currentPlayer'
 import { readKnockout } from '../knockout'
-import { readLiveMatches } from '../match/matchCards'
+import { readLiveMatches, readMatchDetails } from '../match/matchCards'
 import { KnockoutPortal } from '../KnockoutViews'
 import { AddLeagueRound, LockedRoundTile, RoundSettings, StartPeriodCard, TbcRoundTile, type LeagueDoor } from '../LeagueRounds'
 import { parseLeagueSetup, leagueRounds, playByLine, seriesListing, isPeriodLeague, periodListing, periodOf } from '@/lib/leagueSetup'
@@ -168,8 +168,19 @@ export default async function TripCoursePortalPage({
           const roster = (playersRes.data ?? []) as { id: string; name: string; handicap: number | null; gender: string }[]
           const me = roster.some(p => p.id === meId) ? meId : null
           const view = await readKnockout(trip, setupRow?.bracket_setup, me, roster)
-          const live = view ? await readLiveMatches(trip, view, roster) : []
-          return view ? { view, live } : null
+          // The matches being played now, every match's card for the
+          // viewer's scorecard, and which matches are arranged (a course
+          // chosen — their card is ready to score), the last fail-soft.
+          const [live, details, arrangedRes] = view
+            ? await Promise.all([
+                readLiveMatches(trip, view, roster),
+                readMatchDetails(trip, view, roster),
+                supabase.from('matchplay_matches').select('id, course_id').eq('trip_id', trip.id),
+              ])
+            : [[], {}, { data: [], error: null }]
+          const arranged = ((arrangedRes.error ? [] : arrangedRes.data ?? []) as { id: string; course_id: string | null }[])
+            .filter(r => r.course_id).map(r => r.id)
+          return view ? { view, live, details, arranged } : null
         }).catch(e => { console.error('TripCoursePortal knockout read failed:', e); return null })
       : Promise.resolve(null),
     hasMatchSessions
@@ -342,7 +353,12 @@ export default async function TripCoursePortalPage({
 
         {knockoutView && (
           <div className="mb-8">
-            <KnockoutPortal tripCode={tripCode} view={knockoutView} live={knockoutRead?.live ?? []} today={todayString(new Date())} anyoneScores={allowsParticipant(kind, permsRaw, 'score_matches')} />
+            <KnockoutPortal tripCode={tripCode} view={knockoutView} live={knockoutRead?.live ?? []} today={todayString(new Date())} scoring={{
+              passcodeHash: setupRow?.settings_passcode_hash ?? null,
+              anyoneScores: allowsParticipant(kind, permsRaw, 'score_matches'),
+              details: knockoutRead?.details ?? {},
+              arranged: knockoutRead?.arranged ?? [],
+            }} />
           </div>
         )}
 
@@ -456,6 +472,11 @@ export default async function TripCoursePortalPage({
                     tags={sessionTags.length === 2 ? sessionTags : []}
                     nameById={sessionNames}
                     toScore
+                    scoring={{
+                      me: mine,
+                      passcodeHash: setupRow?.settings_passcode_hash ?? null,
+                      anyoneScores: allowsParticipant(kind, permsRaw, 'score_session_matches'),
+                    }}
                   />
                 </section>
               )

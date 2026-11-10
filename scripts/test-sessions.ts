@@ -20,7 +20,7 @@ import { parseLeaderboards, hasMatchplay, boardTitle, boardFacts, type Leaderboa
 import { governingBoard, isPairs } from '../lib/partnerships'
 import { buildRows, type RowContext, type ResolvedScore, type RowHole } from '../lib/boardRows'
 import { overallRows } from '../lib/overallRows'
-import { playSessionCard, sessionResult, type CardHole } from '../lib/matchCard'
+import { playSessionCard, sessionResult, mayScoreCard, type CardHole } from '../lib/matchCard'
 import { foursomesStrokes } from '../lib/matchArrangements'
 import { eventFourthTab, fourthTab } from '../lib/eventHub'
 import { faceOff, tickFills, matchStatus, matchPool, sessionPool, MAX_TICKS } from '../lib/faceOff'
@@ -753,7 +753,7 @@ section('A match from the leaderboard opens hole by hole; the ticker stays; a fo
     'the leaderboard is a viewer: a match slides open beneath its row, never leaving for the card to score')
   ok(list.includes('<MatchDetailView detail={m!.detail} colours={cardColours} />'),
     '  …the strip of marks and the scores hole by hole')
-  ok(list.includes('/card`}') && read(base + 'scoring/page.tsx').includes('toScore\n'), '  …while the Scoring tab still opens the card to score')
+  ok(list.includes('/card`}') && read(base + 'scoring/page.tsx').includes('toScore\n'), '  …while the Scoring tab goes to the card to score')
   const reads = read(base + 'session/sessionMatches.ts')
   ok(reads.includes('result.detail = {'), 'each match with anything on its card carries it hole by hole, for the viewer')
   const board = read(base + 'leaderboard/TripLeaderboardClient.tsx')
@@ -784,16 +784,40 @@ section('Viewers open a card in place, sitewide (Ross, 10 Nov 2026)')
     'a knockout match’s card hole by hole is read once, for the live board and the bracket alike')
   ok(/live\.push\(\{[\s\S]*?detail,\n    \}\)/.test(cards), '  …the live board’s matches carry it')
   const live = read(base + 'KnockoutViews.tsx')
-  ok(live.includes("if (mine) {\n                  return <Link href={`${matchHref(tripHome, l.id)}/card`}"),
-    'Live now: your own match opens its card to score')
-  ok(live.includes('<MatchDetailView detail={l.detail}') && live.includes("gridTemplateRows: isOpen ? '1fr' : '0fr'"),
-    '  …anybody else’s slides open beneath its row')
+  ok(live.includes("if (mayScore(false, mine)) {\n                  return <Link href={`${matchHref(tripHome, l.id)}/card`}"),
+    'Live now: a phone that may alter the score goes into scoring')
+  ok(live.includes('<MatchDetailView detail={detail}') && live.includes("gridTemplateRows: isOpen ? '1fr' : '0fr'")
+    && live.includes('<ViewerRow rowClass={rowClass} detail={l.detail}'),
+    '  …every other phone gets the scorecard, sliding open beneath its row')
   const bracket = read(base + 'matchplay/MatchplayBracket.tsx')
   ok(bracket.includes("if (onView && outcome !== 'correct') {") && bracket.includes('function CardSheet('),
     'the bracket: a match with a card opens it over the draw — no row to open one beneath')
   ok(bracket.includes('Record the result') && bracket.includes('Hold the match on the draw to change its result.'),
     '  …recording a result by hand inside it, a hold still changing a finished one')
   ok(read(base + 'matchplay/page.tsx').includes('readMatchDetails(trip, view,'), '  …read on the server with the draw')
+}
+
+section('Scoring: who goes into scoring, everybody else gets the scorecard (Ross, 10 Nov 2026)')
+{
+  const base = 'app/golf/[root]/[tripCode]/'
+  const may = (o: Partial<{ decided: boolean; organiser: boolean; inMatch: boolean; anyoneScores: boolean }>) =>
+    mayScoreCard({ decided: false, organiser: false, inMatch: false, anyoneScores: false, ...o })
+  eq(may({}), false, 'nobody in particular: not allowed to alter a score')
+  eq([may({ organiser: true }), may({ inMatch: true }), may({ anyoneScores: true })], [true, true, true],
+    '  …the organiser, a player in the match, or anybody while it is open to all')
+  eq(may({ organiser: true, inMatch: true, anyoneScores: true, decided: true }), false, '  …nobody once the match has a result')
+  const client = read(base + 'match/[matchId]/card/MatchCardClient.tsx')
+  ok(client.includes('const canEdit = mayScoreCard({ decided, organiser, inMatch, anyoneScores })'), 'the card itself asks the same rule')
+  const views = read(base + 'KnockoutViews.tsx')
+  ok(views.includes('const scoreHref = mayScore(m.winner !== null, m.mine) ? links.hrefs[m.id] ?? null : null')
+    && views.includes('<ViewerRow rowClass={rowClass} detail={detail}'),
+    'the knockout’s rounds: scoring for a phone that may, else the scorecard slider')
+  const list = read(base + 'leaderboard/SessionMatchList.tsx')
+  ok(list.includes('const goesToScore = toScore && !!m && mayScoreCard({') && list.includes('{!set ? row : goesToScore ? ('),
+    'a session’s matches on the Scoring tab: the same, off score_session_matches')
+  const page = read(base + 'scoring/page.tsx')
+  ok(page.includes('readMatchDetails(trip, view, roster)') && page.includes("allowsParticipant(kind, permsRaw, 'score_session_matches')"),
+    '  …the Scoring tab reads every card for the slider and the permission for the rule')
 }
 
 section('The bracket goes straight into scoring; a match card is voided before its course or tees change (Ross, 10 Nov 2026)')
