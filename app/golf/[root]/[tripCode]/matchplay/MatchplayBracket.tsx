@@ -13,6 +13,8 @@ import { type MatchReading, pendingResults } from '@/lib/matchResults'
 import { decisionLabel } from '@/lib/matchDecision'
 import { deadlineNote } from '@/lib/bracketSetup'
 import { describeShortDate } from '@/lib/itinerary'
+import type { MatchCardDetail } from '@/lib/matchCard'
+import MatchDetailView from '@/app/golf/[root]/[tripCode]/match/[matchId]/card/MatchDetailView'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, optionClass } from '@/app/components/ui'
 
@@ -87,8 +89,16 @@ function bracketHeight(rounds: (BracketMatchRow | null)[][], position: number): 
 // ─── Component ─────────────────────────────────────────────────
 
 export default function MatchplayBracket({
-  matches: initialMatches, entrants, readings = [], deadlines = [], today = '', lock = null,
+  matches: initialMatches, entrants, readings = [], deadlines = [], today = '', lock = null, details = {},
 }: {
+  /**
+   * Each match's card hole by hole, where anything is on it — a tap opens it
+   * over the draw (Ross, 10 Nov 2026: a viewer opens the card in place,
+   * never the card to score; a bracket has no row to open one beneath), the
+   * way to record a result by hand inside it. Holding a finished match
+   * still changes its result.
+   */
+  details?: Record<string, MatchCardDetail>
   /**
    * On an event, changing a result already in is the admin PIN's
    * (docs/event-use-cases.md, story 2): a result the cards filled in, or
@@ -119,6 +129,7 @@ export default function MatchplayBracket({
   useEffect(() => { setMatches(initialMatches) }, [initialMatches])
 
   const [sheet, setSheet] = useState<{ match: BracketMatchRow; correcting: boolean } | null>(null)
+  const [viewing, setViewing] = useState<BracketMatchRow | null>(null)
   // This device's organiser unlock — sessionStorage, read after mount.
   const [unlocked, setUnlocked] = useUnlocked(lock?.tripCode ?? '')
 
@@ -616,6 +627,7 @@ export default function MatchplayBracket({
               y={tileTop(j, slot, PITCH) + lift}
               faded={slot < -0.05 || slot > 1.05}
               onOpen={correcting => setSheet({ match, correcting })}
+              onView={details[match.id] ? () => setViewing(match) : undefined}
             />
           ))
         })}
@@ -639,6 +651,16 @@ export default function MatchplayBracket({
       <p className="text-ink/50 text-[13px] text-center mt-4">
         Swipe to move between rounds · hold a finished match to change it
       </p>
+
+      {viewing && (
+        <CardSheet
+          match={viewing}
+          detail={details[viewing.id]}
+          playerById={playerById}
+          onClose={() => setViewing(null)}
+          onDecide={() => { setViewing(null); setSheet({ match: viewing, correcting: false }) }}
+        />
+      )}
 
       {sheet && (
         <DecideSheet
@@ -717,8 +739,10 @@ function TileNote({ reading, decided }: { reading: MatchReading | null; decided:
 }
 
 function MatchTile({
-  match, reading, playerById, x, y, faded, onOpen,
+  match, reading, playerById, x, y, faded, onOpen, onView,
 }: {
+  /** The match has a card: a tap opens it to read. */
+  onView?: () => void
   match: BracketMatchRow
   /** What the cards say, where this bracket round is linked to a round. */
   reading: MatchReading | null
@@ -816,6 +840,13 @@ function MatchTile({
         heldMs: Date.now() - p.at,
         longPressMs: LONG_PRESS_MS,
       })
+      // A match with a card opens it to read; recording a result by hand is
+      // inside it. A hold on a finished one still changes its result.
+      if (onView && outcome !== 'correct') {
+        swallowClick.current = true
+        onView()
+        return
+      }
       if (outcome === 'decide' || outcome === 'correct') swallowClick.current = true
       if (outcome === 'decide') onOpen(false)
       else if (outcome === 'correct') onOpen(true)
@@ -1000,6 +1031,66 @@ function Side({
       ) : (
         <span className="flex-1 text-[12px] text-ink/50 italic" style={ink}>To be decided</span>
       )}
+    </div>
+  )
+}
+
+// ─── A match's card, to read ───────────────────────────────────
+
+/**
+ * A match's card over the draw — the strip of marks and the scores hole by
+ * hole, the one viewer every screen draws (`MatchDetailView`). A match
+ * still to finish offers the way to record its result by hand; a finished
+ * one says how to change it.
+ */
+function CardSheet({ match, detail, playerById, onClose, onDecide }: {
+  match: BracketMatchRow
+  detail: MatchCardDetail | undefined
+  playerById: Map<string, BracketEntrantRow>
+  onClose: () => void
+  onDecide: () => void
+}) {
+  const colours = sideColours(
+    match.player_a_id ? playerById.get(match.player_a_id)?.colour : null,
+    match.player_b_id ? playerById.get(match.player_b_id)?.colour : null,
+  )
+  const nameOf = (id: string | null) => (id ? playerById.get(id)?.name ?? 'A player' : 'To be decided')
+  const decided = !!match.winner_player_id && !match.player_a_is_bye && !match.player_b_is_bye
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-ink/50 page-enter" />
+      <div
+        className="relative paper border-t border-line rounded-t-sheet shadow-floating-up px-5 pt-5 sheet-up max-h-[90dvh] overflow-y-auto"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 20px)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="min-w-0">
+            <p className="t-cap text-ink/65">{match.round_name}</p>
+            <p className="t-card text-ink mt-0.5">
+              <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: colours.A.fill }} aria-hidden="true" />
+              {nameOf(match.player_a_id)} v{' '}
+              <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: colours.B.fill }} aria-hidden="true" />
+              {nameOf(match.player_b_id)}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="w-11 h-11 flex-shrink-0 flex items-center justify-center text-ink/65 hover:text-ink transition-colors text-xl"
+          >
+            ✕
+          </button>
+        </div>
+        <MatchDetailView detail={detail} colours={colours} />
+        {decided ? (
+          <p className="t-cap text-ink/65 text-center mt-4">Hold the match on the draw to change its result.</p>
+        ) : (
+          <button type="button" onClick={onDecide} className={`${buttonClass('secondary')} mt-4 w-full`}>
+            Record the result
+          </button>
+        )}
+      </div>
     </div>
   )
 }

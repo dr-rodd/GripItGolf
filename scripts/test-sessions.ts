@@ -749,7 +749,7 @@ section('A match from the leaderboard opens hole by hole; the ticker stays; a fo
   const list = read(base + 'leaderboard/SessionMatchList.tsx')
   ok(list.includes('onClick={() => toggle(slot)} aria-expanded={isOpen}') && list.includes("gridTemplateRows: isOpen ? '1fr' : '0fr'"),
     'the leaderboard is a viewer: a match slides open beneath its row, never leaving for the card to score')
-  ok(list.includes('<MatchStrip holes={m!.detail.holes}') && list.includes('<MatchScoresTable a={m!.detail.a}'),
+  ok(list.includes('<MatchDetailView detail={m!.detail} colours={cardColours} />'),
     '  …the strip of marks and the scores hole by hole')
   ok(list.includes('/card`}') && read(base + 'scoring/page.tsx').includes('toScore\n'), '  …while the Scoring tab still opens the card to score')
   const reads = read(base + 'session/sessionMatches.ts')
@@ -770,6 +770,28 @@ section('A match from the leaderboard opens hole by hole; the ticker stays; a fo
   const table = read(base + 'match/[matchId]/card/MatchScorecard.tsx')
   ok(table.includes('w-full table-fixed') && table.includes('<colgroup>'), 'the hole-by-hole table is a fixed layout, four players sharing the width')
   ok(table.includes("${many ? 'w-full max-w-9' : 'min-w-9 px-1.5'}"), '  …each score box shrinking to its column, never pushing past the edge')
+}
+
+section('Viewers open a card in place, sitewide (Ross, 10 Nov 2026)')
+{
+  const base = 'app/golf/[root]/[tripCode]/'
+  const view = read(base + 'match/[matchId]/card/MatchDetailView.tsx')
+  ok(view.includes('<MatchStrip') && view.includes('<MatchScoresTable'), 'one viewer for a match: the strip and the scores hole by hole')
+  const cards = read(base + 'match/matchCards.ts')
+  ok(cards.includes('async function playedCards(') && cards.includes('export async function readMatchDetails('),
+    'a knockout match’s card hole by hole is read once, for the live board and the bracket alike')
+  ok(/live\.push\(\{[\s\S]*?detail,\n    \}\)/.test(cards), '  …the live board’s matches carry it')
+  const live = read(base + 'KnockoutViews.tsx')
+  ok(live.includes("if (mine) {\n                  return <Link href={`${matchHref(tripHome, l.id)}/card`}"),
+    'Live now: your own match opens its card to score')
+  ok(live.includes('<MatchDetailView detail={l.detail}') && live.includes("gridTemplateRows: isOpen ? '1fr' : '0fr'"),
+    '  …anybody else’s slides open beneath its row')
+  const bracket = read(base + 'matchplay/MatchplayBracket.tsx')
+  ok(bracket.includes("if (onView && outcome !== 'correct') {") && bracket.includes('function CardSheet('),
+    'the bracket: a match with a card opens it over the draw — no row to open one beneath')
+  ok(bracket.includes('Record the result') && bracket.includes('Hold the match on the draw to change its result.'),
+    '  …recording a result by hand inside it, a hold still changing a finished one')
+  ok(read(base + 'matchplay/page.tsx').includes('readMatchDetails(trip, view,'), '  …read on the server with the draw')
 }
 
 console.log(`\n${'─'.repeat(56)}`)

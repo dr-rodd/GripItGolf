@@ -34,6 +34,21 @@ export type CardSide = { id: string; players: CardPlayer[] }
 export type CardSideView = { id: string; name: string; players: (CardPlayer & { name: string })[] }
 export type CardHole = { holeNumber: number; par: number; strokeIndex: number; strokeIndexLadies?: number | null }
 
+/**
+ * A match's card as a viewer reads it — the holes, who won each, both
+ * sides and every score — for any screen that shows a match without
+ * scoring it (Ross, 10 Nov 2026: a viewer opens the card in place, never
+ * the card to score). Serialisable, so the server can hand it to a page.
+ */
+export type MatchCardDetail = {
+  holes: CardHole[]
+  outcomes: HoleOutcome[]
+  a: CardSideView
+  b: CardSideView
+  /** Player id → hole → gross; null is an NR. */
+  scores: Record<string, Record<number, number | null>>
+}
+
 /** Player id → hole number → gross, or null for an NR. Absent is not yet entered. */
 export type CardScores = ReadonlyMap<string, ReadonlyMap<number, number | null>>
 /** Hole number → the side that conceded it. */

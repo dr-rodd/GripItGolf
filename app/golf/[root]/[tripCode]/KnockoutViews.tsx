@@ -1,5 +1,6 @@
 'use client'
 
+import MatchDetailView from './match/[matchId]/card/MatchDetailView'
 import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -283,13 +284,15 @@ function liveLine(l: LiveMatch, nameOf: (id: string | null) => string | null): s
 
 /**
  * The matches being played now, at the top of the Scoring tab — the match
- * play live leaderboard. Each opens its card, read-only to anybody not in
- * it. The standing wears the colour of the side ahead — top of the draw
+ * play live leaderboard. Your own match opens its card to score; anybody
+ * else's slides open beneath its row, hole by hole (Ross, 10 Nov 2026: a
+ * viewer never leaves for the card to score). The standing wears the colour of the side ahead — top of the draw
  * red, bottom blue — the same on every phone; green says live.
  */
 function LiveBoard({ tripCode, view, live }: { tripCode: string; view: KnockoutView; live: LiveMatch[] }) {
   const tripHome = useTripBase(tripCode)
   const nameOf = (id: string | null) => (id ? view.names[id] ?? null : null)
+  const [openId, setOpenId] = useState<string | null>(null)
   return (
     <section className={cardClass()} aria-label="Live matches">
       <div className="px-5 pt-4 pb-2 flex items-center gap-2">
@@ -309,20 +312,42 @@ function LiveBoard({ tripCode, view, live }: { tripCode: string; view: KnockoutV
           const thru = l.state.settled ? 'Finished' : l.state.played > 0 ? `Thru ${l.state.thru}` : 'Started'
           return (
             <li key={l.id}>
-              <Link
-                href={`${matchHref(tripHome, l.id)}/card`}
-                className={`flex items-center justify-between gap-3 px-4 py-3 ${cardClass(mine ? 'chosen' : 'flat', true)}`}
-              >
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-ink truncate">
-                    <SideNames a={nameOf(l.sideA) ?? 'A player'} b={nameOf(l.sideB) ?? 'A player'} colours={coloursOf(view, l.sideA, l.sideB)} />
-                  </span>
-                  <span className="block t-cap text-ink/65 truncate">{l.roundName} · {thru}</span>
-                </span>
-                <span className="flex-shrink-0 px-2.5 py-1 rounded-full t-cap font-semibold max-w-[45%] truncate text-ink" style={standingStyle(l, view)}>
-                  {standing}
-                </span>
-              </Link>
+              {(() => {
+                const inner = (
+                  <>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-ink truncate">
+                        <SideNames a={nameOf(l.sideA) ?? 'A player'} b={nameOf(l.sideB) ?? 'A player'} colours={coloursOf(view, l.sideA, l.sideB)} />
+                      </span>
+                      <span className="block t-cap text-ink/65 truncate">{l.roundName} · {thru}</span>
+                    </span>
+                    <span className="flex-shrink-0 px-2.5 py-1 rounded-full t-cap font-semibold max-w-[45%] truncate text-ink" style={standingStyle(l, view)}>
+                      {standing}
+                    </span>
+                  </>
+                )
+                const rowClass = `flex items-center justify-between gap-3 px-4 py-3 w-full text-left ${cardClass(mine ? 'chosen' : 'flat', true)}`
+                if (mine) {
+                  return <Link href={`${matchHref(tripHome, l.id)}/card`} className={rowClass}>{inner}</Link>
+                }
+                const isOpen = openId === l.id
+                return (
+                  <>
+                    <button type="button" className={rowClass} aria-expanded={isOpen}
+                      onClick={() => setOpenId(o => (o === l.id ? null : l.id))}>
+                      {inner}
+                    </button>
+                    <div className="grid transition-[grid-template-rows] duration-300 ease-out"
+                      style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }} aria-hidden={!isOpen}>
+                      <div className="min-h-0 overflow-hidden">
+                        <div className="px-1 pt-2 pb-1">
+                          <MatchDetailView detail={l.detail} colours={coloursOf(view, l.sideA, l.sideB)} />
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )
+              })()}
             </li>
           )
         })}

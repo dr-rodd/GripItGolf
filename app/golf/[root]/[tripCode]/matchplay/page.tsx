@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation'
+import { readKnockout } from '../knockout'
+import { readMatchDetails } from '../match/matchCards'
 import OrganiserLock from '@/app/components/OrganiserLock'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -83,7 +85,7 @@ export default async function MatchplayPage({
       .order('slot'),
     supabase
       .from('players')
-      .select('id, name, handicap')
+      .select('id, name, handicap, gender')
       .eq('trip_id', trip.id),
     // Only needed for a pairs draw, but asking for it unconditionally keeps
     // this a single round trip rather than a conditional second one.
@@ -203,10 +205,19 @@ export default async function MatchplayPage({
     ),
   }) : []
 
-  const readings = links.length > 0
-    ? await readLinkedRounds(trip, links, matches, entrants, memberships,
-        tripQuotaScale(boards))
-    : []
+  // Each match's card hole by hole, where anything is on it — a viewer
+  // taps a match on the draw and its card opens over it (Ross, 10 Nov 2026:
+  // a viewer never leaves for the card to score). Fail-soft: no view, no
+  // cards, the draw as ever.
+  const cardRoster = (playersRes.data ?? []) as { id: string; name: string; handicap: number | null; gender: string | null }[]
+  const [readings, details] = await Promise.all([
+    links.length > 0
+      ? readLinkedRounds(trip, links, matches, entrants, memberships, tripQuotaScale(boards))
+      : Promise.resolve([]),
+    readKnockout(trip, rawSetup, null, cardRoster)
+      .then(view => (view ? readMatchDetails(trip, view, cardRoster.map(p => ({ ...p, gender: p.gender ?? 'M' }))) : {}))
+      .catch(e => { console.error('MatchplayPage card read failed:', e); return {} }),
+  ])
 
   // The organiser's lock, at the header's right edge (OrganiserLock).
   const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={lock ? lock.passcodeHash : null} />
@@ -257,6 +268,7 @@ export default async function MatchplayPage({
             matches={matches as unknown as BracketMatchRow[]}
             entrants={coloured as BracketEntrantRow[]}
             readings={readings}
+            details={details}
             deadlines={deadlines}
             today={todayString(new Date())}
             lock={lock}

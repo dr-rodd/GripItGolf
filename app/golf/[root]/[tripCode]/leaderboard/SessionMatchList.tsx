@@ -20,8 +20,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import type { SessionMatchResult } from '@/lib/sessions'
-import MatchStrip from '@/app/golf/[root]/[tripCode]/match/[matchId]/card/MatchStrip'
-import { MatchScoresTable } from '@/app/golf/[root]/[tripCode]/match/[matchId]/card/MatchScorecard'
+import MatchDetailView from '@/app/golf/[root]/[tripCode]/match/[matchId]/card/MatchDetailView'
 import { matchStatus, softened } from '@/lib/faceOff'
 import { sideColours, sideTint, type SideColour } from '@/lib/matchSides'
 import { tagOfTeam } from '@/lib/tagBoards'
@@ -160,17 +159,7 @@ export default function SessionMatchList({
                   <div className="min-h-0 overflow-hidden">
                     {opened.has(slot) && (
                       <div className="px-3 pb-3 pt-2 border-t border-line bg-tint">
-                        {m!.detail ? (
-                          <>
-                            <MatchStrip holes={m!.detail.holes} outcomes={m!.detail.outcomes} colours={cardColours} />
-                            <div className="mt-2">
-                              <MatchScoresTable a={m!.detail.a} b={m!.detail.b} colours={cardColours}
-                                holes={m!.detail.holes} outcomes={m!.detail.outcomes} scores={m!.detail.scores} />
-                            </div>
-                          </>
-                        ) : (
-                          <p className="t-cap text-ink/65 text-center py-2">Not started — nothing on its card yet.</p>
-                        )}
+                        <MatchDetailView detail={m!.detail} colours={cardColours} />
                       </div>
                     )}
                   </div>

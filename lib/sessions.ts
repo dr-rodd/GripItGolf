@@ -24,7 +24,7 @@
  * which is the one place that reads cards.
  */
 
-import type { CardHole, CardSideView, HoleOutcome } from './matchCard'
+import type { MatchCardDetail } from './matchCard'
 import type { Leaderboard, Scoring, TeamFormat, Audience } from './leaderboards'
 
 // ─── Match formats ─────────────────────────────────────────────
@@ -414,15 +414,8 @@ export type SessionMatchResult = {
   detail?: SessionMatchDetail
 }
 
-/** A session match's card as a viewer reads it: the holes, who won each, and every score. */
-export type SessionMatchDetail = {
-  holes: CardHole[]
-  outcomes: HoleOutcome[]
-  a: CardSideView
-  b: CardSideView
-  /** Player id → hole → gross; null is an NR. */
-  scores: Record<string, Record<number, number | null>>
-}
+/** A session match's card as a viewer reads it — lib/matchCard.ts's one shape. */
+export type SessionMatchDetail = MatchCardDetail
 
 /**
  * A match's line: "Europe won 3&2", "Halved", "USA 2 UP thru 11", "Not started".

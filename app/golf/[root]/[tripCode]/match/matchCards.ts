@@ -6,7 +6,7 @@ import { isPlayable } from '@/lib/knockoutPortal'
 import { matchStrokes, parseMatchTees } from '@/lib/matchArrangements'
 import {
   parseExtraPlan, playCard,
-  type CardHole, type CardSideKey, type CardSideView, type CardState, type ExtraHolePlan,
+  type CardHole, type CardSideKey, type CardSideView, type CardState, type ExtraHolePlan, type MatchCardDetail,
 } from '@/lib/matchCard'
 import type { KnockoutView } from '../knockout'
 
@@ -127,40 +127,42 @@ export type LiveMatch = {
   state: CardState
   /** The side ahead, by its draw id; null when all square. */
   leaderId: string | null
+  /** The card hole by hole, for a viewer to open beneath the row. */
+  detail: MatchCardDetail
 }
 
 /**
- * Every open match with anything on its card — the live board on the
- * Scoring tab. A match already in the bracket is not live, whatever its
- * card says; before migration 058 there are no cards and nothing is live.
+ * The listed matches' cards as played so far — each one with anything on
+ * it, worked out by lib/matchCard.ts's `playCard` over its scores and
+ * concessions, with the card hole by hole for a viewer (`MatchCardDetail`).
+ * The live board and the bracket's viewer both read through here. Before
+ * migration 058 there are no cards, quietly.
  */
-export async function readLiveMatches(
+async function playedCards(
   trip: { id: string; leaderboards?: unknown; formats?: unknown; team_scoring?: unknown },
   view: KnockoutView,
   players: readonly Player[],
-): Promise<LiveMatch[]> {
-  const open = view.matches.filter(m => isPlayable(m) && m.winner === null && m.sideA && m.sideB)
-  if (open.length === 0) return []
-  const openIds = open.map(m => m.id)
-
+  ids: readonly string[],
+): Promise<Map<string, { state: CardState; card: NonNullable<CardSetup['card']>; detail: MatchCardDetail }>> {
+  const out = new Map<string, { state: CardState; card: NonNullable<CardSetup['card']>; detail: MatchCardDetail }>()
+  if (ids.length === 0) return out
   type ScoreRow = { match_id: string; player_id: string; hole_number: number; gross: number | null }
   type ConcessionRow = { match_id: string; hole_number: number; conceded_by: string }
   const [scoresRes, concessionsRes] = await Promise.all([
     readAllRows<ScoreRow>(
       () => supabase.from('match_scores').select('match_id, player_id, hole_number, gross', { count: 'exact' })
-        .eq('trip_id', trip.id).in('match_id', openIds)
+        .eq('trip_id', trip.id).in('match_id', [...ids])
         .order('match_id').order('player_id').order('hole_number'),
       r => `${r.match_id}|${r.player_id}|${r.hole_number}`,
     ),
     readAllRows<ConcessionRow>(
       () => supabase.from('match_concessions').select('match_id, hole_number, conceded_by', { count: 'exact' })
-        .eq('trip_id', trip.id).in('match_id', openIds)
+        .eq('trip_id', trip.id).in('match_id', [...ids])
         .order('match_id').order('hole_number'),
       r => `${r.match_id}|${r.hole_number}`,
     ),
   ])
-  // Before migration 058 neither table exists — nothing is live, quietly.
-  if (scoresRes.error || concessionsRes.error) return []
+  if (scoresRes.error || concessionsRes.error) return out
 
   const scoresOf = new Map<string, Map<string, Map<number, number | null>>>()
   for (const r of scoresRes.data) {
@@ -177,16 +179,60 @@ export async function readLiveMatches(
     concededOf.set(r.match_id, m)
   }
 
-  const started = openIds.filter(id => scoresOf.has(id) || concededOf.has(id))
+  const started = ids.filter(id => scoresOf.has(id) || concededOf.has(id))
   const setups = await readCardSetups(trip, view, players, started)
-  const live: LiveMatch[] = []
   for (const id of started) {
     const card = setups.get(id)?.card
+    if (!card) continue
+    const scores = scoresOf.get(id) ?? new Map()
+    const played = playCard(card.holes, card.a, card.b, scores, concededOf.get(id) ?? new Map(), card.extraPlan)
+    out.set(id, {
+      state: played.state,
+      card,
+      detail: {
+        holes: played.holes,
+        outcomes: played.outcomes,
+        a: card.a,
+        b: card.b,
+        scores: Object.fromEntries([...scores].map(([pid, byHole]) => [pid, Object.fromEntries(byHole)])),
+      },
+    })
+  }
+  return out
+}
+
+/**
+ * Every drawn match's card hole by hole, where anything is on it — the
+ * bracket's viewer, which opens a match's card over the draw (a bracket
+ * has no row to slide one open beneath).
+ */
+export async function readMatchDetails(
+  trip: { id: string; leaderboards?: unknown; formats?: unknown; team_scoring?: unknown },
+  view: KnockoutView,
+  players: readonly Player[],
+): Promise<Record<string, MatchCardDetail>> {
+  const ids = view.matches.filter(m => isPlayable(m) && m.sideA && m.sideB).map(m => m.id)
+  const cards = await playedCards(trip, view, players, ids)
+  return Object.fromEntries([...cards].map(([id, c]) => [id, c.detail]))
+}
+
+/**
+ * Every open match with anything on its card — the live board on the
+ * Scoring tab. A match already in the bracket is not live, whatever its
+ * card says; before migration 058 there are no cards and nothing is live.
+ */
+export async function readLiveMatches(
+  trip: { id: string; leaderboards?: unknown; formats?: unknown; team_scoring?: unknown },
+  view: KnockoutView,
+  players: readonly Player[],
+): Promise<LiveMatch[]> {
+  const open = view.matches.filter(m => isPlayable(m) && m.winner === null && m.sideA && m.sideB)
+  if (open.length === 0) return []
+  const cards = await playedCards(trip, view, players, open.map(m => m.id))
+  const live: LiveMatch[] = []
+  for (const [id, { state, card, detail }] of cards) {
     const match = open.find(m => m.id === id)
-    if (!card || !match) continue
-    const { state } = playCard(
-      card.holes, card.a, card.b, scoresOf.get(id) ?? new Map(), concededOf.get(id) ?? new Map(), card.extraPlan,
-    )
+    if (!match) continue
     live.push({
       id,
       roundName: match.roundName,
@@ -194,6 +240,7 @@ export async function readLiveMatches(
       sideB: match.sideB as string,
       state,
       leaderId: state.leader === 'A' ? card.a.id : state.leader === 'B' ? card.b.id : null,
+      detail,
     })
   }
   // Furthest round first, then the furthest on: the nearest finishes on top.
